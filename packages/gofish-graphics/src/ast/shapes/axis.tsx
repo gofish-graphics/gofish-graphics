@@ -402,28 +402,17 @@ function OrdinalAxisNode({
           return (
             <g transform={`translate(${tx}, ${ty})`}>
               <For each={labelKeys}>
-                {(key: string, i) => {
+                {(key: string) => {
                   const keyNode = keyContext[key];
                   if (!keyNode) return null;
-                  const globalCenter = posRelToAncestor(keyNode, parent, 0);
-                  const barSize = keyNode.intrinsicDims?.[0]?.size ?? 0;
-                  const isFirst = i() === 0;
-                  const isLast = i() === labelKeys.length - 1;
-                  // Edge labels: place x at the bar's left/right edge and
-                  // anchor inward so text never extends beyond the bar boundary.
-                  const globalX = isFirst
-                    ? globalCenter - barSize / 2
-                    : isLast
-                      ? globalCenter + barSize / 2
-                      : globalCenter;
+                  const globalX = posRelToAncestor(keyNode, parent, 0);
                   const localX = globalX - tx;
-                  const anchor = isFirst ? "start" : isLast ? "end" : "middle";
                   return (
                     <text
                       transform="scale(1,-1)"
                       x={localX}
                       y={-AXIS_LINE}
-                      text-anchor={anchor}
+                      text-anchor="middle"
                       dominant-baseline="middle"
                       font-size="10px"
                       fill="gray"
