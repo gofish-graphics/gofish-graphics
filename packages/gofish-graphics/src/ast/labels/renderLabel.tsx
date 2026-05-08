@@ -38,10 +38,8 @@ function resolveNodeFill(node: GoFishNode): string | null {
  * - Inside the shape: contrast against the fill.
  * - Outside the shape: darken the fill for a readable tint on white background.
  */
-function autoLabelColor(node: GoFishNode, position: LabelPosition): string {
+function autoLabelColor(node: GoFishNode, isInside: boolean): string {
   const fill = resolveNodeFill(node);
-  const isInside =
-    position === "center" || (position as string).startsWith("inset");
 
   if (isInside) {
     if (!fill) return "black";
@@ -73,6 +71,81 @@ export function renderLabelJSX(node: GoFishNode): JSX.Element | null {
   const labelText = resolveLabelText(node._label.accessor, datum);
   if (!labelText) return null;
 
+  const placement = node._label.placement;
+
+  // ─── Strategy-resolved placement ──────────────────────────────────────────
+  if (placement) {
+    if (placement.kind === "hidden") return null;
+
+    const fontSize = placement.fontSize ?? node._label.fontSize ?? 11;
+    const fontFamily = "source-sans-pro, sans-serif";
+
+    if (placement.kind === "textPath") {
+      const labelColor =
+        node._label.color ??
+        autoLabelColor(
+          node,
+          /* isInside= */ true /* path labels sit on the line */
+        );
+      // Render path into <defs> so the textPath flows along the same geometry
+      // the connect operator drew. The chart's outer <g> applies scale(1, -1);
+      // we counter-scale on the <text> so the glyphs remain upright.
+      return (
+        <>
+          <defs>
+            <path
+              id={placement.pathId}
+              d={placement.d}
+              fill="none"
+              stroke="none"
+            />
+          </defs>
+          <text
+            transform="scale(1, -1)"
+            fill={labelColor}
+            font-size={`${fontSize}px`}
+            font-family={fontFamily}
+            text-anchor="middle"
+            dominant-baseline="central"
+            pointer-events="none"
+          >
+            <textPath
+              href={`#${placement.pathId}`}
+              startOffset={placement.startOffset}
+            >
+              {labelText}
+            </textPath>
+          </text>
+        </>
+      );
+    }
+
+    // placement.kind === "transform"
+    const isInside = node._labelKind === "area" || node._labelKind === "ribbon";
+    const labelColor = node._label.color ?? autoLabelColor(node, isInside);
+    const rotate = node._label.rotate;
+    const transform = rotate
+      ? `rotate(${-rotate},${placement.x},${placement.y}) scale(1,-1)`
+      : "scale(1,-1)";
+
+    return (
+      <text
+        transform={transform}
+        x={placement.x}
+        y={-placement.y}
+        fill={labelColor}
+        font-size={`${fontSize}px`}
+        font-family={fontFamily}
+        text-anchor={placement.anchor}
+        dominant-baseline={placement.baseline}
+        pointer-events="none"
+      >
+        {labelText}
+      </text>
+    );
+  }
+
+  // ─── Legacy declarative fallback (no strategy resolved) ──────────────────
   const w = node.intrinsicDims[0].size ?? 0;
   const h = node.intrinsicDims[1].size ?? 0;
 
@@ -98,7 +171,9 @@ export function renderLabelJSX(node: GoFishNode): JSX.Element | null {
   const cx = (node.transform?.translate?.[0] ?? 0) + w / 2;
   const cy = (node.transform?.translate?.[1] ?? 0) + h / 2;
 
-  const labelColor = node._label.color ?? autoLabelColor(node, position);
+  const isInside =
+    position === "center" || (position as string).startsWith("inset");
+  const labelColor = node._label.color ?? autoLabelColor(node, isInside);
   const textAnchor = getLabelTextAnchor(position);
 
   const rotate = node._label.rotate;

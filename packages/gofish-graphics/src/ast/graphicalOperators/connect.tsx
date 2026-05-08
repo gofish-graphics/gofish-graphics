@@ -39,6 +39,7 @@ export const connect = createNodeOperator(
     return new GoFishNode(
       {
         type: "connect",
+        labelKind: "path",
         shared: [false, false],
         color: fill,
         resolveUnderlyingSpace: (
@@ -296,6 +297,19 @@ export const connect = createNodeOperator(
           const bboxW = bboxPairs.length > 0 ? bboxMaxX - bboxMinX : 0;
           const bboxH = bboxPairs.length > 0 ? bboxMaxY - bboxMinY : 0;
 
+          // Derive label-placement geometry. `polygon` is the largest closed
+          // ring (sampled from beziers) for area-strategy polylabel; `strips`
+          // is a sorted-by-x array of (x, y0, y1) triples for ribbon-strategy
+          // d3-area-label. Both are derived from the same `paths` data and
+          // are populated only when meaningful (mode === "edge" closes each
+          // path; mode === "center" produces open polylines).
+          const labelPolygon =
+            mode === "edge" ? largestPolygon(paths) : undefined;
+          const labelStrips =
+            mode === "edge" && dir === 0
+              ? extractStripsXEdge(paths)
+              : undefined;
+
           return {
             intrinsicDims: [
               {
@@ -312,7 +326,12 @@ export const connect = createNodeOperator(
               },
             ],
             transform: { translate: [0, 0] },
-            renderData: { paths, defaultColor },
+            renderData: {
+              paths,
+              defaultColor,
+              polygon: labelPolygon,
+              strips: labelStrips,
+            },
           };
         },
         render: (
@@ -366,3 +385,112 @@ export const connect = createNodeOperator(
     );
   }
 );
+
+// ─── Label-placement geometry helpers ───────────────────────────────────────
+// Sample a cubic Bezier at parameter t ∈ [0, 1].
+const BEZIER_SAMPLES = 16;
+
+function bezierAt(
+  b: {
+    start: [number, number];
+    control1: [number, number];
+    control2: [number, number];
+    end: [number, number];
+  },
+  t: number
+): [number, number] {
+  const mt = 1 - t;
+  const x =
+    mt * mt * mt * b.start[0] +
+    3 * mt * mt * t * b.control1[0] +
+    3 * mt * t * t * b.control2[0] +
+    t * t * t * b.end[0];
+  const y =
+    mt * mt * mt * b.start[1] +
+    3 * mt * mt * t * b.control1[1] +
+    3 * mt * t * t * b.control2[1] +
+    t * t * t * b.end[1];
+  return [x, y];
+}
+
+function pathToPolygon(path: Path): [number, number][] {
+  const ring: [number, number][] = [];
+  for (const seg of path) {
+    if (seg.type === "line") {
+      if (ring.length === 0) ring.push(seg.points[0]);
+      ring.push(seg.points[1]);
+    } else {
+      if (ring.length === 0) ring.push(seg.start);
+      for (let i = 1; i <= BEZIER_SAMPLES; i++) {
+        ring.push(bezierAt(seg, i / BEZIER_SAMPLES));
+      }
+    }
+  }
+  return ring;
+}
+
+// Approximate signed area as a polygon-size proxy.
+function ringArea(ring: [number, number][]): number {
+  let a = 0;
+  for (let i = 0, n = ring.length; i < n; i++) {
+    const [x0, y0] = ring[i];
+    const [x1, y1] = ring[(i + 1) % n];
+    a += x0 * y1 - x1 * y0;
+  }
+  return Math.abs(a) / 2;
+}
+
+/** For multi-piece connect output, return the single largest closed ring. */
+function largestPolygon(paths: Path[]): [number, number][] | undefined {
+  let best: [number, number][] | undefined;
+  let bestArea = 0;
+  for (const p of paths) {
+    const ring = pathToPolygon(p);
+    if (ring.length < 3) continue;
+    const a = ringArea(ring);
+    if (a > bestArea) {
+      bestArea = a;
+      best = ring;
+    }
+  }
+  return best;
+}
+
+/**
+ * Extract strips for ribbon labeling. Assumes dir=x edge mode where each
+ * path is `[bottomBezier, line, topBezier, line]`. Walks bezier samples in
+ * lockstep so each sample yields a matched (x, y0, y1) triple.
+ */
+function extractStripsXEdge(
+  paths: Path[]
+): { x: number; y0: number; y1: number }[] | undefined {
+  const out: { x: number; y0: number; y1: number }[] = [];
+  for (const path of paths) {
+    if (path.length !== 4) continue;
+    const bottom = path[0];
+    const top = path[2];
+    if (bottom.type !== "bezier" && bottom.type !== "line") continue;
+    if (top.type !== "bezier" && top.type !== "line") continue;
+    for (let i = 0; i <= BEZIER_SAMPLES; i++) {
+      const t = i / BEZIER_SAMPLES;
+      const [bx, by] =
+        bottom.type === "bezier"
+          ? bezierAt(bottom, t)
+          : [
+              bottom.points[0][0] * (1 - t) + bottom.points[1][0] * t,
+              bottom.points[0][1] * (1 - t) + bottom.points[1][1] * t,
+            ];
+      // Top edge runs right→left; sample at (1 - t) so x's match approximately.
+      const [, ty] =
+        top.type === "bezier"
+          ? bezierAt(top, 1 - t)
+          : [
+              top.points[0][0] * t + top.points[1][0] * (1 - t),
+              top.points[0][1] * t + top.points[1][1] * (1 - t),
+            ];
+      out.push({ x: bx, y0: by, y1: ty });
+    }
+  }
+  out.sort((a, b) => a.x - b.x);
+  return out.length >= 2 ? out : undefined;
+}

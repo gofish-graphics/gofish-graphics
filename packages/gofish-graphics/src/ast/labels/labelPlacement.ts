@@ -1,4 +1,5 @@
 import { Direction, Size } from "../dims";
+import type { LabelKind, Placement } from "./strategies/types";
 
 export type LabelAccessor<D = any> = string | ((d: D) => string);
 
@@ -9,10 +10,14 @@ export interface LabelOptions {
   offset?: number;
   minSpace?: number;
   rotate?: number;
+  /** Override the default placement-strategy kind for this label. */
+  kind?: LabelKind;
 }
 
 export interface LabelSpec<D = any> extends LabelOptions {
   accessor: LabelAccessor<D>;
+  /** Filled in by the `placeLabels` pipeline pass; consumed by `renderLabel`. */
+  placement?: Placement;
 }
 
 export function resolveLabelText(accessor: LabelAccessor, datum: any): string {

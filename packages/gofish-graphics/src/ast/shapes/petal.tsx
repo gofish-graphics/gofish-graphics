@@ -52,6 +52,7 @@ export const Petal = ({
     {
       name,
       type: "petal",
+      labelKind: "box",
       // inferDomains: () => {
       //   return [
       //     isValue(dims[0].size)
