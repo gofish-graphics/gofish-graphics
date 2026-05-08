@@ -41,6 +41,77 @@ export { resolveMarkResult } from "./chartBuilder";
 export type { NameableMark } from "../withGoFish";
 
 /**
+ * Mark dispatch kind. Tagged on marks via the `__kind` symbol so layout
+ * operators can route correctly:
+ *
+ *   per-item (default): T → Element. The mark is invoked once per data item;
+ *     each invocation produces one node. Matches every legacy mark.
+ *   expand: T[] → Element[]. The mark is invoked once with the whole group;
+ *     it returns N nodes 1:1 with data. Used by `cut` so a single source
+ *     shape can produce a sliced array of children that an upstream layout
+ *     operator (`spread`, `stack`, …) arranges.
+ */
+export type MarkKind = "per-item" | "expand";
+
+/**
+ * Read the dispatch kind off a mark. Defaults to per-item so untagged marks
+ * keep their legacy behavior.
+ */
+export function getMarkKind(mark: unknown): MarkKind {
+  return ((mark as any)?.__kind as MarkKind | undefined) ?? "per-item";
+}
+
+/**
+ * Stamp a kind on a mark function (mutating). Returns the mark for chaining.
+ */
+export function withMarkKind<M>(mark: M, kind: MarkKind): M {
+  Object.defineProperty(mark as any, "__kind", {
+    value: kind,
+    writable: true,
+    configurable: true,
+  });
+  return mark;
+}
+
+/**
+ * Dispatch a mark over a group's data. Layout operators call this instead of
+ * invoking the mark directly so per-item and expand kinds can share a single
+ * call path.
+ *
+ *   per-item: one call per leaf with leaf-as-data. Returns `[oneNode]`.
+ *             Preserves the aggregation contract of `inferSize`/`inferPos`
+ *             on grouped data — every legacy mark stays unchanged.
+ *   expand:   call mark once with the whole array; expect an array of nodes.
+ *             The returned array is flattened by the caller across leaves.
+ *
+ * Both branches return `GoFishNode[]`. Per-item returns a singleton; expand
+ * returns N nodes 1:1 with the input data.
+ */
+export async function applyMark<T>(
+  mark: Mark<T> | Mark<T[]>,
+  group: T | T[],
+  groupKey?: string | number,
+  layerContext?: LayerContext
+): Promise<GoFishNode[]> {
+  const kind = getMarkKind(mark);
+  if (kind === "expand") {
+    const items = Array.isArray(group) ? (group as T[]) : ([group] as T[]);
+    const result = await (mark as Mark<T[]>)(items, groupKey, layerContext);
+    return Promise.all(
+      (Array.isArray(result) ? result : [result]).map((r) =>
+        resolveMarkResult(r as any, layerContext)
+      )
+    );
+  }
+  // per-item: legacy behavior — one call per leaf, mark may aggregate.
+  const node = await resolveMarkResult(
+    (mark as Mark<T>)(group as T, groupKey, layerContext),
+    layerContext
+  );
+  return [node];
+}
+
+/**
  * Attach chainable .name() and .label() to a mark, registering it into the
  * layer context when named so that select(...) can find it back.
  */
@@ -51,10 +122,27 @@ export function nameableMark<T>(base: Mark<T>): NameableMark<T> {
       key?: string | number,
       layerContext?: LayerContext
     ) => {
-      const node = await resolveMarkResult(
-        base(d, key, layerContext),
-        layerContext
-      );
+      const raw = await (base as any)(d, key, layerContext);
+      // Expand-kind marks return an array of nodes; per-item return one.
+      // Name + register each produced node so select(layerName) returns them
+      // all (per-item: 1 entry; expand: N entries).
+      if (Array.isArray(raw)) {
+        const nodes = await Promise.all(
+          raw.map((r) => resolveMarkResult(r, layerContext))
+        );
+        for (const node of nodes) {
+          node.name(layerName);
+          if (layerContext && layerName) {
+            if (!layerContext[layerName]) {
+              layerContext[layerName] = { data: [], nodes: [] };
+            }
+            layerContext[layerName].nodes.push(node);
+            layerContext[layerName].data.push((node as any).datum);
+          }
+        }
+        return nodes as unknown as GoFishNode;
+      }
+      const node = await resolveMarkResult(raw, layerContext);
       node.name(layerName);
       if (layerContext && layerName) {
         if (!layerContext[layerName]) {
@@ -65,6 +153,9 @@ export function nameableMark<T>(base: Mark<T>): NameableMark<T> {
       }
       return node;
     };
+    // Preserve the kind tag so applyMark dispatches correctly through the
+    // wrapped mark.
+    withMarkKind(wrapped, getMarkKind(base));
     return nameableMark(wrapped);
   };
   const withLabel = (
@@ -76,13 +167,19 @@ export function nameableMark<T>(base: Mark<T>): NameableMark<T> {
       key?: string | number,
       layerContext?: LayerContext
     ) => {
-      const node = await resolveMarkResult(
-        base(d, key, layerContext),
-        layerContext
-      );
+      const raw = await (base as any)(d, key, layerContext);
+      if (Array.isArray(raw)) {
+        const nodes = await Promise.all(
+          raw.map((r) => resolveMarkResult(r, layerContext))
+        );
+        for (const node of nodes) node.label(accessor, options);
+        return nodes as unknown as GoFishNode;
+      }
+      const node = await resolveMarkResult(raw, layerContext);
       node.label(accessor, options);
       return node;
     };
+    withMarkKind(wrapped, getMarkKind(base));
     return nameableMark(wrapped);
   };
   const render = async (
@@ -370,7 +467,7 @@ export function createOperator<Datum, Options extends Record<string, any>>(
       };
       return nameableMark(base);
     }
-    // Operator (traversal) form: split d, apply one mark per leaf, layout.
+    // Operator (traversal) form: split d, apply mark per leaf, layout.
     const operator: Operator<Datum[], Datum[]> = async (mark) => {
       return (async (
         d: Datum[],
@@ -381,17 +478,25 @@ export function createOperator<Datum, Options extends Record<string, any>>(
         const entries =
           splitResult instanceof Map ? splitResult : splitResult.entries;
         const keys = splitResult instanceof Map ? undefined : splitResult.keys;
-        const nodes = await Promise.all(
+        // Route each leaf through applyMark so expand-kind marks (e.g. `cut`)
+        // can return arrays that we flatten across leaves. Per-item marks
+        // keep the legacy "one call per leaf" semantics — applyMark wraps
+        // their single node in a singleton array.
+        const nodesPerLeaf = await Promise.all(
           [...entries.entries()].map(async ([i, leaf]) => {
             const currentKey = key != undefined ? `${key}-${i}` : i;
-            const node = await resolveMarkResult(
-              mark(leaf, currentKey, layerContext),
+            const leafNodes = await applyMark(
+              mark,
+              leaf as Datum | Datum[],
+              currentKey,
               layerContext
             );
-            node.setKey(currentKey?.toString() ?? "");
-            return node;
+            const keyStr = currentKey?.toString() ?? "";
+            for (const node of leafNodes) node.setKey(keyStr);
+            return leafNodes;
           })
         );
+        const nodes = nodesPerLeaf.flat();
         const lowOpts = buildLayoutOpts(cfg.channels, opts, d, entries, keys);
         return (await layout(lowOpts, nodes)) as unknown as GoFishNode;
       }) as Mark<Datum[]>;

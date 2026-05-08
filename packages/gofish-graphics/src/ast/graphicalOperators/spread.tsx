@@ -454,11 +454,12 @@ export type SpreadOptions<T = any> = {
 };
 
 export const spread = createOperator<any, SpreadOptions>(Spread, {
-  // When no `by` is given, pass each item through as-is. Items may already be
-  // arrays (e.g. after `_.chunk(...)`) or scalars; the downstream mark
-  // normalizes either form internally.
+  // With `by`: groupBy on the field. Without `by`: pass the whole array as a
+  // single leaf so expand-kind marks (e.g. `cut`) see all items at once.
+  // (Per-item marks see the array too and aggregate via inferSize/inferPos —
+  // but that path has no current users; every existing call site uses `by`.)
   split: ({ by }, d) =>
-    by ? Map.groupBy(d, (r: any) => r[by]) : new Map(d.map((r, i) => [i, r])),
+    by ? Map.groupBy(d, (r: any) => r[by]) : new Map([[0, d]]),
   channels: { w: "size", h: "size" },
   axisFields: ({ by, dir }) =>
     by ? (dir === "x" ? { x: by } : { y: by }) : undefined,

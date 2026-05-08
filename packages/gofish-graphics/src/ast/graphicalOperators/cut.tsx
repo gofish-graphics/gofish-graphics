@@ -1,58 +1,63 @@
 /**
- * cut: a flow operator that visually slices a single source shape (image or
- * rect) into per-datum segments along an axis. Each per-group glyph aligns to
- * its own slice of the original artwork rather than to a freshly drawn rect.
+ * cut: an expand-kind mark that slices a single source shape (image or rect)
+ * into N clipped sub-shapes 1:1 with input data. Layout (spread, stack, etc.)
+ * is handled by an upstream operator — cut just produces the slices.
+ *
+ * Chart-flow form (sizes derived from data):
  *
  *   chart(data)
- *     .flow(cut({ shape: image({...}), by: "category", dir: "y", size: "amount" }))
- *     .mark(({ slice, ...d }) => layer([slice.name("part"), text({...})]))
+ *     .flow(spread({ dir: "x" }))
+ *     .mark(image({ href, w, h }).cut({ dir: "y", size: "amount" }))
  *
- * Cut augments each per-group datum with a synthesized `slice` Mark; when
- * invoked, that Mark renders the corresponding portion of `shape`,
- * mask-clipped to its region. Cut owns arrangement: per-group glyphs are
- * stacked along `dir` with no spacing — gaps come from per-slice `inset`.
+ * Low-level form (explicit sizes, no data needed):
+ *
+ *   Spread({ dir: "x" }, await image({ href, w, h }).cut({
+ *     dir: "y",
+ *     sizes: [10, 20, 15],
+ *   })([{}, {}, {}], undefined, {}))
+ *
+ * Internally each slice is a `mask([regionRect, translatedSource])` — the
+ * region rect defines the visible portion, the source shape is translated so
+ * the requested portion lines up under the rect.
  */
 import { GoFishAST } from "../_ast";
 import { GoFishNode } from "../_node";
-import { Mark, Operator } from "../types";
+import { Mark } from "../types";
 import {
   resolveMarkResult,
-  nameableMark,
   NameableMark,
+  LayerContext,
 } from "../marks/createOperator";
-import { Spread } from "./spread";
 import { mask as Mask } from "./porterDuff";
 import { Rect } from "../shapes/rect";
-import { createNodeOperator } from "../withGoFish";
-import { sumBy } from "lodash";
+import { createMark, createNodeOperator } from "../withGoFish";
+import { getValue, isValue } from "../data";
 
-export type CutOptions<T = any> = {
-  /** The source shape mark (e.g. image(...) or rect(...)). Must have explicit
-   *  w and h — cross-axis size cannot be inferred from intrinsic dims in v1. */
-  shape: Mark<any>;
-  /** Group key. v1 takes the first row per group. */
-  by: keyof T & string;
-  /** Cut axis. */
+/** Shape props the cut factory's shape function receives after channel
+ *  resolution. `size` is already an array (or undefined) regardless of how
+ *  the caller passed it. */
+type CutShapeProps = {
+  source: Mark<any>;
   dir: "x" | "y";
-  /** Field whose values determine slice proportions. Defaults to equal slices. */
-  size?: keyof T & string;
+  size?: number[];
+  inset?: number;
+};
+
+/** User-facing cut options (when calling `cut(source, opts)` directly). */
+export type CutMarkOptions = {
+  dir: "x" | "y";
+  /** Slice proportions. Accepts a field name (resolved per-row from data),
+   *  an explicit `number[]` of pixel extents, or undefined for equal slices. */
+  size?: string | number[];
   /** Pixels removed from each slice's source region (split half on each side
    *  along `dir`). Creates a "chunk taken out" effect on every slice. Default 0. */
   inset?: number;
-  /** Pixels of chart-space gap between adjacent slices. Independent of `inset`
-   *  — `inset` shrinks each slice's source window, `spacing` separates the
-   *  rendered slices. Defaults to Spread's default. */
-  spacing?: number;
-  /** Cross-axis alignment of slices in the stack. Default "middle". */
-  alignment?: "start" | "middle" | "end";
-  /** Reverse slice order. */
-  reverse?: boolean;
 };
 
 /**
- * Wraps a single child node and adds a fixed pixel offset along `dir` to its
- * transform.translate. Used to position the source shape so that the desired
- * portion lands under the slice's mask region.
+ * A single-child wrapper that translates its child along `dir` by `offset`
+ * pixels. Used to position the source shape so the requested portion lines
+ * up with the slice's mask region.
  */
 const translateNode = createNodeOperator<
   { dir: 0 | 1; offset: number },
@@ -103,9 +108,8 @@ const translateNode = createNodeOperator<
   );
 });
 
-/** Build a slice Mark for a single group. Captures the source shape and this
- *  group's (offsetAlongDir, extentAlongDir, crossExtent, inset). */
-const buildSlice = (
+/** Build one slice node at (offset, offset+extent) in source coords. */
+async function buildSliceNode(
   source: Mark<any>,
   dirIdx: 0 | 1,
   sourceDimAlong: number,
@@ -113,146 +117,218 @@ const buildSlice = (
   extent: number,
   crossExtent: number,
   inset: number,
-  datum: any
-): NameableMark<unknown> => {
+  datum: any,
+  layerContext?: LayerContext
+): Promise<GoFishNode> {
   const insetExtent = Math.max(0, extent - inset);
   const insetOffset = offset + inset / 2;
 
   // Image and rect render with an internal scale(1, -1) that flips their
-  // y-axis so the source is right-side up in chart-y space. This means
-  // source pixel y=p sits at slice-local chart-y = sourceDimAlong - p. To
-  // bring source pixels [insetOffset, insetOffset+insetExtent] into slice-
-  // local [0, insetExtent] on y, translate by -(sourceDimAlong - insetOffset
-  // - insetExtent), not -insetOffset. The x axis has no such flip.
+  // y-axis so the source is right-side up in chart-y space. To bring source
+  // pixels [insetOffset, insetOffset + insetExtent] into slice-local
+  // [0, insetExtent] on y, translate by -(sourceDimAlong - insetOffset -
+  // insetExtent), not -insetOffset. The x axis has no such flip.
   const translateOffset =
     dirIdx === 1 ? -(sourceDimAlong - insetOffset - insetExtent) : -insetOffset;
 
-  const base: Mark<unknown> = async (_d, _key, layerContext) => {
-    const sliceW = dirIdx === 0 ? insetExtent : crossExtent;
-    const sliceH = dirIdx === 1 ? insetExtent : crossExtent;
+  const sliceW = dirIdx === 0 ? insetExtent : crossExtent;
+  const sliceH = dirIdx === 1 ? insetExtent : crossExtent;
 
-    // White mask shape: defines the visible region in slice-local coords.
-    const regionRect = await Rect({
-      x: 0,
-      y: 0,
-      w: sliceW,
-      h: sliceH,
-      fill: "white",
-    });
+  const regionRect = await Rect({
+    x: 0,
+    y: 0,
+    w: sliceW,
+    h: sliceH,
+    fill: "white",
+  });
+  const sourceNode = await resolveMarkResult(source(undefined), layerContext);
+  const translated = await translateNode(
+    { dir: dirIdx, offset: translateOffset },
+    [sourceNode]
+  );
+  const node = (await Mask({}, [regionRect, translated])) as GoFishNode;
+  // Stamp datum so .name(layerName) registers the original row for select().
+  (node as any).datum = datum;
+  return node;
+}
 
-    // Source shape, translated so the desired portion lands inside the mask.
-    const sourceNode = await resolveMarkResult(source(undefined), layerContext);
-    const translated = await translateNode(
-      { dir: dirIdx, offset: translateOffset },
-      [sourceNode]
+/**
+ * Build N slice nodes from explicit sizes — used when an upstream layout
+ * operator already has the data and just needs the geometry.
+ */
+async function buildSlicesFromSizes(
+  source: Mark<any>,
+  opts: CutMarkOptions,
+  sizes: number[],
+  data: any[],
+  layerContext?: LayerContext
+): Promise<GoFishNode[]> {
+  const probe = await resolveMarkResult(source(undefined), layerContext);
+  const dirIdx: 0 | 1 = opts.dir === "x" ? 0 : 1;
+  const crossIdx: 0 | 1 = dirIdx === 0 ? 1 : 0;
+  const probeArgs: any = (probe as any).args;
+  const sourceDimAlong: number | undefined = probeArgs?.dims?.[dirIdx]?.size;
+  const sourceDimCross: number | undefined = probeArgs?.dims?.[crossIdx]?.size;
+  if (typeof sourceDimAlong !== "number") {
+    throw new Error(
+      `cut: source shape must have an explicit ${
+        opts.dir === "x" ? "w" : "h"
+      } (got ${JSON.stringify(sourceDimAlong)})`
     );
+  }
+  if (typeof sourceDimCross !== "number") {
+    throw new Error(
+      `cut: source shape must have an explicit ${
+        opts.dir === "x" ? "h" : "w"
+      } (cross axis); v1 cannot infer it from intrinsic dimensions`
+    );
+  }
 
-    const node = (await Mask({}, [regionRect, translated])) as GoFishNode;
-    // Stamp the per-group datum onto the slice's node so that .name("...")
-    // registers it for select(), and downstream charts using
-    // Chart(select(name)).mark(...) see the original row data.
-    (node as any).datum = datum;
-    return node;
-  };
-  return nameableMark(base);
-};
-
-export function cut<T extends Record<string, any>>(
-  opts: CutOptions<T>
-): Operator<T[], T & { slice: NameableMark<unknown> }> {
-  const operator: Operator<T[], T & { slice: NameableMark<unknown> }> = async (
-    mark
-  ) => {
-    return (async (data: T[], key?: string | number, layerContext?: any) => {
-      // 1. Probe source for intrinsic extents on dir + cross axis.
-      const probe = await resolveMarkResult(
-        opts.shape(undefined as any),
+  const inset = opts.inset ?? 0;
+  let offset = 0;
+  const nodes: GoFishNode[] = [];
+  for (let i = 0; i < sizes.length; i++) {
+    const extent = sizes[i];
+    const datum = data[i] ?? null;
+    nodes.push(
+      await buildSliceNode(
+        source,
+        dirIdx,
+        sourceDimAlong,
+        offset,
+        extent,
+        sourceDimCross,
+        inset,
+        datum,
         layerContext
-      );
-      const dirIdx: 0 | 1 = opts.dir === "x" ? 0 : 1;
-      const crossIdx: 0 | 1 = dirIdx === 0 ? 1 : 0;
-      const probeArgs: any = (probe as any).args;
-      const sourceDimAlong = probeArgs?.dims?.[dirIdx]?.size;
-      const sourceDimCross = probeArgs?.dims?.[crossIdx]?.size;
-      if (typeof sourceDimAlong !== "number") {
-        throw new Error(
-          `cut: source shape must have an explicit ${
-            opts.dir === "x" ? "w" : "h"
-          } (got ${JSON.stringify(sourceDimAlong)})`
-        );
-      }
-      if (typeof sourceDimCross !== "number") {
-        throw new Error(
-          `cut: source shape must have an explicit ${
-            opts.dir === "x" ? "h" : "w"
-          } (cross axis); v1 cannot infer it from intrinsic dimensions`
-        );
-      }
+      )
+    );
+    offset += extent;
+  }
+  return nodes;
+}
 
-      // 2. Group by `by`. v1 takes the first row per group.
-      const groupMap = new Map<unknown, T[]>();
-      for (const row of data) {
-        const k = (row as any)[opts.by];
-        const list = groupMap.get(k);
-        if (list) list.push(row);
-        else groupMap.set(k, [row]);
-      }
-      const groups = [...groupMap.entries()];
+/**
+ * Resolve the entry-flagged `size` channel value into pixel extents along
+ * `dir`. createMark hands us either:
+ *  - undefined: no `size` was given → equal slices.
+ *  - a number[] / MaybeValue<number>[]: the per-row extents (either passed
+ *    directly by the caller, or mapped per-row from a field name).
+ *
+ * For the field-name case, the values are raw sums; we normalize them to
+ * proportions of `sourceDimAlong`. For the explicit-array case, values are
+ * already in source pixels; pass through.
+ *
+ * The `sizeFromField` flag distinguishes the two paths — when true, treat
+ * values as relative weights and scale; when false (literal array), keep as-is.
+ */
+function resolveExtents(
+  size: any,
+  sourceDimAlong: number,
+  sizeFromField: boolean
+): number[] {
+  if (size === undefined) return [];
+  const arr: number[] = Array.isArray(size)
+    ? size.map((v) =>
+        typeof v === "number" ? v : isValue(v) ? (getValue(v) ?? 0) : 0
+      )
+    : [];
+  if (!sizeFromField) return arr;
+  const total = arr.reduce((a, b) => a + b, 0) || 1;
+  return arr.map((w) => (w / total) * sourceDimAlong);
+}
 
-      // 3. Compute proportions → pixel extents along dir.
-      const weights = groups.map(([, rows]) =>
-        opts.size ? sumBy(rows, (r: any) => Number(r[opts.size!]) || 0) : 1
-      );
-      const total = weights.reduce((a, b) => a + b, 0) || 1;
-      const extents = weights.map((w) => (w / total) * sourceDimAlong);
+/**
+ * Attach a `.cut(opts)` method onto an existing mark. The method returns
+ * `cut(mark, opts)` — the chained sugar form. Propagates through `.name()`
+ * and `.label()` so chained calls retain `.cut`.
+ */
+export function attachCut<M>(mark: M): M {
+  if (typeof mark !== "function") return mark;
+  const m: any = mark;
+  Object.defineProperty(m, "cut", {
+    value: (cutOpts: CutMarkOptions) => cut(m, cutOpts),
+    writable: true,
+    configurable: true,
+  });
+  for (const methodName of ["name", "label"] as const) {
+    const original = m[methodName];
+    if (typeof original === "function") {
+      Object.defineProperty(m, methodName, {
+        value: (...args: any[]) => attachCut(original.call(m, ...args)),
+        writable: true,
+        configurable: true,
+      });
+    }
+  }
+  return mark;
+}
 
-      // 4. Walk groups: build slice mark, call user mark with augmented datum.
-      let offset = 0;
-      const inset = opts.inset ?? 0;
-      const nodes = await Promise.all(
-        groups.map(async ([gkey, rows], i) => {
-          const slice = buildSlice(
-            opts.shape,
-            dirIdx,
-            sourceDimAlong,
-            offset,
-            extents[i],
-            sourceDimCross,
-            inset,
-            rows[0]
-          );
-          offset += extents[i];
-          const augmented = { ...rows[0], slice } as T & {
-            slice: NameableMark<unknown>;
-          };
-          const childKey =
-            key !== undefined ? `${key}-${String(gkey)}` : String(gkey);
-          const node = await resolveMarkResult(
-            mark(augmented, childKey, layerContext),
-            layerContext
-          );
-          node.setKey(childKey);
-          return node;
-        })
-      );
+/**
+ * The cut shape function. createMark resolves the `size` channel before
+ * calling us — by the time we run, `size` is either undefined (equal
+ * slices) or an array of extents. We probe the source for its dir-axis
+ * extent, normalize the extents, and emit N clipped slice nodes.
+ *
+ * `sizeFromField` is a flag on the props that tells us whether the array
+ * came from a field-name resolution (= relative weights, need scaling) or
+ * was passed explicitly by the caller (= absolute pixel extents).
+ */
+async function cutShape(
+  props: CutShapeProps & { __sizeFromField: boolean },
+  data?: any[]
+): Promise<GoFishNode[]> {
+  const items = data ?? [];
+  const probe = await resolveMarkResult(props.source(undefined));
+  const dirIdx: 0 | 1 = props.dir === "x" ? 0 : 1;
+  const probeArgs: any = (probe as any).args;
+  const sourceDimAlong: number | undefined = probeArgs?.dims?.[dirIdx]?.size;
+  if (typeof sourceDimAlong !== "number") {
+    throw new Error(
+      `cut: source shape must have an explicit ${
+        props.dir === "x" ? "w" : "h"
+      } (got ${JSON.stringify(sourceDimAlong)})`
+    );
+  }
 
-      // 5. Stack them along dir. Each slice's bbox is its visible (post-inset)
-      // extent; chart-space spacing between slices is independent of inset.
-      const stacked = (await Spread(
-        {
-          dir: opts.dir,
-          spacing: opts.spacing,
-          alignment: opts.alignment ?? "middle",
-          reverse: opts.reverse ?? false,
-        },
-        nodes
-      )) as unknown as GoFishNode;
-      (stacked as any).datum = data;
-      return stacked;
-    }) as Mark<T[]>;
-  };
-  // Tag for axis title inference (mirrors spread's pattern).
-  (operator as any).__axisFields =
-    opts.dir === "x" ? { x: opts.by } : { y: opts.by };
-  return operator;
+  let extents: number[];
+  if (props.size === undefined) {
+    const n = items.length;
+    extents = n > 0 ? Array(n).fill(sourceDimAlong / n) : [];
+  } else {
+    extents = resolveExtents(props.size, sourceDimAlong, props.__sizeFromField);
+  }
+
+  return buildSlicesFromSizes(
+    props.source,
+    { dir: props.dir, inset: props.inset },
+    extents,
+    items
+  );
+}
+
+const cutFactory = createMark<
+  CutShapeProps & { __sizeFromField: boolean },
+  { size: { type: "size"; entry: true } }
+>(cutShape as any, { size: { type: "size", entry: true } }, { kind: "expand" });
+
+/**
+ * Build a cut mark. The mark is expand-kind — when invoked with data it
+ * returns N slice nodes 1:1 with the data array.
+ *
+ * Wraps `cutFactory` with the `(source, opts)` signature users prefer; the
+ * `__sizeFromField` flag is computed here so the shape function doesn't have
+ * to inspect raw input.
+ */
+export function cut(
+  source: Mark<any>,
+  opts: CutMarkOptions
+): NameableMark<any> {
+  return cutFactory({
+    source,
+    dir: opts.dir,
+    size: opts.size,
+    inset: opts.inset,
+    __sizeFromField: typeof opts.size === "string",
+  } as any);
 }

@@ -20,7 +20,9 @@ import {
   inferPos,
   inferColor,
   inferRaw,
+  inferEntrySize,
 } from "./channels";
+import { withMarkKind, type MarkKind } from "./marks/createOperator";
 import { isValue } from "./data";
 import { Mark } from "./types";
 import type { ConstraintSpec, ConstraintRef } from "./constraints";
@@ -434,11 +436,16 @@ export function createMark<
   ShapeProps extends Record<string, any>,
   C extends ChannelAnnotations<ShapeProps>,
 >(
-  shapeFn: (opts: ShapeProps) => GoFishNode,
-  channels: C
+  shapeFn: (
+    opts: ShapeProps,
+    data?: any[]
+  ) => GoFishNode | GoFishNode[] | Promise<GoFishNode> | Promise<GoFishNode[]>,
+  channels: C,
+  cfg?: { kind?: MarkKind }
 ): <T extends Record<string, any>>(
   opts: DeriveMarkProps<ShapeProps, C, T>
 ) => NameableMark<T | T[] | { item: T | T[]; key: number | string }> {
+  const kind: MarkKind = cfg?.kind ?? "per-item";
   return <T extends Record<string, any>>(
     markOpts: DeriveMarkProps<ShapeProps, C, T>
   ): NameableMark<T | T[] | { item: T | T[]; key: number | string }> => {
@@ -465,16 +472,26 @@ export function createMark<
 
       const data = Array.isArray(d) ? d : [d];
 
-      // Build shape props by encoding each channel
+      // Build shape props by encoding each channel. The plain string spec
+      // ("size"/"pos"/"color"/"raw") aggregates over `data` and produces a
+      // single value. The object form `{type, entry: true}` produces a
+      // per-row array — used by expand-kind marks.
       const shapeProps: Record<string, any> = {};
       for (const propName of Object.keys(markOpts as any)) {
         if (propName === "debug") continue;
-        const channelType = channels[propName as keyof C];
+        const channelSpec = channels[propName as keyof C];
         const markValue = (markOpts as any)[propName];
+
+        const channelType =
+          typeof channelSpec === "string" ? channelSpec : channelSpec?.type;
+        const isEntry =
+          typeof channelSpec === "object" && channelSpec?.entry === true;
 
         if (isValue(markValue)) {
           // Already a Value wrapper (e.g. v(...)) — pass through directly
           shapeProps[propName] = markValue;
+        } else if (isEntry && channelType === "size") {
+          shapeProps[propName] = inferEntrySize(markValue, data);
         } else if (channelType === "size") {
           shapeProps[propName] = inferSize(markValue, data);
         } else if (channelType === "pos") {
@@ -488,11 +505,27 @@ export function createMark<
         }
       }
 
-      const node = shapeFn(shapeProps as ShapeProps);
+      // For expand-kind marks, hand the data array to shapeFn so it can
+      // build N output nodes 1:1 with input rows. shapeFn may be async.
+      const result = await shapeFn(
+        shapeProps as ShapeProps,
+        kind === "expand" ? data : undefined
+      );
+      if (Array.isArray(result)) {
+        // Expand path: stamp each slice with its own datum.
+        for (let i = 0; i < result.length; i++) {
+          const node = result[i];
+          node.name(key?.toString() ?? "");
+          (node as any).datum = data[i] ?? d;
+        }
+        return result as unknown as GoFishNode;
+      }
+      const node = result as GoFishNode;
       node.name(key?.toString() ?? "");
       (node as any).datum = d;
       return node;
     };
+    withMarkKind(baseMark, kind);
 
     // Infer axis field names from string-valued size/pos channels
     const axisFields: { x?: string; y?: string } = {};
@@ -508,14 +541,30 @@ export function createMark<
     const nameMethod = (
       layerName: string
     ): Mark<T | T[] | { item: T | T[]; key: number | string }> => {
-      return async (
+      const wrapped: Mark<
+        T | T[] | { item: T | T[]; key: number | string }
+      > = async (
         input: T | T[] | { item: T | T[]; key: number | string },
         keyParam?: string | number,
         layerContext?: LayerContext
       ) => {
-        const node = await baseMark(input, keyParam, layerContext);
-        // Set the node name for Ref() lookup in low-level context
-        (node as GoFishNode).name(layerName);
+        const result = await baseMark(input, keyParam, layerContext);
+        // Expand-kind marks return arrays — name + register every slice.
+        if (Array.isArray(result)) {
+          for (const node of result as unknown as GoFishNode[]) {
+            (node as GoFishNode).name(layerName);
+            if (layerContext && layerName) {
+              if (!layerContext[layerName]) {
+                layerContext[layerName] = { data: [], nodes: [] };
+              }
+              layerContext[layerName].nodes.push(node);
+              layerContext[layerName].data.push((node as any).datum);
+            }
+          }
+          return result as unknown as GoFishNode;
+        }
+        const node = result as GoFishNode;
+        node.name(layerName);
         if (layerContext && layerName) {
           if (!layerContext[layerName]) {
             layerContext[layerName] = { data: [], nodes: [] };
@@ -525,6 +574,8 @@ export function createMark<
         }
         return node;
       };
+      withMarkKind(wrapped, kind);
+      return wrapped;
     };
     const nameMethodWithFields = (layerName: string) => {
       const fn = nameMethod(layerName);
@@ -537,15 +588,26 @@ export function createMark<
       accessor: LabelAccessor,
       options?: LabelOptions
     ): Mark<T | T[] | { item: T | T[]; key: number | string }> => {
-      return async (
+      const wrapped: Mark<
+        T | T[] | { item: T | T[]; key: number | string }
+      > = async (
         input: T | T[] | { item: T | T[]; key: number | string },
         keyParam?: string | number,
         layerContext?: LayerContext
       ) => {
-        const node = await baseMark(input, keyParam, layerContext);
-        (node as GoFishNode).label(accessor, options);
+        const result = await baseMark(input, keyParam, layerContext);
+        if (Array.isArray(result)) {
+          for (const node of result as unknown as GoFishNode[]) {
+            (node as GoFishNode).label(accessor, options);
+          }
+          return result as unknown as GoFishNode;
+        }
+        const node = result as GoFishNode;
+        node.label(accessor, options);
         return node;
       };
+      withMarkKind(wrapped, kind);
+      return wrapped;
     };
     const renderMethod = async (
       container: Parameters<GoFishNode["render"]>[0],

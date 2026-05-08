@@ -2,7 +2,6 @@ import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
 import {
   Chart,
-  cut,
   layer,
   rect,
   image,
@@ -10,6 +9,8 @@ import {
   Constraint,
   select,
   ref,
+  spread,
+  Spread,
 } from "../../src/lib";
 import bottlePng from "../assets/wilsonblanco.png";
 
@@ -41,25 +42,21 @@ export default meta;
 
 type Args = { w: number; h: number };
 
-/** Image (bottle, stand-in for cucumber) sliced horizontally by `amount`. */
+/** Bottle sliced horizontally by `amount`, arranged vertically by spread. */
 export const ImageCut: StoryObj<Args> = {
   args: { w: 400, h: 700 },
   render: (args: Args) => {
     const container = initializeContainer();
 
     Chart(bottleData)
-      .flow(
-        cut({
-          shape: image({ href: bottlePng, w: 193, h: 600 }),
-          by: "category",
+      .flow(spread({ dir: "y", spacing: 4, reverse: true }))
+      .mark(
+        image({ href: bottlePng, w: 193, h: 600 }).cut({
           dir: "y",
           size: "amount",
           inset: 4,
-          spacing: 4,
-          reverse: true,
         })
       )
-      .mark(({ slice }) => slice)
       .render(container, {
         w: args.w,
         h: args.h,
@@ -71,9 +68,8 @@ export const ImageCut: StoryObj<Args> = {
 };
 
 /** Cut chart with labels added via select() in a separate sub-chart. The cut
- *  chart returns just the named slice (so labels don't widen its layer bbox
- *  and skew slice alignment). A second sub-chart selects "part" and overlays
- *  category and amount labels at each slice's position. */
+ *  chart returns just the named slices; a second sub-chart selects "part"
+ *  and overlays category and amount labels at each slice's position. */
 export const ImageCutWithLabels: StoryObj<Args> = {
   args: { w: 800, h: 700 },
   render: (args: Args) => {
@@ -83,18 +79,12 @@ export const ImageCutWithLabels: StoryObj<Args> = {
 
     layer<Datum>([
       Chart(bottleData)
-        .flow(
-          cut({
-            shape: image({ href: bottlePng, w: 193, h: 600 }),
-            by: "category",
-            dir: "y",
-            size: "amount",
-            inset: 4,
-            spacing: 20,
-            reverse: true,
-          })
-        )
-        .mark(({ slice }) => slice.name("part")),
+        .flow(spread({ dir: "y", spacing: 20, reverse: true }))
+        .mark(
+          image({ href: bottlePng, w: 193, h: 600 })
+            .cut({ dir: "y", size: "amount", inset: 4 })
+            .name("part")
+        ),
 
       Chart(select<Datum>("part")).mark((data) =>
         layer(
@@ -141,119 +131,79 @@ export const ImageCutWithLabels: StoryObj<Args> = {
 };
 
 /** Solid rect cut into 4 equal slices along x with 4px gaps and centered
- *  letter labels. Demonstrates equal-slice default + inset. */
+ *  letter labels. */
 export const RectEqualSlices: StoryObj<Args> = {
   args: { w: 600, h: 200 },
   render: (args: Args) => {
     const container = initializeContainer();
 
     Chart(abcdData)
-      .flow(
-        cut({
-          shape: rect({ w: 400, h: 80, fill: "steelblue" }),
-          by: "label",
-          dir: "x",
-          spacing: 4,
-        })
-      )
-      .mark(({ slice, ...d }) =>
-        layer([
-          slice.name("part"),
-          text({ fontSize: 28, fill: "white", text: d.label }).name("lbl"),
-        ]).constrain(({ part, lbl }) => [
-          Constraint.align({ dir: "x", alignment: "middle" }, [part, lbl]),
-          Constraint.align({ dir: "y", alignment: "middle" }, [part, lbl]),
-        ])
-      )
+      .flow(spread({ dir: "x", spacing: 4 }))
+      .mark(rect({ w: 400, h: 80, fill: "steelblue" }).cut({ dir: "x" }))
       .render(container, { w: args.w, h: args.h, axes: false });
 
     return container;
   },
 };
 
-/** Same as above but with no inset — adjacent slices should touch. */
+/** Same shape with no spacing — adjacent slices should touch. */
 export const RectNoInset: StoryObj<Args> = {
   args: { w: 600, h: 200 },
   render: (args: Args) => {
     const container = initializeContainer();
 
     Chart(abcdData)
-      .flow(
-        cut({
-          shape: rect({ w: 400, h: 80, fill: "tomato" }),
-          by: "label",
-          dir: "x",
-          inset: 0,
-        })
-      )
-      .mark(({ slice, ...d }) =>
-        layer([
-          slice.name("part"),
-          text({ fontSize: 28, fill: "white", text: d.label }).name("lbl"),
-        ]).constrain(({ part, lbl }) => [
-          Constraint.align({ dir: "x", alignment: "middle" }, [part, lbl]),
-          Constraint.align({ dir: "y", alignment: "middle" }, [part, lbl]),
-        ])
-      )
+      .flow(spread({ dir: "x", spacing: 0 }))
+      .mark(rect({ w: 400, h: 80, fill: "tomato" }).cut({ dir: "x" }))
       .render(container, { w: args.w, h: args.h, axes: false });
 
     return container;
   },
 };
 
-/** Image cut into 3 equal slices along y — each slice should show one third of
- *  the bottle (top/middle/bottom). Sanity check that masks line up. */
+/** Image cut into 3 equal slices along y. */
 export const ImageEqualSlices: StoryObj<Args> = {
   args: { w: 600, h: 700 },
   render: (args: Args) => {
     const container = initializeContainer();
 
     Chart([{ k: "top" }, { k: "mid" }, { k: "bot" }])
-      .flow(
-        cut({
-          shape: image({ href: bottlePng, w: 193, h: 600 }),
-          by: "k",
-          dir: "y",
-          inset: 0,
-          reverse: true,
-        })
-      )
-      .mark(({ slice, ...d }) =>
-        layer([
-          slice.name("part"),
-          text({ fontSize: 28, fill: "red", text: d.k }).name("lbl"),
-        ]).constrain(({ part, lbl }) => [
-          Constraint.align({ dir: "x", alignment: "middle" }, [part, lbl]),
-          Constraint.align({ dir: "y", alignment: "middle" }, [part, lbl]),
-        ])
-      )
+      .flow(spread({ dir: "y", spacing: 0, reverse: true }))
+      .mark(image({ href: bottlePng, w: 193, h: 600 }).cut({ dir: "y" }))
       .render(container, { w: args.w, h: args.h, axes: false });
 
     return container;
   },
 };
 
-/** Single slice — sanity check that ONE slice clips correctly. */
-export const SingleSlice: StoryObj<Args> = {
+/** Low-level form: cut + Spread combinator without a Chart — sizes given
+ *  explicitly. Should produce visually identical output to the chart-flow
+ *  form when the same sizes are passed. */
+export const LowLevelForm: StoryObj<Args> = {
   args: { w: 400, h: 700 },
   render: (args: Args) => {
     const container = initializeContainer();
-    Chart([{ k: "only" }])
-      .flow(
-        cut({
-          shape: image({ href: bottlePng, w: 193, h: 600 }),
-          by: "k",
-          dir: "y",
-          inset: 0,
-        })
-      )
-      .mark(({ slice }) => slice)
-      .render(container, { w: args.w, h: args.h, axes: false });
+    const sizes = bottleData.map((d) => d.amount);
+
+    // Pre-resolve cut into N nodes, then hand them to Spread as children.
+    // `size` accepts either a field name or an explicit pixel-extent array.
+    void (async () => {
+      const slices = await image({ href: bottlePng, w: 193, h: 600 }).cut({
+        dir: "y",
+        size: sizes,
+        inset: 4,
+      })(bottleData, undefined, {});
+      Spread({ dir: "y", spacing: 4, reverse: true }, slices).render(
+        container,
+        { w: args.w, h: args.h, axes: false }
+      );
+    })();
+
     return container;
   },
 };
 
-/** dir: "x" with the bottle image — vertical slices with labels above. */
+/** dir: "x" — bottle laid horizontally, sliced vertically with size weights. */
 export const ImageHorizontalCut: StoryObj<Args> = {
   args: { w: 1100, h: 500 },
   render: (args: Args) => {
@@ -268,24 +218,13 @@ export const ImageHorizontalCut: StoryObj<Args> = {
     ];
 
     Chart(data)
-      .flow(
-        cut({
-          shape: image({ href: bottlePng, w: 800, h: 200 }),
-          by: "label",
+      .flow(spread({ dir: "x", spacing: 6 }))
+      .mark(
+        image({ href: bottlePng, w: 800, h: 200 }).cut({
           dir: "x",
           size: "weight",
           inset: 4,
-          spacing: 6,
         })
-      )
-      .mark(({ slice, ...d }) =>
-        layer([
-          slice.name("part"),
-          text({ fontSize: 24, fontWeight: "bold", text: d.label }).name("lbl"),
-        ]).constrain(({ part, lbl }) => [
-          Constraint.align({ dir: "x", alignment: "middle" }, [part, lbl]),
-          Constraint.align({ dir: "y", alignment: "middle" }, [part, lbl]),
-        ])
       )
       .render(container, { w: args.w, h: args.h, axes: false });
 
