@@ -23,6 +23,34 @@ export type KeyContext = { [key: string]: GoFishNode };
 export type AxesOptions = boolean | { x?: AxisOptions; y?: AxisOptions };
 export type AxisOptions = boolean | { title?: string | false };
 
+// string: custom title, false: no title, undefined: infer from encoding
+function resolveAxisTitle(
+  axisOpt: AxisOptions | undefined
+): string | false | undefined {
+  if (axisOpt === undefined || axisOpt === false) return false;
+  if (axisOpt === true) return undefined; // infer from axisFields
+  return axisOpt.title;
+}
+
+function resolveAxisTitles(
+  axes: AxesOptions | undefined,
+  axisFields?: { x?: string; y?: string }
+): { xTitle: string | undefined; yTitle: string | undefined } {
+  let xTitleOpt: string | false | undefined = false;
+  let yTitleOpt: string | false | undefined = false;
+  if (axes === true) {
+    xTitleOpt = undefined;
+    yTitleOpt = undefined;
+  } else if (axes && typeof axes === "object") {
+    xTitleOpt = resolveAxisTitle(axes.x);
+    yTitleOpt = resolveAxisTitle(axes.y);
+  }
+  return {
+    xTitle: xTitleOpt === false ? undefined : (xTitleOpt ?? axisFields?.x),
+    yTitle: yTitleOpt === false ? undefined : (yTitleOpt ?? axisFields?.y),
+  };
+}
+
 export async function layout(
   {
     w,
@@ -171,6 +199,7 @@ export const gofish = (
     debug = false,
     defs,
     axes = false,
+    axisFields,
     colorConfig,
     padding,
   }: {
@@ -249,6 +278,8 @@ export const gofish = (
               height: h,
               svgPadding,
               defs,
+              axes,
+              axisFields,
               scaleContext: data.scaleContext,
             },
             data.child
@@ -274,6 +305,8 @@ export const render = (
     height,
     transform,
     defs,
+    axes,
+    axisFields,
     scaleContext: scaleContextParam,
     svgPadding,
   }: {
@@ -281,6 +314,8 @@ export const render = (
     height: number;
     transform?: string;
     defs?: JSX.Element[];
+    axes?: AxesOptions;
+    axisFields?: { x?: string; y?: string };
     scaleContext: ScaleContext | null;
     svgPadding?: number;
   },
@@ -289,16 +324,24 @@ export const render = (
   const scaleContext = scaleContextParam;
   const pad = svgPadding ?? PADDING;
 
+  const { xTitle, yTitle } = resolveAxisTitles(axes, axisFields);
+  const Y_TITLE_MARGIN = PADDING * 4; // 40px left of content for rotated y-title
+  const X_TITLE_MARGIN = PADDING * 3; // 30px below content for x-title
+  const leftMargin = yTitle ? Y_TITLE_MARGIN : 0;
+  const bottomMargin = xTitle ? X_TITLE_MARGIN : 0;
+
   const result = (
     <svg
-      width={width + pad * 2 + LEGEND_MARGIN}
-      height={height + pad * 2}
+      width={width + leftMargin + pad + LEGEND_MARGIN + pad}
+      height={height + pad + bottomMargin + pad}
       xmlns="http://www.w3.org/2000/svg"
     >
       <Show when={defs}>
         <defs>{defs}</defs>
       </Show>
-      <g transform={`scale(1, -1) translate(${pad}, ${-(height + pad)})`}>
+      <g
+        transform={`scale(1, -1) translate(${leftMargin + pad}, ${-(height + pad)})`}
+      >
         <Show when={transform} keyed fallback={child.INTERNAL_render()}>
           <g transform={transform ?? ""}>{child.INTERNAL_render()}</g>
         </Show>
@@ -330,6 +373,32 @@ export const render = (
             </g>
           )}
         </For>
+        {/* x axis title */}
+        <Show when={xTitle}>
+          <text
+            transform="scale(1, -1)"
+            x={width / 2}
+            y={bottomMargin * 0.6}
+            text-anchor="middle"
+            dominant-baseline="hanging"
+            font-size="11px"
+            fill="gray"
+          >
+            {xTitle}
+          </text>
+        </Show>
+        {/* y axis title */}
+        <Show when={yTitle}>
+          <text
+            transform={`translate(${-(leftMargin * 0.5 + pad)}, ${height / 2}) scale(1, -1) rotate(-90)`}
+            text-anchor="middle"
+            dominant-baseline="middle"
+            font-size="11px"
+            fill="gray"
+          >
+            {yTitle}
+          </text>
+        </Show>
       </g>
     </svg>
   );
