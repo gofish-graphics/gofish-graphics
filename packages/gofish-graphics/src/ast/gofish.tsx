@@ -261,6 +261,7 @@ export const gofish = (
 };
 
 const PADDING = 10;
+const LEGEND_MARGIN = 120; // right-side buffer for legend swatches + labels
 
 /**
  * Finds the translation from the top-level coord node.
@@ -290,7 +291,7 @@ export const render = (
 
   const result = (
     <svg
-      width={width + pad * 2}
+      width={width + pad * 2 + LEGEND_MARGIN}
       height={height + pad * 2}
       xmlns="http://www.w3.org/2000/svg"
     >
