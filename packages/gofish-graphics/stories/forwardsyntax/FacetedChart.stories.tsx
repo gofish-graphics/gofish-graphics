@@ -24,7 +24,7 @@ export const Default: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    Chart(seafood)
+    Chart(seafood, { axes: true })
       .flow(spread({ by: "lake", dir: "x", spacing: 48, axis: true }))
       .mark((data) =>
         Chart(data)
@@ -34,7 +34,6 @@ export const Default: StoryObj<Args> = {
       .render(container, {
         w: args.w,
         h: args.h,
-        axes: true,
         debug: true
       });
 
@@ -47,7 +46,7 @@ export const FacetedScatterDriving: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    Chart(drivingShifts)
+    Chart(drivingShifts, { axes: true })
       .flow(spread({ by: "side", dir: "x", spacing: 50, axis: true }))
       .mark((data) =>
         Chart(data)
@@ -57,7 +56,6 @@ export const FacetedScatterDriving: StoryObj<Args> = {
       .render(container, {
         w: args.w,
         h: args.h,
-        axes: true,
       });
 
     return container;
@@ -69,7 +67,7 @@ export const FacetedScatterY: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    Chart(drivingShifts)
+    Chart(drivingShifts, { axes: true })
       .flow(spread({ by: "side", dir: "y", spacing: 50, axis: true }))
       .mark((data) =>
         Chart(data)
@@ -79,7 +77,6 @@ export const FacetedScatterY: StoryObj<Args> = {
       .render(container, {
         w: args.w,
         h: args.h,
-        axes: true,
       });
 
     return container;

@@ -25,7 +25,7 @@ export const Default: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    Chart(seafood)
+    Chart(seafood, { axes: true })
       .flow(
       spread({ by: "lake",  spacing: 8, dir: "x", axis: false }),
         derive((d) => d.flatMap((d) => repeat(d, "count"))),
@@ -37,7 +37,6 @@ export const Default: StoryObj<Args> = {
       .render(container, {
         w: args.w,
         h: args.h,
-        axes: true,
       });
 
     return container;

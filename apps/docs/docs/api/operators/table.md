@@ -21,10 +21,13 @@ const data = days.flatMap((day) =>
   hours.map((hour) => ({ day, hour, value: (Math.random() * 100) | 0 }))
 );
 
-gf.Chart(data, { color: gf.gradient(["#ffffcc", "#fd8d3c", "#bd0026"]) })
+gf.Chart(data, {
+  color: gf.gradient(["#ffffcc", "#fd8d3c", "#bd0026"]),
+  axes: true,
+})
   .flow(gf.table({ by: { x: "hour", y: "day" }, spacing: 4 }))
   .mark(gf.rect({ fill: "value" }))
-  .render(root, { w: 500, h: 300, axes: true });
+  .render(root, { w: 500, h: 300 });
 ```
 
 :::
@@ -47,10 +50,10 @@ table({ by: { x, y }, spacing?, numCols? })
 
 ```ts
 // Heatmap: hour on x, day on y, colored by value
-Chart(data, { color: gradient(["#ffffcc", "#fd8d3c", "#bd0026"]) })
+Chart(data, { color: gradient(["#ffffcc", "#fd8d3c", "#bd0026"]), axes: true })
   .flow(table({ by: { x: "hour", y: "day" }, spacing: 4 }))
   .mark(rect({ fill: "value" }))
-  .render(container, { w: 600, h: 400, axes: true });
+  .render(container, { w: 600, h: 400 });
 
 // Asymmetric spacing
 .flow(table({ by: { x: "col", y: "row" }, spacing: [2, 8] }))

@@ -11,10 +11,10 @@ const locations = Object.entries(lakeLocations).map(([lake, { x, y }]) => ({
   y,
 }));
 
-gf.Chart(locations)
+gf.Chart(locations, { axes: true })
   .flow(gf.scatter({ by: "lake", x: "x", y: "y" }))
   .mark(gf.circle({ r: 8 }))
-  .render(root, { w: 400, h: 250, axes: true });
+  .render(root, { w: 400, h: 250 });
 ```
 
 :::

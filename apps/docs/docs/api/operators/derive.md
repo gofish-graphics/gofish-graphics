@@ -5,13 +5,13 @@ Transforms data before it reaches the next operator or mark. The function receiv
 ::: starfish
 
 ```js
-gf.Chart(seafood)
+gf.Chart(seafood, { axes: true })
   .flow(
     gf.derive((d) => d.filter((row) => row.species === "Salmon")),
     gf.spread({ by: "lake", dir: "x" })
   )
   .mark(gf.rect({ h: "count", fill: "steelblue" }))
-  .render(root, { w: 400, h: 250, axes: true });
+  .render(root, { w: 400, h: 250 });
 ```
 
 :::

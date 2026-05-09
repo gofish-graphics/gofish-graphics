@@ -339,15 +339,15 @@ gf.Chart(seafood)
 ## Axes
 
 Great! Now let's talk about how to add axes to your chart. GoFish can automatically infer axes from
-your spec as long as you put `axes: true` in the `render` method like so:
+your spec as long as you pass `axes: true` in the `chart()` options like so:
 
 :::starfish
 
 ```ts
-gf.Chart(seafood)
+gf.Chart(seafood, { axes: true })
   .flow(gf.spread({ by: "lake", dir: "x" }))
   .mark(gf.rect({ h: "count", fill: gf.color.green[5] }))
-  .render(root, { w: 500, h: 300, axes: true });
+  .render(root, { w: 500, h: 300 });
 ```
 
 :::
@@ -363,7 +363,7 @@ StackX(
   For(_.groupBy(seafood, "lake"), (lake, key) =>
     rect({ key, w: 32, h: v(_.sumBy(lake, "count")), fill: gf.color.green[5] })
   )
-).render(root, { w: 500, h: 300, axes: true });
+).render(root, { w: 500, h: 300 });
 ```
 
 ::: -->
@@ -382,13 +382,13 @@ like a normal bar chart, except instead of a line of rectangles, it's a line of 
 :::starfish
 
 ```ts
-gf.Chart(seafood)
+gf.Chart(seafood, { axes: true })
   .flow(
     gf.spread({ by: "lake", dir: "x" }), //
     gf.stack({ by: "species", dir: "y", label: false })
   )
   .mark(gf.rect({ h: "count", fill: gf.color.green[5] }))
-  .render(root, { w: 500, h: 300, axes: true });
+  .render(root, { w: 500, h: 300 });
 ```
 
 :::
@@ -402,19 +402,19 @@ color encoding so that each rectangle's color corresponds to the species of fish
 :::starfish
 
 ```ts
-gf.Chart(seafood)
+gf.Chart(seafood, { axes: true })
   .flow(
     gf.spread({ by: "lake", dir: "x" }), //
     gf.stack({ by: "species", dir: "y", label: false })
   )
   .mark(gf.rect({ h: "count", fill: "species" }))
-  .render(root, { w: 500, h: 300, axes: true });
+  .render(root, { w: 500, h: 300 });
 ```
 
 :::
 
 Much better! Notice that we also have a color legend telling us what each color represents. This was
-created automatically because have set `axes: true` on the `render` method.
+created automatically because we passed `axes: true` in the `chart()` options.
 
 <!-- ### The `stack` operator
 
@@ -432,14 +432,14 @@ their counts:
 :::starfish
 
 ```ts
-gf.Chart(seafood)
+gf.Chart(seafood, { axes: true })
   .flow(
     gf.spread({ by: "lake", dir: "x" }),
     gf.derive((d) => _.orderBy(d, "count")),
     gf.stack({ by: "species", dir: "y", label: false })
   )
   .mark(gf.rect({ h: "count", fill: "species" }))
-  .render(root, { w: 500, h: 300, axes: true });
+  .render(root, { w: 500, h: 300 });
 ```
 
 :::
@@ -455,7 +455,7 @@ together.
 :::starfish
 
 ```ts
-gf.Layer([
+gf.Layer({ axes: true }, [
   gf
     .Chart(seafood)
     .flow(
@@ -471,7 +471,6 @@ gf.Layer([
 ]).render(root, {
   w: 500,
   h: 300,
-  axes: true,
 });
 ```
 
@@ -495,7 +494,7 @@ the `spread` operator.
 :::starfish
 
 ```ts
-gf.Layer([
+gf.Layer({ axes: true }, [
   gf
     .Chart(seafood)
     .flow(
@@ -511,7 +510,6 @@ gf.Layer([
 ]).render(root, {
   w: 500,
   h: 300,
-  axes: true,
 });
 ```
 
@@ -540,7 +538,7 @@ Frame([
       For(items, (d) => ref(`${d.lake}-${d.species}`))
     )
   ),
-]).render(root, { w: 500, h: 300, axes: true });
+]).render(root, { w: 500, h: 300 });
 ```
 
 ::: -->
@@ -554,7 +552,7 @@ so that it looks better in polar space.
 :::starfish
 
 ```ts
-gf.Layer({ coord: gf.clock() }, [
+gf.Layer({ coord: gf.clock(), axes: true }, [
   gf
     .Chart(seafood)
     .flow(
@@ -578,7 +576,6 @@ gf.Layer({ coord: gf.clock() }, [
   w: 500,
   h: 300,
   transform: { x: 200, y: 200 },
-  axes: true,
 });
 ```
 

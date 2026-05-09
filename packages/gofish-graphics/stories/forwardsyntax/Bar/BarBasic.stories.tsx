@@ -23,13 +23,12 @@ export const Default: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    Chart(seafood)
+    Chart(seafood, { axes: true })
       .flow(spread({ by: "lake",  dir: "x" }))
       .mark(rect({ h: "count" }))
       .render(container, {
         w: args.w,
         h: args.h,
-        axes: true,
       });
 
     return container;

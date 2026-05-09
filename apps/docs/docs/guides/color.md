@@ -41,10 +41,10 @@ const scores = [
   { label: "H", value: 100 },
 ];
 
-gf.Chart(scores, { color: gf.gradient(["#f7fbff", "#08519c"]) })
+gf.Chart(scores, { color: gf.gradient(["#f7fbff", "#08519c"]), axes: true })
   .flow(gf.spread({ by: "label", dir: "x" }))
   .mark(gf.rect({ h: "value", fill: "value" }))
-  .render(root, { w: 400, h: 250, axes: true });
+  .render(root, { w: 400, h: 250 });
 ```
 
 :::
@@ -67,10 +67,13 @@ const scores = [
   { label: "H", value: 100 },
 ];
 
-gf.Chart(scores, { color: gf.gradient(["#f7fbff", "#42c663", "#6b0808"]) })
+gf.Chart(scores, {
+  color: gf.gradient(["#f7fbff", "#42c663", "#6b0808"]),
+  axes: true,
+})
   .flow(gf.spread({ by: "label", dir: "x" }))
   .mark(gf.rect({ h: "value", fill: "value" }))
-  .render(root, { w: 400, h: 250, axes: true });
+  .render(root, { w: 400, h: 250 });
 ```
 
 :::

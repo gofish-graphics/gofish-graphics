@@ -45,13 +45,13 @@ export const Default: StoryObj<Args> = {
 
     Chart(heatmapData, {
       color: gradient(["#ffffcc", "#fd8d3c", "#bd0026"]),
+      axes: true,
     })
       .flow(table({ by: { x: "hour", y: "day" },  spacing: 4 }))
       .mark(rect({ fill: "value" }))
       .render(container, {
         w: args.w,
         h: args.h,
-        axes: true,
       });
 
     return container;

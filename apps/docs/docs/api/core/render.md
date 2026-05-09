@@ -10,25 +10,24 @@ Renders the chart into a DOM element.
 
 ## Parameters
 
-| Parameter      | Type                                    | Description                                                                             |
-| -------------- | --------------------------------------- | --------------------------------------------------------------------------------------- |
-| `container`    | `HTMLElement`                           | The DOM element to render into                                                          |
-| `options.w`    | `number`                                | Width in pixels                                                                         |
-| `options.h`    | `number`                                | Height in pixels                                                                        |
-| `options.axes` | `boolean \| { x: boolean; y: boolean }` | Auto-generate axes, labels, and legends. Use an object to toggle x/y axes individually. |
+| Parameter   | Type          | Description                    |
+| ----------- | ------------- | ------------------------------ |
+| `container` | `HTMLElement` | The DOM element to render into |
+| `options.w` | `number`      | Width in pixels                |
+| `options.h` | `number`      | Height in pixels               |
 
 ## Example
 
 ```ts
-chart(data)
+chart(data, { axes: true })
   .flow(spread({ by: "category", dir: "x" }))
   .mark(rect({ h: "value" }))
-  .render(container, { w: 500, h: 300, axes: true });
+  .render(container, { w: 500, h: 300 });
 ```
 
 ```ts
-chart(data)
+chart(data, { axes: { x: true, y: false } })
   .flow(spread({ by: "category", dir: "x" }))
   .mark(rect({ h: "value" }))
-  .render(container, { w: 500, h: 300, axes: { x: true, y: false } });
+  .render(container, { w: 500, h: 300 });
 ```

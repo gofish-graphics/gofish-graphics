@@ -7,13 +7,13 @@ positional axis at this level. Used for stacked bar charts.
 ::: starfish
 
 ```js
-gf.Chart(seafood)
+gf.Chart(seafood, { axes: true })
   .flow(
     gf.spread({ by: "lake", dir: "x" }),
     gf.stack({ by: "species", dir: "y" })
   )
   .mark(gf.rect({ h: "count", fill: "species" }))
-  .render(root, { w: 400, h: 250, axes: true });
+  .render(root, { w: 400, h: 250 });
 ```
 
 :::

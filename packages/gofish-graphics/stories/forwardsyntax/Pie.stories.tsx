@@ -25,13 +25,12 @@ export const Basic: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    Chart(seafood, { coord: clock() })
+    Chart(seafood, { coord: clock(), axes: true })
       .flow(stack({ by: "species",  dir: "x" }))
       .mark(rect({ w: "count", fill: "species" }))
       .render(container, {
         w: args.w,
         h: args.h,
-        axes: true,
       });
 
     return container;
@@ -43,13 +42,12 @@ export const Donut: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    Chart(seafood, { coord: clock() })
+    Chart(seafood, { coord: clock(), axes: true })
       .flow(stack({ by: "species",  dir: "x", y: 50, h: 50 }))
       .mark(rect({ w: "count", fill: "species" }))
       .render(container, {
         w: args.w,
         h: args.h,
-        axes: true,
       });
 
     return container;
@@ -61,7 +59,7 @@ export const Rose: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    Chart(nightingale, { coord: clock() })
+    Chart(nightingale, { coord: clock(), axes: true })
       .flow(
         spread({ by: "Month", dir: "x", spacing: 0 }),
         stack({ by: "Type", dir: "y" }),
@@ -75,7 +73,6 @@ export const Rose: StoryObj<Args> = {
       .render(container, {
         w: args.w,
         h: args.h,
-        axes: true,
       });
 
     return container;

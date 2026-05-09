@@ -15,7 +15,7 @@ export default meta;
 type Args = { w: number; h: number };
 
 const DOCS_GROUPED_BAR_CODE = `
-Chart(seafood)
+Chart(seafood, { axes: true })
   .flow(
     spread({ by: "lake",  dir: "x" }),
     stack({ by: "species",  dir: "x", label: false })
@@ -24,7 +24,6 @@ Chart(seafood)
   .render(root, {
     w,
     h,
-    axes: true,
   });
 `;
 
@@ -75,7 +74,7 @@ const runDirectStorybookVersion = (container: HTMLElement, w: number, h: number)
   root.style.margin = "8px";
   container.appendChild(root);
 
-  Chart(seafood)
+  Chart(seafood, { axes: true })
     .flow(
       spread({ by: "lake",  dir: "x" }),
       stack({ by: "species",  dir: "x" })
@@ -84,7 +83,6 @@ const runDirectStorybookVersion = (container: HTMLElement, w: number, h: number)
     .render(root, {
       w,
       h,
-      axes: true,
     });
 
   return root;
