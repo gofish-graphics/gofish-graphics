@@ -347,6 +347,18 @@ export class GoFishNode {
       });
       return;
     }
+
+    // Coordinate-transform nodes (polar, clock, bipolar, etc.) manage their
+    // own coordinate space; Cartesian axes make no sense for them or their
+    // children. Claim all dims so no descendant assigns axis flags.
+    if (this.type === "coord") {
+      const allClaimed = new Set<0 | 1>([0, 1]);
+      this.children.forEach((c) => {
+        if (c instanceof GoFishNode) c.resolveAxes(allClaimed);
+      });
+      return;
+    }
+
     const next = new Set(claimed);
     const space = this._underlyingSpace;
     for (const dim of [0, 1] as (0 | 1)[]) {
@@ -381,6 +393,13 @@ export class GoFishNode {
    * niced domain that gofish.tsx uses for posScale computation.
    */
   public resolveNiceDomains(): void {
+    // Coord-transform nodes and their descendants have domains that map into
+    // the coordinate system's fixed space (e.g. stacked counts → [0, 2π]).
+    // Rounding those domains breaks the mapping, so stop here entirely.
+    if (this.type === "coord") {
+      return;
+    }
+
     if (this._underlyingSpace) {
       for (const dim of [0, 1] as (0 | 1)[]) {
         const space = this._underlyingSpace[dim];
