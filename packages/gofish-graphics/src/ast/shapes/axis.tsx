@@ -60,7 +60,7 @@ export function createAxisNode({
  * returned position is still a meaningful local offset rather than an absolute root
  * coordinate that lands off-screen.
  */
-function posRelToAncestor(
+export function posRelToAncestor(
   keyNode: GoFishNode,
   stopBefore: GoFishNode | undefined,
   dim: 0 | 1

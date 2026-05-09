@@ -47,6 +47,8 @@ export type ChartOptions = {
    * are still respected when `axes: true`.
    */
   axes?: AxesOptions;
+  /** Extra padding (px) between the polar circle and the SVG edge. Default 30. */
+  padding?: number;
 };
 
 /** A lazy selector that defers layer lookup until actually needed. */
