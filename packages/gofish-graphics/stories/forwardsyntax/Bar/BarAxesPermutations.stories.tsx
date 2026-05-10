@@ -2,7 +2,22 @@ import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../../helper";
 import { seafood } from "../../../src/data/catch";
 import { Chart, spread, rect } from "../../../src/lib";
-import type { AxesOptions } from "../../../src/ast/gofish";
+import type { AxesOptions, AxisOptions } from "../../../src/ast/gofish";
+
+/** Extract show/hide boolean from an AxisOptions value.
+ *  false → false (suppress), true or { title } → true (show). */
+function axisOptToShow(opt: AxisOptions | undefined): boolean | undefined {
+  if (opt === undefined) return undefined;
+  return opt !== false;
+}
+
+/** Deconstruct AxesOptions into the spread's axis param (show/hide only). */
+function axesToSpreadAxis(
+  axes: AxesOptions
+): boolean | { x?: boolean; y?: boolean } {
+  if (typeof axes === "boolean") return axes;
+  return { x: axisOptToShow(axes.x), y: axisOptToShow(axes.y) };
+}
 
 const meta: Meta = {
   title: "Forward Syntax V3/Bar/Axes Permutations",
@@ -24,7 +39,7 @@ function renderBar(args: Args, axes: AxesOptions): HTMLElement {
   const container = initializeContainer();
 
   Chart(seafood, { axes })
-    .flow(spread({ by: "lake",  dir: "x" }))
+    .flow(spread({ by: "lake",  dir: "x", axis: axesToSpreadAxis(axes) }))
     .mark(rect({ h: "count" }))
     .render(container, {
       w: args.w,
