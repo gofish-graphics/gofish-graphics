@@ -15,12 +15,21 @@ import {
   stack,
   scatter,
   group,
+  table,
+  log as logOp,
   derive,
   rect,
   circle,
   line,
   area,
   blank,
+  ellipse,
+  petal,
+  text,
+  image,
+  palette,
+  gradient,
+  clock,
   type Operator,
   type Mark,
 } from "gofish-graphics";
@@ -94,20 +103,21 @@ function mapOperator(
         return Array.isArray(d) ? result : (result[0] ?? null);
       });
     }
-    case "spread": {
-      const { field, ...rest } = opts;
-      return field ? spread(field, rest) : spread(rest);
-    }
-    case "stack": {
-      const { field, dir, ...rest } = opts;
-      return stack(field, { dir, ...rest });
-    }
+    // Modern v3 operators all take a single options object with `by`,
+    // `dir`, etc. as keyword args. The previous `field`-positional shape
+    // was stale and silently miscalled most ops.
+    case "spread":
+      return spread(opts as any);
+    case "stack":
+      return stack(opts as any);
     case "group":
-      return group(opts.field);
-    case "scatter": {
-      const { field, x, y, ...rest } = opts;
-      return scatter(field, { x, y, ...rest });
-    }
+      return group(opts as any);
+    case "scatter":
+      return scatter(opts as any);
+    case "table":
+      return table(opts as any);
+    case "log":
+      return logOp(opts.label);
     default:
       console.warn(`Unknown operator type: ${type}`);
       return null;
@@ -120,6 +130,10 @@ const MARK_MAP: Record<string, (opts: Record<string, any>) => Mark<any>> = {
   line: (opts) => line(opts),
   area: (opts) => area(opts),
   blank: (opts) => blank(opts),
+  ellipse: (opts) => ellipse(opts),
+  petal: (opts) => petal(opts),
+  text: (opts) => text(opts),
+  image: (opts) => image(opts),
 };
 
 function mapMark(spec: MarkSpec): Mark<any> {
@@ -127,6 +141,39 @@ function mapMark(spec: MarkSpec): Mark<any> {
   const factory = MARK_MAP[type];
   if (!factory) throw new Error(`Unknown mark type: ${type}`);
   return factory(opts);
+}
+
+/**
+ * Resolve color / coord configs the same way the widget bundle does.
+ * Python emits a tagged dict (`{_tag: "palette", values}` etc.) so the
+ * spec can be JSON-serialized; here we turn those tags back into real
+ * function calls before passing the options to gofish.
+ */
+function resolveOptions(
+  raw: Record<string, any> | undefined
+): Record<string, any> {
+  const resolved: Record<string, any> = { ...(raw ?? {}) };
+  if (
+    resolved.color &&
+    typeof resolved.color === "object" &&
+    "_tag" in resolved.color
+  ) {
+    if (resolved.color._tag === "palette") {
+      resolved.color = palette(resolved.color.values);
+    } else if (resolved.color._tag === "gradient") {
+      resolved.color = gradient(resolved.color.stops);
+    }
+  }
+  if (
+    resolved.coord &&
+    typeof resolved.coord === "object" &&
+    "type" in resolved.coord
+  ) {
+    if (resolved.coord.type === "clock") {
+      resolved.coord = clock();
+    }
+  }
+  return resolved;
 }
 
 // ---------------------------------------------------------------------------
@@ -150,17 +197,23 @@ function renderChart(spec: HarnessSpec) {
 
     const mark = mapMark(spec.mark);
 
-    const builder = Chart(spec.data, spec.options || {});
+    // Pull render options out and pass the rest to Chart() as chart-level
+    // options (color, coord, etc.). Forward `w`/`h` *as-is* — including
+    // when they're undefined — so the rect default-width fallback path is
+    // exercised the same way it is in JS Storybook.
+    const allOpts = spec.options || {};
+    const { w, h, axes, debug, ...chartOptsRaw } = allOpts;
+    const chartOpts = resolveOptions(chartOptsRaw);
+
+    const builder = Chart(spec.data, chartOpts);
     const node = builder.flow(...operators).mark(mark);
 
-    const { w, h, axes, debug, ...restOpts } = spec.options || {};
     node.render(container, {
-      w: w ?? 400,
-      h: h ?? 400,
+      w,
+      h,
       axes: axes ?? false,
       debug: debug ?? false,
-      ...restOpts,
-    });
+    } as any);
 
     // Allow a tick for SolidJS to flush renders
     requestAnimationFrame(() => {
