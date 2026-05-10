@@ -1,23 +1,33 @@
 /**
  * check-python-sync.ts
  *
- * Validates Python story synchronization with JS stories in a PR.
- * Replaces check-python-sync.sh.
+ * Validates Python story synchronization with JS stories.
  *
- * Usage: tsx scripts/check-python-sync.ts [base-ref]
- *   base-ref defaults to BASE_REF env var or "origin/main"
+ * Two modes:
+ *   - default (delta): checks only the JS stories changed between base-ref and HEAD.
+ *     Used in PRs to catch missing/stale Python counterparts on touched files.
+ *   - --all (full coverage): walks every JS story and checks for a Python
+ *     counterpart. Exempt entries become *warnings* (not silent passes) so
+ *     the gap is visible. Missing-and-not-exempt is a hard error.
  *
- * Checks:
- *   1. Coverage: JS story added → Python counterpart must be created (unless exempt)
- *   2. Coverage: JS story deleted → Python counterpart must also be deleted
- *   3. Spec sync: JS story modified + Python exists → Python must also be modified
+ * Usage:
+ *   tsx scripts/check-python-sync.ts [base-ref]    # delta mode (default)
+ *   tsx scripts/check-python-sync.ts --all          # full coverage
+ *
+ *   base-ref in delta mode defaults to BASE_REF env var or "origin/main".
  *
  * Writes results to tests/tmp/sync-results.json for parity review site.
  */
 
 import { execSync } from "child_process";
-import { readFileSync, existsSync, mkdirSync, writeFileSync } from "fs";
-import { join, dirname } from "path";
+import {
+  readFileSync,
+  existsSync,
+  mkdirSync,
+  writeFileSync,
+  readdirSync,
+} from "fs";
+import { join, dirname, relative } from "path";
 import { mapJsToPython } from "./path-mapping.js";
 export { mapJsToPython } from "./path-mapping.js";
 
@@ -77,8 +87,181 @@ function loadExemptSet(): Set<string> {
 }
 
 // ---------------------------------------------------------------------------
+// Walk all JS stories under packages/gofish-graphics/stories/.
+// ---------------------------------------------------------------------------
+
+function walkJsStories(): string[] {
+  const root = join(ROOT_DIR, "packages/gofish-graphics/stories");
+  const out: string[] = [];
+  function walk(dir: string) {
+    if (!existsSync(dir)) return;
+    for (const e of readdirSync(dir, { withFileTypes: true })) {
+      const p = join(dir, e.name);
+      if (e.isDirectory()) walk(p);
+      else if (e.isFile() && e.name.endsWith(".stories.tsx")) {
+        out.push(relative(ROOT_DIR, p));
+      }
+    }
+  }
+  walk(root);
+  return out.sort();
+}
+
+// ---------------------------------------------------------------------------
+// Per-StoryObj coverage helpers.
+// ---------------------------------------------------------------------------
+
+function camelToSnake(s: string): string {
+  return s
+    .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
+    .replace(/^_/, "")
+    .toLowerCase();
+}
+
+/** Extract `export const Foo: StoryObj` names from a JS story file. */
+function readJsStoryExports(absPath: string): string[] {
+  const content = readFileSync(absPath, "utf-8");
+  return [...content.matchAll(/^export\s+const\s+(\w+)\s*:\s*StoryObj/gm)].map(
+    (m) => m[1]
+  );
+}
+
+/** Extract `def story_foo` names from a Python parity test file. */
+function readPyStoryFns(absPath: string): Set<string> {
+  if (!existsSync(absPath)) return new Set();
+  const content = readFileSync(absPath, "utf-8");
+  return new Set(
+    [...content.matchAll(/^def\s+(story_\w+)/gm)].map((m) => m[1])
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Full-coverage mode: walk every JS story file *and* every JS StoryObj
+// export, report missing per-export.
+//
+// Coverage is per-StoryObj — a JS file with 10 exports is only "OK" when
+// the matching Python file has 10 corresponding `story_*` functions.
+// File-level coverage was misleading: most JS story files export several
+// permutations (e.g. axis variants), and a Python file with one
+// `story_default` covers only 1 of N.
+// ---------------------------------------------------------------------------
+
+function runFullCoverage(): number {
+  console.log("Running full-coverage Python parity check (per-StoryObj)...\n");
+  const exemptSet = loadExemptSet();
+  const jsStories = walkJsStories();
+  const results: SyncResult[] = [];
+
+  let exportsTotal = 0;
+  let exportsOk = 0;
+  let exportsMissing = 0;
+  let exportsExempt = 0;
+  let filesError = 0;
+  let filesWarn = 0;
+
+  for (const jsFile of jsStories) {
+    const pythonFile = mapJsToPython(jsFile);
+    const pythonAbs = join(ROOT_DIR, pythonFile);
+    const isExempt = exemptSet.has(jsFile);
+    const jsExports = readJsStoryExports(join(ROOT_DIR, jsFile));
+    exportsTotal += jsExports.length;
+
+    if (isExempt) {
+      // Surface as a warning — exempts are not silent passes anymore. The
+      // file should be a punch list of "not yet supported", not a hidden
+      // dump where things go to be forgotten.
+      const pythonExists = existsSync(pythonAbs);
+      results.push({
+        jsFile,
+        pythonFile,
+        changeType: "modified",
+        status: "warning",
+        message: pythonExists
+          ? `Exempt but Python counterpart exists — consider removing exemption`
+          : `Exempt: Python counterpart not yet implemented (${pythonFile})`,
+      });
+      console.warn(
+        `  WARN (exempt): ${jsFile} (${jsExports.length} export(s))`
+      );
+      exportsExempt += jsExports.length;
+      filesWarn++;
+      continue;
+    }
+
+    const pyFns = readPyStoryFns(pythonAbs);
+    const missing: string[] = [];
+    for (const e of jsExports) {
+      const expected = `story_${camelToSnake(e)}`;
+      if (pyFns.has(expected)) {
+        exportsOk++;
+      } else {
+        missing.push(`${e} → ${expected}`);
+        exportsMissing++;
+      }
+    }
+
+    if (missing.length === 0) {
+      results.push({
+        jsFile,
+        pythonFile,
+        changeType: "modified",
+        status: "ok",
+        message: `All ${jsExports.length} export(s) covered`,
+      });
+      continue;
+    }
+
+    results.push({
+      jsFile,
+      pythonFile,
+      changeType: "modified",
+      status: "error",
+      message:
+        `Missing ${missing.length}/${jsExports.length} Python ` +
+        `counterpart(s) in ${pythonFile}: ${missing.join(", ")}`,
+    });
+    console.error(
+      `  ERROR: ${jsFile} (${missing.length}/${jsExports.length} missing in ${pythonFile})`
+    );
+    for (const m of missing) console.error(`           ${m}`);
+    filesError++;
+  }
+
+  console.log(
+    `\nFiles:    ${jsStories.length}  (${filesError} with errors, ${filesWarn} exempt-warn)\n` +
+      `Exports:  ${exportsTotal}  ` +
+      `OK: ${exportsOk}  ` +
+      `Missing: ${exportsMissing}  ` +
+      `Exempt: ${exportsExempt}`
+  );
+
+  // Persist to the same results file the review site uses.
+  mkdirSync(OUT_DIR, { recursive: true });
+  writeFileSync(OUT_FILE, JSON.stringify(results, null, 2));
+  console.log(`\nResults written to ${OUT_FILE}`);
+
+  if (filesError > 0) {
+    console.error(
+      `\n${exportsMissing} JS StoryObj export(s) have no Python counterpart and are not on the exempt list.`
+    );
+    return 1;
+  }
+  if (filesWarn > 0) {
+    console.log(
+      `\n${filesWarn} exempt JS story file(s) — visible above as a reminder.`
+    );
+  }
+  console.log("\nFull-coverage check passed.");
+  return 0;
+}
+
+// ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
+
+if (process.argv.includes("--all")) {
+  process.exit(runFullCoverage());
+}
 
 const baseRef = process.argv[2] ?? process.env.BASE_REF ?? "origin/main";
 

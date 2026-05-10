@@ -76,7 +76,7 @@ jobs:
         run: pnpm install
 
       - name: Install Python dependencies
-        run: pip install -e packages/gofish-python
+        run: pip install -e packages/gofish-python vega_datasets
 
       - name: Build gofish-graphics
         run: pnpm --filter gofish-graphics build
@@ -247,7 +247,7 @@ jobs:
         run: pnpm install
 
       - name: Install Python dependencies
-        run: pip install -e packages/gofish-python
+        run: pip install -e packages/gofish-python vega_datasets
 
       - name: Build gofish-graphics
         run: pnpm --filter gofish-graphics build
@@ -261,6 +261,15 @@ jobs:
         run: pnpm test:visual:check-python-sync
         env:
           BASE_REF: origin/main
+
+      # Full per-StoryObj coverage audit. Errors for any JS export that has
+      # no matching Python `story_*` and isn't on .python-sync-exempt.
+      # Exempt entries surface as warnings (visible in the log) so the
+      # known-not-yet-supported list doesn't silently rot.
+      - name: Full Python parity coverage (per-StoryObj)
+        id: sync-check-all
+        if: always()
+        run: pnpm test:visual:check-python-sync-all
 
       - name: Capture Python DOM snapshots
         id: capture-python

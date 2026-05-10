@@ -6,13 +6,13 @@ from python_stories.data import SEAFOOD
 
 def story_axes_true():
     return (
-        chart(SEAFOOD).flow(spread("lake", dir="x")).mark(rect(h="count")),
+        chart(SEAFOOD).flow(spread(by="lake", dir="x")).mark(rect(h="count")),
         {"w": 400, "h": 400, "axes": True},
     )
 
 
 def story_axes_false():
     return (
-        chart(SEAFOOD).flow(spread("lake", dir="x")).mark(rect(h="count")),
+        chart(SEAFOOD).flow(spread(by="lake", dir="x")).mark(rect(h="count")),
         {"w": 400, "h": 400, "axes": False},
     )

@@ -391,6 +391,7 @@ async function main() {
 
     let captured = 0;
     let failed = 0;
+    const failures: { story: string; reason: string }[] = [];
 
     for (const story of stories) {
       process.stdout.write(
@@ -404,8 +405,12 @@ async function main() {
 
       const ir = extractIR(story);
       if (!ir) {
-        console.log("SKIP (no IR)");
+        console.log("FAILED (IR extraction)");
         failed++;
+        failures.push({
+          story: `${story.module}::${story.function}`,
+          reason: "IR extraction failed (see error above)",
+        });
         continue;
       }
 
@@ -428,14 +433,32 @@ async function main() {
         console.log("OK");
         captured++;
       } catch (err) {
-        console.log(`FAILED: ${err instanceof Error ? err.message : err}`);
+        const msg = err instanceof Error ? err.message : String(err);
+        console.log(`FAILED: ${msg}`);
         failed++;
+        failures.push({
+          story: `${story.module}::${story.function}`,
+          reason: msg,
+        });
       }
     }
 
     console.log(`\nDone: ${captured} captured, ${failed} failed`);
 
     await context.close();
+
+    // Surface capture failures so CI doesn't silently pass when stories
+    // can't even produce output. Without this, the compare step has
+    // nothing to compare and trivially "passes". A capture failure here
+    // means the Python story is broken (stale API, bad import, etc.) —
+    // we want it red, not invisible.
+    if (failed > 0) {
+      console.error(`\n${failed} Python story capture failure(s):`);
+      for (const f of failures) {
+        console.error(`  - ${f.story}: ${f.reason}`);
+      }
+      process.exitCode = 1;
+    }
   } finally {
     await browser?.close();
     deriveProc.kill();
@@ -444,7 +467,7 @@ async function main() {
 }
 
 main()
-  .then(() => process.exit(0))
+  .then(() => process.exit(process.exitCode ?? 0))
   .catch((err) => {
     console.error("Fatal error:", err);
     process.exit(1);

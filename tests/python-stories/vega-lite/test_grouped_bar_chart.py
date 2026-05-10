@@ -8,8 +8,8 @@ def story_default():
     return (
         chart(GROUPED_BAR_DATA)
         .flow(
-            spread("category", dir="x", spacing=24),
-            spread("group", dir="x", spacing=0),
+            spread(by="category", dir="x", spacing=24),
+            spread(by="group", dir="x", spacing=0),
         )
         .mark(rect(h="value", fill="group")),
         {"h": 300, "axes": True},

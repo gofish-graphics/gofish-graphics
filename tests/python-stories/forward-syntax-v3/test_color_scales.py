@@ -19,7 +19,7 @@ from python_stories.data import SEAFOOD, SCORES_DATA
 def story_palette_named_scheme():
     return (
         chart(SEAFOOD, {"color": palette("tableau10")})
-        .flow(spread("species", dir="x"))
+        .flow(spread(by="species", dir="x"))
         .mark(rect(h="count", fill="species")),
         {"w": 400, "h": 400, "axes": True},
     )
@@ -28,7 +28,7 @@ def story_palette_named_scheme():
 def story_palette_string_array():
     return (
         chart(SEAFOOD, {"color": palette(["#e41a1c", "#377eb8", "#4daf4a", "#984ea3", "#ff7f00"])})
-        .flow(spread("species", dir="x"))
+        .flow(spread(by="species", dir="x"))
         .mark(rect(h="count", fill="species")),
         {"w": 400, "h": 400, "axes": True},
     )
@@ -37,7 +37,7 @@ def story_palette_string_array():
 def story_gradient_named_scheme():
     return (
         chart(SCORES_DATA, {"color": gradient("blues")})
-        .flow(spread("label", dir="x"))
+        .flow(spread(by="label", dir="x"))
         .mark(rect(h="value", fill="value")),
         {"w": 400, "h": 400, "axes": True},
     )
@@ -46,7 +46,7 @@ def story_gradient_named_scheme():
 def story_gradient_string_array():
     return (
         chart(SCORES_DATA, {"color": gradient(["#f7fbff", "#42c663", "#6b0808"])})
-        .flow(spread("label", dir="x"))
+        .flow(spread(by="label", dir="x"))
         .mark(rect(h="value", fill="value")),
         {"w": 400, "h": 400, "axes": True},
     )
@@ -70,8 +70,8 @@ def story_nested_derive():
                 }
                 for item in d
             ]),
-            spread("lake", dir="x"),
-            stack("species", dir="x"),
+            spread(by="lake", dir="x"),
+            stack(by="species", dir="x"),
         )
         .mark(rect(h="count", fill="highlight")),
         {"w": 400, "h": 400, "axes": True},
@@ -86,8 +86,8 @@ def story_selective_derive():
                 {**item, "highlight": "highlighted" if item["species"] == "Salmon" else ""}
                 for item in d
             ]),
-            spread("lake", dir="x"),
-            stack("species", dir="x"),
+            spread(by="lake", dir="x"),
+            stack(by="species", dir="x"),
         )
         .mark(rect(h="count", fill="highlight")),
         {"w": 400, "h": 400, "axes": True},
@@ -98,8 +98,8 @@ def story_selective_group():
     return (
         chart(SEAFOOD, {"color": palette({"Salmon": "#e15759"})})
         .flow(
-            spread("lake", dir="x"),
-            stack("species", dir="x"),
+            spread(by="lake", dir="x"),
+            stack(by="species", dir="x"),
         )
         .mark(rect(h="count", fill="species")),
         {"w": 400, "h": 400, "axes": True},
@@ -110,13 +110,13 @@ def story_ribbon_highlight():
     bars = (
         chart(SEAFOOD, {"color": palette({"Salmon": "#e15759", "Trout": "#4e79a7"})})
         .flow(
-            spread("lake", dir="x", spacing=64),
+            spread(by="lake", dir="x", spacing=64),
             derive(lambda d: sorted(d, key=lambda r: r["count"])),
-            stack("species", dir="y"),
+            stack(by="species", dir="y"),
         )
         .mark(rect(h="count", fill="species").name("bars"))
     )
-    overlay = chart(select("bars")).flow(group("species")).mark(area(opacity=0.6))
+    overlay = chart(select("bars")).flow(group(by="species")).mark(area(opacity=0.6))
     return (
         Layer([bars, overlay]),
         {"w": 400, "h": 400, "axes": True},
