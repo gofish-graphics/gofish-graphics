@@ -208,6 +208,51 @@ function jsFileToId(jsFile: string): string {
     .replace(/([a-z])([A-Z])/g, "$1-$2");
 }
 
+function camelToSnake(s: string): string {
+  return s
+    .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
+    .replace(/^_/, "")
+    .toLowerCase();
+}
+
+// Mirror the per-StoryObj logic in check-python-sync.ts so the viewer's
+// file-level counts line up with what the `--all` check reports.
+function readJsStoryExports(absPath: string): string[] {
+  const content = readOptional(absPath);
+  if (!content) return [];
+  return [...content.matchAll(/^export\s+const\s+(\w+)\s*:\s*StoryObj/gm)].map(
+    (m) => m[1]
+  );
+}
+
+function readPyStoryFns(absPath: string): Set<string> {
+  if (!existsSync(absPath)) return new Set();
+  const content = readOptional(absPath);
+  if (!content) return new Set();
+  return new Set(
+    [...content.matchAll(/^def\s+(story_\w+)/gm)].map((m) => m[1])
+  );
+}
+
+// Load exempt list — entries become viewer warnings, not silent passes
+// (matching the --all check's behavior).
+function loadExemptSet(): Set<string> {
+  const exemptFile = join(TESTS_DIR, ".python-sync-exempt");
+  if (!existsSync(exemptFile)) return new Set();
+  return new Set(
+    readFileSync(exemptFile, "utf-8")
+      .split("\n")
+      .map((l) => l.trim())
+      .filter((l) => l && !l.startsWith("#"))
+  );
+}
+const exemptSet = loadExemptSet();
+
+let exportsTotal = 0;
+let exportsCovered = 0;
+let exportsMissing = 0;
+let exportsExempt = 0;
+
 // From all indexed JS stories
 for (const [, jsFile] of storyIndex) {
   const id = jsFileToId(jsFile);
@@ -215,17 +260,60 @@ for (const [, jsFile] of storyIndex) {
   seenIds.add(id);
 
   const pythonFile = mapJsToPython(jsFile);
-  const pythonExists = existsSync(join(ROOT_DIR, pythonFile));
+  const pythonAbs = join(ROOT_DIR, pythonFile);
+  const isExempt = exemptSet.has(jsFile);
+
+  const jsExports = readJsStoryExports(join(ROOT_DIR, jsFile));
+  exportsTotal += jsExports.length;
+
+  let status: "pass" | "fail" | "warning";
+  let message: string;
+
+  if (isExempt) {
+    // Whole file exempt → warning, all exports count as exempt.
+    exportsExempt += jsExports.length;
+    status = "warning";
+    message =
+      jsExports.length > 0
+        ? `Exempt — ${jsExports.length} export(s) not yet implemented in Python`
+        : "Exempt from Python parity";
+  } else {
+    const pyFns = readPyStoryFns(pythonAbs);
+    const missing: string[] = [];
+    let covered = 0;
+    for (const e of jsExports) {
+      const expected = `story_${camelToSnake(e)}`;
+      if (pyFns.has(expected)) covered++;
+      else missing.push(e);
+    }
+    exportsCovered += covered;
+    exportsMissing += missing.length;
+
+    if (jsExports.length === 0) {
+      // Story file has no parseable exports — treat as warning so it's
+      // visible but doesn't claim coverage.
+      status = "warning";
+      message = "No StoryObj exports detected";
+    } else if (missing.length === 0) {
+      status = "pass";
+      message = `All ${jsExports.length} export(s) covered`;
+    } else {
+      // Any missing export → file-level fail. Show the count and
+      // example so the message is actionable.
+      status = "fail";
+      const preview = missing.slice(0, 3).join(", ");
+      const more = missing.length > 3 ? `, +${missing.length - 3} more` : "";
+      message = `${missing.length}/${jsExports.length} export(s) missing: ${preview}${more}`;
+    }
+  }
 
   pairs.push({
     id,
     jsFile,
     pythonFile,
     checkType: "coverage",
-    status: pythonExists ? "pass" : "warning",
-    message: pythonExists
-      ? "Python counterpart present"
-      : "No Python counterpart found",
+    status,
+    message,
     hasDomDiff: false,
     hasScreenshots: false,
   });
@@ -401,6 +489,12 @@ const meta = {
   repo: process.env.REVIEW_REPO ?? "unknown/repo",
   branch: process.env.REVIEW_BRANCH ?? "unknown",
   sha: process.env.REVIEW_SHA ?? "unknown",
+  exports: {
+    total: exportsTotal,
+    covered: exportsCovered,
+    missing: exportsMissing,
+    exempt: exportsExempt,
+  },
 };
 
 write(join(OUT_DIR, "data/meta.json"), JSON.stringify(meta, null, 2));
@@ -664,8 +758,19 @@ const html = `<!DOCTYPE html>
   function renderSidebar() {
     const fails = allPairs.filter(p => p.status === 'fail').length;
     const warns = allPairs.filter(p => p.status === 'warning').length;
-    document.getElementById('sidebar-stats').textContent =
-      fails + ' failure(s), ' + warns + ' warning(s) / ' + allPairs.length + ' total';
+    const stats = document.getElementById('sidebar-stats');
+    const ex = meta.exports || null;
+    const fileLine = fails + ' failure(s), ' + warns + ' warning(s) / ' + allPairs.length + ' files';
+    if (ex && typeof ex.total === 'number') {
+      stats.innerHTML =
+        '<div>' + fileLine + '</div>' +
+        '<div style="font-size:11px;color:#7f849c;margin-top:2px;">' +
+          ex.covered + '/' + ex.total + ' exports — ' +
+          ex.missing + ' missing, ' + ex.exempt + ' exempt' +
+        '</div>';
+    } else {
+      stats.textContent = fileLine;
+    }
 
     const list = document.getElementById('story-list');
     list.innerHTML = '';
