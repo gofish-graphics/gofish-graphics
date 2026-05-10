@@ -113,6 +113,15 @@ export async function layout(
   if (axes) {
     child.resolveAxes();
     child.resolveNiceDomains();
+    // Store the root union nice space so axis nodes deep in layer trees
+    // (e.g. scatter-per-species) use the full shared domain for ticks.
+    const rootSession = child.getRenderSession();
+    if (rootSession && child._underlyingSpace) {
+      rootSession.rootNiceSpace = child._underlyingSpace as [
+        import("./underlyingSpace").UnderlyingSpace,
+        import("./underlyingSpace").UnderlyingSpace,
+      ];
+    }
   }
 
   // Use (possibly nice-rounded) underlying spaces for posScales

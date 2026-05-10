@@ -53,6 +53,10 @@ export type RenderSession = {
   tokenContext: TokenContext;
   scaleContext: ScaleContext;
   keyContext: KeyContext;
+  /** Root (union) underlying space after nice-rounding. Used so axis nodes
+   * created deep in a layer tree use the full shared domain, not just their
+   * own narrow slice. Set in gofish.tsx after resolveNiceDomains(). */
+  rootNiceSpace?: [UnderlyingSpace, UnderlyingSpace];
 };
 
 export type ScaleFactorFunction = Monotonic.Monotonic;
@@ -363,10 +367,17 @@ export class GoFishNode {
       };
       this.children.forEach((c) => {
         if (c instanceof GoFishNode) {
+          // Dims newly claimed by previous siblings (not in the original claimed)
           const siblingClaimed = new Set(
             [...accumulated].filter((d) => !claimed.has(d as 0 | 1))
           ) as Set<0 | 1>;
-          c.resolveAxes(new Set(accumulated), siblingClaimed);
+          // Merge incoming budgetOnly with sibling-claimed dims so nested
+          // layer nodes (e.g. Frame wrappers) don't lose the budget signal.
+          const childBudgetOnly = new Set([
+            ...budgetOnly,
+            ...siblingClaimed,
+          ]) as Set<0 | 1>;
+          c.resolveAxes(new Set(accumulated), childBudgetOnly);
           scanClaimed(c);
         }
       });
@@ -527,7 +538,12 @@ export class GoFishNode {
     let contentScaleFactors = scaleFactors;
 
     if (axisBudgetX > 0 || axisBudgetY > 0) {
-      contentSize = [size[0] - axisBudgetX, size[1] - axisBudgetY];
+      // Clamp to 0 so charts with h=0 (e.g. 1D strip plots) don't get a
+      // negative content size which causes NaN in the posScale compression.
+      contentSize = [
+        Math.max(0, size[0] - axisBudgetX),
+        Math.max(0, size[1] - axisBudgetY),
+      ];
       // Rescale posScales for the content area, leaving a small top/right margin
       // so the maximum tick never sits exactly at the content boundary.
       // Without this, niceMax always maps to contentH, landing at SVG y=PADDING
@@ -537,23 +553,34 @@ export class GoFishNode {
       // Apply TICK_EDGE_PAD only when this node is the first to scale a given
       // posScale. A fresh root posScale maps domain_max to exactly size[dim];
       // a posScale already rescaled by an ancestor maps it to < size[dim].
+      // Use rootNiceSpace domain max (the union domain) so that per-species
+      // scatters inside a layer correctly detect they hold the fresh posScale.
       const usp = this._underlyingSpace;
+      const rootNiceForPad = this.getRenderSession()?.rootNiceSpace;
+      const effectiveDomainMaxX =
+        rootNiceForPad?.[0] && isPOSITION(rootNiceForPad[0])
+          ? rootNiceForPad[0].domain?.max
+          : usp && isPOSITION(usp[0])
+            ? usp[0].domain?.max
+            : undefined;
+      const effectiveDomainMaxY =
+        rootNiceForPad?.[1] && isPOSITION(rootNiceForPad[1])
+          ? rootNiceForPad[1].domain?.max
+          : usp && isPOSITION(usp[1])
+            ? usp[1].domain?.max
+            : undefined;
       const tickPadX =
         (this.axis_x === true || this._axisBudgetOnlyX) &&
         posScales[0] &&
-        usp &&
-        isPOSITION(usp[0]) &&
-        usp[0].domain &&
-        Math.abs(posScales[0](usp[0].domain.max!) - size[0]) < 1
+        effectiveDomainMaxX !== undefined &&
+        Math.abs(posScales[0](effectiveDomainMaxX) - size[0]) < 1
           ? TICK_EDGE_PAD
           : 0;
       const tickPadY =
         (this.axis_y === true || this._axisBudgetOnlyY) &&
         posScales[1] &&
-        usp &&
-        isPOSITION(usp[1]) &&
-        usp[1].domain &&
-        Math.abs(posScales[1](usp[1].domain.max!) - size[1]) < 1
+        effectiveDomainMaxY !== undefined &&
+        Math.abs(posScales[1](effectiveDomainMaxY) - size[1]) < 1
           ? TICK_EDGE_PAD
           : 0;
 
@@ -567,20 +594,26 @@ export class GoFishNode {
       const outerManagesX = posScales[0] !== undefined && tickPadX === 0;
 
       contentPosScales = [
-        posScales[0] && axisBudgetX > 0 && !outerManagesX
+        posScales[0] && axisBudgetX > 0 && !outerManagesX && size[0] > 0
           ? (v: number) =>
               posScales[0]!(v) * ((contentSize[0] - tickPadX) / size[0])
           : posScales[0],
-        posScales[1] && axisBudgetY > 0 && !outerManagesY
+        posScales[1] && axisBudgetY > 0 && !outerManagesY && size[1] > 0
           ? (v: number) =>
               posScales[1]!(v) * ((contentSize[1] - tickPadY) / size[1])
           : posScales[1],
       ];
       contentScaleFactors = [
-        scaleFactors[0] !== undefined && axisBudgetX > 0 && !outerManagesX
+        scaleFactors[0] !== undefined &&
+        axisBudgetX > 0 &&
+        !outerManagesX &&
+        size[0] > 0
           ? scaleFactors[0] * (contentSize[0] / size[0])
           : scaleFactors[0],
-        scaleFactors[1] !== undefined && axisBudgetY > 0 && !outerManagesY
+        scaleFactors[1] !== undefined &&
+        axisBudgetY > 0 &&
+        !outerManagesY &&
+        size[1] > 0
           ? scaleFactors[1] * (contentSize[1] / size[1])
           : scaleFactors[1],
       ];
@@ -677,6 +710,12 @@ export class GoFishNode {
       this._axisChildren = new Map();
       const space = this._underlyingSpace!;
       const session = this.getRenderSession();
+      // Use the root nice union space for axis ticks when available, so
+      // nodes deep in a layer tree (e.g. per-species scatter) show the full
+      // shared coordinate range rather than their own narrow data slice.
+      const rootNice = session?.rootNiceSpace;
+      const axisSpaceY = rootNice?.[1] ?? space[1];
+      const axisSpaceX = rootNice?.[0] ?? space[0];
 
       if (this.axis_y === true) {
         const sf = this.getRenderSession().scaleContext.y;
@@ -687,7 +726,7 @@ export class GoFishNode {
         const yPosScale = contentPosScales[1] ?? diffScaleY;
         const yAxisNode = createAxisNode({
           dim: 1,
-          space: space[1],
+          space: axisSpaceY,
           contentSize: contentSize[1],
           posScale: yPosScale,
         });
@@ -714,7 +753,7 @@ export class GoFishNode {
         const xPosScale = contentPosScales[0] ?? diffScaleX;
         const xAxisNode = createAxisNode({
           dim: 0,
-          space: space[0],
+          space: axisSpaceX,
           contentSize: contentSize[0],
           posScale: xPosScale,
         });

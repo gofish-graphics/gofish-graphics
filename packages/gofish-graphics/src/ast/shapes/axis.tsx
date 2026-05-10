@@ -10,7 +10,7 @@ import {
   type UnderlyingSpace,
 } from "../underlyingSpace";
 
-export const AXIS_THICKNESS = 30;
+export const AXIS_THICKNESS = 35;
 const AXIS_LINE = AXIS_THICKNESS / 2;
 const TICK_LEN = 4;
 const LABEL_GAP = 7;
