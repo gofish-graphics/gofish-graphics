@@ -25,10 +25,10 @@ export const Default: StoryObj<Args> = {
     const container = initializeContainer();
 
     Chart(seafood, { axes: true })
-      .flow(spread({ by: "lake", dir: "x", axis: {x: true, y: false} }))
+      .flow(spread({ by: "lake", dir: "x", spacing: 15, axis: true }))
       .mark((data) =>
         Chart(data)
-          .flow(spread({ by: "species", dir: "x", axis: true }))
+          .flow(spread({ by: "species", dir: "x", spacing: 2,  axis: {x: true, y: false} }))
           .mark(rect({ h: "count", w: 20 }))
       )
       .render(container, {
@@ -71,7 +71,7 @@ export const FacetedScatterY: StoryObj<Args> = {
       .flow(spread({ by: "side", dir: "y", spacing: 50, axis: true }))
       .mark((data) =>
         Chart(data)
-          .flow(scatter({ x: "year", y: "gas", axis: false }))
+          .flow(scatter({ x: "year", y: "gas", axis: {x: false, y: true} }))
           .mark(circle({ r: 3, fill: "#e07b39" }))
       )
       .render(container, {

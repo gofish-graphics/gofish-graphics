@@ -416,6 +416,21 @@ export class GoFishNode {
       this.children.forEach((c) => {
         if (c instanceof GoFishNode) c.resolveAxes(allClaimed);
       });
+      // _axisOverride can set axis_x/y = true on descendants even when claimed,
+      // which would apply Cartesian axis budgets in polar coordinate space.
+      // Clear them so only the polar axis path (via _polarAxisX/Y) applies.
+      const clearCartesianAxes = (n: GoFishNode): void => {
+        n.axis_x = undefined;
+        n.axis_y = undefined;
+        n._axisBudgetOnlyX = undefined;
+        n._axisBudgetOnlyY = undefined;
+        n.children.forEach((c) => {
+          if (c instanceof GoFishNode) clearCartesianAxes(c);
+        });
+      };
+      this.children.forEach((c) => {
+        if (c instanceof GoFishNode) clearCartesianAxes(c);
+      });
       return;
     }
 

@@ -11,50 +11,58 @@ resolveColorScale → resolveNames → resolveKeys → resolveLabels
 → resolveNiceDomains applies d3.nice() to all POSITION domains in-place
 → layout             axis budgeting + axis child creation
 → place
-→ INTERNAL_render    axis children injected into spread's child array
+→ INTERNAL_render    axis children injected alongside content children
 ```
 
 ## Key Design Decisions
 
 ### resolveAxes
 
-Top-down. First unclaimed node with POSITION/DIFFERENCE/ORDINAL space claims that dim and sets `axis_x/y = true`. Layer nodes pass through without claiming. Manual `axis: false/true` on any operator overrides inference **and** claims the dim (false blocks children too).
+Top-down. First unclaimed node with POSITION/DIFFERENCE/ORDINAL space claims that dim and sets `axis_x/y = true`. Manual `axis: false/true` on any operator overrides inference **and** claims the dim (false blocks children too).
 
-Only POSITION, DIFFERENCE, ORDINAL spaces get axes. SIZE does not.
+Only POSITION, DIFFERENCE, ORDINAL spaces get axes. SIZE does not. Coord-transform nodes (polar, clock, etc.) are skipped entirely — they manage their own coordinate space.
+
+**Layer nodes:** do not claim axes themselves. They accumulate which dims children have claimed and pass `budgetOnly` dims to subsequent siblings. A sibling that receives a `budgetOnly` dim reserves the same `AXIS_THICKNESS` margin (keeping content areas aligned for correct overlay) but does not create axis SVG. The `tickPad` compression is also applied to budget-only nodes so posScales are identical across all siblings.
+
+**Polar axis overrides:** `spread`/`stack` operators tag themselves with `_axisDir` (the stackDir). Inside `coord` nodes, `collectOverrides` uses `_axisDir` to map per-operator `axis:` flags to polar dimensions (theta vs radial) independently.
 
 ### resolveNiceDomains
 
-Nices **all** POSITION domains in the tree, not just axis-bearing nodes. This is required because layer nodes (used as v3 ChartBuilder root) pass through resolveAxes without claiming, so their domain would otherwise be un-niced when gofish.tsx reads it to compute posScales.
+Nices **all** POSITION domains in the tree, not just axis-bearing nodes. This is required because layer nodes pass through resolveAxes without claiming, so their domain would otherwise be un-niced when gofish.tsx reads it to compute posScales. Coord-transform nodes are skipped entirely (their domains are fixed mathematical constants like `[0, 2π]`).
 
 ### layout() — axis budgeting
 
 ```
-axisBudgetX = axis_y ? AXIS_THICKNESS : 0   (y-axis takes left x-space)
-axisBudgetY = axis_x ? AXIS_THICKNESS : 0   (x-axis takes bottom y-space)
-contentSize = [size[0] - axisBudgetX, size[1] - axisBudgetY]
+axisBudgetX = axis_y || _axisBudgetOnlyY ? AXIS_THICKNESS : 0   (left space)
+axisBudgetY = axis_x || _axisBudgetOnlyX ? AXIS_THICKNESS : 0   (bottom space)
+contentSize = [max(0, size[0] - axisBudgetX), max(0, size[1] - axisBudgetY)]
 ```
 
-**Nested / faceted axes:** Outer axis expands its budget to stack both inner and outer axes. The expansion is direction-specific — `_layoutAlignDir` (set by `Spread`) gates which budget grows:
+Content size is clamped to zero so charts with `h:0` (e.g. 1D strip plots) don't get negative content heights and NaN posScales.
 
-- `innerBaselineY` (for `_layoutAlignDir === 1`, horizontal spreads): `axisBudgetY += AXIS_THICKNESS` when any child has `axis_x`; reserves a second bottom row for inner x-axis labels.
-- `innerBaselineX` (for `_layoutAlignDir === 0`, vertical spreads): `axisBudgetX += AXIS_THICKNESS` when any child has `axis_y`; reserves a second left column for inner y-axis labels.
-- **Internal baseline alignment:** After `alignChildren`, each inner frame is shifted back by `-_contentBaseline[alignDir]` so bars land at `posScale(0)` in the outer content space. `_contentBaseline` propagates upward through transparent `layer` nodes.
-- **Inner and outer posScales stay consistent:** When `contentPosScales[dim]` is null (outer has ORDINAL space so no posScale is provided), a local POSITION posScale with `TICK_EDGE_PAD` is injected into `contentPosScales` before `_layout` is called, so scatter circles and axis ticks share the same consistent scale.
+**Nested / faceted axes — inner baseline expansion:**
+
+- `innerBaselineY` (for `_layoutAlignDir === 1`, horizontal spreads): `axisBudgetY += AXIS_THICKNESS` when any child has `axis_x`; reserves extra bottom row for inner x-axis labels.
+- `innerBaselineX` (for `_layoutAlignDir === 0`, vertical spreads): `axisBudgetX += AXIS_THICKNESS` when any child has `axis_y`; reserves extra left column for inner y-axis labels.
+- **Internal baseline alignment:** After `alignChildren`, each inner frame is shifted back by `-_contentBaseline[alignDir]` so bars land at `posScale(0)`. `_contentBaseline` propagates upward through transparent layer nodes.
+- **ORDINAL horizontal spreads:** when the outer spread is ORDINAL (equal distribution) and inner children have Y axes, the spread advances by `childStackSize` rather than `child.dims[stackDir].size`. This keeps facets at even intervals even if inner content overflows the slot.
 
 **posScale rescaling (`TICK_EDGE_PAD`):**
 
-- Applied only once, at the first (outermost) axis-bearing node. Detected by checking `posScale(domain_max) ≈ size[dim]` — a fresh root posScale maps exactly to `size`; a posScale already rescaled by an ancestor maps to less.
-- `outerManagesY/X = posScales[dim] !== undefined && tickPad === 0`: when `tickPad === 0` the incoming posScale was already rescaled → pass through unchanged so inner axes stay on the same scale as the outer.
+- Applied only once, at the first axis-bearing node. Detected using `rootNiceSpace[dim].domain.max` (the union domain after nicing) to check if `posScale(niceMax) ≈ size[dim]` — a fresh root posScale maps exactly to `size`; one already rescaled by an ancestor maps to less.
+- `rootNiceSpace` is stored on the render session by gofish.tsx immediately after `resolveNiceDomains()` runs. Axis nodes use it for tick generation so per-species scatters inside a layer show the full union domain rather than their own narrow slice.
+- `axisSpaceX/Y` for axis node creation uses `rootNiceSpace[dim]` only when both root and local space are POSITION — preventing an outer ORDINAL (e.g. facet key) from being used for an inner POSITION (e.g. scatter x="year").
+- `outerManagesY/X = posScales[dim] !== undefined && tickPad === 0`: when `tickPad === 0` the incoming posScale was already rescaled → pass through unchanged.
 
 Other:
 
-- Children's transforms are shifted by [axisBudgetX, axisBudgetY] after \_layout
-- intrinsicDims is expanded to include axis budget
-- Axis child nodes are created and placed: y-axis at [0, axisBudgetY], x-axis at [axisBudgetX, 0]
+- Children's transforms are shifted by `[axisBudgetX, axisBudgetY]` after `_layout`
+- `intrinsicDims` is expanded to include axis budget
+- Axis child nodes are created and placed: y-axis at `[0, axisBudgetY]`, x-axis at `[axisBudgetX, 0]`
 
 ### INTERNAL_render
 
-Axis children are included in the `allChildrenJSX` array passed to `_render`. The spread's `<g>` wrapper contains both content and axis children at their correct translated positions.
+Axis children are included in the `allChildrenJSX` array passed to `_render`, rendering inside the same `<g>` at their placed positions.
 
 ## axis.tsx — Axis Node Types
 
@@ -69,24 +77,32 @@ Three constructors via `createAxisNode({ dim, space, contentSize, posScale })`:
 - **DifferenceAxisNode** — DIFFERENCE space; line + ticks + interval labels between ticks
 - **OrdinalAxisNode** — ORDINAL space; labels only, positioned via `posRelToAncestor` from keyContext. First/last labels use `text-anchor="start"/"end"` anchored at the bar edge to prevent edge overflow. `posRelToAncestor` falls back to the nearest same-type ancestor when the exact `stopBefore` node is not in the key node's path (handles faceted charts where `keyContext` is overwritten by later facets).
 
+## Polar Axes (coord.tsx)
+
+Polar charts (clock, polar, bipolar) use a separate axis path — the `coord` node renders its own axis SVG inside its `render()` callback rather than creating `_axisChildren` nodes.
+
+- `resolveAxes` skips coord nodes entirely (no Cartesian axis creation inside coordinate-transform space) and collects per-operator `axis:` overrides using `_axisDir` tags.
+- `resolveNiceDomains` also skips coord nodes to preserve fixed mathematical domains.
+- Polar axes are gated by the `axes` ChartOption flowing through `Frame → coord`. When enabled, the coord's render function uses `spaceRef` (captured during `resolveUnderlyingSpace`) to determine which polar axes to draw:
+  - **Ordinal theta axis** (when X space is POSITION, e.g. pie/donut): outer ring + evenly-spaced continuous count ticks using niced domain.
+  - **Ordinal theta labels** (when X space is ORDINAL, e.g. rose): category labels around the circumference.
+  - **Radial axis** (when Y space is POSITION): line at theta=0 with tick marks, labels on the left.
+- Per-operator `axis: false/true` on the inner spread/stack propagates to polar axes via `_polarAxisX/Y` flags set during `collectOverrides`.
+
 ## scatter.tsx — self-computed posScales
 
-Scatter's `_layout` computes local posScales from `node._underlyingSpace` when passed-in posScales are undefined. The local posScale injection in `GoFishNode.layout()` (described above) now handles this before `_layout` is called, ensuring circles and the axis node share the same padded scale.
+When the outer x-space is ORDINAL (no posScale provided), `GoFishNode.layout()` injects a local POSITION posScale with `TICK_EDGE_PAD` into `contentPosScales` before `_layout` is called, ensuring scatter circles and the axis node share the same consistent padded scale.
 
 ## User API
 
 ```typescript
-// Per-operator override (blocks entire subtree)
+// Per-operator override (blocks/enables entire subtree)
 spread({ by: "species", dir: "x", axis: false });
 spread({ by: "lake", dir: "x", axis: { x: true, y: false } });
 
-// Per-render padding for overflow (labels, annotations)
+// Polar axis control flows through ChartOptions to coord
+Chart(data, { coord: clock(), axes: true, padding: 80 });
+
+// Per-render padding for overflow labels/annotations
 chart.render(container, { w: 400, h: 300, axes: true, padding: 30 });
 ```
-
-## Known Limitations / Future Work
-
-- **Polar axes**: no polar axis impl yet
-- **Legends**: svg is now tight — no extra hardcoded padding → no room for legends
-- **Smarter axis inference**: ordinal should not claim, letting descendants get their own continuous axes for faceted charts.
-- **overflow**: labels can clip at SVG edges for wide values. Use `padding` option or add `overflow="visible"` to the SVG.

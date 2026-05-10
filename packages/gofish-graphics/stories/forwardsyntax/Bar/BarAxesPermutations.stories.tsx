@@ -6,15 +6,15 @@ import type { AxesOptions, AxisOptions } from "../../../src/ast/gofish";
 
 /** Extract show/hide boolean from an AxisOptions value.
  *  false → false (suppress), true or { title } → true (show). */
-function axisOptToShow(opt: AxisOptions | undefined): boolean | undefined {
-  if (opt === undefined) return undefined;
+function axisOptToShow(opt: AxisOptions | undefined): boolean {
+  if (opt === undefined) return false;
   return opt !== false;
 }
 
 /** Deconstruct AxesOptions into the spread's axis param (show/hide only). */
 function axesToSpreadAxis(
   axes: AxesOptions
-): boolean | { x?: boolean; y?: boolean } {
+): boolean | { x: boolean; y: boolean } {
   if (typeof axes === "boolean") return axes;
   return { x: axisOptToShow(axes.x), y: axisOptToShow(axes.y) };
 }

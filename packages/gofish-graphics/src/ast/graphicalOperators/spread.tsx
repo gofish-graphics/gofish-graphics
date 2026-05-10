@@ -19,7 +19,6 @@ import {
   SIZE,
   UNDEFINED,
   isDIFFERENCE,
-  isORDINAL,
   isPOSITION,
   isSIZE,
 } from "../underlyingSpace";
@@ -379,13 +378,7 @@ export const Spread = createNodeOperator(
                 pos = childMax + effectiveSpacing;
               } else {
                 child.place(stackDir, pos, "min");
-                // For ORDINAL spreads (equal distribution), advance by the
-                // allocated slot width so children stay at even intervals even
-                // when their natural content overflows the slot. For SIZE/POSITION
-                // spreads, advance by actual rendered size (marks fill their slot).
-                const sz = isORDINAL(myUSpace[stackDir])
-                  ? childStackSize
-                  : (child.dims[stackDir].size ?? 0);
+                const sz = child.dims[stackDir].size ?? 0;
                 pos += sz + effectiveSpacing;
               }
             }
