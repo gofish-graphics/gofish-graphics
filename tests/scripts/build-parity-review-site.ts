@@ -173,6 +173,15 @@ interface ExportEntry {
   /** "story_default", "story_axes_xonly" — what we look for in Python. */
   expected: string;
   status: "pass" | "fail" | "warning";
+  /** Specific reason for the status; lets the sidebar show a breakdown
+   * like "51 missing, 9 capture failed" instead of one bucket. */
+  category:
+    | "covered"
+    | "missing"
+    | "exempt"
+    | "capture-failed"
+    | "capture-skipped"
+    | "parity-mismatch";
   message: string;
   hasDomDiff: boolean;
   hasScreenshots: boolean;
@@ -261,6 +270,9 @@ let exportsTotal = 0;
 let exportsCovered = 0;
 let exportsMissing = 0;
 let exportsExempt = 0;
+let exportsCaptureFailed = 0;
+let exportsCaptureSkipped = 0;
+let exportsParityMismatch = 0;
 
 // From all indexed JS stories. Use the Storybook-title-derived id as the
 // file-level pair id; DOM-diff / capture-result ids share this prefix.
@@ -285,6 +297,7 @@ for (const [fileId, jsFile] of storyIndex) {
         id: exportId,
         expected,
         status: "warning",
+        category: "exempt",
         message: "Exempt — not yet implemented in Python",
         hasDomDiff: false,
         hasScreenshots: false,
@@ -297,6 +310,7 @@ for (const [fileId, jsFile] of storyIndex) {
         id: exportId,
         expected,
         status: "pass",
+        category: "covered",
         message: "Python counterpart present",
         hasDomDiff: false,
         hasScreenshots: false,
@@ -308,6 +322,7 @@ for (const [fileId, jsFile] of storyIndex) {
       id: exportId,
       expected,
       status: "fail",
+      category: "missing",
       message: `Missing Python counterpart (expected ${expected} in ${pythonFile})`,
       hasDomDiff: false,
       hasScreenshots: false,
@@ -383,7 +398,16 @@ for (const diff of parityDiffs) {
         (e) => camelToSnake(e.name).replace(/_/g, "-") === exportSlug
       );
     if (exp) {
+      // Decrement whatever category counter the original status used
+      // before overwriting it with parity-mismatch.
+      if (exp.category === "covered") exportsCovered--;
+      else if (exp.category === "missing") exportsMissing--;
+      else if (exp.category === "exempt") exportsExempt--;
+      else if (exp.category === "capture-failed") exportsCaptureFailed--;
+      else if (exp.category === "capture-skipped") exportsCaptureSkipped--;
+      exportsParityMismatch++;
       exp.status = "fail";
+      exp.category = "parity-mismatch";
       exp.message = domMessage;
       exp.hasDomDiff = hasDomDiff;
       exp.hasScreenshots = hasScreenshots;
@@ -417,12 +441,15 @@ for (const diff of parityDiffs) {
           id,
           expected: `story_${(exportSlug ?? "default").replace(/-/g, "_")}`,
           status: "fail",
+          category: "parity-mismatch",
           message: domMessage,
           hasDomDiff,
           hasScreenshots,
         },
       ],
     };
+    exportsTotal++;
+    exportsParityMismatch++;
     pairs.push(orphan);
     pairById.set(fileId, orphan);
   }
@@ -469,6 +496,9 @@ if (captureResults) {
     const exportSlug = sep > 0 ? id.slice(sep + 2) : null;
     const message = `${label}: ${record.reason}`;
 
+    const newCategory =
+      status === "fail" ? "capture-failed" : "capture-skipped";
+
     const pair = pairById.get(fileId);
     if (pair && exportSlug) {
       const exp =
@@ -480,7 +510,13 @@ if (captureResults) {
         // Don't downgrade an existing fail (e.g. DOM diff already
         // attached); capture is a less specific signal.
         if (exp.status !== "fail") {
+          if (exp.category === "covered") exportsCovered--;
+          else if (exp.category === "missing") exportsMissing--;
+          else if (exp.category === "exempt") exportsExempt--;
+          if (newCategory === "capture-failed") exportsCaptureFailed++;
+          else if (newCategory === "capture-skipped") exportsCaptureSkipped++;
           exp.status = status;
+          exp.category = newCategory;
           exp.message = message;
         }
         if (pair.status !== "fail") {
@@ -512,12 +548,16 @@ if (captureResults) {
           id,
           expected: `story_${(exportSlug ?? "default").replace(/-/g, "_")}`,
           status,
+          category: newCategory,
           message,
           hasDomDiff: false,
           hasScreenshots: false,
         },
       ],
     };
+    exportsTotal++;
+    if (newCategory === "capture-failed") exportsCaptureFailed++;
+    else if (newCategory === "capture-skipped") exportsCaptureSkipped++;
     pairs.push(newPair);
     pairById.set(fileId, newPair);
   };
@@ -584,9 +624,14 @@ const meta = {
   sha: process.env.REVIEW_SHA ?? "unknown",
   exports: {
     total: exportsTotal,
+    // status × category breakdown — viewer rolls up to "failures",
+    // "warnings", "passed" totals and shows subcategories underneath.
     covered: exportsCovered,
     missing: exportsMissing,
     exempt: exportsExempt,
+    captureFailed: exportsCaptureFailed,
+    captureSkipped: exportsCaptureSkipped,
+    parityMismatch: exportsParityMismatch,
   },
 };
 
@@ -902,20 +947,41 @@ const html = `<!DOCTYPE html>
   }
 
   function renderSidebar() {
-    const fails = allPairs.filter(p => p.status === 'fail').length;
-    const warns = allPairs.filter(p => p.status === 'warning').length;
-    const stats = document.getElementById('sidebar-stats');
+    // Stats are export-level, not file-level. Subcategories
+    // (missing / capture-failed / parity-mismatch) roll up into
+    // "failures"; (exempt / capture-skipped) into "warnings"; covered
+    // is "passed". Subcategories with zero count are omitted.
     const ex = meta.exports || null;
-    const fileLine = fails + ' failure(s), ' + warns + ' warning(s) / ' + allPairs.length + ' files';
+    const stats = document.getElementById('sidebar-stats');
     if (ex && typeof ex.total === 'number') {
+      const failParts = [];
+      if (ex.missing > 0) failParts.push(ex.missing + ' missing');
+      if (ex.captureFailed > 0) failParts.push(ex.captureFailed + ' capture failed');
+      if (ex.parityMismatch > 0) failParts.push(ex.parityMismatch + ' parity mismatch');
+      const warnParts = [];
+      if (ex.exempt > 0) warnParts.push(ex.exempt + ' exempt');
+      if (ex.captureSkipped > 0) warnParts.push(ex.captureSkipped + ' capture skipped');
+      const failTotal = (ex.missing||0) + (ex.captureFailed||0) + (ex.parityMismatch||0);
+      const warnTotal = (ex.exempt||0) + (ex.captureSkipped||0);
+      const sub = (n, parts) =>
+        n > 0 && parts.length > 0
+          ? '<span style="color:#7f849c;">  (' + parts.join(', ') + ')</span>'
+          : '';
       stats.innerHTML =
-        '<div>' + fileLine + '</div>' +
-        '<div style="font-size:11px;color:#7f849c;margin-top:2px;">' +
-          ex.covered + '/' + ex.total + ' exports — ' +
-          ex.missing + ' missing, ' + ex.exempt + ' exempt' +
+        '<div>' + ex.total + ' tests total</div>' +
+        '<div style="margin-top:4px;">' +
+          '<span class="status-fail">' + failTotal + ' failures</span>' +
+          sub(failTotal, failParts) +
+        '</div>' +
+        '<div>' +
+          '<span class="status-warning">' + warnTotal + ' warnings</span>' +
+          sub(warnTotal, warnParts) +
+        '</div>' +
+        '<div>' +
+          '<span class="status-pass">' + (ex.covered||0) + ' passed</span>' +
         '</div>';
     } else {
-      stats.textContent = fileLine;
+      stats.textContent = allPairs.length + ' entries';
     }
 
     const list = document.getElementById('story-list');
