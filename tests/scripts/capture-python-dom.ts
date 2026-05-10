@@ -424,6 +424,12 @@ async function main() {
     let skipped = 0;
     const failures: { story: string; reason: string }[] = [];
     const skips: { story: string; reason: string }[] = [];
+    // Per-story records keyed by `story.path` (the same id format used by
+    // DOM-diff snapshots), so the parity review site can overlay capture
+    // results onto the same pair entries.
+    const capturedIds: string[] = [];
+    const failedRecords: { id: string; story: string; reason: string }[] = [];
+    const skippedRecords: { id: string; story: string; reason: string }[] = [];
 
     for (const story of stories) {
       process.stdout.write(
@@ -446,12 +452,22 @@ async function main() {
           story: `${story.module}::${story.function}`,
           reason: ir.reason,
         });
+        skippedRecords.push({
+          id: story.path,
+          story: `${story.module}::${story.function}`,
+          reason: ir.reason,
+        });
         continue;
       }
       if (ir.kind === "error") {
         console.log(`FAILED (IR extraction): ${ir.reason}`);
         failed++;
         failures.push({
+          story: `${story.module}::${story.function}`,
+          reason: `IR extraction failed: ${ir.reason}`,
+        });
+        failedRecords.push({
+          id: story.path,
           story: `${story.module}::${story.function}`,
           reason: `IR extraction failed: ${ir.reason}`,
         });
@@ -476,11 +492,17 @@ async function main() {
 
         console.log("OK");
         captured++;
+        capturedIds.push(story.path);
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         console.log(`FAILED: ${msg}`);
         failed++;
         failures.push({
+          story: `${story.module}::${story.function}`,
+          reason: msg,
+        });
+        failedRecords.push({
+          id: story.path,
           story: `${story.module}::${story.function}`,
           reason: msg,
         });
@@ -512,6 +534,22 @@ async function main() {
       summaryPath,
       JSON.stringify(
         { ...prior, captured, captureFailed: failed, skipped },
+        null,
+        2
+      )
+    );
+
+    // Per-story records for the parity review site. Lets the viewer
+    // render capture failures and skips as their own entries (with the
+    // reason) instead of silently looking like passes.
+    writeFileSync(
+      join(TMP_DIR, "capture-results.json"),
+      JSON.stringify(
+        {
+          captured: capturedIds,
+          failed: failedRecords,
+          skipped: skippedRecords,
+        },
         null,
         2
       )

@@ -272,6 +272,85 @@ for (const diff of parityDiffs) {
   });
 }
 
+// ---------------------------------------------------------------------------
+// Overlay capture results (capture-python-dom.ts writes capture-results.json
+// with per-story failure/skip records). Without this, capture failures look
+// like passes in the viewer because the matching Python file *exists* — but
+// no DOM was ever produced. Skips (e.g. LayerBuilder unsupported) similarly
+// need to be visible warnings, not silent passes.
+// ---------------------------------------------------------------------------
+
+interface CaptureResult {
+  id: string;
+  story: string;
+  reason: string;
+}
+interface CaptureResults {
+  captured: string[];
+  failed: CaptureResult[];
+  skipped: CaptureResult[];
+}
+
+const captureResultsPath = join(TESTS_DIR, "tmp/python/capture-results.json");
+const captureResults: CaptureResults | null = (() => {
+  if (!existsSync(captureResultsPath)) return null;
+  try {
+    return JSON.parse(readFileSync(captureResultsPath, "utf-8"));
+  } catch {
+    return null;
+  }
+})();
+
+if (captureResults) {
+  const overlay = (
+    record: CaptureResult,
+    status: "fail" | "warning",
+    label: string
+  ) => {
+    const id = record.id;
+    const storyId = id.replace(/--[^/]*$/, "");
+    const jsFile =
+      storyIndex.get(storyId) ??
+      `packages/gofish-graphics/stories/${id}.stories.tsx`;
+    const pythonFile = domIdToPythonFile(id);
+    const message = `${label}: ${record.reason}`;
+
+    if (seenIds.has(id)) {
+      const pair = pairs.find((p) => p.id === id);
+      if (pair) {
+        // Don't downgrade an existing fail (e.g. DOM diff already
+        // reported). Otherwise overlay capture status.
+        if (pair.status !== "fail") {
+          pair.status = status;
+          pair.checkType = "capture";
+          pair.message = message;
+        }
+      }
+      return;
+    }
+    seenIds.add(id);
+    pairs.push({
+      id,
+      jsFile,
+      pythonFile,
+      checkType: "capture",
+      status,
+      message,
+      hasDomDiff: false,
+      hasScreenshots: false,
+    });
+  };
+
+  for (const r of captureResults.failed ?? [])
+    overlay(r, "fail", "Capture failed");
+  for (const r of captureResults.skipped ?? [])
+    overlay(r, "warning", "Capture skipped");
+
+  console.log(
+    `  ${captureResults.failed?.length ?? 0} capture failure(s), ${captureResults.skipped?.length ?? 0} capture skip(s) overlaid`
+  );
+}
+
 console.log(`  ${pairs.length} story pair(s) total`);
 
 // ---------------------------------------------------------------------------
@@ -385,6 +464,7 @@ const html = `<!DOCTYPE html>
     .check-coverage { background: #313244; color: #89b4fa; }
     .check-sync { background: #313244; color: #cba6f7; }
     .check-dom { background: #313244; color: #fab387; }
+    .check-capture { background: #313244; color: #f38ba8; }
 
     /* Main panel */
     #main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
@@ -455,6 +535,7 @@ const html = `<!DOCTYPE html>
     <button class="filter-btn" data-filter="warning">Warnings</button>
     <button class="filter-btn" data-filter="coverage">Coverage</button>
     <button class="filter-btn" data-filter="sync">Sync</button>
+    <button class="filter-btn" data-filter="capture">Capture</button>
     <button class="filter-btn" data-filter="dom">DOM</button>
   </div>
   <div id="story-list"></div>
@@ -621,7 +702,7 @@ const html = `<!DOCTYPE html>
     document.getElementById('main-title').textContent = id;
 
     const statusColors = { pass: '#27ae60', fail: '#e74c3c', warning: '#e67e22' };
-    const checkColors = { coverage: '#3498db', sync: '#9b59b6', dom: '#e67e22' };
+    const checkColors = { coverage: '#3498db', sync: '#9b59b6', dom: '#e67e22', capture: '#e74c3c' };
     const sColor = statusColors[pair.status] || '#888';
     const cColor = checkColors[pair.checkType] || '#888';
     document.getElementById('main-badges').innerHTML =
