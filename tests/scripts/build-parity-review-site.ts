@@ -635,6 +635,8 @@ const html = `<!DOCTYPE html>
     #sidebar-header h2 { font-size: 14px; font-weight: 600; color: #cba6f7; margin-bottom: 4px; }
     #sidebar-meta { font-size: 11px; color: #6c7086; margin-bottom: 4px; font-family: monospace; }
     #sidebar-stats { font-size: 12px; color: #a6adc8; }
+    #sidebar-legend { display: flex; gap: 12px; padding: 6px 16px; border-bottom: 1px solid #313244; font-size: 10px; color: #a6adc8; }
+    #sidebar-legend .legend-item { display: flex; align-items: center; gap: 4px; }
     #sidebar-filters { display: flex; gap: 6px; padding: 8px 16px; flex-wrap: wrap; border-bottom: 1px solid #313244; }
     .filter-btn { padding: 3px 10px; border-radius: 12px; border: 1px solid #45475a; background: transparent; color: #a6adc8; font-size: 11px; cursor: pointer; }
     .filter-btn.active { background: #cba6f7; color: #1e1e2e; border-color: #cba6f7; font-weight: 600; }
@@ -724,6 +726,11 @@ const html = `<!DOCTYPE html>
     <div id="readonly-banner">Read-only diagnostic view</div>
     <div id="sidebar-meta" style="margin-top:8px;"></div>
     <div id="sidebar-stats"></div>
+  </div>
+  <div id="sidebar-legend">
+    <span class="legend-item"><span class="status-dot status-dot-pass"></span>pass</span>
+    <span class="legend-item"><span class="status-dot status-dot-warning"></span>warning</span>
+    <span class="legend-item"><span class="status-dot status-dot-fail"></span>fail</span>
   </div>
   <div id="sidebar-filters">
     <button class="filter-btn active" data-filter="all">All</button>
@@ -863,20 +870,25 @@ const html = `<!DOCTYPE html>
   }
 
   // Produce a flat list of visible entries (files + their exports),
-  // honoring the current filter. Files with no visible children stay
-  // hidden when filtering to a specific status/checktype.
+  // honoring the current filter. Files with exactly one export collapse
+  // to a single row (the file IS the entry — no indented child). Files
+  // with no visible children stay hidden when filtering to a specific
+  // status/checktype.
   function visibleEntries() {
     const out = [];
     for (const p of allPairs) {
+      const exports = p.exports || [];
       const fileMatches = entryMatches(p, p.checkType);
-      const visibleExports = (p.exports || []).filter(e =>
+      const visibleExports = exports.filter(e =>
         entryMatches({ status: e.status, checkType: p.checkType }, p.checkType)
       );
       const showFile = filter === 'all' ? true : fileMatches || visibleExports.length > 0;
       if (!showFile) continue;
       out.push({ kind: 'file', pair: p });
-      const childrenToShow =
-        filter === 'all' ? (p.exports || []) : visibleExports;
+      // Collapse single-export files: the file row already represents
+      // the only export, indenting "↳ Default" under it is just noise.
+      if (exports.length <= 1) continue;
+      const childrenToShow = filter === 'all' ? exports : visibleExports;
       for (const exp of childrenToShow) out.push({ kind: 'export', pair: p, exp });
     }
     return out;
@@ -931,10 +943,12 @@ const html = `<!DOCTYPE html>
           '</div>';
       } else {
         el.innerHTML =
-          '<div class="story-name">' + escHtml(name) + '</div>' +
+          '<div class="story-name">' +
+            '<span class="status-dot status-dot-' + entry.pair.status + '"></span>' +
+            escHtml(name) +
+          '</div>' +
           '<div class="story-meta">' +
             '<span class="check-badge check-' + entry.pair.checkType + '">' + entry.pair.checkType.toUpperCase() + '</span>' +
-            '<span class="status-' + entry.pair.status + '">' + entry.pair.status + '</span>' +
           '</div>';
       }
       el.addEventListener('click', () => selectEntry(entry));
