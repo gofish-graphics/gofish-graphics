@@ -382,36 +382,6 @@ export class GoFishNode {
         }
       });
 
-      // Promote any dims that children claimed (but weren't in the original
-      // claimed set) up to THIS layer. This moves axis ownership to y=0 in the
-      // layer's coordinate system rather than leaving it buried inside a child
-      // at that child's arbitrary y position (e.g. a box-whisker frame whose
-      // first rect is at y=posScale(min), not y=0).
-      const promoted = new Set(
-        [...accumulated].filter((d) => !claimed.has(d as 0 | 1))
-      ) as Set<0 | 1>;
-      if (promoted.size > 0) {
-        if (promoted.has(0)) this.axis_x = true;
-        if (promoted.has(1)) this.axis_y = true;
-        // Clear the flags from all descendants so they don't also create
-        // axes or apply axis budget (the layer now owns both).
-        const clearFlags = (n: GoFishNode): void => {
-          if (promoted.has(0)) {
-            n.axis_x = undefined;
-            n._axisBudgetOnlyX = undefined;
-          }
-          if (promoted.has(1)) {
-            n.axis_y = undefined;
-            n._axisBudgetOnlyY = undefined;
-          }
-          n.children.forEach((c) => {
-            if (c instanceof GoFishNode) clearFlags(c);
-          });
-        };
-        this.children.forEach((c) => {
-          if (c instanceof GoFishNode) clearFlags(c);
-        });
-      }
       return;
     }
 
