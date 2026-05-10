@@ -45,7 +45,7 @@ Content size is clamped to zero so charts with `h:0` (e.g. 1D strip plots) don't
 - `innerBaselineY` (for `_layoutAlignDir === 1`, horizontal spreads): `axisBudgetY += AXIS_THICKNESS` when any child has `axis_x`; reserves extra bottom row for inner x-axis labels.
 - `innerBaselineX` (for `_layoutAlignDir === 0`, vertical spreads): `axisBudgetX += AXIS_THICKNESS` when any child has `axis_y`; reserves extra left column for inner y-axis labels.
 - **Internal baseline alignment:** After `alignChildren`, each inner frame is shifted back by `-_contentBaseline[alignDir]` so bars land at `posScale(0)`. `_contentBaseline` propagates upward through transparent layer nodes.
-- **ORDINAL horizontal spreads:** when the outer spread is ORDINAL (equal distribution) and inner children have Y axes, the spread advances by `childStackSize` rather than `child.dims[stackDir].size`. This keeps facets at even intervals even if inner content overflows the slot.
+- **Coord node children:** after `resolveAxes` runs on children of a `coord` node, all Cartesian `axis_x/y` and `_axisBudgetOnly*` flags are cleared from the entire coord subtree. This prevents per-operator `axis:` overrides (e.g. `stack({ axis: true })`) from applying Cartesian axis budgets inside polar coordinate space, where sizes are in radians/radius units. The `_axisOverride` values are still read by `collectOverrides` for polar axis routing before clearing.
 
 **posScale rescaling (`TICK_EDGE_PAD`):**
 
