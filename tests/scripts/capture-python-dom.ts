@@ -97,9 +97,18 @@ function discoverPythonStories(): PythonStory[] {
 // Extract IR from Python story (by calling Python)
 // ---------------------------------------------------------------------------
 
-function extractIR(
-  story: PythonStory
-): { spec: any; data: any; options: any; deriveIds: string[] } | null {
+type IRResult =
+  | {
+      kind: "chart";
+      spec: any;
+      data: any;
+      options: any;
+      deriveIds: string[];
+    }
+  | { kind: "layer-unsupported"; reason: string }
+  | { kind: "error"; reason: string };
+
+function extractIR(story: PythonStory): IRResult {
   const storyAbsPath = join(TESTS_DIR, story.file);
   const script = `
 import sys, json, importlib.util
@@ -130,7 +139,16 @@ if not isinstance(result, tuple):
 builder = result[0]
 options = result[1] if len(result) > 1 else {}
 
-from gofish.ast import DeriveOperator
+from gofish.ast import DeriveOperator, ChartBuilder, LayerBuilder
+
+# The harness was built for ChartBuilder. LayerBuilder stories (Layer([...]))
+# need a different IR shape and a different render path that the current
+# harness doesn't implement. Surface them as a structured "skip" so the
+# parent script can categorize them as a known limitation rather than a
+# hard failure.
+if isinstance(builder, LayerBuilder):
+    print(json.dumps({"_kind": "layer-unsupported"}))
+    sys.exit(0)
 
 ir = builder.to_ir()
 data = builder.data
@@ -164,12 +182,19 @@ print(json.dumps(output))
       input: script,
       timeout: 30_000,
     });
-    return JSON.parse(result.trim());
+    const parsed = JSON.parse(result.trim());
+    if (parsed && parsed._kind === "layer-unsupported") {
+      return {
+        kind: "layer-unsupported",
+        reason: "LayerBuilder stories not yet supported by capture harness",
+      };
+    }
+    return { kind: "chart", ...parsed };
   } catch (err) {
-    console.error(
-      `  Failed to extract IR: ${err instanceof Error ? err.message : err}`
-    );
-    return null;
+    return {
+      kind: "error",
+      reason: err instanceof Error ? err.message : String(err),
+    };
   }
 }
 
@@ -324,9 +349,11 @@ async function captureStory(
     window.__renderChart__(s);
   }, spec);
 
-  // Wait for render completion
+  // Wait for render completion. Short timeout — a render that takes more
+  // than a few seconds in CI is almost always silently broken (e.g. a
+  // missing derive lambda leaving the chart at zero size).
   await page.waitForFunction(() => window.__GOFISH_RENDER_COMPLETE__ === true, {
-    timeout: 15_000,
+    timeout: 8_000,
   });
 
   // Check for errors
@@ -342,13 +369,16 @@ async function captureStory(
     return root ? root.innerHTML : "";
   });
 
-  // Screenshot
+  // Screenshot. Tight timeout: the playwright default of 30s means each
+  // zero-height story burns 30s waiting for the element to "be visible"
+  // before failing. With many failures, the job runs for tens of minutes.
+  // 5s is enough for a healthy chart to settle and render.
   const rootHandle = await page.$("#gofish-harness-root");
   let screenshot: Buffer;
   if (rootHandle) {
-    screenshot = await rootHandle.screenshot({ type: "png" });
+    screenshot = await rootHandle.screenshot({ type: "png", timeout: 5_000 });
   } else {
-    screenshot = await page.screenshot({ type: "png" });
+    screenshot = await page.screenshot({ type: "png", timeout: 5_000 });
   }
 
   return { dom, screenshot };
@@ -391,7 +421,9 @@ async function main() {
 
     let captured = 0;
     let failed = 0;
+    let skipped = 0;
     const failures: { story: string; reason: string }[] = [];
+    const skips: { story: string; reason: string }[] = [];
 
     for (const story of stories) {
       process.stdout.write(
@@ -404,12 +436,24 @@ async function main() {
       }
 
       const ir = extractIR(story);
-      if (!ir) {
-        console.log("FAILED (IR extraction)");
+      if (ir.kind === "layer-unsupported") {
+        // Known limitation, not a real failure: surface visibly but
+        // don't tank the build over Layer stories the harness can't
+        // currently render.
+        console.log(`SKIP (${ir.reason})`);
+        skipped++;
+        skips.push({
+          story: `${story.module}::${story.function}`,
+          reason: ir.reason,
+        });
+        continue;
+      }
+      if (ir.kind === "error") {
+        console.log(`FAILED (IR extraction): ${ir.reason}`);
         failed++;
         failures.push({
           story: `${story.module}::${story.function}`,
-          reason: "IR extraction failed (see error above)",
+          reason: `IR extraction failed: ${ir.reason}`,
         });
         continue;
       }
@@ -443,7 +487,13 @@ async function main() {
       }
     }
 
-    console.log(`\nDone: ${captured} captured, ${failed} failed`);
+    console.log(
+      `\nDone: ${captured} captured, ${failed} failed, ${skipped} skipped`
+    );
+    if (skipped > 0) {
+      console.log(`\n${skipped} skipped (known limitations):`);
+      for (const s of skips) console.log(`  - ${s.story}: ${s.reason}`);
+    }
 
     await context.close();
 
