@@ -9,7 +9,7 @@
  */
 
 import { chromium, type Browser, type Page } from "playwright";
-import { spawn, execSync, type ChildProcess } from "child_process";
+import { spawn, type ChildProcess } from "child_process";
 import {
   readFileSync,
   writeFileSync,
@@ -100,102 +100,59 @@ function discoverPythonStories(): PythonStory[] {
 type IRResult =
   | {
       kind: "chart";
-      spec: any;
-      data: any;
+      operators: any[];
+      mark: any;
       options: any;
+      data: any;
       deriveIds: string[];
     }
   | { kind: "layer-unsupported"; reason: string }
   | { kind: "error"; reason: string };
 
-function extractIR(story: PythonStory): IRResult {
+/**
+ * Load a story via the derive-server's `/load` endpoint. The server imports
+ * the story, builds the IR, *and* registers any `DeriveOperator`s in its
+ * registry — all in one call so the lambda_ids in the returned IR match
+ * what `/derive/<id>` will look up. Doing import + register separately
+ * would mint divergent UUIDs because `derive(lambda)` generates a fresh
+ * UUID per call.
+ */
+async function loadStory(story: PythonStory): Promise<IRResult> {
   const storyAbsPath = join(TESTS_DIR, story.file);
-  const script = `
-import sys, json, importlib.util
-sys.path.insert(0, "${join(ROOT, "packages/gofish-python")}")
-sys.path.insert(0, "${TESTS_DIR}")
-
-# Register "python_stories" as a package so story imports (e.g. from python_stories.data) work
-_pkg_dir = "${PYTHON_STORIES_DIR}"
-_pkg_init = "${PYTHON_STORIES_DIR}/__init__.py"
-_pkg_spec = importlib.util.spec_from_file_location(
-    "python_stories", _pkg_init,
-    submodule_search_locations=[_pkg_dir]
-)
-_pkg_mod = importlib.util.module_from_spec(_pkg_spec)
-sys.modules["python_stories"] = _pkg_mod
-_pkg_spec.loader.exec_module(_pkg_mod)
-
-spec = importlib.util.spec_from_file_location("story_module", "${storyAbsPath}")
-mod = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(mod)
-fn = getattr(mod, "${story.function}")
-
-result = fn()
-if not isinstance(result, tuple):
-    print(json.dumps({"error": "story function must return a tuple"}))
-    sys.exit(1)
-
-builder = result[0]
-options = result[1] if len(result) > 1 else {}
-
-from gofish.ast import DeriveOperator, ChartBuilder, LayerBuilder
-
-# The harness was built for ChartBuilder. LayerBuilder stories (Layer([...]))
-# need a different IR shape and a different render path that the current
-# harness doesn't implement. Surface them as a structured "skip" so the
-# parent script can categorize them as a known limitation rather than a
-# hard failure.
-if isinstance(builder, LayerBuilder):
-    print(json.dumps({"_kind": "layer-unsupported"}))
-    sys.exit(0)
-
-ir = builder.to_ir()
-data = builder.data
-
-# Collect derive lambda IDs
-derive_ids = []
-for op in builder.operators:
-    if isinstance(op, DeriveOperator):
-        derive_ids.append(op.lambda_id)
-
-# Serialize data
-if hasattr(data, 'to_dict'):
-    data = data.to_dict('records')
-elif hasattr(data, 'to_dicts'):
-    data = data.to_dicts()
-
-output = {
-    "operators": ir["operators"],
-    "mark": ir["mark"],
-    "options": {**ir.get("options", {}), **options},
-    "data": data,
-    "deriveIds": derive_ids,
-}
-print(json.dumps(output))
-`;
-
+  let resp: Response;
   try {
-    const result = execSync(`python3 -`, {
-      cwd: ROOT,
-      encoding: "utf-8",
-      input: script,
-      timeout: 30_000,
+    resp = await fetch(`http://localhost:${DERIVE_SERVER_PORT}/load`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        storyFile: storyAbsPath,
+        function: story.function,
+        pythonStoriesDir: PYTHON_STORIES_DIR,
+      }),
     });
-    const parsed = JSON.parse(result.trim());
-    if (parsed && parsed._kind === "layer-unsupported") {
-      return {
-        kind: "layer-unsupported",
-        reason: "LayerBuilder stories not yet supported by capture harness",
-      };
-    }
-    return { kind: "chart", ...parsed };
   } catch (err) {
     return {
       kind: "error",
-      reason: err instanceof Error ? err.message : String(err),
+      reason: `derive-server unreachable: ${err instanceof Error ? err.message : String(err)}`,
     };
   }
+  if (!resp.ok) {
+    let body = "";
+    try {
+      body = await resp.text();
+    } catch {
+      /* ignore */
+    }
+    return { kind: "error", reason: `${resp.status} ${body}` };
+  }
+  const json = (await resp.json()) as any;
+  if (json && json._kind === "layer-unsupported") {
+    return {
+      kind: "layer-unsupported",
+      reason: "LayerBuilder stories not yet supported by capture harness",
+    };
+  }
+  return { kind: "chart", ...json };
 }
 
 // ---------------------------------------------------------------------------
@@ -235,55 +192,9 @@ async function waitForServer(url: string, timeoutMs = 10_000) {
   );
 }
 
-// ---------------------------------------------------------------------------
-// Register derive functions for a story
-// ---------------------------------------------------------------------------
-
-function registerDerives(story: PythonStory): void {
-  const storyAbsPath = join(TESTS_DIR, story.file);
-  const script = `
-import sys, importlib.util
-sys.path.insert(0, "${join(ROOT, "packages/gofish-python")}")
-sys.path.insert(0, "${TESTS_DIR}")
-
-# Register "python_stories" as a package so story imports (e.g. from python_stories.data) work
-_pkg_dir = "${PYTHON_STORIES_DIR}"
-_pkg_init = "${PYTHON_STORIES_DIR}/__init__.py"
-_pkg_spec = importlib.util.spec_from_file_location(
-    "python_stories", _pkg_init,
-    submodule_search_locations=[_pkg_dir]
-)
-_pkg_mod = importlib.util.module_from_spec(_pkg_spec)
-sys.modules["python_stories"] = _pkg_mod
-_pkg_spec.loader.exec_module(_pkg_mod)
-
-from gofish.ast import DeriveOperator
-
-spec = importlib.util.spec_from_file_location("story_module", "${storyAbsPath}")
-mod = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(mod)
-fn = getattr(mod, "${story.function}")
-result = fn()
-builder = result[0]
-
-for op in builder.operators:
-    if isinstance(op, DeriveOperator):
-        pass
-
-print("OK")
-`;
-
-  try {
-    execSync(`python3 -`, {
-      cwd: ROOT,
-      encoding: "utf-8",
-      input: script,
-      timeout: 10_000,
-    });
-  } catch {
-    // Non-fatal — story may not have derives
-  }
-}
+// (Derive registration is now handled by the derive-server's /load
+// endpoint — see loadStory above. The previous `registerDerives` was a
+// no-op stub: it imported the story but never wrote to _registry.)
 
 // ---------------------------------------------------------------------------
 // Start Vite harness server
@@ -436,12 +347,7 @@ async function main() {
         `  ${story.module}::${story.function} → ${story.path} ... `
       );
 
-      // Register derives for this story with the derive server
-      if (story.file) {
-        registerDerives(story);
-      }
-
-      const ir = extractIR(story);
+      const ir = await loadStory(story);
       if (ir.kind === "layer-unsupported") {
         // Known limitation, not a real failure: surface visibly but
         // don't tank the build over Layer stories the harness can't
