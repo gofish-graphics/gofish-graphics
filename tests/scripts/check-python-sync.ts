@@ -240,6 +240,36 @@ function runFullCoverage(): number {
   writeFileSync(OUT_FILE, JSON.stringify(results, null, 2));
   console.log(`\nResults written to ${OUT_FILE}`);
 
+  // Also merge counts into parity-summary.json so the CI status
+  // description can surface coverage info alongside capture/compare
+  // stats. Merge (don't overwrite) — capture-python and compare-python
+  // also write their counts here.
+  const paritySummaryPath = join(OUT_DIR, "parity-summary.json");
+  let priorSummary: Record<string, unknown> = {};
+  if (existsSync(paritySummaryPath)) {
+    try {
+      priorSummary = JSON.parse(readFileSync(paritySummaryPath, "utf-8"));
+    } catch {
+      /* overwrite on parse failure */
+    }
+  }
+  writeFileSync(
+    paritySummaryPath,
+    JSON.stringify(
+      {
+        ...priorSummary,
+        coverageFilesFail: filesError,
+        coverageFilesExempt: filesWarn,
+        coverageExportsTotal: exportsTotal,
+        coverageExportsCovered: exportsOk,
+        coverageExportsMissing: exportsMissing,
+        coverageExportsExempt: exportsExempt,
+      },
+      null,
+      2
+    )
+  );
+
   if (filesError > 0) {
     console.error(
       `\n${exportsMissing} JS StoryObj export(s) have no Python counterpart and are not on the exempt list.`

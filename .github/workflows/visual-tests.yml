@@ -333,6 +333,8 @@ jobs:
               const add = (n, label) => {
                 if (typeof n === 'number' && n > 0) parts.push(`${n} ${label}`);
               };
+              add(summary.coverageFilesFail, 'files w/ missing coverage');
+              add(summary.coverageExportsMissing, 'exports missing');
               add(summary.captureFailed, 'capture failed');
               add(summary.parityMismatches, 'parity mismatched');
               add(summary.missingBaselines, 'missing baseline');
