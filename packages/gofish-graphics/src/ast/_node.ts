@@ -152,6 +152,10 @@ export class GoFishNode {
   // Axis rendering properties
   public axis_x?: boolean;
   public axis_y?: boolean;
+  // Budget-only: apply AXIS_THICKNESS margin but don't render the axis SVG
+  // (set on non-first layer siblings that share an axis owned by sibling 0)
+  public _axisBudgetOnlyX?: boolean;
+  public _axisBudgetOnlyY?: boolean;
   public _axisOverride?: { x?: boolean; y?: boolean };
   public _axisChildren?: Map<0 | 1, GoFishNode>;
   public _contentBaseline: Size = [0, 0];
@@ -340,18 +344,62 @@ export class GoFishNode {
    * Top-down walk that marks which nodes should render axes.
    * `claimed` tracks dimensions already claimed by an ancestor.
    */
-  public resolveAxes(claimed: Set<0 | 1> = new Set()): void {
+  public resolveAxes(
+    claimed: Set<0 | 1> = new Set(),
+    budgetOnly: Set<0 | 1> = new Set()
+  ): void {
     if (this.type === "layer") {
+      // Accumulate claimed dims across siblings so each child sees what
+      // previous siblings already claimed. Newly-claimed dims are passed as
+      // budgetOnly to subsequent siblings: they reserve the axis margin for
+      // layout alignment but don't render duplicate axis SVG.
+      const accumulated = new Set(claimed);
+      const scanClaimed = (n: GoFishNode): void => {
+        if (n.axis_x === true) accumulated.add(0);
+        if (n.axis_y === true) accumulated.add(1);
+        n.children.forEach((c) => {
+          if (c instanceof GoFishNode) scanClaimed(c);
+        });
+      };
       this.children.forEach((c) => {
-        if (c instanceof GoFishNode) c.resolveAxes(claimed);
+        if (c instanceof GoFishNode) {
+          const siblingClaimed = new Set(
+            [...accumulated].filter((d) => !claimed.has(d as 0 | 1))
+          ) as Set<0 | 1>;
+          c.resolveAxes(new Set(accumulated), siblingClaimed);
+          scanClaimed(c);
+        }
       });
       return;
     }
 
     // Coordinate-transform nodes (polar, clock, bipolar, etc.) manage their
     // own coordinate space; Cartesian axes make no sense for them or their
-    // children. Claim all dims so no descendant assigns axis flags.
+    // children. Collect directional axis overrides from the subtree so the
+    // coord's render function can honour per-operator axis: true/false.
     if (this.type === "coord") {
+      let polarAxisX: boolean | undefined = undefined;
+      let polarAxisY: boolean | undefined = undefined;
+      const collectOverrides = (n: GoFishNode) => {
+        if (n._axisOverride) {
+          const dir: number | undefined = (n as any)._axisDir;
+          // If the node carries a direction tag, only apply override to that dim.
+          // Otherwise (e.g. scatter with no dir) apply to both.
+          if (dir !== 1 && n._axisOverride.x !== undefined)
+            polarAxisX = n._axisOverride.x;
+          if (dir !== 0 && n._axisOverride.y !== undefined)
+            polarAxisY = n._axisOverride.y;
+        }
+        n.children.forEach((c) => {
+          if (c instanceof GoFishNode) collectOverrides(c);
+        });
+      };
+      this.children.forEach((c) => {
+        if (c instanceof GoFishNode) collectOverrides(c);
+      });
+      if (polarAxisX !== undefined) (this as any)._polarAxisX = polarAxisX;
+      if (polarAxisY !== undefined) (this as any)._polarAxisY = polarAxisY;
+
       const allClaimed = new Set<0 | 1>([0, 1]);
       this.children.forEach((c) => {
         if (c instanceof GoFishNode) c.resolveAxes(allClaimed);
@@ -368,6 +416,12 @@ export class GoFishNode {
         if (dim === 0) this.axis_x = override;
         else this.axis_y = override;
         next.add(dim); // claim regardless — false blocks children too
+      } else if (budgetOnly.has(dim)) {
+        // A layer sibling already owns this axis. Reserve the layout margin
+        // so content areas stay aligned, but skip axis SVG rendering.
+        if (dim === 0) this._axisBudgetOnlyX = true;
+        else this._axisBudgetOnlyY = true;
+        next.add(dim);
       } else if (
         !claimed.has(dim) &&
         space &&
@@ -423,8 +477,10 @@ export class GoFishNode {
     scaleFactors: Size<number | undefined>,
     posScales: Size<((pos: number) => number) | undefined>
   ): Placeable {
-    let axisBudgetX = this.axis_y === true ? AXIS_THICKNESS : 0;
-    let axisBudgetY = this.axis_x === true ? AXIS_THICKNESS : 0;
+    let axisBudgetX =
+      this.axis_y === true || this._axisBudgetOnlyY ? AXIS_THICKNESS : 0;
+    let axisBudgetY =
+      this.axis_x === true || this._axisBudgetOnlyX ? AXIS_THICKNESS : 0;
 
     // Change 1: expand outer axis budget to include inner baselines so both
     // label rows have room (outer labels + inner facet labels).
@@ -483,7 +539,7 @@ export class GoFishNode {
       // a posScale already rescaled by an ancestor maps it to < size[dim].
       const usp = this._underlyingSpace;
       const tickPadX =
-        this.axis_x === true &&
+        (this.axis_x === true || this._axisBudgetOnlyX) &&
         posScales[0] &&
         usp &&
         isPOSITION(usp[0]) &&
@@ -492,7 +548,7 @@ export class GoFishNode {
           ? TICK_EDGE_PAD
           : 0;
       const tickPadY =
-        this.axis_y === true &&
+        (this.axis_y === true || this._axisBudgetOnlyY) &&
         posScales[1] &&
         usp &&
         isPOSITION(usp[1]) &&

@@ -401,8 +401,14 @@ export const coord = createNodeOperator(
 
           const polarAxisJSX = (): JSX.Element | null => {
             if (!axes || !spaceRef.current) return null;
-            const axesX = typeof axes === "boolean" ? axes : (axes?.x ?? true);
-            const axesY = typeof axes === "boolean" ? axes : (axes?.y ?? true);
+            // Start from the chart-level axes option, then let per-operator
+            // axis: true/false overrides (collected in resolveAxes) take precedence.
+            let axesX = typeof axes === "boolean" ? axes : (axes?.x ?? true);
+            let axesY = typeof axes === "boolean" ? axes : (axes?.y ?? true);
+            if ((node as any)._polarAxisX !== undefined)
+              axesX = (node as any)._polarAxisX;
+            if ((node as any)._polarAxisY !== undefined)
+              axesY = (node as any)._polarAxisY;
             const [xSpace, ySpace] = spaceRef.current;
             const keyContext = node.getRenderSession().keyContext;
             const rContent =
