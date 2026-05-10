@@ -720,12 +720,21 @@ export class GoFishNode {
       this._axisChildren = new Map();
       const space = this._underlyingSpace!;
       const session = this.getRenderSession();
-      // Use the root nice union space for axis ticks when available, so
-      // nodes deep in a layer tree (e.g. per-species scatter) show the full
-      // shared coordinate range rather than their own narrow data slice.
+      // Use the root nice union space for axis ticks when available so nodes
+      // deep in a layer tree (e.g. per-species scatter) show the full shared
+      // domain rather than their own narrow slice.
+      // Only substitute when BOTH the root and local space are POSITION —
+      // never let an outer ORDINAL (e.g. facet by "side") override an inner
+      // POSITION (e.g. scatter x="year").
       const rootNice = session?.rootNiceSpace;
-      const axisSpaceY = rootNice?.[1] ?? space[1];
-      const axisSpaceX = rootNice?.[0] ?? space[0];
+      const axisSpaceY =
+        rootNice?.[1] && isPOSITION(rootNice[1]) && isPOSITION(space[1])
+          ? rootNice[1]
+          : space[1];
+      const axisSpaceX =
+        rootNice?.[0] && isPOSITION(rootNice[0]) && isPOSITION(space[0])
+          ? rootNice[0]
+          : space[0];
 
       if (this.axis_y === true) {
         const sf = this.getRenderSession().scaleContext.y;

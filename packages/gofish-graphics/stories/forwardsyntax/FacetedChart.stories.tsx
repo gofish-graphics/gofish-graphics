@@ -20,12 +20,12 @@ export default meta;
 type Args = { w: number; h: number };
 
 export const Default: StoryObj<Args> = {
-  args: { w: 600, h: 400 },
+  args: { w: 1000, h: 400 },
   render: (args: Args) => {
     const container = initializeContainer();
 
     Chart(seafood, { axes: true })
-      .flow(spread({ by: "lake", dir: "x", spacing: 48, axis: true }))
+      .flow(spread({ by: "lake", dir: "x", axis: {x: true, y: false} }))
       .mark((data) =>
         Chart(data)
           .flow(spread({ by: "species", dir: "x", axis: true }))
@@ -50,7 +50,7 @@ export const FacetedScatterDriving: StoryObj<Args> = {
       .flow(spread({ by: "side", dir: "x", spacing: 50, axis: true }))
       .mark((data) =>
         Chart(data)
-          .flow(scatter({ x: "year", y: "miles", axis: true }))
+          .flow(scatter({ x: "year", y: "miles", axis: {x: true, y:false} }))
           .mark(circle({ r: 3, fill: "#4682b4" }))
       )
       .render(container, {
@@ -71,7 +71,7 @@ export const FacetedScatterY: StoryObj<Args> = {
       .flow(spread({ by: "side", dir: "y", spacing: 50, axis: true }))
       .mark((data) =>
         Chart(data)
-          .flow(scatter({ x: "year", y: "gas", axis: true }))
+          .flow(scatter({ x: "year", y: "gas", axis: false }))
           .mark(circle({ r: 3, fill: "#e07b39" }))
       )
       .render(container, {
