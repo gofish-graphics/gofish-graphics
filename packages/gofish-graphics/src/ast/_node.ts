@@ -381,6 +381,37 @@ export class GoFishNode {
           scanClaimed(c);
         }
       });
+
+      // Promote any dims that children claimed (but weren't in the original
+      // claimed set) up to THIS layer. This moves axis ownership to y=0 in the
+      // layer's coordinate system rather than leaving it buried inside a child
+      // at that child's arbitrary y position (e.g. a box-whisker frame whose
+      // first rect is at y=posScale(min), not y=0).
+      const promoted = new Set(
+        [...accumulated].filter((d) => !claimed.has(d as 0 | 1))
+      ) as Set<0 | 1>;
+      if (promoted.size > 0) {
+        if (promoted.has(0)) this.axis_x = true;
+        if (promoted.has(1)) this.axis_y = true;
+        // Clear the flags from all descendants so they don't also create
+        // axes or apply axis budget (the layer now owns both).
+        const clearFlags = (n: GoFishNode): void => {
+          if (promoted.has(0)) {
+            n.axis_x = undefined;
+            n._axisBudgetOnlyX = undefined;
+          }
+          if (promoted.has(1)) {
+            n.axis_y = undefined;
+            n._axisBudgetOnlyY = undefined;
+          }
+          n.children.forEach((c) => {
+            if (c instanceof GoFishNode) clearFlags(c);
+          });
+        };
+        this.children.forEach((c) => {
+          if (c instanceof GoFishNode) clearFlags(c);
+        });
+      }
       return;
     }
 
@@ -427,9 +458,18 @@ export class GoFishNode {
         if (dim === 0) this.axis_x = override;
         else this.axis_y = override;
         next.add(dim); // claim regardless — false blocks children too
-      } else if (budgetOnly.has(dim)) {
+      } else if (
+        budgetOnly.has(dim) &&
+        space &&
+        !isUNDEFINED(space[dim]) &&
+        (isPOSITION(space[dim]) ||
+          isDIFFERENCE(space[dim]) ||
+          isORDINAL(space[dim]))
+      ) {
         // A layer sibling already owns this axis. Reserve the layout margin
         // so content areas stay aligned, but skip axis SVG rendering.
+        // Only applies when this node has a meaningful space for this dim —
+        // nodes with UNDEFINED space (e.g. connectY) should never get budget.
         if (dim === 0) this._axisBudgetOnlyX = true;
         else this._axisBudgetOnlyY = true;
         next.add(dim);
