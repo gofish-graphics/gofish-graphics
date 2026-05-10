@@ -29,11 +29,6 @@ if (!existsSync(PYTHON_DIR)) {
 
 const pyFiles = listHtmlFiles(PYTHON_DIR);
 
-if (pyFiles.length === 0) {
-  console.log("No Python DOM files found. Nothing to compare.");
-  process.exit(0);
-}
-
 let parityMismatches = 0;
 let missingBaselines = 0;
 let passed = 0;
@@ -62,13 +57,32 @@ for (const file of pyFiles) {
 
 const failures = parityMismatches + missingBaselines;
 
+if (pyFiles.length === 0) {
+  console.log("No Python DOM files found. Nothing to compare.");
+}
+
 console.log(
   `\nResults: ${passed} passed, ${parityMismatches} parity mismatches, ${missingBaselines} missing baselines`
 );
 
+// Merge into any pre-existing summary (capture-python.ts writes capture
+// counts; we add comparison counts here). Always write so the CI status
+// reader has something to render even when capture produced no files.
+let prior: Record<string, unknown> = {};
+if (existsSync(SUMMARY_PATH)) {
+  try {
+    prior = JSON.parse(readFileSync(SUMMARY_PATH, "utf-8"));
+  } catch {
+    /* ignore — overwrite */
+  }
+}
 writeFileSync(
   SUMMARY_PATH,
-  JSON.stringify({ parityMismatches, missingBaselines }, null, 2)
+  JSON.stringify(
+    { ...prior, passed, parityMismatches, missingBaselines },
+    null,
+    2
+  )
 );
 
 if (failures > 0) {
@@ -76,6 +90,12 @@ if (failures > 0) {
     `\n${failures} parity failure(s). Python DOM output does not match JS baselines.`
   );
   process.exit(1);
+}
+
+if (pyFiles.length === 0) {
+  // Capture failed entirely — nothing to compare. Don't claim parity
+  // passed; the capture script's exit code already signaled the failure.
+  process.exit(0);
 }
 
 console.log("\nPython DOM parity check passed.");

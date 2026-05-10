@@ -495,6 +495,28 @@ async function main() {
       for (const s of skips) console.log(`  - ${s.story}: ${s.reason}`);
     }
 
+    // Persist capture counts to parity-summary.json. compare-python.ts
+    // will read and merge into the same file so the CI status description
+    // can render all categories. Written on every run (even when zero) so
+    // the workflow reader always finds the file.
+    const summaryPath = join(TESTS_DIR, "tmp/parity-summary.json");
+    let prior: Record<string, unknown> = {};
+    if (existsSync(summaryPath)) {
+      try {
+        prior = JSON.parse(readFileSync(summaryPath, "utf-8"));
+      } catch {
+        /* ignore — overwrite */
+      }
+    }
+    writeFileSync(
+      summaryPath,
+      JSON.stringify(
+        { ...prior, captured, captureFailed: failed, skipped },
+        null,
+        2
+      )
+    );
+
     await context.close();
 
     // Surface capture failures so CI doesn't silently pass when stories
