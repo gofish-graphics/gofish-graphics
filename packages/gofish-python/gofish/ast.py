@@ -318,6 +318,17 @@ class ChartBuilder:
 
         return widget
 
+    def _repr_mimebundle_(self, include=None, exclude=None):
+        """Auto-display in notebooks.
+
+        When a ChartBuilder is the last expression in a Jupyter / marimo
+        cell, the runtime calls this and inlines the widget's mimebundle.
+        Use ``.render(w=..., h=...)`` for explicit sizing.
+        """
+        if self._mark is None:
+            raise ValueError("Chart must have a mark before display")
+        return self.render()._repr_mimebundle_(include=include, exclude=exclude)
+
 
 # Operator factory functions
 
@@ -880,6 +891,10 @@ class LayerBuilder:
             debug=debug,
         )
         return widget
+
+    def _repr_mimebundle_(self, include=None, exclude=None):
+        """Auto-display in notebooks (see ChartBuilder._repr_mimebundle_)."""
+        return self.render()._repr_mimebundle_(include=include, exclude=exclude)
 
 
 def Layer(
