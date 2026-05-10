@@ -322,7 +322,7 @@ jobs:
             if (!url) return;
 
             const summaryPath = 'tests/tmp/parity-summary.json';
-            let description = 'Click Details to view JS/Python parity diffs';
+            let description = 'Click Details to review and accept parity diffs';
             try {
               const summary = JSON.parse(fs.readFileSync(summaryPath, 'utf8'));
               const parts = [];
