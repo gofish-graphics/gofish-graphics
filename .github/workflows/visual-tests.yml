@@ -317,21 +317,34 @@ jobs:
             let description = 'Click Details to review and accept parity diffs';
             try {
               const summary = JSON.parse(fs.readFileSync(summaryPath, 'utf8'));
-              // Show non-zero counts for every category so the status
-              // reflects capture *and* compare results, not just compare.
-              // Order is rough triage priority: failures first, then
-              // warnings, then passes.
+              // Use the export-level rollup the viewer renders. Single
+              // source of truth: build-parity-review-site computes these
+              // and writes them here.
               const parts = [];
-              const add = (n, label) => {
-                if (typeof n === 'number' && n > 0) parts.push(`${n} ${label}`);
+              const fmt = (n, label, subParts) => {
+                if (!(typeof n === 'number') || n === 0) return null;
+                if (Array.isArray(subParts) && subParts.length > 0) {
+                  return `${n} ${label} (${subParts.join(', ')})`;
+                }
+                return `${n} ${label}`;
               };
-              add(summary.coverageFilesFail, 'files w/ missing coverage');
-              add(summary.coverageExportsMissing, 'exports missing');
-              add(summary.captureFailed, 'capture failed');
-              add(summary.parityMismatches, 'parity mismatched');
-              add(summary.missingBaselines, 'missing baseline');
-              add(summary.skipped, 'skipped');
-              add(summary.passed, 'passed');
+              const failures = fmt(
+                summary.exportsFailures,
+                'failures',
+                summary.exportsFailParts
+              );
+              const warnings = fmt(
+                summary.exportsWarnings,
+                'warnings',
+                summary.exportsWarnParts
+              );
+              const passed =
+                typeof summary.exportsPassed === 'number' && summary.exportsPassed > 0
+                  ? `${summary.exportsPassed} passed`
+                  : null;
+              if (failures) parts.push(failures);
+              if (warnings) parts.push(warnings);
+              if (passed) parts.push(passed);
               if (parts.length > 0) {
                 description = parts.join(', ') + ' — click Details';
               }

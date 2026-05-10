@@ -476,10 +476,21 @@ interface CaptureResults {
 
 const captureResultsPath = join(TESTS_DIR, "tmp/python/capture-results.json");
 const captureResults: CaptureResults | null = (() => {
-  if (!existsSync(captureResultsPath)) return null;
+  if (!existsSync(captureResultsPath)) {
+    console.log(`  capture-results.json: NOT FOUND at ${captureResultsPath}`);
+    return null;
+  }
   try {
-    return JSON.parse(readFileSync(captureResultsPath, "utf-8"));
-  } catch {
+    const parsed = JSON.parse(readFileSync(captureResultsPath, "utf-8"));
+    console.log(
+      `  capture-results.json: ${parsed.captured?.length ?? 0} captured, ` +
+        `${parsed.failed?.length ?? 0} failed, ${parsed.skipped?.length ?? 0} skipped`
+    );
+    return parsed;
+  } catch (err) {
+    console.log(
+      `  capture-results.json: PARSE FAILURE (${err instanceof Error ? err.message : err})`
+    );
     return null;
   }
 })();
@@ -613,6 +624,55 @@ for (const diff of parityDiffs) {
 // ---------------------------------------------------------------------------
 
 write(join(OUT_DIR, "data/results.json"), JSON.stringify(pairs, null, 2));
+
+// ---------------------------------------------------------------------------
+// Roll up export-level totals into tests/tmp/parity-summary.json so the CI
+// workflow status description reflects the same numbers the viewer shows.
+// Single source of truth — no recomputation in the workflow YAML.
+// ---------------------------------------------------------------------------
+
+const exportsFailures =
+  exportsMissing + exportsCaptureFailed + exportsParityMismatch;
+const exportsWarnings = exportsExempt + exportsCaptureSkipped;
+const exportsPassed = exportsCovered;
+
+const failParts: string[] = [];
+if (exportsMissing > 0) failParts.push(`${exportsMissing} missing`);
+if (exportsCaptureFailed > 0)
+  failParts.push(`${exportsCaptureFailed} capture failed`);
+if (exportsParityMismatch > 0)
+  failParts.push(`${exportsParityMismatch} parity mismatch`);
+
+const warnParts: string[] = [];
+if (exportsExempt > 0) warnParts.push(`${exportsExempt} exempt`);
+if (exportsCaptureSkipped > 0)
+  warnParts.push(`${exportsCaptureSkipped} capture skipped`);
+
+const paritySummaryPath = join(TESTS_DIR, "tmp/parity-summary.json");
+let priorSummary: Record<string, unknown> = {};
+if (existsSync(paritySummaryPath)) {
+  try {
+    priorSummary = JSON.parse(readFileSync(paritySummaryPath, "utf-8"));
+  } catch {
+    /* overwrite */
+  }
+}
+writeFileSync(
+  paritySummaryPath,
+  JSON.stringify(
+    {
+      ...priorSummary,
+      exportsTotal,
+      exportsFailures,
+      exportsFailParts: failParts,
+      exportsWarnings,
+      exportsWarnParts: warnParts,
+      exportsPassed,
+    },
+    null,
+    2
+  )
+);
 
 // ---------------------------------------------------------------------------
 // data/meta.json

@@ -315,6 +315,42 @@ async function main() {
 
   let browser: Browser | undefined;
 
+  // Hoisted to function scope so the outer `finally` (and the
+  // `flushCaptureResults` helper it relies on) can persist whatever
+  // we managed to collect even if the loop or browser setup throws.
+  let captured = 0;
+  let failed = 0;
+  let skipped = 0;
+  const failures: { story: string; reason: string }[] = [];
+  const skips: { story: string; reason: string }[] = [];
+  const capturedIds: string[] = [];
+  const failedRecords: { id: string; story: string; reason: string }[] = [];
+  const skippedRecords: { id: string; story: string; reason: string }[] = [];
+
+  // Flush capture-results.json to disk. Called incrementally per story
+  // and again in the outer `finally` so partial output survives a
+  // mid-loop crash (otherwise the build script would see no capture
+  // data and silently render coverage-only state).
+  mkdirSync(TMP_DIR, { recursive: true });
+  const flushCaptureResults = () => {
+    try {
+      writeFileSync(
+        join(TMP_DIR, "capture-results.json"),
+        JSON.stringify(
+          {
+            captured: capturedIds,
+            failed: failedRecords,
+            skipped: skippedRecords,
+          },
+          null,
+          2
+        )
+      );
+    } catch {
+      /* ignore — best-effort */
+    }
+  };
+
   try {
     // Wait for servers to be ready
     await waitForServer(`http://localhost:${DERIVE_SERVER_PORT}/health`);
@@ -327,20 +363,6 @@ async function main() {
       viewport: { width: 1280, height: 720 },
     });
     const page = await context.newPage();
-
-    mkdirSync(TMP_DIR, { recursive: true });
-
-    let captured = 0;
-    let failed = 0;
-    let skipped = 0;
-    const failures: { story: string; reason: string }[] = [];
-    const skips: { story: string; reason: string }[] = [];
-    // Per-story records keyed by `story.path` (the same id format used by
-    // DOM-diff snapshots), so the parity review site can overlay capture
-    // results onto the same pair entries.
-    const capturedIds: string[] = [];
-    const failedRecords: { id: string; story: string; reason: string }[] = [];
-    const skippedRecords: { id: string; story: string; reason: string }[] = [];
 
     for (const story of stories) {
       process.stdout.write(
@@ -363,6 +385,7 @@ async function main() {
           story: `${story.module}::${story.function}`,
           reason: ir.reason,
         });
+        flushCaptureResults();
         continue;
       }
       if (ir.kind === "error") {
@@ -377,6 +400,7 @@ async function main() {
           story: `${story.module}::${story.function}`,
           reason: `IR extraction failed: ${ir.reason}`,
         });
+        flushCaptureResults();
         continue;
       }
 
@@ -413,6 +437,7 @@ async function main() {
           reason: msg,
         });
       }
+      flushCaptureResults();
     }
 
     console.log(
@@ -445,22 +470,6 @@ async function main() {
       )
     );
 
-    // Per-story records for the parity review site. Lets the viewer
-    // render capture failures and skips as their own entries (with the
-    // reason) instead of silently looking like passes.
-    writeFileSync(
-      join(TMP_DIR, "capture-results.json"),
-      JSON.stringify(
-        {
-          captured: capturedIds,
-          failed: failedRecords,
-          skipped: skippedRecords,
-        },
-        null,
-        2
-      )
-    );
-
     await context.close();
 
     // Surface capture failures so CI doesn't silently pass when stories
@@ -479,6 +488,10 @@ async function main() {
     await browser?.close();
     deriveProc.kill();
     harnessProc.kill();
+    // Belt-and-suspenders: even if the loop crashed mid-way, persist
+    // whatever per-story records we collected so build-parity-review-site
+    // can show the partial picture.
+    flushCaptureResults();
   }
 }
 
