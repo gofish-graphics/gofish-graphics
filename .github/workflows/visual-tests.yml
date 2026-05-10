@@ -67,16 +67,8 @@ jobs:
           node-version: 22
           cache: pnpm
 
-      - name: Setup Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: "3.11"
-
       - name: Install Node dependencies
         run: pnpm install
-
-      - name: Install Python dependencies
-        run: pip install -e packages/gofish-python vega_datasets
 
       - name: Build gofish-graphics
         run: pnpm --filter gofish-graphics build
