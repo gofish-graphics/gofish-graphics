@@ -289,8 +289,11 @@ export const coord = createNodeOperator(
             maxY: screenBboxMaxY,
           } = screenBbox;
 
-          // Return intrinsicDims in screen space, normalized to start at (0, 0) for parent layouts.
-          // Use the full allocated size so the circle is centered and axis labels aren't clipped.
+          // When axes are enabled the circle must be centered in the full
+          // allocated space so labels aren't clipped at the edges.
+          // Without axes (e.g. pie glyphs in scatter) use the tighter
+          // content-bbox sizing so the glyph doesn't claim excess space.
+          const hasAxes = !!axes;
           const intrinsicDims =
             dims[0].min !== undefined
               ? {
@@ -299,20 +302,30 @@ export const coord = createNodeOperator(
                   w: screenBboxMaxX - screenBboxMinX,
                   h: screenBboxMaxY - screenBboxMinY,
                 }
-              : { x: 0, y: 0, w: origW, h: origH };
+              : hasAxes
+                ? { x: 0, y: 0, w: origW, h: origH }
+                : {
+                    x: 0,
+                    y: 0,
+                    w: screenBboxMaxX - screenBboxMinX,
+                    h: screenBboxMaxY - screenBboxMinY,
+                  };
 
-          // Translate to center the circle within the allocated space
           const half = Math.min(origW, origH) / 2;
           const translateX =
             dims[0].min !== undefined
               ? coordTransform.transform([dims[0].min, dims[1].min ?? 0])[0] -
                 screenBboxMinX
-              : half;
+              : hasAxes
+                ? half
+                : -screenBboxMinX;
           const translateY =
             dims[1].min !== undefined
               ? coordTransform.transform([dims[0].min ?? 0, dims[1].min])[1] -
                 screenBboxMinY
-              : half;
+              : hasAxes
+                ? half
+                : -screenBboxMinY;
 
           return {
             intrinsicDims,

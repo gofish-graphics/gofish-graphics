@@ -62,9 +62,9 @@ export const Rose: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    Chart(nightingale, { coord: clock(), axes: { x: false, y: true } })
+    Chart(nightingale, { coord: clock(), axes: true })
       .flow(
-        spread({ by: "Month", dir: "x", spacing: 0 }),
+        spread({ by: "Month", dir: "x", spacing: 0, axis: false }),
         stack({ by: "Type", dir: "y" }),
         /* TODO: push this into the h encoding of rect */
         derive((d) => d.map((d) => ({ ...d, Death: Math.sqrt(d.Death) })))
