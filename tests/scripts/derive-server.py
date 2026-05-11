@@ -20,11 +20,40 @@ harness calls /derive/<id> during chart rendering.
 import importlib
 import importlib.util
 import json
+import math
 import sys
 import os
 import traceback
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse
+
+
+def _sanitize_for_json(obj):
+    """Make values JSON-safe.
+
+    - NaN/Infinity floats → None (json.dumps writes the literal `NaN`, which
+      the harness's JSON.parse rejects).
+    - pandas Timestamps and other "stringifiable" non-native types →
+      `str(obj)` so a Seattle-weather `date` column survives the round-trip
+      as the same `YYYY-MM-DD HH:MM:SS` string the harness would have seen
+      from JSON anyway.
+    """
+    if obj is None or isinstance(obj, (bool, int, str)):
+        return obj
+    if isinstance(obj, float):
+        if math.isnan(obj) or math.isinf(obj):
+            return None
+        return obj
+    if isinstance(obj, dict):
+        return {k: _sanitize_for_json(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_sanitize_for_json(v) for v in obj]
+    # numpy scalars, pandas Timestamps, datetime.date / datetime — fall
+    # back to the value's own string form so we never crash the response.
+    try:
+        return str(obj)
+    except Exception:
+        return None
 
 # Add project root to path so we can import gofish
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
@@ -206,7 +235,7 @@ class DeriveHandler(BaseHTTPRequestHandler):
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type")
         self.end_headers()
-        self.wfile.write(json.dumps(data).encode())
+        self.wfile.write(json.dumps(_sanitize_for_json(data)).encode())
 
     def do_OPTIONS(self):
         """Handle CORS preflight."""
