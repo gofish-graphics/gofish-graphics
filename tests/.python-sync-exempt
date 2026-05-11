@@ -38,3 +38,6 @@ packages/gofish-graphics/stories/forwardsyntax/FacetedChart.stories.tsx
 
 # (Vega-Lite ports were brought over from exempt to real parity tests;
 # see tests/python-stories/vega-lite/.)
+
+# Needs low-level v1/v2 API (v() literal fills + mark-as-spread-with-nested-rects).
+packages/gofish-graphics/stories/vega-lite/Bar/GroupedBarChartRepeat.stories.tsx

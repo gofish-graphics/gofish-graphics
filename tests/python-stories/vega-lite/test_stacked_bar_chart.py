@@ -3,7 +3,7 @@
 from datetime import datetime, timezone
 
 from gofish import chart, derive, spread, stack, log, rect, palette
-from vega_datasets import data as vega_data
+from python_stories.vega_data_urls import read_csv
 
 MONTHS = [
     "Jan", "Feb", "Mar", "Apr", "May", "Jun",
@@ -42,8 +42,7 @@ def _collapse(data):
 
 
 def story_default():
-    df = vega_data.seattle_weather()
-    df["date"] = df["date"].dt.strftime("%Y-%m-%d")
+    df = read_csv("seattle-weather.csv")
     weather = df.to_dict("records")
     return (
         chart(

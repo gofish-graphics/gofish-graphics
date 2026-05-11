@@ -3,32 +3,35 @@
 import math
 
 from gofish import chart, log, scatter, rect
-from vega_datasets import data as vega_data
+from python_stories.vega_data_urls import read_json
 
 
 def _present(v):
     return v is not None and not (isinstance(v, float) and math.isnan(v))
 
 
+def _js_numeric(v):
+    """Mirror JS `Math.min`/`Math.max` coercion: `null` → 0, `NaN` propagates
+    as 0 here because pandas converts JSON `null` to `float('nan')`."""
+    if v is None or (isinstance(v, float) and math.isnan(v)):
+        return 0
+    return v
+
+
 def story_default():
-    df = vega_data.movies()
-    # vega_datasets normalizes column names with underscores; JS reads the
-    # raw JSON which keeps spaces. Restore the JS-side names so positional
-    # accessors line up.
-    df = df.rename(columns={
-        "IMDB_Rating": "IMDB Rating",
-        "Rotten_Tomatoes_Rating": "Rotten Tomatoes Rating",
-    })
+    # Use the same npm-pinned movies.json the JS storybook loads — the
+    # Python `vega_datasets` package ships an older snapshot with
+    # different rows, which breaks byte parity.
+    df = read_json("movies.json")
     movies_raw = df.to_dict("records")
 
-    imdb_values = [d["IMDB Rating"] for d in movies_raw if _present(d["IMDB Rating"])]
-    rt_values = [
-        d["Rotten Tomatoes Rating"]
-        for d in movies_raw
-        if _present(d["Rotten Tomatoes Rating"])
-    ]
-    xbin_size = (max(imdb_values) - min(imdb_values)) / 10 or 1
-    ybin_size = (max(rt_values) - min(rt_values)) / 10 or 1
+    # JS `Math.max(...arr.map(d => d["IMDB Rating"]))` runs on the *unfiltered*
+    # list, where missing ratings (null) coerce to 0. Mirror that so the bin
+    # size matches what the JS storybook computes.
+    imdb_all = [_js_numeric(d["IMDB Rating"]) for d in movies_raw]
+    rt_all = [_js_numeric(d["Rotten Tomatoes Rating"]) for d in movies_raw]
+    xbin_size = (max(imdb_all) - min(imdb_all)) / 10 or 1
+    ybin_size = (max(rt_all) - min(rt_all)) / 10 or 1
 
     movies = [
         {

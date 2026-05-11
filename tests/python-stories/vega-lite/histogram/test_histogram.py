@@ -3,7 +3,7 @@
 import math
 
 from gofish import chart, derive, scatter, rect
-from vega_datasets import data as vega_data
+from python_stories.vega_data_urls import read_json
 
 # JS uses `bin("IMDB Rating")` which delegates to d3-array's d3.bin with
 # the default `thresholds(10)` setting. Replicate that here in Python so
@@ -114,7 +114,7 @@ def _bin_field(data, field, count=10):
 
 
 def story_default():
-    df = vega_data.movies().rename(columns={"IMDB_Rating": "IMDB Rating"})
+    df = read_json("movies.json")
     movies = df.to_dict("records")
     return (
         chart(movies)
