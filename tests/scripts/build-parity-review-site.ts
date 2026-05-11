@@ -430,7 +430,7 @@ for (const diff of parityDiffs) {
       exp.hasScreenshots = hasScreenshots;
       pair.hasDomDiff = pair.hasDomDiff || hasDomDiff;
       pair.hasScreenshots = pair.hasScreenshots || hasScreenshots;
-      pair.checkType = "dom";
+      pair.checkType = "parity";
       pair.status = "fail";
       continue;
     }
@@ -447,7 +447,7 @@ for (const diff of parityDiffs) {
       id: fileId,
       jsFile,
       pythonFile: domIdToPythonFile(id),
-      checkType: "dom",
+      checkType: "parity",
       status: "fail",
       message: "Orphan DOM diff (no JS story file)",
       hasDomDiff,
@@ -551,7 +551,7 @@ if (captureResults) {
           pair.status = status;
           pair.message = message;
         }
-        if (pair.checkType !== "dom") pair.checkType = "capture";
+        if (pair.checkType !== "parity") pair.checkType = "capture";
         return;
       }
     }
@@ -854,7 +854,7 @@ const html = `<!DOCTYPE html>
     <button class="filter-btn" data-filter="coverage">Coverage</button>
     <button class="filter-btn" data-filter="sync">Sync</button>
     <button class="filter-btn" data-filter="capture">Capture</button>
-    <button class="filter-btn" data-filter="dom">DOM</button>
+    <button class="filter-btn" data-filter="parity">Parity</button>
   </div>
   <div id="story-list"></div>
 </div>
@@ -1109,9 +1109,9 @@ const html = `<!DOCTYPE html>
     document.getElementById('main-title').textContent = title;
 
     const statusColors = { pass: '#27ae60', fail: '#e74c3c', warning: '#e67e22' };
-    const checkColors = { coverage: '#3498db', sync: '#9b59b6', dom: '#e67e22', capture: '#e74c3c' };
+    const checkColors = { coverage: '#3498db', sync: '#9b59b6', parity: '#e67e22', capture: '#e74c3c' };
     const displayStatus = exp ? exp.status : pair.status;
-    const displayCheck = exp ? (exp.hasDomDiff ? 'dom' : pair.checkType) : pair.checkType;
+    const displayCheck = exp ? (exp.hasDomDiff ? 'parity' : pair.checkType) : pair.checkType;
     const displayMessage = exp ? exp.message : pair.message;
     const sColor = statusColors[displayStatus] || '#888';
     const cColor = checkColors[displayCheck] || '#888';

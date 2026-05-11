@@ -38,6 +38,31 @@ export type ChartOptions = {
   color?: ColorConfig;
 };
 
+/**
+ * Compare two dash-joined tree keys (e.g. `"0-1-2"`) by parsing each
+ * segment as a number. Lexicographic sort would put `"0-10"` before
+ * `"0-2"`; a numeric segment sort respects the tree position. Falls
+ * back to string compare for any segment that isn't a clean integer.
+ */
+function compareTreeKey(a: string | undefined, b: string | undefined): number {
+  if (a === b) return 0;
+  if (a === undefined) return -1;
+  if (b === undefined) return 1;
+  const as = a.split("-");
+  const bs = b.split("-");
+  const n = Math.min(as.length, bs.length);
+  for (let i = 0; i < n; i++) {
+    const ai = Number(as[i]);
+    const bi = Number(bs[i]);
+    if (Number.isFinite(ai) && Number.isFinite(bi)) {
+      if (ai !== bi) return ai - bi;
+    } else if (as[i] !== bs[i]) {
+      return as[i] < bs[i] ? -1 : 1;
+    }
+  }
+  return as.length - bs.length;
+}
+
 /** A lazy selector that defers layer lookup until actually needed. */
 export class LayerSelector<T = any> {
   constructor(public readonly layerName: string) {}
@@ -51,7 +76,15 @@ export class LayerSelector<T = any> {
       );
     }
 
-    let resolvedNodes: GoFishNode[] = layer.nodes;
+    // `layer.nodes` is in the order the named marks resolved, which is
+    // async-scheduling-dependent (e.g. when an upstream `derive` makes
+    // an HTTP RPC the per-leaf latencies vary, so children of one parent
+    // arrive interleaved). Sort by the tree-key the parent operator
+    // stamped on each node so downstream readers always see a
+    // deterministic, parent-iteration order.
+    const resolvedNodes: GoFishNode[] = [...layer.nodes].sort((a, b) =>
+      compareTreeKey(a.key, b.key)
+    );
 
     // Return node-attached data enriched with refs to nodes.
     // Option 3: flatten arrays and duplicate __ref per underlying datum.
