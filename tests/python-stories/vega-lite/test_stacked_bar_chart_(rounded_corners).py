@@ -45,15 +45,13 @@ def story_default():
     return (
         chart(
             weather,
-            {
-                "color": palette({
-                    "sun": "#e7ba52",
-                    "fog": "#dfdfdf",
-                    "drizzle": "#79a1d5",
-                    "rain": "#1f77b4",
-                    "snow": "#9467bd",
-                })
-            },
+            color=palette({
+                "sun": "#e7ba52",
+                "fog": "#dfdfdf",
+                "drizzle": "#79a1d5",
+                "rain": "#1f77b4",
+                "snow": "#9467bd",
+            }),
         )
         .flow(
             derive(_aggregate),

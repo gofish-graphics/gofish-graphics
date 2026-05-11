@@ -253,18 +253,35 @@ function readPyStoryFns(absPath: string): Set<string> {
 }
 
 // Load exempt list — entries become viewer warnings, not silent passes
-// (matching the --all check's behavior).
-function loadExemptSet(): Set<string> {
+// (matching the --all check's behavior). Supports both whole-file entries
+// and per-export entries with `path/to/file.stories.tsx::ExportName`.
+interface ExemptSet {
+  files: Set<string>;
+  exports: Map<string, Set<string>>;
+}
+function loadExemptSet(): ExemptSet {
+  const exempt: ExemptSet = { files: new Set(), exports: new Map() };
   const exemptFile = join(TESTS_DIR, ".python-sync-exempt");
-  if (!existsSync(exemptFile)) return new Set();
-  return new Set(
-    readFileSync(exemptFile, "utf-8")
-      .split("\n")
-      .map((l) => l.trim())
-      .filter((l) => l && !l.startsWith("#"))
-  );
+  if (!existsSync(exemptFile)) return exempt;
+  for (const raw of readFileSync(exemptFile, "utf-8").split("\n")) {
+    const line = raw.trim();
+    if (!line || line.startsWith("#")) continue;
+    const sep = line.indexOf("::");
+    if (sep === -1) {
+      exempt.files.add(line);
+    } else {
+      const file = line.slice(0, sep);
+      const exp = line.slice(sep + 2);
+      if (!exempt.exports.has(file)) exempt.exports.set(file, new Set());
+      exempt.exports.get(file)!.add(exp);
+    }
+  }
+  return exempt;
 }
 const exemptSet = loadExemptSet();
+const isFileExempt = (file: string) => exemptSet.files.has(file);
+const isExportExempt = (file: string, exp: string) =>
+  exemptSet.files.has(file) || exemptSet.exports.get(file)?.has(exp) === true;
 
 let exportsTotal = 0;
 let exportsCovered = 0;
@@ -281,16 +298,16 @@ for (const [fileId, jsFile] of storyIndex) {
 
   const pythonFile = mapJsToPython(jsFile);
   const pythonAbs = join(ROOT_DIR, pythonFile);
-  const isExempt = exemptSet.has(jsFile);
+  const fileExempt = isFileExempt(jsFile);
 
   const jsExports = readJsStoryExports(join(ROOT_DIR, jsFile));
   exportsTotal += jsExports.length;
 
-  const pyFns = isExempt ? new Set<string>() : readPyStoryFns(pythonAbs);
+  const pyFns = fileExempt ? new Set<string>() : readPyStoryFns(pythonAbs);
   const exports: ExportEntry[] = jsExports.map((name) => {
     const expected = `story_${camelToSnake(name)}`;
     const exportId = `${fileId}--${camelToSnake(name).replace(/_/g, "-")}`;
-    if (isExempt) {
+    if (fileExempt || isExportExempt(jsFile, name)) {
       exportsExempt++;
       return {
         name,
@@ -331,7 +348,7 @@ for (const [fileId, jsFile] of storyIndex) {
 
   let fileStatus: "pass" | "fail" | "warning";
   let fileMessage: string;
-  if (isExempt) {
+  if (fileExempt) {
     fileStatus = "warning";
     fileMessage =
       jsExports.length > 0

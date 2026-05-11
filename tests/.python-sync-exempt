@@ -41,3 +41,9 @@ packages/gofish-graphics/stories/forwardsyntax/FacetedChart.stories.tsx
 
 # Needs low-level v1/v2 API (v() literal fills + mark-as-spread-with-nested-rects).
 packages/gofish-graphics/stories/vega-lite/Bar/GroupedBarChartRepeat.stories.tsx
+
+# Per-export exemption — uses `assignGradientColor` to precompute per-row
+# fills from two distinct gradients in a single chart. The Python wrapper
+# doesn't expose `assignGradientColor` (one chart, one color config), so
+# this story can't be ported without a workaround or a wrapper extension.
+packages/gofish-graphics/stories/forwardsyntax/ColorScales.stories.tsx::PairedPalettes

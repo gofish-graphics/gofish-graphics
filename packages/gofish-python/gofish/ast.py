@@ -787,18 +787,23 @@ def image(
     return Mark("image", **kwargs)
 
 
-def chart(data: Any, options: Optional[dict] = None) -> ChartBuilder:
+def chart(data: Any, **options: Any) -> ChartBuilder:
     """
     Create a new chart builder.
 
+    Chart-level options (color, coord, etc.) are passed as keyword arguments:
+
+        chart(data, color=palette("tableau10"))
+        chart(data, color=gradient("blues"), coord=clock())
+
     Args:
         data: Input data or select() for cross-chart layer references
-        options: Optional chart options (w, h, color, etc.)
+        **options: Chart options (color, coord, ...)
 
     Returns:
         ChartBuilder instance
     """
-    return ChartBuilder(data, options)
+    return ChartBuilder(data, options if options else None)
 
 
 class LayerBuilder:

@@ -8,7 +8,7 @@ from python_stories.data import SEAFOOD, NIGHTINGALE
 
 def story_basic():
     return (
-        chart(SEAFOOD, {"coord": clock()})
+        chart(SEAFOOD, coord=clock())
         .flow(stack(by="species", dir="x"))
         .mark(rect(w="count", fill="species")),
         {"w": 400, "h": 400, "axes": True},
@@ -17,7 +17,7 @@ def story_basic():
 
 def story_donut():
     return (
-        chart(SEAFOOD, {"coord": clock()})
+        chart(SEAFOOD, coord=clock())
         .flow(stack(by="species", dir="x", y=50, h=50))
         .mark(rect(w="count", fill="species")),
         {"w": 400, "h": 400, "axes": True},
@@ -26,7 +26,7 @@ def story_donut():
 
 def story_rose():
     return (
-        chart(NIGHTINGALE, {"coord": clock()})
+        chart(NIGHTINGALE, coord=clock())
         .flow(
             stack(by="Month", dir="x"),
             stack(by="Type", dir="y"),

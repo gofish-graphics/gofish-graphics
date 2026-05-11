@@ -7,7 +7,7 @@ from vega_datasets import data as vega_data
 def story_default():
     barley = vega_data.barley()
     return (
-        chart(barley, {"color": palette("tableau10")})
+        chart(barley, color=palette("tableau10"))
         .flow(
             spread(by="variety", dir="y"),
             stack(by="site", dir="x"),
