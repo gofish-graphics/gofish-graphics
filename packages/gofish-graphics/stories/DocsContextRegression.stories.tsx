@@ -180,7 +180,30 @@ export const GroupedBarDocsParity: StoryObj<Args> = {
     grid.appendChild(docsSourcePanel);
     grid.appendChild(docsPublicPanel);
 
-    requestAnimationFrame(() => {
+    // Wait until each mount has actually rendered some <rect>s before
+    // reading the status. The previous double-`requestAnimationFrame`
+    // version captured intermittently: in CI a snapshot would land before
+    // SolidJS had flushed, leaving status text frozen at
+    // `loading=true, uniqueFills=0` even though the SVG itself was fine.
+    const waitForRects = (mount: HTMLElement) =>
+      new Promise<void>((resolve) => {
+        if (mount.querySelectorAll("rect").length > 0) return resolve();
+        const observer = new MutationObserver(() => {
+          if (mount.querySelectorAll("rect").length > 0) {
+            observer.disconnect();
+            resolve();
+          }
+        });
+        observer.observe(mount, { childList: true, subtree: true });
+      });
+
+    void Promise.all([
+      waitForRects(directMount),
+      waitForRects(docsLikeSourceMount),
+      waitForRects(docsLikePublicMount),
+    ]).then(() => {
+      // One extra frame so SolidJS finishes any post-mount effects that
+      // would update `fill` attributes (e.g. color-scale resolution).
       requestAnimationFrame(() => {
         const a = inspectHealth(directMount);
         const b = inspectHealth(docsLikeSourceMount);
