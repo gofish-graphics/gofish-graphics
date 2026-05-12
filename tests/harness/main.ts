@@ -43,9 +43,11 @@ import {
   out,
   atop,
   mask,
+  createName,
   type ChartBuilder,
   type Operator,
   type Mark,
+  type Token,
 } from "gofish-graphics";
 
 // Combinator-form factory map. Each entry takes (opts, marks) and returns
@@ -194,6 +196,78 @@ function unwrapValues(value: any): any {
   return unwrapMarkOpts(value, undefined);
 }
 
+/**
+ * Per-render Token resolver. Python emits hygienic-name tokens as
+ * `{__gofish_token: <uuid>, __tag: <tag>}` sentinels — first sighting
+ * mints a JS `createName(tag)` Token; subsequent sightings of the same
+ * uuid reuse it so all `.name(token)` / `ref(token).x` callsites refer
+ * to the same JS Token within a single render.
+ */
+type TokenSentinel = { __gofish_token: string; __tag: string };
+type TokenResolver = (s: TokenSentinel) => Token;
+
+function makeTokenResolver(): TokenResolver {
+  const cache = new Map<string, Token>();
+  return (sentinel: TokenSentinel) => {
+    let t = cache.get(sentinel.__gofish_token);
+    if (!t) {
+      t = createName(sentinel.__tag);
+      cache.set(sentinel.__gofish_token, t);
+    }
+    return t;
+  };
+}
+
+function isTokenSentinel(v: any): v is TokenSentinel {
+  return (
+    v !== null &&
+    typeof v === "object" &&
+    typeof v.__gofish_token === "string" &&
+    typeof v.__tag === "string"
+  );
+}
+
+/**
+ * Wrap a Mark so its resolved GoFishNode gets `.scope()` called on it —
+ * matches what JS `createMark` does for any component-defined mark. The
+ * Python wrapper's `@createMark` decorator flags its output with
+ * `__scope: true`; this wrapper does the post-resolve call.
+ *
+ * The inner mark may be a `NameableMark`/`ConstrainableMark` (which has
+ * `.name` / `.label` / `.render` / `.constrain` properties); forward all
+ * of these so callers can still chain or directly `.render()` a scoped
+ * combinator-form mark used at the raw-mark level.
+ */
+function wrapWithScope(inner: any): any {
+  const wrapped: any = async (data: any, key: any, layerContext: any) => {
+    const node: any = await Promise.resolve(inner(data, key, layerContext));
+    if (node && typeof node.scope === "function") {
+      node.scope();
+    }
+    return node;
+  };
+  // `Function.prototype.name` and other built-ins are read-only — use
+  // defineProperty to override them on the wrapper function.
+  const define = (key: string, value: any) =>
+    Object.defineProperty(wrapped, key, {
+      value,
+      writable: true,
+      configurable: true,
+    });
+  if (typeof inner.render === "function") {
+    define("render", async (container: any, options: any) => {
+      const node: any = await wrapped(undefined, undefined, undefined);
+      return node.render(container, options);
+    });
+  }
+  for (const key of ["name", "label", "constrain"] as const) {
+    if (typeof inner[key] === "function") {
+      define(key, (...args: any[]) => wrapWithScope(inner[key](...args)));
+    }
+  }
+  return wrapped;
+}
+
 declare global {
   interface Window {
     __GOFISH_SPEC__: HarnessSpec | null;
@@ -273,12 +347,42 @@ const MARK_MAP: Record<string, (opts: Record<string, any>) => Mark<any>> = {
   image: (opts) => image(opts),
 };
 
-function mapMark(spec: MarkSpec, deriveServerUrl?: string): Mark<any> {
+/** Resolve a `.name` field that's either a string or a token sentinel. */
+function resolveNameField(
+  rawName: any,
+  resolveToken: TokenResolver
+): string | Token | undefined {
+  if (rawName == null) return undefined;
+  if (isTokenSentinel(rawName)) return resolveToken(rawName);
+  return rawName;
+}
+
+/** Resolve a `ref(...)` spec into a JS GoFishRef. Accepts string,
+ *  string-array, or array containing token sentinels. */
+function resolveRefSelection(selection: any, resolveToken: TokenResolver): any {
+  if (typeof selection === "string") return selection;
+  if (Array.isArray(selection)) {
+    return selection.map((seg) =>
+      isTokenSentinel(seg) ? resolveToken(seg) : seg
+    );
+  }
+  return selection;
+}
+
+function mapMark(
+  spec: MarkSpec,
+  deriveServerUrl: string | undefined,
+  resolveToken: TokenResolver
+): Mark<any> {
   // Leaf-form `ref(name)`: not a combinator, not a mark factory. JS's
   // `ref(...)` returns a GoFishRef the runtime accepts wherever a mark
-  // child is expected. Cast to Mark<any> for the typed mapMark signature.
+  // child is expected. Selection may be a string (flat name), an array
+  // (for `ref(token).foo[2].bar` proxy navigation), or contain token
+  // sentinels that need resolving.
   if (spec.type === "ref" && !spec.__combinator) {
-    return ref(spec.selection as string) as unknown as Mark<any>;
+    return ref(
+      resolveRefSelection(spec.selection, resolveToken)
+    ) as unknown as Mark<any>;
   }
 
   // Combinator-form marks: a layout operator (`spread`, `layer`, or
@@ -289,7 +393,7 @@ function mapMark(spec: MarkSpec, deriveServerUrl?: string): Mark<any> {
   // then chain `.constrain(...)` if present.
   if (spec.__combinator) {
     const childMarks = (spec.children ?? []).map((c) =>
-      mapMark(c, deriveServerUrl)
+      mapMark(c, deriveServerUrl, resolveToken)
     );
     const opts = unwrapMarkOpts(spec.options ?? {}, deriveServerUrl);
     const factory = COMBINATOR_FACTORIES[spec.type];
@@ -311,8 +415,14 @@ function mapMark(spec: MarkSpec, deriveServerUrl?: string): Mark<any> {
         )
       );
     }
-    if (spec.name && typeof (mark as any).name === "function") {
-      mark = (mark as any).name(spec.name);
+    // `@createMark`-decorated components flag their output for a
+    // `node.scope()` post-resolution pass — wrap before applying name.
+    if (spec.__scope) {
+      mark = wrapWithScope(mark);
+    }
+    const nameVal = resolveNameField(spec.name, resolveToken);
+    if (nameVal != null && typeof (mark as any).name === "function") {
+      mark = (mark as any).name(nameVal);
     }
     return mark;
   }
@@ -343,8 +453,12 @@ function mapMark(spec: MarkSpec, deriveServerUrl?: string): Mark<any> {
     >;
     mark = (mark as any).label(accessor, labelOpts);
   }
-  if (layerName && typeof (mark as any).name === "function") {
-    mark = (mark as any).name(layerName);
+  if (spec.__scope) {
+    mark = wrapWithScope(mark);
+  }
+  const nameVal = resolveNameField(layerName, resolveToken);
+  if (nameVal != null && typeof (mark as any).name === "function") {
+    mark = (mark as any).name(nameVal);
   }
   return mark;
 }
@@ -392,14 +506,15 @@ function resolveOptions(
  */
 function buildChartFromSpec(
   chartSpec: ChartHarnessSpec,
-  deriveServerUrl: string | undefined
+  deriveServerUrl: string | undefined,
+  resolveToken: TokenResolver
 ): ChartBuilder<any, any> {
   const operators: Operator<any, any>[] = [];
   for (const opSpec of chartSpec.operators || []) {
     const op = mapOperator(opSpec, deriveServerUrl);
     if (op) operators.push(op);
   }
-  const mark = mapMark(chartSpec.mark, deriveServerUrl);
+  const mark = mapMark(chartSpec.mark, deriveServerUrl, resolveToken);
   const chartOpts = resolveOptions(chartSpec.options || {});
 
   let chartData: any = chartSpec.data;
@@ -429,6 +544,10 @@ function renderChart(spec: HarnessSpec) {
     return;
   }
 
+  // Fresh per-render Token cache so Python's `createName(...)` UUIDs map
+  // to the same JS Token everywhere they appear in this spec.
+  const resolveToken = makeTokenResolver();
+
   try {
     if (spec.type === "raw-mark") {
       // Bypass the Chart wrapper entirely: the mark renders itself directly.
@@ -438,7 +557,11 @@ function renderChart(spec: HarnessSpec) {
       // direct renders skip).
       const allOpts = spec.options || {};
       const { w, h, axes, debug } = allOpts;
-      const mark = mapMark(spec.mark, spec.deriveServerUrl) as any;
+      const mark = mapMark(
+        spec.mark,
+        spec.deriveServerUrl,
+        resolveToken
+      ) as any;
       mark.render(container, {
         w,
         h,
@@ -453,7 +576,7 @@ function renderChart(spec: HarnessSpec) {
       const layerOpts = resolveOptions(layerOptsRaw);
 
       const childCharts = spec.charts.map((c) =>
-        buildChartFromSpec(c, spec.deriveServerUrl)
+        buildChartFromSpec(c, spec.deriveServerUrl, resolveToken)
       );
 
       const layerNode =
@@ -479,7 +602,8 @@ function renderChart(spec: HarnessSpec) {
           options: chartOptsRaw,
           zOrder: spec.zOrder ?? null,
         },
-        spec.deriveServerUrl
+        spec.deriveServerUrl,
+        resolveToken
       );
 
       node.render(container, {

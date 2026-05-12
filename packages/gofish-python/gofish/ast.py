@@ -70,6 +70,59 @@ def _collect_mark_lambdas(mark: "Mark") -> List[tuple]:
     return pairs
 
 
+class Token:
+    """Hygienic name for a sub-mark inside a `@createMark` component.
+
+    Mirrors JS `createName(tag) -> Token`
+    (`packages/gofish-graphics/src/ast/createName.ts`). Each Token carries
+    an opaque UUID `id` so two `createName("box")` calls in different
+    components don't collide, plus a `tag` string used as the scope-map
+    path segment for both `.constrain(lambda box: ...)` callbacks and
+    outer `ref(t).box` navigation.
+    """
+
+    def __init__(self, tag: str):
+        self.tag = tag
+        self.id = str(uuid.uuid4())
+
+    def to_dict(self) -> dict:
+        return {"__gofish_token": self.id, "__tag": self.tag}
+
+
+def createName(tag: str) -> Token:
+    """Mint a hygienic token. See `Token`."""
+    return Token(tag)
+
+
+def createMark(fn: Callable) -> Callable:
+    """Decorator that promotes a `(**props) -> Mark` function into a
+    reusable component factory.
+
+    Calling the decorated function eagerly runs `fn(**props)` to produce
+    a Mark tree, then flags the result as a scope boundary so the
+    harness wraps it in `node.scope()` post-resolution. Internal names
+    declared via `createName(...)` therefore don't leak to outer scope.
+
+    Mirrors JS `createMark(shapeFn)`
+    (`packages/gofish-graphics/src/ast/withGoFish.ts:525`). Channel
+    annotations (the `(shapeFn, channels)` overload) are out of scope
+    here — Python components take plain kwargs and produce IR eagerly.
+    """
+
+    def wrapped(**props):
+        mark = fn(**props)
+        if not isinstance(mark, Mark):
+            raise TypeError(
+                f"@createMark function `{fn.__name__}` must return a Mark"
+            )
+        mark._is_scope = True
+        return mark
+
+    wrapped.__name__ = getattr(fn, "__name__", "createMark_component")
+    wrapped.__doc__ = fn.__doc__
+    return wrapped
+
+
 class Mark:
     """Base class for chart marks."""
 
@@ -81,26 +134,36 @@ class Mark:
     ):
         self.mark_type = mark_type
         self.kwargs = kwargs
-        self._name: Optional[str] = None
+        self._name: Optional[Union[str, "Token"]] = None
         self._label: Optional[dict] = None
         # When set, this Mark is the combinator form of a layout operator
         # (e.g. `spread([rect, rect], dir="x")`) and `to_dict()` will emit a
         # `__combinator: true` payload the harness/widget reconstructs by
         # calling the JS-side combinator overload.
         self._children: Optional[List["Mark"]] = _children
+        # When True, the harness wraps the resulting JS Mark in a
+        # `node.scope()` post-pass so that internal names declared via
+        # `createName(...)` don't leak to outer scope. Set by the
+        # `@createMark` decorator.
+        self._is_scope: bool = False
 
     def _copy_meta(self, target: "Mark") -> "Mark":
         target._name = self._name
         target._label = self._label
         target._children = self._children
+        target._is_scope = self._is_scope
         return target
 
-    def name(self, layer_name: str) -> "Mark":
+    def name(self, name_or_token: Union[str, "Token"]) -> "Mark":
         """
-        Set a layer name on this mark for cross-chart referencing via select().
+        Set a layer name on this mark for cross-chart referencing via
+        `select()` (string form) or hygienic in-component naming
+        (`createName(...)` token form).
 
         Args:
-            layer_name: Name to register this mark's output under
+            name_or_token: A bare string for flat naming, or a `Token`
+                returned by `createName()` for hygienic scoping inside a
+                `@createMark`-decorated component.
 
         Returns:
             New Mark (same subclass as self) with name set
@@ -109,7 +172,7 @@ class Mark:
             self.mark_type, _children=self._children, **self.kwargs
         )
         self._copy_meta(new_mark)
-        new_mark._name = layer_name
+        new_mark._name = name_or_token
         return new_mark
 
     def label(
@@ -182,7 +245,11 @@ class Mark:
         else:
             d = {"type": self.mark_type, **serialized_kwargs}
         if self._name is not None:
-            d["name"] = self._name
+            d["name"] = (
+                self._name.to_dict()
+                if isinstance(self._name, Token)
+                else self._name
+            )
         if self._label is not None:
             d["label"] = self._label
         # Only ConstrainableMark carries _constraints, but reading via getattr
@@ -190,6 +257,11 @@ class Mark:
         constraints = getattr(self, "_constraints", None)
         if constraints is not None:
             d["constraints"] = [c.to_dict() for c in constraints]
+        # `@createMark`-decorated components flag their output Mark as a
+        # scope boundary so the harness wraps the resolved node in
+        # `node.scope()` — matches JS createMark's behavior.
+        if self._is_scope:
+            d["__scope"] = True
         return d
 
     def to_ir(self) -> dict:
@@ -398,12 +470,17 @@ class ConstrainableMark(Mark):
             )
         child_names: List[str] = []
         for child in self._children:
-            if getattr(child, "_name", None) is None:
+            child_name = getattr(child, "_name", None)
+            if child_name is None:
                 raise ValueError(
                     "every child of layer(...) used with .constrain() must be "
                     "named via .name(...) so the callback can reference it"
                 )
-            child_names.append(child._name)
+            # Tokens contribute their `tag` to the callback kwargs; the
+            # JS-side scope resolution still matches by tag string.
+            child_names.append(
+                child_name.tag if isinstance(child_name, Token) else child_name
+            )
         refs = {name: RefSentinel(name) for name in child_names}
         constraints = callback(**refs)
         new_mark = type(self)(
@@ -712,17 +789,74 @@ def layer(
     return ConstrainableMark("layer", _children=list(children), **options)
 
 
-def ref(name: str) -> Mark:
+# Attribute names reserved on `_RefProxy` so they pass through normal
+# Python lookup (Mark fields + methods) rather than being treated as
+# selection-path segments. Hits `__getattr__` ONLY when normal lookup
+# fails, so this is mostly defensive — but explicit guards make the
+# failure mode loud if a child happens to be named e.g. "kwargs".
+_REF_PROXY_RESERVED = frozenset({
+    "mark_type", "kwargs", "_name", "_label", "_children", "_is_scope",
+    "name", "label", "to_dict", "to_ir", "render", "_copy_meta",
+    "_repr_mimebundle_", "constrain",
+})
+
+
+class _RefProxy(Mark):
+    """Chainable reference. Property access (`.foo`, `[2]`) extends the
+    selection path; `.path(*segs)` is the variadic-segments escape hatch.
+
+    Mirrors JS `RefProxy` (`packages/gofish-graphics/src/ast/shapes/ref.tsx:60`):
+    `ref(token).variables[i].value` accumulates a selection array that
+    the harness/widget reconstructs by calling JS `ref([token, "variables", i, "value"])`.
     """
-    Reference a previously-named node by string selection.
+
+    def __init__(self, selection: list):
+        super().__init__("ref", selection=list(selection))
+
+    def _sel(self) -> list:
+        return self.kwargs["selection"]
+
+    def __getattr__(self, name: str):
+        # `__getattr__` only fires when normal lookup fails — Mark's own
+        # fields/methods take precedence. Guard against private dunders
+        # and the explicit reserved set so we don't shadow internals.
+        if name.startswith("_") or name in _REF_PROXY_RESERVED:
+            raise AttributeError(name)
+        if name == "path":
+            return lambda *segs: _RefProxy(self._sel() + list(segs))
+        return _RefProxy(self._sel() + [name])
+
+    def __getitem__(self, idx):
+        return _RefProxy(self._sel() + [idx])
+
+    def to_dict(self) -> dict:
+        # Serialize each selection segment: tokens become sentinel dicts;
+        # primitives pass through unchanged.
+        serialized = [
+            seg.to_dict() if isinstance(seg, Token) else seg
+            for seg in self._sel()
+        ]
+        # Single-string selection stays in the "scalar" shape the JS
+        # `ref(stringName)` path expects — preserves byte-parity for
+        # existing flat-name callsites (e.g. the Planets stories).
+        if len(serialized) == 1 and isinstance(serialized[0], str):
+            return {"type": "ref", "selection": serialized[0]}
+        return {"type": "ref", "selection": serialized}
+
+
+def ref(target: Union[str, Token]) -> _RefProxy:
+    """
+    Reference a previously-named node by selection.
+
+    - `ref("name")` — flat string selection.
+    - `ref(token)` — Token returned by `createName(...)`. Subsequent
+      `.attr` / `[i]` / `.path(...)` calls extend the selection.
 
     Used as a child of a combinator (spread/layer/arrow) to insert an
-    already-named-and-resolved node into the layout — e.g. point an arrow
-    at, or align with, a mark whose `.name(...)` matches.
-
-    Mirrors JS `ref("Mercury")` (`packages/gofish-graphics/src/ast/shapes/ref.tsx:86`).
+    already-named-and-resolved node into the layout. Mirrors JS
+    `ref(...)` (`packages/gofish-graphics/src/ast/shapes/ref.tsx:86`).
     """
-    return Mark("ref", selection=name)
+    return _RefProxy([target])
 
 
 def arrow(

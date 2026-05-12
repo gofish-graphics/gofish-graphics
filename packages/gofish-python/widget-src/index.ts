@@ -45,9 +45,11 @@ import {
   out,
   atop,
   mask,
+  createName,
   type ChartBuilder,
   type Operator,
   type Mark,
+  type Token,
 } from "gofish-graphics";
 
 // Combinator-form factory map. Mirrors tests/harness/main.ts.
@@ -227,6 +229,86 @@ function unwrapValues(value: any): any {
   return out;
 }
 
+// Per-render Token resolver — mirrors `tests/harness/main.ts`. Python
+// emits `{__gofish_token: <uuid>, __tag: <tag>}` sentinels for hygienic
+// names; first sighting mints a JS `createName(tag)` Token, subsequent
+// sightings reuse it within a single render.
+type TokenSentinel = { __gofish_token: string; __tag: string };
+type TokenResolver = (s: TokenSentinel) => Token;
+
+function makeTokenResolver(): TokenResolver {
+  const cache = new Map<string, Token>();
+  return (sentinel: TokenSentinel) => {
+    let t = cache.get(sentinel.__gofish_token);
+    if (!t) {
+      t = createName(sentinel.__tag);
+      cache.set(sentinel.__gofish_token, t);
+    }
+    return t;
+  };
+}
+
+function isTokenSentinel(v: any): v is TokenSentinel {
+  return (
+    v !== null &&
+    typeof v === "object" &&
+    typeof v.__gofish_token === "string" &&
+    typeof v.__tag === "string"
+  );
+}
+
+/** Wrap a Mark so its resolved GoFishNode gets `.scope()` called — matches
+ *  what JS `createMark` does internally. Triggered by the `__scope: true`
+ *  flag the Python `@createMark` decorator stamps on a Mark's IR.
+ *  Forwards `.name`/`.label`/`.render`/`.constrain` so the scoped mark
+ *  still behaves as a NameableMark for the raw-mark render path. */
+function wrapWithScope(inner: any): any {
+  const wrapped: any = async (data: any, key: any, layerContext: any) => {
+    const node: any = await Promise.resolve(inner(data, key, layerContext));
+    if (node && typeof node.scope === "function") {
+      node.scope();
+    }
+    return node;
+  };
+  const define = (key: string, value: any) =>
+    Object.defineProperty(wrapped, key, {
+      value,
+      writable: true,
+      configurable: true,
+    });
+  if (typeof inner.render === "function") {
+    define("render", async (container: any, options: any) => {
+      const node: any = await wrapped(undefined, undefined, undefined);
+      return node.render(container, options);
+    });
+  }
+  for (const key of ["name", "label", "constrain"] as const) {
+    if (typeof inner[key] === "function") {
+      define(key, (...args: any[]) => wrapWithScope(inner[key](...args)));
+    }
+  }
+  return wrapped;
+}
+
+function resolveNameField(
+  rawName: any,
+  resolveToken: TokenResolver
+): string | Token | undefined {
+  if (rawName == null) return undefined;
+  if (isTokenSentinel(rawName)) return resolveToken(rawName);
+  return rawName;
+}
+
+function resolveRefSelection(selection: any, resolveToken: TokenResolver): any {
+  if (typeof selection === "string") return selection;
+  if (Array.isArray(selection)) {
+    return selection.map((seg) =>
+      isTokenSentinel(seg) ? resolveToken(seg) : seg
+    );
+  }
+  return selection;
+}
+
 interface RenderOptions {
   w: number;
   h: number;
@@ -359,10 +441,17 @@ const MARK_MAP: Record<string, (opts: Record<string, any>) => Mark<any>> = {
   image: (opts) => image(opts),
 };
 
-function mapMark(markSpec: MarkSpec, bridge: DeriveBridge): Mark<any> {
+function mapMark(
+  markSpec: MarkSpec,
+  bridge: DeriveBridge,
+  resolveToken: TokenResolver
+): Mark<any> {
   // Leaf-form `ref(name)` — not a combinator, not a mark factory.
+  // Selection may be string, array, or contain token sentinels.
   if (markSpec.type === "ref" && !markSpec.__combinator) {
-    return ref(markSpec.selection as string) as unknown as Mark<any>;
+    return ref(
+      resolveRefSelection(markSpec.selection, resolveToken)
+    ) as unknown as Mark<any>;
   }
 
   // Combinator-form marks: a layout operator (`spread`, `layer`, or
@@ -371,7 +460,9 @@ function mapMark(markSpec: MarkSpec, bridge: DeriveBridge): Mark<any> {
   // constraints?}`; rebuild it by calling the JS operator's `(opts, marks)`
   // overload, then chain `.constrain(...)` if present.
   if (markSpec.__combinator) {
-    const childMarks = (markSpec.children ?? []).map((c) => mapMark(c, bridge));
+    const childMarks = (markSpec.children ?? []).map((c) =>
+      mapMark(c, bridge, resolveToken)
+    );
     const opts = unwrapMarkOpts(markSpec.options ?? {}, bridge);
     const factory = COMBINATOR_FACTORIES[markSpec.type];
     if (!factory) {
@@ -392,8 +483,12 @@ function mapMark(markSpec: MarkSpec, bridge: DeriveBridge): Mark<any> {
         )
       );
     }
-    if (markSpec.name && typeof (mark as any).name === "function") {
-      mark = (mark as any).name(markSpec.name);
+    if (markSpec.__scope) {
+      mark = wrapWithScope(mark);
+    }
+    const nameVal = resolveNameField(markSpec.name, resolveToken);
+    if (nameVal != null && typeof (mark as any).name === "function") {
+      mark = (mark as any).name(nameVal);
     }
     return mark;
   }
@@ -419,15 +514,19 @@ function mapMark(markSpec: MarkSpec, bridge: DeriveBridge): Mark<any> {
     throw new Error(`Unknown mark type: ${type}`);
   }
   let mark = factory(unwrapMarkOpts(opts, bridge));
-  if (layerName && typeof (mark as any).name === "function") {
-    mark = (mark as any).name(layerName);
-  }
   if (labelSpec && typeof (mark as any).label === "function") {
     const { accessor, ...labelOpts } = labelSpec;
     mark = (mark as any).label(
       accessor,
       Object.keys(labelOpts).length > 0 ? labelOpts : undefined
     );
+  }
+  if (markSpec.__scope) {
+    mark = wrapWithScope(mark);
+  }
+  const nameVal = resolveNameField(layerName, resolveToken);
+  if (nameVal != null && typeof (mark as any).name === "function") {
+    mark = (mark as any).name(nameVal);
   }
   return mark;
 }
@@ -488,7 +587,8 @@ function decodeArrowB64(b64: string): Record<string, any>[] {
 function buildChart(
   chartSpec: ChartSpec,
   data: Record<string, any>[],
-  bridge: DeriveBridge
+  bridge: DeriveBridge,
+  resolveToken: TokenResolver
 ): ChartBuilder {
   const operators: Operator<any, any>[] = [];
   for (const opSpec of chartSpec.operators || []) {
@@ -496,7 +596,7 @@ function buildChart(
     if (op) operators.push(op);
   }
   const markSpec = chartSpec.mark || { type: "rect" };
-  const mark = mapMark(markSpec, bridge);
+  const mark = mapMark(markSpec, bridge, resolveToken);
   const resolvedOptions = resolveOptions(chartSpec.options || {});
 
   let chartData: any = data;
@@ -539,12 +639,13 @@ function renderLayer(
     throw new Error(`Failed to parse layer arrow_data JSON: ${e}`);
   }
 
+  const resolveToken = makeTokenResolver();
   const childCharts: ChartBuilder[] = spec.charts.map(
     (chartSpec: ChartSpec, i: number) => {
       const b64 = arrowDict[String(i)] || "";
       const data = decodeArrowB64(b64);
       log(`Building chart ${i}: ${data.length} rows`);
-      return buildChart(chartSpec, data, bridge);
+      return buildChart(chartSpec, data, bridge, resolveToken);
     }
   );
 
@@ -576,7 +677,8 @@ function renderRawMark(
     : () => {};
 
   log("Building raw mark...");
-  const mark = mapMark(spec.mark, bridge) as any;
+  const resolveToken = makeTokenResolver();
+  const mark = mapMark(spec.mark, bridge, resolveToken) as any;
   const renderOptions: RenderOptions = {
     w: model.get("width"),
     h: model.get("height"),
@@ -618,7 +720,8 @@ function renderChart(
   }
 
   log("Building chart...");
-  const node = buildChart(chartSpec, data, bridge);
+  const resolveToken = makeTokenResolver();
+  const node = buildChart(chartSpec, data, bridge, resolveToken);
 
   const renderOptions: RenderOptions = {
     w: model.get("width"),
