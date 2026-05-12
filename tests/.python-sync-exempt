@@ -55,7 +55,7 @@ packages/gofish-graphics/stories/forwardsyntax/Labels.stories.tsx::PositionShowc
 # a 2-column grid with section headers, demonstrating that
 # `spread({alignment, ...})` equals `align(...) + distribute(...)`. The
 # parity harness captures one chart per story, so this layout shape can't
-# be byte-matched. The six single-chart exports (AlignOnly, AlignOnly_ManualY,
+# be byte-matched. The six single-chart exports (AlignOnly, AlignOnlyManualY,
 # DistributeOnly, SubsetSelection, BackgroundNotDistributed, AlignCenterDistributeY)
 # are ported.
 packages/gofish-graphics/stories/lowlevel/Constraints.stories.tsx::SpreadY_AlignStart

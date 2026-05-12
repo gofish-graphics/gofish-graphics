@@ -226,39 +226,16 @@ console.log(`  ${parityDiffs.length} DOM parity diff(s) found`);
 const pairs: StoryPair[] = [];
 const pairById = new Map<string, StoryPair>();
 
-// PUA sentinel for the two-step underscore translation used by the
-// Python-side path converter. Mirrors capture-python-dom.ts and
-// check-python-sync.ts so the viewer's IDs line up with the captured
-// file paths even when a JS export name contains a literal underscore
-// (e.g. `AlignOnly_ManualY` → `align_only__manual_y` snake →
-// `align-only_manual-y` kebab path).
-const UNDERSCORE_SENTINEL = "";
-
 function camelToSnake(s: string): string {
   return s
-    .split("_")
-    .join(UNDERSCORE_SENTINEL)
     .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
     .replace(/^_/, "")
-    .toLowerCase()
-    .split(UNDERSCORE_SENTINEL)
-    .join("__");
+    .toLowerCase();
 }
 
-/** JS export name → kebab-case path segment, preserving literal underscores
- *  as single `_` (so `AlignOnly_ManualY` becomes `align-only_manual-y`).
- *  Matches the capture-python-dom.ts inverse direction. */
+/** JS export name → kebab-case path segment. */
 function jsExportToKebab(s: string): string {
-  return s
-    .split("_")
-    .join(UNDERSCORE_SENTINEL)
-    .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
-    .replace(/^_/, "")
-    .toLowerCase()
-    .split("_")
-    .join("-")
-    .split(UNDERSCORE_SENTINEL)
-    .join("_");
+  return camelToSnake(s).replace(/_/g, "-");
 }
 
 // Mirror the per-StoryObj logic in check-python-sync.ts so the viewer's

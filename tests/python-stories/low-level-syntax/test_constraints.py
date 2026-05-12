@@ -25,7 +25,7 @@ def story_align_only():
     )
 
 
-def story_align_only__manual_y():
+def story_align_only_manual_y():
     return (
         layer([
             rect(w=80, h=40, y=20, fill="#e63946").name("a"),
