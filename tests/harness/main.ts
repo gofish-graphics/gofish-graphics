@@ -37,10 +37,34 @@ import {
   Constraint,
   ref,
   arrow,
+  over,
+  inside,
+  xor,
+  out,
+  atop,
+  mask,
   type ChartBuilder,
   type Operator,
   type Mark,
 } from "gofish-graphics";
+
+// Combinator-form factory map. Each entry takes (opts, marks) and returns
+// a Mark. JS storybook uses these directly via the dual-mode operator
+// overloads; the harness mirrors that shape.
+const COMBINATOR_FACTORIES: Record<
+  string,
+  (opts: Record<string, any>, marks: Mark<any>[]) => Mark<any>
+> = {
+  spread: (opts, marks) => spread(opts, marks) as unknown as Mark<any>,
+  layer: (opts, marks) => layer(opts, marks) as unknown as Mark<any>,
+  arrow: (opts, marks) => arrow(opts, marks) as unknown as Mark<any>,
+  over: (opts, marks) => over(opts, marks) as unknown as Mark<any>,
+  inside: (opts, marks) => inside(opts, marks) as unknown as Mark<any>,
+  xor: (opts, marks) => xor(opts, marks) as unknown as Mark<any>,
+  out: (opts, marks) => out(opts, marks) as unknown as Mark<any>,
+  atop: (opts, marks) => atop(opts, marks) as unknown as Mark<any>,
+  mask: (opts, marks) => mask(opts, marks) as unknown as Mark<any>,
+};
 
 // ---------------------------------------------------------------------------
 // Types
@@ -218,16 +242,11 @@ function mapMark(spec: MarkSpec): Mark<any> {
   if (spec.__combinator) {
     const childMarks = (spec.children ?? []).map(mapMark);
     const opts = unwrapValues(spec.options ?? {});
-    let mark: Mark<any>;
-    if (spec.type === "spread") {
-      mark = spread(opts, childMarks) as unknown as Mark<any>;
-    } else if (spec.type === "layer") {
-      mark = layer(opts, childMarks) as unknown as Mark<any>;
-    } else if (spec.type === "arrow") {
-      mark = arrow(opts, childMarks) as unknown as Mark<any>;
-    } else {
+    const factory = COMBINATOR_FACTORIES[spec.type];
+    if (!factory) {
       throw new Error(`Unknown combinator mark type: ${spec.type}`);
     }
+    let mark = factory(opts, childMarks);
     // Constraint chain. The Python side serializes refs by name; reify the
     // JS-side ConstraintRef objects from those names by looking them up in
     // the `refs` map the JS callback receives.

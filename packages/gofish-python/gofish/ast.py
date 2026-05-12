@@ -692,6 +692,44 @@ def arrow(
     return Mark("arrow", _children=list(children), **options)
 
 
+# ─── Porter-Duff compositing operators ────────────────────────────────────
+# Mirrors JS `over`/`inside`/`xor`/`out`/`atop`/`mask` from
+# `packages/gofish-graphics/src/ast/graphicalOperators/porterDuff` (and the
+# v3 re-exports in `marks/chart.ts`). Each is a two-children combinator
+# whose IR carries the same `__combinator: true` shape as `spread`/`layer`/
+# `arrow`. The harness/widget reconstructs by calling the JS factory.
+
+
+def over(children: List["Mark"], **options: Any) -> Mark:
+    """Porter-Duff `over` — destination painted over source."""
+    return Mark("over", _children=list(children), **options)
+
+
+def inside(children: List["Mark"], **options: Any) -> Mark:
+    """Porter-Duff `in` — intersection of source and destination."""
+    return Mark("inside", _children=list(children), **options)
+
+
+def xor(children: List["Mark"], **options: Any) -> Mark:
+    """Porter-Duff `xor` — symmetric difference of source and destination."""
+    return Mark("xor", _children=list(children), **options)
+
+
+def out(children: List["Mark"], **options: Any) -> Mark:
+    """Porter-Duff `out` — source minus destination."""
+    return Mark("out", _children=list(children), **options)
+
+
+def atop(children: List["Mark"], **options: Any) -> Mark:
+    """Porter-Duff `atop` — source painted only where destination is."""
+    return Mark("atop", _children=list(children), **options)
+
+
+def mask(children: List["Mark"], **options: Any) -> Mark:
+    """Porter-Duff `mask` — alpha-mask compositing."""
+    return Mark("mask", _children=list(children), **options)
+
+
 def stack(
     *,
     by: Optional[str] = None,
@@ -1142,17 +1180,29 @@ def text(
 
 
 def image(
+    href: Optional[str] = None,
     w: Optional[Union[int, str]] = None,
     h: Optional[Union[int, str]] = None,
-    src: Optional[str] = None,
+    x: Optional[Union[int, str]] = None,
+    y: Optional[Union[int, str]] = None,
     debug: Optional[bool] = None,
 ) -> Mark:
-    """Image mark."""
+    """Image mark.
+
+    Args:
+        href: URL of the image. Matches the JS storybook spelling
+            (`image({href: ...})`). For local files in the parity-test
+            environment, use Vite's `/@fs/<absolute-path>` form.
+        w, h: Width/height.
+        x, y: Position.
+    """
     kwargs: Dict[str, Any] = {}
     for k, value in [
+        ("href", href),
         ("w", w),
         ("h", h),
-        ("src", src),
+        ("x", x),
+        ("y", y),
         ("debug", debug),
     ]:
         if value is not None:

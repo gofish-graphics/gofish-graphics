@@ -10,7 +10,6 @@ packages/gofish-graphics/stories/lowlevel/IcicleChart.stories.tsx
 packages/gofish-graphics/stories/lowlevel/ImageMixedPrimitives.stories.tsx
 packages/gofish-graphics/stories/lowlevel/NestedMosaicChart.stories.tsx
 packages/gofish-graphics/stories/lowlevel/NestedWaffleChart.stories.tsx
-packages/gofish-graphics/stories/lowlevel/PorterDuffRelations.stories.tsx
 packages/gofish-graphics/stories/lowlevel/SankeyTree.stories.tsx
 packages/gofish-graphics/stories/lowlevel/StringlineChart.stories.tsx
 packages/gofish-graphics/stories/lowlevel/ViolinPlot.stories.tsx

@@ -39,10 +39,32 @@ import {
   Constraint,
   ref,
   arrow,
+  over,
+  inside,
+  xor,
+  out,
+  atop,
+  mask,
   type ChartBuilder,
   type Operator,
   type Mark,
 } from "gofish-graphics";
+
+// Combinator-form factory map. Mirrors tests/harness/main.ts.
+const COMBINATOR_FACTORIES: Record<
+  string,
+  (opts: Record<string, any>, marks: Mark<any>[]) => Mark<any>
+> = {
+  spread: (opts, marks) => spread(opts, marks) as unknown as Mark<any>,
+  layer: (opts, marks) => layer(opts, marks) as unknown as Mark<any>,
+  arrow: (opts, marks) => arrow(opts, marks) as unknown as Mark<any>,
+  over: (opts, marks) => over(opts, marks) as unknown as Mark<any>,
+  inside: (opts, marks) => inside(opts, marks) as unknown as Mark<any>,
+  xor: (opts, marks) => xor(opts, marks) as unknown as Mark<any>,
+  out: (opts, marks) => out(opts, marks) as unknown as Mark<any>,
+  atop: (opts, marks) => atop(opts, marks) as unknown as Mark<any>,
+  mask: (opts, marks) => mask(opts, marks) as unknown as Mark<any>,
+};
 
 interface WidgetModel {
   get(key: "spec"): ChartSpec | LayerSpec | RawMarkSpec;
@@ -113,9 +135,9 @@ interface ConstraintSpec {
 }
 
 interface MarkSpec {
-  // Mark types include the leaf shapes, combinator-form layout operators
-  // (`spread`, `layer`, `arrow`) used as marks via the `__combinator` flag,
-  // and the bare `ref` leaf for selection-by-name.
+  // Mark types include the leaf shapes, combinator-form operators
+  // (`spread`, `layer`, `arrow`, Porter-Duff) used as marks via the
+  // `__combinator` flag, and the bare `ref` leaf for selection-by-name.
   type:
     | "rect"
     | "circle"
@@ -129,6 +151,12 @@ interface MarkSpec {
     | "spread"
     | "layer"
     | "arrow"
+    | "over"
+    | "inside"
+    | "xor"
+    | "out"
+    | "atop"
+    | "mask"
     | "ref";
   name?: string;
   label?: LabelSpec;
@@ -303,16 +331,11 @@ function mapMark(markSpec: MarkSpec): Mark<any> {
   if (markSpec.__combinator) {
     const childMarks = (markSpec.children ?? []).map(mapMark);
     const opts = unwrapValues(markSpec.options ?? {});
-    let mark: Mark<any>;
-    if (markSpec.type === "spread") {
-      mark = spread(opts, childMarks) as unknown as Mark<any>;
-    } else if (markSpec.type === "layer") {
-      mark = layer(opts, childMarks) as unknown as Mark<any>;
-    } else if (markSpec.type === "arrow") {
-      mark = arrow(opts, childMarks) as unknown as Mark<any>;
-    } else {
+    const factory = COMBINATOR_FACTORIES[markSpec.type];
+    if (!factory) {
       throw new Error(`Unknown combinator mark type: ${markSpec.type}`);
     }
+    let mark = factory(opts, childMarks);
     // Constraint chain. The Python side serializes refs by name; reify the
     // JS-side ConstraintRef objects from those names by looking them up in
     // the `refs` map the JS callback receives.
@@ -336,7 +359,19 @@ function mapMark(markSpec: MarkSpec): Mark<any> {
   const { type, name: layerName, label: labelSpec, ...opts } = markSpec;
   const factory =
     MARK_MAP[
-      type as Exclude<MarkSpec["type"], "spread" | "layer" | "arrow" | "ref">
+      type as Exclude<
+        MarkSpec["type"],
+        | "spread"
+        | "layer"
+        | "arrow"
+        | "ref"
+        | "over"
+        | "inside"
+        | "xor"
+        | "out"
+        | "atop"
+        | "mask"
+      >
     ];
   if (!factory) {
     throw new Error(`Unknown mark type: ${type}`);
