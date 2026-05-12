@@ -585,6 +585,7 @@ def rect(
     cy: Optional[Union[int, str]] = None,
     x2: Optional[Union[int, str]] = None,
     y2: Optional[Union[int, str]] = None,
+    aspectRatio: Optional[float] = None,
     filter: Optional[str] = None,
     label: Optional[str] = None,
     key: Optional[str] = None,
@@ -611,6 +612,7 @@ def rect(
         ("cy", cy),
         ("x2", x2),
         ("y2", y2),
+        ("aspectRatio", aspectRatio),
         ("filter", filter),
         ("label", label),
         ("key", key),
@@ -785,18 +787,23 @@ def image(
     return Mark("image", **kwargs)
 
 
-def chart(data: Any, options: Optional[dict] = None) -> ChartBuilder:
+def chart(data: Any, **options: Any) -> ChartBuilder:
     """
     Create a new chart builder.
 
+    Chart-level options (color, coord, etc.) are passed as keyword arguments:
+
+        chart(data, color=palette("tableau10"))
+        chart(data, color=gradient("blues"), coord=clock())
+
     Args:
         data: Input data or select() for cross-chart layer references
-        options: Optional chart options (w, h, color, etc.)
+        **options: Chart options (color, coord, ...)
 
     Returns:
         ChartBuilder instance
     """
-    return ChartBuilder(data, options)
+    return ChartBuilder(data, options if options else None)
 
 
 class LayerBuilder:

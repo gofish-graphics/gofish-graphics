@@ -6,7 +6,7 @@ from python_stories.data import GROUPED_BAR_DATA
 
 def story_default():
     return (
-        chart(GROUPED_BAR_DATA, {"color": palette("tableau10")})
+        chart(GROUPED_BAR_DATA, color=palette("tableau10"))
         .flow(
             spread(by="category", dir="x", spacing=24),
             spread(by="group", dir="x", spacing=0),

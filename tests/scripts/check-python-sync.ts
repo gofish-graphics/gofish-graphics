@@ -77,13 +77,45 @@ function gitDiff(filter: string, baseRef: string): string[] {
 // Exempt list
 // ---------------------------------------------------------------------------
 
-function loadExemptSet(): Set<string> {
-  if (!existsSync(EXEMPT_FILE)) return new Set();
+interface ExemptSet {
+  files: Set<string>;
+  // file path → set of exempt JS export names (camelCase, as declared)
+  exports: Map<string, Set<string>>;
+}
+
+function loadExemptSet(): ExemptSet {
+  const exempt: ExemptSet = { files: new Set(), exports: new Map() };
+  if (!existsSync(EXEMPT_FILE)) return exempt;
   const lines = readFileSync(EXEMPT_FILE, "utf-8")
     .split("\n")
     .map((l) => l.trim())
     .filter((l) => l && !l.startsWith("#"));
-  return new Set(lines);
+  for (const line of lines) {
+    // Per-export entry: `path/to/file.stories.tsx::ExportName`
+    const sep = line.indexOf("::");
+    if (sep === -1) {
+      exempt.files.add(line);
+      continue;
+    }
+    const file = line.slice(0, sep);
+    const exp = line.slice(sep + 2);
+    if (!exempt.exports.has(file)) exempt.exports.set(file, new Set());
+    exempt.exports.get(file)!.add(exp);
+  }
+  return exempt;
+}
+
+function isFileExempt(set: ExemptSet, file: string): boolean {
+  return set.files.has(file);
+}
+
+function isExportExempt(
+  set: ExemptSet,
+  file: string,
+  exportName: string
+): boolean {
+  if (set.files.has(file)) return true;
+  return set.exports.get(file)?.has(exportName) === true;
 }
 
 // ---------------------------------------------------------------------------
@@ -162,11 +194,11 @@ function runFullCoverage(): number {
   for (const jsFile of jsStories) {
     const pythonFile = mapJsToPython(jsFile);
     const pythonAbs = join(ROOT_DIR, pythonFile);
-    const isExempt = exemptSet.has(jsFile);
+    const fileExempt = isFileExempt(exemptSet, jsFile);
     const jsExports = readJsStoryExports(join(ROOT_DIR, jsFile));
     exportsTotal += jsExports.length;
 
-    if (isExempt) {
+    if (fileExempt) {
       // Surface as a warning — exempts are not silent passes anymore. The
       // file should be a punch list of "not yet supported", not a hidden
       // dump where things go to be forgotten.
@@ -190,10 +222,14 @@ function runFullCoverage(): number {
 
     const pyFns = readPyStoryFns(pythonAbs);
     const missing: string[] = [];
+    const exemptedExports: string[] = [];
     for (const e of jsExports) {
       const expected = `story_${camelToSnake(e)}`;
       if (pyFns.has(expected)) {
         exportsOk++;
+      } else if (isExportExempt(exemptSet, jsFile, e)) {
+        exemptedExports.push(e);
+        exportsExempt++;
       } else {
         missing.push(`${e} → ${expected}`);
         exportsMissing++;
@@ -206,7 +242,10 @@ function runFullCoverage(): number {
         pythonFile,
         changeType: "modified",
         status: "ok",
-        message: `All ${jsExports.length} export(s) covered`,
+        message:
+          exemptedExports.length > 0
+            ? `${jsExports.length - exemptedExports.length}/${jsExports.length} export(s) covered (${exemptedExports.length} exempt)`
+            : `All ${jsExports.length} export(s) covered`,
       });
       continue;
     }
@@ -317,7 +356,7 @@ let errors = 0;
 for (const jsFile of addedJs) {
   const pythonFile = mapJsToPython(jsFile);
 
-  if (exemptSet.has(jsFile)) {
+  if (isFileExempt(exemptSet, jsFile)) {
     results.push({
       jsFile,
       pythonFile,
@@ -358,7 +397,7 @@ for (const jsFile of addedJs) {
 for (const jsFile of deletedJs) {
   const pythonFile = mapJsToPython(jsFile);
 
-  if (exemptSet.has(jsFile)) {
+  if (isFileExempt(exemptSet, jsFile)) {
     results.push({
       jsFile,
       pythonFile,
@@ -398,7 +437,7 @@ for (const jsFile of deletedJs) {
 for (const jsFile of modifiedJs) {
   const pythonFile = mapJsToPython(jsFile);
 
-  if (exemptSet.has(jsFile)) {
+  if (isFileExempt(exemptSet, jsFile)) {
     results.push({
       jsFile,
       pythonFile,

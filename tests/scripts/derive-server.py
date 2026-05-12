@@ -20,11 +20,40 @@ harness calls /derive/<id> during chart rendering.
 import importlib
 import importlib.util
 import json
+import math
 import sys
 import os
 import traceback
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse
+
+
+def _sanitize_for_json(obj):
+    """Make values JSON-safe.
+
+    - NaN/Infinity floats → None (json.dumps writes the literal `NaN`, which
+      the harness's JSON.parse rejects).
+    - pandas Timestamps and other "stringifiable" non-native types →
+      `str(obj)` so a Seattle-weather `date` column survives the round-trip
+      as the same `YYYY-MM-DD HH:MM:SS` string the harness would have seen
+      from JSON anyway.
+    """
+    if obj is None or isinstance(obj, (bool, int, str)):
+        return obj
+    if isinstance(obj, float):
+        if math.isnan(obj) or math.isinf(obj):
+            return None
+        return obj
+    if isinstance(obj, dict):
+        return {k: _sanitize_for_json(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_sanitize_for_json(v) for v in obj]
+    # numpy scalars, pandas Timestamps, datetime.date / datetime — fall
+    # back to the value's own string form so we never crash the response.
+    try:
+        return str(obj)
+    except Exception:
+        return None
 
 # Add project root to path so we can import gofish
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
@@ -66,7 +95,7 @@ class DeriveHandler(BaseHTTPRequestHandler):
                "pythonStoriesDir": "/abs/path/tests/python-stories"}
 
         Response (chart): {operators, mark, options, data, deriveIds}
-        Response (layer): {"_kind": "layer-unsupported"}
+        Response (layer): {"_kind": "layer", charts, options, deriveIds}
         """
         try:
             data = json.loads(body)
@@ -109,39 +138,64 @@ class DeriveHandler(BaseHTTPRequestHandler):
             builder = result[0]
             options = result[1] if len(result) > 1 else {}
 
-            # Layer detection — same handling capture-python-dom.ts used to
-            # do inline. Surfacing as a structured payload so the caller
-            # can categorize.
-            from gofish.ast import DeriveOperator, LayerBuilder
+            from gofish.ast import ChartBuilder, DeriveOperator, LayerBuilder, LayerSelector
+
+            def serialize_chart(child: ChartBuilder) -> tuple:
+                """Return (child_payload, derive_ids) for one chart builder.
+
+                child_payload: {operators, mark, options, data, zOrder}
+                  data is records list, or {"type": "select", layer: name}
+                  for select-data children.
+                """
+                child_ir = child.to_ir()
+                if isinstance(child.data, LayerSelector):
+                    child_data = child_ir["data"]
+                else:
+                    raw = child.data
+                    if hasattr(raw, "to_dict"):
+                        child_data = raw.to_dict("records")
+                    elif hasattr(raw, "to_dicts"):
+                        child_data = raw.to_dicts()
+                    else:
+                        child_data = raw
+
+                child_derive_ids = []
+                for op in child.operators:
+                    if isinstance(op, DeriveOperator):
+                        child_derive_ids.append(op.lambda_id)
+                        _registry[op.lambda_id] = op.fn
+
+                return (
+                    {
+                        "operators": child_ir["operators"],
+                        "mark": child_ir["mark"],
+                        "options": child_ir.get("options", {}),
+                        "data": child_data,
+                        "zOrder": child_ir.get("zOrder"),
+                    },
+                    child_derive_ids,
+                )
+
             if isinstance(builder, LayerBuilder):
-                self._json_response(200, {"_kind": "layer-unsupported"})
+                child_payloads = []
+                derive_ids: list = []
+                for child in builder.children:
+                    payload, child_derive_ids = serialize_chart(child)
+                    child_payloads.append(payload)
+                    derive_ids.extend(child_derive_ids)
+
+                self._json_response(200, {
+                    "_kind": "layer",
+                    "charts": child_payloads,
+                    "options": {**(builder.options or {}), **options},
+                    "deriveIds": derive_ids,
+                })
                 return
 
-            ir = builder.to_ir()
-            data_attr = builder.data
-
-            # Register every DeriveOperator using the *same* lambda_ids that
-            # appear in the IR — this is the whole point of doing it in the
-            # same call.
-            derive_ids = []
-            for op in builder.operators:
-                if isinstance(op, DeriveOperator):
-                    derive_ids.append(op.lambda_id)
-                    _registry[op.lambda_id] = op.fn
-
-            # Serialize data
-            if hasattr(data_attr, "to_dict"):
-                data_attr = data_attr.to_dict("records")
-            elif hasattr(data_attr, "to_dicts"):
-                data_attr = data_attr.to_dicts()
-
-            self._json_response(200, {
-                "operators": ir["operators"],
-                "mark": ir["mark"],
-                "options": {**ir.get("options", {}), **options},
-                "data": data_attr,
-                "deriveIds": derive_ids,
-            })
+            chart_payload, derive_ids = serialize_chart(builder)
+            chart_payload["options"] = {**chart_payload["options"], **options}
+            chart_payload["deriveIds"] = derive_ids
+            self._json_response(200, chart_payload)
         except Exception as e:
             self._json_response(500, {
                 "error": str(e),
@@ -181,7 +235,7 @@ class DeriveHandler(BaseHTTPRequestHandler):
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type")
         self.end_headers()
-        self.wfile.write(json.dumps(data).encode())
+        self.wfile.write(json.dumps(_sanitize_for_json(data)).encode())
 
     def do_OPTIONS(self):
         """Handle CORS preflight."""
