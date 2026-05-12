@@ -33,6 +33,8 @@ import {
   gradient,
   clock,
   v,
+  layer,
+  Constraint,
   type ChartBuilder,
   type Operator,
   type Mark,
@@ -85,12 +87,19 @@ interface OperatorSpec {
   [key: string]: any;
 }
 
+interface ConstraintSpec {
+  type: "align" | "distribute";
+  options: Record<string, any>;
+  refs: string[];
+}
+
 interface MarkSpec {
   type: string;
   name?: string;
   __combinator?: boolean;
   options?: Record<string, any>;
   children?: MarkSpec[];
+  constraints?: ConstraintSpec[];
   [key: string]: any;
 }
 
@@ -191,19 +200,35 @@ const MARK_MAP: Record<string, (opts: Record<string, any>) => Mark<any>> = {
 };
 
 function mapMark(spec: MarkSpec): Mark<any> {
-  // Combinator-form marks: a layout operator (currently just `spread`) used
-  // as a mark, with explicit nested children instead of repeating a single
-  // mark across data. Python emits `{type, __combinator: true, options,
-  // children, name?, label?}`; rebuild it by calling the JS operator's
-  // `(opts, marks)` overload.
+  // Combinator-form marks: a layout operator (`spread` or `layer`) used as a
+  // mark, with explicit nested children instead of repeating a single mark
+  // across data. Python emits `{type, __combinator: true, options, children,
+  // name?, label?, constraints?}`; rebuild it by calling the JS operator's
+  // `(opts, marks)` overload, then chain `.constrain(...)` if present.
   if (spec.__combinator) {
     const childMarks = (spec.children ?? []).map(mapMark);
     const opts = unwrapValues(spec.options ?? {});
     let mark: Mark<any>;
     if (spec.type === "spread") {
       mark = spread(opts, childMarks) as unknown as Mark<any>;
+    } else if (spec.type === "layer") {
+      mark = layer(opts, childMarks) as unknown as Mark<any>;
     } else {
       throw new Error(`Unknown combinator mark type: ${spec.type}`);
+    }
+    // Constraint chain. The Python side serializes refs by name; reify the
+    // JS-side ConstraintRef objects from those names by looking them up in
+    // the `refs` map the JS callback receives.
+    if (spec.constraints && typeof (mark as any).constrain === "function") {
+      const constraints = spec.constraints;
+      mark = (mark as any).constrain((refs: Record<string, any>) =>
+        constraints.map((c) =>
+          (Constraint as any)[c.type](
+            c.options,
+            c.refs.map((name) => refs[name])
+          )
+        )
+      );
     }
     if (spec.name && typeof (mark as any).name === "function") {
       mark = (mark as any).name(spec.name);

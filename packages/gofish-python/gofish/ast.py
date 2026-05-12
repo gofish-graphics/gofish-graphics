@@ -64,9 +64,11 @@ class Mark:
             layer_name: Name to register this mark's output under
 
         Returns:
-            New Mark with name set
+            New Mark (same subclass as self) with name set
         """
-        new_mark = Mark(self.mark_type, **self.kwargs)
+        new_mark = type(self)(
+            self.mark_type, _children=self._children, **self.kwargs
+        )
         self._copy_meta(new_mark)
         new_mark._name = layer_name
         return new_mark
@@ -94,9 +96,11 @@ class Mark:
             rotate: Rotation angle in degrees
 
         Returns:
-            New Mark with label set
+            New Mark (same subclass as self) with label set
         """
-        new_mark = Mark(self.mark_type, **self.kwargs)
+        new_mark = type(self)(
+            self.mark_type, _children=self._children, **self.kwargs
+        )
         self._copy_meta(new_mark)
         label_spec: Dict[str, Any] = {"accessor": accessor}
         if position is not None:
@@ -131,6 +135,11 @@ class Mark:
             d["name"] = self._name
         if self._label is not None:
             d["label"] = self._label
+        # Only ConstrainableMark carries _constraints, but reading via getattr
+        # keeps the base class oblivious to the subclass extension.
+        constraints = getattr(self, "_constraints", None)
+        if constraints is not None:
+            d["constraints"] = [c.to_dict() for c in constraints]
         return d
 
     def to_ir(self) -> dict:
@@ -184,6 +193,175 @@ class Mark:
     def _repr_mimebundle_(self, include=None, exclude=None):
         """Auto-display in notebooks (see ChartBuilder._repr_mimebundle_)."""
         return self.render()._repr_mimebundle_(include=include, exclude=exclude)
+
+
+# Low-level constraint surface — mirrors JS `Constraint.align` / `Constraint.distribute`
+# from packages/gofish-graphics/src/ast/constraints/index.ts. Used only by the
+# v2-style `layer([marks]).constrain(...)` combinator. The Python user authors
+# constraints by name; the IR carries the names; the harness/widget rebuilds
+# the JS-side ref objects from those names.
+
+
+class RefSentinel:
+    """Opaque handle for a named layer child, passed to a constrain callback.
+
+    `layer([rect(...).name("a")]).constrain(lambda a, b: [...])` receives one
+    of these per child, keyed by the child's `.name(...)` tag.
+    """
+
+    def __init__(self, ref_name: str):
+        self.ref_name = ref_name
+
+
+class AlignConstraint:
+    """IR carrier for `Constraint.align(refs, x=..., y=...)`."""
+
+    def __init__(self, refs: List[RefSentinel], options: Dict[str, Any]):
+        self.refs = refs
+        self.options = options
+
+    def to_dict(self) -> dict:
+        return {
+            "type": "align",
+            "options": self.options,
+            "refs": [r.ref_name for r in self.refs],
+        }
+
+
+class DistributeConstraint:
+    """IR carrier for `Constraint.distribute(refs, dir=..., spacing=..., ...)`."""
+
+    def __init__(self, refs: List[RefSentinel], options: Dict[str, Any]):
+        self.refs = refs
+        self.options = options
+
+    def to_dict(self) -> dict:
+        return {
+            "type": "distribute",
+            "options": self.options,
+            "refs": [r.ref_name for r in self.refs],
+        }
+
+
+class Constraint:
+    """Namespace for low-level constraint factories.
+
+    Mirrors JS `Constraint.align` / `Constraint.distribute` exactly. Both
+    return IR carriers consumed by `layer(...).constrain(...)`.
+    """
+
+    @staticmethod
+    def align(
+        refs: List[RefSentinel],
+        *,
+        x: Optional[str] = None,
+        y: Optional[str] = None,
+    ) -> AlignConstraint:
+        """Align the given refs on one or both axes.
+
+        Args:
+            refs: List of RefSentinels (typically the kwargs given to the
+                constrain callback).
+            x: Optional "start" | "middle" | "end" — alignment on the x-axis.
+            y: Optional "start" | "middle" | "end" — alignment on the y-axis.
+
+        At least one of `x` or `y` must be provided.
+        """
+        if x is None and y is None:
+            raise ValueError("Constraint.align requires at least one of x, y")
+        options: Dict[str, Any] = {}
+        if x is not None:
+            options["x"] = x
+        if y is not None:
+            options["y"] = y
+        return AlignConstraint(refs, options)
+
+    @staticmethod
+    def distribute(
+        refs: List[RefSentinel],
+        *,
+        dir: str,
+        spacing: Optional[float] = None,
+        mode: Optional[str] = None,
+        order: Optional[str] = None,
+    ) -> DistributeConstraint:
+        """Distribute the given refs along an axis.
+
+        Args:
+            refs: List of RefSentinels.
+            dir: "x" or "y" — required.
+            spacing: Number of pixels between successive refs (default 8).
+            mode: "edge" (default) or "center" — edge-to-edge or
+                center-to-center spacing.
+            order: "forward" (default) or "reverse" — distribute in reverse order.
+        """
+        options: Dict[str, Any] = {"dir": dir}
+        if spacing is not None:
+            options["spacing"] = spacing
+        if mode is not None:
+            options["mode"] = mode
+        if order is not None:
+            options["order"] = order
+        return DistributeConstraint(refs, options)
+
+
+class ConstrainableMark(Mark):
+    """A combinator-form Mark returned by `layer(...)`.
+
+    Adds a `.constrain(callback)` method that the spread combinator lacks.
+    The callback receives one `RefSentinel` per named child as a kwarg and
+    returns a list of constraint specs (`Constraint.align(...)` / `.distribute(...)`).
+    """
+
+    def __init__(
+        self,
+        mark_type: str,
+        _children: Optional[List["Mark"]] = None,
+        **kwargs,
+    ):
+        super().__init__(mark_type, _children=_children, **kwargs)
+        self._constraints: Optional[List[Any]] = None
+
+    def _copy_meta(self, target: "Mark") -> "Mark":
+        super()._copy_meta(target)
+        if isinstance(target, ConstrainableMark):
+            target._constraints = self._constraints
+        return target
+
+    def constrain(self, callback: Callable[..., List[Any]]) -> "ConstrainableMark":
+        """Apply constraints relating named children of this layer.
+
+        The callback receives one `RefSentinel` per named child as a kwarg
+        and must return a list of constraint specs:
+
+            layer([rect(...).name("a"), rect(...).name("b")]).constrain(
+                lambda a, b: [
+                    Constraint.align([a, b], x="end"),
+                    Constraint.distribute([a, b], dir="y", spacing=10),
+                ]
+            )
+        """
+        if self._children is None:
+            raise ValueError(
+                ".constrain() requires combinator children — use "
+                "`layer([...]).constrain(...)`"
+            )
+        child_names: List[str] = []
+        for child in self._children:
+            if getattr(child, "_name", None) is None:
+                raise ValueError(
+                    "every child of layer(...) used with .constrain() must be "
+                    "named via .name(...) so the callback can reference it"
+                )
+            child_names.append(child._name)
+        refs = {name: RefSentinel(name) for name in child_names}
+        constraints = callback(**refs)
+        new_mark = type(self)(
+            self.mark_type, _children=self._children, **self.kwargs
+        )
+        self._copy_meta(new_mark)
+        new_mark._constraints = list(constraints)
+        return new_mark
 
 
 class LayerSelector:
@@ -455,6 +633,33 @@ def spread(
     if by is not None:
         options["by"] = by
     return Operator("spread", **options)
+
+
+def layer(
+    children: List["Mark"],
+    **options: Any,
+) -> ConstrainableMark:
+    """
+    Low-level combinator-form layer mark.
+
+    Wraps a list of child marks in a layer node. Children typically carry
+    `.name(...)` tags so they can be referenced from a `.constrain(...)`
+    callback:
+
+        layer([
+            rect(w=80, h=40, fill="#e63946").name("a"),
+            rect(w=120, h=60, fill="#457b9d").name("b"),
+            rect(w=60, h=30, fill="#2a9d8f").name("c"),
+        ]).constrain(lambda a, b, c: [
+            Constraint.align([a, b, c], x="end"),
+            Constraint.distribute([a, b, c], dir="y", spacing=10),
+        ]).render(w=300, h=300)
+
+    Mirrors JS `layer([marks]).constrain(...).render(...)` from
+    packages/gofish-graphics/src/ast/marks/chart.ts:367 — a ConstrainableMark
+    that renders directly (no Chart wrapper).
+    """
+    return ConstrainableMark("layer", _children=list(children), **options)
 
 
 def stack(

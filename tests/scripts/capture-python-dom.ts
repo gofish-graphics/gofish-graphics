@@ -68,7 +68,23 @@ function discoverPythonStories(): PythonStory[] {
             .replace(/^test_/, "")
             .replace(/\.py$/, "")
             .replace(/_/g, "-");
-          const storyName = funcName.replace(/^story_/, "").replace(/_/g, "-");
+          // Python identifiers can't contain `-`, so the convention is:
+          //   single `_` → `-` (CamelCase word boundary on the JS side)
+          //   `__`       → `_` (a literal underscore in the JS export name)
+          // e.g. `AlignOnly_ManualY` JS → `align-only_manual-y` path →
+          //      `story_align_only__manual_y` Python.
+          // String.split/join (not regex) so the PUA sentinel char
+          // never sits inside a regex literal — sidesteps eslint
+          // no-control-regex.
+          const UNDERSCORE_SENTINEL = "";
+          const storyName = funcName
+            .replace(/^story_/, "")
+            .split("__")
+            .join(UNDERSCORE_SENTINEL)
+            .split("_")
+            .join("-")
+            .split(UNDERSCORE_SENTINEL)
+            .join("_");
           const outPath = prefix
             ? `${prefix}/${baseName}--${storyName}`
             : `${baseName}--${storyName}`;

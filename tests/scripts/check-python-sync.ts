@@ -143,11 +143,25 @@ function walkJsStories(): string[] {
 // Per-StoryObj coverage helpers.
 // ---------------------------------------------------------------------------
 
+// PUA sentinel for the two-step underscore translation. Won't appear in
+// any real identifier; we use String.split/join (not regex) so the PUA
+// char never sits inside a regex literal, sidestepping eslint's
+// no-control-regex rule.
+const UNDERSCORE_SENTINEL = "";
+
 function camelToSnake(s: string): string {
+  // Literal underscores in the JS export name (e.g. `AlignOnly_ManualY`)
+  // become `__` in the Python function name so they survive the
+  // capture-side single-underscore-to-dash conversion. The convention is:
+  // CamelCase boundary → `_`, literal `_` → `__`.
   return s
+    .split("_")
+    .join(UNDERSCORE_SENTINEL)
     .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
     .replace(/^_/, "")
-    .toLowerCase();
+    .toLowerCase()
+    .split(UNDERSCORE_SENTINEL)
+    .join("__");
 }
 
 /** Extract `export const Foo: StoryObj` names from a JS story file. */

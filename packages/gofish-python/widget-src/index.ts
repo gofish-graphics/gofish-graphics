@@ -35,6 +35,8 @@ import {
   text,
   image,
   v,
+  layer,
+  Constraint,
   type ChartBuilder,
   type Operator,
   type Mark,
@@ -102,9 +104,15 @@ interface LabelSpec {
   rotate?: number;
 }
 
+interface ConstraintSpec {
+  type: "align" | "distribute";
+  options: Record<string, any>;
+  refs: string[];
+}
+
 interface MarkSpec {
   // Mark types include the leaf shapes plus combinator-form layout
-  // operators ("spread") used as marks via the `__combinator` flag.
+  // operators (`spread`, `layer`) used as marks via the `__combinator` flag.
   type:
     | "rect"
     | "circle"
@@ -115,12 +123,14 @@ interface MarkSpec {
     | "petal"
     | "text"
     | "image"
-    | "spread";
+    | "spread"
+    | "layer";
   name?: string;
   label?: LabelSpec;
   __combinator?: boolean;
   options?: Record<string, any>;
   children?: MarkSpec[];
+  constraints?: ConstraintSpec[];
   [key: string]: any;
 }
 
@@ -274,18 +284,35 @@ const MARK_MAP: Record<string, (opts: Record<string, any>) => Mark<any>> = {
 };
 
 function mapMark(markSpec: MarkSpec): Mark<any> {
-  // Combinator-form marks: a layout operator (currently just `spread`) used
-  // as a mark, with explicit nested children. Python emits `{type,
-  // __combinator: true, options, children, name?, label?}`; rebuild it by
-  // calling the JS operator's `(opts, marks)` overload.
+  // Combinator-form marks: a layout operator (`spread` or `layer`) used as
+  // a mark, with explicit nested children. Python emits `{type,
+  // __combinator: true, options, children, name?, label?, constraints?}`;
+  // rebuild it by calling the JS operator's `(opts, marks)` overload, then
+  // chain `.constrain(...)` if present.
   if (markSpec.__combinator) {
     const childMarks = (markSpec.children ?? []).map(mapMark);
     const opts = unwrapValues(markSpec.options ?? {});
     let mark: Mark<any>;
     if (markSpec.type === "spread") {
       mark = spread(opts, childMarks) as unknown as Mark<any>;
+    } else if (markSpec.type === "layer") {
+      mark = layer(opts, childMarks) as unknown as Mark<any>;
     } else {
       throw new Error(`Unknown combinator mark type: ${markSpec.type}`);
+    }
+    // Constraint chain. The Python side serializes refs by name; reify the
+    // JS-side ConstraintRef objects from those names by looking them up in
+    // the `refs` map the JS callback receives.
+    if (markSpec.constraints && typeof (mark as any).constrain === "function") {
+      const constraints = markSpec.constraints;
+      mark = (mark as any).constrain((refs: Record<string, any>) =>
+        constraints.map((c) =>
+          (Constraint as any)[c.type](
+            c.options,
+            c.refs.map((name) => refs[name])
+          )
+        )
+      );
     }
     if (markSpec.name && typeof (mark as any).name === "function") {
       mark = (mark as any).name(markSpec.name);
@@ -294,7 +321,8 @@ function mapMark(markSpec: MarkSpec): Mark<any> {
   }
 
   const { type, name: layerName, label: labelSpec, ...opts } = markSpec;
-  const factory = MARK_MAP[type as Exclude<MarkSpec["type"], "spread">];
+  const factory =
+    MARK_MAP[type as Exclude<MarkSpec["type"], "spread" | "layer">];
   if (!factory) {
     throw new Error(`Unknown mark type: ${type}`);
   }
