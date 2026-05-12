@@ -32,6 +32,7 @@ import {
   palette,
   gradient,
   clock,
+  v,
   type ChartBuilder,
   type Operator,
   type Mark,
@@ -66,7 +67,17 @@ interface LayerHarnessSpec {
   deriveServerUrl?: string;
 }
 
-type HarnessSpec = SingleChartHarnessSpec | LayerHarnessSpec;
+interface RawMarkHarnessSpec {
+  type: "raw-mark";
+  mark: MarkSpec;
+  options: Record<string, any>;
+  deriveServerUrl?: string;
+}
+
+type HarnessSpec =
+  | SingleChartHarnessSpec
+  | LayerHarnessSpec
+  | RawMarkHarnessSpec;
 
 interface OperatorSpec {
   type: string;
@@ -77,7 +88,27 @@ interface OperatorSpec {
 interface MarkSpec {
   type: string;
   name?: string;
+  __combinator?: boolean;
+  options?: Record<string, any>;
+  children?: MarkSpec[];
   [key: string]: any;
+}
+
+/**
+ * Walk an arbitrary value and replace `{__gofish_v: field}` sentinels with
+ * a real JS `v(field)` call. Python uses the sentinel because dict-only IR
+ * has no way to author a function call; the harness rebuilds the call
+ * before handing the prop to the JS mark factory.
+ */
+function unwrapValues(value: any): any {
+  if (value === null || typeof value !== "object") return value;
+  if (Array.isArray(value)) return value.map(unwrapValues);
+  if (typeof value.__gofish_v === "string") return v(value.__gofish_v);
+  const out: Record<string, any> = {};
+  for (const [k, val] of Object.entries(value)) {
+    out[k] = unwrapValues(val);
+  }
+  return out;
 }
 
 declare global {
@@ -160,6 +191,26 @@ const MARK_MAP: Record<string, (opts: Record<string, any>) => Mark<any>> = {
 };
 
 function mapMark(spec: MarkSpec): Mark<any> {
+  // Combinator-form marks: a layout operator (currently just `spread`) used
+  // as a mark, with explicit nested children instead of repeating a single
+  // mark across data. Python emits `{type, __combinator: true, options,
+  // children, name?, label?}`; rebuild it by calling the JS operator's
+  // `(opts, marks)` overload.
+  if (spec.__combinator) {
+    const childMarks = (spec.children ?? []).map(mapMark);
+    const opts = unwrapValues(spec.options ?? {});
+    let mark: Mark<any>;
+    if (spec.type === "spread") {
+      mark = spread(opts, childMarks) as unknown as Mark<any>;
+    } else {
+      throw new Error(`Unknown combinator mark type: ${spec.type}`);
+    }
+    if (spec.name && typeof (mark as any).name === "function") {
+      mark = (mark as any).name(spec.name);
+    }
+    return mark;
+  }
+
   const { type, name: layerName, label, ...opts } = spec;
   const factory = MARK_MAP[type];
   if (!factory) throw new Error(`Unknown mark type: ${type}`);
@@ -171,9 +222,11 @@ function mapMark(spec: MarkSpec): Mark<any> {
   // uses (e.g. `rect({h: "count"}).label("count", {position: "outset"})`).
   const isStructuredLabel =
     label && typeof label === "object" && !Array.isArray(label);
-  const factoryOpts: Record<string, any> = isStructuredLabel
-    ? opts
-    : { ...opts, ...(label !== undefined ? { label } : {}) };
+  const factoryOpts: Record<string, any> = unwrapValues(
+    isStructuredLabel
+      ? opts
+      : { ...opts, ...(label !== undefined ? { label } : {}) }
+  );
 
   let mark = factory(factoryOpts);
   if (isStructuredLabel && typeof (mark as any).label === "function") {
@@ -270,7 +323,22 @@ function renderChart(spec: HarnessSpec) {
   }
 
   try {
-    if (spec.type === "layer") {
+    if (spec.type === "raw-mark") {
+      // Bypass the Chart wrapper entirely: the mark renders itself directly.
+      // Mirrors JS storybook spelling `spread(opts, [marks]).render(...)`,
+      // which produces a noticeably different DOM shape than going through
+      // Chart (Chart adds an identity-transform Frame wrapper that JS-side
+      // direct renders skip).
+      const allOpts = spec.options || {};
+      const { w, h, axes, debug } = allOpts;
+      const mark = mapMark(spec.mark) as any;
+      mark.render(container, {
+        w,
+        h,
+        axes: axes ?? false,
+        debug: debug ?? false,
+      });
+    } else if (spec.type === "layer") {
       // Layer-level options: w/h/axes/debug are render options; the rest
       // (coord, color) become Layer's chart-level options.
       const layerAll = spec.options || {};

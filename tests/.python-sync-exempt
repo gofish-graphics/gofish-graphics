@@ -16,8 +16,14 @@ packages/gofish-graphics/stories/lowlevel/StringlineChart.stories.tsx
 packages/gofish-graphics/stories/lowlevel/ViolinPlot.stories.tsx
 packages/gofish-graphics/stories/lowlevel/Whisker.stories.tsx
 
-# Bluefish examples
-packages/gofish-graphics/stories/bluefish/Planets.stories.tsx
+# Bluefish examples — Planets.stories.tsx::PlanetsOnly is ported; the other
+# exports use additional low-level primitives (`layer`, `text`, `ref`,
+# `arrow`) that the Python wrapper doesn't expose yet.
+packages/gofish-graphics/stories/bluefish/Planets.stories.tsx::PlanetsWithLabelAbove
+packages/gofish-graphics/stories/bluefish/Planets.stories.tsx::PlanetsWithLabelBelow
+packages/gofish-graphics/stories/bluefish/Planets.stories.tsx::PlanetsWithLabelAboveNoSpacing
+packages/gofish-graphics/stories/bluefish/Planets.stories.tsx::PlanetsWithLabelBelowNoSpacing
+packages/gofish-graphics/stories/bluefish/Planets.stories.tsx::PlanetsWithArrow
 
 # Shape primitives
 packages/gofish-graphics/stories/shapes/TextMarks.stories.tsx
@@ -39,8 +45,6 @@ packages/gofish-graphics/stories/forwardsyntax/FacetedChart.stories.tsx
 # (Vega-Lite ports were brought over from exempt to real parity tests;
 # see tests/python-stories/vega-lite/.)
 
-# Needs low-level v1/v2 API (v() literal fills + mark-as-spread-with-nested-rects).
-packages/gofish-graphics/stories/vega-lite/Bar/GroupedBarChartRepeat.stories.tsx
 
 # Per-export exemption — uses `assignGradientColor` to precompute per-row
 # fills from two distinct gradients in a single chart. The Python wrapper

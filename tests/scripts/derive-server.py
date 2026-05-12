@@ -138,7 +138,7 @@ class DeriveHandler(BaseHTTPRequestHandler):
             builder = result[0]
             options = result[1] if len(result) > 1 else {}
 
-            from gofish.ast import ChartBuilder, DeriveOperator, LayerBuilder, LayerSelector
+            from gofish.ast import ChartBuilder, DeriveOperator, LayerBuilder, LayerSelector, Mark
 
             def serialize_chart(child: ChartBuilder) -> tuple:
                 """Return (child_payload, derive_ids) for one chart builder.
@@ -175,6 +175,18 @@ class DeriveHandler(BaseHTTPRequestHandler):
                     },
                     child_derive_ids,
                 )
+
+            if isinstance(builder, Mark):
+                # Raw-mark render path: a Mark returned directly from a
+                # story (no Chart, no Layer). Mirrors JS storybook spelling
+                # `spread(opts, [marks]).render(container, {w, h})`.
+                self._json_response(200, {
+                    "_kind": "raw-mark",
+                    "mark": builder.to_dict(),
+                    "options": options,
+                    "deriveIds": [],
+                })
+                return
 
             if isinstance(builder, LayerBuilder):
                 child_payloads = []

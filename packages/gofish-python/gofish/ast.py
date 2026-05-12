@@ -34,11 +34,27 @@ class DeriveOperator(Operator):
 class Mark:
     """Base class for chart marks."""
 
-    def __init__(self, mark_type: str, **kwargs):
+    def __init__(
+        self,
+        mark_type: str,
+        _children: Optional[List["Mark"]] = None,
+        **kwargs,
+    ):
         self.mark_type = mark_type
         self.kwargs = kwargs
         self._name: Optional[str] = None
         self._label: Optional[dict] = None
+        # When set, this Mark is the combinator form of a layout operator
+        # (e.g. `spread([rect, rect], dir="x")`) and `to_dict()` will emit a
+        # `__combinator: true` payload the harness/widget reconstructs by
+        # calling the JS-side combinator overload.
+        self._children: Optional[List["Mark"]] = _children
+
+    def _copy_meta(self, target: "Mark") -> "Mark":
+        target._name = self._name
+        target._label = self._label
+        target._children = self._children
+        return target
 
     def name(self, layer_name: str) -> "Mark":
         """
@@ -51,8 +67,8 @@ class Mark:
             New Mark with name set
         """
         new_mark = Mark(self.mark_type, **self.kwargs)
+        self._copy_meta(new_mark)
         new_mark._name = layer_name
-        new_mark._label = self._label
         return new_mark
 
     def label(
@@ -81,7 +97,7 @@ class Mark:
             New Mark with label set
         """
         new_mark = Mark(self.mark_type, **self.kwargs)
-        new_mark._name = self._name
+        self._copy_meta(new_mark)
         label_spec: Dict[str, Any] = {"accessor": accessor}
         if position is not None:
             label_spec["position"] = position
@@ -100,12 +116,74 @@ class Mark:
 
     def to_dict(self) -> dict:
         """Convert mark to dictionary for JSON IR."""
-        d: dict = {"type": self.mark_type, **self.kwargs}
+        if self._children is not None:
+            # Combinator form: emit a nested payload the JS side reconstructs
+            # via the operator's `(opts, marks)` overload.
+            d: dict = {
+                "type": self.mark_type,
+                "__combinator": True,
+                "options": self.kwargs,
+                "children": [child.to_dict() for child in self._children],
+            }
+        else:
+            d = {"type": self.mark_type, **self.kwargs}
         if self._name is not None:
             d["name"] = self._name
         if self._label is not None:
             d["label"] = self._label
         return d
+
+    def to_ir(self) -> dict:
+        """
+        Top-level IR shape when this Mark is rendered directly (no Chart).
+
+        Mirrors JS storybook spelling `spread(opts, [marks]).render(...)`:
+        no data, no operators, no chart-level color/coord config. The harness
+        calls the NameableMark's own `.render(container, opts)` and skips the
+        Chart/Frame wrapper, which is what gives byte-identical output to a
+        JS storybook export that renders a mark directly.
+        """
+        return {"type": "raw-mark", "mark": self.to_dict()}
+
+    def render(
+        self,
+        w: int = 800,
+        h: int = 600,
+        axes: bool = False,
+        debug: bool = False,
+    ):
+        """
+        Render this Mark directly (no Chart wrapper) — mirrors the JS storybook
+        pattern `spread({...}, [marks]).render(container, {w, h})`.
+
+        Returns a GoFishChartWidget; in a notebook this auto-displays.
+        """
+        import base64
+        import json
+        from .widget import GoFishChartWidget
+        import pyarrow as pa
+
+        schema = pa.schema([pa.field("_placeholder", pa.int32())])
+        table = pa.Table.from_arrays([], schema=schema)
+        sink = pa.BufferOutputStream()
+        with pa.ipc.new_stream(sink, schema) as writer:
+            writer.write_table(table)
+        arrow_data = sink.getvalue().to_pybytes()
+
+        widget = GoFishChartWidget(
+            spec=self.to_ir(),
+            arrow_data=arrow_data,
+            derive_functions={},
+            width=w,
+            height=h,
+            axes=axes,
+            debug=debug,
+        )
+        return widget
+
+    def _repr_mimebundle_(self, include=None, exclude=None):
+        """Auto-display in notebooks (see ChartBuilder._repr_mimebundle_)."""
+        return self.render()._repr_mimebundle_(include=include, exclude=exclude)
 
 
 class LayerSelector:
@@ -334,25 +412,48 @@ class ChartBuilder:
 
 
 def spread(
+    children: Optional[List["Mark"]] = None,
     *,
     by: Optional[str] = None,
     **options: Any,
-) -> Operator:
+) -> Union[Operator, "Mark"]:
     """
-    Spread operator — partitions data by `by` (or iterates per-item when
-    omitted) and lays out children with spacing along an axis.
+    Spread — polymorphic.
+
+    Operator form (no positional arg): partitions data by `by` (or iterates
+    per-item when omitted) and lays children out along an axis. Used inside
+    `.flow(...)`.
+
+        spread(by="category", dir="x", spacing=24)
+
+    Combinator form (positional list of marks): returns a low-level Mark
+    that lays the given child marks out along an axis. Used inside `.mark()`
+    when you want explicit nested marks instead of repeating a single mark
+    across data.
+
+        spread([rect(h="A"), rect(h="B")], dir="x", spacing=0)
 
     Args:
-        by: Field name to partition by. Omit for per-item spread.
+        children: When provided, switches to combinator form. List of child
+            Marks to lay out side-by-side.
+        by: Field name to partition by (operator form only). Omit for
+            per-item spread.
         **options: dir ("x"|"y"), spacing, alignment, sharedScale, mode, etc.
 
     Returns:
-        Operator object
+        Operator (no children) or Mark (with children).
     """
-    if by is not None:
-        options["by"] = by
     if "dir" not in options:
         raise ValueError("spread() requires 'dir' option ('x' or 'y')")
+    if children is not None:
+        if by is not None:
+            raise ValueError(
+                "spread() combinator form (with children) does not accept "
+                "`by` — the layout is over the explicit child list, not data."
+            )
+        return Mark("spread", _children=list(children), **options)
+    if by is not None:
+        options["by"] = by
     return Operator("spread", **options)
 
 
@@ -526,6 +627,28 @@ def select(layer_name: str) -> LayerSelector:
         LayerSelector sentinel for use as chart() data argument
     """
     return LayerSelector(layer_name)
+
+
+# Literal-value wrapper
+
+
+def v(field_name: str) -> dict:
+    """
+    Wrap a field name so a mark prop reads it as a per-row literal value
+    instead of as an aesthetic-channel field accessor.
+
+    Mirrors JS `v(field)` (`packages/gofish-graphics/src/ast/data.ts:10`):
+    `rect(fill=v("Worldwide Gross"))` uses the row's `Worldwide Gross` value
+    as the literal fill color, instead of treating it as a categorical
+    encoding to map through the chart's color scale.
+
+    Args:
+        field_name: Field name whose per-row value should be used literally.
+
+    Returns:
+        Sentinel dict the harness/widget unwraps into a JS `v()` call.
+    """
+    return {"__gofish_v": field_name}
 
 
 # Data utilities (for use inside derive() callbacks)

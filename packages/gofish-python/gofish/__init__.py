@@ -29,6 +29,7 @@ from .ast import (
     petal,
     text,
     image,
+    v,
 )
 
 __all__ = [
@@ -58,6 +59,7 @@ __all__ = [
     "petal",
     "text",
     "image",
+    "v",
 ]
 
 __version__ = "0.1.0"

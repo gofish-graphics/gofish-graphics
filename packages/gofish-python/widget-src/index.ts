@@ -34,13 +34,14 @@ import {
   petal,
   text,
   image,
+  v,
   type ChartBuilder,
   type Operator,
   type Mark,
 } from "gofish-graphics";
 
 interface WidgetModel {
-  get(key: "spec"): ChartSpec | LayerSpec;
+  get(key: "spec"): ChartSpec | LayerSpec | RawMarkSpec;
   get(key: "arrow_data"): string;
   get(key: "width"): number;
   get(key: "height"): number;
@@ -79,6 +80,12 @@ interface LayerSpec {
   options?: Record<string, any>;
 }
 
+interface RawMarkSpec {
+  type: "raw-mark";
+  mark: MarkSpec;
+  options?: Record<string, any>;
+}
+
 interface OperatorSpec {
   type: "derive" | "spread" | "stack" | "group" | "scatter" | "table" | "log";
   lambdaId?: string;
@@ -96,6 +103,8 @@ interface LabelSpec {
 }
 
 interface MarkSpec {
+  // Mark types include the leaf shapes plus combinator-form layout
+  // operators ("spread") used as marks via the `__combinator` flag.
   type:
     | "rect"
     | "circle"
@@ -105,10 +114,31 @@ interface MarkSpec {
     | "ellipse"
     | "petal"
     | "text"
-    | "image";
+    | "image"
+    | "spread";
   name?: string;
   label?: LabelSpec;
+  __combinator?: boolean;
+  options?: Record<string, any>;
+  children?: MarkSpec[];
   [key: string]: any;
+}
+
+/**
+ * Walk an arbitrary value and replace `{__gofish_v: field}` sentinels with
+ * a real JS `v(field)` call. Python uses the sentinel because dict-only IR
+ * has no way to author a function call; this rebuilds the call before
+ * handing the prop to the JS mark factory.
+ */
+function unwrapValues(value: any): any {
+  if (value === null || typeof value !== "object") return value;
+  if (Array.isArray(value)) return value.map(unwrapValues);
+  if (typeof value.__gofish_v === "string") return v(value.__gofish_v);
+  const out: Record<string, any> = {};
+  for (const [k, val] of Object.entries(value)) {
+    out[k] = unwrapValues(val);
+  }
+  return out;
 }
 
 interface RenderOptions {
@@ -244,12 +274,31 @@ const MARK_MAP: Record<string, (opts: Record<string, any>) => Mark<any>> = {
 };
 
 function mapMark(markSpec: MarkSpec): Mark<any> {
+  // Combinator-form marks: a layout operator (currently just `spread`) used
+  // as a mark, with explicit nested children. Python emits `{type,
+  // __combinator: true, options, children, name?, label?}`; rebuild it by
+  // calling the JS operator's `(opts, marks)` overload.
+  if (markSpec.__combinator) {
+    const childMarks = (markSpec.children ?? []).map(mapMark);
+    const opts = unwrapValues(markSpec.options ?? {});
+    let mark: Mark<any>;
+    if (markSpec.type === "spread") {
+      mark = spread(opts, childMarks) as unknown as Mark<any>;
+    } else {
+      throw new Error(`Unknown combinator mark type: ${markSpec.type}`);
+    }
+    if (markSpec.name && typeof (mark as any).name === "function") {
+      mark = (mark as any).name(markSpec.name);
+    }
+    return mark;
+  }
+
   const { type, name: layerName, label: labelSpec, ...opts } = markSpec;
-  const factory = MARK_MAP[type];
+  const factory = MARK_MAP[type as Exclude<MarkSpec["type"], "spread">];
   if (!factory) {
     throw new Error(`Unknown mark type: ${type}`);
   }
-  let mark = factory(opts);
+  let mark = factory(unwrapValues(opts));
   if (layerName && typeof (mark as any).name === "function") {
     mark = (mark as any).name(layerName);
   }
@@ -395,6 +444,26 @@ function renderLayer(
   log("Layer rendered successfully!");
 }
 
+function renderRawMark(model: WidgetModel, container: HTMLElement): void {
+  const spec = model.get("spec") as unknown as RawMarkSpec;
+  const debug = model.get("debug");
+  const log = debug
+    ? (...args: any[]) => console.log("[GoFish Widget]", ...args)
+    : () => {};
+
+  log("Building raw mark...");
+  const mark = mapMark(spec.mark) as any;
+  const renderOptions: RenderOptions = {
+    w: model.get("width"),
+    h: model.get("height"),
+    axes: model.get("axes"),
+    debug,
+  };
+  log("Rendering raw mark with options:", renderOptions);
+  mark.render(container, renderOptions);
+  log("Raw mark rendered successfully!");
+}
+
 function renderChart(
   model: WidgetModel,
   container: HTMLElement,
@@ -403,6 +472,10 @@ function renderChart(
   const spec = model.get("spec");
   if ((spec as any).type === "layer") {
     renderLayer(model, container, bridge);
+    return;
+  }
+  if ((spec as any).type === "raw-mark") {
+    renderRawMark(model, container);
     return;
   }
 
