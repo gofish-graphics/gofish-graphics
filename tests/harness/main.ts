@@ -11,6 +11,8 @@
 
 import {
   Chart,
+  Layer,
+  select,
   spread,
   stack,
   scatter,
@@ -30,6 +32,7 @@ import {
   palette,
   gradient,
   clock,
+  type ChartBuilder,
   type Operator,
   type Mark,
 } from "gofish-graphics";
@@ -38,13 +41,32 @@ import {
 // Types
 // ---------------------------------------------------------------------------
 
-interface HarnessSpec {
-  data: Record<string, any>[];
+interface SelectDataSpec {
+  type: "select";
+  layer: string;
+}
+
+interface ChartHarnessSpec {
+  data: Record<string, any>[] | SelectDataSpec | null;
   operators: OperatorSpec[];
   mark: MarkSpec;
   options: Record<string, any>;
+  zOrder?: number | null;
+}
+
+interface SingleChartHarnessSpec extends ChartHarnessSpec {
+  type?: undefined;
   deriveServerUrl?: string;
 }
+
+interface LayerHarnessSpec {
+  type: "layer";
+  charts: ChartHarnessSpec[];
+  options: Record<string, any>;
+  deriveServerUrl?: string;
+}
+
+type HarnessSpec = SingleChartHarnessSpec | LayerHarnessSpec;
 
 interface OperatorSpec {
   type: string;
@@ -54,6 +76,7 @@ interface OperatorSpec {
 
 interface MarkSpec {
   type: string;
+  name?: string;
   [key: string]: any;
 }
 
@@ -137,10 +160,14 @@ const MARK_MAP: Record<string, (opts: Record<string, any>) => Mark<any>> = {
 };
 
 function mapMark(spec: MarkSpec): Mark<any> {
-  const { type, ...opts } = spec;
+  const { type, name: layerName, ...opts } = spec;
   const factory = MARK_MAP[type];
   if (!factory) throw new Error(`Unknown mark type: ${type}`);
-  return factory(opts);
+  let mark = factory(opts);
+  if (layerName && typeof (mark as any).name === "function") {
+    mark = (mark as any).name(layerName);
+  }
+  return mark;
 }
 
 /**
@@ -180,6 +207,41 @@ function resolveOptions(
 // Render
 // ---------------------------------------------------------------------------
 
+/**
+ * Build a single ChartBuilder from a chart spec, resolving select-data
+ * references via `select(layerName)` like the widget bundle does.
+ */
+function buildChartFromSpec(
+  chartSpec: ChartHarnessSpec,
+  deriveServerUrl: string | undefined
+): ChartBuilder<any, any> {
+  const operators: Operator<any, any>[] = [];
+  for (const opSpec of chartSpec.operators || []) {
+    const op = mapOperator(opSpec, deriveServerUrl);
+    if (op) operators.push(op);
+  }
+  const mark = mapMark(chartSpec.mark);
+  const chartOpts = resolveOptions(chartSpec.options || {});
+
+  let chartData: any = chartSpec.data;
+  if (
+    chartData &&
+    typeof chartData === "object" &&
+    !Array.isArray(chartData) &&
+    (chartData as SelectDataSpec).type === "select"
+  ) {
+    chartData = select((chartData as SelectDataSpec).layer);
+  }
+
+  let builder = Chart(chartData, chartOpts)
+    .flow(...operators)
+    .mark(mark);
+  if (chartSpec.zOrder !== undefined && chartSpec.zOrder !== null) {
+    builder = builder.zOrder(chartSpec.zOrder);
+  }
+  return builder;
+}
+
 function renderChart(spec: HarnessSpec) {
   const container = document.getElementById("gofish-harness-root");
   if (!container) {
@@ -189,31 +251,50 @@ function renderChart(spec: HarnessSpec) {
   }
 
   try {
-    const operators: Operator<any, any>[] = [];
-    for (const opSpec of spec.operators || []) {
-      const op = mapOperator(opSpec, spec.deriveServerUrl);
-      if (op) operators.push(op);
+    if (spec.type === "layer") {
+      // Layer-level options: w/h/axes/debug are render options; the rest
+      // (coord, color) become Layer's chart-level options.
+      const layerAll = spec.options || {};
+      const { w, h, axes, debug, ...layerOptsRaw } = layerAll;
+      const layerOpts = resolveOptions(layerOptsRaw);
+
+      const childCharts = spec.charts.map((c) =>
+        buildChartFromSpec(c, spec.deriveServerUrl)
+      );
+
+      const layerNode =
+        Object.keys(layerOpts).length > 0
+          ? Layer(layerOpts as any, childCharts)
+          : Layer(childCharts);
+
+      layerNode.render(container, {
+        w,
+        h,
+        axes: axes ?? false,
+        debug: debug ?? false,
+      } as any);
+    } else {
+      // Single-chart path. Pull render options out; rest are chart-level.
+      const allOpts = spec.options || {};
+      const { w, h, axes, debug, ...chartOptsRaw } = allOpts;
+      const node = buildChartFromSpec(
+        {
+          data: spec.data,
+          operators: spec.operators,
+          mark: spec.mark,
+          options: chartOptsRaw,
+          zOrder: spec.zOrder ?? null,
+        },
+        spec.deriveServerUrl
+      );
+
+      node.render(container, {
+        w,
+        h,
+        axes: axes ?? false,
+        debug: debug ?? false,
+      } as any);
     }
-
-    const mark = mapMark(spec.mark);
-
-    // Pull render options out and pass the rest to Chart() as chart-level
-    // options (color, coord, etc.). Forward `w`/`h` *as-is* — including
-    // when they're undefined — so the rect default-width fallback path is
-    // exercised the same way it is in JS Storybook.
-    const allOpts = spec.options || {};
-    const { w, h, axes, debug, ...chartOptsRaw } = allOpts;
-    const chartOpts = resolveOptions(chartOptsRaw);
-
-    const builder = Chart(spec.data, chartOpts);
-    const node = builder.flow(...operators).mark(mark);
-
-    node.render(container, {
-      w,
-      h,
-      axes: axes ?? false,
-      debug: debug ?? false,
-    } as any);
 
     // Allow a tick for SolidJS to flush renders
     requestAnimationFrame(() => {

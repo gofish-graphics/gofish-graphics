@@ -97,13 +97,23 @@ function discoverPythonStories(): PythonStory[] {
 // Extract IR from Python story (by calling Python)
 // ---------------------------------------------------------------------------
 
+type ChartIR = {
+  operators: any[];
+  mark: any;
+  options: any;
+  data: any;
+  zOrder?: number | null;
+};
+
 type IRResult =
-  | {
+  | ({
       kind: "chart";
-      operators: any[];
-      mark: any;
+      deriveIds: string[];
+    } & ChartIR)
+  | {
+      kind: "layer";
+      charts: ChartIR[];
       options: any;
-      data: any;
       deriveIds: string[];
     }
   | { kind: "layer-unsupported"; reason: string }
@@ -146,6 +156,14 @@ async function loadStory(story: PythonStory): Promise<IRResult> {
     return { kind: "error", reason: `${resp.status} ${body}` };
   }
   const json = (await resp.json()) as any;
+  if (json && json._kind === "layer") {
+    return {
+      kind: "layer",
+      charts: json.charts,
+      options: json.options ?? {},
+      deriveIds: json.deriveIds ?? [],
+    };
+  }
   if (json && json._kind === "layer-unsupported") {
     return {
       kind: "layer-unsupported",
@@ -235,21 +253,32 @@ async function captureStory(
   page: Page,
   harnessUrl: string,
   story: PythonStory,
-  ir: any
+  ir: IRResult & { kind: "chart" | "layer" }
 ): Promise<{ dom: string; screenshot: Buffer }> {
   await page.goto(harnessUrl, { waitUntil: "networkidle" });
 
-  // Inject spec and trigger render
-  const spec = {
-    data: ir.data,
-    operators: ir.operators,
-    mark: ir.mark,
-    options: ir.options,
-    deriveServerUrl:
-      ir.deriveIds && ir.deriveIds.length > 0
-        ? `http://localhost:${DERIVE_SERVER_PORT}`
-        : undefined,
-  };
+  const deriveServerUrl =
+    ir.deriveIds && ir.deriveIds.length > 0
+      ? `http://localhost:${DERIVE_SERVER_PORT}`
+      : undefined;
+
+  // Inject spec and trigger render. Layer specs use a different shape
+  // that the harness dispatches on via `spec.type === "layer"`.
+  const spec =
+    ir.kind === "layer"
+      ? {
+          type: "layer",
+          charts: ir.charts,
+          options: ir.options,
+          deriveServerUrl,
+        }
+      : {
+          data: ir.data,
+          operators: ir.operators,
+          mark: ir.mark,
+          options: ir.options,
+          deriveServerUrl,
+        };
 
   await page.evaluate((s) => {
     window.__GOFISH_RENDER_COMPLETE__ = false;

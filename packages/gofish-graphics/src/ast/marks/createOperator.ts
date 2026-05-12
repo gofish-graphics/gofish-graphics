@@ -56,12 +56,12 @@ export function nameableMark<T>(base: Mark<T>): NameableMark<T> {
         layerContext
       );
       node.name(layerName);
+      // Tag for the post-resolve tree walk in ChartBuilder.resolve
+      // (collectLayerRegistrations); inline pushing here would record
+      // async-completion order instead of parent-iteration order.
       if (layerContext && layerName) {
-        if (!layerContext[layerName]) {
-          layerContext[layerName] = { data: [], nodes: [] };
-        }
-        layerContext[layerName].nodes.push(node);
-        layerContext[layerName].data.push((node as any).datum);
+        (node as { __layerRegistration?: string }).__layerRegistration =
+          layerName;
       }
       return node;
     };

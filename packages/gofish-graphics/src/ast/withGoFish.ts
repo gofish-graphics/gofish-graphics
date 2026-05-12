@@ -448,12 +448,13 @@ function attachNameableMethods<T>(baseMark: Mark<T>): NameableMark<T> {
       (node as GoFishNode).name(layerName);
       // layerContext is keyed by string name (v3 chart-layer selection);
       // tokens are hygienic handles and do not participate in that registry.
+      // Tag here; the actual push into `layerContext[layerName]` happens in
+      // ChartBuilder.resolve's post-resolve tree walk (chartBuilder.ts:
+      // collectLayerRegistrations) so the order matches parent-iteration
+      // order rather than which leg's async chain happened to finish first.
       if (layerContext && typeof layerName === "string" && layerName) {
-        if (!layerContext[layerName]) {
-          layerContext[layerName] = { data: [], nodes: [] };
-        }
-        layerContext[layerName].nodes.push(node as GoFishNode);
-        layerContext[layerName].data.push((node as any).datum);
+        (node as { __layerRegistration?: string }).__layerRegistration =
+          layerName;
       }
       return node;
     };
