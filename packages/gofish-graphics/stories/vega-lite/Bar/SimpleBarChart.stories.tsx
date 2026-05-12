@@ -3,7 +3,6 @@ import { initializeContainer } from "../../helper";
 import { Chart, spread, rect } from "../../../src/lib";
 
 // Mirrors: https://vega.github.io/vega-lite/examples/bar.html
-// (touched to exercise visual-tests CI caches — see PR #425)
 
 const values = [
   { a: "A", b: 28 },
