@@ -160,10 +160,29 @@ const MARK_MAP: Record<string, (opts: Record<string, any>) => Mark<any>> = {
 };
 
 function mapMark(spec: MarkSpec): Mark<any> {
-  const { type, name: layerName, ...opts } = spec;
+  const { type, name: layerName, label, ...opts } = spec;
   const factory = MARK_MAP[type];
   if (!factory) throw new Error(`Unknown mark type: ${type}`);
-  let mark = factory(opts);
+
+  // `label: true` (boolean) is a primitive kwarg the mark itself understands
+  // (auto-value labels). The Python Mark.label() chain emits a structured
+  // `{accessor, position?, fontSize?, ...}` dict that must be reapplied as a
+  // chained `.label(accessor, options)` call — same shape the JS storybook
+  // uses (e.g. `rect({h: "count"}).label("count", {position: "outset"})`).
+  const isStructuredLabel =
+    label && typeof label === "object" && !Array.isArray(label);
+  const factoryOpts: Record<string, any> = isStructuredLabel
+    ? opts
+    : { ...opts, ...(label !== undefined ? { label } : {}) };
+
+  let mark = factory(factoryOpts);
+  if (isStructuredLabel && typeof (mark as any).label === "function") {
+    const { accessor, ...labelOpts } = label as { accessor: any } & Record<
+      string,
+      any
+    >;
+    mark = (mark as any).label(accessor, labelOpts);
+  }
   if (layerName && typeof (mark as any).name === "function") {
     mark = (mark as any).name(layerName);
   }

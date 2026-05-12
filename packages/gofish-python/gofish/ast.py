@@ -587,7 +587,7 @@ def rect(
     y2: Optional[Union[int, str]] = None,
     aspectRatio: Optional[float] = None,
     filter: Optional[str] = None,
-    label: Optional[str] = None,
+    label: Optional[Union[bool, str]] = None,
     key: Optional[str] = None,
     debug: Optional[bool] = None,
 ) -> Mark:

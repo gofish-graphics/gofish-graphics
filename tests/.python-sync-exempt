@@ -47,3 +47,11 @@ packages/gofish-graphics/stories/vega-lite/Bar/GroupedBarChartRepeat.stories.tsx
 # doesn't expose `assignGradientColor` (one chart, one color config), so
 # this story can't be ported without a workaround or a wrapper extension.
 packages/gofish-graphics/stories/forwardsyntax/ColorScales.stories.tsx::PairedPalettes
+
+# Per-export exemptions for Labels.stories.tsx — these stories don't fit
+# the single-chart parity harness (they compose many charts in a flex div,
+# use async mark-as-function, or hand-build raw SVG).
+packages/gofish-graphics/stories/forwardsyntax/Labels.stories.tsx::AllPositions
+packages/gofish-graphics/stories/forwardsyntax/Labels.stories.tsx::Rotated
+packages/gofish-graphics/stories/forwardsyntax/Labels.stories.tsx::LabelOnSpread
+packages/gofish-graphics/stories/forwardsyntax/Labels.stories.tsx::PositionShowcase
