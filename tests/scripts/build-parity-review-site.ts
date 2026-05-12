@@ -226,11 +226,39 @@ console.log(`  ${parityDiffs.length} DOM parity diff(s) found`);
 const pairs: StoryPair[] = [];
 const pairById = new Map<string, StoryPair>();
 
+// PUA sentinel for the two-step underscore translation used by the
+// Python-side path converter. Mirrors capture-python-dom.ts and
+// check-python-sync.ts so the viewer's IDs line up with the captured
+// file paths even when a JS export name contains a literal underscore
+// (e.g. `AlignOnly_ManualY` → `align_only__manual_y` snake →
+// `align-only_manual-y` kebab path).
+const UNDERSCORE_SENTINEL = "";
+
 function camelToSnake(s: string): string {
   return s
+    .split("_")
+    .join(UNDERSCORE_SENTINEL)
     .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
     .replace(/^_/, "")
-    .toLowerCase();
+    .toLowerCase()
+    .split(UNDERSCORE_SENTINEL)
+    .join("__");
+}
+
+/** JS export name → kebab-case path segment, preserving literal underscores
+ *  as single `_` (so `AlignOnly_ManualY` becomes `align-only_manual-y`).
+ *  Matches the capture-python-dom.ts inverse direction. */
+function jsExportToKebab(s: string): string {
+  return s
+    .split("_")
+    .join(UNDERSCORE_SENTINEL)
+    .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
+    .replace(/^_/, "")
+    .toLowerCase()
+    .split("_")
+    .join("-")
+    .split(UNDERSCORE_SENTINEL)
+    .join("_");
 }
 
 // Mirror the per-StoryObj logic in check-python-sync.ts so the viewer's
@@ -306,7 +334,7 @@ for (const [fileId, jsFile] of storyIndex) {
   const pyFns = fileExempt ? new Set<string>() : readPyStoryFns(pythonAbs);
   const exports: ExportEntry[] = jsExports.map((name) => {
     const expected = `story_${camelToSnake(name)}`;
-    const exportId = `${fileId}--${camelToSnake(name).replace(/_/g, "-")}`;
+    const exportId = `${fileId}--${jsExportToKebab(name)}`;
     if (fileExempt || isExportExempt(jsFile, name)) {
       exportsExempt++;
       return {
@@ -411,9 +439,7 @@ for (const diff of parityDiffs) {
       pair.exports.find((e) => e.id === id) ??
       // Slug-based fallback (case-insensitive). Lets DOM diffs attach
       // even when export name casing differs.
-      pair.exports.find(
-        (e) => camelToSnake(e.name).replace(/_/g, "-") === exportSlug
-      );
+      pair.exports.find((e) => jsExportToKebab(e.name) === exportSlug);
     if (exp) {
       // Decrement whatever category counter the original status used
       // before overwriting it with parity-mismatch.
@@ -531,9 +557,7 @@ if (captureResults) {
     if (pair && exportSlug) {
       const exp =
         pair.exports.find((e) => e.id === id) ??
-        pair.exports.find(
-          (e) => camelToSnake(e.name).replace(/_/g, "-") === exportSlug
-        );
+        pair.exports.find((e) => jsExportToKebab(e.name) === exportSlug);
       if (exp) {
         // Don't downgrade an existing fail (e.g. DOM diff already
         // attached); capture is a less specific signal.
