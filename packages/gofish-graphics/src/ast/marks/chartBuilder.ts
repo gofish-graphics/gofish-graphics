@@ -39,28 +39,38 @@ export type ChartOptions = {
 };
 
 /**
- * Compare two dash-joined tree keys (e.g. `"0-1-2"`) by parsing each
- * segment as a number. Lexicographic sort would put `"0-10"` before
- * `"0-2"`; a numeric segment sort respects the tree position. Falls
- * back to string compare for any segment that isn't a clean integer.
+ * Walk the finished node tree in DFS order and push each node that the
+ * `.name(...)` wrapper tagged with `__layerRegistration` into the
+ * matching layerContext entry.
+ *
+ * Done as a post-resolve pass — rather than pushing inline inside the
+ * named wrapper — so the entries appear in parent-iteration order, not
+ * async-completion order. Each parent operator builds its `children`
+ * array via `Promise.all(...)` whose return preserves input order, so a
+ * DFS over the resulting tree is the same canonical order we'd get from
+ * sequential rendering, without paying for serialized awaits.
  */
-function compareTreeKey(a: string | undefined, b: string | undefined): number {
-  if (a === b) return 0;
-  if (a === undefined) return -1;
-  if (b === undefined) return 1;
-  const as = a.split("-");
-  const bs = b.split("-");
-  const n = Math.min(as.length, bs.length);
-  for (let i = 0; i < n; i++) {
-    const ai = Number(as[i]);
-    const bi = Number(bs[i]);
-    if (Number.isFinite(ai) && Number.isFinite(bi)) {
-      if (ai !== bi) return ai - bi;
-    } else if (as[i] !== bs[i]) {
-      return as[i] < bs[i] ? -1 : 1;
+function collectLayerRegistrations(
+  node: GoFishNode,
+  layerContext: LayerContext
+): void {
+  const layerName = (node as { __layerRegistration?: string })
+    .__layerRegistration;
+  if (layerName) {
+    if (!layerContext[layerName]) {
+      layerContext[layerName] = { data: [], nodes: [] };
+    }
+    layerContext[layerName].nodes.push(node);
+    layerContext[layerName].data.push((node as { datum?: unknown }).datum);
+    // One-shot — repeat resolves (e.g. embedded Layer renders) would
+    // otherwise re-push the same node.
+    (node as { __layerRegistration?: string }).__layerRegistration = undefined;
+  }
+  for (const child of node.children ?? []) {
+    if (child instanceof GoFishNode) {
+      collectLayerRegistrations(child, layerContext);
     }
   }
-  return as.length - bs.length;
 }
 
 /** A lazy selector that defers layer lookup until actually needed. */
@@ -76,15 +86,7 @@ export class LayerSelector<T = any> {
       );
     }
 
-    // `layer.nodes` is in the order the named marks resolved, which is
-    // async-scheduling-dependent (e.g. when an upstream `derive` makes
-    // an HTTP RPC the per-leaf latencies vary, so children of one parent
-    // arrive interleaved). Sort by the tree-key the parent operator
-    // stamped on each node so downstream readers always see a
-    // deterministic, parent-iteration order.
-    const resolvedNodes: GoFishNode[] = [...layer.nodes].sort((a, b) =>
-      compareTreeKey(a.key, b.key)
-    );
+    const resolvedNodes: GoFishNode[] = layer.nodes;
 
     // Return node-attached data enriched with refs to nodes.
     // Option 3: flatten arrays and duplicate __ref per underlying datum.
@@ -211,7 +213,8 @@ export class ChartBuilder<TInput, TOutput = TInput> {
       data = data.resolve(this.layerContext) as any;
     }
 
-    // Create the node; pass layerContext so named marks can register each produced node
+    // Create the node; named marks tag themselves for the post-resolve
+    // collection pass below.
     const node = await Frame(this.options ?? {}, [
       (
         await resolveMarkResult(
@@ -220,6 +223,13 @@ export class ChartBuilder<TInput, TOutput = TInput> {
         )
       ).setShared([true, true]),
     ]);
+
+    // Populate layerContext by walking the finished tree in DFS order.
+    // Tree order = parent-iteration order (because every parent operator's
+    // Promise.all preserves child order in its return array), so this is
+    // deterministic regardless of how individual async legs (e.g. a Python
+    // `derive` RPC) interleaved at resolution time.
+    collectLayerRegistrations(node, this.layerContext);
 
     // Embed colorConfig on the node so it survives .resolve() inside Layer
     if (this.options?.color) {
