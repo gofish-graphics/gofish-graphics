@@ -73,9 +73,9 @@ jobs:
       - name: Build gofish-graphics
         run: pnpm --filter gofish-graphics build
 
-      - name: Cache Playwright browsers
+      - name: Restore Playwright browser cache
         id: playwright-cache
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
@@ -83,6 +83,17 @@ jobs:
       - name: Install Playwright browsers
         if: steps.playwright-cache.outputs.cache-hit != 'true'
         run: pnpm --filter @gofish/tests exec playwright install --with-deps chromium
+
+      # Save cache immediately after a successful install rather than relying
+      # on the default end-of-job save. That way the cache is written even if
+      # a later step (e.g. visual diff comparison) fails, but NOT written if
+      # the install itself failed (the step is skipped on prior failure).
+      - name: Save Playwright browser cache
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
 
       # On cache hit, browser binaries are restored but system libraries
       # (installed via apt by --with-deps) are not. Install just those.
@@ -260,9 +271,9 @@ jobs:
       - name: Build gofish-graphics
         run: pnpm --filter gofish-graphics build
 
-      - name: Cache Playwright browsers
+      - name: Restore Playwright browser cache
         id: playwright-cache
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
@@ -270,6 +281,13 @@ jobs:
       - name: Install Playwright browsers
         if: steps.playwright-cache.outputs.cache-hit != 'true'
         run: pnpm --filter @gofish/tests exec playwright install --with-deps chromium
+
+      - name: Save Playwright browser cache
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
 
       - name: Install Playwright system deps
         if: steps.playwright-cache.outputs.cache-hit == 'true'
