@@ -169,15 +169,57 @@ interface MarkSpec {
 }
 
 /**
- * Walk an arbitrary value and replace `{__gofish_v: field}` sentinels with
- * a real JS `v(field)` call. Python uses the sentinel because dict-only IR
- * has no way to author a function call; this rebuilds the call before
- * handing the prop to the JS mark factory.
+ * Build the async arrow for a `{__gofish_lambda: id}` sentinel. The arrow
+ * is what JS-side `inferRaw` (and equivalents) calls per row; the body
+ * RPCs into Python via the existing `DeriveBridge` (Arrow-encoded over
+ * traitlets). Same registry as `derive()` operators — the lambda was
+ * registered on the Python side when the widget spec was built.
  */
+function makeLambdaAccessor(lambdaId: string, bridge: DeriveBridge) {
+  return async (d: any) => {
+    const arrowBuffer = arrayToArrow([d]);
+    const arrowB64 = btoa(String.fromCharCode(...arrowBuffer));
+    const resultB64 = await bridge.request(lambdaId, arrowB64);
+    const resultBuffer = Uint8Array.from(atob(resultB64), (c) =>
+      c.charCodeAt(0)
+    );
+    const [result] = arrowTableToArray(Arrow.tableFromIPC(resultBuffer));
+    // The Python rows_fn returns `[value]` for a single-row input; the
+    // Arrow round-trip puts it under the first column. Surface the value
+    // directly so JS sees a scalar, not a one-key object.
+    if (result && typeof result === "object") {
+      const keys = Object.keys(result);
+      if (keys.length === 1) return result[keys[0]];
+    }
+    return result;
+  };
+}
+
+/**
+ * Walk an arbitrary value and resolve Python-emitted sentinels:
+ * - `{__gofish_v: value}` → `v(value)` call (embedded-value wrapper).
+ * - `{__gofish_lambda: id}` → an `async (d) => ...` arrow that RPCs into
+ *   Python via the trait bridge.
+ */
+function unwrapMarkOpts(value: any, bridge: DeriveBridge): any {
+  if (value === null || typeof value !== "object") return value;
+  if (Array.isArray(value)) return value.map((v) => unwrapMarkOpts(v, bridge));
+  if ("__gofish_v" in value) return v(value.__gofish_v);
+  if (typeof value.__gofish_lambda === "string") {
+    return makeLambdaAccessor(value.__gofish_lambda, bridge);
+  }
+  const out: Record<string, any> = {};
+  for (const [k, val] of Object.entries(value)) {
+    out[k] = unwrapMarkOpts(val, bridge);
+  }
+  return out;
+}
+
+/** Backwards-compatible alias for callsites without bridge access. */
 function unwrapValues(value: any): any {
   if (value === null || typeof value !== "object") return value;
   if (Array.isArray(value)) return value.map(unwrapValues);
-  if (typeof value.__gofish_v === "string") return v(value.__gofish_v);
+  if ("__gofish_v" in value) return v(value.__gofish_v);
   const out: Record<string, any> = {};
   for (const [k, val] of Object.entries(value)) {
     out[k] = unwrapValues(val);
@@ -317,7 +359,7 @@ const MARK_MAP: Record<string, (opts: Record<string, any>) => Mark<any>> = {
   image: (opts) => image(opts),
 };
 
-function mapMark(markSpec: MarkSpec): Mark<any> {
+function mapMark(markSpec: MarkSpec, bridge: DeriveBridge): Mark<any> {
   // Leaf-form `ref(name)` — not a combinator, not a mark factory.
   if (markSpec.type === "ref" && !markSpec.__combinator) {
     return ref(markSpec.selection as string) as unknown as Mark<any>;
@@ -329,8 +371,8 @@ function mapMark(markSpec: MarkSpec): Mark<any> {
   // constraints?}`; rebuild it by calling the JS operator's `(opts, marks)`
   // overload, then chain `.constrain(...)` if present.
   if (markSpec.__combinator) {
-    const childMarks = (markSpec.children ?? []).map(mapMark);
-    const opts = unwrapValues(markSpec.options ?? {});
+    const childMarks = (markSpec.children ?? []).map((c) => mapMark(c, bridge));
+    const opts = unwrapMarkOpts(markSpec.options ?? {}, bridge);
     const factory = COMBINATOR_FACTORIES[markSpec.type];
     if (!factory) {
       throw new Error(`Unknown combinator mark type: ${markSpec.type}`);
@@ -376,7 +418,7 @@ function mapMark(markSpec: MarkSpec): Mark<any> {
   if (!factory) {
     throw new Error(`Unknown mark type: ${type}`);
   }
-  let mark = factory(unwrapValues(opts));
+  let mark = factory(unwrapMarkOpts(opts, bridge));
   if (layerName && typeof (mark as any).name === "function") {
     mark = (mark as any).name(layerName);
   }
@@ -454,7 +496,7 @@ function buildChart(
     if (op) operators.push(op);
   }
   const markSpec = chartSpec.mark || { type: "rect" };
-  const mark = mapMark(markSpec);
+  const mark = mapMark(markSpec, bridge);
   const resolvedOptions = resolveOptions(chartSpec.options || {});
 
   let chartData: any = data;
@@ -522,7 +564,11 @@ function renderLayer(
   log("Layer rendered successfully!");
 }
 
-function renderRawMark(model: WidgetModel, container: HTMLElement): void {
+function renderRawMark(
+  model: WidgetModel,
+  container: HTMLElement,
+  bridge: DeriveBridge
+): void {
   const spec = model.get("spec") as unknown as RawMarkSpec;
   const debug = model.get("debug");
   const log = debug
@@ -530,7 +576,7 @@ function renderRawMark(model: WidgetModel, container: HTMLElement): void {
     : () => {};
 
   log("Building raw mark...");
-  const mark = mapMark(spec.mark) as any;
+  const mark = mapMark(spec.mark, bridge) as any;
   const renderOptions: RenderOptions = {
     w: model.get("width"),
     h: model.get("height"),
@@ -553,7 +599,7 @@ function renderChart(
     return;
   }
   if ((spec as any).type === "raw-mark") {
-    renderRawMark(model, container);
+    renderRawMark(model, container, bridge);
     return;
   }
 

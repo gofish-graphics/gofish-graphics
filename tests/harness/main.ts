@@ -130,20 +130,68 @@ interface MarkSpec {
 }
 
 /**
- * Walk an arbitrary value and replace `{__gofish_v: field}` sentinels with
- * a real JS `v(field)` call. Python uses the sentinel because dict-only IR
- * has no way to author a function call; the harness rebuilds the call
- * before handing the prop to the JS mark factory.
+ * Build the async arrow that swaps in for a `{__gofish_lambda: id}`
+ * sentinel. The arrow is called by the JS-side mark factory (e.g. by
+ * `inferRaw` for `text({text: ...})`); its body posts the per-row datum
+ * to the same `/derive/<id>` endpoint user-authored derive operators use,
+ * receives the lambda's result, and returns it.
+ *
+ * The lambda is registered server-side during `/load` (see
+ * `derive-server.py`'s `_collect_mark_lambdas` walk).
  */
-function unwrapValues(value: any): any {
+function makeLambdaAccessor(
+  lambdaId: string,
+  deriveServerUrl: string | undefined
+) {
+  if (!deriveServerUrl) {
+    throw new Error(
+      `lambda accessor ${lambdaId} requires deriveServerUrl on the spec`
+    );
+  }
+  return async (d: any) => {
+    const resp = await fetch(`${deriveServerUrl}/derive/${lambdaId}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify([d]),
+    });
+    if (!resp.ok) {
+      throw new Error(
+        `lambda accessor ${lambdaId} failed: ${resp.status} ${await resp.text()}`
+      );
+    }
+    const result = await resp.json();
+    return Array.isArray(result) ? result[0] : result;
+  };
+}
+
+/**
+ * Walk an arbitrary value and resolve Python-emitted sentinels:
+ * - `{__gofish_v: field}` → `v(field)` call (literal-value wrapper).
+ * - `{__gofish_lambda: id}` → an `async (d) => fetch /derive/<id>` arrow.
+ *
+ * Python uses sentinels because dict-only IR has no way to author a
+ * function call; the harness rebuilds them before handing props to JS.
+ */
+function unwrapMarkOpts(value: any, deriveServerUrl: string | undefined): any {
   if (value === null || typeof value !== "object") return value;
-  if (Array.isArray(value)) return value.map(unwrapValues);
-  if (typeof value.__gofish_v === "string") return v(value.__gofish_v);
+  if (Array.isArray(value))
+    return value.map((v) => unwrapMarkOpts(v, deriveServerUrl));
+  if ("__gofish_v" in value) return v(value.__gofish_v);
+  if (typeof value.__gofish_lambda === "string") {
+    return makeLambdaAccessor(value.__gofish_lambda, deriveServerUrl);
+  }
   const out: Record<string, any> = {};
   for (const [k, val] of Object.entries(value)) {
-    out[k] = unwrapValues(val);
+    out[k] = unwrapMarkOpts(val, deriveServerUrl);
   }
   return out;
+}
+
+/** Backwards-compatible alias for callsites that pre-date the lambda
+ * sentinel. New code should pass `deriveServerUrl` and use
+ * `unwrapMarkOpts` directly. */
+function unwrapValues(value: any): any {
+  return unwrapMarkOpts(value, undefined);
 }
 
 declare global {
@@ -225,7 +273,7 @@ const MARK_MAP: Record<string, (opts: Record<string, any>) => Mark<any>> = {
   image: (opts) => image(opts),
 };
 
-function mapMark(spec: MarkSpec): Mark<any> {
+function mapMark(spec: MarkSpec, deriveServerUrl?: string): Mark<any> {
   // Leaf-form `ref(name)`: not a combinator, not a mark factory. JS's
   // `ref(...)` returns a GoFishRef the runtime accepts wherever a mark
   // child is expected. Cast to Mark<any> for the typed mapMark signature.
@@ -240,8 +288,10 @@ function mapMark(spec: MarkSpec): Mark<any> {
   // rebuild it by calling the JS operator's `(opts, marks)` overload,
   // then chain `.constrain(...)` if present.
   if (spec.__combinator) {
-    const childMarks = (spec.children ?? []).map(mapMark);
-    const opts = unwrapValues(spec.options ?? {});
+    const childMarks = (spec.children ?? []).map((c) =>
+      mapMark(c, deriveServerUrl)
+    );
+    const opts = unwrapMarkOpts(spec.options ?? {}, deriveServerUrl);
     const factory = COMBINATOR_FACTORIES[spec.type];
     if (!factory) {
       throw new Error(`Unknown combinator mark type: ${spec.type}`);
@@ -278,10 +328,11 @@ function mapMark(spec: MarkSpec): Mark<any> {
   // uses (e.g. `rect({h: "count"}).label("count", {position: "outset"})`).
   const isStructuredLabel =
     label && typeof label === "object" && !Array.isArray(label);
-  const factoryOpts: Record<string, any> = unwrapValues(
+  const factoryOpts: Record<string, any> = unwrapMarkOpts(
     isStructuredLabel
       ? opts
-      : { ...opts, ...(label !== undefined ? { label } : {}) }
+      : { ...opts, ...(label !== undefined ? { label } : {}) },
+    deriveServerUrl
   );
 
   let mark = factory(factoryOpts);
@@ -348,7 +399,7 @@ function buildChartFromSpec(
     const op = mapOperator(opSpec, deriveServerUrl);
     if (op) operators.push(op);
   }
-  const mark = mapMark(chartSpec.mark);
+  const mark = mapMark(chartSpec.mark, deriveServerUrl);
   const chartOpts = resolveOptions(chartSpec.options || {});
 
   let chartData: any = chartSpec.data;
@@ -387,7 +438,7 @@ function renderChart(spec: HarnessSpec) {
       // direct renders skip).
       const allOpts = spec.options || {};
       const { w, h, axes, debug } = allOpts;
-      const mark = mapMark(spec.mark) as any;
+      const mark = mapMark(spec.mark, spec.deriveServerUrl) as any;
       mark.render(container, {
         w,
         h,

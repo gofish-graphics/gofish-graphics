@@ -31,6 +31,45 @@ class DeriveOperator(Operator):
         return {"type": "derive", "lambdaId": self.lambda_id}
 
 
+class _PendingAccessor:
+    """Sentinel wrapping a Python callable used as a mark kwarg accessor.
+
+    JS's `createMark` accepts a callable for encoding channels like
+    `text({text: (d) => `${d.amount}%`})`. The harness can't ship a Python
+    callable to JS, so the factory wraps it here with a fresh `lambda_id`
+    (same UUID shape as `DeriveOperator`, sharing one registry).
+    `Mark.to_dict()` serializes it as `{"__gofish_lambda": id}`; the
+    harness/widget swaps that sentinel for an `async (d) => fetch
+    /derive/<id>(d)` arrow at render time, so JS sees a real accessor
+    function whose body happens to RPC into Python.
+    """
+
+    def __init__(self, fn: Callable):
+        self.fn = fn
+        self.lambda_id = str(uuid.uuid4())
+
+
+def _collect_mark_lambdas(mark: "Mark") -> List[tuple]:
+    """Walk a Mark tree, yielding `(lambda_id, rows_fn)` pairs for every
+    `_PendingAccessor` in mark kwargs (and recursively in combinator
+    `_children`). `rows_fn` adapts the user's `(row) -> value` callable to
+    the rows-in / rows-out shape the existing `/derive/<id>` endpoint
+    expects, so mark accessors and `derive()` operators share one registry
+    and one endpoint.
+    """
+    pairs: List[tuple] = []
+    for val in mark.kwargs.values():
+        if isinstance(val, _PendingAccessor):
+            fn = val.fn
+            pairs.append(
+                (val.lambda_id, lambda rows, _fn=fn: [_fn(r) for r in rows])
+            )
+    if mark._children is not None:
+        for child in mark._children:
+            pairs.extend(_collect_mark_lambdas(child))
+    return pairs
+
+
 class Mark:
     """Base class for chart marks."""
 
@@ -120,17 +159,28 @@ class Mark:
 
     def to_dict(self) -> dict:
         """Convert mark to dictionary for JSON IR."""
+        # Replace `_PendingAccessor` kwarg values with their lambda-id
+        # sentinel. The derive-server walks the Mark tree separately to
+        # register the underlying callable in the shared registry; the JS
+        # harness/widget substitutes the sentinel for a real `(d) => ...`
+        # arrow function whose body RPCs into Python.
+        def _wire(v):
+            if isinstance(v, _PendingAccessor):
+                return {"__gofish_lambda": v.lambda_id}
+            return v
+
+        serialized_kwargs = {k: _wire(v) for k, v in self.kwargs.items()}
         if self._children is not None:
             # Combinator form: emit a nested payload the JS side reconstructs
             # via the operator's `(opts, marks)` overload.
             d: dict = {
                 "type": self.mark_type,
                 "__combinator": True,
-                "options": self.kwargs,
+                "options": serialized_kwargs,
                 "children": [child.to_dict() for child in self._children],
             }
         else:
-            d = {"type": self.mark_type, **self.kwargs}
+            d = {"type": self.mark_type, **serialized_kwargs}
         if self._name is not None:
             d["name"] = self._name
         if self._label is not None:
@@ -905,23 +955,24 @@ def select(layer_name: str) -> LayerSelector:
 # Literal-value wrapper
 
 
-def v(field_name: str) -> dict:
+def v(value: Any) -> dict:
     """
-    Wrap a field name so a mark prop reads it as a per-row literal value
-    instead of as an aesthetic-channel field accessor.
+    Wrap a value so a mark prop reads it as an embedded data-space value.
 
-    Mirrors JS `v(field)` (`packages/gofish-graphics/src/ast/data.ts:10`):
-    `rect(fill=v("Worldwide Gross"))` uses the row's `Worldwide Gross` value
-    as the literal fill color, instead of treating it as a categorical
-    encoding to map through the chart's color scale.
+    Mirrors JS `v(...)` (`packages/gofish-graphics/src/ast/data.ts:10`):
+    - `rect(fill=v("Worldwide Gross"))` — use the row's `Worldwide Gross`
+      column value as the literal fill color, skipping categorical-color
+      encoding.
+    - `image(h=v(100))` — declare height 100 as an *embedded* size in data
+      space. `inferEmbedded` (see `data.ts`) flips the interval's
+      `embedded` flag, which changes how the layout system places the mark
+      vs. a plain `h=100` (literal pixel value).
 
     Args:
-        field_name: Field name whose per-row value should be used literally.
-
-    Returns:
-        Sentinel dict the harness/widget unwraps into a JS `v()` call.
+        value: A field name string, a literal number, or any value to
+            wrap. The harness/widget rebuilds it as a JS `v(value)` call.
     """
-    return {"__gofish_v": field_name}
+    return {"__gofish_v": value}
 
 
 # Data utilities (for use inside derive() callbacks)
@@ -1144,7 +1195,7 @@ def petal(
 
 
 def text(
-    text: Optional[str] = None,
+    text: Optional[Any] = None,
     fill: Optional[str] = None,
     fontSize: Optional[Union[int, str]] = None,
     fontWeight: Optional[Union[int, str]] = None,
@@ -1156,13 +1207,22 @@ def text(
     """Text mark.
 
     Args:
-        text: Literal string content. The JS mark calls this `text:` —
-            matching it here so storybook ports translate 1:1.
+        text: String content, a field-name accessor, or a callable
+            `(row) -> str`. Callables are routed through the same derive RPC
+            as `derive()` operators — `ChartBuilder.mark()` walks the mark
+            tree, registers the callable, and prepends a derive step that
+            populates an auto-generated field per row.
         fill: Text color.
         fontSize / fontWeight / fontFamily: Typography.
         debugBoundingBox: Draw the text's bounding box (for layout debug).
         label: Auto-value-label flag (different from text content).
     """
+    if (
+        text is not None
+        and not isinstance(text, (str, int, float, bool))
+        and callable(text)
+    ):
+        text = _PendingAccessor(text)
     kwargs: Dict[str, Any] = {}
     for k, value in [
         ("text", text),

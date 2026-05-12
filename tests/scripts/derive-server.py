@@ -138,7 +138,14 @@ class DeriveHandler(BaseHTTPRequestHandler):
             builder = result[0]
             options = result[1] if len(result) > 1 else {}
 
-            from gofish.ast import ChartBuilder, DeriveOperator, LayerBuilder, LayerSelector, Mark
+            from gofish.ast import (
+                ChartBuilder,
+                DeriveOperator,
+                LayerBuilder,
+                LayerSelector,
+                Mark,
+                _collect_mark_lambdas,
+            )
 
             def serialize_chart(child: ChartBuilder) -> tuple:
                 """Return (child_payload, derive_ids) for one chart builder.
@@ -165,6 +172,14 @@ class DeriveHandler(BaseHTTPRequestHandler):
                         child_derive_ids.append(op.lambda_id)
                         _registry[op.lambda_id] = op.fn
 
+                # Register every callable accessor on the mark in the same
+                # registry. The harness/widget rebuilds an async arrow that
+                # POSTs `[row]` to `/derive/<lambda_id>` per invocation.
+                if child._mark is not None:
+                    for lambda_id, rows_fn in _collect_mark_lambdas(child._mark):
+                        child_derive_ids.append(lambda_id)
+                        _registry[lambda_id] = rows_fn
+
                 return (
                     {
                         "operators": child_ir["operators"],
@@ -180,11 +195,15 @@ class DeriveHandler(BaseHTTPRequestHandler):
                 # Raw-mark render path: a Mark returned directly from a
                 # story (no Chart, no Layer). Mirrors JS storybook spelling
                 # `spread(opts, [marks]).render(container, {w, h})`.
+                raw_mark_derive_ids = []
+                for lambda_id, rows_fn in _collect_mark_lambdas(builder):
+                    raw_mark_derive_ids.append(lambda_id)
+                    _registry[lambda_id] = rows_fn
                 self._json_response(200, {
                     "_kind": "raw-mark",
                     "mark": builder.to_dict(),
                     "options": options,
-                    "deriveIds": [],
+                    "deriveIds": raw_mark_derive_ids,
                 })
                 return
 
