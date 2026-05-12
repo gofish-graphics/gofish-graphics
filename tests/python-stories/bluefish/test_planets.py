@@ -1,16 +1,13 @@
-"""Equivalent of bluefish/Planets.stories.tsx::PlanetsOnly — Bluefish/Planets.
+"""Equivalent of bluefish/Planets.stories.tsx — Bluefish/Planets.
 
-PlanetsOnly is the simplest export in the file: pure low-level composition
-of a `spread` combinator over per-planet `ellipse` children, rendered
-directly (no Chart wrapper). The other Planets exports (labels, arrows)
-need additional low-level primitives (`layer`, `text`, `ref`, `arrow`)
-that the Python wrapper doesn't yet expose — those stay per-export exempt.
-
-JS uses `For(planets, planet => ellipse({...}))` to produce the children;
+All six exports port directly now that the Python wrapper exposes the
+necessary low-level combinators (`layer`, `spread([marks], ...)`, `arrow`)
+and leaves (`text(text=...)`, `ref(name)`). The shared `PLANETS` constant
+mirrors the JS file. Where JS uses `For(planets, planet => ellipse({...}))`,
 Python uses a list comprehension to the same effect.
 """
 
-from gofish import ellipse, spread
+from gofish import arrow, ellipse, layer, ref, spread, text
 
 PLANETS = [
     {"name": "Mercury", "radius": 15, "color": "#EBE3CF"},
@@ -20,22 +17,100 @@ PLANETS = [
 ]
 
 
+def _planet_row():
+    """The horizontal spread of planet ellipses shared by every story."""
+    return spread(
+        [
+            ellipse(
+                w=p["radius"] * 2,
+                h=p["radius"] * 2,
+                fill=p["color"],
+                stroke="#333",
+                strokeWidth=3,
+            ).name(p["name"])
+            for p in PLANETS
+        ],
+        dir="x",
+        spacing=50,
+        alignment="middle",
+    )
+
+
 def story_planets_only():
+    return _planet_row(), {"w": 800, "h": 200}
+
+
+def story_planets_with_label_above():
     return (
-        spread(
-            [
-                ellipse(
-                    w=p["radius"] * 2,
-                    h=p["radius"] * 2,
-                    fill=p["color"],
-                    stroke="#333",
-                    strokeWidth=3,
-                )
-                for p in PLANETS
-            ],
-            dir="x",
-            spacing=50,
-            alignment="middle",
-        ),
+        layer([
+            _planet_row(),
+            spread(
+                [ref("Mercury"), text(text="Mercury")],
+                dir="y",
+                spacing=60,
+                alignment="middle",
+            ),
+        ]),
+        {"w": 800, "h": 200},
+    )
+
+
+def story_planets_with_label_below():
+    return (
+        layer([
+            _planet_row(),
+            spread(
+                [text(text="Mercury"), ref("Mercury")],
+                dir="y",
+                spacing=60,
+                alignment="middle",
+            ),
+        ]),
+        {"w": 800, "h": 200},
+    )
+
+
+def story_planets_with_label_above_no_spacing():
+    return (
+        layer([
+            _planet_row(),
+            spread(
+                [ref("Mercury"), text(text="Mercury", debugBoundingBox=True)],
+                dir="y",
+                spacing=0,
+                alignment="middle",
+            ),
+        ]),
+        {"w": 800, "h": 200},
+    )
+
+
+def story_planets_with_label_below_no_spacing():
+    return (
+        layer([
+            _planet_row(),
+            spread(
+                [text(text="Mercury", debugBoundingBox=True), ref("Mercury")],
+                dir="y",
+                spacing=0,
+                alignment="middle",
+            ),
+        ]),
+        {"w": 800, "h": 200},
+    )
+
+
+def story_planets_with_arrow():
+    return (
+        layer([
+            _planet_row(),
+            spread(
+                [text(text="Mercury").name("label"), ref("Mercury")],
+                dir="y",
+                spacing=60,
+                alignment="middle",
+            ),
+            arrow([ref("label"), ref("Mercury")]),
+        ]),
         {"w": 800, "h": 200},
     )

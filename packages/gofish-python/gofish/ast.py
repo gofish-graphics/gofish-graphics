@@ -662,6 +662,36 @@ def layer(
     return ConstrainableMark("layer", _children=list(children), **options)
 
 
+def ref(name: str) -> Mark:
+    """
+    Reference a previously-named node by string selection.
+
+    Used as a child of a combinator (spread/layer/arrow) to insert an
+    already-named-and-resolved node into the layout — e.g. point an arrow
+    at, or align with, a mark whose `.name(...)` matches.
+
+    Mirrors JS `ref("Mercury")` (`packages/gofish-graphics/src/ast/shapes/ref.tsx:86`).
+    """
+    return Mark("ref", selection=name)
+
+
+def arrow(
+    children: List["Mark"],
+    **options: Any,
+) -> Mark:
+    """
+    Low-level combinator-form arrow.
+
+    Takes a list of two (or more) refs / marks and draws an arrow between
+    them. Mirrors JS `arrow({stroke?, strokeWidth?, ...}, [from, to])` from
+    `packages/gofish-graphics/src/ast/graphicalOperators/arrow.tsx:45`.
+
+        arrow([ref("label"), ref("Mercury")])
+        arrow([ref("a"), ref("b")], stroke="red", strokeWidth=2)
+    """
+    return Mark("arrow", _children=list(children), **options)
+
+
 def stack(
     *,
     by: Optional[str] = None,
@@ -1076,18 +1106,33 @@ def petal(
 
 
 def text(
+    text: Optional[str] = None,
     fill: Optional[str] = None,
     fontSize: Optional[Union[int, str]] = None,
     fontWeight: Optional[Union[int, str]] = None,
+    fontFamily: Optional[str] = None,
+    debugBoundingBox: Optional[bool] = None,
     label: Optional[str] = None,
     debug: Optional[bool] = None,
 ) -> Mark:
-    """Text mark."""
+    """Text mark.
+
+    Args:
+        text: Literal string content. The JS mark calls this `text:` —
+            matching it here so storybook ports translate 1:1.
+        fill: Text color.
+        fontSize / fontWeight / fontFamily: Typography.
+        debugBoundingBox: Draw the text's bounding box (for layout debug).
+        label: Auto-value-label flag (different from text content).
+    """
     kwargs: Dict[str, Any] = {}
     for k, value in [
+        ("text", text),
         ("fill", fill),
         ("fontSize", fontSize),
         ("fontWeight", fontWeight),
+        ("fontFamily", fontFamily),
+        ("debugBoundingBox", debugBoundingBox),
         ("label", label),
         ("debug", debug),
     ]:

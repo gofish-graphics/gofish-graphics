@@ -37,6 +37,8 @@ import {
   v,
   layer,
   Constraint,
+  ref,
+  arrow,
   type ChartBuilder,
   type Operator,
   type Mark,
@@ -111,8 +113,9 @@ interface ConstraintSpec {
 }
 
 interface MarkSpec {
-  // Mark types include the leaf shapes plus combinator-form layout
-  // operators (`spread`, `layer`) used as marks via the `__combinator` flag.
+  // Mark types include the leaf shapes, combinator-form layout operators
+  // (`spread`, `layer`, `arrow`) used as marks via the `__combinator` flag,
+  // and the bare `ref` leaf for selection-by-name.
   type:
     | "rect"
     | "circle"
@@ -124,13 +127,16 @@ interface MarkSpec {
     | "text"
     | "image"
     | "spread"
-    | "layer";
+    | "layer"
+    | "arrow"
+    | "ref";
   name?: string;
   label?: LabelSpec;
   __combinator?: boolean;
   options?: Record<string, any>;
   children?: MarkSpec[];
   constraints?: ConstraintSpec[];
+  selection?: string;
   [key: string]: any;
 }
 
@@ -284,11 +290,16 @@ const MARK_MAP: Record<string, (opts: Record<string, any>) => Mark<any>> = {
 };
 
 function mapMark(markSpec: MarkSpec): Mark<any> {
-  // Combinator-form marks: a layout operator (`spread` or `layer`) used as
-  // a mark, with explicit nested children. Python emits `{type,
-  // __combinator: true, options, children, name?, label?, constraints?}`;
-  // rebuild it by calling the JS operator's `(opts, marks)` overload, then
-  // chain `.constrain(...)` if present.
+  // Leaf-form `ref(name)` — not a combinator, not a mark factory.
+  if (markSpec.type === "ref" && !markSpec.__combinator) {
+    return ref(markSpec.selection as string) as unknown as Mark<any>;
+  }
+
+  // Combinator-form marks: a layout operator (`spread`, `layer`, or
+  // `arrow`) used as a mark, with explicit nested children. Python emits
+  // `{type, __combinator: true, options, children, name?, label?,
+  // constraints?}`; rebuild it by calling the JS operator's `(opts, marks)`
+  // overload, then chain `.constrain(...)` if present.
   if (markSpec.__combinator) {
     const childMarks = (markSpec.children ?? []).map(mapMark);
     const opts = unwrapValues(markSpec.options ?? {});
@@ -297,6 +308,8 @@ function mapMark(markSpec: MarkSpec): Mark<any> {
       mark = spread(opts, childMarks) as unknown as Mark<any>;
     } else if (markSpec.type === "layer") {
       mark = layer(opts, childMarks) as unknown as Mark<any>;
+    } else if (markSpec.type === "arrow") {
+      mark = arrow(opts, childMarks) as unknown as Mark<any>;
     } else {
       throw new Error(`Unknown combinator mark type: ${markSpec.type}`);
     }
@@ -322,7 +335,9 @@ function mapMark(markSpec: MarkSpec): Mark<any> {
 
   const { type, name: layerName, label: labelSpec, ...opts } = markSpec;
   const factory =
-    MARK_MAP[type as Exclude<MarkSpec["type"], "spread" | "layer">];
+    MARK_MAP[
+      type as Exclude<MarkSpec["type"], "spread" | "layer" | "arrow" | "ref">
+    ];
   if (!factory) {
     throw new Error(`Unknown mark type: ${type}`);
   }

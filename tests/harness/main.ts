@@ -35,6 +35,8 @@ import {
   v,
   layer,
   Constraint,
+  ref,
+  arrow,
   type ChartBuilder,
   type Operator,
   type Mark,
@@ -200,11 +202,19 @@ const MARK_MAP: Record<string, (opts: Record<string, any>) => Mark<any>> = {
 };
 
 function mapMark(spec: MarkSpec): Mark<any> {
-  // Combinator-form marks: a layout operator (`spread` or `layer`) used as a
-  // mark, with explicit nested children instead of repeating a single mark
-  // across data. Python emits `{type, __combinator: true, options, children,
-  // name?, label?, constraints?}`; rebuild it by calling the JS operator's
-  // `(opts, marks)` overload, then chain `.constrain(...)` if present.
+  // Leaf-form `ref(name)`: not a combinator, not a mark factory. JS's
+  // `ref(...)` returns a GoFishRef the runtime accepts wherever a mark
+  // child is expected. Cast to Mark<any> for the typed mapMark signature.
+  if (spec.type === "ref" && !spec.__combinator) {
+    return ref(spec.selection as string) as unknown as Mark<any>;
+  }
+
+  // Combinator-form marks: a layout operator (`spread`, `layer`, or
+  // `arrow`) used as a mark, with explicit nested children instead of
+  // repeating a single mark across data. Python emits `{type,
+  // __combinator: true, options, children, name?, label?, constraints?}`;
+  // rebuild it by calling the JS operator's `(opts, marks)` overload,
+  // then chain `.constrain(...)` if present.
   if (spec.__combinator) {
     const childMarks = (spec.children ?? []).map(mapMark);
     const opts = unwrapValues(spec.options ?? {});
@@ -213,6 +223,8 @@ function mapMark(spec: MarkSpec): Mark<any> {
       mark = spread(opts, childMarks) as unknown as Mark<any>;
     } else if (spec.type === "layer") {
       mark = layer(opts, childMarks) as unknown as Mark<any>;
+    } else if (spec.type === "arrow") {
+      mark = arrow(opts, childMarks) as unknown as Mark<any>;
     } else {
       throw new Error(`Unknown combinator mark type: ${spec.type}`);
     }
