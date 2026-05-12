@@ -31,6 +31,25 @@ class DeriveOperator(Operator):
         return {"type": "derive", "lambdaId": self.lambda_id}
 
 
+class _MarkFn:
+    """Sentinel wrapping a Python callable used as a *whole* mark.
+
+    `ChartBuilder.mark(lambda data: chart(data[0]["collection"]).flow(...).mark(...))`
+    — the lambda receives the per-group data slice and returns a new
+    `ChartBuilder` for that slice. JS storybook calls this "mark-as-function"
+    (see `Scatter.stories.tsx::WithPieGlyphs`).
+
+    The wire shape is `{type: "mark-fn", lambdaId: <uuid>}`. The harness
+    builds a JS Mark whose body fetches `/derive/<id>` per invocation,
+    receives a chart IR, and constructs a ChartBuilder JS-side — the same
+    object `resolveMarkResult` already accepts as a mark return value.
+    """
+
+    def __init__(self, fn: Callable):
+        self.fn = fn
+        self.lambda_id = str(uuid.uuid4())
+
+
 class _PendingAccessor:
     """Sentinel wrapping a Python callable used as a mark kwarg accessor.
 
@@ -146,13 +165,40 @@ class Mark:
         # `createName(...)` don't leak to outer scope. Set by the
         # `@createMark` decorator.
         self._is_scope: bool = False
+        # When set, the harness invokes the JS-side mark with this datum
+        # and key — mirrors the JS `rect({...})(d, key)` pattern used by
+        # `Treemap(opts, [rect(...)(d1, k1), rect(...)(d2, k2), ...])`.
+        # Set via `.bind_data(d, key)`.
+        self._datum: Any = None
+        self._datum_set: bool = False
+        self._key: Optional[str] = None
 
     def _copy_meta(self, target: "Mark") -> "Mark":
         target._name = self._name
         target._label = self._label
         target._children = self._children
         target._is_scope = self._is_scope
+        target._datum = self._datum
+        target._datum_set = self._datum_set
+        target._key = self._key
         return target
+
+    def bind_data(self, datum: Any, key: Optional[str] = None) -> "Mark":
+        """Bind a datum (and optional key) to this Mark for the Treemap
+        combinator pattern.
+
+        Mirrors JS storybook spelling `rect({...})(d, d.key)` — the mark
+        factory is invoked with `(d, key)` to produce a pre-resolved node
+        with `.datum = d` set. The harness emits the equivalent call.
+        """
+        new_mark = type(self)(
+            self.mark_type, _children=self._children, **self.kwargs
+        )
+        self._copy_meta(new_mark)
+        new_mark._datum = datum
+        new_mark._datum_set = True
+        new_mark._key = key
+        return new_mark
 
     def name(self, name_or_token: Union[str, "Token"]) -> "Mark":
         """
@@ -262,6 +308,11 @@ class Mark:
         # `node.scope()` — matches JS createMark's behavior.
         if self._is_scope:
             d["__scope"] = True
+        # `bind_data()` pre-binds a datum + key for the
+        # `rect({...})(d, key)` Treemap-style invocation pattern.
+        if self._datum_set:
+            d["__datum"] = self._datum
+            d["__key"] = self._key
         return d
 
     def to_ir(self) -> dict:
@@ -539,12 +590,17 @@ class ChartBuilder:
             z_order=self._z_order,
         )
 
-    def mark(self, mark: Mark) -> "ChartBuilder":
+    def mark(self, mark) -> "ChartBuilder":
         """
-        Set the mark (visual encoding) for the chart.
+        Set the mark for the chart.
 
         Args:
-            mark: A mark function (rect, circle, line, etc.)
+            mark: A `Mark` (rect/circle/line/...) **or** a callable
+                `(data) -> ChartBuilder` — the mark-as-function pattern. The
+                callable receives the per-group data slice (after the
+                pipeline operators run on the JS side) and returns a new
+                ChartBuilder for that slice. Mirrors JS storybook spelling
+                `.mark((data) => Chart(data[0].collection, ...).flow(...).mark(...))`.
 
         Returns:
             New ChartBuilder with mark set
@@ -552,7 +608,12 @@ class ChartBuilder:
         new_builder = ChartBuilder(
             self.data, self.options, self.operators, z_order=self._z_order
         )
-        new_builder._mark = mark
+        # Wrap callables in `_MarkFn` so the IR carries a stable lambda_id
+        # the derive-server can register and the harness can RPC into.
+        if not isinstance(mark, Mark) and callable(mark):
+            new_builder._mark = _MarkFn(mark)
+        else:
+            new_builder._mark = mark
         return new_builder
 
     def zOrder(self, value: float) -> "ChartBuilder":
@@ -609,10 +670,15 @@ class ChartBuilder:
         else:
             data_ir = None
 
+        if isinstance(self._mark, _MarkFn):
+            mark_ir = {"type": "mark-fn", "lambdaId": self._mark.lambda_id}
+        else:
+            mark_ir = self._mark.to_dict()
+
         return {
             "data": data_ir,
             "operators": [op.to_dict() for op in self.operators],
-            "mark": self._mark.to_dict(),
+            "mark": mark_ir,
             "options": self.options,
             "zOrder": self._z_order,
         }
@@ -857,6 +923,33 @@ def ref(target: Union[str, Token]) -> _RefProxy:
     `ref(...)` (`packages/gofish-graphics/src/ast/shapes/ref.tsx:86`).
     """
     return _RefProxy([target])
+
+
+def Treemap(  # noqa: N802  — match JS storybook spelling
+    children: List["Mark"],
+    **options: Any,
+) -> Mark:
+    """
+    Low-level combinator-form treemap.
+
+    Takes a list of pre-data-bound marks (typically `rect(...).bind_data(d, key)`
+    or `circle(...).bind_data(d, key)`) and lays them out by the
+    `valueField` on each mark's datum.
+
+        Treemap(
+            [rect(fill=v(genre)).bind_data({"worldwideGross": gross}, genre)
+             for genre, gross in groups],
+            valueField="worldwideGross",
+            paddingInner=2,
+            paddingOuter=2,
+            round=True,
+            tile="squarify",
+        ).render(w=700, h=420)
+
+    Mirrors JS `Treemap({valueField, ...}, nodes)` from
+    `packages/gofish-graphics/src/ast/graphicalOperators/treemap.tsx:62`.
+    """
+    return Mark("treemap", _children=list(children), **options)
 
 
 def arrow(
@@ -1209,6 +1302,8 @@ def circle(
     fill: Optional[str] = None,
     stroke: Optional[str] = None,
     strokeWidth: Optional[int] = None,
+    opacity: Optional[float] = None,
+    label: Optional[Union[bool, str]] = None,
     debug: Optional[bool] = None,
 ) -> Mark:
     """Circle mark."""
@@ -1218,6 +1313,8 @@ def circle(
         ("fill", fill),
         ("stroke", stroke),
         ("strokeWidth", strokeWidth),
+        ("opacity", opacity),
+        ("label", label),
         ("debug", debug),
     ]:
         if value is not None:

@@ -46,6 +46,7 @@ import {
   atop,
   mask,
   createName,
+  Treemap,
   type ChartBuilder,
   type Operator,
   type Mark,
@@ -60,6 +61,7 @@ const COMBINATOR_FACTORIES: Record<
   spread: (opts, marks) => spread(opts, marks) as unknown as Mark<any>,
   layer: (opts, marks) => layer(opts, marks) as unknown as Mark<any>,
   arrow: (opts, marks) => arrow(opts, marks) as unknown as Mark<any>,
+  treemap: (opts, marks) => Treemap(opts, marks) as unknown as Mark<any>,
   over: (opts, marks) => over(opts, marks) as unknown as Mark<any>,
   inside: (opts, marks) => inside(opts, marks) as unknown as Mark<any>,
   xor: (opts, marks) => xor(opts, marks) as unknown as Mark<any>,
@@ -446,6 +448,38 @@ function mapMark(
   bridge: DeriveBridge,
   resolveToken: TokenResolver
 ): Mark<any> {
+  // Mark-as-function: Python registered a `(data) -> ChartBuilder` lambda.
+  // The JS Mark fetches a chart IR per invocation (via the trait bridge —
+  // Arrow-encoded) and rebuilds a ChartBuilder JS-side.
+  if (markSpec.type === "mark-fn") {
+    const lambdaId = markSpec.lambdaId as string;
+    return (async (data: any, _key: any, _layerContext: any) => {
+      const rows = Array.isArray(data) ? data : [data];
+      const arrowBuffer = arrayToArrow(rows);
+      const arrowB64 = btoa(String.fromCharCode(...arrowBuffer));
+      const resultB64 = await bridge.request(lambdaId, arrowB64);
+      const resultBuffer = Uint8Array.from(atob(resultB64), (c) =>
+        c.charCodeAt(0)
+      );
+      const resultArr = arrowTableToArray(Arrow.tableFromIPC(resultBuffer));
+      // mark-fn returns a one-element list; row[0] is the chart-spec dict.
+      // Widget's Arrow round-trip wraps it under the first column.
+      const first = resultArr[0];
+      const chartSpec =
+        first && typeof first === "object" && Object.keys(first).length === 1
+          ? first[Object.keys(first)[0]]
+          : first;
+      // Inner chart's data may need decoding from Arrow b64 if the
+      // serializer wrapped it; for the current widget path we receive
+      // record-shape data directly via the chart spec.
+      const cs = chartSpec as ChartSpec;
+      const data2 = Array.isArray(cs.data)
+        ? (cs.data as unknown as Record<string, any>[])
+        : [];
+      return buildChart(cs, data2, bridge, resolveToken);
+    }) as Mark<any>;
+  }
+
   // Leaf-form `ref(name)` — not a combinator, not a mark factory.
   // Selection may be string, array, or contain token sentinels.
   if (markSpec.type === "ref" && !markSpec.__combinator) {
@@ -527,6 +561,13 @@ function mapMark(
   const nameVal = resolveNameField(layerName, resolveToken);
   if (nameVal != null && typeof (mark as any).name === "function") {
     mark = (mark as any).name(nameVal);
+  }
+  if ("__datum" in markSpec) {
+    const boundDatum = markSpec.__datum;
+    const boundKey = markSpec.__key ?? undefined;
+    const inner = mark as any;
+    mark = (async (_data: any, _key: any, layerContext: any) =>
+      inner(boundDatum, boundKey, layerContext)) as Mark<any>;
   }
   return mark;
 }

@@ -100,7 +100,10 @@ window.__renderStory__ = async (id: string): Promise<boolean> => {
     }
 
     const args = { ...story.args };
-    const element = story.render(args, context);
+    // Some stories (e.g. lowlevel/Treemap) declare an `async render` and
+    // await their own data loaders inside. Await unconditionally — `await`
+    // on a non-Promise is a no-op, so sync renders are unaffected.
+    const element = await story.render(args, context);
 
     if (element instanceof HTMLElement) {
       root.appendChild(element);

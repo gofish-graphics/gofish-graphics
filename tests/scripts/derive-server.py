@@ -145,6 +145,7 @@ class DeriveHandler(BaseHTTPRequestHandler):
                 LayerSelector,
                 Mark,
                 _collect_mark_lambdas,
+                _MarkFn,
             )
 
             def serialize_chart(child: ChartBuilder) -> tuple:
@@ -175,10 +176,29 @@ class DeriveHandler(BaseHTTPRequestHandler):
                 # Register every callable accessor on the mark in the same
                 # registry. The harness/widget rebuilds an async arrow that
                 # POSTs `[row]` to `/derive/<lambda_id>` per invocation.
-                if child._mark is not None:
+                if child._mark is not None and not isinstance(child._mark, _MarkFn):
                     for lambda_id, rows_fn in _collect_mark_lambdas(child._mark):
                         child_derive_ids.append(lambda_id)
                         _registry[lambda_id] = rows_fn
+
+                # Mark-as-function: register a wrapper that runs the user's
+                # `(data) -> ChartBuilder` callable, recursively serializes
+                # the resulting ChartBuilder (which also registers its own
+                # derive ops + nested mark lambdas), and returns the chart
+                # IR. The JS harness fetches this IR per invocation and
+                # builds a ChartBuilder from it.
+                if isinstance(child._mark, _MarkFn):
+                    mark_fn = child._mark
+                    child_derive_ids.append(mark_fn.lambda_id)
+
+                    def _mark_fn_wrapped(data, _user_fn=mark_fn.fn):
+                        inner_cb = _user_fn(data)
+                        payload, _inner_ids = serialize_chart(inner_cb)
+                        # Return as a single-element list to fit the existing
+                        # `/derive/<id>` rows-in / rows-out contract.
+                        return [payload]
+
+                    _registry[mark_fn.lambda_id] = _mark_fn_wrapped
 
                 return (
                     {

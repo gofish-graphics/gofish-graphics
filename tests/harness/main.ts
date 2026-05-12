@@ -44,6 +44,7 @@ import {
   atop,
   mask,
   createName,
+  Treemap,
   type ChartBuilder,
   type Operator,
   type Mark,
@@ -60,6 +61,7 @@ const COMBINATOR_FACTORIES: Record<
   spread: (opts, marks) => spread(opts, marks) as unknown as Mark<any>,
   layer: (opts, marks) => layer(opts, marks) as unknown as Mark<any>,
   arrow: (opts, marks) => arrow(opts, marks) as unknown as Mark<any>,
+  treemap: (opts, marks) => Treemap(opts, marks) as unknown as Mark<any>,
   over: (opts, marks) => over(opts, marks) as unknown as Mark<any>,
   inside: (opts, marks) => inside(opts, marks) as unknown as Mark<any>,
   xor: (opts, marks) => xor(opts, marks) as unknown as Mark<any>,
@@ -374,6 +376,46 @@ function mapMark(
   deriveServerUrl: string | undefined,
   resolveToken: TokenResolver
 ): Mark<any> {
+  // Mark-as-function: Python registered a `(data) -> ChartBuilder` lambda
+  // in the derive-server registry. The JS Mark fetches a chart IR per
+  // invocation and rebuilds a ChartBuilder JS-side; `resolveMarkResult`
+  // already accepts ChartBuilders as mark results. We memoize the
+  // ChartBuilder per data-key since the gofish runtime may resolve the
+  // same mark multiple times during a render (measurement + placement)
+  // and each RPC round-trip is expensive over localhost HTTP.
+  if (spec.type === "mark-fn") {
+    const lambdaId = spec.lambdaId as string;
+    if (!deriveServerUrl) {
+      throw new Error(
+        `mark-fn ${lambdaId} requires deriveServerUrl on the spec`
+      );
+    }
+    const cache = new Map<string, Promise<any>>();
+    return (async (data: any, _key: any, _layerContext: any) => {
+      const cacheKey = JSON.stringify(data);
+      let entry = cache.get(cacheKey);
+      if (!entry) {
+        entry = (async () => {
+          const resp = await fetch(`${deriveServerUrl}/derive/${lambdaId}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(data),
+          });
+          if (!resp.ok) {
+            throw new Error(
+              `mark-fn ${lambdaId} failed: ${resp.status} ${await resp.text()}`
+            );
+          }
+          const result = await resp.json();
+          const chartSpec = Array.isArray(result) ? result[0] : result;
+          return buildChartFromSpec(chartSpec, deriveServerUrl, resolveToken);
+        })();
+        cache.set(cacheKey, entry);
+      }
+      return entry;
+    }) as Mark<any>;
+  }
+
   // Leaf-form `ref(name)`: not a combinator, not a mark factory. JS's
   // `ref(...)` returns a GoFishRef the runtime accepts wherever a mark
   // child is expected. Selection may be a string (flat name), an array
@@ -459,6 +501,16 @@ function mapMark(
   const nameVal = resolveNameField(layerName, resolveToken);
   if (nameVal != null && typeof (mark as any).name === "function") {
     mark = (mark as any).name(nameVal);
+  }
+  // `bind_data(d, key)` (Treemap-style) pre-binds a datum so the JS-side
+  // mark factory is invoked as `mark(d, key)`. Wrap last so name/label
+  // chains take effect on the underlying mark first.
+  if ("__datum" in spec) {
+    const boundDatum = spec.__datum;
+    const boundKey = spec.__key ?? undefined;
+    const inner = mark as any;
+    mark = (async (_data: any, _key: any, layerContext: any) =>
+      inner(boundDatum, boundKey, layerContext)) as Mark<any>;
   }
   return mark;
 }
@@ -548,81 +600,85 @@ function renderChart(spec: HarnessSpec) {
   // to the same JS Token everywhere they appear in this spec.
   const resolveToken = makeTokenResolver();
 
-  try {
-    if (spec.type === "raw-mark") {
-      // Bypass the Chart wrapper entirely: the mark renders itself directly.
-      // Mirrors JS storybook spelling `spread(opts, [marks]).render(...)`,
-      // which produces a noticeably different DOM shape than going through
-      // Chart (Chart adds an identity-transform Frame wrapper that JS-side
-      // direct renders skip).
-      const allOpts = spec.options || {};
-      const { w, h, axes, debug } = allOpts;
-      const mark = mapMark(
-        spec.mark,
-        spec.deriveServerUrl,
-        resolveToken
-      ) as any;
-      mark.render(container, {
-        w,
-        h,
-        axes: axes ?? false,
-        debug: debug ?? false,
-      });
-    } else if (spec.type === "layer") {
-      // Layer-level options: w/h/axes/debug are render options; the rest
-      // (coord, color) become Layer's chart-level options.
-      const layerAll = spec.options || {};
-      const { w, h, axes, debug, ...layerOptsRaw } = layerAll;
-      const layerOpts = resolveOptions(layerOptsRaw);
+  // Wrap the render path in an async IIFE so we can `await` each path's
+  // gofish `.render()` (now Promise-returning since `inferRaw` went async
+  // and RPC-based mark-fns/lambda-accessors layer on top). Without awaiting,
+  // `__GOFISH_RENDER_COMPLETE__` would fire while the DOM is still being
+  // mutated, and Playwright's screenshot times out waiting for the element
+  // to stabilize.
+  (async () => {
+    try {
+      if (spec.type === "raw-mark") {
+        const allOpts = spec.options || {};
+        const { w, h, axes, debug } = allOpts;
+        const mark = mapMark(
+          spec.mark,
+          spec.deriveServerUrl,
+          resolveToken
+        ) as any;
+        await mark.render(container, {
+          w,
+          h,
+          axes: axes ?? false,
+          debug: debug ?? false,
+        });
+      } else if (spec.type === "layer") {
+        // Layer-level options: w/h/axes/debug are render options; the rest
+        // (coord, color) become Layer's chart-level options.
+        const layerAll = spec.options || {};
+        const { w, h, axes, debug, ...layerOptsRaw } = layerAll;
+        const layerOpts = resolveOptions(layerOptsRaw);
 
-      const childCharts = spec.charts.map((c) =>
-        buildChartFromSpec(c, spec.deriveServerUrl, resolveToken)
+        const childCharts = spec.charts.map((c) =>
+          buildChartFromSpec(c, spec.deriveServerUrl, resolveToken)
+        );
+
+        const layerNode =
+          Object.keys(layerOpts).length > 0
+            ? Layer(layerOpts as any, childCharts)
+            : Layer(childCharts);
+
+        await layerNode.render(container, {
+          w,
+          h,
+          axes: axes ?? false,
+          debug: debug ?? false,
+        } as any);
+      } else {
+        // Single-chart path. Pull render options out; rest are chart-level.
+        const allOpts = spec.options || {};
+        const { w, h, axes, debug, ...chartOptsRaw } = allOpts;
+        const node = buildChartFromSpec(
+          {
+            data: spec.data,
+            operators: spec.operators,
+            mark: spec.mark,
+            options: chartOptsRaw,
+            zOrder: spec.zOrder ?? null,
+          },
+          spec.deriveServerUrl,
+          resolveToken
+        );
+
+        await node.render(container, {
+          w,
+          h,
+          axes: axes ?? false,
+          debug: debug ?? false,
+        } as any);
+      }
+
+      // Allow a tick for SolidJS to flush renders.
+      await new Promise<void>((resolve) =>
+        requestAnimationFrame(() => resolve())
       );
-
-      const layerNode =
-        Object.keys(layerOpts).length > 0
-          ? Layer(layerOpts as any, childCharts)
-          : Layer(childCharts);
-
-      layerNode.render(container, {
-        w,
-        h,
-        axes: axes ?? false,
-        debug: debug ?? false,
-      } as any);
-    } else {
-      // Single-chart path. Pull render options out; rest are chart-level.
-      const allOpts = spec.options || {};
-      const { w, h, axes, debug, ...chartOptsRaw } = allOpts;
-      const node = buildChartFromSpec(
-        {
-          data: spec.data,
-          operators: spec.operators,
-          mark: spec.mark,
-          options: chartOptsRaw,
-          zOrder: spec.zOrder ?? null,
-        },
-        spec.deriveServerUrl,
-        resolveToken
-      );
-
-      node.render(container, {
-        w,
-        h,
-        axes: axes ?? false,
-        debug: debug ?? false,
-      } as any);
-    }
-
-    // Allow a tick for SolidJS to flush renders
-    requestAnimationFrame(() => {
       window.__GOFISH_RENDER_COMPLETE__ = true;
-    });
-  } catch (err) {
-    window.__GOFISH_RENDER_ERROR__ =
-      err instanceof Error ? err.message : String(err);
-    window.__GOFISH_RENDER_COMPLETE__ = true;
-  }
+    } catch (err) {
+      window.__GOFISH_RENDER_ERROR__ =
+        err instanceof Error ? err.message : String(err);
+      window.__GOFISH_RENDER_COMPLETE__ = true;
+    }
+  })();
 }
 
 // Expose globally so Playwright can call it
