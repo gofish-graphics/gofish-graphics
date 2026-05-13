@@ -267,8 +267,15 @@ function isTokenSentinel(v: any): v is TokenSentinel {
 function wrapWithScope(inner: any): any {
   const wrapped: any = async (data: any, key: any, layerContext: any) => {
     const node: any = await Promise.resolve(inner(data, key, layerContext));
-    if (node && typeof node.scope === "function") {
-      node.scope();
+    // Match JS `createMark`'s post-resolve sequence: datum, then scope.
+    // We skip the `node.name(key)` step because the widget's mapMark
+    // already chains `.name(spec.name)` when set, and an empty-string
+    // name on a nested combinator child disrupts layer-context registration.
+    if (node) {
+      node.datum = data;
+      if (typeof node.scope === "function") {
+        node.scope();
+      }
     }
     return node;
   };

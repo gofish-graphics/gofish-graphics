@@ -243,8 +243,19 @@ function isTokenSentinel(v: any): v is TokenSentinel {
 function wrapWithScope(inner: any): any {
   const wrapped: any = async (data: any, key: any, layerContext: any) => {
     const node: any = await Promise.resolve(inner(data, key, layerContext));
-    if (node && typeof node.scope === "function") {
-      node.scope();
+    // Match JS `createMark`'s post-resolve sequence: stamp datum, then
+    // declare a scope boundary. Layout reads `node.datum` during some
+    // bbox / inferRaw passes — missing the stamp shifts text positions
+    // by a pixel or two in the python-tutor stories. We skip the
+    // `node.name(key)` step JS createMark does because (a) the harness's
+    // mapMark already chains `.name(spec.name)` when set, and (b) calling
+    // `.name("")` on a nested combinator child disrupts layer-context
+    // registration when the parent expects un-named children.
+    if (node) {
+      node.datum = data;
+      if (typeof node.scope === "function") {
+        node.scope();
+      }
     }
     return node;
   };
