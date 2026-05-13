@@ -20,27 +20,6 @@ import { createNodeOperator } from "../withGoFish";
 import { computeTransformedBoundingBox } from "./coordUtils";
 import { empty, union } from "../../util/bbox";
 import type { AxesOptions } from "../gofish";
-import { findPathToRoot } from "../_node";
-
-function posRelToAncestor(
-  keyNode: GoFishNode,
-  stopBefore: GoFishNode | undefined,
-  dim: 0 | 1
-): number {
-  let pos = (keyNode as any).intrinsicDims?.[dim]?.center ?? 0;
-  const path = findPathToRoot(keyNode);
-  const effectiveStop =
-    stopBefore && path.includes(stopBefore)
-      ? stopBefore
-      : stopBefore
-        ? path.find((n) => n.type === stopBefore.type)
-        : undefined;
-  for (const n of path) {
-    if (n === effectiveStop) break;
-    pos += n.transform?.translate?.[dim] ?? 0;
-  }
-  return pos;
-}
 
 export type CoordinateTransform = {
   type: string;
@@ -423,7 +402,6 @@ export const coord = createNodeOperator(
             if ((node as any)._polarAxisY !== undefined)
               axesY = (node as any)._polarAxisY;
             const [xSpace, ySpace] = spaceRef.current;
-            const keyContext = node.getRenderSession().keyContext;
             const rContent =
               (renderData as any)?.coordinateSpaceBbox?.rMax ??
               coordTransform.domain[1].max ??
@@ -492,14 +470,13 @@ export const coord = createNodeOperator(
                   );
                 }
               } else if (isORDINAL(xSpace) && xSpace.domain) {
-                // Ordinal theta axis: category labels at sector centers
-                for (const key of xSpace.domain) {
-                  const keyNode = keyContext[key];
-                  if (!keyNode) continue;
-                  const thetaCenter = posRelToAncestor(keyNode, node, 0);
-                  const sectorSize =
-                    (keyNode as any).intrinsicDims?.[0]?.size ?? 0;
-                  const thetaStart = thetaCenter - sectorSize / 2;
+                // Ordinal theta axis: evenly-spaced sector labels by index
+                const keys = xSpace.domain;
+                const n = keys.length;
+                const sectorWidth = (2 * Math.PI) / n;
+                for (let i = 0; i < n; i++) {
+                  const thetaStart = i * sectorWidth;
+                  const thetaCenter = thetaStart + sectorWidth / 2;
                   const [ix, iy] = coordTransform.transform([
                     thetaStart,
                     rOuter,
@@ -533,7 +510,7 @@ export const coord = createNodeOperator(
                       font-size="10px"
                       fill="gray"
                     >
-                      {key}
+                      {keys[i]}
                     </text>
                   );
                 }
