@@ -32,6 +32,21 @@ jobs:
       - name: Setup Git LFS
         run: git lfs install
 
+      # The PythonTutor stories (and several others) use Andale Mono, Verdana,
+      # and other MS-core fonts. ubuntu-latest doesn't ship those; without
+      # them Chromium falls through to fontconfig generic-monospace /
+      # generic-sans, and the JS storybook and Python harness end up
+      # measuring text against different fallback resolutions. Installing the
+      # MS core fonts pins both pipelines to the same actual font files.
+      - name: Install MS TrueType core fonts
+        run: |
+          echo "ttf-mscorefonts-installer msttcorefonts/accepted-mscorefonts-eula select true" | sudo debconf-set-selections
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ttf-mscorefonts-installer
+          sudo fc-cache -f
+          fc-match "Andale Mono"
+          fc-match "Verdana"
+
       - name: Fetch snapshot baselines
         run: |
           SNAP_BRANCH="snapshots/${GITHUB_HEAD_REF:-${GITHUB_REF_NAME}}"
@@ -219,6 +234,19 @@ jobs:
 
       - name: Setup Git LFS
         run: git lfs install
+
+      # Match the JS job's font set so the Python harness measures text
+      # against the same actual fonts (Andale Mono, Verdana, ...) the JS
+      # storybook capture saw. Without this, Chromium's fontconfig
+      # fallback chain causes the two pipelines to diverge on a few px.
+      - name: Install MS TrueType core fonts
+        run: |
+          echo "ttf-mscorefonts-installer msttcorefonts/accepted-mscorefonts-eula select true" | sudo debconf-set-selections
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ttf-mscorefonts-installer
+          sudo fc-cache -f
+          fc-match "Andale Mono"
+          fc-match "Verdana"
 
       - name: Fetch snapshot baselines
         run: |
