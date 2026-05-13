@@ -532,6 +532,18 @@ class ConstrainableMark(Mark):
             child_names.append(
                 child_name.tag if isinstance(child_name, Token) else child_name
             )
+        # Two children sharing the same tag would silently collapse to one
+        # sentinel in the callback kwargs, leaving the second unreachable.
+        # Surface that as an error early.
+        seen: Dict[str, int] = {}
+        for name in child_names:
+            seen[name] = seen.get(name, 0) + 1
+        duplicates = sorted(n for n, count in seen.items() if count > 1)
+        if duplicates:
+            raise ValueError(
+                ".constrain() children must have unique names; saw "
+                f"duplicates: {duplicates}"
+            )
         refs = {name: RefSentinel(name) for name in child_names}
         constraints = callback(**refs)
         new_mark = type(self)(

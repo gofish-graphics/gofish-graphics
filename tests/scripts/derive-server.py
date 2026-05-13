@@ -63,6 +63,11 @@ sys.path.insert(0, os.path.join(PROJECT_ROOT, "tests"))
 # Registry: lambdaId → Python function
 _registry: dict = {}
 
+# Track where the `python_stories` package was registered from, so a /load
+# request with a different pythonStoriesDir can re-register against the new
+# path instead of silently reusing a stale registration.
+_python_stories_pkg_dir: "str | None" = None
+
 
 class DeriveHandler(BaseHTTPRequestHandler):
     def do_GET(self):
@@ -104,16 +109,34 @@ class DeriveHandler(BaseHTTPRequestHandler):
             pkg_dir = data.get("pythonStoriesDir")
 
             # Make `from python_stories.data import ...` resolvable, the same
-            # way capture-python-dom.ts had to set it up before.
-            if pkg_dir and "python_stories" not in sys.modules:
-                pkg_init = os.path.join(pkg_dir, "__init__.py")
-                pkg_spec = importlib.util.spec_from_file_location(
-                    "python_stories", pkg_init,
-                    submodule_search_locations=[pkg_dir]
-                )
-                pkg_mod = importlib.util.module_from_spec(pkg_spec)
-                sys.modules["python_stories"] = pkg_mod
-                pkg_spec.loader.exec_module(pkg_mod)
+            # way capture-python-dom.ts had to set it up before. If a prior
+            # /load registered the package against a different directory
+            # (e.g. a test run crossing pythonStoriesDir boundaries), drop
+            # the stale registration so imports resolve against the new path.
+            if pkg_dir:
+                global _python_stories_pkg_dir
+                normalized = os.path.abspath(pkg_dir)
+                if (
+                    "python_stories" in sys.modules
+                    and _python_stories_pkg_dir != normalized
+                ):
+                    for mod_name in [
+                        name
+                        for name in sys.modules
+                        if name == "python_stories"
+                        or name.startswith("python_stories.")
+                    ]:
+                        sys.modules.pop(mod_name, None)
+                if "python_stories" not in sys.modules:
+                    pkg_init = os.path.join(pkg_dir, "__init__.py")
+                    pkg_spec = importlib.util.spec_from_file_location(
+                        "python_stories", pkg_init,
+                        submodule_search_locations=[pkg_dir]
+                    )
+                    pkg_mod = importlib.util.module_from_spec(pkg_spec)
+                    sys.modules["python_stories"] = pkg_mod
+                    pkg_spec.loader.exec_module(pkg_mod)
+                    _python_stories_pkg_dir = normalized
 
             # Always reimport the story file fresh — Python caches by module
             # name, and we use the same name across stories. Without

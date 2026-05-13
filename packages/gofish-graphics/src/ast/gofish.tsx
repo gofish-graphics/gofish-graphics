@@ -159,13 +159,9 @@ export async function layout(
   if (contexts?.session) {
     child.setRenderSession(contexts.session);
   }
-  if (
-    typeof document !== "undefined" &&
-    document.fonts &&
-    typeof document.fonts.ready?.then === "function"
-  ) {
-    await document.fonts.ready;
-  }
+  // Note: callers must await `document.fonts.ready` before invoking
+  // `layout()`. The public `gofish()` entry handles this; standalone
+  // callers of `layout()` are responsible for the wait themselves.
   if (debug) {
     console.log("🌳 Input Scene Graph:");
     debugInputSceneGraph(child);

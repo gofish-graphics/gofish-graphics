@@ -164,7 +164,17 @@ function makeLambdaAccessor(
       );
     }
     const result = await resp.json();
-    return Array.isArray(result) ? result[0] : result;
+    if (Array.isArray(result)) {
+      if (result.length === 0) {
+        console.warn(
+          `lambda accessor ${lambdaId} returned an empty array; ` +
+            `did the Python lambda raise or return None? Surfacing as null.`
+        );
+        return null;
+      }
+      return result[0];
+    }
+    return result;
   };
 }
 
@@ -461,6 +471,10 @@ function mapMark(
       const constraints = spec.constraints;
       mark = (mark as any).constrain((refs: Record<string, any>) =>
         constraints.map((c) =>
+          // JS Constraint.align/distribute signature is (options, refs) — see
+          // packages/gofish-graphics/src/ast/constraints/index.ts. Python
+          // surfaces refs-first ergonomically (`Constraint.align([a,b], x=...)`)
+          // but serializes to the same `{options, refs}` IR.
           (Constraint as any)[c.type](
             c.options,
             c.refs.map((name) => refs[name])
