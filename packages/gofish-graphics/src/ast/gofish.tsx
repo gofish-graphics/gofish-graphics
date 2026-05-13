@@ -159,13 +159,9 @@ export async function layout(
   if (contexts?.session) {
     child.setRenderSession(contexts.session);
   }
-  if (
-    typeof document !== "undefined" &&
-    document.fonts &&
-    typeof document.fonts.ready?.then === "function"
-  ) {
-    await document.fonts.ready;
-  }
+  // Note: callers must await `document.fonts.ready` before invoking
+  // `layout()`. The public `gofish()` entry handles this; standalone
+  // callers of `layout()` are responsible for the wait themselves.
   if (debug) {
     console.log("🌳 Input Scene Graph:");
     debugInputSceneGraph(child);
@@ -338,6 +334,19 @@ export const gofish = (
       const contexts = {
         session,
       };
+
+      // Text mark bbox measurements (via canvas measureText in
+      // text.tsx) depend on resolved font metrics. If a webfont is
+      // still loading when layout runs, measurement uses fallback
+      // metrics, baking the wrong positions into the SVG.
+      // FontFaceSet.ready resolves once all CSS-declared @font-face
+      // loads are done. System-fallback resolution (e.g. "Andale Mono"
+      // → fontconfig monospace on Linux) bypasses this entirely, so
+      // this isn't a full guarantee — but it's a strict improvement
+      // for any consumer using <link>-loaded webfonts.
+      if (typeof document !== "undefined" && document.fonts?.ready) {
+        await document.fonts.ready;
+      }
 
       const layoutResult = await layout(
         { w, h, x, y, transform, debug, defs, axes },

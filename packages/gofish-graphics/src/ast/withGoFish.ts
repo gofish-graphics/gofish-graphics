@@ -578,7 +578,10 @@ export function createMark(
         } else if (channelType === "color") {
           shapeProps[propName] = inferColor(markValue, data);
         } else if (channelType === "raw") {
-          shapeProps[propName] = inferRaw(markValue, data);
+          // `inferRaw` is async so that callable accessors may return a
+          // Promise — used by the Python wrapper to bridge `text(text=
+          // lambda d: ...)` through the derive-server RPC.
+          shapeProps[propName] = await inferRaw(markValue, data);
         } else {
           shapeProps[propName] = markValue;
         }

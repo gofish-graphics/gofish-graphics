@@ -233,6 +233,11 @@ function camelToSnake(s: string): string {
     .toLowerCase();
 }
 
+/** JS export name → kebab-case path segment. */
+function jsExportToKebab(s: string): string {
+  return camelToSnake(s).replace(/_/g, "-");
+}
+
 // Mirror the per-StoryObj logic in check-python-sync.ts so the viewer's
 // file-level counts line up with what the `--all` check reports.
 function readJsStoryExports(absPath: string): string[] {
@@ -306,7 +311,7 @@ for (const [fileId, jsFile] of storyIndex) {
   const pyFns = fileExempt ? new Set<string>() : readPyStoryFns(pythonAbs);
   const exports: ExportEntry[] = jsExports.map((name) => {
     const expected = `story_${camelToSnake(name)}`;
-    const exportId = `${fileId}--${camelToSnake(name).replace(/_/g, "-")}`;
+    const exportId = `${fileId}--${jsExportToKebab(name)}`;
     if (fileExempt || isExportExempt(jsFile, name)) {
       exportsExempt++;
       return {
@@ -411,9 +416,7 @@ for (const diff of parityDiffs) {
       pair.exports.find((e) => e.id === id) ??
       // Slug-based fallback (case-insensitive). Lets DOM diffs attach
       // even when export name casing differs.
-      pair.exports.find(
-        (e) => camelToSnake(e.name).replace(/_/g, "-") === exportSlug
-      );
+      pair.exports.find((e) => jsExportToKebab(e.name) === exportSlug);
     if (exp) {
       // Decrement whatever category counter the original status used
       // before overwriting it with parity-mismatch.
@@ -531,9 +534,7 @@ if (captureResults) {
     if (pair && exportSlug) {
       const exp =
         pair.exports.find((e) => e.id === id) ??
-        pair.exports.find(
-          (e) => camelToSnake(e.name).replace(/_/g, "-") === exportSlug
-        );
+        pair.exports.find((e) => jsExportToKebab(e.name) === exportSlug);
       if (exp) {
         // Don't downgrade an existing fail (e.g. DOM diff already
         // attached); capture is a less specific signal.

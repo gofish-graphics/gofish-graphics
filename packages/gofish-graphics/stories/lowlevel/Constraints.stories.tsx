@@ -383,7 +383,7 @@ export const AlignOnly: StoryObj<Args> = {
  * Same as AlignOnly, but children are manually placed on y.
  * Useful for making x-alignment behavior obvious without distribution.
  */
-export const AlignOnly_ManualY: StoryObj<Args> = {
+export const AlignOnlyManualY: StoryObj<Args> = {
   args: { w: 300, h: 300 },
   render: (args: Args) => {
     const container = initializeContainer();

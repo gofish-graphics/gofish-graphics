@@ -63,6 +63,11 @@ sys.path.insert(0, os.path.join(PROJECT_ROOT, "tests"))
 # Registry: lambdaId → Python function
 _registry: dict = {}
 
+# Track where the `python_stories` package was registered from, so a /load
+# request with a different pythonStoriesDir can re-register against the new
+# path instead of silently reusing a stale registration.
+_python_stories_pkg_dir: "str | None" = None
+
 
 class DeriveHandler(BaseHTTPRequestHandler):
     def do_GET(self):
@@ -104,16 +109,34 @@ class DeriveHandler(BaseHTTPRequestHandler):
             pkg_dir = data.get("pythonStoriesDir")
 
             # Make `from python_stories.data import ...` resolvable, the same
-            # way capture-python-dom.ts had to set it up before.
-            if pkg_dir and "python_stories" not in sys.modules:
-                pkg_init = os.path.join(pkg_dir, "__init__.py")
-                pkg_spec = importlib.util.spec_from_file_location(
-                    "python_stories", pkg_init,
-                    submodule_search_locations=[pkg_dir]
-                )
-                pkg_mod = importlib.util.module_from_spec(pkg_spec)
-                sys.modules["python_stories"] = pkg_mod
-                pkg_spec.loader.exec_module(pkg_mod)
+            # way capture-python-dom.ts had to set it up before. If a prior
+            # /load registered the package against a different directory
+            # (e.g. a test run crossing pythonStoriesDir boundaries), drop
+            # the stale registration so imports resolve against the new path.
+            if pkg_dir:
+                global _python_stories_pkg_dir
+                normalized = os.path.abspath(pkg_dir)
+                if (
+                    "python_stories" in sys.modules
+                    and _python_stories_pkg_dir != normalized
+                ):
+                    for mod_name in [
+                        name
+                        for name in sys.modules
+                        if name == "python_stories"
+                        or name.startswith("python_stories.")
+                    ]:
+                        sys.modules.pop(mod_name, None)
+                if "python_stories" not in sys.modules:
+                    pkg_init = os.path.join(pkg_dir, "__init__.py")
+                    pkg_spec = importlib.util.spec_from_file_location(
+                        "python_stories", pkg_init,
+                        submodule_search_locations=[pkg_dir]
+                    )
+                    pkg_mod = importlib.util.module_from_spec(pkg_spec)
+                    sys.modules["python_stories"] = pkg_mod
+                    pkg_spec.loader.exec_module(pkg_mod)
+                    _python_stories_pkg_dir = normalized
 
             # Always reimport the story file fresh — Python caches by module
             # name, and we use the same name across stories. Without
@@ -138,7 +161,15 @@ class DeriveHandler(BaseHTTPRequestHandler):
             builder = result[0]
             options = result[1] if len(result) > 1 else {}
 
-            from gofish.ast import ChartBuilder, DeriveOperator, LayerBuilder, LayerSelector
+            from gofish.ast import (
+                ChartBuilder,
+                DeriveOperator,
+                LayerBuilder,
+                LayerSelector,
+                Mark,
+                _collect_mark_lambdas,
+                _MarkFn,
+            )
 
             def serialize_chart(child: ChartBuilder) -> tuple:
                 """Return (child_payload, derive_ids) for one chart builder.
@@ -165,6 +196,33 @@ class DeriveHandler(BaseHTTPRequestHandler):
                         child_derive_ids.append(op.lambda_id)
                         _registry[op.lambda_id] = op.fn
 
+                # Register every callable accessor on the mark in the same
+                # registry. The harness/widget rebuilds an async arrow that
+                # POSTs `[row]` to `/derive/<lambda_id>` per invocation.
+                if child._mark is not None and not isinstance(child._mark, _MarkFn):
+                    for lambda_id, rows_fn in _collect_mark_lambdas(child._mark):
+                        child_derive_ids.append(lambda_id)
+                        _registry[lambda_id] = rows_fn
+
+                # Mark-as-function: register a wrapper that runs the user's
+                # `(data) -> ChartBuilder` callable, recursively serializes
+                # the resulting ChartBuilder (which also registers its own
+                # derive ops + nested mark lambdas), and returns the chart
+                # IR. The JS harness fetches this IR per invocation and
+                # builds a ChartBuilder from it.
+                if isinstance(child._mark, _MarkFn):
+                    mark_fn = child._mark
+                    child_derive_ids.append(mark_fn.lambda_id)
+
+                    def _mark_fn_wrapped(data, _user_fn=mark_fn.fn):
+                        inner_cb = _user_fn(data)
+                        payload, _inner_ids = serialize_chart(inner_cb)
+                        # Return as a single-element list to fit the existing
+                        # `/derive/<id>` rows-in / rows-out contract.
+                        return [payload]
+
+                    _registry[mark_fn.lambda_id] = _mark_fn_wrapped
+
                 return (
                     {
                         "operators": child_ir["operators"],
@@ -175,6 +233,22 @@ class DeriveHandler(BaseHTTPRequestHandler):
                     },
                     child_derive_ids,
                 )
+
+            if isinstance(builder, Mark):
+                # Raw-mark render path: a Mark returned directly from a
+                # story (no Chart, no Layer). Mirrors JS storybook spelling
+                # `spread(opts, [marks]).render(container, {w, h})`.
+                raw_mark_derive_ids = []
+                for lambda_id, rows_fn in _collect_mark_lambdas(builder):
+                    raw_mark_derive_ids.append(lambda_id)
+                    _registry[lambda_id] = rows_fn
+                self._json_response(200, {
+                    "_kind": "raw-mark",
+                    "mark": builder.to_dict(),
+                    "options": options,
+                    "deriveIds": raw_mark_derive_ids,
+                })
+                return
 
             if isinstance(builder, LayerBuilder):
                 child_payloads = []

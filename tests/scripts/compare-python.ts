@@ -15,6 +15,47 @@ import { getSnapshotBranchName, pullSnapshots } from "./snapshot-branch.js";
 
 const SUMMARY_PATH = join(import.meta.dirname, "../tmp/parity-summary.json");
 
+/**
+ * Emit a unified-style line diff to stderr for a single failing story so the
+ * CI log shows what changed without requiring a parity-review-site download.
+ * Both inputs are already normalized by `normalize-dom.ts`, so a line-by-line
+ * diff is informative. Capped at `maxLines` total context lines.
+ */
+function printInlineDiff(
+  baseline: string,
+  python: string,
+  maxLines = 40
+): void {
+  const a = baseline.split("\n");
+  const b = python.split("\n");
+  // Trivial line-by-line walk — both files have the same overall structure
+  // post-normalization, so an LCS isn't worth the complexity.
+  const out: string[] = [];
+  const n = Math.max(a.length, b.length);
+  let truncated = false;
+  for (let i = 0; i < n; i++) {
+    const av = a[i];
+    const bv = b[i];
+    if (av === bv) continue;
+    if (out.length >= maxLines) {
+      truncated = true;
+      break;
+    }
+    if (av !== undefined) out.push(`    - ${av}`);
+    if (out.length >= maxLines) {
+      truncated = true;
+      break;
+    }
+    if (bv !== undefined) out.push(`    + ${bv}`);
+  }
+  for (const line of out) process.stderr.write(line + "\n");
+  if (truncated) {
+    process.stderr.write(
+      "    … (truncated; see parity-review-site artifact for full diff)\n"
+    );
+  }
+}
+
 // Pull baselines from the snapshot branch if not already present locally.
 pullSnapshots(getSnapshotBranchName(), join(ROOT, "__snapshots__"));
 
@@ -48,6 +89,7 @@ for (const file of pyFiles) {
 
   if (pythonContent !== baselineContent) {
     console.error(`  FAIL: Parity mismatch for ${file}`);
+    printInlineDiff(baselineContent, pythonContent);
     parityMismatches++;
   } else {
     console.log(`  PASS: ${file}`);
