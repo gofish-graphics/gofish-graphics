@@ -300,7 +300,7 @@ export const gofish = (
   return container;
 };
 
-const PADDING = 10;
+const PADDING = 40;
 const LEGEND_MARGIN = 120; // right-side buffer for legend swatches + labels
 
 /**

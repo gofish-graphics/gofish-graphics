@@ -48,8 +48,7 @@ export const Default: StoryObj<Args> = {
       ]))
       .render(container, {
         w: args.w,
-        h: args.h,
-        padding: 40
+        h: args.h
       });
 
     return container;

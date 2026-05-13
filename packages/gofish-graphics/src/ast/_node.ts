@@ -569,63 +569,18 @@ export class GoFishNode {
         Math.max(0, size[0] - axisBudgetX),
         Math.max(0, size[1] - axisBudgetY),
       ];
-      // Rescale posScales for the content area, leaving a small top/right margin
-      // so the maximum tick never sits exactly at the content boundary.
-      // Without this, niceMax always maps to contentH, landing at SVG y=PADDING
-      // regardless of axis thickness — the top label always clips.
-      const TICK_EDGE_PAD = 8;
-
-      // Apply TICK_EDGE_PAD only when this node is the first to scale a given
-      // posScale. A fresh root posScale maps domain_max to exactly size[dim];
-      // a posScale already rescaled by an ancestor maps it to < size[dim].
-      // Use rootNiceSpace domain max (the union domain) so that per-species
-      // scatters inside a layer correctly detect they hold the fresh posScale.
-      const usp = this._underlyingSpace;
-      const rootNiceForPad = this.getRenderSession()?.rootNiceSpace;
-      const effectiveDomainMaxX =
-        rootNiceForPad?.[0] && isPOSITION(rootNiceForPad[0])
-          ? rootNiceForPad[0].domain?.max
-          : usp && isPOSITION(usp[0])
-            ? usp[0].domain?.max
-            : undefined;
-      const effectiveDomainMaxY =
-        rootNiceForPad?.[1] && isPOSITION(rootNiceForPad[1])
-          ? rootNiceForPad[1].domain?.max
-          : usp && isPOSITION(usp[1])
-            ? usp[1].domain?.max
-            : undefined;
-      const tickPadX =
-        (this.axis_x === true || this._axisBudgetOnlyX) &&
-        posScales[0] &&
-        effectiveDomainMaxX !== undefined &&
-        Math.abs(posScales[0](effectiveDomainMaxX) - size[0]) < 1
-          ? TICK_EDGE_PAD
-          : 0;
-      const tickPadY =
-        (this.axis_y === true || this._axisBudgetOnlyY) &&
-        posScales[1] &&
-        effectiveDomainMaxY !== undefined &&
-        Math.abs(posScales[1](effectiveDomainMaxY) - size[1]) < 1
-          ? TICK_EDGE_PAD
-          : 0;
-
-      // Change 2: pass the incoming posScale through unchanged when it was
-      // already rescaled by an ancestor (tickPad === 0 → not the root scale).
-      // When tickPad > 0 this node is the first to scale, so it compresses.
-      // This prevents double-compression: inner y-axes align with the outer
-      // because both use the same root-derived scale, just proportionally
-      // mapped to their respective content sizes without stacking extra margins.
-      const outerManagesY = posScales[1] !== undefined && tickPadY === 0;
-      const outerManagesX = posScales[0] !== undefined && tickPadX === 0;
+      // Rescale posScales to fit within content area.
+      // outerManages: when posScales[dim] is already provided by an ancestor,
+      // pass it through unchanged to avoid double-compression in faceted charts.
+      const outerManagesX = posScales[0] !== undefined;
+      const outerManagesY = posScales[1] !== undefined;
 
       contentPosScales = [
         posScales[0] && axisBudgetX > 0 && !outerManagesX && size[0] > 0
-          ? (v: number) =>
-              posScales[0]!(v) * ((contentSize[0] - tickPadX) / size[0])
+          ? (v: number) => posScales[0]!(v) * (contentSize[0] / size[0])
           : posScales[0],
         posScales[1] && axisBudgetY > 0 && !outerManagesY && size[1] > 0
-          ? (v: number) =>
-              posScales[1]!(v) * ((contentSize[1] - tickPadY) / size[1])
+          ? (v: number) => posScales[1]!(v) * (contentSize[1] / size[1])
           : posScales[1],
       ];
       contentScaleFactors = [
@@ -645,12 +600,8 @@ export class GoFishNode {
       this._contentBaseline = [axisBudgetX, axisBudgetY];
 
       // When this node owns an axis for a POSITION dimension but the outer
-      // context didn't supply a posScale for it (e.g. inner scatter inside a
-      // faceted chart where the outer x-space is ORDINAL), compute a local
-      // padded posScale now. Injecting it into contentPosScales ensures the
-      // operator's _layout (scatter circles) and the axis node both use the
-      // same scale with TICK_EDGE_PAD margin — matching the behaviour of the
-      // non-faceted case where the outer rescaling already applies the pad.
+      // context didn't supply a posScale (e.g. inner scatter inside a faceted
+      // chart where the outer x-space is ORDINAL), compute a local posScale.
       const uspace = this._underlyingSpace;
       if (
         !contentPosScales[0] &&
@@ -665,7 +616,7 @@ export class GoFishNode {
               value: [uspace[0].domain.min!, uspace[0].domain.max!],
               measure: "unit",
             }),
-            contentSize[0] - TICK_EDGE_PAD
+            contentSize[0]
           ),
           contentPosScales[1],
         ];
@@ -684,7 +635,7 @@ export class GoFishNode {
               value: [uspace[1].domain.min!, uspace[1].domain.max!],
               measure: "unit",
             }),
-            contentSize[1] - TICK_EDGE_PAD
+            contentSize[1]
           ),
         ];
       }
