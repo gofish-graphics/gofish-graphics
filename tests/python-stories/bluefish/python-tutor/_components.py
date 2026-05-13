@@ -7,7 +7,7 @@ Mirrors:
 - heap.ts
 - globalFrame.ts
 
-Each component is a `@createMark` decorator (so internal `createName(...)`
+Each component is a `@mark` decorator (so internal `createName(...)`
 names get a `node.scope()` post-pass on the JS side). The helpers are
 authored in one file to sidestep the `python_stories.bluefish.python-tutor.*`
 import-path issue — the storybook title resolves to a dashed dir, which
@@ -17,9 +17,9 @@ Python can't address via `from` imports.
 from gofish import (
     Constraint,
     arrow,
-    createMark,
     createName,
     layer,
+    mark,
     rect,
     ref,
     spread,
@@ -29,7 +29,7 @@ from gofish import (
 FONT_FAMILY = "verdana, arial, helvetica, sans-serif"
 
 
-@createMark
+@mark
 def stack_slot(variable: str, value=None):
     """One row in a stack frame — variable name + boxed value."""
     box_tag = createName("box")
@@ -72,7 +72,7 @@ def stack_slot(variable: str, value=None):
     )
 
 
-@createMark
+@mark
 def elm_tuple(tupleIndex: str, tupleData=None):
     """One boxed cell in a heap-object row."""
     val_tag = createName("val")
@@ -109,7 +109,7 @@ def elm_tuple(tupleIndex: str, tupleData=None):
     )
 
 
-@createMark
+@mark
 def heap_object(objectType: str, objectValues: list):
     """A heap-side object — type label + horizontal row of `elm_tuple` cells."""
     elm_tuples_tag = createName("elmTuples")
@@ -142,7 +142,7 @@ def heap_object(objectType: str, objectValues: list):
     )
 
 
-@createMark
+@mark
 def heap(heap: list, heapArrangement: list):
     """2D grid of `heap_object`s laid out by an arrangement matrix."""
     return spread(
@@ -186,7 +186,7 @@ def heap(heap: list, heapArrangement: list):
     )
 
 
-@createMark
+@mark
 def global_frame(stack: list):
     """Frame with a label, side border, and a column of `stack_slot`s."""
     variables_tag = createName("variables")

@@ -261,9 +261,9 @@ function isTokenSentinel(v: any): v is TokenSentinel {
 
 /** Wrap a Mark so its resolved GoFishNode gets `.scope()` called — matches
  *  what JS `createMark` does internally. Triggered by the `__scope: true`
- *  flag the Python `@createMark` decorator stamps on a Mark's IR.
- *  Forwards `.name`/`.label`/`.render`/`.constrain` so the scoped mark
- *  still behaves as a NameableMark for the raw-mark render path. */
+ *  flag the Python `@mark` decorator stamps on a Mark's IR. Forwards
+ *  `.name`/`.label`/`.render`/`.constrain` so the scoped mark still
+ *  behaves as a NameableMark for the raw-mark render path. */
 function wrapWithScope(inner: any): any {
   const wrapped: any = async (data: any, key: any, layerContext: any) => {
     const node: any = await Promise.resolve(inner(data, key, layerContext));

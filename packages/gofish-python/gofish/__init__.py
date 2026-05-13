@@ -5,7 +5,7 @@ GoFish Graphics in Python
 from .ast import (
     chart,
     ChartBuilder,
-    createMark,
+    mark,
     createName,
     Token,
     Layer,
@@ -49,7 +49,7 @@ from .ast import (
 __all__ = [
     "chart",
     "ChartBuilder",
-    "createMark",
+    "mark",
     "createName",
     "Token",
     "Layer",

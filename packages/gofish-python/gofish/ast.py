@@ -90,7 +90,7 @@ def _collect_mark_lambdas(mark: "Mark") -> List[tuple]:
 
 
 class Token:
-    """Hygienic name for a sub-mark inside a `@createMark` component.
+    """Hygienic name for a sub-mark inside a `@mark` component.
 
     Mirrors JS `createName(tag) -> Token`
     (`packages/gofish-graphics/src/ast/createName.ts`). Each Token carries
@@ -113,7 +113,7 @@ def createName(tag: str) -> Token:
     return Token(tag)
 
 
-def createMark(fn: Callable) -> Callable:
+def mark(fn: Callable) -> Callable:
     """Decorator that promotes a `(**props) -> Mark` function into a
     reusable component factory.
 
@@ -129,15 +129,15 @@ def createMark(fn: Callable) -> Callable:
     """
 
     def wrapped(**props):
-        mark = fn(**props)
-        if not isinstance(mark, Mark):
+        result = fn(**props)
+        if not isinstance(result, Mark):
             raise TypeError(
-                f"@createMark function `{fn.__name__}` must return a Mark"
+                f"@mark function `{fn.__name__}` must return a Mark"
             )
-        mark._is_scope = True
-        return mark
+        result._is_scope = True
+        return result
 
-    wrapped.__name__ = getattr(fn, "__name__", "createMark_component")
+    wrapped.__name__ = getattr(fn, "__name__", "mark_component")
     wrapped.__doc__ = fn.__doc__
     return wrapped
 
@@ -163,7 +163,7 @@ class Mark:
         # When True, the harness wraps the resulting JS Mark in a
         # `node.scope()` post-pass so that internal names declared via
         # `createName(...)` don't leak to outer scope. Set by the
-        # `@createMark` decorator.
+        # `@mark` decorator.
         self._is_scope: bool = False
         # When set, the harness invokes the JS-side mark with this datum
         # and key — mirrors the JS `rect({...})(d, key)` pattern used by
@@ -209,7 +209,7 @@ class Mark:
         Args:
             name_or_token: A bare string for flat naming, or a `Token`
                 returned by `createName()` for hygienic scoping inside a
-                `@createMark`-decorated component.
+                `@mark`-decorated component.
 
         Returns:
             New Mark (same subclass as self) with name set
@@ -303,7 +303,7 @@ class Mark:
         constraints = getattr(self, "_constraints", None)
         if constraints is not None:
             d["constraints"] = [c.to_dict() for c in constraints]
-        # `@createMark`-decorated components flag their output Mark as a
+        # `@mark`-decorated components flag their output Mark as a
         # scope boundary so the harness wraps the resolved node in
         # `node.scope()` — matches JS createMark's behavior.
         if self._is_scope:

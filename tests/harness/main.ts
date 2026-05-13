@@ -232,8 +232,8 @@ function isTokenSentinel(v: any): v is TokenSentinel {
 /**
  * Wrap a Mark so its resolved GoFishNode gets `.scope()` called on it —
  * matches what JS `createMark` does for any component-defined mark. The
- * Python wrapper's `@createMark` decorator flags its output with
- * `__scope: true`; this wrapper does the post-resolve call.
+ * Python wrapper's `@mark` decorator flags its output with `__scope: true`;
+ * this wrapper does the post-resolve call.
  *
  * The inner mark may be a `NameableMark`/`ConstrainableMark` (which has
  * `.name` / `.label` / `.render` / `.constrain` properties); forward all
@@ -468,7 +468,7 @@ function mapMark(
         )
       );
     }
-    // `@createMark`-decorated components flag their output for a
+    // `@mark`-decorated components flag their output for a
     // `node.scope()` post-resolution pass — wrap before applying name.
     if (spec.__scope) {
       mark = wrapWithScope(mark);
