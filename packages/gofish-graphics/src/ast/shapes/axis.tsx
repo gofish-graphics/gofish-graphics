@@ -10,8 +10,8 @@ import {
   type UnderlyingSpace,
 } from "../underlyingSpace";
 
-export const AXIS_THICKNESS = 35;
-const AXIS_LINE = AXIS_THICKNESS / 2;
+export const AXIS_WIDTH = 35;
+const AXIS_LINE = AXIS_WIDTH / 2;
 const TICK_LEN = 4;
 const LABEL_GAP = 7;
 
@@ -127,9 +127,9 @@ function ContinuousAxisNode({
         };
         intrinsicDims[crossDim] = {
           min: 0,
-          max: AXIS_THICKNESS,
-          size: AXIS_THICKNESS,
-          center: AXIS_THICKNESS / 2,
+          max: AXIS_WIDTH,
+          size: AXIS_WIDTH,
+          center: AXIS_WIDTH / 2,
         };
         return {
           intrinsicDims,
@@ -262,9 +262,9 @@ function DifferenceAxisNode({
         };
         intrinsicDims[crossDim] = {
           min: 0,
-          max: AXIS_THICKNESS,
-          size: AXIS_THICKNESS,
-          center: AXIS_THICKNESS / 2,
+          max: AXIS_WIDTH,
+          size: AXIS_WIDTH,
+          center: AXIS_WIDTH / 2,
         };
         return {
           intrinsicDims,
@@ -401,9 +401,9 @@ function OrdinalAxisNode({
         };
         intrinsicDims[crossDim] = {
           min: 0,
-          max: AXIS_THICKNESS,
-          size: AXIS_THICKNESS,
-          center: AXIS_THICKNESS / 2,
+          max: AXIS_WIDTH,
+          size: AXIS_WIDTH,
+          center: AXIS_WIDTH / 2,
         };
         return {
           intrinsicDims,

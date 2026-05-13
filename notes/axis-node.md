@@ -22,7 +22,7 @@ Top-down. First unclaimed node with POSITION/DIFFERENCE/ORDINAL space claims tha
 
 Only POSITION, DIFFERENCE, ORDINAL spaces get axes. SIZE does not. Coord-transform nodes (polar, clock, etc.) are skipped entirely — they manage their own coordinate space.
 
-**Layer nodes:** do not claim axes themselves. They accumulate which dims children have claimed and pass `budgetOnly` dims to subsequent siblings. A sibling that receives a `budgetOnly` dim reserves the same `AXIS_THICKNESS` margin (keeping content areas aligned for correct overlay) but does not create axis SVG. The `tickPad` compression is also applied to budget-only nodes so posScales are identical across all siblings.
+**Layer nodes:** do not claim axes themselves. They accumulate which dims children have claimed and pass `budgetOnly` dims to subsequent siblings. A sibling that receives a `budgetOnly` dim reserves the same `AXIS_WIDTH` margin (keeping content areas aligned for correct overlay) but does not create axis SVG. The `tickPad` compression is also applied to budget-only nodes so posScales are identical across all siblings.
 
 **Polar axis overrides:** `spread`/`stack` operators tag themselves with `_axisDir` (the stackDir). Inside `coord` nodes, `collectOverrides` uses `_axisDir` to map per-operator `axis:` flags to polar dimensions (theta vs radial) independently.
 
@@ -33,8 +33,8 @@ Nices **all** POSITION domains in the tree, not just axis-bearing nodes. This is
 ### layout() — axis budgeting
 
 ```
-axisBudgetX = axis_y || _axisBudgetOnlyY ? AXIS_THICKNESS : 0   (left space)
-axisBudgetY = axis_x || _axisBudgetOnlyX ? AXIS_THICKNESS : 0   (bottom space)
+axisBudgetX = axis_y || _axisBudgetOnlyY ? AXIS_WIDTH : 0   (left space)
+axisBudgetY = axis_x || _axisBudgetOnlyX ? AXIS_WIDTH : 0   (bottom space)
 contentSize = [max(0, size[0] - axisBudgetX), max(0, size[1] - axisBudgetY)]
 ```
 
@@ -42,8 +42,8 @@ Content size is clamped to zero so charts with `h:0` (e.g. 1D strip plots) don't
 
 **Nested / faceted axes — inner baseline expansion:**
 
-- `innerBaselineY` (for `_layoutAlignDir === 1`, horizontal spreads): `axisBudgetY += AXIS_THICKNESS` when any child has `axis_x`; reserves extra bottom row for inner x-axis labels.
-- `innerBaselineX` (for `_layoutAlignDir === 0`, vertical spreads): `axisBudgetX += AXIS_THICKNESS` when any child has `axis_y`; reserves extra left column for inner y-axis labels.
+- `innerBaselineY` (for `_layoutAlignDir === 1`, horizontal spreads): `axisBudgetY += AXIS_WIDTH` when any child has `axis_x`; reserves extra bottom row for inner x-axis labels.
+- `innerBaselineX` (for `_layoutAlignDir === 0`, vertical spreads): `axisBudgetX += AXIS_WIDTH` when any child has `axis_y`; reserves extra left column for inner y-axis labels.
 - **Internal baseline alignment:** After `alignChildren`, each inner frame is shifted back by `-_contentBaseline[alignDir]` so bars land at `posScale(0)`. `_contentBaseline` propagates upward through transparent layer nodes.
 - **Coord node children:** after `resolveAxes` runs on children of a `coord` node, all Cartesian `axis_x/y` and `_axisBudgetOnly*` flags are cleared from the entire coord subtree. This prevents per-operator `axis:` overrides (e.g. `stack({ axis: true })`) from applying Cartesian axis budgets inside polar coordinate space, where sizes are in radians/radius units. The `_axisOverride` values are still read by `collectOverrides` for polar axis routing before clearing.
 
@@ -66,8 +66,8 @@ Axis children are included in the `allChildrenJSX` array passed to `_render`, re
 
 ## axis.tsx — Axis Node Types
 
-`AXIS_THICKNESS = 30` — budget allocated per axis
-`AXIS_LINE = AXIS_THICKNESS / 2` — where the axis line is drawn (centered in budget)
+`AXIS_WIDTH = 30` — budget allocated per axis
+`AXIS_LINE = AXIS_WIDTH / 2` — where the axis line is drawn (centered in budget)
 `TICK_LEN = 4` — ticks extend from line away from content
 `LABEL_GAP = 3` — gap between tick end and label anchor
 

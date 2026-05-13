@@ -31,7 +31,7 @@ import {
 import { toJSON, interval } from "../util/interval";
 import { nice } from "d3-array";
 import type { KeyContext, ScaleContext } from "./gofish";
-import { createAxisNode, AXIS_THICKNESS } from "./shapes/axis";
+import { createAxisNode, AXIS_WIDTH } from "./shapes/axis";
 import { computePosScale, continuous } from "./domain";
 import type { TokenContext } from "./tokenContext";
 import { isToken, Token } from "./createName";
@@ -156,7 +156,7 @@ export class GoFishNode {
   // Axis rendering properties
   public axis_x?: boolean;
   public axis_y?: boolean;
-  // Budget-only: apply AXIS_THICKNESS margin but don't render the axis SVG
+  // Budget-only: apply AXIS_WIDTH margin but don't render the axis SVG
   // (set on non-first layer siblings that share an axis owned by sibling 0)
   public _axisBudgetOnlyX?: boolean;
   public _axisBudgetOnlyY?: boolean;
@@ -514,9 +514,9 @@ export class GoFishNode {
     posScales: Size<((pos: number) => number) | undefined>
   ): Placeable {
     let axisBudgetX =
-      this.axis_y === true || this._axisBudgetOnlyY ? AXIS_THICKNESS : 0;
+      this.axis_y === true || this._axisBudgetOnlyY ? AXIS_WIDTH : 0;
     let axisBudgetY =
-      this.axis_x === true || this._axisBudgetOnlyX ? AXIS_THICKNESS : 0;
+      this.axis_x === true || this._axisBudgetOnlyX ? AXIS_WIDTH : 0;
 
     // Change 1: expand outer axis budget to include inner baselines so both
     // label rows have room (outer labels + inner facet labels).
@@ -539,7 +539,7 @@ export class GoFishNode {
         ? this.children.reduce(
             (max, c) =>
               c instanceof GoFishNode && findAxisFlag(c, 0)
-                ? Math.max(max, AXIS_THICKNESS)
+                ? Math.max(max, AXIS_WIDTH)
                 : max,
             0
           )
@@ -550,7 +550,7 @@ export class GoFishNode {
         ? this.children.reduce(
             (max, c) =>
               c instanceof GoFishNode && findAxisFlag(c, 1)
-                ? Math.max(max, AXIS_THICKNESS)
+                ? Math.max(max, AXIS_WIDTH)
                 : max,
             0
           )
