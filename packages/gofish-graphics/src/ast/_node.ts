@@ -153,23 +153,28 @@ export class GoFishNode {
   public _label?: LabelSpec;
   private _zOrder = 0;
   private renderSession?: RenderSession;
-  // Axis rendering properties
-  public axis_x?: boolean;
-  public axis_y?: boolean;
-  // Budget-only: apply AXIS_WIDTH margin but don't render the axis SVG
-  // (set on non-first layer siblings that share an axis owned by sibling 0)
-  public _axisBudgetOnlyX?: boolean;
-  public _axisBudgetOnlyY?: boolean;
+  // Axis state per dimension.
+  // true    = owns the axis (renders SVG + reserves AXIS_WIDTH budget)
+  // false   = explicitly suppressed via axes: override (no budget, blocks children)
+  // "budget"= budget-only; reserves AXIS_WIDTH space but does not render SVG
+  //           (set on non-first layer siblings that share a sibling's axis)
+  // undefined = not involved
+  public axis: { x?: true | false | "budget"; y?: true | false | "budget" } =
+    {};
   public _axisOverride?: { x?: boolean; y?: boolean };
   public _axisChildren?: Map<0 | 1, GoFishNode>;
   public _contentBaseline: Size = [0, 0];
   /**
    * Set by directional operators (Spread) to indicate the align direction.
-   * Used in layout() to gate innerBaselineX expansion: only expand the x-axis
-   * budget for inner y-axes when the align direction is 0 (vertical spread),
-   * because that's the only case where Change 3 shifts in x and creates room.
+   * Used in layout() to gate innerBaselineX expansion.
    */
   public _layoutAlignDir?: 0 | 1;
+  /**
+   * Stack direction of the operator that created this node.
+   * Used in coord.tsx collectOverrides to route axis: overrides to the
+   * correct polar axis (theta vs radial).
+   */
+  public axisDir?: 0 | 1;
   constructor(
     {
       name,
@@ -359,8 +364,8 @@ export class GoFishNode {
       // layout alignment but don't render duplicate axis SVG.
       const accumulated = new Set(claimed);
       const scanClaimed = (n: GoFishNode): void => {
-        if (n.axis_x === true) accumulated.add(0);
-        if (n.axis_y === true) accumulated.add(1);
+        if (n.axis.x === true) accumulated.add(0);
+        if (n.axis.y === true) accumulated.add(1);
         n.children.forEach((c) => {
           if (c instanceof GoFishNode) scanClaimed(c);
         });
@@ -394,7 +399,7 @@ export class GoFishNode {
       let polarAxisY: boolean | undefined = undefined;
       const collectOverrides = (n: GoFishNode) => {
         if (n._axisOverride) {
-          const dir: number | undefined = (n as any)._axisDir;
+          const dir = n.axisDir;
           // If the node carries a direction tag, only apply override to that dim.
           // Otherwise (e.g. scatter with no dir) apply to both.
           if (dir !== 1 && n._axisOverride.x !== undefined)
@@ -416,14 +421,12 @@ export class GoFishNode {
       this.children.forEach((c) => {
         if (c instanceof GoFishNode) c.resolveAxes(allClaimed);
       });
-      // _axisOverride can set axis_x/y = true on descendants even when claimed,
+      // _axisOverride can set axisX/Y on descendants even when claimed,
       // which would apply Cartesian axis budgets in polar coordinate space.
       // Clear them so only the polar axis path (via _polarAxisX/Y) applies.
       const clearCartesianAxes = (n: GoFishNode): void => {
-        n.axis_x = undefined;
-        n.axis_y = undefined;
-        n._axisBudgetOnlyX = undefined;
-        n._axisBudgetOnlyY = undefined;
+        n.axis.x = undefined;
+        n.axis.y = undefined;
         n.children.forEach((c) => {
           if (c instanceof GoFishNode) clearCartesianAxes(c);
         });
@@ -440,8 +443,8 @@ export class GoFishNode {
       const override =
         dim === 0 ? this._axisOverride?.x : this._axisOverride?.y;
       if (override !== undefined) {
-        if (dim === 0) this.axis_x = override;
-        else this.axis_y = override;
+        if (dim === 0) this.axis.x = override === false ? false : true;
+        else this.axis.y = override === false ? false : true;
         next.add(dim); // claim regardless — false blocks children too
       } else if (
         budgetOnly.has(dim) &&
@@ -455,8 +458,8 @@ export class GoFishNode {
         // so content areas stay aligned, but skip axis SVG rendering.
         // Only applies when this node has a meaningful space for this dim —
         // nodes with UNDEFINED space (e.g. connectY) should never get budget.
-        if (dim === 0) this._axisBudgetOnlyX = true;
-        else this._axisBudgetOnlyY = true;
+        if (dim === 0) this.axis.x = "budget";
+        else this.axis.y = "budget";
         next.add(dim);
       } else if (
         !claimed.has(dim) &&
@@ -466,8 +469,8 @@ export class GoFishNode {
           isDIFFERENCE(space[dim]) ||
           isORDINAL(space[dim]))
       ) {
-        if (dim === 0) this.axis_x = true;
-        else this.axis_y = true;
+        if (dim === 0) this.axis.x = true;
+        else this.axis.y = true;
         next.add(dim);
       }
     }
@@ -514,9 +517,9 @@ export class GoFishNode {
     posScales: Size<((pos: number) => number) | undefined>
   ): Placeable {
     let axisBudgetX =
-      this.axis_y === true || this._axisBudgetOnlyY ? AXIS_WIDTH : 0;
+      this.axis.y === true || this.axis.y === "budget" ? AXIS_WIDTH : 0;
     let axisBudgetY =
-      this.axis_x === true || this._axisBudgetOnlyX ? AXIS_WIDTH : 0;
+      this.axis.x === true || this.axis.x === "budget" ? AXIS_WIDTH : 0;
 
     // Change 1: expand outer axis budget to include inner baselines so both
     // label rows have room (outer labels + inner facet labels).
@@ -527,7 +530,7 @@ export class GoFishNode {
           (c) => c instanceof GoFishNode && findAxisFlag(c, dim)
         );
       }
-      return dim === 0 ? n.axis_x === true : n.axis_y === true;
+      return dim === 0 ? n.axis.x === true : n.axis.y === true;
     };
     // innerBaselineY: for horizontal spreads (dir:"x", alignDir=1) only.
     // The inner x-axis label row stacks in y below the outer x-axis labels,
@@ -605,7 +608,7 @@ export class GoFishNode {
       const uspace = this._underlyingSpace;
       if (
         !contentPosScales[0] &&
-        this.axis_x === true &&
+        this.axis.x === true &&
         uspace &&
         isPOSITION(uspace[0]) &&
         uspace[0].domain
@@ -623,7 +626,7 @@ export class GoFishNode {
       }
       if (
         !contentPosScales[1] &&
-        this.axis_y === true &&
+        this.axis.y === true &&
         uspace &&
         isPOSITION(uspace[1]) &&
         uspace[1].domain
@@ -702,7 +705,7 @@ export class GoFishNode {
           ? rootNice[0]
           : space[0];
 
-      if (this.axis_y === true) {
+      if (this.axis.y === true) {
         const sf = this.getRenderSession().scaleContext.y;
         const diffScaleY =
           isDIFFERENCE(space[1]) && sf && "scaleFactor" in sf
@@ -731,7 +734,7 @@ export class GoFishNode {
         }
       }
 
-      if (this.axis_x === true) {
+      if (this.axis.x === true) {
         const sf = this.getRenderSession().scaleContext.x;
         const diffScaleX =
           isDIFFERENCE(space[0]) && sf && "scaleFactor" in sf

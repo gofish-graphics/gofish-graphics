@@ -461,7 +461,7 @@ export const Spread = createNodeOperator(
         typeof axes === "boolean" ? { x: axes, y: axes } : axes;
     }
     // Tag with stack direction so coord can map axis overrides to polar dimensions
-    (node as any)._axisDir = stackDir;
+    node.axisDir = stackDir;
     node._layoutAlignDir = alignDir;
     return node;
   }
