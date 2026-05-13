@@ -347,8 +347,12 @@ jobs:
         if: always()
         run: pnpm test:visual:compare-python
 
+      # Always build + deploy the parity review site, even when all
+      # comparisons pass. Exempt and warning entries still need an
+      # interface for browsing/promoting to real ports — those are
+      # invisible from logs alone.
       - name: Build parity review site
-        if: failure()
+        if: always()
         run: pnpm --filter @gofish/tests build:parity-review-site
         env:
           REVIEW_REPO: ${{ github.repository }}
@@ -356,14 +360,14 @@ jobs:
           REVIEW_SHA: ${{ github.sha }}
 
       - name: Upload parity report artifact
-        if: failure()
+        if: always()
         uses: actions/upload-artifact@v5
         with:
           name: parity-review-site
           path: tests/tmp/parity-review-site/
 
       - name: Deploy parity review site to Cloudflare Pages
-        if: failure()
+        if: always()
         id: deploy-parity
         run: |
           output=$(npx wrangler@latest --cwd tests/tmp/parity-review-site pages deploy . \
@@ -379,7 +383,7 @@ jobs:
           NO_COLOR: "1"
 
       - name: Publish parity-review-link commit status
-        if: failure() && github.event_name == 'pull_request'
+        if: always() && github.event_name == 'pull_request'
         uses: actions/github-script@v8
         with:
           script: |
@@ -389,6 +393,9 @@ jobs:
 
             const summaryPath = 'tests/tmp/parity-summary.json';
             let description = 'Click Details to review and accept parity diffs';
+            // Default to pending so the fallback (no summary) prompts a click.
+            // Real status derives from the summary below.
+            let state = 'pending';
             try {
               const summary = JSON.parse(fs.readFileSync(summaryPath, 'utf8'));
               // Use the export-level rollup the viewer renders. Single
@@ -422,8 +429,13 @@ jobs:
               if (parts.length > 0) {
                 description = parts.join(', ') + ' — click Details';
               }
+              // Green check when nothing failed; otherwise stay pending so
+              // the PR check pulls attention to the unresolved diffs.
+              if (typeof summary.exportsFailures === 'number' && summary.exportsFailures === 0) {
+                state = 'success';
+              }
             } catch (e) {
-              // keep fallback description
+              // keep fallback description + pending state
             }
 
             if (description.length > 140) description = description.slice(0, 140);
@@ -432,7 +444,7 @@ jobs:
               owner: context.repo.owner,
               repo: context.repo.repo,
               sha: context.payload.pull_request.head.sha,
-              state: 'pending',
+              state,
               target_url: url,
               description,
               context: 'Python Parity Review',
