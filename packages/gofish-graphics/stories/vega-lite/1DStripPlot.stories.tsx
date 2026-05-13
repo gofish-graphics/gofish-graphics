@@ -27,7 +27,7 @@ export const Default: StoryObj<Args> = {
 
     Chart(context.loaded.weather as any[], { axes: { x: true, y: false } })
       .flow(scatter({ by: "date",  x: "precipitation" }))
-      .mark(rect({ w: 1, h: 10, fill: "rgb(31, 119, 180)", stroke: "0",
+      .mark(rect({ w: 1, h: 10, fill: "rgb(31, 119, 180)",
         opacity: 0.7,
       }))
 
