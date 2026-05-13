@@ -40,8 +40,7 @@ export const Default: StoryObj<Args> = {
           rect({h: "amount", fill: "#00ff00"}),
         ]).name("bottle"),
         rect({h: 1, fill: "#666", w: 175, y: "amount"}).name("line"),
-        text({fontSize: 35, fill: "#666", text: (d) => `${d.amount}%`}).name("label"),
-        blank({ h: v(115) }).name("headroom"),
+        text({fontSize: 35, fill: "#666", text: (d) => `${d.amount}%`}).name("label")
       ]).constrain(({line, label, bottle}) => [
         Constraint.align({ x: "start" }, [bottle, line]),
         Constraint.distribute({ dir: "y", spacing: 0 }, [line, label]),
@@ -49,7 +48,8 @@ export const Default: StoryObj<Args> = {
       ]))
       .render(container, {
         w: args.w,
-        h: args.h
+        h: args.h,
+        padding: 40
       });
 
     return container;
