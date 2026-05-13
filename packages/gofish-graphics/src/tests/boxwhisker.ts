@@ -43,19 +43,14 @@ const boxAndWhisker = ({
 
 export const testSingleBoxWhisker = () => {
   const data = genderPayGap[0];
-  return spreadX(
-    { sharedScale: true },
-    [
-      boxAndWhisker({
-        median: data.Median,
-        min: data.Min,
-        max: data.Max,
-        q1: data["25-Percentile"],
-        q3: data["75-Percentile"],
-        fill: v(data.Gender as string),
-      }),
-    ]
-  );
+  return boxAndWhisker({
+    median: data.Median,
+    min: data.Min,
+    max: data.Max,
+    q1: data["25-Percentile"],
+    q3: data["75-Percentile"],
+    fill: v(data.Gender as string),
+  });
 };
 
 export const testPairBoxWhisker = () => {
