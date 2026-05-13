@@ -27,7 +27,7 @@ export const Default: StoryObj<Args> = {
 
     Chart(seafood, { axes: true })
       .flow(
-      spread({ by: "lake",  spacing: 8, dir: "x", axis: false }),
+      spread({ by: "lake",  spacing: 8, dir: "x", axes: false }),
         derive((d) => d.flatMap((d) => repeat(d, "count"))),
         derive((d) => _.chunk(d, 5)),
         spread({ spacing: 2, dir: "y" }),

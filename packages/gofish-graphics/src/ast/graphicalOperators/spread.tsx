@@ -48,7 +48,7 @@ export const Spread = createNodeOperator(
       mode = "edge",
       reverse = false,
       glue = false,
-      axis,
+      axes,
       ...fancyDims
     }: {
       name?: string;
@@ -64,7 +64,7 @@ export const Spread = createNodeOperator(
       glue?: boolean;
       /** Override axis rendering for this node. true/false applies to both
        * dims; object form controls x/y independently. */
-      axis?: boolean | { x?: boolean; y?: boolean };
+      axes?: boolean | { x?: boolean; y?: boolean };
     } & FancyDims<MaybeValue<number>>,
     children: GoFishAST[] | Collection<GoFishAST>
   ) => {
@@ -456,9 +456,9 @@ export const Spread = createNodeOperator(
       },
       children
     );
-    if (axis !== undefined) {
+    if (axes !== undefined) {
       node._axisOverride =
-        typeof axis === "boolean" ? { x: axis, y: axis } : axis;
+        typeof axes === "boolean" ? { x: axes, y: axes } : axes;
     }
     // Tag with stack direction so coord can map axis overrides to polar dimensions
     (node as any)._axisDir = stackDir;
@@ -479,7 +479,7 @@ export type SpreadOptions<T = any> = {
   w?: number | (keyof T & string);
   h?: number | (keyof T & string);
   debug?: boolean;
-  axis?: boolean | { x?: boolean; y?: boolean };
+  axes?: boolean | { x?: boolean; y?: boolean };
 };
 
 export const spread = createOperator<any, SpreadOptions>(Spread, {

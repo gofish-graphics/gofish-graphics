@@ -47,12 +47,12 @@ Content size is clamped to zero so charts with `h:0` (e.g. 1D strip plots) don't
 - **Internal baseline alignment:** After `alignChildren`, each inner frame is shifted back by `-_contentBaseline[alignDir]` so bars land at `posScale(0)`. `_contentBaseline` propagates upward through transparent layer nodes.
 - **Coord node children:** after `resolveAxes` runs on children of a `coord` node, all Cartesian `axis_x/y` and `_axisBudgetOnly*` flags are cleared from the entire coord subtree. This prevents per-operator `axis:` overrides (e.g. `stack({ axis: true })`) from applying Cartesian axis budgets inside polar coordinate space, where sizes are in radians/radius units. The `_axisOverride` values are still read by `collectOverrides` for polar axis routing before clearing.
 
-**posScale rescaling (`TICK_EDGE_PAD`):**
+**posScale rescaling:**
 
-- Applied only once, at the first axis-bearing node. Detected using `rootNiceSpace[dim].domain.max` (the union domain after nicing) to check if `posScale(niceMax) ≈ size[dim]` — a fresh root posScale maps exactly to `size`; one already rescaled by an ancestor maps to less.
-- `rootNiceSpace` is stored on the render session by gofish.tsx immediately after `resolveNiceDomains()` runs. Axis nodes use it for tick generation so per-species scatters inside a layer show the full union domain rather than their own narrow slice.
+- `rootNiceSpace` is stored on the render session by gofish.tsx after `resolveNiceDomains()` runs. Axis nodes use it for tick generation so per-species scatters inside a layer show the full union domain rather than their own narrow slice.
 - `axisSpaceX/Y` for axis node creation uses `rootNiceSpace[dim]` only when both root and local space are POSITION — preventing an outer ORDINAL (e.g. facet key) from being used for an inner POSITION (e.g. scatter x="year").
-- `outerManagesY/X = posScales[dim] !== undefined && tickPad === 0`: when `tickPad === 0` the incoming posScale was already rescaled → pass through unchanged.
+- `outerManagesX/Y = posScales[dim] !== undefined`: when a posScale is already provided by an ancestor pass it through unchanged to avoid double-compression in faceted charts.
+- Tick-edge labels that bleed slightly past the content boundary are accommodated by the SVG padding (default `40px`). A proper axis layout pass will handle this more precisely in the future.
 
 Other:
 
@@ -71,11 +71,11 @@ Axis children are included in the `allChildrenJSX` array passed to `_render`, re
 `TICK_LEN = 4` — ticks extend from line away from content
 `LABEL_GAP = 3` — gap between tick end and label anchor
 
-Three constructors via `createAxisNode({ dim, space, contentSize, posScale })`:
+Three constructors via `createAxisNode({ dim, space, contentSize, posScale, ownerNode, keyContext })`:
 
 - **ContinuousAxisNode** — POSITION space; line + ticks + numeric labels
 - **DifferenceAxisNode** — DIFFERENCE space; line + ticks + interval labels between ticks
-- **OrdinalAxisNode** — ORDINAL space; labels only, positioned via `posRelToAncestor` from keyContext. First/last labels use `text-anchor="start"/"end"` anchored at the bar edge to prevent edge overflow. `posRelToAncestor` falls back to the nearest same-type ancestor when the exact `stopBefore` node is not in the key node's path (handles faceted charts where `keyContext` is overwritten by later facets).
+- **OrdinalAxisNode** — ORDINAL space; labels only. Key positions are pre-computed at layout time (in `createAxisNode`) by walking each key node up to the axis-owning node via `posRelToAncestor`, stored in `renderData.keyPositions`. The render function reads positions directly — no tree walk at render time.
 
 ## Polar Axes (coord.tsx)
 

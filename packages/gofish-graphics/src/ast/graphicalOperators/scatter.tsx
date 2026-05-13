@@ -33,7 +33,7 @@ export type ScatterProps = {
   yMin?: MaybeValue<number>[];
   yMax?: MaybeValue<number>[];
   alignment?: Alignment;
-  axis?: boolean | { x?: boolean; y?: boolean };
+  axes?: boolean | { x?: boolean; y?: boolean };
 } & FancyDims<MaybeValue<number>>;
 
 function getCurrentAnchor(
@@ -94,7 +94,7 @@ export const Scatter = createNodeOperator(
       yMin,
       yMax,
       alignment = "baseline",
-      axis,
+      axes,
       ...fancyDims
     } = options;
     children = unwrapLodashArray(children);
@@ -270,7 +270,7 @@ export const Scatter = createNodeOperator(
             const fromSize = axis === 0 ? xFromSize : yFromSize;
             alignChildren(
               childPlaceables,
-              axis,
+              axes,
               alignment,
               size[axis],
               effectivePosScales?.[axis],
@@ -323,9 +323,9 @@ export const Scatter = createNodeOperator(
       },
       children
     );
-    if (axis !== undefined) {
+    if (axes !== undefined) {
       node._axisOverride =
-        typeof axis === "boolean" ? { x: axis, y: axis } : axis;
+        typeof axes === "boolean" ? { x: axes, y: axes } : axes;
     }
     return node;
   }
@@ -350,7 +350,7 @@ export type ScatterOptions = {
   yMax?: string | MaybeValue<number>[];
   alignment?: "start" | "middle" | "end" | "baseline";
   debug?: boolean;
-  axis?: boolean | { x?: boolean; y?: boolean };
+  axes?: boolean | { x?: boolean; y?: boolean };
 };
 
 export const scatter = createOperator<any, ScatterOptions>(Scatter, {
