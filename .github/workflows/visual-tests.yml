@@ -38,11 +38,24 @@ jobs:
       # generic-sans, and the JS storybook and Python harness end up
       # measuring text against different fallback resolutions. Installing the
       # MS core fonts pins both pipelines to the same actual font files.
-      - name: Install MS TrueType core fonts
+      #
+      # The .deb is a tiny installer stub — it downloads ~30MB of .ttf files
+      # from SourceForge during postinst (slow, ~50s). cache-apt-pkgs-action
+      # caches the installed files under /usr/share/fonts/..., so cache hits
+      # restore in ~3-5s and skip the SourceForge fetch.
+      - name: Install MS TrueType core fonts (cached)
+        uses: awalsh128/cache-apt-pkgs-action@v1
+        with:
+          packages: ttf-mscorefonts-installer
+          version: 1
+          execute_install_scripts: true
+        env:
+          # Pre-accept the EULA so the install runs non-interactively whether
+          # the cache hits or misses.
+          DEBIAN_FRONTEND: noninteractive
+
+      - name: Rebuild font cache + verify
         run: |
-          echo "ttf-mscorefonts-installer msttcorefonts/accepted-mscorefonts-eula select true" | sudo debconf-set-selections
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends ttf-mscorefonts-installer
           sudo fc-cache -f
           fc-match "Andale Mono"
           fc-match "Verdana"
@@ -237,13 +250,19 @@ jobs:
 
       # Match the JS job's font set so the Python harness measures text
       # against the same actual fonts (Andale Mono, Verdana, ...) the JS
-      # storybook capture saw. Without this, Chromium's fontconfig
-      # fallback chain causes the two pipelines to diverge on a few px.
-      - name: Install MS TrueType core fonts
+      # storybook capture saw. See the visual-test job's note for details
+      # on why caching the installed files matters here.
+      - name: Install MS TrueType core fonts (cached)
+        uses: awalsh128/cache-apt-pkgs-action@v1
+        with:
+          packages: ttf-mscorefonts-installer
+          version: 1
+          execute_install_scripts: true
+        env:
+          DEBIAN_FRONTEND: noninteractive
+
+      - name: Rebuild font cache + verify
         run: |
-          echo "ttf-mscorefonts-installer msttcorefonts/accepted-mscorefonts-eula select true" | sudo debconf-set-selections
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends ttf-mscorefonts-installer
           sudo fc-cache -f
           fc-match "Andale Mono"
           fc-match "Verdana"
