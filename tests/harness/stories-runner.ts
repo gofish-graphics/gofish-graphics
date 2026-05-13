@@ -100,6 +100,12 @@ window.__renderStory__ = async (id: string): Promise<boolean> => {
     }
 
     const args = { ...story.args };
+    // Wait for fonts so text bbox measurements use real metrics, not
+    // fallbacks. Keeps the JS capture in sync with the harness capture
+    // when both run in the same Playwright session.
+    if (typeof document !== "undefined" && document.fonts?.ready) {
+      await document.fonts.ready;
+    }
     // Some stories (e.g. lowlevel/Treemap) declare an `async render` and
     // await their own data loaders inside. Await unconditionally — `await`
     // on a non-Promise is a no-op, so sync renders are unaffected.

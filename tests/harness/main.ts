@@ -611,6 +611,14 @@ function renderChart(spec: HarnessSpec) {
   // to the same JS Token everywhere they appear in this spec.
   const resolveToken = makeTokenResolver();
 
+  // Wait for the page's fonts to finish loading before rendering. Text
+  // marks measure bboxes during layout via the browser's font metrics; if
+  // a system font like "Andale Mono" isn't ready yet, the fallback
+  // metrics get baked into positions and the rendered SVG drifts a pixel
+  // or two from a font-ready render. The JS storybook runner sees this
+  // less because its `import.meta.glob` eager-imports pad startup time;
+  // the harness has nothing to load, so render starts faster than fonts
+  // resolve. Awaiting `document.fonts.ready` synchronizes the two.
   // Wrap the render path in an async IIFE so we can `await` each path's
   // gofish `.render()` (now Promise-returning since `inferRaw` went async
   // and RPC-based mark-fns/lambda-accessors layer on top). Without awaiting,
@@ -619,6 +627,9 @@ function renderChart(spec: HarnessSpec) {
   // to stabilize.
   (async () => {
     try {
+      if (typeof document !== "undefined" && document.fonts?.ready) {
+        await document.fonts.ready;
+      }
       if (spec.type === "raw-mark") {
         const allOpts = spec.options || {};
         const { w, h, axes, debug } = allOpts;
