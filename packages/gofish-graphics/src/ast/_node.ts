@@ -763,6 +763,8 @@ export class GoFishNode {
           space: axisSpaceY,
           contentSize: contentSize[1],
           posScale: yPosScale,
+          ownerNode: this,
+          keyContext: session?.keyContext,
         });
         if (yAxisNode) {
           yAxisNode.parent = this;
@@ -790,6 +792,8 @@ export class GoFishNode {
           space: axisSpaceX,
           contentSize: contentSize[0],
           posScale: xPosScale,
+          ownerNode: this,
+          keyContext: session?.keyContext,
         });
         if (xAxisNode) {
           xAxisNode.parent = this;

@@ -24,11 +24,15 @@ export function createAxisNode({
   space,
   contentSize,
   posScale,
+  ownerNode,
+  keyContext,
 }: {
   dim: 0 | 1;
   space: UnderlyingSpace;
   contentSize: number;
   posScale: ((v: number) => number) | undefined;
+  ownerNode?: GoFishNode;
+  keyContext?: Record<string, GoFishNode>;
 }): GoFishNode | null {
   if (isPOSITION(space) && posScale) {
     return ContinuousAxisNode({
@@ -47,7 +51,22 @@ export function createAxisNode({
     });
   }
   if (isORDINAL(space)) {
-    return OrdinalAxisNode({ dim, domain: space.domain ?? [], contentSize });
+    // Pre-compute each key's position at layout time so the render function
+    // doesn't need to walk the tree backward.
+    const keyPositions: Record<string, number> = {};
+    if (ownerNode && keyContext) {
+      for (const key of space.domain ?? []) {
+        const keyNode = keyContext[key];
+        if (keyNode)
+          keyPositions[key] = posRelToAncestor(keyNode, ownerNode, dim);
+      }
+    }
+    return OrdinalAxisNode({
+      dim,
+      domain: space.domain ?? [],
+      contentSize,
+      keyPositions,
+    });
   }
   return null;
 }
@@ -60,7 +79,7 @@ export function createAxisNode({
  * returned position is still a meaningful local offset rather than an absolute root
  * coordinate that lands off-screen.
  */
-export function posRelToAncestor(
+function posRelToAncestor(
   keyNode: GoFishNode,
   stopBefore: GoFishNode | undefined,
   dim: 0 | 1
@@ -359,10 +378,12 @@ function OrdinalAxisNode({
   dim,
   domain,
   contentSize,
+  keyPositions,
 }: {
   dim: 0 | 1;
   domain: string[];
   contentSize: number;
+  keyPositions: Record<string, number>;
 }): GoFishNode {
   const crossDim = (1 - dim) as 0 | 1;
 
@@ -387,15 +408,13 @@ function OrdinalAxisNode({
         return {
           intrinsicDims,
           transform: {},
-          renderData: { domain },
+          renderData: { domain, keyPositions },
         };
       },
-      render: ({ transform, renderData }, _children, node) => {
+      render: ({ transform, renderData }) => {
         const tx = transform?.translate?.[0] ?? 0;
         const ty = transform?.translate?.[1] ?? 0;
-        const { domain: labelKeys } = renderData!;
-        const keyContext = node.getRenderSession().keyContext;
-        const parent = node.parent;
+        const { domain: labelKeys, keyPositions: positions } = renderData!;
 
         if (dim === 0) {
           // X-axis ordinal: labels below content
@@ -403,10 +422,7 @@ function OrdinalAxisNode({
             <g transform={`translate(${tx}, ${ty})`}>
               <For each={labelKeys}>
                 {(key: string) => {
-                  const keyNode = keyContext[key];
-                  if (!keyNode) return null;
-                  const globalX = posRelToAncestor(keyNode, parent, 0);
-                  const localX = globalX - tx;
+                  const localX = (positions?.[key] ?? 0) - tx;
                   return (
                     <text
                       transform="scale(1,-1)"
@@ -430,10 +446,7 @@ function OrdinalAxisNode({
             <g transform={`translate(${tx}, ${ty})`}>
               <For each={labelKeys}>
                 {(key: string) => {
-                  const keyNode = keyContext[key];
-                  if (!keyNode) return null;
-                  const globalY = posRelToAncestor(keyNode, parent, 1);
-                  const localY = globalY - ty;
+                  const localY = (positions?.[key] ?? 0) - ty;
                   return (
                     <text
                       transform="scale(1,-1)"
