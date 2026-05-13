@@ -52,6 +52,8 @@ Treemap(options?, children)
 | `round`        | `boolean`                         | Round pixel positions/sizes.                                                              |
 | `tile`         | `"squarify" \| "slice" \| "dice"` | Tiling strategy (`"squarify"` default).                                                   |
 | `sort`         | `"asc" \| "desc" \| "none"`       | Sort leaves by weight before layout (`"desc"` default).                                   |
+| `flipY`        | `boolean`                         | When `true`, mirror the layout top-to-bottom inside the treemap box (default `false`).   |
+| `leafIntrinsicRadiusField` | `string`            | Optional datum key for **radius** (pixels in treemap space): each leaf is laid out in a square `min(leafW, leafH, 2×radius)` so the same value can match across separate treemaps. |
 | `x`, `y`       | `number \| Value<number>`         | Optional position offset for the treemap container.                                       |
 | `w`, `h`       | `number \| Value<number>`         | Optional explicit size override for the treemap container.                                |
 

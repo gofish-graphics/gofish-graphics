@@ -35,6 +35,7 @@
     "build": "vite build",
     "serve": "vite preview",
     "prepublishOnly": "pnpm run build",
+    "fetch-titanic-passengers": "node scripts/fetch-titanic-passengers.mjs",
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build",
     "test": "pnpm run test:path && pnpm run test:font",

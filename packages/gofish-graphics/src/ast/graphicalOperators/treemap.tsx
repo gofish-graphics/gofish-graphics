@@ -28,6 +28,14 @@ type TreemapProps = {
   sort?: TreemapSort;
   valueField?: string;
   value?: (node: GoFishNode) => number;
+  /** When true, mirror leaf layout top-to-bottom within the treemap box (SVG y grows downward). */
+  flipY?: boolean;
+  /**
+   * When set, each leaf is laid out in a square of side `min(leafW, leafH, 2*datum[field])`
+   * so mark size can follow a **global** scale across facets. Default fills the full leaf
+   * rectangle (`[w,h]`).
+   */
+  leafIntrinsicRadiusField?: string;
 } & FancyDims<MaybeValue<number>>;
 
 type LeafDatum = {
@@ -71,6 +79,8 @@ export const treemap = createNodeOperator(
       sort = "desc",
       valueField,
       value,
+      flipY = false,
+      leafIntrinsicRadiusField,
       ...fancyDims
     } = opts;
 
@@ -88,6 +98,8 @@ export const treemap = createNodeOperator(
           tile,
           sort,
           valueField,
+          flipY,
+          leafIntrinsicRadiusField,
           dims,
         },
         key,
@@ -188,9 +200,26 @@ export const treemap = createNodeOperator(
             const h = Math.max(0, y1 - y0);
 
             const child = childAsts[i];
-            const placeable = child.layout([w, h], scaleFactors, posScales);
+            let lw = w;
+            let lh = h;
+            if (
+              leafIntrinsicRadiusField &&
+              child instanceof GoFishNode
+            ) {
+              const datum = (child as GoFishNode & { datum?: unknown }).datum;
+              const d = datum as Record<string, unknown> | undefined;
+              const rad = Number(d?.[leafIntrinsicRadiusField]);
+              if (Number.isFinite(rad) && rad > 0) {
+                const side = Math.min(2 * rad, w, h);
+                lw = side;
+                lh = side;
+              }
+            }
+            const placeable = child.layout([lw, lh], scaleFactors, posScales);
             placeable.place(0, x0 + w / 2, "center");
-            placeable.place(1, y0 + h / 2, "center");
+            const cy = y0 + h / 2;
+            const yCenter = flipY ? resolvedSize[1] - cy : cy;
+            placeable.place(1, yCenter, "center");
             placed[i] = placeable;
           }
 
