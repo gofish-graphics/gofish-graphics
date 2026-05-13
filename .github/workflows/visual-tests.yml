@@ -43,22 +43,40 @@ jobs:
       # from SourceForge during postinst (slow, ~50s). cache-apt-pkgs-action
       # caches the installed files under /usr/share/fonts/..., so cache hits
       # restore in ~3-5s and skip the SourceForge fetch.
+      # Pre-accept the EULA via debconf BEFORE the apt install runs. Without
+      # this, ttf-mscorefonts-installer's postinst silently no-ops the
+      # SourceForge font download — apt reports success and the .deb's
+      # metadata files appear under /usr/share/package-data-downloads/, but
+      # the actual .ttf files never land in /usr/share/fonts/truetype/msttcorefonts/.
+      # `fc-match "Andale Mono"` would then return DejaVu Sans Mono and we'd
+      # be right back to the fontconfig-fallback drift this commit is trying
+      # to fix.
+      - name: Pre-accept mscorefonts EULA
+        run: echo "ttf-mscorefonts-installer msttcorefonts/accepted-mscorefonts-eula select true" | sudo debconf-set-selections
+
       - name: Install MS TrueType core fonts (cached)
         uses: awalsh128/cache-apt-pkgs-action@v1
         with:
           packages: ttf-mscorefonts-installer
-          version: 1
+          # Bump when the EULA / install path changes; invalidates the cache
+          # so stale empty installs don't get restored.
+          version: 2
           execute_install_scripts: true
         env:
-          # Pre-accept the EULA so the install runs non-interactively whether
-          # the cache hits or misses.
           DEBIAN_FRONTEND: noninteractive
 
       - name: Rebuild font cache + verify
         run: |
           sudo fc-cache -f
-          fc-match "Andale Mono"
-          fc-match "Verdana"
+          # fc-match always finds *something* (DejaVu is the ultimate
+          # fallback), so a non-zero exit code doesn't help — instead grep
+          # for the expected filename. If the apt install silently no-oped
+          # (EULA not pre-accepted, cache restore that missed /usr/share/fonts,
+          # etc.) this will fail with the actual fallback name visible.
+          fc-match "Andale Mono" | grep -q "Andale_Mono.ttf" \
+            || { echo "FAIL: Andale Mono resolved to fallback: $(fc-match 'Andale Mono')"; exit 1; }
+          fc-match "Verdana" | grep -q "Verdana.ttf" \
+            || { echo "FAIL: Verdana resolved to fallback: $(fc-match 'Verdana')"; exit 1; }
 
       - name: Fetch snapshot baselines
         run: |
@@ -251,12 +269,16 @@ jobs:
       # Match the JS job's font set so the Python harness measures text
       # against the same actual fonts (Andale Mono, Verdana, ...) the JS
       # storybook capture saw. See the visual-test job's note for details
-      # on why caching the installed files matters here.
+      # on why caching the installed files matters here, and on why the
+      # EULA pre-accept is required.
+      - name: Pre-accept mscorefonts EULA
+        run: echo "ttf-mscorefonts-installer msttcorefonts/accepted-mscorefonts-eula select true" | sudo debconf-set-selections
+
       - name: Install MS TrueType core fonts (cached)
         uses: awalsh128/cache-apt-pkgs-action@v1
         with:
           packages: ttf-mscorefonts-installer
-          version: 1
+          version: 2
           execute_install_scripts: true
         env:
           DEBIAN_FRONTEND: noninteractive
@@ -264,8 +286,15 @@ jobs:
       - name: Rebuild font cache + verify
         run: |
           sudo fc-cache -f
-          fc-match "Andale Mono"
-          fc-match "Verdana"
+          # fc-match always finds *something* (DejaVu is the ultimate
+          # fallback), so a non-zero exit code doesn't help — instead grep
+          # for the expected filename. If the apt install silently no-oped
+          # (EULA not pre-accepted, cache restore that missed /usr/share/fonts,
+          # etc.) this will fail with the actual fallback name visible.
+          fc-match "Andale Mono" | grep -q "Andale_Mono.ttf" \
+            || { echo "FAIL: Andale Mono resolved to fallback: $(fc-match 'Andale Mono')"; exit 1; }
+          fc-match "Verdana" | grep -q "Verdana.ttf" \
+            || { echo "FAIL: Verdana resolved to fallback: $(fc-match 'Verdana')"; exit 1; }
 
       - name: Fetch snapshot baselines
         run: |
