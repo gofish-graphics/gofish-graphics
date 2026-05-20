@@ -19,7 +19,6 @@ export type ScaleContext = {
     | { domain: [number, number]; scaleFactor: number };
 };
 
-export type KeyContext = { [key: string]: GoFishNode };
 export type AxesOptions = boolean | { x?: AxisOptions; y?: AxisOptions };
 export type AxisOptions = boolean | { title?: string | false };
 
@@ -105,7 +104,6 @@ export async function layout(
   // return render({ width, height, transform }, layoutAST);
   child.resolveColorScale();
   child.resolveNames();
-  child.resolveKeys();
   child.resolveLabels();
   child.resolveUnderlyingSpace();
 
@@ -236,14 +234,12 @@ export const gofish = (
     ];
     child: GoFishNode;
     scaleContext: ScaleContext;
-    keyContext: KeyContext;
   };
 
   const runGofish = async (): Promise<LayoutData> => {
     const session: RenderSession = {
       tokenContext: new Map(),
       scaleContext: { unit: { color: new Map(), colorConfig } },
-      keyContext: {},
     };
     try {
       const contexts = {
@@ -259,7 +255,6 @@ export const gofish = (
       const result = {
         ...layoutResult,
         scaleContext: session.scaleContext,
-        keyContext: session.keyContext,
       };
 
       return result;

@@ -109,19 +109,19 @@ export const Table = createNodeOperator(
             child.place(1, row * (cellH + ySpacing), "min");
           }
 
-          // Register representative cells in keyContext for ordinal axis labels.
+          // Store representative cells for ordinal axis label positioning.
           // First-row cells provide x-positions for column keys.
           // First-column cells provide y-positions for row keys.
-          // The same cell at (0,0) can be registered under both — buildOrdinalScaleX
-          // only reads its x-center and buildOrdinalScaleY only reads its y-center.
-          const keyContext = session.keyContext;
+          // Cell (0,0) is registered under both — posRelToAncestor reads only
+          // the relevant dimension so it works correctly for either axis.
+          const ordinalKeyMap: Record<string, GoFishNode> = {};
           if (colKeys) {
             for (
               let j = 0;
               j < Math.min(numCols, childPlaceables.length);
               j++
             ) {
-              keyContext[colKeys[j]] = childPlaceables[
+              ordinalKeyMap[colKeys[j]] = childPlaceables[
                 j
               ] as unknown as GoFishNode;
             }
@@ -130,12 +130,13 @@ export const Table = createNodeOperator(
             for (let i = 0; i < numRows; i++) {
               const idx = i * numCols;
               if (idx < childPlaceables.length) {
-                keyContext[rowKeys[i]] = childPlaceables[
+                ordinalKeyMap[rowKeys[i]] = childPlaceables[
                   idx
                 ] as unknown as GoFishNode;
               }
             }
           }
+          node._ordinalKeyMap = ordinalKeyMap;
 
           const xMin = Math.min(...childPlaceables.map((c) => c.dims[0].min!));
           const xMax = Math.max(...childPlaceables.map((c) => c.dims[0].max!));

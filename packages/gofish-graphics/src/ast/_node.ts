@@ -30,7 +30,7 @@ import {
 } from "./underlyingSpace";
 import { toJSON, interval } from "../util/interval";
 import { nice } from "d3-array";
-import type { KeyContext, ScaleContext } from "./gofish";
+import type { ScaleContext } from "./gofish";
 import { createAxisNode, AXIS_WIDTH } from "./shapes/axis";
 import { computePosScale, continuous } from "./domain";
 import type { TokenContext } from "./tokenContext";
@@ -52,7 +52,6 @@ import { renderLabelJSX } from "./labels/renderLabel";
 export type RenderSession = {
   tokenContext: TokenContext;
   scaleContext: ScaleContext;
-  keyContext: KeyContext;
   /** Root (union) underlying space after nice-rounding. Used so axis nodes
    * created deep in a layer tree use the full shared domain, not just their
    * own narrow slice. Set in gofish.tsx after resolveNiceDomains(). */
@@ -162,6 +161,9 @@ export class GoFishNode {
   public axis: { x?: true | false | "budget"; y?: true | false | "budget" } =
     {};
   public _axisOverride?: { x?: boolean; y?: boolean };
+  /** Explicit key→node map for ordinal axis label positioning. Set by
+   * operators (e.g. table) whose domain keys differ from children's .key. */
+  public _ordinalKeyMap?: Record<string, GoFishNode>;
   public _axisChildren?: Map<0 | 1, GoFishNode>;
   public _contentBaseline: Size = [0, 0];
   /**
@@ -323,15 +325,6 @@ export class GoFishNode {
     // by ref(string) for a layer-local lookup.
     this.children.forEach((child) => {
       child.resolveNames();
-    });
-  }
-
-  public resolveKeys(): void {
-    if (this.key !== undefined) {
-      this.getRenderSession().keyContext[this.key] = this;
-    }
-    this.children.forEach((child) => {
-      child.resolveKeys();
     });
   }
 
@@ -718,7 +711,6 @@ export class GoFishNode {
           contentSize: contentSize[1],
           posScale: yPosScale,
           ownerNode: this,
-          keyContext: session?.keyContext,
         });
         if (yAxisNode) {
           yAxisNode.parent = this;
@@ -747,7 +739,6 @@ export class GoFishNode {
           contentSize: contentSize[0],
           posScale: xPosScale,
           ownerNode: this,
-          keyContext: session?.keyContext,
         });
         if (xAxisNode) {
           xAxisNode.parent = this;

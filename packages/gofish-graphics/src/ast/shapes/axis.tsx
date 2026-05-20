@@ -25,14 +25,12 @@ export function createAxisNode({
   contentSize,
   posScale,
   ownerNode,
-  keyContext,
 }: {
   dim: 0 | 1;
   space: UnderlyingSpace;
   contentSize: number;
   posScale: ((v: number) => number) | undefined;
   ownerNode?: GoFishNode;
-  keyContext?: Record<string, GoFishNode>;
 }): GoFishNode | null {
   if (isPOSITION(space) && posScale) {
     return ContinuousAxisNode({
@@ -53,10 +51,21 @@ export function createAxisNode({
   if (isORDINAL(space)) {
     // Pre-compute each key's position at layout time so the render function
     // doesn't need to walk the tree backward.
+    // _ordinalKeyMap (set by operators like table) takes priority; otherwise
+    // fall back to walking the subtree by node.key. Never use the global
+    // keyContext: it's last-write-wins across facets, so for all but the last
+    // facet it points to nodes that haven't been placed yet.
     const keyPositions: Record<string, number> = {};
-    if (ownerNode && keyContext) {
+    if (ownerNode) {
+      let keyMap: Record<string, GoFishNode>;
+      if (ownerNode._ordinalKeyMap) {
+        keyMap = ownerNode._ordinalKeyMap;
+      } else {
+        keyMap = {};
+        collectLocalKeys(ownerNode, keyMap);
+      }
       for (const key of space.domain ?? []) {
-        const keyNode = keyContext[key];
+        const keyNode = keyMap[key];
         if (keyNode)
           keyPositions[key] = posRelToAncestor(keyNode, ownerNode, dim);
       }
@@ -71,14 +80,17 @@ export function createAxisNode({
   return null;
 }
 
-/** Compute the position of keyNode's center along `dim` relative to `stopBefore`.
- *
- * In faceted charts multiple inner spreads share the same key names, so keyContext
- * may point to a node from a *different* facet than stopBefore. When stopBefore is
- * not an ancestor of keyNode we fall back to the nearest same-type ancestor so the
- * returned position is still a meaningful local offset rather than an absolute root
- * coordinate that lands off-screen.
- */
+function collectLocalKeys(
+  node: GoFishNode,
+  out: Record<string, GoFishNode>
+): void {
+  if (node.key !== undefined) out[node.key] = node;
+  node.children.forEach((c) => {
+    if (c instanceof GoFishNode) collectLocalKeys(c, out);
+  });
+}
+
+/** Compute the position of keyNode's center along `dim` relative to `stopBefore`. */
 function posRelToAncestor(
   keyNode: GoFishNode,
   stopBefore: GoFishNode | undefined,
