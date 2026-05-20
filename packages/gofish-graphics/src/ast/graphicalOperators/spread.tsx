@@ -64,9 +64,7 @@ export const Spread = createNodeOperator(
       // sizes into a POSITION at this level. `spacing` is ignored.
       glue?: boolean;
       /** Override axis rendering for this node. true/false applies to both
-       * dims; object form controls x/y independently.
-       * Per-dim AxisOptions supports { shared?: boolean } to control whether
-       * axis ticks use the root union domain or the local domain. */
+       * dims; object form controls x/y independently. */
       axes?: boolean | { x?: AxisOptions; y?: AxisOptions };
     } & FancyDims<MaybeValue<number>>,
     children: GoFishAST[] | Collection<GoFishAST>
@@ -474,16 +472,6 @@ export const Spread = createNodeOperator(
         typeof axes === "boolean"
           ? { x: axes, y: axes }
           : { x: toShow(axes.x), y: toShow(axes.y) };
-      const sharedX =
-        typeof axes !== "boolean" && typeof axes.x === "object"
-          ? axes.x?.shared
-          : undefined;
-      const sharedY =
-        typeof axes !== "boolean" && typeof axes.y === "object"
-          ? axes.y?.shared
-          : undefined;
-      if (sharedX !== undefined || sharedY !== undefined)
-        node._axisSharedOverride = { x: sharedX, y: sharedY };
     }
     // Tag with stack direction so coord can map axis overrides to polar dimensions
     node.axisDir = stackDir;
@@ -504,7 +492,7 @@ export type SpreadOptions<T = any> = {
   w?: number | (keyof T & string);
   h?: number | (keyof T & string);
   debug?: boolean;
-  axes?: boolean | { x?: boolean; y?: boolean };
+  axes?: boolean | { x?: AxisOptions; y?: AxisOptions };
 };
 
 export const spread = createOperator<any, SpreadOptions>(Spread, {

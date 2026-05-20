@@ -156,14 +156,9 @@ export class GoFishNode {
   // "budget"= budget-only; reserves AXIS_WIDTH space but does not render SVG
   //           (set on non-first layer siblings that share a sibling's axis)
   // undefined = not involved
-  public axis: {
-    x?: true | false | "budget";
-    y?: true | false | "budget";
-    xShared?: boolean;
-    yShared?: boolean;
-  } = {};
+  public axis: { x?: true | false | "budget"; y?: true | false | "budget" } =
+    {};
   public _axisOverride?: { x?: boolean; y?: boolean };
-  public _axisSharedOverride?: { x?: boolean; y?: boolean };
   /** Explicit key→node map for ordinal axis label positioning. Set by
    * operators (e.g. table) whose domain keys differ from children's .key. */
   public _ordinalKeyMap?: Record<string, GoFishNode>;
@@ -439,13 +434,8 @@ export class GoFishNode {
       const override =
         dim === 0 ? this._axisOverride?.x : this._axisOverride?.y;
       if (override !== undefined) {
-        if (dim === 0) {
-          this.axis.x = override === false ? false : true;
-          this.axis.xShared = this._axisSharedOverride?.x;
-        } else {
-          this.axis.y = override === false ? false : true;
-          this.axis.yShared = this._axisSharedOverride?.y;
-        }
+        if (dim === 0) this.axis.x = override === false ? false : true;
+        else this.axis.y = override === false ? false : true;
         next.add(dim); // claim regardless — false blocks children too
       } else if (
         budgetOnly.has(dim) &&
@@ -470,13 +460,8 @@ export class GoFishNode {
           isDIFFERENCE(space[dim]) ||
           isORDINAL(space[dim]))
       ) {
-        if (dim === 0) {
-          this.axis.x = true;
-          this.axis.xShared = this._axisSharedOverride?.x;
-        } else {
-          this.axis.y = true;
-          this.axis.yShared = this._axisSharedOverride?.y;
-        }
+        if (dim === 0) this.axis.x = true;
+        else this.axis.y = true;
         next.add(dim);
       }
     }
@@ -712,7 +697,6 @@ export class GoFishNode {
           posScale: yPosScale,
           ownerNode: this,
           posDomain: posDomains?.[1],
-          shared: this.axis.yShared ?? true,
         });
         if (yAxisNode) {
           yAxisNode.parent = this;
@@ -742,7 +726,6 @@ export class GoFishNode {
           posScale: xPosScale,
           ownerNode: this,
           posDomain: posDomains?.[0],
-          shared: this.axis.xShared ?? true,
         });
         if (xAxisNode) {
           xAxisNode.parent = this;

@@ -20,9 +20,7 @@ export type ScaleContext = {
 };
 
 export type AxesOptions = boolean | { x?: AxisOptions; y?: AxisOptions };
-export type AxisOptions =
-  | boolean
-  | { title?: string | false; shared?: boolean };
+export type AxisOptions = boolean | { title?: string | false };
 
 // string: custom title, false: no title, undefined: infer from encoding
 function resolveAxisTitle(

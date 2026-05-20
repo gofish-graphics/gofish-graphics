@@ -339,16 +339,6 @@ export const Scatter = createNodeOperator(
         typeof axes === "boolean"
           ? { x: axes, y: axes }
           : { x: toShow(axes.x), y: toShow(axes.y) };
-      const sharedX =
-        typeof axes !== "boolean" && typeof axes.x === "object"
-          ? axes.x?.shared
-          : undefined;
-      const sharedY =
-        typeof axes !== "boolean" && typeof axes.y === "object"
-          ? axes.y?.shared
-          : undefined;
-      if (sharedX !== undefined || sharedY !== undefined)
-        node._axisSharedOverride = { x: sharedX, y: sharedY };
     }
     return node;
   }
@@ -373,7 +363,7 @@ export type ScatterOptions = {
   yMax?: string | MaybeValue<number>[];
   alignment?: "start" | "middle" | "end" | "baseline";
   debug?: boolean;
-  axes?: boolean | { x?: boolean; y?: boolean };
+  axes?: boolean | { x?: AxisOptions; y?: AxisOptions };
 };
 
 export const scatter = createOperator<any, ScatterOptions>(Scatter, {

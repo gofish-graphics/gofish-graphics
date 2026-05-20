@@ -26,7 +26,6 @@ export function createAxisNode({
   posScale,
   ownerNode,
   posDomain,
-  shared = true,
 }: {
   dim: 0 | 1;
   space: UnderlyingSpace;
@@ -34,16 +33,14 @@ export function createAxisNode({
   posScale: ((v: number) => number) | undefined;
   ownerNode?: GoFishNode;
   posDomain?: [number, number];
-  shared?: boolean;
 }): GoFishNode | null {
   if (isPOSITION(space) && posScale) {
-    // Use passed-down domain for ticks when shared and available; fall back to
-    // local space domain. posDomain is only non-undefined when the outer context
-    // is POSITION, so the posScale always covers it — no out-of-range ticks.
-    const tickDomain =
-      shared && posDomain
-        ? { min: posDomain[0], max: posDomain[1] }
-        : { min: space.domain.min!, max: space.domain.max! };
+    // Use passed-down domain for ticks when available; fall back to local space
+    // domain. posDomain is only non-undefined when the outer context is POSITION,
+    // so the posScale always covers it — no out-of-range ticks.
+    const tickDomain = posDomain
+      ? { min: posDomain[0], max: posDomain[1] }
+      : { min: space.domain.min!, max: space.domain.max! };
     return ContinuousAxisNode({
       dim,
       domain: tickDomain,
