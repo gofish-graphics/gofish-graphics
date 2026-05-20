@@ -9,7 +9,7 @@
  */
 
 import { chromium, type Browser, type Page } from "playwright";
-import { spawn, execSync, type ChildProcess } from "child_process";
+import { spawn, type ChildProcess } from "child_process";
 import {
   readFileSync,
   writeFileSync,
@@ -68,6 +68,9 @@ function discoverPythonStories(): PythonStory[] {
             .replace(/^test_/, "")
             .replace(/\.py$/, "")
             .replace(/_/g, "-");
+          // Python identifiers can't contain `-`; convention is plain
+          // snake_case → kebab-case. JS storybook authors should avoid
+          // literal underscores in export names (use CamelCase only).
           const storyName = funcName.replace(/^story_/, "").replace(/_/g, "-");
           const outPath = prefix
             ? `${prefix}/${baseName}--${storyName}`
@@ -97,80 +100,94 @@ function discoverPythonStories(): PythonStory[] {
 // Extract IR from Python story (by calling Python)
 // ---------------------------------------------------------------------------
 
-function extractIR(
-  story: PythonStory
-): { spec: any; data: any; options: any; deriveIds: string[] } | null {
+type ChartIR = {
+  operators: any[];
+  mark: any;
+  options: any;
+  data: any;
+  zOrder?: number | null;
+};
+
+type IRResult =
+  | ({
+      kind: "chart";
+      deriveIds: string[];
+    } & ChartIR)
+  | {
+      kind: "layer";
+      charts: ChartIR[];
+      options: any;
+      deriveIds: string[];
+    }
+  | {
+      kind: "raw-mark";
+      mark: any;
+      options: any;
+      deriveIds: string[];
+    }
+  | { kind: "layer-unsupported"; reason: string }
+  | { kind: "error"; reason: string };
+
+/**
+ * Load a story via the derive-server's `/load` endpoint. The server imports
+ * the story, builds the IR, *and* registers any `DeriveOperator`s in its
+ * registry — all in one call so the lambda_ids in the returned IR match
+ * what `/derive/<id>` will look up. Doing import + register separately
+ * would mint divergent UUIDs because `derive(lambda)` generates a fresh
+ * UUID per call.
+ */
+async function loadStory(story: PythonStory): Promise<IRResult> {
   const storyAbsPath = join(TESTS_DIR, story.file);
-  const script = `
-import sys, json, importlib.util
-sys.path.insert(0, "${join(ROOT, "packages/gofish-python")}")
-sys.path.insert(0, "${TESTS_DIR}")
-
-# Register "python_stories" as a package so story imports (e.g. from python_stories.data) work
-_pkg_dir = "${PYTHON_STORIES_DIR}"
-_pkg_init = "${PYTHON_STORIES_DIR}/__init__.py"
-_pkg_spec = importlib.util.spec_from_file_location(
-    "python_stories", _pkg_init,
-    submodule_search_locations=[_pkg_dir]
-)
-_pkg_mod = importlib.util.module_from_spec(_pkg_spec)
-sys.modules["python_stories"] = _pkg_mod
-_pkg_spec.loader.exec_module(_pkg_mod)
-
-spec = importlib.util.spec_from_file_location("story_module", "${storyAbsPath}")
-mod = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(mod)
-fn = getattr(mod, "${story.function}")
-
-result = fn()
-if not isinstance(result, tuple):
-    print(json.dumps({"error": "story function must return a tuple"}))
-    sys.exit(1)
-
-builder = result[0]
-options = result[1] if len(result) > 1 else {}
-
-from gofish.ast import DeriveOperator
-
-ir = builder.to_ir()
-data = builder.data
-
-# Collect derive lambda IDs
-derive_ids = []
-for op in builder.operators:
-    if isinstance(op, DeriveOperator):
-        derive_ids.append(op.lambda_id)
-
-# Serialize data
-if hasattr(data, 'to_dict'):
-    data = data.to_dict('records')
-elif hasattr(data, 'to_dicts'):
-    data = data.to_dicts()
-
-output = {
-    "operators": ir["operators"],
-    "mark": ir["mark"],
-    "options": {**ir.get("options", {}), **options},
-    "data": data,
-    "deriveIds": derive_ids,
-}
-print(json.dumps(output))
-`;
-
+  let resp: Response;
   try {
-    const result = execSync(`python3 -`, {
-      cwd: ROOT,
-      encoding: "utf-8",
-      input: script,
-      timeout: 30_000,
+    resp = await fetch(`http://localhost:${DERIVE_SERVER_PORT}/load`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        storyFile: storyAbsPath,
+        function: story.function,
+        pythonStoriesDir: PYTHON_STORIES_DIR,
+      }),
     });
-    return JSON.parse(result.trim());
   } catch (err) {
-    console.error(
-      `  Failed to extract IR: ${err instanceof Error ? err.message : err}`
-    );
-    return null;
+    return {
+      kind: "error",
+      reason: `derive-server unreachable: ${err instanceof Error ? err.message : String(err)}`,
+    };
   }
+  if (!resp.ok) {
+    let body = "";
+    try {
+      body = await resp.text();
+    } catch {
+      /* ignore */
+    }
+    return { kind: "error", reason: `${resp.status} ${body}` };
+  }
+  const json = (await resp.json()) as any;
+  if (json && json._kind === "layer") {
+    return {
+      kind: "layer",
+      charts: json.charts,
+      options: json.options ?? {},
+      deriveIds: json.deriveIds ?? [],
+    };
+  }
+  if (json && json._kind === "raw-mark") {
+    return {
+      kind: "raw-mark",
+      mark: json.mark,
+      options: json.options ?? {},
+      deriveIds: json.deriveIds ?? [],
+    };
+  }
+  if (json && json._kind === "layer-unsupported") {
+    return {
+      kind: "layer-unsupported",
+      reason: "LayerBuilder stories not yet supported by capture harness",
+    };
+  }
+  return { kind: "chart", ...json };
 }
 
 // ---------------------------------------------------------------------------
@@ -210,55 +227,9 @@ async function waitForServer(url: string, timeoutMs = 10_000) {
   );
 }
 
-// ---------------------------------------------------------------------------
-// Register derive functions for a story
-// ---------------------------------------------------------------------------
-
-function registerDerives(story: PythonStory): void {
-  const storyAbsPath = join(TESTS_DIR, story.file);
-  const script = `
-import sys, importlib.util
-sys.path.insert(0, "${join(ROOT, "packages/gofish-python")}")
-sys.path.insert(0, "${TESTS_DIR}")
-
-# Register "python_stories" as a package so story imports (e.g. from python_stories.data) work
-_pkg_dir = "${PYTHON_STORIES_DIR}"
-_pkg_init = "${PYTHON_STORIES_DIR}/__init__.py"
-_pkg_spec = importlib.util.spec_from_file_location(
-    "python_stories", _pkg_init,
-    submodule_search_locations=[_pkg_dir]
-)
-_pkg_mod = importlib.util.module_from_spec(_pkg_spec)
-sys.modules["python_stories"] = _pkg_mod
-_pkg_spec.loader.exec_module(_pkg_mod)
-
-from gofish.ast import DeriveOperator
-
-spec = importlib.util.spec_from_file_location("story_module", "${storyAbsPath}")
-mod = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(mod)
-fn = getattr(mod, "${story.function}")
-result = fn()
-builder = result[0]
-
-for op in builder.operators:
-    if isinstance(op, DeriveOperator):
-        pass
-
-print("OK")
-`;
-
-  try {
-    execSync(`python3 -`, {
-      cwd: ROOT,
-      encoding: "utf-8",
-      input: script,
-      timeout: 10_000,
-    });
-  } catch {
-    // Non-fatal — story may not have derives
-  }
-}
+// (Derive registration is now handled by the derive-server's /load
+// endpoint — see loadStory above. The previous `registerDerives` was a
+// no-op stub: it imported the story but never wrote to _registry.)
 
 // ---------------------------------------------------------------------------
 // Start Vite harness server
@@ -299,21 +270,42 @@ async function captureStory(
   page: Page,
   harnessUrl: string,
   story: PythonStory,
-  ir: any
+  ir: IRResult & { kind: "chart" | "layer" | "raw-mark" }
 ): Promise<{ dom: string; screenshot: Buffer }> {
   await page.goto(harnessUrl, { waitUntil: "networkidle" });
 
-  // Inject spec and trigger render
-  const spec = {
-    data: ir.data,
-    operators: ir.operators,
-    mark: ir.mark,
-    options: ir.options,
-    deriveServerUrl:
-      ir.deriveIds && ir.deriveIds.length > 0
-        ? `http://localhost:${DERIVE_SERVER_PORT}`
-        : undefined,
-  };
+  const deriveServerUrl =
+    ir.deriveIds && ir.deriveIds.length > 0
+      ? `http://localhost:${DERIVE_SERVER_PORT}`
+      : undefined;
+
+  // Inject spec and trigger render. The harness dispatches on `spec.type`:
+  // `"layer"` for a multi-chart layer, `"raw-mark"` for a bare Mark
+  // rendered without a Chart wrapper, undefined for the single-chart path.
+  let spec: any;
+  if (ir.kind === "layer") {
+    spec = {
+      type: "layer",
+      charts: ir.charts,
+      options: ir.options,
+      deriveServerUrl,
+    };
+  } else if (ir.kind === "raw-mark") {
+    spec = {
+      type: "raw-mark",
+      mark: ir.mark,
+      options: ir.options,
+      deriveServerUrl,
+    };
+  } else {
+    spec = {
+      data: ir.data,
+      operators: ir.operators,
+      mark: ir.mark,
+      options: ir.options,
+      deriveServerUrl,
+    };
+  }
 
   await page.evaluate((s) => {
     window.__GOFISH_RENDER_COMPLETE__ = false;
@@ -324,9 +316,11 @@ async function captureStory(
     window.__renderChart__(s);
   }, spec);
 
-  // Wait for render completion
+  // Wait for render completion. Short timeout — a render that takes more
+  // than a few seconds in CI is almost always silently broken (e.g. a
+  // missing derive lambda leaving the chart at zero size).
   await page.waitForFunction(() => window.__GOFISH_RENDER_COMPLETE__ === true, {
-    timeout: 15_000,
+    timeout: 8_000,
   });
 
   // Check for errors
@@ -342,13 +336,16 @@ async function captureStory(
     return root ? root.innerHTML : "";
   });
 
-  // Screenshot
+  // Screenshot. Tight timeout: the playwright default of 30s means each
+  // zero-height story burns 30s waiting for the element to "be visible"
+  // before failing. With many failures, the job runs for tens of minutes.
+  // 5s is enough for a healthy chart to settle and render.
   const rootHandle = await page.$("#gofish-harness-root");
   let screenshot: Buffer;
   if (rootHandle) {
-    screenshot = await rootHandle.screenshot({ type: "png" });
+    screenshot = await rootHandle.screenshot({ type: "png", timeout: 5_000 });
   } else {
-    screenshot = await page.screenshot({ type: "png" });
+    screenshot = await page.screenshot({ type: "png", timeout: 5_000 });
   }
 
   return { dom, screenshot };
@@ -374,6 +371,42 @@ async function main() {
 
   let browser: Browser | undefined;
 
+  // Hoisted to function scope so the outer `finally` (and the
+  // `flushCaptureResults` helper it relies on) can persist whatever
+  // we managed to collect even if the loop or browser setup throws.
+  let captured = 0;
+  let failed = 0;
+  let skipped = 0;
+  const failures: { story: string; reason: string }[] = [];
+  const skips: { story: string; reason: string }[] = [];
+  const capturedIds: string[] = [];
+  const failedRecords: { id: string; story: string; reason: string }[] = [];
+  const skippedRecords: { id: string; story: string; reason: string }[] = [];
+
+  // Flush capture-results.json to disk. Called incrementally per story
+  // and again in the outer `finally` so partial output survives a
+  // mid-loop crash (otherwise the build script would see no capture
+  // data and silently render coverage-only state).
+  mkdirSync(TMP_DIR, { recursive: true });
+  const flushCaptureResults = () => {
+    try {
+      writeFileSync(
+        join(TMP_DIR, "capture-results.json"),
+        JSON.stringify(
+          {
+            captured: capturedIds,
+            failed: failedRecords,
+            skipped: skippedRecords,
+          },
+          null,
+          2
+        )
+      );
+    } catch {
+      /* ignore — best-effort */
+    }
+  };
+
   try {
     // Wait for servers to be ready
     await waitForServer(`http://localhost:${DERIVE_SERVER_PORT}/health`);
@@ -387,25 +420,43 @@ async function main() {
     });
     const page = await context.newPage();
 
-    mkdirSync(TMP_DIR, { recursive: true });
-
-    let captured = 0;
-    let failed = 0;
-
     for (const story of stories) {
       process.stdout.write(
         `  ${story.module}::${story.function} → ${story.path} ... `
       );
 
-      // Register derives for this story with the derive server
-      if (story.file) {
-        registerDerives(story);
+      const ir = await loadStory(story);
+      if (ir.kind === "layer-unsupported") {
+        // Known limitation, not a real failure: surface visibly but
+        // don't tank the build over Layer stories the harness can't
+        // currently render.
+        console.log(`SKIP (${ir.reason})`);
+        skipped++;
+        skips.push({
+          story: `${story.module}::${story.function}`,
+          reason: ir.reason,
+        });
+        skippedRecords.push({
+          id: story.path,
+          story: `${story.module}::${story.function}`,
+          reason: ir.reason,
+        });
+        flushCaptureResults();
+        continue;
       }
-
-      const ir = extractIR(story);
-      if (!ir) {
-        console.log("SKIP (no IR)");
+      if (ir.kind === "error") {
+        console.log(`FAILED (IR extraction): ${ir.reason}`);
         failed++;
+        failures.push({
+          story: `${story.module}::${story.function}`,
+          reason: `IR extraction failed: ${ir.reason}`,
+        });
+        failedRecords.push({
+          id: story.path,
+          story: `${story.module}::${story.function}`,
+          reason: `IR extraction failed: ${ir.reason}`,
+        });
+        flushCaptureResults();
         continue;
       }
 
@@ -427,24 +478,81 @@ async function main() {
 
         console.log("OK");
         captured++;
+        capturedIds.push(story.path);
       } catch (err) {
-        console.log(`FAILED: ${err instanceof Error ? err.message : err}`);
+        const msg = err instanceof Error ? err.message : String(err);
+        console.log(`FAILED: ${msg}`);
         failed++;
+        failures.push({
+          story: `${story.module}::${story.function}`,
+          reason: msg,
+        });
+        failedRecords.push({
+          id: story.path,
+          story: `${story.module}::${story.function}`,
+          reason: msg,
+        });
       }
+      flushCaptureResults();
     }
 
-    console.log(`\nDone: ${captured} captured, ${failed} failed`);
+    console.log(
+      `\nDone: ${captured} captured, ${failed} failed, ${skipped} skipped`
+    );
+    if (skipped > 0) {
+      console.log(`\n${skipped} skipped (known limitations):`);
+      for (const s of skips) console.log(`  - ${s.story}: ${s.reason}`);
+    }
+
+    // Persist capture counts to parity-summary.json. compare-python.ts
+    // will read and merge into the same file so the CI status description
+    // can render all categories. Written on every run (even when zero) so
+    // the workflow reader always finds the file.
+    const summaryPath = join(TESTS_DIR, "tmp/parity-summary.json");
+    let prior: Record<string, unknown> = {};
+    if (existsSync(summaryPath)) {
+      try {
+        prior = JSON.parse(readFileSync(summaryPath, "utf-8"));
+      } catch {
+        /* ignore — overwrite */
+      }
+    }
+    writeFileSync(
+      summaryPath,
+      JSON.stringify(
+        { ...prior, captured, captureFailed: failed, skipped },
+        null,
+        2
+      )
+    );
 
     await context.close();
+
+    // Surface capture failures so CI doesn't silently pass when stories
+    // can't even produce output. Without this, the compare step has
+    // nothing to compare and trivially "passes". A capture failure here
+    // means the Python story is broken (stale API, bad import, etc.) —
+    // we want it red, not invisible.
+    if (failed > 0) {
+      console.error(`\n${failed} Python story capture failure(s):`);
+      for (const f of failures) {
+        console.error(`  - ${f.story}: ${f.reason}`);
+      }
+      process.exitCode = 1;
+    }
   } finally {
     await browser?.close();
     deriveProc.kill();
     harnessProc.kill();
+    // Belt-and-suspenders: even if the loop crashed mid-way, persist
+    // whatever per-story records we collected so build-parity-review-site
+    // can show the partial picture.
+    flushCaptureResults();
   }
 }
 
 main()
-  .then(() => process.exit(0))
+  .then(() => process.exit(process.exitCode ?? 0))
   .catch((err) => {
     console.error("Fatal error:", err);
     process.exit(1);

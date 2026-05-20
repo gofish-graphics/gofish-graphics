@@ -25,10 +25,10 @@ graph TB
     IR -->|"Serialization:<br/>• JSON IR (spec)<br/>• Apache Arrow (data)<br/>• base64 encoding"| Widget
 
     subgraph AnyWidget["AnyWidget Bridge"]
-        Widget[GoFishChartWidget<br/>widget.py<br/><br/>• Traitlets for sync<br/>• Derive function registry<br/>• _execute_derive command]
+        Widget[GoFishChartWidget<br/>widget.py<br/><br/>• Traitlets for sync<br/>• Derive function registry<br/>• @observe(derive_request)]
     end
 
-    Widget -->|"Transport:<br/>• spec (JSON)<br/>• arrow_data (base64)<br/>• RPC via experimental.invoke()"| JS
+    Widget -->|"Transport:<br/>• spec (JSON)<br/>• arrow_data (base64)<br/>• Derive RPC via synced traits"| JS
 
     subgraph Browser["JavaScript Layer (Browser)"]
         JS[Widget Bundle<br/>widget.esm.js]
@@ -193,11 +193,25 @@ Inherits from `anywidget.AnyWidget` to provide seamless Jupyter integration.
 
 **Traitlets (State Management)**
 
-- `spec` (Dict, synced) - Chart specification JSON
-- `arrow_data` (Unicode, synced) - Base64-encoded Arrow IPC bytes
-- `derive_functions` (Dict, NOT synced) - Python-only registry mapping lambda_id -> callable
-- `width`, `height`, `axes`, `debug` (synced) - Render options
-- `container_id` (synced) - Unique DOM element ID
+Static (Python → JS, set once in `__init__`):
+
+- `spec` (Dict, synced) — Chart specification JSON
+- `arrow_data` (Unicode, synced) — Base64-encoded Arrow IPC bytes
+- `width`, `height`, `axes`, `debug` (synced) — Render options
+- `container_id` (synced) — Unique DOM element ID
+
+Derive RPC (bidirectional via observers):
+
+- `derive_request` (Dict, synced, JS → Python) — `{request_id, lambda_id, arrow_b64}`
+- `derive_response` (Dict, synced, Python → JS) — `{request_id, result_b64}` or `{request_id, error}`
+
+Status (JS → Python, terminal):
+
+- `render_result` (Dict, synced) — `{value: True}` on success or `{error: str}` on failure
+
+Python-only:
+
+- `derive_functions` (Dict, NOT synced) — `lambda_id -> callable` registry
 
 **Widget Initialization Flow**
 
@@ -209,28 +223,32 @@ Inherits from `anywidget.AnyWidget` to provide seamless Jupyter integration.
 
 **RPC Mechanism for Derive**
 
-The `_execute_derive` command enables JavaScript to call Python during rendering:
+We follow the Altair `JupyterChart` / Plotly `FigureWidget` pattern: synced
+traitlets + observer handlers, no `experimental.invoke` and no custom messages.
+This works identically in Jupyter and marimo because `experimental.invoke` is
+unsupported in marimo.
 
 ```python
-@anywidget.experimental.command
-def _execute_derive(self, msg: dict, buffers: list):
-    lambda_id = msg["lambdaId"]
-    arrow_b64 = msg["arrowB64"]
-
-    # Look up Python function
-    fn = self.derive_functions[lambda_id]
-
-    # Deserialize Arrow -> DataFrame
-    df = arrow_to_dataframe(base64.b64decode(arrow_b64))
-
-    # Execute user function
-    result_df = fn(df)
-
-    # Serialize result -> Arrow -> base64
-    result_b64 = base64.b64encode(dataframe_to_arrow(result_df))
-
-    return {"resultB64": result_b64}, buffers
+@traitlets.observe("derive_request")
+def _on_derive_request(self, change):
+    msg = change["new"]
+    if not msg:
+        return
+    request_id = msg["request_id"]
+    try:
+        fn = self.derive_functions[msg["lambda_id"]]
+        df = arrow_to_dataframe(base64.b64decode(msg["arrow_b64"]))
+        result_df = pd.DataFrame(fn(df.to_dict("records")))
+        result_b64 = base64.b64encode(dataframe_to_arrow(result_df)).decode()
+        self.derive_response = {"request_id": request_id, "result_b64": result_b64}
+    except Exception as exc:
+        self.derive_response = {"request_id": request_id, "error": str(exc)}
 ```
+
+The JS side correlates responses to requests via `request_id`. Derive ops are
+sequential (one in-flight per widget), so a single trait pair is enough. The
+fire-and-forget shape avoids the comm-during-cell-execution issue documented
+in [ipywidgets#1349](https://github.com/jupyter-widgets/ipywidgets/issues/1349).
 
 **Why AnyWidget?**
 
@@ -253,11 +271,16 @@ import * as Arrow from "apache-arrow";
 import { chart, spread, stack, ... } from "gofish-graphics";
 
 export default {
-  async render({ model, el, experimental }) {
-    // 1. Deserialize Arrow data
+  initialize({ model }) {
+    // Wire up the derive bridge: a per-widget pending map +
+    // model.on("change:derive_response") listener.
+    (model as any).__gofishBridge = makeDeriveBridge(model);
+  },
+  async render({ model, el }) {
+    // 1. Deserialize Arrow data from `arrow_data` trait
     // 2. Map IR operators to GoFish operators
     // 3. Map IR mark to GoFish mark
-    // 4. Render chart
+    // 4. Render chart, then set render_result for status
   }
 }
 ```
@@ -276,18 +299,19 @@ export default {
 - Used for serialize data for derive RPC
 - Tries multiple methods for Arrow API compatibility
 
-`mapOperator(opSpec, model, experimental)`
+`mapOperator(opSpec, bridge)`
 
 - Maps IR operator spec to GoFish operator function
 - Uses lookup table `OPERATOR_MAP` for extensibility
-- Special handling for `derive` (creates async RPC operator)
+- Special handling for `derive` (creates an async operator that calls
+  `bridge.request(lambdaId, arrowB64)`)
 
 `mapMark(markSpec)`
 
 - Maps IR mark spec to GoFish mark function
 - Simple lookup table `MARK_MAP`
 
-`renderChart(model, container, experimental)`
+`renderChart(model, container, bridge)`
 
 - Main rendering orchestrator
 - Deserializes data and spec
@@ -297,31 +321,24 @@ export default {
 
 **Derive RPC Implementation**
 
-The derive operator in JavaScript is async and calls back to Python:
+The derive operator in JavaScript is async and calls back to Python via the
+synced trait protocol:
 
 ```typescript
-derive: (opts, model, experimental) => {
+derive: (opts, bridge) => {
   const lambdaId = opts.lambdaId;
-
   return derive(async (d) => {
-    // Serialize current data to Arrow
-    const arrowBuffer = arrayToArrow(normalizeToArray(d));
-    const arrowB64 = btoa(String.fromCharCode(...arrowBuffer));
-
-    // Call Python via RPC
-    const [response] = await experimental.invoke("_execute_derive", {
-      lambdaId,
-      arrowB64,
-    });
-
-    // Deserialize result from Arrow
-    const resultBuffer = Uint8Array.from(atob(response.resultB64), (c) =>
+    const rows = normalizeToArray(d);
+    if (rows.length === 0) return Array.isArray(d) ? d : (d ?? null);
+    const arrowB64 = btoa(String.fromCharCode(...arrayToArrow(rows)));
+    // Bridge sets `derive_request` and resolves on `change:derive_response`
+    // with a matching request_id.
+    const resultB64 = await bridge.request(lambdaId, arrowB64);
+    const resultBuffer = Uint8Array.from(atob(resultB64), (c) =>
       c.charCodeAt(0)
     );
-    const resultTable = Arrow.tableFromIPC(resultBuffer);
-    const resultArray = arrowTableToArray(resultTable);
-
-    return Array.isArray(d) ? resultArray : resultArray[0];
+    const resultArray = arrowTableToArray(Arrow.tableFromIPC(resultBuffer));
+    return Array.isArray(d) ? resultArray : (resultArray[0] ?? null);
   });
 };
 ```
@@ -433,7 +450,8 @@ chart(data) \
 
 **4. Widget Render (JavaScript)**
 
-- AnyWidget calls `render({ model, el, experimental })`
+- AnyWidget calls `initialize({ model })` once to wire up the derive bridge,
+  then `render({ model, el })` to paint the chart
 - Decode base64 -> Arrow bytes -> `Arrow.tableFromIPC()`
 - Convert Arrow Table -> array of objects:
   ```js
@@ -488,33 +506,25 @@ const currentData = [...];  // After spread
 const arrowBuffer = arrayToArrow(currentData);
 const arrowB64 = btoa(String.fromCharCode(...arrowBuffer));
 
-// Call Python
-const [response] = await experimental.invoke(
-  "_execute_derive",
-  { lambdaId: "abc123", arrowB64 }
-);
+// Set the derive_request trait; resolve when derive_response arrives
+// with a matching request_id.
+const resultB64 = await bridge.request("abc123", arrowB64);
 
 // Deserialize result
-const resultBuffer = Uint8Array.from(atob(response.resultB64), ...);
+const resultBuffer = Uint8Array.from(atob(resultB64), c => c.charCodeAt(0));
 const resultTable = Arrow.tableFromIPC(resultBuffer);
 const sortedData = arrowTableToArray(resultTable);
 ```
 
-Python side (`_execute_derive`):
+Python side (`@traitlets.observe("derive_request")`):
 
 ```python
-# Receive Arrow bytes
-arrow_bytes = base64.b64decode(arrow_b64)
-df = arrow_to_dataframe(arrow_bytes)
-
-# Execute user function
-fn = self.derive_functions["abc123"]  # lambda df: df.sort_values("count")
-result_df = fn(df)
-
-# Return Arrow bytes
-result_arrow = dataframe_to_arrow(result_df)
-result_b64 = base64.b64encode(result_arrow)
-return {"resultB64": result_b64}
+# change.new == {"request_id": "r-0", "lambda_id": "abc123", "arrow_b64": ...}
+df = arrow_to_dataframe(base64.b64decode(msg["arrow_b64"]))
+fn = self.derive_functions["abc123"]  # lambda rows: sorted(rows, key=...)
+result_df = pd.DataFrame(fn(df.to_dict("records")))
+result_b64 = base64.b64encode(dataframe_to_arrow(result_df)).decode()
+self.derive_response = {"request_id": "r-0", "result_b64": result_b64}
 ```
 
 **8. Final Render (JavaScript)**

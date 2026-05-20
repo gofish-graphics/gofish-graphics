@@ -284,12 +284,16 @@ function makeConstrainableMark<T>(base: Mark<T>): ConstrainableMark<T> {
         layerContext
       );
       node.name(layerName);
+      // Tag for a deterministic post-resolve collection pass instead of
+      // pushing directly into `layerContext` here — the push order would
+      // otherwise depend on which leg's `await` happened to finish first
+      // (parents fan their children out via `Promise.all`, and any async
+      // op in the chain — e.g. a Python `derive` RPC — varies per-leaf
+      // latency). ChartBuilder.resolve walks the finished node tree in
+      // parent-iteration order so consumers see canonical order.
       if (layerContext && layerName) {
-        if (!layerContext[layerName]) {
-          layerContext[layerName] = { data: [], nodes: [] };
-        }
-        layerContext[layerName].nodes.push(node);
-        layerContext[layerName].data.push((node as any).datum);
+        (node as { __layerRegistration?: string }).__layerRegistration =
+          layerName;
       }
       return node;
     };

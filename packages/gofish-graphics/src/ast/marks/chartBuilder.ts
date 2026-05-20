@@ -22,6 +22,13 @@ export async function resolveMarkResult(
   raw: ReturnType<Mark<any>>,
   layerContext?: LayerContext
 ): Promise<GoFishNode> {
+  // Mark functions are typed as sync-returning, but async marks are a
+  // valid pattern (e.g. the Python wrapper's mark-as-function bridges via
+  // RPC and returns `Promise<ChartBuilder>`). Await any thenable upfront
+  // so the instanceof/typeof checks below see the resolved value.
+  if (raw && typeof (raw as any).then === "function") {
+    raw = await (raw as unknown as Promise<ReturnType<Mark<any>>>);
+  }
   if (raw instanceof ChartBuilder)
     return raw.withLayerContext(layerContext ?? {}).resolve();
   if (typeof raw === "function")
@@ -51,6 +58,41 @@ export type ChartOptions = {
   padding?: number;
 };
 
+/**
+ * Walk the finished node tree in DFS order and push each node that the
+ * `.name(...)` wrapper tagged with `__layerRegistration` into the
+ * matching layerContext entry.
+ *
+ * Done as a post-resolve pass — rather than pushing inline inside the
+ * named wrapper — so the entries appear in parent-iteration order, not
+ * async-completion order. Each parent operator builds its `children`
+ * array via `Promise.all(...)` whose return preserves input order, so a
+ * DFS over the resulting tree is the same canonical order we'd get from
+ * sequential rendering, without paying for serialized awaits.
+ */
+function collectLayerRegistrations(
+  node: GoFishNode,
+  layerContext: LayerContext
+): void {
+  const layerName = (node as { __layerRegistration?: string })
+    .__layerRegistration;
+  if (layerName) {
+    if (!layerContext[layerName]) {
+      layerContext[layerName] = { data: [], nodes: [] };
+    }
+    layerContext[layerName].nodes.push(node);
+    layerContext[layerName].data.push((node as { datum?: unknown }).datum);
+    // One-shot — repeat resolves (e.g. embedded Layer renders) would
+    // otherwise re-push the same node.
+    (node as { __layerRegistration?: string }).__layerRegistration = undefined;
+  }
+  for (const child of node.children ?? []) {
+    if (child instanceof GoFishNode) {
+      collectLayerRegistrations(child, layerContext);
+    }
+  }
+}
+
 /** A lazy selector that defers layer lookup until actually needed. */
 export class LayerSelector<T = any> {
   constructor(public readonly layerName: string) {}
@@ -64,7 +106,7 @@ export class LayerSelector<T = any> {
       );
     }
 
-    let resolvedNodes: GoFishNode[] = layer.nodes;
+    const resolvedNodes: GoFishNode[] = layer.nodes;
 
     // Return node-attached data enriched with refs to nodes.
     // Option 3: flatten arrays and duplicate __ref per underlying datum.
@@ -191,7 +233,8 @@ export class ChartBuilder<TInput, TOutput = TInput> {
       data = data.resolve(this.layerContext) as any;
     }
 
-    // Create the node; pass layerContext so named marks can register each produced node
+    // Create the node; named marks tag themselves for the post-resolve
+    // collection pass below.
     const node = await Frame(this.options ?? {}, [
       (
         await resolveMarkResult(
@@ -200,6 +243,13 @@ export class ChartBuilder<TInput, TOutput = TInput> {
         )
       ).setShared([true, true]),
     ]);
+
+    // Populate layerContext by walking the finished tree in DFS order.
+    // Tree order = parent-iteration order (because every parent operator's
+    // Promise.all preserves child order in its return array), so this is
+    // deterministic regardless of how individual async legs (e.g. a Python
+    // `derive` RPC) interleaved at resolution time.
+    collectLayerRegistrations(node, this.layerContext);
 
     // Embed colorConfig on the node so it survives .resolve() inside Layer
     if (this.options?.color) {

@@ -8,9 +8,9 @@ def story_default():
     return (
         chart(MOSAIC_DATA)
         .flow(
-            spread("origin", dir="x"),
+            spread(by="origin", dir="x"),
             derive(lambda d: normalize(d, "count")),
-            stack("cylinders", dir="y"),
+            stack(by="cylinders", dir="y"),
         )
         .mark(rect(h="count", fill="origin", stroke="white", strokeWidth=2)),
         {"w": 400, "h": 400, "axes": True},

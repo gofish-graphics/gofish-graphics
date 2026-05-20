@@ -10,14 +10,10 @@ packages/gofish-graphics/stories/lowlevel/IcicleChart.stories.tsx
 packages/gofish-graphics/stories/lowlevel/ImageMixedPrimitives.stories.tsx
 packages/gofish-graphics/stories/lowlevel/NestedMosaicChart.stories.tsx
 packages/gofish-graphics/stories/lowlevel/NestedWaffleChart.stories.tsx
-packages/gofish-graphics/stories/lowlevel/PorterDuffRelations.stories.tsx
 packages/gofish-graphics/stories/lowlevel/SankeyTree.stories.tsx
 packages/gofish-graphics/stories/lowlevel/StringlineChart.stories.tsx
 packages/gofish-graphics/stories/lowlevel/ViolinPlot.stories.tsx
 packages/gofish-graphics/stories/lowlevel/Whisker.stories.tsx
-
-# Bluefish examples
-packages/gofish-graphics/stories/bluefish/Planets.stories.tsx
 
 # Shape primitives
 packages/gofish-graphics/stories/shapes/TextMarks.stories.tsx
@@ -36,14 +32,37 @@ packages/gofish-graphics/stories/forwardsyntax/FacetedChart.stories.tsx
 # Forward syntax stories needing coord transforms other than clock
 # (clock is now supported)
 
-# Vega-Lite stories needing external datasets or complex derives
-packages/gofish-graphics/stories/vega-lite/Bar/AggregateBarChart.stories.tsx
-packages/gofish-graphics/stories/vega-lite/Bar/AggregateBarChartSorted.stories.tsx
-packages/gofish-graphics/stories/vega-lite/Bar/GroupedBarChartRepeat.stories.tsx
-packages/gofish-graphics/stories/vega-lite/Bar/HorizontalStackedBarChart.stories.tsx
-packages/gofish-graphics/stories/vega-lite/Bar/StackedBarChart.stories.tsx
-packages/gofish-graphics/stories/vega-lite/Bar/StackedBarChartRounded.stories.tsx
-packages/gofish-graphics/stories/vega-lite/Bar/NormalizedStackedBarChart.stories.tsx
+# (Vega-Lite ports were brought over from exempt to real parity tests;
+# see tests/python-stories/vega-lite/.)
 
-# Vega-Lite stories on this branch not yet in Python
-packages/gofish-graphics/stories/vega-lite/Histogram/Histogram.stories.tsx
+
+# Per-export exemption — uses `assignGradientColor` to precompute per-row
+# fills from two distinct gradients in a single chart. The Python wrapper
+# doesn't expose `assignGradientColor` (one chart, one color config), so
+# this story can't be ported without a workaround or a wrapper extension.
+packages/gofish-graphics/stories/forwardsyntax/ColorScales.stories.tsx::PairedPalettes
+
+# Per-export exemptions for Labels.stories.tsx — these stories don't fit
+# the single-chart parity harness (they compose many charts in a flex div,
+# use async mark-as-function, or hand-build raw SVG).
+packages/gofish-graphics/stories/forwardsyntax/Labels.stories.tsx::AllPositions
+packages/gofish-graphics/stories/forwardsyntax/Labels.stories.tsx::Rotated
+packages/gofish-graphics/stories/forwardsyntax/Labels.stories.tsx::LabelOnSpread
+packages/gofish-graphics/stories/forwardsyntax/Labels.stories.tsx::PositionShowcase
+
+# Per-export exemptions for Constraints.stories.tsx — the eight Spread*
+# stories use `renderEquivalentStory()` to mount TWO equivalent charts in
+# a 2-column grid with section headers, demonstrating that
+# `spread({alignment, ...})` equals `align(...) + distribute(...)`. The
+# parity harness captures one chart per story, so this layout shape can't
+# be byte-matched. The six single-chart exports (AlignOnly, AlignOnlyManualY,
+# DistributeOnly, SubsetSelection, BackgroundNotDistributed, AlignCenterDistributeY)
+# are ported.
+packages/gofish-graphics/stories/lowlevel/Constraints.stories.tsx::SpreadY_AlignStart
+packages/gofish-graphics/stories/lowlevel/Constraints.stories.tsx::SpreadY_AlignEnd
+packages/gofish-graphics/stories/lowlevel/Constraints.stories.tsx::SpreadY_AlignMiddle
+packages/gofish-graphics/stories/lowlevel/Constraints.stories.tsx::SpreadX_AlignStart
+packages/gofish-graphics/stories/lowlevel/Constraints.stories.tsx::SpreadY_Spacing
+packages/gofish-graphics/stories/lowlevel/Constraints.stories.tsx::SpreadX_Spacing_AlignEnd
+packages/gofish-graphics/stories/lowlevel/Constraints.stories.tsx::SpreadX_CenterToCenter
+packages/gofish-graphics/stories/lowlevel/Constraints.stories.tsx::SpreadY_Reversed

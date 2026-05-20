@@ -7,7 +7,7 @@ from python_stories.data import CATCH_LOCATIONS_ARRAY
 def story_default():
     points = (
         chart(CATCH_LOCATIONS_ARRAY)
-        .flow(scatter("lake", x="x", y="y"))
+        .flow(scatter(by="lake", x="x", y="y"))
         .mark(blank().name("points"))
     )
     lines = chart(select("points")).mark(line())
