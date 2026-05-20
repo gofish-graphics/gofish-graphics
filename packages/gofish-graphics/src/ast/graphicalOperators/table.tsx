@@ -80,7 +80,15 @@ export const Table = createNodeOperator(
 
           return [xSpace, ySpace];
         },
-        layout: (_shared, size, scaleFactors, children, posScales, node) => {
+        layout: (
+          _shared,
+          size,
+          scaleFactors,
+          children,
+          posScales,
+          node,
+          posDomains
+        ) => {
           const numRows = Math.ceil(children.length / numCols);
           const cellW = (size[0] - xSpacing * (numCols - 1)) / numCols;
           const cellH = (size[1] - ySpacing * (numRows - 1)) / numRows;
@@ -98,7 +106,7 @@ export const Table = createNodeOperator(
 
           const cellSize: Size = [cellW, cellH];
           const childPlaceables: Placeable[] = children.map((child) =>
-            child.layout(cellSize, scaleFactors, posScales)
+            child.layout(cellSize, scaleFactors, posScales, posDomains)
           );
 
           for (let i = 0; i < childPlaceables.length; i++) {

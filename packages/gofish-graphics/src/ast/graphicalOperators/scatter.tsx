@@ -1,4 +1,5 @@
 import { GoFishNode, Placeable } from "../_node";
+import type { AxisOptions } from "../gofish";
 import { getValue, isValue, MaybeValue } from "../data";
 import { Dimensions, elaborateDims, FancyDims, Size } from "../dims";
 import { createNodeOperator } from "../withGoFish";
@@ -33,7 +34,7 @@ export type ScatterProps = {
   yMin?: MaybeValue<number>[];
   yMax?: MaybeValue<number>[];
   alignment?: Alignment;
-  axes?: boolean | { x?: boolean; y?: boolean };
+  axes?: boolean | { x?: AxisOptions; y?: AxisOptions };
 } & FancyDims<MaybeValue<number>>;
 
 function getCurrentAnchor(
@@ -174,7 +175,15 @@ export const Scatter = createNodeOperator(
 
           return [xSpace, ySpace];
         },
-        layout: (_shared, size, scaleFactors, childNodes, posScales, node) => {
+        layout: (
+          _shared,
+          size,
+          scaleFactors,
+          childNodes,
+          posScales,
+          node,
+          posDomains
+        ) => {
           // In a faceted context the outer x/y may be ORDINAL, giving undefined
           // posScales for those dims. Scatter has its own POSITION domain, so
           // compute local posScales as a fallback for any undefined dim.
@@ -203,7 +212,7 @@ export const Scatter = createNodeOperator(
           ];
 
           const childPlaceables = childNodes.map((child) =>
-            child.layout(size, scaleFactors, effectivePosScales)
+            child.layout(size, scaleFactors, effectivePosScales, posDomains)
           );
 
           childPlaceables.forEach((child) => {
@@ -324,8 +333,22 @@ export const Scatter = createNodeOperator(
       children
     );
     if (axes !== undefined) {
+      const toShow = (opt: AxisOptions | undefined): boolean | undefined =>
+        opt === undefined ? undefined : opt === false ? false : true;
       node._axisOverride =
-        typeof axes === "boolean" ? { x: axes, y: axes } : axes;
+        typeof axes === "boolean"
+          ? { x: axes, y: axes }
+          : { x: toShow(axes.x), y: toShow(axes.y) };
+      const sharedX =
+        typeof axes !== "boolean" && typeof axes.x === "object"
+          ? axes.x?.shared
+          : undefined;
+      const sharedY =
+        typeof axes !== "boolean" && typeof axes.y === "object"
+          ? axes.y?.shared
+          : undefined;
+      if (sharedX !== undefined || sharedY !== undefined)
+        node._axisSharedOverride = { x: sharedX, y: sharedY };
     }
     return node;
   }

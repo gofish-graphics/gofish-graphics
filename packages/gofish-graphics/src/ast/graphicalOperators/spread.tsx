@@ -1,4 +1,5 @@
 import { GoFishNode, Placeable } from "../_node";
+import type { AxisOptions } from "../gofish";
 import { getValue, isValue, MaybeValue } from "../data";
 import {
   Direction,
@@ -63,8 +64,10 @@ export const Spread = createNodeOperator(
       // sizes into a POSITION at this level. `spacing` is ignored.
       glue?: boolean;
       /** Override axis rendering for this node. true/false applies to both
-       * dims; object form controls x/y independently. */
-      axes?: boolean | { x?: boolean; y?: boolean };
+       * dims; object form controls x/y independently.
+       * Per-dim AxisOptions supports { shared?: boolean } to control whether
+       * axis ticks use the root union domain or the local domain. */
+      axes?: boolean | { x?: AxisOptions; y?: AxisOptions };
     } & FancyDims<MaybeValue<number>>,
     children: GoFishAST[] | Collection<GoFishAST>
   ) => {
@@ -199,7 +202,15 @@ export const Spread = createNodeOperator(
             [alignDir]: alignSpace,
           };
         },
-        layout: (shared, size, scaleFactors, children, posScales, node) => {
+        layout: (
+          shared,
+          size,
+          scaleFactors,
+          children,
+          posScales,
+          node,
+          posDomains
+        ) => {
           if (reverse) {
             children = children.reverse();
           }
@@ -283,7 +294,7 @@ export const Spread = createNodeOperator(
           // console.log(size[stackDir], size[alignDir]);
 
           const childPlaceables = children.map((child) =>
-            child.layout(modifiedSize, scaleFactors, posScales)
+            child.layout(modifiedSize, scaleFactors, posScales, posDomains)
           );
 
           // Fixed-position children have dims already defined (e.g. Ref to another layer)
@@ -457,8 +468,22 @@ export const Spread = createNodeOperator(
       children
     );
     if (axes !== undefined) {
+      const toShow = (opt: AxisOptions | undefined): boolean | undefined =>
+        opt === undefined ? undefined : opt === false ? false : true;
       node._axisOverride =
-        typeof axes === "boolean" ? { x: axes, y: axes } : axes;
+        typeof axes === "boolean"
+          ? { x: axes, y: axes }
+          : { x: toShow(axes.x), y: toShow(axes.y) };
+      const sharedX =
+        typeof axes !== "boolean" && typeof axes.x === "object"
+          ? axes.x?.shared
+          : undefined;
+      const sharedY =
+        typeof axes !== "boolean" && typeof axes.y === "object"
+          ? axes.y?.shared
+          : undefined;
+      if (sharedX !== undefined || sharedY !== undefined)
+        node._axisSharedOverride = { x: sharedX, y: sharedY };
     }
     // Tag with stack direction so coord can map axis overrides to polar dimensions
     node.axisDir = stackDir;

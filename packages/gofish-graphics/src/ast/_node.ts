@@ -52,10 +52,6 @@ import { renderLabelJSX } from "./labels/renderLabel";
 export type RenderSession = {
   tokenContext: TokenContext;
   scaleContext: ScaleContext;
-  /** Root (union) underlying space after nice-rounding. Used so axis nodes
-   * created deep in a layer tree use the full shared domain, not just their
-   * own narrow slice. Set in gofish.tsx after resolveNiceDomains(). */
-  rootNiceSpace?: [UnderlyingSpace, UnderlyingSpace];
 };
 
 export type ScaleFactorFunction = Monotonic.Monotonic;
@@ -86,11 +82,13 @@ export type Layout = (
     layout: (
       size: Size,
       scaleFactors: Size<number | undefined>,
-      posScales: Size<((pos: number) => number) | undefined>
+      posScales: Size<((pos: number) => number) | undefined>,
+      posDomains?: Size<[number, number] | undefined>
     ) => Placeable;
   }[],
   posScales: Size<((pos: number) => number) | undefined>,
-  node: GoFishNode
+  node: GoFishNode,
+  posDomains?: Size<[number, number] | undefined>
 ) => { intrinsicDims: FancyDims; transform: FancyTransform; renderData?: any };
 
 export type Render = (
@@ -158,9 +156,14 @@ export class GoFishNode {
   // "budget"= budget-only; reserves AXIS_WIDTH space but does not render SVG
   //           (set on non-first layer siblings that share a sibling's axis)
   // undefined = not involved
-  public axis: { x?: true | false | "budget"; y?: true | false | "budget" } =
-    {};
+  public axis: {
+    x?: true | false | "budget";
+    y?: true | false | "budget";
+    xShared?: boolean;
+    yShared?: boolean;
+  } = {};
   public _axisOverride?: { x?: boolean; y?: boolean };
+  public _axisSharedOverride?: { x?: boolean; y?: boolean };
   /** Explicit key→node map for ordinal axis label positioning. Set by
    * operators (e.g. table) whose domain keys differ from children's .key. */
   public _ordinalKeyMap?: Record<string, GoFishNode>;
@@ -436,8 +439,13 @@ export class GoFishNode {
       const override =
         dim === 0 ? this._axisOverride?.x : this._axisOverride?.y;
       if (override !== undefined) {
-        if (dim === 0) this.axis.x = override === false ? false : true;
-        else this.axis.y = override === false ? false : true;
+        if (dim === 0) {
+          this.axis.x = override === false ? false : true;
+          this.axis.xShared = this._axisSharedOverride?.x;
+        } else {
+          this.axis.y = override === false ? false : true;
+          this.axis.yShared = this._axisSharedOverride?.y;
+        }
         next.add(dim); // claim regardless — false blocks children too
       } else if (
         budgetOnly.has(dim) &&
@@ -462,8 +470,13 @@ export class GoFishNode {
           isDIFFERENCE(space[dim]) ||
           isORDINAL(space[dim]))
       ) {
-        if (dim === 0) this.axis.x = true;
-        else this.axis.y = true;
+        if (dim === 0) {
+          this.axis.x = true;
+          this.axis.xShared = this._axisSharedOverride?.x;
+        } else {
+          this.axis.y = true;
+          this.axis.yShared = this._axisSharedOverride?.y;
+        }
         next.add(dim);
       }
     }
@@ -507,7 +520,8 @@ export class GoFishNode {
   public layout(
     size: Size,
     scaleFactors: Size<number | undefined>,
-    posScales: Size<((pos: number) => number) | undefined>
+    posScales: Size<((pos: number) => number) | undefined>,
+    posDomains?: Size<[number, number] | undefined>
   ): Placeable {
     let axisBudgetX =
       this.axis.y === true || this.axis.y === "budget" ? AXIS_WIDTH : 0;
@@ -643,7 +657,8 @@ export class GoFishNode {
       contentScaleFactors,
       this.children,
       contentPosScales,
-      this
+      this,
+      posDomains
     );
 
     if (axisBudgetX > 0 || axisBudgetY > 0) {
@@ -682,21 +697,6 @@ export class GoFishNode {
       this._axisChildren = new Map();
       const space = this._underlyingSpace!;
       const session = this.getRenderSession();
-      // Use the root nice union space for axis ticks when available so nodes
-      // deep in a layer tree (e.g. per-species scatter) show the full shared
-      // domain rather than their own narrow slice.
-      // Only substitute when BOTH the root and local space are POSITION —
-      // never let an outer ORDINAL (e.g. facet by "side") override an inner
-      // POSITION (e.g. scatter x="year").
-      const rootNice = session?.rootNiceSpace;
-      const axisSpaceY =
-        rootNice?.[1] && isPOSITION(rootNice[1]) && isPOSITION(space[1])
-          ? rootNice[1]
-          : space[1];
-      const axisSpaceX =
-        rootNice?.[0] && isPOSITION(rootNice[0]) && isPOSITION(space[0])
-          ? rootNice[0]
-          : space[0];
 
       if (this.axis.y === true) {
         const sf = this.getRenderSession().scaleContext.y;
@@ -707,10 +707,12 @@ export class GoFishNode {
         const yPosScale = contentPosScales[1] ?? diffScaleY;
         const yAxisNode = createAxisNode({
           dim: 1,
-          space: axisSpaceY,
+          space: space[1],
           contentSize: contentSize[1],
           posScale: yPosScale,
           ownerNode: this,
+          posDomain: posDomains?.[1],
+          shared: this.axis.yShared ?? true,
         });
         if (yAxisNode) {
           yAxisNode.parent = this;
@@ -735,10 +737,12 @@ export class GoFishNode {
         const xPosScale = contentPosScales[0] ?? diffScaleX;
         const xAxisNode = createAxisNode({
           dim: 0,
-          space: axisSpaceX,
+          space: space[0],
           contentSize: contentSize[0],
           posScale: xPosScale,
           ownerNode: this,
+          posDomain: posDomains?.[0],
+          shared: this.axis.xShared ?? true,
         });
         if (xAxisNode) {
           xAxisNode.parent = this;

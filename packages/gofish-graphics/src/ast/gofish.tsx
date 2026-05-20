@@ -20,7 +20,9 @@ export type ScaleContext = {
 };
 
 export type AxesOptions = boolean | { x?: AxisOptions; y?: AxisOptions };
-export type AxisOptions = boolean | { title?: string | false };
+export type AxisOptions =
+  | boolean
+  | { title?: string | false; shared?: boolean };
 
 // string: custom title, false: no title, undefined: infer from encoding
 function resolveAxisTitle(
@@ -111,15 +113,6 @@ export async function layout(
   if (axes) {
     child.resolveAxes();
     child.resolveNiceDomains();
-    // Store the root union nice space so axis nodes deep in layer trees
-    // (e.g. scatter-per-species) use the full shared domain for ticks.
-    const rootSession = child.getRenderSession();
-    if (rootSession && child._underlyingSpace) {
-      rootSession.rootNiceSpace = child._underlyingSpace as [
-        import("./underlyingSpace").UnderlyingSpace,
-        import("./underlyingSpace").UnderlyingSpace,
-      ];
-    }
   }
 
   // Use (possibly nice-rounded) underlying spaces for posScales
@@ -177,7 +170,23 @@ export async function layout(
       : undefined,
   ];
 
-  child.layout([w, h], rootScaleFactors, posScales);
+  // Seed posDomains from the root nice underlying space so axis nodes
+  // deep in a layer tree use the full shared domain for tick generation.
+  // Only defined when the root space is POSITION (undefined for ORDINAL dims,
+  // which ensures facet-inner POSITION axes fall back to their local domain).
+  const posDomains: [
+    [number, number] | undefined,
+    [number, number] | undefined,
+  ] = [
+    niceUnderlyingSpaceX.kind === "position"
+      ? [niceUnderlyingSpaceX.domain!.min!, niceUnderlyingSpaceX.domain!.max!]
+      : undefined,
+    niceUnderlyingSpaceY.kind === "position"
+      ? [niceUnderlyingSpaceY.domain!.min!, niceUnderlyingSpaceY.domain!.max!]
+      : undefined,
+  ];
+
+  child.layout([w, h], rootScaleFactors, posScales, posDomains);
   child.place("x", x ?? transform?.x ?? 0, "baseline");
   child.place("y", y ?? transform?.y ?? 0, "baseline");
 
