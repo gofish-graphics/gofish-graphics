@@ -1,9 +1,36 @@
 import { defineConfig } from "vitepress";
 import starfish from "./markdown-it-starfish";
-import examplesData from "./data/examples.data.js";
 import container from "markdown-it-container";
 import { renderSandbox } from "vitepress-plugin-sandpack";
 import vueJsx from "@vitejs/plugin-vue-jsx";
+import { readdirSync } from "fs";
+import { join, relative } from "path";
+import { fileURLToPath } from "url";
+
+// Build-time manifest of every JS/Python doc route. Exposed via themeConfig so
+// the language toggle knows whether a mirrored page exists before navigating.
+const docsDir = join(fileURLToPath(import.meta.url), "../..");
+
+function collectDocRoutes(): string[] {
+  const routes: string[] = [];
+  const walk = (dir: string) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const full = join(dir, entry.name);
+      if (entry.isDirectory()) {
+        walk(full);
+      } else if (entry.name.endsWith(".md")) {
+        let rel = relative(docsDir, full)
+          .replace(/\\/g, "/")
+          .replace(/\.md$/, "");
+        if (rel.endsWith("/index")) rel = rel.slice(0, -"index".length);
+        routes.push("/" + rel);
+      }
+    }
+  };
+  walk(join(docsDir, "js"));
+  walk(join(docsDir, "python"));
+  return routes;
+}
 
 // https://vitepress.dev/reference/site-config
 export default defineConfig({
@@ -14,6 +41,15 @@ export default defineConfig({
   title: "GoFish Graphics",
   description: "Documentation for GoFish",
   head: [
+    // Set <html data-docs-lang> before first paint so the language toggle and
+    // hero render in the reader's preferred language with no flash of the
+    // default. On doc pages the route wins; on the home page the saved
+    // preference wins. CSS keyed off this attribute does the rest.
+    [
+      "script",
+      {},
+      `(function(){try{var p=location.pathname,l;if(p.indexOf('/python/')===0){l='python';}else if(p.indexOf('/js/')===0){l='js';}else{var s=localStorage.getItem('gofish-docs-lang');l=(s==='python'||s==='js')?s:'js';}document.documentElement.setAttribute('data-docs-lang',l);}catch(e){}})();`,
+    ],
     ["link", { rel: "preconnect", href: "https://fonts.googleapis.com" }],
     [
       "link",
@@ -40,199 +76,170 @@ export default defineConfig({
   },
   themeConfig: {
     logo: "/gofish-logo.png",
+    // Consumed by the LanguageToggle theme component.
+    docRoutes: collectDocRoutes(),
     search: {
       provider: "local",
     },
     // https://vitepress.dev/reference/default-theme-config
-    nav: [
-      { text: "Home", link: "/" },
-      { text: "Get Started!", link: "/get-started" },
-      { text: "Tutorial", link: "/tutorial" },
-      { text: "Examples", link: "/examples/index.md" },
-      { text: "API", link: "/api/" },
-      {
-        text: "Cheatsheets",
-        items: [
-          { text: "Overview", link: "/cheatsheet" },
-          { text: "Shapes", link: "/marks-cheatsheet" },
-          {
-            text: "Coordinate Transforms",
-            link: "/coordinate-transforms-cheatsheet",
-          },
-          {
-            text: "Operators",
-            link: "/operators-cheatsheet",
-          },
-        ],
-      },
-      // { text: "Guides", link: "/guides/index.md" },
-      // { text: "API Reference", link: "/api/index.md" },
-    ],
+    // No top nav items — the logo links home, section navigation lives in the
+    // per-language sidebar, and the JavaScript/Python toggle is a theme slot.
+    nav: [],
 
+    // One sidebar per language — the same structure shows on every page
+    // (overview pages and API pages alike); VitePress auto-expands the group
+    // that contains the current page.
     sidebar: {
-      "/api/": [
+      "/js/": [
         {
-          text: "Overview",
-          link: "/api/",
+          text: "Get Started",
+          items: [
+            { text: "First Steps", link: "/js/get-started" },
+            { text: "Tutorial", link: "/js/tutorial" },
+            { text: "Examples", link: "/js/examples/" },
+          ],
         },
         {
           text: "How To",
           items: [
-            { text: "Create a chart", link: "/api/howto/create-chart" },
-            { text: "Create a glyph", link: "/api/howto/create-glyph" },
-            { text: "Pick a layout operator", link: "/api/howto/operators" },
-            { text: "Use selection", link: "/api/howto/selection" },
+            { text: "Create a chart", link: "/js/api/howto/create-chart" },
+            { text: "Create a glyph", link: "/js/api/howto/create-glyph" },
+            { text: "Pick a layout operator", link: "/js/api/howto/operators" },
+            { text: "Use selection", link: "/js/api/howto/selection" },
             {
               text: "Name and scope",
-              link: "/api/howto/naming-and-scoping",
-            },
-          ],
-        },
-        {
-          text: "Core",
-          items: [
-            { text: "chart", link: "/api/core/chart" },
-            { text: "flow", link: "/api/core/flow" },
-            { text: "mark", link: "/api/core/mark" },
-            { text: "render", link: "/api/core/render" },
-          ],
-        },
-        {
-          text: "Marks",
-          items: [
-            { text: "rect", link: "/api/marks/rect" },
-            { text: "circle", link: "/api/marks/circle" },
-            { text: "ellipse", link: "/api/marks/ellipse" },
-            { text: "line", link: "/api/marks/line" },
-            { text: "area", link: "/api/marks/area" },
-            { text: "blank", link: "/api/marks/blank" },
-            { text: "ref", link: "/api/marks/ref" },
-          ],
-        },
-        {
-          text: "Operators",
-          items: [
-            { text: "spread", link: "/api/operators/spread" },
-            { text: "stack", link: "/api/operators/stack" },
-            { text: "table", link: "/api/operators/table" },
-            { text: "scatter", link: "/api/operators/scatter" },
-            { text: "group", link: "/api/operators/group" },
-            { text: "layer", link: "/api/operators/layer" },
-            { text: "derive", link: "/api/operators/derive" },
-            { text: "log", link: "/api/operators/log" },
-          ],
-        },
-        {
-          text: "Constraints",
-          items: [{ text: "constrain", link: "/api/constraints/constrain" }],
-        },
-        {
-          text: "Selection",
-          items: [{ text: "select", link: "/api/selection/select" }],
-        },
-        {
-          text: "Coordinates",
-          items: [
-            { text: "polar", link: "/api/coords/polar" },
-            { text: "clock", link: "/api/coords/clock" },
-          ],
-        },
-      ],
-      "/": [
-        {
-          text: "Get Started!",
-          link: "/get-started",
-        },
-        {
-          text: "Tutorial",
-          link: "/tutorial",
-        },
-        {
-          text: "Examples",
-          items: [
-            {
-              text: "Search",
-              link: "/examples/",
-            },
-            {
-              text: "All Examples",
-              items: examplesData.load().examples.map((example) => ({
-                text: example.title,
-                link: example.demoUrl,
-              })),
+              link: "/js/api/howto/naming-and-scoping",
             },
           ],
         },
         {
           text: "API Reference",
-          link: "/api/",
-        },
-        {
-          text: "Reference",
           items: [
             {
-              text: "Cheatsheet Overview",
-              link: "/cheatsheet",
+              text: "Core",
+              collapsed: true,
+              items: [
+                { text: "chart", link: "/js/api/core/chart" },
+                { text: "flow", link: "/js/api/core/flow" },
+                { text: "mark", link: "/js/api/core/mark" },
+                { text: "render", link: "/js/api/core/render" },
+              ],
             },
             {
-              text: "Shapes Cheat Sheet",
-              link: "/shapes-cheatsheet",
+              text: "Marks",
+              collapsed: true,
+              items: [
+                { text: "rect", link: "/js/api/marks/rect" },
+                { text: "circle", link: "/js/api/marks/circle" },
+                { text: "ellipse", link: "/js/api/marks/ellipse" },
+                { text: "line", link: "/js/api/marks/line" },
+                { text: "area", link: "/js/api/marks/area" },
+                { text: "blank", link: "/js/api/marks/blank" },
+                { text: "ref", link: "/js/api/marks/ref" },
+              ],
             },
             {
-              text: "Coordinate Transforms Cheat Sheet",
-              link: "/coordinate-transforms-cheatsheet",
+              text: "Operators",
+              collapsed: true,
+              items: [
+                { text: "spread", link: "/js/api/operators/spread" },
+                { text: "stack", link: "/js/api/operators/stack" },
+                { text: "table", link: "/js/api/operators/table" },
+                { text: "scatter", link: "/js/api/operators/scatter" },
+                { text: "group", link: "/js/api/operators/group" },
+                { text: "layer", link: "/js/api/operators/layer" },
+                { text: "derive", link: "/js/api/operators/derive" },
+                { text: "log", link: "/js/api/operators/log" },
+              ],
+            },
+            {
+              text: "Color",
+              collapsed: true,
+              items: [
+                { text: "palette", link: "/js/api/color/palette" },
+                { text: "gradient", link: "/js/api/color/gradient" },
+              ],
+            },
+            {
+              text: "Constraints",
+              collapsed: true,
+              items: [
+                { text: "constrain", link: "/js/api/constraints/constrain" },
+              ],
+            },
+            {
+              text: "Selection",
+              collapsed: true,
+              items: [{ text: "select", link: "/js/api/selection/select" }],
+            },
+            {
+              text: "Coordinates",
+              collapsed: true,
+              items: [
+                { text: "polar", link: "/js/api/coords/polar" },
+                { text: "clock", link: "/js/api/coords/clock" },
+              ],
             },
           ],
         },
-        // { text: "Examples", link: "/examples/" },
-        // {
-        //   text: "Examples List",
-        //   collapsed: true,
-        //   items: [
-        //     // Programmatically generated example links
-        //     ...examplesData.load().examples.map((example) => ({
-        //       text: example.title,
-        //       link: example.demoUrl,
-        //     })),
-        //     // { text: "Area Charts", link: "/examples/area-charts.md" },
-        //     // { text: "Bar Charts", link: "/examples/bar-charts.md" },
-        //     // { text: "Line Charts", link: "/examples/line-charts.md" },
-        //     // { text: "Pie Charts", link: "/examples/pie-charts.md" },
-        //     // { text: "Ribbon Charts", link: "/examples/ribbon-charts.md" },
-        //     // { text: "Scatter Plots", link: "/examples/scatter-plots.md" },
-        //   ],
-        // },
-        // {
-        //   text: "API Reference",
-        //   collapsed: true,
-        //   items: [
-        //     { text: "Starfish", link: "/api/starfish.md" },
-        //     {
-        //       text: "Shapes",
-        //       items: [
-        //         { text: "Rect", link: "/api/shapes/rect.md" },
-        //         { text: "Circle", link: "/api/shapes/circle.md" },
-        //       ],
-        //     },
-        //     {
-        //       text: "Operators",
-        //       items: [
-        //         { text: "Stack", link: "/api/operators/stack.md" },
-        //         { text: "Connect", link: "/api/operators/connect.md" },
-        //       ],
-        //     },
-        //   ],
-        // },
-        /* {
-        text: "Guides",
-        collapsed: true,
-        items: [
-          { text: "Color", link: "/guides/color.md" },
-          { text: "Labels", link: "/guides/labels.md" },
-          { text: "Spacing", link: "/guides/spacing.md" },
-          { text: "Style", link: "/guides/style.md" },
-        ],
-      }, */
+      ],
+      "/python/": [
+        {
+          text: "Get Started",
+          items: [
+            { text: "First Steps", link: "/python/get-started" },
+            { text: "Tutorial", link: "/python/tutorial" },
+            { text: "Examples", link: "/python/examples/" },
+          ],
+        },
+        {
+          text: "API Reference",
+          items: [
+            {
+              text: "Core",
+              collapsed: true,
+              items: [
+                { text: "chart", link: "/python/api/core/chart" },
+                { text: "flow", link: "/python/api/core/flow" },
+                { text: "mark", link: "/python/api/core/mark" },
+                { text: "render", link: "/python/api/core/render" },
+              ],
+            },
+            {
+              text: "Marks",
+              collapsed: true,
+              items: [
+                { text: "rect", link: "/python/api/marks/rect" },
+                { text: "circle", link: "/python/api/marks/circle" },
+                { text: "ellipse", link: "/python/api/marks/ellipse" },
+                { text: "line", link: "/python/api/marks/line" },
+                { text: "area", link: "/python/api/marks/area" },
+                { text: "blank", link: "/python/api/marks/blank" },
+              ],
+            },
+            {
+              text: "Operators",
+              collapsed: true,
+              items: [
+                { text: "spread", link: "/python/api/operators/spread" },
+                { text: "stack", link: "/python/api/operators/stack" },
+                { text: "table", link: "/python/api/operators/table" },
+                { text: "scatter", link: "/python/api/operators/scatter" },
+                { text: "group", link: "/python/api/operators/group" },
+                { text: "derive", link: "/python/api/operators/derive" },
+                { text: "log", link: "/python/api/operators/log" },
+              ],
+            },
+            {
+              text: "Color",
+              collapsed: true,
+              items: [
+                { text: "palette", link: "/python/api/color/palette" },
+                { text: "gradient", link: "/python/api/color/gradient" },
+              ],
+            },
+          ],
+        },
       ],
     },
 

@@ -164,9 +164,12 @@ export default {
       {
         id: "HIDDEN-bar-chart-get-started",
       },
+      {
+        id: "HIDDEN-table-heatmap",
+      },
     ].map((example) => ({
       ...example,
-      demoUrl: `/examples/${example.id}`,
+      demoUrl: `/js/examples/${example.id}`,
       code: loadExampleCode(`${example.id}.ts`),
     }));
 
