@@ -42,8 +42,12 @@ Returns a `Mark` for use in [`.mark()`](/python/api/core/mark).
 
 Areas use the same two-chart recipe as [`line`](/python/api/marks/line#the-line-pattern):
 one chart positions named [`blank`](/python/api/marks/blank) marks, a second
-selects them and draws the `area()`. Stack several areas in one `Layer` — with
-`opacity` or `mixBlendMode` — for layered and stacked area charts.
+`select`s them and draws the `area()`. `select(name)` reads a named layer from an
+earlier chart, and `Layer([chartA, chartB])` composes multiple charts into one
+figure.
+
+Stack several areas in one `Layer` — with `opacity` or `mixBlendMode` — for
+layered and stacked area charts.
 
 ## Examples
 

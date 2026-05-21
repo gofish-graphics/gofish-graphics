@@ -72,12 +72,12 @@ The site documents both the JavaScript and Python APIs, one folder per language:
 A `LanguageToggle.vue` component (`.vitepress/theme/components/`) lets readers
 switch languages; it is injected via the `nav-bar-content-after` and
 `sidebar-nav-before` theme slots. It navigates to the mirrored page in the other
-language, falling back to that language's `get-started` page. The build-time
-route manifest it consults is `.vitepress/data/routes.data.ts`.
+language, falling back to that language's `get-started` page. The route manifest
+it consults is collected at build time by `collectDocRoutes()` in `config.mts`
+and exposed via `themeConfig.docRoutes`.
 
-The `sidebar` in `config.mts` is path-keyed per language (`/js/`, `/js/api/`,
-`/python/`, `/python/api/`). When editing the docs, keep the two language trees
-structurally parallel.
+The `sidebar` in `config.mts` has one entry per language (`/js/`, `/python/`).
+When editing the docs, keep the two language trees structurally parallel.
 
 **Python chart previews:** Python and JavaScript serialize to the same
 intermediate representation, so a chart renders identically regardless of

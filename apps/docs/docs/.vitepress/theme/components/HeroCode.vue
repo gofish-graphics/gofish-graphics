@@ -258,36 +258,25 @@ async function copyInstall() {
    Vue's scoped-CSS transform. */
 
 .install-pill {
-  display: block;
-  font-weight: 700;
-  font-family: var(--vp-font-family-mono);
-  font-size: 12px;
-  background-color: var(--vp-c-brand-soft);
-  padding: 0.25rem 0.5rem;
-  border-radius: 4px;
-  margin-left: 0.25rem;
   display: inline-flex;
-  transition:
-    background 0.2s ease,
-    border-color 0.2s ease,
-    transform 0.05s ease;
-  /* width: 100%; */
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
   width: 100%;
   margin-top: 2rem;
-  align-items: center;
-  gap: 10px;
   padding: 10px 12px;
-  border-radius: 10px;
   border: 1px solid var(--vp-c-divider);
+  border-radius: 10px;
   background: var(--vp-c-bg-soft);
+  font-family: var(--vp-font-family-mono);
+  font-size: 12px;
+  font-weight: 700;
   cursor: pointer;
   user-select: none;
   transition:
     background 0.2s ease,
     border-color 0.2s ease,
     transform 0.05s ease;
-  justify-content: space-between;
-  margin-top: 2rem;
 }
 
 .install-pill:hover {

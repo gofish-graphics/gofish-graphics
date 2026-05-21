@@ -43,60 +43,6 @@
           </button>
         </div>
       </div>
-
-      <!-- <div class="filter-section">
-        <div class="filter-group">
-          <label>Marks:</label>
-          <div class="tag-filters">
-            <button
-              v-for="mark in availableMarks"
-              :key="mark"
-              :class="['tag-filter', { active: selectedMarks.includes(mark) }]"
-              @click="toggleFilter('marks', mark)"
-            >
-              {{ mark }}
-            </button>
-          </div>
-        </div>
-
-        <div class="filter-group">
-          <label>Operators:</label>
-          <div class="tag-filters">
-            <button
-              v-for="operator in availableOperators"
-              :key="operator"
-              :class="[
-                'tag-filter',
-                { active: selectedOperators.includes(operator) },
-              ]"
-              @click="toggleFilter('operators', operator)"
-            >
-              {{ operator }}
-            </button>
-          </div>
-        </div>
-
-        <div class="filter-group">
-          <label>Chart Types:</label>
-          <div class="tag-filters">
-            <button
-              v-for="chartType in availableChartTypes"
-              :key="chartType"
-              :class="[
-                'tag-filter',
-                { active: selectedChartTypes.includes(chartType) },
-              ]"
-              @click="toggleFilter('chartTypes', chartType)"
-            >
-              {{ chartType }}
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <button @click="clearAllFilters" class="clear-filters">
-        Clear All Filters
-      </button> -->
     </div>
 
     <!-- Results Count -->
@@ -172,95 +118,18 @@ import GoFishVue from "./GoFishVue.vue";
 const examples = ref([]);
 const searchQuery = ref("");
 const viewMode = ref("grid");
-// const selectedMarks = ref([]);
-// const selectedOperators = ref([]);
-// const selectedChartTypes = ref([]);
 
-// Get all available filter options
-const availableMarks = computed(() => {
-  const marks = new Set();
-  examples.value.forEach((example) => {
-    example.tags.marks.forEach((mark) => marks.add(mark));
-  });
-  return Array.from(marks).sort();
-});
-
-const availableOperators = computed(() => {
-  const operators = new Set();
-  examples.value.forEach((example) => {
-    example.tags.operators.forEach((operator) => operators.add(operator));
-  });
-  return Array.from(operators).sort();
-});
-
-const availableChartTypes = computed(() => {
-  const chartTypes = new Set();
-  examples.value.forEach((example) => {
-    example.tags.chartTypes.forEach((type) => chartTypes.add(type));
-  });
-  return Array.from(chartTypes).sort();
-});
-
-// Filter examples based on search and selected filters
+// Filter examples by the search query (title or description).
 const filteredExamples = computed(() => {
-  return examples.value.filter((example) => {
-    // Text search
-    const matchesSearch =
-      searchQuery.value === "" ||
-      example.title.toLowerCase().includes(searchQuery.value.toLowerCase()) ||
-      (example.description &&
-        example.description
-          .toLowerCase()
-          .includes(searchQuery.value.toLowerCase())); /* ||
-      example.tags.marks.some((tag) =>
-        tag.toLowerCase().includes(searchQuery.value.toLowerCase())
-      ) ||
-      example.tags.operators.some((tag) =>
-        tag.toLowerCase().includes(searchQuery.value.toLowerCase())
-      ) ||
-      example.tags.chartTypes.some((tag) =>
-        tag.toLowerCase().includes(searchQuery.value.toLowerCase())
-      ); */
-
-    // // Tag filters
-    // const matchesMarks =
-    //   selectedMarks.value.length === 0 ||
-    //   selectedMarks.value.some((mark) => example.tags.marks.includes(mark));
-
-    // const matchesOperators =
-    //   selectedOperators.value.length === 0 ||
-    //   selectedOperators.value.some((operator) =>
-    //     example.tags.operators.includes(operator)
-    //   );
-
-    // const matchesChartTypes =
-    //   selectedChartTypes.value.length === 0 ||
-    //   selectedChartTypes.value.some((type) =>
-    //     example.tags.chartTypes.includes(type)
-    //   );
-
-    return matchesSearch /* && matchesMarks && matchesOperators && matchesChartTypes */;
-  });
+  const q = searchQuery.value.toLowerCase();
+  return examples.value.filter(
+    (example) =>
+      q === "" ||
+      example.title.toLowerCase().includes(q) ||
+      (example.description && example.description.toLowerCase().includes(q))
+  );
 });
 
-// Toggle filter selection
-const toggleFilter = (filterType, value) => {
-  const filterArray =
-    filterType === "marks"
-      ? selectedMarks
-      : filterType === "operators"
-        ? selectedOperators
-        : selectedChartTypes;
-
-  const index = filterArray.value.indexOf(value);
-  if (index > -1) {
-    filterArray.value.splice(index, 1);
-  } else {
-    filterArray.value.push(value);
-  }
-};
-
-// Clear all filters
 const clearAllFilters = () => {
   searchQuery.value = "";
 };
