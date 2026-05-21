@@ -5,11 +5,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Development Commands
 
 ### Documentation Site
+
 - **Development server**: `pnpm docs:dev` - Starts VitePress dev server with hot reload
 - **Build documentation**: `pnpm docs:build` - Builds static documentation site
 - **Preview build**: `pnpm docs:preview` - Serves built documentation for testing
 
 ### Dependencies
+
 - **Install**: `pnpm install` - Installs all dependencies
 
 ## Project Architecture
@@ -19,53 +21,90 @@ This is a documentation site for the GoFish Graphics library built with VitePres
 ### Core Components
 
 #### Documentation System
+
 - **VitePress**: Static site generator with Vue 3 support
-- **Custom markdown plugins**: 
+- **Custom markdown plugins**:
   - `starfish` containers for embedding live code examples
   - `starfish-live` containers for Sandpack-powered interactive editors
 - **Example system**: Centralized example code management via `docs/.vitepress/data/examples.data.js`
 
 #### Interactive Code Execution
+
 - **GoFishVue.vue** (`components/GoFishVue.vue:1`): Vue component that executes GoFish code in a sandboxed environment using `new Function()`. Provides access to lodash, datasets, and the full GoFish API.
 - **StarfishLive.tsx** (`components/StarfishLive.tsx:1`): Sandpack-based live code editor component for interactive examples
 - **Markdown integration**: Custom markdown-it plugin (`docs/.vitepress/markdown-it-starfish.ts:22`) processes `::: starfish` containers
 
 #### Data Management
+
 - **Dataset modules**: Located in `components/data/` - TypeScript modules exporting chart datasets (titanic, penguins, streamgraph data, etc.)
 - **Examples registry**: `docs/.vitepress/data/examples.data.js:1` contains all chart examples with reusable code snippets
 
 ### Key Architecture Patterns
 
 #### Live Code Rendering
+
 The documentation uses two approaches for interactive examples:
+
 1. **Server-side execution**: `GoFishVue` component executes code during page load
 2. **Client-side sandbox**: `StarfishLive` provides editable code playgrounds via Sandpack
 
 #### Example Code Reuse
+
 Examples are defined once in `examples.data.js` and can be imported into documentation pages using:
+
 ```markdown
 ::: starfish example:bar-chart
 :::
 ```
 
 #### Coordinate System Integration
+
 The GoFish library supports multiple coordinate systems (cartesian, polar, wavy) through the `coord` parameter in Frame components.
+
+#### Dual-Language Docs (JavaScript + Python)
+
+The site documents both the JavaScript and Python APIs, one folder per language:
+
+- `docs/js/` - JavaScript documentation (the original docs)
+- `docs/python/` - Python documentation
+- `docs/index.md` - shared landing page at `/`
+
+A `LanguageToggle.vue` component (`.vitepress/theme/components/`) lets readers
+switch languages; it is injected via the `nav-bar-content-after` and
+`sidebar-nav-before` theme slots. It navigates to the mirrored page in the other
+language, falling back to that language's `get-started` page. The build-time
+route manifest it consults is `.vitepress/data/routes.data.ts`.
+
+The `sidebar` in `config.mts` is path-keyed per language (`/js/`, `/js/api/`,
+`/python/`, `/python/api/`). When editing the docs, keep the two language trees
+structurally parallel.
+
+**Python chart previews:** Python and JavaScript serialize to the same
+intermediate representation, so a chart renders identically regardless of
+language. Python pages show hand-written Python code in a `python` fence, then
+render the chart with the existing JS engine via `::: starfish example:<id>
+hidden` — which renders a registered example without showing its JS code.
 
 ## File Structure
 
 ### Documentation (`docs/`)
-- `examples/` - Individual example pages with live demos
-- `guides/` - Tutorial and guide content
-- `api/` - API reference documentation
-- `.vitepress/config.mts` - VitePress configuration
-- `.vitepress/theme/` - Custom theme components
+
+- `js/` - JavaScript docs: `js/examples/`, `js/api/`, `js/guides/`, `js/theory/`
+- `python/` - Python docs: `python/api/`, `python/examples/`
+- `index.md` - shared home page
+- `.vitepress/config.mts` - VitePress configuration (per-language sidebars)
+- `.vitepress/theme/` - Custom theme components (incl. `LanguageToggle.vue`)
+- `.vitepress/examples/` - `.ts` source for registered live examples
+- `.vitepress/data/` - build-time data loaders (`examples.data.js`, `routes.data.ts`)
 
 ### Components (`components/`)
+
 - Vue components for rendering live examples
 - `data/` - Chart datasets used in examples
 - Gallery components for homepage
 
 ### Dependencies
+
 - **Core**: `gofish-graphics` - The graphics library being documented
 - **Documentation**: `vitepress`, `vitepress-plugin-sandpack`
 - **Interactive features**: `sandpack-vue3`, `monaco-editor`

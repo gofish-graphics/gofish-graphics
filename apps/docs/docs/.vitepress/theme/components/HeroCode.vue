@@ -5,7 +5,7 @@ import {
   spread,
   stack,
   derive,
-  Layer,
+  layer,
   select,
   rect,
   area,
@@ -13,13 +13,22 @@ import {
   clock,
 } from "gofish-graphics";
 import _ from "lodash";
+import { docsLang } from "../docsLang";
 const { orderBy } = _;
 
 const rootEl = ref<HTMLElement | null>(null);
 const copied = ref(false);
-const installCmd = "npm install gofish-graphics";
 const CHART_WIDTH = 500;
 const CHART_HEIGHT = 300;
+
+// The install command to copy follows the reader's language preference.
+// Both code snippets are rendered; CSS (keyed off <html data-docs-lang>) shows
+// the right one with no flash — see <style> below.
+const installCmd = computed(() =>
+  docsLang.value === "python"
+    ? "pip install gofish-graphics"
+    : "npm install gofish-graphics"
+);
 
 const seafood = [
   { lake: "Lake A", species: "Bass", count: 23 },
@@ -54,30 +63,41 @@ const seafood = [
   { lake: "Lake F", species: "Salmon", count: 47 },
 ];
 
-const code = `Layer({ coord: clock() }, [
-  Chart(seafood)
-    .flow(
-      spread("lake", {
-        dir: "x",
-        spacing: (2 * Math.PI) / 6,
-        mode: "center",
-        y: 50,
-        label: false,
-      }),
-      derive((d) => orderBy(d, "count")),
-      stack("species", { dir: "y", label: false })
-    )
-    .mark(rect({ h: "count", fill: "species" }).name("bars")),
-  Chart(select("bars"))
-    .flow(group("species"))
-    .mark(area({ opacity: 0.8 })),
-]).render(root, { w: ${CHART_WIDTH}, h: ${CHART_HEIGHT}, transform: { x: 200, y: 200 }, axes: true });`;
+const jsCode = `layer({ coord: clock() }, [
+    Chart(seafood)
+        .flow(
+            spread({ by: "lake", dir: "x", spacing: (2 * Math.PI) / 6,
+                     mode: "center", y: 50, label: false }),
+            derive((d) => orderBy(d, "count")),
+            stack({ by: "species", dir: "y", label: false }),
+        )
+        .mark(rect({ h: "count", fill: "species" }).name("bars")),
+    Chart(select("bars"))
+        .flow(group({ by: "species" }))
+        .mark(area({ opacity: 0.8 })),
+]).render(root, { w: ${CHART_WIDTH}, h: ${CHART_HEIGHT}, transform: { x: 250, y: 150 }, axes: true });`;
+
+const pyCode = `Layer({"coord": clock()}, [
+    chart(seafood)
+        .flow(
+            spread(by="lake", dir="x", spacing=2 * math.pi / 6,
+                   mode="center", y=50, label=False),
+            derive(lambda d: sorted(d, key=lambda r: r["count"])),
+            stack(by="species", dir="y", label=False),
+        )
+        .mark(rect(h="count", fill="species").name("bars")),
+    chart(select("bars"))
+        .flow(group(by="species"))
+        .mark(area(opacity=0.8)),
+]).render(w=${CHART_WIDTH}, h=${CHART_HEIGHT}, axes=True)`;
 
 function escapeHtml(src: string): string {
   return src.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
-function highlightTs(src: string): string {
+// Lightweight highlighter shared by the JS and Python snippets. Strings are
+// tagged first so later passes never reach inside an injected <span>.
+function highlight(src: string): string {
   let s = escapeHtml(src);
 
   // Strings
@@ -85,9 +105,10 @@ function highlightTs(src: string): string {
     /("[^"]*"|'[^']*'|`[^`]*`)/g,
     '<span class="tok-str">$1</span>'
   );
-  // Keywords
+  // Keywords (JS + Python). NB: do not add `class` here — it would match the
+  // `class` attribute inside the <span> tags injected by the strings pass.
   s = s.replace(
-    /\b(import|from|const|let|return|new|export|function|if|else|await|async)\b/g,
+    /\b(import|from|const|let|return|new|export|function|if|else|await|async|lambda|def|None|True|False|and|or|not|in)\b/g,
     '<span class="tok-kw">$1</span>'
   );
   // Numbers
@@ -108,7 +129,8 @@ function highlightTs(src: string): string {
   return s;
 }
 
-const highlighted = computed(() => highlightTs(code));
+const highlightedJs = highlight(jsCode);
+const highlightedPy = highlight(pyCode);
 
 function renderFixedChart() {
   const root = rootEl.value;
@@ -119,10 +141,11 @@ function renderFixedChart() {
   const centerX = CHART_WIDTH / 2;
   const centerY = CHART_HEIGHT / 2;
 
-  Layer({ coord: clock() }, [
+  layer({ coord: clock() }, [
     Chart(seafood)
       .flow(
-        spread("lake", {
+        spread({
+          by: "lake",
           dir: "x",
           spacing: (2 * Math.PI) / 6,
           mode: "center",
@@ -130,11 +153,11 @@ function renderFixedChart() {
           label: false,
         }),
         derive((d) => orderBy(d, "count")),
-        stack("species", { dir: "y", label: false })
+        stack({ by: "species", dir: "y", label: false })
       )
       .mark(rect({ h: "count", fill: "species" }).name("bars")),
     Chart(select("bars"))
-      .flow(group("species"))
+      .flow(group({ by: "species" }))
       .mark(area({ opacity: 0.8 })),
   ]).render(root, {
     w: CHART_WIDTH,
@@ -160,12 +183,12 @@ onMounted(() => {
 
 async function copyInstall() {
   try {
-    await navigator.clipboard.writeText(installCmd);
+    await navigator.clipboard.writeText(installCmd.value);
     copied.value = true;
     setTimeout(() => (copied.value = false), 1500);
   } catch (_) {
     const ta = document.createElement("textarea");
-    ta.value = installCmd;
+    ta.value = installCmd.value;
     ta.setAttribute("readonly", "");
     ta.style.position = "absolute";
     ta.style.left = "-9999px";
@@ -187,20 +210,34 @@ async function copyInstall() {
     }"
   >
     <div
-      class="install-pill"
+      class="install-pill hero-lang-js"
       role="button"
       aria-label="Copy install command"
       @click="copyInstall"
     >
       <code class="cmd"
-        >npm install <span class="gofish-graphics">gofish-graphics</span></code
+        >npm install <span class="pkg">gofish-graphics</span></code
+      >
+      <span class="copy">{{ copied ? "Copied" : "Copy" }}</span>
+    </div>
+    <div
+      class="install-pill hero-lang-python"
+      role="button"
+      aria-label="Copy install command"
+      @click="copyInstall"
+    >
+      <code class="cmd"
+        >pip install <span class="pkg">gofish-graphics</span></code
       >
       <span class="copy">{{ copied ? "Copied" : "Copy" }}</span>
     </div>
     <div ref="rootEl" class="viz"></div>
     <pre
-      class="code"
-    ><code class="language-ts" v-html="highlighted"></code></pre>
+      class="code hero-lang-js"
+    ><code class="language-ts" v-html="highlightedJs"></code></pre>
+    <pre
+      class="code hero-lang-python"
+    ><code class="language-python" v-html="highlightedPy"></code></pre>
   </div>
 </template>
 
@@ -212,9 +249,13 @@ async function copyInstall() {
   margin-left: auto;
   width: min(640px, 100%);
 }
-.gofish-graphics {
+.pkg {
   color: #4cb05e;
 }
+
+/* The .hero-lang-js / .hero-lang-python visibility rules live in the global
+   theme/style.css — keyed off <html data-docs-lang>, they must not go through
+   Vue's scoped-CSS transform. */
 
 .install-pill {
   display: block;
@@ -226,7 +267,10 @@ async function copyInstall() {
   border-radius: 4px;
   margin-left: 0.25rem;
   display: inline-flex;
-  transition: background 0.2s ease, border-color 0.2s ease, transform 0.05s ease;
+  transition:
+    background 0.2s ease,
+    border-color 0.2s ease,
+    transform 0.05s ease;
   /* width: 100%; */
   width: 100%;
   margin-top: 2rem;
@@ -238,7 +282,10 @@ async function copyInstall() {
   background: var(--vp-c-bg-soft);
   cursor: pointer;
   user-select: none;
-  transition: background 0.2s ease, border-color 0.2s ease, transform 0.05s ease;
+  transition:
+    background 0.2s ease,
+    border-color 0.2s ease,
+    transform 0.05s ease;
   justify-content: space-between;
   margin-top: 2rem;
 }
@@ -317,7 +364,9 @@ async function copyInstall() {
   color: var(--vp-c-cyan-2, #000);
 }
 
-/* Entrance animation: slide up + fade in */
+/* Entrance animation for the chart only. The install pill and code panels are
+   intentionally left un-animated: with both languages rendered and toggled via
+   `display`, an animation would re-fire every time the language is switched. */
 @keyframes slideFadeUp {
   from {
     opacity: 0;
@@ -333,18 +382,8 @@ async function copyInstall() {
   animation: slideFadeUp 600ms ease-out both;
 }
 
-.hero-snippet .code {
-  animation: slideFadeUp 700ms ease-out both;
-  animation-delay: 120ms;
-}
-
-.hero-snippet .install-pill {
-  animation: slideFadeUp 500ms ease-out both;
-}
-
 @media (prefers-reduced-motion: reduce) {
-  .hero-snippet .viz,
-  .hero-snippet .code {
+  .hero-snippet .viz {
     animation: none !important;
   }
 }

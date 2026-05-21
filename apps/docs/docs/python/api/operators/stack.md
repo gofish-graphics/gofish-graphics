@@ -1,0 +1,56 @@
+# stack
+
+Stacks groups edge-to-edge along an axis with no gap between them — `spread`
+without the spacing. The basis for stacked bar charts and pie charts.
+
+::: starfish example:stacked-bar-chart hidden
+:::
+
+```python
+from gofish import chart, spread, stack, rect
+
+chart(seafood).flow(
+    spread(by="lake", dir="x"),
+    stack(by="species", dir="y", label=False),
+).mark(rect(h="count", fill="species")).render(w=500, h=300, axes=True)
+```
+
+## Signature
+
+```python
+stack(*, by=None, dir, **options) -> Operator
+```
+
+## Parameters
+
+| Parameter   | Type           | Description                                            |
+| ----------- | -------------- | ------------------------------------------------------ |
+| `by`        | `str`          | Field name to partition by. Omit to stack per row.     |
+| `dir`       | `"x"` \| `"y"` | **Required.** Axis to stack along.                     |
+| `alignment` | `str`          | Cross-axis alignment of the stacked groups.            |
+| `label`     | `bool`         | Whether to emit an axis label for the partition field. |
+
+Returns an `Operator` for use inside [`.flow()`](/python/api/core/flow).
+
+## Examples
+
+```python
+# Stacked bars: lakes across x, species stacked up y
+chart(seafood).flow(
+    spread(by="lake", dir="x"),
+    stack(by="species", dir="y"),
+).mark(rect(h="count", fill="species"))
+
+# Grouped bars: stack along x instead
+chart(seafood).flow(
+    spread(by="lake", dir="x"),
+    stack(by="species", dir="x"),
+).mark(rect(h="count", fill="species"))
+```
+
+## Notes
+
+- `dir` is required — `stack()` raises a `ValueError` without it.
+- Combine with `coord=clock()` on [`chart`](/python/api/core/chart) to turn a
+  stack into a pie chart.
+- Use [`spread`](/python/api/operators/spread) when you want gaps between groups.
