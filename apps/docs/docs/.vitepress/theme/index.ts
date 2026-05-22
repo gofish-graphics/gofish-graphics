@@ -17,7 +17,7 @@ import { StarfishLive } from "../../../components/StarfishLive";
 import HeroCode from "./components/HeroCode.vue";
 import LanguageToggle from "./components/LanguageToggle.vue";
 import HeroActions from "./components/HeroActions.vue";
-import SourceLinks from "./components/SourceLinks.vue";
+import EssayMeta from "./components/EssayMeta.vue";
 import InternalsLink from "./components/InternalsLink.vue";
 import TwoslashFloatingVue from "@shikijs/vitepress-twoslash/client";
 import "@shikijs/vitepress-twoslash/style.css";
@@ -36,9 +36,9 @@ export default {
         h(LanguageToggle, { placement: "nav" }),
       ],
       "sidebar-nav-before": () => h(LanguageToggle, { placement: "sidebar" }),
-      // "Source files" box for internals essays with `covers:` frontmatter
-      // (the component renders nothing on pages without it).
-      "doc-before": () => h(SourceLinks),
+      // Status banner + "Source files" box for internals essays
+      // (the component renders nothing on pages without the frontmatter).
+      "doc-before": () => h(EssayMeta),
     });
   },
   enhanceApp({ app, router }) {

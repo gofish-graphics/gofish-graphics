@@ -94,8 +94,8 @@ language toggle (`LanguageToggle.vue` hides itself on `/internals/` routes). See
 
 - The `/internals/` sidebar is generated at build time by `collectInternalsSidebar()`
   in `config.mts` from each essay's `section` / `order` / `title` frontmatter.
-- Each essay declares `covers:` (the source files it documents). `SourceLinks.vue`
-  renders those as a "Source files" box; `scripts/sync-backlinks.mjs` projects them
+- Each essay declares `covers:` (the source files it documents). `EssayMeta.vue`
+  renders those as a "Source files" box (and the draft/speculative status banner); `scripts/sync-backlinks.mjs` projects them
   into managed `@wiki` comments in the source files. Run `pnpm sync-backlinks` after
   editing `covers:`; CI runs `pnpm check-backlinks`.
 - Code samples use ` ```ts twoslash ` fences for compiler-checked type-on-hover.
@@ -115,7 +115,7 @@ language toggle (`LanguageToggle.vue` hides itself on `/internals/` routes). See
 - `internals/` - internal architecture wiki (`internals/api/` is generated, gitignored)
 - `index.md` - shared home page
 - `.vitepress/config.mts` - VitePress configuration (per-language + internals sidebars)
-- `.vitepress/theme/` - Custom theme components (incl. `LanguageToggle.vue`, `SourceLinks.vue`)
+- `.vitepress/theme/` - Custom theme components (incl. `LanguageToggle.vue`, `EssayMeta.vue`)
 - `.vitepress/examples/` - `.ts` source for registered live examples (incl. `internal-*.ts` diagrams)
 - `.vitepress/data/` - build-time data loaders (`examples.data.js`, `routes.data.ts`)
 
