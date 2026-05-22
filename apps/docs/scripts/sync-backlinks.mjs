@@ -109,6 +109,10 @@ const missing = [];
 
 for (const rel of [...targets].sort()) {
   const abs = join(repoRoot, rel);
+  if (abs !== repoRoot && !abs.startsWith(repoRoot + "/")) {
+    missing.push(`${rel} — path escapes the repo root`);
+    continue;
+  }
   const token = commentToken(rel);
   if (!token) {
     missing.push(`${rel} — unsupported file type for a back-link comment`);
@@ -152,9 +156,6 @@ if (MODE === "check") {
   process.exit(1);
 }
 
-if (missing.length) {
-  for (const m of missing) console.warn(`sync-backlinks: warning — ${m}`);
-}
 console.log(
   changed.length
     ? `sync-backlinks: updated ${changed.length} file(s):\n${changed
@@ -162,3 +163,10 @@ console.log(
         .join("\n")}`
     : "sync-backlinks: nothing to update"
 );
+if (missing.length) {
+  console.error(
+    "sync-backlinks: covers: entries that did not resolve to a file:"
+  );
+  for (const m of missing) console.error(`  ${m}`);
+  process.exit(1);
+}

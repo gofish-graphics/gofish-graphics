@@ -29,7 +29,9 @@ covers: # source files this essay documents
 ```
 
 **Sections** group the sidebar. In order: `Overview`, `Frontend`, `Core`,
-`Python`, `Speculative Notes`.
+`Python`, `Speculative Notes`. An essay's place in the sidebar comes entirely
+from its `section:` (and `group:`) frontmatter — the directory a file happens to
+sit in is filesystem convenience and need not match its section.
 
 **`group`** files an essay under an intermediate sidebar label, e.g.
 `group: Scale Resolution`. Group labels are **not pages** — only leaf essays
@@ -49,13 +51,17 @@ The `covers:` list does double duty:
 1. It renders as the **Source files** box at the top of the page (the links above this
    section, if any). On the web those are GitHub links; locally they are repo-relative
    paths you (or Claude) can open and edit.
-2. It is projected into the source files as a one-line `@wiki` back-link comment, e.g.
+2. It is projected into the source files as a managed `@wiki` back-link comment
+   block, e.g.
 
    ```ts
-   /** @wiki internals/core/monotonic — The Monotonic Module */
+   // <gofish-wiki> AUTO-GENERATED — see covers: in the essay; run `pnpm --filter docs sync-backlinks`
+   // @wiki The Monotonic Module — /internals/core/monotonic
+   // </gofish-wiki>
    ```
 
    So when you open `monotonic.ts`, you can see at a glance which essay describes it.
+   The block is regenerated idempotently — never edit it by hand.
 
 `covers:` is canonical. After editing it, run `pnpm --filter docs sync-backlinks` to
 regenerate the `@wiki` comments. CI runs `check-backlinks` to verify the two stay in

@@ -2,7 +2,9 @@
 import { computed } from "vue";
 import { useData } from "vitepress";
 
-// Repo + branch the `covers:` paths resolve against on the web.
+// Repo + branch the `covers:` paths resolve against on the web. BRANCH is
+// pinned to `main`: source links always point at the released file, even when
+// the wiki is read from a feature branch.
 const REPO = "https://github.com/gofish-graphics/gofish-graphics";
 const BRANCH = "main";
 
