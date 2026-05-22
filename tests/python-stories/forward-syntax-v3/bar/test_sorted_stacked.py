@@ -8,9 +8,9 @@ def story_default():
     return (
         chart(SEAFOOD)
         .flow(
-            spread("lake", dir="x"),
+            spread(by="lake", dir="x"),
             derive(lambda d: sorted(d, key=lambda row: row["count"])),
-            stack("species", dir="y"),
+            stack(by="species", dir="y"),
         )
         .mark(rect(h="count", fill="species")),
         {"w": 400, "h": 400, "axes": True},

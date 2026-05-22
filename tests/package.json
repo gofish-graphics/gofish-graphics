@@ -11,6 +11,7 @@
     "update-baselines": "tsx scripts/update-baselines.ts",
     "check-sync": "tsx scripts/check-python-sync.ts",
     "check-python-sync": "tsx scripts/check-python-sync.ts",
+    "check-python-sync-all": "tsx scripts/check-python-sync.ts --all",
     "capture-python": "tsx scripts/capture-python-dom.ts",
     "compare-python": "tsx scripts/compare-python.ts",
     "build:parity-review-site": "tsx scripts/build-parity-review-site.ts",

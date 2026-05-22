@@ -164,18 +164,45 @@ function domIdToPythonFile(id: string): string {
 // Types
 // ---------------------------------------------------------------------------
 
-interface StoryPair {
-  /** Slug used as key, e.g. "forwardsyntax/bar--basic" */
+interface ExportEntry {
+  /** Camel-cased export name from the JS file, e.g. "Default", "AxesXOnly". */
+  name: string;
+  /** Story-level id, e.g. "forward-syntax-v3/bar/basic--default". Matches
+   * the path produced by capture-python's story-discovery + DOM diffs. */
   id: string;
-  jsFile: string;
-  pythonFile: string;
-  /** "coverage" | "sync" | "dom" */
-  checkType: string;
-  /** "pass" | "fail" | "warning" */
-  status: string;
+  /** "story_default", "story_axes_xonly" — what we look for in Python. */
+  expected: string;
+  status: "pass" | "fail" | "warning";
+  /** Specific reason for the status; lets the sidebar show a breakdown
+   * like "51 missing, 9 capture failed" instead of one bucket. */
+  category:
+    | "covered"
+    | "missing"
+    | "exempt"
+    | "capture-failed"
+    | "capture-skipped"
+    | "parity-mismatch";
   message: string;
   hasDomDiff: boolean;
   hasScreenshots: boolean;
+}
+
+interface StoryPair {
+  /** File-level id derived from the Storybook title, e.g.
+   * "forward-syntax-v3/bar/basic". Shares a prefix with each child's id. */
+  id: string;
+  jsFile: string;
+  pythonFile: string;
+  /** "coverage" | "sync" | "dom" | "capture" */
+  checkType: string;
+  /** Aggregate over children: "pass" if all pass, "warning" if any
+   * warning and none fail, "fail" if any fail. */
+  status: "pass" | "fail" | "warning";
+  message: string;
+  /** Aggregate flags — true if any child has a DOM diff / screenshot. */
+  hasDomDiff: boolean;
+  hasScreenshots: boolean;
+  exports: ExportEntry[];
 }
 
 // ---------------------------------------------------------------------------
@@ -197,79 +224,381 @@ console.log(`  ${parityDiffs.length} DOM parity diff(s) found`);
 // ---------------------------------------------------------------------------
 
 const pairs: StoryPair[] = [];
-const seenIds = new Set<string>();
+const pairById = new Map<string, StoryPair>();
 
-function jsFileToId(jsFile: string): string {
-  return jsFile
-    .replace(/^packages\/gofish-graphics\/stories\//, "")
-    .replace(/\.stories\.tsx$/, "")
-    .toLowerCase()
-    .replace(/\//g, "/")
-    .replace(/([a-z])([A-Z])/g, "$1-$2");
+function camelToSnake(s: string): string {
+  return s
+    .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
+    .replace(/^_/, "")
+    .toLowerCase();
 }
 
-// From all indexed JS stories
-for (const [, jsFile] of storyIndex) {
-  const id = jsFileToId(jsFile);
-  if (seenIds.has(id)) continue;
-  seenIds.add(id);
+/** JS export name → kebab-case path segment. */
+function jsExportToKebab(s: string): string {
+  return camelToSnake(s).replace(/_/g, "-");
+}
+
+// Mirror the per-StoryObj logic in check-python-sync.ts so the viewer's
+// file-level counts line up with what the `--all` check reports.
+function readJsStoryExports(absPath: string): string[] {
+  const content = readOptional(absPath);
+  if (!content) return [];
+  return [...content.matchAll(/^export\s+const\s+(\w+)\s*:\s*StoryObj/gm)].map(
+    (m) => m[1]
+  );
+}
+
+function readPyStoryFns(absPath: string): Set<string> {
+  if (!existsSync(absPath)) return new Set();
+  const content = readOptional(absPath);
+  if (!content) return new Set();
+  return new Set(
+    [...content.matchAll(/^def\s+(story_\w+)/gm)].map((m) => m[1])
+  );
+}
+
+// Load exempt list — entries become viewer warnings, not silent passes
+// (matching the --all check's behavior). Supports both whole-file entries
+// and per-export entries with `path/to/file.stories.tsx::ExportName`.
+interface ExemptSet {
+  files: Set<string>;
+  exports: Map<string, Set<string>>;
+}
+function loadExemptSet(): ExemptSet {
+  const exempt: ExemptSet = { files: new Set(), exports: new Map() };
+  const exemptFile = join(TESTS_DIR, ".python-sync-exempt");
+  if (!existsSync(exemptFile)) return exempt;
+  for (const raw of readFileSync(exemptFile, "utf-8").split("\n")) {
+    const line = raw.trim();
+    if (!line || line.startsWith("#")) continue;
+    const sep = line.indexOf("::");
+    if (sep === -1) {
+      exempt.files.add(line);
+    } else {
+      const file = line.slice(0, sep);
+      const exp = line.slice(sep + 2);
+      if (!exempt.exports.has(file)) exempt.exports.set(file, new Set());
+      exempt.exports.get(file)!.add(exp);
+    }
+  }
+  return exempt;
+}
+const exemptSet = loadExemptSet();
+const isFileExempt = (file: string) => exemptSet.files.has(file);
+const isExportExempt = (file: string, exp: string) =>
+  exemptSet.files.has(file) || exemptSet.exports.get(file)?.has(exp) === true;
+
+let exportsTotal = 0;
+let exportsCovered = 0;
+let exportsMissing = 0;
+let exportsExempt = 0;
+let exportsCaptureFailed = 0;
+let exportsCaptureSkipped = 0;
+let exportsParityMismatch = 0;
+
+// From all indexed JS stories. Use the Storybook-title-derived id as the
+// file-level pair id; DOM-diff / capture-result ids share this prefix.
+for (const [fileId, jsFile] of storyIndex) {
+  if (pairById.has(fileId)) continue;
 
   const pythonFile = mapJsToPython(jsFile);
-  const pythonExists = existsSync(join(ROOT_DIR, pythonFile));
+  const pythonAbs = join(ROOT_DIR, pythonFile);
+  const fileExempt = isFileExempt(jsFile);
 
-  pairs.push({
-    id,
+  const jsExports = readJsStoryExports(join(ROOT_DIR, jsFile));
+  exportsTotal += jsExports.length;
+
+  const pyFns = fileExempt ? new Set<string>() : readPyStoryFns(pythonAbs);
+  const exports: ExportEntry[] = jsExports.map((name) => {
+    const expected = `story_${camelToSnake(name)}`;
+    const exportId = `${fileId}--${jsExportToKebab(name)}`;
+    if (fileExempt || isExportExempt(jsFile, name)) {
+      exportsExempt++;
+      return {
+        name,
+        id: exportId,
+        expected,
+        status: "warning",
+        category: "exempt",
+        message: "Exempt — not yet implemented in Python",
+        hasDomDiff: false,
+        hasScreenshots: false,
+      };
+    }
+    if (pyFns.has(expected)) {
+      exportsCovered++;
+      return {
+        name,
+        id: exportId,
+        expected,
+        status: "pass",
+        category: "covered",
+        message: "Python counterpart present",
+        hasDomDiff: false,
+        hasScreenshots: false,
+      };
+    }
+    exportsMissing++;
+    return {
+      name,
+      id: exportId,
+      expected,
+      status: "fail",
+      category: "missing",
+      message: `Missing Python counterpart (expected ${expected} in ${pythonFile})`,
+      hasDomDiff: false,
+      hasScreenshots: false,
+    };
+  });
+
+  let fileStatus: "pass" | "fail" | "warning";
+  let fileMessage: string;
+  if (fileExempt) {
+    fileStatus = "warning";
+    fileMessage =
+      jsExports.length > 0
+        ? `Exempt — ${jsExports.length} export(s) not yet implemented in Python`
+        : "Exempt from Python parity";
+  } else if (jsExports.length === 0) {
+    fileStatus = "warning";
+    fileMessage = "No StoryObj exports detected";
+  } else {
+    const fails = exports.filter((e) => e.status === "fail").length;
+    if (fails === 0) {
+      fileStatus = "pass";
+      fileMessage = `All ${jsExports.length} export(s) covered`;
+    } else {
+      fileStatus = "fail";
+      const failNames = exports
+        .filter((e) => e.status === "fail")
+        .map((e) => e.name);
+      const preview = failNames.slice(0, 3).join(", ");
+      const more =
+        failNames.length > 3 ? `, +${failNames.length - 3} more` : "";
+      fileMessage = `${fails}/${jsExports.length} export(s) missing: ${preview}${more}`;
+    }
+  }
+
+  const pair: StoryPair = {
+    id: fileId,
     jsFile,
     pythonFile,
     checkType: "coverage",
-    status: pythonExists ? "pass" : "warning",
-    message: pythonExists
-      ? "Python counterpart present"
-      : "No Python counterpart found",
+    status: fileStatus,
+    message: fileMessage,
     hasDomDiff: false,
     hasScreenshots: false,
-  });
+    exports,
+  };
+  pairs.push(pair);
+  pairById.set(fileId, pair);
 }
 
-// Overlay DOM parity diffs
+// Overlay DOM parity diffs onto specific exports. diff.path is e.g.
+// "forward-syntax-v3/bar/basic--default.html"; split into file id +
+// export suffix, find the matching pair + export entry.
 for (const diff of parityDiffs) {
   const id = diff.path.replace(/\.html$/, "");
+  const sep = id.lastIndexOf("--");
+  const fileId = sep > 0 ? id.slice(0, sep) : id;
+  const exportSlug = sep > 0 ? id.slice(sep + 2) : null;
 
-  if (seenIds.has(id)) {
-    const pair = pairs.find((p) => p.id === id);
-    if (pair) {
-      pair.hasDomDiff = true;
-      if (diff.afterScreenshotPath) pair.hasScreenshots = true;
-      if (pair.status !== "fail") pair.status = "fail";
-      pair.checkType = "dom";
-      pair.message =
-        diff.beforeDom !== null
-          ? "DOM output does not match JS baseline"
-          : "No JS baseline exists yet";
+  const pair = pairById.get(fileId);
+  const domMessage =
+    diff.beforeDom !== null
+      ? "DOM output does not match JS baseline"
+      : "No JS baseline exists yet";
+  const hasDomDiff = diff.beforeDom !== null;
+  const hasScreenshots = diff.afterScreenshotPath !== null;
+
+  if (pair && exportSlug) {
+    const exp =
+      pair.exports.find((e) => e.id === id) ??
+      // Slug-based fallback (case-insensitive). Lets DOM diffs attach
+      // even when export name casing differs.
+      pair.exports.find((e) => jsExportToKebab(e.name) === exportSlug);
+    if (exp) {
+      // Decrement whatever category counter the original status used
+      // before overwriting it with parity-mismatch.
+      if (exp.category === "covered") exportsCovered--;
+      else if (exp.category === "missing") exportsMissing--;
+      else if (exp.category === "exempt") exportsExempt--;
+      else if (exp.category === "capture-failed") exportsCaptureFailed--;
+      else if (exp.category === "capture-skipped") exportsCaptureSkipped--;
+      exportsParityMismatch++;
+      exp.status = "fail";
+      exp.category = "parity-mismatch";
+      exp.message = domMessage;
+      exp.hasDomDiff = hasDomDiff;
+      exp.hasScreenshots = hasScreenshots;
+      pair.hasDomDiff = pair.hasDomDiff || hasDomDiff;
+      pair.hasScreenshots = pair.hasScreenshots || hasScreenshots;
+      pair.checkType = "parity";
+      pair.status = "fail";
+      continue;
     }
-    continue;
   }
-  seenIds.add(id);
 
-  const storyId = id.replace(/--[^/]*$/, "");
-  const jsFile =
-    storyIndex.get(storyId) ??
-    `packages/gofish-graphics/stories/${id}.stories.tsx`;
-  const pythonFile = domIdToPythonFile(id);
+  // Fallback: no matching file pair / export. Create a standalone
+  // entry so the diff still appears (rare — generally indicates an
+  // orphan snapshot whose JS story was deleted).
+  if (!pairById.has(fileId)) {
+    const jsFile =
+      storyIndex.get(fileId) ??
+      `packages/gofish-graphics/stories/${id}.stories.tsx`;
+    const orphan: StoryPair = {
+      id: fileId,
+      jsFile,
+      pythonFile: domIdToPythonFile(id),
+      checkType: "parity",
+      status: "fail",
+      message: "Orphan DOM diff (no JS story file)",
+      hasDomDiff,
+      hasScreenshots,
+      exports: [
+        {
+          name: exportSlug ?? "default",
+          id,
+          expected: `story_${(exportSlug ?? "default").replace(/-/g, "_")}`,
+          status: "fail",
+          category: "parity-mismatch",
+          message: domMessage,
+          hasDomDiff,
+          hasScreenshots,
+        },
+      ],
+    };
+    exportsTotal++;
+    exportsParityMismatch++;
+    pairs.push(orphan);
+    pairById.set(fileId, orphan);
+  }
+}
 
-  pairs.push({
-    id,
-    jsFile,
-    pythonFile,
-    checkType: "dom",
-    status: "fail",
-    message:
-      diff.beforeDom !== null
-        ? "DOM output does not match JS baseline"
-        : "No JS baseline exists yet",
-    hasDomDiff: diff.beforeDom !== null,
-    hasScreenshots: diff.afterScreenshotPath !== null,
-  });
+// ---------------------------------------------------------------------------
+// Overlay capture results (capture-python-dom.ts writes capture-results.json
+// with per-story failure/skip records). Without this, capture failures look
+// like passes in the viewer because the matching Python file *exists* — but
+// no DOM was ever produced. Skips (e.g. LayerBuilder unsupported) similarly
+// need to be visible warnings, not silent passes.
+// ---------------------------------------------------------------------------
+
+interface CaptureResult {
+  id: string;
+  story: string;
+  reason: string;
+}
+interface CaptureResults {
+  captured: string[];
+  failed: CaptureResult[];
+  skipped: CaptureResult[];
+}
+
+const captureResultsPath = join(TESTS_DIR, "tmp/python/capture-results.json");
+const captureResults: CaptureResults | null = (() => {
+  if (!existsSync(captureResultsPath)) {
+    console.log(`  capture-results.json: NOT FOUND at ${captureResultsPath}`);
+    return null;
+  }
+  try {
+    const parsed = JSON.parse(readFileSync(captureResultsPath, "utf-8"));
+    console.log(
+      `  capture-results.json: ${parsed.captured?.length ?? 0} captured, ` +
+        `${parsed.failed?.length ?? 0} failed, ${parsed.skipped?.length ?? 0} skipped`
+    );
+    return parsed;
+  } catch (err) {
+    console.log(
+      `  capture-results.json: PARSE FAILURE (${err instanceof Error ? err.message : err})`
+    );
+    return null;
+  }
+})();
+
+if (captureResults) {
+  const overlay = (
+    record: CaptureResult,
+    status: "fail" | "warning",
+    label: string
+  ) => {
+    const id = record.id;
+    const sep = id.lastIndexOf("--");
+    const fileId = sep > 0 ? id.slice(0, sep) : id;
+    const exportSlug = sep > 0 ? id.slice(sep + 2) : null;
+    const message = `${label}: ${record.reason}`;
+
+    const newCategory =
+      status === "fail" ? "capture-failed" : "capture-skipped";
+
+    const pair = pairById.get(fileId);
+    if (pair && exportSlug) {
+      const exp =
+        pair.exports.find((e) => e.id === id) ??
+        pair.exports.find((e) => jsExportToKebab(e.name) === exportSlug);
+      if (exp) {
+        // Don't downgrade an existing fail (e.g. DOM diff already
+        // attached); capture is a less specific signal.
+        if (exp.status !== "fail") {
+          if (exp.category === "covered") exportsCovered--;
+          else if (exp.category === "missing") exportsMissing--;
+          else if (exp.category === "exempt") exportsExempt--;
+          if (newCategory === "capture-failed") exportsCaptureFailed++;
+          else if (newCategory === "capture-skipped") exportsCaptureSkipped++;
+          exp.status = status;
+          exp.category = newCategory;
+          exp.message = message;
+        }
+        if (pair.status !== "fail") {
+          pair.status = status;
+          pair.message = message;
+        }
+        if (pair.checkType !== "parity") pair.checkType = "capture";
+        return;
+      }
+    }
+
+    // No matching file pair or export — create an orphan entry so the
+    // capture record still surfaces.
+    const jsFile =
+      storyIndex.get(fileId) ??
+      `packages/gofish-graphics/stories/${id}.stories.tsx`;
+    const newPair: StoryPair = {
+      id: fileId,
+      jsFile,
+      pythonFile: domIdToPythonFile(id),
+      checkType: "capture",
+      status,
+      message,
+      hasDomDiff: false,
+      hasScreenshots: false,
+      exports: [
+        {
+          name: exportSlug ?? "default",
+          id,
+          expected: `story_${(exportSlug ?? "default").replace(/-/g, "_")}`,
+          status,
+          category: newCategory,
+          message,
+          hasDomDiff: false,
+          hasScreenshots: false,
+        },
+      ],
+    };
+    exportsTotal++;
+    if (newCategory === "capture-failed") exportsCaptureFailed++;
+    else if (newCategory === "capture-skipped") exportsCaptureSkipped++;
+    pairs.push(newPair);
+    pairById.set(fileId, newPair);
+  };
+
+  for (const r of captureResults.failed ?? [])
+    overlay(r, "fail", "Capture failed");
+  for (const r of captureResults.skipped ?? [])
+    overlay(r, "warning", "Capture skipped");
+
+  console.log(
+    `  ${captureResults.failed?.length ?? 0} capture failure(s), ${captureResults.skipped?.length ?? 0} capture skip(s) overlaid`
+  );
 }
 
 console.log(`  ${pairs.length} story pair(s) total`);
@@ -315,6 +644,55 @@ for (const diff of parityDiffs) {
 write(join(OUT_DIR, "data/results.json"), JSON.stringify(pairs, null, 2));
 
 // ---------------------------------------------------------------------------
+// Roll up export-level totals into tests/tmp/parity-summary.json so the CI
+// workflow status description reflects the same numbers the viewer shows.
+// Single source of truth — no recomputation in the workflow YAML.
+// ---------------------------------------------------------------------------
+
+const exportsFailures =
+  exportsMissing + exportsCaptureFailed + exportsParityMismatch;
+const exportsWarnings = exportsExempt + exportsCaptureSkipped;
+const exportsPassed = exportsCovered;
+
+const failParts: string[] = [];
+if (exportsMissing > 0) failParts.push(`${exportsMissing} missing`);
+if (exportsCaptureFailed > 0)
+  failParts.push(`${exportsCaptureFailed} capture failed`);
+if (exportsParityMismatch > 0)
+  failParts.push(`${exportsParityMismatch} parity mismatch`);
+
+const warnParts: string[] = [];
+if (exportsExempt > 0) warnParts.push(`${exportsExempt} exempt`);
+if (exportsCaptureSkipped > 0)
+  warnParts.push(`${exportsCaptureSkipped} capture skipped`);
+
+const paritySummaryPath = join(TESTS_DIR, "tmp/parity-summary.json");
+let priorSummary: Record<string, unknown> = {};
+if (existsSync(paritySummaryPath)) {
+  try {
+    priorSummary = JSON.parse(readFileSync(paritySummaryPath, "utf-8"));
+  } catch {
+    /* overwrite */
+  }
+}
+writeFileSync(
+  paritySummaryPath,
+  JSON.stringify(
+    {
+      ...priorSummary,
+      exportsTotal,
+      exportsFailures,
+      exportsFailParts: failParts,
+      exportsWarnings,
+      exportsWarnParts: warnParts,
+      exportsPassed,
+    },
+    null,
+    2
+  )
+);
+
+// ---------------------------------------------------------------------------
 // data/meta.json
 // ---------------------------------------------------------------------------
 
@@ -322,6 +700,17 @@ const meta = {
   repo: process.env.REVIEW_REPO ?? "unknown/repo",
   branch: process.env.REVIEW_BRANCH ?? "unknown",
   sha: process.env.REVIEW_SHA ?? "unknown",
+  exports: {
+    total: exportsTotal,
+    // status × category breakdown — viewer rolls up to "failures",
+    // "warnings", "passed" totals and shows subcategories underneath.
+    covered: exportsCovered,
+    missing: exportsMissing,
+    exempt: exportsExempt,
+    captureFailed: exportsCaptureFailed,
+    captureSkipped: exportsCaptureSkipped,
+    parityMismatch: exportsParityMismatch,
+  },
 };
 
 write(join(OUT_DIR, "data/meta.json"), JSON.stringify(meta, null, 2));
@@ -373,11 +762,20 @@ const html = `<!DOCTYPE html>
     .filter-btn { padding: 3px 10px; border-radius: 12px; border: 1px solid #45475a; background: transparent; color: #a6adc8; font-size: 11px; cursor: pointer; }
     .filter-btn.active { background: #cba6f7; color: #1e1e2e; border-color: #cba6f7; font-weight: 600; }
     #story-list { flex: 1; overflow-y: auto; }
-    .story-item { padding: 10px 16px; cursor: pointer; border-bottom: 1px solid #181825; transition: background 0.1s; }
+    .story-item { padding: 8px 16px; cursor: pointer; border-bottom: 1px solid #181825; transition: background 0.1s; }
     .story-item:hover { background: #313244; }
     .story-item.active { background: #45475a; }
+    .story-item.export { padding: 4px 16px 4px 32px; border-bottom: none; }
+    .story-item.export.active { background: #45475a; }
     .story-name { font-size: 12px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-family: monospace; }
+    .story-item.export .story-name { font-size: 11px; font-weight: 400; color: #a6adc8; }
+    .story-item.export .story-name::before { content: "↳ "; color: #585b70; }
     .story-meta { font-size: 11px; margin-top: 2px; display: flex; gap: 8px; }
+    .story-item.export .story-meta { margin-top: 1px; }
+    .status-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
+    .status-dot-pass { background: #a6e3a1; }
+    .status-dot-fail { background: #f38ba8; }
+    .status-dot-warning { background: #fab387; }
     .status-pass { color: #a6e3a1; }
     .status-fail { color: #f38ba8; }
     .status-warning { color: #fab387; }
@@ -385,6 +783,7 @@ const html = `<!DOCTYPE html>
     .check-coverage { background: #313244; color: #89b4fa; }
     .check-sync { background: #313244; color: #cba6f7; }
     .check-dom { background: #313244; color: #fab387; }
+    .check-capture { background: #313244; color: #f38ba8; }
 
     /* Main panel */
     #main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
@@ -455,7 +854,8 @@ const html = `<!DOCTYPE html>
     <button class="filter-btn" data-filter="warning">Warnings</button>
     <button class="filter-btn" data-filter="coverage">Coverage</button>
     <button class="filter-btn" data-filter="sync">Sync</button>
-    <button class="filter-btn" data-filter="dom">DOM</button>
+    <button class="filter-btn" data-filter="capture">Capture</button>
+    <button class="filter-btn" data-filter="parity">Parity</button>
   </div>
   <div id="story-list"></div>
 </div>
@@ -570,86 +970,183 @@ const html = `<!DOCTYPE html>
     metaEl.textContent = meta.branch + ' @ ' + shortSha;
 
     renderSidebar();
-    if (allPairs.length > 0) selectPair(allPairs[0].id);
+    const first = visibleEntries()[0];
+    if (first) selectEntry(first);
   }
 
-  function filteredPairs() {
-    if (filter === 'all') return allPairs;
-    if (filter === 'fail') return allPairs.filter(p => p.status === 'fail');
-    if (filter === 'warning') return allPairs.filter(p => p.status === 'warning');
-    return allPairs.filter(p => p.checkType === filter);
+  // Resolve an entry by composite id (file id, or file-id--export-slug).
+  function findEntry(entryId) {
+    if (!entryId) return null;
+    for (const p of allPairs) {
+      if (p.id === entryId) return { kind: 'file', pair: p };
+      const exp = p.exports?.find(e => e.id === entryId);
+      if (exp) return { kind: 'export', pair: p, exp };
+    }
+    return null;
+  }
+
+  // Produce a flat list of visible entries (files + their exports),
+  // honoring the current filter. Files with exactly one export collapse
+  // to a single row (the file IS the entry — no indented child). Files
+  // with no visible children stay hidden when filtering to a specific
+  // status/checktype.
+  function visibleEntries() {
+    const out = [];
+    for (const p of allPairs) {
+      const exports = p.exports || [];
+      const fileMatches = entryMatches(p, p.checkType);
+      const visibleExports = exports.filter(e =>
+        entryMatches({ status: e.status, checkType: p.checkType }, p.checkType)
+      );
+      const showFile = filter === 'all' ? true : fileMatches || visibleExports.length > 0;
+      if (!showFile) continue;
+      out.push({ kind: 'file', pair: p });
+      // Collapse single-export files: the file row already represents
+      // the only export, indenting "↳ Default" under it is just noise.
+      if (exports.length <= 1) continue;
+      const childrenToShow = filter === 'all' ? exports : visibleExports;
+      for (const exp of childrenToShow) out.push({ kind: 'export', pair: p, exp });
+    }
+    return out;
+  }
+
+  function entryMatches(e, checkType) {
+    if (filter === 'all') return true;
+    if (filter === 'fail') return e.status === 'fail';
+    if (filter === 'warning') return e.status === 'warning';
+    return checkType === filter;
   }
 
   function renderSidebar() {
-    const fails = allPairs.filter(p => p.status === 'fail').length;
-    const warns = allPairs.filter(p => p.status === 'warning').length;
-    document.getElementById('sidebar-stats').textContent =
-      fails + ' failure(s), ' + warns + ' warning(s) / ' + allPairs.length + ' total';
+    // Stats are export-level, not file-level. Subcategories
+    // (missing / capture-failed / parity-mismatch) roll up into
+    // "failures"; (exempt / capture-skipped) into "warnings"; covered
+    // is "passed". Subcategories with zero count are omitted.
+    const ex = meta.exports || null;
+    const stats = document.getElementById('sidebar-stats');
+    if (ex && typeof ex.total === 'number') {
+      const failParts = [];
+      if (ex.missing > 0) failParts.push(ex.missing + ' missing');
+      if (ex.captureFailed > 0) failParts.push(ex.captureFailed + ' capture failed');
+      if (ex.parityMismatch > 0) failParts.push(ex.parityMismatch + ' parity mismatch');
+      const warnParts = [];
+      if (ex.exempt > 0) warnParts.push(ex.exempt + ' exempt');
+      if (ex.captureSkipped > 0) warnParts.push(ex.captureSkipped + ' capture skipped');
+      const failTotal = (ex.missing||0) + (ex.captureFailed||0) + (ex.parityMismatch||0);
+      const warnTotal = (ex.exempt||0) + (ex.captureSkipped||0);
+      const sub = (n, parts) =>
+        n > 0 && parts.length > 0
+          ? '<span style="color:#7f849c;">  (' + parts.join(', ') + ')</span>'
+          : '';
+      stats.innerHTML =
+        '<div>' + ex.total + ' tests total</div>' +
+        '<div style="margin-top:4px;">' +
+          '<span class="status-fail">' + failTotal + ' failures</span>' +
+          sub(failTotal, failParts) +
+        '</div>' +
+        '<div>' +
+          '<span class="status-warning">' + warnTotal + ' warnings</span>' +
+          sub(warnTotal, warnParts) +
+        '</div>' +
+        '<div>' +
+          '<span class="status-pass">' + (ex.covered||0) + ' passed</span>' +
+        '</div>';
+    } else {
+      stats.textContent = allPairs.length + ' entries';
+    }
 
     const list = document.getElementById('story-list');
     list.innerHTML = '';
-    const items = filteredPairs();
+    const items = visibleEntries();
     if (items.length === 0) {
       list.innerHTML = '<div style="padding:16px;color:#585b70;font-size:13px;">No items</div>';
       return;
     }
-    for (const p of items) {
+    for (const entry of items) {
       const el = document.createElement('div');
-      el.className = 'story-item' + (p.id === currentId ? ' active' : '');
-      el.dataset.id = p.id;
-      el.innerHTML =
-        '<div class="story-name">' + escHtml(p.id) + '</div>' +
-        '<div class="story-meta">' +
-          '<span class="check-badge check-' + p.checkType + '">' + p.checkType.toUpperCase() + '</span>' +
-          '<span class="status-' + p.status + '">' + p.status + '</span>' +
-        '</div>';
-      el.addEventListener('click', () => selectPair(p.id));
+      const isExport = entry.kind === 'export';
+      const node = isExport ? entry.exp : entry.pair;
+      const cls = ['story-item'];
+      if (isExport) cls.push('export');
+      if (node.id === currentId) cls.push('active');
+      el.className = cls.join(' ');
+      el.dataset.id = node.id;
+      const name = isExport ? entry.exp.name : entry.pair.id;
+      if (isExport) {
+        el.innerHTML =
+          '<div class="story-name">' +
+            '<span class="status-dot status-dot-' + entry.exp.status + '"></span>' +
+            escHtml(name) +
+          '</div>';
+      } else {
+        el.innerHTML =
+          '<div class="story-name">' +
+            '<span class="status-dot status-dot-' + entry.pair.status + '"></span>' +
+            escHtml(name) +
+          '</div>' +
+          '<div class="story-meta">' +
+            '<span class="check-badge check-' + entry.pair.checkType + '">' + entry.pair.checkType.toUpperCase() + '</span>' +
+          '</div>';
+      }
+      el.addEventListener('click', () => selectEntry(entry));
       list.appendChild(el);
     }
   }
 
-  async function selectPair(id) {
-    currentId = id;
-
+  async function selectEntry(entry) {
+    const node = entry.kind === 'export' ? entry.exp : entry.pair;
+    currentId = node.id;
     document.querySelectorAll('.story-item').forEach(el => {
-      el.classList.toggle('active', el.dataset.id === id);
+      el.classList.toggle('active', el.dataset.id === currentId);
     });
+    await renderMain(entry);
+  }
 
-    const pair = allPairs.find(p => p.id === id);
-    if (!pair) return;
+  async function renderMain(entry) {
+    const pair = entry.pair;
+    const exp = entry.kind === 'export' ? entry.exp : null;
 
-    document.getElementById('main-title').textContent = id;
+    const title = exp ? pair.id + ' :: ' + exp.name : pair.id;
+    document.getElementById('main-title').textContent = title;
 
     const statusColors = { pass: '#27ae60', fail: '#e74c3c', warning: '#e67e22' };
-    const checkColors = { coverage: '#3498db', sync: '#9b59b6', dom: '#e67e22' };
-    const sColor = statusColors[pair.status] || '#888';
-    const cColor = checkColors[pair.checkType] || '#888';
+    const checkColors = { coverage: '#3498db', sync: '#9b59b6', parity: '#e67e22', capture: '#e74c3c' };
+    const displayStatus = exp ? exp.status : pair.status;
+    const displayCheck = exp ? (exp.hasDomDiff ? 'parity' : pair.checkType) : pair.checkType;
+    const displayMessage = exp ? exp.message : pair.message;
+    const sColor = statusColors[displayStatus] || '#888';
+    const cColor = checkColors[displayCheck] || '#888';
     document.getElementById('main-badges').innerHTML =
-      '<span class="badge" style="background:' + sColor + '22;color:' + sColor + ';border:1px solid ' + sColor + ';">' + pair.status.toUpperCase() + '</span>' +
-      '<span class="badge" style="background:' + cColor + '22;color:' + cColor + ';border:1px solid ' + cColor + ';">' + pair.checkType.toUpperCase() + '</span>' +
-      '<span style="font-size:12px;color:#666;">' + escHtml(pair.message) + '</span>';
+      '<span class="badge" style="background:' + sColor + '22;color:' + sColor + ';border:1px solid ' + sColor + ';">' + displayStatus.toUpperCase() + '</span>' +
+      '<span class="badge" style="background:' + cColor + '22;color:' + cColor + ';border:1px solid ' + cColor + ';">' + displayCheck.toUpperCase() + '</span>' +
+      '<span style="font-size:12px;color:#666;">' + escHtml(displayMessage) + '</span>';
 
     document.getElementById('empty-state').style.display = 'none';
     document.getElementById('story-content').style.display = 'block';
 
-    // Load sources
+    // Source comparison is per-file — same regardless of which child
+    // export is selected.
     await loadSources(pair);
 
-    // Screenshots
+    // Screenshots and DOM diffs scope to the specific export when one
+    // is selected; fall back to the file's first export with a diff
+    // when only the file header is selected.
+    const targetExp =
+      exp ??
+      (pair.exports || []).find((e) => e.hasDomDiff || e.hasScreenshots);
     const ssSec = document.getElementById('screenshot-section');
-    if (pair.hasScreenshots) {
+    if (targetExp && targetExp.hasScreenshots) {
       ssSec.style.display = 'block';
-      renderScreenshots(pair.id);
+      renderScreenshots(targetExp.id);
     } else {
       ssSec.style.display = 'none';
       stopStrobe();
     }
 
-    // DOM diff section
     const domSection = document.getElementById('dom-diff-section');
-    if (pair.hasDomDiff) {
+    if (targetExp && targetExp.hasDomDiff) {
       domSection.style.display = 'block';
-      await loadDomDiff(pair.id + '.html');
+      await loadDomDiff(targetExp.id + '.html');
     } else {
       domSection.style.display = 'none';
     }
@@ -761,8 +1258,11 @@ const html = `<!DOCTYPE html>
       document.getElementById('sbs-view').classList.toggle('active', ssView === 'sbs');
       document.getElementById('strobe-view').classList.toggle('active', ssView === 'strobe');
       if (ssView === 'strobe' && currentId) {
-        const pair = allPairs.find(p => p.id === currentId);
-        if (pair && pair.hasScreenshots) startStrobe();
+        const entry = findEntry(currentId);
+        if (entry) {
+          const target = entry.kind === 'export' ? entry.exp : entry.pair;
+          if (target.hasScreenshots) startStrobe();
+        }
       } else {
         stopStrobe();
       }
@@ -790,19 +1290,22 @@ const html = `<!DOCTYPE html>
     arrow.textContent = isOpen ? '▶' : '▼';
   });
 
-  // Keyboard nav
+  // Keyboard nav — walks all visible entries (files + their child exports).
   document.addEventListener('keydown', (e) => {
     if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
-    const items = filteredPairs();
-    const idx = items.findIndex(p => p.id === currentId);
+    const items = visibleEntries();
+    const idx = items.findIndex(it => {
+      const id = it.kind === 'export' ? it.exp.id : it.pair.id;
+      return id === currentId;
+    });
     if (e.key === 'ArrowDown' || e.key === 'j') {
       e.preventDefault();
       const next = items[Math.min(idx + 1, items.length - 1)];
-      if (next) selectPair(next.id);
+      if (next) selectEntry(next);
     } else if (e.key === 'ArrowUp' || e.key === 'k') {
       e.preventDefault();
       const prev = items[Math.max(idx - 1, 0)];
-      if (prev) selectPair(prev.id);
+      if (prev) selectEntry(prev);
     }
   });
 

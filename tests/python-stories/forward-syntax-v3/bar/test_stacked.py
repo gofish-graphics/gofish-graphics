@@ -8,8 +8,8 @@ def story_default():
     return (
         chart(SEAFOOD)
         .flow(
-            spread("lake", dir="x"),
-            stack("species", dir="y"),
+            spread(by="lake", dir="x"),
+            stack(by="species", dir="y"),
         )
         .mark(rect(h="count", fill="species")),
         {"w": 400, "h": 400, "axes": True},

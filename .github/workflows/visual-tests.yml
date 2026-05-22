@@ -32,6 +32,65 @@ jobs:
       - name: Setup Git LFS
         run: git lfs install
 
+      # The PythonTutor stories (and several others) use Andale Mono, Verdana,
+      # and other MS-core fonts. ubuntu-latest doesn't ship those; without
+      # them Chromium falls through to fontconfig generic-monospace /
+      # generic-sans, and the JS storybook and Python harness end up
+      # measuring text against different fallback resolutions. Installing the
+      # MS core fonts pins both pipelines to the same actual font files.
+      #
+      # The .deb is a tiny installer stub — it downloads ~30MB of .ttf files
+      # from SourceForge during postinst (slow, ~50s). cache-apt-pkgs-action
+      # caches the installed files under /usr/share/fonts/..., so cache hits
+      # restore in ~3-5s and skip the SourceForge fetch.
+      # awalsh128/cache-apt-pkgs-action doesn't work for mscorefonts: the
+      # .deb is a tiny installer stub whose postinst downloads ~30MB of .ttf
+      # files from SourceForge *after* dpkg has recorded the package's
+      # file list. Those .ttf files aren't tracked by apt, so the cache
+      # restore (which only mirrors dpkg-tracked files) leaves
+      # /usr/share/fonts/truetype/msttcorefonts/ empty — cache hit then
+      # passes the verify? No: fc-match falls back to DejaVu and we're
+      # back to the fontconfig-fallback drift.
+      #
+      # So cache the .ttf files directly. First run pays the full ~50s
+      # install + SourceForge download; subsequent runs restore the .ttf
+      # files into /usr/share/fonts/ in ~3s.
+      - name: Restore mscorefonts .ttf cache
+        id: msfonts-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/msttcorefonts
+          key: msttcorefonts-v1
+
+      - name: Install MS TrueType core fonts
+        run: |
+          set -euo pipefail
+          DEST=/usr/share/fonts/truetype/msttcorefonts
+          CACHE="$HOME/.cache/msttcorefonts"
+          if [ -d "$CACHE" ] && ls "$CACHE"/*.ttf >/dev/null 2>&1; then
+            echo "Restoring fonts from cache: $CACHE"
+            sudo mkdir -p "$DEST"
+            sudo cp "$CACHE"/*.ttf "$DEST"/
+          else
+            echo "Cache miss; installing via apt (downloads from SourceForge)..."
+            echo "ttf-mscorefonts-installer msttcorefonts/accepted-mscorefonts-eula select true" | sudo debconf-set-selections
+            sudo apt-get update
+            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends ttf-mscorefonts-installer
+            mkdir -p "$CACHE"
+            cp "$DEST"/*.ttf "$CACHE"/
+          fi
+          sudo fc-cache -f
+
+      - name: Verify fonts resolve correctly
+        run: |
+          # fc-match always finds *something* (DejaVu is the ultimate
+          # fallback), so a non-zero exit doesn't catch a silently-broken
+          # install. Grep for the expected .ttf filename.
+          fc-match "Andale Mono" | grep -q "Andale_Mono.ttf" \
+            || { echo "FAIL: Andale Mono resolved to: $(fc-match 'Andale Mono')"; exit 1; }
+          fc-match "Verdana" | grep -q "Verdana.ttf" \
+            || { echo "FAIL: Verdana resolved to: $(fc-match 'Verdana')"; exit 1; }
+
       - name: Fetch snapshot baselines
         run: |
           SNAP_BRANCH="snapshots/${GITHUB_HEAD_REF:-${GITHUB_REF_NAME}}"
@@ -67,22 +126,39 @@ jobs:
           node-version: 22
           cache: pnpm
 
-      - name: Setup Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: "3.11"
-
       - name: Install Node dependencies
         run: pnpm install
-
-      - name: Install Python dependencies
-        run: pip install -e packages/gofish-python
 
       - name: Build gofish-graphics
         run: pnpm --filter gofish-graphics build
 
+      - name: Restore Playwright browser cache
+        id: playwright-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+
       - name: Install Playwright browsers
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
         run: pnpm --filter @gofish/tests exec playwright install --with-deps chromium
+
+      # Save cache immediately after a successful install rather than relying
+      # on the default end-of-job save. That way the cache is written even if
+      # a later step (e.g. visual diff comparison) fails, but NOT written if
+      # the install itself failed (the step is skipped on prior failure).
+      - name: Save Playwright browser cache
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+
+      # On cache hit, browser binaries are restored but system libraries
+      # (installed via apt by --with-deps) are not. Install just those.
+      - name: Install Playwright system deps
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: pnpm --filter @gofish/tests exec playwright install-deps chromium
 
       - name: Capture JS DOM snapshots
         run: pnpm --filter @gofish/tests capture-js
@@ -203,6 +279,43 @@ jobs:
       - name: Setup Git LFS
         run: git lfs install
 
+      # Match the JS job's font set so the Python harness measures text
+      # against the same actual fonts. See the visual-test job for the
+      # full explanation of why we cache .ttf files directly instead of
+      # using cache-apt-pkgs-action.
+      - name: Restore mscorefonts .ttf cache
+        id: msfonts-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/msttcorefonts
+          key: msttcorefonts-v1
+
+      - name: Install MS TrueType core fonts
+        run: |
+          set -euo pipefail
+          DEST=/usr/share/fonts/truetype/msttcorefonts
+          CACHE="$HOME/.cache/msttcorefonts"
+          if [ -d "$CACHE" ] && ls "$CACHE"/*.ttf >/dev/null 2>&1; then
+            echo "Restoring fonts from cache: $CACHE"
+            sudo mkdir -p "$DEST"
+            sudo cp "$CACHE"/*.ttf "$DEST"/
+          else
+            echo "Cache miss; installing via apt (downloads from SourceForge)..."
+            echo "ttf-mscorefonts-installer msttcorefonts/accepted-mscorefonts-eula select true" | sudo debconf-set-selections
+            sudo apt-get update
+            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends ttf-mscorefonts-installer
+            mkdir -p "$CACHE"
+            cp "$DEST"/*.ttf "$CACHE"/
+          fi
+          sudo fc-cache -f
+
+      - name: Verify fonts resolve correctly
+        run: |
+          fc-match "Andale Mono" | grep -q "Andale_Mono.ttf" \
+            || { echo "FAIL: Andale Mono resolved to: $(fc-match 'Andale Mono')"; exit 1; }
+          fc-match "Verdana" | grep -q "Verdana.ttf" \
+            || { echo "FAIL: Verdana resolved to: $(fc-match 'Verdana')"; exit 1; }
+
       - name: Fetch snapshot baselines
         run: |
           SNAP_BRANCH="snapshots/${GITHUB_HEAD_REF:-${GITHUB_REF_NAME}}"
@@ -242,18 +355,39 @@ jobs:
         uses: actions/setup-python@v6
         with:
           python-version: "3.11"
+          cache: pip
+          cache-dependency-path: packages/gofish-python/pyproject.toml
 
       - name: Install Node dependencies
         run: pnpm install
 
       - name: Install Python dependencies
-        run: pip install -e packages/gofish-python
+        run: pip install -e packages/gofish-python vega_datasets
 
       - name: Build gofish-graphics
         run: pnpm --filter gofish-graphics build
 
+      - name: Restore Playwright browser cache
+        id: playwright-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+
       - name: Install Playwright browsers
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
         run: pnpm --filter @gofish/tests exec playwright install --with-deps chromium
+
+      - name: Save Playwright browser cache
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+
+      - name: Install Playwright system deps
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: pnpm --filter @gofish/tests exec playwright install-deps chromium
 
       - name: Check Python story sync (coverage + spec sync)
         id: sync-check
@@ -261,6 +395,15 @@ jobs:
         run: pnpm test:visual:check-python-sync
         env:
           BASE_REF: origin/main
+
+      # Full per-StoryObj coverage audit. Errors for any JS export that has
+      # no matching Python `story_*` and isn't on .python-sync-exempt.
+      # Exempt entries surface as warnings (visible in the log) so the
+      # known-not-yet-supported list doesn't silently rot.
+      - name: Full Python parity coverage (per-StoryObj)
+        id: sync-check-all
+        if: always()
+        run: pnpm test:visual:check-python-sync-all
 
       - name: Capture Python DOM snapshots
         id: capture-python
@@ -272,8 +415,12 @@ jobs:
         if: always()
         run: pnpm test:visual:compare-python
 
+      # Always build + deploy the parity review site, even when all
+      # comparisons pass. Exempt and warning entries still need an
+      # interface for browsing/promoting to real ports — those are
+      # invisible from logs alone.
       - name: Build parity review site
-        if: failure()
+        if: always()
         run: pnpm --filter @gofish/tests build:parity-review-site
         env:
           REVIEW_REPO: ${{ github.repository }}
@@ -281,14 +428,14 @@ jobs:
           REVIEW_SHA: ${{ github.sha }}
 
       - name: Upload parity report artifact
-        if: failure()
+        if: always()
         uses: actions/upload-artifact@v5
         with:
           name: parity-review-site
           path: tests/tmp/parity-review-site/
 
       - name: Deploy parity review site to Cloudflare Pages
-        if: failure()
+        if: always()
         id: deploy-parity
         run: |
           output=$(npx wrangler@latest --cwd tests/tmp/parity-review-site pages deploy . \
@@ -304,7 +451,7 @@ jobs:
           NO_COLOR: "1"
 
       - name: Publish parity-review-link commit status
-        if: failure() && github.event_name == 'pull_request'
+        if: always() && github.event_name == 'pull_request'
         uses: actions/github-script@v8
         with:
           script: |
@@ -313,23 +460,50 @@ jobs:
             if (!url) return;
 
             const summaryPath = 'tests/tmp/parity-summary.json';
-            let description = 'Click Details to view JS/Python parity diffs';
+            let description = 'Click Details to review and accept parity diffs';
+            // Default to pending so the fallback (no summary) prompts a click.
+            // Real status derives from the summary below.
+            let state = 'pending';
             try {
               const summary = JSON.parse(fs.readFileSync(summaryPath, 'utf8'));
+              // Use the export-level rollup the viewer renders. Single
+              // source of truth: build-parity-review-site computes these
+              // and writes them here.
               const parts = [];
-              const plural = (n, singular, pluralForm) =>
-                `${n} ${n === 1 ? singular : pluralForm}`;
-              if (summary.parityMismatches > 0) {
-                parts.push(plural(summary.parityMismatches, 'parity mismatch', 'parity mismatches'));
-              }
-              if (summary.missingBaselines > 0) {
-                parts.push(plural(summary.missingBaselines, 'missing baseline', 'missing baselines'));
-              }
+              const fmt = (n, label, subParts) => {
+                if (!(typeof n === 'number') || n === 0) return null;
+                if (Array.isArray(subParts) && subParts.length > 0) {
+                  return `${n} ${label} (${subParts.join(', ')})`;
+                }
+                return `${n} ${label}`;
+              };
+              const failures = fmt(
+                summary.exportsFailures,
+                'failures',
+                summary.exportsFailParts
+              );
+              const warnings = fmt(
+                summary.exportsWarnings,
+                'warnings',
+                summary.exportsWarnParts
+              );
+              const passed =
+                typeof summary.exportsPassed === 'number' && summary.exportsPassed > 0
+                  ? `${summary.exportsPassed} passed`
+                  : null;
+              if (failures) parts.push(failures);
+              if (warnings) parts.push(warnings);
+              if (passed) parts.push(passed);
               if (parts.length > 0) {
-                description = parts.join(', ') + ' — click Details to review';
+                description = parts.join(', ') + ' — click Details';
+              }
+              // Green check when nothing failed; otherwise stay pending so
+              // the PR check pulls attention to the unresolved diffs.
+              if (typeof summary.exportsFailures === 'number' && summary.exportsFailures === 0) {
+                state = 'success';
               }
             } catch (e) {
-              // keep fallback description
+              // keep fallback description + pending state
             }
 
             if (description.length > 140) description = description.slice(0, 140);
@@ -338,7 +512,7 @@ jobs:
               owner: context.repo.owner,
               repo: context.repo.repo,
               sha: context.payload.pull_request.head.sha,
-              state: 'pending',
+              state,
               target_url: url,
               description,
               context: 'Python Parity Review',
