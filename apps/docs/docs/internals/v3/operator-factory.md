@@ -1,3 +1,12 @@
+---
+title: The Operator Factory
+section: Frontend
+order: 30
+status: draft
+covers:
+  - packages/gofish-graphics/src/ast/marks/createOperator.ts
+---
+
 # `createOperator`: turning a layout into a v3 operator
 
 `createOperator` is the factory that wraps a low-level layout node-builder
@@ -6,8 +15,7 @@ operator (`spread`, `scatter`, `table`, `group`, plus `stack` as a thin
 wrapper over `spread`) used inside `chart(...).flow(...)` and as a
 combinator inside `.mark(...)`.
 
-It lives at
-[`packages/gofish-graphics/src/ast/marks/createOperator.ts`](../packages/gofish-graphics/src/ast/marks/createOperator.ts).
+It lives at `src/ast/marks/createOperator.ts`.
 
 The design is inspired by Krist Wongsuphasawat's **Encodable** ("Encodable:
 Configurable Grammar for Visualization Components", IEEE VIS 2020 —
@@ -19,7 +27,7 @@ added in front and a `combine` (low-level layout) step added behind. See
 
 This doc explains what the factory does, why it has two call shapes, and how
 to add a new operator. It assumes you've read
-[`docs/createMark.md`](./createMark.md) — this is the same idea applied to
+[The Mark Factory](/internals/v3/mark-factory) — this is the same idea applied to
 layout containers instead of leaf shapes.
 
 ## 1. The two call shapes every operator has
@@ -81,7 +89,7 @@ datum, and hands the resulting nodes to the same `combine` step.
 
 ## 3. Anatomy of a `createOperator` call
 
-From [`packages/gofish-graphics/src/ast/graphicalOperators/spread.tsx:430`](../packages/gofish-graphics/src/ast/graphicalOperators/spread.tsx):
+From `src/ast/graphicalOperators/spread.tsx:430`:
 
 ```ts
 export const spread = createOperator<any, SpreadOptions>(Spread, {
@@ -110,7 +118,7 @@ factory.
 
 ### Operator form (`spread({ by, dir })` inside `.flow(...)`)
 
-Walking [`createOperator.ts:391-415`](../packages/gofish-graphics/src/ast/marks/createOperator.ts):
+Walking `createOperator.ts:391-415`:
 
 1. **Split** — `cfg.split(opts, d)` partitions the input into a
    `Map<key, subdata>`. (Some operators, like `table`, also return `keys` —
@@ -160,7 +168,7 @@ channels: {
 
 `scatter` uses `entry: true` for `x`/`y`/`xMin`/`xMax`/`yMin`/`yMax` so a
 field name like `x: "miles"` becomes a per-group mean position
-([`packages/gofish-graphics/src/ast/graphicalOperators/scatter.tsx:336`](../packages/gofish-graphics/src/ast/graphicalOperators/scatter.tsx)).
+(`src/ast/graphicalOperators/scatter.tsx:336`).
 
 ## 6. Adding a new operator: a worked example
 
@@ -201,9 +209,7 @@ so consumers can pass a field name there.
 
 If your operator needs to feed extra data (like `colKeys`/`rowKeys`) into
 the layout opts, return the wrapped `{entries, keys}` form from `split`
-instead of a bare Map — see
-[`table.tsx:228`](../packages/gofish-graphics/src/ast/graphicalOperators/table.tsx)
-for an example.
+instead of a bare Map — see `table.tsx:228` for an example.
 
 ## 7. The relationship with `createMark`
 
@@ -219,9 +225,8 @@ supporting `.name(...)` and `.label(...)` chaining.
 
 Naming-wise: `createOperator` is the v3 factory; the low-level helper that
 produces `Spread`, `Scatter`, etc. is `createNodeOperator`
-([`withGoFish.ts:297`](../packages/gofish-graphics/src/ast/withGoFish.ts)).
-The "node" prefix reflects that it returns a function whose output is a
-single `GoFishNode`, not the v3 dual-mode shape.
+(`withGoFish.ts:297`). The "node" prefix reflects that it returns a
+function whose output is a single `GoFishNode`, not the v3 dual-mode shape.
 
 ## 8. Prior art
 
@@ -230,7 +235,7 @@ single `GoFishNode`, not the v3 dual-mode shape.
 [paper](https://arxiv.org/abs/2009.00722),
 [code](https://github.com/kristw/encodable)) to layout operators. The
 channel system maps onto Encodable's directly — see
-[`docs/createMark.md`](./createMark.md)'s "Prior art" section for the
+[The Mark Factory](/internals/v3/mark-factory)'s "Prior art" section for the
 mark-level table. `createOperator` adds two pieces Encodable doesn't have:
 
 | step                       | what it does                                          | Encodable analogue                                                                           |
@@ -246,7 +251,7 @@ to `createOperator`; Encodable doesn't address layout multiplicity.
 
 ## 9. Pointers
 
-- The factory: [`packages/gofish-graphics/src/ast/marks/createOperator.ts`](../packages/gofish-graphics/src/ast/marks/createOperator.ts).
+- The factory: `src/ast/marks/createOperator.ts`.
 - Existing operators (each colocated with their low-level layout):
   - `spread` and `stack` — `graphicalOperators/spread.tsx`.
   - `scatter` — `graphicalOperators/scatter.tsx`.
@@ -254,6 +259,6 @@ to `createOperator`; Encodable doesn't address layout multiplicity.
   - `group` — `graphicalOperators/group.ts` (sibling of `frame.tsx`,
     extracted to keep the chartBuilder ↔ createOperator import graph
     acyclic).
-- The companion mark factory: [`docs/createMark.md`](./createMark.md).
+- The companion mark factory: [The Mark Factory](/internals/v3/mark-factory).
 - Encodable: paper [arxiv:2009.00722](https://arxiv.org/abs/2009.00722),
   source [github.com/kristw/encodable](https://github.com/kristw/encodable).

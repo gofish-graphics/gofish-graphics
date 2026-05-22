@@ -1,11 +1,20 @@
+---
+title: The Mark Factory
+section: Frontend
+order: 20
+status: draft
+covers:
+  - packages/gofish-graphics/src/ast/withGoFish.ts
+  - packages/gofish-graphics/src/ast/channels.ts
+---
+
 # `createMark`: turning a shape into a v3 mark
 
 `createMark` is the factory that wraps a low-level shape function (`Rect`,
 `Ellipse`, `Petal`, `Text`, `Image`) and produces the high-level v3 mark
 (`rect`, `ellipse`, `petal`, `text`, `image`) used inside `chart(...).mark(...)`.
 
-It lives at
-[`packages/gofish-graphics/src/ast/withGoFish.ts:419`](../packages/gofish-graphics/src/ast/withGoFish.ts).
+It lives at `src/ast/withGoFish.ts:419`.
 
 The design is inspired by Krist Wongsuphasawat's **Encodable** ("Encodable:
 Configurable Grammar for Visualization Components", IEEE VIS 2020 —
@@ -43,7 +52,7 @@ shape props to the underlying low-level builder.
 
 ## Anatomy of a `createMark` call
 
-From [`packages/gofish-graphics/src/ast/shapes/rect.tsx:631`](../packages/gofish-graphics/src/ast/shapes/rect.tsx):
+From `src/ast/shapes/rect.tsx:631`:
 
 ```ts
 export const rect = createMark(Rect, {
@@ -62,8 +71,7 @@ Two arguments:
    A partial map from prop name → channel type. Props not in this map pass
    through unchanged.
 
-The factory's signature
-([`withGoFish.ts:419`](../packages/gofish-graphics/src/ast/withGoFish.ts)):
+The factory's signature (`withGoFish.ts:419`):
 
 ```ts
 function createMark<ShapeProps, C extends ChannelAnnotations<ShapeProps>>(
@@ -74,8 +82,7 @@ function createMark<ShapeProps, C extends ChannelAnnotations<ShapeProps>>(
 
 ## Channel types
 
-Two are wired up today, both defined at
-[`packages/gofish-graphics/src/ast/channels.ts`](../packages/gofish-graphics/src/ast/channels.ts):
+Two are wired up today, both defined at `src/ast/channels.ts`:
 
 | channel   | accepts                                 | does                                                                 |
 | --------- | --------------------------------------- | -------------------------------------------------------------------- |
@@ -92,11 +99,11 @@ is passed through to `shapeFn` exactly as the user wrote it.
 
 ## What happens at render time
 
-Walking [`withGoFish.ts:431-477`](../packages/gofish-graphics/src/ast/withGoFish.ts):
+Walking `withGoFish.ts:431-477`:
 
 1. **Unwrap the input.** Marks are called with one of three shapes —
    `T` (single datum), `T[]` (array), or `{ item, key }` (an item paired with a
-   key set by an upstream operator). Step 1 normalises them to `(d, key)`.
+   key set by an upstream operator). Step 1 normalizes them to `(d, key)`.
 2. **Wrap to an array.** `data = Array.isArray(d) ? d : [d]`. The `infer*`
    helpers all expect an array.
 3. **Apply each channel.** For each prop in the user's `markOpts`:
@@ -123,7 +130,7 @@ chainable methods:
   node, deferring label placement to the layout phase.
 
 Both wrap the base mark in a new closure rather than mutating it, so naming
-or labelling one mark never affects another.
+or labeling one mark never affects another.
 
 ## Adding a new mark
 
@@ -162,8 +169,9 @@ Today's channels are `"size"` and `"color"`. To add (say) `"angle"`:
    chain in `withGoFish.ts` to handle it.
 
 `createOperator` has its own channel handling
-([see docs/createOperator.md](./createOperator.md)) and would need the same
-treatment if the new channel should be available in operator opts as well.
+(see [The Operator Factory](/internals/v3/operator-factory)) and would need
+the same treatment if the new channel should be available in operator opts as
+well.
 
 ## Prior art
 
@@ -185,18 +193,17 @@ resolves into rendering parameters. The shape map is one-to-one:
 GoFish's twist is that a mark also produces a node in a layout AST rather
 than a render directly, and the channel set is smaller (`size`, `pos`,
 `color`) — Encodable's vega-lite-flavored channel taxonomy is richer.
-[`docs/createOperator.md`](./createOperator.md) extends the same pattern
+[The Operator Factory](/internals/v3/operator-factory) extends the same pattern
 to layout operators (split + per-partition application).
 
 ## Pointers
 
-- The factory: [`packages/gofish-graphics/src/ast/withGoFish.ts:419`](../packages/gofish-graphics/src/ast/withGoFish.ts).
+- The factory: `src/ast/withGoFish.ts:419`.
 - The channel helpers (`inferSize`, `inferPos`, `inferColor`) and the
-  `DeriveMarkProps` conditional:
-  [`packages/gofish-graphics/src/ast/channels.ts`](../packages/gofish-graphics/src/ast/channels.ts).
+  `DeriveMarkProps` conditional: `src/ast/channels.ts`.
 - The five existing call sites: `rect`, `ellipse`, `petal`, `text`, `image`
-  in `packages/gofish-graphics/src/ast/shapes/`.
+  in `src/ast/shapes/`.
 - The companion factory for layout operators:
-  [`docs/createOperator.md`](./createOperator.md).
+  [The Operator Factory](/internals/v3/operator-factory).
 - Encodable: paper [arxiv:2009.00722](https://arxiv.org/abs/2009.00722),
   source [github.com/kristw/encodable](https://github.com/kristw/encodable).

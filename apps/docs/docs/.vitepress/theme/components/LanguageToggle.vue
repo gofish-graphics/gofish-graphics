@@ -11,6 +11,18 @@ const route = useRoute();
 const router = useRouter();
 const { theme } = useData();
 
+// The nav-bar copy of the toggle shows only on the home page — every doc page
+// carries the toggle in its sidebar instead, so the nav copy would be a
+// duplicate. The sidebar copy shows wherever it renders, except the
+// language-agnostic internals wiki.
+const hidden = computed(() => {
+  const p = route.path;
+  if (props.placement === "nav") {
+    return !(p === "/" || p === "/index.html" || p === "/index");
+  }
+  return /^\/internals(\/|\.html|$)/.test(p);
+});
+
 const LANGS = [
   { id: "js", label: "JavaScript" },
   { id: "python", label: "Python" },
@@ -63,7 +75,11 @@ function switchTo(lang: Lang) {
 </script>
 
 <template>
-  <div class="lang-toggle" :class="`lang-toggle--${props.placement}`">
+  <div
+    v-if="!hidden"
+    class="lang-toggle"
+    :class="`lang-toggle--${props.placement}`"
+  >
     <span v-if="props.placement === 'sidebar'" class="lang-toggle__label">
       Language
     </span>
@@ -163,10 +179,10 @@ function switchTo(lang: Lang) {
   display: block;
 }
 
-/* Nav placement: separate it from the GitHub icon; hide on narrow screens
-   where the navbar collapses (the sidebar copy covers mobile). */
+/* Nav placement: a small gap from the logo. Hide on narrow screens where the
+   navbar collapses (the sidebar copy covers mobile). */
 .lang-toggle--nav {
-  margin-left: 16px;
+  margin-left: 24px;
 }
 
 @media (max-width: 768px) {

@@ -1,9 +1,11 @@
 import { defineConfig } from "vitepress";
+import { transformerTwoslash } from "@shikijs/vitepress-twoslash";
+import matter from "gray-matter";
 import starfish from "./markdown-it-starfish";
 import container from "markdown-it-container";
 import { renderSandbox } from "vitepress-plugin-sandpack";
 import vueJsx from "@vitejs/plugin-vue-jsx";
-import { readdirSync } from "fs";
+import { readdirSync, readFileSync } from "fs";
 import { join, relative } from "path";
 import { fileURLToPath } from "url";
 
@@ -32,6 +34,105 @@ function collectDocRoutes(): string[] {
   return routes;
 }
 
+// The internals wiki is language-agnostic — a third top-level section beside
+// js/ and python/. Its sidebar is generated from each essay's frontmatter:
+// `section` picks the top-level group and `order` sorts within it. An optional
+// `group` files the essay under an intermediate, non-clickable label — only leaf
+// essays are pages; a group sits at the position of its lowest-ordered member.
+const INTERNALS_SECTION_ORDER = [
+  "Overview",
+  "Frontend",
+  "Core",
+  "Python",
+  "Speculative Notes",
+];
+
+function collectInternalsSidebar() {
+  type Page = {
+    title: string;
+    section: string;
+    order: number;
+    group: string | null;
+    link: string;
+  };
+  const pages: Page[] = [];
+  const walk = (dir: string) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      // api/ holds generated TypeDoc output — essays link to it directly, it
+      // does not belong in the hand-curated sidebar.
+      if (entry.isDirectory()) {
+        if (entry.name !== "api") walk(join(dir, entry.name));
+        continue;
+      }
+      if (!entry.name.endsWith(".md")) continue;
+      const full = join(dir, entry.name);
+      const fm = matter(readFileSync(full, "utf-8")).data as Record<
+        string,
+        unknown
+      >;
+      let rel = relative(docsDir, full)
+        .replace(/\\/g, "/")
+        .replace(/\.md$/, "");
+      if (rel.endsWith("/index")) rel = rel.slice(0, -"/index".length);
+      pages.push({
+        title: typeof fm.title === "string" ? fm.title : entry.name,
+        section: typeof fm.section === "string" ? fm.section : "Other",
+        order: typeof fm.order === "number" ? fm.order : 999,
+        group: typeof fm.group === "string" ? fm.group : null,
+        link: "/" + rel,
+      });
+    }
+  };
+  walk(join(docsDir, "internals"));
+
+  const byOrder = (a: Page, b: Page) =>
+    a.order - b.order || a.title.localeCompare(b.title);
+
+  const bySection = new Map<string, Page[]>();
+  for (const p of pages) {
+    if (!bySection.has(p.section)) bySection.set(p.section, []);
+    bySection.get(p.section)!.push(p);
+  }
+
+  const rank = (s: string) => {
+    const i = INTERNALS_SECTION_ORDER.indexOf(s);
+    return i < 0 ? INTERNALS_SECTION_ORDER.length : i;
+  };
+
+  return [...bySection.keys()]
+    .sort((a, b) => rank(a) - rank(b) || a.localeCompare(b))
+    .map((section) => {
+      const ps = bySection.get(section)!;
+      // Each section entry is either a leaf essay or a label-only group; both
+      // sort by `order` (a group takes its lowest-ordered member's order).
+      type Entry = { order: number; item: Record<string, unknown> };
+      const entries: Entry[] = ps
+        .filter((p) => !p.group)
+        .map((p) => ({
+          order: p.order,
+          item: { text: p.title, link: p.link },
+        }));
+      for (const name of new Set(
+        ps.filter((p) => p.group).map((p) => p.group as string)
+      )) {
+        const members = ps.filter((p) => p.group === name).sort(byOrder);
+        entries.push({
+          order: members[0].order,
+          item: {
+            text: name,
+            collapsed: false,
+            items: members.map((m) => ({ text: m.title, link: m.link })),
+          },
+        });
+      }
+      return {
+        text: section,
+        collapsed: false,
+        items: entries.sort((a, b) => a.order - b.order).map((e) => e.item),
+      };
+    });
+}
+
 // https://vitepress.dev/reference/site-config
 export default defineConfig({
   vite: { plugins: [vueJsx()] },
@@ -44,7 +145,9 @@ export default defineConfig({
     // Set <html data-docs-lang> before first paint so the language toggle and
     // hero render in the reader's preferred language with no flash of the
     // default. On doc pages the route wins; on the home page the saved
-    // preference wins. CSS keyed off this attribute does the rest.
+    // preference wins. CSS keyed off this attribute does the rest. Internals
+    // pages are language-agnostic (the toggle is hidden there), so they fall
+    // through to the saved preference — harmless.
     [
       "script",
       {},
@@ -65,6 +168,8 @@ export default defineConfig({
     ["link", { rel: "icon", href: "/gofish-logo.png" }],
   ],
   markdown: {
+    // Real type-on-hover in `ts twoslash` blocks — type errors fail the build.
+    codeTransformers: [transformerTwoslash()],
     config: (md) => {
       starfish(md);
       md.use(container, "starfish-live", {
@@ -80,15 +185,33 @@ export default defineConfig({
     docRoutes: collectDocRoutes(),
     search: {
       provider: "local",
+      options: {
+        // Show a text excerpt under each result, not just the heading.
+        detailedView: true,
+        // Internals essays are long and narrative; one search hit per heading
+        // is noise. Demote sub-headings before the local-search indexer splits
+        // the page, so each internals essay collapses to a single result. The
+        // JS/Python API docs keep their finer-grained per-section results.
+        _render(src, env, md) {
+          const html = md.render(src, env);
+          if (
+            typeof env.relativePath === "string" &&
+            env.relativePath.startsWith("internals/")
+          ) {
+            return html.replace(/<(\/?)h[2-6]([^>]*)>/g, "<$1p$2>");
+          }
+          return html;
+        },
+      },
     },
     // https://vitepress.dev/reference/default-theme-config
-    // No top nav items — the logo links home, section navigation lives in the
-    // per-language sidebar, and the JavaScript/Python toggle is a theme slot.
+    // No top-nav items — section navigation lives in the per-language
+    // sidebar, the language toggle is a theme slot, and the internals wiki
+    // is reached via a quiet icon link in the nav bar (InternalsLink.vue).
     nav: [],
 
-    // One sidebar per language — the same structure shows on every page
-    // (overview pages and API pages alike); VitePress auto-expands the group
-    // that contains the current page.
+    // One sidebar per top-level area. JS/Python are hand-maintained and kept
+    // structurally parallel; /internals/ is generated from essay frontmatter.
     sidebar: {
       "/js/": [
         {
@@ -241,6 +364,7 @@ export default defineConfig({
           ],
         },
       ],
+      "/internals/": collectInternalsSidebar(),
     },
 
     socialLinks: [

@@ -17,6 +17,10 @@ import { StarfishLive } from "../../../components/StarfishLive";
 import HeroCode from "./components/HeroCode.vue";
 import LanguageToggle from "./components/LanguageToggle.vue";
 import HeroActions from "./components/HeroActions.vue";
+import SourceLinks from "./components/SourceLinks.vue";
+import InternalsLink from "./components/InternalsLink.vue";
+import TwoslashFloatingVue from "@shikijs/vitepress-twoslash/client";
+import "@shikijs/vitepress-twoslash/style.css";
 export default {
   extends: DefaultTheme,
   Layout: () => {
@@ -25,12 +29,20 @@ export default {
       "home-hero-image": () => h(HeroCode),
       // Point the hero buttons at the reader's preferred language
       "home-hero-actions-after": () => h(HeroActions),
-      // JavaScript / Python documentation toggle
-      "nav-bar-content-after": () => h(LanguageToggle, { placement: "nav" }),
+      // Right-hand nav cluster: the labeled Internals link, then the
+      // JavaScript / Python toggle directly before the GitHub social icon.
+      "nav-bar-content-after": () => [
+        h(InternalsLink),
+        h(LanguageToggle, { placement: "nav" }),
+      ],
       "sidebar-nav-before": () => h(LanguageToggle, { placement: "sidebar" }),
+      // "Source files" box for internals essays with `covers:` frontmatter
+      // (the component renders nothing on pages without it).
+      "doc-before": () => h(SourceLinks),
     });
   },
   enhanceApp({ app, router }) {
+    app.use(TwoslashFloatingVue);
     app.component("GoFishVue", GoFishVue);
     app.component("ExampleGallery", ExampleGallery);
     app.component("HomeGallery", HomeGallery);

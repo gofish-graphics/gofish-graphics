@@ -1,4 +1,14 @@
-# Checkpoint of current thinking.
+---
+title: Overview
+section: Core
+order: 60
+group: Scale Resolution
+status: draft
+---
+
+# Scale Utilities
+
+A checkpoint of current thinking on position scales and statistical data types.
 
 Position scales can be described roughly by statistical data type:
 
