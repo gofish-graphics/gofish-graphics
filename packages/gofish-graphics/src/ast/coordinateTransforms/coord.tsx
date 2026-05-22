@@ -1,3 +1,7 @@
+// <gofish-wiki> AUTO-GENERATED — see covers: in the essay; run `pnpm --filter docs sync-backlinks`
+// @wiki Flattening the Scenegraph — /internals/layout/coord-flattening
+// </gofish-wiki>
+
 import { Show } from "solid-js";
 import { path, pathToSVGPath, transformPath } from "../../path";
 import { GoFishAST } from "../_ast";

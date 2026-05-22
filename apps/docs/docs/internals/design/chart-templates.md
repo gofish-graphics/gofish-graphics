@@ -1,3 +1,10 @@
+---
+title: Chart Templates
+section: Frontend
+order: 70
+status: draft
+---
+
 # Design of the High-Level Chart API
 
 This level is the closest to the original GoG. But because we also have the mid- and low-level APIs,

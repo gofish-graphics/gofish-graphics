@@ -1,3 +1,10 @@
+---
+title: PICCL
+section: Speculative Notes
+order: 20
+status: speculative
+---
+
 # PiCCL
 
 PiCCL is a cool paper about making pictorial charts. To adapt it to GoFish we'd need to add image

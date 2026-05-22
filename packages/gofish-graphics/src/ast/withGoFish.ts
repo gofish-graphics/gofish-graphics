@@ -1,3 +1,7 @@
+// <gofish-wiki> AUTO-GENERATED — see covers: in the essay; run `pnpm --filter docs sync-backlinks`
+// @wiki The Mark Factory — /internals/v3/mark-factory
+// </gofish-wiki>
+
 /* 
 1. Supports direct and data style.
 

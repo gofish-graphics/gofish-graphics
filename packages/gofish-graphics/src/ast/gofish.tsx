@@ -1,3 +1,8 @@
+// <gofish-wiki> AUTO-GENERATED — see covers: in the essay; run `pnpm --filter docs sync-backlinks`
+// @wiki Overview — /internals/layout/passes
+// @wiki Architecture Overview — /internals/overview/architecture
+// </gofish-wiki>
+
 import { createResource, For, Show, Suspense, type JSX } from "solid-js";
 import { type ColorConfig } from "./colorSchemes";
 import { render as solidRender } from "solid-js/web";

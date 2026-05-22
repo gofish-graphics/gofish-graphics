@@ -1,3 +1,17 @@
+---
+title: Labels
+section: Frontend
+order: 60
+status: draft
+---
+
+# Label Syntax
+
+Scratch notes exploring possible surface syntaxes for labels, label styling, and
+related string-valued props (`stroke`, `h`). These are sketches, not decisions.
+
+## Label and style spellings
+
 ```ts
 ({
   label: align("x-middle", "y-middle"),
@@ -54,6 +68,8 @@ labelStyle: "x-middle y-middle red";
 stroke: "2pt + red";
 stroke: "2pt red";
 ```
+
+## Labeling a selected subset of a layer
 
 ```ts
 layer([

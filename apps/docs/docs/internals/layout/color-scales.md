@@ -1,3 +1,14 @@
+---
+title: Color Scale Resolution
+section: Core
+order: 62
+group: Scale Resolution
+status: draft
+covers:
+  - packages/gofish-graphics/src/ast/colorSchemes.ts
+  - packages/gofish-graphics/src/ast/_node.ts
+---
+
 # GoFish Color Scales
 
 ## API
