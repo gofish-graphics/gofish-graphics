@@ -336,8 +336,8 @@ export const render = (
   const pad = svgPadding ?? PADDING;
 
   const { xTitle, yTitle } = resolveAxisTitles(axes, axisFields);
-  const Y_TITLE_MARGIN = PADDING * 4; // 40px left of content for rotated y-title
-  const X_TITLE_MARGIN = PADDING * 3; // 30px below content for x-title
+  const Y_TITLE_MARGIN = PADDING; // 40px left of content for rotated y-title
+  const X_TITLE_MARGIN = PADDING; // 30px below content for x-title
   const leftMargin = yTitle ? Y_TITLE_MARGIN : 0;
   const bottomMargin = xTitle ? X_TITLE_MARGIN : 0;
 
