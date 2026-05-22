@@ -2,7 +2,7 @@ import { For } from "solid-js";
 import { Path, PathSegment, pathToSVGPath, transformPath } from "../../path";
 import { GoFishAST } from "../_ast";
 import { GoFishNode } from "../_node";
-import { elaborateDirection, FancyDirection, Size } from "../dims";
+import { Dimensions, elaborateDirection, FancyDirection, Size } from "../dims";
 import { pairs } from "../../util";
 import { linear } from "../coordinateTransforms/linear";
 import { getValue, isValue, MaybeValue } from "../data";
@@ -21,8 +21,11 @@ export const connect = createNodeOperator(
       opacity,
       mode = "edge",
       mixBlendMode,
+      source,
+      target,
     }: {
-      direction: FancyDirection;
+      // Optional in anchor mode (source/target), where it is ignored.
+      direction?: FancyDirection;
       fill?: MaybeValue<string>;
       interpolation?: "linear" | "bezier";
       stroke?: string;
@@ -30,10 +33,20 @@ export const connect = createNodeOperator(
       opacity?: number;
       mode?: "edge" | "center";
       mixBlendMode?: "multiply" | "normal";
+      // Per-endpoint anchor points as normalized [fx, fy] fractions of each
+      // endpoint's bounding box (`min + f * size`, GoFish-native y-up). When
+      // either is given, the connector runs straight between the anchored
+      // points of each consecutive child pair, ignoring `direction`/`mode`.
+      // If both are given, the line runs directly between them. If only one
+      // is given, the other endpoint is the specified point clamped onto the
+      // opposite bbox per axis (Bluefish `Line` behavior) — yielding an
+      // axis-aligned line when the point lies within that box on one axis.
+      source?: [number, number];
+      target?: [number, number];
     },
     children: GoFishAST[]
   ) => {
-    const dir = elaborateDirection(direction);
+    const dir = elaborateDirection(direction ?? 0);
     interpolation = interpolation ?? "linear";
 
     return new GoFishNode(
@@ -52,10 +65,12 @@ export const connect = createNodeOperator(
 
           const paths: Path[] = [];
 
-          if (mode === "edge") {
+          const hasAnchors = source !== undefined || target !== undefined;
+
+          if (mode === "edge" && !hasAnchors) {
             for (const child of children) {
               // toggle embedding on the direction axis
-              (child as GoFishAST).embed(direction);
+              (child as GoFishAST).embed(direction ?? 0);
             }
           }
 
@@ -63,6 +78,81 @@ export const connect = createNodeOperator(
             child.layout(size, scaleFactors, [undefined, undefined])
           );
           const bboxPairs = pairs(childPlaceables.map((child) => child.dims));
+
+          // Anchor mode: connect normalized points on each endpoint's bbox.
+          if (hasAnchors) {
+            const onlySource = source !== undefined && target === undefined;
+            const onlyTarget = target !== undefined && source === undefined;
+
+            // Resolve a normalized [fx, fy] anchor to an absolute point on a bbox.
+            const anchorPoint = (
+              b: Dimensions,
+              f: [number, number]
+            ): [number, number] => [
+              b[0].min! + f[0] * b[0].size!,
+              b[1].min! + f[1] * b[1].size!,
+            ];
+
+            // When one anchor is omitted, clamp the specified point's
+            // coordinates into the other bbox's range (per-axis). This is
+            // Bluefish's Line behavior: it produces an axis-aligned line when
+            // the specified point lies within the other box on one axis, and
+            // falls back to the nearest corner otherwise.
+            const clamp = (v: number, lo: number, hi: number): number =>
+              Math.max(lo, Math.min(hi, v));
+            const clampOnto = (
+              pt: [number, number],
+              onto: Dimensions
+            ): [number, number] => [
+              clamp(pt[0], onto[0].min!, onto[0].max!),
+              clamp(pt[1], onto[1].min!, onto[1].max!),
+            ];
+
+            let aMinX = Infinity;
+            let aMaxX = -Infinity;
+            let aMinY = Infinity;
+            let aMaxY = -Infinity;
+            for (const [b0, b1] of bboxPairs) {
+              let p0: [number, number];
+              let p1: [number, number];
+              if (onlySource) {
+                p0 = anchorPoint(b0, source!);
+                p1 = clampOnto(p0, b1);
+              } else if (onlyTarget) {
+                p1 = anchorPoint(b1, target!);
+                p0 = clampOnto(p1, b0);
+              } else {
+                p0 = anchorPoint(b0, source ?? [0.5, 0.5]);
+                p1 = anchorPoint(b1, target ?? [0.5, 0.5]);
+              }
+              paths.push([{ type: "line", points: [p0, p1] }]);
+              aMinX = Math.min(aMinX, p0[0], p1[0]);
+              aMaxX = Math.max(aMaxX, p0[0], p1[0]);
+              aMinY = Math.min(aMinY, p0[1], p1[1]);
+              aMaxY = Math.max(aMaxY, p0[1], p1[1]);
+            }
+            const hasPaths = bboxPairs.length > 0;
+            const w = hasPaths ? aMaxX - aMinX : 0;
+            const h = hasPaths ? aMaxY - aMinY : 0;
+            return {
+              intrinsicDims: [
+                {
+                  min: hasPaths ? aMinX : 0,
+                  size: w,
+                  center: hasPaths ? aMinX + w / 2 : 0,
+                  max: hasPaths ? aMaxX : 0,
+                },
+                {
+                  min: hasPaths ? aMinY : 0,
+                  size: h,
+                  center: hasPaths ? aMinY + h / 2 : 0,
+                  max: hasPaths ? aMaxY : 0,
+                },
+              ],
+              transform: { translate: [0, 0] },
+              renderData: { paths, defaultColor },
+            };
+          }
           // If in center mode, adjust bounding boxes to have zero width/height
           // with min and max equal to the center point
 

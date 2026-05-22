@@ -139,25 +139,15 @@ export const layer = createNodeOperatorSequential(
               y: { start: 0, middle: size[1] / 2, end: size[1] },
             });
 
-            // Re-layout unconstrained children so internal Ref() nodes observe
-            // final constrained sibling positions. Constrained children are
-            // intentionally left untouched to preserve "placed once" semantics.
-            for (let i = 0; i < children.length; i++) {
-              const childName = childNameKey(node.children[i]);
-              if (childName && constrainedNames.has(childName)) continue;
-              childPlaceables[i] = children[i].layout(
-                size,
-                scaleFactors,
-                posScales
-              );
-            }
-
-            // Default any unplaced axes to 0
+            // Place any child the constraints left unplaced at the layer's
+            // baseline origin — consistent with the phase-1 baseline placement
+            // of unconstrained children. A ref-consuming child (e.g. connect)
+            // that must observe constrained siblings should live in an outer
+            // tier laid out after them (see notes/nested-layer-tiers.md), not
+            // rely on a re-layout pass here.
             for (const cp of childPlaceables) {
-              const needsX = cp.dims[0].min === undefined;
-              const needsY = cp.dims[1].min === undefined;
-              if (needsX) cp.place("x", 0);
-              if (needsY) cp.place("y", 0);
+              if (cp.dims[0].min === undefined) cp.place("x", 0, "baseline");
+              if (cp.dims[1].min === undefined) cp.place("y", 0, "baseline");
             }
           } else {
             // Default layer behavior: place all children at (0, 0)

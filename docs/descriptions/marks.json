@@ -24,6 +24,10 @@
       "type": "petal",
       "description": "A petal shape."
     },
+    "polygon": {
+      "type": "polygon",
+      "description": "A closed polygon defined by explicit local-coordinate points (GoFish-native y-up); its bounding box is computed from the points."
+    },
     "blank": {
       "type": "blank",
       "description": "..."
