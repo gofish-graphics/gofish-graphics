@@ -1,29 +1,31 @@
 {
-    "name": "Operators",
-    "description": "Graphical operators are used to used to arrange, overlay, and connect visual elements.",
-    "usage": {
-        "spread": {
-            "description": "The spread operator is used to spread the data across the x or y axis.",
-            "example": "chart(seafood).flow(spread('lake', { dir: 'x' })).mark(rect({ h: 'count' }));"
-        },
-        "stack": {
-            "description": "The stack operator is used to stack the data across the x or y axis.",
-            "example": "chart(seafood).flow(stack('lake', { dir: 'x' })).mark(rect({ h: 'count' }));"
-        },
-        "scatter": {
-            "description": "The scatter operator is used to scatter the data across the x or y axis.",
-            "example": "chart(seafood).flow(scatter('lake', { dir: 'x' })).mark(rect({ h: 'count' }));"
-        }, 
-        "group": {
-            "description": "The group operator is used to group the data by a given key.",
-            "example": "chart(seafood).flow(group('lake')).mark(rect({ h: 'count' }));"
-        },
-        "derive": {
-            "description": "The derive operator is used to derive a new column from the data.",
-            "example": "chart(seafood).flow(derive((d) => d.count * 2)).mark(rect({ h: 'count' }));"
-        }
+  "name": "Operators",
+  "description": "Graphical operators are used to used to arrange, overlay, and connect visual elements.",
+  "usage": {
+    "spread": {
+      "description": "The spread operator is used to spread the data across the x or y axis.",
+      "example": "chart(seafood).flow(spread('lake', { dir: 'x' })).mark(rect({ h: 'count' }));"
     },
-    "components": {
-        
+    "stack": {
+      "description": "The stack operator is used to stack the data across the x or y axis.",
+      "example": "chart(seafood).flow(stack('lake', { dir: 'x' })).mark(rect({ h: 'count' }));"
+    },
+    "scatter": {
+      "description": "The scatter operator is used to scatter the data across the x or y axis.",
+      "example": "chart(seafood).flow(scatter('lake', { dir: 'x' })).mark(rect({ h: 'count' }));"
+    },
+    "group": {
+      "description": "The group operator is used to group the data by a given key.",
+      "example": "chart(seafood).flow(group('lake')).mark(rect({ h: 'count' }));"
+    },
+    "derive": {
+      "description": "The derive operator is used to derive a new column from the data.",
+      "example": "chart(seafood).flow(derive((d) => d.count * 2)).mark(rect({ h: 'count' }));"
+    },
+    "connect": {
+      "description": "The connect operator draws paths between elements. Pass `source` and/or `target` as normalized [fx, fy] bounding-box fractions to anchor each endpoint. If only one is given, the other is clamped onto the opposite box per axis, producing an axis-aligned line when possible.",
+      "example": "connect({ source: [0, 0.5], target: [1, 0.5] }, [ref('a'), ref('b')]);"
     }
+  },
+  "components": {}
 }
