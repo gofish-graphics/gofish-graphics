@@ -7,13 +7,13 @@ covers:
   - packages/gofish-graphics/src/ast/marks/createOperator.ts
 ---
 
-# `createOperator`: turning a layout into a v3 operator
+# `createOperator`: turning a layout into a frontend operator
 
 `createOperator` is the factory that wraps a low-level layout node-builder
-(`Spread`, `Scatter`, `Table`, `Frame`) and produces the high-level v3
-operator (`spread`, `scatter`, `table`, `group`, plus `stack` as a thin
-wrapper over `spread`) used inside `chart(...).flow(...)` and as a
-combinator inside `.mark(...)`.
+(`Spread`, `Scatter`, `Table`, `Frame`) and produces the frontend operator
+(`spread`, `scatter`, `table`, `group`, plus `stack` as a thin wrapper over
+`spread`) used inside `chart(...).flow(...)` and as a combinator inside
+`.mark(...)`.
 
 It lives at `src/ast/marks/createOperator.ts`.
 
@@ -27,12 +27,12 @@ added in front and a `combine` (low-level layout) step added behind. See
 
 This doc explains what the factory does, why it has two call shapes, and how
 to add a new operator. It assumes you've read
-[The Mark Factory](/internals/v3/mark-factory) — this is the same idea applied to
-layout containers instead of leaf shapes.
+[The Mark Factory](/internals/frontend/mark-factory) — this is the same idea
+applied to layout containers instead of leaf shapes.
 
 ## 1. The two call shapes every operator has
 
-Every v3 layout operator is a single function that you can call in two ways:
+Every layout operator is a single function that you can call in two ways:
 
 ```ts
 // (A) Combinator form — pass marks directly:
@@ -62,7 +62,11 @@ arg means operator form.
 
 ## 2. The split → fmap → combine shape
 
-Pick any layout operator and you'll find the same three steps:
+Pick any layout operator and you'll find the same three steps — a fan-out
+into N pieces, followed by a fan-in back to a single node:
+
+::: starfish example:internal-operator-factory-pipeline hidden
+:::
 
 1. **Split.** Partition the data into pieces. For `spread`, this is
    "groupBy `by`-field"; for `table`, it's the cartesian product of two
@@ -72,16 +76,6 @@ Pick any layout operator and you'll find the same three steps:
    `GoFishNode` per piece.
 3. **Combine.** Hand the array of nodes to the low-level layout function
    (`Spread`, `Table`, `Scatter`, `Frame`), which positions them.
-
-```
-data ──split──▶ [piece₀, piece₁, …, pieceₙ]
-                   │
-                   ▼ (fmap)
-                 [mark(piece₀), mark(piece₁), …, mark(pieceₙ)]
-                   │
-                   ▼ (combine = layout)
-                 GoFishNode (the arranged children)
-```
 
 The combinator form skips `split` entirely — the user already supplied the
 array of marks. The factory loops over them, applies each to the shared
@@ -223,10 +217,11 @@ The two factories are siblings:
 Both use channel annotations to encode opts; both produce mark types
 supporting `.name(...)` and `.label(...)` chaining.
 
-Naming-wise: `createOperator` is the v3 factory; the low-level helper that
-produces `Spread`, `Scatter`, etc. is `createNodeOperator`
-(`withGoFish.ts:297`). The "node" prefix reflects that it returns a
-function whose output is a single `GoFishNode`, not the v3 dual-mode shape.
+Naming-wise: `createOperator` is the frontend factory; the low-level helper
+that produces `Spread`, `Scatter`, etc. is `createNodeOperator`
+(`withGoFish.ts:297`). The "node" prefix reflects that it returns a function
+whose output is a single `GoFishNode`, not the dual-mode shape that
+`createOperator` returns.
 
 ## 8. Prior art
 
@@ -235,7 +230,7 @@ function whose output is a single `GoFishNode`, not the v3 dual-mode shape.
 [paper](https://arxiv.org/abs/2009.00722),
 [code](https://github.com/kristw/encodable)) to layout operators. The
 channel system maps onto Encodable's directly — see
-[The Mark Factory](/internals/v3/mark-factory)'s "Prior art" section for the
+[The Mark Factory](/internals/frontend/mark-factory)'s "Prior art" section for the
 mark-level table. `createOperator` adds two pieces Encodable doesn't have:
 
 | step                       | what it does                                          | Encodable analogue                                                                           |
@@ -259,6 +254,6 @@ to `createOperator`; Encodable doesn't address layout multiplicity.
   - `group` — `graphicalOperators/group.ts` (sibling of `frame.tsx`,
     extracted to keep the chartBuilder ↔ createOperator import graph
     acyclic).
-- The companion mark factory: [The Mark Factory](/internals/v3/mark-factory).
+- The companion mark factory: [The Mark Factory](/internals/frontend/mark-factory).
 - Encodable: paper [arxiv:2009.00722](https://arxiv.org/abs/2009.00722),
   source [github.com/kristw/encodable](https://github.com/kristw/encodable).

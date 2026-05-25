@@ -52,6 +52,28 @@ dual-axis chart or a scatterpie is no different: each is built from universal
 graphical primitives — marks, positions, composition. Forbid those and there is no
 graphical language left.
 
+The charting world has its own bubble sorts. Three concrete examples:
+
+- A **pie chart** is what falls out of having polar coordinates _at all_. Once a
+  `coord` transform can map a stacked bar from Cartesian to polar, the pie chart
+  is the same spec under a different `coord`. Forbidding the pie means forbidding
+  polar — and polar is the price of rose charts, donut charts, sunbursts, clock
+  faces, circular dendrograms.
+- A **scatterpie** is what falls out of allowing a chart to be a mark inside
+  another chart. The moment a `pie(...)` chart can be passed to `scatter(...)`'s
+  `.mark(...)` slot, scatterpies exist. Forbidding the scatterpie means
+  forbidding chart nesting — and nesting is the price of small multiples,
+  facets, ridgelines, and almost every composite diagram.
+- A **dual-axis chart** is what falls out of `layer`. Stack two charts on top of
+  one another and each contributes its own y-scale. (There may be ways to
+  _disallow_ this — refuse to overlay incompatible position scales, or fold them
+  into a shared underlying space — but the path of least resistance from `layer`
+  is dual axes.) Forbidding dual-axis means forbidding free layering, which is
+  the price of error bars, annotation layers, and connected scatter plots.
+
+In each case the "bad" chart is _not_ the special case; it is the generic case.
+The expensive thing is the restriction.
+
 At a high enough level of abstraction you _could_ pull it off. A language whose only
 sorting construct is a built-in `sort` cannot express bubble sort at all. Nor can a
 **predicate language** — one where you write not an algorithm but a specification
@@ -87,12 +109,12 @@ architecture worth borrowing, not a GHC quirk.
 
 GoFish has the same shape:
 
-| GHC                                           | GoFish                                                                                                                                                           |
-| --------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Haskell — a large surface language            | The surface API — v1, v2, and the v3 `chart().flow().mark()` builder; convenience methods like `.facet()`; high-level constructs such as **axes** and **labels** |
-| Typecheck + Desugar                           | [Pipeline desugaring](/internals/v3/pipeline-syntax) — convenience methods unfold into operator applications; the builder resolves into a tree                   |
-| Core — a small typed IL                       | The `GoFishNode` AST — a small set of _primitive_ node kinds: basic marks and graphical operators                                                                |
-| Rest of GHC — analysis, optimization, codegen | The [three render passes](/internals/overview/architecture) — domain inference, layout, placement                                                                |
+| GHC                                           | GoFish                                                                                                                                                 |
+| --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Haskell — a large surface language            | The frontend — the `chart().flow().mark()` builder, plus convenience methods like `.facet()` and high-level constructs such as **axes** and **labels** |
+| Typecheck + Desugar                           | [Pipeline desugaring](/internals/frontend/pipeline-syntax) — convenience methods unfold into operator applications; the builder resolves into a tree   |
+| Core — a small typed IL                       | The `GoFishNode` AST — a small set of _primitive_ node kinds: basic marks and graphical operators                                                      |
+| Rest of GHC — analysis, optimization, codegen | The [three render passes](/internals/overview/architecture) — domain inference, layout, placement                                                      |
 
 Everything a reader can _write_ lives in the surface language. Everything the engine
 _reasons about_ lives in the core. The two are deliberately different sizes.
@@ -123,24 +145,42 @@ place only if it desugars into the _existing_ core. If it cannot, that is not a 
 to enlarge the core — it is a signal to rethink the feature. The core grows slowly,
 and on purpose.
 
-**Axes** and **labels** are the standing example. Both are _frontend_ constructs, not
-core node kinds: an axis or a label resolves into ordinary core marks — lines, ticks,
-text — so neither had to widen the core. That is exactly why they sit in the Frontend
-section of this wiki — [Axes](/internals/frontend/axes) and
+**Axes** and **labels** are the standing example. Both are _frontend_ constructs,
+not core node kinds: an axis or a label resolves into ordinary core marks — lines,
+ticks, text — so neither has to widen the core. That is exactly why they sit in the
+Frontend section of this wiki — [Axes](/internals/frontend/axes) and
 [Labels](/internals/design/label-syntax) — and not in Core.
+
+(A truth-in-advertising note: axes and labels desugar in spirit more than in
+implementation today. The renderer special-cases their placement rather than
+running them through the same desugaring path the rest of the frontend takes.
+The aspiration is to fold both into the same scheme. **Treemaps** are an even
+more aspirational example: a treemap algorithm fits the same shape — desugar
+the user spec into nested rectangles laid out by ordinary `spread`/`stack` /
+`scatter` operators — but the engine cannot do that today.)
 
 ## What follows from it
 
 This one principle explains much of the rest of GoFish:
 
 - **Desugaring over special-casing.** Convenience methods (`.facet()`, `.stack()`)
-  are pure sugar over `.flow(...)` — see [Pipeline Syntax](/internals/v3/pipeline-syntax).
-- **One polymorphic operator over many parallel ones.** A single operator with a
-  strategy option keeps the core narrow; parallel operators would widen it.
-- **Breaking APIs cleanly** rather than accreting compatibility shims — the surface is
-  _allowed_ to churn precisely because it is only surface; the core stays stable.
+  are pure sugar over `.flow(...)` — see [Pipeline
+  Syntax](/internals/frontend/pipeline-syntax).
+- **Prefer a polymorphic operator to a family of near-duplicates.** When two
+  proposed operators share most of their semantics — `stackX`/`stackY`,
+  `spreadX`/`spreadY` — the cheaper move is one operator that takes the
+  variation as an option (a `dir` of `"x"` vs `"y"`). The motivation is _core
+  surface area_, not user ergonomics: parallel operators each have to be
+  reasoned about by every pass, and each lands as a separate desugaring target.
+  Folding them into one keeps the set of node kinds the passes face small,
+  without committing to a single "do everything" operator. The rule is "fold
+  near-duplicates," not "everything must be one operator."
+- **Breaking APIs cleanly** rather than accreting compatibility shims — the surface
+  is _allowed_ to churn precisely because it is only surface; the core stays
+  stable.
 - **Multi-pass rendering** — domain inference → layout → placement is a compiler
-  pipeline over the core (see the [Architecture Overview](/internals/overview/architecture)).
+  pipeline over the core (see the [Architecture
+  Overview](/internals/overview/architecture)).
 
 ## More PL ideas
 
@@ -148,8 +188,8 @@ The compiler-pipeline framing is the spine of this pillar, but not all of it. Ot
 programming-languages ideas thread through GoFish and deserve their own treatment:
 **hygienic scoping** for [names](/internals/core/names-and-scoping), by analogy to
 hygienic macros; the [monotonic algebra](/internals/core/monotonic) as a form of
-abstract interpretation; and a categorical reading of the v3 API. They are flagged
-here and expanded elsewhere as the wiki grows.
+abstract interpretation; and a categorical reading of the frontend. They are
+flagged here and expanded elsewhere as the wiki grows.
 
 ---
 

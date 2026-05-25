@@ -1,3 +1,7 @@
+// <gofish-wiki> AUTO-GENERATED — see covers: in the essay; run `pnpm --filter docs sync-backlinks`
+// @wiki Three Surfaces — /internals/design-evolution/three-surfaces
+// </gofish-wiki>
+
 // Main library exports
 export * from "./color";
 export * from "./path";

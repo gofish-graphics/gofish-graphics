@@ -445,5 +445,5 @@ companion thesis repo).
 - Layout consumption: `gofish.tsx`'s `layout()` for root-level dispatch;
   `spread.tsx`'s `layout` for the per-node `computeScaleFactor`.
 - Companion factory docs:
-  [The Mark Factory](/internals/v3/mark-factory),
-  [The Operator Factory](/internals/v3/operator-factory).
+  [The Mark Factory](/internals/frontend/mark-factory),
+  [The Operator Factory](/internals/frontend/operator-factory).

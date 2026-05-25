@@ -8,11 +8,11 @@ covers:
   - packages/gofish-graphics/src/ast/channels.ts
 ---
 
-# `createMark`: turning a shape into a v3 mark
+# `createMark`: turning a shape into a frontend mark
 
 `createMark` is the factory that wraps a low-level shape function (`Rect`,
-`Ellipse`, `Petal`, `Text`, `Image`) and produces the high-level v3 mark
-(`rect`, `ellipse`, `petal`, `text`, `image`) used inside `chart(...).mark(...)`.
+`Ellipse`, `Petal`, `Text`, `Image`) and produces the frontend mark (`rect`,
+`ellipse`, `petal`, `text`, `image`) used inside `chart(...).mark(...)`.
 
 It lives at `src/ast/withGoFish.ts:419`.
 
@@ -35,7 +35,7 @@ A low-level shape takes plain pixel-space numbers:
 Rect({ w: 50, h: 100, fill: "tomato" });
 ```
 
-A v3 mark takes _data-aware_ inputs — either a plain value, or a field name to
+A frontend mark takes _data-aware_ inputs — either a plain value, or a field name to
 pull from the data:
 
 ```ts
@@ -169,7 +169,7 @@ Today's channels are `"size"` and `"color"`. To add (say) `"angle"`:
    chain in `withGoFish.ts` to handle it.
 
 `createOperator` has its own channel handling
-(see [The Operator Factory](/internals/v3/operator-factory)) and would need
+(see [The Operator Factory](/internals/frontend/operator-factory)) and would need
 the same treatment if the new channel should be available in operator opts as
 well.
 
@@ -193,7 +193,7 @@ resolves into rendering parameters. The shape map is one-to-one:
 GoFish's twist is that a mark also produces a node in a layout AST rather
 than a render directly, and the channel set is smaller (`size`, `pos`,
 `color`) — Encodable's vega-lite-flavored channel taxonomy is richer.
-[The Operator Factory](/internals/v3/operator-factory) extends the same pattern
+[The Operator Factory](/internals/frontend/operator-factory) extends the same pattern
 to layout operators (split + per-partition application).
 
 ## Pointers
@@ -204,6 +204,6 @@ to layout operators (split + per-partition application).
 - The five existing call sites: `rect`, `ellipse`, `petal`, `text`, `image`
   in `src/ast/shapes/`.
 - The companion factory for layout operators:
-  [The Operator Factory](/internals/v3/operator-factory).
+  [The Operator Factory](/internals/frontend/operator-factory).
 - Encodable: paper [arxiv:2009.00722](https://arxiv.org/abs/2009.00722),
   source [github.com/kristw/encodable](https://github.com/kristw/encodable).

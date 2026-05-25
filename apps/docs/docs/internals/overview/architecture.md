@@ -23,10 +23,11 @@ and the engine works out the rest. That description is an **abstract syntax tree
 - **Graphical operators** — composition: `stackX`, `spread`, `layer`, `connect`,
   `coord`, and so on. An operator arranges its children; it has no appearance of its own.
 
-The modern [v3 fluent API](/internals/v3/pipeline-syntax) — `chart(data).flow(...).mark(...)`
-— is sugar. It [desugars](/internals/v3/pipeline-syntax) into exactly this tree, built
-from the [mark](/internals/v3/mark-factory) and [operator](/internals/v3/operator-factory)
-factories.
+The [fluent frontend](/internals/frontend/pipeline-syntax) —
+`chart(data).flow(...).mark(...)` — is sugar. It
+[desugars](/internals/frontend/pipeline-syntax) into exactly this tree, built
+from the [mark](/internals/frontend/mark-factory) and
+[operator](/internals/frontend/operator-factory) factories.
 
 ## Three passes
 

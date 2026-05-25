@@ -1,5 +1,5 @@
 // <gofish-wiki> AUTO-GENERATED — see covers: in the essay; run `pnpm --filter docs sync-backlinks`
-// @wiki The Operator Factory — /internals/v3/operator-factory
+// @wiki The Operator Factory — /internals/frontend/operator-factory
 // </gofish-wiki>
 
 /**

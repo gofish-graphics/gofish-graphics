@@ -1,8 +1,8 @@
 ---
 title: Chart Templates
-section: Frontend
-order: 70
-status: draft
+section: Speculative Notes
+order: 30
+status: speculative
 ---
 
 # Design of the High-Level Chart API

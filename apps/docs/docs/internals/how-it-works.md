@@ -29,9 +29,15 @@ covers: # source files this essay documents
 ```
 
 **Sections** group the sidebar. In order: `Overview`, `Frontend`, `Core`,
-`Python`, `Speculative Notes`. An essay's place in the sidebar comes entirely
-from its `section:` (and `group:`) frontmatter — the directory a file happens to
-sit in is filesystem convenience and need not match its section.
+`Python`, `Design Evolution`, `Speculative Notes`. An essay's place in the
+sidebar comes entirely from its `section:` (and `group:`) frontmatter — the
+directory a file happens to sit in is filesystem convenience and need not match
+its section.
+
+`Design Evolution` is the home for retrospective and design-history essays —
+how the surface API arrived at its current shape, ideas that were tried and
+abandoned, comparisons with prior surfaces. It is for ground that has _already
+been walked_; aspirational direction goes in `Speculative Notes`.
 
 **`group`** files an essay under an intermediate sidebar label, e.g.
 `group: Scale Resolution`. Group labels are **not pages** — only leaf essays

@@ -23,6 +23,9 @@ through component frameworks. What is rare is connecting them to _visualization_
 and rarer still to connect all three at once. That is the bet: no single one of the
 three is enough on its own, but the combination, brought to charts, is.
 
+::: starfish example:internal-three-traditions-venn hidden
+:::
+
 ## Three traditions
 
 **Programming languages & compilers.** A chart is a program; the renderer is a

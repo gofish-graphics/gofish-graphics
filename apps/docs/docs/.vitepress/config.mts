@@ -44,6 +44,7 @@ const INTERNALS_SECTION_ORDER = [
   "Frontend",
   "Core",
   "Python",
+  "Design Evolution",
   "Speculative Notes",
 ];
 

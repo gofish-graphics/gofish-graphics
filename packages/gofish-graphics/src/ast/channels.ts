@@ -1,5 +1,5 @@
 // <gofish-wiki> AUTO-GENERATED — see covers: in the essay; run `pnpm --filter docs sync-backlinks`
-// @wiki The Mark Factory — /internals/v3/mark-factory
+// @wiki The Mark Factory — /internals/frontend/mark-factory
 // </gofish-wiki>
 
 import { sumBy, meanBy } from "lodash";

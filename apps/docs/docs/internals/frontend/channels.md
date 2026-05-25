@@ -7,10 +7,10 @@ status: draft
 
 # Mark Channel Types
 
-A v3 mark's options are not all alike. A channel is classified by its **aggregation
-semantics** — size, position, color, or raw — and that classification, not naming
-convenience, determines how the channel behaves under operators. This essay will
-document the channel taxonomy.
+A frontend mark's options are not all alike. A channel is classified by its
+**aggregation semantics** — size, position, color, or raw — and that
+classification, not naming convenience, determines how the channel behaves
+under operators. This essay will document the channel taxonomy.
 
 ## Planned contents
 
@@ -23,5 +23,5 @@ document the channel taxonomy.
 
 Likely `covers:`: the mark factory and channel code under
 `packages/gofish-graphics/src/ast/marks/`. See also
-[The Mark Factory](/internals/v3/mark-factory). Add the `covers:` frontmatter when
+[The Mark Factory](/internals/frontend/mark-factory). Add the `covers:` frontmatter when
 writing this up, then run `pnpm --filter docs sync-backlinks`.

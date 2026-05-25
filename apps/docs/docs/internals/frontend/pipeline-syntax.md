@@ -7,7 +7,8 @@ status: draft
 
 # Pipeline Syntax & Desugaring
 
-This essay collects the design notes behind the v3 "forward" pipeline syntax —
+This essay collects the design notes behind the frontend's "forward" pipeline
+syntax —
 why `chart(data).flow(...).mark(...)` flows the way it does, a catalog of
 worked chart examples expressed in it, and the implementation TODO list that
 tracked it. It reads like design scratch because it is: the syntax was settled

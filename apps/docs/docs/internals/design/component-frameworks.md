@@ -28,7 +28,7 @@ exactly this sense:
   canvas calls.
 - _Composable_ — operators nest: a `stackX` of `layer`s of `rect`s.
 - _Extensible_ — new marks and operators are authored through the
-  [mark](/internals/v3/mark-factory) and [operator](/internals/v3/operator-factory)
+  [mark](/internals/frontend/mark-factory) and [operator](/internals/frontend/operator-factory)
   factories, exactly as a UI framework lets you write custom components.
 
 ## Past the single-parent tree

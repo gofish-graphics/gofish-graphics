@@ -22,14 +22,16 @@ tricks, the Python bridge, and the design philosophy behind it all.
   for the authoring conventions — frontmatter, sidebar sections, the `covers:` ↔
   code back-links, diagrams, and code samples.
 
-The wiki is broken into five sections:
+The wiki is broken into six sections:
 
 - **Overview** — orientation: this page, the architecture map, the design
-  philosophy, and a glossary.
-- **Frontend** — the surface API a chart author writes: pipeline syntax, marks and
-  operators, axes, and labels.
+  philosophy, a glossary, and the case for the project at all.
+- **Frontend** — the surface a chart author writes: pipeline syntax, marks and
+  operators, axes, labels, color.
 - **Core** — the rendering engine: underlying space, the layout and
   scale-resolution passes, and rendering itself.
 - **Python** — the Python wrapper and its bridge to the JavaScript engine.
+- **Design Evolution** — retrospective: how the surface arrived at its current
+  shape, paths considered and rejected, comparisons with prior surfaces.
 - **Speculative Notes** — design exploration and project direction that may never
   ship.
