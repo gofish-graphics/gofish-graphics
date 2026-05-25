@@ -1,6 +1,6 @@
 ---
 title: Overview
-section: Core
+section: Layout & Rendering
 order: 60
 group: Scale Resolution
 status: draft

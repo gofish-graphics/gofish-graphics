@@ -1,6 +1,6 @@
 ---
 title: Flattening the Scenegraph
-section: Core
+section: Layout & Rendering
 order: 51
 group: Layout
 status: draft

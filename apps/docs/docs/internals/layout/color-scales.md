@@ -1,6 +1,6 @@
 ---
 title: Color Scale Resolution
-section: Core
+section: Layout & Rendering
 order: 62
 group: Scale Resolution
 status: draft

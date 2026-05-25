@@ -1,6 +1,6 @@
 ---
 title: The Monotonic Module
-section: Core
+section: Layout & Rendering
 order: 61
 group: Scale Resolution
 status: draft

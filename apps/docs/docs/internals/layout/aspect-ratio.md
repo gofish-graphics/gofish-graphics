@@ -1,6 +1,6 @@
 ---
 title: Fixed Aspect Ratio
-section: Core
+section: Layout & Rendering
 order: 52
 group: Layout
 status: draft

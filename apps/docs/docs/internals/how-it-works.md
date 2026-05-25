@@ -29,10 +29,10 @@ covers: # source files this essay documents
 ```
 
 **Sections** group the sidebar. In order: `Overview`, `Frontend`, `Core`,
-`Python`, `Design Evolution`, `Speculative Notes`. An essay's place in the
-sidebar comes entirely from its `section:` (and `group:`) frontmatter — the
-directory a file happens to sit in is filesystem convenience and need not match
-its section.
+`Layout & Rendering`, `Python`, `Design Evolution`, `Speculative Notes`. An
+essay's place in the sidebar comes entirely from its `section:` (and `group:`)
+frontmatter — the directory a file happens to sit in is filesystem convenience
+and need not match its section.
 
 `Design Evolution` is the home for retrospective and design-history essays —
 how the surface API arrived at its current shape, ideas that were tried and

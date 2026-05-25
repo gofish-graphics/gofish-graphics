@@ -1,6 +1,6 @@
 ---
 title: Overview
-section: Core
+section: Layout & Rendering
 order: 70
 group: Rendering
 status: draft

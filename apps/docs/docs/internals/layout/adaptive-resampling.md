@@ -1,6 +1,6 @@
 ---
 title: Adaptive Resampling
-section: Core
+section: Layout & Rendering
 order: 71
 group: Rendering
 status: draft

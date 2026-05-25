@@ -1,6 +1,6 @@
 ---
 title: Authoring Coordinate Transforms
-section: Core
+section: Layout & Rendering
 order: 72
 group: Rendering
 status: draft
