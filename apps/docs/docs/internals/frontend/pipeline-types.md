@@ -53,17 +53,19 @@ It is reasonable to read `Operator<T, U>` and ask why `T` is on the left and
 `U` on the right when the data flows _from_ `T` _to_ `U`. The answer is the
 **continuation**.
 
-Expand `Operator` all the way:
+Expand `Operator` all the way (the two `≡` lines are successive rewrites of
+the same type):
 
-```ts
-Operator<T, U> = (cont: Mark<U>) =>
-  (Mark<T> = (cont: (d: U) => GoFishNode) => (d: T) => GoFishNode);
+```text
+Operator<T, U>
+  ≡ (cont: Mark<U>) => Mark<T>
+  ≡ (cont: (d: U) => GoFishNode) => (d: T) => GoFishNode
 ```
 
 Reorder the arguments and you get:
 
-```ts
-(d: T) => (cont: (d: U) => GoFishNode) => GoFishNode;
+```text
+(d: T) => (cont: (d: U) => GoFishNode) => GoFishNode
 ```
 
 Read in English: _give me a `T`, and give me a way to turn a `U` into a
