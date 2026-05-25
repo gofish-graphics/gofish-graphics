@@ -179,19 +179,32 @@ export const Pulley: StoryObj<Args> = {
       text({ text: "s" }).name("t6"),
     ])
       .constrain((c) => [
-        // each dimension label sits ~5px right of its rope, centered on it
+        // each dimension label sits ~5px right of its rope on x. On y, the
+        // upper trio (x/y/z) shares x's centerY (anchored to rope l1); the
+        // lower trio (p/q/s) shares s's centerY (anchored to rope l6) — à la
+        // Bluefish's `Align centerY [t1,t2,t3]` / `[t6,t5,t4]`.
         Constraint.distribute({ dir: "x", spacing: 5, mode: "edge" }, [c.l1, c.t1]),
         Constraint.align({ y: "middle" }, [c.l1, c.t1]),
         Constraint.distribute({ dir: "x", spacing: 5, mode: "edge" }, [c.l2, c.t2]),
-        Constraint.align({ y: "middle" }, [c.l2, c.t2]),
+        Constraint.align({ y: "middle" }, [c.t1, c.t2]),
         Constraint.distribute({ dir: "x", spacing: 5, mode: "edge" }, [c.l3, c.t3]),
-        Constraint.align({ y: "middle" }, [c.l3, c.t3]),
-        Constraint.distribute({ dir: "x", spacing: 5, mode: "edge" }, [c.l4, c.t4]),
-        Constraint.align({ y: "middle" }, [c.l4, c.t4]),
-        Constraint.distribute({ dir: "x", spacing: 5, mode: "edge" }, [c.l5, c.t5]),
-        Constraint.align({ y: "middle" }, [c.l5, c.t5]),
+        Constraint.align({ y: "middle" }, [c.t1, c.t3]),
         Constraint.distribute({ dir: "x", spacing: 5, mode: "edge" }, [c.l6, c.t6]),
         Constraint.align({ y: "middle" }, [c.l6, c.t6]),
+        Constraint.distribute({ dir: "x", spacing: 5, mode: "edge" }, [c.l5, c.t5]),
+        Constraint.align({ y: "middle" }, [c.t6, c.t5]),
+        Constraint.distribute({ dir: "x", spacing: 5, mode: "edge" }, [c.l4, c.t4]),
+        Constraint.align({ y: "middle" }, [c.t6, c.t4]),
+
+        // ── granular paint order: relative z-order constraints ────────────
+        // Cross-tier refs (c.A, c.B, c.C) work because collectConstraintRefs
+        // descends into the (plain) inner shapes layer. The ropes' default
+        // .zOrder(-1) keeps the unmentioned ropes (l2/l3/l4/l5) behind their
+        // circles; these constraints carve out the four exceptions.
+        Constraint.zAbove(c.l1, c.A), // x over A
+        Constraint.zBelow(c.l1, c.B), // x under B
+        Constraint.zAbove(c.l0, c.B), // ceiling→B over B
+        Constraint.zAbove(c.l6, c.C), // s over C
       ])
       .render(container, { w: args.w, h: args.h });
 
