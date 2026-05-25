@@ -36,13 +36,17 @@ type Args = { w: number; h: number };
 
 const r = 25;
 const w2jut = 10;
-const rope = { stroke: "#774e32", strokeWidth: 3 } as const;
+// Connect's default mix-blend-mode is "multiply" — that turns the brown stroke
+// translucent over the gray pulleys. Override to "normal" so the ropes are
+// solid/opaque, matching the Bluefish reference.
+const rope = {
+  stroke: "#774e32",
+  strokeWidth: 3,
+  mixBlendMode: "normal",
+} as const;
 
-// A pulley wheel: outer wheel + concentric hub dot. The explicit w/h keeps the
-// `align center` fallback baseline (size/2) anchored to the wheel's own box
-// rather than the much larger inherited layout size.
 const PulleyCircle = createMark(({ r = 25 }: { r?: number }) =>
-  Layer({ w: 2 * r, h: 2 * r }, [
+  Layer([
     circle({ r, stroke: "#828282", strokeWidth: 3, fill: "#C1C1C1" }).name(
       "wheel"
     ),
@@ -63,7 +67,7 @@ const Weight = createMark(
     height: number;
     label: string;
   }) =>
-    Layer({ w: width, h: height }, [
+    Layer([
       polygon({
         // GoFish y-up: full-width bottom edge at y=0, inset top edge at y=height.
         points: [
@@ -89,7 +93,7 @@ export const Pulley: StoryObj<Args> = {
     // Cross-tier names: the ropes (outer layer) reference the shapes (inner
     // layer). String names are layer-scoped; `createName` tokens register
     // globally, so `ref(token)` resolves across the layer boundary.
-    const rectN = createName("rect");
+    const ceiling = createName("ceiling");
     const A = createName("A");
     const B = createName("B");
     const C = createName("C");
@@ -107,7 +111,7 @@ export const Pulley: StoryObj<Args> = {
           fill: "#C9C9C9",
           stroke: "#000",
           strokeWidth: 2,
-        }).name(rectN),
+        }).name(ceiling),
         PulleyCircle({ r }).name(A),
         PulleyCircle({ r }).name(B),
         PulleyCircle({ r }).name(C),
@@ -122,12 +126,12 @@ export const Pulley: StoryObj<Args> = {
         Constraint.distribute({ dir: "x", spacing: 0, mode: "edge" }, [c.B, c.C]),
 
         // vertical placement (GoFish is y-up; pair order flipped vs Bluefish)
-        Constraint.distribute({ dir: "y", spacing: 40, mode: "edge" }, [c.B, c.rect]),
+        Constraint.distribute({ dir: "y", spacing: 40, mode: "edge" }, [c.B, c.ceiling]),
         Constraint.distribute({ dir: "y", spacing: 30, mode: "edge" }, [c.A, c.B]),
         Constraint.distribute({ dir: "y", spacing: 50, mode: "edge" }, [c.C, c.B]),
 
         // ceiling centered over the cluster (substitute for Bluefish <Group>)
-        Constraint.align({ x: "middle" }, [c.B, c.rect]),
+        Constraint.align({ x: "middle" }, [c.B, c.ceiling]),
 
         // weights (negative spacing offsets each weight so its inset trapezoid
         // top sits under the rope source points)
@@ -148,63 +152,65 @@ export const Pulley: StoryObj<Args> = {
       // ── tier 2: rope segments — read the placed shapes ──────────────────
       // Declared after tier 1 so their ref()s resolve against placed shapes.
       // zOrder(-1): painted behind tier 1, so the wheels draw over rope ends.
-      Connect({ ...rope, target: [0.5, 0.5] }, [ref(rectN), ref(B)])
-        .name("l0")
+      // `ropeSupport` is the unlabeled support rope from the ceiling to B; the
+      // rest are named after the dimension letter (x/y/z/p/q/s) they carry.
+      Connect({ ...rope, target: [0.5, 0.5] }, [ref(ceiling), ref(B)])
+        .name("ropeSupport")
         .zOrder(-1),
       Connect({ ...rope, source: [0, 0.5], target: [0.5, 0.5] }, [ref(B), ref(A)])
-        .name("l1")
+        .name("ropeX")
         .zOrder(-1),
       Connect({ ...rope, source: [1, 0.5], target: [0, 0.5] }, [ref(B), ref(C)])
-        .name("l2")
+        .name("ropeY")
         .zOrder(-1),
-      Connect({ ...rope, target: [1, 0.5] }, [ref(rectN), ref(C)])
-        .name("l3")
+      Connect({ ...rope, target: [1, 0.5] }, [ref(ceiling), ref(C)])
+        .name("ropeZ")
         .zOrder(-1),
       Connect({ ...rope, source: [0, 0.5] }, [ref(A), ref(w1)])
-        .name("l4")
+        .name("ropeP")
         .zOrder(-1),
       Connect({ ...rope, source: [1, 0.5] }, [ref(A), ref(w2)])
-        .name("l5")
+        .name("ropeQ")
         .zOrder(-1),
       Connect({ ...rope, source: [0.5, 0.5] }, [ref(C), ref(w2)])
-        .name("l6")
+        .name("ropeS")
         .zOrder(-1),
 
       // ── tier 3: dimension labels ────────────────────────────────────────
-      text({ text: "x" }).name("t1"),
-      text({ text: "y" }).name("t2"),
-      text({ text: "z" }).name("t3"),
-      text({ text: "p" }).name("t4"),
-      text({ text: "q" }).name("t5"),
-      text({ text: "s" }).name("t6"),
+      text({ text: "x" }).name("labelX"),
+      text({ text: "y" }).name("labelY"),
+      text({ text: "z" }).name("labelZ"),
+      text({ text: "p" }).name("labelP"),
+      text({ text: "q" }).name("labelQ"),
+      text({ text: "s" }).name("labelS"),
     ])
       .constrain((c) => [
         // each dimension label sits ~5px right of its rope on x. On y, the
-        // upper trio (x/y/z) shares x's centerY (anchored to rope l1); the
-        // lower trio (p/q/s) shares s's centerY (anchored to rope l6) — à la
+        // upper trio (x/y/z) shares x's centerY (anchored to ropeX); the
+        // lower trio (p/q/s) shares s's centerY (anchored to ropeS) — à la
         // Bluefish's `Align centerY [t1,t2,t3]` / `[t6,t5,t4]`.
-        Constraint.distribute({ dir: "x", spacing: 5, mode: "edge" }, [c.l1, c.t1]),
-        Constraint.align({ y: "middle" }, [c.l1, c.t1]),
-        Constraint.distribute({ dir: "x", spacing: 5, mode: "edge" }, [c.l2, c.t2]),
-        Constraint.align({ y: "middle" }, [c.t1, c.t2]),
-        Constraint.distribute({ dir: "x", spacing: 5, mode: "edge" }, [c.l3, c.t3]),
-        Constraint.align({ y: "middle" }, [c.t1, c.t3]),
-        Constraint.distribute({ dir: "x", spacing: 5, mode: "edge" }, [c.l6, c.t6]),
-        Constraint.align({ y: "middle" }, [c.l6, c.t6]),
-        Constraint.distribute({ dir: "x", spacing: 5, mode: "edge" }, [c.l5, c.t5]),
-        Constraint.align({ y: "middle" }, [c.t6, c.t5]),
-        Constraint.distribute({ dir: "x", spacing: 5, mode: "edge" }, [c.l4, c.t4]),
-        Constraint.align({ y: "middle" }, [c.t6, c.t4]),
+        Constraint.distribute({ dir: "x", spacing: 5, mode: "edge" }, [c.ropeX, c.labelX]),
+        Constraint.align({ y: "middle" }, [c.ropeX, c.labelX]),
+        Constraint.distribute({ dir: "x", spacing: 5, mode: "edge" }, [c.ropeY, c.labelY]),
+        Constraint.align({ y: "middle" }, [c.labelX, c.labelY]),
+        Constraint.distribute({ dir: "x", spacing: 5, mode: "edge" }, [c.ropeZ, c.labelZ]),
+        Constraint.align({ y: "middle" }, [c.labelX, c.labelZ]),
+        Constraint.distribute({ dir: "x", spacing: 5, mode: "edge" }, [c.ropeS, c.labelS]),
+        Constraint.align({ y: "middle" }, [c.ropeS, c.labelS]),
+        Constraint.distribute({ dir: "x", spacing: 5, mode: "edge" }, [c.ropeQ, c.labelQ]),
+        Constraint.align({ y: "middle" }, [c.labelS, c.labelQ]),
+        Constraint.distribute({ dir: "x", spacing: 5, mode: "edge" }, [c.ropeP, c.labelP]),
+        Constraint.align({ y: "middle" }, [c.labelS, c.labelP]),
 
         // ── granular paint order: relative z-order constraints ────────────
         // Cross-tier refs (c.A, c.B, c.C) work because collectConstraintRefs
         // descends into the (plain) inner shapes layer. The ropes' default
-        // .zOrder(-1) keeps the unmentioned ropes (l2/l3/l4/l5) behind their
+        // .zOrder(-1) keeps the unmentioned ropes (Y/Z/P/Q) behind their
         // circles; these constraints carve out the four exceptions.
-        Constraint.zAbove(c.l1, c.A), // x over A
-        Constraint.zBelow(c.l1, c.B), // x under B
-        Constraint.zAbove(c.l0, c.B), // ceiling→B over B
-        Constraint.zAbove(c.l6, c.C), // s over C
+        Constraint.zAbove(c.ropeX, c.A), // x over A
+        Constraint.zBelow(c.ropeX, c.B), // x under B
+        Constraint.zAbove(c.ropeSupport, c.B), // ceiling→B over B
+        Constraint.zAbove(c.ropeS, c.C), // s over C
       ])
       .render(container, { w: args.w, h: args.h });
 
