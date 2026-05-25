@@ -172,6 +172,9 @@ class Mark:
         self._datum: Any = None
         self._datum_set: bool = False
         self._key: Optional[str] = None
+        # Default z-order hint (sorted within siblings inside `layer`'s
+        # render). Mirrors JS `node._zOrder` (`.zOrder(n)`).
+        self._z_order: Optional[float] = None
 
     def _copy_meta(self, target: "Mark") -> "Mark":
         target._name = self._name
@@ -181,6 +184,7 @@ class Mark:
         target._datum = self._datum
         target._datum_set = self._datum_set
         target._key = self._key
+        target._z_order = self._z_order
         return target
 
     def bind_data(self, datum: Any, key: Optional[str] = None) -> "Mark":
@@ -219,6 +223,27 @@ class Mark:
         )
         self._copy_meta(new_mark)
         new_mark._name = name_or_token
+        return new_mark
+
+    def z_order(self, value: float) -> "Mark":
+        """Set the default z-order hint for this mark.
+
+        Within a single layer's render, marks are sorted by `(z_order, index)`
+        before painting. Lower values paint first (further back). Mirrors
+        JS `node.zOrder(n)`.
+
+        For *relational* paint order ("this above that"), use
+        `Constraint.z_above(a, b)` / `Constraint.z_below(a, b)` inside the
+        enclosing layer's `.constrain(...)` instead.
+
+        Returns:
+            New Mark (same subclass as self) with the z-order set.
+        """
+        new_mark = type(self)(
+            self.mark_type, _children=self._children, **self.kwargs
+        )
+        self._copy_meta(new_mark)
+        new_mark._z_order = value
         return new_mark
 
     def label(
@@ -313,6 +338,9 @@ class Mark:
         if self._datum_set:
             d["__datum"] = self._datum
             d["__key"] = self._key
+        # `.zOrder(n)` — applied post-construction on the JS side.
+        if self._z_order is not None:
+            d["zOrder"] = self._z_order
         return d
 
     def to_ir(self) -> dict:
@@ -416,27 +444,55 @@ class DistributeConstraint:
         }
 
 
+class ZOrderConstraint:
+    """IR carrier for `Constraint.zAbove(a, b)` / `Constraint.zBelow(a, b)`.
+
+    Z-order constraints declare a partial-order relation between two named
+    children of a layer. They do not affect position; the JS engine
+    topologically sorts the layer's children to resolve the total paint
+    order at render time.
+    """
+
+    def __init__(self, ctype: str, refs: List[RefSentinel]):
+        # `ctype` is "zAbove" or "zBelow"; preserved as-is on the wire so the
+        # JS widget dispatches to the matching `Constraint.zAbove/zBelow`.
+        self.ctype = ctype
+        self.refs = refs
+
+    def to_dict(self) -> dict:
+        return {
+            "type": self.ctype,
+            "refs": [r.ref_name for r in self.refs],
+        }
+
+
 class Constraint:
     """Namespace for low-level constraint factories.
 
-    Mirrors JS `Constraint.align` / `Constraint.distribute` exactly. Both
-    return IR carriers consumed by `layer(...).constrain(...)`.
+    Mirrors JS `Constraint.align` / `Constraint.distribute` /
+    `Constraint.zAbove` / `Constraint.zBelow`. Method names are
+    snake-cased Python-side (`z_above`, `z_below`); the wire-format
+    discriminator (`"zAbove"` / `"zBelow"`) preserves the JS spelling.
     """
 
     @staticmethod
     def align(
         refs: List[RefSentinel],
         *,
-        x: Optional[str] = None,
-        y: Optional[str] = None,
+        x: Optional[Union[str, List[str]]] = None,
+        y: Optional[Union[str, List[str]]] = None,
     ) -> AlignConstraint:
         """Align the given refs on one or both axes.
 
         Args:
             refs: List of RefSentinels (typically the kwargs given to the
                 constrain callback).
-            x: Optional "start" | "middle" | "end" — alignment on the x-axis.
-            y: Optional "start" | "middle" | "end" — alignment on the y-axis.
+            x: Optional `"start" | "middle" | "end"` — alignment on the
+                x-axis. Pass a list of the same length as `refs` to assign
+                one anchor per child positionally (e.g.
+                `["middle", "start"]` aligns the first child's center to
+                the second child's start).
+            y: Optional alignment on the y-axis. Same shape as `x`.
 
         At least one of `x` or `y` must be provided.
         """
@@ -477,6 +533,21 @@ class Constraint:
             options["order"] = order
         return DistributeConstraint(refs, options)
 
+    @staticmethod
+    def z_above(a: RefSentinel, b: RefSentinel) -> ZOrderConstraint:
+        """`a` paints in front of `b` (on top in z).
+
+        Declares a partial-order relation for paint order only — does not
+        affect position. `z_below(a, b)` is equivalent to `z_above(b, a)`;
+        both spellings are provided so the spec reads naturally either way.
+        """
+        return ZOrderConstraint("zAbove", [a, b])
+
+    @staticmethod
+    def z_below(a: RefSentinel, b: RefSentinel) -> ZOrderConstraint:
+        """`a` paints behind `b` (under in z). See `Constraint.z_above`."""
+        return ZOrderConstraint("zBelow", [a, b])
+
 
 class ConstrainableMark(Mark):
     """A combinator-form Mark returned by `layer(...)`.
@@ -513,38 +584,81 @@ class ConstrainableMark(Mark):
                     Constraint.distribute([a, b], dir="y", spacing=10),
                 ]
             )
+
+        Direct children are collected first; then the walker descends into
+        any **non-component** nested `layer(...)` children (i.e. those not
+        produced by `@mark`) so the callback can reach across tier
+        boundaries — e.g. an outer layer's `Constraint.z_above` can
+        reference a name declared inside an inner shapes layer. Direct
+        children win on name collision. Mirrors JS-side
+        `collectConstraintRefs` in
+        `packages/gofish-graphics/src/ast/constraints/index.ts`.
         """
         if self._children is None:
             raise ValueError(
                 ".constrain() requires combinator children — use "
                 "`layer([...]).constrain(...)`"
             )
-        child_names: List[str] = []
+
+        def _name_key(child: "Mark") -> Optional[str]:
+            n = getattr(child, "_name", None)
+            if n is None:
+                return None
+            return n.tag if isinstance(n, Token) else n
+
+        # Two phases, mirroring the JS-side descent: collect direct-child
+        # names first (so they win on collision), then recurse into any
+        # unnamed nested non-component layer.
+        refs: Dict[str, RefSentinel] = {}
+        seen_dupes: List[str] = []
+
+        def collect(children: List["Mark"], is_direct: bool) -> None:
+            # Phase 1 (this layer): named children.
+            for child in children:
+                key = _name_key(child)
+                if key is None:
+                    continue
+                if is_direct and key in refs:
+                    seen_dupes.append(key)
+                elif key not in refs:
+                    refs[key] = RefSentinel(key)
+            # Phase 2 (this layer): recurse into non-component plain layers.
+            for child in children:
+                if not isinstance(child, ConstrainableMark):
+                    continue
+                if getattr(child, "_is_scope", False):
+                    continue
+                if child._children is None:
+                    continue
+                collect(child._children, is_direct=False)
+
+        # Validate that every direct child can contribute names — either
+        # by being named itself, or by being a non-component layer the
+        # walker will descend into.
         for child in self._children:
-            child_name = getattr(child, "_name", None)
-            if child_name is None:
-                raise ValueError(
-                    "every child of layer(...) used with .constrain() must be "
-                    "named via .name(...) so the callback can reference it"
-                )
-            # Tokens contribute their `tag` to the callback kwargs; the
-            # JS-side scope resolution still matches by tag string.
-            child_names.append(
-                child_name.tag if isinstance(child_name, Token) else child_name
+            name = _name_key(child)
+            if name is not None:
+                continue
+            if (
+                isinstance(child, ConstrainableMark)
+                and not getattr(child, "_is_scope", False)
+                and child._children is not None
+            ):
+                continue
+            raise ValueError(
+                "every child of layer(...) used with .constrain() must be "
+                "named via .name(...) so the callback can reference it "
+                "(or be an unnamed non-component nested layer)"
             )
-        # Two children sharing the same tag would silently collapse to one
-        # sentinel in the callback kwargs, leaving the second unreachable.
-        # Surface that as an error early.
-        seen: Dict[str, int] = {}
-        for name in child_names:
-            seen[name] = seen.get(name, 0) + 1
-        duplicates = sorted(n for n, count in seen.items() if count > 1)
-        if duplicates:
+
+        collect(self._children, is_direct=True)
+
+        if seen_dupes:
             raise ValueError(
                 ".constrain() children must have unique names; saw "
-                f"duplicates: {duplicates}"
+                f"duplicates: {sorted(set(seen_dupes))}"
             )
-        refs = {name: RefSentinel(name) for name in child_names}
+
         constraints = callback(**refs)
         new_mark = type(self)(
             self.mark_type, _children=self._children, **self.kwargs
@@ -1511,6 +1625,98 @@ def image(
         if value is not None:
             kwargs[k] = value
     return Mark("image", **kwargs)
+
+
+def polygon(
+    points: List[List[float]],
+    fill: Optional[str] = None,
+    stroke: Optional[str] = None,
+    strokeWidth: Optional[float] = None,
+    debug: Optional[bool] = None,
+) -> Mark:
+    """Polygon mark — closed polygon from explicit local-coord points.
+
+    Args:
+        points: Vertices `[[x, y], ...]` in local coordinates. GoFish is
+            y-up: `[0, 0]` is the bottom-left.
+        fill: Fill color.
+        stroke: Stroke color (defaults to `fill`).
+        strokeWidth: Stroke width.
+
+    Mirrors JS `polygon({ points, fill?, stroke?, strokeWidth? })` from
+    `packages/gofish-graphics/src/ast/shapes/polygon.tsx`.
+    """
+    kwargs: Dict[str, Any] = {"points": points}
+    for k, value in [
+        ("fill", fill),
+        ("stroke", stroke),
+        ("strokeWidth", strokeWidth),
+        ("debug", debug),
+    ]:
+        if value is not None:
+            kwargs[k] = value
+    return Mark("polygon", **kwargs)
+
+
+def connect(
+    children: List["Mark"],
+    *,
+    source: Optional[
+        Union[str, List[Union[str, float]], Dict[str, Union[str, float]]]
+    ] = None,
+    target: Optional[
+        Union[str, List[Union[str, float]], Dict[str, Union[str, float]]]
+    ] = None,
+    stroke: Optional[str] = None,
+    strokeWidth: Optional[float] = None,
+    fill: Optional[str] = None,
+    opacity: Optional[float] = None,
+    mixBlendMode: Optional[str] = None,
+    interpolation: Optional[str] = None,
+    direction: Optional[Union[str, int]] = None,
+    mode: Optional[str] = None,
+) -> Mark:
+    """Low-level combinator-form connector.
+
+    Draws a connector (line) between each consecutive pair of children.
+    Children are typically `ref(...)` calls pointing at named elements
+    placed by an earlier tier.
+
+    Anchor mode (recommended): provide `source` and/or `target` as one of:
+        - `"start"` | `"middle"` | `"end"` (single keyword, both axes)
+        - `["start", "middle"]` (tuple, per-axis)
+        - `{"x": "start", "y": 0.5}` (axis-keyed dict; omitted axis = 0.5)
+
+    Where `start` → 0, `middle` → 0.5, `end` → 1. GoFish is y-up. If only
+    one anchor is given, the other endpoint is the same point clamped onto
+    the opposite bbox per axis (Bluefish `Line` behavior).
+
+    Edge mode (no anchors): falls back to routing between the children's
+    facing edges along `direction`.
+
+    Mirrors JS `connect({source?, target?, stroke?, ...}, [m1, m2, ...])`
+    from `packages/gofish-graphics/src/ast/graphicalOperators/connect.tsx`.
+    """
+    options: Dict[str, Any] = {}
+    for k, value in [
+        ("source", source),
+        ("target", target),
+        ("stroke", stroke),
+        ("strokeWidth", strokeWidth),
+        ("fill", fill),
+        ("opacity", opacity),
+        ("mixBlendMode", mixBlendMode),
+        ("interpolation", interpolation),
+        ("direction", direction),
+        ("mode", mode),
+    ]:
+        if value is not None:
+            options[k] = value
+    return Mark("connect", _children=list(children), **options)
+
+
+# JS exports both spellings (`connect` and `Connect`); mirror that.
+Connect = connect
 
 
 def chart(data: Any, **options: Any) -> ChartBuilder:
