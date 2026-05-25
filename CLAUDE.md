@@ -135,7 +135,7 @@ Key coordinate systems available:
 
 ## Development Notes
 
-- **Update docs on user-facing API changes**: When you change a public API surface (signatures, option shapes, exported names, default behaviors) in `packages/gofish-graphics/src/`, update the corresponding page in `apps/docs/docs/` in the same change — signature, examples, and any equivalences tables. Do not defer this to a follow-up.
+- **Update docs on user-facing API changes**: When you change a public API surface (signatures, option shapes, exported names, default behaviors) in `packages/gofish-graphics/src/`, update the corresponding page under `apps/docs/docs/js/` in the same change — signature, examples, and any equivalences tables. For Python API changes (`packages/gofish-python/`), update the mirror page under `apps/docs/docs/python/`. The docs site has one folder per language (`js/`, `python/`) with a top-level language toggle. Do not defer this to a follow-up.
 - **Monorepo Management**: Uses pnpm workspaces
 - **Visual Development**: Use Storybook (`pnpm storybook`) for interactive development and testing
 - **Documentation**: VitePress site in `apps/docs/` with live chart examples
@@ -149,9 +149,30 @@ Key coordinate systems available:
   - Perfect-arrows for arrow rendering
   - Bubblesets-js for enclosure rendering
 
+## Internal Architecture Wiki
+
+Architecture and design documentation lives in `apps/docs/docs/internals/` — narrative
+essays explaining how the library works (the layout pipeline, the coordinate system,
+the type-level machinery, the Python bridge, the design philosophy). They are published
+on the docs site under `/internals/`. Start at `apps/docs/docs/internals/index.md`,
+which documents the authoring conventions.
+
+**Keeping it in sync is mandatory.** Each essay's frontmatter has a `covers:` list of
+the source files it documents. That list is projected into a managed `@wiki` comment at
+the top of every covered source file. Therefore:
+
+- When you edit a source file that has a `// <gofish-wiki>` / `@wiki` comment block at
+  the top, **update the essay it names in the same change** — the essay and the code are
+  reviewed together. This is the only thing that keeps the wiki trustworthy.
+- When you add or change an essay's `covers:` list, run
+  `pnpm --filter docs sync-backlinks` to regenerate the `@wiki` comments, and commit the
+  result. CI runs `pnpm --filter docs check-backlinks` and fails if they have drifted.
+- Never hand-edit a `// <gofish-wiki>` block — it is generated.
+
 ## Additional Resources
 
-- **Technical Documentation**: See `docs/layout-and-render-passes.md` for detailed explanation of the rendering pipeline
+- **Internal architecture wiki**: `apps/docs/docs/internals/` — the consolidated home
+  for architecture and design docs (see the section above). This replaced the former
+  scattered repo-root `docs/` and `notes/` files.
 - **Package-specific CLAUDE.md files**:
   - `apps/docs/CLAUDE.md` - Documentation site specific guidance
-  - Additional notes in `notes/` directory for design discussions

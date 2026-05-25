@@ -3,18 +3,18 @@ layout: home
 
 hero:
   name: GoFish Graphics
-  text: "JavaScript Charts Without the Headache"
-  tagline: More simple. More beautiful. More expressive. More.
+  text: "Charts Without the Headache"
+  tagline: More simple. More beautiful. More expressive. More. In JavaScript and Python.
   actions:
     - theme: brand
-      text: Get Started!
-      link: /get-started
-    - theme: alt
-      text: Tutorial
-      link: /tutorial
+      text: Get Started
+      link: /js/get-started
     - theme: alt
       text: Examples
-      link: /examples
+      link: /js/examples/
+    - theme: alt
+      text: API Reference
+      link: /js/api/core/chart
 ---
 
 <HomeGallery />

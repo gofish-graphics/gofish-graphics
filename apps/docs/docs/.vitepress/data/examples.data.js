@@ -1,4 +1,4 @@
-import { readFileSync } from "fs";
+import { readFileSync, readdirSync } from "fs";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 
@@ -164,18 +164,30 @@ export default {
       {
         id: "HIDDEN-bar-chart-get-started",
       },
+      {
+        id: "HIDDEN-table-heatmap",
+      },
     ].map((example) => ({
       ...example,
-      demoUrl: `/examples/${example.id}`,
+      demoUrl: `/js/examples/${example.id}`,
       code: loadExampleCode(`${example.id}.ts`),
     }));
+
+    // Internal-wiki diagrams: any examples/internal-*.ts file is auto-registered
+    // so internals essays can embed it with `::: starfish example:internal-...`.
+    const examplesDir = join(__dirname, "..", "examples");
+    const internalExamples = readdirSync(examplesDir)
+      .filter((f) => f.startsWith("internal-") && f.endsWith(".ts"))
+      .map((f) => ({ id: f.replace(/\.ts$/, ""), code: loadExampleCode(f) }));
+
+    const allExamples = [...examples, ...internalExamples];
 
     return {
       examples: examples
         .filter((ex) => !ex.id.startsWith("HIDDEN"))
         .sort((a, b) => a.title.localeCompare(b.title)),
       getCodeById(id) {
-        const example = examples.find((ex) => ex.id === id);
+        const example = allExamples.find((ex) => ex.id === id);
         return example ? example.code : null;
       },
     };

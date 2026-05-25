@@ -1,3 +1,7 @@
+// <gofish-wiki> AUTO-GENERATED — see covers: in the essay; run `pnpm --filter docs sync-backlinks`
+// @wiki Overview — /internals/layout/passes
+// </gofish-wiki>
+
 import { color6, color6_old } from "../../color";
 import { path, Path, pathToSVGPath, segment, transformPath } from "../../path";
 import { GoFishNode } from "../_node";

@@ -1,3 +1,7 @@
+// <gofish-wiki> AUTO-GENERATED — see covers: in the essay; run `pnpm --filter docs sync-backlinks`
+// @wiki Color Scale Resolution — /internals/layout/color-scales
+// </gofish-wiki>
+
 import chroma from "chroma-js";
 
 export type PaletteScale = {

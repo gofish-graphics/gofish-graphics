@@ -58,3 +58,6 @@ jobs:
       - name: Run ESLint on changed files
         if: steps.changed.outputs.eslint_files != ''
         run: pnpm exec eslint ${{ steps.changed.outputs.eslint_files }}
+
+      - name: Check internals wiki back-links
+        run: pnpm --filter docs check-backlinks
