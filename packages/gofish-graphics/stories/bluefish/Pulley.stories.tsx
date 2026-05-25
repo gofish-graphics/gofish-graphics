@@ -154,25 +154,31 @@ export const Pulley: StoryObj<Args> = {
       // zOrder(-1): painted behind tier 1, so the wheels draw over rope ends.
       // `ropeSupport` is the unlabeled support rope from the ceiling to B; the
       // rest are named after the dimension letter (x/y/z/p/q/s) they carry.
-      Connect({ ...rope, target: [0.5, 0.5] }, [ref(ceiling), ref(B)])
+      Connect({ ...rope, target: "middle" }, [ref(ceiling), ref(B)])
         .name("ropeSupport")
         .zOrder(-1),
-      Connect({ ...rope, source: [0, 0.5], target: [0.5, 0.5] }, [ref(B), ref(A)])
+      Connect({ ...rope, source: ["start", "middle"], target: "middle" }, [
+        ref(B),
+        ref(A),
+      ])
         .name("ropeX")
         .zOrder(-1),
-      Connect({ ...rope, source: [1, 0.5], target: [0, 0.5] }, [ref(B), ref(C)])
+      Connect(
+        { ...rope, source: ["end", "middle"], target: ["start", "middle"] },
+        [ref(B), ref(C)]
+      )
         .name("ropeY")
         .zOrder(-1),
-      Connect({ ...rope, target: [1, 0.5] }, [ref(ceiling), ref(C)])
+      Connect({ ...rope, target: ["end", "middle"] }, [ref(ceiling), ref(C)])
         .name("ropeZ")
         .zOrder(-1),
-      Connect({ ...rope, source: [0, 0.5] }, [ref(A), ref(w1)])
+      Connect({ ...rope, source: ["start", "middle"] }, [ref(A), ref(w1)])
         .name("ropeP")
         .zOrder(-1),
-      Connect({ ...rope, source: [1, 0.5] }, [ref(A), ref(w2)])
+      Connect({ ...rope, source: ["end", "middle"] }, [ref(A), ref(w2)])
         .name("ropeQ")
         .zOrder(-1),
-      Connect({ ...rope, source: [0.5, 0.5] }, [ref(C), ref(w2)])
+      Connect({ ...rope, source: "middle" }, [ref(C), ref(w2)])
         .name("ropeS")
         .zOrder(-1),
 

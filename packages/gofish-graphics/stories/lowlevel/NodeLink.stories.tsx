@@ -75,13 +75,22 @@ export const NodeLink: StoryObj<Args> = {
       ]),
 
       // ── tier 2: edges — read the placed nodes; painted behind them ──────
-      Connect({ ...edge, source: [1, 0.5], target: [0, 0.5] }, [ref(A), ref(B)])
+      Connect(
+        { ...edge, source: ["end", "middle"], target: ["start", "middle"] },
+        [ref(A), ref(B)]
+      )
         .name("e1")
         .zOrder(-1),
-      Connect({ ...edge, source: [1, 0.5], target: [0, 0.5] }, [ref(B), ref(C)])
+      Connect(
+        { ...edge, source: ["end", "middle"], target: ["start", "middle"] },
+        [ref(B), ref(C)]
+      )
         .name("e2")
         .zOrder(-1),
-      Connect({ ...edge, source: [0.5, 0], target: [0.5, 1] }, [ref(B), ref(D)])
+      Connect(
+        { ...edge, source: ["middle", "start"], target: ["middle", "end"] },
+        [ref(B), ref(D)]
+      )
         .name("e3")
         .zOrder(-1),
 

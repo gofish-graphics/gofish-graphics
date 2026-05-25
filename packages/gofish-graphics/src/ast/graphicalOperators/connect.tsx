@@ -10,6 +10,38 @@ import { Domain } from "../domain";
 import { UNDEFINED, UnderlyingSpace } from "../underlyingSpace";
 import { createNodeOperator } from "../withGoFish";
 
+// Per-axis bbox anchor. A literal number is the raw fraction in [0, 1]; the
+// keywords map to {start: 0, middle: 0.5, end: 1}. GoFish is y-up, so
+// `start`/`end` on the y axis are bottom/top respectively.
+export type AnchorAlignment = "start" | "middle" | "end";
+export type AnchorAxis = number | AnchorAlignment;
+// One of:
+//   - a single keyword applied to both axes  (`"middle"` ≡ `[0.5, 0.5]`)
+//   - a per-axis tuple                       (`["start", "middle"]`)
+//   - an axis-keyed object                   (`{ x: "start", y: 0.5 }`)
+// In the object form, omitted axes default to `"middle"` (0.5).
+export type AnchorSpec =
+  | AnchorAlignment
+  | [AnchorAxis, AnchorAxis]
+  | { x?: AnchorAxis; y?: AnchorAxis };
+
+const resolveAnchorAxis = (a: AnchorAxis): number =>
+  typeof a === "number" ? a : a === "start" ? 0 : a === "middle" ? 0.5 : 1;
+
+const resolveAnchor = (a: AnchorSpec): [number, number] => {
+  if (typeof a === "string") {
+    const v = resolveAnchorAxis(a);
+    return [v, v];
+  }
+  if (Array.isArray(a)) {
+    return [resolveAnchorAxis(a[0]), resolveAnchorAxis(a[1])];
+  }
+  return [
+    a.x !== undefined ? resolveAnchorAxis(a.x) : 0.5,
+    a.y !== undefined ? resolveAnchorAxis(a.y) : 0.5,
+  ];
+};
+
 export const connect = createNodeOperator(
   (
     {
@@ -33,19 +65,27 @@ export const connect = createNodeOperator(
       opacity?: number;
       mode?: "edge" | "center";
       mixBlendMode?: "multiply" | "normal";
-      // Per-endpoint anchor points as normalized [fx, fy] fractions of each
-      // endpoint's bounding box (`min + f * size`, GoFish-native y-up). When
-      // either is given, the connector runs straight between the anchored
-      // points of each consecutive child pair, ignoring `direction`/`mode`.
-      // If both are given, the line runs directly between them. If only one
-      // is given, the other endpoint is the specified point clamped onto the
-      // opposite bbox per axis (Bluefish `Line` behavior) — yielding an
-      // axis-aligned line when the point lies within that box on one axis.
-      source?: [number, number];
-      target?: [number, number];
+      // Per-endpoint anchor on each child's bbox. Accepts a per-axis tuple
+      // `[fx, fy]` of numbers (`min + f * size`) or alignment keywords
+      // (`start | middle | end` → `0 | 0.5 | 1`), with a single keyword as
+      // shorthand for both axes (e.g. `"middle"` ≡ `[0.5, 0.5]`).
+      //
+      // When either is given, the connector runs straight between the
+      // anchored points of each consecutive child pair, ignoring
+      // `direction`/`mode`. If both are given, the line runs directly between
+      // them. If only one is given, the other endpoint is the specified
+      // point clamped onto the opposite bbox per axis (Bluefish `Line`
+      // behavior) — yielding an axis-aligned line when the point lies within
+      // that box on one axis.
+      source?: AnchorSpec;
+      target?: AnchorSpec;
     },
     children: GoFishAST[]
   ) => {
+    const resolvedSource =
+      source !== undefined ? resolveAnchor(source) : undefined;
+    const resolvedTarget =
+      target !== undefined ? resolveAnchor(target) : undefined;
     const dir = elaborateDirection(direction ?? 0);
     interpolation = interpolation ?? "linear";
 
@@ -65,7 +105,8 @@ export const connect = createNodeOperator(
 
           const paths: Path[] = [];
 
-          const hasAnchors = source !== undefined || target !== undefined;
+          const hasAnchors =
+            resolvedSource !== undefined || resolvedTarget !== undefined;
 
           if (mode === "edge" && !hasAnchors) {
             for (const child of children) {
@@ -81,8 +122,10 @@ export const connect = createNodeOperator(
 
           // Anchor mode: connect normalized points on each endpoint's bbox.
           if (hasAnchors) {
-            const onlySource = source !== undefined && target === undefined;
-            const onlyTarget = target !== undefined && source === undefined;
+            const onlySource =
+              resolvedSource !== undefined && resolvedTarget === undefined;
+            const onlyTarget =
+              resolvedTarget !== undefined && resolvedSource === undefined;
 
             // Resolve a normalized [fx, fy] anchor to an absolute point on a bbox.
             const anchorPoint = (
@@ -116,14 +159,14 @@ export const connect = createNodeOperator(
               let p0: [number, number];
               let p1: [number, number];
               if (onlySource) {
-                p0 = anchorPoint(b0, source!);
+                p0 = anchorPoint(b0, resolvedSource!);
                 p1 = clampOnto(p0, b1);
               } else if (onlyTarget) {
-                p1 = anchorPoint(b1, target!);
+                p1 = anchorPoint(b1, resolvedTarget!);
                 p0 = clampOnto(p1, b0);
               } else {
-                p0 = anchorPoint(b0, source ?? [0.5, 0.5]);
-                p1 = anchorPoint(b1, target ?? [0.5, 0.5]);
+                p0 = anchorPoint(b0, resolvedSource ?? [0.5, 0.5]);
+                p1 = anchorPoint(b1, resolvedTarget ?? [0.5, 0.5]);
               }
               paths.push([{ type: "line", points: [p0, p1] }]);
               aMinX = Math.min(aMinX, p0[0], p1[0]);
