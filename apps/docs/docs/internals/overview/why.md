@@ -11,7 +11,7 @@ There are already a lot of charting libraries. Before any essay in this wiki
 explains _how_ GoFish is built, it is worth saying — in plain terms — _why
 it is being built at all_.
 
-There are four reasons, and they stack.
+There are five reasons, and they stack.
 
 ## 1. The Cambrian explosion of grammars
 
