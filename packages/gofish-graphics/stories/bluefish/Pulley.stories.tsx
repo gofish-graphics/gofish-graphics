@@ -121,9 +121,10 @@ export const Pulley: StoryObj<Args> = {
         text({ text: "B", fontSize: 12 }).name("Blabel"),
         text({ text: "C", fontSize: 12 }).name("Clabel"),
       ]).constrain((c) => [
-        // horizontal pulley cluster
-        Constraint.distribute({ dir: "x", spacing: -r, mode: "edge" }, [c.A, c.B]),
-        Constraint.distribute({ dir: "x", spacing: 0, mode: "edge" }, [c.B, c.C]),
+        // horizontal pulley cluster — each adjacent pair shares an edge:
+        // B.start sits on A.middle (overlap by half a wheel), C.start on B.end.
+        Constraint.align({ x: ["middle", "start"] }, [c.A, c.B]),
+        Constraint.align({ x: ["end", "start"] }, [c.B, c.C]),
 
         // vertical placement (GoFish is y-up; pair order flipped vs Bluefish)
         Constraint.distribute({ dir: "y", spacing: 40, mode: "edge" }, [c.B, c.ceiling]),
@@ -134,19 +135,28 @@ export const Pulley: StoryObj<Args> = {
         Constraint.align({ x: "middle" }, [c.B, c.ceiling]),
 
         // weights (negative spacing offsets each weight so its inset trapezoid
-        // top sits under the rope source points)
+        // top sits under the rope source points — not natural anchor points,
+        // so these stay as `distribute`)
         Constraint.distribute({ dir: "y", spacing: 50, mode: "edge" }, [c.w2, c.C]),
         Constraint.distribute({ dir: "x", spacing: -20, mode: "edge" }, [c.A, c.w2]),
         Constraint.distribute({ dir: "x", spacing: -15, mode: "edge" }, [c.w1, c.A]),
         Constraint.align({ y: "middle" }, [c.w2, c.w1]),
 
-        // pulley letter labels (just outside the wheel, at a corner)
-        Constraint.distribute({ dir: "x", spacing: 1, mode: "edge" }, [c.B, c.Blabel]),
-        Constraint.align({ y: "end" }, [c.B, c.Blabel]),
-        Constraint.distribute({ dir: "x", spacing: 1, mode: "edge" }, [c.Alabel, c.A]),
-        Constraint.align({ y: "end" }, [c.A, c.Alabel]),
-        Constraint.distribute({ dir: "x", spacing: 1, mode: "edge" }, [c.C, c.Clabel]),
-        Constraint.align({ y: "start" }, [c.C, c.Clabel]),
+        // pulley letter labels — 1px gap from the wheel; the label sits on
+        // one side and y-anchors to one corner of the wheel.
+        ...(
+          [
+            { pulley: c.A, label: c.Alabel, side: "left", y: "end" },
+            { pulley: c.B, label: c.Blabel, side: "right", y: "end" },
+            { pulley: c.C, label: c.Clabel, side: "right", y: "start" },
+          ] as const
+        ).flatMap(({ pulley, label, side, y }) => [
+          Constraint.distribute(
+            { dir: "x", spacing: 1, mode: "edge" },
+            side === "right" ? [pulley, label] : [label, pulley]
+          ),
+          Constraint.align({ y }, [pulley, label]),
+        ]),
       ]),
 
       // ── tier 2: rope segments — read the placed shapes ──────────────────
@@ -191,22 +201,21 @@ export const Pulley: StoryObj<Args> = {
       text({ text: "s" }).name("labelS"),
     ])
       .constrain((c) => [
-        // each dimension label sits ~5px right of its rope on x. On y, the
-        // upper trio (x/y/z) shares x's centerY (anchored to ropeX); the
-        // lower trio (p/q/s) shares s's centerY (anchored to ropeS) — à la
-        // Bluefish's `Align centerY [t1,t2,t3]` / `[t6,t5,t4]`.
-        Constraint.distribute({ dir: "x", spacing: 5, mode: "edge" }, [c.ropeX, c.labelX]),
-        Constraint.align({ y: "middle" }, [c.ropeX, c.labelX]),
-        Constraint.distribute({ dir: "x", spacing: 5, mode: "edge" }, [c.ropeY, c.labelY]),
-        Constraint.align({ y: "middle" }, [c.labelX, c.labelY]),
-        Constraint.distribute({ dir: "x", spacing: 5, mode: "edge" }, [c.ropeZ, c.labelZ]),
-        Constraint.align({ y: "middle" }, [c.labelX, c.labelZ]),
-        Constraint.distribute({ dir: "x", spacing: 5, mode: "edge" }, [c.ropeS, c.labelS]),
-        Constraint.align({ y: "middle" }, [c.ropeS, c.labelS]),
-        Constraint.distribute({ dir: "x", spacing: 5, mode: "edge" }, [c.ropeQ, c.labelQ]),
-        Constraint.align({ y: "middle" }, [c.labelS, c.labelQ]),
-        Constraint.distribute({ dir: "x", spacing: 5, mode: "edge" }, [c.ropeP, c.labelP]),
-        Constraint.align({ y: "middle" }, [c.labelS, c.labelP]),
+        // Each dimension label sits 5px right of its rope on x. On y, the
+        // upper trio (x/y/z) shares ropeX's centerY; the lower trio (p/q/s)
+        // shares ropeS's — à la Bluefish's `Align centerY [t1,t2,t3]` /
+        // `[t6,t5,t4]`.
+        ...[
+          { rope: c.ropeX, label: c.labelX, yAnchorTo: c.ropeX },
+          { rope: c.ropeY, label: c.labelY, yAnchorTo: c.labelX },
+          { rope: c.ropeZ, label: c.labelZ, yAnchorTo: c.labelX },
+          { rope: c.ropeS, label: c.labelS, yAnchorTo: c.ropeS },
+          { rope: c.ropeQ, label: c.labelQ, yAnchorTo: c.labelS },
+          { rope: c.ropeP, label: c.labelP, yAnchorTo: c.labelS },
+        ].flatMap(({ rope, label, yAnchorTo }) => [
+          Constraint.distribute({ dir: "x", spacing: 5, mode: "edge" }, [rope, label]),
+          Constraint.align({ y: "middle" }, [yAnchorTo, label]),
+        ]),
 
         // ── granular paint order: relative z-order constraints ────────────
         // Cross-tier refs (c.A, c.B, c.C) work because collectConstraintRefs
