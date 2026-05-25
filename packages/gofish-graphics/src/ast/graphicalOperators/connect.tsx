@@ -478,9 +478,8 @@ export const connect = createNodeOperator(
                       // filter="url(#crumpled-paper)"
                       style={{
                         "mix-blend-mode":
-                          (mixBlendMode ?? mode === "center")
-                            ? "normal"
-                            : "multiply",
+                          mixBlendMode ??
+                          (mode === "center" ? "normal" : "multiply"),
                       }}
                       d={d}
                       fill={fill ?? "none"}

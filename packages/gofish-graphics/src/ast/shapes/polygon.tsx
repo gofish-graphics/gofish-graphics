@@ -23,6 +23,13 @@ export const Polygon = ({
   strokeWidth?: number;
   points: [number, number][];
 }) => {
+  // Without an explicit guard, Math.min(...[]) → Infinity and
+  // Math.max(...[]) → -Infinity, producing a bbox with size: -Infinity that
+  // silently corrupts downstream layout. Three points is the closed-polygon
+  // floor.
+  if (points.length < 3) {
+    throw new Error(`polygon requires at least 3 points, got ${points.length}`);
+  }
   const xs = points.map((p) => p[0]);
   const ys = points.map((p) => p[1]);
   const minX = Math.min(...xs);

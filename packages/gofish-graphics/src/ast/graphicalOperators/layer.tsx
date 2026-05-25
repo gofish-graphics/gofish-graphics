@@ -31,9 +31,7 @@ const childNameKey = (node: GoFishAST): string | undefined => {
 //
 // When a layer has `Constraint.zAbove` / `zBelow` constraints, it flattens
 // its (non-component) subtree into a single paint list, topologically sorts
-// it against the constraints, and emits the result in resolved order — see
-// notes/nested-layer-tiers.md ("zOrder for paint order") and the design at
-// /Users/jmp/.claude/plans/dapper-drifting-spark.md.
+// it against the constraints, and emits the result in resolved order.
 
 type PaintItem = {
   node: GoFishAST;
@@ -53,6 +51,11 @@ function flattenForZOrder(children: GoFishAST[]): PaintItem[] {
   walk(children, 0, 0);
   return out;
 
+  // NB: only translates are accumulated across transparent ancestors. A
+  // non-component nested layer that also carries `options.transform.scale`
+  // would hoist its children with the right translate but the *wrong*
+  // resolved size, since the scale isn't propagated here. No current story
+  // mixes z-order constraints with scaled inner layers; revisit if one does.
   function walk(cs: GoFishAST[], accTx: number, accTy: number): void {
     for (const child of cs) {
       if (!(child instanceof GoFishNode)) {
