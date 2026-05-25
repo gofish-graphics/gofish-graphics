@@ -116,6 +116,53 @@ about this risk.
 Nobody knows the answer. But you cannot find out from the outside. The
 project is, in part, an honest attempt to know.
 
+## 5. Loud errors instead of broken charts
+
+The major declarative charting libraries — Vega-Lite, Observable Plot,
+ggplot2 — bake a lot of data-type assumptions into their marks, scales, and
+encodings. That is part of why they are concise. But when those assumptions
+are _violated_, the chart silently breaks: the library renders _something_,
+and that something is wrong in a way the user has to deduce from staring at
+the output.
+
+A Vega-Lite bar with `x: { field: "a", type: "quantitative" }` against a
+field whose values are `"A"`, `"B"`, `"C"`, ... produces an axis with an
+infinite extent and an empty plotting area. The console says something
+about an infinite extent. It does not say _"`a` is categorical; you asked
+for a quantitative scale; pick one."_
+
+An Observable Plot `barX` with `x: "letter"` on the standard `alphabet`
+dataset produces a single overlapping bar where 26 should be. `barX`
+expects a quantitative x; the encoding is ordinal; no error is thrown.
+
+Both libraries are powerful, both have well-thought-out scale-inference
+logic, and both still fail this case. The pattern repeats across the
+ecosystem: the inference is mostly silent when it succeeds, and silently
+wrong when it fails. The user is expected to know enough about the
+library's internal data-type model to reverse-engineer what went wrong from
+the broken picture. This is the visualization-tooling equivalent of a
+mid-2000s scripting language that returns `NaN` from `"5" + 3 / "tomato"`
+and trusts you to notice.
+
+It does not have to be this way. The right error from the right layer at
+the right time is a solvable problem — it is what compilers _do_. GoFish
+does not have a strong type system today; the frontend does not yet catch
+these mistakes for you. What it _does_ have is an architecture set up to
+catch them. The discipline (see [PL &
+Compilers](/internals/design/principles)) is a small typed core under a
+single desugaring path: there is one place a chart spec has to land, and
+one place the data-type assumptions live. That is the property that makes
+boundary checks tractable. A scattering of marks, each with their own
+inference, is the situation where loud errors are hard. A single core with
+typed channels is the situation where they are routine.
+
+The frontend's channel taxonomy (`size`, `pos`, `color`, `raw`) is the
+beginnings of the type-level vocabulary that boundary checks will use. The
+work to come is filling in the rules — at the surface, where they can name
+the violation in terms of the spec the user wrote, not at the renderer
+after the chart is already broken. Loud failure is a deliberate target,
+not an afterthought.
+
 ## And then: solving complex chart and diagram problems
 
 The four motivations above are abstract. The concrete one is this: there are

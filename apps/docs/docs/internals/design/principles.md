@@ -181,6 +181,12 @@ This one principle explains much of the rest of GoFish:
 - **Multi-pass rendering** — domain inference → layout → placement is a compiler
   pipeline over the core (see the [Architecture
   Overview](/internals/overview/architecture)).
+- **Loud errors, not broken pictures.** A spec that is ill-formed should
+  fail at the surface with a message that names the violated assumption —
+  not render a wrong chart that the user has to reverse-engineer. The
+  channel-type taxonomy is the first piece of this; [Why
+  GoFish](/internals/overview/why#5-loud-errors-instead-of-broken-charts)
+  motivates it.
 
 ## More PL ideas
 
