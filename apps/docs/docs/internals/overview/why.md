@@ -148,20 +148,29 @@ It does not have to be this way. The right error from the right layer at
 the right time is a solvable problem — it is what compilers _do_. GoFish
 does not have a strong type system today; the frontend does not yet catch
 these mistakes for you. What it _does_ have is an architecture set up to
-catch them. The discipline (see [PL &
-Compilers](/internals/design/principles)) is a small typed core under a
-single desugaring path: there is one place a chart spec has to land, and
-one place the data-type assumptions live. That is the property that makes
-boundary checks tractable. A scattering of marks, each with their own
-inference, is the situation where loud errors are hard. A single core with
-typed channels is the situation where they are routine.
+catch them, organized around two deliberate moves:
 
-The frontend's channel taxonomy (`size`, `pos`, `color`, `raw`) is the
-beginnings of the type-level vocabulary that boundary checks will use. The
-work to come is filling in the rules — at the surface, where they can name
-the violation in terms of the spec the user wrote, not at the renderer
-after the chart is already broken. Loud failure is a deliberate target,
-not an afterthought.
+- **Centralize the typing, don't scatter it.** Vega-Lite and Plot keep
+  data-type assumptions inside each mark and each scale-inference
+  routine — the rules live in many places at once, and silently disagree
+  about edge cases. GoFish concentrates the type-relevant decisions
+  along the single desugaring path between surface and core. There is
+  one place a chart spec lands, one place a channel says what kind of
+  value it expects, one place an underlying-space is resolved. Boundary
+  checks at a single concentrated layer are tractable in a way that
+  checks scattered across dozens of marks are not.
+- **Make types explicit in the internals, not implicit.** A scale or an
+  encoding kind is a real, named thing inside the engine — the
+  channel taxonomy (`size`, `pos`, `color`, `raw`), the
+  [underlying-space](/internals/core/underlying-space) kinds — not an
+  ambient assumption inferred from data shape and recovered later from
+  context. Things that are named can be checked; things that are
+  implicit, by construction, cannot.
+
+The work to come is filling in the rules — at the surface, where they can
+name the violation in terms of the spec the user wrote, not at the
+renderer after the chart is already broken. Loud failure is a deliberate
+target, not an afterthought.
 
 ## And then: solving complex chart and diagram problems
 
