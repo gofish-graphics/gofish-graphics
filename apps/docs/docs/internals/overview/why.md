@@ -131,9 +131,74 @@ infinite extent and an empty plotting area. The console says something
 about an infinite extent. It does not say _"`a` is categorical; you asked
 for a quantitative scale; pick one."_
 
+```json
+{
+  "$schema": "https://vega.github.io/schema/vega-lite/v6.json",
+  "data": {
+    "values": [
+      { "a": "A", "b": 28 },
+      { "a": "B", "b": 55 },
+      { "a": "C", "b": 43 },
+      { "a": "D", "b": 91 },
+      { "a": "E", "b": 81 },
+      { "a": "F", "b": 53 },
+      { "a": "G", "b": 19 },
+      { "a": "H", "b": 87 },
+      { "a": "I", "b": 52 }
+    ]
+  },
+  "mark": "bar",
+  "encoding": {
+    "x": { "field": "a", "type": "quantitative", "axis": { "labelAngle": 0 } },
+    "y": { "field": "b", "type": "quantitative" }
+  }
+}
+```
+
+<VegaLiteEmbed
+  caption='Output: an infinite-extent warning in the console and an empty plotting area.'
+  :spec='{
+    "$schema": "https://vega.github.io/schema/vega-lite/v6.json",
+    "data": {
+      "values": [
+        {"a": "A", "b": 28}, {"a": "B", "b": 55}, {"a": "C", "b": 43},
+        {"a": "D", "b": 91}, {"a": "E", "b": 81}, {"a": "F", "b": 53},
+        {"a": "G", "b": 19}, {"a": "H", "b": 87}, {"a": "I", "b": 52}
+      ]
+    },
+    "mark": "bar",
+    "encoding": {
+      "x": {"field": "a", "type": "quantitative", "axis": {"labelAngle": 0}},
+      "y": {"field": "b", "type": "quantitative"}
+    }
+  }'
+/>
+
 An Observable Plot `barX` with `x: "letter"` on the standard `alphabet`
 dataset produces a single overlapping bar where 26 should be. `barX`
 expects a quantitative x; the encoding is ordinal; no error is thrown.
+
+```js
+Plot.plot({
+  marks: [
+    Plot.barX(alphabet, { x: "letter", fillOpacity: 0.3, inset: 0.5 }),
+    Plot.ruleX([0, 1]),
+  ],
+});
+```
+
+<ObservablePlotEmbed
+  caption='Output: 26 bars collapse on top of each other; no error is thrown.'
+  :build='(Plot, d3) => {
+    const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("").map((letter, i) => ({letter, frequency: i + 1}));
+    return Plot.plot({
+      marks: [
+        Plot.barX(alphabet, {x: "letter", fillOpacity: 0.3, inset: 0.5}),
+        Plot.ruleX([0, 1])
+      ]
+    });
+  }'
+/>
 
 Both libraries are powerful, both have well-thought-out scale-inference
 logic, and both still fail this case. The pattern repeats across the

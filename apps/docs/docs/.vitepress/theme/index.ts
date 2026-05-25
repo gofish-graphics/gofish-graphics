@@ -11,6 +11,8 @@ import CheatSheet from "../../../components/MarksCheatSheet.vue";
 import CoordinateTransformsCheatSheet from "../../../components/CoordinateTransformsCheatSheet.vue";
 import OverallCheatSheet from "../../../components/OverallCheatSheet.vue";
 import OperatorsCheatSheet from "../../../components/OperatorsCheatSheet.vue";
+import VegaLiteEmbed from "../../../components/VegaLiteEmbed.vue";
+import ObservablePlotEmbed from "../../../components/ObservablePlotEmbed.vue";
 import { Sandbox } from "vitepress-plugin-sandpack";
 import "vitepress-plugin-sandpack/dist/style.css";
 import { StarfishLive } from "../../../components/StarfishLive";
@@ -55,5 +57,7 @@ export default {
     );
     app.component("OverallCheatSheet", OverallCheatSheet);
     app.component("OperatorsCheatSheet", OperatorsCheatSheet);
+    app.component("VegaLiteEmbed", VegaLiteEmbed);
+    app.component("ObservablePlotEmbed", ObservablePlotEmbed);
   },
 } satisfies Theme;

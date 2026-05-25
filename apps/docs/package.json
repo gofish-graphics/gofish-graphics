@@ -29,7 +29,9 @@
   },
   "dependencies": {
     "@codesandbox/sandpack-themes": "^2.0.21",
+    "@observablehq/plot": "^0.6.17",
     "@types/lodash": "^4.17.17",
+    "d3": "^7.9.0",
     "fast-kde": "^0.2.2",
     "gofish-graphics": "workspace:*",
     "lodash": "^4.17.21",
@@ -37,6 +39,9 @@
     "monaco-editor": "^0.52.2",
     "sandpack-vue3": "^3.1.12",
     "spectral.js": "2.0.2",
+    "vega": "^5.30.0",
+    "vega-embed": "^6.26.0",
+    "vega-lite": "^5.21.0",
     "vite-plugin-monaco-editor": "^1.1.0"
   }
 }
