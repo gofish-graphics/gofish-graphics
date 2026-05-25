@@ -3,6 +3,12 @@
 #
 # Remove entries as Python support is added.
 
+# Bluefish port + new nested-tier example — depend on the polygon mark,
+# Connect with source/target anchors, and Constraint.zAbove/zBelow, none
+# of which the Python wrapper exposes yet. See gofish-graphics#459.
+packages/gofish-graphics/stories/bluefish/Pulley.stories.tsx
+packages/gofish-graphics/stories/lowlevel/NodeLink.stories.tsx
+
 # Low-level API stories (v1/v2)
 packages/gofish-graphics/stories/lowlevel/BalloonChart.stories.tsx
 packages/gofish-graphics/stories/lowlevel/FlowerChart.stories.tsx
