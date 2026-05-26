@@ -214,17 +214,27 @@ export const FRONTEND_IR_JSON_SCHEMA = {
       },
     },
     LabelIR: {
-      type: "object",
-      required: ["accessor"],
-      properties: {
-        accessor: { type: "string" },
-        position: { type: "string" },
-        fontSize: { type: "number" },
-        color: { type: "string" },
-        offset: { type: "number" },
-        minSpace: { type: "number" },
-        rotate: { type: "number" },
-      },
+      // Three shapes: the canonical object form, a boolean shorthand
+      // (`label: true` — let the mark shape decide what to label), and
+      // a string shorthand (`label: "field"` — use this field accessor
+      // with default styling). All three match `LabelIR` in schema.ts.
+      oneOf: [
+        { type: "boolean" },
+        { type: "string" },
+        {
+          type: "object",
+          required: ["accessor"],
+          properties: {
+            accessor: { type: "string" },
+            position: { type: "string" },
+            fontSize: { type: "number" },
+            color: { type: "string" },
+            offset: { type: "number" },
+            minSpace: { type: "number" },
+            rotate: { type: "number" },
+          },
+        },
+      ],
     },
     ConstraintIR: {
       type: "object",

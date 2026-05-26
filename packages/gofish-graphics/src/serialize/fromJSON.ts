@@ -340,14 +340,37 @@ export function mapMark(
     return mark;
   }
 
-  const { type, name: layerName, label: labelSpec, ...opts } = spec;
+  const { type, name: layerName, ...rest } = spec;
+  // Label has two shapes:
+  //   - Object `{accessor, ...opts}` — pull out and call the chained
+  //     `.label(accessor, opts)` method (adds an external label layer).
+  //   - Boolean / string shorthand — keep in opts so the mark *shape*
+  //     interprets it directly (e.g. rect's `label?: boolean` prop).
+  let labelObj: LabelSpec | undefined;
+  let opts: Record<string, any>;
+  if (
+    rest.label !== undefined &&
+    rest.label !== null &&
+    typeof rest.label === "object" &&
+    !Array.isArray(rest.label)
+  ) {
+    const { label: lbl, ...rest2 } = rest;
+    labelObj = lbl as LabelSpec;
+    opts = rest2;
+  } else {
+    opts = rest;
+  }
+
   const factory = MARK_MAP[type as string];
   if (!factory) {
     throw new Error(`Unknown mark type: ${String(type)}`);
   }
   let mark = factory(unwrapMarkOpts(opts, bridge));
-  if (labelSpec && typeof (mark as any).label === "function") {
-    const { accessor, ...labelOpts } = labelSpec as LabelSpec;
+  if (labelObj && typeof (mark as any).label === "function") {
+    const { accessor, ...labelOpts } = labelObj as Exclude<
+      LabelSpec,
+      true | string
+    >;
     mark = (mark as any).label(
       accessor,
       Object.keys(labelOpts).length > 0 ? labelOpts : undefined

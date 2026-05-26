@@ -356,6 +356,53 @@ check(
 );
 
 // ---------------------------------------------------------------------------
+// Bug fixes — label shorthand, table.by required (from PR review)
+// ---------------------------------------------------------------------------
+
+console.log("\n# Label shorthand forms (true / string / object)");
+
+function chartWithLabel(label: any) {
+  return {
+    irVersion: 0,
+    ir: "gofish-frontend",
+    root: {
+      type: "chart",
+      mark: { type: "rect", label },
+    },
+  } as unknown as FrontendIRDocument;
+}
+
+check(
+  "label: true accepts (boolean shorthand)",
+  validate(chartWithLabel(true), { strict: true }).valid
+);
+check(
+  "label: 'field' accepts (string shorthand)",
+  validate(chartWithLabel("amount"), { strict: true }).valid
+);
+check(
+  "label: { accessor } accepts (canonical object form)",
+  validate(chartWithLabel({ accessor: "amount", position: "outset" }), {
+    strict: true,
+  }).valid
+);
+check(
+  "label: number is rejected (not a recognized shape)",
+  !validate(chartWithLabel(42)).valid
+);
+
+console.log("\n# table.by is required");
+
+check(
+  "table without by is rejected",
+  !validate(chart([{ type: "table" }])).valid
+);
+check(
+  "table with by accepts",
+  validate(chart([{ type: "table", by: { x: "a", y: "b" } }])).valid
+);
+
+// ---------------------------------------------------------------------------
 // Report
 // ---------------------------------------------------------------------------
 

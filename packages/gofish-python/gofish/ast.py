@@ -801,13 +801,18 @@ class ChartBuilder:
         else:
             mark_ir = self._mark.to_dict()
 
-        return {
+        # Build the IR conditionally: omit optional fields that are unset
+        # so the canonical schema's `zOrder: number` (no null) matches
+        # what we emit, and consumers don't see spurious `null`s.
+        result: dict = {
             "data": data_ir,
             "operators": [op.to_dict() for op in self.operators],
             "mark": mark_ir,
             "options": self.options,
-            "zOrder": self._z_order,
         }
+        if self._z_order is not None:
+            result["zOrder"] = self._z_order
+        return result
 
     def render(
         self,

@@ -116,7 +116,17 @@ export const OPERATOR_MAP: Record<
   derive: (opts, bridge) => {
     const lambdaId = opts.lambdaId;
     if (!lambdaId) {
-      throw new Error("derive operator missing lambdaId");
+      // A derive operator with no `lambdaId` is what the JS-side `toJSON`
+      // emits for pure-JS `derive(fn)` callsites — function bodies aren't
+      // JSON-serializable. Such IRs are inspect-only; they can't be
+      // round-tripped through fromJSON because there's no callable to
+      // wire up. The Python widget emits the `lambdaId`-carrying form.
+      throw new Error(
+        "derive operator missing lambdaId — this IR was emitted from a pure-JS " +
+          "derive(fn) callsite and isn't round-trippable (function bodies don't serialize). " +
+          "Only IRs emitted by the Python wrapper or hand-built IRs with explicit " +
+          "lambdaIds can be deserialized."
+      );
     }
     if (!bridge) {
       throw new Error(

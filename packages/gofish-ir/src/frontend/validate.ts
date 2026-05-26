@@ -309,6 +309,7 @@ function walkOperator(node: unknown, path: string, ctx: Context): void {
           });
       });
       optionalField(node, "spacing", path, ctx, expectNumber);
+      optionalField(node, "alignment", path, ctx, expectString);
       optionalField(node, "sharedScale", path, ctx, expectBoolean);
       optionalField(node, "reverse", path, ctx, expectBoolean);
       optionalField(node, "mode", path, ctx, (v, p) => {
@@ -329,7 +330,9 @@ function walkOperator(node: unknown, path: string, ctx: Context): void {
       }
       break;
     case "table":
-      optionalField(node, "by", path, ctx, (v, p) => {
+      // `by` is required: the table operator can't run without an
+      // {x, y} field-name pair (Python's table() raises if missing).
+      expectField(node, "by", path, ctx, (v, p) => {
         if (!isObject(v)) {
           ctx.errors.push({ path: p, message: "table.by must be an object" });
           return;

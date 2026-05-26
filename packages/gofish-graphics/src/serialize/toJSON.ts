@@ -129,11 +129,16 @@ async function chartBuilderToChartIR(
   const ir: Frontend.ChartIR = {
     type: "chart",
     data: dataToIR(data),
-    operators: operators.map(operatorToIR),
     mark: finalMark
       ? await markToIR(finalMark)
       : ({ type: "rect" } as Frontend.LeafMarkIR),
   };
+  // Match how `options` / `zOrder` are handled — omit empty arrays so a
+  // round-trip through fromJSON → toJSON doesn't gain a spurious
+  // `operators: []` on the second pass when none were specified.
+  if (operators.length > 0) {
+    ir.operators = operators.map(operatorToIR);
+  }
   if (options && Object.keys(options).length > 0) {
     ir.options = options as AnyObject;
   }
@@ -160,8 +165,16 @@ function dataToIR(data: unknown): Frontend.DataIR | null {
   ) {
     return data as Frontend.DataIR;
   }
-  // Unknown shape — fall back to inline with whatever we got, wrapping in an
-  // array so the schema is satisfied.
+  // Unknown shape — wrap as single-row inline so the schema is satisfied,
+  // but warn so the caller can investigate. Hitting this path usually
+  // indicates the chart's data argument was neither an array nor a
+  // LayerSelector and isn't structurally what the runtime expects.
+  if (typeof console !== "undefined" && typeof console.warn === "function") {
+    console.warn(
+      "[gofish-ir] toJSON.dataToIR: unrecognized data shape, wrapping as single-row inline. " +
+        "Expected an array, a LayerSelector, or a pre-wrapped {type:'inline', rows} value."
+    );
+  }
   return { type: "inline", rows: [data as AnyObject] };
 }
 
