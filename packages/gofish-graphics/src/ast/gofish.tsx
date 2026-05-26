@@ -25,6 +25,7 @@ import {
   isSIZE,
   type UnderlyingSpace,
 } from "./underlyingSpace";
+import { placeLabels } from "./labels/placeLabels";
 import { continuous } from "./domain";
 import { interval } from "../util/interval";
 import { path, pathToSVGPath, transformPath } from "../path";
@@ -264,6 +265,11 @@ export async function layout(
   child.layout([w, h], rootScaleFactors, posScales);
   child.place("x", x ?? transform?.x ?? 0, "baseline");
   child.place("y", y ?? transform?.y ?? 0, "baseline");
+
+  // Resolve label placements (post-layout, pre-render). Strategies look up
+  // `_labelKind` per node, gather obstacles globally, and write the resolved
+  // `Placement` into `_label.placement` for the renderer to consume.
+  placeLabels(child);
 
   if (debug) {
     console.log("🌳 Node Tree:");

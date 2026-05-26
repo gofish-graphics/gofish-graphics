@@ -57,6 +57,7 @@ import {
   type LabelSpec,
 } from "./labels/labelPlacement";
 import { renderLabelJSX } from "./labels/renderLabel";
+import type { LabelKind } from "./labels/strategies/types";
 
 export type RenderSession = {
   tokenContext: TokenContext;
@@ -156,6 +157,8 @@ export class GoFishNode {
   public constraints: ConstraintSpec[] = [];
   public colorConfig?: ColorConfig;
   public _label?: LabelSpec;
+  /** Default placement-strategy kind for this node's label. */
+  public _labelKind?: LabelKind;
   private _zOrder = 0;
   private renderSession?: RenderSession;
   constructor(
@@ -170,6 +173,7 @@ export class GoFishNode {
       render,
       shared = [false, false],
       color,
+      labelKind,
     }: {
       name?: string;
       key?: string;
@@ -181,6 +185,7 @@ export class GoFishNode {
       render: Render;
       shared?: Size<boolean>;
       color?: MaybeValue<string>;
+      labelKind?: LabelKind;
     },
     children: GoFishAST[]
   ) {
@@ -200,6 +205,7 @@ export class GoFishNode {
     this.args = args;
     this.shared = shared;
     this.color = color;
+    this._labelKind = labelKind;
   }
 
   private collectColorValues(out: any[]): void {
@@ -509,6 +515,11 @@ export class GoFishNode {
 
   public label(accessor: LabelAccessor, options?: LabelOptions): this {
     this._label = { accessor, ...options };
+    return this;
+  }
+
+  public labelKind(kind: LabelKind): this {
+    this._labelKind = kind;
     return this;
   }
 

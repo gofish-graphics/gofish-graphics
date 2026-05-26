@@ -61,6 +61,7 @@ export const Ellipse = ({
     {
       name,
       type: "ellipse",
+      labelKind: "box",
       color: fill,
       resolveUnderlyingSpace: (
         _children: Size<UnderlyingSpace>[],

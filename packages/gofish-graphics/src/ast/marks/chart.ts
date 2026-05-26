@@ -128,6 +128,8 @@ export function circle<T extends Record<string, any>>({
       strokeWidth,
       label,
     }).name(key?.toString() ?? "");
+    // Circles are data points, so override the underlying Ellipse default ("box").
+    node._labelKind = "point";
     (node as any).datum = d;
     return node;
   };
@@ -146,8 +148,14 @@ export function line<T extends Record<string, any>>(options?: {
   strokeWidth?: number;
   opacity?: number;
   interpolation?: "linear" | "bezier";
-}): Mark<Array<T & { __ref?: GoFishNode }>> {
-  return async (
+}): Mark<Array<T & { __ref?: GoFishNode }>> & {
+  name(layerName: string): Mark<Array<T & { __ref?: GoFishNode }>>;
+  label(
+    accessor: LabelAccessor,
+    options?: LabelOptions
+  ): Mark<Array<T & { __ref?: GoFishNode }>>;
+} {
+  const base: Mark<Array<T & { __ref?: GoFishNode }>> = async (
     d: Array<T & { __ref?: GoFishNode }>,
     key?: string | number,
     _layerContext?: LayerContext
@@ -160,7 +168,7 @@ export function line<T extends Record<string, any>>(options?: {
       throw new Error("line mark expected __ref on items");
     });
 
-    return Connect(
+    const node = await Connect(
       {
         direction: 0, // x direction
         mode: "center",
@@ -171,7 +179,10 @@ export function line<T extends Record<string, any>>(options?: {
       },
       refs
     );
+    (node as any).datum = d;
+    return node;
   };
+  return nameableMark(base);
 }
 
 // area() mark connects data points using edge-to-edge mode
@@ -182,8 +193,14 @@ export function area<T extends Record<string, any>>(options?: {
   mixBlendMode?: "normal" | "multiply";
   dir?: "x" | "y";
   interpolation?: "linear" | "bezier";
-}): Mark<Array<T & { __ref?: GoFishNode }>> {
-  return async (
+}): Mark<Array<T & { __ref?: GoFishNode }>> & {
+  name(layerName: string): Mark<Array<T & { __ref?: GoFishNode }>>;
+  label(
+    accessor: LabelAccessor,
+    options?: LabelOptions
+  ): Mark<Array<T & { __ref?: GoFishNode }>>;
+} {
+  const base: Mark<Array<T & { __ref?: GoFishNode }>> = async (
     d: Array<T & { __ref?: GoFishNode }>,
     key?: string | number,
     _layerContext?: LayerContext
@@ -196,7 +213,7 @@ export function area<T extends Record<string, any>>(options?: {
       throw new Error("area mark expected __ref on items");
     });
 
-    return Connect(
+    const node = await Connect(
       {
         direction: options?.dir ?? "x",
         mode: "edge",
@@ -208,7 +225,12 @@ export function area<T extends Record<string, any>>(options?: {
       },
       refs
     );
+    // Override the connect node's default labelKind ("path") for area marks.
+    node._labelKind = "area";
+    (node as any).datum = d;
+    return node;
   };
+  return nameableMark(base);
 }
 
 // blank() mark creates invisible guides for positioning

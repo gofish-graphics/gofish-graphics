@@ -234,6 +234,7 @@ export const Image = ({
       name,
       key,
       type: "image",
+      labelKind: "box",
       args: {
         key,
         name,

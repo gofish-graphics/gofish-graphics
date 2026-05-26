@@ -85,6 +85,7 @@ export const Rect = ({
       name,
       key,
       type: "rect",
+      labelKind: "box",
       args: {
         key,
         name,
