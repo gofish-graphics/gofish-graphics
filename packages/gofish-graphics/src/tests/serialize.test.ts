@@ -29,6 +29,9 @@ const {
   derive,
   log,
   v,
+  field,
+  datum,
+  literal,
 } = GoFish as any;
 
 declare const process: { exit(code: number): never };
@@ -230,6 +233,65 @@ async function main() {
     check(
       "v() wrapper preserved as datum",
       fill && typeof fill === "object" && fill.type === "datum"
+    );
+  }
+
+  // -------------------------------------------------------------------------
+  // field() / datum() / literal() explicit channel constructors.
+  // -------------------------------------------------------------------------
+  console.log("\n# Explicit channel constructors (field / datum / literal)");
+
+  // field() should produce the same runtime behavior as a bare field-name
+  // string. The chart renders identically; the IR carries the field tag.
+  {
+    const data = [{ count: 5 }, { count: 10 }];
+    const chart = Chart(data)
+      .mark(rect({ h: field("count"), fill: literal("steelblue") }));
+    const doc = await chart.toJSON();
+    validateDoc(doc, "field/literal explicit chart", false);
+    const mark = (doc.root as Frontend.ChartIR).mark as any;
+    check(
+      "field('count') survives on the wire",
+      mark.h && typeof mark.h === "object" && mark.h.type === "field"
+    );
+    check("field carries name", mark.h.name === "count");
+    check(
+      "literal('steelblue') survives on the wire",
+      mark.fill && typeof mark.fill === "object" && mark.fill.type === "literal"
+    );
+    check("literal carries value", mark.fill.value === "steelblue");
+  }
+
+  // datum() is an alias for v() — same runtime tag, same wire shape.
+  {
+    const data = [{ a: 1 }];
+    const viaDatum = await Chart(data)
+      .mark(rect({ fill: datum("crimson") }))
+      .toJSON();
+    const viaV = await Chart(data).mark(rect({ fill: v("crimson") })).toJSON();
+    const fillDatum = (viaDatum.root as any).mark.fill;
+    const fillV = (viaV.root as any).mark.fill;
+    check(
+      "datum() and v() emit identical IR",
+      JSON.stringify(fillDatum) === JSON.stringify(fillV)
+    );
+    check(
+      "datum() emits type: 'datum' (Vega-Lite convention)",
+      fillDatum && typeof fillDatum === "object" && fillDatum.type === "datum"
+    );
+  }
+
+  // Disambiguation example: literal("count") means the string literal "count"
+  // (not the column "count"); field("0.5") means the column named "0.5"
+  // (not the number 0.5).
+  {
+    const data = [{ count: 5 }];
+    const chart = Chart(data).mark(text({ text: literal("count") }));
+    const doc = await chart.toJSON();
+    const txt = (doc.root as any).mark.text;
+    check(
+      "literal('count') is not interpreted as a field",
+      txt && typeof txt === "object" && txt.type === "literal" && txt.value === "count"
     );
   }
 
