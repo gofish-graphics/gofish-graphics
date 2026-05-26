@@ -47,6 +47,50 @@ improvements summarized in [§ Future evolution](#future-evolution)
 per-stage sibling schemas) are deferred to subsequent breaking
 releases.
 
+## Dumping the IR from a spec
+
+JavaScript:
+
+```ts
+import { Chart, spread, rect, Serialize } from "gofish-graphics";
+import { Frontend } from "gofish-ir";
+
+const chart = Chart(data)
+  .flow(spread({ by: "lake", dir: "x" }))
+  .mark(rect({ h: "count" }));
+
+// Three call shapes, all returning Promise<FrontendIRDocument>:
+const doc = await chart.toJSON(); // method on ChartBuilder
+const doc2 = await Serialize.toJSON(chart); // standalone function
+const doc3 = await Serialize.toJSONLayer(opts, [a, b]); // for Layer combinators
+const doc4 = await Serialize.toJSONRawMark(mark, opts); // for bare marks
+```
+
+`toJSON` is async because combinator-form marks may carry their child
+list as a `Promise<Mark[]>` (e.g. from `For(...)` helpers); the emitter
+resolves these to walk into them.
+
+Python (via the wrapper):
+
+```python
+from gofish import chart, spread, rect
+
+builder = chart(data).flow(spread(by="lake", dir="x")).mark(rect(h="count"))
+doc = builder.to_ir()      # canonical entry point — returns a dict
+doc = builder.to_dict()    # alias
+```
+
+Validate either against the schema:
+
+```ts
+import { Frontend } from "gofish-ir";
+const result = Frontend.validate(doc, { strict: true });
+if (!result.valid) console.error(result.errors);
+```
+
+`strict: true` rejects unknown fields (for tests + CI); the default
+permissive mode ignores them for forward-compatible reading.
+
 ## The document at a glance
 
 A document is a wrapper that names the schema version, the stage, and
