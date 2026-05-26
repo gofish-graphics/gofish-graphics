@@ -309,6 +309,10 @@ export default defineConfig({
             },
           ],
         },
+        {
+          text: "GoTree",
+          items: [{ text: "tree (separate package)", link: "/js/gotree" }],
+        },
       ],
       "/python/": [
         {
