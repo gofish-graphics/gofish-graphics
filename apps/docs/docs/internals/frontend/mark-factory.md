@@ -205,5 +205,8 @@ to layout operators (split + per-partition application).
   in `src/ast/shapes/`.
 - The companion factory for layout operators:
   [The Operator Factory](/internals/frontend/operator-factory).
+- The factory's optional `serialize` config (third argument) tags the
+  produced mark with `__serialize` metadata that the frontend-IR emitter
+  reads — see [Frontend IR (Serialization)](/internals/frontend/serialization).
 - Encodable: paper [arxiv:2009.00722](https://arxiv.org/abs/2009.00722),
   source [github.com/kristw/encodable](https://github.com/kristw/encodable).

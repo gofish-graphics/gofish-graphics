@@ -2,10 +2,29 @@
 title: Frontend IR (Serialization)
 section: Frontend
 order: 80
-status: speculative
+status: draft
+covers:
+  - packages/gofish-ir/src/frontend/schema.ts
+  - packages/gofish-ir/src/frontend/validate.ts
+  - packages/gofish-ir/src/frontend/jsonSchema.ts
+  - packages/gofish-graphics/src/serialize/toJSON.ts
+  - packages/gofish-graphics/src/serialize/fromJSON.ts
+  - packages/gofish-graphics/src/serialize/registry.ts
 ---
 
 # The Frontend IR
+
+> **Status (v0 — gofish-ir@0.1.0):** the schema package, validator, JSON
+> Schema artifact, JS-side emitter (`Serialize.toJSON` /
+> `ChartBuilder.toJSON()`), and JS-side deserializer
+> (`Serialize.buildChart`) are all shipped. The widget consumes the
+> deserializer and the Python emitter is validated against the canonical
+> schema in CI (90/90 stories that load successfully validate). What v0
+> ships matches the existing widget wire format exactly (lowercase `type`
+> discriminators, `__combinator` flag, channel slots accept the existing
+> sentinels); the design improvements below — PascalCase rename,
+> ChannelExpr-only IR, `__combinator` removal — are deferred to subsequent
+> breaking releases.
 
 This essay sketches a serialized intermediate representation (IR) for GoFish's
 frontend syntax — the form a chart author writes via `chart(data).flow(...).mark(...)`,
