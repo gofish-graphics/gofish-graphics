@@ -2,7 +2,7 @@
 title: Frontend IR (Serialization)
 section: Frontend
 order: 80
-status: draft
+status: stable
 covers:
   - packages/gofish-ir/src/frontend/schema.ts
   - packages/gofish-ir/src/frontend/validate.ts
