@@ -338,4 +338,5 @@ export const scatter = createOperator<any, ScatterOptions>(Scatter, {
     else if (typeof yMax === "string") fields.y = yMax;
     return fields;
   },
+  serialize: { type: "scatter" },
 });

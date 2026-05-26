@@ -203,4 +203,5 @@ export const table = createOperator<any, TableOptions>(Table, {
     return { entries, keys: { colKeys, rowKeys } };
   },
   axisFields: ({ by }) => (by ? { x: by.x, y: by.y } : undefined),
+  serialize: { type: "table" },
 });

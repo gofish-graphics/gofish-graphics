@@ -89,4 +89,4 @@ export const Polygon = ({
   );
 };
 
-export const polygon = createMark(Polygon);
+export const polygon = createMark(Polygon, undefined, "polygon");

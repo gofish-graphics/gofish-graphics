@@ -227,6 +227,25 @@ export type OperatorConfig<Datum, Options> = {
    * `{x: "lake"}` so an x-axis title `lake` is inferred.
    */
   axisFields?: (opts: Options) => { x?: string; y?: string } | undefined;
+  /**
+   * Optional IR-serialization config. When set, the factory tags the
+   * produced operator with an `__serialize: { type, opts }` marker the
+   * frontend-IR emitter (gofish-graphics/serialize/toJSON) reads. Each
+   * standard-library operator should declare its IR discriminator here;
+   * user-built operators may omit it (the emitter falls back to opaque
+   * `{ type: "derive" }` for any operator that lacks a tag).
+   */
+  serialize?: {
+    /** IR discriminator (lowercase to match the wire format), e.g. "spread". */
+    type: string;
+    /**
+     * Optional shape function: takes the original options and returns the
+     * IR payload. Default behavior is to copy opts verbatim. Use this when
+     * the runtime opts diverge from what the IR should carry — e.g. to
+     * strip non-serializable fields or rename a key.
+     */
+    shape?: (opts: Options) => Record<string, unknown>;
+  };
 };
 
 export type DualModeOperator<Datum, Options> = {
@@ -373,7 +392,20 @@ export function createOperator<Datum, Options extends Record<string, any>>(
         (node as any).datum = d;
         return node;
       };
-      return nameableMark(base);
+      const combinator = nameableMark(base);
+      // Tag combinator-form mark with IR-serialization metadata, mirroring
+      // the operator-form tagging below. The `__combinator: true` flag tells
+      // the emitter to write the spec into the mark tree (with `children`)
+      // rather than into the operators[] list.
+      if (cfg.serialize) {
+        const payload = cfg.serialize.shape ? cfg.serialize.shape(opts) : opts;
+        (combinator as any).__serialize = {
+          type: cfg.serialize.type,
+          opts: payload,
+          __combinator: true,
+        };
+      }
+      return combinator;
     }
     // Operator (traversal) form: split d, apply one mark per leaf, layout.
     const operator: Operator<Datum[], Datum[]> = async (mark) => {
@@ -407,6 +439,15 @@ export function createOperator<Datum, Options extends Record<string, any>>(
     const fields = cfg.axisFields?.(opts);
     if (fields && (fields.x !== undefined || fields.y !== undefined)) {
       (operator as any).__axisFields = fields;
+    }
+    // Tag the operator with IR-serialization metadata so the frontend-IR
+    // emitter can reconstruct it as `{ type, ...opts }` on the wire.
+    if (cfg.serialize) {
+      const payload = cfg.serialize.shape ? cfg.serialize.shape(opts) : opts;
+      (operator as any).__serialize = {
+        type: cfg.serialize.type,
+        opts: payload,
+      };
     }
     return operator;
   }

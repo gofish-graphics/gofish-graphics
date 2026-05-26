@@ -35,7 +35,7 @@ export type { ChartOptions };
 
 /* Data Transformation Operators */
 export function derive<T, U>(fn: (d: T) => U | Promise<U>): Operator<T, U> {
-  return async (mark: Mark<U>) => {
+  const op: Operator<T, U> = async (mark: Mark<U>) => {
     return (async (
       d: T,
       key?: string | number,
@@ -44,6 +44,12 @@ export function derive<T, U>(fn: (d: T) => U | Promise<U>): Operator<T, U> {
       return mark(await fn(d), key, layerContext);
     }) as Mark<T>;
   };
+  // The function body is not serializable; the frontend-IR emitter sees
+  // an opaque `{ type: "derive" }`. The Python-bridge widget emits its own
+  // `{ type: "derive", lambdaId }` shape; pure-JS callers leave the
+  // payload empty.
+  (op as any).__serialize = { type: "derive", opts: {} };
+  return op;
 }
 
 // return an array of copies of `d` repeated `d.field` times
@@ -68,7 +74,7 @@ export const normalize = <T, K extends keyof T>(
 };
 
 export function log<T>(label?: string): Operator<T, T> {
-  return async (mark: Mark<T>) => {
+  const op: Operator<T, T> = async (mark: Mark<T>) => {
     return (async (
       d: T,
       key?: string | number,
@@ -82,6 +88,11 @@ export function log<T>(label?: string): Operator<T, T> {
       return mark(d, key, layerContext);
     }) as Mark<T>;
   };
+  (op as any).__serialize = {
+    type: "log",
+    opts: label !== undefined ? { label } : {},
+  };
+  return op;
 }
 
 /* END Data Transformation Operators */
@@ -131,7 +142,12 @@ export function circle<T extends Record<string, any>>({
     (node as any).datum = d;
     return node;
   };
-  return nameableMark(base);
+  const result = nameableMark(base);
+  (result as any).__serialize = {
+    type: "circle",
+    opts: { r, fill, stroke, strokeWidth, label },
+  };
+  return result;
 }
 
 // select() returns a lazy selector that defers layer lookup until actually needed
@@ -147,7 +163,7 @@ export function line<T extends Record<string, any>>(options?: {
   opacity?: number;
   interpolation?: "linear" | "bezier";
 }): Mark<Array<T & { __ref?: GoFishNode }>> {
-  return async (
+  const mark: Mark<Array<T & { __ref?: GoFishNode }>> = async (
     d: Array<T & { __ref?: GoFishNode }>,
     key?: string | number,
     _layerContext?: LayerContext
@@ -172,6 +188,8 @@ export function line<T extends Record<string, any>>(options?: {
       refs
     );
   };
+  (mark as any).__serialize = { type: "line", opts: options ?? {} };
+  return mark;
 }
 
 // area() mark connects data points using edge-to-edge mode
@@ -183,7 +201,7 @@ export function area<T extends Record<string, any>>(options?: {
   dir?: "x" | "y";
   interpolation?: "linear" | "bezier";
 }): Mark<Array<T & { __ref?: GoFishNode }>> {
-  return async (
+  const mark: Mark<Array<T & { __ref?: GoFishNode }>> = async (
     d: Array<T & { __ref?: GoFishNode }>,
     key?: string | number,
     _layerContext?: LayerContext
@@ -209,6 +227,8 @@ export function area<T extends Record<string, any>>(options?: {
       refs
     );
   };
+  (mark as any).__serialize = { type: "area", opts: options ?? {} };
+  return mark;
 }
 
 // blank() mark creates invisible guides for positioning
@@ -236,7 +256,7 @@ export function blank<T extends Record<string, any>>({
   debug?: boolean;
 } = {}): Mark<T | T[] | { item: T | T[]; key: number | string }> {
   // blank is essentially a transparent/zero-size rect
-  return generatedRect<T>({
+  const mark = generatedRect<T>({
     emX,
     emY,
     w,
@@ -248,6 +268,13 @@ export function blank<T extends Record<string, any>>({
     stroke,
     strokeWidth,
   });
+  // Override the rect-emitted tag — blank should appear as { type: "blank" }
+  // on the wire even though it delegates to rect internally.
+  (mark as any).__serialize = {
+    type: "blank",
+    opts: { emX, emY, w, h, rx, ry, fill, debug, stroke, strokeWidth },
+  };
+  return mark;
 }
 
 /* ---- mark-combinator forms for layer and Porter-Duff operators ---- */
@@ -391,10 +418,19 @@ export function layer<T>(
     (node as any).datum = d;
     return node;
   };
-  return makeConstrainableMark(base);
+  const result = makeConstrainableMark(base);
+  (result as any).__serialize = {
+    type: "layer",
+    opts,
+    __combinator: true,
+  };
+  return result;
 }
 
-function makePorterDuffCombinator(lowLevel: (opts: any, children: any) => any) {
+function makePorterDuffCombinator(
+  lowLevel: (opts: any, children: any) => any,
+  irType: string
+) {
   function fn<T>(marks: [Mark<any>, Mark<any>]): NameableMark<T>;
   function fn<T>(
     opts: PdOptions,
@@ -422,14 +458,20 @@ function makePorterDuffCombinator(lowLevel: (opts: any, children: any) => any) {
       (node as any).datum = d;
       return node;
     };
-    return nameableMark(base);
+    const result = nameableMark(base);
+    (result as any).__serialize = {
+      type: irType,
+      opts,
+      __combinator: true,
+    };
+    return result;
   }
   return fn;
 }
 
-export const atop = makePorterDuffCombinator(Atop);
-export const over = makePorterDuffCombinator(Over);
-export const inside = makePorterDuffCombinator(Inside);
-export const xor = makePorterDuffCombinator(Xor);
-export const out = makePorterDuffCombinator(Out);
-export const mask = makePorterDuffCombinator(Mask);
+export const atop = makePorterDuffCombinator(Atop, "atop");
+export const over = makePorterDuffCombinator(Over, "over");
+export const inside = makePorterDuffCombinator(Inside, "inside");
+export const xor = makePorterDuffCombinator(Xor, "xor");
+export const out = makePorterDuffCombinator(Out, "out");
+export const mask = makePorterDuffCombinator(Mask, "mask");

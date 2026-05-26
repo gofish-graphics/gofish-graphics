@@ -557,17 +557,21 @@ export const Rect = ({
   );
 };
 
-export const rect = createMark(Rect, {
-  w: "size",
-  h: "size",
-  x: "pos",
-  y: "pos",
-  l: "pos",
-  r: "pos",
-  t: "pos",
-  b: "pos",
-  cx: "pos",
-  cy: "pos",
-  fill: "color",
-  stroke: "color",
-});
+export const rect = createMark(
+  Rect,
+  {
+    w: "size",
+    h: "size",
+    x: "pos",
+    y: "pos",
+    l: "pos",
+    r: "pos",
+    t: "pos",
+    b: "pos",
+    cx: "pos",
+    cy: "pos",
+    fill: "color",
+    stroke: "color",
+  },
+  "rect"
+);

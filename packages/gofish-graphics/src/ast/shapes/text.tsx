@@ -332,7 +332,11 @@ export const Text = ({
   );
 };
 
-export const text = createMark(Text, {
-  fill: "color",
-  text: "raw",
-});
+export const text = createMark(
+  Text,
+  {
+    fill: "color",
+    text: "raw",
+  },
+  "text"
+);

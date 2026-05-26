@@ -451,8 +451,12 @@ export const Ellipse = ({
   );
 };
 
-export const ellipse = createMark(Ellipse, {
-  w: "size",
-  h: "size",
-  fill: "color",
-});
+export const ellipse = createMark(
+  Ellipse,
+  {
+    w: "size",
+    h: "size",
+    fill: "color",
+  },
+  "ellipse"
+);
