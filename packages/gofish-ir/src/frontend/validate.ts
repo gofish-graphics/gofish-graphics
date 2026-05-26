@@ -444,7 +444,7 @@ function walkRefMark(
       });
     }
   });
-  optionalField(node, "name", path, ctx, expectString);
+  optionalField(node, "name", path, ctx, expectNameOrToken);
   optionalField(node, "label", path, ctx, walkLabel);
   optionalField(node, "zOrder", path, ctx, expectNumber);
   if (ctx.strict) {
@@ -475,7 +475,7 @@ function walkCombinatorMark(
   expectField(node, "children", path, ctx, (v, p) =>
     walkArray(v, p, ctx, walkMark)
   );
-  optionalField(node, "name", path, ctx, expectString);
+  optionalField(node, "name", path, ctx, expectNameOrToken);
   optionalField(node, "label", path, ctx, walkLabel);
   optionalField(node, "constraints", path, ctx, (v, p) =>
     walkArray(v, p, ctx, walkConstraint)
@@ -508,7 +508,7 @@ function walkLeafMark(
   ctx: Context
 ): void {
   walkBaseFields(node, path, ctx);
-  optionalField(node, "name", path, ctx, expectString);
+  optionalField(node, "name", path, ctx, expectNameOrToken);
   optionalField(node, "label", path, ctx, walkLabel);
   optionalField(node, "constraints", path, ctx, (v, p) =>
     walkArray(v, p, ctx, walkConstraint)
@@ -521,8 +521,16 @@ function walkLeafMark(
 }
 
 function walkLabel(node: unknown, path: string, ctx: Context): void {
+  // Shorthand forms (matching the JS API):
+  //   label: true   → "label with default settings"
+  //   label: "field" → "label with this field accessor, defaults elsewhere"
+  if (typeof node === "boolean") return;
+  if (typeof node === "string") return;
   if (!isObject(node)) {
-    ctx.errors.push({ path, message: "expected object" });
+    ctx.errors.push({
+      path,
+      message: "expected object, boolean, or string",
+    });
     return;
   }
   expectField(node, "accessor", path, ctx, expectString);
@@ -588,7 +596,7 @@ function walkOrigin(node: unknown, path: string, ctx: Context): void {
     ctx.errors.push({ path, message: "origin must be an object" });
     return;
   }
-  optionalField(node, "name", path, ctx, expectString);
+  optionalField(node, "name", path, ctx, expectNameOrToken);
   optionalField(node, "stack", path, ctx, expectString);
   if (ctx.strict) rejectUnknown(node, ["name", "stack"], path, ctx);
 }
@@ -632,7 +640,10 @@ function optionalField<T extends Record<string, unknown>>(
   ctx: Context,
   check: (value: unknown, path: string, ctx: Context) => void
 ): void {
-  if (!(key in obj) || obj[key] === undefined) return;
+  // Treat both `undefined` and explicit `null` as "absent". Python's
+  // `to_dict()` emits `null` for several optional fields (data, zOrder,
+  // ...) rather than omitting them.
+  if (!(key in obj) || obj[key] === undefined || obj[key] === null) return;
   check(obj[key], `${parentPath}.${key}`, ctx);
 }
 
@@ -690,6 +701,28 @@ function expectBoolean(value: unknown, path: string, ctx: Context): void {
       message: `expected boolean, got ${typeNameOf(value)}`,
     });
   }
+}
+
+/**
+ * A name field may be a string or a Python-bridge token sentinel
+ * (`{__gofish_token, __tag}`) used to encode hygienic names across the
+ * widget bridge. The deserializer resolves the sentinel to a runtime
+ * Token at chart-build time.
+ */
+function expectNameOrToken(value: unknown, path: string, ctx: Context): void {
+  if (typeof value === "string") return;
+  if (
+    typeof value === "object" &&
+    value !== null &&
+    typeof (value as any).__gofish_token === "string" &&
+    typeof (value as any).__tag === "string"
+  ) {
+    return;
+  }
+  ctx.errors.push({
+    path,
+    message: `expected string or token sentinel, got ${typeNameOf(value)}`,
+  });
 }
 
 function expectObject(value: unknown, path: string, ctx: Context): void {

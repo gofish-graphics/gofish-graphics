@@ -398,14 +398,20 @@ export function buildChart(
     ((chartSpec as any).options ?? {}) as Record<string, any>
   );
 
+  // Resolve chartSpec.data. The canonical shapes are:
+  //   - { type: "inline", rows: [...] } — inline rows live on the spec
+  //   - { type: "select", layer }       — late-bound layer reference
+  //   - null / undefined                — data was shipped via the bridge's
+  //                                       arrow_data sidecar; use the
+  //                                       `data` argument the caller passed
   let chartData: any = data;
   const dataField = (chartSpec as any).data;
-  if (
-    dataField &&
-    typeof dataField === "object" &&
-    dataField.type === "select"
-  ) {
-    chartData = select(dataField.layer);
+  if (dataField && typeof dataField === "object") {
+    if (dataField.type === "select") {
+      chartData = select(dataField.layer);
+    } else if (dataField.type === "inline" && Array.isArray(dataField.rows)) {
+      chartData = dataField.rows;
+    }
   }
 
   // Cast the flow chain: `chart(...).flow(...).mark(...)` is typed with

@@ -625,14 +625,17 @@ function buildChartFromSpec(
   const mark = mapMark(chartSpec.mark, deriveServerUrl, resolveToken);
   const chartOpts = resolveOptions(chartSpec.options || {});
 
+  // Unwrap the canonical DataIR shapes. The wire formats are:
+  //   - { type: "inline", rows: [...] } → use the rows directly
+  //   - { type: "select", layer: name } → resolve via a LayerSelector
+  //   - null / array (legacy) → treat as bare rows
   let chartData: any = chartSpec.data;
-  if (
-    chartData &&
-    typeof chartData === "object" &&
-    !Array.isArray(chartData) &&
-    (chartData as SelectDataSpec).type === "select"
-  ) {
-    chartData = select((chartData as SelectDataSpec).layer);
+  if (chartData && typeof chartData === "object" && !Array.isArray(chartData)) {
+    if ((chartData as SelectDataSpec).type === "select") {
+      chartData = select((chartData as SelectDataSpec).layer);
+    } else if ((chartData as any).type === "inline") {
+      chartData = (chartData as any).rows;
+    }
   }
 
   let builder = Chart(chartData, chartOpts)

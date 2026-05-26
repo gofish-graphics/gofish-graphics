@@ -92,6 +92,16 @@ export interface RawMarkIR extends BaseIRNode {
 // Data
 // ---------------------------------------------------------------------------
 
+/**
+ * The data field on a chart.
+ *
+ * - **Inline rows**: `{type: "inline", rows: [...]}` for charts whose data is
+ *   embedded in the IR.
+ * - **Select reference**: `{type: "select", layer: "name"}` resolves a sibling
+ *   chart's named-mark output at deserialize time.
+ * - **External**: `{type: "external", id?: "..."}` indicates data ships over a
+ *   sidecar transport (anywidget's `arrow_data` trait) and the id keys into it.
+ */
 export type DataIR =
   | { type: "inline"; rows: Array<Record<string, unknown>> }
   | { type: "select"; layer: string }
@@ -186,7 +196,9 @@ export type LeafMarkType =
   | "petal"
   | "text"
   | "image"
-  | "polygon";
+  | "polygon"
+  | "mark-fn"; // Python-bridge: a registered (data) -> ChartBuilder lambda.
+// Carries a `lambdaId` field; resolved via the bridge.
 
 export type CombinatorMarkType =
   | "spread"
@@ -286,15 +298,28 @@ export interface BridgeLambdaSentinel {
 // Labels and constraints
 // ---------------------------------------------------------------------------
 
-export interface LabelIR {
-  accessor: string;
-  position?: string;
-  fontSize?: number;
-  color?: string;
-  offset?: number;
-  minSpace?: number;
-  rotate?: number;
-}
+/**
+ * Label specification.
+ *
+ * The canonical object form `{accessor, position?, fontSize?, ...}` is
+ * what `mark.label("field", options)` produces. Shorthand forms (matching
+ * the JS mark-kwarg API):
+ *
+ *   label: true     — show a label with default styling
+ *   label: "field"  — label using this field accessor, defaults elsewhere
+ */
+export type LabelIR =
+  | true
+  | string
+  | {
+      accessor: string;
+      position?: string;
+      fontSize?: number;
+      color?: string;
+      offset?: number;
+      minSpace?: number;
+      rotate?: number;
+    };
 
 export interface ConstraintIR {
   type: "align" | "distribute" | "zAbove" | "zBelow";
@@ -355,6 +380,7 @@ export const LEAF_MARK_TYPES: readonly LeafMarkType[] = [
   "text",
   "image",
   "polygon",
+  "mark-fn",
 ];
 
 /** The set of combinator-mark type discriminators recognized in v0. */

@@ -16,8 +16,12 @@
     "compare-python": "tsx scripts/compare-python.ts",
     "build:parity-review-site": "tsx scripts/build-parity-review-site.ts",
     "test:python": "tsx scripts/capture-python-dom.ts && tsx scripts/compare-python.ts",
+    "validate-python-ir": "tsx scripts/validate-python-ir.ts",
     "review": "tsx scripts/review-server.ts",
     "build:review-site": "tsx scripts/build-review-site.ts"
+  },
+  "dependencies": {
+    "gofish-ir": "workspace:*"
   },
   "devDependencies": {
     "@playwright/test": "^1.58.2",

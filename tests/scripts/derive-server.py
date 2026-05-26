@@ -175,8 +175,10 @@ class DeriveHandler(BaseHTTPRequestHandler):
                 """Return (child_payload, derive_ids) for one chart builder.
 
                 child_payload: {operators, mark, options, data, zOrder}
-                  data is records list, or {"type": "select", layer: name}
-                  for select-data children.
+                  data is the canonical Frontend.DataIR shape:
+                    - {"type": "inline", "rows": [...]} for inline rows
+                    - {"type": "select", "layer": name} for select-data
+                  See packages/gofish-ir/src/frontend/schema.ts.
                 """
                 child_ir = child.to_ir()
                 if isinstance(child.data, LayerSelector):
@@ -184,11 +186,16 @@ class DeriveHandler(BaseHTTPRequestHandler):
                 else:
                     raw = child.data
                     if hasattr(raw, "to_dict"):
-                        child_data = raw.to_dict("records")
+                        rows = raw.to_dict("records")
                     elif hasattr(raw, "to_dicts"):
-                        child_data = raw.to_dicts()
+                        rows = raw.to_dicts()
                     else:
-                        child_data = raw
+                        rows = raw
+                    # Wrap inline rows in the canonical DataIR shape.
+                    if isinstance(rows, list):
+                        child_data = {"type": "inline", "rows": rows}
+                    else:
+                        child_data = rows
 
                 child_derive_ids = []
                 for op in child.operators:
@@ -225,6 +232,7 @@ class DeriveHandler(BaseHTTPRequestHandler):
 
                 return (
                     {
+                        "type": "chart",
                         "operators": child_ir["operators"],
                         "mark": child_ir["mark"],
                         "options": child_ir.get("options", {}),

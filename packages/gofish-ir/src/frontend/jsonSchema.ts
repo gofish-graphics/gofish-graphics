@@ -147,6 +147,7 @@ export const FRONTEND_IR_JSON_SCHEMA = {
             "text",
             "image",
             "polygon",
+            "mark-fn",
           ],
         },
         name: { type: "string" },

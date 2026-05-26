@@ -242,6 +242,10 @@ importers:
         version: 0.24.0
 
   tests:
+    dependencies:
+      gofish-ir:
+        specifier: workspace:*
+        version: link:../packages/gofish-ir
     devDependencies:
       '@playwright/test':
         specifier: ^1.58.2

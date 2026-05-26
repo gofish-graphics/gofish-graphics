@@ -148,9 +148,16 @@ function dataToIR(data: unknown): Frontend.DataIR | null {
   if (Array.isArray(data)) {
     return { type: "inline", rows: data as AnyObject[] };
   }
+  // Already wrapped (a previous round-trip).
+  if (
+    typeof data === "object" &&
+    (data as any).type === "inline" &&
+    Array.isArray((data as any).rows)
+  ) {
+    return data as Frontend.DataIR;
+  }
   // Unknown shape — fall back to inline with whatever we got, wrapping in an
-  // array so the schema is satisfied. Callers passing already-Arrow-encoded
-  // data through the widget bridge won't go through this path.
+  // array so the schema is satisfied.
   return { type: "inline", rows: [data as AnyObject] };
 }
 
