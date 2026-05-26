@@ -8,7 +8,7 @@ genre rect carries its own datum (via `bind_data`) so the JS-side
 import math
 from collections import defaultdict
 
-from gofish import Treemap, rect, v
+from gofish import Treemap, rect, datum
 from python_stories.vega_data_urls import read_json
 
 GRAY = "#D1D9E2"  # mirrors packages/gofish-graphics/src/color.ts:492
@@ -47,7 +47,7 @@ def story_default():
             continue
         nodes.append(
             rect(
-                fill=v(genre),
+                fill=datum(genre),
                 stroke=GRAY,
                 strokeWidth=1,
                 rx=2,

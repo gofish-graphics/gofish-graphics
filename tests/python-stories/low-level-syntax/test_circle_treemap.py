@@ -5,7 +5,7 @@ but with circles instead of rects.
 import math
 from collections import defaultdict
 
-from gofish import Treemap, circle, v
+from gofish import Treemap, circle, datum
 from python_stories.vega_data_urls import read_json
 
 GRAY = "#D1D9E2"
@@ -40,7 +40,7 @@ def story_default():
             continue
         nodes.append(
             circle(
-                fill=v(genre),
+                fill=datum(genre),
                 stroke=GRAY,
                 strokeWidth=1,
                 label=True,

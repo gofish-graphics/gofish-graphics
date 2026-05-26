@@ -265,14 +265,15 @@ export interface RefMarkIR extends BaseIRNode {
  * A channel value (the right-hand side of a mark or operator property like
  * `h: …` or `fill: …`).
  *
- * v0 mirrors the existing widget wire format — strings disambiguate to
- * field-accessor or literal at runtime by checking against `data[0]`;
- * `__gofish_v` and `__gofish_lambda` are Python-bridge sentinels;
- * `{type: "datum"}` is the existing wrapped-value runtime tag.
+ * Strings without explicit tagging disambiguate to field-accessor or
+ * literal at runtime by checking against `data[0]`. The explicit
+ * constructors `field(name)` / `datum(x)` / `literal(x)` emit their
+ * canonical tagged-object forms. `__gofish_lambda` is the one remaining
+ * Python-bridge sentinel — it encodes a remote callable that the widget
+ * resolves via the DeriveBridge.
  *
- * v0.1+ will introduce explicit `field` / `datum` / `literal` constructors
- * that the v3 API desugars eagerly, so the IR sees only one canonical
- * shape per slot. See the architecture essay.
+ * v0.1+ will move the v3 API to desugar string shorthand to explicit
+ * constructors eagerly, so the IR carries only canonical forms.
  */
 export type ChannelValue =
   | string
@@ -280,17 +281,11 @@ export type ChannelValue =
   | boolean
   | null
   | DatumValue
-  | BridgeValueSentinel
   | BridgeLambdaSentinel;
 
 export interface DatumValue {
   type: "datum";
   [key: string]: unknown;
-}
-
-/** Python-bridge sentinel for a wrapped-value (`v(...)` on the Python side). */
-export interface BridgeValueSentinel {
-  __gofish_v: unknown;
 }
 
 /** Python-bridge sentinel for a remote callable. The JS side issues an RPC for each datum. */

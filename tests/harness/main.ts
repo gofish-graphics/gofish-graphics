@@ -33,7 +33,6 @@ import {
   palette,
   gradient,
   clock,
-  v,
   layer,
   Constraint,
   ref,
@@ -183,18 +182,16 @@ function makeLambdaAccessor(
 }
 
 /**
- * Walk an arbitrary value and resolve Python-emitted sentinels:
- * - `{__gofish_v: field}` → `v(field)` call (literal-value wrapper).
+ * Walk an arbitrary value and resolve Python-emitted lambda sentinels.
  * - `{__gofish_lambda: id}` → an `async (d) => fetch /derive/<id>` arrow.
  *
- * Python uses sentinels because dict-only IR has no way to author a
- * function call; the harness rebuilds them before handing props to JS.
+ * Python's `datum(x)` emits the canonical `{type: "datum", datum: x}`
+ * shape directly, so no unwrap is needed for per-row values.
  */
 function unwrapMarkOpts(value: any, deriveServerUrl: string | undefined): any {
   if (value === null || typeof value !== "object") return value;
   if (Array.isArray(value))
     return value.map((v) => unwrapMarkOpts(v, deriveServerUrl));
-  if ("__gofish_v" in value) return v(value.__gofish_v);
   if (typeof value.__gofish_lambda === "string") {
     return makeLambdaAccessor(value.__gofish_lambda, deriveServerUrl);
   }

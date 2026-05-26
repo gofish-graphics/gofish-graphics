@@ -1063,7 +1063,7 @@ def Treemap(  # noqa: N802  — match JS storybook spelling
     `valueField` on each mark's datum.
 
         Treemap(
-            [rect(fill=v(genre)).bind_data({"worldwideGross": gross}, genre)
+            [rect(fill=datum(genre)).bind_data({"worldwideGross": gross}, genre)
              for genre, gross in groups],
             valueField="worldwideGross",
             paddingInner=2,
@@ -1308,24 +1308,28 @@ def select(layer_name: str) -> LayerSelector:
 # Literal-value wrapper
 
 
-def v(value: Any) -> dict:
+def datum(value: Any) -> dict:
     """
-    Wrap a value so a mark prop reads it as an embedded data-space value.
+    Wrap a value as an embedded data-space value (the per-row,
+    scale-aware form). Mirrors the JS `datum(...)` constructor in
+    `packages/gofish-graphics/src/ast/data.ts`.
 
-    Mirrors JS `v(...)` (`packages/gofish-graphics/src/ast/data.ts:10`):
-    - `rect(fill=v("Worldwide Gross"))` — use the row's `Worldwide Gross`
-      column value as the literal fill color, skipping categorical-color
-      encoding.
-    - `image(h=v(100))` — declare height 100 as an *embedded* size in data
-      space. `inferEmbedded` (see `data.ts`) flips the interval's
-      `embedded` flag, which changes how the layout system places the mark
-      vs. a plain `h=100` (literal pixel value).
+    - `rect(fill=datum("Worldwide Gross"))` — use the row's
+      `Worldwide Gross` column value as the literal fill color, skipping
+      categorical-color encoding.
+    - `image(h=datum(100))` — declare height 100 as an *embedded* size
+      in data space. `inferEmbedded` (see `data.ts`) flips the
+      interval's `embedded` flag, which changes how the layout system
+      places the mark vs. a plain `h=100` (literal pixel value).
+
+    Emits the canonical `{type: "datum", datum: value}` shape directly;
+    the widget consumes it without any unwrap step.
 
     Args:
         value: A field name string, a literal number, or any value to
-            wrap. The harness/widget rebuilds it as a JS `v(value)` call.
+            wrap.
     """
-    return {"__gofish_v": value}
+    return {"type": "datum", "datum": value}
 
 
 # Data utilities (for use inside derive() callbacks)

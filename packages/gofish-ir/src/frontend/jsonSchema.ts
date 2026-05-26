@@ -270,11 +270,6 @@ export const FRONTEND_IR_JSON_SCHEMA = {
         },
         {
           type: "object",
-          required: ["__gofish_v"],
-          properties: { __gofish_v: {} },
-        },
-        {
-          type: "object",
           required: ["__gofish_lambda"],
           properties: { __gofish_lambda: { type: "string" } },
         },

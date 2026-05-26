@@ -82,8 +82,7 @@ shorthand path) or one of three explicit tagged objects:
 - `datum(x)` → `{type: "datum", datum: x, measure?}` — inline value, scaled.
 - `literal(x)` → `{type: "literal", value: x}` — inline constant, not scaled.
 
-These three mirror Vega-Lite's `field` / `datum` / `value` trichotomy
-(see [issue #266][gh-266]).
+These three mirror Vega-Lite's `field` / `datum` / `value` trichotomy.
 
 ## A worked example
 
@@ -273,10 +272,12 @@ public schema — they extend it for the round-trip across anywidget:
 | Sentinel            | Meaning                                                               |
 | ------------------- | --------------------------------------------------------------------- |
 | `{__gofish_lambda}` | A Python callable; the JS deserializer wires it to an async accessor. |
-| `{__gofish_v}`      | A Python `v(x)` wrapper; converted to the runtime `{type: "datum"}`.  |
 | `{__gofish_token}`  | A hygienic-name token; resolved via a per-render token map.           |
 | `__scope: true`     | The `@mark` decorator's scope-wrap signal.                            |
 | `__datum` / `__key` | `bind_data()` pre-binding for Treemap-style invocation.               |
+
+Python's `datum(x)` emits the canonical `{type: "datum", datum: x}` shape
+directly — no bridge sentinel needed.
 
 Olli and other pure-JS consumers don't see these — they're a
 [`FrontendIRWithBridge`](/internals/python/ir) extension declared in
@@ -324,4 +325,3 @@ The schema-shape and modularity decisions draw on four sources:
 [vega-lite]: https://github.com/vega/vega-lite
 [ttg-note]: https://gitlab.haskell.org/ghc/ghc/-/blob/master/compiler/Language/Haskell/Syntax/Extension.hs
 [lean-syntax]: https://github.com/leanprover/lean4/blob/master/src/Init/Prelude.lean
-[gh-266]: https://github.com/gofish-graphics/gofish-graphics/issues/266

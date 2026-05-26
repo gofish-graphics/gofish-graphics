@@ -41,10 +41,12 @@ they're bridge-specific:
 | Sentinel            | Meaning                                                                                                                    |
 | ------------------- | -------------------------------------------------------------------------------------------------------------------------- |
 | `{__gofish_lambda}` | A Python callable registered on the widget side. The JS deserializer wires it to an async per-row accessor via the bridge. |
-| `{__gofish_v}`      | A wrapped value (`v(x)` on the Python side). The deserializer converts to a runtime `{type: "datum"}` shape.               |
 | `{__gofish_token}`  | A hygienic-name token. First sighting mints a `createName(tag)` Token; subsequent uses reuse it within one render.         |
 | `__scope: true`     | The `@mark` decorator stamps this so the harness wraps the resolved node in `node.scope()`.                                |
 | `__datum` / `__key` | `bind_data()` pre-binds a datum + key for Treemap-style invocation.                                                        |
+
+Python's `datum(x)` emits the canonical `{type: "datum", datum: x}` shape
+directly — no bridge sentinel needed.
 
 These are documented as the **Python-bridge schema extension** — they
 extend the canonical IR for the round-trip between Python and the widget

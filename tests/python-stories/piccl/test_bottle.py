@@ -18,12 +18,12 @@ from gofish import (
     Constraint,
     atop,
     chart,
+    datum,
     image,
     layer,
     rect,
     spread,
     text,
-    v,
 )
 
 _REPO_ROOT = os.path.abspath(
@@ -50,7 +50,7 @@ def story_default():
             layer([
                 atop(
                     [
-                        image(href=BOTTLE_PNG, h=v(100)),
+                        image(href=BOTTLE_PNG, h=datum(100)),
                         rect(h="amount", fill="#00ff00"),
                     ],
                     blendMode="color",

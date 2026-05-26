@@ -380,7 +380,7 @@ function walkChannelValue(value: unknown, path: string, ctx: Context): void {
   }
   // Object form: one of the recognized tagged shapes.
   const obj = value as Record<string, unknown>;
-  if ("__gofish_v" in obj || "__gofish_lambda" in obj) return; // bridge sentinels
+  if ("__gofish_lambda" in obj) return; // Python-bridge sentinel
   if (obj.type === "datum") return;
   if (obj.type === "field") {
     if (typeof obj.name !== "string") {

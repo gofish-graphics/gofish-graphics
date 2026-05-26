@@ -14,7 +14,6 @@
 
 // Source-module imports — see the note in registry.ts.
 import { chart, select } from "../ast/marks/chart";
-import { value as v } from "../ast/data";
 import { clock } from "../ast/coordinateTransforms/clock";
 import { createName, type Token } from "../ast/createName";
 import { Constraint } from "../ast/constraints";
@@ -97,22 +96,21 @@ function makeLambdaAccessor(lambdaId: string, bridge: DeriveBridge) {
 }
 
 /**
- * Walk an arbitrary value and resolve Python-emitted sentinels:
+ * Walk an arbitrary value and resolve Python-emitted lambda sentinels.
  *
- *  - `{ __gofish_v: value }` becomes a `v(value)` call (the embedded-value
- *    wrapper that GoFish runtime channel inference recognizes).
  *  - `{ __gofish_lambda: id }` becomes an `async (d) => …` arrow that
  *    RPCs into Python via the supplied bridge.
  *
- * If no bridge is supplied, lambda sentinels are passed through unchanged
- * (a pure-JS consumer never emits them, so this is only the bridge case).
+ * Python's `datum(x)` emits the canonical `{type: "datum", datum: x}`
+ * directly, so no unwrap step is needed for it. If no bridge is
+ * supplied, lambda sentinels throw — a pure-JS consumer should never
+ * emit one.
  */
 export function unwrapMarkOpts(value: any, bridge?: DeriveBridge): any {
   if (value === null || typeof value !== "object") return value;
   if (Array.isArray(value)) {
     return value.map((item) => unwrapMarkOpts(item, bridge));
   }
-  if ("__gofish_v" in value) return v(value.__gofish_v);
   if (typeof value.__gofish_lambda === "string") {
     if (bridge === undefined) {
       throw new Error(
@@ -132,7 +130,6 @@ export function unwrapMarkOpts(value: any, bridge?: DeriveBridge): any {
 export function unwrapValues(value: any): any {
   if (value === null || typeof value !== "object") return value;
   if (Array.isArray(value)) return value.map(unwrapValues);
-  if ("__gofish_v" in value) return v(value.__gofish_v);
   const out: Record<string, any> = {};
   for (const [k, val] of Object.entries(value)) {
     out[k] = unwrapValues(val);
