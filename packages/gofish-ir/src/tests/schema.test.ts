@@ -228,6 +228,134 @@ check(
 );
 
 // ---------------------------------------------------------------------------
+// Per-operator validation (P6)
+// ---------------------------------------------------------------------------
+
+console.log("\n# Per-operator field validation");
+
+function chart(operators: any[], mark: any = { type: "rect" }) {
+  return {
+    irVersion: 0,
+    ir: "gofish-frontend",
+    root: { type: "chart", operators, mark },
+  } as unknown as FrontendIRDocument;
+}
+
+check(
+  "spread with valid dir accepts",
+  validate(chart([{ type: "spread", by: "lake", dir: "x" }])).valid
+);
+
+check(
+  "spread with invalid dir rejected",
+  !validate(chart([{ type: "spread", by: "lake", dir: "diagonal" }])).valid
+);
+
+check(
+  "spread with non-string by rejected",
+  !validate(chart([{ type: "spread", by: 123 }])).valid
+);
+
+check(
+  "stack with valid alignment accepts",
+  validate(chart([{ type: "stack", by: "s", dir: "y" }])).valid
+);
+
+check(
+  "stack with bad mode rejected",
+  !validate(chart([{ type: "stack", mode: "elsewhere" }])).valid
+);
+
+check(
+  "group without by is rejected",
+  !validate(chart([{ type: "group" }])).valid
+);
+
+check(
+  "group with by accepts",
+  validate(chart([{ type: "group", by: "category" }])).valid
+);
+
+check(
+  "table with valid by accepts",
+  validate(chart([{ type: "table", by: { x: "cat", y: "row" } }])).valid
+);
+
+check(
+  "table with by missing x is rejected",
+  !validate(chart([{ type: "table", by: { y: "row" } }])).valid
+);
+
+check(
+  "table with by missing y is rejected",
+  !validate(chart([{ type: "table", by: { x: "cat" } }])).valid
+);
+
+check(
+  "table.spacing as number accepts",
+  validate(chart([{ type: "table", by: { x: "a", y: "b" }, spacing: 8 }])).valid
+);
+
+check(
+  "table.spacing as [number, number] accepts",
+  validate(chart([{ type: "table", by: { x: "a", y: "b" }, spacing: [4, 6] }]))
+    .valid
+);
+
+check(
+  "table.spacing as wrong shape rejected",
+  !validate(
+    chart([{ type: "table", by: { x: "a", y: "b" }, spacing: "tight" }])
+  ).valid
+);
+
+check(
+  "log with non-string label rejected",
+  !validate(chart([{ type: "log", label: 5 }])).valid
+);
+
+check(
+  "derive with non-string lambdaId rejected",
+  !validate(chart([{ type: "derive", lambdaId: 42 }])).valid
+);
+
+check(
+  "scatter with field/literal channel constructors accepts",
+  validate(
+    chart([
+      {
+        type: "scatter",
+        x: { type: "field", name: "hp" },
+        y: { type: "literal", value: 0 },
+      },
+    ])
+  ).valid
+);
+
+check(
+  "scatter with field missing name rejected",
+  !validate(chart([{ type: "scatter", x: { type: "field" } }])).valid
+);
+
+check(
+  "scatter with literal missing value rejected",
+  !validate(chart([{ type: "scatter", x: { type: "literal" } }])).valid
+);
+
+console.log("\n# Strict mode rejects unknown operator fields");
+
+check(
+  "unknown spread field rejected in strict",
+  !validate(chart([{ type: "spread", by: "lake", quux: 1 }]), { strict: true })
+    .valid
+);
+
+check(
+  "unknown spread field accepted in permissive",
+  validate(chart([{ type: "spread", by: "lake", quux: 1 }])).valid
+);
+
+// ---------------------------------------------------------------------------
 // Report
 // ---------------------------------------------------------------------------
 

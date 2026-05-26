@@ -246,10 +246,157 @@ function walkOperator(node: unknown, path: string, ctx: Context): void {
     return;
   }
   walkBaseFields(node, path, ctx);
-  // Type-specific fields are validated leniently — every operator's option
-  // bag may grow over time. Strict mode just gates whether unknown fields
-  // trigger errors; we don't enumerate per-operator required fields here
-  // (Phase 6 will).
+  // Per-type field validation. Each operator has a known set of optional
+  // and required fields; in strict mode, unknown fields are rejected.
+  const knownFields: Record<string, string[]> = {
+    derive: ["type", "lambdaId", "origin", "meta"],
+    spread: [
+      "type",
+      "by",
+      "dir",
+      "spacing",
+      "alignment",
+      "sharedScale",
+      "mode",
+      "reverse",
+      "origin",
+      "meta",
+    ],
+    stack: [
+      "type",
+      "by",
+      "dir",
+      "alignment",
+      "sharedScale",
+      "mode",
+      "reverse",
+      "origin",
+      "meta",
+    ],
+    group: ["type", "by", "origin", "meta"],
+    scatter: [
+      "type",
+      "by",
+      "x",
+      "y",
+      "xMin",
+      "xMax",
+      "yMin",
+      "yMax",
+      "alignment",
+      "origin",
+      "meta",
+    ],
+    table: ["type", "by", "spacing", "numCols", "origin", "meta"],
+    log: ["type", "label", "origin", "meta"],
+  };
+  switch (node.type) {
+    case "derive":
+      optionalField(node, "lambdaId", path, ctx, expectString);
+      break;
+    case "spread":
+    case "stack":
+      optionalField(node, "by", path, ctx, expectString);
+      optionalField(node, "dir", path, ctx, (v, p) => {
+        if (v !== "x" && v !== "y")
+          ctx.errors.push({
+            path: p,
+            message: `dir must be "x" | "y", got ${JSON.stringify(v)}`,
+          });
+      });
+      optionalField(node, "spacing", path, ctx, expectNumber);
+      optionalField(node, "sharedScale", path, ctx, expectBoolean);
+      optionalField(node, "reverse", path, ctx, expectBoolean);
+      optionalField(node, "mode", path, ctx, (v, p) => {
+        if (v !== "edge" && v !== "center")
+          ctx.errors.push({
+            path: p,
+            message: `mode must be "edge" | "center"`,
+          });
+      });
+      break;
+    case "group":
+      expectField(node, "by", path, ctx, expectString);
+      break;
+    case "scatter":
+      optionalField(node, "by", path, ctx, expectString);
+      for (const k of ["x", "y", "xMin", "xMax", "yMin", "yMax"]) {
+        optionalField(node, k, path, ctx, walkChannelValue);
+      }
+      break;
+    case "table":
+      optionalField(node, "by", path, ctx, (v, p) => {
+        if (!isObject(v)) {
+          ctx.errors.push({ path: p, message: "table.by must be an object" });
+          return;
+        }
+        expectField(v, "x", p, ctx, expectString);
+        expectField(v, "y", p, ctx, expectString);
+      });
+      optionalField(node, "spacing", path, ctx, (v, p) => {
+        if (typeof v === "number") return;
+        if (
+          Array.isArray(v) &&
+          v.length === 2 &&
+          v.every((n) => typeof n === "number")
+        )
+          return;
+        ctx.errors.push({
+          path: p,
+          message: "table.spacing must be a number or [number, number]",
+        });
+      });
+      optionalField(node, "numCols", path, ctx, expectNumber);
+      break;
+    case "log":
+      optionalField(node, "label", path, ctx, expectString);
+      break;
+  }
+  if (ctx.strict) {
+    rejectUnknown(node, knownFields[node.type] ?? ["type"], path, ctx);
+  }
+}
+
+/**
+ * A channel value: bare primitive, the existing `{type:"datum"}` wrapper,
+ * the new `{type:"field"|"literal"}` constructors, or a Python-bridge
+ * sentinel. Permissive — only catches obviously-wrong shapes.
+ */
+function walkChannelValue(value: unknown, path: string, ctx: Context): void {
+  if (value === null) return;
+  if (typeof value === "string") return;
+  if (typeof value === "number") return;
+  if (typeof value === "boolean") return;
+  if (typeof value !== "object") {
+    ctx.errors.push({
+      path,
+      message: `channel value must be primitive or tagged object, got ${typeNameOf(value)}`,
+    });
+    return;
+  }
+  // Object form: one of the recognized tagged shapes.
+  const obj = value as Record<string, unknown>;
+  if ("__gofish_v" in obj || "__gofish_lambda" in obj) return; // bridge sentinels
+  if (obj.type === "datum") return;
+  if (obj.type === "field") {
+    if (typeof obj.name !== "string") {
+      ctx.errors.push({
+        path: `${path}.name`,
+        message: 'field channel must have a string "name"',
+      });
+    }
+    return;
+  }
+  if (obj.type === "literal") {
+    if (!("value" in obj)) {
+      ctx.errors.push({
+        path: `${path}.value`,
+        message: 'literal channel must have a "value" field',
+      });
+    }
+    return;
+  }
+  // Permissive fallback: allow unknown object shapes for forward-compat.
 }
 
 function walkMark(node: unknown, path: string, ctx: Context): void {
@@ -532,6 +679,15 @@ function expectNumber(value: unknown, path: string, ctx: Context): void {
     ctx.errors.push({
       path,
       message: `expected number, got ${typeNameOf(value)}`,
+    });
+  }
+}
+
+function expectBoolean(value: unknown, path: string, ctx: Context): void {
+  if (typeof value !== "boolean") {
+    ctx.errors.push({
+      path,
+      message: `expected boolean, got ${typeNameOf(value)}`,
     });
   }
 }

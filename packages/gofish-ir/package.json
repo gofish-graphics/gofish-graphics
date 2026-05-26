@@ -32,7 +32,7 @@
     "url": "https://github.com/gofish-graphics/gofish-graphics"
   },
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && tsx scripts/emit-jsonschema.ts",
     "test": "tsx src/tests/schema.test.ts",
     "prepublishOnly": "pnpm run build"
   },
