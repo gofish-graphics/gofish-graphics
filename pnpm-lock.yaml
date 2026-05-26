@@ -142,6 +142,9 @@ importers:
       d3-hierarchy:
         specifier: ^3.1.2
         version: 3.1.2
+      gofish-ir:
+        specifier: workspace:*
+        version: link:../gofish-ir
       lodash:
         specifier: ^4.17.21
         version: 4.17.21
@@ -212,6 +215,15 @@ importers:
       vite-plugin-solid:
         specifier: ^2.11.6
         version: 2.11.8(@testing-library/jest-dom@6.8.0)(solid-js@1.9.5)(vite@6.0.0(@types/node@24.10.1)(tsx@4.21.0)(yaml@2.9.0))
+
+  packages/gofish-ir:
+    devDependencies:
+      tsx:
+        specifier: ^4.19.2
+        version: 4.21.0
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
 
   packages/gofish-python:
     dependencies:

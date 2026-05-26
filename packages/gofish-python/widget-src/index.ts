@@ -3,75 +3,27 @@
  *
  * Trait-based protocol (Altair / Plotly pattern):
  *   - JS reads `spec`, `arrow_data`, render options on mount and renders.
- *   - For `derive` operators, JS sets `derive_request` and awaits a
- *     `derive_response` change. Python's `@traitlets.observe` runs the
- *     callback. Sequential — at most one in-flight derive per widget.
+ *   - For `derive` operators and lambda accessors, JS sets `derive_request`
+ *     and awaits a `derive_response` change. Python's `@traitlets.observe`
+ *     runs the callback. Sequential — at most one in-flight derive per widget.
  *   - On success/failure, JS sets `render_result` so Python can read
  *     `widget.result` / `widget.error` / `widget.done`.
+ *
+ * The deserializer (mapMark/mapOperator/buildChart and friends) lives in
+ * `gofish-graphics/serialize`. This file retains only the widget-bridge
+ * concerns: WidgetModel I/O, Arrow encoding for the bridge transport,
+ * and the render entry points.
  */
 
 import * as Arrow from "apache-arrow";
-import {
-  Chart as chart,
-  Layer,
-  clock,
-  spread,
-  stack,
-  scatter,
-  group,
-  table,
-  derive,
-  log,
-  select,
-  palette,
-  gradient,
-  rect,
-  circle,
-  line,
-  blank,
-  area,
-  ellipse,
-  petal,
-  text,
-  image,
-  polygon,
-  v,
-  layer,
-  Constraint,
-  ref,
-  arrow,
-  connect,
-  over,
-  inside,
-  xor,
-  out,
-  atop,
-  mask,
-  createName,
-  Treemap,
-  type ChartBuilder,
-  type Operator,
-  type Mark,
-  type Token,
-} from "gofish-graphics";
+import { Layer, Serialize, type ChartBuilder } from "gofish-graphics";
+import type { Frontend } from "gofish-ir";
 
-// Combinator-form factory map. Mirrors tests/harness/main.ts.
-const COMBINATOR_FACTORIES: Record<
-  string,
-  (opts: Record<string, any>, marks: Mark<any>[]) => Mark<any>
-> = {
-  spread: (opts, marks) => spread(opts, marks) as unknown as Mark<any>,
-  layer: (opts, marks) => layer(opts, marks) as unknown as Mark<any>,
-  arrow: (opts, marks) => arrow(opts, marks) as unknown as Mark<any>,
-  connect: (opts, marks) => connect(opts, marks) as unknown as Mark<any>,
-  treemap: (opts, marks) => Treemap(opts, marks) as unknown as Mark<any>,
-  over: (opts, marks) => over(opts, marks) as unknown as Mark<any>,
-  inside: (opts, marks) => inside(opts, marks) as unknown as Mark<any>,
-  xor: (opts, marks) => xor(opts, marks) as unknown as Mark<any>,
-  out: (opts, marks) => out(opts, marks) as unknown as Mark<any>,
-  atop: (opts, marks) => atop(opts, marks) as unknown as Mark<any>,
-  mask: (opts, marks) => mask(opts, marks) as unknown as Mark<any>,
-};
+// Type aliases pointing at the canonical IR schema. Internal usages below
+// keep the legacy `…Spec` names for readability.
+type ChartSpec = Frontend.ChartIR;
+type LayerSpec = Frontend.LayerIR;
+type RawMarkSpec = Frontend.RawMarkIR;
 
 interface WidgetModel {
   get(key: "spec"): ChartSpec | LayerSpec | RawMarkSpec;
@@ -89,244 +41,14 @@ interface WidgetModel {
   on(event: string, callback: () => void): void;
 }
 
-interface DeriveBridge {
+/**
+ * The raw RPC layer underneath the widget bridge: a `request(lambdaId,
+ * arrowB64)` channel built on top of anywidget traitlets. The
+ * Serialize.DeriveBridge interface (which the deserializer uses) is
+ * derived from this — see {@link makeDeriveBridge}.
+ */
+interface RawDeriveBridge {
   request(lambdaId: string, arrowB64: string): Promise<string>;
-}
-
-interface SelectSpec {
-  type: "select";
-  layer: string;
-}
-
-interface ChartSpec {
-  type?: string;
-  data?: SelectSpec | null;
-  operators?: OperatorSpec[];
-  mark: MarkSpec;
-  options?: Record<string, any>;
-  zOrder?: number;
-}
-
-interface LayerSpec {
-  type: "layer";
-  charts: ChartSpec[];
-  options?: Record<string, any>;
-}
-
-interface RawMarkSpec {
-  type: "raw-mark";
-  mark: MarkSpec;
-  options?: Record<string, any>;
-}
-
-interface OperatorSpec {
-  type: "derive" | "spread" | "stack" | "group" | "scatter" | "table" | "log";
-  lambdaId?: string;
-  [key: string]: any;
-}
-
-interface LabelSpec {
-  accessor: string;
-  position?: string;
-  fontSize?: number;
-  color?: string;
-  offset?: number;
-  minSpace?: number;
-  rotate?: number;
-}
-
-interface ConstraintSpec {
-  type: "align" | "distribute" | "zAbove" | "zBelow";
-  // Positioning constraints carry `options`; z-order constraints don't.
-  options?: Record<string, any>;
-  refs: string[];
-}
-
-interface MarkSpec {
-  // Mark types include the leaf shapes, combinator-form operators
-  // (`spread`, `layer`, `arrow`, `connect`, Porter-Duff) used as marks via
-  // the `__combinator` flag, and the bare `ref` leaf for selection-by-name.
-  type:
-    | "rect"
-    | "circle"
-    | "line"
-    | "area"
-    | "blank"
-    | "ellipse"
-    | "petal"
-    | "text"
-    | "image"
-    | "polygon"
-    | "spread"
-    | "layer"
-    | "arrow"
-    | "connect"
-    | "over"
-    | "inside"
-    | "xor"
-    | "out"
-    | "atop"
-    | "mask"
-    | "ref";
-  name?: string;
-  label?: LabelSpec;
-  __combinator?: boolean;
-  options?: Record<string, any>;
-  children?: MarkSpec[];
-  constraints?: ConstraintSpec[];
-  selection?: string;
-  [key: string]: any;
-}
-
-/**
- * Build the async arrow for a `{__gofish_lambda: id}` sentinel. The arrow
- * is what JS-side `inferRaw` (and equivalents) calls per row; the body
- * RPCs into Python via the existing `DeriveBridge` (Arrow-encoded over
- * traitlets). Same registry as `derive()` operators — the lambda was
- * registered on the Python side when the widget spec was built.
- */
-function makeLambdaAccessor(lambdaId: string, bridge: DeriveBridge) {
-  return async (d: any) => {
-    const arrowBuffer = arrayToArrow([d]);
-    const arrowB64 = btoa(String.fromCharCode(...arrowBuffer));
-    const resultB64 = await bridge.request(lambdaId, arrowB64);
-    const resultBuffer = Uint8Array.from(atob(resultB64), (c) =>
-      c.charCodeAt(0)
-    );
-    const [result] = arrowTableToArray(Arrow.tableFromIPC(resultBuffer));
-    // The Python rows_fn returns `[value]` for a single-row input; the
-    // Arrow round-trip puts it under the first column. Surface the value
-    // directly so JS sees a scalar, not a one-key object.
-    if (result && typeof result === "object") {
-      const keys = Object.keys(result);
-      if (keys.length === 1) return result[keys[0]];
-    }
-    return result;
-  };
-}
-
-/**
- * Walk an arbitrary value and resolve Python-emitted sentinels:
- * - `{__gofish_v: value}` → `v(value)` call (embedded-value wrapper).
- * - `{__gofish_lambda: id}` → an `async (d) => ...` arrow that RPCs into
- *   Python via the trait bridge.
- */
-function unwrapMarkOpts(value: any, bridge: DeriveBridge): any {
-  if (value === null || typeof value !== "object") return value;
-  if (Array.isArray(value)) return value.map((v) => unwrapMarkOpts(v, bridge));
-  if ("__gofish_v" in value) return v(value.__gofish_v);
-  if (typeof value.__gofish_lambda === "string") {
-    return makeLambdaAccessor(value.__gofish_lambda, bridge);
-  }
-  const out: Record<string, any> = {};
-  for (const [k, val] of Object.entries(value)) {
-    out[k] = unwrapMarkOpts(val, bridge);
-  }
-  return out;
-}
-
-/** Backwards-compatible alias for callsites without bridge access. */
-function unwrapValues(value: any): any {
-  if (value === null || typeof value !== "object") return value;
-  if (Array.isArray(value)) return value.map(unwrapValues);
-  if ("__gofish_v" in value) return v(value.__gofish_v);
-  const out: Record<string, any> = {};
-  for (const [k, val] of Object.entries(value)) {
-    out[k] = unwrapValues(val);
-  }
-  return out;
-}
-
-// Per-render Token resolver — mirrors `tests/harness/main.ts`. Python
-// emits `{__gofish_token: <uuid>, __tag: <tag>}` sentinels for hygienic
-// names; first sighting mints a JS `createName(tag)` Token, subsequent
-// sightings reuse it within a single render.
-type TokenSentinel = { __gofish_token: string; __tag: string };
-type TokenResolver = (s: TokenSentinel) => Token;
-
-function makeTokenResolver(): TokenResolver {
-  const cache = new Map<string, Token>();
-  return (sentinel: TokenSentinel) => {
-    let t = cache.get(sentinel.__gofish_token);
-    if (!t) {
-      t = createName(sentinel.__tag);
-      cache.set(sentinel.__gofish_token, t);
-    }
-    return t;
-  };
-}
-
-function isTokenSentinel(v: any): v is TokenSentinel {
-  return (
-    v !== null &&
-    typeof v === "object" &&
-    typeof v.__gofish_token === "string" &&
-    typeof v.__tag === "string"
-  );
-}
-
-/** Wrap a Mark so its resolved GoFishNode gets `.scope()` called — matches
- *  what JS `createMark` does internally. Triggered by the `__scope: true`
- *  flag the Python `@mark` decorator stamps on a Mark's IR. Forwards
- *  `.name`/`.label`/`.render`/`.constrain` so the scoped mark still
- *  behaves as a NameableMark for the raw-mark render path. */
-function wrapWithScope(inner: any): any {
-  const wrapped: any = async (data: any, key: any, layerContext: any) => {
-    const node: any = await Promise.resolve(inner(data, key, layerContext));
-    // Match JS `createMark`'s post-resolve sequence: datum, then scope.
-    // We skip the `node.name(key)` step because the widget's mapMark
-    // already chains `.name(spec.name)` when set, and an empty-string
-    // name on a nested combinator child disrupts layer-context registration.
-    if (node) {
-      node.datum = data;
-      if (typeof node.scope === "function") {
-        node.scope();
-      }
-      // Match JS `createMark`: ref-name resolution and z-order flattening
-      // both stop at `_isComponent`, which is otherwise only set by
-      // `createMark` itself. Without this, an inner layer produced by a
-      // Python `@mark`-decorated function would be transparent.
-      node._isComponent = true;
-    }
-    return node;
-  };
-  const define = (key: string, value: any) =>
-    Object.defineProperty(wrapped, key, {
-      value,
-      writable: true,
-      configurable: true,
-    });
-  if (typeof inner.render === "function") {
-    define("render", async (container: any, options: any) => {
-      const node: any = await wrapped(undefined, undefined, undefined);
-      return node.render(container, options);
-    });
-  }
-  for (const key of ["name", "label", "constrain"] as const) {
-    if (typeof inner[key] === "function") {
-      define(key, (...args: any[]) => wrapWithScope(inner[key](...args)));
-    }
-  }
-  return wrapped;
-}
-
-function resolveNameField(
-  rawName: any,
-  resolveToken: TokenResolver
-): string | Token | undefined {
-  if (rawName == null) return undefined;
-  if (isTokenSentinel(rawName)) return resolveToken(rawName);
-  return rawName;
-}
-
-function resolveRefSelection(selection: any, resolveToken: TokenResolver): any {
-  if (typeof selection === "string") return selection;
-  if (Array.isArray(selection)) {
-    return selection.map((seg) =>
-      isTokenSentinel(seg) ? resolveToken(seg) : seg
-    );
-  }
-  return selection;
 }
 
 interface RenderOptions {
@@ -335,6 +57,10 @@ interface RenderOptions {
   axes: boolean;
   debug: boolean;
 }
+
+// ---------------------------------------------------------------------------
+// Arrow utilities (widget transport)
+// ---------------------------------------------------------------------------
 
 function arrowTableToArray(table: Arrow.Table): Record<string, any>[] {
   const numRows = table.numRows;
@@ -369,12 +95,6 @@ function arrowTableToArray(table: Arrow.Table): Record<string, any>[] {
   return data;
 }
 
-function normalizeToArray(value: any): any[] {
-  if (Array.isArray(value)) return value;
-  if (value === null || value === undefined) return [];
-  return [value];
-}
-
 function arrayToArrow(rows: Record<string, any>[]): Uint8Array {
   if (!rows || rows.length === 0) {
     throw new Error("Cannot serialize empty data to Arrow");
@@ -406,257 +126,6 @@ function arrayToArrow(rows: Record<string, any>[]): Uint8Array {
   return buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
 }
 
-const OPERATOR_MAP: Record<
-  string,
-  (opts: Record<string, any>, bridge: DeriveBridge) => Operator<any, any> | null
-> = {
-  derive: (opts, bridge) => {
-    const lambdaId = opts.lambdaId;
-    if (!lambdaId) {
-      throw new Error("derive operator missing lambdaId");
-    }
-    return derive(async (d: any) => {
-      const rows = normalizeToArray(d);
-      if (rows.length === 0) {
-        return Array.isArray(d) ? d : (d ?? null);
-      }
-      const arrowBuffer = arrayToArrow(rows);
-      const arrowB64 = btoa(String.fromCharCode(...arrowBuffer));
-      const resultB64 = await bridge.request(lambdaId, arrowB64);
-      const resultBuffer = Uint8Array.from(atob(resultB64), (c) =>
-        c.charCodeAt(0)
-      );
-      const resultTable = Arrow.tableFromIPC(resultBuffer);
-      const resultArray = arrowTableToArray(resultTable);
-      return Array.isArray(d) ? resultArray : (resultArray[0] ?? null);
-    });
-  },
-  spread: (opts) => spread(opts as any),
-  stack: (opts) => stack(opts as any),
-  group: (opts) => group(opts as any),
-  scatter: (opts) => scatter(opts as any),
-  table: (opts) => table(opts as any),
-  log: (opts) => log(opts.label),
-};
-
-function mapOperator(
-  op: OperatorSpec,
-  bridge: DeriveBridge
-): Operator<any, any> | null {
-  const { type, ...opts } = op;
-  const factory = OPERATOR_MAP[type];
-  if (!factory) return null;
-  return factory(opts, bridge);
-}
-
-const MARK_MAP: Record<string, (opts: Record<string, any>) => Mark<any>> = {
-  rect: (opts) => rect(opts),
-  circle: (opts) => circle(opts),
-  line: (opts) => line(opts),
-  area: (opts) => area(opts),
-  blank: (opts) => blank(opts),
-  ellipse: (opts) => ellipse(opts),
-  petal: (opts) => petal(opts),
-  text: (opts) => text(opts),
-  image: (opts) => image(opts),
-  polygon: (opts) => polygon(opts as any) as unknown as Mark<any>,
-};
-
-function mapMark(
-  markSpec: MarkSpec,
-  bridge: DeriveBridge,
-  resolveToken: TokenResolver
-): Mark<any> {
-  // Mark-as-function: Python registered a `(data) -> ChartBuilder` lambda.
-  // The JS Mark fetches a chart IR per invocation (via the trait bridge —
-  // Arrow-encoded) and rebuilds a ChartBuilder JS-side.
-  if (markSpec.type === "mark-fn") {
-    const lambdaId = markSpec.lambdaId as string;
-    return (async (data: any, _key: any, _layerContext: any) => {
-      const rows = Array.isArray(data) ? data : [data];
-      const arrowBuffer = arrayToArrow(rows);
-      const arrowB64 = btoa(String.fromCharCode(...arrowBuffer));
-      const resultB64 = await bridge.request(lambdaId, arrowB64);
-      const resultBuffer = Uint8Array.from(atob(resultB64), (c) =>
-        c.charCodeAt(0)
-      );
-      const resultArr = arrowTableToArray(Arrow.tableFromIPC(resultBuffer));
-      // mark-fn returns a one-element list; row[0] is the chart-spec dict.
-      // Widget's Arrow round-trip wraps it under the first column.
-      const first = resultArr[0];
-      const chartSpec =
-        first && typeof first === "object" && Object.keys(first).length === 1
-          ? first[Object.keys(first)[0]]
-          : first;
-      // Inner chart's data may need decoding from Arrow b64 if the
-      // serializer wrapped it; for the current widget path we receive
-      // record-shape data directly via the chart spec.
-      const cs = chartSpec as ChartSpec;
-      const data2 = Array.isArray(cs.data)
-        ? (cs.data as unknown as Record<string, any>[])
-        : [];
-      return buildChart(cs, data2, bridge, resolveToken);
-    }) as Mark<any>;
-  }
-
-  // Leaf-form `ref(name)` — not a combinator, not a mark factory.
-  // Selection may be string, array, or contain token sentinels.
-  if (markSpec.type === "ref" && !markSpec.__combinator) {
-    return ref(
-      resolveRefSelection(markSpec.selection, resolveToken)
-    ) as unknown as Mark<any>;
-  }
-
-  // Combinator-form marks: a layout operator (`spread`, `layer`, or
-  // `arrow`) used as a mark, with explicit nested children. Python emits
-  // `{type, __combinator: true, options, children, name?, label?,
-  // constraints?}`; rebuild it by calling the JS operator's `(opts, marks)`
-  // overload, then chain `.constrain(...)` if present.
-  if (markSpec.__combinator) {
-    const childMarks = (markSpec.children ?? []).map((c) =>
-      mapMark(c, bridge, resolveToken)
-    );
-    const opts = unwrapMarkOpts(markSpec.options ?? {}, bridge);
-    const factory = COMBINATOR_FACTORIES[markSpec.type];
-    if (!factory) {
-      throw new Error(`Unknown combinator mark type: ${markSpec.type}`);
-    }
-    let mark = factory(opts, childMarks);
-    // Constraint chain. The Python side serializes refs by name; reify the
-    // JS-side ConstraintRef objects from those names by looking them up in
-    // the `refs` map the JS callback receives. Z-order constraints
-    // (`zAbove` / `zBelow`) take two refs directly rather than the
-    // `(options, refs)` signature shared by positioning constraints.
-    if (markSpec.constraints && typeof (mark as any).constrain === "function") {
-      const constraints = markSpec.constraints;
-      mark = (mark as any).constrain((refs: Record<string, any>) =>
-        constraints.map((c) => {
-          if (c.type === "zAbove" || c.type === "zBelow") {
-            return (Constraint as any)[c.type](
-              ...c.refs.map((name) => refs[name])
-            );
-          }
-          return (Constraint as any)[c.type](
-            c.options,
-            c.refs.map((name) => refs[name])
-          );
-        })
-      );
-    }
-    if (markSpec.__scope) {
-      mark = wrapWithScope(mark);
-    }
-    const nameVal = resolveNameField(markSpec.name, resolveToken);
-    if (nameVal != null && typeof (mark as any).name === "function") {
-      mark = (mark as any).name(nameVal);
-    }
-    if (
-      typeof markSpec.zOrder === "number" &&
-      typeof (mark as any).zOrder === "function"
-    ) {
-      mark = (mark as any).zOrder(markSpec.zOrder);
-    }
-    return mark;
-  }
-
-  const { type, name: layerName, label: labelSpec, ...opts } = markSpec;
-  const factory =
-    MARK_MAP[
-      type as Exclude<
-        MarkSpec["type"],
-        | "spread"
-        | "layer"
-        | "arrow"
-        | "connect"
-        | "ref"
-        | "over"
-        | "inside"
-        | "xor"
-        | "out"
-        | "atop"
-        | "mask"
-      >
-    ];
-  if (!factory) {
-    throw new Error(`Unknown mark type: ${type}`);
-  }
-  let mark = factory(unwrapMarkOpts(opts, bridge));
-  if (labelSpec && typeof (mark as any).label === "function") {
-    const { accessor, ...labelOpts } = labelSpec;
-    mark = (mark as any).label(
-      accessor,
-      Object.keys(labelOpts).length > 0 ? labelOpts : undefined
-    );
-  }
-  if (markSpec.__scope) {
-    mark = wrapWithScope(mark);
-  }
-  const nameVal = resolveNameField(layerName, resolveToken);
-  if (nameVal != null && typeof (mark as any).name === "function") {
-    mark = (mark as any).name(nameVal);
-  }
-  if (
-    typeof markSpec.zOrder === "number" &&
-    typeof (mark as any).zOrder === "function"
-  ) {
-    mark = (mark as any).zOrder(markSpec.zOrder);
-  }
-  if ("__datum" in markSpec) {
-    const boundDatum = markSpec.__datum;
-    const boundKey = markSpec.__key ?? undefined;
-    const inner = mark as any;
-    mark = (async (_data: any, _key: any, layerContext: any) =>
-      inner(boundDatum, boundKey, layerContext)) as Mark<any>;
-  }
-  return mark;
-}
-
-function resolveColorConfig(colorSpec: Record<string, any>): any {
-  if (colorSpec._tag === "palette") return palette(colorSpec.values);
-  if (colorSpec._tag === "gradient") return gradient(colorSpec.stops);
-  return colorSpec;
-}
-
-function resolveCoordConfig(coordSpec: Record<string, any>): any {
-  if (coordSpec.type === "clock") return clock();
-  return coordSpec;
-}
-
-function resolveOptions(raw: Record<string, any>): Record<string, any> {
-  const resolved: Record<string, any> = { ...raw };
-  if (
-    resolved.color &&
-    typeof resolved.color === "object" &&
-    "_tag" in resolved.color
-  ) {
-    resolved.color = resolveColorConfig(resolved.color);
-  }
-  if (
-    resolved.coord &&
-    typeof resolved.coord === "object" &&
-    "type" in resolved.coord
-  ) {
-    resolved.coord = resolveCoordConfig(resolved.coord);
-  }
-  return resolved;
-}
-
-function renderError(
-  container: HTMLElement,
-  error: Error,
-  debug: boolean
-): void {
-  const message = error.message || String(error);
-  const stack = debug && error.stack ? error.stack : "";
-  container.innerHTML = `
-    <div style="color: red; padding: 20px; border: 2px solid red; background: #ffe0e0;">
-      <h2 style="margin-top: 0;">GoFish Widget Error</h2>
-      <p><strong>${message}</strong></p>
-      ${stack ? `<pre style="background: #fff; padding: 10px; overflow: auto; white-space: pre-wrap;">${stack}</pre>` : ""}
-    </div>
-  `;
-}
-
 function decodeArrowB64(b64: string): Record<string, any>[] {
   if (!b64) return [];
   const arrowBuffer = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
@@ -664,161 +133,35 @@ function decodeArrowB64(b64: string): Record<string, any>[] {
   return arrowTableToArray(table);
 }
 
-function buildChart(
-  chartSpec: ChartSpec,
-  data: Record<string, any>[],
-  bridge: DeriveBridge,
-  resolveToken: TokenResolver
-): ChartBuilder {
-  const operators: Operator<any, any>[] = [];
-  for (const opSpec of chartSpec.operators || []) {
-    const op = mapOperator(opSpec, bridge);
-    if (op) operators.push(op);
-  }
-  const markSpec = chartSpec.mark || { type: "rect" };
-  const mark = mapMark(markSpec, bridge, resolveToken);
-  const resolvedOptions = resolveOptions(chartSpec.options || {});
+// ---------------------------------------------------------------------------
+// Bridge: low-level RPC and the typed DeriveBridge the deserializer expects
+// ---------------------------------------------------------------------------
 
-  let chartData: any = data;
-  if (
-    chartSpec.data &&
-    typeof chartSpec.data === "object" &&
-    chartSpec.data.type === "select"
-  ) {
-    chartData = select(chartSpec.data.layer);
-  }
-
-  let builder = chart(chartData, resolvedOptions)
-    .flow(...operators)
-    .mark(mark);
-  if (chartSpec.zOrder !== undefined) {
-    builder = builder.zOrder(chartSpec.zOrder);
-  }
-  return builder;
-}
-
-function renderLayer(
-  model: WidgetModel,
-  container: HTMLElement,
-  bridge: DeriveBridge
-): void {
-  const debug = model.get("debug");
-  const log = debug
-    ? (...args: any[]) => console.log("[GoFish Widget]", ...args)
-    : () => {};
-
-  log("Rendering layer...");
-
-  const spec = model.get("spec") as LayerSpec;
-  const arrowDataRaw = model.get("arrow_data");
-
-  let arrowDict: Record<string, string> = {};
-  try {
-    arrowDict = JSON.parse(arrowDataRaw);
-  } catch (e) {
-    throw new Error(`Failed to parse layer arrow_data JSON: ${e}`);
-  }
-
-  const resolveToken = makeTokenResolver();
-  const childCharts: ChartBuilder[] = spec.charts.map(
-    (chartSpec: ChartSpec, i: number) => {
-      const b64 = arrowDict[String(i)] || "";
-      const data = decodeArrowB64(b64);
-      log(`Building chart ${i}: ${data.length} rows`);
-      return buildChart(chartSpec, data, bridge, resolveToken);
-    }
-  );
-
-  const resolvedLayerOptions = resolveOptions(spec.options || {});
-  const renderOptions: RenderOptions = {
-    w: model.get("width"),
-    h: model.get("height"),
-    axes: model.get("axes"),
-    debug,
+/**
+ * Build a typed `Serialize.DeriveBridge` on top of a raw RPC bridge.
+ * Translates a rows-in / rows-out `applyLambda` call into the
+ * arrow-base64 transport the Python side speaks.
+ */
+function makeDeriveBridgeFromRaw(raw: RawDeriveBridge): Serialize.DeriveBridge {
+  return {
+    async applyLambda(lambdaId: string, rows: any[]): Promise<any[]> {
+      if (rows.length === 0) return [];
+      const arrowBuffer = arrayToArrow(rows);
+      const arrowB64 = btoa(String.fromCharCode(...arrowBuffer));
+      const resultB64 = await raw.request(lambdaId, arrowB64);
+      const resultBuffer = Uint8Array.from(atob(resultB64), (c) =>
+        c.charCodeAt(0)
+      );
+      return arrowTableToArray(Arrow.tableFromIPC(resultBuffer));
+    },
   };
-
-  if (Object.keys(resolvedLayerOptions).length > 0) {
-    Layer(resolvedLayerOptions, childCharts).render(container, renderOptions);
-  } else {
-    Layer(childCharts).render(container, renderOptions);
-  }
-  log("Layer rendered successfully!");
-}
-
-function renderRawMark(
-  model: WidgetModel,
-  container: HTMLElement,
-  bridge: DeriveBridge
-): void {
-  const spec = model.get("spec") as unknown as RawMarkSpec;
-  const debug = model.get("debug");
-  const log = debug
-    ? (...args: any[]) => console.log("[GoFish Widget]", ...args)
-    : () => {};
-
-  log("Building raw mark...");
-  const resolveToken = makeTokenResolver();
-  const mark = mapMark(spec.mark, bridge, resolveToken) as any;
-  const renderOptions: RenderOptions = {
-    w: model.get("width"),
-    h: model.get("height"),
-    axes: model.get("axes"),
-    debug,
-  };
-  log("Rendering raw mark with options:", renderOptions);
-  mark.render(container, renderOptions);
-  log("Raw mark rendered successfully!");
-}
-
-function renderChart(
-  model: WidgetModel,
-  container: HTMLElement,
-  bridge: DeriveBridge
-): void {
-  const spec = model.get("spec");
-  if ((spec as any).type === "layer") {
-    renderLayer(model, container, bridge);
-    return;
-  }
-  if ((spec as any).type === "raw-mark") {
-    renderRawMark(model, container, bridge);
-    return;
-  }
-
-  const chartSpec = spec as ChartSpec;
-  const debug = model.get("debug");
-  const log = debug
-    ? (...args: any[]) => console.log("[GoFish Widget]", ...args)
-    : () => {};
-
-  let data: Record<string, any>[] = [];
-  const arrowDataB64 = model.get("arrow_data");
-  if (arrowDataB64) {
-    log("Decoding Arrow data...");
-    data = decodeArrowB64(arrowDataB64);
-    log(`Converted to ${data.length} data objects`);
-  }
-
-  log("Building chart...");
-  const resolveToken = makeTokenResolver();
-  const node = buildChart(chartSpec, data, bridge, resolveToken);
-
-  const renderOptions: RenderOptions = {
-    w: model.get("width"),
-    h: model.get("height"),
-    axes: model.get("axes"),
-    debug,
-  };
-  log("Rendering with options:", renderOptions);
-  node.render(container, renderOptions);
-  log("Chart rendered successfully!");
 }
 
 /**
- * Per-widget derive bridge: assigns request_ids, sets `derive_request`,
+ * Per-widget raw RPC bridge: assigns request_ids, sets `derive_request`,
  * resolves the matching promise when `derive_response` arrives.
  */
-function makeDeriveBridge(model: WidgetModel): DeriveBridge {
+function makeRawDeriveBridge(model: WidgetModel): RawDeriveBridge {
   let nextId = 0;
   const pending = new Map<
     string,
@@ -887,9 +230,158 @@ function makeDeriveBridge(model: WidgetModel): DeriveBridge {
   };
 }
 
+/** Build the full Serialize.DeriveBridge for a widget instance. */
+function makeDeriveBridge(model: WidgetModel): Serialize.DeriveBridge {
+  return makeDeriveBridgeFromRaw(makeRawDeriveBridge(model));
+}
+
+// ---------------------------------------------------------------------------
+// Rendering
+// ---------------------------------------------------------------------------
+
+function renderError(
+  container: HTMLElement,
+  error: Error,
+  debug: boolean
+): void {
+  const message = error.message || String(error);
+  const stack = debug && error.stack ? error.stack : "";
+  container.innerHTML = `
+    <div style="color: red; padding: 20px; border: 2px solid red; background: #ffe0e0;">
+      <h2 style="margin-top: 0;">GoFish Widget Error</h2>
+      <p><strong>${message}</strong></p>
+      ${stack ? `<pre style="background: #fff; padding: 10px; overflow: auto; white-space: pre-wrap;">${stack}</pre>` : ""}
+    </div>
+  `;
+}
+
+function renderLayer(
+  model: WidgetModel,
+  container: HTMLElement,
+  bridge: Serialize.DeriveBridge
+): void {
+  const debug = model.get("debug");
+  const log = debug
+    ? (...args: any[]) => console.log("[GoFish Widget]", ...args)
+    : () => {};
+
+  log("Rendering layer...");
+
+  const spec = model.get("spec") as LayerSpec;
+  const arrowDataRaw = model.get("arrow_data");
+
+  let arrowDict: Record<string, string> = {};
+  try {
+    arrowDict = JSON.parse(arrowDataRaw);
+  } catch (e) {
+    throw new Error(`Failed to parse layer arrow_data JSON: ${e}`);
+  }
+
+  const resolveToken = Serialize.makeTokenResolver();
+  const childCharts: ChartBuilder<any>[] = spec.charts.map(
+    (chartSpec: ChartSpec, i: number) => {
+      const b64 = arrowDict[String(i)] || "";
+      const data = decodeArrowB64(b64);
+      log(`Building chart ${i}: ${data.length} rows`);
+      return Serialize.buildChart(chartSpec, data, bridge, resolveToken);
+    }
+  );
+
+  const resolvedLayerOptions = Serialize.resolveOptions(
+    (spec.options ?? {}) as Record<string, any>
+  );
+  const renderOptions: RenderOptions = {
+    w: model.get("width"),
+    h: model.get("height"),
+    axes: model.get("axes"),
+    debug,
+  };
+
+  if (Object.keys(resolvedLayerOptions).length > 0) {
+    (Layer as any)(resolvedLayerOptions, childCharts).render(
+      container,
+      renderOptions
+    );
+  } else {
+    (Layer as any)(childCharts).render(container, renderOptions);
+  }
+  log("Layer rendered successfully!");
+}
+
+function renderRawMark(
+  model: WidgetModel,
+  container: HTMLElement,
+  bridge: Serialize.DeriveBridge
+): void {
+  const spec = model.get("spec") as unknown as RawMarkSpec;
+  const debug = model.get("debug");
+  const log = debug
+    ? (...args: any[]) => console.log("[GoFish Widget]", ...args)
+    : () => {};
+
+  log("Building raw mark...");
+  const resolveToken = Serialize.makeTokenResolver();
+  const mark = Serialize.mapMark(spec.mark, bridge, resolveToken) as any;
+  const renderOptions: RenderOptions = {
+    w: model.get("width"),
+    h: model.get("height"),
+    axes: model.get("axes"),
+    debug,
+  };
+  log("Rendering raw mark with options:", renderOptions);
+  mark.render(container, renderOptions);
+  log("Raw mark rendered successfully!");
+}
+
+function renderChart(
+  model: WidgetModel,
+  container: HTMLElement,
+  bridge: Serialize.DeriveBridge
+): void {
+  const spec = model.get("spec");
+  if ((spec as any).type === "layer") {
+    renderLayer(model, container, bridge);
+    return;
+  }
+  if ((spec as any).type === "raw-mark") {
+    renderRawMark(model, container, bridge);
+    return;
+  }
+
+  const chartSpec = spec as ChartSpec;
+  const debug = model.get("debug");
+  const log = debug
+    ? (...args: any[]) => console.log("[GoFish Widget]", ...args)
+    : () => {};
+
+  let data: Record<string, any>[] = [];
+  const arrowDataB64 = model.get("arrow_data");
+  if (arrowDataB64) {
+    log("Decoding Arrow data...");
+    data = decodeArrowB64(arrowDataB64);
+    log(`Converted to ${data.length} data objects`);
+  }
+
+  log("Building chart...");
+  const resolveToken = Serialize.makeTokenResolver();
+  const node = Serialize.buildChart(chartSpec, data, bridge, resolveToken);
+
+  const renderOptions: RenderOptions = {
+    w: model.get("width"),
+    h: model.get("height"),
+    axes: model.get("axes"),
+    debug,
+  };
+  log("Rendering with options:", renderOptions);
+  node.render(container, renderOptions);
+  log("Chart rendered successfully!");
+}
+
+// ---------------------------------------------------------------------------
+// AnyWidget entry point
+// ---------------------------------------------------------------------------
+
 /**
- * AnyWidget entry point.
- *
  * `initialize` runs once per widget on mount: that's where we wire up
  * the derive bridge so its listener and pending map are scoped to this
  * widget instance. `render` paints the chart into the cell DOM.
@@ -925,7 +417,9 @@ export default {
       return;
     }
 
-    let bridge = (model as any).__gofishBridge as DeriveBridge | undefined;
+    let bridge = (model as any).__gofishBridge as
+      | Serialize.DeriveBridge
+      | undefined;
     if (!bridge) {
       // Fallback if initialize() didn't run for some reason (e.g. older
       // anywidget environment that only calls render).

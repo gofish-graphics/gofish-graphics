@@ -128,6 +128,10 @@ export type {
 } from "./ast/marks/chart";
 // Side-effect import: attaches .facet() / .stack() to ChartBuilder.
 import "./ast/marks/builderMixins";
+
+// Frontend-IR deserializer — re-exported as a namespace so the symbol set
+// stays scoped (`Serialize.mapMark`, etc.).
+export * as Serialize from "./serialize";
 export { palette, gradient, assignGradientColor } from "./ast/colorSchemes";
 export type {
   ColorConfig,
