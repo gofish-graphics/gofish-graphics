@@ -396,13 +396,16 @@ export function createOperator<Datum, Options extends Record<string, any>>(
       // Tag combinator-form mark with IR-serialization metadata, mirroring
       // the operator-form tagging below. The `__combinator: true` flag tells
       // the emitter to write the spec into the mark tree (with `children`)
-      // rather than into the operators[] list.
+      // rather than into the operators[] list. We stash the child marks on
+      // the tag so the emitter can walk them — without this, the children
+      // are trapped inside the closure of `base`.
       if (cfg.serialize) {
         const payload = cfg.serialize.shape ? cfg.serialize.shape(opts) : opts;
         (combinator as any).__serialize = {
           type: cfg.serialize.type,
           opts: payload,
           __combinator: true,
+          children: marks,
         };
       }
       return combinator;

@@ -423,6 +423,7 @@ export function layer<T>(
     type: "layer",
     opts,
     __combinator: true,
+    children: marks,
   };
   return result;
 }
@@ -463,6 +464,7 @@ function makePorterDuffCombinator(
       type: irType,
       opts,
       __combinator: true,
+      children: marks,
     };
     return result;
   }

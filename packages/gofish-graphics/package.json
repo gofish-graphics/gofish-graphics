@@ -37,9 +37,10 @@
     "prepublishOnly": "pnpm run build",
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build",
-    "test": "pnpm run test:path && pnpm run test:font",
+    "test": "pnpm run test:path && pnpm run test:font && pnpm run test:serialize",
     "test:path": "tsx src/tests/path.test.ts",
-    "test:font": "tsx src/tests/fontUtils.test.ts"
+    "test:font": "tsx src/tests/fontUtils.test.ts",
+    "test:serialize": "pnpm run build && tsx src/tests/serialize.test.ts"
   },
   "devDependencies": {
     "@storybook/addon-docs": "^9.1.6",

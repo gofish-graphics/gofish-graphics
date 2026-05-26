@@ -35,3 +35,5 @@ export {
   type TokenResolver,
   type TokenSentinel,
 } from "./fromJSON";
+
+export { toJSON, toJSONLayer, toJSONRawMark } from "./toJSON";
