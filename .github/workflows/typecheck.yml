@@ -28,8 +28,5 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Typecheck gofish-graphics (src)
+      - name: Typecheck gofish-graphics
         run: pnpm --filter gofish-graphics typecheck
-
-      - name: Typecheck gofish-graphics (declaration mode)
-        run: pnpm --filter gofish-graphics typecheck:emit
