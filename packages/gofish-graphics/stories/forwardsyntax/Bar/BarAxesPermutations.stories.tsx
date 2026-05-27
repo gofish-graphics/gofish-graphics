@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../../helper";
 import { seafood } from "../../../src/data/catch";
 import { Chart, spread, rect } from "../../../src/lib";
-import type { AxesOptions } from "../../../src/ast/gofish";
+import type { AxesOptions, AxisOptions } from "../../../src/ast/gofish";
 
 const meta: Meta = {
   title: "Forward Syntax V3/Bar/Axes Permutations",
@@ -23,13 +23,12 @@ type Args = { w: number; h: number };
 function renderBar(args: Args, axes: AxesOptions): HTMLElement {
   const container = initializeContainer();
 
-  Chart(seafood)
-    .flow(spread({ by: "lake",  dir: "x" }))
+  Chart(seafood, { axes })
+    .flow(spread({ by: "lake",  dir: "x", axes: axes }))
     .mark(rect({ h: "count" }))
     .render(container, {
       w: args.w,
       h: args.h,
-      axes,
     });
 
   return container;

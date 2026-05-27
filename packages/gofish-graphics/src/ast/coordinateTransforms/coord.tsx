@@ -3,6 +3,8 @@
 // </gofish-wiki>
 
 import { Show } from "solid-js";
+import { ticks as d3Ticks, nice as d3Nice } from "d3-array";
+import type { JSX } from "solid-js";
 import { path, pathToSVGPath, transformPath } from "../../path";
 import { GoFishAST } from "../_ast";
 import { GoFishNode } from "../_node";
@@ -16,10 +18,12 @@ import {
   ORDINAL,
   isORDINAL,
   isPOSITION,
+  isUNDEFINED,
 } from "../underlyingSpace";
 import { createNodeOperator } from "../withGoFish";
 import { computeTransformedBoundingBox } from "./coordUtils";
 import { empty, union } from "../../util/bbox";
+import type { AxesOptions } from "../gofish";
 
 export type CoordinateTransform = {
   type: string;
@@ -99,16 +103,23 @@ export const coord = createNodeOperator(
       name,
       transform: coordTransform,
       grid = false,
+      axes,
+      padding = 30,
       ...fancyDims
     }: {
       key?: string;
       name?: string;
       transform: CoordinateTransform;
       grid?: boolean;
+      axes?: AxesOptions;
+      padding?: number;
     } & FancyDims,
     children: GoFishAST[]
   ) => {
     const dims = elaborateDims(fancyDims);
+    const spaceRef: { current: Size<UnderlyingSpace> | null } = {
+      current: null,
+    };
 
     return new GoFishNode(
       {
@@ -187,12 +198,15 @@ export const coord = createNodeOperator(
             ySpace = ORDINAL(Array.from(allKeys));
           }
 
-          return [xSpace, ySpace];
+          const result: Size<UnderlyingSpace> = [xSpace, ySpace];
+          spaceRef.current = result;
+          return result;
         },
         layout: (shared, size, scaleFactors, children, posScales) => {
           /* TODO: need correct scale factors */
           // TODO: only works for polar2 right now
-          size = [2 * Math.PI, Math.min(size[0], size[1]) / 2 - 30];
+          const [origW, origH] = size;
+          size = [2 * Math.PI, Math.min(origW, origH) / 2 - padding];
           const childPlaceables = children.map((child) =>
             child.layout(size, [1, 1], [undefined, undefined])
           );
@@ -258,25 +272,43 @@ export const coord = createNodeOperator(
             maxY: screenBboxMaxY,
           } = screenBbox;
 
-          // Return intrinsicDims in screen space, normalized to start at (0, 0) for parent layouts
-          const intrinsicDims = {
-            x: 0,
-            y: 0,
-            w: screenBboxMaxX - screenBboxMinX,
-            h: screenBboxMaxY - screenBboxMinY,
-          };
+          // When axes are enabled the circle must be centered in the full
+          // allocated space so labels aren't clipped at the edges.
+          // Without axes (e.g. pie glyphs in scatter) use the tighter
+          // content-bbox sizing so the glyph doesn't claim excess space.
+          const hasAxes = !!axes;
+          const intrinsicDims =
+            dims[0].min !== undefined
+              ? {
+                  x: 0,
+                  y: 0,
+                  w: screenBboxMaxX - screenBboxMinX,
+                  h: screenBboxMaxY - screenBboxMinY,
+                }
+              : hasAxes
+                ? { x: 0, y: 0, w: origW, h: origH }
+                : {
+                    x: 0,
+                    y: 0,
+                    w: screenBboxMaxX - screenBboxMinX,
+                    h: screenBboxMaxY - screenBboxMinY,
+                  };
 
-          // Translate to offset the negative values and position correctly
+          const half = Math.min(origW, origH) / 2;
           const translateX =
             dims[0].min !== undefined
               ? coordTransform.transform([dims[0].min, dims[1].min ?? 0])[0] -
                 screenBboxMinX
-              : -screenBboxMinX;
+              : hasAxes
+                ? half
+                : -screenBboxMinX;
           const translateY =
             dims[1].min !== undefined
               ? coordTransform.transform([dims[0].min ?? 0, dims[1].min])[1] -
                 screenBboxMinY
-              : -screenBboxMinY;
+              : hasAxes
+                ? half
+                : -screenBboxMinY;
 
           return {
             intrinsicDims,
@@ -288,7 +320,7 @@ export const coord = createNodeOperator(
             },
           };
         },
-        render: ({ transform }) => {
+        render: ({ transform, renderData }, _children, node) => {
           const gridLines = () => {
             /* take an evenly space net of lines covering the space, map them through the space, and
           render the paths */
@@ -363,6 +395,192 @@ export const coord = createNodeOperator(
             flattenLayout(child)
           );
 
+          const polarAxisJSX = (): JSX.Element | null => {
+            if (!axes || !spaceRef.current) return null;
+            // Start from the chart-level axes option, then let per-operator
+            // axis: true/false overrides (collected in resolveAxes) take precedence.
+            let axesX = typeof axes === "boolean" ? axes : (axes?.x ?? true);
+            let axesY = typeof axes === "boolean" ? axes : (axes?.y ?? true);
+            if ((node as any)._polarAxisX !== undefined)
+              axesX = (node as any)._polarAxisX;
+            if ((node as any)._polarAxisY !== undefined)
+              axesY = (node as any)._polarAxisY;
+            const [xSpace, ySpace] = spaceRef.current;
+            const rContent =
+              (renderData as any)?.coordinateSpaceBbox?.rMax ??
+              coordTransform.domain[1].max ??
+              100;
+            const RING_GAP = 20;
+            const rOuter = rContent + RING_GAP;
+            const elements: JSX.Element[] = [];
+
+            // Theta axis: outer ring + tick marks + labels.
+            if (axesX && !isUNDEFINED(xSpace)) {
+              // Outer ring
+              elements.push(
+                <circle
+                  cx={0}
+                  cy={0}
+                  r={rOuter}
+                  fill="none"
+                  stroke="gray"
+                  stroke-width="1"
+                />
+              );
+
+              if (isPOSITION(xSpace) && xSpace.domain) {
+                // Continuous theta axis: regular count ticks around the ring.
+                // Use a niced max so ticks evenly divide the circle — no small leftover gap.
+                const xMin = xSpace.domain.min!;
+                const xMax = xSpace.domain.max!;
+                const [, nicedMax] = d3Nice(xMin, xMax, 8);
+                const tickVals = d3Ticks(xMin, nicedMax, 8).filter(
+                  (t) => t < nicedMax
+                );
+                for (const t of tickVals) {
+                  const theta = (t / (nicedMax - xMin)) * 2 * Math.PI;
+                  const [ix, iy] = coordTransform.transform([theta, rOuter]);
+                  const [ox, oy] = coordTransform.transform([
+                    theta,
+                    rOuter + 6,
+                  ]);
+                  elements.push(
+                    <line
+                      x1={ix}
+                      y1={iy}
+                      x2={ox}
+                      y2={oy}
+                      stroke="gray"
+                      stroke-width="1"
+                    />
+                  );
+                  const [lx, ly] = coordTransform.transform([
+                    theta,
+                    rOuter + 16,
+                  ]);
+                  const anchor = lx < -5 ? "end" : lx > 5 ? "start" : "middle";
+                  elements.push(
+                    <text
+                      transform="scale(1,-1)"
+                      x={lx}
+                      y={-ly}
+                      text-anchor={anchor}
+                      dominant-baseline="middle"
+                      font-size="10px"
+                      fill="gray"
+                    >
+                      {t}
+                    </text>
+                  );
+                }
+              } else if (isORDINAL(xSpace) && xSpace.domain) {
+                // Ordinal theta axis: evenly-spaced sector labels by index
+                const keys = xSpace.domain;
+                const n = keys.length;
+                const sectorWidth = (2 * Math.PI) / n;
+                for (let i = 0; i < n; i++) {
+                  const thetaStart = i * sectorWidth;
+                  const thetaCenter = thetaStart + sectorWidth / 2;
+                  const [ix, iy] = coordTransform.transform([
+                    thetaStart,
+                    rOuter,
+                  ]);
+                  const [ox, oy] = coordTransform.transform([
+                    thetaStart,
+                    rOuter + 6,
+                  ]);
+                  elements.push(
+                    <line
+                      x1={ix}
+                      y1={iy}
+                      x2={ox}
+                      y2={oy}
+                      stroke="gray"
+                      stroke-width="1"
+                    />
+                  );
+                  const [lx, ly] = coordTransform.transform([
+                    thetaCenter,
+                    rOuter + 16,
+                  ]);
+                  const anchor = lx < -5 ? "end" : lx > 5 ? "start" : "middle";
+                  elements.push(
+                    <text
+                      transform="scale(1,-1)"
+                      x={lx}
+                      y={-ly}
+                      text-anchor={anchor}
+                      dominant-baseline="middle"
+                      font-size="10px"
+                      fill="gray"
+                    >
+                      {keys[i]}
+                    </text>
+                  );
+                }
+              }
+            }
+
+            // Continuous radial axis at theta=0.
+            if (axesY && isPOSITION(ySpace) && ySpace.domain) {
+              const yMin = ySpace.domain.min!;
+              const yMax = ySpace.domain.max!;
+              const dataToScreenR = (v: number) =>
+                yMax === yMin ? 0 : ((v - yMin) / (yMax - yMin)) * rContent;
+
+              // Horizontal offset so the axis sits slightly left of center
+              const H_GAP = 6;
+              const tickVals = d3Ticks(yMin, yMax, 5);
+              // Line runs from center (r=0) to the outer ring (rContent), past the tallest chunk
+              const [x0, y0] = coordTransform.transform([
+                0,
+                dataToScreenR(yMin),
+              ]);
+              const [x1, y1] = coordTransform.transform([0, rContent]);
+              elements.push(
+                <line
+                  x1={x0 - H_GAP}
+                  y1={y0}
+                  x2={x1 - H_GAP}
+                  y2={y1}
+                  stroke="gray"
+                  stroke-width="1"
+                />
+              );
+              for (const t of tickVals) {
+                const [tx, ty] = coordTransform.transform([
+                  0,
+                  dataToScreenR(t),
+                ]);
+                elements.push(
+                  <line
+                    x1={tx - H_GAP - 4}
+                    y1={ty}
+                    x2={tx - H_GAP + 4}
+                    y2={ty}
+                    stroke="gray"
+                    stroke-width="1"
+                  />
+                );
+                elements.push(
+                  <text
+                    transform="scale(1,-1)"
+                    x={tx - H_GAP - 6}
+                    y={-ty}
+                    text-anchor="end"
+                    dominant-baseline="middle"
+                    font-size="10px"
+                    fill="gray"
+                  >
+                    {t}
+                  </text>
+                );
+              }
+            }
+
+            return elements.length > 0 ? <g>{elements}</g> : null;
+          };
+
           return (
             <g
               transform={`translate(${transform?.translate?.[0] ?? 0}, ${transform?.translate?.[1] ?? 0})`}
@@ -371,6 +589,7 @@ export const coord = createNodeOperator(
                 child.INTERNAL_render(coordTransform)
               )}
               <Show when={grid}>{gridLines()}</Show>
+              {polarAxisJSX()}
             </g>
           );
         },

@@ -126,8 +126,8 @@ def story_rose_gradient():
     return (
         chart(_ROSE_DATA, color=gradient("blues"), coord=clock())
         .flow(
-            spread(by="sector", dir="x", spacing=0),
-            stack(by="ring", dir="y"),
+            spread(by="sector", dir="x", spacing=0, axes=False),
+            stack(by="ring", dir="y", axes=True),
         )
         .mark(rect(w=(math.pi * 2) / _NUM_SECTORS, emX=True, h="value", fill="ring")),
         {"w": 400, "h": 400, "axes": True},

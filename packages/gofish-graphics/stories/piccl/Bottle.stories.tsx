@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
-import { Chart, spread, rect, image, text, Constraint, layer, atop, v } from "../../src/lib";
+import { Chart, spread, rect, image, text, blank, Constraint, layer, atop, v } from "../../src/lib";
 import bottlePng from "../assets/wilsonblanco.png";
 
 const data = [
@@ -31,8 +31,8 @@ export const Default: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    Chart(data)
-      .flow(spread({ by: "category", dir: "x", spacing: 20 }))
+    Chart(data, {axes: false})
+      .flow(spread({ by: "category", dir: "x", spacing: 20, axes: {x: false} }))
       .mark(layer(
         [
           atop({blendMode: "color"}, [
@@ -40,7 +40,7 @@ export const Default: StoryObj<Args> = {
           rect({h: "amount", fill: "#00ff00"}),
         ]).name("bottle"),
         rect({h: 1, fill: "#666", w: 175, y: "amount"}).name("line"),
-        text({fontSize: 35, fill: "#666", text: (d) => `${d.amount}%`}).name("label"),
+        text({fontSize: 35, fill: "#666", text: (d) => `${d.amount}%`}).name("label")
       ]).constrain(({line, label, bottle}) => [
         Constraint.align({ x: "start" }, [bottle, line]),
         Constraint.distribute({ dir: "y", spacing: 0 }, [line, label]),
@@ -48,8 +48,7 @@ export const Default: StoryObj<Args> = {
       ]))
       .render(container, {
         w: args.w,
-        h: args.h,
-        axes: { x: false, y: true},
+        h: args.h
       });
 
     return container;

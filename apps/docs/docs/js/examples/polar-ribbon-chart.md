@@ -24,7 +24,7 @@ import { seafood } from "./dataset";
 
 const container = document.getElementById("app");
 
-Layer({ coord: clock() }, [
+Layer({ coord: clock(), axes: true }, [
   Chart(seafood)
     .flow(
       spread({
@@ -46,7 +46,6 @@ Layer({ coord: clock() }, [
   w: 500,
   h: 300,
   transform: { x: 200, y: 200 },
-  axes: true,
 });
 ```
 

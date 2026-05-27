@@ -251,6 +251,18 @@ class TestIRDetails:
         ir = default().to_ir()
         assert ir["options"]["color"]["_tag"] == "palette"
 
+    def test_axes_is_a_chart_option(self):
+        # axes lives in chart() options (not .render()), and the structured
+        # shape passes through to the IR verbatim for the JS bridge.
+        from stories.forwardsyntax.bar.bar_axes import both, x_only, custom_title
+
+        _assert_valid_ir(both())
+        assert both().to_ir()["options"]["axes"] is True
+        assert x_only().to_ir()["options"]["axes"] == {"x": True, "y": False}
+        assert custom_title().to_ir()["options"]["axes"]["x"]["title"] == (
+            "Sampling Location"
+        )
+
     def test_normalized_stacked_bar_ops(self):
         from stories.vega_lite.normalized_stacked_bar_chart import default
         stub = [

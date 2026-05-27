@@ -12,7 +12,7 @@ import { catchLocationsArray } from "./dataset";
 
 const container = document.getElementById("app");
 
-Layer([
+Layer({ axes: true }, [
   Chart(catchLocationsArray)
     .flow(scatter({ by: "lake", x: "x", y: "y" }))
     .mark(blank().name("points")),
@@ -20,7 +20,6 @@ Layer([
 ]).render(container, {
   w: 500,
   h: 300,
-  axes: true,
 });
 ```
 

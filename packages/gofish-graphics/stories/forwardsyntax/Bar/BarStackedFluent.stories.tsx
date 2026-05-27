@@ -23,11 +23,11 @@ export const Default: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    Chart(seafood)
+    Chart(seafood, { axes: true })
       .facet({ by: "lake", dir: "x" })
       .stack({ by: "species", dir: "y" })
       .mark(rect({ h: "count", fill: "species" }))
-      .render(container, { w: args.w, h: args.h, axes: true });
+      .render(container, { w: args.w, h: args.h });
 
     return container;
   },

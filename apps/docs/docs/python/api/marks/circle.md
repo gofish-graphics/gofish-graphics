@@ -9,9 +9,9 @@ and dot-based glyphs.
 ```python
 from gofish import chart, scatter, circle
 
-chart(catch_locations).flow(scatter(by="lake", x="x", y="y")).mark(
+chart(catch_locations, axes=True).flow(scatter(by="lake", x="x", y="y")).mark(
     circle(r=5)
-).render(w=500, h=300, axes=True)
+).render(w=500, h=300)
 ```
 
 ## Signature
