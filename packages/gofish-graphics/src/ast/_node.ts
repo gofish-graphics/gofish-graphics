@@ -388,6 +388,10 @@ export class GoFishNode {
     };
 
     if (anchorToDim[anchor] === undefined) {
+      // Interval has min/max/center/size but not "baseline" — baseline is a
+      // synthetic anchor aliased to min above (see TODO). When the anchor is
+      // already undefined and we're being asked to set it, "baseline" can't
+      // be written back: just no-op so the translate path below is skipped.
       if (anchor !== "baseline") {
         this.intrinsicDims![dir][anchor] = value;
       }

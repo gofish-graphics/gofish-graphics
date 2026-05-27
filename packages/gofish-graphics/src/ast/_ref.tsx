@@ -54,6 +54,9 @@ export class GoFishRef {
   public parent?: GoFishNode;
 
   private intrinsicDims?: Dimensions;
+  /** @internal Layout-pass state. Public to match GoFishNode.transform so
+   *  `(node as GoFishAST).transform` resolves on the union; external callers
+   *  should not rely on this field. */
   public transform?: Transform;
   public shared: Size<boolean>;
   private measurement!: (scaleFactors: Size) => Size;
@@ -313,6 +316,10 @@ export class GoFishRef {
     };
 
     if (anchorToDim[anchor] === undefined) {
+      // Interval has min/max/center/size but not "baseline" — baseline is a
+      // synthetic anchor aliased to min above (see TODO). When the anchor is
+      // already undefined and we're being asked to set it, "baseline" can't
+      // be written back: just no-op so the translate path below is skipped.
       if (anchor !== "baseline") {
         this.intrinsicDims![dir][anchor] = value;
       }

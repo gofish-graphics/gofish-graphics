@@ -8,10 +8,12 @@ function runBin<T extends Record<string, any>>(
   options?: { thresholds?: number | number[] }
 ): BinResult[] {
   const thresholds = options?.thresholds ?? 10;
+  // d3 .thresholds() has separate overloads for `number` and `number[]`;
+  // pass a typed value so the right overload is picked.
   const binnerBase = d3bin<T, number>().value((d) => d[field] as number);
   const binner = Array.isArray(thresholds)
-    ? binnerBase.thresholds(thresholds)
-    : binnerBase.thresholds(thresholds);
+    ? binnerBase.thresholds(thresholds as number[])
+    : binnerBase.thresholds(thresholds as number);
   const bins = binner(data.filter((d) => d[field] != null));
   return bins
     .filter((b) => b.x0 !== undefined && b.x1 !== undefined)
