@@ -66,16 +66,17 @@ export function collectConstraintRefs(
   return refs;
 
   function collect(cs: GoFishAST[]): void {
-    // Phase 1: collect direct children (so they win on collision).
+    // Phase 1: collect direct children (so they win on collision). Both
+    // GoFishNode and GoFishRef carry `_name`, so a named ref (used as a
+    // cross-tier stand-in) is a valid constraint target too.
     for (const child of cs) {
-      if (!(child instanceof GoFishNode)) continue;
-      if (child._name) {
-        const raw = child._name;
+      const raw = (child as { _name?: string | Token })._name;
+      if (raw) {
         const name = isToken(raw) ? raw.__tag : raw;
         if (!(name in refs)) refs[name] = { name };
       }
     }
-    // Phase 2: recurse into non-component plain layers.
+    // Phase 2: recurse into non-component plain layers (refs have no children).
     for (const child of cs) {
       if (!(child instanceof GoFishNode)) continue;
       if (child._isComponent) continue;
@@ -97,7 +98,7 @@ export function getPositioningConstraintRefs(
   const names = new Set<string>();
   for (const c of constraints) {
     if (isZOrderConstraint(c)) continue;
-    for (const ref of c.children) names.add(ref.name);
+    for (const ref of c.children) if (ref) names.add(ref.name);
   }
   return names;
 }

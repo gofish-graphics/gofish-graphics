@@ -50,7 +50,10 @@ export type Layout = (
 
 export class GoFishRef {
   public type: string = "ref";
-  public name?: string;
+  // Stored as `_name` (not `name`) so the constraint system's childNameKey,
+  // which reads `_name`, treats a named ref as a constraint target — and so
+  // `name()` can be a chainable method like GoFishNode.name().
+  public _name?: string | Token;
   public parent?: GoFishNode;
 
   private intrinsicDims?: Dimensions;
@@ -68,7 +71,7 @@ export class GoFishRef {
     node,
     shared = [false, false],
   }: {
-    name?: string;
+    name?: string | Token;
     selection?: string | Token | (Token | string | number)[];
     node?: GoFishNode;
     shared?: Size<boolean>;
@@ -76,10 +79,17 @@ export class GoFishRef {
     if (selection === undefined && !node) {
       throw new Error("Ref must have either selection or node");
     }
-    this.name = name;
+    this._name = name;
     this.shared = shared;
     this.selection = selection;
     this.directNode = node;
+  }
+
+  /** Chainable: name this ref so a layer constraint can reference it (mirrors
+   * GoFishNode.name()). Returns `this` so `ref(token).name("x")` works. */
+  public name(name: string | Token): this {
+    this._name = name;
+    return this;
   }
 
   public resolveNames(): void {
