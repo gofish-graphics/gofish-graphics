@@ -1,6 +1,7 @@
 ---
 title: Frontend IR
 section: JSON Formats
+group: Frontend
 order: 10
 status: stable
 covers:

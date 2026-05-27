@@ -1,6 +1,7 @@
 ---
 title: Full JSON Schema
 section: JSON Formats
+group: Frontend
 order: 30
 status: draft
 ---

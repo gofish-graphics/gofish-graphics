@@ -1,6 +1,7 @@
 ---
 title: Using the Frontend IR
 section: JSON Formats
+group: Frontend
 order: 20
 status: draft
 ---
