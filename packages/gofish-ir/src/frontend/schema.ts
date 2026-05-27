@@ -206,6 +206,10 @@ export type LeafMarkType =
 
 export type CombinatorMarkType =
   | "spread"
+  | "stack"
+  | "scatter"
+  | "group"
+  | "table"
   | "layer"
   | "arrow"
   | "connect"
@@ -385,6 +389,10 @@ export const LEAF_MARK_TYPES: readonly LeafMarkType[] = [
 /** The set of combinator-mark type discriminators recognized in v0. */
 export const COMBINATOR_MARK_TYPES: readonly CombinatorMarkType[] = [
   "spread",
+  "stack",
+  "scatter",
+  "group",
+  "table",
   "layer",
   "arrow",
   "connect",

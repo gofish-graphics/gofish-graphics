@@ -170,6 +170,10 @@ export const FRONTEND_IR_JSON_SCHEMA = {
         type: {
           enum: [
             "spread",
+            "stack",
+            "scatter",
+            "group",
+            "table",
             "layer",
             "arrow",
             "connect",

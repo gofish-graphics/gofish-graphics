@@ -359,6 +359,19 @@ function makeConstrainableMark<T>(base: Mark<T>): ConstrainableMark<T> {
       };
     } else if (baseTag) {
       (labeled as any).__serialize = baseTag;
+      if (
+        typeof accessor === "function" &&
+        typeof console !== "undefined" &&
+        typeof console.warn === "function"
+      ) {
+        // Function accessors don't serialize; the mark stays serializable
+        // but the label is dropped from the emitted IR.
+        console.warn(
+          "[gofish-ir] .label(fn): function accessors aren't serializable; " +
+            "label will be omitted from the emitted IR. Use a string field " +
+            "name if you need the label to round-trip."
+        );
+      }
     }
     return makeConstrainableMark(labeled);
   };

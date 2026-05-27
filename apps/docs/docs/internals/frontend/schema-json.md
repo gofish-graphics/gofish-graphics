@@ -273,6 +273,10 @@ for the API.
         "type": {
           "enum": [
             "spread",
+            "stack",
+            "scatter",
+            "group",
+            "table",
             "layer",
             "arrow",
             "connect",

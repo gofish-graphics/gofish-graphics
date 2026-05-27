@@ -88,6 +88,17 @@ export const COMBINATOR_FACTORIES: Record<
   // looser shape. Casting once at the dispatch boundary keeps the rest of
   // the deserializer typed.
   spread: (opts, marks) => (spread as any)(opts, marks) as unknown as Mark<any>,
+  // stack/scatter/group/table are DualModeOperators built via
+  // `createOperator` (same as spread). Their `(opts, marks)` overload
+  // produces a combinator-form Mark that `toJSON` emits with
+  // `__combinator: true`, so the deserializer needs the matching
+  // factories — otherwise the IR round-trips fine through `toJSON` but
+  // fromJSON throws "Unknown combinator mark type".
+  stack: (opts, marks) => (stack as any)(opts, marks) as unknown as Mark<any>,
+  scatter: (opts, marks) =>
+    (scatter as any)(opts, marks) as unknown as Mark<any>,
+  group: (opts, marks) => (group as any)(opts, marks) as unknown as Mark<any>,
+  table: (opts, marks) => (table as any)(opts, marks) as unknown as Mark<any>,
   layer: (opts, marks) => (layer as any)(opts, marks) as unknown as Mark<any>,
   arrow: (opts, marks) => (arrow as any)(opts, marks) as unknown as Mark<any>,
   connect: (opts, marks) =>

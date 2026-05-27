@@ -356,6 +356,21 @@ async function main() {
     );
   }
 
+  // Combinator-form stack: previously emitted by toJSON but COMBINATOR_FACTORIES
+  // had no entry to deserialize it, so fromJSON threw "Unknown combinator
+  // mark type". The fix is two lines in registry.ts; this test pins it.
+  {
+    const chart = Chart([{ a: 1 }]).mark(
+      stack({ dir: "y" }, [rect({ h: 10 }), rect({ h: 20 })])
+    );
+    const doc = await chart.toJSON();
+    validateDoc(doc, "combinator-form stack");
+    const mark = (doc.root as Frontend.ChartIR).mark as any;
+    check("combinator stack emits", mark.type === "stack");
+    check("combinator stack is flagged", mark.__combinator === true);
+    check("combinator stack has children", Array.isArray(mark.children));
+  }
+
   console.log(`\n${passed} passed, ${failed} failed`);
   if (failed > 0) {
     process.exit(1);

@@ -485,10 +485,14 @@ export function stack(
   // Stack is `spread({glue: true})` under the hood, but the IR wire format
   // discriminates them by type. Re-tag the produced operator/mark so the
   // frontend-IR emitter sees `{ type: "stack", ...stripped-opts }` instead
-  // of `{ type: "spread", glue: true, ... }`.
-  if ((result as any).__serialize) {
-    const { glue: _glue, ...stackPayload } = (result as any).__serialize.opts;
+  // of `{ type: "spread", glue: true, ... }`. Preserve `__combinator` and
+  // `children` when present (combinator form) — dropping them would make
+  // toJSON emit a leaf-shaped node missing its children.
+  const tag = (result as any).__serialize;
+  if (tag) {
+    const { glue: _glue, ...stackPayload } = tag.opts;
     (result as any).__serialize = {
+      ...tag,
       type: "stack",
       opts: stackPayload,
     };

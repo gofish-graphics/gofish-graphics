@@ -165,6 +165,19 @@ function propagateSerializeWithLabel(
       accessor,
       ...(options && typeof options === "object" ? options : {}),
     };
+  } else if (
+    typeof accessor === "function" &&
+    typeof console !== "undefined" &&
+    typeof console.warn === "function"
+  ) {
+    // Function accessors can't be JSON-serialized. The mark stays
+    // serializable (the rest of the tag propagates) but the label is
+    // dropped from the emitted IR. Matches `dataToIR`'s warn precedent.
+    console.warn(
+      "[gofish-ir] .label(fn): function accessors aren't serializable; " +
+        "label will be omitted from the emitted IR. Use a string field " +
+        "name if you need the label to round-trip."
+    );
   }
   (to as any).__serialize = nextTag;
   if ((from as any).__axisFields) {
