@@ -295,6 +295,67 @@ async function main() {
     );
   }
 
+  // -------------------------------------------------------------------------
+  // Chained .name() and .label() propagate through __serialize.
+  // -------------------------------------------------------------------------
+  console.log("\n# Chained .name() and .label() survive toJSON");
+
+  // .name("bars") on a leaf mark — the prior bug was that the chain
+  // returned a new mark without __serialize, throwing in toJSON.
+  {
+    const chart = Chart([{ a: 1 }]).mark(rect({ h: 10 }).name("bars"));
+    const doc = await chart.toJSON();
+    validateDoc(doc, "chart with .name()");
+    const mark = (doc.root as Frontend.ChartIR).mark as any;
+    check(".name('bars') survives toJSON", mark.name === "bars");
+    check(".name() preserves other channel opts", mark.h === 10);
+  }
+
+  // .name(...) on a combinator-form mark.
+  {
+    const chart = Chart([{ a: 1 }]).mark(
+      layer([rect({ w: 5 }), rect({ w: 10 })]).name("layered-rects")
+    );
+    const doc = await chart.toJSON();
+    validateDoc(doc, "combinator with .name()");
+    const mark = (doc.root as Frontend.ChartIR).mark as any;
+    check(
+      "combinator .name() survives",
+      mark.name === "layered-rects" &&
+        mark.type === "layer" &&
+        mark.__combinator === true
+    );
+  }
+
+  // Chained .label("accessor", {options})
+  {
+    const chart = Chart([{ a: 1, count: 5 }]).mark(
+      rect({ h: "count" }).label("count", { position: "outset", fontSize: 10 })
+    );
+    const doc = await chart.toJSON();
+    validateDoc(doc, "chart with chained .label()");
+    const mark = (doc.root as Frontend.ChartIR).mark as any;
+    check(".label() preserved as object", typeof mark.label === "object");
+    check(".label() accessor preserved", mark.label?.accessor === "count");
+    check(
+      ".label() options preserved",
+      mark.label?.position === "outset" && mark.label?.fontSize === 10
+    );
+  }
+
+  // Round-trip after .name() — fromJSON should recreate the named mark.
+  {
+    const built = Chart([{ a: 1 }]).mark(
+      rect({ fill: "red" }).name("named")
+    );
+    const doc = await built.toJSON();
+    const mark = (doc.root as Frontend.ChartIR).mark as any;
+    check(
+      "round-trip .name() preserves field on second pass",
+      mark.name === "named"
+    );
+  }
+
   console.log(`\n${passed} passed, ${failed} failed`);
   if (failed > 0) {
     process.exit(1);

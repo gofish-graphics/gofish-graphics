@@ -32,6 +32,10 @@ interface SerializeTag {
   opts: AnyObject;
   __combinator?: true;
   children?: Mark<any>[] | Promise<Mark<any>[]>;
+  /** Set when `.name(layerName)` is chained on a mark. Strings pass through; Tokens become bridge-style sentinels. */
+  name?: string | { __gofish_token: string; __tag: string };
+  /** Set when `.label(accessor, options)` is chained on a mark (object form). */
+  label?: { accessor: string; [k: string]: unknown };
 }
 
 function readTag(value: unknown): SerializeTag | undefined {
@@ -197,6 +201,13 @@ async function markToIR(mark: Mark<any>): Promise<Frontend.MarkIR> {
         "field at the construction site"
     );
   }
+  // Chained `.name()` / `.label()` calls land in dedicated tag slots; both
+  // surface as top-level fields on the emitted leaf/combinator IR (matches
+  // Python's `to_dict()` shape).
+  const chained: AnyObject = {};
+  if (tag.name !== undefined) chained.name = tag.name;
+  if (tag.label !== undefined) chained.label = tag.label;
+
   if (tag.__combinator) {
     const childrenResolved = tag.children
       ? await Promise.resolve(tag.children)
@@ -206,9 +217,10 @@ async function markToIR(mark: Mark<any>): Promise<Frontend.MarkIR> {
       __combinator: true,
       ...(Object.keys(tag.opts).length > 0 ? { options: tag.opts } : {}),
       children: await Promise.all(childrenResolved.map((c) => markToIR(c))),
+      ...chained,
     };
     return ir;
   }
-  // Leaf mark — emit opts directly at the top level.
-  return { type: tag.type, ...tag.opts } as Frontend.LeafMarkIR;
+  // Leaf mark — spread opts plus any chained name/label at the top level.
+  return { type: tag.type, ...tag.opts, ...chained } as Frontend.LeafMarkIR;
 }

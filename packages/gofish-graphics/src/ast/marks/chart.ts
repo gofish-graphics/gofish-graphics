@@ -324,6 +324,16 @@ function makeConstrainableMark<T>(base: Mark<T>): ConstrainableMark<T> {
       }
       return node;
     };
+    // Propagate the IR-serialize tag through the chain and record the
+    // layerName in its `name` slot. Without this, `.name(...)` on a
+    // combinator-form mark (layer, Porter-Duff, …) would strip the tag
+    // and toJSON would fail.
+    const baseTag = (base as any).__serialize;
+    if (baseTag && typeof layerName === "string") {
+      (named as any).__serialize = { ...baseTag, name: layerName };
+    } else if (baseTag) {
+      (named as any).__serialize = baseTag;
+    }
     return makeConstrainableMark(named);
   };
   const withLabel = (
@@ -338,6 +348,18 @@ function makeConstrainableMark<T>(base: Mark<T>): ConstrainableMark<T> {
       node.label(accessor, options);
       return node;
     };
+    const baseTag = (base as any).__serialize;
+    if (baseTag && typeof accessor === "string") {
+      (labeled as any).__serialize = {
+        ...baseTag,
+        label: {
+          accessor,
+          ...(options && typeof options === "object" ? options : {}),
+        },
+      };
+    } else if (baseTag) {
+      (labeled as any).__serialize = baseTag;
+    }
     return makeConstrainableMark(labeled);
   };
   const withConstrain = (

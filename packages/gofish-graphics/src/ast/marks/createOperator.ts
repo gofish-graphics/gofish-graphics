@@ -70,6 +70,11 @@ export function nameableMark<T>(base: Mark<T>): NameableMark<T> {
       }
       return node;
     };
+    // Propagate `__serialize` through the chain so toJSON can still emit
+    // this mark's IR, and stash the layerName so the emitter surfaces it
+    // as the canonical top-level `name` field. Without this, every
+    // `.name("...")` call would strip the serialize tag.
+    propagateSerializeWithName(base, wrapped, layerName);
     return nameableMark(wrapped);
   };
   const withLabel = (
@@ -88,6 +93,7 @@ export function nameableMark<T>(base: Mark<T>): NameableMark<T> {
       node.label(accessor, options);
       return node;
     };
+    propagateSerializeWithLabel(base, wrapped, accessor, options);
     return nameableMark(wrapped);
   };
   const render = async (
@@ -113,6 +119,57 @@ export function nameableMark<T>(base: Mark<T>): NameableMark<T> {
     configurable: true,
   });
   return base as NameableMark<T>;
+}
+
+/**
+ * Copy the `__serialize` metadata tag from `from` to `to` and merge a
+ * chained name (and `__axisFields` for axis-title inference) onto it.
+ *
+ * `name` lives in a dedicated tag slot rather than `opts` so the
+ * frontend-IR emitter can surface it as the canonical top-level `name`
+ * field of the leaf/combinator IR (matching Python's emit shape).
+ *
+ * Layer-name tokens (`Token` from `createName`) are not yet supported by
+ * `toJSON` — when one is passed we still propagate the tag (so the mark
+ * stays serializable for its other fields) but omit the `name`.
+ */
+function propagateSerializeWithName(
+  from: object,
+  to: object,
+  layerName: unknown
+): void {
+  const tag = (from as any).__serialize;
+  if (!tag) return;
+  const nextTag: any = { ...tag };
+  if (typeof layerName === "string") {
+    nextTag.name = layerName;
+  }
+  (to as any).__serialize = nextTag;
+  // Keep axis-field inference working through the chain.
+  if ((from as any).__axisFields) {
+    (to as any).__axisFields = (from as any).__axisFields;
+  }
+}
+
+function propagateSerializeWithLabel(
+  from: object,
+  to: object,
+  accessor: unknown,
+  options: unknown
+): void {
+  const tag = (from as any).__serialize;
+  if (!tag) return;
+  const nextTag: any = { ...tag };
+  if (typeof accessor === "string") {
+    nextTag.label = {
+      accessor,
+      ...(options && typeof options === "object" ? options : {}),
+    };
+  }
+  (to as any).__serialize = nextTag;
+  if ((from as any).__axisFields) {
+    (to as any).__axisFields = (from as any).__axisFields;
+  }
 }
 
 /**
