@@ -1,3 +1,7 @@
+// <gofish-wiki> AUTO-GENERATED — see covers: in the essay; run `pnpm --filter docs sync-backlinks`
+// @wiki The Operator Factory — /internals/frontend/operator-factory
+// </gofish-wiki>
+
 /**
  * createOperator: a factory for v3 layout operators.
  *
@@ -21,7 +25,8 @@
  *   operator form (inside .flow()):   createOp(opts)                -> Operator
  *   combinator form (inside a mark):  createOp(opts, marksShape)    -> Mark
  *
- * See docs/createOperator.md for a full walk-through.
+ * See the "Operator Factory" internals essay
+ * (apps/docs/docs/internals/v3/operator-factory.md) for a full walk-through.
  */
 
 import { GoFishAST } from "../_ast";

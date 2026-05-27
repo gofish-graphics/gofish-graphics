@@ -47,5 +47,10 @@
   },
   "dependencies": {
     "seedrandom": "^3.0.5"
+  },
+  "pnpm": {
+    "overrides": {
+      "vue": "3.5.24"
+    }
   }
 }

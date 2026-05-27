@@ -21,6 +21,13 @@ export async function resolveMarkResult(
   raw: ReturnType<Mark<any>>,
   layerContext?: LayerContext
 ): Promise<GoFishNode> {
+  // Mark functions are typed as sync-returning, but async marks are a
+  // valid pattern (e.g. the Python wrapper's mark-as-function bridges via
+  // RPC and returns `Promise<ChartBuilder>`). Await any thenable upfront
+  // so the instanceof/typeof checks below see the resolved value.
+  if (raw && typeof (raw as any).then === "function") {
+    raw = await (raw as unknown as Promise<ReturnType<Mark<any>>>);
+  }
   if (raw instanceof ChartBuilder)
     return raw.withLayerContext(layerContext ?? {}).resolve();
   if (typeof raw === "function")

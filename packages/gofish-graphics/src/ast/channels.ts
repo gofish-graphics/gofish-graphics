@@ -1,3 +1,7 @@
+// <gofish-wiki> AUTO-GENERATED — see covers: in the essay; run `pnpm --filter docs sync-backlinks`
+// @wiki The Mark Factory — /internals/frontend/mark-factory
+// </gofish-wiki>
+
 import { sumBy, meanBy } from "lodash";
 import { MaybeValue, Value, value } from "./data";
 
@@ -115,16 +119,25 @@ export const inferColor = <T extends Record<string, any>>(
  * - function: called on data[0] and wraps the result as a Value.
  * No aggregation — suitable for text content, labels, unscaled identifiers.
  */
-export const inferRaw = <T extends Record<string, any>>(
-  accessor: string | number | ((d: T) => string | number) | undefined,
+export const inferRaw = async <T extends Record<string, any>>(
+  accessor:
+    | string
+    | number
+    | ((d: T) => string | number | Promise<string | number>)
+    | undefined,
   data: T[]
-): MaybeValue<string | number> | undefined => {
+): Promise<MaybeValue<string | number> | undefined> => {
   if (accessor === undefined) return undefined;
   if (typeof accessor === "number") return accessor;
   if (typeof accessor === "function") {
-    return data.length > 0 && data[0] != null
-      ? value(accessor(data[0]))
-      : undefined;
+    if (data.length > 0 && data[0] != null) {
+      // Awaiting on a non-Promise is a no-op, so this transparently
+      // supports both sync `(d) => d.amount` accessors and async ones
+      // (e.g. the Python-bridge arrow the harness installs for
+      // `text({text: <__gofish_lambda sentinel>})`).
+      return value(await accessor(data[0]));
+    }
+    return undefined;
   }
   if (data.length > 0 && data[0] != null && accessor in data[0]) {
     return value(data[0][accessor]);

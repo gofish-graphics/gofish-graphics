@@ -8,20 +8,30 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "docs:dev": "vitepress dev docs",
-    "docs:build": "vitepress build docs",
-    "docs:preview": "vitepress preview docs"
+    "docs:dev": "pnpm run docs:types && vitepress dev docs",
+    "docs:build": "pnpm run docs:types && vitepress build docs",
+    "docs:preview": "vitepress preview docs",
+    "docs:types": "typedoc",
+    "sync-backlinks": "node scripts/sync-backlinks.mjs sync",
+    "check-backlinks": "node scripts/sync-backlinks.mjs check"
   },
   "devDependencies": {
+    "@shikijs/vitepress-twoslash": "^4.1.0",
     "@types/node": "^24.0.0",
     "@vitejs/plugin-vue-jsx": "^5.0.0",
+    "gray-matter": "^4.0.3",
+    "typedoc": "^0.28.19",
+    "typedoc-plugin-markdown": "^4.11.0",
+    "typescript": "^6.0.3",
     "vitepress": "^1.6.3",
     "vitepress-plugin-sandpack": "^1.1.4",
     "vue": "^3.5.13"
   },
   "dependencies": {
     "@codesandbox/sandpack-themes": "^2.0.21",
+    "@observablehq/plot": "^0.6.17",
     "@types/lodash": "^4.17.17",
+    "d3": "^7.9.0",
     "fast-kde": "^0.2.2",
     "gofish-graphics": "workspace:*",
     "lodash": "^4.17.21",
@@ -29,6 +39,9 @@
     "monaco-editor": "^0.52.2",
     "sandpack-vue3": "^3.1.12",
     "spectral.js": "2.0.2",
+    "vega": "^5.30.0",
+    "vega-embed": "^6.26.0",
+    "vega-lite": "^5.21.0",
     "vite-plugin-monaco-editor": "^1.1.0"
   }
 }

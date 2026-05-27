@@ -68,6 +68,9 @@ function discoverPythonStories(): PythonStory[] {
             .replace(/^test_/, "")
             .replace(/\.py$/, "")
             .replace(/_/g, "-");
+          // Python identifiers can't contain `-`; convention is plain
+          // snake_case → kebab-case. JS storybook authors should avoid
+          // literal underscores in export names (use CamelCase only).
           const storyName = funcName.replace(/^story_/, "").replace(/_/g, "-");
           const outPath = prefix
             ? `${prefix}/${baseName}--${storyName}`
@@ -116,6 +119,12 @@ type IRResult =
       options: any;
       deriveIds: string[];
     }
+  | {
+      kind: "raw-mark";
+      mark: any;
+      options: any;
+      deriveIds: string[];
+    }
   | { kind: "layer-unsupported"; reason: string }
   | { kind: "error"; reason: string };
 
@@ -160,6 +169,14 @@ async function loadStory(story: PythonStory): Promise<IRResult> {
     return {
       kind: "layer",
       charts: json.charts,
+      options: json.options ?? {},
+      deriveIds: json.deriveIds ?? [],
+    };
+  }
+  if (json && json._kind === "raw-mark") {
+    return {
+      kind: "raw-mark",
+      mark: json.mark,
       options: json.options ?? {},
       deriveIds: json.deriveIds ?? [],
     };
@@ -253,7 +270,7 @@ async function captureStory(
   page: Page,
   harnessUrl: string,
   story: PythonStory,
-  ir: IRResult & { kind: "chart" | "layer" }
+  ir: IRResult & { kind: "chart" | "layer" | "raw-mark" }
 ): Promise<{ dom: string; screenshot: Buffer }> {
   await page.goto(harnessUrl, { waitUntil: "networkidle" });
 
@@ -262,23 +279,33 @@ async function captureStory(
       ? `http://localhost:${DERIVE_SERVER_PORT}`
       : undefined;
 
-  // Inject spec and trigger render. Layer specs use a different shape
-  // that the harness dispatches on via `spec.type === "layer"`.
-  const spec =
-    ir.kind === "layer"
-      ? {
-          type: "layer",
-          charts: ir.charts,
-          options: ir.options,
-          deriveServerUrl,
-        }
-      : {
-          data: ir.data,
-          operators: ir.operators,
-          mark: ir.mark,
-          options: ir.options,
-          deriveServerUrl,
-        };
+  // Inject spec and trigger render. The harness dispatches on `spec.type`:
+  // `"layer"` for a multi-chart layer, `"raw-mark"` for a bare Mark
+  // rendered without a Chart wrapper, undefined for the single-chart path.
+  let spec: any;
+  if (ir.kind === "layer") {
+    spec = {
+      type: "layer",
+      charts: ir.charts,
+      options: ir.options,
+      deriveServerUrl,
+    };
+  } else if (ir.kind === "raw-mark") {
+    spec = {
+      type: "raw-mark",
+      mark: ir.mark,
+      options: ir.options,
+      deriveServerUrl,
+    };
+  } else {
+    spec = {
+      data: ir.data,
+      operators: ir.operators,
+      mark: ir.mark,
+      options: ir.options,
+      deriveServerUrl,
+    };
+  }
 
   await page.evaluate((s) => {
     window.__GOFISH_RENDER_COMPLETE__ = false;
