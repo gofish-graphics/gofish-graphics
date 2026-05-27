@@ -279,7 +279,7 @@ export const Scatter = createNodeOperator(
             const fromSize = axis === 0 ? xFromSize : yFromSize;
             alignChildren(
               childPlaceables,
-              axes,
+              axis,
               alignment,
               size[axis],
               effectivePosScales?.[axis],
