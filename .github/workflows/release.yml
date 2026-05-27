@@ -1,6 +1,11 @@
 name: Release
 
-# Unified publish workflow.
+# Unified publish workflow. Publishes `gofish-graphics` and `gofish-ir`
+# in lockstep — they always carry the same version, npm tag, and (for
+# `release` mode) git tag. `gofish-ir` publishes first so the
+# `workspace:*` dependency declared by `gofish-graphics` resolves to a
+# concrete already-published version on the registry.
+#
 #   - Scheduled (4am UTC daily): publishes a nightly-tagged prerelease if
 #     there are commits from the last 24h.
 #   - workflow_dispatch: lets you pick a release mode:
@@ -83,28 +88,40 @@ jobs:
         if: steps.plan.outputs.skip == 'false'
         run: pnpm install --frozen-lockfile
 
+      # Both packages release in lockstep: same version number, same npm
+      # tag, same git tag. gofish-graphics declares `gofish-ir: workspace:*`,
+      # so `pnpm publish` rewrites that to the gofish-ir version that ships
+      # in the same workflow run — provided gofish-ir publishes first.
       - name: Compute version
         if: steps.plan.outputs.skip == 'false'
         id: version
-        working-directory: packages/gofish-graphics
         run: |
           MODE="${{ steps.plan.outputs.mode }}"
+          # gofish-graphics's package.json is the canonical version source;
+          # gofish-ir is kept in lockstep by being bumped to the same value.
           if [ "$MODE" = "nightly" ]; then
-            BASE=$(node -p "require('./package.json').version")
+            BASE=$(node -p "require('./packages/gofish-graphics/package.json').version")
             DATE=$(date +'%Y%m%d')
             NEW="${BASE}-nightly.${DATE}"
-            npm version --no-git-tag-version "$NEW"
+            ( cd packages/gofish-graphics && npm version --no-git-tag-version "$NEW" )
+            ( cd packages/gofish-ir && npm version --no-git-tag-version "$NEW" )
             echo "version=$NEW" >> "$GITHUB_OUTPUT"
             echo "npm_tag=nightly" >> "$GITHUB_OUTPUT"
             echo "git_tag=" >> "$GITHUB_OUTPUT"
           else
-            RAW=$(npm version --no-git-tag-version "$MODE")
-            V="${RAW#v}"
+            ( cd packages/gofish-graphics && npm version --no-git-tag-version "$MODE" >/dev/null )
+            V=$(node -p "require('./packages/gofish-graphics/package.json').version")
+            ( cd packages/gofish-ir && npm version --no-git-tag-version "$V" )
             echo "version=$V" >> "$GITHUB_OUTPUT"
             echo "npm_tag=latest" >> "$GITHUB_OUTPUT"
             echo "git_tag=v$V" >> "$GITHUB_OUTPUT"
           fi
-          echo "Publishing version: $(node -p "require('./package.json').version")"
+          echo "Publishing gofish-graphics version: $(node -p "require('./packages/gofish-graphics/package.json').version")"
+          echo "Publishing gofish-ir version:       $(node -p "require('./packages/gofish-ir/package.json').version")"
+
+      - name: Build gofish-ir
+        if: steps.plan.outputs.skip == 'false'
+        run: pnpm --filter gofish-ir build
 
       - name: Build gofish-graphics
         if: steps.plan.outputs.skip == 'false'
@@ -114,10 +131,23 @@ jobs:
         if: steps.plan.outputs.skip == 'false'
         run: pnpm exec tsc --project packages/gofish-graphics/tsconfig.build.json || true
 
-      - name: Publish to npm
+      # gofish-ir publishes first so the workspace:* dependency in
+      # gofish-graphics resolves to a real published version on the registry
+      # at the moment gofish-graphics publishes. `pnpm publish` rewrites
+      # workspace:* into the concrete semver during pack; `npm publish`
+      # would publish the literal "workspace:*" string, which is invalid.
+      # `--no-git-checks` is needed because we just bumped package.json
+      # versions (dirty tree); the bump-and-push happens later in the
+      # release branch of this job.
+      - name: Publish gofish-ir to npm
+        if: steps.plan.outputs.skip == 'false'
+        working-directory: packages/gofish-ir
+        run: pnpm publish --tag "${{ steps.version.outputs.npm_tag }}" --access public --no-git-checks
+
+      - name: Publish gofish-graphics to npm
         if: steps.plan.outputs.skip == 'false'
         working-directory: packages/gofish-graphics
-        run: npm publish --tag "${{ steps.version.outputs.npm_tag }}" --access public
+        run: pnpm publish --tag "${{ steps.version.outputs.npm_tag }}" --access public --no-git-checks
 
       - name: Commit, tag, and push (release only)
         if: steps.plan.outputs.skip == 'false' && steps.plan.outputs.mode != 'nightly'
@@ -127,7 +157,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add packages/gofish-graphics/package.json
+          git add packages/gofish-graphics/package.json packages/gofish-ir/package.json
           git commit -m "chore(release): v${VERSION}"
           git tag "${TAG}"
           git push origin HEAD:main

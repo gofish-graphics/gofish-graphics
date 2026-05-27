@@ -13,7 +13,9 @@
     "docs:preview": "vitepress preview docs",
     "docs:types": "typedoc",
     "sync-backlinks": "node scripts/sync-backlinks.mjs sync",
-    "check-backlinks": "node scripts/sync-backlinks.mjs check"
+    "check-backlinks": "node scripts/sync-backlinks.mjs check",
+    "sync-ir-schema": "node scripts/sync-ir-schema.mjs sync",
+    "check-ir-schema": "node scripts/sync-ir-schema.mjs check"
   },
   "devDependencies": {
     "@shikijs/vitepress-twoslash": "^4.1.0",

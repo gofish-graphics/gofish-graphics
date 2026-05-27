@@ -213,7 +213,9 @@ The shipped schema is Draft 2020-12, hand-written, ~280 lines. It lives
 in source at
 [`packages/gofish-ir/src/frontend/jsonSchema.ts`](https://github.com/gofish-graphics/gofish-graphics/blob/main/packages/gofish-ir/src/frontend/jsonSchema.ts)
 and is emitted as a JSON artifact during build to
-`packages/gofish-ir/dist/frontend/v0.json`.
+`packages/gofish-ir/dist/frontend/v0.json`. See
+[Full JSON Schema](/internals/frontend/schema-json) for the rendered
+document.
 
 The high-level structure:
 

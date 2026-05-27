@@ -61,3 +61,6 @@ jobs:
 
       - name: Check internals wiki back-links
         run: pnpm --filter docs check-backlinks
+
+      - name: Check Frontend IR JSON Schema docs page is in sync
+        run: pnpm --filter docs check-ir-schema

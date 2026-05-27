@@ -121,7 +121,9 @@ if (!result.valid) {
 
 The JSON Schema artifact is at `packages/gofish-ir/dist/frontend/v0.json`
 (emitted during build); use it with any external validator (Python
-`jsonschema`, Ajv, language servers, etc.).
+`jsonschema`, Ajv, language servers, etc.). The
+[Full JSON Schema](/internals/frontend/schema-json) page renders the
+whole document inline if you just want to read it.
 
 ## What round-trips and what doesn't
 
