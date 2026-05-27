@@ -22,6 +22,7 @@
     "@types/node": "^24.0.0",
     "@vitejs/plugin-vue-jsx": "^5.0.0",
     "gray-matter": "^4.0.3",
+    "prettier": "^3.6.2",
     "typedoc": "^0.28.19",
     "typedoc-plugin-markdown": "^4.11.0",
     "typescript": "^6.0.3",

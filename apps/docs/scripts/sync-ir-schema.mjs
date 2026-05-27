@@ -20,6 +20,7 @@
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import prettier from "prettier";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, "..", "..", "..");
@@ -92,14 +93,21 @@ ${json}
 \`\`\`
 `;
 
-function buildPage() {
+async function buildPage() {
   const schema = readSchemaConstant();
   const json = JSON.stringify(schema, null, 2);
-  return PAGE_TEMPLATE(json);
+  const raw = PAGE_TEMPLATE(json);
+  // Run the output through prettier so the file matches what lint-staged
+  // produces post-commit (otherwise `check` would diff on every push:
+  // prettier collapses short arrays / objects). Resolve the parser via
+  // prettier's own filepath logic so we pick up the same config the rest
+  // of the repo uses.
+  const config = (await prettier.resolveConfig(DOC_PAGE)) ?? {};
+  return prettier.format(raw, { ...config, filepath: DOC_PAGE });
 }
 
 if (mode === "sync") {
-  const content = buildPage();
+  const content = await buildPage();
   const current = existsSync(DOC_PAGE) ? readFileSync(DOC_PAGE, "utf-8") : "";
   if (content === current) {
     console.log(`sync-ir-schema: already in sync (${DOC_PAGE})`);
@@ -108,7 +116,7 @@ if (mode === "sync") {
     console.log(`sync-ir-schema: wrote ${DOC_PAGE}`);
   }
 } else {
-  const want = buildPage();
+  const want = await buildPage();
   const have = existsSync(DOC_PAGE) ? readFileSync(DOC_PAGE, "utf-8") : "";
   if (want !== have) {
     console.error(

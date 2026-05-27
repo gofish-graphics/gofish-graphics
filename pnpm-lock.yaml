@@ -103,6 +103,9 @@ importers:
       gray-matter:
         specifier: ^4.0.3
         version: 4.0.3
+      prettier:
+        specifier: ^3.6.2
+        version: 3.8.1
       typedoc:
         specifier: ^0.28.19
         version: 0.28.19(typescript@6.0.3)
