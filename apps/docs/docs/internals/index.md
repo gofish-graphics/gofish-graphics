@@ -28,15 +28,15 @@ The wiki is broken into eight sections:
   philosophy, a glossary, and the case for the project at all.
 - **Frontend** — the surface a chart author writes: pipeline syntax, marks and
   operators, axes, labels, color.
-- **JSON Formats** — the portable JSON representations of charts: the
-  Frontend IR design, how to use the serialization API, and the full
-  JSON Schema. Subsequent compiler stages (Core, Rendered) will add
-  their own pages here.
 - **Core** — the foundational data model: underlying space, bounding boxes,
   the context system, name resolution and scoping.
 - **Layout & Rendering** — the three-pass engine itself: the layout pass,
   scale resolution (positional, monotonic, color), coordinate transforms,
   and the actual draw to SVG.
+- **JSON Formats** — the portable JSON representations of charts: the
+  Frontend IR design, how to use the serialization API, and the full
+  JSON Schema. Subsequent compiler stages (Core, Rendered) will add
+  their own pages here.
 - **Python** — the Python wrapper and its bridge to the JavaScript engine.
 - **Design Evolution** — retrospective: how the surface arrived at its current
   shape, paths considered and rejected, comparisons with prior surfaces.

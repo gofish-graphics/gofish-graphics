@@ -42,9 +42,9 @@ function collectDocRoutes(): string[] {
 const INTERNALS_SECTION_ORDER = [
   "Overview",
   "Frontend",
-  "JSON Formats",
   "Core",
   "Layout & Rendering",
+  "JSON Formats",
   "Python",
   "Design Evolution",
   "Speculative Notes",
