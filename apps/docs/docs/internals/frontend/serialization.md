@@ -1,7 +1,7 @@
 ---
-title: Frontend IR (Serialization)
-section: Frontend
-order: 80
+title: Frontend IR
+section: JSON Formats
+order: 10
 status: stable
 covers:
   - packages/gofish-ir/src/frontend/schema.ts
@@ -22,9 +22,11 @@ expansion and elaboration. Three consumers:
   boundaries, labels, and axes to assistive technology. Its existing
   Bluefish adapter has to capture imperative execution to reconstruct
   this; a declarative IR sidesteps that.
-- **The Python wrapper.** Already builds something IR-shaped and ships
-  it across anywidget. The schema package makes it official; the JS
-  deserializer is now shared. See [Python · The IR Bridge](/internals/python/ir).
+- **The Python wrapper.** Builds the same IR and ships it across
+  anywidget. The schema package makes it official; the JS deserializer
+  is shared. See [The Jupyter Bridge & RPC](/internals/python/bridge)
+  for the transport and § Bridge extensions below for the Python-side
+  sentinels that extend the canonical schema.
 - **Future internal tooling** — debuggers, alternative renderers,
   parity-test harnesses.
 
@@ -326,8 +328,8 @@ Python's `datum(x)` emits the canonical `{type: "datum", datum: x}` shape
 directly — no bridge sentinel needed.
 
 Olli and other pure-JS consumers don't see these — they're a
-[`FrontendIRWithBridge`](/internals/python/ir) extension declared in
-the Python widget code.
+`FrontendIRWithBridge` extension declared in the Python widget code
+(see [The Jupyter Bridge & RPC](/internals/python/bridge)).
 
 ## Prior art
 

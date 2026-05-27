@@ -1,5 +1,5 @@
 // <gofish-wiki> AUTO-GENERATED — see covers: in the essay; run `pnpm --filter docs sync-backlinks`
-// @wiki Frontend IR (Serialization) — /internals/frontend/serialization
+// @wiki Frontend IR — /internals/frontend/serialization
 // </gofish-wiki>
 
 /**

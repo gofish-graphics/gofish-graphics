@@ -1,7 +1,7 @@
 ---
 title: Using the Frontend IR
-section: Frontend
-order: 81
+section: JSON Formats
+order: 20
 status: draft
 ---
 
@@ -60,7 +60,8 @@ doc_alias = builder.to_dict()  # equivalent
 
 `LayerBuilder.to_ir()` and bare `Mark.to_ir()` work the same way.
 
-The Python IR carries [bridge-extension sentinels](/internals/python/ir)
+The Python IR carries
+[bridge-extension sentinels](/internals/frontend/serialization#bridge-extensions-python-widget)
 (`__gofish_lambda`, `__gofish_token`, `__scope`, `__datum`, `__key`) that
 the canonical schema doesn't include — they're for round-trip with the
 widget. Pure-JS consumers shouldn't see them.
@@ -178,8 +179,9 @@ in #gofish before relying on the shape — it's likely to change.
 
 - [Frontend IR (Serialization)](/internals/frontend/serialization) —
   schema design, multi-stage plans, prior-art lineage.
-- [Python · The IR Bridge](/internals/python/ir) — bridge-extension
-  sentinels and the widget's role in the round-trip.
+- [The Jupyter Bridge & RPC](/internals/python/bridge) — the
+  anywidget transport, RPC, and the Python-widget sentinels documented
+  in the Frontend IR essay's "Bridge extensions" section.
 - Source: `packages/gofish-ir/src/frontend/{schema,validate,jsonSchema,examples}.ts`,
   `packages/gofish-graphics/src/serialize/{toJSON,fromJSON,registry}.ts`.
 - Validator at runtime: `Frontend.validate(doc, { strict?: boolean })`.

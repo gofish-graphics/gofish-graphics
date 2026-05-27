@@ -67,8 +67,8 @@ function readSchemaConstant() {
 
 const PAGE_TEMPLATE = (json) => `---
 title: Full JSON Schema
-section: Frontend
-order: 82
+section: JSON Formats
+order: 30
 status: draft
 ---
 
