@@ -10,10 +10,10 @@ mark — to lay the groups out.
 ```python
 from gofish import chart, spread, group, stack, rect
 
-chart(seafood).flow(
+chart(seafood, axes=True).flow(
     spread(by="lake", dir="x"),
     group(by="species"),
-).mark(rect(h="count", fill="species")).render(w=400, h=300, axes=True)
+).mark(rect(h="count", fill="species")).render(w=400, h=300)
 ```
 
 ## Signature

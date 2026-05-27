@@ -9,10 +9,10 @@ without the spacing. The basis for stacked bar charts and pie charts.
 ```python
 from gofish import chart, spread, stack, rect
 
-chart(seafood).flow(
+chart(seafood, axes=True).flow(
     spread(by="lake", dir="x"),
     stack(by="species", dir="y", label=False),
-).mark(rect(h="count", fill="species")).render(w=500, h=300, axes=True)
+).mark(rect(h="count", fill="species")).render(w=500, h=300)
 ```
 
 ## Signature
