@@ -13,6 +13,8 @@ export const value = <T>(datum: T, measure?: Measure): Value<any> => ({
   measure,
 });
 
+type DatumValue = { type: "datum"; datum: any; measure?: Measure };
+
 export const isValue = <T>(
   value: MaybeValue<T>
 ): value is Exclude<Value<T>, undefined> => {
@@ -32,14 +34,14 @@ export const isAesthetic = <T>(
 
 export const getValue = <T>(value: MaybeValue<T>): T => {
   if (isValue(value)) {
-    return value.datum;
+    return (value as DatumValue).datum;
   }
-  return value;
+  return value as T;
 };
 
 export const getMeasure = <T>(value: MaybeValue<T>): Measure => {
   if (isValue(value)) {
-    return value.measure ?? "unit";
+    return (value as DatumValue).measure ?? "unit";
   }
   return "unknown";
 };

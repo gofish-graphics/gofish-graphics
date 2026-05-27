@@ -2,9 +2,6 @@
 import { render } from "solid-js/web";
 
 import "./index.css";
-import App from "./App";
-import { testFishPolarRibbonChartTextured } from "./tests/fishPolarRibbonChartTextured";
-import { renderBarChart } from "./tests/renderBarChart";
 
 const root = document.getElementById("root");
 
@@ -14,6 +11,7 @@ if (import.meta.env.DEV && !(root instanceof HTMLElement)) {
   );
 }
 
-// renderBarChart();
-
-render(() => <App />, root!);
+render(
+  () => <div>Use Storybook (`pnpm storybook`) for development.</div>,
+  root!
+);

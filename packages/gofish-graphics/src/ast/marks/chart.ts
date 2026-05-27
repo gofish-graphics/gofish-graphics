@@ -7,6 +7,7 @@ import { inferSize } from "../channels";
 import { rect as generatedRect } from "../shapes/rect";
 import { Ellipse } from "../shapes/ellipse";
 import { Mark, Operator } from "../types";
+import type { NameableMark } from "../withGoFish";
 import type { LabelAccessor, LabelOptions } from "../labels/labelPlacement";
 import {
   resolveMarkResult,
@@ -99,6 +100,7 @@ export function circle<T extends Record<string, any>>({
   stroke?: string;
   strokeWidth?: number;
   debug?: boolean;
+  label?: boolean;
 }): Mark<T> & {
   name(layerName: string): Mark<T>;
   label(accessor: LabelAccessor, options?: LabelOptions): Mark<T>;

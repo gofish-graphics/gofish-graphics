@@ -138,9 +138,10 @@ export const treemap = createNodeOperator(
             for (const d of leafData) d.weight = 1;
           }
 
-          const root = hierarchy<{ children: LeafDatum[] }>(
-            { children: leafData },
-            (d) => d.children
+          type TreemapDatum = { children?: LeafDatum[] } | LeafDatum;
+          const root = hierarchy<TreemapDatum>(
+            { children: leafData } as TreemapDatum,
+            (d) => ("children" in d ? d.children : undefined)
           ).sum((d: any) =>
             typeof d.weight === "number" ? d.weight : 0
           ) as HierarchyNode<any>;

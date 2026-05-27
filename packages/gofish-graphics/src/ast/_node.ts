@@ -88,13 +88,7 @@ export type Layout = (
   shared: Size<boolean>,
   size: Size,
   scaleFactors: Size<number | undefined>,
-  children: {
-    layout: (
-      size: Size,
-      scaleFactors: Size<number | undefined>,
-      posScales: Size<((pos: number) => number) | undefined>
-    ) => Placeable;
-  }[],
+  children: GoFishAST[],
   posScales: Size<((pos: number) => number) | undefined>,
   node: GoFishNode
 ) => { intrinsicDims: FancyDims; transform: FancyTransform; renderData?: any };
@@ -244,11 +238,8 @@ export class GoFishNode {
           (color.startsWith("#") ||
             color.startsWith("rgb") ||
             color.startsWith("hsl"));
-        if (!isLiteralColor && !scaleContext.unit.color.has(color)) {
-          scaleContext.unit.color.set(
-            color,
-            color6[scaleContext.unit.color.size % 6]
-          );
+        if (!isLiteralColor && !unit.color.has(color)) {
+          unit.color.set(color, color6[unit.color.size % 6]);
         }
       }
       this.children.forEach((child) => {
@@ -397,7 +388,9 @@ export class GoFishNode {
     };
 
     if (anchorToDim[anchor] === undefined) {
-      this.intrinsicDims![dir][anchor] = value;
+      if (anchor !== "baseline") {
+        this.intrinsicDims![dir][anchor] = value;
+      }
       return;
     }
 
@@ -563,7 +556,7 @@ export class GoFishNode {
 
 export const findPathToRoot = (node: GoFishNode): GoFishNode[] => {
   const path: GoFishNode[] = [];
-  let current = node;
+  let current: GoFishNode | undefined = node;
   while (current) {
     path.push(current);
     current = current.parent;

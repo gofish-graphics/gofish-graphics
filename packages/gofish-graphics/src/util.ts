@@ -86,6 +86,6 @@ export const computeSize = (
   input: MaybeValue<number> | undefined,
   scaleFactor: number,
   size: number
-) => {
-  return computeAesthetic(input, (x) => x * scaleFactor, size);
+): number => {
+  return computeAesthetic(input, (x) => x * scaleFactor, size) as number;
 };

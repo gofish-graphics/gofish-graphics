@@ -54,9 +54,9 @@ export class GoFishRef {
   public parent?: GoFishNode;
 
   private intrinsicDims?: Dimensions;
-  private transform?: Transform;
+  public transform?: Transform;
   public shared: Size<boolean>;
-  private measurement: (scaleFactors: Size) => Size;
+  private measurement!: (scaleFactors: Size) => Size;
   private selection?: string | Token | (Token | string | number)[];
   private directNode?: GoFishNode;
   private selectedNode?: GoFishNode;
@@ -210,8 +210,10 @@ export class GoFishRef {
   }
 
   /* TODO: what should the default be? */
-  public resolveUnderlyingSpace(): UnderlyingSpace {
-    return this.selectedNode?.resolveUnderlyingSpace() ?? ORDINAL([]);
+  public resolveUnderlyingSpace(): Size<UnderlyingSpace> {
+    return (
+      this.selectedNode?.resolveUnderlyingSpace() ?? [ORDINAL([]), ORDINAL([])]
+    );
   }
 
   /* TODO: I'm not really sure what this should do */
@@ -232,34 +234,32 @@ export class GoFishRef {
     const lca = findLeastCommonAncestor(this, this.selectedNode);
 
     // Compute transform from selected node up to LCA
-    let upwardTransform: Transform = { translate: [0, 0] };
-    let current = this.selectedNode;
+    const upwardTranslate: [number, number] = [0, 0];
+    let current: GoFishAST | undefined = this.selectedNode;
     while (current && current !== lca) {
       if (current.transform) {
-        upwardTransform.translate![0] += current.transform.translate?.[0] ?? 0;
-        upwardTransform.translate![1] += current.transform.translate?.[1] ?? 0;
+        upwardTranslate[0] += current.transform.translate?.[0] ?? 0;
+        upwardTranslate[1] += current.transform.translate?.[1] ?? 0;
       }
-      current = current.parent!;
+      current = current.parent;
     }
 
     // Compute transform from LCA down to this ref
-    let downwardTransform: Transform = { translate: [0, 0] };
+    const downwardTranslate: [number, number] = [0, 0];
     current = this;
     while (current && current !== lca) {
       if (current.transform) {
-        downwardTransform.translate![0] +=
-          current.transform.translate?.[0] ?? 0;
-        downwardTransform.translate![1] +=
-          current.transform.translate?.[1] ?? 0;
+        downwardTranslate[0] += current.transform.translate?.[0] ?? 0;
+        downwardTranslate[1] += current.transform.translate?.[1] ?? 0;
       }
-      current = current.parent!;
+      current = current.parent;
     }
 
     // Combine transforms
     this.transform = {
       translate: [
-        upwardTransform.translate![0] - downwardTransform.translate![0],
-        upwardTransform.translate![1] - downwardTransform.translate![1],
+        upwardTranslate[0] - downwardTranslate[0],
+        upwardTranslate[1] - downwardTranslate[1],
       ],
     };
 
@@ -313,7 +313,9 @@ export class GoFishRef {
     };
 
     if (anchorToDim[anchor] === undefined) {
-      this.intrinsicDims![dir][anchor] = value;
+      if (anchor !== "baseline") {
+        this.intrinsicDims![dir][anchor] = value;
+      }
       return;
     }
 
@@ -364,9 +366,9 @@ const findInComponent = (
   return undefined;
 };
 
-export const findPathToRoot = (node: GoFishAST): GoFishNode[] => {
-  const path: GoFishNode[] = [];
-  let current = node;
+export const findPathToRoot = (node: GoFishAST): GoFishAST[] => {
+  const path: GoFishAST[] = [];
+  let current: GoFishAST | undefined = node;
   while (current) {
     path.push(current);
     current = current.parent;
@@ -377,7 +379,7 @@ export const findPathToRoot = (node: GoFishAST): GoFishNode[] => {
 export const findLeastCommonAncestor = (
   node1: GoFishAST,
   node2: GoFishAST
-): GoFishNode => {
+): GoFishAST => {
   const path1 = findPathToRoot(node1);
   const path2 = findPathToRoot(node2);
 

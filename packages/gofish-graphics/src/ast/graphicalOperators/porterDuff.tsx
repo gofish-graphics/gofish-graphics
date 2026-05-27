@@ -49,7 +49,7 @@ const renderComposite = (
         <feBlend
           in="compositeResult"
           in2="graySource"
-          mode={blendMode}
+          mode={blendMode as "multiply" | "screen"}
           result="blendedIntersect"
         />
         <feComposite
@@ -59,7 +59,11 @@ const renderComposite = (
         />
       </>
     ) : operator === "over" || operator === "atop" ? (
-      <feBlend in="compositeResult" in2="graySource" mode={blendMode} />
+      <feBlend
+        in="compositeResult"
+        in2="graySource"
+        mode={blendMode as "multiply" | "screen"}
+      />
     ) : null;
 
   return (

@@ -172,10 +172,10 @@ export const Rect = ({
           const min = x;
           const max = computeAesthetic(
             value(getValue(dims[0].min)! + getValue(dims[0].size)!),
-            posScales[0],
+            posScales[0]!,
             undefined
           );
-          w = max - min;
+          w = (max ?? 0) - (min ?? 0);
         } else if (isValue(dims[0].size) && posScales?.[0]) {
           // If we have size but no min, and posScales exists, use position scale
           // Treat min as 0 (baseline) and compute width from position scale
@@ -206,10 +206,10 @@ export const Rect = ({
           const min = y;
           const max = computeAesthetic(
             value(getValue(dims[1].min)! + getValue(dims[1].size)!),
-            posScales[1],
+            posScales[1]!,
             undefined
           );
-          h = max - min;
+          h = (max ?? 0) - (min ?? 0);
         } else if (isValue(dims[1].size) && posScales?.[1]) {
           // If we have size but no min, and posScales exists, use position scale
           // Treat min as 0 (baseline) and compute height from position scale
@@ -241,28 +241,29 @@ export const Rect = ({
           }
         }
 
-        const result = {
-          intrinsicDims: [
-            {
-              min: w >= 0 ? 0 : w,
-              size: w,
-              center: w / 2,
-              max: w >= 0 ? w : 0,
-              embedded: dims[0].embedded,
-            },
-            {
-              min: h >= 0 ? 0 : h,
-              size: h,
-              center: h / 2,
-              max: h >= 0 ? h : 0,
-              embedded: dims[1].embedded,
-            },
-          ],
+        return {
+          intrinsicDims: {
+            dims: [
+              {
+                min: w >= 0 ? 0 : w,
+                size: w,
+                center: w / 2,
+                max: w >= 0 ? w : 0,
+                embedded: dims[0].embedded,
+              },
+              {
+                min: h >= 0 ? 0 : h,
+                size: h,
+                center: h / 2,
+                max: h >= 0 ? h : 0,
+                embedded: dims[1].embedded,
+              },
+            ],
+          },
           transform: {
             translate: [x, y],
           },
         };
-        return result;
       },
       render: (
         {

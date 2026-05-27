@@ -117,12 +117,12 @@ export const color6_old = [
 export const color10Order = ["blue", "yellow", "fuschia", "lime", "purple"];
 
 export const color6_20250320 = [
-  color[color10Order[0]][5],
-  color[color10Order[1]][4],
-  color[color10Order[4]][5],
+  (color as unknown as Record<string, string[]>)[color10Order[0]][5],
+  (color as unknown as Record<string, string[]>)[color10Order[1]][4],
+  (color as unknown as Record<string, string[]>)[color10Order[4]][5],
   color.red[4],
-  color[color10Order[3]][4],
-  color[color10Order[2]][4],
+  (color as unknown as Record<string, string[]>)[color10Order[3]][4],
+  (color as unknown as Record<string, string[]>)[color10Order[2]][4],
 ];
 
 /* OH NO!!!! I WANT TO START WITH A GREEN!!!!! NOT BLUE!!!! */

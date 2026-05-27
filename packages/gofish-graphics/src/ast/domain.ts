@@ -31,11 +31,13 @@ export const aesthetic = (value: any): AestheticDomain => ({
 });
 
 export const canUnifyDomains = (domains: Domain[]) => {
+  const first = domains[0];
+  if (first === undefined || first.type !== "continuous") return false;
   return domains.every(
     (domain) =>
       domain !== undefined &&
       domain.type === "continuous" &&
-      domain.measure === domains[0].measure
+      domain.measure === first.measure
   );
 };
 

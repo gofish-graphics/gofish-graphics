@@ -114,12 +114,12 @@ export const Spread = createNodeOperator(
 
           // Explicit size on the spread overrides children-derived sizing.
           if (isValue(dims[stackDir].size)) {
-            return {
-              [stackDir]: SIZE(
-                Monotonic.linear(getValue(dims[stackDir].size!), 0)
-              ),
-              [alignDir]: alignSpace,
-            };
+            const explicit: Size<UnderlyingSpace> = [UNDEFINED, UNDEFINED];
+            explicit[stackDir] = SIZE(
+              Monotonic.linear(getValue(dims[stackDir].size!), 0)
+            );
+            explicit[alignDir] = alignSpace;
+            return explicit;
           }
 
           let stackSpace: UnderlyingSpace = UNDEFINED;
@@ -192,10 +192,10 @@ export const Spread = createNodeOperator(
             }
           }
 
-          return {
-            [stackDir]: stackSpace,
-            [alignDir]: alignSpace,
-          };
+          const result: Size<UnderlyingSpace> = [UNDEFINED, UNDEFINED];
+          result[stackDir] = stackSpace;
+          result[alignDir] = alignSpace;
+          return result;
         },
         layout: (shared, size, scaleFactors, children, posScales, node) => {
           if (reverse) {
@@ -212,18 +212,18 @@ export const Spread = createNodeOperator(
             undefined
           );
 
-          size = {
-            [stackDir]: computeSize(
-              dims[stackDir].size,
-              scaleFactors?.[stackDir]!,
-              size[stackDir]
-            ),
-            [alignDir]: computeSize(
-              dims[alignDir].size,
-              scaleFactors?.[alignDir]!,
-              size[alignDir]
-            ),
-          };
+          const nextSize: Size = [0, 0];
+          nextSize[stackDir] = computeSize(
+            dims[stackDir].size,
+            scaleFactors?.[stackDir]!,
+            size[stackDir]
+          );
+          nextSize[alignDir] = computeSize(
+            dims[alignDir].size,
+            scaleFactors?.[alignDir]!,
+            size[alignDir]
+          );
+          size = nextSize;
 
           // Compute scale factors at this level by dispatching on
           // underlying-space kind: SIZE inverts the composed Monotonic;
@@ -260,13 +260,15 @@ export const Spread = createNodeOperator(
           }
 
           const scaleContext = node.getRenderSession().scaleContext;
+          const sfX = scaleFactors[0] ?? 1;
+          const sfY = scaleFactors[1] ?? 1;
           scaleContext.x = {
-            domain: [0, size[0] / scaleFactors[0]],
-            scaleFactor: scaleFactors[0],
+            domain: [0, size[0] / sfX],
+            scaleFactor: sfX,
           };
           scaleContext.y = {
-            domain: [0, size[1] / scaleFactors[1]],
-            scaleFactor: scaleFactors[1],
+            domain: [0, size[1] / sfY],
+            scaleFactor: sfY,
           };
 
           // Calculate available space for children in stacking direction after subtracting spacing

@@ -341,7 +341,7 @@ export const Image = ({
             width={Math.abs(width)}
             height={Math.abs(height)}
             href={href}
-            preserveAspectRatio={preserveAspectRatio}
+            preserveAspectRatio={preserveAspectRatio as any}
             filter={filter}
             opacity={opacity}
           />

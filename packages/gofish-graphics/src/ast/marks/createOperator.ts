@@ -390,7 +390,7 @@ export function createOperator<Datum, Options extends Record<string, any>>(
           [...entries.entries()].map(async ([i, leaf]) => {
             const currentKey = key != undefined ? `${key}-${i}` : i;
             const node = await resolveMarkResult(
-              mark(leaf, currentKey, layerContext),
+              mark(leaf as Datum[], currentKey, layerContext),
               layerContext
             );
             node.setKey(currentKey?.toString() ?? "");

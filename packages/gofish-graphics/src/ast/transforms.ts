@@ -7,9 +7,11 @@ function runBin<T extends Record<string, any>>(
   field: keyof T & string,
   options?: { thresholds?: number | number[] }
 ): BinResult[] {
-  const binner = d3bin<T, number>()
-    .value((d) => d[field] as number)
-    .thresholds(options?.thresholds ?? 10);
+  const thresholds = options?.thresholds ?? 10;
+  const binnerBase = d3bin<T, number>().value((d) => d[field] as number);
+  const binner = Array.isArray(thresholds)
+    ? binnerBase.thresholds(thresholds)
+    : binnerBase.thresholds(thresholds);
   const bins = binner(data.filter((d) => d[field] != null));
   return bins
     .filter((b) => b.x0 !== undefined && b.x1 !== undefined)

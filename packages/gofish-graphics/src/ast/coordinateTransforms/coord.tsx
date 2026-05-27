@@ -137,10 +137,7 @@ export const coord = createNodeOperator(
                 .filter(isPOSITION)
                 .map((space) => space.domain)
             );
-            xSpace = {
-              ...POSITION(domain),
-              coordinateTransform: coordTransform,
-            };
+            xSpace = POSITION(domain, coordTransform);
           } else if (xChildrenOrdinalSpaces.length > 0) {
             // Collect and merge domains from all child ordinal spaces
             const allKeys = new Set<string>();
@@ -171,10 +168,7 @@ export const coord = createNodeOperator(
                 .filter(isPOSITION)
                 .map((space) => space.domain)
             );
-            ySpace = {
-              ...POSITION(domain),
-              coordinateTransform: coordTransform,
-            };
+            ySpace = POSITION(domain, coordTransform);
           } else if (yChildrenOrdinalSpaces.length > 0) {
             // Collect and merge domains from all child ordinal spaces
             const allKeys = new Set<string>();
