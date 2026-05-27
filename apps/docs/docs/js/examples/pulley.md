@@ -23,3 +23,4 @@ The diagram demonstrates several mid-level features in concert:
   "rope passes _between_ two pulley wheels" effect.
 
 ::: starfish example:pulley
+:::
