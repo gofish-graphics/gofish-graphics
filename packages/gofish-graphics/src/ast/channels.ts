@@ -1,3 +1,7 @@
+// <gofish-wiki> AUTO-GENERATED — see covers: in the essay; run `pnpm --filter docs sync-backlinks`
+// @wiki The Mark Factory — /internals/frontend/mark-factory
+// </gofish-wiki>
+
 import { sumBy, meanBy } from "lodash";
 import { MaybeValue, Value, value } from "./data";
 

@@ -9,7 +9,12 @@ import { CoordinateTransform } from "../coordinateTransforms/coord";
 import { coord } from "../coordinateTransforms/coord";
 import { createNodeOperatorSequential } from "../withGoFish";
 import { GoFishAST } from "../_ast";
-import { applyConstraints } from "../constraints";
+import {
+  applyConstraints,
+  getPositioningConstraintRefs,
+  isZOrderConstraint,
+  type ZOrderConstraint,
+} from "../constraints";
 import { unionChildSpaces } from "./alignment";
 
 /** Normalize a node's _name (string or Token) to the string used as a key in
@@ -21,6 +26,151 @@ const childNameKey = (node: GoFishAST): string | undefined => {
   if (n === undefined) return undefined;
   return isToken(n) ? n.__tag : n;
 };
+
+// ── Z-order resolution ────────────────────────────────────────────────────
+//
+// When a layer has `Constraint.zAbove` / `zBelow` constraints, it flattens
+// its (non-component) subtree into a single paint list, topologically sorts
+// it against the constraints, and emits the result in resolved order.
+
+type PaintItem = {
+  node: GoFishAST;
+  /** Sum of skipped-ancestor translates between this layer and the hoisted
+   *  element. Applied as a `<g transform="translate(…)">` wrapper at emit. */
+  accTranslate: [number, number];
+  /** Position in the flattened default order (used as a stable tiebreaker). */
+  defaultOrder: number;
+  /** Existing numeric `_zOrder` hint (used as the primary tiebreaker so
+   *  `node.zOrder(-1)` still pushes a node toward the back by default). */
+  defaultZ: number;
+};
+
+function flattenForZOrder(children: GoFishAST[]): PaintItem[] {
+  const out: PaintItem[] = [];
+  let order = 0;
+  walk(children, 0, 0);
+  return out;
+
+  // NB: only translates are accumulated across transparent ancestors. A
+  // non-component nested layer that also carries `options.transform.scale`
+  // would hoist its children with the right translate but the *wrong*
+  // resolved size, since the scale isn't propagated here. No current story
+  // mixes z-order constraints with scaled inner layers; revisit if one does.
+  function walk(cs: GoFishAST[], accTx: number, accTy: number): void {
+    for (const child of cs) {
+      if (!(child instanceof GoFishNode)) {
+        out.push({
+          node: child,
+          accTranslate: [accTx, accTy],
+          defaultOrder: order++,
+          defaultZ: 0,
+        });
+        continue;
+      }
+      // Plain (non-component) nested layers are transparent for paint
+      // ordering — their children are hoisted into this paint context.
+      if (!child._isComponent && child.type === "layer") {
+        const cTx = accTx + (child.transform?.translate?.[0] ?? 0);
+        const cTy = accTy + (child.transform?.translate?.[1] ?? 0);
+        walk(child.children, cTx, cTy);
+      } else {
+        out.push({
+          node: child,
+          accTranslate: [accTx, accTy],
+          defaultOrder: order++,
+          defaultZ: child.getZOrder(),
+        });
+      }
+    }
+  }
+}
+
+function topoSortByZOrder(
+  items: PaintItem[],
+  constraints: ZOrderConstraint[]
+): PaintItem[] {
+  const n = items.length;
+
+  // name → indices. Descent through nested layers can theoretically produce
+  // duplicates if names collide; we apply the constraint to all matches.
+  const nameToIndices = new Map<string, number[]>();
+  for (let i = 0; i < n; i++) {
+    const node = items[i].node;
+    if (node instanceof GoFishNode && node._name !== undefined) {
+      const raw = node._name;
+      const name = isToken(raw) ? raw.__tag : raw;
+      const arr = nameToIndices.get(name);
+      if (arr) arr.push(i);
+      else nameToIndices.set(name, [i]);
+    }
+  }
+
+  const adj: Set<number>[] = Array.from({ length: n }, () => new Set());
+  const inDegree: number[] = new Array(n).fill(0);
+  const addEdge = (from: number, to: number) => {
+    if (from === to) return;
+    if (!adj[from].has(to)) {
+      adj[from].add(to);
+      inDegree[to]++;
+    }
+  };
+
+  for (const c of constraints) {
+    const aName = c.children[0].name;
+    const bName = c.children[1].name;
+    const aIdx = nameToIndices.get(aName) ?? [];
+    const bIdx = nameToIndices.get(bName) ?? [];
+    for (const ai of aIdx) {
+      for (const bi of bIdx) {
+        // zAbove(a, b): a paints LATER (over b) → edge b → a
+        // zBelow(a, b): a paints EARLIER (under b) → edge a → b
+        if (c.type === "zAbove") addEdge(bi, ai);
+        else addEdge(ai, bi);
+      }
+    }
+  }
+
+  // Stable topo sort: among eligible nodes, pick by (defaultZ, defaultOrder).
+  const cmp = (i: number, j: number): number =>
+    items[i].defaultZ - items[j].defaultZ ||
+    items[i].defaultOrder - items[j].defaultOrder;
+
+  const eligible: number[] = [];
+  for (let i = 0; i < n; i++) {
+    if (inDegree[i] === 0) eligible.push(i);
+  }
+
+  const result: PaintItem[] = [];
+  const emitted = new Array<boolean>(n).fill(false);
+  while (eligible.length > 0) {
+    eligible.sort(cmp);
+    const i = eligible.shift()!;
+    result.push(items[i]);
+    emitted[i] = true;
+    for (const j of adj[i]) {
+      inDegree[j]--;
+      if (inDegree[j] === 0) eligible.push(j);
+    }
+  }
+
+  if (result.length < n) {
+    const remaining = [];
+    for (let i = 0; i < n; i++) {
+      if (!emitted[i]) {
+        const node = items[i].node;
+        const raw = node instanceof GoFishNode ? node._name : undefined;
+        const name =
+          raw === undefined ? "(unnamed)" : isToken(raw) ? raw.__tag : raw;
+        remaining.push(name);
+      }
+    }
+    throw new Error(
+      `z-order constraints form a cycle; could not order: ${remaining.join(", ")}`
+    );
+  }
+
+  return result;
+}
 
 export const layer = createNodeOperatorSequential(
   async (
@@ -102,18 +252,14 @@ export const layer = createNodeOperatorSequential(
 
           const childPlaceables = [];
 
-          // Collect constrained names before layout so we can skip baseline
-          // placement for constrained children. Baseline placement sets
-          // transform.translate, which makes isPlacedOn() return true and
-          // causes constraints to treat every child as already placed.
-          const constrainedNames = new Set<string>();
-          if (node.constraints.length > 0) {
-            for (const constraint of node.constraints) {
-              for (const ref of constraint.children) {
-                constrainedNames.add(ref.name);
-              }
-            }
-          }
+          // Collect *positioning* constraint refs only — children skipped
+          // here forgo phase-1 baseline placement so a constraint can place
+          // them. Z-order constraints don't position; including them here
+          // would erroneously rob their referents of baseline placement.
+          const constrainedNames =
+            node.constraints.length > 0
+              ? getPositioningConstraintRefs(node.constraints)
+              : new Set<string>();
 
           for (let i = 0; i < children.length; i++) {
             const child = children[i];
@@ -152,26 +298,15 @@ export const layer = createNodeOperatorSequential(
               y: { start: 0, middle: size[1] / 2, end: size[1] },
             });
 
-            // Re-layout unconstrained children so internal Ref() nodes observe
-            // final constrained sibling positions. Constrained children are
-            // intentionally left untouched to preserve "placed once" semantics.
-            for (let i = 0; i < children.length; i++) {
-              const childName = childNameKey(node.children[i]);
-              if (childName && constrainedNames.has(childName)) continue;
-              childPlaceables[i] = children[i].layout(
-                size,
-                scaleFactors,
-                posScales,
-                posDomains
-              );
-            }
-
-            // Default any unplaced axes to 0
+            // Place any child the constraints left unplaced at the layer's
+            // baseline origin — consistent with the phase-1 baseline placement
+            // of unconstrained children. A ref-consuming child (e.g. connect)
+            // that must observe constrained siblings should live in an outer
+            // tier laid out after them (see notes/nested-layer-tiers.md), not
+            // rely on a re-layout pass here.
             for (const cp of childPlaceables) {
-              const needsX = cp.dims[0].min === undefined;
-              const needsY = cp.dims[1].min === undefined;
-              if (needsX) cp.place("x", 0);
-              if (needsY) cp.place("y", 0);
+              if (cp.dims[0].min === undefined) cp.place("x", 0, "baseline");
+              if (cp.dims[1].min === undefined) cp.place("y", 0, "baseline");
             }
           } else {
             // Default layer behavior: place all children at (0, 0)
@@ -233,28 +368,53 @@ export const layer = createNodeOperatorSequential(
             },
           };
         },
-        render: ({ intrinsicDims, transform }, children, node) => {
+        render: ({ transform, coordinateTransform }, children, node) => {
           const scaleX = options.transform?.scale?.x ?? 1;
           const scaleY = options.transform?.scale?.y ?? 1;
-          const orderedChildren = children
-            .map((child, index) => ({
-              child,
-              index,
-              zOrder:
-                node.children[index] instanceof GoFishNode
-                  ? node.children[index].getZOrder()
-                  : 0,
-            }))
-            .sort((a, b) => a.zOrder - b.zOrder || a.index - b.index)
-            .map(({ child }) => child);
+          const wrapTransform = `translate(${transform?.translate?.[0] ?? 0}, ${
+            transform?.translate?.[1] ?? 0
+          }) scale(${scaleX}, ${scaleY})`;
 
+          // Z-order resolution: when this layer carries any zAbove/zBelow
+          // constraints, flatten the (non-component) subtree and emit in
+          // topologically-resolved order. Otherwise, keep the existing
+          // (zOrder, index) sort over already-rendered children.
+          const zConstraints: ZOrderConstraint[] = (
+            node.constraints ?? []
+          ).filter(isZOrderConstraint);
+
+          if (zConstraints.length === 0) {
+            const orderedChildren = children
+              .map((child, index) => ({
+                child,
+                index,
+                zOrder:
+                  node.children[index] instanceof GoFishNode
+                    ? (node.children[index] as GoFishNode).getZOrder()
+                    : 0,
+              }))
+              .sort((a, b) => a.zOrder - b.zOrder || a.index - b.index)
+              .map(({ child }) => child);
+            return <g transform={wrapTransform}>{orderedChildren}</g>;
+          }
+
+          const flat = flattenForZOrder(node.children);
+          const sorted = topoSortByZOrder(flat, zConstraints);
           return (
-            <g
-              transform={`translate(${transform?.translate?.[0] ?? 0}, ${
-                transform?.translate?.[1] ?? 0
-              }) scale(${scaleX}, ${scaleY})`}
-            >
-              {orderedChildren}
+            <g transform={wrapTransform}>
+              {sorted.map((item) => {
+                const rendered = item.node.INTERNAL_render(coordinateTransform);
+                if (item.accTranslate[0] === 0 && item.accTranslate[1] === 0) {
+                  return rendered;
+                }
+                return (
+                  <g
+                    transform={`translate(${item.accTranslate[0]}, ${item.accTranslate[1]})`}
+                  >
+                    {rendered}
+                  </g>
+                );
+              })}
             </g>
           );
         },

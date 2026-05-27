@@ -1,0 +1,17 @@
+{
+  "$schema": "https://typedoc.org/schema.json",
+  "plugin": ["typedoc-plugin-markdown"],
+  "entryPoints": ["../../packages/gofish-graphics/src/util/monotonic.ts"],
+  "tsconfig": "../../packages/gofish-graphics/tsconfig.json",
+  "out": "docs/internals/api",
+  "readme": "none",
+  "name": "Type Reference",
+  "skipErrorChecking": true,
+  "githubPages": false,
+  "hideGenerator": true,
+  "entryFileName": "index.md",
+  "hidePageHeader": true,
+  "hideBreadcrumbs": true,
+  "useCodeBlocks": true,
+  "expandObjects": true
+}

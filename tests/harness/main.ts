@@ -29,6 +29,7 @@ import {
   petal,
   text,
   image,
+  polygon,
   palette,
   gradient,
   clock,
@@ -37,6 +38,7 @@ import {
   Constraint,
   ref,
   arrow,
+  connect,
   over,
   inside,
   xor,
@@ -61,6 +63,7 @@ const COMBINATOR_FACTORIES: Record<
   spread: (opts, marks) => spread(opts, marks) as unknown as Mark<any>,
   layer: (opts, marks) => layer(opts, marks) as unknown as Mark<any>,
   arrow: (opts, marks) => arrow(opts, marks) as unknown as Mark<any>,
+  connect: (opts, marks) => connect(opts, marks) as unknown as Mark<any>,
   treemap: (opts, marks) => Treemap(opts, marks) as unknown as Mark<any>,
   over: (opts, marks) => over(opts, marks) as unknown as Mark<any>,
   inside: (opts, marks) => inside(opts, marks) as unknown as Mark<any>,
@@ -118,8 +121,9 @@ interface OperatorSpec {
 }
 
 interface ConstraintSpec {
-  type: "align" | "distribute";
-  options: Record<string, any>;
+  type: "align" | "distribute" | "zAbove" | "zBelow";
+  // Positioning constraints carry `options`; z-order constraints don't.
+  options?: Record<string, any>;
   refs: string[];
 }
 
@@ -266,6 +270,13 @@ function wrapWithScope(inner: any): any {
       if (typeof node.scope === "function") {
         node.scope();
       }
+      // Match JS `createMark`: the composite is an opaque unit. Ref-name
+      // resolution and z-order flattening both stop at `_isComponent`,
+      // which is otherwise only set by `createMark` itself. Without this,
+      // an inner `layer` produced by a Python `@mark`-decorated function
+      // would be transparent — flattenForZOrder would descend into it and
+      // emit its children as separate paint items.
+      node._isComponent = true;
     }
     return node;
   };
@@ -368,6 +379,7 @@ const MARK_MAP: Record<string, (opts: Record<string, any>) => Mark<any>> = {
   petal: (opts) => petal(opts),
   text: (opts) => text(opts),
   image: (opts) => image(opts),
+  polygon: (opts) => polygon(opts as any) as unknown as Mark<any>,
 };
 
 /** Resolve a `.name` field that's either a string or a token sentinel. */
@@ -470,16 +482,23 @@ function mapMark(
     if (spec.constraints && typeof (mark as any).constrain === "function") {
       const constraints = spec.constraints;
       mark = (mark as any).constrain((refs: Record<string, any>) =>
-        constraints.map((c) =>
-          // JS Constraint.align/distribute signature is (options, refs) — see
-          // packages/gofish-graphics/src/ast/constraints/index.ts. Python
-          // surfaces refs-first ergonomically (`Constraint.align([a,b], x=...)`)
-          // but serializes to the same `{options, refs}` IR.
-          (Constraint as any)[c.type](
+        constraints.map((c) => {
+          // JS positioning constraints take (options, refs); z-order
+          // constraints (`zAbove` / `zBelow`) take two refs directly.
+          if (c.type === "zAbove" || c.type === "zBelow") {
+            return (Constraint as any)[c.type](
+              ...c.refs.map((name) => refs[name])
+            );
+          }
+          // Align/distribute: Python surfaces refs-first ergonomically
+          // (`Constraint.align([a,b], x=...)`) but serializes to the same
+          // `{options, refs}` IR. See
+          // packages/gofish-graphics/src/ast/constraints/index.ts.
+          return (Constraint as any)[c.type](
             c.options,
             c.refs.map((name) => refs[name])
-          )
-        )
+          );
+        })
       );
     }
     // `@mark`-decorated components flag their output for a
@@ -490,6 +509,12 @@ function mapMark(
     const nameVal = resolveNameField(spec.name, resolveToken);
     if (nameVal != null && typeof (mark as any).name === "function") {
       mark = (mark as any).name(nameVal);
+    }
+    if (
+      typeof spec.zOrder === "number" &&
+      typeof (mark as any).zOrder === "function"
+    ) {
+      mark = (mark as any).zOrder(spec.zOrder);
     }
     return mark;
   }
@@ -526,6 +551,12 @@ function mapMark(
   const nameVal = resolveNameField(layerName, resolveToken);
   if (nameVal != null && typeof (mark as any).name === "function") {
     mark = (mark as any).name(nameVal);
+  }
+  if (
+    typeof spec.zOrder === "number" &&
+    typeof (mark as any).zOrder === "function"
+  ) {
+    mark = (mark as any).zOrder(spec.zOrder);
   }
   // `bind_data(d, key)` (Treemap-style) pre-binds a datum so the JS-side
   // mark factory is invoked as `mark(d, key)`. Wrap last so name/label

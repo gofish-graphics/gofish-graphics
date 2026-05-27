@@ -43,6 +43,9 @@ from .ast import (
     petal,
     text,
     image,
+    polygon,
+    connect,
+    Connect,
     v,
 )
 
@@ -87,6 +90,9 @@ __all__ = [
     "petal",
     "text",
     "image",
+    "polygon",
+    "connect",
+    "Connect",
     "v",
 ]
 

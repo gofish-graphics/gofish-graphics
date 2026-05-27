@@ -1,3 +1,7 @@
+// <gofish-wiki> AUTO-GENERATED — see covers: in the essay; run `pnpm --filter docs sync-backlinks`
+// @wiki Underlying Space — /internals/core/underlying-space
+// </gofish-wiki>
+
 // import { ContinuousDomain } from "./domain";
 import { interval, Interval } from "../util/interval";
 import { CoordinateTransform } from "./coordinateTransforms/coord";

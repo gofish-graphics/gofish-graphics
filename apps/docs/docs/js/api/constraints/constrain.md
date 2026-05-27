@@ -42,12 +42,29 @@ Aligns a set of children to a shared edge or center on one or both axes. At leas
 Constraint.align({ x?, y? }, [ref1, ref2, ...])
 ```
 
-| Option | Type                           | Default | Description                                                    |
-| ------ | ------------------------------ | ------- | -------------------------------------------------------------- |
-| `x`    | `"start" \| "middle" \| "end"` | —       | Edge/center to align on the x axis (omit to leave x untouched) |
-| `y`    | `"start" \| "middle" \| "end"` | —       | Edge/center to align on the y axis (omit to leave y untouched) |
+| Option | Type                       | Default | Description                                                    |
+| ------ | -------------------------- | ------- | -------------------------------------------------------------- |
+| `x`    | `Alignment \| Alignment[]` | —       | Edge/center to align on the x axis (omit to leave x untouched) |
+| `y`    | `Alignment \| Alignment[]` | —       | Edge/center to align on the y axis (omit to leave y untouched) |
 
-The first already-placed child in the list acts as the anchor on each specified axis. Unplaced children are moved to match it. If no child is placed yet, the layer's own edge is used as the baseline (`start` = 0, `middle` = midpoint, `end` = full extent). When both `x` and `y` are given, x is resolved before y.
+`Alignment` is `"start" \| "middle" \| "end"`. Pass a single value to share one anchor across every child (the common case); pass an array to assign one anchor _per child_ positionally — the array length must equal the number of children.
+
+The first already-placed child in the list acts as the anchor on each specified axis (read at _that child's_ anchor). Unplaced children are moved to match it (placed at _their own_ anchor). If no child is placed yet, the layer's own edge is used as the baseline (`start` = 0, `middle` = midpoint, `end` = full extent). When both `x` and `y` are given, x is resolved before y.
+
+### Per-child anchors
+
+```ts
+// "A's center aligns with B's start" — useful for shared-edge layouts
+// where two children overlap by a known fraction of their bbox.
+Constraint.align({ x: ["middle", "start"] }, [A, B]);
+
+// "B's end touches C's start" — adjacent placement.
+Constraint.align({ x: ["end", "start"] }, [B, C]);
+```
+
+This is the per-child generalization of the single-anchor form. It expresses
+"edges share" relations directly, instead of through a `distribute` with a
+negative `spacing`.
 
 ::: starfish
 
@@ -99,6 +116,68 @@ gf.Layer([
 ```
 
 :::
+
+## Constraint.zAbove / Constraint.zBelow
+
+Declare a partial-order relation between two named children for **paint order**
+(z-order) only. They do not affect position.
+
+```ts
+Constraint.zAbove(a, b); // a paints in front of b (on top in z)
+Constraint.zBelow(a, b); // a paints behind b (under in z)
+```
+
+`zBelow(a, b)` is equivalent to `zAbove(b, a)`; both are provided so the spec
+reads naturally either way.
+
+When a `Layer` carries any z-order constraint, the render flattens the
+(non-component) subtree into a single paint list and **topologically sorts**
+it. Within the order constraints don't pin, the existing default order is
+preserved (`.zOrder(n)` hints first, then declaration order). A cycle
+(`zAbove(a, b) + zAbove(b, a)`) throws an error at render time.
+
+```ts
+Layer([
+  rect({ w: 80, h: 40, fill: "lightgray" }).name("bg"),
+  rect({ w: 60, h: 60, fill: "steelblue" }).name("box"),
+  text({ text: "label", fontSize: 14 }).name("label"),
+]).constrain(({ bg, box, label }) => [
+  // box paints over bg; label paints over both.
+  Constraint.zAbove(box, bg),
+  Constraint.zAbove(label, box),
+]);
+```
+
+### Cross-tier references
+
+Z-order refs can reach into the layer's _direct_ children and into any
+**plain (non-component) nested `Layer`** below — the same descent rule
+`ref()` uses inside `createMark` composites. This makes patterns like
+"rope on the outer layer slots in z between two pulleys in the inner layer"
+expressible without restructuring the AST.
+
+```ts
+Layer([
+  Layer([
+    PulleyCircle({ r: 25 }).name(A),
+    PulleyCircle({ r: 25 }).name(B),
+  ]).constrain(/* … */),
+  Connect({ ... }, [ref(A), ref(B)]).name("rope"),
+]).constrain((c) => [
+  Constraint.zAbove(c.rope, c.A),  // rope paints over A …
+  Constraint.zBelow(c.rope, c.B),  // … but is covered by B
+]);
+```
+
+### When to use this vs `.zOrder(n)`
+
+- Use `.zOrder(n)` when you want a _global tier_ (e.g. "all ropes go behind
+  all wheels").
+- Use `Constraint.zAbove` / `zBelow` when you want a _relational_ exception
+  (e.g. "this specific rope sits between these two specific wheels").
+
+The two compose: `.zOrder(n)` sets the default order; z-order constraints
+override it for the pairs they name.
 
 ## Spread equivalences
 

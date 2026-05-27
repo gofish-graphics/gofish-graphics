@@ -34,11 +34,13 @@ import {
   petal,
   text,
   image,
+  polygon,
   v,
   layer,
   Constraint,
   ref,
   arrow,
+  connect,
   over,
   inside,
   xor,
@@ -61,6 +63,7 @@ const COMBINATOR_FACTORIES: Record<
   spread: (opts, marks) => spread(opts, marks) as unknown as Mark<any>,
   layer: (opts, marks) => layer(opts, marks) as unknown as Mark<any>,
   arrow: (opts, marks) => arrow(opts, marks) as unknown as Mark<any>,
+  connect: (opts, marks) => connect(opts, marks) as unknown as Mark<any>,
   treemap: (opts, marks) => Treemap(opts, marks) as unknown as Mark<any>,
   over: (opts, marks) => over(opts, marks) as unknown as Mark<any>,
   inside: (opts, marks) => inside(opts, marks) as unknown as Mark<any>,
@@ -133,15 +136,16 @@ interface LabelSpec {
 }
 
 interface ConstraintSpec {
-  type: "align" | "distribute";
-  options: Record<string, any>;
+  type: "align" | "distribute" | "zAbove" | "zBelow";
+  // Positioning constraints carry `options`; z-order constraints don't.
+  options?: Record<string, any>;
   refs: string[];
 }
 
 interface MarkSpec {
   // Mark types include the leaf shapes, combinator-form operators
-  // (`spread`, `layer`, `arrow`, Porter-Duff) used as marks via the
-  // `__combinator` flag, and the bare `ref` leaf for selection-by-name.
+  // (`spread`, `layer`, `arrow`, `connect`, Porter-Duff) used as marks via
+  // the `__combinator` flag, and the bare `ref` leaf for selection-by-name.
   type:
     | "rect"
     | "circle"
@@ -152,9 +156,11 @@ interface MarkSpec {
     | "petal"
     | "text"
     | "image"
+    | "polygon"
     | "spread"
     | "layer"
     | "arrow"
+    | "connect"
     | "over"
     | "inside"
     | "xor"
@@ -276,6 +282,11 @@ function wrapWithScope(inner: any): any {
       if (typeof node.scope === "function") {
         node.scope();
       }
+      // Match JS `createMark`: ref-name resolution and z-order flattening
+      // both stop at `_isComponent`, which is otherwise only set by
+      // `createMark` itself. Without this, an inner layer produced by a
+      // Python `@mark`-decorated function would be transparent.
+      node._isComponent = true;
     }
     return node;
   };
@@ -448,6 +459,7 @@ const MARK_MAP: Record<string, (opts: Record<string, any>) => Mark<any>> = {
   petal: (opts) => petal(opts),
   text: (opts) => text(opts),
   image: (opts) => image(opts),
+  polygon: (opts) => polygon(opts as any) as unknown as Mark<any>,
 };
 
 function mapMark(
@@ -512,16 +524,23 @@ function mapMark(
     let mark = factory(opts, childMarks);
     // Constraint chain. The Python side serializes refs by name; reify the
     // JS-side ConstraintRef objects from those names by looking them up in
-    // the `refs` map the JS callback receives.
+    // the `refs` map the JS callback receives. Z-order constraints
+    // (`zAbove` / `zBelow`) take two refs directly rather than the
+    // `(options, refs)` signature shared by positioning constraints.
     if (markSpec.constraints && typeof (mark as any).constrain === "function") {
       const constraints = markSpec.constraints;
       mark = (mark as any).constrain((refs: Record<string, any>) =>
-        constraints.map((c) =>
-          (Constraint as any)[c.type](
+        constraints.map((c) => {
+          if (c.type === "zAbove" || c.type === "zBelow") {
+            return (Constraint as any)[c.type](
+              ...c.refs.map((name) => refs[name])
+            );
+          }
+          return (Constraint as any)[c.type](
             c.options,
             c.refs.map((name) => refs[name])
-          )
-        )
+          );
+        })
       );
     }
     if (markSpec.__scope) {
@@ -530,6 +549,12 @@ function mapMark(
     const nameVal = resolveNameField(markSpec.name, resolveToken);
     if (nameVal != null && typeof (mark as any).name === "function") {
       mark = (mark as any).name(nameVal);
+    }
+    if (
+      typeof markSpec.zOrder === "number" &&
+      typeof (mark as any).zOrder === "function"
+    ) {
+      mark = (mark as any).zOrder(markSpec.zOrder);
     }
     return mark;
   }
@@ -542,6 +567,7 @@ function mapMark(
         | "spread"
         | "layer"
         | "arrow"
+        | "connect"
         | "ref"
         | "over"
         | "inside"
@@ -568,6 +594,12 @@ function mapMark(
   const nameVal = resolveNameField(layerName, resolveToken);
   if (nameVal != null && typeof (mark as any).name === "function") {
     mark = (mark as any).name(nameVal);
+  }
+  if (
+    typeof markSpec.zOrder === "number" &&
+    typeof (mark as any).zOrder === "function"
+  ) {
+    mark = (mark as any).zOrder(markSpec.zOrder);
   }
   if ("__datum" in markSpec) {
     const boundDatum = markSpec.__datum;

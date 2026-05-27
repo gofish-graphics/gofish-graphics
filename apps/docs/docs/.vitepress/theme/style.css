@@ -217,6 +217,42 @@ html[data-docs-lang="python"] .lang-toggle__btn[data-lang="python"] {
   display: none;
 }
 
+/* The Internals link + language toggle are injected via the
+   `nav-bar-content-after` theme slot. Reorder the right-hand cluster with
+   flexbox `order`: language toggle · search sit on the left by the logo, while
+   the flex-growing search pushes GitHub · Internals to the right.
+   NOTE: the selectors below target VitePress's internal nav class names —
+   re-test the nav layout after any `vitepress` upgrade. */
+.VPNavBar .content-body > .VPNavBarMenu {
+  display: none;
+}
+/* Match the toggle->search gap to the 24px logo->toggle gap. */
+.VPNavBar .content-body > .VPNavBarSearch {
+  padding-left: 24px;
+}
+.VPNavBar .content-body > .lang-toggle {
+  order: -1;
+}
+.VPNavBar .content-body > .VPNavBarSocialLinks {
+  order: 1;
+}
+.VPNavBar .content-body > .internals-link {
+  order: 2;
+}
+.VPNavBar .content-body > .VPNavBarExtra {
+  order: 3;
+}
+
+/* Suppress the overscroll rubber-band. Bouncing the page or the sidebar past its
+   scroll limit flashed sidebar content up into the header region. `.VPSidebar`
+   is doubled so it outweighs VitePress's own `overscroll-behavior: contain`. */
+html {
+  overscroll-behavior: none;
+}
+.VPSidebar.VPSidebar {
+  overscroll-behavior: none;
+}
+
 /**
  * Component: Custom Block
  * -------------------------------------------------------------------------- */

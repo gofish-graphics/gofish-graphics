@@ -1,3 +1,10 @@
+// <gofish-wiki> AUTO-GENERATED — see covers: in the essay; run `pnpm --filter docs sync-backlinks`
+// @wiki Underlying Space — /internals/core/underlying-space
+// @wiki Color Scale Resolution — /internals/layout/color-scales
+// @wiki Overview — /internals/layout/passes
+// @wiki Architecture Overview — /internals/overview/architecture
+// </gofish-wiki>
+
 import type { JSX } from "solid-js";
 import {
   Anchor,

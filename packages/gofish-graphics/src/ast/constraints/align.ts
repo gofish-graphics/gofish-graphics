@@ -7,16 +7,24 @@ import {
   isPlacedOn,
 } from "./shared";
 
+/**
+ * Anchor spec for one axis of an `align` constraint. A single `Alignment`
+ * is shared by every child (the common case). An array gives each child its
+ * own anchor positionally — `align({x: ["middle", "start"]}, [A, B])` aligns
+ * A's center with B's start. The array length must equal `children.length`.
+ */
+export type AlignAxisSpec = Alignment | Alignment[];
+
 export interface AlignConstraint {
   type: "align";
-  x?: Alignment;
-  y?: Alignment;
+  x?: AlignAxisSpec;
+  y?: AlignAxisSpec;
   children: ConstraintRef[];
 }
 
 export interface AlignOptions {
-  x?: Alignment;
-  y?: Alignment;
+  x?: AlignAxisSpec;
+  y?: AlignAxisSpec;
 }
 
 export const createAlignConstraint = (
@@ -37,37 +45,80 @@ export interface AlignFallbackBaseline {
   end?: number;
 }
 
+/** Read the coordinate of `target` along axis `idx` at anchor `a`. */
+const anchorValue = (target: Placeable, idx: 0 | 1, a: Alignment): number =>
+  a === "start"
+    ? target.dims[idx].min!
+    : a === "middle"
+      ? target.dims[idx].center!
+      : target.dims[idx].max!;
+
+/** Place `target` on `axis` so its anchor `a` lands at `value`. */
+const placeAtAnchor = (
+  target: Placeable,
+  axis: Axis,
+  value: number,
+  a: Alignment
+): void => {
+  if (a === "start") target.place(axis, value);
+  else if (a === "middle") target.place(axis, value, "center");
+  else target.place(axis, value, "max");
+};
+
+const fallbackFor = (
+  fallback: AlignFallbackBaseline | undefined,
+  a: Alignment
+): number =>
+  (a === "start"
+    ? fallback?.start
+    : a === "middle"
+      ? fallback?.middle
+      : fallback?.end) ?? 0;
+
 function applyAlignAxis(
   axis: Axis,
-  alignment: Alignment,
+  spec: AlignAxisSpec,
   targets: Placeable[],
   fallback?: AlignFallbackBaseline
 ): void {
   const idx = axisIndex(axis);
 
-  // Find baseline from first already-placed child, or default to 0
-  let baseline: number;
-  const placed = targets.find((t) => isPlacedOn(t, idx));
-
-  if (alignment === "start") {
-    baseline = placed ? placed.dims[idx].min! : (fallback?.start ?? 0);
-    for (const target of targets) {
-      if (isPlacedOn(target, idx)) continue;
-      target.place(axis, baseline);
+  // Normalize to a per-child anchor array.
+  let anchors: Alignment[];
+  if (Array.isArray(spec)) {
+    if (spec.length !== targets.length) {
+      throw new Error(
+        `Constraint.align: anchor array length ${spec.length} must match number of children ${targets.length}`
+      );
     }
-  } else if (alignment === "middle") {
-    baseline = placed ? placed.dims[idx].center! : (fallback?.middle ?? 0);
-    for (const target of targets) {
-      if (isPlacedOn(target, idx)) continue;
-      target.place(axis, baseline, "center");
-    }
+    anchors = spec;
   } else {
-    // "end"
-    baseline = placed ? placed.dims[idx].max! : (fallback?.end ?? 0);
-    for (const target of targets) {
-      if (isPlacedOn(target, idx)) continue;
-      target.place(axis, baseline, "max");
+    anchors = new Array<Alignment>(targets.length).fill(spec);
+  }
+
+  // Baseline = the coordinate the alignment is enforcing. Taken from the
+  // first already-placed child, read at *that child's* anchor. With a
+  // shared anchor the per-child anchor lookup collapses to the legacy
+  // behavior (read .min/.center/.max consistently).
+  let baseline: number | undefined;
+  for (let i = 0; i < targets.length; i++) {
+    if (isPlacedOn(targets[i], idx)) {
+      baseline = anchorValue(targets[i], idx, anchors[i]);
+      break;
     }
+  }
+  if (baseline === undefined) {
+    // No placed siblings: fall back to the layer's box baseline. With a
+    // shared anchor that's the historic behavior; with per-child anchors
+    // we anchor the *first* child to the fallback and let the others land
+    // relative to it on the next pass (still pinned via this same value
+    // since the same baseline is reused below).
+    baseline = fallbackFor(fallback, anchors[0]);
+  }
+
+  for (let i = 0; i < targets.length; i++) {
+    if (isPlacedOn(targets[i], idx)) continue;
+    placeAtAnchor(targets[i], axis, baseline, anchors[i]);
   }
 }
 

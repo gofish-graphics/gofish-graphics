@@ -1,3 +1,7 @@
+// <gofish-wiki> AUTO-GENERATED — see covers: in the essay; run `pnpm --filter docs sync-backlinks`
+// @wiki The Monotonic Module — /internals/core/monotonic
+// </gofish-wiki>
+
 import { findTargetMonotonic } from "../util";
 
 export type Monotonic = {
