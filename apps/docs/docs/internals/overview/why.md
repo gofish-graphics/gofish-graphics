@@ -59,7 +59,11 @@ parallel attempts could share: a single small core onto which "unit chart
 grammar" and "animation grammar" and "diagram grammar" and "pictorial chart
 grammar" desugar, instead of each one being rewritten from scratch against a
 different backend. See [Other Grammars](/internals/overview/other-grammars)
-for the comparative survey.
+for the comparative survey, and
+[Composition, Not Enumeration](/internals/design/composition-not-enumeration)
+for the structural reason the existing grammars do not extend cleanly to each
+other's territory — and why the response is "fork the runtime" rather than
+"write a library."
 
 ## 2. The community is, mostly, stagnating in place
 
