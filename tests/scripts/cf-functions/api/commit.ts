@@ -7,12 +7,18 @@
  * sends them in the request body. The Worker only makes GitHub API calls:
  * - 1 blob creation per screenshot (binary, needs blob API)
  * - DOM files use tree `content` field directly (no blob API needed)
- * - 5 fixed GitHub calls (get ref, get commit, create tree, create commit, update ref)
+ * - 5–7 fixed GitHub calls: get ref, get commit, create tree, create commit,
+ *   update/create ref, and (final chunk only) status update + rerun.
  *
- * Total subrequests: N (screenshots) + 5 — well within Cloudflare's 50 limit.
+ * Cloudflare caps each invocation at 50 outgoing subrequests (free plan),
+ * so the client splits accepts into chunks of ~25 and calls /api/commit
+ * once per chunk. Each chunk creates a follow-on commit on top of the
+ * previous chunk's HEAD — fine for the snapshot orphan branch, whose
+ * history is already a long "Accept N visual diff(s)" chain.
  *
  * Request body:
- *   { paths, domContents, screenshotContents, repo, branch }
+ *   { paths, domContents, screenshotContents, repo, branch,
+ *     headSha?, runId? }  // headSha/runId set on the final chunk only
  *
  * GITHUB_TOKEN is a Cloudflare Pages secret.
  */
