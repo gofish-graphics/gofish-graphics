@@ -39,11 +39,13 @@ jobs:
       - name: Build gofish-graphics library
         run: pnpm --filter gofish-graphics build
 
-      - name: Run Chromatic
+      - name: Publish Storybook to Chromatic
         uses: chromaui/action@latest
         with:
           projectToken: chpt_b7e06495d0d4585
           workingDir: packages/gofish-graphics
           buildScriptName: build-storybook
-          onlyChanged: true # Only test stories that changed
-          autoAcceptChanges: "main"
+          # Publish-only mode: visual regressions are caught by our custom
+          # diff viewer (see visual-tests.yml), so exit as soon as Storybook
+          # is uploaded instead of waiting for Chromatic's UI Tests.
+          exitOnceUploaded: true
