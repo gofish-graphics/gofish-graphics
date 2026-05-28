@@ -30,11 +30,22 @@ Storybook story headlessly and writes a PNG you can `Read`.
 
 ## The loop
 
-1. **Identify the target story and the intent.** Which `.stories.tsx` story are we
-   working on? What is the chart *supposed* to show? If the user named a story
-   (e.g. `bar/grouped`), use that. If unsure which stories exist, run
-   `pnpm --filter @gofish/tests capture-one` with no argument to list them, or
-   ask the user what the example should look like.
+1. **Identify the target story and the intent.** The user does **not** need to give
+   an exact story id — a freeform description is fine (e.g. `/iterate-example
+   implement a pulley diagram` or "fix the scatter example"). Resolve it to a story:
+   - **Existing story:** any substring works — `capture-one` matches case-insensitively
+     against `Title/StoryName`, so `"pulley"` or `"scatter"` is enough. If the
+     description is ambiguous, run `pnpm --filter @gofish/tests capture-one` with no
+     argument to list stories and pick the best match (confirm with the user if
+     genuinely unclear).
+   - **New example that doesn't exist yet** (e.g. "implement a pulley diagram"):
+     first **author the story** — add a `.stories.tsx` under
+     `packages/gofish-graphics/stories/` (follow a sibling story's structure: a
+     default `meta` with a `title`, and a named export with a `render`). Then iterate
+     on it with the loop below.
+
+   Either way, pin down what the chart is *supposed* to show before capturing — that
+   intent is what you critique the rendered image against.
 
 2. **Capture it.**
 
