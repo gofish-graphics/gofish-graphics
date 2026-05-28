@@ -31,10 +31,11 @@ export const Vertical: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    barChart(testData, { x: "category", y: "value", axes: true }).render(
-      container,
-      { w: args.w, h: args.h }
-    );
+    barChart(testData, { x: "category", y: "value" }).render(container, {
+      w: args.w,
+      h: args.h,
+      axes: true,
+    });
 
     return container;
   },
@@ -49,8 +50,11 @@ export const Horizontal: StoryObj<Args> = {
       x: "value",
       y: "category",
       orientation: "x",
+    }).render(container, {
+      w: args.w,
+      h: args.h,
       axes: true,
-    }).render(container, { w: args.w, h: args.h });
+    });
 
     return container;
   },
@@ -65,8 +69,11 @@ export const VerticalWithFillColor: StoryObj<Args> = {
       x: "category",
       y: "value",
       fill: "#4ecdc4",
+    }).render(container, {
+      w: args.w,
+      h: args.h,
       axes: true,
-    }).render(container, { w: args.w, h: args.h });
+    });
 
     return container;
   },
@@ -82,8 +89,11 @@ export const HorizontalWithFillColor: StoryObj<Args> = {
       y: "category",
       orientation: "x",
       fill: "#ff6b6b",
+    }).render(container, {
+      w: args.w,
+      h: args.h,
       axes: true,
-    }).render(container, { w: args.w, h: args.h });
+    });
 
     return container;
   },
@@ -98,8 +108,11 @@ export const VerticalWithFillField: StoryObj<Args> = {
       x: "category",
       y: "value",
       fill: "color",
+    }).render(container, {
+      w: args.w,
+      h: args.h,
       axes: true,
-    }).render(container, { w: args.w, h: args.h });
+    });
 
     return container;
   },
@@ -115,8 +128,11 @@ export const HorizontalWithFillField: StoryObj<Args> = {
       y: "category",
       orientation: "x",
       fill: "color",
+    }).render(container, {
+      w: args.w,
+      h: args.h,
       axes: true,
-    }).render(container, { w: args.w, h: args.h });
+    });
 
     return container;
   },
@@ -131,8 +147,11 @@ export const VerticalWithCustomMark: StoryObj<Args> = {
       x: "category",
       y: "value",
       mark: circle,
+    }).render(container, {
+      w: args.w,
+      h: args.h,
       axes: true,
-    }).render(container, { w: args.w, h: args.h });
+    });
 
     return container;
   },
@@ -148,8 +167,11 @@ export const HorizontalWithCustomMark: StoryObj<Args> = {
       y: "category",
       orientation: "x",
       mark: circle,
+    }).render(container, {
+      w: args.w,
+      h: args.h,
       axes: true,
-    }).render(container, { w: args.w, h: args.h });
+    });
 
     return container;
   },
@@ -165,8 +187,11 @@ export const VerticalWithCustomMarkAndFill: StoryObj<Args> = {
       y: "value",
       fill: "#45b7d1",
       mark: circle,
+    }).render(container, {
+      w: args.w,
+      h: args.h,
       axes: true,
-    }).render(container, { w: args.w, h: args.h });
+    });
 
     return container;
   },
@@ -183,8 +208,11 @@ export const HorizontalWithCustomMarkAndFill: StoryObj<Args> = {
       orientation: "x",
       fill: "#f9ca24",
       mark: circle,
+    }).render(container, {
+      w: args.w,
+      h: args.h,
       axes: true,
-    }).render(container, { w: args.w, h: args.h });
+    });
 
     return container;
   },

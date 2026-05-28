@@ -80,15 +80,7 @@ export const Table = createNodeOperator(
 
           return [xSpace, ySpace];
         },
-        layout: (
-          _shared,
-          size,
-          scaleFactors,
-          children,
-          posScales,
-          node,
-          posDomains
-        ) => {
+        layout: (_shared, size, scaleFactors, children, posScales, node) => {
           const numRows = Math.ceil(children.length / numCols);
           const cellW = (size[0] - xSpacing * (numCols - 1)) / numCols;
           const cellH = (size[1] - ySpacing * (numRows - 1)) / numRows;
@@ -106,7 +98,7 @@ export const Table = createNodeOperator(
 
           const cellSize: Size = [cellW, cellH];
           const childPlaceables: Placeable[] = children.map((child) =>
-            child.layout(cellSize, scaleFactors, posScales, posDomains)
+            child.layout(cellSize, scaleFactors, posScales)
           );
 
           for (let i = 0; i < childPlaceables.length; i++) {
@@ -117,19 +109,19 @@ export const Table = createNodeOperator(
             child.place(1, row * (cellH + ySpacing), "min");
           }
 
-          // Store representative cells for ordinal axis label positioning.
+          // Register representative cells in keyContext for ordinal axis labels.
           // First-row cells provide x-positions for column keys.
           // First-column cells provide y-positions for row keys.
-          // Cell (0,0) is registered under both — posRelToAncestor reads only
-          // the relevant dimension so it works correctly for either axis.
-          const ordinalKeyMap: Record<string, GoFishNode> = {};
+          // The same cell at (0,0) can be registered under both — buildOrdinalScaleX
+          // only reads its x-center and buildOrdinalScaleY only reads its y-center.
+          const keyContext = session.keyContext;
           if (colKeys) {
             for (
               let j = 0;
               j < Math.min(numCols, childPlaceables.length);
               j++
             ) {
-              ordinalKeyMap[colKeys[j]] = childPlaceables[
+              keyContext[colKeys[j]] = childPlaceables[
                 j
               ] as unknown as GoFishNode;
             }
@@ -138,13 +130,12 @@ export const Table = createNodeOperator(
             for (let i = 0; i < numRows; i++) {
               const idx = i * numCols;
               if (idx < childPlaceables.length) {
-                ordinalKeyMap[rowKeys[i]] = childPlaceables[
+                keyContext[rowKeys[i]] = childPlaceables[
                   idx
                 ] as unknown as GoFishNode;
               }
             }
           }
-          node._ordinalKeyMap = ordinalKeyMap;
 
           const xMin = Math.min(...childPlaceables.map((c) => c.dims[0].min!));
           const xMax = Math.max(...childPlaceables.map((c) => c.dims[0].max!));

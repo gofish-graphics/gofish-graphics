@@ -13,7 +13,7 @@ import { seafood } from "./dataset";
 
 const container = document.getElementById("app");
 
-Chart(seafood, { axes: true })
+Chart(seafood)
   .flow(
     spread({ by: "lake", dir: "x" }),
     derive((d) => orderBy(d, "count")),
@@ -23,6 +23,7 @@ Chart(seafood, { axes: true })
   .render(container, {
     w: 400,
     h: 400,
+    axes: true,
   });
 ```
 

@@ -27,12 +27,13 @@ export const Basic: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    Chart(catchLocationsArray, { axes: true })
+    Chart(catchLocationsArray)
       .flow(scatter({ by: "lake",  x: "x", y: "y" }))
       .mark(circle({ r: 5 }))
       .render(container, {
         w: args.w,
         h: args.h,
+        axes: true,
       });
 
     return container;
@@ -79,7 +80,7 @@ export const WithPieGlyphs: StoryObj<Args> = {
       }))
       .value();
 
-    Chart(scatterData, { axes: true })
+    Chart(scatterData)
       .flow(scatter({ by: "lake",  x: "x", y: "y" }))
       .mark((data) =>
         Chart(data[0].collection, { coord: clock() })
@@ -89,6 +90,7 @@ export const WithPieGlyphs: StoryObj<Args> = {
       .render(container, {
         w: args.w,
         h: args.h,
+        axes: true,
       });
 
     return container;

@@ -21,7 +21,7 @@ import { seafood } from "./dataset";
 
 const container = document.getElementById("app");
 
-Layer({ axes: true }, [
+Layer([
   Chart(seafood)
     .flow(
       spread({ by: "lake", dir: "x", spacing: 64 }),
@@ -34,6 +34,7 @@ Layer({ axes: true }, [
 ]).render(container, {
   w: 500,
   h: 300,
+  axes: true,
 });
 ```
 

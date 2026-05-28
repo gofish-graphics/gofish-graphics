@@ -12,7 +12,7 @@ import { drivingShifts } from "./dataset";
 
 const container = document.getElementById("app");
 
-Layer({ axes: true }, [
+Layer([
   Chart(drivingShifts)
     .flow(scatter({ by: "year", x: "miles", y: "gas" }))
     .mark(
@@ -26,6 +26,7 @@ Layer({ axes: true }, [
 ]).render(container, {
   w: 500,
   h: 300,
+  axes: true,
 });
 ```
 

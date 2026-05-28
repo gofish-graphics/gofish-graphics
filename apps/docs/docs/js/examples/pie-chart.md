@@ -13,12 +13,13 @@ import { seafood } from "./dataset";
 
 const container = document.getElementById("app");
 
-Chart(seafood, { coord: clock(), axes: true })
+Chart(seafood, { coord: clock() })
   .flow(stack({ by: "species", dir: "x" }))
   .mark(rect({ w: "count", fill: "species" }))
   .render(container, {
     w: 400,
     h: 300,
+    axes: true,
     transform: { x: 200, y: 200 },
   });
 ```

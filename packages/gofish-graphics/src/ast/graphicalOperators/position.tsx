@@ -35,15 +35,7 @@ export const position = createNodeOperator(
               : UNDEFINED,
           ];
         },
-        layout: (
-          shared,
-          size,
-          scaleFactors,
-          children,
-          posScales,
-          _node,
-          posDomains
-        ) => {
+        layout: (shared, size, scaleFactors, children, posScales) => {
           if (children.length !== 1) {
             throw new Error("Position operator expects exactly one child");
           }
@@ -51,12 +43,7 @@ export const position = createNodeOperator(
           const child = children[0];
           /* TODO: maybe pass like [10, 10] to this instead of size to do a default think for
         scattering... but scatter pie is still broken... */
-          const childPlaceable = child.layout(
-            size,
-            scaleFactors,
-            posScales,
-            posDomains
-          );
+          const childPlaceable = child.layout(size, scaleFactors, posScales);
 
           // Place child at origin first to get its dimensions
           childPlaceable.place("x", 0);

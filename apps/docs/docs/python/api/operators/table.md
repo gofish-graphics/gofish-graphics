@@ -9,9 +9,9 @@ field. The primary operator for heatmaps and other grid-based visualizations.
 ```python
 from gofish import chart, table, rect, gradient
 
-chart(data, color=gradient(["#ffffcc", "#fd8d3c", "#bd0026"]), axes=True).flow(
+chart(data, color=gradient(["#ffffcc", "#fd8d3c", "#bd0026"])).flow(
     table(by={"x": "hour", "y": "day"}, spacing=4)
-).mark(rect(fill="value")).render(w=500, h=300)
+).mark(rect(fill="value")).render(w=500, h=300, axes=True)
 ```
 
 ## Signature

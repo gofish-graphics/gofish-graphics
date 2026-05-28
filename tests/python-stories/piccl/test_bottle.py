@@ -45,7 +45,7 @@ DATA = [
 def story_default():
     return (
         chart(DATA)
-        .flow(spread(by="category", dir="x", spacing=20, axes={"x": False}))
+        .flow(spread(by="category", dir="x", spacing=20))
         .mark(
             layer([
                 atop(
@@ -67,5 +67,5 @@ def story_default():
                 Constraint.align([label, line], x="end"),
             ])
         ),
-        {"w": 1000, "h": 400, "axes": False},
+        {"w": 1000, "h": 400, "axes": {"x": False, "y": True}},
     )

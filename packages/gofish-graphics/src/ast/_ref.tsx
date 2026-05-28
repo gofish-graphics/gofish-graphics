@@ -201,6 +201,10 @@ export class GoFishRef {
     );
   }
 
+  public resolveKeys(): void {
+    this.selectedNode?.resolveKeys();
+  }
+
   public embed(direction: FancyDirection): void {
     this.selectedNode?.embed(direction);
   }

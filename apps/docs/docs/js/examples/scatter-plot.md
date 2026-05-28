@@ -12,12 +12,13 @@ import { catchLocationsArray } from "./dataset";
 
 const container = document.getElementById("app");
 
-Chart(catchLocationsArray, { axes: true })
+Chart(catchLocationsArray)
   .flow(scatter({ by: "lake", x: "x", y: "y" }))
   .mark(circle({ r: 5 }))
   .render(container, {
     w: 500,
     h: 300,
+    axes: true,
   });
 ```
 

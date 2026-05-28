@@ -6,7 +6,6 @@ import {
   Mark,
   ChartBuilder,
   Operator,
-  type ChartOptions,
 } from "../lib";
 import { Stackable } from "./stackable";
 
@@ -64,7 +63,6 @@ export const barChart = <T extends Record<string, any>>(
     y: keyof T & string;
     orientation?: "x" | "y";
     fill?: (keyof T & string) | string;
-    axes?: ChartOptions["axes"];
     mark?: (options: {
       h?: string | number | (keyof T & string);
       w?: string | number | (keyof T & string);
@@ -82,10 +80,8 @@ export const barChart = <T extends Record<string, any>>(
   const orientation = options.orientation ?? "y";
 
   // Vertical bar chart (orientation: "y"): spread along x-axis using x field, height from y field
-  const chartOptions: ChartOptions = { axes: options.axes };
-
   if (orientation === "y") {
-    const builder = Chart(data, chartOptions)
+    const builder = Chart(data)
       .flow(spread({ by: options.x, dir: "x" }))
       .mark(
         markFn({
@@ -98,7 +94,7 @@ export const barChart = <T extends Record<string, any>>(
 
   // Horizontal bar chart (orientation: "x"): spread along y-axis using y field, width from x field
   if (orientation === "x") {
-    const builder = Chart(data, chartOptions)
+    const builder = Chart(data)
       .flow(spread({ by: options.y, dir: "y" }))
       .mark(
         markFn({

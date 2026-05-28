@@ -813,6 +813,7 @@ class ChartBuilder:
         self,
         w: int = 800,
         h: int = 600,
+        axes: bool = False,
         debug: bool = False,
     ):
         """
@@ -821,20 +822,15 @@ class ChartBuilder:
         Args:
             w: Chart width in pixels
             h: Chart height in pixels
+            axes: Whether to show axes
             debug: Whether to enable debug mode
 
         Returns:
             GoFishChartWidget instance that will display in Jupyter
 
-        Note:
-            Axes are a *chart* option, not a render option — pass `axes=...`
-            (and `padding=...`) to ``chart(data, axes=True)``, mirroring the
-            JS ``Chart(data, { axes: true })``. See ``chart`` for the full
-            ``axes`` shape.
-
         Example:
             >>> data = [{"x": 1, "y": 2}]
-            >>> chart(data, axes=True).mark(rect(h="y")).render()
+            >>> chart(data).mark(rect(h="y")).render()
             >>> chart(data).mark(rect(h="y")).render(w=500, h=300)
         """
         if self._mark is None:
@@ -884,14 +880,14 @@ class ChartBuilder:
             if isinstance(op, DeriveOperator)
         }
 
-        # Create and return widget. Axes flow through the chart options
-        # (spec["options"]["axes"]), not a render-time trait.
+        # Create and return widget
         widget = GoFishChartWidget(
             spec=spec,
             arrow_data=arrow_data,
             derive_functions=derive_functions,
             width=w,
             height=h,
+            axes=axes,
             debug=debug,
         )
 
@@ -1723,47 +1719,23 @@ def connect(
 Connect = connect
 
 
-def chart(
-    data: Any, options: Optional[dict] = None, **kwargs: Any
-) -> ChartBuilder:
+def chart(data: Any, **options: Any) -> ChartBuilder:
     """
     Create a new chart builder.
 
-    Chart-level options can be passed either as a positional dict (mirroring
-    the JS ``Chart(data, { axes, coord, ... })``) or as keyword arguments —
-    both forms are accepted and merged (kwargs win on conflict):
+    Chart-level options (color, coord, etc.) are passed as keyword arguments:
 
-        chart(data, {"color": palette("tableau10")})   # JS-style options object
-        chart(data, color=palette("tableau10"))         # keyword form
+        chart(data, color=palette("tableau10"))
         chart(data, color=gradient("blues"), coord=clock())
-
-    Axes are a chart option (not a render option). ``axes`` accepts:
-
-        axes=True                      # show both axes, titles inferred
-        axes=False                     # no axes
-        axes={"x": True, "y": False}   # per-dimension on/off
-        axes={"x": {"title": "Year"}}  # custom title (title=False suppresses it)
-
-        chart(data, axes=True)
-        chart(data, axes={"x": {"title": "Year"}, "y": True})
-        chart(data, coord=clock(), axes=True, padding=80)   # polar chart
-
-    Per-operator overrides use the same shape on spread()/scatter():
-
-        spread(by="species", dir="x", axes={"x": True, "y": False})
 
     Args:
         data: Input data or select() for cross-chart layer references
-        options: Chart options as a dict (JS-style positional object)
-        **kwargs: Chart options as keywords — ``axes``, ``color``, ``coord``,
-            ``padding``, ... (merged over ``options``)
+        **options: Chart options (color, coord, ...)
 
     Returns:
         ChartBuilder instance
     """
-    merged: dict = dict(options) if options else {}
-    merged.update(kwargs)
-    return ChartBuilder(data, merged if merged else None)
+    return ChartBuilder(data, options if options else None)
 
 
 class LayerBuilder:

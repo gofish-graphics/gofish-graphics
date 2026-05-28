@@ -20,7 +20,7 @@ import { streamgraphData } from "./dataset";
 
 const container = document.getElementById("app");
 
-Layer({ axes: true }, [
+Layer([
   Chart(streamgraphData)
     .flow(spread({ by: "x", dir: "x", spacing: 50 }))
     .mark(blank({ h: "y", fill: "c" }).name("points")),
@@ -30,6 +30,7 @@ Layer({ axes: true }, [
 ]).render(container, {
   w: 500,
   h: 300,
+  axes: true,
 });
 ```
 

@@ -12,12 +12,13 @@ import { seafood } from "./dataset";
 
 const container = document.getElementById("app");
 
-Chart(seafood, { axes: true })
+Chart(seafood)
   .flow(spread({ by: "lake", dir: "x" }))
   .mark(rect({ h: "count" }))
   .render(container, {
     w: 400,
     h: 300,
+    axes: true,
   });
 ```
 

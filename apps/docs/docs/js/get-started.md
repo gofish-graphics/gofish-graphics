@@ -28,12 +28,13 @@ const alphabet = [
 
 const root = document.createElement("div");
 
-Chart(seafood, { axes: true })
+Chart(seafood)
   .flow(spread({ by: "letter", dir: "x" }))
   .mark(rect({ h: "frequency" }))
   .render(root, {
     w: 500,
     h: 300,
+    axes: true,
   });
 ```
 
@@ -107,13 +108,13 @@ We use the `spreadX` operator to spread out rectangles horizontally. It also mak
 ### Rendering
 
 ```ts
-Chart(alphabet, { axes: true }).render(root, { w: 500, h: 300 });
+  .render(root, { w: 500, h: 300, axes: true });
 ```
 
 The `render` method draws our chart to the screen! We give it a DOM container to render into (`root`
 in this case) and some options. We've specified the width and height of our chart with `w` and `h`
 (just like on `rect`). We've also told GoFish to create some axes, labels, and legends for us
-automatically by passing `axes: true` in the `chart()` options.
+automatically with `axes: true`.
 
 ## 4. Next steps
 
@@ -130,12 +131,13 @@ const root = document.getElementById("app");
 
 // - Try changing `dir` to `y` and use `rect`'s `w` channel instead of `h`.
 // - What happens when you map both `w` and `h` to "frequency"?
-Chart(alphabet, { axes: true })
+Chart(alphabet)
   .flow(spread({ by: "letter", dir: "x" }))
   .mark(rect({ h: "frequency" }))
   .render(root, {
     w: 500,
     h: 300,
+    axes: true,
   });
 ```
 

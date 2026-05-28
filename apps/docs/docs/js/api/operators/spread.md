@@ -5,10 +5,10 @@ Partitions data by the `by` field and lays out one child per partition along an 
 ::: starfish
 
 ```js
-gf.Chart(seafood, { axes: true })
+gf.Chart(seafood)
   .flow(gf.spread({ by: "lake", dir: "x" }))
   .mark(gf.rect({ h: "count" }))
-  .render(root, { w: 400, h: 250 });
+  .render(root, { w: 400, h: 250, axes: true });
 ```
 
 :::

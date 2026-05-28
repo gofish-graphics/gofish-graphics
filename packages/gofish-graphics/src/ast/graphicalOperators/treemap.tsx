@@ -98,15 +98,7 @@ export const treemap = createNodeOperator(
           // Use a stable unit domain; this avoids implying ordinal semantics.
           return [POSITION(interval(0, 1)), POSITION(interval(0, 1))];
         },
-        layout: (
-          _shared,
-          size,
-          scaleFactors,
-          childAsts,
-          posScales,
-          node,
-          posDomains
-        ) => {
+        layout: (_shared, size, scaleFactors, childAsts, posScales, node) => {
           const xPos = computeAesthetic(
             dims[0].min,
             posScales?.[0]!,
@@ -196,12 +188,7 @@ export const treemap = createNodeOperator(
             const h = Math.max(0, y1 - y0);
 
             const child = childAsts[i];
-            const placeable = child.layout(
-              [w, h],
-              scaleFactors,
-              posScales,
-              posDomains
-            );
+            const placeable = child.layout([w, h], scaleFactors, posScales);
             placeable.place(0, x0 + w / 2, "center");
             placeable.place(1, y0 + h / 2, "center");
             placed[i] = placeable;

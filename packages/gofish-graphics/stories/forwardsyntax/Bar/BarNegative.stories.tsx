@@ -30,12 +30,13 @@ export const Default: StoryObj<Args> = {
       { category: "E", value: 20 },
     ];
 
-    Chart(testData, { axes: true })
+    Chart(testData)
       .flow(spread({ by: "category",  dir: "x" }))
       .mark(rect({ h: "value" }))
       .render(container, {
         w: args.w,
         h: args.h,
+        axes: true,
       });
 
     return container;

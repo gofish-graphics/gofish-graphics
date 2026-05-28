@@ -35,7 +35,7 @@ export const Default: StoryObj<Args> = {
       { origin: "USA", cylinders: "8", count: 108 },
     ];
 
-    Chart(data, { axes: true })
+    Chart(data)
       .flow(
         spread({ by: "origin",  dir: "x" }),
         derive((d) => normalize(d, "count")),
@@ -47,6 +47,7 @@ export const Default: StoryObj<Args> = {
       .render(container, {
         w: args.w,
         h: args.h,
+        axes: true,
       });
 
     return container;

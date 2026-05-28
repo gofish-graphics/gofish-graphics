@@ -235,15 +235,7 @@ export const layer = createNodeOperatorSequential(
             applyScale(unionChildSpaces(children, 1), scaleY),
           ];
         },
-        layout: (
-          shared,
-          size,
-          scaleFactors,
-          children,
-          posScales,
-          node,
-          posDomains
-        ) => {
+        layout: (shared, size, scaleFactors, children, posScales, node) => {
           // Compute size using dims (w and h) before passing to children
           size = [
             computeSize(dims[0].size, scaleFactors?.[0]!, size[0]) ?? size[0],
@@ -263,12 +255,7 @@ export const layer = createNodeOperatorSequential(
 
           for (let i = 0; i < children.length; i++) {
             const child = children[i];
-            const childPlaceable = child.layout(
-              size,
-              scaleFactors,
-              posScales,
-              posDomains
-            );
+            const childPlaceable = child.layout(size, scaleFactors, posScales);
             const childName = childNameKey(node.children[i]);
             if (!childName || !constrainedNames.has(childName)) {
               childPlaceable.place("x", 0, "baseline");

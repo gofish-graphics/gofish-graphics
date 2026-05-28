@@ -29,7 +29,7 @@ const lakeTotals = Object.entries(groupBy(seafood, "lake")).map(
   })
 );
 
-Layer({ axes: true }, [
+Layer([
   Chart(lakeTotals)
     .flow(spread({ by: "lake", dir: "x", spacing: 64 }))
     .mark(blank({ h: "count" }).name("points")),
@@ -37,6 +37,7 @@ Layer({ axes: true }, [
 ]).render(container, {
   w: 500,
   h: 300,
+  axes: true,
 });
 ```
 
