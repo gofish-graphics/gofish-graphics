@@ -142,8 +142,8 @@ Key coordinate systems available:
   Storybook story headlessly to `tests/tmp/iterate/<path>.png` (+ normalized DOM) so Claude can
   look at the output and fix mistakes in a feedback loop instead of editing blind. Run with no
   argument to list stories. The `/iterate-example` skill (`.claude/skills/iterate-example/`) drives
-  this render → review → fix loop. Requires `dist/` to exist once (`pnpm --filter gofish-graphics
-build`); source edits are picked up live without rebuilding.
+  this render → review → fix loop. Requires `dist/` to exist once
+  (`pnpm --filter gofish-graphics build`); source edits are picked up live without rebuilding.
 - **Documentation**: VitePress site in `apps/docs/` with live chart examples
 - **Testing**: The `src/tests/` directory contains visual chart examples for development, not automated unit tests
 - **Development Server**: `pnpm dev` runs Vite dev server on port 3000

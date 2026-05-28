@@ -23,29 +23,15 @@
 
 import { chromium, type Browser } from "playwright";
 import { spawn, type ChildProcess } from "child_process";
-import { writeFileSync, mkdirSync, rmSync, existsSync } from "fs";
+import { writeFileSync, mkdirSync } from "fs";
 import { join, dirname } from "path";
 import { normalizeDom } from "./normalize-dom.js";
+import { storyToPath } from "./path-mapping.js";
 
 const TESTS_DIR = join(import.meta.dirname, "..");
 const HARNESS_DIR = join(TESTS_DIR, "harness");
 const OUT_DIR = join(TESTS_DIR, "tmp/iterate");
 const VITE_PORT = 3002; // distinct from capture-js-dom (3001) so both can run
-
-/** Convert a story title + name into a file-system path for snapshots. */
-function storyToPath(title: string, name: string): string {
-  const segments = title.split("/").map((s) =>
-    s
-      .replace(/([a-z])([A-Z])/g, "$1-$2")
-      .replace(/\s+/g, "-")
-      .toLowerCase()
-  );
-  const storyName = name
-    .replace(/([a-z])([A-Z])/g, "$1-$2")
-    .replace(/\s+/g, "-")
-    .toLowerCase();
-  return `${segments.join("/")}--${storyName}`;
-}
 
 function startViteServer(): ChildProcess {
   return spawn(
@@ -149,8 +135,8 @@ async function main() {
       return;
     }
 
-    // Clean only this iterate output dir (never touches capture-js-dom's tmp/js).
-    if (existsSync(OUT_DIR)) rmSync(OUT_DIR, { recursive: true });
+    // Overwrite per-story below (never wipe the whole dir): captures from a
+    // previous filter survive, so you can compare two stories across runs.
     mkdirSync(OUT_DIR, { recursive: true });
 
     console.log(
@@ -196,13 +182,16 @@ async function main() {
           screenshotPath,
           await rootHandle.screenshot({ type: "png" })
         );
-        written.push(screenshotPath);
+        // PNG first (read this), then the DOM (read for exact coords/sizes).
+        written.push(screenshotPath, domPath);
       }
       console.log("OK");
     }
 
     if (written.length) {
-      console.log(`\nScreenshots written — open/read these:`);
+      console.log(
+        `\nWritten — read the .png (and .html for exact coords/sizes):`
+      );
       for (const p of written) console.log(`  ${p}`);
     }
 
