@@ -148,44 +148,51 @@ async function main() {
       const path = storyToPath(story.title, story.name);
       process.stdout.write(`  ${story.title}/${story.name} ... `);
 
-      const success = await page.evaluate(
-        async (id) => window.__renderStory__(id),
-        story.id
-      );
-      if (!success) {
-        const err = await page.evaluate(() => window.__STORY_RENDER_ERROR__);
-        console.log(`FAILED: ${err}`);
-        continue;
-      }
-      await page.waitForFunction(() => window.__STORY_RENDER_DONE__ === true, {
-        timeout: 15_000,
-      });
-
-      const rawDom = await page.evaluate(() => {
-        const root = document.getElementById("stories-root");
-        return root ? root.innerHTML : "";
-      });
-      if (!rawDom.trim()) {
-        console.log("SKIP (empty)");
-        continue;
-      }
-
-      const domPath = join(OUT_DIR, `${path}.html`);
-      mkdirSync(dirname(domPath), { recursive: true });
-      writeFileSync(domPath, normalizeDom(rawDom), "utf-8");
-
-      const rootHandle = await page.$("#stories-root");
-      if (rootHandle) {
-        const screenshotPath = join(OUT_DIR, `${path}.png`);
-        mkdirSync(dirname(screenshotPath), { recursive: true });
-        writeFileSync(
-          screenshotPath,
-          await rootHandle.screenshot({ type: "png" })
+      // Guard each story (like capture-js-dom.ts) so one render/timeout failure
+      // doesn't abort the remaining matches when a filter hits several stories.
+      try {
+        const success = await page.evaluate(
+          async (id) => window.__renderStory__(id),
+          story.id
         );
-        // PNG first (read this), then the DOM (read for exact coords/sizes).
-        written.push(screenshotPath, domPath);
+        if (!success) {
+          const err = await page.evaluate(() => window.__STORY_RENDER_ERROR__);
+          console.log(`FAILED: ${err}`);
+          continue;
+        }
+        await page.waitForFunction(
+          () => window.__STORY_RENDER_DONE__ === true,
+          { timeout: 15_000 }
+        );
+
+        const rawDom = await page.evaluate(() => {
+          const root = document.getElementById("stories-root");
+          return root ? root.innerHTML : "";
+        });
+        if (!rawDom.trim()) {
+          console.log("SKIP (empty)");
+          continue;
+        }
+
+        const domPath = join(OUT_DIR, `${path}.html`);
+        mkdirSync(dirname(domPath), { recursive: true });
+        writeFileSync(domPath, normalizeDom(rawDom), "utf-8");
+
+        const rootHandle = await page.$("#stories-root");
+        if (rootHandle) {
+          const screenshotPath = join(OUT_DIR, `${path}.png`);
+          mkdirSync(dirname(screenshotPath), { recursive: true });
+          writeFileSync(
+            screenshotPath,
+            await rootHandle.screenshot({ type: "png" })
+          );
+          // PNG first (read this), then the DOM (read for exact coords/sizes).
+          written.push(screenshotPath, domPath);
+        }
+        console.log("OK");
+      } catch (err) {
+        console.log(`FAILED: ${err instanceof Error ? err.message : err}`);
       }
-      console.log("OK");
     }
 
     if (written.length) {

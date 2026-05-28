@@ -13,6 +13,13 @@ const SCRIPTS_DIR = import.meta.dirname;
 const TESTS_DIR = dirname(SCRIPTS_DIR);
 const ROOT_DIR = dirname(TESTS_DIR);
 
+/** CamelCase / spaced → kebab-case (one source of truth for path generation). */
+const toKebab = (s: string) =>
+  s
+    .replace(/([a-z])([A-Z])/g, "$1-$2")
+    .replace(/\s+/g, "-")
+    .toLowerCase();
+
 /**
  * Convert a Storybook story title + export name into a stable file-system path
  * used for snapshots/screenshots.
@@ -23,11 +30,6 @@ const ROOT_DIR = dirname(TESTS_DIR);
  * the two stay in lockstep if the kebab-casing rule ever changes.
  */
 export function storyToPath(title: string, name: string): string {
-  const toKebab = (s: string) =>
-    s
-      .replace(/([a-z])([A-Z])/g, "$1-$2")
-      .replace(/\s+/g, "-")
-      .toLowerCase();
   const segments = title.split("/").map(toKebab);
   return `${segments.join("/")}--${toKebab(name)}`;
 }
@@ -52,11 +54,6 @@ export function mapJsToPython(jsFile: string): string {
   }
 
   if (title) {
-    const toKebab = (s: string) =>
-      s
-        .replace(/([a-z])([A-Z])/g, "$1-$2")
-        .replace(/\s+/g, "-")
-        .toLowerCase();
     const segments = title.split("/").map(toKebab);
     const dirPath = segments.slice(0, -1).join("/");
     const basePart = segments[segments.length - 1].replace(/-/g, "_");
