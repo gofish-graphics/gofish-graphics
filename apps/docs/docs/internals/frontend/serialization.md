@@ -289,6 +289,43 @@ User-defined custom marks via the no-channels `createMark((data, props) => …)`
 overload are an open question (deferred to v0.1+ — Olli treats them as
 opaque semantic boundaries via the `name` field).
 
+## Underlying-space annotations (`meta.space`)
+
+Every IR node has an optional `meta` slot for later-pass info. The first
+field populated is `meta.space` — the node's **underlying-space type**, the
+classification the layout pipeline uses to drive scales, axes, and legends
+(see [Underlying Space](/internals/core/underlying-space)). It is per-axis and,
+when present, complete:
+
+```jsonc
+"meta": {
+  "space": {
+    "x": { "kind": "ORDINAL", "domain": ["A", "B"] },
+    "y": { "kind": "POSITION", "domain": [0, 20] }
+  }
+}
+```
+
+Two rules govern it:
+
+- **Derived, never authoritative.** `meta.space` is _read off the in-memory
+  model_, not inferred from the JSON. The emitter (`toJSON`) resolves the chart
+  and projects the resolved root's `_underlyingSpace` via
+  `underlyingSpaceToAnnotation`; the deserializer ignores `meta` entirely. A
+  `toJSON → fromJSON → toJSON` round-trip therefore re-derives an identical
+  annotation. Domains require the data pipeline (today coupled to node
+  construction, #457), which is why they come from resolution rather than a
+  pre-resolve pass; _kinds_ alone can be checked cheaply on the chart-builder
+  AST (`serialize/inferUnderlyingSpace.ts`), the early typecheck of #452.
+- **Optional per node, but complete when emitted.** Its fields are required, so
+  if resolution can't determine them — unbound/external data, a mark the
+  resolver can't build standalone, a non-linear `SIZE` — `meta.space` is simply
+  omitted for that node. Serialization never throws on a missing annotation.
+
+The Python wrapper does not compute underlying space, so its `to_ir()` output
+omits `meta.space`; since the slot is optional this round-trips cleanly, and
+visual parity is unaffected (the annotation doesn't drive rendering).
+
 ## Future evolution
 
 v0 publishes the existing widget wire shape so consumers can ship
@@ -310,9 +347,10 @@ in the design improvements:
   `Syntax` → `Expr`. Reserved as namespace; nothing ships under
   `Core` or `Rendered` yet.
 - **Inline `meta?` annotations** — per-node optional slot for
-  later-pass info (underlying-space classification, source positions,
-  scale resolution). Open-typed; the slot is reserved in v0,
-  unset by emitters.
+  later-pass info (source positions, scale resolution, …). Open-typed.
+  The first populated field, `meta.space`, ships in v0 (see
+  [§ Underlying-space annotations](#underlying-space-annotations-meta-space));
+  the remaining fields stay reserved until their passes land.
 
 ## Bridge extensions (Python widget)
 

@@ -208,5 +208,8 @@ to layout operators (split + per-partition application).
 - The factory's optional `serialize` config (third argument) tags the
   produced mark with `__serialize` metadata that the frontend-IR emitter
   reads — see [Frontend IR (Serialization)](/internals/frontend/serialization).
+  The tag also carries the mark's `channels` map (not emitted to the wire) so
+  the cheap underlying-space _kind_ inference can classify each axis without
+  resolving — see [Underlying Space](/internals/core/underlying-space).
 - Encodable: paper [arxiv:2009.00722](https://arxiv.org/abs/2009.00722),
   source [github.com/kristw/encodable](https://github.com/kristw/encodable).

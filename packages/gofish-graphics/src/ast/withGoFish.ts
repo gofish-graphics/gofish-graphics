@@ -697,6 +697,12 @@ export function createMark(
       (baseMark as any).__serialize = {
         type: serializeConfig.type,
         opts: payload,
+        // Per-channel annotations (`{w:"size", h:"size", x:"pos", …}`), so the
+        // underlying-space *kind* inference (gofish-graphics/serialize/
+        // inferUnderlyingSpace) can classify each axis structurally without
+        // resolving the node. Not emitted to the wire — the emitter only reads
+        // type/opts/name/label/children off the tag.
+        channels,
       };
     }
 

@@ -5,8 +5,11 @@ order: 10
 status: draft
 covers:
   - packages/gofish-graphics/src/ast/underlyingSpace.ts
+  - packages/gofish-graphics/src/ast/underlyingSpaceRules.ts
   - packages/gofish-graphics/src/ast/_node.ts
   - packages/gofish-graphics/src/ast/graphicalOperators/alignment.ts
+  - packages/gofish-graphics/src/serialize/inferUnderlyingSpace.ts
+  - packages/gofish-graphics/src/serialize/typecheckChannels.ts
 ---
 
 # The underlying space tree
@@ -410,6 +413,70 @@ If your operator is layout-time-only (no contribution to the kind tree),
 return `[UNDEFINED, UNDEFINED]` and rely on the children to drive
 inference upward through your wrapper (e.g. via `unionChildSpaces` from
 a parent layer).
+
+## Underlying space as a type, and as a serialized annotation
+
+Underlying space is, in effect, GoFish's **type system**: each node's per-axis
+kind is its "type", and the resolution traversal is type _inference_. Two
+practical consequences follow, both implemented in
+`src/ast/underlyingSpace.ts` and `src/ast/underlyingSpaceRules.ts`.
+
+**The annotation travels into the frontend IR.** `underlyingSpaceToAnnotation`
+projects a node's runtime `Size<UnderlyingSpace>` onto the serializable
+`UnderlyingSpaceAnnotation` carried in the IR's per-node `meta.space` slot (see
+[The Frontend IR](/internals/frontend/serialization)). The annotation is the
+_data-domain view_ of the runtime space — `POSITION`/`SIZE` carry a numeric
+`[min, max]`, `DIFFERENCE` a `width`, `ORDINAL` its category keys. A runtime
+`SIZE` holds a layout-time `Monotonic` rather than a data extent; for the linear
+case `computeIntrinsicSize` produces, the extent is recoverable as
+`[intercept, intercept + slope]` (the image of the unit interval), so the two
+representations agree. Non-linear Monotonics have no closed-form extent and
+raise `UnderlyingSpaceInferenceError`.
+
+**Two stages, one type system.** This mirrors GHC (the surface `HsSyn` is
+typechecked _before_ desugaring to Core, and **Core Lint** re-checks the typed
+Core after each optimization pass) and Lean (surface syntax elaborates to a
+fully-typed `Expr`, with types carried as inline metadata that survive
+lowering). GoFish has the analogous split:
+
+- **Cheap kind inference on the chart-builder AST** —
+  `serialize/inferUnderlyingSpace.ts` classifies a leaf mark's per-axis _kind_
+  from its channel annotations alone (`underlyingSpaceRules.ts`), with no data
+  and no node construction. This is the early typecheck: runnable on the small
+  surface AST before it is resolved.
+- **Full resolution on the scenegraph** — `resolveUnderlyingSpace()` (above)
+  computes kinds _and_ domains, and composes them through operators. This is the
+  authoritative stage; it is what `meta.space` is read off, and what axes,
+  legends, and scales consume.
+
+Today the two stages overlap only at the leaves: domains and operator
+composition (a `spread` turning child `SIZE` into a stacked `POSITION`, say)
+require the data pipeline, which is still coupled to node construction. Once
+elaboration is split into its own pass (issue #457), the cheap stage can
+compose and carry domains too, and the parity check below extends to the whole
+tree. The cross-stage parity test ("Core Lint") asserts the cheap leaf kinds
+agree with every resolved leaf node's kind.
+
+### Channel typechecking against the inline-data schema
+
+When data is inline, the column types read off the **first row** give the
+cheap stage a typing context (`serialize/typecheckChannels.ts`). Each channel
+argument is _elaborated_ — a string that names a column becomes a field access,
+otherwise a literal (the same rule the runtime `inferSize`/`inferColor`/… use)
+— and then _typechecked_ against the type its channel expects: `size`/`pos`
+want numbers, a literal `color` wants a CSS string, `raw` takes anything.
+`rect({ h: "species" })` over `{species: string, count: number}` is a type
+error (a size channel bound to a string column); `rect({ h: "count" })` checks.
+
+The schema is **opaque past a `derive`**: an arbitrary transform can rename or
+retype columns, so once a `derive` (or any operator the emitter can't tag) sits
+between the data and the mark, no schema is known, strings stay unresolved, and
+only schema-free errors (a literal in the wrong slot) are reported. This is the
+elaboration seam #457 will formalize.
+
+A spec may freely **mix chart-builder (v3) code with low-level (`GoFishNode`)
+code**; the cheap pass classifies the marks it understands and otherwise leaves
+classification to resolution, so both stages stay sound on mixed trees.
 
 ## Prior art
 

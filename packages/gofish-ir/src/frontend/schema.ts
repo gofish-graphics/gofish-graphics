@@ -29,11 +29,20 @@ export type FrontendIR = ChartIR | LayerIR | RawMarkIR;
  * passes (underlying-space inference, scale resolution, etc.) populate the
  * relevant fields. The slot is reserved so additive evolution doesn't
  * require a schema bump.
+ *
+ * `space` is **derived, not authoritative**: it is computed by the
+ * underlying-space inference pass over the in-memory chart-builder AST (the
+ * source of truth) and merely *read off* into the IR by the emitter — the
+ * deserializer drops it and a round-trip re-derives it. The serializer never
+ * infers from the JSON.
  */
 export interface Meta {
   /** Source-position attribution — populated by future build-time hooks. */
   loc?: SourceLocation;
-  /** Underlying-space classification — populated post-elaboration. */
+  /**
+   * Underlying-space classification — the node's inferred "type" in the
+   * underlying-space type system. Per-axis (`x` / `y`).
+   */
   space?: UnderlyingSpaceAnnotation;
   /** Open extension for unknown pass-specific annotations. */
   [key: string]: unknown;
@@ -45,9 +54,39 @@ export interface SourceLocation {
   column: number;
 }
 
+/**
+ * A node's inferred underlying space, one classification per axis.
+ *
+ * This is the serializable, data-domain view of the runtime
+ * `UnderlyingSpace` (`gofish-graphics/src/ast/underlyingSpace.ts`). Fields are
+ * **required** — inference must determine them from the spec's data, or fail
+ * with an error asking the author to annotate. The layout-time `Monotonic`
+ * that a runtime `SIZE` carries is a realization detail and is *not* part of
+ * the type; `SIZE.domain` is the data-value extent feeding the size channel.
+ */
 export interface UnderlyingSpaceAnnotation {
-  type: "SIZE" | "POSITION" | "ORDINAL" | "DIFFERENCE" | "UNDEFINED";
+  x: AxisSpace;
+  y: AxisSpace;
 }
+
+export type AxisSpaceKind =
+  | "POSITION"
+  | "SIZE"
+  | "DIFFERENCE"
+  | "ORDINAL"
+  | "UNDEFINED";
+
+export type AxisSpace =
+  /** A positional extent in data space (e.g. `x`/`x2` coordinates). */
+  | { kind: "POSITION"; domain: [number, number] }
+  /** A measured magnitude; `domain` is the data-value extent. */
+  | { kind: "SIZE"; domain: [number, number] }
+  /** A fixed pixel-space difference (constant size, no scale). */
+  | { kind: "DIFFERENCE"; width: number }
+  /** A categorical axis; `domain` is the ordered category keys. */
+  | { kind: "ORDINAL"; domain: string[] }
+  /** No underlying space (unmeasured / not positioned). */
+  | { kind: "UNDEFINED" };
 
 /** Mixin properties available on every IR node. */
 export interface BaseIRNode {

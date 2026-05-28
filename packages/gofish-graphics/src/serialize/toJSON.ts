@@ -21,6 +21,7 @@
 
 import type { Frontend } from "gofish-ir";
 import type { ChartBuilder, Mark, Operator } from "./registry";
+import { underlyingSpaceToAnnotation } from "../ast/underlyingSpace";
 
 // The widget IR uses these symbol-loose shapes; toJSON returns them as-is.
 // The validator in `gofish-ir` accepts these shapes in permissive mode.
@@ -149,7 +150,34 @@ async function chartBuilderToChartIR(
   if (nodeZOrder !== undefined) {
     ir.zOrder = nodeZOrder;
   }
+  const space = await rootSpaceAnnotation(chart);
+  if (space) ir.meta = { space };
   return ir;
+}
+
+/**
+ * Read the chart's root underlying-space annotation **off the in-memory
+ * model** (never inferred from the IR). Domains require the data pipeline,
+ * which — until elaboration is split out (#457) — also builds the node tree,
+ * so we resolve the chart and read `_underlyingSpace` off the resolved root
+ * (the same value layout uses to drive axes/legends), then project it to the
+ * serializable annotation.
+ *
+ * The annotation is *derived, not authoritative*: any failure (unbound/
+ * external data, a non-linear SIZE with no closed-form extent, a mark the
+ * resolver can't build standalone) yields `undefined`, and `meta.space` is
+ * simply omitted — serialization never regresses. `meta.space` is optional
+ * per node, but complete (all required fields present) when emitted.
+ */
+async function rootSpaceAnnotation(
+  chart: ChartBuilder<any>
+): Promise<Frontend.UnderlyingSpaceAnnotation | undefined> {
+  try {
+    const node = await (chart as any).resolve();
+    return underlyingSpaceToAnnotation(node.resolveUnderlyingSpace());
+  } catch {
+    return undefined;
+  }
 }
 
 function dataToIR(data: unknown): Frontend.DataIR | null {

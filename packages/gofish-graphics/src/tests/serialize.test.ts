@@ -32,7 +32,28 @@ const {
   field,
   datum,
   literal,
+  Serialize,
 } = GoFish as any;
+
+/** Map a runtime UnderlyingSpace.kind (lowercase) to the IR AxisSpaceKind. */
+const KIND_TO_IR: Record<string, string> = {
+  position: "POSITION",
+  size: "SIZE",
+  difference: "DIFFERENCE",
+  ordinal: "ORDINAL",
+  undefined: "UNDEFINED",
+};
+
+/** Collect leaf GoFishNodes (no children) from a resolved tree. */
+function collectLeafNodes(node: any, out: any[] = []): any[] {
+  const children = node?.children ?? [];
+  if (children.length === 0) {
+    out.push(node);
+  } else {
+    for (const c of children) collectLeafNodes(c, out);
+  }
+  return out;
+}
 
 declare const process: { exit(code: number): never };
 
@@ -392,6 +413,164 @@ async function main() {
     check("combinator stack emits", mark.type === "stack");
     check("combinator stack is flagged", mark.__combinator === true);
     check("combinator stack has children", Array.isArray(mark.children));
+  }
+
+  // -------------------------------------------------------------------------
+  // Underlying-space annotation (meta.space) — read off the resolved model.
+  // -------------------------------------------------------------------------
+  console.log("\n# Underlying-space annotation (meta.space)");
+  {
+    const seafood = [
+      { lake: "A", species: "trout", count: 12 },
+      { lake: "A", species: "bass", count: 8 },
+      { lake: "B", species: "trout", count: 5 },
+    ];
+    const bar = Chart(seafood)
+      .flow(spread({ by: "lake", dir: "x" }))
+      .mark(rect({ h: "count", fill: "species" }));
+    const doc = await bar.toJSON();
+    validateDoc(doc, "bar chart with meta.space", true);
+    const space = (doc.root as any).meta?.space;
+    check("bar chart root carries meta.space", !!space);
+    check(
+      "bar x axis is ORDINAL over lakes",
+      space?.x?.kind === "ORDINAL" &&
+        JSON.stringify(space?.x?.domain) === JSON.stringify(["A", "B"])
+    );
+    check(
+      "bar y axis is POSITION with a numeric domain pair",
+      space?.y?.kind === "POSITION" &&
+        Array.isArray(space?.y?.domain) &&
+        space.y.domain.length === 2
+    );
+
+    // Determinism: the derived annotation is stable across emits (so a
+    // toJSON → fromJSON → toJSON round-trip re-derives it identically).
+    const doc2 = await bar.toJSON();
+    check(
+      "meta.space is deterministic across emits",
+      JSON.stringify((doc.root as any).meta) ===
+        JSON.stringify((doc2.root as any).meta)
+    );
+
+    // When the chart can't be resolved (here a bare `line()` mark, which needs
+    // refs it doesn't have), meta.space is omitted rather than thrown — the
+    // annotation is derived, so serialization never regresses.
+    const GoFishLine = (GoFish as any).line;
+    const unresolvable = await Chart([{ a: 1 }]).mark(GoFishLine()).toJSON();
+    check(
+      "unresolvable chart still emits, omitting meta.space (no throw)",
+      (unresolvable.root as any).meta?.space === undefined &&
+        (unresolvable.root as any).type === "chart"
+    );
+  }
+
+  // -------------------------------------------------------------------------
+  // Cheap kind inference + cross-stage parity ("Core Lint").
+  // -------------------------------------------------------------------------
+  console.log("\n# Cheap kind inference (chart-builder AST)");
+  {
+    // Leaf classification rules (data-independent).
+    const sizeMark = Serialize.inferLeafMarkKinds(rect({ h: "count" }));
+    check(
+      "rect({h: field}) → y SIZE, x UNDEFINED",
+      sizeMark.y === "SIZE" && sizeMark.x === "UNDEFINED"
+    );
+    const diffMark = Serialize.inferLeafMarkKinds(rect({ w: 50 }));
+    check("rect({w: number}) → x DIFFERENCE", diffMark.x === "DIFFERENCE");
+    const posMark = Serialize.inferLeafMarkKinds(rect({ x: "count" }));
+    check("rect({x: field}) → x POSITION", posMark.x === "POSITION");
+
+    // Marks without channel annotations (circle) can't be classified cheaply.
+    let threw = false;
+    try {
+      Serialize.inferLeafMarkKinds(circle({ r: 4 }));
+    } catch (e: any) {
+      threw = e?.name === "UnderlyingSpaceInferenceError";
+    }
+    check("circle (no channels) raises UnderlyingSpaceInferenceError", threw);
+
+    // Parity: every resolved leaf node's kind agrees with the cheap classifier.
+    const seafood = [
+      { lake: "A", count: 12 },
+      { lake: "B", count: 5 },
+    ];
+    const mark = rect({ h: "count" });
+    const cheap = Serialize.collectLeafMarkKinds(mark)[0];
+    const node = await Chart(seafood)
+      .flow(spread({ by: "lake", dir: "x" }))
+      .mark(mark)
+      .resolve();
+    const leaves = collectLeafNodes(node).filter((n) => n?.type === "rect");
+    check("parity: resolved tree has rect leaves", leaves.length > 0);
+    const allMatch = leaves.every((leaf) => {
+      const sp = leaf.resolveUnderlyingSpace();
+      return (
+        KIND_TO_IR[sp[0].kind] === cheap.x &&
+        KIND_TO_IR[sp[1].kind] === cheap.y
+      );
+    });
+    check(
+      "parity: cheap leaf kinds match every resolved leaf node's kinds",
+      allMatch
+    );
+  }
+
+  // -------------------------------------------------------------------------
+  // Channel elaboration + typecheck against the inline-data schema.
+  // -------------------------------------------------------------------------
+  console.log("\n# Channel typecheck (inline-data schema)");
+  {
+    const rows = [{ species: "trout", count: 12 }];
+
+    // Well-typed: count (number) on a size channel, species (string) on color.
+    const okChart = Chart(rows).mark(rect({ h: "count", fill: "species" }));
+    check(
+      "well-typed channels produce no errors",
+      Serialize.typecheckChart(okChart).length === 0
+    );
+
+    // Mistyped: a string column on a size channel.
+    const badSize = Chart(rows).mark(rect({ h: "species" }));
+    const badSizeErrors = Serialize.typecheckChart(badSize);
+    check(
+      "string column on size channel is a type error",
+      badSizeErrors.length === 1 &&
+        badSizeErrors[0].channel === "h" &&
+        badSizeErrors[0].channelType === "size"
+    );
+
+    // A literal number in a color slot is a type error (color wants a string).
+    const badColor = Chart(rows).mark(rect({ fill: 42 as any }));
+    check(
+      "numeric literal on color channel is a type error",
+      Serialize.typecheckChart(badColor).some((e: any) => e.channel === "fill")
+    );
+
+    // String elaboration: a column name → field, a non-column → literal.
+    const schema = Serialize.inferRowSchema(rows);
+    check(
+      "inferRowSchema reads column types off the first row",
+      schema?.count === "number" && schema?.species === "string"
+    );
+    check(
+      "string naming a column elaborates to a field",
+      Serialize.elaborateChannelArg("count", schema).kind === "field"
+    );
+    check(
+      "string not naming a column elaborates to a literal",
+      Serialize.elaborateChannelArg("steelblue", schema).kind === "literal"
+    );
+
+    // Opaque past a derive: the schema is unknown, so no field typecheck fires
+    // even though "species" would otherwise be a string-on-size error.
+    const withDerive = Chart(rows)
+      .flow(derive((d: any) => d))
+      .mark(rect({ h: "species" }));
+    check(
+      "a derive makes the schema opaque (no channel type errors)",
+      Serialize.typecheckChart(withDerive).length === 0
+    );
   }
 
   console.log(`\n${passed} passed, ${failed} failed`);

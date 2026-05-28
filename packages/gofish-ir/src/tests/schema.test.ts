@@ -467,6 +467,57 @@ check(
   validate(chart([{ type: "table", by: { x: "a", y: "b" } }])).valid
 );
 
+console.log("\n# meta.space underlying-space annotation");
+
+/** A chart whose root carries a meta.space annotation. */
+function chartWithSpace(space: any) {
+  return {
+    irVersion: 0,
+    ir: "gofish-frontend",
+    root: { type: "chart", mark: { type: "rect" }, meta: { space } },
+  } as unknown as FrontendIRDocument;
+}
+
+check(
+  "meta.space with required per-axis fields accepts (strict)",
+  validate(
+    chartWithSpace({
+      x: { kind: "ORDINAL", domain: ["A", "B"] },
+      y: { kind: "POSITION", domain: [0, 20] },
+    }),
+    { strict: true }
+  ).valid
+);
+check(
+  "meta.space SIZE/DIFFERENCE/UNDEFINED accept (strict)",
+  validate(
+    chartWithSpace({
+      x: { kind: "DIFFERENCE", width: 16 },
+      y: { kind: "SIZE", domain: [0, 25] },
+    }),
+    { strict: true }
+  ).valid &&
+    validate(
+      chartWithSpace({ x: { kind: "UNDEFINED" }, y: { kind: "UNDEFINED" } }),
+      { strict: true }
+    ).valid
+);
+check(
+  "meta.space missing an axis is rejected",
+  !validate(chartWithSpace({ x: { kind: "UNDEFINED" } })).valid
+);
+check(
+  "POSITION without a numeric domain pair is rejected",
+  !validate(
+    chartWithSpace({ x: { kind: "POSITION" }, y: { kind: "UNDEFINED" } })
+  ).valid
+);
+check(
+  "unknown axis-space kind is rejected",
+  !validate(chartWithSpace({ x: { kind: "WAT" }, y: { kind: "UNDEFINED" } }))
+    .valid
+);
+
 // ---------------------------------------------------------------------------
 // Report
 // ---------------------------------------------------------------------------

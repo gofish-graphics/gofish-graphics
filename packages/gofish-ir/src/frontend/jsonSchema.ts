@@ -45,7 +45,59 @@ export const FRONTEND_IR_JSON_SCHEMA = {
     Meta: {
       type: "object",
       description:
-        "Optional inline annotations populated by later passes. v0 emitters leave it absent.",
+        "Optional inline annotations populated by later passes. The `space` slot carries the node's inferred underlying-space type; it is derived (read off the in-memory model) and dropped on deserialize.",
+      properties: {
+        space: { $ref: "#/$defs/UnderlyingSpaceAnnotation" },
+      },
+    },
+    UnderlyingSpaceAnnotation: {
+      type: "object",
+      description: "Per-axis underlying-space classification.",
+      required: ["x", "y"],
+      properties: {
+        x: { $ref: "#/$defs/AxisSpace" },
+        y: { $ref: "#/$defs/AxisSpace" },
+      },
+    },
+    AxisSpace: {
+      description:
+        "A single axis's inferred underlying space. Fields are required — inference determines them from the spec's data.",
+      oneOf: [
+        {
+          type: "object",
+          required: ["kind", "domain"],
+          properties: {
+            kind: { enum: ["POSITION", "SIZE"] },
+            domain: {
+              type: "array",
+              items: { type: "number" },
+              minItems: 2,
+              maxItems: 2,
+            },
+          },
+        },
+        {
+          type: "object",
+          required: ["kind", "width"],
+          properties: {
+            kind: { const: "DIFFERENCE" },
+            width: { type: "number" },
+          },
+        },
+        {
+          type: "object",
+          required: ["kind", "domain"],
+          properties: {
+            kind: { const: "ORDINAL" },
+            domain: { type: "array", items: { type: "string" } },
+          },
+        },
+        {
+          type: "object",
+          required: ["kind"],
+          properties: { kind: { const: "UNDEFINED" } },
+        },
+      ],
     },
     DataIR: {
       oneOf: [
