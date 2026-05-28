@@ -255,9 +255,11 @@ export function commitAndPushSnapshots(
     // committed to the data-only snapshot branch.
     git("git add -A dom screenshots", { cwd: wtPath });
 
-    // Check if there's anything to commit.
-    const status = git("git status --porcelain", { cwd: wtPath });
-    if (!status) {
+    // Check if there's anything staged. Use --cached so untracked files
+    // like .husky/ (created by pnpm install) don't fool us into running
+    // `git commit` with an empty index.
+    const staged = git("git diff --cached --name-only", { cwd: wtPath });
+    if (!staged) {
       console.log("No changes to snapshot baselines.");
       return;
     }
