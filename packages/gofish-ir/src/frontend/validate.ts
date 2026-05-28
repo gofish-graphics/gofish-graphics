@@ -655,14 +655,78 @@ function walkOrigin(node: unknown, path: string, ctx: Context): void {
   if (ctx.strict) rejectUnknown(node, ["name", "stack"], path, ctx);
 }
 
-function walkMeta(node: unknown, path: string, _ctx: Context): void {
+function walkMeta(node: unknown, path: string, ctx: Context): void {
   if (!isObject(node)) {
-    _ctx.errors.push({ path, message: "meta must be an object" });
+    ctx.errors.push({ path, message: "meta must be an object" });
     return;
   }
   // Meta is intentionally open — additional keys are reserved for future
-  // passes. v0 doesn't enforce per-key shapes; that lands with the passes
-  // that populate them.
+  // passes. The `space` annotation is the one populated shape today.
+  optionalField(node, "space", path, ctx, walkUnderlyingSpace);
+}
+
+/** `meta.space` — per-axis underlying-space classification (`{x, y}`). */
+function walkUnderlyingSpace(node: unknown, path: string, ctx: Context): void {
+  if (!isObject(node)) {
+    ctx.errors.push({ path, message: "meta.space must be an object" });
+    return;
+  }
+  expectField(node, "x", path, ctx, walkAxisSpace);
+  expectField(node, "y", path, ctx, walkAxisSpace);
+  if (ctx.strict) rejectUnknown(node, ["x", "y"], path, ctx);
+}
+
+function walkAxisSpace(node: unknown, path: string, ctx: Context): void {
+  if (!isObject(node)) {
+    ctx.errors.push({ path, message: "axis space must be an object" });
+    return;
+  }
+  const kind = node.kind;
+  switch (kind) {
+    case "POSITION":
+    case "SIZE":
+      expectField(node, "domain", path, ctx, expectNumberPair);
+      if (ctx.strict) rejectUnknown(node, ["kind", "domain"], path, ctx);
+      return;
+    case "DIFFERENCE":
+      expectField(node, "width", path, ctx, expectNumber);
+      if (ctx.strict) rejectUnknown(node, ["kind", "width"], path, ctx);
+      return;
+    case "ORDINAL":
+      expectField(node, "domain", path, ctx, (v, p) => {
+        if (!Array.isArray(v) || !v.every((x) => typeof x === "string")) {
+          ctx.errors.push({
+            path: p,
+            message: "ORDINAL domain must be an array of strings",
+          });
+        }
+      });
+      if (ctx.strict) rejectUnknown(node, ["kind", "domain"], path, ctx);
+      return;
+    case "UNDEFINED":
+      if (ctx.strict) rejectUnknown(node, ["kind"], path, ctx);
+      return;
+    default:
+      ctx.errors.push({
+        path: `${path}.kind`,
+        message: `axis space kind must be one of POSITION | SIZE | DIFFERENCE | ORDINAL | UNDEFINED, got ${JSON.stringify(
+          kind
+        )}`,
+      });
+  }
+}
+
+function expectNumberPair(value: unknown, path: string, ctx: Context): void {
+  if (
+    !Array.isArray(value) ||
+    value.length !== 2 ||
+    !value.every((n) => typeof n === "number")
+  ) {
+    ctx.errors.push({
+      path,
+      message: `expected [number, number], got ${typeNameOf(value)}`,
+    });
+  }
 }
 
 // ---------------------------------------------------------------------------

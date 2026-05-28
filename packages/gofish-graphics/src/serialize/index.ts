@@ -37,3 +37,26 @@ export {
 } from "./fromJSON";
 
 export { toJSON, toJSONLayer, toJSONRawMark } from "./toJSON";
+
+export {
+  inferLeafMarkKinds,
+  collectLeafMarkKinds,
+  type LeafKind,
+} from "./inferUnderlyingSpace";
+
+export {
+  typecheckChart,
+  typecheckMarkChannels,
+  elaborateChannelArg,
+  inferRowSchema,
+  type ChannelTypeError,
+  type ElaboratedArg,
+  type RowSchema,
+  type DataType,
+} from "./typecheckChannels";
+
+export {
+  underlyingSpaceToAnnotation,
+  axisSpaceToAnnotation,
+  UnderlyingSpaceInferenceError,
+} from "../ast/underlyingSpace";
