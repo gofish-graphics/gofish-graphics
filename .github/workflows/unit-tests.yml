@@ -20,14 +20,35 @@ on:
       - "packages/**"
       - "tests/**"
       - ".github/workflows/unit-tests.yml"
+  # No pull_request paths filter: this workflow is a required status check,
+  # so it must always trigger and report. The cheap `changes` job below
+  # decides whether the real work runs. When nothing relevant changed the
+  # heavy jobs are skipped (a skipped job counts as success for required
+  # checks) instead of the workflow never starting (which would leave the
+  # check pending and block the PR forever).
   pull_request:
-    paths:
-      - "packages/**"
-      - "tests/**"
-      - ".github/workflows/unit-tests.yml"
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      relevant: ${{ steps.filter.outputs.relevant }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            relevant:
+              - "packages/**"
+              - "tests/**"
+              - ".github/workflows/unit-tests.yml"
+
   js-unit-tests:
+    needs: changes
+    # On push (already path-filtered above) always run; on PRs run only when
+    # relevant files changed, otherwise skip (= success for required checks).
+    if: ${{ github.event_name != 'pull_request' || needs.changes.outputs.relevant == 'true' }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -61,6 +82,8 @@ jobs:
         run: pnpm --filter gofish-graphics test
 
   python-ir-validation:
+    needs: changes
+    if: ${{ github.event_name != 'pull_request' || needs.changes.outputs.relevant == 'true' }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
