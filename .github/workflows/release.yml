@@ -154,14 +154,28 @@ jobs:
         env:
           VERSION: ${{ steps.version.outputs.version }}
           TAG: ${{ steps.version.outputs.git_tag }}
+          # Admin-owned PAT (contents: write). This bump is a direct push to
+          # main, which the branch ruleset's required status checks reject for
+          # github-actions[bot] (not a bypass actor). Pushing as an admin user
+          # satisfies the ruleset's admin bypass. Referenced only here, so
+          # nightly runs (which never push to main) don't need the secret.
+          RELEASE_TOKEN: ${{ secrets.RELEASE_TOKEN }}
         run: |
+          if [ -z "${RELEASE_TOKEN}" ]; then
+            echo "::error::RELEASE_TOKEN secret is not set. A tagged release pushes a"
+            echo "::error::version-bump commit to main, which needs an admin-owned PAT"
+            echo "::error::(contents: write) to satisfy branch protection. Set the secret"
+            echo "::error::before running a non-nightly release."
+            exit 1
+          fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add packages/gofish-graphics/package.json packages/gofish-ir/package.json
           git commit -m "chore(release): v${VERSION}"
           git tag "${TAG}"
-          git push origin HEAD:main
-          git push origin "${TAG}"
+          REMOTE="https://x-access-token:${RELEASE_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git push "${REMOTE}" HEAD:main
+          git push "${REMOTE}" "${TAG}"
 
       - name: Create GitHub release (release only)
         if: steps.plan.outputs.skip == 'false' && steps.plan.outputs.mode != 'nightly'
