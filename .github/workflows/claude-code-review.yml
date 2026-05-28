@@ -38,6 +38,24 @@ jobs:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           plugin_marketplaces: "https://github.com/anthropics/claude-code.git"
           plugins: "code-review@claude-code-plugins"
-          prompt: "/code-review:code-review ${{ github.repository }}/pull/${{ github.event.pull_request.number }}"
+          prompt: |
+            /code-review:code-review --comment ${{ github.repository }}/pull/${{ github.event.pull_request.number }}
+
+            In addition to the standard review, perform a documentation-sync check.
+            Per CLAUDE.md, user-facing API changes and new/changed features must be
+            documented in the same PR:
+            - If this PR changes a public API surface in packages/gofish-graphics/src/
+              (exported names, function signatures, option shapes, default behaviors) or
+              adds/changes a user-facing feature, verify the matching page under
+              apps/docs/docs/js/ was updated in this PR (signature, examples, and any
+              equivalences tables). For Python API changes in packages/gofish-python/,
+              verify the mirror page under apps/docs/docs/python/.
+            - If a changed source file has a `// <gofish-wiki>` / @wiki comment block,
+              verify the internals essay it names (apps/docs/docs/internals/) was updated
+              in the same PR.
+            - If documentation that should have been updated was not, flag it as a review
+              finding naming the specific source change and the doc page that needs updating.
+              If docs were updated appropriately, or no user-facing/feature change is present,
+              say so briefly and do not raise a finding.
           # See https://github.com/anthropics/claude-code-action/blob/main/docs/usage.md
           # or https://code.claude.com/docs/en/cli-reference for available options
