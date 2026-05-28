@@ -13,6 +13,9 @@ export const value = <T>(datum: T, measure?: Measure): Value<any> => ({
   measure,
 });
 
+/** Object branch of {@link Value}; named here so the {@link getValue} /
+ *  {@link getMeasure} casts don't read as opaque. Keep in sync with the
+ *  inline shape in {@link Value} above. */
 type DatumValue = { type: "datum"; datum: any; measure?: Measure };
 
 export const isValue = <T>(
