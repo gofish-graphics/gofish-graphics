@@ -23,13 +23,13 @@ export const Default: StoryObj<Args> = {
   render: (args: Args, context: any) => {
     const container = initializeContainer();
 
-    Chart(context.loaded.movies as any[])
+    Chart(context.loaded.movies as any[], { axes: true })
       .flow(
         derive(bin("IMDB Rating")),
         scatter({ xMin: "start", xMax: "end" })
       )
       .mark(rect({ h: "count" }))
-      .render(container, { w: args.w, h: args.h, axes: true });
+      .render(container, { w: args.w, h: args.h });
 
     return container;
   },

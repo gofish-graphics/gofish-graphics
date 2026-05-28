@@ -24,7 +24,7 @@ export const Default: StoryObj<Args> = {
   render: (args: Args, context: any) => {
     const container = initializeContainer();
 
-    Chart(context.loaded.population.filter((row) => row.year === 2000) as any[], {
+    Chart(context.loaded.population.filter((row) => row.year === 2000) as any[], { axes: true,
       color: palette({ Female: "#675193", Male: "#ca8861" }),
     })
       .flow(
@@ -41,7 +41,7 @@ export const Default: StoryObj<Args> = {
         stack({ by: "sex",  dir: "y" })
       )
       .mark(rect({ h: "proportion", fill: "sex" }))
-      .render(container, { w: args.w, h: args.h, axes: true });
+      .render(container, { w: args.w, h: args.h });
 
     return container;
   },

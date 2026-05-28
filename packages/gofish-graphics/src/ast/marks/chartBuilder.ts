@@ -1,6 +1,7 @@
 import { GoFishNode } from "../_node";
 import { CoordinateTransform } from "../coordinateTransforms/coord";
 import { type ColorConfig } from "../colorSchemes";
+import type { AxesOptions } from "../gofish";
 import { Mark, Operator } from "../types";
 import { Frame } from "../graphicalOperators/frame";
 
@@ -43,6 +44,18 @@ export type ChartOptions = {
   h?: number;
   coord?: CoordinateTransform;
   color?: ColorConfig;
+  /**
+   * Whether to render axes for this chart.
+   * - `true`  — auto-infer axes from underlying space (default inference rules apply).
+   * - `false` — suppress all axis rendering for this chart.
+   * - `{ x?, y? }` — control x and y independently.
+   *
+   * Manual `axis: true/false` overrides on individual operators within the chart
+   * are still respected when `axes: true`.
+   */
+  axes?: AxesOptions;
+  /** Extra padding (px) between the polar circle and the SVG edge. Default 30. */
+  padding?: number;
 };
 
 /**
@@ -275,7 +288,7 @@ export class ChartBuilder<TInput, TOutput = TInput> {
   // render calls resolve and then renders
   async render(
     container: Parameters<GoFishNode["render"]>[0],
-    options: Parameters<GoFishNode["render"]>[1]
+    options: Omit<Parameters<GoFishNode["render"]>[1], "axes">
   ): Promise<ReturnType<GoFishNode["render"]>> {
     // Auto-infer axis titles from field encodings on the mark and operators.
     // Mark fields take priority (they encode measured values, e.g. h: "count");
@@ -297,6 +310,7 @@ export class ChartBuilder<TInput, TOutput = TInput> {
     const node = await this.resolve();
     return node.render(container, {
       ...options,
+      axes: this.options?.axes,
       colorConfig: this.options?.color,
       axisFields,
     });

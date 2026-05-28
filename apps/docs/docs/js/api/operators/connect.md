@@ -158,4 +158,4 @@ Connect({ source: "middle" }, [ref("A"), ref("B"), ref("C")]);
 - Pair the operator with z-order constraints
   ([`Constraint.zAbove` / `zBelow`](/js/api/constraints/constrain#constraint-zabove-constraint-zbelow))
   when a connector needs to sit _between_ two elements in paint order — see
-  the [pulley story](/js/examples/pulley) for the canonical use case.
+  the [pulley diagram](/js/examples/pulley) for the canonical use case.

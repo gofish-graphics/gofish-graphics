@@ -33,7 +33,7 @@ export const Default: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
     spreadY(
-      { reverse: true, spacing: 4, alignment: "middle" },
+      { reverse: true, spacing: 4, alignment: "start" },
       For(groupBy(titanic, "class"), (items, cls) =>
         spreadX(
           { key: cls, h: _(items).sumBy("count") / 10, spacing: 2, alignment: "middle" },

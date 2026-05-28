@@ -9,9 +9,9 @@ into pixels.
 ```python
 from gofish import chart, spread, rect
 
-chart(seafood).flow(spread(by="lake", dir="x")).mark(rect(h="count")).render(
-    w=500, h=300, axes=True
-)
+chart(seafood, axes=True).flow(spread(by="lake", dir="x")).mark(
+    rect(h="count")
+).render(w=500, h=300)
 ```
 
 ## Signature

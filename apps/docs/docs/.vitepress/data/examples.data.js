@@ -162,6 +162,12 @@ export default {
         description: "A layered area chart",
       },
       {
+        id: "pulley",
+        title: "Pulley Diagram",
+        description:
+          "A constraint-based physics diagram ported from Bluefish — pulleys, ropes, and weights laid out in nested layer tiers",
+      },
+      {
         id: "HIDDEN-bar-chart-get-started",
       },
       {

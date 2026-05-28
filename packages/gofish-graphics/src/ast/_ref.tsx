@@ -204,10 +204,6 @@ export class GoFishRef {
     );
   }
 
-  public resolveKeys(): void {
-    this.selectedNode?.resolveKeys();
-  }
-
   public embed(direction: FancyDirection): void {
     this.selectedNode?.embed(direction);
   }
@@ -228,7 +224,12 @@ export class GoFishRef {
     return measurement;
   }
 
-  public layout(size: Size, scaleFactors: Size<number | undefined>): Placeable {
+  public layout(
+    size: Size,
+    scaleFactors: Size<number | undefined>,
+    _posScales?: Size<((pos: number) => number) | undefined>,
+    _posDomains?: Size<[number, number] | undefined>
+  ): Placeable {
     if (!this.selectedNode) {
       throw new Error("Selected node not found");
     }
