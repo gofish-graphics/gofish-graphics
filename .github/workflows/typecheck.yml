@@ -28,5 +28,11 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # gofish-graphics imports from gofish-ir via its package exports
+      # (`./dist/index.d.ts`), so we need the types before `tsc --noEmit`
+      # can resolve them.
+      - name: Build gofish-ir (emits .d.ts for gofish-graphics to consume)
+        run: pnpm --filter gofish-ir build
+
       - name: Typecheck gofish-graphics
         run: pnpm --filter gofish-graphics typecheck
