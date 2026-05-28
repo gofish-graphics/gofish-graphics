@@ -1,5 +1,5 @@
 import { circle } from "gofish-graphics";
-import { tree } from "../src";
+import { tree, spread } from "../src";
 
 const sampleData = {
   name: "root",
@@ -21,7 +21,7 @@ const sampleData = {
 
 const depthColor = ["#1f3a5f", "#4682b4", "#7baed1", "#c0d8ec"];
 
-export const testTreeNodeLink = (size: { width: number; height: number }) =>
+export const testTreeNodeLink = (_size: { width: number; height: number }) =>
   tree(
     {
       node: (d) =>
@@ -32,14 +32,8 @@ export const testTreeNodeLink = (size: { width: number; height: number }) =>
           strokeWidth: 1,
         }),
       link: { interpolation: "linear", stroke: "#90a4ae", strokeWidth: 1.5 },
-      parentChild: {
-        type: "spread",
-        dir: "y",
-        spacing: 48,
-        alignment: "middle",
-      },
-      sibling: { type: "spread", dir: "x", spacing: 24, alignment: "start" },
-      mode: "topDown",
+      parentChild: spread({ dir: "y", spacing: 48, alignment: "middle" }),
+      sibling: spread({ dir: "x", spacing: 24, alignment: "start" }),
     },
     sampleData
   );

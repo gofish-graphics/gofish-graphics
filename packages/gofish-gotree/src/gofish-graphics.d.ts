@@ -20,6 +20,7 @@ declare module "gofish-graphics" {
   export const text: (opts: Record<string, any>) => any;
 
   export const spread: (opts: Record<string, any>, children?: any[]) => any;
+  export const Spread: (opts: Record<string, any>, children: any[]) => any;
   export const stack: (opts: Record<string, any>, children?: any[]) => any;
   export const connect: (opts: Record<string, any>, children: any[]) => any;
   export const layer: (...args: any[]) => any;
@@ -35,6 +36,7 @@ declare module "gofish-graphics" {
     distribute: (opts: any, refs: any[]) => any;
     zAbove: (a: any, b: any) => any;
     zBelow: (a: any, b: any) => any;
+    contain: (opts: { x?: number; y?: number }, refs: [any, any]) => any;
     [k: string]: any;
   };
 

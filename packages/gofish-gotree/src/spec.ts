@@ -3,10 +3,14 @@ import type { HierarchyNode } from "d3-hierarchy";
 
 export type Alignment = "start" | "middle" | "end" | "baseline";
 
-export type Rel =
-  | { type: "spread"; dir: "x" | "y"; spacing?: number; alignment?: Alignment }
-  | { type: "nest"; dir: "x" | "y"; padding?: number; fill?: boolean }
-  | { type: "align"; dir: "x" | "y"; alignment: Alignment };
+/**
+ * A `Combiner` is a function that takes an array of GoFish AST children and
+ * returns a composed AST. The `parentChild` slot receives `[parent, group]`;
+ * `sibling` receives the full children list. Users can pass any function with
+ * this shape — the `spread()` and `contain()` helpers (re-exported from
+ * `gofish-gotree`) are ergonomic conveniences but not the only option.
+ */
+export type Combiner = (children: any[]) => any;
 
 export type HierarchyDatum = {
   data: any;
@@ -33,8 +37,10 @@ export type LinkSpec =
 export type GoTreeSpec = {
   node?: NodeFactory;
   link?: LinkSpec;
-  parentChild?: Rel | Rel[];
-  sibling?: Rel | Rel[];
+  /** Combiner for parent ↔ children-group. Called with `[parentMark, childGroup]`. */
+  parentChild?: Combiner;
+  /** Combiner for the sibling group. Called with the full children list. */
+  sibling?: Combiner;
   mode?: "topDown" | "bottomUp";
   sortBy?: (d: HierarchyDatum) => number;
   coord?: unknown;

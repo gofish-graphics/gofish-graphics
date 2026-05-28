@@ -41,6 +41,13 @@ function linkMark(
     {
       mode: "center",
       interpolation: interpolation as "linear" | "bezier",
+      // connect's default `fill` falls back to children[0].color ?? "black".
+      // For a straight cartesian line that's invisible (fill area of a
+      // zero-thickness line is zero), but under a polar coord transform the
+      // line is resampled into an arc — and SVG fills the segment between
+      // the arc and its implicit closing chord, producing wide filled bands.
+      // Force fill: "none" so only the stroke renders.
+      fill: "none",
       stroke: opts.stroke ?? DEFAULTS.stroke,
       strokeWidth: opts.strokeWidth ?? DEFAULTS.strokeWidth,
       opacity: opts.opacity,

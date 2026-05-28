@@ -5,22 +5,21 @@ GoFish. It ships as a separate workspace package — install and import it along
 `gofish-graphics`:
 
 ```ts
-import { tree } from "gofish-gotree";
+import { tree, spread, contain } from "gofish-gotree";
 import { gofish, circle } from "gofish-graphics";
 ```
 
 A single function — `tree(spec, data)` — produces a tree visualization. Varying the
-spec yields node-link diagrams, dendrograms, icicle plots, sunbursts, treemap slices,
-and their radial duals. The grammar follows the structure of
-[GoTree (Li et al., CHI 2020)](https://dl.acm.org/doi/10.1145/3313831.3376297) but
-renames concepts to match GoFish conventions (`spread` instead of `juxtapose`,
-`spacing` instead of `Padding`/`Margin`, `start | middle | end | baseline` instead
-of `top | center | bottom`).
+spec yields node-link diagrams, dendrograms, nested-box trees, and (with later
+milestones) icicle plots, sunbursts, and treemap slices. The grammar follows the
+structure of [GoTree (Li et al., CHI 2020)](https://dl.acm.org/doi/10.1145/3313831.3376297)
+but renames concepts to match GoFish conventions and switches to callable helpers
+instead of JSON descriptors.
 
 ## Quick example — node-link tree
 
 ```ts
-import { tree } from "gofish-gotree";
+import { tree, spread } from "gofish-gotree";
 import { circle } from "gofish-graphics";
 
 const data = {
@@ -36,14 +35,41 @@ const chart = tree(
   {
     node: (d) => circle({ r: 10, fill: "steelblue" }),
     link: { interpolation: "linear", stroke: "#888" },
-    parentChild: { type: "spread", dir: "y", spacing: 48, alignment: "middle" },
-    sibling: { type: "spread", dir: "x", spacing: 24, alignment: "start" },
-    mode: "topDown",
+    parentChild: spread({ dir: "y", spacing: 48, alignment: "middle" }),
+    sibling: spread({ dir: "x", spacing: 24, alignment: "start" }),
   },
   data
 );
 
 chart.render(container, { w: 600, h: 400 });
+```
+
+## Quick example — nested-boxes tree
+
+Same data, different `parentChild` combiner — produces a Russian-doll of nested
+rectangles where each parent box wraps its children.
+
+```ts
+import { tree, spread, contain } from "gofish-gotree";
+import { Layer, Constraint, rect, text } from "gofish-graphics";
+
+const labeledNode = (d) =>
+  Layer({ w: 96, h: 22 }, [
+    rect({ w: 96, h: 22, rx: 4, fill: "#e3edf7" }).name("box"),
+    text({ text: d.data.name, fontSize: 11 }).name("label"),
+  ]).constrain(({ box, label }) => [
+    Constraint.align({ x: "middle", y: "middle" }, [box, label]),
+  ]);
+
+tree(
+  {
+    node: labeledNode,
+    link: "none",
+    parentChild: contain({ x: 10, y: 10 }),
+    sibling: spread({ dir: "y", spacing: 8, alignment: "middle" }),
+  },
+  data
+).render(container, { w: 720, h: 560 });
 ```
 
 ## The spec
@@ -52,20 +78,21 @@ chart.render(container, { w: 600, h: 400 });
 type GoTreeSpec = {
   node?: (d: HierarchyDatum) => Mark;
   link?: "none" | LinkOptions | ((s, t) => LinkOptions);
-  parentChild?: Rel | Rel[];
-  sibling?: Rel | Rel[];
+  parentChild?: Combiner;
+  sibling?: Combiner;
   mode?: "topDown" | "bottomUp";
   sortBy?: (d: HierarchyDatum) => number;
   coord?: CoordTransform;
 };
 
-type Rel =
-  | { type: "spread"; dir: "x" | "y"; spacing?: number; alignment?: Alignment }
-  | { type: "nest"; dir: "x" | "y"; padding?: number; fill?: boolean }
-  | { type: "align"; dir: "x" | "y"; alignment: Alignment };
-
-type Alignment = "start" | "middle" | "end" | "baseline";
+/** A function that takes children and returns a composed GoFish AST. */
+type Combiner = (children: any[]) => any;
 ```
+
+The spec slots take **callable values** — you write `spread(...)` or `contain(...)`
+directly, the way you write `circle(...)` for `node`. The package exports two
+ergonomic helpers (`spread` and `contain`); you can also pass any function with the
+combiner shape.
 
 ### `node` — the node-mark factory
 
@@ -79,7 +106,7 @@ node: (d) => circle({ r: 4 + d.height * 2, fill: colorByDepth(d.depth) });
 
 ### `link` — the edge encoding
 
-- `"none"` — omit all edges (useful for icicle / treemap variants).
+- `"none"` — omit all edges (useful for nested-box / icicle / treemap variants).
 - An options object `{ interpolation, stroke, strokeWidth, opacity }` — applied
   uniformly.
 - A function `(source, target) => LinkOptions` — per-edge styling.
@@ -88,46 +115,68 @@ node: (d) => circle({ r: 4 + d.height * 2, fill: colorByDepth(d.depth) });
 link: { interpolation: "linear", stroke: "#90a4ae", strokeWidth: 1.5 }
 ```
 
-In M1 only `interpolation: "linear"` is supported. `"bezier"`, `"orthogonal"`,
+Currently only `interpolation: "linear"` is supported. `"bezier"`, `"orthogonal"`,
 and `"arc"` are planned for later milestones.
 
-### `parentChild` and `sibling` — the layout relations
+### `parentChild` and `sibling` — the layout combiners
 
-Each role describes how parts of the tree relate along an axis:
+These slots take a `Combiner = (children: any[]) => any`. `tree()` calls
+`parentChild([parentMark, childGroup])` to assemble a single subtree, and
+`sibling(kidsArray)` to combine all rendered children of one node into a group.
 
-- **`parentChild`** — how a parent node sits relative to its children-group.
-- **`sibling`** — how siblings within a group sit relative to one another.
+Two helpers cover the common cases:
 
-Each can be a single `Rel` or an array of `Rel`s (one per axis). The supported
-relation types:
+#### `spread({ dir, spacing?, alignment? })`
 
-| `type`     | Meaning                                                                               | Status |
-| ---------- | ------------------------------------------------------------------------------------- | ------ |
-| `"spread"` | Distribute along `dir` with `spacing`. Aligns on the orthogonal axis via `alignment`. | M1 ✓   |
-| `"align"`  | Align on `dir` (sibling-only — modifies the orthogonal spread's alignment).           | M1 ✓   |
-| `"nest"`   | 1D containment: child-group fits within parent's extent along `dir`.                  | M2+    |
-
-The classic node-link tree uses `spread` for both roles. For an icicle plot
-(unimplemented in M1), you would mix `spread` and `nest`:
+Returns a combiner that distributes the children along an axis. Used as
+`parentChild`, the helper places parent and children-group adjacent along `dir`
+(with the y-up swap, parent ends at high y / top of screen for `dir: "y"`). Used as
+`sibling`, it spreads N children along `dir`.
 
 ```ts
-// M2+ — icicle plot
-parentChild: [
-  { type: "nest",   dir: "x" },                          // children fill parent's X
-  { type: "spread", dir: "y", spacing: 0 },              // parent above children
-],
-sibling: [
-  { type: "spread", dir: "x", spacing: 0 },              // siblings spread on X
-  { type: "align",  dir: "y", alignment: "start" },      // siblings top-aligned
-],
+parentChild: spread({ dir: "y", spacing: 48, alignment: "middle" }),
+sibling: spread({ dir: "x", spacing: 24, alignment: "start" }),
+```
+
+#### `contain({ x?, y? })`
+
+Returns a combiner that wraps `[outer, inner]` in a Layer with
+`Constraint.contain({x?, y?}, [outer, inner])`. The outer is sized to inner's
+intrinsic dims plus `2 * padding` symmetrically per constrained axis; inner is
+centered inside outer. Missing axis (e.g. `{x: 8}` only) leaves the other axis
+unconstrained.
+
+```ts
+parentChild: contain({ x: 10, y: 10 }),   // box-in-box
+```
+
+Internally, `contain` injects two reserved names (`__contain-outer` /
+`__contain-inner`) on the children it wraps — it does not consult or modify any
+name a user has placed on the node mark.
+
+#### Custom combiners
+
+Any function with shape `(children: any[]) => any` works. For example, a sibling
+combiner that adds a small label below each spread group:
+
+```ts
+import { Layer, StackY } from "gofish-graphics";
+
+sibling: (kids) => StackY({ spacing: 8 }, [
+  spread({ dir: "x", spacing: 16 })(kids),
+  text({ text: `${kids.length} items` }),
+]),
 ```
 
 ### `mode` — sizing direction
 
 - `"topDown"` (default) — parent's encoded size partitions among children
   (treemap-style).
-- `"bottomUp"` — children's sizes sum into the parent (dendrogram-style). The
-  parent is drawn after the children-group along the parent-child axis.
+- `"bottomUp"` — children's sizes sum into the parent (dendrogram-style).
+
+In the current implementation, `mode` is a documentation hint only — the visual
+orientation is handled by the y-up swap inside `spread`, and data-driven sizing is
+performed in the user's `node` factory via the existing `value()` channel.
 
 ### `coord` — coordinate transform
 
@@ -135,44 +184,64 @@ Pass any GoFish `CoordTransform` (e.g. `polar()` for a radial layout). Defaults 
 linear cartesian.
 
 ```ts
-coord: polar({ innerRadius: 20 }); // M3+ — radial node-link
+coord: polar(); // radial node-link
 ```
+
+**Polar authoring rule**: under `coord: polar()`, nodes render as _points_
+in the transform — only their center sweeps through, their bbox does not.
+Set `mode: "center"` on the sibling spread (and typically the parentChild
+spread too). Center-mode `spread` lays out child centers `spacing` apart
+and ignores bbox widths, matching the geometry polar expects. With
+`mode: "edge"` (the default), shape bboxes accumulate into the cartesian-x
+span and overflow polar's `[0, 2π]` theta domain — making the tree spiral.
+
+```ts
+parentChild: spread({ dir: "y", spacing: 40,         mode: "center" }), // r units
+sibling:     spread({ dir: "x", spacing: Math.PI/3,  mode: "center" }), // radians
+coord:       polar(),
+```
+
+Sibling `spacing` is in **radians** (~`π / N` for N siblings per level);
+`parentChild` `spacing` is in **radius units**.
+
+This is the right pattern for point-like nodes (circle, small mark used as a
+node). When the _shape itself_ needs to sweep through the transform —
+filled wedges, ribbons, polar bars — reach for `Value`-typed dims +
+`sharedScale: true` instead (the pattern in `polarBar` / `polarRibbon`).
 
 ## Translation from the GoTree paper
 
-The grammar's structure is preserved from the paper; only the names change to align
-with GoFish conventions.
+The grammar's structure is preserved from the paper; names align with GoFish
+conventions and switch from JSON descriptors to callable helpers.
 
-| Paper                             | GoTree-in-GoFish                                  |
-| --------------------------------- | ------------------------------------------------- |
-| `Element.Node: "rectangle"`       | `node: (d) => rect({...})`                        |
-| `Element.Link: "straight"`        | `link: { interpolation: "linear" }`               |
-| `Element.Color: "depth"`          | inside `node`: `fill: byDepth(d.depth)`           |
-| `Element.Width/Height`            | inside `node`: `w` / `h` on the mark              |
-| `Element.LinkWidth`               | `link.strokeWidth`                                |
-| `Element.Label`                   | inside `node`: include a `text` mark              |
-| `Layout.Mode`                     | `mode`                                            |
-| `Layout.X.Root: juxtapose`        | `parentChild: { type: "spread", dir: "x" }`       |
-| `Layout.X.Subtree: flatten`       | `sibling: { type: "spread", dir: "x" }`           |
-| `Layout.X.Subtree: align`         | `sibling: { type: "align", dir: "x" }`            |
-| `Layout.X.Root: include`/`within` | `parentChild: { type: "nest", dir: "x" }` _(M2+)_ |
-| `Padding` / `Margin`              | `spacing`                                         |
-| `Alignment: top / left`           | `alignment: "start"`                              |
-| `Alignment: center`               | `alignment: "middle"`                             |
-| `Alignment: bottom / right`       | `alignment: "end"`                                |
-| `SortingCriteria`                 | `sortBy: (d) => ...`                              |
-| `SubtreeWidth`/`Height`           | inside `node`: `value(d.value, "key")`            |
-| `CoordinateSystem.Category`       | `coord: linear()` or `coord: polar()`             |
+| Paper                             | GoTree-in-GoFish                                      |
+| --------------------------------- | ----------------------------------------------------- |
+| `Element.Node: "rectangle"`       | `node: (d) => rect({...})`                            |
+| `Element.Link: "straight"`        | `link: { interpolation: "linear" }`                   |
+| `Element.Color: "depth"`          | inside `node`: `fill: byDepth(d.depth)`               |
+| `Element.Width/Height`            | inside `node`: `w` / `h` on the mark                  |
+| `Element.LinkWidth`               | `link.strokeWidth`                                    |
+| `Element.Label`                   | inside `node`: include a `text` mark                  |
+| `Layout.Mode`                     | `mode`                                                |
+| `Layout.X.Root: juxtapose`        | `parentChild: spread({ dir: "x" })`                   |
+| `Layout.X.Subtree: flatten`       | `sibling: spread({ dir: "x" })`                       |
+| `Layout.X.Root: include`/`within` | `parentChild: contain({ x: padding })`                |
+| `Padding` / `Margin`              | `spacing` (on spread), `x` / `y` padding (on contain) |
+| `Alignment: top / left`           | `alignment: "start"`                                  |
+| `Alignment: center`               | `alignment: "middle"`                                 |
+| `Alignment: bottom / right`       | `alignment: "end"`                                    |
+| `SortingCriteria`                 | `sortBy: (d) => ...`                                  |
+| `SubtreeWidth`/`Height`           | inside `node`: `value(d.value, "key")`                |
+| `CoordinateSystem.Category`       | `coord: linear()` or `coord: polar()`                 |
 
 ## Milestone status
 
-M1 ships only cartesian node-link with `spread`/`align` relations and `"linear"`
-links. The remaining grammar (icicle, treemap-slice, sunburst, radial node-link,
-dendrogram, orthogonal/bezier/arc links) is designed but unimplemented. Trying to
-use those values raises an explicit error.
-
-- **M1** (shipped) — node-link with `spread` and `align`.
-- **M2** — `nest` primitive in `gofish-graphics`; enables icicle and treemap-slice.
-- **M3** — polar coord wrap; enables sunburst and radial node-link.
+- **M1** — node-link with `spread` combiner; linear links.
+- **M2** (this milestone) — `Constraint.contain` primitive in `gofish-graphics`;
+  `contain` combiner in `gofish-gotree`; nested-box trees.
+- **M3** — polar coord wrap; sunburst and radial node-link.
 - **M4** — `orthogonal`/`bezier`/`arc` links; sort.
-- **M5** — `bottomUp` mode for dendrograms.
+- **M5** — `bottomUp` mode for dendrograms via intrinsic-dim wiring.
+
+Trying to use values from M3+ (`coord: polar(...)`, `orthogonal`/`bezier`/`arc`
+link interpolations) raises an explicit error.

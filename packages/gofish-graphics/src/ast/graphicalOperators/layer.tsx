@@ -12,6 +12,7 @@ import { GoFishAST } from "../_ast";
 import {
   applyConstraints,
   getPositioningConstraintRefs,
+  isContainConstraint,
   isZOrderConstraint,
   type ZOrderConstraint,
 } from "../constraints";
@@ -242,7 +243,9 @@ export const layer = createNodeOperatorSequential(
             computeSize(dims[1].size, scaleFactors?.[1]!, size[1]) ?? size[1],
           ];
 
-          const childPlaceables = [];
+          const childPlaceables: ReturnType<
+            (typeof children)[number]["layout"]
+          >[] = new Array(children.length);
 
           // Collect *positioning* constraint refs only — children skipped
           // here forgo phase-1 baseline placement so a constraint can place
@@ -253,15 +256,101 @@ export const layer = createNodeOperatorSequential(
               ? getPositioningConstraintRefs(node.constraints)
               : new Set<string>();
 
-          for (let i = 0; i < children.length; i++) {
+          // ── Contain pre-pass ────────────────────────────────────────────
+          // `Constraint.contain` drives outer's size from inner's intrinsic
+          // dims, so inner must be laid out first. Build the outer→inner map
+          // from the layer's contain constraints, topologically sort children
+          // (inner first), then dispatch layout per-child:
+          //   - standard child: layout at the layer's size
+          //   - inner-of-contain: layout at the layer's size; record dims
+          //   - outer-of-contain: layout at `inner.intrinsicDims + 2*padding`
+          //                       on each constrained axis (other axis is
+          //                       left at the layer's size)
+          //
+          // Phase-2 (`applyContain`) places inner at outer's center on each
+          // constrained axis — with outer sized to `inner + 2*padding`,
+          // centering yields `inner.min = outer.min + padding` naturally.
+          const containConstraints =
+            node.constraints.filter(isContainConstraint);
+
+          const childIndexByName = new Map<string, number>();
+          if (containConstraints.length > 0) {
+            for (let i = 0; i < node.children.length; i++) {
+              const name = childNameKey(node.children[i]);
+              if (name !== undefined) childIndexByName.set(name, i);
+            }
+          }
+
+          // outerIdx → { innerIdx, padX, padY }
+          const outerToInner = new Map<
+            number,
+            { innerIdx: number; padX?: number; padY?: number }
+          >();
+          for (const c of containConstraints) {
+            const outerIdx = childIndexByName.get(c.children[0].name);
+            const innerIdx = childIndexByName.get(c.children[1].name);
+            if (outerIdx === undefined || innerIdx === undefined) continue;
+            outerToInner.set(outerIdx, {
+              innerIdx,
+              padX: c.x,
+              padY: c.y,
+            });
+          }
+
+          // Topo-sort children by contain dependency (outer depends on inner).
+          // Cycles (A contains B contains A) raise an explicit error.
+          const layoutOrder: number[] = [];
+          if (outerToInner.size > 0) {
+            const visiting = new Set<number>();
+            const visited = new Set<number>();
+            const visit = (i: number, stack: number[]): void => {
+              if (visited.has(i)) return;
+              if (visiting.has(i)) {
+                throw new Error(
+                  `Layer: Constraint.contain cycle detected through child indices ${[
+                    ...stack,
+                    i,
+                  ].join(" → ")}`
+                );
+              }
+              visiting.add(i);
+              const dep = outerToInner.get(i);
+              if (dep !== undefined) visit(dep.innerIdx, [...stack, i]);
+              visiting.delete(i);
+              visited.add(i);
+              layoutOrder.push(i);
+            };
+            for (let i = 0; i < children.length; i++) visit(i, []);
+          } else {
+            for (let i = 0; i < children.length; i++) layoutOrder.push(i);
+          }
+
+          for (const i of layoutOrder) {
             const child = children[i];
-            const childPlaceable = child.layout(size, scaleFactors, posScales);
+            let layoutSize: Size = size;
+            const containInfo = outerToInner.get(i);
+            if (containInfo !== undefined) {
+              const innerDims = childPlaceables[containInfo.innerIdx].dims;
+              layoutSize = [
+                containInfo.padX !== undefined
+                  ? (innerDims[0].size ?? 0) + 2 * containInfo.padX
+                  : size[0],
+                containInfo.padY !== undefined
+                  ? (innerDims[1].size ?? 0) + 2 * containInfo.padY
+                  : size[1],
+              ];
+            }
+            const childPlaceable = child.layout(
+              layoutSize,
+              scaleFactors,
+              posScales
+            );
             const childName = childNameKey(node.children[i]);
             if (!childName || !constrainedNames.has(childName)) {
               childPlaceable.place("x", 0, "baseline");
               childPlaceable.place("y", 0, "baseline");
             }
-            childPlaceables.push(childPlaceable);
+            childPlaceables[i] = childPlaceable;
           }
 
           if (node.constraints.length > 0) {
