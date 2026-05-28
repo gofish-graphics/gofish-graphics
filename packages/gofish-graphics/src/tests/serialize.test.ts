@@ -208,6 +208,29 @@ async function main() {
   }
 
   // -------------------------------------------------------------------------
+  // Per-operator `axes` override propagates and validates strict.
+  // -------------------------------------------------------------------------
+  {
+    const chart = Chart([
+      { lake: "A", count: 1 },
+      { lake: "B", count: 2 },
+    ])
+      .flow(
+        spread({ by: "lake", dir: "x", axes: { x: false, y: true } } as any)
+      )
+      .mark(rect({ h: "count" }));
+    const doc = await chart.toJSON();
+    validateDoc(doc, "spread with axes override");
+    const ops = (doc.root as Frontend.ChartIR).operators!;
+    check("spread carries axes object", typeof (ops[0] as any).axes === "object");
+    check(
+      "spread.axes.x preserved",
+      (ops[0] as any).axes.x === false &&
+        (ops[0] as any).axes.y === true
+    );
+  }
+
+  // -------------------------------------------------------------------------
   // No-operator chart (mark only).
   // -------------------------------------------------------------------------
   {

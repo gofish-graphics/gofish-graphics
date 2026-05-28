@@ -202,6 +202,7 @@ for the API.
     },
     "OperatorIR": {
       "type": "object",
+      "description": "A pipeline operator. Field coverage is open at the schema level (`additionalProperties` is permitted) — see validate.ts and schema.ts for per-type field shapes. `spread`, `stack`, and `scatter` accept an `axes` property of shape `AxesOptions`.",
       "required": ["type"],
       "properties": {
         "type": {
@@ -214,8 +215,52 @@ for the API.
             "table",
             "log"
           ]
+        },
+        "axes": {
+          "$ref": "#/$defs/AxesOptions"
         }
       }
+    },
+    "AxesOptions": {
+      "description": "Per-node axis-rendering override. Boolean toggles both dimensions; object form lets x and y differ. Each `AxisOption` is `true`/`false`, or `{ title?: string | false }` to set or suppress the title.",
+      "oneOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "x": {
+              "$ref": "#/$defs/AxisOption"
+            },
+            "y": {
+              "$ref": "#/$defs/AxisOption"
+            }
+          }
+        }
+      ]
+    },
+    "AxisOption": {
+      "oneOf": [
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "title": {
+              "oneOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "const": false
+                }
+              ]
+            }
+          }
+        }
+      ]
     },
     "MarkIR": {
       "oneOf": [

@@ -253,7 +253,8 @@ The high-level structure:
 The validator at
 [`validate.ts`](https://github.com/gofish-graphics/gofish-graphics/blob/main/packages/gofish-ir/src/frontend/validate.ts)
 covers the same shapes plus per-operator field constraints (e.g.
-`spread.dir ∈ {"x","y"}`, `table.by` requires `{x, y}`). It runs in
+`spread.dir ∈ {"x","y"}`, `table.by` requires `{x, y}`, `spread`/`stack`/`scatter`
+accept an `axes` override of shape `AxesOptions`). It runs in
 permissive mode by default (unknown fields ignored, for forward-compat)
 and strict mode in CI tests.
 

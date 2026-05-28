@@ -355,6 +355,71 @@ check(
   validate(chart([{ type: "spread", by: "lake", quux: 1 }])).valid
 );
 
+// Per-operator `axes` override — boolean and object forms (matches the
+// node-based axis rendering added in main).
+console.log("\n# Per-operator axes overrides");
+
+check(
+  "spread with axes: true accepts (strict)",
+  validate(chart([{ type: "spread", by: "lake", dir: "x", axes: true }]), {
+    strict: true,
+  }).valid
+);
+
+check(
+  "spread with axes: false accepts (strict)",
+  validate(chart([{ type: "spread", by: "lake", dir: "x", axes: false }]), {
+    strict: true,
+  }).valid
+);
+
+check(
+  "spread with axes object form accepts (strict)",
+  validate(
+    chart([
+      {
+        type: "spread",
+        by: "lake",
+        dir: "x",
+        axes: { x: false, y: { title: "Count" } },
+      },
+    ]),
+    { strict: true }
+  ).valid
+);
+
+check(
+  "stack with axes accepts (strict)",
+  validate(chart([{ type: "stack", by: "s", dir: "y", axes: { y: true } }]), {
+    strict: true,
+  }).valid
+);
+
+check(
+  "scatter with axes accepts (strict)",
+  validate(
+    chart([{ type: "scatter", x: "hp", y: "mpg", axes: { x: true, y: true } }]),
+    { strict: true }
+  ).valid
+);
+
+check(
+  "axes: 'truthy-string' rejected",
+  !validate(chart([{ type: "spread", axes: "yes" }])).valid
+);
+
+check(
+  "axes object with bogus title type rejected",
+  !validate(chart([{ type: "spread", axes: { x: { title: 7 } } }])).valid
+);
+
+check(
+  "axes object with unknown sub-key rejected in strict",
+  !validate(chart([{ type: "spread", axes: { z: true } as any }]), {
+    strict: true,
+  }).valid
+);
+
 // ---------------------------------------------------------------------------
 // Bug fixes — label shorthand, table.by required (from PR review)
 // ---------------------------------------------------------------------------

@@ -263,6 +263,7 @@ function walkOperator(node: unknown, path: string, ctx: Context): void {
       "sharedScale",
       "mode",
       "reverse",
+      "axes",
       "origin",
       "meta",
     ],
@@ -274,6 +275,7 @@ function walkOperator(node: unknown, path: string, ctx: Context): void {
       "sharedScale",
       "mode",
       "reverse",
+      "axes",
       "origin",
       "meta",
     ],
@@ -288,6 +290,7 @@ function walkOperator(node: unknown, path: string, ctx: Context): void {
       "yMin",
       "yMax",
       "alignment",
+      "axes",
       "origin",
       "meta",
     ],
@@ -319,6 +322,7 @@ function walkOperator(node: unknown, path: string, ctx: Context): void {
             message: `mode must be "edge" | "center"`,
           });
       });
+      optionalField(node, "axes", path, ctx, walkAxesOptions);
       break;
     case "group":
       expectField(node, "by", path, ctx, expectString);
@@ -328,6 +332,7 @@ function walkOperator(node: unknown, path: string, ctx: Context): void {
       for (const k of ["x", "y", "xMin", "xMax", "yMin", "yMax"]) {
         optionalField(node, k, path, ctx, walkChannelValue);
       }
+      optionalField(node, "axes", path, ctx, walkAxesOptions);
       break;
     case "table":
       // `by` is required: the table operator can't run without an
@@ -404,6 +409,48 @@ function walkChannelValue(value: unknown, path: string, ctx: Context): void {
     return;
   }
   // Permissive fallback: allow unknown object shapes for forward-compat.
+}
+
+/**
+ * `axes` — per-node axis-rendering override. Either a boolean (apply to
+ * both dims) or an object `{ x?: AxisOptions, y?: AxisOptions }` where each
+ * AxisOptions is a boolean or `{ title?: string | false }`.
+ */
+function walkAxesOptions(value: unknown, path: string, ctx: Context): void {
+  if (typeof value === "boolean") return;
+  if (!isObject(value)) {
+    ctx.errors.push({
+      path,
+      message: `axes must be boolean or {x?, y?}, got ${typeNameOf(value)}`,
+    });
+    return;
+  }
+  for (const k of ["x", "y"]) {
+    if (k in value) walkAxisOption(value[k], `${path}.${k}`, ctx);
+  }
+  if (ctx.strict) rejectUnknown(value, ["x", "y"], path, ctx);
+}
+
+function walkAxisOption(value: unknown, path: string, ctx: Context): void {
+  if (typeof value === "boolean") return;
+  if (value === undefined) return;
+  if (!isObject(value)) {
+    ctx.errors.push({
+      path,
+      message: `axis option must be boolean or { title? }, got ${typeNameOf(value)}`,
+    });
+    return;
+  }
+  if ("title" in value) {
+    const t = value.title;
+    if (t !== false && typeof t !== "string") {
+      ctx.errors.push({
+        path: `${path}.title`,
+        message: `axis title must be a string or false, got ${typeNameOf(t)}`,
+      });
+    }
+  }
+  if (ctx.strict) rejectUnknown(value, ["title"], path, ctx);
 }
 
 function walkMark(node: unknown, path: string, ctx: Context): void {

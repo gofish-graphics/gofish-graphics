@@ -143,6 +143,7 @@ export interface SpreadOperator extends BaseIRNode {
   sharedScale?: boolean;
   mode?: "edge" | "center";
   reverse?: boolean;
+  axes?: AxesOptions;
 }
 
 export interface StackOperator extends BaseIRNode {
@@ -153,6 +154,7 @@ export interface StackOperator extends BaseIRNode {
   sharedScale?: boolean;
   mode?: "edge" | "center";
   reverse?: boolean;
+  axes?: AxesOptions;
 }
 
 export interface GroupOperator extends BaseIRNode {
@@ -170,7 +172,22 @@ export interface ScatterOperator extends BaseIRNode {
   yMin?: ChannelValue;
   yMax?: ChannelValue;
   alignment?: string;
+  axes?: AxesOptions;
 }
+
+/**
+ * Per-node axis-rendering override. Mirrors the JS-side `AxesOptions` /
+ * `AxisOptions` from `gofish-graphics/src/ast/gofish.tsx`.
+ *
+ * - `true` / `false` — show or hide both x and y axes.
+ * - Object form — independently control each dimension.
+ *
+ * `AxisOptions` per-dim is either a boolean (show/hide, infer title) or an
+ * object with an optional `title` (string for custom title, `false` to
+ * suppress).
+ */
+export type AxesOptions = boolean | { x?: AxisOptions; y?: AxisOptions };
+export type AxisOptions = boolean | { title?: string | false };
 
 export interface TableOperator extends BaseIRNode {
   type: "table";
