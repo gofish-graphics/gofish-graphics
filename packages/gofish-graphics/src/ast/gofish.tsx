@@ -367,10 +367,17 @@ export const render = (
   const X_TITLE_MARGIN = PADDING; // 30px below content for x-title
   const leftMargin = yTitle ? Y_TITLE_MARGIN : 0;
   const bottomMargin = xTitle ? X_TITLE_MARGIN : 0;
+  // Only reserve right-side legend space when a color legend will actually
+  // render — the legend `<For>` below iterates an empty Map otherwise, so
+  // stories without a color scale would pay 120 px for nothing.
+  const hasLegend =
+    !!(scaleContext?.unit && "color" in scaleContext.unit) &&
+    (scaleContext.unit.color as Map<unknown, unknown>).size > 0;
+  const rightMargin = hasLegend ? LEGEND_MARGIN : 0;
 
   const result = (
     <svg
-      width={width + leftMargin + pad + LEGEND_MARGIN + pad}
+      width={width + leftMargin + pad + rightMargin + pad}
       height={height + pad + bottomMargin + pad}
       xmlns="http://www.w3.org/2000/svg"
     >
