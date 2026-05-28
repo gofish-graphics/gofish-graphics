@@ -1,9 +1,9 @@
 /**
  * path-mapping.ts
  *
- * Pure utility: maps JS story file paths to Python test file paths.
- * Extracted from check-python-sync.ts so it can be imported without
- * triggering that script's top-level imperative code.
+ * Pure utilities for mapping between story identities and file paths.
+ * Extracted so they can be imported without triggering a script's top-level
+ * imperative code.
  */
 
 import { readFileSync } from "fs";
@@ -12,6 +12,27 @@ import { join, dirname } from "path";
 const SCRIPTS_DIR = import.meta.dirname;
 const TESTS_DIR = dirname(SCRIPTS_DIR);
 const ROOT_DIR = dirname(TESTS_DIR);
+
+/** CamelCase / spaced → kebab-case (one source of truth for path generation). */
+const toKebab = (s: string) =>
+  s
+    .replace(/([a-z])([A-Z])/g, "$1-$2")
+    .replace(/\s+/g, "-")
+    .toLowerCase();
+
+/**
+ * Convert a Storybook story title + export name into a stable file-system path
+ * used for snapshots/screenshots.
+ *
+ * e.g. ("Forward Syntax V3/Bar/Basic", "Default") → "forward-syntax-v3/bar/basic--default"
+ *
+ * Shared by capture-js-dom.ts (full corpus) and capture-one.ts (single story) so
+ * the two stay in lockstep if the kebab-casing rule ever changes.
+ */
+export function storyToPath(title: string, name: string): string {
+  const segments = title.split("/").map(toKebab);
+  return `${segments.join("/")}--${toKebab(name)}`;
+}
 
 /**
  * Maps a JS story file path to the expected Python test file path.
@@ -33,11 +54,6 @@ export function mapJsToPython(jsFile: string): string {
   }
 
   if (title) {
-    const toKebab = (s: string) =>
-      s
-        .replace(/([a-z])([A-Z])/g, "$1-$2")
-        .replace(/\s+/g, "-")
-        .toLowerCase();
     const segments = title.split("/").map(toKebab);
     const dirPath = segments.slice(0, -1).join("/");
     const basePart = segments[segments.length - 1].replace(/-/g, "_");

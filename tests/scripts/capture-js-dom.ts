@@ -16,6 +16,7 @@ import { spawn, type ChildProcess } from "child_process";
 import { writeFileSync, mkdirSync, rmSync, existsSync } from "fs";
 import { join, dirname } from "path";
 import { normalizeDom } from "./normalize-dom.js";
+import { storyToPath } from "./path-mapping.js";
 
 // ---------------------------------------------------------------------------
 // Config
@@ -25,28 +26,6 @@ const TESTS_DIR = join(import.meta.dirname, "..");
 const HARNESS_DIR = join(TESTS_DIR, "harness");
 const TMP_DIR = join(TESTS_DIR, "tmp/js");
 const VITE_PORT = 3001;
-
-// ---------------------------------------------------------------------------
-// Story ID → file path mapping
-// ---------------------------------------------------------------------------
-
-/** Convert a story title + name into a file-system path for snapshots. */
-function storyToPath(title: string, name: string): string {
-  // "Forward Syntax V3/Bar/Basic" + "Default" → "forward-syntax/bar/basic--default"
-  const segments = title.split("/").map((s) =>
-    s
-      .replace(/([a-z])([A-Z])/g, "$1-$2")
-      .replace(/\s+/g, "-")
-      .toLowerCase()
-  );
-
-  const storyName = name
-    .replace(/([a-z])([A-Z])/g, "$1-$2")
-    .replace(/\s+/g, "-")
-    .toLowerCase();
-
-  return `${segments.join("/")}--${storyName}`;
-}
 
 // ---------------------------------------------------------------------------
 // Start Vite dev server

@@ -21,6 +21,8 @@ __pycache__/
 *.egg-info/
 _static/
 .cursor/
-.claude/
+.claude/*
+# Share project skills with the team; keep everything else under .claude/ local.
+!.claude/skills/
 tests/tmp/
 __snapshots__/

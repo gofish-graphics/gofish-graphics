@@ -21,6 +21,7 @@
     "test:visual": "pnpm --filter @gofish/tests test",
     "test:visual:update": "pnpm --filter @gofish/tests update",
     "test:visual:js": "pnpm --filter @gofish/tests test:js",
+    "capture-one": "pnpm --filter @gofish/tests capture-one",
     "test:visual:review": "pnpm --filter @gofish/tests review",
     "test:visual:check-sync": "pnpm --filter @gofish/tests check-sync",
     "test:visual:python": "pnpm --filter @gofish/tests test:python",
