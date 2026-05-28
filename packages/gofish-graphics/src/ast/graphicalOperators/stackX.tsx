@@ -19,8 +19,11 @@ export const stackX = (...args: any[]): ReturnType<typeof stack> => {
       children
     );
   } else {
-    return stack({
-      dir: "x",
-    });
+    return stack(
+      {
+        dir: "x",
+      },
+      []
+    );
   }
 };

@@ -27,10 +27,10 @@ export const Default: StoryObj<Args> = {
       (d) => d.year === 2000
     );
 
-    Chart(year2000)
+    Chart(year2000, {axes: true})
       .flow(spread({ by: "age",  dir: "y", reverse: true }))
       .mark(rect({ w: "people" }))
-      .render(container, { w: args.w, h: args.h, axes: true });
+      .render(container, { w: args.w, h: args.h});
 
     return container;
   },

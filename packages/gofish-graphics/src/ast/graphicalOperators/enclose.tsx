@@ -26,11 +26,11 @@ export const enclose = createNodeOperator(
         ) => {
           return [UNDEFINED, UNDEFINED];
         },
-        layout: (shared, size, scaleFactors, children) => {
+        layout: (shared, size, scaleFactors, children, posScales) => {
           const childPlaceables = [];
 
           for (const child of children) {
-            const childPlaceable = child.layout(size, scaleFactors);
+            const childPlaceable = child.layout(size, scaleFactors, posScales);
             childPlaceable.place("x", 0, "baseline");
             childPlaceable.place("y", 0, "baseline");
             childPlaceables.push(childPlaceable);

@@ -98,7 +98,15 @@ export const treemap = createNodeOperator(
           // Use a stable unit domain; this avoids implying ordinal semantics.
           return [POSITION(interval(0, 1)), POSITION(interval(0, 1))];
         },
-        layout: (_shared, size, scaleFactors, childAsts, posScales, node) => {
+        layout: (
+          _shared,
+          size,
+          scaleFactors,
+          childAsts,
+          posScales,
+          node,
+          posDomains
+        ) => {
           const xPos = computeAesthetic(
             dims[0].min,
             posScales?.[0]!,
@@ -138,9 +146,10 @@ export const treemap = createNodeOperator(
             for (const d of leafData) d.weight = 1;
           }
 
-          const root = hierarchy<{ children: LeafDatum[] }>(
-            { children: leafData },
-            (d) => d.children
+          type TreemapDatum = { children?: LeafDatum[] } | LeafDatum;
+          const root = hierarchy<TreemapDatum>(
+            { children: leafData } as TreemapDatum,
+            (d) => ("children" in d ? d.children : undefined)
           ).sum((d: any) =>
             typeof d.weight === "number" ? d.weight : 0
           ) as HierarchyNode<any>;
@@ -188,7 +197,12 @@ export const treemap = createNodeOperator(
             const h = Math.max(0, y1 - y0);
 
             const child = childAsts[i];
-            const placeable = child.layout([w, h], scaleFactors, posScales);
+            const placeable = child.layout(
+              [w, h],
+              scaleFactors,
+              posScales,
+              posDomains
+            );
             placeable.place(0, x0 + w / 2, "center");
             placeable.place(1, y0 + h / 2, "center");
             placed[i] = placeable;

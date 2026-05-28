@@ -28,6 +28,7 @@
     "test:visual:compare-python": "pnpm --filter @gofish/tests compare-python",
     "test:visual:check-python-sync": "pnpm --filter @gofish/tests check-python-sync",
     "test:visual:check-python-sync-all": "pnpm --filter @gofish/tests check-python-sync-all",
+    "typecheck": "pnpm --filter gofish-graphics typecheck",
     "lint": "pnpm exec eslint .",
     "lint:fix": "pnpm exec eslint . --fix",
     "format": "pnpm exec prettier . --write",

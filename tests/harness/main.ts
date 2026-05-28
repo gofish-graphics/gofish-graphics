@@ -703,9 +703,9 @@ function renderChart(spec: HarnessSpec) {
           debug: debug ?? false,
         } as any);
       } else {
-        // Single-chart path. Pull render options out; rest are chart-level.
+        // Single-chart path. Only w/h/debug are render options; rest are chart-level.
         const allOpts = spec.options || {};
-        const { w, h, axes, debug, ...chartOptsRaw } = allOpts;
+        const { w, h, debug, ...chartOptsRaw } = allOpts;
         const node = buildChartFromSpec(
           {
             data: spec.data,
@@ -721,7 +721,6 @@ function renderChart(spec: HarnessSpec) {
         await node.render(container, {
           w,
           h,
-          axes: axes ?? false,
           debug: debug ?? false,
         } as any);
       }

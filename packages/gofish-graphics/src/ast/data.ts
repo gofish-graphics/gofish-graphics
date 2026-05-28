@@ -13,6 +13,11 @@ export const value = <T>(datum: T, measure?: Measure): Value<any> => ({
   measure,
 });
 
+/** Object branch of {@link Value}; named here so the {@link getValue} /
+ *  {@link getMeasure} casts don't read as opaque. Keep in sync with the
+ *  inline shape in {@link Value} above. */
+type DatumValue = { type: "datum"; datum: any; measure?: Measure };
+
 /**
  * `datum(x)` is the recommended name for the data-driven value wrapper
  * (matches the `field` / `datum` / `literal` trichotomy from Vega-Lite's
@@ -75,14 +80,14 @@ export const isAesthetic = <T>(
 
 export const getValue = <T>(value: MaybeValue<T>): T => {
   if (isValue(value)) {
-    return value.datum;
+    return (value as DatumValue).datum;
   }
-  return value;
+  return value as T;
 };
 
 export const getMeasure = <T>(value: MaybeValue<T>): Measure => {
   if (isValue(value)) {
-    return value.measure ?? "unit";
+    return (value as DatumValue).measure ?? "unit";
   }
   return "unknown";
 };

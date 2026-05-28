@@ -20,18 +20,18 @@ export default meta;
 type Args = { w: number; h: number };
 
 export const Default: StoryObj<Args> = {
-  args: { w: 300, h: 0 },
+  args: { w: 300, h: 50 },
   loaders: [async () => ({ weather: await data["seattle-weather.csv"]() })],
   render: (args: Args, context: any) => {
     const container = initializeContainer();
 
-    Chart(context.loaded.weather as any[])
+    Chart(context.loaded.weather as any[], { axes: { x: true, y: false } })
       .flow(scatter({ by: "date",  x: "precipitation" }))
       .mark(rect({ w: 1, h: 10, fill: "rgb(31, 119, 180)",
         opacity: 0.7,
       }))
 
-      .render(container, { w: args.w, h: args.h, axes: true } as any);
+      .render(container, { w: args.w, h: args.h });
 
     return container;
   },

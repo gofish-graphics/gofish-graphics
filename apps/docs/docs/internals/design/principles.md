@@ -87,6 +87,16 @@ So GoFish chooses maximal expressiveness, with correctness defined internally. T
 rest of this essay is about the machinery that makes that choice tractable — and
 most of it is borrowed from compilers.
 
+There is a companion to this argument that runs in the other direction. This essay
+defends GoFish's stance on _expressiveness_ — what the language allows. The
+companion essay, [Composition, Not
+Enumeration](/internals/design/composition-not-enumeration), is a structural
+critique of the existing GoG-family languages from the same PL-design vantage:
+that despite being called "grammars," they enumerate legal arrangements rather
+than generate them, and the publication-chart gap is the visible consequence.
+Together, the two essays are the negative and positive halves of the same PL
+position.
+
 ## A small core
 
 GoFish is built like a **compiler**. A chart is a program; the renderer is a

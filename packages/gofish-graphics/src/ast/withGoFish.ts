@@ -274,6 +274,7 @@ export async function reifyChildrenSequentially(
     | GoFishAST
     | (() => GoFishAST | Promise<GoFishAST>)
     | ChartBuilder<any, any>
+    | Mark<any>
   )[],
   layerContext?: LayerContext
 ): Promise<GoFishAST[]> {
@@ -447,8 +448,8 @@ export type NameableMark<T> = Mark<T> & {
  */
 function attachNameableMethods<T>(baseMark: Mark<T>): NameableMark<T> {
   const nameMethod = (layerName: string | Token): Mark<T> => {
-    return async (input, keyParam, layerContext) => {
-      const node = await baseMark(input, keyParam, layerContext);
+    const wrapped: Mark<T> = async (input, keyParam, layerContext) => {
+      const node = (await baseMark(input, keyParam, layerContext)) as GoFishAST;
       (node as GoFishNode).name(layerName);
       // layerContext is keyed by string name (v3 chart-layer selection);
       // tokens are hygienic handles and do not participate in that registry.
@@ -462,6 +463,7 @@ function attachNameableMethods<T>(baseMark: Mark<T>): NameableMark<T> {
       }
       return node;
     };
+    return wrapped;
   };
   const nameMethodWithFields = (layerName: string | Token): Mark<T> => {
     const fn = nameMethod(layerName);
@@ -487,7 +489,9 @@ function attachNameableMethods<T>(baseMark: Mark<T>): NameableMark<T> {
     options?: LabelOptions
   ): Mark<T> => {
     const fn: Mark<T> = async (input, keyParam, layerContext) => {
-      const node = await baseMark(input, keyParam, layerContext);
+      // main's typing fix: baseMark returns GoFishAST; cast to GoFishNode
+      // to invoke .label(). Both branches do the same runtime work.
+      const node = (await baseMark(input, keyParam, layerContext)) as GoFishAST;
       (node as GoFishNode).label(accessor, options);
       return node;
     };

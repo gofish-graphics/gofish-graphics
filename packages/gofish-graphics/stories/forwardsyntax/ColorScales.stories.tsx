@@ -37,10 +37,10 @@ export const PaletteNamedScheme: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    Chart(seafood, { color: palette("tableau10") })
+    Chart(seafood, { color: palette("tableau10"), axes: true })
       .flow(spread({ by: "species",  dir: "x" }))
       .mark(rect({ h: "count", fill: "species" }))
-      .render(container, { w: args.w, h: args.h, axes: true });
+      .render(container, { w: args.w, h: args.h });
 
     return container;
   },
@@ -53,10 +53,10 @@ export const PaletteStringArray: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    Chart(seafood, { color: palette(["#e41a1c", "#377eb8", "#4daf4a", "#984ea3", "#ff7f00"]) })
+    Chart(seafood, { color: palette(["#e41a1c", "#377eb8", "#4daf4a", "#984ea3", "#ff7f00"]), axes: true })
       .flow(spread({ by: "species",  dir: "x" }))
       .mark(rect({ h: "count", fill: "species" }))
-      .render(container, { w: args.w, h: args.h, axes: true });
+      .render(container, { w: args.w, h: args.h });
 
     return container;
   },
@@ -69,10 +69,10 @@ export const GradientNamedScheme: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    Chart(scores, { color: gradient("blues") })
+    Chart(scores, { color: gradient("blues"), axes: true })
       .flow(spread({ by: "label",  dir: "x" }))
       .mark(rect({ h: "value", fill: "value" }))
-      .render(container, { w: args.w, h: args.h, axes: true });
+      .render(container, { w: args.w, h: args.h });
 
     return container;
   },
@@ -85,10 +85,10 @@ export const GradientStringArray: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    Chart(scores, { color: gradient(["#f7fbff", "#42c663", "#6b0808"]) })
+    Chart(scores, { color: gradient(["#f7fbff", "#42c663", "#6b0808"]), axes: true })
       .flow(spread({ by: "label",  dir: "x" }))
       .mark(rect({ h: "value", fill: "value" }))
-      .render(container, { w: args.w, h: args.h, axes: true });
+      .render(container, { w: args.w, h: args.h });
 
     return container;
   },
@@ -115,7 +115,7 @@ export const PairedPalettes: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    Chart(pairedBars)
+    Chart(pairedBars, { axes: true })
       .flow(
         derive((d) => {
           const values = d.map((item) => item.value);
@@ -131,7 +131,7 @@ export const PairedPalettes: StoryObj<Args> = {
         stack({ by: "type",  dir: "x" })
       )
       .mark(rect({ h: "value", fill: "color" }))
-      .render(container, { w: args.w, h: args.h, axes: true });
+      .render(container, { w: args.w, h: args.h });
 
     return container;
   },
@@ -151,6 +151,7 @@ export const NestedDerive: StoryObj<Args> = {
         "salmon-highlight": "#e15759",
         "first-half": "#4e79a7",
       }),
+      axes: true,
     })
       .flow(
         derive((d) =>
@@ -172,7 +173,7 @@ export const NestedDerive: StoryObj<Args> = {
         stack({ by: "species",  dir: "x" })
       )
       .mark(rect({ h: "count", fill: "highlight" }))
-      .render(container, { w: args.w, h: args.h, axes: true });
+      .render(container, { w: args.w, h: args.h });
 
     return container;
   },
@@ -185,7 +186,7 @@ export const SelectiveDerive: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    Chart(seafood, { color: palette({ highlighted: "#e15759" }) })
+    Chart(seafood, { color: palette({ highlighted: "#e15759" }), axes: true })
       .flow(
         derive((d) =>
           d.map((item) => ({
@@ -197,7 +198,7 @@ export const SelectiveDerive: StoryObj<Args> = {
         stack({ by: "species",  dir: "x" })
       )
       .mark(rect({ h: "count", fill: "highlight" }))
-      .render(container, { w: args.w, h: args.h, axes: true });
+      .render(container, { w: args.w, h: args.h });
 
     return container;
   },
@@ -210,13 +211,13 @@ export const SelectiveGroup: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    Chart(seafood, { color: palette({ Salmon: "#e15759" }) })
+    Chart(seafood, { color: palette({ Salmon: "#e15759" }), axes: true })
       .flow(
         spread({ by: "lake",  dir: "x" }),
         stack({ by: "species",  dir: "x" })
       )
       .mark(rect({ h: "count", fill: "species" }))
-      .render(container, { w: args.w, h: args.h, axes: true });
+      .render(container, { w: args.w, h: args.h });
 
     return container;
   },
@@ -265,13 +266,13 @@ export const RoseGradient: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    Chart(roseData, { color: gradient("blues"), coord: clock() })
+    Chart(roseData, { color: gradient("blues"), coord: clock(), axes: true })
       .flow(
-        spread({ by: "sector", dir: "x", spacing: 0 }),
-        stack({ by: "ring", dir: "y" }),
+        spread({ by: "sector", dir: "x", spacing: 0, axes: false }),
+        stack({ by: "ring", dir: "y", axes: true }),
       )
       .mark(rect({ w: (Math.PI * 2) / NUM_SECTORS, emX: true, h: "value", fill: "ring" }))
-      .render(container, { w: args.w, h: args.h, axes: true });
+      .render(container, { w: args.w, h: args.h });
 
     return container;
   },

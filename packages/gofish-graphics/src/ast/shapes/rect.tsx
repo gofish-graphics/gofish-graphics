@@ -166,16 +166,20 @@ export const Rect = ({
             posScales?.[0]!,
             undefined
           );
-          w = (xMax ?? 0) - (x ?? 0);
+          // posScales[0]! above guarantees a defined scale, so
+          // computeAesthetic returns a number here.
+          w = xMax! - x!;
         } else if (isValue(dims[0].min) && isValue(dims[0].size)) {
           // If posScales for x exists, scale min and min+size, then subtract
           const min = x;
           const max = computeAesthetic(
             value(getValue(dims[0].min)! + getValue(dims[0].size)!),
-            posScales[0],
+            posScales[0]!,
             undefined
           );
-          w = max - min;
+          // Same invariant as the min/max branch: posScales[0]! above
+          // guarantees a defined scale.
+          w = max! - min!;
         } else if (isValue(dims[0].size) && posScales?.[0]) {
           // If we have size but no min, and posScales exists, use position scale
           // Treat min as 0 (baseline) and compute width from position scale
@@ -200,16 +204,20 @@ export const Rect = ({
             posScales?.[1]!,
             undefined
           );
-          h = (yMax ?? 0) - (y ?? 0);
+          // posScales[1]! above guarantees a defined scale, so
+          // computeAesthetic returns a number here.
+          h = yMax! - y!;
         } else if (isValue(dims[1].min) && isValue(dims[1].size)) {
           // If posScales for y exists, scale min and min+size, then subtract
           const min = y;
           const max = computeAesthetic(
             value(getValue(dims[1].min)! + getValue(dims[1].size)!),
-            posScales[1],
+            posScales[1]!,
             undefined
           );
-          h = max - min;
+          // Same invariant as the min/max branch: posScales[1]! above
+          // guarantees a defined scale.
+          h = max! - min!;
         } else if (isValue(dims[1].size) && posScales?.[1]) {
           // If we have size but no min, and posScales exists, use position scale
           // Treat min as 0 (baseline) and compute height from position scale
@@ -241,28 +249,29 @@ export const Rect = ({
           }
         }
 
-        const result = {
-          intrinsicDims: [
-            {
-              min: w >= 0 ? 0 : w,
-              size: w,
-              center: w / 2,
-              max: w >= 0 ? w : 0,
-              embedded: dims[0].embedded,
-            },
-            {
-              min: h >= 0 ? 0 : h,
-              size: h,
-              center: h / 2,
-              max: h >= 0 ? h : 0,
-              embedded: dims[1].embedded,
-            },
-          ],
+        return {
+          intrinsicDims: {
+            dims: [
+              {
+                min: w >= 0 ? 0 : w,
+                size: w,
+                center: w / 2,
+                max: w >= 0 ? w : 0,
+                embedded: dims[0].embedded,
+              },
+              {
+                min: h >= 0 ? 0 : h,
+                size: h,
+                center: h / 2,
+                max: h >= 0 ? h : 0,
+                embedded: dims[1].embedded,
+              },
+            ],
+          },
           transform: {
             translate: [x, y],
           },
         };
-        return result;
       },
       render: (
         {

@@ -2,6 +2,7 @@ import { For } from "solid-js";
 import { Path, PathSegment, pathToSVGPath, transformPath } from "../../path";
 import { GoFishAST } from "../_ast";
 import { GoFishNode } from "../_node";
+import { isCategoricalScale } from "../gofish";
 import { Dimensions, elaborateDirection, FancyDirection, Size } from "../dims";
 import { pairs } from "../../util";
 import { linear } from "../coordinateTransforms/linear";
@@ -454,12 +455,14 @@ export const connect = createNodeOperator(
           node
         ) => {
           const scaleContext = node.getRenderSession().scaleContext;
-          fill = fill ?? renderData.defaultColor;
-          fill = isValue(fill)
-            ? scaleContext?.unit?.color
-              ? scaleContext.unit.color.get(getValue(fill))
-              : getValue(fill)
-            : fill;
+          const rawFill: MaybeValue<string> | undefined =
+            fill ?? renderData.defaultColor;
+          const unitScale = scaleContext?.unit;
+          const resolvedFill: string | undefined = isValue(rawFill)
+            ? isCategoricalScale(unitScale)
+              ? unitScale.color.get(getValue(rawFill))
+              : getValue(rawFill)
+            : (rawFill as string | undefined);
 
           return (
             <g
@@ -482,8 +485,8 @@ export const connect = createNodeOperator(
                           (mode === "center" ? "normal" : "multiply"),
                       }}
                       d={d}
-                      fill={fill ?? "none"}
-                      stroke={stroke ?? fill ?? "black"}
+                      fill={resolvedFill ?? "none"}
+                      stroke={stroke ?? resolvedFill ?? "black"}
                       stroke-width={strokeWidth ?? 0}
                       opacity={opacity ?? 1}
                     />

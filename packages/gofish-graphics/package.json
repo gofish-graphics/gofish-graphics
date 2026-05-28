@@ -40,7 +40,8 @@
     "test": "pnpm run test:path && pnpm run test:font && pnpm run test:serialize",
     "test:path": "tsx src/tests/path.test.ts",
     "test:font": "tsx src/tests/fontUtils.test.ts",
-    "test:serialize": "pnpm run build && tsx src/tests/serialize.test.ts"
+    "test:serialize": "pnpm run build && tsx src/tests/serialize.test.ts",
+    "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
     "@storybook/addon-docs": "^9.1.6",
@@ -48,6 +49,8 @@
     "@storybook/react": "^9.1.6",
     "@types/chroma-js": "^3.1.1",
     "@types/d3-dsv": "^3.0.7",
+    "@types/culori": "^4.0.1",
+    "@types/d3-hierarchy": "^3.1.7",
     "@types/lodash": "^4.17.16",
     "@types/seedrandom": "^3.0.8",
     "d3-dsv": "^3.0.1",
@@ -59,6 +62,7 @@
     "typescript": "^5.7.2",
     "vega-datasets": "^3.2.1",
     "vite": "^6.0.0",
+    "vite-plugin-dts": "^5.0.1",
     "vite-plugin-solid": "^2.11.6"
   },
   "dependencies": {

@@ -41,9 +41,9 @@ seafood = [
     {"lake": "Lake F", "species": "Bass", "count": 4},
 ]
 
-chart(seafood).flow(spread(by="lake", dir="x")).mark(rect(h="count")).render(
-    w=500, h=300, axes=True
-)
+chart(seafood, axes=True).flow(spread(by="lake", dir="x")).mark(
+    rect(h="count")
+).render(w=500, h=300)
 ```
 
 `spread(by="lake", dir="x")` partitions the rows by `lake` and lays the groups
@@ -59,12 +59,13 @@ notebook cell, it displays automatically — no `.render()` call needed:
 chart(seafood).flow(spread(by="lake", dir="x")).mark(rect(h="count"))
 ```
 
-Call `.render()` explicitly when you want to set the size or show axes:
+Call `.render()` explicitly when you want to set the size (axes are a `chart()`
+option — `chart(seafood, axes=True)`):
 
 ```python
-chart(seafood).flow(spread(by="lake", dir="x")).mark(rect(h="count")).render(
-    w=500, h=300, axes=True
-)
+chart(seafood, axes=True).flow(spread(by="lake", dir="x")).mark(
+    rect(h="count")
+).render(w=500, h=300)
 ```
 
 ::: tip

@@ -114,7 +114,13 @@ export const color6_old = [
   mix(appleColorGenerator((2 / 12) * 360), white, 0.2),
 ];
 
-export const color10Order = ["blue", "yellow", "fuschia", "lime", "purple"];
+export const color10Order = [
+  "blue",
+  "yellow",
+  "fuschia",
+  "lime",
+  "purple",
+] as const;
 
 export const color6_20250320 = [
   color[color10Order[0]][5],
