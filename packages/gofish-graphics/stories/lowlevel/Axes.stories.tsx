@@ -1,17 +1,24 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
-import { Constraint, createName, layer, Layer, rect, ref, text } from "../../src/lib";
+import {
+  Constraint,
+  createName,
+  layer,
+  Layer,
+  rect,
+  ref,
+  spread,
+  text,
+  type Token,
+} from "../../src/lib";
+import { nice, ticks } from "d3-array";
 
 /**
- * SPIKE (#464): hand-draw axes using the gofish spec.
- *
- * Vertical bar chart built from constraints, no axis machinery. Each bar is
- * middle-aligned in x with a text label, with a vertical gap between them
- * (the ordinal x-axis). OrdinalAxisWithTitle adds an axis title below.
+ * attempt to hand-draw axes using the gofish spec. a test of completeness of our core constraint API. 
  */
 
 const meta: Meta = {
-  title: "Low Level Syntax/Hand-Built Axes",
+  title: "Low Level Syntax/Axes",
   argTypes: {
     w: { control: { type: "number", min: 100, max: 1000, step: 10 } },
     h: { control: { type: "number", min: 100, max: 1000, step: 10 } },
@@ -21,193 +28,117 @@ export default meta;
 
 type Args = { w: number; h: number };
 
-export const OrdinalAxis: StoryObj<Args> = {
-  args: { w: 400, h: 360 },
-  render: (args: Args) => {
-    const container = initializeContainer();
+// Shared bar definition — both stories use the same three bars, indexed a/b/c.
+const HEIGHTS = [100, 280, 150];
+const BAR_FILL = "#457b9d";
 
-    layer([
-      rect({ w: 40, h: 100, fill: "#e63946" }).name("a"),
-      rect({ w: 40, h: 250, fill: "#457b9d" }).name("b"),
-      rect({ w: 40, h: 150, fill: "#2a9d8f" }).name("c"),
-      text({ text: "salmon", fontSize: 12, fill: "#666" }).name("la"),
-      text({ text: "bass", fontSize: 12, fill: "#666" }).name("lb"),
-      text({ text: "trout", fontSize: 12, fill: "#666" }).name("lc"),
-    ])
-      .constrain(({ a, b, c, la, lb, lc }) => [
-        Constraint.align({ y: "start" }, [a, b, c]),
-        Constraint.distribute({ dir: "x" }, [a, b, c]),
-        // each bar middle-aligned in x with its label
-        Constraint.align({ x: "middle" }, [a, la]),
-        Constraint.align({ x: "middle" }, [b, lb]),
-        Constraint.align({ x: "middle" }, [c, lc]),
-        // vertical gap between label and bar (label below the bar)
-        Constraint.distribute({ dir: "y", spacing: 8 }, [la, a]),
-        Constraint.distribute({ dir: "y", spacing: 8 }, [lb, b]),
-        Constraint.distribute({ dir: "y", spacing: 8 }, [lc, c]),
-      ])
-      .render(container, { w: args.w, h: args.h });
+const bars = (names: (string | Token)[] = ["a", "b", "c"]) => [
+  rect({ w: 40, h: HEIGHTS[0], fill: BAR_FILL }).name(names[0]),
+  rect({ w: 40, h: HEIGHTS[1], fill: BAR_FILL }).name(names[1]),
+  rect({ w: 40, h: HEIGHTS[2], fill: BAR_FILL }).name(names[2]),
+];
 
-    return container;
-  },
-};
-
-export const OrdinalAxisWithTitle: StoryObj<Args> = {
-  args: { w: 400, h: 360 },
-  render: (args: Args) => {
-    const container = initializeContainer();
-
-    const a = createName("a");
-    const b = createName("b");
-    const c = createName("c");
-    const bars = createName("bars");
-
-    // bars ⊂ (labels + title). The bars are a self-distributed sub-layer; the
-    // labels and title live alongside it in the root layer.
-    Layer([
-      // BARS TIER: just the bars, self-distributed.
-      Layer([
-        rect({ w: 40, h: 100, fill: "#e63946" }).name(a),
-        rect({ w: 40, h: 250, fill: "#457b9d" }).name(b),
-        rect({ w: 40, h: 150, fill: "#2a9d8f" }).name(c),
-      ])
-        .name(bars)
-        .constrain(({ a, b, c }) => [
-          Constraint.align({ y: "start" }, [a, b, c]),
-          Constraint.distribute({ dir: "x" }, [a, b, c]),
-        ]),
-      text({ text: "salmon", fontSize: 12, fill: "#666" }).name("la"),
-      text({ text: "bass", fontSize: 12, fill: "#fa0000" }).name("lb"),
-      text({ text: "trout", fontSize: 12, fill: "#0048ff" }).name("lc"),
-      text({ text: "species", fontSize: 14, fill: "#333" }).name("title"),
-    ])
-      .constrain(({ a, b, c, la, lb, lc, bars, title }) => [
-        // each label centered in x on its bar
-        Constraint.align({ x: "middle" }, [a, la]),
-        Constraint.align({ x: "middle" }, [b, lb]),
-        Constraint.align({ x: "middle" }, [c, lc]),
-        // label sits below its bar
-        Constraint.distribute({ dir: "y", spacing: 8 }, [la, a]),
-        Constraint.distribute({ dir: "y", spacing: 8 }, [lb, b]),
-        Constraint.distribute({ dir: "y", spacing: 8 }, [lc, c]),
-        // title centered on the bars group's bbox, below the labels
-        Constraint.align({ x: "middle" }, [bars, title]),
-        Constraint.distribute({ dir: "y", spacing: 16 }, [title, la]),
-      ])
-      .render(container, { w: args.w, h: args.h });
-
-    return container;
-  },
-};
-
-// Everything flat: bars + labels + title are all direct children of ONE layer,
-// so they share a single coordinate frame and every constraint reference
-// resolves (nameToPlaceable only includes direct children).
-//
-// Stacked bottom→top in y so nothing sits below y=0: title (bottom) → label row
-// → bars (top). This keeps the whole axis inside the canvas — the render only
-// reserves ~20px below the baseline, so axis content that hangs into negative y
-// gets clipped. (Finding for #464: a spec-built axis must offset content upward
-// by the axis height; the render doesn't reserve room below the baseline.)
-export const OrdinalAxisFlat: StoryObj<Args> = {
+// Cross-tier constraints via global tokens + refs
+export const OrdinalXAxis: StoryObj<Args> = {
   args: { w: 400, h: 400 },
   render: (args: Args) => {
     const container = initializeContainer();
 
-    layer([
-      rect({ w: 40, h: 100, fill: "#e63946" }).name("a"),
-      rect({ w: 40, h: 250, fill: "#457b9d" }).name("b"),
-      rect({ w: 40, h: 150, fill: "#2a9d8f" }).name("c"),
-      text({ text: "salmon", fontSize: 12, fill: "#666" }).name("la"),
-      text({ text: "bass", fontSize: 12, fill: "#666" }).name("lb"),
-      text({ text: "trout", fontSize: 12, fill: "#666" }).name("lc"),
-      text({ text: "species", fontSize: 14, fill: "#333" }).name("title"),
-    ])
-      .constrain(({ a, b, c, la, lb, lc, title }) => [
-        // x: bars spread, labels centered on bars, title centered on middle bar
-        Constraint.distribute({ dir: "x" }, [a, b, c]),
-        Constraint.align({ x: "middle" }, [a, la]),
-        Constraint.align({ x: "middle" }, [b, lb]),
-        Constraint.align({ x: "middle" }, [c, lc]),
-        Constraint.align({ x: "middle" }, [b, title]),
-        // y: stack from the bottom up. The first distribute anchors `title` at
-        // y=0; each label sits above the title (same row); each bar sits above
-        // its label — so the bars share a common bottom and nothing is negative.
-        Constraint.distribute({ dir: "y", spacing: 8 }, [title, la]),
-        Constraint.distribute({ dir: "y", spacing: 8 }, [title, lb]),
-        Constraint.distribute({ dir: "y", spacing: 8 }, [title, lc]),
-        Constraint.distribute({ dir: "y", spacing: 8 }, [la, a]),
-        Constraint.distribute({ dir: "y", spacing: 8 }, [lb, b]),
-        Constraint.distribute({ dir: "y", spacing: 8 }, [lc, c]),
-      ])
-      .render(container, { w: args.w, h: args.h });
-
-    return container;
-  },
-};
-
-// Cross-tier via global tokens + refs (the Pulley pattern).
-//
-// Bars live in their own tier, named with `createName` tokens (global, unlike
-// layer-scoped strings). The labels/title tiers then drop a `ref(token)` into
-// their own layer as a local stand-in for the bar; the ref resolves the bar's
-// position ACROSS the layer boundary (via _ref.tsx's LCA + transform walk), so
-// the constraint aligning label↔ref is same-frame from the resolver's view.
-// This is what makes cross-tier alignment work where bare nested names fail
-// (nameToPlaceable doesn't descend, and dims aren't frame-corrected).
-//
-// Tiers are declared in dependency order so each ref resolves against a placed
-// target: bars → labels → title.
-export const OrdinalAxisRefs: StoryObj<Args> = {
-  args: { w: 400, h: 400 },
-  render: (args: Args) => {
-    const container = initializeContainer();
-
+    // create global tokens for each bar + group of bars
     const a = createName("a");
     const b = createName("b");
     const c = createName("c");
-    const bars = createName("bars");
+    const barsTok = createName("bars");
 
     layer({ x: 20, y: 20 }, [
-      // ── tier 1: bars, fully placed, named with global tokens ──
-      layer([
-        rect({ w: 40, h: 100, fill: "#e63946" }).name(a),
-        rect({ w: 40, h: 250, fill: "#457b9d" }).name(b),
-        rect({ w: 40, h: 150, fill: "#2a9d8f" }).name(c),
-      ])
-        .name(bars)
-        .constrain((g) => [
-          Constraint.align({ y: "start" }, [g.a, g.b, g.c]),
-          Constraint.distribute({ dir: "x", spacing: 30 }, [g.a, g.b, g.c]),
-        ]),
+      // barsTok = spread x of 3 bars
+      spread({ dir: "x", alignment: "start" }, bars([a, b, c])).name(barsTok),
 
-      // ── tier 2: labels — each refs its bar across the layer boundary ──
+      // labels: layer of 3 spreadY(referenced bar, label) 
       layer([
-        ref(a).name("ra"),
-        ref(b).name("rb"),
-        ref(c).name("rc"),
-        text({ text: "salmon", fontSize: 12, fill: "#666" }).name("la"),
-        text({ text: "bass", fontSize: 12, fill: "#666" }).name("lb"),
-        text({ text: "trout", fontSize: 12, fill: "#666" }).name("lc"),
-      ]).constrain((g) => [
-        // each label centered on its bar (via the ref stand-in), sitting below it
-        Constraint.align({ x: "middle" }, [g.ra, g.la]),
-        Constraint.align({ x: "middle" }, [g.rb, g.lb]),
-        Constraint.align({ x: "middle" }, [g.rc, g.lc]),
-        Constraint.distribute({ dir: "y", spacing: 8 }, [g.la, g.ra]),
-        Constraint.distribute({ dir: "y", spacing: 8 }, [g.lb, g.rb]),
-        Constraint.distribute({ dir: "y", spacing: 8 }, [g.lc, g.rc]),
+        spread({ dir: "y", spacing: 8, alignment: "middle" }, [
+          text({ text: "salmon", fontSize: 12, fill: "#666" }),
+          ref(a)
+        ]),
+        spread({ dir: "y", spacing: 8, alignment: "middle" }, [
+          text({ text: "bass", fontSize: 12, fill: "#666" }),
+          ref(b),
+        ]),
+        spread({ dir: "y", spacing: 8, alignment: "middle" }, [
+          text({ text: "trout", fontSize: 12, fill: "#666" }),
+          ref(c),
+        ]),
       ]),
 
-      // ── tier 3: title — refs the whole bars group, centered on its bbox ──
-      layer([
-        ref(bars).name("rbars"),
-        text({ text: "species", fontSize: 14, fill: "#333" }).name("title"),
-      ]).constrain((g) => [
-        Constraint.align({ x: "middle" }, [g.rbars, g.title]),
-        Constraint.distribute( {dir: "y", spacing: 24}, [g.title, g.rbars])
+      // title: spreadY(barsTok, title)
+      spread({ dir: "y", spacing: 24, alignment: "middle" }, [
+        text({ text: "species", fontSize: 14, fill: "#333" }),
+        ref(barsTok),
       ]),
     ]).render(container, { w: args.w, h: args.h });
+
+    return container;
+  },
+};
+
+// Continuous y-axis: 3 bars with a vertical scale to their left
+export const ContinuousYAxis: StoryObj<Args> = {
+  args: { w: 400, h: 400 },
+  render: (args: Args) => {
+    const container = initializeContainer();
+
+    const TICK_COUNT = 5;
+
+    // get nice domain from the data: [0, max(HEIGHTS)] rounded out to align with nice ticks
+    const [, yMax] = nice(0, Math.max(...HEIGHTS), TICK_COUNT);
+    const tickValues = ticks(0, yMax, TICK_COUNT);
+    const N = tickValues.length;
+
+    // each tick = spreadX(label, tick)
+    const tick = (v: number, i: number) =>
+      spread(
+        { dir: "x", spacing: 3, alignment: "middle" },
+        [
+          text({ text: String(v), fontSize: 11, fill: "#666" }),
+          rect({ w: 5, h: 1, fill: "#999" }),
+        ]
+      ).name(`t${i}`);
+
+    Layer([
+      // bars wrapped in a spread so the outer constraints address them as one
+      spread({ dir: "x", alignment: "start" }, bars()).name("bars"),
+      // axis line spanning nice domain
+      rect({ w: 1, h: yMax, fill: "#999" }).name("axis"),
+      ...tickValues.map(tick),
+      text({ text: "count", fontSize: 13, fill: "#333" }).name("title"),
+    ])
+      .constrain((g) => {
+        const ticks = Array.from({ length: N }, (_, i) => g[`t${i}`]);
+        return [
+          Constraint.align({ x: "start" }, [g.title]),
+          Constraint.distribute({ dir: "x", spacing: 8 }, [g.title, ticks[N - 1]]),
+          // right-align the tick column so every mark's right edge sits at
+          // the same x (each tick's right edge is its mark's right edge)
+          Constraint.align({ x: "end" }, ticks),
+          // axis flush against the right edge of the tick column
+          Constraint.distribute({ dir: "x", spacing: 0 }, [ticks[0], g.axis]),
+          Constraint.distribute({ dir: "x", spacing: 6 }, [g.axis, g.bars]),
+
+          // ── Y: bars + axis top-aligned, ticks distributed along axis ─
+          Constraint.align({ y: "start" }, [g.bars, g.axis]),
+          // top tick's middle pinned to the axis line's start (= axis top)
+          Constraint.align({ y: ["middle", "start"] }, [ticks[0], g.axis]),
+          // ticks distributed center-to-center; step = yMax/(N-1) lands the
+          // last tick's center on the axis line's bottom edge
+          Constraint.distribute(
+            { dir: "y", spacing: yMax / (N - 1), mode: "center" },
+            ticks
+          ),
+          // title vertically centered on the axis line
+          Constraint.align({ y: "middle" }, [g.axis, g.title]),
+        ];
+      })
+      .render(container, { w: args.w, h: args.h });
 
     return container;
   },

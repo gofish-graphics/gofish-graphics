@@ -1,5 +1,7 @@
 import { sumBy, v, Connect, ref } from "../../lib";
 import { GoFishNode } from "../_node";
+import { GoFishRef } from "../_ref";
+import type { Token } from "../createName";
 import { type ColorConfig } from "../colorSchemes";
 
 export type { ColorConfig };
@@ -100,7 +102,7 @@ export function circle<T extends Record<string, any>>({
   strokeWidth?: number;
   debug?: boolean;
 }): Mark<T> & {
-  name(layerName: string): Mark<T>;
+  name(layerName: string | Token): Mark<T>;
   label(accessor: LabelAccessor, options?: LabelOptions): Mark<T>;
 } {
   const base: Mark<T> = async (
@@ -265,7 +267,7 @@ type PdOptions = { blendMode?: BlendMode };
  *   `chart(data).mark(layer([rect({h: "v"}), ...])).render(container, opts)`.
  */
 export type ConstrainableMark<T> = Mark<T> & {
-  name(layerName: string): ConstrainableMark<T>;
+  name(layerName: string | Token): ConstrainableMark<T>;
   label(accessor: LabelAccessor, options?: LabelOptions): ConstrainableMark<T>;
   constrain(
     fn: (refs: Record<string, ConstraintRef>) => ConstraintSpec[]
@@ -277,7 +279,7 @@ export type ConstrainableMark<T> = Mark<T> & {
 };
 
 function makeConstrainableMark<T>(base: Mark<T>): ConstrainableMark<T> {
-  const withName = (layerName: string): ConstrainableMark<T> => {
+  const withName = (layerName: string | Token): ConstrainableMark<T> => {
     const named: Mark<T> = async (d, key, layerContext) => {
       const node = await resolveMarkResult(
         base(d, key, layerContext),
@@ -364,14 +366,16 @@ function makeConstrainableMark<T>(base: Mark<T>): ConstrainableMark<T> {
  *   - already-resolved GoFishNodes (e.g. ref(...)).
  * Supports `.name()`, `.label()`, `.constrain()`, and a top-level `.render()`.
  */
-export function layer<T>(marks: Mark<any>[]): ConstrainableMark<T>;
 export function layer<T>(
-  opts: Record<string, any>,
-  marks: Mark<any>[]
+  marks: (Mark<any> | GoFishRef)[]
 ): ConstrainableMark<T>;
 export function layer<T>(
-  marksOrOpts: Mark<any>[] | Record<string, any>,
-  maybeMarks?: Mark<any>[]
+  opts: Record<string, any>,
+  marks: (Mark<any> | GoFishRef)[]
+): ConstrainableMark<T>;
+export function layer<T>(
+  marksOrOpts: (Mark<any> | GoFishRef)[] | Record<string, any>,
+  maybeMarks?: (Mark<any> | GoFishRef)[]
 ): ConstrainableMark<T> {
   const opts = Array.isArray(marksOrOpts) ? {} : marksOrOpts;
   const marks = (Array.isArray(marksOrOpts) ? marksOrOpts : maybeMarks) ?? [];
