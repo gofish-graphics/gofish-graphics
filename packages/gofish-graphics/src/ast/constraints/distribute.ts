@@ -29,17 +29,6 @@ export const createDistributeConstraint = (
   children,
 });
 
-/** Short label for a placeable in debug logs: name ?? type. */
-const dbgLabel = (t: Placeable): string =>
-  (t as any)._name ?? (t as any).type ?? "?";
-
-/** Snapshot a placeable's min/size/max on an axis for logging. */
-const dbgDims = (t: Placeable, idx: 0 | 1): string => {
-  const d = t.dims[idx];
-  const f = (n: number | undefined) => (n === undefined ? "·" : n.toFixed(1));
-  return `[min=${f(d.min)} size=${f(d.size)} max=${f(d.max)} placed=${isPlacedOn(t, idx)}]`;
-};
-
 export function applyDistribute(
   constraint: DistributeConstraint,
   targets: Placeable[]
@@ -50,13 +39,6 @@ export function applyDistribute(
 
   // Find the first already-placed child (the anchor)
   const anchorIdx = ordered.findIndex((t) => isPlacedOn(t, idx));
-
-  console.log(
-    `[distribute ${constraint.dir} spacing=${constraint.spacing} mode=${constraint.mode}] anchorIdx=${anchorIdx} targets:`,
-    ordered.map((t) => `${dbgLabel(t)} ${dbgDims(t, idx)}`).join("  ")
-  );
-  const logPlaced = (t: Placeable) =>
-    console.log(`  ↳ placed ${dbgLabel(t)} → ${dbgDims(t, idx)}`);
 
   if (anchorIdx === -1) {
     // No pre-placed items — start from 0, walk forward
@@ -69,7 +51,6 @@ export function applyDistribute(
         target.place(constraint.dir, pos);
         pos += (target.dims[idx].size ?? 0) + constraint.spacing;
       }
-      logPlaced(target);
     }
     return;
   }
@@ -84,7 +65,6 @@ export function applyDistribute(
       } else {
         t.place(constraint.dir, pos);
         pos += (t.dims[idx].size ?? 0) + constraint.spacing;
-        logPlaced(t);
       }
     }
     // Walk backward from anchor (items before it), placing via "max" anchor
@@ -96,7 +76,6 @@ export function applyDistribute(
       } else {
         t.place(constraint.dir, pos, "max");
         pos -= (t.dims[idx].size ?? 0) + constraint.spacing;
-        logPlaced(t);
       }
     }
   } else {
@@ -109,7 +88,6 @@ export function applyDistribute(
       } else {
         t.place(constraint.dir, pos, "center");
         pos += constraint.spacing;
-        logPlaced(t);
       }
     }
     pos = ordered[anchorIdx].dims[idx].center! - constraint.spacing;
@@ -120,7 +98,6 @@ export function applyDistribute(
       } else {
         t.place(constraint.dir, pos, "center");
         pos -= constraint.spacing;
-        logPlaced(t);
       }
     }
   }

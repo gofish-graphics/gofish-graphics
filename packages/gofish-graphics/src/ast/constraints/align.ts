@@ -75,17 +75,6 @@ const fallbackFor = (
       ? fallback?.middle
       : fallback?.end) ?? 0;
 
-/** Short label for a placeable in debug logs: name ?? type. */
-const dbgLabel = (t: Placeable): string =>
-  (t as any)._name ?? (t as any).type ?? "?";
-
-/** Snapshot a placeable's min/center/max on an axis for logging. */
-const dbgDims = (t: Placeable, idx: 0 | 1): string => {
-  const d = t.dims[idx];
-  const f = (n: number | undefined) => (n === undefined ? "·" : n.toFixed(1));
-  return `[min=${f(d.min)} ctr=${f(d.center)} max=${f(d.max)} placed=${isPlacedOn(t, idx)}]`;
-};
-
 function applyAlignAxis(
   axis: Axis,
   spec: AlignAxisSpec,
@@ -107,11 +96,6 @@ function applyAlignAxis(
     anchors = new Array<Alignment>(targets.length).fill(spec);
   }
 
-  console.log(
-    `[align ${axis}] anchors=${JSON.stringify(anchors)} targets:`,
-    targets.map((t, i) => `${dbgLabel(t)} ${dbgDims(t, idx)}`).join("  ")
-  );
-
   // Baseline = the coordinate the alignment is enforcing. Taken from the
   // first already-placed child, read at *that child's* anchor. With a
   // shared anchor the per-child anchor lookup collapses to the legacy
@@ -120,29 +104,17 @@ function applyAlignAxis(
   for (let i = 0; i < targets.length; i++) {
     if (isPlacedOn(targets[i], idx)) {
       baseline = anchorValue(targets[i], idx, anchors[i]);
-
-      console.log(
-        `  ↳ anchor = ${dbgLabel(targets[i])} (placed), baseline=${baseline.toFixed(1)}`
-      );
       break;
     }
   }
   if (baseline === undefined) {
     // No placed siblings: fall back to the layer's box baseline.
     baseline = fallbackFor(fallback, anchors[0]);
-
-    console.log(
-      `  ↳ no placed sibling, fallback baseline=${baseline.toFixed(1)}`
-    );
   }
 
   for (let i = 0; i < targets.length; i++) {
     if (isPlacedOn(targets[i], idx)) continue;
     placeAtAnchor(targets[i], axis, baseline, anchors[i]);
-
-    console.log(
-      `  ↳ placed ${dbgLabel(targets[i])} @${anchors[i]}=${baseline.toFixed(1)} → ${dbgDims(targets[i], idx)}`
-    );
   }
 }
 
