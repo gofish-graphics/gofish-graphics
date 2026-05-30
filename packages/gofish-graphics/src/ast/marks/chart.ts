@@ -292,8 +292,10 @@ function makeConstrainableMark<T>(base: Mark<T>): ConstrainableMark<T> {
       // (parents fan their children out via `Promise.all`, and any async
       // op in the chain — e.g. a Python `derive` RPC — varies per-leaf
       // latency). ChartBuilder.resolve walks the finished node tree in
-      // parent-iteration order so consumers see canonical order.
-      if (layerContext && layerName) {
+      // parent-iteration order so consumers see canonical order. Tokens
+      // are hygienic handles and don't participate in the string-keyed
+      // layerContext registry, so we only tag for string names.
+      if (layerContext && typeof layerName === "string" && layerName) {
         (node as { __layerRegistration?: string }).__layerRegistration =
           layerName;
       }

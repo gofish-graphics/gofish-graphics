@@ -1,6 +1,6 @@
 import type { GoFishAST } from "../_ast";
 import { GoFishNode, type Placeable } from "../_node";
-import { isToken } from "../createName";
+import { isToken, type Token } from "../createName";
 import { applyAlign, createAlignConstraint } from "./align";
 import { applyDistribute, createDistributeConstraint } from "./distribute";
 import {
