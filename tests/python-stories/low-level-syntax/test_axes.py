@@ -39,7 +39,7 @@ def _bars(names):
     ]
 
 
-def story_ordinal_x_axis():
+def story_ordinal_xaxis():
     a = createName("a")
     b = createName("b")
     c = createName("c")
@@ -112,7 +112,7 @@ _TICK_VALUES = [0, 50, 100, 150, 200, 250, 300]
 _N = len(_TICK_VALUES)
 
 
-def story_continuous_y_axis():
+def story_continuous_yaxis():
     def _tick(v, i):
         return spread(
             [
