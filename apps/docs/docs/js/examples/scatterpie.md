@@ -24,7 +24,7 @@ const scatterData = Object.entries(groupBy(seafood, "lake")).map(
   })
 );
 
-Chart(scatterData)
+Chart(scatterData, { axes: true })
   .flow(scatter({ by: "lake", x: "x", y: "y" }))
   .mark((data) =>
     Chart(data[0].collection, { coord: clock() })
@@ -34,7 +34,6 @@ Chart(scatterData)
   .render(container, {
     w: 500,
     h: 300,
-    axes: true,
   });
 ```
 

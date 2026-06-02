@@ -4,12 +4,17 @@ from gofish import chart, spread, rect
 from python_stories.data import SEAFOOD
 
 
-def _bar():
-    return chart(SEAFOOD).flow(spread(by="lake", dir="x")).mark(rect(h="count"))
+def _bar(axes):
+    # axes is both a chart option and a per-operator override on the spread,
+    # mirroring BarAxesPermutations.stories.tsx (`Chart(seafood, { axes })`
+    # + `spread({ by, dir, axes })`).
+    return (
+        chart(SEAFOOD).flow(spread(by="lake", dir="x", axes=axes)).mark(rect(h="count"))
+    )
 
 
 def _story(axes):
-    return (_bar(), {"w": 400, "h": 400, "axes": axes})
+    return (_bar(axes), {"w": 400, "h": 400, "axes": axes})
 
 
 def story_axes_true():

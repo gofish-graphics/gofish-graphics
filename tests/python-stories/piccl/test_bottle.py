@@ -18,12 +18,12 @@ from gofish import (
     Constraint,
     atop,
     chart,
+    datum,
     image,
     layer,
     rect,
     spread,
     text,
-    v,
 )
 
 _REPO_ROOT = os.path.abspath(
@@ -45,12 +45,12 @@ DATA = [
 def story_default():
     return (
         chart(DATA)
-        .flow(spread(by="category", dir="x", spacing=20))
+        .flow(spread(by="category", dir="x", spacing=20, axes={"x": False}))
         .mark(
             layer([
                 atop(
                     [
-                        image(href=BOTTLE_PNG, h=v(100)),
+                        image(href=BOTTLE_PNG, h=datum(100)),
                         rect(h="amount", fill="#00ff00"),
                     ],
                     blendMode="color",
@@ -67,5 +67,5 @@ def story_default():
                 Constraint.align([label, line], x="end"),
             ])
         ),
-        {"w": 1000, "h": 400, "axes": {"x": False, "y": True}},
+        {"w": 1000, "h": 400, "axes": False},
     )

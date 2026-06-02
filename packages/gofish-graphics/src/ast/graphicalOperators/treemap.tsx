@@ -127,7 +127,15 @@ export const Treemap = createNodeOperator(
               : POSITION(interval(0, 1));
           return [axisSpace(0), axisSpace(1)];
         },
-        layout: (_shared, size, scaleFactors, childAsts, posScales, node) => {
+        layout: (
+          _shared,
+          size,
+          scaleFactors,
+          childAsts,
+          posScales,
+          node,
+          posDomains
+        ) => {
           const xPos = computeAesthetic(
             dims[0].min,
             posScales?.[0]!,
@@ -214,9 +222,10 @@ export const Treemap = createNodeOperator(
             for (const d of leafData) d.weight = 1;
           }
 
-          const root = hierarchy<{ children: LeafDatum[] }>(
-            { children: leafData },
-            (d) => d.children
+          type TreemapDatum = { children?: LeafDatum[] } | LeafDatum;
+          const root = hierarchy<TreemapDatum>(
+            { children: leafData } as TreemapDatum,
+            (d) => ("children" in d ? d.children : undefined)
           ).sum((d: any) =>
             typeof d.weight === "number" ? d.weight : 0
           ) as HierarchyNode<any>;
@@ -276,7 +285,12 @@ export const Treemap = createNodeOperator(
                 lh = side;
               }
             }
-            const placeable = child.layout([lw, lh], scaleFactors, posScales);
+            const placeable = child.layout(
+              [lw, lh],
+              scaleFactors,
+              posScales,
+              posDomains
+            );
             placeable.place(0, x0 + w / 2, "center");
             const cy = y0 + h / 2;
             const yCenter = flipY ? resolvedSize[1] - cy : cy;

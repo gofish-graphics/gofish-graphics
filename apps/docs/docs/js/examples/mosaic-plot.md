@@ -12,7 +12,7 @@ import { data } from "./dataset";
 
 const container = document.getElementById("app");
 
-Chart(data)
+Chart(data, { axes: true })
   .flow(
     spread({ by: "origin", dir: "x" }),
     derive((d) => normalize(d, "count")),
@@ -22,7 +22,6 @@ Chart(data)
   .render(container, {
     w: 500,
     h: 300,
-    axes: true,
   });
 ```
 

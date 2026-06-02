@@ -667,6 +667,14 @@ const html = `<!DOCTYPE html>
     const acceptedEntries = allDiffs.filter(d => d.status === 'accepted');
     if (acceptedEntries.length === 0) return;
 
+    // Cloudflare Workers cap each invocation at 50 outgoing subrequests
+    // (free plan). The Worker spends 5–7 on fixed Git data API calls and
+    // 1 blob-create per accepted screenshot, so a single /api/commit
+    // beyond ~42 entries trips the limit. Chunk the accepts and let the
+    // Worker make one commit per chunk on top of the previous chunk's
+    // HEAD — final result is a small commit chain instead of one.
+    const CHUNK_SIZE = 25;
+
     setAcceptBusy(true);
     try {
       // Phase 1: fetch file contents in the browser (avoids Worker subrequest limit)
@@ -684,43 +692,78 @@ const html = `<!DOCTYPE html>
         if (screenshotRes.ok) screenshotContents[pngPath] = arrayBufferToBase64(await screenshotRes.arrayBuffer());
       }));
 
-      // Phase 2: send to Worker for committing
-      document.getElementById('action-status').innerHTML = '<span class="spinner"></span>Committing...';
-      const res = await fetch('/api/commit', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          paths: acceptedEntries.map(e => e.path),
-          domContents,
-          screenshotContents,
-          repo: meta.repo,
-          branch: meta.snapshotBranch,
-          runId: meta.runId,
-          headSha: meta.sha,
-        }),
-      });
-      const ct = res.headers.get('content-type') || '';
-      if (!ct.includes('application/json')) {
-        const text = await res.text();
-        setActionStatus('Server error (' + res.status + '): expected JSON but got ' + ct.split(';')[0].trim() + '. Check that the review site was built and deployed with the latest functions.', true);
-        console.error('/api/commit non-JSON response:', text.slice(0, 500));
-        return;
+      // Phase 2: send to Worker for committing, chunked.
+      const chunks = [];
+      for (let i = 0; i < acceptedEntries.length; i += CHUNK_SIZE) {
+        chunks.push(acceptedEntries.slice(i, i + CHUNK_SIZE));
       }
-      const data = await res.json();
-      if (res.status === 401) {
-        setActionStatus('Token expired — GITHUB_TOKEN is invalid or revoked.', true);
-      } else if (!res.ok || !data.ok) {
-        setActionStatus('Error: ' + (data.error || 'Unknown error'), true);
-      } else {
-        hasUncommittedAccepts = false;
-        const warnings = (data.postCommitWarnings || []).join('; ');
-        const msg = 'Committed ' + data.accepted + ' diff(s): ' + (data.commitSha || '').slice(0, 8) +
-          (data.errors && data.errors.length ? ' (' + data.errors.length + ' errors)' : '') +
-          (warnings ? ' — warnings: ' + warnings : '');
-        setActionStatus(msg, (data.errors && data.errors.length > 0) || Boolean(warnings));
-        renderSidebar();
-        updateCommitBtn();
+
+      let totalAccepted = 0;
+      let lastCommitSha = '';
+      const allErrors = [];
+      const allWarnings = [];
+
+      for (let ci = 0; ci < chunks.length; ci++) {
+        const chunk = chunks[ci];
+        const isLastChunk = ci === chunks.length - 1;
+        const chunkDom = {};
+        const chunkScreens = {};
+        for (const entry of chunk) {
+          if (domContents[entry.path] != null) chunkDom[entry.path] = domContents[entry.path];
+          const pngPath = entry.path.replace(/\\.html$/, '.png');
+          if (screenshotContents[pngPath] != null) chunkScreens[pngPath] = screenshotContents[pngPath];
+        }
+
+        const label = chunks.length > 1 ? ' (' + (ci + 1) + '/' + chunks.length + ')' : '';
+        document.getElementById('action-status').innerHTML =
+          '<span class="spinner"></span>Committing' + label + '...';
+
+        const res = await fetch('/api/commit', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            paths: chunk.map(e => e.path),
+            domContents: chunkDom,
+            screenshotContents: chunkScreens,
+            repo: meta.repo,
+            branch: meta.snapshotBranch,
+            // Only run post-commit actions (CI rerun + status update) once,
+            // after the final chunk lands.
+            runId: isLastChunk ? meta.runId : undefined,
+            headSha: isLastChunk ? meta.sha : undefined,
+          }),
+        });
+        const ct = res.headers.get('content-type') || '';
+        if (!ct.includes('application/json')) {
+          const text = await res.text();
+          setActionStatus('Server error (' + res.status + ') on chunk ' + (ci + 1) + '/' + chunks.length + ': expected JSON but got ' + ct.split(';')[0].trim() + '. Check that the review site was built and deployed with the latest functions.', true);
+          console.error('/api/commit non-JSON response:', text.slice(0, 500));
+          return;
+        }
+        const data = await res.json();
+        if (res.status === 401) {
+          setActionStatus('Token expired — GITHUB_TOKEN is invalid or revoked.', true);
+          return;
+        }
+        if (!res.ok || !data.ok) {
+          setActionStatus('Error on chunk ' + (ci + 1) + '/' + chunks.length + ': ' + (data.error || 'Unknown error'), true);
+          return;
+        }
+        totalAccepted += data.accepted || 0;
+        lastCommitSha = data.commitSha || lastCommitSha;
+        if (data.errors && data.errors.length) allErrors.push(...data.errors);
+        if (data.postCommitWarnings && data.postCommitWarnings.length) allWarnings.push(...data.postCommitWarnings);
       }
+
+      hasUncommittedAccepts = false;
+      const warnings = allWarnings.join('; ');
+      const commitsNote = chunks.length > 1 ? ' over ' + chunks.length + ' commits' : '';
+      const msg = 'Committed ' + totalAccepted + ' diff(s)' + commitsNote + ': ' + (lastCommitSha || '').slice(0, 8) +
+        (allErrors.length ? ' (' + allErrors.length + ' errors)' : '') +
+        (warnings ? ' — warnings: ' + warnings : '');
+      setActionStatus(msg, allErrors.length > 0 || Boolean(warnings));
+      renderSidebar();
+      updateCommitBtn();
     } catch (e) {
       setActionStatus('Error: ' + String(e), true);
     } finally {

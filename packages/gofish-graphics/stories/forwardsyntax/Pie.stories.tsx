@@ -14,24 +14,26 @@ const meta: Meta = {
     h: {
       control: { type: "number", min: 100, max: 1000, step: 10 },
     },
+    padding: {
+      control: { type: "number", min: 10, max: 150, step: 5 },
+    },
   },
 };
 export default meta;
 
-type Args = { w: number; h: number };
+type Args = { w: number; h: number; padding: number };
 
 export const Basic: StoryObj<Args> = {
-  args: { w: 400, h: 400 },
+  args: { w: 400, h: 400, padding: 80 },
   render: (args: Args) => {
     const container = initializeContainer();
 
-    Chart(seafood, { coord: clock() })
+    Chart(seafood, { coord: clock(), axes: true, padding: args.padding })
       .flow(stack({ by: "species",  dir: "x" }))
       .mark(rect({ w: "count", fill: "species" }))
       .render(container, {
         w: args.w,
         h: args.h,
-        axes: true,
       });
 
     return container;
@@ -39,17 +41,16 @@ export const Basic: StoryObj<Args> = {
 };
 
 export const Donut: StoryObj<Args> = {
-  args: { w: 400, h: 400 },
+  args: { w: 400, h: 400, padding: 60 },
   render: (args: Args) => {
     const container = initializeContainer();
 
-    Chart(seafood, { coord: clock() })
+    Chart(seafood, { coord: clock(), axes: true, padding: args.padding })
       .flow(stack({ by: "species",  dir: "x", y: 50, h: 50 }))
       .mark(rect({ w: "count", fill: "species" }))
       .render(container, {
         w: args.w,
         h: args.h,
-        axes: true,
       });
 
     return container;
@@ -61,9 +62,9 @@ export const Rose: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    Chart(nightingale, { coord: clock() })
+    Chart(nightingale, { coord: clock(), axes: true })
       .flow(
-        spread({ by: "Month", dir: "x", spacing: 0 }),
+        spread({ by: "Month", dir: "x", spacing: 0, axes: {x: false, y: true} }),
         stack({ by: "Type", dir: "y" }),
         /* TODO: push this into the h encoding of rect */
         derive((d) => d.map((d) => ({ ...d, Death: Math.sqrt(d.Death) })))
@@ -75,7 +76,6 @@ export const Rose: StoryObj<Args> = {
       .render(container, {
         w: args.w,
         h: args.h,
-        axes: true,
       });
 
     return container;

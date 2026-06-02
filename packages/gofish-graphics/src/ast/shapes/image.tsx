@@ -341,7 +341,7 @@ export const Image = ({
             width={Math.abs(width)}
             height={Math.abs(height)}
             href={href}
-            preserveAspectRatio={preserveAspectRatio}
+            preserveAspectRatio={preserveAspectRatio as any}
             filter={filter}
             opacity={opacity}
           />
@@ -352,7 +352,7 @@ export const Image = ({
   );
 };
 
-const rawImage = createMark(Image, {});
+const rawImage = createMark(Image, {}, "image");
 
 /** Wrap an image mark so it awaits intrinsic dimension loading before producing
  *  a node. Recursively wraps .name/.label so chained calls stay awaiting. */

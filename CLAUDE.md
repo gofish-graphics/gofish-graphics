@@ -138,6 +138,12 @@ Key coordinate systems available:
 - **Update docs on user-facing API changes**: When you change a public API surface (signatures, option shapes, exported names, default behaviors) in `packages/gofish-graphics/src/`, update the corresponding page under `apps/docs/docs/js/` in the same change — signature, examples, and any equivalences tables. For Python API changes (`packages/gofish-python/`), update the mirror page under `apps/docs/docs/python/`. The docs site has one folder per language (`js/`, `python/`) with a top-level language toggle. Do not defer this to a follow-up.
 - **Monorepo Management**: Uses pnpm workspaces
 - **Visual Development**: Use Storybook (`pnpm storybook`) for interactive development and testing
+- **Iterating on examples with Claude**: `pnpm capture-one "<title/story>"` renders a single
+  Storybook story headlessly to `tests/tmp/iterate/<path>.png` (+ normalized DOM) so Claude can
+  look at the output and fix mistakes in a feedback loop instead of editing blind. Run with no
+  argument to list stories. The `/iterate-example` skill (`.claude/skills/iterate-example/`) drives
+  this render → review → fix loop. Requires `dist/` to exist once
+  (`pnpm --filter gofish-graphics build`); source edits are picked up live without rebuilding.
 - **Documentation**: VitePress site in `apps/docs/` with live chart examples
 - **Testing**: The `src/tests/` directory contains visual chart examples for development, not automated unit tests
 - **Development Server**: `pnpm dev` runs Vite dev server on port 3000

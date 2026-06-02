@@ -58,6 +58,14 @@ and an extension story for marks and operators, the same authors could ship
 their work as packages of GoFish marks/operators rather than separate
 compilers. Whether this pans out is open.
 
+This pattern — every new chart family arriving as a fork rather than a
+library — is the empirical evidence for the structural claim laid out in
+[Composition, Not
+Enumeration](/internals/design/composition-not-enumeration): the GoG-family
+grammars enumerate legal arrangements, they do not generate them, so an
+extension that needs a composition the language did not anticipate has no
+choice but to fork.
+
 ## Pictorial and bespoke
 
 **PICCL** (a research grammar for pictorial charts — see

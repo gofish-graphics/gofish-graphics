@@ -9,10 +9,10 @@ Call `.label(field)` on any mark to display a data field as text.
 ::: starfish
 
 ```js
-gf.Chart(seafood)
+gf.Chart(seafood, { axes: true })
   .flow(gf.spread({ by: "lake", dir: "x" }))
   .mark(gf.rect({ h: "count" }).label("count"))
-  .render(root, { w: 400, h: 250, axes: true });
+  .render(root, { w: 400, h: 250 });
 ```
 
 :::
@@ -24,7 +24,7 @@ Labels use a `side-edge-align` position system.
 ::: starfish
 
 ```js
-gf.Chart(seafood)
+gf.Chart(seafood, { axes: true })
   .flow(
     gf.spread({ by: "lake", dir: "x" }),
     gf.stack({ by: "species", dir: "y" })
@@ -34,7 +34,7 @@ gf.Chart(seafood)
       .rect({ h: "count", fill: "species" })
       .label("count", { position: "center", fontSize: 10 })
   )
-  .render(root, { w: 400, h: 250, axes: true });
+  .render(root, { w: 400, h: 250 });
 ```
 
 :::
@@ -92,14 +92,14 @@ const heatData = ["Mon", "Tue", "Wed", "Thu", "Fri"].flatMap((day, di) =>
   }))
 );
 
-gf.Chart(heatData, { color: gf.gradient(["#e0f3ff", "#08519c"]) })
+gf.Chart(heatData, { color: gf.gradient(["#e0f3ff", "#08519c"]), axes: true })
   .flow(gf.table("hour", "day", { spacing: 4 }))
   .mark(
     gf
       .rect({ fill: "value" })
       .label("value", { position: "center", fontSize: 11 })
   )
-  .render(root, { w: 350, h: 250, axes: true });
+  .render(root, { w: 350, h: 250 });
 ```
 
 :::
@@ -111,14 +111,14 @@ Use the `rotate` option for angled labels. Positive values rotate clockwise.
 ::: starfish
 
 ```js
-gf.Chart(seafood)
+gf.Chart(seafood, { axes: true })
   .flow(gf.spread({ by: "lake", dir: "x" }))
   .mark(
     gf
       .rect({ h: "count" })
       .label("lake", { position: "outset", rotate: 45, fontSize: 10 })
   )
-  .render(root, { w: 400, h: 280, axes: true });
+  .render(root, { w: 400, h: 280 });
 ```
 
 :::

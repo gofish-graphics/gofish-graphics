@@ -50,7 +50,7 @@ export const Default: StoryObj<Args> = {
     ] as any).render(container, {
       w: args.w,
       h: args.h,
-      axes: true,
+      axes: true
     });
 
     return container;

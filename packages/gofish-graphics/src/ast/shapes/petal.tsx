@@ -304,7 +304,11 @@ export const Petal = ({
   );
 };
 
-export const petal = createMark(Petal, {
-  w: "size",
-  h: "size",
-});
+export const petal = createMark(
+  Petal,
+  {
+    w: "size",
+    h: "size",
+  },
+  "petal"
+);

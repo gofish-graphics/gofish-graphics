@@ -801,19 +801,23 @@ class ChartBuilder:
         else:
             mark_ir = self._mark.to_dict()
 
-        return {
+        # Build the IR conditionally: omit optional fields that are unset
+        # so the canonical schema's `zOrder: number` (no null) matches
+        # what we emit, and consumers don't see spurious `null`s.
+        result: dict = {
             "data": data_ir,
             "operators": [op.to_dict() for op in self.operators],
             "mark": mark_ir,
             "options": self.options,
-            "zOrder": self._z_order,
         }
+        if self._z_order is not None:
+            result["zOrder"] = self._z_order
+        return result
 
     def render(
         self,
         w: int = 800,
         h: int = 600,
-        axes: bool = False,
         debug: bool = False,
     ):
         """
@@ -822,15 +826,20 @@ class ChartBuilder:
         Args:
             w: Chart width in pixels
             h: Chart height in pixels
-            axes: Whether to show axes
             debug: Whether to enable debug mode
 
         Returns:
             GoFishChartWidget instance that will display in Jupyter
 
+        Note:
+            Axes are a *chart* option, not a render option — pass `axes=...`
+            (and `padding=...`) to ``chart(data, axes=True)``, mirroring the
+            JS ``Chart(data, { axes: true })``. See ``chart`` for the full
+            ``axes`` shape.
+
         Example:
             >>> data = [{"x": 1, "y": 2}]
-            >>> chart(data).mark(rect(h="y")).render()
+            >>> chart(data, axes=True).mark(rect(h="y")).render()
             >>> chart(data).mark(rect(h="y")).render(w=500, h=300)
         """
         if self._mark is None:
@@ -880,14 +889,14 @@ class ChartBuilder:
             if isinstance(op, DeriveOperator)
         }
 
-        # Create and return widget
+        # Create and return widget. Axes flow through the chart options
+        # (spec["options"]["axes"]), not a render-time trait.
         widget = GoFishChartWidget(
             spec=spec,
             arrow_data=arrow_data,
             derive_functions=derive_functions,
             width=w,
             height=h,
-            axes=axes,
             debug=debug,
         )
 
@@ -1063,7 +1072,7 @@ def Treemap(  # noqa: N802  — match JS storybook spelling
     `valueField` on each mark's datum.
 
         Treemap(
-            [rect(fill=v(genre)).bind_data({"worldwideGross": gross}, genre)
+            [rect(fill=datum(genre)).bind_data({"worldwideGross": gross}, genre)
              for genre, gross in groups],
             valueField="worldwideGross",
             paddingInner=2,
@@ -1308,24 +1317,28 @@ def select(layer_name: str) -> LayerSelector:
 # Literal-value wrapper
 
 
-def v(value: Any) -> dict:
+def datum(value: Any) -> dict:
     """
-    Wrap a value so a mark prop reads it as an embedded data-space value.
+    Wrap a value as an embedded data-space value (the per-row,
+    scale-aware form). Mirrors the JS `datum(...)` constructor in
+    `packages/gofish-graphics/src/ast/data.ts`.
 
-    Mirrors JS `v(...)` (`packages/gofish-graphics/src/ast/data.ts:10`):
-    - `rect(fill=v("Worldwide Gross"))` — use the row's `Worldwide Gross`
-      column value as the literal fill color, skipping categorical-color
-      encoding.
-    - `image(h=v(100))` — declare height 100 as an *embedded* size in data
-      space. `inferEmbedded` (see `data.ts`) flips the interval's
-      `embedded` flag, which changes how the layout system places the mark
-      vs. a plain `h=100` (literal pixel value).
+    - `rect(fill=datum("Worldwide Gross"))` — use the row's
+      `Worldwide Gross` column value as the literal fill color, skipping
+      categorical-color encoding.
+    - `image(h=datum(100))` — declare height 100 as an *embedded* size
+      in data space. `inferEmbedded` (see `data.ts`) flips the
+      interval's `embedded` flag, which changes how the layout system
+      places the mark vs. a plain `h=100` (literal pixel value).
+
+    Emits the canonical `{type: "datum", datum: value}` shape directly;
+    the widget consumes it without any unwrap step.
 
     Args:
         value: A field name string, a literal number, or any value to
-            wrap. The harness/widget rebuilds it as a JS `v(value)` call.
+            wrap.
     """
-    return {"__gofish_v": value}
+    return {"type": "datum", "datum": value}
 
 
 # Data utilities (for use inside derive() callbacks)
@@ -1719,23 +1732,47 @@ def connect(
 Connect = connect
 
 
-def chart(data: Any, **options: Any) -> ChartBuilder:
+def chart(
+    data: Any, options: Optional[dict] = None, **kwargs: Any
+) -> ChartBuilder:
     """
     Create a new chart builder.
 
-    Chart-level options (color, coord, etc.) are passed as keyword arguments:
+    Chart-level options can be passed either as a positional dict (mirroring
+    the JS ``Chart(data, { axes, coord, ... })``) or as keyword arguments —
+    both forms are accepted and merged (kwargs win on conflict):
 
-        chart(data, color=palette("tableau10"))
+        chart(data, {"color": palette("tableau10")})   # JS-style options object
+        chart(data, color=palette("tableau10"))         # keyword form
         chart(data, color=gradient("blues"), coord=clock())
+
+    Axes are a chart option (not a render option). ``axes`` accepts:
+
+        axes=True                      # show both axes, titles inferred
+        axes=False                     # no axes
+        axes={"x": True, "y": False}   # per-dimension on/off
+        axes={"x": {"title": "Year"}}  # custom title (title=False suppresses it)
+
+        chart(data, axes=True)
+        chart(data, axes={"x": {"title": "Year"}, "y": True})
+        chart(data, coord=clock(), axes=True, padding=80)   # polar chart
+
+    Per-operator overrides use the same shape on spread()/scatter():
+
+        spread(by="species", dir="x", axes={"x": True, "y": False})
 
     Args:
         data: Input data or select() for cross-chart layer references
-        **options: Chart options (color, coord, ...)
+        options: Chart options as a dict (JS-style positional object)
+        **kwargs: Chart options as keywords — ``axes``, ``color``, ``coord``,
+            ``padding``, ... (merged over ``options``)
 
     Returns:
         ChartBuilder instance
     """
-    return ChartBuilder(data, options if options else None)
+    merged: dict = dict(options) if options else {}
+    merged.update(kwargs)
+    return ChartBuilder(data, merged if merged else None)
 
 
 class LayerBuilder:

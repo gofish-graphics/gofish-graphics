@@ -46,7 +46,7 @@ from .ast import (
     polygon,
     connect,
     Connect,
-    v,
+    datum,
 )
 
 __all__ = [
@@ -93,7 +93,7 @@ __all__ = [
     "polygon",
     "connect",
     "Connect",
-    "v",
+    "datum",
 ]
 
 __version__ = "0.1.0"

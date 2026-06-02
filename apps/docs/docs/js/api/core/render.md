@@ -22,35 +22,17 @@ Renders the chart into a DOM element.
 The `axes` option controls per-axis visibility and titles:
 
 ```ts
-type AxesOptions = boolean | { x?: AxisOptions; y?: AxisOptions };
-type AxisOptions = boolean | { title?: string | false };
+chart(data, { axes: true })
+  .flow(spread({ by: "category", dir: "x" }))
+  .mark(rect({ h: "value" }))
+  .render(container, { w: 500, h: 300 });
 ```
 
-**`AxesOptions` (top level)**
-
-- `true` — both axes visible with inferred titles
-- `false` — both axes hidden
-- `{ x: AxisOptions }` — configure x-axis; y absent means y hidden
-- `{ x: AxisOptions, y: AxisOptions }` — configure both axes
-
-**`AxisOptions` (per axis)**
-
-- `true` — axis visible, title inferred from the field encoding (e.g. `rect({ h: "count" })` infers `"count"`)
-- `false` — axis hidden, title irrelevant
-- `{ title: "Custom" }` — axis visible with title "Custom"
-- `{ title: false }` — axis visible, title suppressed
-
-## Examples
-
-### Inferred titles from encodings
-
-::: starfish
-
-```js
-gf.Chart(seafood)
-  .flow(gf.spread({ by: "lake", dir: "x" }))
-  .mark(gf.rect({ h: "count" }))
-  .render(root, { w: 400, h: 250, axes: true });
+```ts
+chart(data, { axes: { x: true, y: false } })
+  .flow(spread({ by: "category", dir: "x" }))
+  .mark(rect({ h: "value" }))
+  .render(container, { w: 500, h: 300 });
 ```
 
 :::

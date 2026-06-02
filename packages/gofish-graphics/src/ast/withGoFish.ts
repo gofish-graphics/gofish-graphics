@@ -274,6 +274,7 @@ export async function reifyChildrenSequentially(
     | GoFishAST
     | (() => GoFishAST | Promise<GoFishAST>)
     | ChartBuilder<any, any>
+    | Mark<any>
   )[],
   layerContext?: LayerContext
 ): Promise<GoFishAST[]> {
@@ -447,8 +448,8 @@ export type NameableMark<T> = Mark<T> & {
  */
 function attachNameableMethods<T>(baseMark: Mark<T>): NameableMark<T> {
   const nameMethod = (layerName: string | Token): Mark<T> => {
-    return async (input, keyParam, layerContext) => {
-      const node = await baseMark(input, keyParam, layerContext);
+    const wrapped: Mark<T> = async (input, keyParam, layerContext) => {
+      const node = (await baseMark(input, keyParam, layerContext)) as GoFishAST;
       (node as GoFishNode).name(layerName);
       // layerContext is keyed by string name (v3 chart-layer selection);
       // tokens are hygienic handles and do not participate in that registry.
@@ -462,11 +463,24 @@ function attachNameableMethods<T>(baseMark: Mark<T>): NameableMark<T> {
       }
       return node;
     };
+    return wrapped;
   };
   const nameMethodWithFields = (layerName: string | Token): Mark<T> => {
     const fn = nameMethod(layerName);
     if ((baseMark as any).__axisFields) {
       (fn as any).__axisFields = (baseMark as any).__axisFields;
+    }
+    // Propagate the IR-serialize tag through the chain so toJSON still
+    // sees this mark, and stash the layerName so the emitter surfaces it
+    // as the canonical top-level `name` field. String names only in v0;
+    // Token names are dropped (the rest of the tag still propagates).
+    const baseTag = (baseMark as any).__serialize;
+    if (baseTag) {
+      const nextTag: any = { ...baseTag };
+      if (typeof layerName === "string") {
+        nextTag.name = layerName;
+      }
+      (fn as any).__serialize = nextTag;
     }
     return fn;
   };
@@ -474,11 +488,43 @@ function attachNameableMethods<T>(baseMark: Mark<T>): NameableMark<T> {
     accessor: LabelAccessor,
     options?: LabelOptions
   ): Mark<T> => {
-    return async (input, keyParam, layerContext) => {
-      const node = await baseMark(input, keyParam, layerContext);
+    const fn: Mark<T> = async (input, keyParam, layerContext) => {
+      // main's typing fix: baseMark returns GoFishAST; cast to GoFishNode
+      // to invoke .label(). Both branches do the same runtime work.
+      const node = (await baseMark(input, keyParam, layerContext)) as GoFishAST;
       (node as GoFishNode).label(accessor, options);
       return node;
     };
+    // Same as nameMethodWithFields — keep the serialize tag alive and
+    // record the label in the dedicated tag slot so the emitter writes
+    // it as a top-level LabelIR object.
+    const baseTag = (baseMark as any).__serialize;
+    if (baseTag) {
+      const nextTag: any = { ...baseTag };
+      if (typeof accessor === "string") {
+        nextTag.label = {
+          accessor,
+          ...(options && typeof options === "object" ? options : {}),
+        };
+      } else if (
+        typeof accessor === "function" &&
+        typeof console !== "undefined" &&
+        typeof console.warn === "function"
+      ) {
+        // Function accessors don't serialize. The mark stays
+        // serializable; only the label is dropped from the emitted IR.
+        console.warn(
+          "[gofish-ir] .label(fn): function accessors aren't serializable; " +
+            "label will be omitted from the emitted IR. Use a string field " +
+            "name if you need the label to round-trip."
+        );
+      }
+      (fn as any).__serialize = nextTag;
+    }
+    if ((baseMark as any).__axisFields) {
+      (fn as any).__axisFields = (baseMark as any).__axisFields;
+    }
+    return fn;
   };
   const renderMethod = async (
     container: Parameters<GoFishNode["render"]>[0],
@@ -526,22 +572,51 @@ function attachNameableMethods<T>(baseMark: Mark<T>): NameableMark<T> {
  * The returned mark supports `.name("layerName" | token)` so that when used
  * in a chart, each produced node is registered for `select("layerName")`.
  */
+/**
+ * Mark-factory IR serialization config — passed as the optional third
+ * argument to `createMark`. A string is shorthand for `{ type: <string> }`.
+ *
+ * The factory tags each produced mark with `__serialize: { type, opts }`
+ * so the frontend-IR emitter (gofish-graphics/serialize/toJSON) can
+ * reconstruct the mark on the wire.
+ */
+export type MarkSerializeConfig<P = any> =
+  | string
+  | {
+      /** IR discriminator (lowercase to match the wire format), e.g. "rect". */
+      type: string;
+      /**
+       * Optional shape function. Default: copy `markOpts` verbatim. Use to
+       * strip non-serializable fields or rename keys.
+       */
+      shape?: (opts: P) => Record<string, unknown>;
+    };
+
 export function createMark<P extends Record<string, any>>(
   shapeFn: (props: P) => GoFishNode | PromiseLike<GoFishNode>
+): (props: P) => NameableMark<P>;
+export function createMark<P extends Record<string, any>>(
+  shapeFn: (props: P) => GoFishNode | PromiseLike<GoFishNode>,
+  channels: undefined,
+  serialize: MarkSerializeConfig<P>
 ): (props: P) => NameableMark<P>;
 export function createMark<
   ShapeProps extends Record<string, any>,
   C extends ChannelAnnotations<ShapeProps>,
 >(
   shapeFn: (opts: ShapeProps) => GoFishNode | PromiseLike<GoFishNode>,
-  channels: C
+  channels: C,
+  serialize?: MarkSerializeConfig
 ): <T extends Record<string, any>>(
   opts: DeriveMarkProps<ShapeProps, C, T>
 ) => NameableMark<T | T[] | { item: T | T[]; key: number | string }>;
 export function createMark(
   shapeFn: any,
-  channels: Record<string, any> = {}
+  channels: Record<string, any> = {},
+  serialize?: MarkSerializeConfig
 ): any {
+  const serializeConfig: { type: string; shape?: (o: any) => any } | undefined =
+    typeof serialize === "string" ? { type: serialize } : serialize;
   return (markOpts: Record<string, any>) => {
     const baseMark: Mark<any> = async (
       input,
@@ -612,6 +687,17 @@ export function createMark(
     else if (typeof markOpts.y === "string") axisFields.y = markOpts.y;
     if (axisFields.x || axisFields.y) {
       (baseMark as any).__axisFields = axisFields;
+    }
+
+    // Tag with IR-serialization metadata for the frontend-IR emitter.
+    if (serializeConfig) {
+      const payload = serializeConfig.shape
+        ? serializeConfig.shape(markOpts)
+        : markOpts;
+      (baseMark as any).__serialize = {
+        type: serializeConfig.type,
+        opts: payload,
+      };
     }
 
     return attachNameableMethods(baseMark);

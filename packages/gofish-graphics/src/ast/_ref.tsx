@@ -54,9 +54,12 @@ export class GoFishRef {
   public parent?: GoFishNode;
 
   private intrinsicDims?: Dimensions;
-  private transform?: Transform;
+  /** @internal Layout-pass state. Public to match GoFishNode.transform so
+   *  `(node as GoFishAST).transform` resolves on the union; external callers
+   *  should not rely on this field. */
+  public transform?: Transform;
   public shared: Size<boolean>;
-  private measurement: (scaleFactors: Size) => Size;
+  private measurement!: (scaleFactors: Size) => Size;
   private selection?: string | Token | (Token | string | number)[];
   private directNode?: GoFishNode;
   private selectedNode?: GoFishNode;
@@ -201,17 +204,15 @@ export class GoFishRef {
     );
   }
 
-  public resolveKeys(): void {
-    this.selectedNode?.resolveKeys();
-  }
-
   public embed(direction: FancyDirection): void {
     this.selectedNode?.embed(direction);
   }
 
   /* TODO: what should the default be? */
-  public resolveUnderlyingSpace(): UnderlyingSpace {
-    return this.selectedNode?.resolveUnderlyingSpace() ?? ORDINAL([]);
+  public resolveUnderlyingSpace(): Size<UnderlyingSpace> {
+    return (
+      this.selectedNode?.resolveUnderlyingSpace() ?? [ORDINAL([]), ORDINAL([])]
+    );
   }
 
   /* TODO: I'm not really sure what this should do */
@@ -223,7 +224,12 @@ export class GoFishRef {
     return measurement;
   }
 
-  public layout(size: Size, scaleFactors: Size<number | undefined>): Placeable {
+  public layout(
+    size: Size,
+    scaleFactors: Size<number | undefined>,
+    _posScales?: Size<((pos: number) => number) | undefined>,
+    _posDomains?: Size<[number, number] | undefined>
+  ): Placeable {
     if (!this.selectedNode) {
       throw new Error("Selected node not found");
     }
@@ -232,34 +238,32 @@ export class GoFishRef {
     const lca = findLeastCommonAncestor(this, this.selectedNode);
 
     // Compute transform from selected node up to LCA
-    let upwardTransform: Transform = { translate: [0, 0] };
-    let current = this.selectedNode;
+    const upwardTranslate: [number, number] = [0, 0];
+    let current: GoFishAST | undefined = this.selectedNode;
     while (current && current !== lca) {
       if (current.transform) {
-        upwardTransform.translate![0] += current.transform.translate?.[0] ?? 0;
-        upwardTransform.translate![1] += current.transform.translate?.[1] ?? 0;
+        upwardTranslate[0] += current.transform.translate?.[0] ?? 0;
+        upwardTranslate[1] += current.transform.translate?.[1] ?? 0;
       }
-      current = current.parent!;
+      current = current.parent;
     }
 
     // Compute transform from LCA down to this ref
-    let downwardTransform: Transform = { translate: [0, 0] };
+    const downwardTranslate: [number, number] = [0, 0];
     current = this;
     while (current && current !== lca) {
       if (current.transform) {
-        downwardTransform.translate![0] +=
-          current.transform.translate?.[0] ?? 0;
-        downwardTransform.translate![1] +=
-          current.transform.translate?.[1] ?? 0;
+        downwardTranslate[0] += current.transform.translate?.[0] ?? 0;
+        downwardTranslate[1] += current.transform.translate?.[1] ?? 0;
       }
-      current = current.parent!;
+      current = current.parent;
     }
 
     // Combine transforms
     this.transform = {
       translate: [
-        upwardTransform.translate![0] - downwardTransform.translate![0],
-        upwardTransform.translate![1] - downwardTransform.translate![1],
+        upwardTranslate[0] - downwardTranslate[0],
+        upwardTranslate[1] - downwardTranslate[1],
       ],
     };
 
@@ -313,7 +317,13 @@ export class GoFishRef {
     };
 
     if (anchorToDim[anchor] === undefined) {
-      this.intrinsicDims![dir][anchor] = value;
+      // Interval has min/max/center/size but not "baseline" — baseline is a
+      // synthetic anchor aliased to min above (see TODO). When the anchor is
+      // already undefined and we're being asked to set it, "baseline" can't
+      // be written back: just no-op so the translate path below is skipped.
+      if (anchor !== "baseline") {
+        this.intrinsicDims![dir][anchor] = value;
+      }
       return;
     }
 
@@ -364,9 +374,9 @@ const findInComponent = (
   return undefined;
 };
 
-export const findPathToRoot = (node: GoFishAST): GoFishNode[] => {
-  const path: GoFishNode[] = [];
-  let current = node;
+export const findPathToRoot = (node: GoFishAST): GoFishAST[] => {
+  const path: GoFishAST[] = [];
+  let current: GoFishAST | undefined = node;
   while (current) {
     path.push(current);
     current = current.parent;
@@ -377,7 +387,7 @@ export const findPathToRoot = (node: GoFishAST): GoFishNode[] => {
 export const findLeastCommonAncestor = (
   node1: GoFishAST,
   node2: GoFishAST
-): GoFishNode => {
+): GoFishAST => {
   const path1 = findPathToRoot(node1);
   const path2 = findPathToRoot(node2);
 

@@ -33,7 +33,6 @@ import {
   palette,
   gradient,
   clock,
-  v,
   layer,
   Constraint,
   ref,
@@ -183,18 +182,16 @@ function makeLambdaAccessor(
 }
 
 /**
- * Walk an arbitrary value and resolve Python-emitted sentinels:
- * - `{__gofish_v: field}` → `v(field)` call (literal-value wrapper).
+ * Walk an arbitrary value and resolve Python-emitted lambda sentinels.
  * - `{__gofish_lambda: id}` → an `async (d) => fetch /derive/<id>` arrow.
  *
- * Python uses sentinels because dict-only IR has no way to author a
- * function call; the harness rebuilds them before handing props to JS.
+ * Python's `datum(x)` emits the canonical `{type: "datum", datum: x}`
+ * shape directly, so no unwrap is needed for per-row values.
  */
 function unwrapMarkOpts(value: any, deriveServerUrl: string | undefined): any {
   if (value === null || typeof value !== "object") return value;
   if (Array.isArray(value))
     return value.map((v) => unwrapMarkOpts(v, deriveServerUrl));
-  if ("__gofish_v" in value) return v(value.__gofish_v);
   if (typeof value.__gofish_lambda === "string") {
     return makeLambdaAccessor(value.__gofish_lambda, deriveServerUrl);
   }
@@ -625,14 +622,17 @@ function buildChartFromSpec(
   const mark = mapMark(chartSpec.mark, deriveServerUrl, resolveToken);
   const chartOpts = resolveOptions(chartSpec.options || {});
 
+  // Unwrap the canonical DataIR shapes. The wire formats are:
+  //   - { type: "inline", rows: [...] } → use the rows directly
+  //   - { type: "select", layer: name } → resolve via a LayerSelector
+  //   - null / array (legacy) → treat as bare rows
   let chartData: any = chartSpec.data;
-  if (
-    chartData &&
-    typeof chartData === "object" &&
-    !Array.isArray(chartData) &&
-    (chartData as SelectDataSpec).type === "select"
-  ) {
-    chartData = select((chartData as SelectDataSpec).layer);
+  if (chartData && typeof chartData === "object" && !Array.isArray(chartData)) {
+    if ((chartData as SelectDataSpec).type === "select") {
+      chartData = select((chartData as SelectDataSpec).layer);
+    } else if ((chartData as any).type === "inline") {
+      chartData = (chartData as any).rows;
+    }
   }
 
   let builder = Chart(chartData, chartOpts)
@@ -703,9 +703,9 @@ function renderChart(spec: HarnessSpec) {
           debug: debug ?? false,
         } as any);
       } else {
-        // Single-chart path. Pull render options out; rest are chart-level.
+        // Single-chart path. Only w/h/debug are render options; rest are chart-level.
         const allOpts = spec.options || {};
-        const { w, h, axes, debug, ...chartOptsRaw } = allOpts;
+        const { w, h, debug, ...chartOptsRaw } = allOpts;
         const node = buildChartFromSpec(
           {
             data: spec.data,
@@ -721,7 +721,6 @@ function renderChart(spec: HarnessSpec) {
         await node.render(container, {
           w,
           h,
-          axes: axes ?? false,
           debug: debug ?? false,
         } as any);
       }

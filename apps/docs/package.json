@@ -13,13 +13,16 @@
     "docs:preview": "vitepress preview docs",
     "docs:types": "typedoc",
     "sync-backlinks": "node scripts/sync-backlinks.mjs sync",
-    "check-backlinks": "node scripts/sync-backlinks.mjs check"
+    "check-backlinks": "node scripts/sync-backlinks.mjs check",
+    "sync-ir-schema": "node scripts/sync-ir-schema.mjs sync",
+    "check-ir-schema": "node scripts/sync-ir-schema.mjs check"
   },
   "devDependencies": {
     "@shikijs/vitepress-twoslash": "^4.1.0",
     "@types/node": "^24.0.0",
     "@vitejs/plugin-vue-jsx": "^5.0.0",
     "gray-matter": "^4.0.3",
+    "prettier": "^3.6.2",
     "typedoc": "^0.28.19",
     "typedoc-plugin-markdown": "^4.11.0",
     "typescript": "^6.0.3",

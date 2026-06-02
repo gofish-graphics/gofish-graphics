@@ -10,6 +10,12 @@ export * from "./util";
 // Data utilities
 export { value } from "./ast/data";
 export { value as v } from "./ast/data";
+// `field` / `datum` / `literal` — explicit channel-value constructors
+// matching the Vega-Lite encoding trichotomy. `datum` is an alias for
+// `value`/`v` (data-driven, scaled); `field(name)` is an explicit field
+// accessor; `literal(x)` is an explicit constant.
+export { datum, field, literal } from "./ast/data";
+export type { FieldAccessor, LiteralValue } from "./ast/data";
 export { For as map } from "./ast/iterators/for";
 
 // Coordinate Transforms
@@ -128,6 +134,10 @@ export type {
 } from "./ast/marks/chart";
 // Side-effect import: attaches .facet() / .stack() to ChartBuilder.
 import "./ast/marks/builderMixins";
+
+// Frontend-IR deserializer — re-exported as a namespace so the symbol set
+// stays scoped (`Serialize.mapMark`, etc.).
+export * as Serialize from "./serialize";
 export { palette, gradient, assignGradientColor } from "./ast/colorSchemes";
 export type {
   ColorConfig,

@@ -23,7 +23,7 @@ export const Default: StoryObj<Args> = {
   render: (args: Args, context: any) => {
     const container = initializeContainer();
 
-    Chart(context.loaded.movies as any[])
+    Chart(context.loaded.movies as any[], {axes: true})
       .flow(spread({ by: "Major Genre",  dir: "x" }))
       .mark(
         spread({ dir: "x", spacing: 0 }, [
@@ -31,7 +31,7 @@ export const Default: StoryObj<Args> = {
           rect({ h: "US Gross", fill: v("US Gross") }),
         ])
       )
-      .render(container, { w: args.w, h: args.h, axes: true });
+      .render(container, { w: args.w, h: args.h });
 
     return container;
   },

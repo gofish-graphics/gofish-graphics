@@ -88,7 +88,10 @@ export function renderLabelJSX(node: GoFishNode): JSX.Element | null {
       chartBounds: { width: w, height: h },
       availableSpace: { top: 20, right: 20, bottom: 20, left: 20 },
     },
-    { position: node._label.position ?? "auto", offset: node._label.offset }
+    {
+      position: node._label.position ?? "outset",
+      offset: node._label.offset,
+    }
   );
 
   const offset = calculateLabelOffset(position, [w, h], {

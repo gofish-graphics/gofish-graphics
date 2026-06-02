@@ -3,7 +3,15 @@
 // </gofish-wiki>
 
 import { sumBy, meanBy } from "lodash";
-import { MaybeValue, Value, value } from "./data";
+import {
+  MaybeValue,
+  Value,
+  value,
+  isField,
+  isLiteral,
+  type FieldAccessor,
+  type LiteralValue,
+} from "./data";
 
 export type ChannelType = "size" | "pos" | "color" | "raw";
 
@@ -64,12 +72,22 @@ export type DeriveMarkProps<
  * - function: called per-row and summed across the data array.
  */
 export const inferSize = <T>(
-  accessor: string | number | ((d: T) => number) | undefined,
+  accessor:
+    | string
+    | number
+    | ((d: T) => number)
+    | FieldAccessor
+    | LiteralValue
+    | undefined,
   d: T | T[]
 ): MaybeValue<number> | undefined => {
   if (accessor === undefined) return undefined;
   if (typeof accessor === "number") return accessor;
+  if (isLiteral(accessor)) return accessor.value as number;
   const data = Array.isArray(d) ? d : [d];
+  if (isField(accessor)) {
+    return value(sumBy(data, accessor.name as any));
+  }
   return value(sumBy(data, accessor as any));
 };
 
@@ -80,12 +98,22 @@ export const inferSize = <T>(
  * - function: called per-row and averaged across the data array.
  */
 export const inferPos = <T>(
-  accessor: string | number | ((d: T) => number) | undefined,
+  accessor:
+    | string
+    | number
+    | ((d: T) => number)
+    | FieldAccessor
+    | LiteralValue
+    | undefined,
   d: T | T[]
 ): MaybeValue<number> | undefined => {
   if (accessor === undefined) return undefined;
   if (typeof accessor === "number") return accessor;
+  if (isLiteral(accessor)) return accessor.value as number;
   const data = Array.isArray(d) ? d : [d];
+  if (isField(accessor)) {
+    return value(meanBy(data, accessor.name as any));
+  }
   return value(meanBy(data, accessor as any));
 };
 
@@ -96,10 +124,21 @@ export const inferPos = <T>(
  * - function: called on data[0] and wraps the result as a Value.
  */
 export const inferColor = <T extends Record<string, any>>(
-  accessor: string | ((d: T) => string) | undefined,
+  accessor:
+    | string
+    | ((d: T) => string)
+    | FieldAccessor
+    | LiteralValue
+    | undefined,
   data: T[]
 ): MaybeValue<string> | undefined => {
   if (accessor === undefined) return undefined;
+  if (isLiteral(accessor)) return accessor.value as string;
+  if (isField(accessor)) {
+    return data.length > 0 && data[0] != null
+      ? value(data[0][accessor.name])
+      : undefined;
+  }
   if (typeof accessor === "function") {
     return data.length > 0 && data[0] != null
       ? value(accessor(data[0]))
@@ -124,11 +163,19 @@ export const inferRaw = async <T extends Record<string, any>>(
     | string
     | number
     | ((d: T) => string | number | Promise<string | number>)
+    | FieldAccessor
+    | LiteralValue
     | undefined,
   data: T[]
 ): Promise<MaybeValue<string | number> | undefined> => {
   if (accessor === undefined) return undefined;
   if (typeof accessor === "number") return accessor;
+  if (isLiteral(accessor)) return accessor.value as string | number;
+  if (isField(accessor)) {
+    return data.length > 0 && data[0] != null
+      ? value(data[0][accessor.name])
+      : undefined;
+  }
   if (typeof accessor === "function") {
     if (data.length > 0 && data[0] != null) {
       // Awaiting on a non-Promise is a no-op, so this transparently

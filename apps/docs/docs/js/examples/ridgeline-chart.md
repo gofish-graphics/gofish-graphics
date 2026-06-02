@@ -20,7 +20,7 @@ import { seafood } from "./dataset";
 
 const container = document.getElementById("app");
 
-Layer([
+Layer({ axes: true }, [
   Chart(seafood)
     .flow(
       spread({ by: "lake", dir: "x", spacing: 80 }),
@@ -30,7 +30,7 @@ Layer([
   Chart(select("points"))
     .flow(group({ by: "species" }))
     .mark(area({ opacity: 0.8, mixBlendMode: "normal" })),
-]).render(container, { w: 500, h: 300, axes: true });
+]).render(container, { w: 500, h: 300 });
 ```
 
 ```ts dataset.ts

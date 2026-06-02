@@ -15,5 +15,6 @@ export const group = createOperator<any, GroupOptions>(
       if (!by) throw new Error("group requires opts.by = fieldName");
       return Map.groupBy(d, (r: any) => r[by]);
     },
+    serialize: { type: "group" },
   }
 );
