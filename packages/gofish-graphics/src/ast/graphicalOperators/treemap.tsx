@@ -9,11 +9,20 @@ import type { HierarchyNode, HierarchyRectangularNode } from "d3-hierarchy";
 import { GoFishNode, Placeable } from "../_node";
 import { GoFishAST } from "../_ast";
 import { createNodeOperator } from "../withGoFish";
-import { FancyDims, Size, elaborateDims } from "../dims";
+import { FancyDims, Size, Direction, elaborateDims } from "../dims";
 import { getValue, isValue, MaybeValue } from "../data";
 import { computeAesthetic, computeSize } from "../../util";
-import { POSITION, SIZE, UnderlyingSpace } from "../underlyingSpace";
+import {
+  POSITION,
+  SIZE,
+  isSIZE,
+  isPOSITION,
+  isDIFFERENCE,
+  UnderlyingSpace,
+} from "../underlyingSpace";
 import { interval } from "../../util/interval";
+import * as Interval from "../../util/interval";
+import * as Monotonic from "../../util/monotonic";
 import { createOperator } from "../marks/createOperator";
 
 type TreemapTile = "squarify" | "slice" | "dice" | "binary" | "resquarify";
@@ -107,21 +116,16 @@ export const Treemap = createNodeOperator(
         name,
         shared: [false, false],
         resolveUnderlyingSpace: (): Size<UnderlyingSpace> => {
-          // Use POSITION(interval(...)) so the returned object has a .domain.run().
-          // Mark axes that declared a `size` so parent alignment can detect them.
-          const baseX = POSITION(interval(0, 1));
-          const baseY = POSITION(interval(0, 1));
-
-          const xSpace =
-            dims[0].size !== undefined
-              ? { ...baseX, __requestsSize: true }
-              : baseX;
-          const ySpace =
-            dims[1].size !== undefined
-              ? { ...baseY, __requestsSize: true }
-              : baseY;
-
-          return [xSpace, ySpace];
+          // Mirror Spread's explicit-size handling (spread.tsx:123-131): when a
+          // data-driven size is declared on an axis (e.g. `h: "fare"` auto-summed
+          // to a Value), emit SIZE so the parent faceting spread can co-solve a
+          // scale shared across sibling treemaps. Otherwise the treemap is a
+          // positioned box that fills the slot it is given.
+          const axisSpace = (i: Direction): UnderlyingSpace =>
+            isValue(dims[i].size)
+              ? SIZE(Monotonic.linear(getValue(dims[i].size!)!, 0))
+              : POSITION(interval(0, 1));
+          return [axisSpace(0), axisSpace(1)];
         },
         layout: (_shared, size, scaleFactors, childAsts, posScales, node) => {
           const xPos = computeAesthetic(
@@ -135,20 +139,67 @@ export const Treemap = createNodeOperator(
             undefined
           );
 
-          const resolvedSize: Size = [
-            computeSize(dims[0].size, scaleFactors?.[0]!, size[0]),
-            computeSize(dims[1].size, scaleFactors?.[1]!, size[1]),
-          ];
+          // Re-solve a local scale factor from this node's own underlying space,
+          // mirroring Spread.computeScaleFactor (spread.tsx:242-259). Used as a
+          // fallback for the standalone (non-faceted) data-driven case.
+          const myUSpace = node._underlyingSpace!;
+          const localScaleFactor = (dir: Direction): number | undefined => {
+            const space = myUSpace[dir];
+            if (isSIZE(space)) {
+              return (
+                space.domain.inverse(size[dir], {
+                  upperBoundGuess: size[dir],
+                }) ?? 0
+              );
+            }
+            if (isPOSITION(space) && space.domain) {
+              const w = Interval.width(space.domain);
+              return w !== 0 ? size[dir] / w : 0;
+            }
+            if (isDIFFERENCE(space)) {
+              return space.width !== 0 ? size[dir] / space.width : 0;
+            }
+            return undefined;
+          };
+
+          // Treemap box size per axis (the [w, h] handed to d3-treemap):
+          //  - no size      -> fill the slot the parent gave (size[dir]).
+          //  - numeric size -> that many px (computeSize literal branch).
+          //  - data-driven  -> if a shared posScale exists on this axis (the
+          //    faceting parent composed POSITION[0,maxV] across siblings), map
+          //    the value through it so all facets share one scale; otherwise
+          //    solve our own factor and multiply.
+          const resolveAxisSize = (dir: Direction): number => {
+            const declared = dims[dir].size;
+            if (declared === undefined) return size[dir];
+            if (!isValue(declared)) {
+              return computeSize(
+                declared,
+                scaleFactors?.[dir] ?? 1,
+                size[dir]
+              ) as number;
+            }
+            const v = getValue(declared)!;
+            const posScale = posScales?.[dir];
+            if (posScale) return posScale(v) - posScale(0);
+            const sf = scaleFactors?.[dir] ?? localScaleFactor(dir) ?? 1;
+            return v * sf;
+          };
+
+          const resolvedSize: Size = [resolveAxisSize(0), resolveAxisSize(1)];
+
+          const sfX = scaleFactors?.[0] ?? localScaleFactor(0) ?? 1;
+          const sfY = scaleFactors?.[1] ?? localScaleFactor(1) ?? 1;
 
           const session = node.getRenderSession();
           const scaleContext = session.scaleContext;
           scaleContext.x = {
-            domain: [0, resolvedSize[0] / (scaleFactors[0] ?? 1)],
-            scaleFactor: scaleFactors[0] ?? 1,
+            domain: [0, resolvedSize[0] / sfX],
+            scaleFactor: sfX,
           };
           scaleContext.y = {
-            domain: [0, resolvedSize[1] / (scaleFactors[1] ?? 1)],
-            scaleFactor: scaleFactors[1] ?? 1,
+            domain: [0, resolvedSize[1] / sfY],
+            scaleFactor: sfY,
           };
 
           // Build weights and hierarchy (single level: the passed-in children).

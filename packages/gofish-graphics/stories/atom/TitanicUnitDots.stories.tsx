@@ -102,6 +102,14 @@ export const Default: StoryObj<Args> = {
     //   titanicPassengers,
     //   args.paddingInner
     // );
+    // `h: "fare"` is a `size` channel, so it auto-sums fare per pclass facet and
+    // scales each treemap's height on a scale shared across the three facets.
+    //
+    // TODO (exercise, left intentionally unfixed — two harmless cosmetic warts):
+    //   1. `dir: "y"` below is NOT a TreemapProps key, so it is silently ignored.
+    //   2. `treemap`'s `valueField` channel is annotated `"string"` in
+    //      createOperator, which is not a valid ChannelType ("size"|"pos"|"color").
+    //      It's a no-op today; `valueField: "fare"` still reaches Treemap fine.
     Chart(titanicPassengers).facet({by: "pclass", dir: "x"})
       .flow(treemap({ h: "fare", dir: "y", valueField: "fare", paddingInner: args.paddingInner }))
       .mark(rect({ fill: "survived", stroke: "#ccc", strokeWidth: 1 }))
