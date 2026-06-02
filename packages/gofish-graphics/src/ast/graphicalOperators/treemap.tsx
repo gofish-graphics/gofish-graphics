@@ -305,9 +305,8 @@ export const Treemap = createNodeOperator(
               posDomains
             );
             placeable.place(0, x0 + w / 2, "center");
-            const cy = y0 + h / 2;
-            const yCenter = flipY ? resolvedSize[1] - cy : cy;
-            placeable.place(1, yCenter, "center");
+            const cy = flipY ? resolvedSize[1] - (y0 + h / 2) : y0 + h / 2;
+            placeable.place(1, cy, "center");
             placed[i] = placeable;
           }
 
@@ -340,10 +339,10 @@ export const Treemap = createNodeOperator(
           };
         },
         render: ({ transform }, renderedChildren) => {
+          const translateX = transform?.translate?.[0] ?? 0;
+          const translateY = transform?.translate?.[1] ?? 0;
           return (
-            <g
-              transform={`translate(${transform?.translate?.[0] ?? 0}, ${transform?.translate?.[1] ?? 0})`}
-            >
+            <g transform={`translate(${translateX}, ${translateY})`}>
               {renderedChildren}
             </g>
           );

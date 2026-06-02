@@ -109,7 +109,7 @@ export const Default: StoryObj<Args> = {
     //      createOperator, which is not a valid ChannelType ("size"|"pos"|"color").
     //      It's a no-op today; `valueField: "fare"` still reaches Treemap fine.
     Chart(titanicPassengers, { color: palette(["#2b8cbe", "#ff8408"]) }).facet({by: "pclass", dir: "x"})
-      .flow(treemap({ h: "fare", dir: "y", valueField: "fare", paddingInner: args.paddingInner, tile: "squarifyCircle", sort: "desc"}))
+      .flow(treemap({ h: "fare", dir: "y", valueField: "fare", paddingInner: args.paddingInner, tile: "squarifyCircle", sort: "desc", flipY: true}))
       .mark(circle({ fill: "survived", stroke: "#ccc", strokeWidth: 1 }))
       .render(container, { w: args.w, h: args.h });
     return container;
