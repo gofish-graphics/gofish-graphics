@@ -12,8 +12,9 @@ import { createNodeOperator } from "../withGoFish";
 import { FancyDims, Size, elaborateDims } from "../dims";
 import { getValue, isValue, MaybeValue } from "../data";
 import { computeAesthetic, computeSize } from "../../util";
-import { POSITION, UnderlyingSpace } from "../underlyingSpace";
+import { POSITION, SIZE, UnderlyingSpace } from "../underlyingSpace";
 import { interval } from "../../util/interval";
+import { createOperator } from "../marks/createOperator";
 
 type TreemapTile = "squarify" | "slice" | "dice" | "binary" | "resquarify";
 type TreemapSort = "asc" | "desc" | "none";
@@ -67,7 +68,7 @@ function resolveWeightFromChild(
   return 1;
 }
 
-export const treemap = createNodeOperator(
+export const Treemap = createNodeOperator(
   (opts: TreemapProps, children: GoFishAST[]) => {
     const {
       name,
@@ -106,9 +107,21 @@ export const treemap = createNodeOperator(
         name,
         shared: [false, false],
         resolveUnderlyingSpace: (): Size<UnderlyingSpace> => {
-          // Treemap is inherently positioned in both axes within its allotted box.
-          // Use a stable unit domain; this avoids implying ordinal semantics.
-          return [POSITION(interval(0, 1)), POSITION(interval(0, 1))];
+          // Use POSITION(interval(...)) so the returned object has a .domain.run().
+          // Mark axes that declared a `size` so parent alignment can detect them.
+          const baseX = POSITION(interval(0, 1));
+          const baseY = POSITION(interval(0, 1));
+
+          const xSpace =
+            dims[0].size !== undefined
+              ? { ...baseX, __requestsSize: true }
+              : baseX;
+          const ySpace =
+            dims[1].size !== undefined
+              ? { ...baseY, __requestsSize: true }
+              : baseY;
+
+          return [xSpace, ySpace];
         },
         layout: (_shared, size, scaleFactors, childAsts, posScales, node) => {
           const xPos = computeAesthetic(
@@ -202,10 +215,7 @@ export const treemap = createNodeOperator(
             const child = childAsts[i];
             let lw = w;
             let lh = h;
-            if (
-              leafIntrinsicRadiusField &&
-              child instanceof GoFishNode
-            ) {
+            if (leafIntrinsicRadiusField && child instanceof GoFishNode) {
               const datum = (child as GoFishNode & { datum?: unknown }).datum;
               const d = datum as Record<string, unknown> | undefined;
               const rad = Number(d?.[leafIntrinsicRadiusField]);
@@ -263,5 +273,18 @@ export const treemap = createNodeOperator(
       },
       children
     );
+  }
+);
+
+export const treemap = createOperator<any, TreemapProps>(
+  (props: TreemapProps, children: GoFishAST[]) => Treemap(props, children),
+  {
+    split: ({ name }, d) => new Map(d.map((r, i) => [i, r])),
+    channels: {
+      w: "size",
+      h: "size",
+      valueField: "string",
+      leafIntrinsicRadiusField: "string",
+    },
   }
 );

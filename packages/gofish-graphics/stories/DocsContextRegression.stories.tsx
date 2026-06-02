@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { Chart, spread, stack, rect } from "../src/lib";
 import { seafood } from "../src/data/catch";
-import * as publicApi from "../dist/index.js";
+import * as publicApi from "../src/lib";
 
 const meta: Meta = {
   title: "Regressions/Docs Context Parity",
