@@ -1,13 +1,11 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { groupBy, maxBy, orderBy, sumBy } from "lodash";
 import { initializeContainer } from "../helper";
-import { treemap, circle, Spread, Chart } from "../../src/lib";
-import { stack } from "../../src/lib";
+import { treemap, circle, Spread, Chart, palette } from "../../src/lib";
 import {
   titanicPassengers,
   type TitanicPassenger,
 } from "../../src/data/titanicPassengers";
-import { rect } from "../../src/lib";
 
 /**
  * Data: [intuinno/unit `titanic3.csv`](https://github.com/intuinno/unit/blob/master/app/data/titanic3.csv)
@@ -110,9 +108,9 @@ export const Default: StoryObj<Args> = {
     //   2. `treemap`'s `valueField` channel is annotated `"string"` in
     //      createOperator, which is not a valid ChannelType ("size"|"pos"|"color").
     //      It's a no-op today; `valueField: "fare"` still reaches Treemap fine.
-    Chart(titanicPassengers).facet({by: "pclass", dir: "x"})
-      .flow(treemap({ h: "fare", dir: "y", valueField: "fare", paddingInner: args.paddingInner }))
-      .mark(rect({ fill: "survived", stroke: "#ccc", strokeWidth: 1 }))
+    Chart(titanicPassengers, { color: palette(["#2b8cbe", "#ff8408"]) }).facet({by: "pclass", dir: "x"})
+      .flow(treemap({ h: "fare", w: 100, dir: "y", valueField: "fare", paddingInner: args.paddingInner, tile: "squarify" }))
+      .mark(circle({ fill: "survived", stroke: "#ccc", strokeWidth: 1 }))
       .render(container, { w: args.w, h: args.h });
     return container;
   },
