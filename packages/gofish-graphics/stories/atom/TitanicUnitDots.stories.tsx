@@ -93,7 +93,7 @@ export default meta;
 type Args = { w: number; h: number; paddingInner: number };
 
 export const Default: StoryObj<Args> = {
-  args: { w: 720, h: 480, paddingInner: 0 },
+  args: { w: 1000, h: 320, paddingInner: 0 },
   render: (args: Args) => {
     const container = initializeContainer();
     // const { facets, stackWeights } = facetTreemaps(
@@ -109,7 +109,7 @@ export const Default: StoryObj<Args> = {
     //      createOperator, which is not a valid ChannelType ("size"|"pos"|"color").
     //      It's a no-op today; `valueField: "fare"` still reaches Treemap fine.
     Chart(titanicPassengers, { color: palette(["#2b8cbe", "#ff8408"]) }).facet({by: "pclass", dir: "x"})
-      .flow(treemap({ h: "fare", w: 100, dir: "y", valueField: "fare", paddingInner: args.paddingInner, tile: "squarify" }))
+      .flow(treemap({ h: "fare", dir: "y", valueField: "fare", paddingInner: args.paddingInner, tile: "squarifyCircle", sort: "desc"}))
       .mark(circle({ fill: "survived", stroke: "#ccc", strokeWidth: 1 }))
       .render(container, { w: args.w, h: args.h });
     return container;

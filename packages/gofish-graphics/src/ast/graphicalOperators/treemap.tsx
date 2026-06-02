@@ -3,6 +3,9 @@ import {
   treemap as d3Treemap,
   treemapDice,
   treemapSlice,
+  treemapBinary,
+  treemapSliceDice,
+  treemapSquarify,
 } from "d3-hierarchy";
 import type { HierarchyNode, HierarchyRectangularNode } from "d3-hierarchy";
 
@@ -25,7 +28,13 @@ import * as Interval from "../../util/interval";
 import * as Monotonic from "../../util/monotonic";
 import { createOperator } from "../marks/createOperator";
 
-type TreemapTile = "squarify" | "slice" | "dice" | "binary" | "resquarify";
+type TreemapTile =
+  | "squarify"
+  | "slice"
+  | "dice"
+  | "binary"
+  | "slicedice"
+  | "squarifyCircle";
 type TreemapSort = "asc" | "desc" | "none";
 
 type TreemapProps = {
@@ -247,6 +256,10 @@ export const Treemap = createNodeOperator(
           // Keep default squarify unless we explicitly choose something else.
           if (tile === "slice") treemapLayout.tile(treemapSlice);
           else if (tile === "dice") treemapLayout.tile(treemapDice);
+          else if (tile === "binary") treemapLayout.tile(treemapBinary);
+          else if (tile === "slicedice") treemapLayout.tile(treemapSliceDice);
+          else if (tile === "squarifyCircle")
+            treemapLayout.tile(treemapSquarify.ratio(1));
 
           const rectRoot = treemapLayout(root) as HierarchyRectangularNode<any>;
           const leaves = rectRoot.leaves();
