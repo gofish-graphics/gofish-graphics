@@ -360,8 +360,6 @@ export const treemap = createOperator<any, TreemapProps>(
     channels: {
       w: "size",
       h: "size",
-      valueField: "string",
-      leafIntrinsicRadiusField: "string",
     },
   }
 );
