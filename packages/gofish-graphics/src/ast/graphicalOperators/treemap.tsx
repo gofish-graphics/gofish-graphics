@@ -360,6 +360,6 @@ export const treemap = createOperator<any, TreemapProps>(
     channels: {
       w: "size",
       h: "size",
-    },
+    } as any,
   }
 );
