@@ -108,11 +108,7 @@ function applyAlignAxis(
     }
   }
   if (baseline === undefined) {
-    // No placed siblings: fall back to the layer's box baseline. With a
-    // shared anchor that's the historic behavior; with per-child anchors
-    // we anchor the *first* child to the fallback and let the others land
-    // relative to it on the next pass (still pinned via this same value
-    // since the same baseline is reused below).
+    // No placed siblings: fall back to the layer's box baseline.
     baseline = fallbackFor(fallback, anchors[0]);
   }
 
