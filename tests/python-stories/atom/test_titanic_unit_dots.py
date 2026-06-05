@@ -3,10 +3,9 @@ from gofish_python import Chart, circle, palette, treemap
 from gofish_python.data.titanic_passengers import titanic_passengers
 
 
-def test_titanic_unit_dots():
-    container = initialize_container()
+def story_default():
 
-    Chart(titanic_passengers, color=palette(["#2b8cbe", "#ff8408"])) \
+    return Chart(titanic_passengers, color=palette(["#2b8cbe", "#ff8408"])) \
         .facet(by="pclass", dir="x") \
         .flow(
             treemap(
@@ -20,5 +19,3 @@ def test_titanic_unit_dots():
         ) \
         .mark(circle(fill="survived", stroke="#ccc", strokeWidth=1)) \
         .render(container, w=1000, h=320)
-
-    return container
