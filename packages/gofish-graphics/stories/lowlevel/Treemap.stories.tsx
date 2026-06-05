@@ -65,7 +65,7 @@ export const Default: StoryObj<Args> = {
         paddingOuter: args.paddingInner,
         round: true,
         tile: "squarify",
-        flipY: true
+        flipY: false
       },
       nodes as any
     ).render(container, { w: args.w, h: args.h });
