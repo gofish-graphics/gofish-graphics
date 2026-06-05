@@ -1,7 +1,6 @@
 from math import ceil, sqrt
 from typing import Any
 
-from ..helper import initialize_container
 from gofish_python import Chart, circle, derive, palette, spread, table
 from gofish_python.data.titanic_passengers import titanic_passengers
 
@@ -15,7 +14,7 @@ def story_default():
         size = ceil(sqrt(len(rows)))
         return [rows[i : i + size] for i in range(0, len(rows), size)]
 
-    return Chart(titanic_passengers, color=palette(["#2b8cbe", "#ff8408"])) \
+    return (Chart(titanic_passengers, color=palette(["#2b8cbe", "#ff8408"])) \
         .flow(table(by={"x": "pclass", "y": "sex"})) \
         .mark(
             lambda group_data: Chart(group_data)
@@ -26,5 +25,4 @@ def story_default():
                 spread(spacing=2, dir="x"),
             )
             .mark(circle(r=4, fill="survived"))
-        ) \
-        .render(container, w=720, h=480, axes=True)
+        ), {"w" : 720, "h": 480})

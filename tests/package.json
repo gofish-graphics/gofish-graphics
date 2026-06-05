@@ -25,20 +25,20 @@
     "gofish-ir": "workspace:*"
   },
   "devDependencies": {
-    "@playwright/test": "^1.58.2",
+    "@playwright/test": "^1.60.0",
     "@types/diff-match-patch": "^1.0.36",
     "@types/pixelmatch": "^5.2.6",
     "@types/pngjs": "^6.0.5",
     "diff": "^7.0.0",
     "diff-match-patch": "^1.0.5",
     "pixelmatch": "^5.3.0",
-    "playwright": "^1.58.2",
+    "playwright": "^1.60.0",
     "pngjs": "^7.0.0",
-    "prettier": "^3.8.1",
-    "solid-js": "^1.9.11",
-    "tsx": "^4.21.0",
+    "prettier": "^3.8.3",
+    "solid-js": "^1.9.13",
+    "tsx": "^4.22.4",
     "typescript": "^5.9.3",
-    "vite": "^6.4.1",
-    "vite-plugin-solid": "^2.11.10"
+    "vite": "^6.4.3",
+    "vite-plugin-solid": "^2.11.12"
   }
 }
