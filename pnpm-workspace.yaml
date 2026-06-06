@@ -2,9 +2,5 @@ packages:
   - "packages/*"
   - "apps/*"
   - "tests"
-
 allowBuilds:
   esbuild: true
-
-overrides:
-  vue: 3.5.24
