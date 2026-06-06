@@ -35,5 +35,5 @@ def story_default():
         chart(titanic_passengers, color=palette(["#2b8cbe", "#ff8408"]))
         .flow(table(by={"x": "pclass", "y": "sex"}))
         .mark(passenger_dots),
-        {"w": 720, "h": 480, "axes": True},
+        {"w": 720, "h": 480, "axes": False},
     )

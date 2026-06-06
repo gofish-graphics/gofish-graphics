@@ -9,6 +9,11 @@ def story_default():
     titanic_passengers = pd.read_json(
         "packages/gofish-graphics/src/data/titanicPassengers.json"
     )
+    # Match JS titanicPassengers.ts: fare must be numeric for treemap's
+    # data-driven `h: "fare"` sizing — string fares produce NaN layouts.
+    titanic_passengers["fare"] = pd.to_numeric(
+        titanic_passengers["fare"], errors="coerce"
+    ).fillna(1)
 
     return (
         chart(titanic_passengers, color=palette(["#2b8cbe", "#ff8408"]))
