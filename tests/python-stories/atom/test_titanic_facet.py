@@ -1,26 +1,27 @@
-from math import ceil, sqrt
-from typing import Any
+"""Equivalent of TitanicFacet.stories.tsx — atom/TitanicFacet."""
 
-from gofish import Chart, circle, derive, palette, spread, table
+from math import ceil, sqrt
+
 import pandas as pd
-import os
+
+from gofish import chart, circle, derive, palette, spread, table
 
 
 def story_default():
-    data_filepath = os.path.join(os.getcwd(), '../../packages/gofish-graphics/src/data/titanicPassengers.json')
-    titanic_passengers = pd.read_json('packages/gofish-graphics/src/data/titanicPassengers.json')
+    titanic_passengers = pd.read_json(
+        "packages/gofish-graphics/src/data/titanicPassengers.json"
+    )
 
-    def order_by_survived(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    def order_by_survived(rows):
         return sorted(rows, key=lambda row: row["survived"], reverse=True)
 
-    def chunk_rows(rows: list[dict[str, Any]]) -> list[list[dict[str, Any]]]:
+    def chunk_rows(rows):
         size = ceil(sqrt(len(rows)))
         return [rows[i : i + size] for i in range(0, len(rows), size)]
 
-    return (Chart(titanic_passengers, color=palette(["#2b8cbe", "#ff8408"])) \
-        .flow(table(by={"x": "pclass", "y": "sex"})) \
-        .mark(
-            lambda group_data: Chart(group_data)
+    def passenger_dots(group_data):
+        return (
+            chart(group_data)
             .flow(
                 derive(order_by_survived),
                 derive(chunk_rows),
@@ -28,4 +29,11 @@ def story_default():
                 spread(spacing=2, dir="x"),
             )
             .mark(circle(r=4, fill="survived"))
-        ), {"w" : 720, "h": 480})
+        )
+
+    return (
+        chart(titanic_passengers, color=palette(["#2b8cbe", "#ff8408"]))
+        .flow(table(by={"x": "pclass", "y": "sex"}))
+        .mark(passenger_dots),
+        {"w": 720, "h": 480, "axes": True},
+    )

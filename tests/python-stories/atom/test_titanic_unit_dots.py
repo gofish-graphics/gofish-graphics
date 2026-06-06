@@ -1,13 +1,18 @@
-from gofish import Chart, circle, palette, treemap
+"""Equivalent of TitanicUnitDots.stories.tsx — atom/TitanicUnitDots."""
+
 import pandas as pd
-import os
+
+from gofish import chart, circle, palette, treemap
 
 
 def story_default():
-    data_filepath = os.path.join(os.getcwd(), '../../packages/gofish-graphics/src/data/titanicPassengers.json')
-    titanic_passengers = pd.read_json('packages/gofish-graphics/src/data/titanicPassengers.json')
-    return (Chart(titanic_passengers, color=palette(["#2b8cbe", "#ff8408"])) \
-        .facet(by="pclass", dir="x") \
+    titanic_passengers = pd.read_json(
+        "packages/gofish-graphics/src/data/titanicPassengers.json"
+    )
+
+    return (
+        chart(titanic_passengers, color=palette(["#2b8cbe", "#ff8408"]))
+        .facet(by="pclass", dir="x")
         .flow(
             treemap(
                 h="fare",
@@ -17,6 +22,7 @@ def story_default():
                 sort="desc",
                 flipY=True,
             )
-        ) \
+        )
         .mark(circle(fill="survived", stroke="#ccc", strokeWidth=1)),
-        {"w" : 1000, "h": 320})
+        {"w": 1000, "h": 320},
+    )
