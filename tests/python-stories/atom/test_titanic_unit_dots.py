@@ -1,9 +1,11 @@
-from gofish_python import Chart, circle, palette, treemap
-from gofish_python.data.titanic_passengers import titanic_passengers
+from gofish import Chart, circle, palette, treemap
+import pandas as pd
+import os
 
 
 def story_default():
-
+    data_filepath = os.path.join(os.getcwd(), '../../packages/gofish-graphics/src/data/titanicPassengers.json')
+    titanic_passengers = pd.read_json('packages/gofish-graphics/src/data/titanicPassengers.json')
     return (Chart(titanic_passengers, color=palette(["#2b8cbe", "#ff8408"])) \
         .facet(by="pclass", dir="x") \
         .flow(

@@ -1,11 +1,14 @@
 from math import ceil, sqrt
 from typing import Any
 
-from gofish_python import Chart, circle, derive, palette, spread, table
-from gofish_python.data.titanic_passengers import titanic_passengers
+from gofish import Chart, circle, derive, palette, spread, table
+import pandas as pd
+import os
 
 
 def story_default():
+    data_filepath = os.path.join(os.getcwd(), '../../packages/gofish-graphics/src/data/titanicPassengers.json')
+    titanic_passengers = pd.read_json('packages/gofish-graphics/src/data/titanicPassengers.json')
 
     def order_by_survived(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
         return sorted(rows, key=lambda row: row["survived"], reverse=True)
