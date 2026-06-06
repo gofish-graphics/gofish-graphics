@@ -11,9 +11,13 @@ def story_default():
     )
     # Match JS titanicPassengers.ts: fare must be numeric for treemap's
     # data-driven `h: "fare"` sizing — string fares produce NaN layouts.
+
+    tier_fare = {1: 85, 2: 40, 3: 14}
     titanic_passengers["fare"] = pd.to_numeric(
         titanic_passengers["fare"], errors="coerce"
-    ).fillna(1)
+    )
+    mask = titanic_passengers["fare"].isna() | (titanic_passengers["fare"] < 0)
+    titanic_passengers.loc[mask, "fare"] = titanic_passengers.loc[mask, "pclass"].map(tier_fare).fillna(1)
 
     return (
         chart(titanic_passengers, color=palette(["#2b8cbe", "#ff8408"]))
