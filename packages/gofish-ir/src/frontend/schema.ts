@@ -386,6 +386,7 @@ export const OPERATOR_TYPES = [
   "scatter",
   "table",
   "log",
+  "treemap",
 ] as const;
 
 /** The set of leaf-mark type discriminators recognized in v0. */
