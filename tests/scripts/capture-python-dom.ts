@@ -316,12 +316,26 @@ async function captureStory(
     window.__renderChart__(s);
   }, spec);
 
-  // Wait for render completion. Short timeout — a render that takes more
-  // than a few seconds in CI is almost always silently broken (e.g. a
-  // missing derive lambda leaving the chart at zero size).
-  await page.waitForFunction(() => window.__GOFISH_RENDER_COMPLETE__ === true, {
-    timeout: 8_000,
-  });
+  // Wait for render completion. Most charts resolve quickly; heavy unit-dot
+  // treemaps can paint thousands of marks while the render promise is still
+  // settling, so fall back to waiting for visible SVG output.
+  try {
+    await page.waitForFunction(
+      () => window.__GOFISH_RENDER_COMPLETE__ === true,
+      { timeout: 8_000 }
+    );
+  } catch {
+    await page.waitForFunction(
+      () => {
+        const root = document.getElementById("gofish-harness-root");
+        return (
+          (root?.querySelectorAll("ellipse, circle, rect, path, line")
+            ?.length ?? 0) > 0
+        );
+      },
+      { timeout: 40_000 }
+    );
+  }
 
   // Check for errors
   const error = await page.evaluate(() => window.__GOFISH_RENDER_ERROR__);

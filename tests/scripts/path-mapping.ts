@@ -14,11 +14,19 @@ const TESTS_DIR = dirname(SCRIPTS_DIR);
 const ROOT_DIR = dirname(TESTS_DIR);
 
 /** CamelCase / spaced → kebab-case (one source of truth for path generation). */
-const toKebab = (s: string) =>
+export const toKebab = (s: string) =>
   s
     .replace(/([a-z])([A-Z])/g, "$1-$2")
     .replace(/\s+/g, "-")
     .toLowerCase();
+
+/**
+ * Storybook title → file-level story id used by capture + parity review.
+ * e.g. "atom/TitanicUnitDots" → "atom/titanic-unit-dots"
+ */
+export function titleToStoryId(title: string): string {
+  return title.split("/").map(toKebab).join("/");
+}
 
 /**
  * Convert a Storybook story title + export name into a stable file-system path

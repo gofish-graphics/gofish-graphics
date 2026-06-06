@@ -30,7 +30,7 @@ import {
   formatDomDiff,
   type DiffEntry,
 } from "./diff-utils.js";
-import { mapJsToPython } from "./path-mapping.js";
+import { mapJsToPython, titleToStoryId } from "./path-mapping.js";
 
 // ---------------------------------------------------------------------------
 // Paths
@@ -76,16 +76,7 @@ function buildStoryIndex(): Map<string, string> {
         if (!source) continue;
         const m = source.match(/title:\s*["']([^"']+)["']/);
         if (!m) continue;
-        const storyId = m[1]
-          .split("/")
-          .map((s) =>
-            s
-              .trim()
-              .toLowerCase()
-              .replace(/\s+/g, "-")
-              .replace(/[^a-z0-9-]/g, "")
-          )
-          .join("/");
+        const storyId = titleToStoryId(m[1]);
         index.set(
           storyId,
           "packages/gofish-graphics/stories/" +
