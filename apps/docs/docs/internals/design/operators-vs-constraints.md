@@ -56,6 +56,21 @@ inside `layer` and `Porter-Duff`'s underlying-space resolution
 vs `Placeable`) but the _idea_ is the same: take a list, pick an anchor,
 move the rest into alignment.
 
+**`scatter` / `position` vs `Constraint.position`.** `Constraint.position`
+(`constraints/position.ts`) places a child at an `x`/`y` coordinate that is
+either a literal pixel or a `datum` — the same literal-or-datum convention the
+`scatter` and `position` operators use, mapping a datum to a pixel via
+`posScales[axis](getValue(v))`. Crucially, the constraint participates in
+**underlying-space resolution**: a `Layer` folds the _datum_ coordinates of its
+`position` constraints into a POSITION domain on that axis
+(`collectPositionDomains` → `unionChildSpaces`), then builds the scale over its
+own pixel size at layout time. So a `position` constraint carries a _fragment_
+of the space-resolution pass, not just a placement — which is the missing piece
+for expressing a data-positioned operator (`scatter`) as a union of
+constraints. (The `Layer` deliberately does **not** forward that scale to its
+non-data children, so SIZE content laid out alongside data-positioned marks is
+left to its own alignment.)
+
 ## What a re-unification could look like
 
 Two shapes worth considering:

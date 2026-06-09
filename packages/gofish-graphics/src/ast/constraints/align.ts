@@ -54,7 +54,7 @@ const anchorValue = (target: Placeable, idx: 0 | 1, a: Alignment): number =>
       : target.dims[idx].max!;
 
 /** Place `target` on `axis` so its anchor `a` lands at `value`. */
-const placeAtAnchor = (
+export const placeAtAnchor = (
   target: Placeable,
   axis: Axis,
   value: number,

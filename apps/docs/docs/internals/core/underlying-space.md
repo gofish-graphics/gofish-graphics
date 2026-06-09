@@ -191,13 +191,23 @@ Each node implements `_resolveUnderlyingSpace`:
 type ResolveUnderlyingSpace = (
   childSpaces: Size<UnderlyingSpace>[], // one [x, y] tuple per child
   childNodes: GoFishAST[],
-  shared: Size<boolean> // [shared on x, shared on y]
+  shared: Size<boolean>, // [shared on x, shared on y]
+  constraints: ConstraintSpec[] // this node's positioning constraints
 ) => FancySize<UnderlyingSpace>;
 ```
 
 Returns the node's own `[xSpace, ySpace]`, computed bottom-up from the
 already-resolved child spaces. The traversal is memoized at `_node.ts`'s
 `resolveUnderlyingSpace()`.
+
+The `constraints` argument lets constraints contribute a _fragment_ of the
+space: `layer` folds the _datum_ coordinates of its `Constraint.position`
+constraints into a POSITION domain on the constrained axis
+(`collectPositionDomains`), unioned with the children's spaces. (Literal-pixel
+coordinates are not data and don't contribute.) That domain is what the layer
+later turns into a data→pixel scale to resolve those position constraints — see
+[[operators-vs-constraints]] for why this is the seam for expressing a
+data-positioned operator as a union of constraints.
 
 Three patterns cover most operators:
 

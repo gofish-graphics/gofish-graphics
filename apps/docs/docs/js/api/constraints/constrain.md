@@ -117,6 +117,45 @@ gf.Layer([
 
 :::
 
+## Constraint.position
+
+Places a child at an `x` and/or `y` coordinate — the data-driven counterpart to
+`align`/`distribute`, which only relate children to each other. It mirrors how
+you position a shape: each coordinate is either a **literal** pixel value or a
+**`datum`** (`datum(n)`). A literal is placed as-is; a datum is mapped through a
+scale the `Layer` infers from the datum coordinates of its `position`
+constraints (their union is the layer's domain on that axis, mapped onto the
+layer's pixel size). This is how a hand-drawn continuous axis places each tick
+at its value rather than assuming uniform spacing.
+
+```ts
+Constraint.position({ x?, y?, anchor? }, [ref]);
+```
+
+| Option   | Type              | Default    | Description                                         |
+| -------- | ----------------- | ---------- | --------------------------------------------------- |
+| `x`      | `number \| Value` | —          | x coordinate — literal pixel or `datum(n)` (scaled) |
+| `y`      | `number \| Value` | —          | y coordinate — literal pixel or `datum(n)` (scaled) |
+| `anchor` | `Alignment`       | `"middle"` | Which anchor of the ref lands on the coordinate     |
+
+At least one of `x` / `y` is required. Only `datum` coordinates feed the layer's
+inferred scale; literal pixels are placed directly and don't define the domain.
+
+```ts
+// A continuous y-axis: each tick centered at its data value. Passing `datum(v)`
+// maps it through the y-scale the Layer derives from these constraints (domain
+// [0, 300] → plot height). A bare number would be a raw pixel instead.
+Layer([
+  rect({ w: 1, h: 300 }).name("axis"),
+  ...tickValues.map((v, i) => tick(v).name(`t${i}`)),
+]).constrain((g) => [
+  Constraint.align({ y: "start" }, [g.axis]),
+  ...tickValues.map((v, i) =>
+    Constraint.position({ y: datum(v) }, [g[`t${i}`]])
+  ),
+]);
+```
+
 ## Constraint.zAbove / Constraint.zBelow
 
 Declare a partial-order relation between two named children for **paint order**

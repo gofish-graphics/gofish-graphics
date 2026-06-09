@@ -1,7 +1,7 @@
 """Equivalent of lowlevel/Axes.stories.tsx — Low Level Syntax/Axes.
 
 Hand-drawn axes built from `layer` + `spread` + `constrain` + `ref`, with
-cross-tier links via `createName` tokens (the Pulley pattern). Two stories:
+cross-tier links via `createName` tokens (the Pulley pattern). Three stories:
 
 - OrdinalXAxis: 3 bars with species labels and a chart-axis title beneath.
   Three tiers (bars / labels / title), each one's `ref(token)` resolves
@@ -9,15 +9,23 @@ cross-tier links via `createName` tokens (the Pulley pattern). Two stories:
 
 - ContinuousYAxis: 3 bars with a vertical scale (axis line + tick marks +
   tick labels + axis title) to their left. All marks flat in one layer; the
-  constraint block chains positions title → ticks → axis → bars in x and
-  pins the tick column endpoints to the axis line in y.
+  constraint block chains positions title → ticks → axis → bars in x. In y,
+  each tick is pinned to its *data value* via `Constraint.position`, and the
+  layer derives a y-scale ([0, yMax] → plot height) from those constraints —
+  a genuine continuous axis, not a uniform `distribute`.
 
-Heights and fill are shared between both stories — same three bars in each.
+- NonUniformYAxis: a y-axis whose tick *values* are unevenly chosen
+  ([0, 50, 75, 90, 100]) on a linear scale, each pinned with
+  `Constraint.position({ y: datum(v) })` so 50 lands halfway and the spacing
+  is uneven — showing the placement is data-driven, not uniform.
+
+Heights and fill (for the bar stories) are shared — same three bars in each.
 """
 
 from gofish import (
     Constraint,
     createName,
+    datum,
     layer,
     rect,
     ref,
@@ -140,17 +148,15 @@ def story_continuous_yaxis():
             # axis flush against the right edge of the tick column
             Constraint.distribute([tick_refs[0], g["axis"]], dir="x", spacing=0),
             Constraint.distribute([g["axis"], g["bars"]], dir="x", spacing=6),
-            # ── Y: bars + axis top-aligned, ticks distributed along axis ──
+            # ── Y: bars + axis top-aligned at the plot top (value 0) ──
             Constraint.align([g["bars"], g["axis"]], y="start"),
-            # top tick's middle pinned to the axis line's start (= axis top)
-            Constraint.align([tick_refs[0], g["axis"]], y=["middle", "start"]),
-            # ticks distributed center-to-center along the axis line
-            Constraint.distribute(
-                tick_refs,
-                dir="y",
-                spacing=_Y_MAX / (_N - 1),
-                mode="center",
-            ),
+            # each tick's center pinned to its data value (a `datum`, so it maps
+            # through the y-scale the layer infers from these constraints; a
+            # literal would be a raw pixel). Domain [0, yMax].
+            *[
+                Constraint.position([tick_refs[i]], y=datum(v))
+                for i, v in enumerate(_TICK_VALUES)
+            ],
             # title vertically centered on the axis line
             Constraint.align([g["axis"], g["title"]], y="middle"),
         ]
@@ -165,10 +171,65 @@ def story_continuous_yaxis():
                     dir="x",
                     alignment="start",
                 ).name("bars"),
-                rect(w=1, h=_Y_MAX, fill="#999").name("axis"),
+                # axis line spanning the plot height (= the data range in pixels)
+                rect(w=1, h=300, fill="#999").name("axis"),
                 *ticks,
                 text(text="count", fontSize=13, fill="#333").name("title"),
             ]
         ).constrain(_constrain),
-        {"w": 400, "h": 400},
+        {"w": 400, "h": 300},
+    )
+
+
+# Deliberately uneven tick values on a linear scale (bunched toward the top):
+# 50 sits halfway, 100 at the top, labels are the real values.
+_NU_TICK_VALUES = [0, 50, 75, 90, 100]
+_NU_N = len(_NU_TICK_VALUES)
+
+
+def story_non_uniform_yaxis():
+    def _tick(v, i):
+        return spread(
+            [
+                text(text=str(v), fontSize=11, fill="#666"),
+                rect(w=5, h=1, fill="#999"),
+            ],
+            dir="x",
+            spacing=3,
+            alignment="middle",
+        ).name(f"t{i}")
+
+    ticks = [_tick(v, i) for i, v in enumerate(_NU_TICK_VALUES)]
+
+    def _constrain(**g):
+        tick_refs = [g[f"t{i}"] for i in range(_NU_N)]
+        return [
+            # ── X chain: title (x=0) → ticks → axis ──
+            Constraint.align([g["title"]], x="start"),
+            Constraint.distribute(
+                [g["title"], tick_refs[_NU_N - 1]], dir="x", spacing=8
+            ),
+            Constraint.align(tick_refs, x="end"),
+            Constraint.distribute([tick_refs[0], g["axis"]], dir="x", spacing=0),
+            # ── Y: axis pinned to plot top; ticks at their data positions ──
+            Constraint.align([g["axis"]], y="start"),
+            # datum(v) on the inferred [0, 100] scale → uneven values, uneven
+            # spacing (50 halfway, 100 at the top)
+            *[
+                Constraint.position([tick_refs[i]], y=datum(v))
+                for i, v in enumerate(_NU_TICK_VALUES)
+            ],
+            Constraint.align([g["axis"], g["title"]], y="middle"),
+        ]
+
+    return (
+        layer(
+            [
+                # axis line spanning the plot height (the [0, 100] domain in pixels)
+                rect(w=1, h=300, fill="#999").name("axis"),
+                *ticks,
+                text(text="score", fontSize=13, fill="#333").name("title"),
+            ]
+        ).constrain(_constrain),
+        {"w": 400, "h": 300},
     )

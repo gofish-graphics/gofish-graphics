@@ -2,17 +2,26 @@ import * as Monotonic from "../../util/monotonic";
 import { GoFishNode } from "../_node";
 import { isToken } from "../createName";
 import { Size, elaborateDims, FancyDims } from "../dims";
-import { SIZE, UnderlyingSpace, isSIZE } from "../underlyingSpace";
+import {
+  POSITION,
+  SIZE,
+  UnderlyingSpace,
+  isPOSITION,
+  isSIZE,
+} from "../underlyingSpace";
 import * as Interval from "../../util/interval";
 import { computeSize } from "../../util";
+import { computePosScale, continuous } from "../domain";
 import { CoordinateTransform } from "../coordinateTransforms/coord";
 import { coord } from "../coordinateTransforms/coord";
 import { createNodeOperatorSequential } from "../withGoFish";
 import { GoFishAST } from "../_ast";
 import {
   applyConstraints,
+  collectPositionDomains,
   getPositioningConstraintRefs,
   isZOrderConstraint,
+  type ConstraintPosScales,
   type ZOrderConstraint,
 } from "../constraints";
 import { unionChildSpaces } from "./alignment";
@@ -217,7 +226,9 @@ export const layer = createNodeOperatorSequential(
         shared: [false, false],
         resolveUnderlyingSpace: (
           children: Size<UnderlyingSpace>[],
-          _childNodes: GoFishAST[]
+          _childNodes: GoFishAST[],
+          _shared: Size<boolean>,
+          constraints
         ) => {
           // Apply layer's own transform.scale to any SIZE spaces produced
           // by unionChildSpaces (the SIZE-preserving overlay path).
@@ -230,9 +241,29 @@ export const layer = createNodeOperatorSequential(
             isSIZE(space) && scale !== 1
               ? SIZE(Monotonic.smul(scale, space.domain))
               : space;
+
+          // `position` constraints contribute a POSITION-domain fragment per
+          // axis: the union of their data values is this layer's domain on that
+          // axis, merged with any POSITION domain bubbled up from children. This
+          // is what lets the layer build a position scale at layout time so
+          // `Constraint.position` can map data values to pixels.
+          const posDomains = collectPositionDomains(constraints ?? []);
+          const resolveAxis = (
+            axis: 0 | 1,
+            scale: number,
+            iv: Interval.Interval | undefined
+          ): UnderlyingSpace => {
+            const base = applyScale(unionChildSpaces(children, axis), scale);
+            if (iv === undefined) return base;
+            const merged =
+              isPOSITION(base) && base.domain
+                ? Interval.unionAll(base.domain, iv)
+                : iv;
+            return POSITION(merged);
+          };
           return [
-            applyScale(unionChildSpaces(children, 0), scaleX),
-            applyScale(unionChildSpaces(children, 1), scaleY),
+            resolveAxis(0, scaleX, posDomains.x),
+            resolveAxis(1, scaleY, posDomains.y),
           ];
         },
         layout: (
@@ -250,6 +281,50 @@ export const layer = createNodeOperatorSequential(
             computeSize(dims[1].size, scaleFactors?.[1]!, size[1]) ?? size[1],
           ];
 
+          // `position` constraints with a datum coordinate contribute a data
+          // domain on their axis (see collectPositionDomains); the union is what
+          // those constraints resolve against.
+          const constraintDomains = collectPositionDomains(node.constraints);
+          const ownsPositionAxis =
+            constraintDomains.x !== undefined ||
+            constraintDomains.y !== undefined;
+
+          // Children are NOT given the position scale on an axis this layer's
+          // own `position` constraints own: that scale resolves the constraints
+          // (a data→pixel map for the constrained marks), but the layer's other
+          // children are plain SIZE/aligned content with no data coordinate. A
+          // posScale leaking into e.g. a SIZE `spread` would make its alignment
+          // pass treat the children as data-positioned and skip placing them.
+          const childPosScales: ConstraintPosScales = [
+            constraintDomains.x !== undefined ? undefined : posScales[0],
+            constraintDomains.y !== undefined ? undefined : posScales[1],
+          ];
+
+          // Scale for resolving this layer's datum `position` constraints: an
+          // inherited posScale, else a local one mapping the layer's own
+          // POSITION domain onto its pixel size (mirrors scatter.tsx's fallback).
+          // Only built when the layer actually owns such an axis — it is used
+          // solely by applyConstraints below, not passed to children.
+          const space = node._underlyingSpace;
+          const fallbackPosScale = (dim: 0 | 1) => {
+            const s = space?.[dim];
+            return s && isPOSITION(s) && s.domain
+              ? computePosScale(
+                  continuous({
+                    value: [s.domain.min!, s.domain.max!],
+                    measure: "unit",
+                  }),
+                  size[dim]
+                )
+              : undefined;
+          };
+          const effectivePosScales: ConstraintPosScales = ownsPositionAxis
+            ? [
+                posScales[0] ?? fallbackPosScale(0),
+                posScales[1] ?? fallbackPosScale(1),
+              ]
+            : [posScales[0], posScales[1]];
+
           const childPlaceables = [];
 
           // Collect *positioning* constraint refs only — children skipped
@@ -266,7 +341,7 @@ export const layer = createNodeOperatorSequential(
             const childPlaceable = child.layout(
               size,
               scaleFactors,
-              posScales,
+              childPosScales,
               posDomains
             );
             const childName = childNameKey(node.children[i]);
@@ -293,10 +368,15 @@ export const layer = createNodeOperatorSequential(
 
             // Apply constraints in declaration order. When a constraint has no
             // pre-placed target, fall back to this layer's own box baselines.
-            applyConstraints(node.constraints, nameToPlaceable, {
-              x: { start: 0, middle: size[0] / 2, end: size[0] },
-              y: { start: 0, middle: size[1] / 2, end: size[1] },
-            });
+            applyConstraints(
+              node.constraints,
+              nameToPlaceable,
+              {
+                x: { start: 0, middle: size[0] / 2, end: size[0] },
+                y: { start: 0, middle: size[1] / 2, end: size[1] },
+              },
+              effectivePosScales
+            );
 
             // Place any child the constraints left unplaced at the layer's
             // baseline origin — consistent with the phase-1 baseline placement

@@ -444,6 +444,27 @@ class DistributeConstraint:
         }
 
 
+class PositionConstraint:
+    """IR carrier for `Constraint.position(refs, x=..., y=..., anchor=...)`.
+
+    Unlike align/distribute (relative to siblings), `position` places the ref at
+    an x/y coordinate — a literal pixel or a `datum(...)`. A datum is mapped to a
+    pixel by the layer's position scale, which the layer derives from the datum
+    coordinates of these constraints (its POSITION underlying space).
+    """
+
+    def __init__(self, refs: List[RefSentinel], options: Dict[str, Any]):
+        self.refs = refs
+        self.options = options
+
+    def to_dict(self) -> dict:
+        return {
+            "type": "position",
+            "options": self.options,
+            "refs": [r.ref_name for r in self.refs],
+        }
+
+
 class ZOrderConstraint:
     """IR carrier for `Constraint.zAbove(a, b)` / `Constraint.zBelow(a, b)`.
 
@@ -532,6 +553,42 @@ class Constraint:
         if order is not None:
             options["order"] = order
         return DistributeConstraint(refs, options)
+
+    @staticmethod
+    def position(
+        refs: List[RefSentinel],
+        *,
+        x: Optional[Any] = None,
+        y: Optional[Any] = None,
+        anchor: Optional[str] = None,
+    ) -> PositionConstraint:
+        """Place the given refs at an x and/or y coordinate.
+
+        Mirrors positioning a shape (or the `position` operator): each of `x` /
+        `y` is either a **literal** pixel coordinate or a **datum** (`datum(n)`)
+        — a literal is placed as-is; a datum is mapped through the layer's
+        position scale (which the layer infers from the datum coordinates of its
+        `position` constraints). At least one of `x` / `y` is required.
+
+        Args:
+            refs: List of RefSentinels (typically one).
+            x: Literal pixel or `datum(...)` coordinate on the x axis.
+            y: Literal pixel or `datum(...)` coordinate on the y axis.
+            anchor: "start" | "middle" | "end" — which anchor of the ref lands
+                on the coordinate. Defaults to "middle" (the ref's center).
+        """
+        if x is None and y is None:
+            raise ValueError(
+                "Constraint.position requires at least one of x, y"
+            )
+        options: Dict[str, Any] = {}
+        if x is not None:
+            options["x"] = x
+        if y is not None:
+            options["y"] = y
+        if anchor is not None:
+            options["anchor"] = anchor
+        return PositionConstraint(refs, options)
 
     @staticmethod
     def z_above(a: RefSentinel, b: RefSentinel) -> ZOrderConstraint:
