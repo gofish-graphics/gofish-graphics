@@ -41,7 +41,8 @@ import {
 // Visual constants — chosen to match the previous bespoke axis styling.
 const TICK_LEN = 4;
 const LABEL_TICK_GAP = 3; // gap between a continuous label and its tick mark
-const ORDINAL_LABEL_GAP = 6; // gap between an ordinal label and its key
+const ORDINAL_LABEL_GAP = 8; // gap between content edge and the ordinal label row
+const INNER_REF_NAME = "__axisInner"; // name of the content node in the outer tier
 const AXIS_CONTENT_GAP = 6; // gap between axis line and content
 const TICK_COUNT = 10;
 const LABEL_FONT_SIZE = 10;
@@ -236,38 +237,74 @@ function elaborateDifferenceAxis(
 }
 
 /**
- * One ordinal axis: a label per key, stacked against the laid-out key node via a
- * direct ref (the ref makes the label track the content — no constraints).
+ * One ordinal axis: a label per key. Each label is centered on its key node
+ * along the axis (via a `ref` stand-in + `align`), but seated on a COMMON
+ * baseline by `distribute`-ing it past the whole content's near edge — so the
+ * labels form a straight row/column and don't follow each mark's own extent
+ * (which would scatter them, e.g. under a negative bar). The content is pinned
+ * at the layer origin (see the orchestrator) so it can anchor the distribute.
  */
 function elaborateOrdinalAxis(
   dim: 0 | 1,
   space: Extract<UnderlyingSpace, { kind: "ordinal" }>,
-  keyMap: Record<string, GoFishNode>
+  keyMap: Record<string, GoFishNode>,
+  prefix: string
 ): AxisElaboration {
-  const crossDim = (1 - dim) as 0 | 1;
   const keys = (space.domain ?? []).filter((k) => keyMap[k] !== undefined);
-  const nodes = keys.map(
-    (k) =>
-      (Spread as any)(
-        {
-          dir: dirName(crossDim),
-          spacing: ORDINAL_LABEL_GAP,
-          alignment: "middle",
-        },
-        [
-          Text({ text: k, fontSize: LABEL_FONT_SIZE, fill: AXIS_COLOR }),
-          ref(keyMap[k]),
-        ]
-      ) as GoFishNode
-  );
-  return { nodes, constraints: () => [] };
+  const trackAxis = dirName(dim); // labels track their key along the axis dim
+  const gutterDir = dirName((1 - dim) as 0 | 1); // labels sit in the cross gutter
+  const lName = (i: number) => `${prefix}ol${i}`;
+  const rName = (i: number) => `${prefix}or${i}`;
+
+  const nodes: GoFishNode[] = [];
+  keys.forEach((k, i) => {
+    nodes.push(
+      Text({ text: k, fontSize: LABEL_FONT_SIZE, fill: AXIS_COLOR }).name(
+        lName(i)
+      )
+    );
+    nodes.push((ref(keyMap[k]) as any).name(rName(i)) as GoFishNode);
+  });
+
+  const constraints = (g: Record<string, any>) => {
+    const cs: any[] = [];
+    keys.forEach((_, i) => {
+      // Track the key along the axis dim …
+      cs.push(
+        Constraint.align({ [trackAxis]: "middle" } as any, [
+          g[lName(i)],
+          g[rName(i)],
+        ])
+      );
+      // … and sit just past the content's near edge in the gutter, anchored to
+      // the whole content group (not the individual mark).
+      cs.push(
+        Constraint.distribute(
+          { dir: gutterDir, spacing: ORDINAL_LABEL_GAP } as any,
+          [g[lName(i)], g[INNER_REF_NAME]]
+        )
+      );
+    });
+    return cs;
+  };
+
+  return { nodes, constraints };
 }
 
-/** key→node for an ordinal node (mirrors the former axis.tsx key discovery). */
+/**
+ * key→node for an ordinal axis. Walks the subtree collecting both explicit
+ * `_ordinalKeyMap`s (set by operators like `table`, possibly on a descendant
+ * when a wrapping layer owns the axis) and per-node `.key`s (set by faceting
+ * operators). Shallower entries win on collision.
+ */
 function collectKeyMap(node: GoFishNode): Record<string, GoFishNode> {
-  if (node._ordinalKeyMap) return node._ordinalKeyMap;
   const out: Record<string, GoFishNode> = {};
   const walk = (n: GoFishNode) => {
+    if (n._ordinalKeyMap) {
+      for (const k of Object.keys(n._ordinalKeyMap)) {
+        if (!(k in out)) out[k] = n._ordinalKeyMap[k];
+      }
+    }
     if (n.key !== undefined && !(n.key in out)) out[n.key] = n;
     n.children.forEach((c) => {
       if (c instanceof GoFishNode) walk(c);
@@ -307,7 +344,7 @@ function elaborationsFor(node: GoFishNode): {
     } else if (isDIFFERENCE(s)) {
       constrained.push(elaborateDifferenceAxis(dim, s, CONTENT_NAME, prefix));
     } else if (isORDINAL(s)) {
-      refBased.push(elaborateOrdinalAxis(dim, s, collectKeyMap(node)));
+      refBased.push(elaborateOrdinalAxis(dim, s, collectKeyMap(node), prefix));
     } else {
       continue;
     }
@@ -362,11 +399,17 @@ export async function elaborateAxes(
   }
 
   // Outer tier: ref-based (ordinal) labels, laid out after `inner` so their refs
-  // read the content's final (gutter-shifted) position.
+  // read the content's final (gutter-shifted) position. The inner is named and
+  // pinned at the origin so the ordinal labels can `distribute` against its edge.
   let root = inner;
   if (refBased.length > 0) {
+    inner.name(INNER_REF_NAME);
     const labelNodes = refBased.flatMap((e) => e.nodes);
     root = (await (layer as any)([inner, ...labelNodes])) as GoFishNode;
+    root.constrain((g) => [
+      Constraint.align({ x: "start", y: "start" } as any, [g[INNER_REF_NAME]]),
+      ...refBased.flatMap((e) => e.constraints(g)),
+    ]);
   }
 
   if (origName !== undefined) root._name = origName;

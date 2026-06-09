@@ -32,7 +32,7 @@ export const Table = createNodeOperator(
     const xSpacing = Array.isArray(spacing) ? spacing[0] : spacing;
     const ySpacing = Array.isArray(spacing) ? spacing[1] : spacing;
 
-    return new GoFishNode(
+    const node = new GoFishNode(
       {
         type: "table",
         args: { key, name, numCols, spacing, colKeys, rowKeys },
@@ -183,6 +183,23 @@ export const Table = createNodeOperator(
       },
       children
     );
+
+    // Populate `_ordinalKeyMap` at construction (the layout pass sets the same
+    // map from placeables, but axis elaboration runs BEFORE layout and needs it
+    // to ref the representative cell for each col/row key). First-row cells give
+    // x-positions for column keys; first-column cells give y-positions for rows.
+    const keyMap: Record<string, GoFishNode> = {};
+    colKeys?.forEach((k, j) => {
+      const c = children[j];
+      if (c instanceof GoFishNode) keyMap[k] = c;
+    });
+    rowKeys?.forEach((k, i) => {
+      const c = children[i * numCols];
+      if (c instanceof GoFishNode) keyMap[k] = c;
+    });
+    node._ordinalKeyMap = keyMap;
+
+    return node;
   }
 );
 

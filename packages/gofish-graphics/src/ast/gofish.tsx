@@ -124,7 +124,17 @@ export async function layout(
 
   // Node-based axis pipeline: mark axis nodes and apply nice-rounding in-place
   if (axes) {
-    child.resolveAxes();
+    // Which dims the chart-level `axes` option enables. `true` → both; an
+    // `{ x?, y? }` enables a dim when its value is truthy (true or a title obj).
+    const enabled = new Set<0 | 1>();
+    if (axes === true) {
+      enabled.add(0);
+      enabled.add(1);
+    } else if (typeof axes === "object") {
+      if (axes.x) enabled.add(0);
+      if (axes.y) enabled.add(1);
+    }
+    child.resolveAxes(new Set(), enabled);
     child.resolveNiceDomains();
 
     // Axis elaboration: turn inferred axes into ordinary shapes + constraints.

@@ -24,7 +24,7 @@ function renderBar(args: Args, axes: AxesOptions): HTMLElement {
   const container = initializeContainer();
 
   Chart(seafood, { axes })
-    .flow(spread({ by: "lake",  dir: "x", axes: axes }))
+    .flow(spread({ by: "lake",  dir: "x" }))
     .mark(rect({ h: "count" }))
     .render(container, {
       w: args.w,

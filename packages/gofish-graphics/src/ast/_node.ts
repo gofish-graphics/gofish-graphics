@@ -354,40 +354,13 @@ export class GoFishNode {
    */
   public resolveAxes(
     claimed: Set<0 | 1> = new Set(),
-    budgetOnly: Set<0 | 1> = new Set()
+    enabled: Set<0 | 1> = new Set([0, 1])
   ): void {
-    if (this.type === "layer") {
-      // Accumulate claimed dims across siblings so each child sees what
-      // previous siblings already claimed. Newly-claimed dims are passed as
-      // budgetOnly to subsequent siblings: they reserve the axis margin for
-      // layout alignment but don't render duplicate axis SVG.
-      const accumulated = new Set(claimed);
-      const scanClaimed = (n: GoFishNode): void => {
-        if (n.axis.x === true) accumulated.add(0);
-        if (n.axis.y === true) accumulated.add(1);
-        n.children.forEach((c) => {
-          if (c instanceof GoFishNode) scanClaimed(c);
-        });
-      };
-      this.children.forEach((c) => {
-        if (c instanceof GoFishNode) {
-          // Dims newly claimed by previous siblings (not in the original claimed)
-          const siblingClaimed = new Set(
-            [...accumulated].filter((d) => !claimed.has(d as 0 | 1))
-          ) as Set<0 | 1>;
-          // Merge incoming budgetOnly with sibling-claimed dims so nested
-          // layer nodes (e.g. Frame wrappers) don't lose the budget signal.
-          const childBudgetOnly = new Set([
-            ...budgetOnly,
-            ...siblingClaimed,
-          ]) as Set<0 | 1>;
-          c.resolveAxes(new Set(accumulated), childBudgetOnly);
-          scanClaimed(c);
-        }
-      });
-
-      return;
-    }
+    // Note: a `layer` is treated like any other node below — it claims the
+    // axis for its own (unioned) space ONCE, so overlaid children share a single
+    // axis instead of each drawing its own (the elaboration pass then wraps the
+    // layer). Per-child axes still happen via explicit operator `axes:` overrides
+    // (e.g. faceted scatter), which the override branch honors regardless.
 
     // Coordinate-transform nodes (polar, clock, bipolar, etc.) manage their
     // own coordinate space; Cartesian axes make no sense for them or their
@@ -418,7 +391,7 @@ export class GoFishNode {
 
       const allClaimed = new Set<0 | 1>([0, 1]);
       this.children.forEach((c) => {
-        if (c instanceof GoFishNode) c.resolveAxes(allClaimed);
+        if (c instanceof GoFishNode) c.resolveAxes(allClaimed, enabled);
       });
       // _axisOverride can set axisX/Y on descendants even when claimed,
       // which would apply Cartesian axis budgets in polar coordinate space.
@@ -446,21 +419,7 @@ export class GoFishNode {
         else this.axis.y = override === false ? false : true;
         next.add(dim); // claim regardless — false blocks children too
       } else if (
-        budgetOnly.has(dim) &&
-        space &&
-        !isUNDEFINED(space[dim]) &&
-        (isPOSITION(space[dim]) ||
-          isDIFFERENCE(space[dim]) ||
-          isORDINAL(space[dim]))
-      ) {
-        // A layer sibling already owns this axis. Reserve the layout margin
-        // so content areas stay aligned, but skip axis SVG rendering.
-        // Only applies when this node has a meaningful space for this dim —
-        // nodes with UNDEFINED space (e.g. connectY) should never get budget.
-        if (dim === 0) this.axis.x = "budget";
-        else this.axis.y = "budget";
-        next.add(dim);
-      } else if (
+        enabled.has(dim) &&
         !claimed.has(dim) &&
         space &&
         !isUNDEFINED(space[dim]) &&
@@ -474,7 +433,7 @@ export class GoFishNode {
       }
     }
     this.children.forEach((c) => {
-      if (c instanceof GoFishNode) c.resolveAxes(next);
+      if (c instanceof GoFishNode) c.resolveAxes(next, enabled);
     });
   }
 
