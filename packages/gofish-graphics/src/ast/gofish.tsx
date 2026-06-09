@@ -141,17 +141,7 @@ export async function layout(
       // The rewrite inserted new nodes (wrappers + axis shapes) and moved keys
       // onto wrappers; `resolveUnderlyingSpace` memoizes, so clear every node's
       // cached space and recompute the whole tree from scratch before re-nicing.
-      const clearSpace = (n: GoFishNode): void => {
-        n._underlyingSpace = undefined;
-        n.children.forEach((c) => {
-          // Structural node check — GoFishNode is a type-only import here, and
-          // GoFishRef (the other child kind) has no `children` array.
-          if (c && Array.isArray((c as GoFishNode).children)) {
-            clearSpace(c as GoFishNode);
-          }
-        });
-      };
-      clearSpace(child);
+      child.clearUnderlyingSpace();
       child.resolveUnderlyingSpace();
       child.resolveNiceDomains();
     }

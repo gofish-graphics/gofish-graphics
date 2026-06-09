@@ -56,6 +56,9 @@ export type AxisElaboration = {
 
 const dirName = (dim: 0 | 1) => (dim === 0 ? "x" : "y");
 
+/** Stringify a tick value without floating-point noise (0.1+0.2 → "0.3"). */
+const fmtNum = (n: number) => String(+n.toPrecision(12));
+
 /** A short label+tick mark pair, stacked along the cross axis. */
 function tickMark(dim: 0 | 1, label: string, name: string): GoFishNode {
   const crossDim = (1 - dim) as 0 | 1;
@@ -100,6 +103,9 @@ function gutterConstraints(
   contentName: string,
   ticks: any[]
 ): any[] {
+  // A degenerate domain can yield zero ticks; emit no gutter rather than
+  // dereferencing ticks[0]/ticks[last] (which would crash applyDistribute).
+  if (ticks.length === 0) return [];
   const cross = (1 - dim) as 0 | 1;
   const d = dirName(cross);
   const startAlign = cross === 0 ? { x: "start" } : { y: "start" };
@@ -121,6 +127,56 @@ function gutterConstraints(
   ];
 }
 
+/**
+ * Shared builder for the two "position-like" axes (continuous + difference):
+ * an axis line spanning [lineMin,lineMax] via datum endpoints, an anchor + tick
+ * nodes pinned at their data values, an optional set of extra labels pinned at
+ * data positions (the difference deltas), and the seated gutter. Factoring this
+ * keeps the two kinds from drifting (e.g. a fix applied to only one).
+ */
+function positionAxis(opts: {
+  dim: 0 | 1;
+  contentName: string;
+  prefix: string;
+  lineMin: number;
+  lineMax: number;
+  tickValues: number[];
+  /** Build the node for tick i (labeled for continuous, bare for difference). */
+  tickNode: (v: number, i: number, name: string) => GoFishNode;
+  /** Extra labels placed at a data position (difference delta labels). */
+  extraLabels?: { value: number; text: string }[];
+}): AxisElaboration {
+  const { dim, contentName, prefix, lineMin, lineMax, tickValues } = opts;
+  const lineName = `${prefix}line`;
+  const anchorName = `${prefix}anchor`;
+  const tickName = (i: number) => `${prefix}t${i}`;
+  const labelName = (i: number) => `${prefix}l${i}`;
+  const pos = (v: number) =>
+    (dim === 1 ? { y: datum(v) } : { x: datum(v) }) as any;
+
+  const line = axisLine(dim, lineMin, lineMax, lineName);
+  const anchor = Rect({ w: 0, h: 0 }).name(anchorName);
+  const tickNodes = tickValues.map((v, i) => opts.tickNode(v, i, tickName(i)));
+  const extra = opts.extraLabels ?? [];
+  const labelNodes = extra.map((e, i) => tickMark(dim, e.text, labelName(i)));
+
+  const constraints = (g: Record<string, any>) => {
+    const ticks = tickValues.map((_, i) => g[tickName(i)]);
+    const cs: any[] = tickValues.map((v, i) =>
+      Constraint.position(pos(v), [ticks[i]])
+    );
+    extra.forEach((e, i) =>
+      cs.push(Constraint.position(pos(e.value), [g[labelName(i)]]))
+    );
+    cs.push(
+      ...gutterConstraints(dim, g, anchorName, lineName, contentName, ticks)
+    );
+    return cs;
+  };
+
+  return { nodes: [anchor, line, ...tickNodes, ...labelNodes], constraints };
+}
+
 /** One continuous (POSITION) axis. Mirrors the hand-drawn ContinuousYAxis. */
 function elaborateContinuousAxis(
   dim: 0 | 1,
@@ -134,87 +190,49 @@ function elaborateContinuousAxis(
     TICK_COUNT
   );
   const tickValues = d3Ticks(niceMin, niceMax, TICK_COUNT);
-  const lineName = `${prefix}line`;
-  const anchorName = `${prefix}anchor`;
-  const tickName = (i: number) => `${prefix}t${i}`;
-
-  const line = axisLine(dim, niceMin, niceMax, lineName);
-  const anchor = Rect({ w: 0, h: 0 }).name(anchorName);
-  const tickNodes = tickValues.map((v, i) =>
-    tickMark(dim, String(v), tickName(i))
-  );
-
-  const constraints = (g: Record<string, any>) => {
-    const ticks = tickValues.map((_, i) => g[tickName(i)]);
-    const cs: any[] = tickValues.map((v, i) =>
-      Constraint.position(
-        (dim === 1 ? { y: datum(v) } : { x: datum(v) }) as any,
-        [ticks[i]]
-      )
-    );
-    cs.push(
-      ...gutterConstraints(dim, g, anchorName, lineName, contentName, ticks)
-    );
-    return cs;
-  };
-
-  return { nodes: [anchor, line, ...tickNodes], constraints };
+  return positionAxis({
+    dim,
+    contentName,
+    prefix,
+    lineMin: niceMin,
+    lineMax: niceMax,
+    tickValues,
+    tickNode: (v, _i, name) => tickMark(dim, fmtNum(v), name),
+  });
 }
 
-/** One difference axis: tick marks at tick values, delta labels at midpoints. */
+/** One difference axis: bare tick marks at tick values, delta labels at midpoints. */
 function elaborateDifferenceAxis(
   dim: 0 | 1,
   space: Extract<UnderlyingSpace, { kind: "difference" }>,
   contentName: string,
   prefix: string
 ): AxisElaboration {
-  const [niceMin, niceMax] = d3Nice(0, space.width, TICK_COUNT);
-  const tickValues = d3Ticks(niceMin, niceMax, TICK_COUNT);
-  const lineName = `${prefix}line`;
-  const anchorName = `${prefix}anchor`;
-  const tickName = (i: number) => `${prefix}t${i}`;
-
-  const line = axisLine(dim, niceMin, niceMax, lineName);
-  const anchor = Rect({ w: 0, h: 0 }).name(anchorName);
-  // Bare tick marks (no label) pinned at each tick value, to anchor the gutter
-  // and span the domain; delta labels sit between consecutive ticks.
-  const tickNodes = tickValues.map((_, i) =>
-    Rect(
-      dim === 1
-        ? { w: TICK_LEN, h: 1, fill: AXIS_COLOR }
-        : { w: 1, h: TICK_LEN, fill: AXIS_COLOR }
-    ).name(tickName(i))
-  );
-  const labelName = (i: number) => `${prefix}l${i}`;
-  const labelNodes = tickValues
-    .slice(0, -1)
-    .map((v, i) => tickMark(dim, String(tickValues[i + 1] - v), labelName(i)));
-
-  const constraints = (g: Record<string, any>) => {
-    const ticks = tickValues.map((_, i) => g[tickName(i)]);
-    const cs: any[] = tickValues.map((v, i) =>
-      Constraint.position(
-        (dim === 1 ? { y: datum(v) } : { x: datum(v) }) as any,
-        [ticks[i]]
-      )
-    );
-    // Delta labels at midpoints between consecutive ticks.
-    tickValues.slice(0, -1).forEach((v, i) => {
-      const mid = (v + tickValues[i + 1]) / 2;
-      cs.push(
-        Constraint.position(
-          (dim === 1 ? { y: datum(mid) } : { x: datum(mid) }) as any,
-          [g[labelName(i)]]
-        )
-      );
-    });
-    cs.push(
-      ...gutterConstraints(dim, g, anchorName, lineName, contentName, ticks)
-    );
-    return cs;
-  };
-
-  return { nodes: [anchor, line, ...tickNodes, ...labelNodes], constraints };
+  // Scale over the RAW width (not a niced max) so the tick scale equals the
+  // content's own width-based scaleFactor (size/width) and ticks line up with
+  // the marks they annotate. The axis line spans [0, width]; ticks are nice
+  // values within it. (The old bespoke path used v*scaleFactor for the same.)
+  const width = space.width;
+  const tickValues = d3Ticks(0, width, TICK_COUNT);
+  const extraLabels = tickValues.slice(0, -1).map((v, i) => ({
+    value: (v + tickValues[i + 1]) / 2,
+    text: fmtNum(tickValues[i + 1] - v),
+  }));
+  return positionAxis({
+    dim,
+    contentName,
+    prefix,
+    lineMin: 0,
+    lineMax: width,
+    tickValues,
+    tickNode: (_v, _i, name) =>
+      Rect(
+        dim === 1
+          ? { w: TICK_LEN, h: 1, fill: AXIS_COLOR }
+          : { w: 1, h: TICK_LEN, fill: AXIS_COLOR }
+      ).name(name),
+    extraLabels,
+  });
 }
 
 /**
@@ -259,30 +277,44 @@ function collectKeyMap(node: GoFishNode): Record<string, GoFishNode> {
   return out;
 }
 
-/** Build the elaborations for whichever axes `node` owns; clears its flags. */
-function elaborationsFor(node: GoFishNode): AxisElaboration[] {
+const CONTENT_NAME = "__axisContent";
+
+/**
+ * Build the elaborations for whichever axes `node` owns; clears its flags.
+ * Splits them into two tiers because they place differently:
+ *  - `constrained` (continuous/difference) seat a gutter via constraints that
+ *    SHIFT the content; they must wrap the content directly.
+ *  - `refBased` (ordinal) track the content via `ref(...)`, so they must be laid
+ *    out AFTER the content is in its final (shifted) position — i.e. in an outer
+ *    tier. Otherwise the ref captures the pre-shift position and the labels miss
+ *    the continuous-axis gutter offset.
+ */
+function elaborationsFor(node: GoFishNode): {
+  constrained: AxisElaboration[];
+  refBased: AxisElaboration[];
+} {
   const space = node._underlyingSpace;
-  if (!space) return [];
-  const out: AxisElaboration[] = [];
-  const contentName = "__axisContent";
+  if (!space) return { constrained: [], refBased: [] };
+  const constrained: AxisElaboration[] = [];
+  const refBased: AxisElaboration[] = [];
   for (const dim of [0, 1] as (0 | 1)[]) {
     const flag = dim === 0 ? node.axis.x : node.axis.y;
     if (flag !== true && flag !== "budget") continue;
     const s = space[dim];
     const prefix = dim === 1 ? "__y" : "__x";
     if (isPOSITION(s) && s.domain) {
-      out.push(elaborateContinuousAxis(dim, s, contentName, prefix));
+      constrained.push(elaborateContinuousAxis(dim, s, CONTENT_NAME, prefix));
     } else if (isDIFFERENCE(s)) {
-      out.push(elaborateDifferenceAxis(dim, s, contentName, prefix));
+      constrained.push(elaborateDifferenceAxis(dim, s, CONTENT_NAME, prefix));
     } else if (isORDINAL(s)) {
-      out.push(elaborateOrdinalAxis(dim, s, collectKeyMap(node)));
+      refBased.push(elaborateOrdinalAxis(dim, s, collectKeyMap(node)));
     } else {
       continue;
     }
     if (dim === 0) node.axis.x = undefined;
     else node.axis.y = undefined;
   }
-  return out;
+  return { constrained, refBased };
 }
 
 /**
@@ -308,23 +340,36 @@ export async function elaborateAxes(
     }
   }
 
-  const elaborations = elaborationsFor(node);
-  if (elaborations.length === 0) return { node, changed };
+  const { constrained, refBased } = elaborationsFor(node);
+  if (constrained.length === 0 && refBased.length === 0) {
+    return { node, changed };
+  }
 
-  const contentName = "__axisContent";
+  // Move identity off the content onto whatever ends up outermost, so the
+  // parent (faceting/refs/select) still resolves to this node.
   const origName = node._name;
   const origKey = node.key;
-  node.name(contentName);
+  node._name = undefined;
+  node.key = undefined;
 
-  const axisNodes = elaborations.flatMap((e) => e.nodes);
-  const wrapper = (await (layer as any)([node, ...axisNodes])) as GoFishNode;
-  wrapper.constrain((g) => elaborations.flatMap((e) => e.constraints(g)));
-
-  // Inherit identity so the parent (faceting/refs/select) still finds this node.
-  if (origName !== undefined) wrapper._name = origName;
-  if (origKey !== undefined) {
-    wrapper.setKey(origKey);
-    node.key = undefined;
+  // Inner tier: content + constraint-based (continuous/difference) axes.
+  let inner: GoFishNode = node;
+  if (constrained.length > 0) {
+    node.name(CONTENT_NAME);
+    const axisNodes = constrained.flatMap((e) => e.nodes);
+    inner = (await (layer as any)([node, ...axisNodes])) as GoFishNode;
+    inner.constrain((g) => constrained.flatMap((e) => e.constraints(g)));
   }
-  return { node: wrapper, changed: true };
+
+  // Outer tier: ref-based (ordinal) labels, laid out after `inner` so their refs
+  // read the content's final (gutter-shifted) position.
+  let root = inner;
+  if (refBased.length > 0) {
+    const labelNodes = refBased.flatMap((e) => e.nodes);
+    root = (await (layer as any)([inner, ...labelNodes])) as GoFishNode;
+  }
+
+  if (origName !== undefined) root._name = origName;
+  if (origKey !== undefined) root.setKey(origKey);
+  return { node: root, changed: true };
 }

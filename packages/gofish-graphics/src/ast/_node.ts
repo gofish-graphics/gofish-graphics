@@ -335,6 +335,20 @@ export class GoFishNode {
   }
 
   /**
+   * Drop the memoized underlying space for this node and its whole subtree, so a
+   * later `resolveUnderlyingSpace()` recomputes from scratch. Used after the axis
+   * elaboration pass rewrites the tree (inserts wrappers, moves keys). Keeping
+   * the invalidation here — rather than ad hoc at the call site — means any
+   * future memoized field can be cleared in one place.
+   */
+  public clearUnderlyingSpace(): void {
+    this._underlyingSpace = undefined;
+    this.children.forEach((c) => {
+      if (c instanceof GoFishNode) c.clearUnderlyingSpace();
+    });
+  }
+
+  /**
    * Top-down walk that marks which nodes should render axes.
    * `claimed` tracks dimensions already claimed by an ancestor.
    */
