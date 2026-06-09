@@ -395,19 +395,26 @@ export const Spread = createNodeOperator(
             }
           }
 
-          // Compute alignDir intrinsicDims from extents to account for negative bars
-          const alignMin = Math.min(
-            ...childPlaceables.map((child) => child.dims[alignDir].min!)
-          );
-          const alignMax = Math.max(
-            ...childPlaceables.map((child) => child.dims[alignDir].max!)
-          );
-          const stackMin = Math.min(
-            ...childPlaceables.map((child) => child.dims[stackDir].min!)
-          );
-          const stackMax = Math.max(
-            ...childPlaceables.map((child) => child.dims[stackDir].max!)
-          );
+          // Compute alignDir intrinsicDims from extents to account for negative
+          // bars. Ignore children that report a non-finite extent on a given
+          // axis (e.g. an unconstrained dim) so one `undefined` doesn't turn the
+          // whole box into NaN via `Math.min(undefined)`.
+          const reduceExtent = (
+            dir: Direction,
+            pick: (iv: { min?: number; max?: number }) => number | undefined,
+            f: (...n: number[]) => number
+          ): number => {
+            const vals = childPlaceables
+              .map((child) => pick(child.dims[dir]))
+              .filter(
+                (v): v is number => typeof v === "number" && Number.isFinite(v)
+              );
+            return vals.length ? f(...vals) : 0;
+          };
+          const alignMin = reduceExtent(alignDir, (iv) => iv.min, Math.min);
+          const alignMax = reduceExtent(alignDir, (iv) => iv.max, Math.max);
+          const stackMin = reduceExtent(stackDir, (iv) => iv.min, Math.min);
+          const stackMax = reduceExtent(stackDir, (iv) => iv.max, Math.max);
           const alignSize = alignMax - alignMin;
           const stackSize = stackMax - stackMin;
           const translateAlign =

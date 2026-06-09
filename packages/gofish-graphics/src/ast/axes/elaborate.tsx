@@ -42,7 +42,7 @@ import {
 const TICK_LEN = 4;
 const LABEL_TICK_GAP = 3; // gap between a continuous label and its tick mark
 const ORDINAL_LABEL_GAP = 8; // gap between content edge and the ordinal label row
-const INNER_REF_NAME = "__axisInner"; // name of the content node in the outer tier
+const CONTENT_REF_NAME = "__axisContentRef"; // outer-tier ref back to the content
 const AXIS_CONTENT_GAP = 6; // gap between axis line and content
 const TICK_COUNT = 10;
 const LABEL_FONT_SIZE = 10;
@@ -268,11 +268,12 @@ function elaborateOrdinalAxis(
         ])
       );
       // … and sit just past the content's near edge in the gutter, anchored to
-      // the whole content group (not the individual mark).
+      // the whole content group (a cross-tier ref, so it tracks the content's
+      // real position) rather than the individual mark.
       cs.push(
         Constraint.distribute(
           { dir: gutterDir, spacing: ORDINAL_LABEL_GAP } as any,
-          [g[lName(i)], g[INNER_REF_NAME]]
+          [g[lName(i)], g[CONTENT_REF_NAME]]
         )
       );
     });
@@ -394,18 +395,21 @@ export async function elaborateAxes(
     ]);
   }
 
-  // Outer tier: ref-based (ordinal) labels, laid out after `inner` so their refs
-  // read the content's final (gutter-shifted) position. The inner is named and
-  // pinned at the origin so the ordinal labels can `distribute` against its edge.
+  // Outer tier: ref-based (ordinal) labels. `inner` is NOT pinned here (it just
+  // baseline-places at the origin) — pinning its min would shift it, and the
+  // bars with it, by the negative-space gutter, *after* the label refs already
+  // resolved. Instead the labels anchor to a cross-tier `ref` of the content,
+  // which reports the content's real (unshifted) position.
   let root = inner;
   if (refBased.length > 0) {
-    inner.name(INNER_REF_NAME);
+    const contentRef = (ref(node) as any).name(CONTENT_REF_NAME) as GoFishNode;
     const labelNodes = refBased.flatMap((e) => e.nodes);
-    root = (await (layer as any)([inner, ...labelNodes])) as GoFishNode;
-    root.constrain((g) => [
-      Constraint.align({ x: "start", y: "start" } as any, [g[INNER_REF_NAME]]),
-      ...refBased.flatMap((e) => e.constraints(g)),
-    ]);
+    root = (await (layer as any)([
+      inner,
+      contentRef,
+      ...labelNodes,
+    ])) as GoFishNode;
+    root.constrain((g) => refBased.flatMap((e) => e.constraints(g)));
   }
 
   if (origName !== undefined) root._name = origName;
