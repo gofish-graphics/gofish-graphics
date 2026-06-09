@@ -165,6 +165,15 @@ This is one of the most important passes. It determines the **underlying space**
 
 See [Underlying Space](/internals/core/underlying-space) for the full treatment of this intermediate representation.
 
+**Constraints participate too.** `resolveUnderlyingSpace` passes a node's
+positioning constraints to its resolver (a fourth `constraints` argument). A
+`layer` folds the _datum_ coordinates of its `Constraint.position` constraints
+into a `POSITION` domain on that axis (`collectPositionDomains`), unioned with
+the children's spaces — so a `position` constraint contributes a fragment of
+this pass, which is what lets the layer build a data→pixel scale to resolve
+those constraints at layout time. See
+[Operators vs Constraints](/internals/design/operators-vs-constraints).
+
 **Example for Bar Chart Rectangles**:
 
 **Location**: `src/ast/shapes/rect.tsx:92-169`
