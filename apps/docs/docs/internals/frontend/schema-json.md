@@ -443,7 +443,7 @@ for the API.
       "required": ["type", "refs"],
       "properties": {
         "type": {
-          "enum": ["align", "distribute", "zAbove", "zBelow"]
+          "enum": ["align", "distribute", "position", "zAbove", "zBelow"]
         },
         "options": {
           "type": "object"

@@ -342,8 +342,9 @@ export type LabelIR =
     };
 
 export interface ConstraintIR {
-  type: "align" | "distribute" | "zAbove" | "zBelow";
-  /** Positioning constraints carry `options`; z-order constraints don't. */
+  type: "align" | "distribute" | "position" | "zAbove" | "zBelow";
+  /** Positioning constraints (`align`/`distribute`/`position`) carry `options`;
+   *  z-order constraints don't. */
   options?: Record<string, unknown>;
   refs: string[];
 }
