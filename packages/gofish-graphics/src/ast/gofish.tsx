@@ -124,15 +124,17 @@ export async function layout(
 
   // Node-based axis pipeline: mark axis nodes and apply nice-rounding in-place
   if (axes) {
-    // Which dims the chart-level `axes` option enables. `true` → both; an
-    // `{ x?, y? }` enables a dim when its value is truthy (true or a title obj).
+    // Which dims the chart-level `axes` option enables. `true` → both. For an
+    // `{ x?, y? }` object, a dim is enabled unless it is explicitly `false` —
+    // an unspecified (undefined) dim still shows (specifying one axis doesn't
+    // disable the other); only `false` suppresses.
     const enabled = new Set<0 | 1>();
     if (axes === true) {
       enabled.add(0);
       enabled.add(1);
     } else if (typeof axes === "object") {
-      if (axes.x) enabled.add(0);
-      if (axes.y) enabled.add(1);
+      if (axes.x !== false) enabled.add(0);
+      if (axes.y !== false) enabled.add(1);
     }
     child.resolveAxes(new Set(), enabled);
     child.resolveNiceDomains();

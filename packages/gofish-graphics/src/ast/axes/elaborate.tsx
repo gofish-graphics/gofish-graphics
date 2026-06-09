@@ -151,18 +151,28 @@ function positionAxis(opts: {
 
   const line = axisLine(dim, lineMin, lineMax, lineName);
   const tickNodes = tickValues.map((v, i) => opts.tickNode(v, i, tickName(i)));
+  // Extra labels (difference deltas) are PLAIN text — no tick mark of their own,
+  // or the axis ends up with a second row of ticks at the midpoints.
   const extra = opts.extraLabels ?? [];
-  const labelNodes = extra.map((e, i) => tickMark(dim, e.text, labelName(i)));
+  const labelNodes = extra.map((e, i) =>
+    Text({ text: e.text, fontSize: LABEL_FONT_SIZE, fill: AXIS_COLOR }).name(
+      labelName(i)
+    )
+  );
 
   const constraints = (g: Record<string, any>) => {
     const ticks = tickValues.map((_, i) => g[tickName(i)]);
+    const labels = extra.map((_, i) => g[labelName(i)]);
     const cs: any[] = tickValues.map((v, i) =>
       Constraint.position(pos(v), [ticks[i]])
     );
     extra.forEach((e, i) =>
       cs.push(Constraint.position(pos(e.value), [g[labelName(i)]]))
     );
-    cs.push(...gutterConstraints(dim, g, lineName, contentName, ticks));
+    // Seat every gutter piece (ticks AND labels) against the line.
+    cs.push(
+      ...gutterConstraints(dim, g, lineName, contentName, [...ticks, ...labels])
+    );
     return cs;
   };
 
