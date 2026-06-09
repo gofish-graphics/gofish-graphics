@@ -56,6 +56,8 @@ export type {
   AlignConstraint,
   DistributeConstraint,
   DistributeOptions,
+  PositionConstraint,
+  PositionOptions,
   Axis,
   Alignment,
 } from "./ast/constraints";

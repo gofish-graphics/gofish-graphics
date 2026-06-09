@@ -110,7 +110,10 @@ export type Render = (
 export type ResolveUnderlyingSpace = (
   childSpaces: Size<UnderlyingSpace>[],
   childNodes: (GoFishNode | GoFishRef)[],
-  shared: Size<boolean>
+  shared: Size<boolean>,
+  /** This node's positioning constraints. `position` constraints contribute a
+   *  POSITION-domain fragment to the resolved space (see `layer.tsx`). */
+  constraints: ConstraintSpec[]
 ) => FancySize<UnderlyingSpace>;
 
 export class GoFishNode {
@@ -331,7 +334,8 @@ export class GoFishNode {
       this._resolveUnderlyingSpace(
         this.children.map((child) => child.resolveUnderlyingSpace()),
         this.children,
-        this.shared
+        this.shared,
+        this.constraints
       )
     );
     return this._underlyingSpace;

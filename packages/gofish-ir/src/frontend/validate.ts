@@ -618,10 +618,16 @@ function walkConstraint(node: unknown, path: string, ctx: Context): void {
     return;
   }
   const t = node.type;
-  if (t !== "align" && t !== "distribute" && t !== "zAbove" && t !== "zBelow") {
+  if (
+    t !== "align" &&
+    t !== "distribute" &&
+    t !== "position" &&
+    t !== "zAbove" &&
+    t !== "zBelow"
+  ) {
     ctx.errors.push({
       path: `${path}.type`,
-      message: `constraint type must be "align" | "distribute" | "zAbove" | "zBelow"`,
+      message: `constraint type must be "align" | "distribute" | "position" | "zAbove" | "zBelow"`,
     });
     return;
   }

@@ -366,6 +366,16 @@ export default defineConfig({
                 { text: "gradient", link: "/python/api/color/gradient" },
               ],
             },
+            {
+              text: "Constraints",
+              collapsed: true,
+              items: [
+                {
+                  text: "constrain",
+                  link: "/python/api/constraints/constrain",
+                },
+              ],
+            },
           ],
         },
       ],
