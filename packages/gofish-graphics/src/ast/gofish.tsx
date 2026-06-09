@@ -17,6 +17,7 @@ import { computePosScale } from "./domain";
 import type { Size } from "./dims";
 import { isSIZE, type UnderlyingSpace } from "./underlyingSpace";
 import { continuous } from "./domain";
+import { elaborateAxes } from "./axes/elaborate";
 
 export type CategoricalScale = {
   color: Map<any, string>;
@@ -125,6 +126,35 @@ export async function layout(
   if (axes) {
     child.resolveAxes();
     child.resolveNiceDomains();
+
+    // Axis elaboration: turn inferred axes into ordinary shapes + constraints.
+    // Wraps axis-owning content in a Layer with tick/label shapes and clears the
+    // handled axis flags; the new subtree is then re-resolved below. Cases not
+    // yet elaborated keep their flags and fall through to the legacy pipeline.
+    const elaborated = await elaborateAxes(child);
+    if (elaborated.changed) {
+      child = elaborated.node;
+      if (contexts?.session) child.setRenderSession(contexts.session);
+      child.resolveColorScale();
+      child.resolveNames();
+      child.resolveLabels();
+      // The rewrite inserted new nodes (wrappers + axis shapes) and moved keys
+      // onto wrappers; `resolveUnderlyingSpace` memoizes, so clear every node's
+      // cached space and recompute the whole tree from scratch before re-nicing.
+      const clearSpace = (n: GoFishNode): void => {
+        n._underlyingSpace = undefined;
+        n.children.forEach((c) => {
+          // Structural node check — GoFishNode is a type-only import here, and
+          // GoFishRef (the other child kind) has no `children` array.
+          if (c && Array.isArray((c as GoFishNode).children)) {
+            clearSpace(c as GoFishNode);
+          }
+        });
+      };
+      clearSpace(child);
+      child.resolveUnderlyingSpace();
+      child.resolveNiceDomains();
+    }
   }
 
   // Use (possibly nice-rounded) underlying spaces for posScales

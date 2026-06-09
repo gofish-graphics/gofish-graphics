@@ -38,8 +38,6 @@ import {
 import { toJSON, interval } from "../util/interval";
 import { nice } from "d3-array";
 import type { ScaleContext } from "./gofish";
-import { createAxisNode, AXIS_WIDTH } from "./shapes/axis";
-import { computePosScale, continuous } from "./domain";
 import type { TokenContext } from "./tokenContext";
 import { isToken, Token } from "./createName";
 import type { ConstraintSpec, ConstraintRef } from "./constraints";
@@ -153,11 +151,13 @@ export class GoFishNode {
   public _label?: LabelSpec;
   private _zOrder = 0;
   private renderSession?: RenderSession;
-  // Axis state per dimension.
-  // true    = owns the axis (renders SVG + reserves AXIS_WIDTH budget)
-  // false   = explicitly suppressed via axes: override (no budget, blocks children)
-  // "budget"= budget-only; reserves AXIS_WIDTH space but does not render SVG
-  //           (set on non-first layer siblings that share a sibling's axis)
+  // Axis state per dimension. Set by `resolveAxes` and consumed by the axis
+  // elaboration pass (`elaborateAxes`), which wraps owning nodes in a Layer of
+  // ordinary tick/label shapes.
+  // true     = owns the axis (gets elaborated into shapes here)
+  // "budget" = a layer sibling owns it; also elaborated (overlapping siblings
+  //            overdraw identically, which keeps their content aligned)
+  // false    = explicitly suppressed via axes: override (blocks children)
   // undefined = not involved
   public axis: { x?: true | false | "budget"; y?: true | false | "budget" } =
     {};
@@ -165,13 +165,6 @@ export class GoFishNode {
   /** Explicit key→node map for ordinal axis label positioning. Set by
    * operators (e.g. table) whose domain keys differ from children's .key. */
   public _ordinalKeyMap?: Record<string, GoFishNode>;
-  public _axisChildren?: Map<0 | 1, GoFishNode>;
-  public _contentBaseline: Size = [0, 0];
-  /**
-   * Set by directional operators (Spread) to indicate the align direction.
-   * Used in layout() to gate innerBaselineX expansion.
-   */
-  public _layoutAlignDir?: 0 | 1;
   /**
    * Stack direction of the operator that created this node.
    * Used in coord.tsx collectOverrides to route axis: overrides to the
@@ -509,264 +502,20 @@ export class GoFishNode {
     posScales: Size<((pos: number) => number) | undefined>,
     posDomains?: Size<[number, number] | undefined>
   ): Placeable {
-    let axisBudgetX =
-      this.axis.y === true || this.axis.y === "budget" ? AXIS_WIDTH : 0;
-    let axisBudgetY =
-      this.axis.x === true || this.axis.x === "budget" ? AXIS_WIDTH : 0;
-
-    // Change 1: expand outer axis budget to include inner baselines so both
-    // label rows have room (outer labels + inner facet labels).
-    // Look through transparent layer nodes to find real axis flags.
-    const findAxisFlag = (n: GoFishNode, dim: 0 | 1): boolean => {
-      if (n.type === "layer") {
-        return n.children.some(
-          (c) => c instanceof GoFishNode && findAxisFlag(c, dim)
-        );
-      }
-      return dim === 0 ? n.axis.x === true : n.axis.y === true;
-    };
-    // innerBaselineY: for horizontal spreads (dir:"x", alignDir=1) only.
-    // The inner x-axis label row stacks in y below the outer x-axis labels,
-    // so 2×AT is needed. For vertical spreads (dir:"y") the inner x-axis sits
-    // inside each facet and already falls adjacent to the outer x-axis with
-    // just 1×AT — expanding here would push frames up, creating a dead gap.
-    const innerBaselineY =
-      axisBudgetY > 0 && this._layoutAlignDir === 1
-        ? this.children.reduce(
-            (max, c) =>
-              c instanceof GoFishNode && findAxisFlag(c, 0)
-                ? Math.max(max, AXIS_WIDTH)
-                : max,
-            0
-          )
-        : 0;
-    // innerBaselineX: for vertical spreads (dir:"y", alignDir=0) only.
-    const innerBaselineX =
-      axisBudgetX > 0 && this._layoutAlignDir === 0
-        ? this.children.reduce(
-            (max, c) =>
-              c instanceof GoFishNode && findAxisFlag(c, 1)
-                ? Math.max(max, AXIS_WIDTH)
-                : max,
-            0
-          )
-        : 0;
-    axisBudgetY += innerBaselineY;
-    axisBudgetX += innerBaselineX;
-
-    let contentSize: Size = size;
-    let contentPosScales = posScales;
-    let contentScaleFactors = scaleFactors;
-
-    if (axisBudgetX > 0 || axisBudgetY > 0) {
-      // Clamp to 0 so charts with h=0 (e.g. 1D strip plots) don't get a
-      // negative content size which causes NaN in the posScale compression.
-      contentSize = [
-        Math.max(0, size[0] - axisBudgetX),
-        Math.max(0, size[1] - axisBudgetY),
-      ];
-      // Rescale posScales to fit within content area.
-      // outerManages: when posScales[dim] is already provided by an ancestor,
-      // pass it through unchanged to avoid double-compression in faceted charts.
-      const outerManagesX = posScales[0] !== undefined;
-      const outerManagesY = posScales[1] !== undefined;
-
-      contentPosScales = [
-        posScales[0] && axisBudgetX > 0 && !outerManagesX && size[0] > 0
-          ? (v: number) => posScales[0]!(v) * (contentSize[0] / size[0])
-          : posScales[0],
-        posScales[1] && axisBudgetY > 0 && !outerManagesY && size[1] > 0
-          ? (v: number) => posScales[1]!(v) * (contentSize[1] / size[1])
-          : posScales[1],
-      ];
-      contentScaleFactors = [
-        scaleFactors[0] !== undefined &&
-        axisBudgetX > 0 &&
-        !outerManagesX &&
-        size[0] > 0
-          ? scaleFactors[0] * (contentSize[0] / size[0])
-          : scaleFactors[0],
-        scaleFactors[1] !== undefined &&
-        axisBudgetY > 0 &&
-        !outerManagesY &&
-        size[1] > 0
-          ? scaleFactors[1] * (contentSize[1] / size[1])
-          : scaleFactors[1],
-      ];
-      this._contentBaseline = [axisBudgetX, axisBudgetY];
-
-      // When this node owns an axis for a POSITION dimension but the outer
-      // context didn't supply a posScale (e.g. inner scatter inside a faceted
-      // chart where the outer x-space is ORDINAL), compute a local posScale.
-      const uspace = this._underlyingSpace;
-      if (
-        !contentPosScales[0] &&
-        this.axis.x === true &&
-        uspace &&
-        isPOSITION(uspace[0]) &&
-        uspace[0].domain
-      ) {
-        contentPosScales = [
-          computePosScale(
-            continuous({
-              value: [uspace[0].domain.min!, uspace[0].domain.max!],
-              measure: "unit",
-            }),
-            contentSize[0]
-          ),
-          contentPosScales[1],
-        ];
-      }
-      if (
-        !contentPosScales[1] &&
-        this.axis.y === true &&
-        uspace &&
-        isPOSITION(uspace[1]) &&
-        uspace[1].domain
-      ) {
-        contentPosScales = [
-          contentPosScales[0],
-          computePosScale(
-            continuous({
-              value: [uspace[1].domain.min!, uspace[1].domain.max!],
-              measure: "unit",
-            }),
-            contentSize[1]
-          ),
-        ];
-      }
-    }
-
+    // Axes are no longer drawn here: they are elaborated into ordinary shapes +
+    // constraints by `elaborateAxes` (src/ast/axes/elaborate.tsx) before layout,
+    // so the layout engine has no axis-specific budget/baseline machinery.
     const { intrinsicDims, transform, renderData } = this._layout(
       this.shared,
-      contentSize,
-      contentScaleFactors,
+      size,
+      scaleFactors,
       this.children,
-      contentPosScales,
+      posScales,
       this,
       posDomains
     );
 
-    if (axisBudgetX > 0 || axisBudgetY > 0) {
-      // Shift content children's transforms so they occupy the content area
-      for (const child of this.children) {
-        if (child instanceof GoFishNode && child.transform) {
-          if (axisBudgetX > 0) {
-            child.transform.translate![0] =
-              (child.transform.translate![0] ?? 0) + axisBudgetX;
-          }
-          if (axisBudgetY > 0) {
-            child.transform.translate![1] =
-              (child.transform.translate![1] ?? 0) + axisBudgetY;
-          }
-        }
-      }
-
-      // Expand intrinsicDims to include axis budget
-      const dims = elaborateDims(intrinsicDims);
-      this.intrinsicDims = [
-        {
-          min: 0,
-          max: (dims[0].max ?? 0) + axisBudgetX,
-          size: (dims[0].size ?? 0) + axisBudgetX,
-          center: ((dims[0].max ?? 0) + axisBudgetX) / 2,
-        },
-        {
-          min: 0,
-          max: (dims[1].max ?? 0) + axisBudgetY,
-          size: (dims[1].size ?? 0) + axisBudgetY,
-          center: ((dims[1].max ?? 0) + axisBudgetY) / 2,
-        },
-      ];
-
-      // Create and place axis children
-      this._axisChildren = new Map();
-      const space = this._underlyingSpace!;
-      const session = this.getRenderSession();
-
-      if (this.axis.y === true) {
-        const sf = this.getRenderSession().scaleContext.y;
-        const diffScaleY =
-          isDIFFERENCE(space[1]) && sf && "scaleFactor" in sf
-            ? (v: number) => v * (sf as any).scaleFactor
-            : undefined;
-        const yPosScale = contentPosScales[1] ?? diffScaleY;
-        const yAxisNode = createAxisNode({
-          dim: 1,
-          space: space[1],
-          contentSize: contentSize[1],
-          posScale: yPosScale,
-          ownerNode: this,
-          posDomain: posDomains?.[1],
-        });
-        if (yAxisNode) {
-          yAxisNode.parent = this;
-          yAxisNode.setRenderSession(session);
-          yAxisNode.layout(
-            [axisBudgetX, contentSize[1]],
-            contentScaleFactors,
-            contentPosScales
-          );
-          yAxisNode.place(0, 0, "min");
-          yAxisNode.place(1, axisBudgetY, "min");
-          this._axisChildren.set(1, yAxisNode);
-        }
-      }
-
-      if (this.axis.x === true) {
-        const sf = this.getRenderSession().scaleContext.x;
-        const diffScaleX =
-          isDIFFERENCE(space[0]) && sf && "scaleFactor" in sf
-            ? (v: number) => v * (sf as any).scaleFactor
-            : undefined;
-        const xPosScale = contentPosScales[0] ?? diffScaleX;
-        const xAxisNode = createAxisNode({
-          dim: 0,
-          space: space[0],
-          contentSize: contentSize[0],
-          posScale: xPosScale,
-          ownerNode: this,
-          posDomain: posDomains?.[0],
-        });
-        if (xAxisNode) {
-          xAxisNode.parent = this;
-          xAxisNode.setRenderSession(session);
-          xAxisNode.layout(
-            [contentSize[0], axisBudgetY],
-            contentScaleFactors,
-            contentPosScales
-          );
-          xAxisNode.place(0, axisBudgetX, "min");
-          xAxisNode.place(1, 0, "min");
-          this._axisChildren.set(0, xAxisNode);
-        }
-      }
-    } else {
-      this.intrinsicDims = elaborateDims(intrinsicDims);
-      // Propagate _contentBaseline through transparent layer nodes so that
-      // outer spreads (Change 3) can read the inner chart's axis offset even
-      // when a Frame/layer sits between the outer spread and the inner chart.
-      if (this.type === "layer") {
-        const maxBaselineX = this.children.reduce(
-          (max, c) =>
-            c instanceof GoFishNode
-              ? Math.max(max, c._contentBaseline[0])
-              : max,
-          0
-        );
-        const maxBaselineY = this.children.reduce(
-          (max, c) =>
-            c instanceof GoFishNode
-              ? Math.max(max, c._contentBaseline[1])
-              : max,
-          0
-        );
-        if (maxBaselineX > 0 || maxBaselineY > 0) {
-          this._contentBaseline = [maxBaselineX, maxBaselineY];
-        }
-      }
-    }
-
+    this.intrinsicDims = elaborateDims(intrinsicDims);
     this.transform = elaborateTransform(transform);
     this.renderData = renderData;
     return this;
@@ -855,17 +604,6 @@ export class GoFishNode {
       )
     );
 
-    // Include axis children alongside content children
-    const axisChildrenJSX: JSX.Element[] =
-      this._axisChildren && this._axisChildren.size > 0
-        ? [...this._axisChildren.values()].map((n) => n.INTERNAL_render())
-        : [];
-
-    const allChildrenJSX =
-      axisChildrenJSX.length > 0
-        ? ([...contentChildrenJSX, ...axisChildrenJSX] as JSX.Element[])
-        : contentChildrenJSX;
-
     const shapeJSX = this._render(
       {
         intrinsicDims: this.intrinsicDims,
@@ -873,7 +611,7 @@ export class GoFishNode {
         renderData: this.renderData,
         coordinateTransform: coordinateTransform,
       },
-      allChildrenJSX,
+      contentChildrenJSX,
       this
     );
     if (this._label && this.intrinsicDims) {

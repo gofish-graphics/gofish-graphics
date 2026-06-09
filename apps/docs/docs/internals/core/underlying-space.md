@@ -357,27 +357,23 @@ Conceptually, axis inference splits into two independent questions:
    a facet operator might explicitly request labels for the ORDINAL
    spaces it creates.
 
-**The current implementation only does (1), and only at the root.**
-`gofish.tsx`'s `render()` takes a chart-level `axes: boolean | { x?, y? }`
-option and renders an axis when both the option is on and the _root_
-underlying space is POSITION (quantitative ticks), DIFFERENCE (a magnitude
-guide, currently limited), or ORDINAL (labels at laid-out positions). The
-space kind determines the axis style; the boolean option controls
-per-axis visibility globally.
+Both questions are now answered by a tree walk. `resolveAxes` (`_node.ts`)
+performs (2): a top-down pass that tags each node's `axis.x` / `axis.y` as
+`true` (this node owns a visible axis on that dimension), `"budget"` (a layer
+sibling owns it), or `false` (suppressed via an operator's `axes:` override).
+It honors per-operator overrides and short-circuits coordinate-transform
+subtrees (polar axes are handled separately by `coord.tsx`). The space _kind_
+then answers (1): POSITION → quantitative ticks, DIFFERENCE → delta labels,
+ORDINAL → labels at laid-out keys.
 
-What's _not_ implemented: per-node axis annotations on the underlying-
-space tree. There's no way for an inner operator to mark "this nested
-POSITION space deserves its own visible axis" or for an outer operator
-to suppress an axis its child would otherwise produce. Today that's not
-a problem because GoFish charts have a single overall coordinate space
-at the root and axes are decided once at the chart level.
-
-When this matters — for nested coordinate spaces, faceting with
-per-facet axes, or charts that want different guide kinds on different
-parts of the same axis — the natural extension is to tag nodes in the
-tree with `{ axis?: "auto" | "show" | "hide", title?: ... }` and have
-guide selection walk the tree as its own pass. Future work; tracked
-informally as "axis-tag follow-up" until a chart actually needs it.
+Selection is no longer tied to the root. A faceted chart tags an axis on each
+facet-owning node, and an outer operator can suppress an axis its child would
+otherwise produce. The flags are consumed by the **axis elaboration pass**
+(`elaborateAxes`, `src/ast/axes/elaborate.tsx`), which wraps each flagged node
+in a `Layer` of ordinary tick/label shapes constrained to the inferred domain —
+so axes are not a privileged node type and the layout engine carries no
+axis-specific budget machinery. See [Axes](/internals/frontend/axes) for the
+full elaboration story.
 
 ## Discrete non-position channels
 

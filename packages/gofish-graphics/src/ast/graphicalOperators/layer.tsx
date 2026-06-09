@@ -289,16 +289,10 @@ export const layer = createNodeOperatorSequential(
             constraintDomains.x !== undefined ||
             constraintDomains.y !== undefined;
 
-          // Children are NOT given the position scale on an axis this layer's
-          // own `position` constraints own: that scale resolves the constraints
-          // (a data→pixel map for the constrained marks), but the layer's other
-          // children are plain SIZE/aligned content with no data coordinate. A
-          // posScale leaking into e.g. a SIZE `spread` would make its alignment
-          // pass treat the children as data-positioned and skip placing them.
-          const childPosScales: ConstraintPosScales = [
-            constraintDomains.x !== undefined ? undefined : posScales[0],
-            constraintDomains.y !== undefined ? undefined : posScales[1],
-          ];
+          // Per-child posScale forwarding on the axes this layer owns happens
+          // below (`childScalesFor`): the wrapped POSITION content keeps the
+          // shared scale, while ticks and SIZE content do not. See the comment
+          // there for why a blanket rule is wrong.
 
           // Scale for resolving this layer's datum `position` constraints: an
           // inherited posScale, else a local one mapping the layer's own
@@ -336,12 +330,52 @@ export const layer = createNodeOperatorSequential(
               ? getPositioningConstraintRefs(node.constraints)
               : new Set<string>();
 
+          // Targets of `position` constraints (e.g. axis ticks pinned via
+          // `Constraint.position({ y: datum(v) })`).
+          const positionTargetNames = new Set<string>();
+          for (const c of node.constraints) {
+            if (c.type === "position") {
+              for (const r of c.children)
+                if (r) positionTargetNames.add(r.name);
+            }
+          }
+
+          // Per-child posScales on the axes this layer owns. The blanket
+          // suppression of a layer-owned axis is too coarse for elaborated axes:
+          // the wrapped *content* may be POSITION (e.g. a scatter) and genuinely
+          // needs the shared scale, while the *ticks* (position-constraint
+          // targets) and any SIZE content must not get it (a posScale leaking
+          // into a SIZE spread makes its alignment skip placing children). So on
+          // an owned axis, forward `effectivePosScales` only to a non-target
+          // child whose own space on that axis is POSITION; otherwise suppress.
+          const ownsAxis: [boolean, boolean] = [
+            constraintDomains.x !== undefined,
+            constraintDomains.y !== undefined,
+          ];
+          const childScalesFor = (
+            i: number,
+            isPositionTarget: boolean
+          ): ConstraintPosScales => {
+            const sp = (children[i] as GoFishNode)._underlyingSpace;
+            const pick = (dim: 0 | 1) => {
+              if (!ownsAxis[dim]) return posScales[dim]; // inherited, unchanged
+              if (isPositionTarget) return undefined; // placed by the constraint
+              return sp && isPOSITION(sp[dim])
+                ? effectivePosScales[dim]
+                : undefined;
+            };
+            return [pick(0), pick(1)];
+          };
+
           for (let i = 0; i < children.length; i++) {
             const child = children[i];
+            const childName0 = childNameKey(node.children[i]);
+            const isPositionTarget =
+              childName0 !== undefined && positionTargetNames.has(childName0);
             const childPlaceable = child.layout(
               size,
               scaleFactors,
-              childPosScales,
+              childScalesFor(i, isPositionTarget),
               posDomains
             );
             const childName = childNameKey(node.children[i]);
