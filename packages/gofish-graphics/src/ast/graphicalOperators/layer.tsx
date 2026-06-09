@@ -430,26 +430,34 @@ export const layer = createNodeOperatorSequential(
             }
           }
 
-          // Calculate the bounding box of all children
-          const minX = Math.min(
-            ...childPlaceables.map(
-              (childPlaceable) => childPlaceable.dims[0].min!
-            )
+          // Calculate the bounding box of all children. A child can report an
+          // undefined extent on an axis it doesn't constrain (e.g. a `spread`
+          // over POSITION children leaves its y-min unset); ignore those rather
+          // than letting `Math.min(undefined)` poison the box with NaN.
+          const fold = (
+            vals: (number | undefined)[],
+            f: (...n: number[]) => number
+          ): number => {
+            const finite = vals.filter(
+              (v): v is number => typeof v === "number" && Number.isFinite(v)
+            );
+            return finite.length ? f(...finite) : 0;
+          };
+          const minX = fold(
+            childPlaceables.map((cp) => cp.dims[0].min),
+            Math.min
           );
-          const maxX = Math.max(
-            ...childPlaceables.map(
-              (childPlaceable) => childPlaceable.dims[0].max!
-            )
+          const maxX = fold(
+            childPlaceables.map((cp) => cp.dims[0].max),
+            Math.max
           );
-          const minY = Math.min(
-            ...childPlaceables.map(
-              (childPlaceable) => childPlaceable.dims[1].min!
-            )
+          const minY = fold(
+            childPlaceables.map((cp) => cp.dims[1].min),
+            Math.min
           );
-          const maxY = Math.max(
-            ...childPlaceables.map(
-              (childPlaceable) => childPlaceable.dims[1].max!
-            )
+          const maxY = fold(
+            childPlaceables.map((cp) => cp.dims[1].max),
+            Math.max
           );
 
           const scaleX = options.transform?.scale?.x ?? 1;

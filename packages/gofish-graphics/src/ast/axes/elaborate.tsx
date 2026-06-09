@@ -91,15 +91,16 @@ function axisLine(
 }
 
 /**
- * Seat the gutter beside the content, flowing along the cross axis from a fixed
- * anchor (at the cross-start edge) so the gutter offset emerges positively:
- *   anchor → [tick labels, right-aligned] → axis line → content.
- * Mirrors the hand-drawn ContinuousYAxis, whose title played the anchor role.
+ * Seat the axis in the gutter beside the content, growing into NEGATIVE cross
+ * space (into the SVG padding) rather than shifting the content. Keeping the
+ * content pinned at the origin (see the orchestrator) is what lets the *other*
+ * axis's posScale-positioned ticks stay aligned with it — otherwise a y-axis
+ * gutter would push the content off the x-axis's tick grid (and vice versa).
+ *   [tick labels] ← tick marks ← axis line ← | content (at origin)
  */
 function gutterConstraints(
   dim: 0 | 1,
   g: Record<string, any>,
-  anchorName: string,
   lineName: string,
   contentName: string,
   ticks: any[]
@@ -109,22 +110,16 @@ function gutterConstraints(
   if (ticks.length === 0) return [];
   const cross = (1 - dim) as 0 | 1;
   const d = dirName(cross);
-  const startAlign = cross === 0 ? { x: "start" } : { y: "start" };
-  // "inner" = the edge of each piece facing the content (cross-end).
+  // "inner" = the edge facing the content (cross-end of the gutter pieces).
   const innerAlign = cross === 0 ? { x: "end" } : { y: "end" };
-  const last = ticks[ticks.length - 1];
   return [
-    Constraint.align(startAlign as any, [g[anchorName]]),
-    Constraint.distribute({ dir: d, spacing: 0 } as any, [g[anchorName], last]),
-    Constraint.align(innerAlign as any, ticks),
-    Constraint.distribute({ dir: d, spacing: 0 } as any, [
-      ticks[0],
-      g[lineName],
-    ]),
+    // Axis line just past the content's near edge, into the gutter.
     Constraint.distribute({ dir: d, spacing: AXIS_CONTENT_GAP } as any, [
       g[lineName],
       g[contentName],
     ]),
+    // Tick marks' inner edge flush with the line; labels extend into the gutter.
+    Constraint.align(innerAlign as any, [...ticks, g[lineName]]),
   ];
 }
 
@@ -149,14 +144,12 @@ function positionAxis(opts: {
 }): AxisElaboration {
   const { dim, contentName, prefix, lineMin, lineMax, tickValues } = opts;
   const lineName = `${prefix}line`;
-  const anchorName = `${prefix}anchor`;
   const tickName = (i: number) => `${prefix}t${i}`;
   const labelName = (i: number) => `${prefix}l${i}`;
   const pos = (v: number) =>
     (dim === 1 ? { y: datum(v) } : { x: datum(v) }) as any;
 
   const line = axisLine(dim, lineMin, lineMax, lineName);
-  const anchor = Rect({ w: 0, h: 0 }).name(anchorName);
   const tickNodes = tickValues.map((v, i) => opts.tickNode(v, i, tickName(i)));
   const extra = opts.extraLabels ?? [];
   const labelNodes = extra.map((e, i) => tickMark(dim, e.text, labelName(i)));
@@ -169,13 +162,11 @@ function positionAxis(opts: {
     extra.forEach((e, i) =>
       cs.push(Constraint.position(pos(e.value), [g[labelName(i)]]))
     );
-    cs.push(
-      ...gutterConstraints(dim, g, anchorName, lineName, contentName, ticks)
-    );
+    cs.push(...gutterConstraints(dim, g, lineName, contentName, ticks));
     return cs;
   };
 
-  return { nodes: [anchor, line, ...tickNodes, ...labelNodes], constraints };
+  return { nodes: [line, ...tickNodes, ...labelNodes], constraints };
 }
 
 /** One continuous (POSITION) axis. Mirrors the hand-drawn ContinuousYAxis. */
@@ -389,13 +380,18 @@ export async function elaborateAxes(
   node._name = undefined;
   node.key = undefined;
 
-  // Inner tier: content + constraint-based (continuous/difference) axes.
+  // Inner tier: content + constraint-based (continuous/difference) axes. The
+  // content is pinned at the origin so each axis grows into negative gutter
+  // space; this keeps the content on the posScale grid both axes' ticks use.
   let inner: GoFishNode = node;
   if (constrained.length > 0) {
     node.name(CONTENT_NAME);
     const axisNodes = constrained.flatMap((e) => e.nodes);
     inner = (await (layer as any)([node, ...axisNodes])) as GoFishNode;
-    inner.constrain((g) => constrained.flatMap((e) => e.constraints(g)));
+    inner.constrain((g) => [
+      Constraint.align({ x: "start", y: "start" } as any, [g[CONTENT_NAME]]),
+      ...constrained.flatMap((e) => e.constraints(g)),
+    ]);
   }
 
   // Outer tier: ref-based (ordinal) labels, laid out after `inner` so their refs
