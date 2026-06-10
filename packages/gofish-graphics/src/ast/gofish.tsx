@@ -41,8 +41,9 @@ export const isCategoricalScale = (
 export type AxesOptions = boolean | { x?: AxisOptions; y?: AxisOptions };
 export type AxisOptions = boolean | { title?: string | false };
 
-// Fallback extent for an omitted `w`/`h` when the content can't be shrunk-to-fit
-// (see the `effW`/`effH` comment in `layout()` for the full behavior).
+// Fallback extent for an omitted `w`/`h` on a POSITION or data-driven SIZE axis,
+// which needs a concrete canvas to scale data into (see the per-axis comment in
+// `layout()` for the full behavior, including the shrink-to-fit case).
 const DEFAULT_CANVAS_SIZE = 400;
 
 // string: custom title, false: no title, undefined: infer from encoding
@@ -175,15 +176,27 @@ export async function layout(
     debugUnderlyingSpaceTree(child);
   }
 
-  // When the user omits an overall dimension, lay out against the default
-  // canvas size so the rest of layout runs on real numbers (no NaN/undefined
-  // propagation). The *final* extent is then read back from the laid-out
-  // content below — content that reports a smaller intrinsic bbox (a bare
-  // shape, a `layer`/`enclose` of fixed-size marks) shrinks-to-fit, while
-  // operators that claim the whole canvas (data-driven sizes, positional axes,
-  // distribution like `spread`/`scatter`, `treemap`, polar) keep the default.
-  const effW = w ?? DEFAULT_CANVAS_SIZE;
-  const effH = h ?? DEFAULT_CANVAS_SIZE;
+  // An omitted overall dimension is resolved per axis from its root underlying
+  // space:
+  //  - POSITION / data-driven SIZE (a scatter axis, or bar heights = value):
+  //    there's data to scale into pixels, so fall back to a concrete canvas
+  //    (DEFAULT_CANVAS_SIZE).
+  //  - ORDINAL / UNDEFINED (a bar chart's category axis, or a bare fixed-size
+  //    shape): nothing to scale, so lay out *unsized* — marks keep their default
+  //    sizes and the operator shrinks to fit. The natural extent is recovered by
+  //    the `finalDim` readback below, so the SVG is still sized concretely.
+  // Unsized axes are handed `UNSIZED` (NaN); marks treat a non-finite size as
+  // "use my default" (e.g. rect's DEFAULT_RECT_SIZE) via their `Number.isFinite`
+  // guards, the same path the layout engine already relies on.
+  const UNSIZED = NaN;
+  const needsCanvas = (s: UnderlyingSpace) =>
+    s.kind === "position" || isSIZE(s);
+  // Concrete canvas for scaling POSITION/SIZE axes (always a real number).
+  const canvasW = w ?? DEFAULT_CANVAS_SIZE;
+  const canvasH = h ?? DEFAULT_CANVAS_SIZE;
+  // Size handed to `child.layout`: a shrink-to-fit axis is left unsized.
+  const layoutW = w ?? (needsCanvas(niceUnderlyingSpaceX) ? canvasW : UNSIZED);
+  const layoutH = h ?? (needsCanvas(niceUnderlyingSpaceY) ? canvasH : UNSIZED);
 
   const posScales: [
     ((pos: number) => number) | undefined,
@@ -198,7 +211,7 @@ export async function layout(
             ],
             measure: "unit",
           }),
-          effW
+          canvasW
         )
       : undefined,
     niceUnderlyingSpaceY.kind === "position"
@@ -210,13 +223,13 @@ export async function layout(
             ],
             measure: "unit",
           }),
-          effH
+          canvasH
         )
       : undefined,
   ];
 
   if (debug) {
-    console.log("width and height constraints:", effW, effH);
+    console.log("width and height constraints:", layoutW, layoutH);
   }
 
   // Root scale factors come from SIZE underlying spaces by inverting the
@@ -224,14 +237,14 @@ export async function layout(
   // posScales (computed above) instead.
   const rootScaleFactors: Size<number | undefined> = [
     isSIZE(niceUnderlyingSpaceX)
-      ? (niceUnderlyingSpaceX.domain.inverse(effW) ?? undefined)
+      ? (niceUnderlyingSpaceX.domain.inverse(canvasW) ?? undefined)
       : undefined,
     isSIZE(niceUnderlyingSpaceY)
-      ? (niceUnderlyingSpaceY.domain.inverse(effH) ?? undefined)
+      ? (niceUnderlyingSpaceY.domain.inverse(canvasH) ?? undefined)
       : undefined,
   ];
 
-  child.layout([effW, effH], rootScaleFactors, posScales);
+  child.layout([layoutW, layoutH], rootScaleFactors, posScales);
   child.place("x", x ?? transform?.x ?? 0, "baseline");
   child.place("y", y ?? transform?.y ?? 0, "baseline");
 

@@ -35,9 +35,12 @@ export const LayerShrinkToFit: StoryObj = {
   },
 };
 
-// Data-driven SIZE height (bar heights = value) with omitted h → the bars claim
-// the canvas, so the extent stays at the 400px default; bars scale to fill it.
-export const DataDrivenSizeDefault: StoryObj = {
+// Per-axis inference on a bar chart with both dims omitted. The y axis is a
+// data-driven SIZE (bar heights = value), so it needs a canvas and falls back to
+// the 400px default — bars scale to fill it. The x axis is ORDINAL (categories),
+// which has nothing to scale, so bars keep their default 16px width and the chart
+// shrinks-to-fit horizontally.
+export const DataDrivenHeightDefault: StoryObj = {
   render: () => {
     const container = initializeContainer();
     Chart(seafood, { axes: true })
