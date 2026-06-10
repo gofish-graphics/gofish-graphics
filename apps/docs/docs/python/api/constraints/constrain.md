@@ -37,17 +37,23 @@ one of `x` / `y` must be given.
 Constraint.align(refs, *, x=None, y=None)
 ```
 
-| Parameter | Type                 | Description                                            |
-| --------- | -------------------- | ------------------------------------------------------ |
-| `refs`    | `list[Ref]`          | The refs to align (the kwargs from the callback).      |
-| `x`       | `str` \| `list[str]` | Edge/center to align on x (omit to leave x untouched). |
-| `y`       | `str` \| `list[str]` | Edge/center to align on y.                             |
+| Parameter | Type                 | Description                                                   |
+| --------- | -------------------- | ------------------------------------------------------------- |
+| `refs`    | `list[Ref]`          | The refs to align (the kwargs from the callback).             |
+| `x`       | `str` \| `list[str]` | Edge/center/origin to align on x (omit to leave x untouched). |
+| `y`       | `str` \| `list[str]` | Edge/center/origin to align on y.                             |
 
-`Alignment` is `"start" | "middle" | "end"`. Pass a single value to share one
-anchor across every ref; pass a list to assign one anchor _per ref_ positionally
-(the list length must equal the number of refs) — e.g. `x=["middle", "start"]`
-aligns the first ref's center to the second ref's start. The first
-already-placed ref acts as the anchor; unplaced refs move to match it.
+The anchor is `"start" | "middle" | "end" | "baseline"`. The first three
+anchor a ref by its bounding-box edge or center. `"baseline"` anchors a ref by
+its **origin** (its local 0 point) instead of its box: `align([content],
+y="baseline")` with no placed sibling pins the ref's origin to the layer's
+origin — i.e. "stay where you were laid out" — regardless of how far its box
+overhangs the origin (a bar dipping below zero, axis labels hanging under a
+chart). Pass a single value to share one anchor across every ref; pass a list
+to assign one anchor _per ref_ positionally (the list length must equal the
+number of refs) — e.g. `x=["middle", "start"]` aligns the first ref's center
+to the second ref's start. The first already-placed ref acts as the anchor;
+unplaced refs move to match it.
 
 ## Constraint.distribute
 
@@ -95,11 +101,11 @@ its value rather than assuming uniform spacing.
 Constraint.position(refs, *, x=None, y=None, anchor=None)
 ```
 
-| Parameter | Type             | Default    | Description                                          |
-| --------- | ---------------- | ---------- | ---------------------------------------------------- |
-| `x`       | `int` \| `datum` | —          | x coordinate — literal pixel or `datum(n)` (scaled). |
-| `y`       | `int` \| `datum` | —          | y coordinate — literal pixel or `datum(n)` (scaled). |
-| `anchor`  | `str`            | `"middle"` | Which anchor of the ref lands on the coordinate.     |
+| Parameter | Type             | Default    | Description                                                                                                             |
+| --------- | ---------------- | ---------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `x`       | `int` \| `datum` | —          | x coordinate — literal pixel or `datum(n)` (scaled).                                                                    |
+| `y`       | `int` \| `datum` | —          | y coordinate — literal pixel or `datum(n)` (scaled).                                                                    |
+| `anchor`  | `str`            | `"middle"` | Which anchor of the ref lands on the coordinate (`"start"`, `"middle"`, `"end"`, or `"baseline"` for the ref's origin). |
 
 At least one of `x` / `y` is required. Only `datum` coordinates feed the layer's
 inferred scale; literal pixels are placed directly and don't define the domain.

@@ -200,7 +200,26 @@ if (!isValue(dims[0].min) && !isValue(dims[0].size)) {
 }
 ```
 
-### Pass 7: Position Scale Computation
+### Pass 7: Axis Elaboration
+
+**Location**: `src/ast/gofish.tsx` (`layout()`), `src/ast/axes/elaborate.tsx`
+
+If the chart-level `axes` option enables a dimension, `resolveAxes` walks the
+tree top-down flagging which node _owns_ an axis on each dimension,
+`resolveNiceDomains` rounds POSITION domains to tick-friendly bounds, and then
+`elaborateAxes` **rewrites the tree**: each axis-owning node is wrapped in
+`Layer` tiers containing ordinary `rect`/`text`/`spread` axis shapes wired with
+`align`/`distribute`/`position` constraints. Axes are not a privileged node
+type and there is no axis-specific code later in the pipeline — after this
+pass they are just nodes. Because the rewrite inserts new nodes and moves
+keys onto wrappers, the affected resolution passes (color, names, labels,
+underlying space, nice domains) rerun on the new tree.
+
+See [Axes](/internals/frontend/axes) for the full elaboration story (the
+two-tier structure, baseline pins, negative-space gutters, and the
+continuous/difference/ordinal kinds).
+
+### Pass 8: Position Scale Computation
 
 **Location**: `src/ast/gofish.tsx:183-202`
 
@@ -229,7 +248,7 @@ const posScales = [
 
 For `POSITION` spaces, this creates linear scales that map from data values to pixel coordinates. These scales are used during layout to position elements.
 
-### Pass 8: Layout Calculation
+### Pass 9: Layout Calculation
 
 **Location**: `src/ast/gofish.tsx:208`
 
@@ -296,7 +315,7 @@ For a bar chart rectangle, the layout function:
 
 The `intrinsicDims` represent the element's size in its local coordinate system (with min typically at 0), while `transform.translate` positions it in the parent's coordinate system.
 
-### Pass 9: Placement
+### Pass 10: Placement
 
 **Location**: `src/ast/gofish.tsx:209`
 
@@ -308,7 +327,7 @@ child.place({ x: x ?? transform?.x ?? 0, y: y ?? transform?.y ?? 0 });
 
 Applies final positioning offsets. This is typically used for positioning the entire chart within its container.
 
-### Pass 10: Ordinal Scale Building
+### Pass 11: Ordinal Scale Building
 
 **Location**: `src/ast/gofish.tsx:216-223`
 
@@ -373,11 +392,14 @@ keyContext = keyContextParam;
 
 The global contexts are restored so that render functions can access them.
 
-### Render Pass 2: Axis Tick Calculation
+### Render Pass 2: Axis Titles
 
-**Location**: `src/ast/gofish.tsx:381-405`
+**Location**: `src/ast/gofish.tsx` (`render()`)
 
-If `axes: true`, tick marks are computed for continuous axes using D3's `nice()` and `ticks()` functions.
+Only axis **titles** are still drawn at render time. Tick marks, tick labels,
+axis lines, and ordinal category labels are no longer computed here — they
+were elaborated into ordinary nodes during layout (see Pass 7: Axis
+Elaboration) and render as part of the node tree like any other shape.
 
 ### Render Pass 3: SVG Container Creation
 
@@ -512,85 +534,14 @@ if (space.type === "linear") {
 }
 ```
 
-### Render Pass 7: Axis Rendering
+### Render Pass 7: Axis Rendering (removed)
 
-**Location**: `src/ast/gofish.tsx:422-832`
-
-If `axes: true`, axes are rendered based on the underlying space types:
-
-#### Continuous Y-Axis (POSITION)
-
-**Location**: `src/ast/gofish.tsx:434-479`
-
-For `POSITION` spaces, a continuous axis is rendered with tick marks and labels:
-
-```typescript
-<Show when={isPOSITION(underlyingSpaceY)}>
-  {(() => {
-    const [yMin, yMax] = nice(
-      underlyingSpaceY.domain!.min,
-      underlyingSpaceY.domain!.max,
-      10
-    );
-    const yTicks = ticks(yMin, yMax, 10);
-    return (
-      <g>
-        <line ... /> {/* Axis line */}
-        <For each={yTicks}>
-          {(tick) => (
-            <>
-              <text ...>{tick}</text> {/* Tick label */}
-              <line ... /> {/* Tick mark */}
-            </>
-          )}
-        </For>
-      </g>
-    );
-  })()}
-</Show>
-```
-
-#### Ordinal X-Axis
-
-**Location**: `src/ast/gofish.tsx:683-741`
-
-For `ORDINAL` spaces, category labels are positioned using the ordinal scale:
-
-```typescript
-<Show when={isORDINAL(underlyingSpaceX) && ordinalScales[0] && keyContext}>
-  {(() => {
-    const scale = ordinalScales[0]!;
-    const domain = isORDINAL(underlyingSpaceX) ? underlyingSpaceX.domain : undefined;
-    const labelKeys = domain && domain.length > 0 ? domain : [];
-    return (
-      <g>
-        <For each={labelKeys}>
-          {(key) => {
-            const xPos = scale(key);
-            return (
-              <text
-                transform="scale(1, -1)"
-                x={xPos}
-                y={-minY + 5}
-                text-anchor="middle"
-              >
-                {key}
-              </text>
-            );
-          }}
-        </For>
-      </g>
-    );
-  })()}
-</Show>
-```
-
-**Example**: In a bar chart with `spread("category", { dir: "x" })`:
-
-1. Each bar has a key like `"category-A"`, `"category-B"`, etc.
-2. The `ORDINAL` underlying space has `domain: ["category-A", "category-B", ...]`
-3. The ordinal scale maps each key to its x-position
-4. Labels are rendered at those positions
+The bespoke axis-rendering pass that used to live here (hand-written SVG for
+continuous/ordinal axes, ~400 lines of `gofish.tsx`) was **deleted**. Axes are
+now elaborated into ordinary GoFish nodes during layout (see Pass 7: Axis
+Elaboration and [Axes](/internals/frontend/axes)), so they render through the
+normal node-tree pass above with no special casing. The only axis artifact
+still drawn directly at render time is the title text (Render Pass 2).
 
 ### Render Pass 8: Legend Rendering
 
@@ -652,11 +603,14 @@ This creates:
 4. **Underlying Space Resolution**:
    - X-axis: `ORDINAL` (from `spread`)
    - Y-axis: `SIZE` (height is data-driven, no position)
-5. **Layout Calculation**:
+5. **Axis Elaboration** (if `axes` enabled): the chart is wrapped in layers
+   carrying the y tick marks/labels (constraint-pinned at their data values)
+   and the per-category x labels (`ref`-bound to the bars)
+6. **Layout Calculation**:
    - X-positions computed by `spread` operator (ordinal spacing)
    - Y-positions set to 0 (bars start at baseline)
    - Heights computed from data values using size scale factors
-6. **Ordinal Scale Building**: Maps category keys to x-positions
+7. **Ordinal Scale Building**: Maps category keys to x-positions
 
 ### Step 3: Render Pass
 
@@ -672,9 +626,9 @@ This creates:
    return <rect x={baseX} y={-baseY - height} width={width} height={height} ... />;
    ```
 
-2. **Axis Rendering**:
-   - X-axis: Ordinal axis with category labels positioned using ordinal scale
-   - Y-axis: Continuous axis (if `axes: true`) showing value scale
+2. **Axes**: already part of the node tree (elaborated during layout), so
+   the category labels and the y tick marks render in step 1 with everything
+   else; only the axis titles are drawn separately
 
 ## Debug Support
 
