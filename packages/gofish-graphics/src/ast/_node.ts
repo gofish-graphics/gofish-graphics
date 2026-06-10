@@ -88,8 +88,7 @@ export type Layout = (
   scaleFactors: Size<number | undefined>,
   children: GoFishAST[],
   posScales: Size<((pos: number) => number) | undefined>,
-  node: GoFishNode,
-  posDomains?: Size<[number, number] | undefined>
+  node: GoFishNode
 ) => { intrinsicDims: FancyDims; transform: FancyTransform; renderData?: any };
 
 export type Render = (
@@ -145,7 +144,6 @@ export class GoFishNode {
   public intrinsicDims?: Dimensions;
   public transform?: Transform;
   public shared: Size<boolean>;
-  // public posDomains: Size<Domain | undefined> = [undefined, undefined];
   public renderData?: any;
   public coordinateTransform?: CoordinateTransform;
   public color?: MaybeValue<string>;
@@ -474,8 +472,7 @@ export class GoFishNode {
   public layout(
     size: Size,
     scaleFactors: Size<number | undefined>,
-    posScales: Size<((pos: number) => number) | undefined>,
-    posDomains?: Size<[number, number] | undefined>
+    posScales: Size<((pos: number) => number) | undefined>
   ): Placeable {
     // Axes are no longer drawn here: they are elaborated into ordinary shapes +
     // constraints by `elaborateAxes` (src/ast/axes/elaborate.tsx) before layout,
@@ -486,8 +483,7 @@ export class GoFishNode {
       scaleFactors,
       this.children,
       posScales,
-      this,
-      posDomains
+      this
     );
 
     this.intrinsicDims = elaborateDims(intrinsicDims);

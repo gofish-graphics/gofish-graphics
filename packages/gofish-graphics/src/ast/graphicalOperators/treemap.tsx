@@ -136,15 +136,7 @@ export const Treemap = createNodeOperator(
               : POSITION(interval(0, 1));
           return [axisSpace(0), axisSpace(1)];
         },
-        layout: (
-          _shared,
-          size,
-          scaleFactors,
-          childAsts,
-          posScales,
-          node,
-          posDomains
-        ) => {
+        layout: (_shared, size, scaleFactors, childAsts, posScales, node) => {
           const xPos = computeAesthetic(
             dims[0].min,
             posScales?.[0]!,
@@ -298,12 +290,7 @@ export const Treemap = createNodeOperator(
                 lh = side;
               }
             }
-            const placeable = child.layout(
-              [lw, lh],
-              scaleFactors,
-              posScales,
-              posDomains
-            );
+            const placeable = child.layout([lw, lh], scaleFactors, posScales);
             placeable.place(0, x0 + w / 2, "center");
             const cy = flipY ? resolvedSize[1] - (y0 + h / 2) : y0 + h / 2;
             placeable.place(1, cy, "center");

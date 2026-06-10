@@ -266,15 +266,7 @@ export const layer = createNodeOperatorSequential(
             resolveAxis(1, scaleY, posDomains.y),
           ];
         },
-        layout: (
-          shared,
-          size,
-          scaleFactors,
-          children,
-          posScales,
-          node,
-          posDomains
-        ) => {
+        layout: (shared, size, scaleFactors, children, posScales, node) => {
           // Compute size using dims (w and h) before passing to children
           size = [
             computeSize(dims[0].size, scaleFactors?.[0]!, size[0]) ?? size[0],
@@ -368,8 +360,7 @@ export const layer = createNodeOperatorSequential(
             const childPlaceable = child.layout(
               size,
               scaleFactors,
-              childScalesFor(i, targetDims),
-              posDomains
+              childScalesFor(i, targetDims)
             );
             if (!childName || !constrainedNames.has(childName)) {
               childPlaceable.place("x", 0, "baseline");

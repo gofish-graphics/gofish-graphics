@@ -176,15 +176,7 @@ export const Scatter = createNodeOperator(
 
           return [xSpace, ySpace];
         },
-        layout: (
-          _shared,
-          size,
-          scaleFactors,
-          childNodes,
-          posScales,
-          node,
-          posDomains
-        ) => {
+        layout: (_shared, size, scaleFactors, childNodes, posScales, node) => {
           // In a faceted context the outer x/y may be ORDINAL, giving undefined
           // posScales for those dims. Scatter has its own POSITION domain, so
           // compute local posScales as a fallback for any undefined dim.
@@ -213,7 +205,7 @@ export const Scatter = createNodeOperator(
           ];
 
           const childPlaceables = childNodes.map((child) =>
-            child.layout(size, scaleFactors, effectivePosScales, posDomains)
+            child.layout(size, scaleFactors, effectivePosScales)
           );
 
           childPlaceables.forEach((child) => {
