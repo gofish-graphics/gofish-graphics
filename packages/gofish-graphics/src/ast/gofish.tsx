@@ -41,6 +41,11 @@ export const isCategoricalScale = (
 export type AxesOptions = boolean | { x?: AxisOptions; y?: AxisOptions };
 export type AxisOptions = boolean | { title?: string | false };
 
+// Fallback extent for an omitted `w`/`h` on a POSITION or data-driven SIZE axis,
+// which needs a concrete canvas to scale data into (see the per-axis comment in
+// `layout()` for the full behavior, including the shrink-to-fit case).
+const DEFAULT_CANVAS_SIZE = 400;
+
 // string: custom title, false: no title, undefined: infer from encoding
 function resolveAxisTitle(
   axisOpt: AxisOptions | undefined
@@ -79,8 +84,8 @@ export async function layout(
     debug = false,
     axes = false,
   }: {
-    w: number;
-    h: number;
+    w?: number;
+    h?: number;
     x?: number;
     y?: number;
     transform?: { x?: number; y?: number };
@@ -100,6 +105,8 @@ export async function layout(
     ((pos: number) => number) | undefined,
   ];
   child: GoFishNode;
+  width: number;
+  height: number;
 }> {
   child = await child;
   if (contexts?.session) {
@@ -169,6 +176,28 @@ export async function layout(
     debugUnderlyingSpaceTree(child);
   }
 
+  // An omitted overall dimension is resolved per axis from its root underlying
+  // space:
+  //  - POSITION / data-driven SIZE (a scatter axis, or bar heights = value):
+  //    there's data to scale into pixels, so fall back to a concrete canvas
+  //    (DEFAULT_CANVAS_SIZE).
+  //  - ORDINAL / UNDEFINED (a bar chart's category axis, or a bare fixed-size
+  //    shape): nothing to scale, so lay out *unsized* — marks keep their default
+  //    sizes and the operator shrinks to fit. The natural extent is recovered by
+  //    the `finalDim` readback below, so the SVG is still sized concretely.
+  // Unsized axes are handed `UNSIZED` (NaN); marks treat a non-finite size as
+  // "use my default" (e.g. rect's DEFAULT_RECT_SIZE) via their `Number.isFinite`
+  // guards, the same path the layout engine already relies on.
+  const UNSIZED = NaN;
+  const needsCanvas = (s: UnderlyingSpace) =>
+    s.kind === "position" || isSIZE(s);
+  // Concrete canvas for scaling POSITION/SIZE axes (always a real number).
+  const canvasW = w ?? DEFAULT_CANVAS_SIZE;
+  const canvasH = h ?? DEFAULT_CANVAS_SIZE;
+  // Size handed to `child.layout`: a shrink-to-fit axis is left unsized.
+  const layoutW = w ?? (needsCanvas(niceUnderlyingSpaceX) ? canvasW : UNSIZED);
+  const layoutH = h ?? (needsCanvas(niceUnderlyingSpaceY) ? canvasH : UNSIZED);
+
   const posScales: [
     ((pos: number) => number) | undefined,
     ((pos: number) => number) | undefined,
@@ -182,7 +211,7 @@ export async function layout(
             ],
             measure: "unit",
           }),
-          w
+          canvasW
         )
       : undefined,
     niceUnderlyingSpaceY.kind === "position"
@@ -194,13 +223,13 @@ export async function layout(
             ],
             measure: "unit",
           }),
-          h
+          canvasH
         )
       : undefined,
   ];
 
   if (debug) {
-    console.log("width and height constraints:", w, h);
+    console.log("width and height constraints:", layoutW, layoutH);
   }
 
   // Root scale factors come from SIZE underlying spaces by inverting the
@@ -208,16 +237,27 @@ export async function layout(
   // posScales (computed above) instead.
   const rootScaleFactors: Size<number | undefined> = [
     isSIZE(niceUnderlyingSpaceX)
-      ? (niceUnderlyingSpaceX.domain.inverse(w) ?? undefined)
+      ? (niceUnderlyingSpaceX.domain.inverse(canvasW) ?? undefined)
       : undefined,
     isSIZE(niceUnderlyingSpaceY)
-      ? (niceUnderlyingSpaceY.domain.inverse(h) ?? undefined)
+      ? (niceUnderlyingSpaceY.domain.inverse(canvasH) ?? undefined)
       : undefined,
   ];
 
-  child.layout([w, h], rootScaleFactors, posScales);
+  child.layout([layoutW, layoutH], rootScaleFactors, posScales);
   child.place("x", x ?? transform?.x ?? 0, "baseline");
   child.place("y", y ?? transform?.y ?? 0, "baseline");
+
+  // Final extent: a user-given dimension is authoritative; otherwise prefer the
+  // content's laid-out intrinsic size (shrink-to-fit), falling back to the
+  // canvas default when the content didn't report one.
+  const finalDim = (i: 0 | 1, given: number | undefined): number => {
+    if (given !== undefined) return given;
+    const s = child.dims[i]?.size;
+    return s !== undefined && Number.isFinite(s) ? s : DEFAULT_CANVAS_SIZE;
+  };
+  const finalW = finalDim(0, w);
+  const finalH = finalDim(1, h);
 
   if (debug) {
     console.log("🌳 Node Tree:");
@@ -229,6 +269,8 @@ export async function layout(
     underlyingSpaceY: niceUnderlyingSpaceY,
     posScales,
     child,
+    width: finalW,
+    height: finalH,
   };
 }
 
@@ -248,8 +290,8 @@ export const gofish = (
     colorConfig,
     padding,
   }: {
-    w: number;
-    h: number;
+    w?: number;
+    h?: number;
     x?: number;
     y?: number;
     transform?: { x?: number; y?: number };
@@ -271,6 +313,8 @@ export const gofish = (
       ((pos: number) => number) | undefined,
     ];
     child: GoFishNode;
+    width: number;
+    height: number;
     scaleContext: ScaleContext;
   };
 
@@ -329,8 +373,8 @@ export const gofish = (
           if (!data) return null;
           return render(
             {
-              width: w,
-              height: h,
+              width: data.width,
+              height: data.height,
               svgPadding,
               defs,
               axes,

@@ -266,6 +266,32 @@ This is where the actual positioning and sizing happens. Each node's `layout` fu
 
 It applies layout algorithms (stacking, positioning, etc.), calculates intrinsic dimensions for each node, and handles nested layouts and complex arrangements.
 
+**Inferring an omitted `w`/`h`.** The chart-level `w` and `h` are optional. An
+omitted dimension is resolved per axis from that axis's root underlying space:
+
+- A **POSITION** or **data-driven SIZE** axis (a scatter axis, or bar heights
+  `= value`) has data to scale into pixels, so it falls back to a concrete canvas
+  (`DEFAULT_CANVAS_SIZE = 400`).
+- An **ORDINAL** or **UNDEFINED** axis (a bar chart's category axis, or a bare
+  fixed-size shape) has nothing to scale, so it lays out _unsized_: marks keep
+  their default sizes (a mark treats a non-finite size as "use my default" via its
+  `Number.isFinite` guards) and the operator shrinks to fit.
+
+`layout()` therefore distinguishes the concrete `canvasW`/`canvasH` (used to build
+the position scales and root scale factors) from the `layoutW`/`layoutH` it hands
+to `child.layout` (where a shrink-to-fit axis is left unsized). After layout it
+reads the chart's _final_ extent back off the root via `child.dims[i].size`, so an
+unsized axis still yields a concrete SVG size (e.g. a no-width bar chart gets
+default-width bars and a width of `n·barWidth + spacing`). A user-supplied
+dimension is always authoritative. This computed extent — not the raw option — is
+what the render pass uses to size the SVG and place chrome like the legend.
+
+> Literal pixel sizes are invisible to the underlying-space tree (a fixed-size
+> shape resolves to `UNDEFINED`, not `SIZE`), which is why the unsized path relies
+> on the marks' default-size guards and the bbox readback rather than reading an
+> intrinsic size from the space. Tracking constant sizes in the space system is a
+> separate change.
+
 **Example: Rect Layout Function**
 
 **Location**: `src/ast/shapes/rect.tsx:177-250`
