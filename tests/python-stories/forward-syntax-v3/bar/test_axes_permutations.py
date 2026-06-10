@@ -5,16 +5,19 @@ from python_stories.data import SEAFOOD
 
 
 def _bar(axes):
-    # axes is both a chart option and a per-operator override on the spread,
-    # mirroring BarAxesPermutations.stories.tsx (`Chart(seafood, { axes })`
-    # + `spread({ by, dir, axes })`).
+    # axes is a CHART-level option only, mirroring the current
+    # BarAxesPermutations.stories.tsx (`Chart(seafood, { axes })` with a plain
+    # `spread({ by, dir })`). A per-operator override on the spread would
+    # claim the axes a second time and draw them twice.
     return (
-        chart(SEAFOOD).flow(spread(by="lake", dir="x", axes=axes)).mark(rect(h="count"))
+        chart(SEAFOOD, axes=axes)
+        .flow(spread(by="lake", dir="x"))
+        .mark(rect(h="count"))
     )
 
 
 def _story(axes):
-    return (_bar(axes), {"w": 400, "h": 400, "axes": axes})
+    return (_bar(axes), {"w": 400, "h": 400})
 
 
 def story_axes_true():
