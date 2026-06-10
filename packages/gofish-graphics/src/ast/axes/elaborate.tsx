@@ -97,13 +97,23 @@ function axisLine(
  * axis's posScale-positioned ticks stay aligned with it — otherwise a y-axis
  * gutter would push the content off the x-axis's tick grid (and vice versa).
  *   [tick labels] ← tick marks ← axis line ← | content (at origin)
+ *
+ * The LINE seats one of two ways:
+ *  - `crossFloor` given (the other dim also has a position-like axis): the line
+ *    sits flush at the PLOT edge — `position({[cross]: datum(crossFloor)})`,
+ *    the other axis's scale minimum. The two lines then meet at the domain
+ *    corner even when no datum reaches it (a scatter whose y domain starts
+ *    below the lowest point must not draw its x axis at the lowest point).
+ *  - otherwise: distribute just past the content's bbox edge (a bar chart's
+ *    y axis sits beside the bars).
  */
 function gutterConstraints(
   dim: 0 | 1,
   g: Record<string, any>,
   lineName: string,
   contentName: string,
-  ticks: any[]
+  ticks: any[],
+  crossFloor?: number
 ): any[] {
   // A degenerate domain can yield zero ticks; emit no gutter rather than
   // dereferencing ticks[0]/ticks[last] (which would crash applyDistribute).
@@ -112,12 +122,17 @@ function gutterConstraints(
   const d = dirName(cross);
   // "inner" = the edge facing the content (cross-end of the gutter pieces).
   const innerAlign = cross === 0 ? { x: "end" } : { y: "end" };
+  const seat =
+    crossFloor !== undefined
+      ? Constraint.position({ [d]: datum(crossFloor), anchor: "end" } as any, [
+          g[lineName],
+        ])
+      : Constraint.distribute({ dir: d, spacing: AXIS_CONTENT_GAP } as any, [
+          g[lineName],
+          g[contentName],
+        ]);
   return [
-    // Axis line just past the content's near edge, into the gutter.
-    Constraint.distribute({ dir: d, spacing: AXIS_CONTENT_GAP } as any, [
-      g[lineName],
-      g[contentName],
-    ]),
+    seat,
     // Tick marks' inner edge flush with the line; labels extend into the gutter.
     Constraint.align(innerAlign as any, [...ticks, g[lineName]]),
   ];
@@ -141,6 +156,9 @@ function positionAxis(opts: {
   tickNode: (v: number, i: number, name: string) => GoFishNode;
   /** Extra labels placed at a data position (difference delta labels). */
   extraLabels?: { value: number; text: string }[];
+  /** The other dim's scale floor, when it also carries a position-like axis —
+   *  seats this line at the plot corner instead of the content edge. */
+  crossFloor?: number;
 }): AxisElaboration {
   const { dim, contentName, prefix, lineMin, lineMax, tickValues } = opts;
   const lineName = `${prefix}line`;
@@ -170,7 +188,16 @@ function positionAxis(opts: {
       cs.push(Constraint.position(pos(e.value), [g[labelName(i)]]))
     );
     // Tick marks align flush with the line (their inner edge IS the tick).
-    cs.push(...gutterConstraints(dim, g, lineName, contentName, ticks));
+    cs.push(
+      ...gutterConstraints(
+        dim,
+        g,
+        lineName,
+        contentName,
+        ticks,
+        opts.crossFloor
+      )
+    );
     // Plain delta labels have no tick of their own to provide an offset, so
     // they DISTRIBUTE off the line instead of aligning flush against it —
     // seated at the same outer offset as the continuous labels (tick + gap).
@@ -194,7 +221,8 @@ function elaborateContinuousAxis(
   dim: 0 | 1,
   space: Extract<UnderlyingSpace, { kind: "position" }>,
   contentName: string,
-  prefix: string
+  prefix: string,
+  crossFloor?: number
 ): AxisElaboration {
   const [niceMin, niceMax] = d3Nice(
     space.domain!.min!,
@@ -210,6 +238,7 @@ function elaborateContinuousAxis(
     lineMax: niceMax,
     tickValues,
     tickNode: (v, _i, name) => tickMark(dim, fmtNum(v), name),
+    crossFloor,
   });
 }
 
@@ -218,7 +247,8 @@ function elaborateDifferenceAxis(
   dim: 0 | 1,
   space: Extract<UnderlyingSpace, { kind: "difference" }>,
   contentName: string,
-  prefix: string
+  prefix: string,
+  crossFloor?: number
 ): AxisElaboration {
   // Scale over the RAW width (not a niced max) so the tick scale equals the
   // content's own width-based scaleFactor (size/width) and ticks line up with
@@ -244,6 +274,7 @@ function elaborateDifferenceAxis(
           : { w: 1, h: TICK_LEN, fill: AXIS_COLOR }
       ).name(name),
     extraLabels,
+    crossFloor,
   });
 }
 
@@ -347,6 +378,20 @@ function elaborationsFor(node: GoFishNode): {
 } {
   const space = node._underlyingSpace;
   if (!space) return { constrained: [], refBased: [] };
+  // Scale floor (the plot-edge value) per dim that carries a position-like
+  // axis. Each such axis seats its line at the OTHER dim's floor — the plot
+  // corner — rather than at the content's data extent (see gutterConstraints).
+  const floors: (number | undefined)[] = [undefined, undefined];
+  for (const dim of [0, 1] as (0 | 1)[]) {
+    const flag = dim === 0 ? node.axis.x : node.axis.y;
+    if (flag !== true && flag !== "budget") continue;
+    const s = space[dim];
+    if (isPOSITION(s) && s.domain) {
+      floors[dim] = d3Nice(s.domain.min!, s.domain.max!, TICK_COUNT)[0];
+    } else if (isDIFFERENCE(s)) {
+      floors[dim] = 0;
+    }
+  }
   const constrained: AxisElaboration[] = [];
   const refBased: AxisElaboration[] = [];
   for (const dim of [0, 1] as (0 | 1)[]) {
@@ -354,10 +399,15 @@ function elaborationsFor(node: GoFishNode): {
     if (flag !== true && flag !== "budget") continue;
     const s = space[dim];
     const prefix = dim === 1 ? "__y" : "__x";
+    const crossFloor = floors[(1 - dim) as 0 | 1];
     if (isPOSITION(s) && s.domain) {
-      constrained.push(elaborateContinuousAxis(dim, s, CONTENT_NAME, prefix));
+      constrained.push(
+        elaborateContinuousAxis(dim, s, CONTENT_NAME, prefix, crossFloor)
+      );
     } else if (isDIFFERENCE(s)) {
-      constrained.push(elaborateDifferenceAxis(dim, s, CONTENT_NAME, prefix));
+      constrained.push(
+        elaborateDifferenceAxis(dim, s, CONTENT_NAME, prefix, crossFloor)
+      );
     } else if (isORDINAL(s)) {
       refBased.push(elaborateOrdinalAxis(dim, s, collectKeyMap(node), prefix));
     } else {

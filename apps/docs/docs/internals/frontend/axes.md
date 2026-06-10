@@ -78,11 +78,17 @@ one branch per underlying-space kind — the seam a future public API would over
 - **POSITION (continuous)** — `d3.nice` + `d3.ticks` over the domain; an axis line
   (a 1px `rect` auto-spanning the domain via `datum` endpoints), and a
   `spread([text, tickMark])` per tick pinned with
-  `Constraint.position({ [axis]: datum(v) })`. The gutter is negative space:
-  `distribute([line, content])` seats the line just past the content's near edge,
-  and `align(end)` sets the ticks flush against it (their inner edge _is_ the
-  tick mark, so the label text ends up offset by the tick + gap inside each
-  tick's spread).
+  `Constraint.position({ [axis]: datum(v) })`. The gutter is negative space;
+  the line seats one of two ways. When the **other** dim also carries a
+  position-like axis, the line is pinned at that axis's scale floor —
+  `position({ [cross]: datum(floor) }, anchor: "end")` — so the two lines meet
+  at the domain corner even when no datum reaches it (a scatter whose y domain
+  is niced below the lowest point must not draw its x axis at the lowest
+  point). Otherwise `distribute([line, content])` seats it just past the
+  content's bbox edge (a bar chart's y axis sits beside the bars). Either way,
+  `align(end)` sets the ticks flush against the line (their inner edge _is_
+  the tick mark, so the label text ends up offset by the tick + gap inside
+  each tick's spread).
 - **DIFFERENCE** — bare tick marks at the tick values, plus plain-text labels
   showing the _delta_ between adjacent ticks, pinned at their midpoints
   (`position({ [axis]: datum(midpoint) })`). The delta labels have no tick of

@@ -330,13 +330,21 @@ export const layer = createNodeOperatorSequential(
               ? getPositioningConstraintRefs(node.constraints)
               : new Set<string>();
 
-          // Targets of `position` constraints (e.g. axis ticks pinned via
-          // `Constraint.position({ y: datum(v) })`).
-          const positionTargetNames = new Set<string>();
+          // Per-AXIS targets of `position` constraints (e.g. axis ticks pinned
+          // via `Constraint.position({ y: datum(v) })`). Tracked per axis, not
+          // per child: a child pinned on one axis may still need the scale on
+          // the other (an axis line position-seated on its cross axis resolves
+          // its own-axis datum endpoints through the scale).
+          const positionTargetDims = new Map<string, Set<0 | 1>>();
           for (const c of node.constraints) {
             if (c.type === "position") {
-              for (const r of c.children)
-                if (r) positionTargetNames.add(r.name);
+              for (const r of c.children) {
+                if (!r) continue;
+                const dims = positionTargetDims.get(r.name) ?? new Set();
+                if (c.x !== undefined) dims.add(0);
+                if (c.y !== undefined) dims.add(1);
+                positionTargetDims.set(r.name, dims);
+              }
             }
           }
 
@@ -354,12 +362,12 @@ export const layer = createNodeOperatorSequential(
           ];
           const childScalesFor = (
             i: number,
-            isPositionTarget: boolean
+            targetDims: Set<0 | 1> | undefined
           ): ConstraintPosScales => {
             const sp = (children[i] as GoFishNode)._underlyingSpace;
             const pick = (dim: 0 | 1) => {
               if (!ownsAxis[dim]) return posScales[dim]; // inherited, unchanged
-              if (isPositionTarget) return undefined; // placed by the constraint
+              if (targetDims?.has(dim)) return undefined; // placed by the constraint
               return sp && isPOSITION(sp[dim])
                 ? effectivePosScales[dim]
                 : undefined;
@@ -370,12 +378,14 @@ export const layer = createNodeOperatorSequential(
           for (let i = 0; i < children.length; i++) {
             const child = children[i];
             const childName0 = childNameKey(node.children[i]);
-            const isPositionTarget =
-              childName0 !== undefined && positionTargetNames.has(childName0);
+            const targetDims =
+              childName0 !== undefined
+                ? positionTargetDims.get(childName0)
+                : undefined;
             const childPlaceable = child.layout(
               size,
               scaleFactors,
-              childScalesFor(i, isPositionTarget),
+              childScalesFor(i, targetDims),
               posDomains
             );
             const childName = childNameKey(node.children[i]);
