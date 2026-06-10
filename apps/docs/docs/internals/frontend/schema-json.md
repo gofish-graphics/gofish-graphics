@@ -503,6 +503,10 @@ for the API.
             "datum": {},
             "measure": {
               "type": "string"
+            },
+            "offset": {
+              "type": "number",
+              "description": "Pixel offset applied after the datum maps through its scale (datum(v) + px)."
             }
           }
         },

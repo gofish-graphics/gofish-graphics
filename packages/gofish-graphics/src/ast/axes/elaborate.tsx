@@ -126,13 +126,12 @@ function gutterConstraints(
     crossFloor !== undefined
       ? // Standoff: the line sits AXIS_CONTENT_GAP outside the plot edge, so
         // marks at the domain floor (a y=0 histogram bin) don't straddle it.
-        // Both lines get the same outward offset, so they still meet at the
-        // (offset) corner.
+        // Both lines get the same outward offset, so they still frame the
+        // corner. `datum(v).offset(px)` = "this data position, plus pixels".
         Constraint.position(
           {
-            [d]: datum(crossFloor),
+            [d]: datum(crossFloor).offset(-AXIS_CONTENT_GAP),
             anchor: "end",
-            offset: -AXIS_CONTENT_GAP,
           } as any,
           [g[lineName]]
         )
@@ -264,7 +263,13 @@ function elaborateDifferenceAxis(
   // the marks they annotate. The axis line spans [0, width]; ticks are nice
   // values within it. (The old bespoke path used v*scaleFactor for the same.)
   const width = space.width;
-  const tickValues = d3Ticks(0, width, TICK_COUNT);
+  const base = d3Ticks(0, width, TICK_COUNT);
+  // End cap: the line's far end always carries a tick (the old bespoke axis
+  // got this by overshooting to the next nice value; here the scale must stay
+  // anchored to the content's size/width factor, so the cap sits at `width`
+  // itself) — and the final, possibly partial, interval still gets its delta.
+  const tickValues =
+    base.length > 0 && base[base.length - 1] < width ? [...base, width] : base;
   const extraLabels = tickValues.slice(0, -1).map((v, i) => ({
     value: (v + tickValues[i + 1]) / 2,
     text: fmtNum(tickValues[i + 1] - v),

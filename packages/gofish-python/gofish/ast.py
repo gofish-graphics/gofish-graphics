@@ -1374,7 +1374,42 @@ def select(layer_name: str) -> LayerSelector:
 # Literal-value wrapper
 
 
-def datum(value: Any) -> dict:
+class DatumValue(dict):
+    """
+    The `{type: "datum", ...}` wire shape, as a dict subclass so a datum
+    supports pixel-offset arithmetic: `datum(v) + px` / `datum(v) - px`
+    yield a new datum whose `offset` field carries the accumulated pixels.
+    The JS side applies `offset` AFTER mapping the datum through its
+    scale — "this data position, plus pixels" (e.g. an axis line seated a
+    fixed standoff outside the plot edge). Mirrors `datum(v).offset(px)`
+    in JS. Serializes like a plain dict (it is one), so it crosses the IR
+    bridge unchanged.
+    """
+
+    def _with_offset(self, px):
+        if isinstance(px, bool) or not isinstance(px, (int, float)):
+            return NotImplemented
+        out = DatumValue(self)
+        out["offset"] = self.get("offset", 0) + px
+        return out
+
+    def __add__(self, px):  # datum(v) + 6
+        return self._with_offset(px)
+
+    def __radd__(self, px):  # 6 + datum(v)
+        return self._with_offset(px)
+
+    def __sub__(self, px):  # datum(v) - 6
+        if isinstance(px, bool) or not isinstance(px, (int, float)):
+            return NotImplemented
+        return self._with_offset(-px)
+
+    def offset(self, px):
+        """Method form, for parity with JS ``datum(v).offset(px)``."""
+        return self._with_offset(px)
+
+
+def datum(value: Any) -> DatumValue:
     """
     Wrap a value as an embedded data-space value (the per-row,
     scale-aware form). Mirrors the JS `datum(...)` constructor in
@@ -1387,6 +1422,8 @@ def datum(value: Any) -> dict:
       in data space. `inferEmbedded` (see `data.ts`) flips the
       interval's `embedded` flag, which changes how the layout system
       places the mark vs. a plain `h=100` (literal pixel value).
+    - `datum(0) - 6` — a pixel offset from the data position: the value
+      maps through its scale, then shifts 6px (see `DatumValue`).
 
     Emits the canonical `{type: "datum", datum: value}` shape directly;
     the widget consumes it without any unwrap step.
@@ -1395,7 +1432,7 @@ def datum(value: Any) -> dict:
         value: A field name string, a literal number, or any value to
             wrap.
     """
-    return {"type": "datum", "datum": value}
+    return DatumValue({"type": "datum", "datum": value})
 
 
 # Data utilities (for use inside derive() callbacks)

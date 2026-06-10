@@ -132,15 +132,27 @@ at its value rather than assuming uniform spacing.
 Constraint.position({ x?, y?, anchor? }, [ref]);
 ```
 
-| Option   | Type              | Default    | Description                                                                                   |
-| -------- | ----------------- | ---------- | --------------------------------------------------------------------------------------------- |
-| `x`      | `number \| Value` | —          | x coordinate — literal pixel or `datum(n)` (scaled)                                           |
-| `y`      | `number \| Value` | —          | y coordinate — literal pixel or `datum(n)` (scaled)                                           |
-| `anchor` | `Alignment`       | `"middle"` | Which anchor of the ref lands on the coordinate                                               |
-| `offset` | `number`          | `0`        | Pixel offset added after the coordinate resolves (e.g. a fixed standoff from a data position) |
+| Option   | Type              | Default    | Description                                         |
+| -------- | ----------------- | ---------- | --------------------------------------------------- |
+| `x`      | `number \| Value` | —          | x coordinate — literal pixel or `datum(n)` (scaled) |
+| `y`      | `number \| Value` | —          | y coordinate — literal pixel or `datum(n)` (scaled) |
+| `anchor` | `Alignment`       | `"middle"` | Which anchor of the ref lands on the coordinate     |
 
 At least one of `x` / `y` is required. Only `datum` coordinates feed the layer's
 inferred scale; literal pixels are placed directly and don't define the domain.
+
+A datum coordinate can carry a **pixel offset** applied after the scale
+mapping — "this data position, plus pixels":
+
+```ts
+// Seat a line 6px outside the y = 0 grid position, wherever 0 lands.
+Constraint.position({ y: datum(0).offset(-6), anchor: "end" }, [line]);
+```
+
+The offset shifts the resolved position without affecting the inferred domain
+(`datum(0).offset(-6)` still contributes `0` to the scale). It works anywhere a
+`Value` is accepted — shape coordinates too, not just constraints. In Python
+the same thing is written with plain arithmetic: `datum(0) - 6`.
 
 ```ts
 // A continuous y-axis: each tick centered at its data value. Passing `datum(v)`

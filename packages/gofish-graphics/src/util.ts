@@ -1,4 +1,4 @@
-import { getValue, isValue, MaybeValue } from "./ast/data";
+import { getValue, getValueOffset, isValue, MaybeValue } from "./ast/data";
 
 export const lerp = (a: number, b: number, t: number): number => {
   return a + t * (b - a);
@@ -79,7 +79,11 @@ export const computeAesthetic = (
   scale: (x: number) => number,
   provided: number | undefined
 ): number | undefined => {
-  return isValue(input) ? scale(getValue(input)!) : (input ?? provided);
+  // A datum's pixel offset applies AFTER the scale mapping — "this data
+  // position, plus pixels" (`datum(v).offset(px)`).
+  return isValue(input)
+    ? scale(getValue(input)!) + getValueOffset(input)
+    : (input ?? provided);
 };
 
 export const computeSize = (

@@ -4,19 +4,60 @@ export type Measure = string;
 
 export const measure = (unit: string): Measure => unit;
 
-export type Value<T> = T | { type: "datum"; datum: any; measure?: Measure };
+export type Value<T> = T | DatumValue | DatumValueImpl;
 export type MaybeValue<T> = T | Value<T>;
 
-export const value = <T>(datum: T, measure?: Measure): Value<any> => ({
-  type: "datum",
-  datum,
-  measure,
-});
+/** The datum wrapper's WIRE shape — what the Python bridge emits and what the
+ *  {@link getValue} / {@link getMeasure} casts read. `offset` is a pixel
+ *  offset added AFTER the datum maps through its scale ("a fixed standoff
+ *  from a data position"); set via `datum(v).offset(px)` in JS or
+ *  `datum(v) + px` in Python, read with {@link getValueOffset}. */
+type DatumValue = {
+  type: "datum";
+  datum: any;
+  measure?: Measure;
+  offset?: number;
+};
 
-/** Object branch of {@link Value}; named here so the {@link getValue} /
- *  {@link getMeasure} casts don't read as opaque. Keep in sync with the
- *  inline shape in {@link Value} above. */
-type DatumValue = { type: "datum"; datum: any; measure?: Measure };
+/**
+ * Datum wrapper instance, as built by `datum(...)` / `value(...)` in JS. A
+ * class (not a plain object) so `.offset(px)` can CHAIN while the serialized
+ * field is still named `offset`: instances keep the pixels in `_offset` (an
+ * own field, so it survives object spread) and `toJSON` writes the canonical
+ * {@link DatumValue} wire shape. Resolution sites read either form via
+ * {@link getValueOffset}.
+ */
+export class DatumValueImpl {
+  public readonly type = "datum" as const;
+  constructor(
+    public readonly datum: any,
+    public readonly measure?: Measure,
+    /** @internal accumulated pixel offset; read via {@link getValueOffset} */
+    public readonly _offset?: number
+  ) {}
+
+  /** A new value at the same datum, shifted `px` pixels post-scale —
+   *  "this data position, plus pixels". */
+  offset(px: number): DatumValueImpl {
+    return new DatumValueImpl(
+      this.datum,
+      this.measure,
+      (this._offset ?? 0) + px
+    );
+  }
+
+  toJSON(): DatumValue {
+    return {
+      type: this.type,
+      datum: this.datum,
+      ...(this.measure !== undefined ? { measure: this.measure } : {}),
+      ...(this._offset ? { offset: this._offset } : {}),
+    };
+  }
+}
+
+export const value = <T>(datum: T, measure?: Measure): DatumValueImpl =>
+  new DatumValueImpl(datum, measure);
 
 /**
  * `datum(x)` is the recommended name for the data-driven value wrapper
@@ -90,6 +131,19 @@ export const getMeasure = <T>(value: MaybeValue<T>): Measure => {
     return (value as DatumValue).measure ?? "unit";
   }
   return "unknown";
+};
+
+/**
+ * The post-scale pixel offset carried by a datum value, in either of its two
+ * forms: a JS {@link DatumValueImpl} instance (pixels in `_offset`; `offset`
+ * is the chaining method) or the deserialized wire shape (a plain object with
+ * a numeric `offset`, as the Python wrapper emits for `datum(v) + px`).
+ */
+export const getValueOffset = <T>(value: MaybeValue<T>): number => {
+  if (!isValue(value)) return 0;
+  const v = value as any;
+  if (typeof v.offset === "number") return v.offset;
+  return typeof v._offset === "number" ? v._offset : 0;
 };
 
 export const inferEmbedded = <T>(interval: Interval<T>): Interval<T> => {

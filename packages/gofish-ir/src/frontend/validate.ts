@@ -389,7 +389,15 @@ function walkChannelValue(value: unknown, path: string, ctx: Context): void {
   // Object form: one of the recognized tagged shapes.
   const obj = value as Record<string, unknown>;
   if ("__gofish_lambda" in obj) return; // Python-bridge sentinel
-  if (obj.type === "datum") return;
+  if (obj.type === "datum") {
+    if (obj.offset !== undefined && typeof obj.offset !== "number") {
+      ctx.errors.push({
+        path: `${path}.offset`,
+        message: 'datum "offset" must be a number (post-scale pixel offset)',
+      });
+    }
+    return;
+  }
   if (obj.type === "field") {
     if (typeof obj.name !== "string") {
       ctx.errors.push({

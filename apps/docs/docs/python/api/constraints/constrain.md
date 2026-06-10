@@ -104,6 +104,19 @@ Constraint.position(refs, *, x=None, y=None, anchor=None)
 At least one of `x` / `y` is required. Only `datum` coordinates feed the layer's
 inferred scale; literal pixels are placed directly and don't define the domain.
 
+A datum coordinate supports **pixel-offset arithmetic** — "this data position,
+plus pixels", applied after the scale mapping:
+
+```python
+# Seat a line 6px outside the y = 0 grid position, wherever 0 lands.
+Constraint.position([line], y=datum(0) - 6, anchor="end")
+```
+
+The offset shifts the resolved position without affecting the inferred domain
+(`datum(0) - 6` still contributes `0` to the scale). It works anywhere a datum
+is accepted — shape coordinates too, not just constraints. (The JS equivalent
+is `datum(0).offset(-6)`.)
+
 ```python
 from gofish import layer, rect, datum, Constraint
 

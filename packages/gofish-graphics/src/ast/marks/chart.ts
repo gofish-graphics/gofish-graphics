@@ -1,5 +1,6 @@
 import { sumBy, v, Connect, ref } from "../../lib";
 import { GoFishNode } from "../_node";
+import type { Value } from "../data";
 import { GoFishRef } from "../_ref";
 import type { Token } from "../createName";
 import { type ColorConfig } from "../colorSchemes";
@@ -129,11 +130,11 @@ export function circle<T extends Record<string, any>>({
     const resolvedFill =
       typeof fill === "string" && datum && fill in datum
         ? v(datum[fill as string])
-        : fill;
+        : (fill as Value<string> | undefined);
     const resolvedStroke =
       typeof stroke === "string" && datum && stroke in datum
         ? v(datum[stroke as string])
-        : stroke;
+        : (stroke as Value<string> | undefined);
     const node = Ellipse({
       w: typeof r === "number" ? r * 2 : inferSize(r, d),
       h: typeof r === "number" ? r * 2 : inferSize(r, d),

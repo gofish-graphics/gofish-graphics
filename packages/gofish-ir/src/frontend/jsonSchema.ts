@@ -310,6 +310,11 @@ export const FRONTEND_IR_JSON_SCHEMA = {
             type: { const: "datum" },
             datum: {},
             measure: { type: "string" },
+            offset: {
+              type: "number",
+              description:
+                "Pixel offset applied after the datum maps through its scale (datum(v) + px).",
+            },
           },
         },
         {

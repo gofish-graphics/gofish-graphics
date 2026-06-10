@@ -1,6 +1,12 @@
 import { GoFishNode } from "../_node";
 import { Size, elaborateDims, FancyDims } from "../dims";
-import { getMeasure, getValue, isValue, MaybeValue } from "../data";
+import {
+  getMeasure,
+  getValue,
+  getValueOffset,
+  isValue,
+  MaybeValue,
+} from "../data";
 import { POSITION, UNDEFINED, UnderlyingSpace } from "../underlyingSpace";
 import { interval } from "../../util/interval";
 import { createNodeOperator } from "../withGoFish";
@@ -69,12 +75,12 @@ export const position = createNodeOperator(
           // Handle x and y values (can be literal values or data-bound values)
           const xPos = options.x
             ? isValue(options.x)
-              ? posScales[0]!(getValue(options.x)!)
+              ? posScales[0]!(getValue(options.x)!) + getValueOffset(options.x)
               : options.x
             : 0;
           const yPos = options.y
             ? isValue(options.y)
-              ? posScales[1]!(getValue(options.y)!)
+              ? posScales[1]!(getValue(options.y)!) + getValueOffset(options.y)
               : options.y
             : 0;
 

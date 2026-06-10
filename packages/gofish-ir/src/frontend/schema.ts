@@ -306,6 +306,10 @@ export type ChannelValue =
 
 export interface DatumValue {
   type: "datum";
+  /** Pixel offset applied AFTER the datum maps through its scale — "this
+   *  data position, plus pixels". Emitted by `datum(v) + px` in Python and
+   *  `datum(v).offset(px)` in JS. */
+  offset?: number;
   [key: string]: unknown;
 }
 
