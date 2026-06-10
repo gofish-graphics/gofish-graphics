@@ -266,6 +266,23 @@ This is where the actual positioning and sizing happens. Each node's `layout` fu
 
 It applies layout algorithms (stacking, positioning, etc.), calculates intrinsic dimensions for each node, and handles nested layouts and complex arrangements.
 
+**Inferring an omitted `w`/`h`.** The chart-level `w` and `h` are optional. When
+one is omitted, `layout()` runs against a default canvas size (`DEFAULT_CANVAS_SIZE
+= 400`) for that axis — so the `w`/`h` shown above are really the effective
+`effW`/`effH` — and then reads the chart's _final_ extent back off the laid-out
+root via `child.dims[i].size`. Content that reports a smaller intrinsic bbox (a
+bare shape, a `layer`/`enclose` of fixed-size marks) shrinks-to-fit; operators
+that claim the whole canvas (data-driven sizes, positional axes, distribution
+like `spread`/`scatter`, `treemap`, polar) keep the default. A user-supplied
+dimension is always authoritative. This computed extent — not the raw option — is
+what the render pass uses to size the SVG and place chrome like the legend.
+
+> Literal pixel sizes are invisible to the underlying-space tree (a fixed-size
+> shape resolves to `UNDEFINED`, not `SIZE`), which is why the intrinsic extent is
+> recovered by reading the laid-out bbox rather than from the space. Tracking
+> constant sizes in the space system (to shrink-to-fit _through_ distribution
+> operators) is a separate change.
+
 **Example: Rect Layout Function**
 
 **Location**: `src/ast/shapes/rect.tsx:177-250`

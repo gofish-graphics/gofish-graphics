@@ -633,8 +633,8 @@ export class GoFishNode {
       colorConfig,
       padding,
     }: {
-      w: number;
-      h: number;
+      w?: number;
+      h?: number;
       x?: number;
       y?: number;
       transform?: { x?: number; y?: number };

@@ -274,7 +274,10 @@ We are using a green from GoFish's default color palette for this chart. Try cha
 or changing `5` to a higher or lower number.
 
 Finally, we call `.render` to render the chart to the DOM, specifying a width and height for the
-entire graphic.
+entire graphic. Both `w` and `h` are optional: omit either one and GoFish computes that dimension
+during layout. Content with an intrinsic size (a fixed-size shape, or a `layer` of them) shrinks to
+fit its contents, while data-driven charts (bars, scatters, and other scale-based layouts) fall back
+to a default size.
 
 ## Bar Chart
 
