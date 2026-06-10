@@ -47,13 +47,26 @@ function main() {
 
   console.log(`Updated ${count} story baseline(s).`);
 
+  // Push the accepted baselines to the shared snapshots/<branch> ref ONLY in
+  // CI: that branch is what CI fetches as its baseline, and CI renders on
+  // Linux. A local (macOS) run must never publish its captures there — text
+  // metrics differ and every text-bearing story would falsely regress.
+  // Locally the accept is still useful: __snapshots__/dom feeds the local
+  // parity compare (compare-python.ts).
   if (count > 0) {
-    const snapBranch = getSnapshotBranchName();
-    commitAndPushSnapshots(
-      snapBranch,
-      join(ROOT, "__snapshots__"),
-      `Accept ${count} visual diff(s)`
-    );
+    if (process.env.CI) {
+      const snapBranch = getSnapshotBranchName();
+      commitAndPushSnapshots(
+        snapBranch,
+        join(ROOT, "__snapshots__"),
+        `Accept ${count} visual diff(s)`
+      );
+    } else {
+      console.log(
+        "Local run: accepted baselines were NOT pushed to the snapshots " +
+          "branch (CI-only). They live in __snapshots__/ for local compares."
+      );
+    }
   }
 }
 
