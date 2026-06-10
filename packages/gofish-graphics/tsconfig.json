@@ -14,8 +14,7 @@
     "declaration": true,
     "declarationMap": true,
     "outDir": "dist",
-    "skipLibCheck": true,
-    "resolveJsonModule": true
+    "skipLibCheck": true
   },
   "include": ["src/**/*"],
   "exclude": [

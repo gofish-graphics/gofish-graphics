@@ -17,7 +17,6 @@ import {
   stack,
   scatter,
   group,
-  treemap,
   table,
   log as logOp,
   derive,
@@ -359,8 +358,6 @@ function mapOperator(
       return scatter(opts as any);
     case "table":
       return table(opts as any);
-    case "treemap":
-      return treemap(opts as any);
     case "log":
       return logOp(opts.label);
     default:

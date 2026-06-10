@@ -113,8 +113,8 @@ export const Table = createNodeOperator(
             const child = childPlaceables[i];
             const col = i % numCols;
             const row = Math.floor(i / numCols);
-            child.place(0, col * (cellW + xSpacing) + cellW / 2, "center");
-            child.place(1, row * (cellH + ySpacing) + cellH / 2, "center");
+            child.place(0, col * (cellW + xSpacing), "min");
+            child.place(1, row * (cellH + ySpacing), "min");
           }
 
           // Store representative cells for ordinal axis label positioning.

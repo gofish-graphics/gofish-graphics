@@ -1275,16 +1275,6 @@ def scatter(
     return Operator("scatter", **options)
 
 
-def treemap(**options: Any) -> Operator:
-    """
-    Treemap operator — lay out children in fare/weight-proportional rectangles.
-
-    Mirrors JS ``treemap({ valueField, tile, sort, flipY, ... })`` in
-    ``.flow()``.
-    """
-    return Operator("treemap", **options)
-
-
 def table(
     *,
     by: Optional[Dict[str, str]] = None,

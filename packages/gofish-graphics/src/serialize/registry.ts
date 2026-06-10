@@ -47,10 +47,7 @@ import { group } from "../ast/graphicalOperators/group";
 import { table } from "../ast/graphicalOperators/table";
 import { arrow } from "../ast/graphicalOperators/arrow";
 import { connect } from "../ast/graphicalOperators/connect";
-import {
-  treemap as treemapOperator,
-  Treemap,
-} from "../ast/graphicalOperators/treemap";
+import { treemap as Treemap } from "../ast/graphicalOperators/treemap";
 import type { Frontend } from "gofish-ir";
 
 export type { ChartBuilder, Mark, Operator };
@@ -161,7 +158,6 @@ export const OPERATOR_MAP: Record<
   group: (opts) => group(opts as any),
   scatter: (opts) => scatter(opts as any),
   table: (opts) => table(opts as any),
-  treemap: (opts) => treemapOperator(opts as any),
   log: (opts) => log(opts.label),
 };
 

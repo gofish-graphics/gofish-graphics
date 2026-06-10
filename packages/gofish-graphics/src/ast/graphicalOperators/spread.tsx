@@ -49,7 +49,6 @@ export const Spread = createNodeOperator(
       mode = "edge",
       reverse = false,
       glue = false,
-      stackWeights,
       axes,
       ...fancyDims
     }: {
@@ -64,12 +63,6 @@ export const Spread = createNodeOperator(
       // When true, treat as a stack: glue children together, summing their
       // sizes into a POSITION at this level. `spacing` is ignored.
       glue?: boolean;
-      /**
-       * When length matches `children`, divides space along `dir` in proportion
-       * to these weights (after subtracting `spacing`). Otherwise each child
-       * gets an equal share.
-       */
-      stackWeights?: number[];
       /** Override axis rendering for this node. true/false applies to both
        * dims; object form controls x/y independently. */
       axes?: boolean | { x?: AxisOptions; y?: AxisOptions };
@@ -100,7 +93,6 @@ export const Spread = createNodeOperator(
           mode,
           reverse,
           glue,
-          stackWeights,
           dims,
         },
         key,
@@ -293,32 +285,17 @@ export const Spread = createNodeOperator(
           // Calculate available space for children in stacking direction after subtracting spacing
           const totalSpacing = effectiveSpacing * (children.length - 1);
           const availableStackSpace = size[stackDir] - totalSpacing;
-          const n = children.length;
-          const weightsOk =
-            stackWeights !== undefined &&
-            stackWeights.length === n &&
-            stackWeights.every((w) => Number.isFinite(w) && w >= 0);
-          const weightSum = weightsOk
-            ? stackWeights!.reduce((acc, w) => acc + Math.max(w, 0), 0)
-            : 0;
-          const useWeights = weightsOk && weightSum > 0;
-          const childStackSizes: number[] = useWeights
-            ? stackWeights!.map(
-                (w) => (Math.max(w, 0) / weightSum) * availableStackSpace
-              )
-            : Array.from({ length: n }, () => availableStackSpace / n);
+          const childStackSize = availableStackSpace / children.length;
 
-          const childPlaceables = children.map((child, i) => {
-            const modifiedSize: Size = [0, 0];
-            modifiedSize[stackDir] = childStackSizes[i] ?? 0;
-            modifiedSize[alignDir] = size[alignDir];
-            return child.layout(
-              modifiedSize,
-              scaleFactors,
-              posScales,
-              posDomains
-            );
-          });
+          // Create modified size with equal distribution for stacking direction
+          const modifiedSize: Size = [0, 0];
+          modifiedSize[stackDir] = childStackSize;
+          modifiedSize[alignDir] = size[alignDir];
+          // console.log(size[stackDir], size[alignDir]);
+
+          const childPlaceables = children.map((child) =>
+            child.layout(modifiedSize, scaleFactors, posScales, posDomains)
+          );
 
           // Fixed-position children have dims already defined (e.g. Ref to another layer)
           const isFixed = (dir: Direction) => (child: Placeable) =>
@@ -514,8 +491,6 @@ export type SpreadOptions<T = any> = {
   mode?: "edge" | "center";
   reverse?: boolean;
   glue?: boolean;
-  /** Combinator form: same length as child marks; splits space along `dir` by weight. */
-  stackWeights?: number[];
   w?: number | (keyof T & string);
   h?: number | (keyof T & string);
   debug?: boolean;
