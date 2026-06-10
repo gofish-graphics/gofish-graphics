@@ -273,11 +273,11 @@ class TestNewMarks:
 
     def test_image_mark(self):
         """Test image mark creation."""
-        m = image(w=100, h=100, src="url")
+        m = image(w=100, h=100, href="url")
         d = m.to_dict()
         assert d["type"] == "image"
         assert d["w"] == 100
-        assert d["src"] == "url"
+        assert d["href"] == "url"
 
     def test_marks_support_name(self):
         """Test all marks support .name()."""
