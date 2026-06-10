@@ -25,7 +25,7 @@ const GITATTRIBUTES_CONTENT =
   "screenshots/**/*.png filter=lfs diff=lfs merge=lfs -text\n";
 
 // ---------------------------------------------------------------------------
-// Internal helpers
+// Shared git helpers (also used by capture-diff.ts)
 // ---------------------------------------------------------------------------
 
 interface GitOptions {
@@ -34,7 +34,7 @@ interface GitOptions {
   ignoreError?: boolean;
 }
 
-function git(cmd: string, opts: GitOptions = {}): string {
+export function git(cmd: string, opts: GitOptions = {}): string {
   const { cwd = ROOT, input, ignoreError = false } = opts;
   try {
     return execSync(cmd, {
@@ -49,7 +49,7 @@ function git(cmd: string, opts: GitOptions = {}): string {
   }
 }
 
-function removeWorktree(wtPath: string): void {
+export function removeWorktree(wtPath: string): void {
   try {
     git(`git worktree remove --force "${wtPath}"`);
   } catch {

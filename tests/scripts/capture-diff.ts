@@ -34,6 +34,7 @@ import { readFileSync, writeFileSync, rmSync, mkdirSync, existsSync } from "fs";
 import { join } from "path";
 import { captureStories } from "./capture-core.js";
 import { formatDomDiff, escapeHtml } from "./diff-utils.js";
+import { git, removeWorktree } from "./snapshot-branch.js";
 
 const TESTS_DIR = join(import.meta.dirname, "..");
 const HARNESS_DIR = join(TESTS_DIR, "harness");
@@ -44,39 +45,6 @@ const REPORT_PATH = join(OUT_DIR, "report.html");
 
 const HEAD_PORT = 3001; // reuse capture-js-dom's port (it isn't running concurrently)
 const BASE_PORT = 3003; // distinct so the base worktree's server can coexist
-
-// ---------------------------------------------------------------------------
-// git helpers
-// ---------------------------------------------------------------------------
-
-function git(
-  cmd: string,
-  opts: { cwd?: string; ignoreError?: boolean } = {}
-): string {
-  try {
-    return execSync(cmd, {
-      cwd: opts.cwd,
-      encoding: "utf-8",
-      stdio: ["pipe", "pipe", "pipe"],
-    }).trim();
-  } catch (e) {
-    if (opts.ignoreError) return "";
-    throw e;
-  }
-}
-
-const REPO_ROOT = git("git rev-parse --show-toplevel", { cwd: TESTS_DIR });
-
-function removeWorktree(wtPath: string): void {
-  git(`git worktree remove --force "${wtPath}"`, {
-    cwd: REPO_ROOT,
-    ignoreError: true,
-  });
-  if (existsSync(wtPath)) {
-    rmSync(wtPath, { recursive: true, force: true });
-    git("git worktree prune", { cwd: REPO_ROOT, ignoreError: true });
-  }
-}
 
 // ---------------------------------------------------------------------------
 // Report
@@ -167,10 +135,7 @@ async function main() {
 
   // Resolve the ref now so we fail fast on a typo (and pin to a sha so the
   // worktree is stable even if the branch moves mid-run).
-  const baseSha = git(`git rev-parse "${baseRef}"`, {
-    cwd: REPO_ROOT,
-    ignoreError: true,
-  });
+  const baseSha = git(`git rev-parse "${baseRef}"`, { ignoreError: true });
   if (!baseSha) {
     console.error(
       `Cannot resolve base ref "${baseRef}". Is it a valid commit/branch?`
@@ -200,7 +165,7 @@ async function main() {
     console.log(
       `\n=== Checking out ${baseRef} (${baseShort}) into a temp worktree ===`
     );
-    git(`git worktree add --detach "${wtPath}" ${baseSha}`, { cwd: REPO_ROOT });
+    git(`git worktree add --detach "${wtPath}" ${baseSha}`);
 
     // The worktree has no node_modules — install so its harness can run Vite.
     // --ignore-scripts skips husky/postinstall (not needed for a headless render)
@@ -227,34 +192,23 @@ async function main() {
   // 3. Diff per story.
   const headSet = new Set(headResult.captured);
   const baseSet = new Set(baseResult.captured);
-  const all = [
-    ...new Set([...headResult.captured, ...baseResult.captured]),
-  ].sort();
+  const all = Array.from(new Set([...headSet, ...baseSet])).sort();
 
   const changes: Change[] = [];
   for (const path of all) {
-    const inHead = headSet.has(path);
-    const inBase = baseSet.has(path);
-    if (inHead && inBase) {
-      const headDom = readFileSync(join(HEAD_DIR, path), "utf-8");
-      const baseDom = readFileSync(join(BASE_DIR, path), "utf-8");
-      if (headDom !== baseDom)
-        changes.push({ path, kind: "changed", baseDom, headDom });
-    } else if (inHead) {
-      changes.push({
-        path,
-        kind: "added",
-        baseDom: null,
-        headDom: readFileSync(join(HEAD_DIR, path), "utf-8"),
-      });
-    } else {
-      changes.push({
-        path,
-        kind: "removed",
-        baseDom: readFileSync(join(BASE_DIR, path), "utf-8"),
-        headDom: null,
-      });
-    }
+    const headDom = headSet.has(path)
+      ? readFileSync(join(HEAD_DIR, path), "utf-8")
+      : null;
+    const baseDom = baseSet.has(path)
+      ? readFileSync(join(BASE_DIR, path), "utf-8")
+      : null;
+
+    if (baseDom === null)
+      changes.push({ path, kind: "added", baseDom, headDom });
+    else if (headDom === null)
+      changes.push({ path, kind: "removed", baseDom, headDom });
+    else if (headDom !== baseDom)
+      changes.push({ path, kind: "changed", baseDom, headDom });
   }
 
   // 4. Report.

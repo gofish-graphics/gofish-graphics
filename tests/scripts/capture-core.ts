@@ -45,8 +45,6 @@ export interface CaptureOptions {
   screenshot?: boolean;
   /** Wipe `outDir` before capturing (default: false — callers manage layout). */
   cleanOutDir?: boolean;
-  /** Progress sink. Defaults to console.log; pass `() => {}` to silence. */
-  log?: (msg: string) => void;
 }
 
 export interface CaptureResult {
@@ -104,7 +102,6 @@ export async function captureStories(
     filter,
     screenshot = false,
     cleanOutDir = false,
-    log = (m: string) => console.log(m),
   } = opts;
 
   const result: CaptureResult = { captured: [], failed: [], skipped: [] };
@@ -165,7 +162,7 @@ export async function captureStories(
         })
       : allStories;
 
-    log(
+    console.log(
       `Found ${allStories.length} stories${needle ? `, ${stories.length} matching "${needle}"` : ""}\n`
     );
 
