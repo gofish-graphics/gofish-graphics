@@ -76,6 +76,9 @@ export const findScaleFactor = (
 
 export type Placeable = {
   dims: Dimensions;
+  /** Placement state; `translate[i] === undefined` means "parent may place
+   *  me". Exposed so the `baseline` align anchor can read a target's origin. */
+  transform?: Transform;
   place: (axis: FancyDirection, value: number, anchor?: Anchor) => void;
 };
 

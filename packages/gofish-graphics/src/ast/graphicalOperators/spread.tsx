@@ -395,10 +395,22 @@ export const Spread = createNodeOperator(
             }
           }
 
+          // A child the alignment step didn't place (no `alignment` given)
+          // renders at its own origin (translate 0): nail it down there now so
+          // the extents below measure the real box. Left unplaced, the child
+          // would be invisible to the measurement and the spread would report
+          // a zero cross extent — wrong whenever children's boxes overhang
+          // their origin (e.g. facets whose axis labels hang below baseline).
+          for (const child of childPlaceables) {
+            if (child.dims[alignDir].min === undefined) {
+              child.place(alignDir, 0, "baseline");
+            }
+          }
+
           // Compute alignDir intrinsicDims from extents to account for negative
           // bars. Ignore children that report a non-finite extent on a given
-          // axis (e.g. an unconstrained dim) so one `undefined` doesn't turn the
-          // whole box into NaN via `Math.min(undefined)`.
+          // axis (e.g. a child with no intrinsic size there) so one `undefined`
+          // doesn't turn the whole box into NaN via `Math.min(undefined)`.
           const reduceExtent = (
             dir: Direction,
             pick: (iv: { min?: number; max?: number }) => number | undefined,

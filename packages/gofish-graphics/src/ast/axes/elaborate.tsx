@@ -49,8 +49,6 @@ const LABEL_FONT_SIZE = 10;
 const AXIS_COLOR = "gray";
 
 export type AxisElaboration = {
-  /** Which axis this elaborates (0 = x, 1 = y). */
-  dim: 0 | 1;
   /** Shapes to add as siblings of the content inside the wrapping layer. */
   nodes: GoFishNode[];
   /** Builds this axis's constraints from the layer's name→ref map. */
@@ -171,14 +169,24 @@ function positionAxis(opts: {
     extra.forEach((e, i) =>
       cs.push(Constraint.position(pos(e.value), [g[labelName(i)]]))
     );
-    // Seat every gutter piece (ticks AND labels) against the line.
-    cs.push(
-      ...gutterConstraints(dim, g, lineName, contentName, [...ticks, ...labels])
+    // Tick marks align flush with the line (their inner edge IS the tick).
+    cs.push(...gutterConstraints(dim, g, lineName, contentName, ticks));
+    // Plain delta labels have no tick of their own to provide an offset, so
+    // they DISTRIBUTE off the line instead of aligning flush against it —
+    // seated at the same outer offset as the continuous labels (tick + gap).
+    const crossDir = dirName((1 - dim) as 0 | 1);
+    labels.forEach((l) =>
+      cs.push(
+        Constraint.distribute(
+          { dir: crossDir, spacing: TICK_LEN + LABEL_TICK_GAP } as any,
+          [l, g[lineName]]
+        )
+      )
     );
     return cs;
   };
 
-  return { dim, nodes: [line, ...tickNodes, ...labelNodes], constraints };
+  return { nodes: [line, ...tickNodes, ...labelNodes], constraints };
 }
 
 /** One continuous (POSITION) axis. Mirrors the hand-drawn ContinuousYAxis. */
@@ -295,7 +303,7 @@ function elaborateOrdinalAxis(
     return cs;
   };
 
-  return { dim, nodes, constraints };
+  return { nodes, constraints };
 }
 
 /**
@@ -397,35 +405,39 @@ export async function elaborateAxes(
   node.key = undefined;
 
   // Inner tier: content + constraint-based (continuous/difference) axes. The
-  // content is pinned at the origin so each axis grows into negative gutter
-  // space; this keeps the content on the posScale grid both axes' ticks use.
+  // content is pinned at its own ORIGIN (baseline anchor, translate 0) so each
+  // axis grows into negative gutter space; this keeps the content on the
+  // posScale grid both axes' ticks use. The anchor must be `baseline`, not
+  // `start`: nested content (facets carrying their own ordinal labels) has a
+  // bbox extending past its origin, and pinning bbox-min would slide the marks
+  // off the tick grid by that overhang.
   let inner: GoFishNode = node;
   if (constrained.length > 0) {
     node.name(CONTENT_NAME);
     const axisNodes = constrained.flatMap((e) => e.nodes);
     inner = (await (layer as any)([node, ...axisNodes])) as GoFishNode;
     inner.constrain((g) => [
-      Constraint.align({ x: "start", y: "start" } as any, [g[CONTENT_NAME]]),
+      Constraint.align({ x: "baseline", y: "baseline" } as any, [
+        g[CONTENT_NAME],
+      ]),
       ...constrained.flatMap((e) => e.constraints(g)),
     ]);
   }
 
   // Outer tier: ref-based (ordinal) labels. The labels `distribute` against
-  // `inner` (whose bbox includes any nested inner-facet labels, so an outer
-  // label row stacks below the inner row). For that anchor to be "placed",
-  // `inner` is pinned — but ONLY on each ordinal axis's GUTTER dim (the cross
-  // dim it stacks along), never the axis dim, so the bars don't get shifted
-  // sideways out from under their labels.
+  // `inner`, whose bbox includes any nested inner-facet labels — so an outer
+  // label row stacks below the inner row. For that anchor to be "placed",
+  // `inner` is baseline-pinned: its 0 point stays the layer's 0 point, and the
+  // labels seat past its bbox edge in negative gutter space.
   let root = inner;
   if (refBased.length > 0) {
     inner.name(INNER_REF_NAME);
-    const gutterPins: Record<string, "start"> = {};
-    for (const e of refBased)
-      gutterPins[dirName((1 - e.dim) as 0 | 1)] = "start";
     const labelNodes = refBased.flatMap((e) => e.nodes);
     root = (await (layer as any)([inner, ...labelNodes])) as GoFishNode;
     root.constrain((g) => [
-      Constraint.align(gutterPins as any, [g[INNER_REF_NAME]]),
+      Constraint.align({ x: "baseline", y: "baseline" } as any, [
+        g[INNER_REF_NAME],
+      ]),
       ...refBased.flatMap((e) => e.constraints(g)),
     ]);
   }

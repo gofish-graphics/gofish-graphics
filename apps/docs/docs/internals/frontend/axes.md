@@ -24,11 +24,33 @@ engine has no axis-specific code at all.
 (which flags which node owns an axis on each dimension), and `resolveNiceDomains`
 (so tick values come from the rounded domain). It walks the node tree **bottom-up**;
 any node `resolveAxes` flagged (`axis.x` / `axis.y === true | "budget"`) is replaced
-by a `Layer` wrapping the original content plus the elaborated axis shapes:
+by up to two `Layer` tiers wrapping the original content plus the elaborated axis
+shapes:
 
 ```
-Layer([ content.name("__axisContent"), ...axisShapes ]).constrain(...)
+inner = Layer([ content.name("__axisContent"), ...continuous/difference shapes ])
+root  = Layer([ inner.name("__axisInner"), ...ordinal labels ])
 ```
+
+The **inner tier** holds the constraint-pinned axes (continuous/difference); the
+**outer tier** holds the ordinal label rows, which need the inner tier fully laid
+out so they can seat past its bounding box. In each tier the wrapped child is
+pinned with `align({ x: "baseline", y: "baseline" })` — a _baseline_ (origin)
+pin, meaning "stay exactly where you were laid out". The pin exists because the
+content is referenced by `distribute` constraints, and a constraint-referenced
+child skips the layer's phase-1 baseline placement (placement is first-write-wins,
+so constraints must run against unplaced targets); the baseline pin re-states
+that phase-1 placement explicitly. It must be `baseline`, not `start`: `start`
+pins the _bounding-box_ corner, which slides the marks off the tick grid once
+the box overhangs the origin (nested facet labels, negative bars).
+
+Everything else then seats around the stationary content in **negative gutter
+space** (into the SVG padding): the axis line distributes off the content's
+near edge, tick marks align flush with the line, labels hang outward. Keeping
+the content at its origin — rather than letting the gutter chain push it, as
+the single-axis hand-drawn story does — is what keeps _two_ continuous axes on
+one grid: a shifted content would land at `gutter + scale(v)` while the other
+axis's datum-pinned ticks sit at `scale(v)`.
 
 The wrapper inherits the wrapped node's `key` and `_name`, so faceting and
 external refs keep resolving to it. After the rewrite, the whole tree's underlying
@@ -56,16 +78,26 @@ one branch per underlying-space kind — the seam a future public API would over
 - **POSITION (continuous)** — `d3.nice` + `d3.ticks` over the domain; an axis line
   (a 1px `rect` auto-spanning the domain via `datum` endpoints), and a
   `spread([text, tickMark])` per tick pinned with
-  `Constraint.position({ [axis]: datum(v) })`. The gutter flows from a zero-size
-  anchor (`align` to the cross-start edge) → tick labels → line → content, so the
-  gutter width emerges positively (the hand-drawn `ContinuousYAxis` used its title
-  for this anchor role).
-- **DIFFERENCE** — same geometry, but the labels are the _delta_ between adjacent
-  ticks placed at their midpoints (`position({ [axis]: datum(midpoint) })`).
-- **ORDINAL** — a `spread([text(key), ref(keyNode)])` per key, where `ref(keyNode)`
-  binds directly to the laid-out key node so the label tracks the content with no
-  constraints at all. Key discovery uses `_ordinalKeyMap` (set by operators such as
-  `table`) or a subtree walk by `node.key`.
+  `Constraint.position({ [axis]: datum(v) })`. The gutter is negative space:
+  `distribute([line, content])` seats the line just past the content's near edge,
+  and `align(end)` sets the ticks flush against it (their inner edge _is_ the
+  tick mark, so the label text ends up offset by the tick + gap inside each
+  tick's spread).
+- **DIFFERENCE** — bare tick marks at the tick values, plus plain-text labels
+  showing the _delta_ between adjacent ticks, pinned at their midpoints
+  (`position({ [axis]: datum(midpoint) })`). The delta labels have no tick of
+  their own to provide an offset, so they `distribute` off the line (at the
+  tick + gap distance) instead of aligning flush against it.
+- **ORDINAL** — per key, a `text(key)` plus a `ref(keyNode)` stand-in bound
+  directly to the laid-out key node. The label `align`s `middle` with its ref
+  along the axis (tracking its mark), and `distribute`s against the wrapped
+  content layer (`__axisInner`) in the gutter dimension — so all labels share
+  one row seated past the _group's_ box (below the most-negative bar; below an
+  inner facet's own label row), not each mark's own extent. This is the chain
+  that makes nested facet labels stack: the inner row joins the facet's box,
+  the facet boxes join the spread's box, and the outer row distributes against
+  that. Key discovery uses `_ordinalKeyMap` (set by operators such as `table`)
+  or a subtree walk by `node.key`.
 
 ## The scale-sharing seam
 

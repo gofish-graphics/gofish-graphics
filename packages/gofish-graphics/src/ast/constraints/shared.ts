@@ -2,6 +2,13 @@ import type { Placeable } from "../_node";
 
 export type Axis = "x" | "y";
 export type Alignment = "start" | "middle" | "end";
+/** Anchor for align/position constraints. The bbox anchors (`Alignment`) place
+ *  a target by its extent; `"baseline"` places the target's own ORIGIN (its
+ *  local coordinate 0) at the value — i.e. `align({y: "baseline"})` with a
+ *  fallback of 0 means "stay where you were laid out", regardless of how far
+ *  the target's bbox extends past its origin (e.g. axis labels hanging below
+ *  a chart's zero line). */
+export type AlignAnchor = Alignment | "baseline";
 
 /** Lightweight handle for referencing a named child inside .constrain() */
 export type ConstraintRef = { readonly name: string };

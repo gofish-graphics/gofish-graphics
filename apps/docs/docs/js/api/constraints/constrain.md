@@ -42,14 +42,14 @@ Aligns a set of children to a shared edge or center on one or both axes. At leas
 Constraint.align({ x?, y? }, [ref1, ref2, ...])
 ```
 
-| Option | Type                       | Default | Description                                                    |
-| ------ | -------------------------- | ------- | -------------------------------------------------------------- |
-| `x`    | `Alignment \| Alignment[]` | —       | Edge/center to align on the x axis (omit to leave x untouched) |
-| `y`    | `Alignment \| Alignment[]` | —       | Edge/center to align on the y axis (omit to leave y untouched) |
+| Option | Type                           | Default | Description                                                           |
+| ------ | ------------------------------ | ------- | --------------------------------------------------------------------- |
+| `x`    | `AlignAnchor \| AlignAnchor[]` | —       | Edge/center/origin to align on the x axis (omit to leave x untouched) |
+| `y`    | `AlignAnchor \| AlignAnchor[]` | —       | Edge/center/origin to align on the y axis (omit to leave y untouched) |
 
-`Alignment` is `"start" \| "middle" \| "end"`. Pass a single value to share one anchor across every child (the common case); pass an array to assign one anchor _per child_ positionally — the array length must equal the number of children.
+`AlignAnchor` is `"start" \| "middle" \| "end" \| "baseline"`. The first three anchor a child by its bounding-box edge or center. `"baseline"` anchors a child by its **origin** (its local 0 point) instead of its box: `align({ y: "baseline" })` with no placed sibling pins the child's origin to the layer's origin — i.e. "stay where you were laid out" — regardless of how far its box overhangs the origin (a bar dipping below zero, axis labels hanging under a chart). Pass a single value to share one anchor across every child (the common case); pass an array to assign one anchor _per child_ positionally — the array length must equal the number of children.
 
-The first already-placed child in the list acts as the anchor on each specified axis (read at _that child's_ anchor). Unplaced children are moved to match it (placed at _their own_ anchor). If no child is placed yet, the layer's own edge is used as the baseline (`start` = 0, `middle` = midpoint, `end` = full extent). When both `x` and `y` are given, x is resolved before y.
+The first already-placed child in the list acts as the anchor on each specified axis (read at _that child's_ anchor). Unplaced children are moved to match it (placed at _their own_ anchor). If no child is placed yet, the layer's own edge is used as the fallback (`start` = 0, `middle` = midpoint, `end` = full extent, `baseline` = 0). When both `x` and `y` are given, x is resolved before y.
 
 ### Per-child anchors
 
