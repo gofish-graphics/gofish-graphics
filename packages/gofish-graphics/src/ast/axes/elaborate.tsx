@@ -194,10 +194,16 @@ function positionAxis(opts: {
     const cs: any[] = tickValues.map((v, i) =>
       Constraint.position(pos(v), [ticks[i]])
     );
+    // Seat the gutter FIRST: constraints apply in order and placement is
+    // first-write-wins, so the line must be placed before anything
+    // distributes off it — an unplaced-anchor distribute would walk from 0
+    // and drag the line into the plot. Tick marks align flush with the line
+    // (their inner edge IS the tick).
+    cs.push(...gutterConstraints(dim, g, lineName, ticks, opts.crossFloor));
     // Each extra label is pinned at its data position along the axis, and —
     // having no tick of its own to provide an offset — DISTRIBUTEs off the
-    // line in the gutter instead of aligning flush against it, seated at the
-    // same outer offset as the continuous labels (tick + gap).
+    // (now seated) line, at the same outer offset as the continuous labels
+    // (tick + gap).
     extra.forEach((e, i) => {
       const label = g[labelName(i)];
       cs.push(Constraint.position(pos(e.value), [label]));
@@ -208,8 +214,6 @@ function positionAxis(opts: {
         )
       );
     });
-    // Tick marks align flush with the line (their inner edge IS the tick).
-    cs.push(...gutterConstraints(dim, g, lineName, ticks, opts.crossFloor));
     return cs;
   };
 
