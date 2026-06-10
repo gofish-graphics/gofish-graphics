@@ -63,9 +63,10 @@ export const PositionScatterDefault: StoryObj = {
   },
 };
 
-// Color legend placement off the COMPUTED extent: omitted w/h + a color scale.
-// The legend swatches should sit just right of the computed content width.
-export const LegendOffComputedExtent: StoryObj = {
+// With w/h omitted and a color scale present, the legend should be positioned
+// relative to the COMPUTED content extent: its swatches sit just right of the
+// computed content width, not off an assumed/default width.
+export const LegendTracksComputedExtent: StoryObj = {
   render: () => {
     const container = initializeContainer();
     Chart(seafood)
