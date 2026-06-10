@@ -71,6 +71,7 @@ def story_default():
             paddingOuter=2,
             round=True,
             tile="squarify",
+            flipY=False
         ),
         {"w": 700, "h": 420},
     )
