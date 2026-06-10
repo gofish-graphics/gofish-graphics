@@ -64,3 +64,29 @@ export const computePosScale = (
   return (pos: number) =>
     reverse ? size - (pos - min) * scale : (pos - min) * scale;
 };
+
+/**
+ * Local position scale from a node's resolved POSITION space on one axis:
+ * the space's domain mapped affinely onto `[0, size]`, or undefined when the
+ * axis isn't POSITION (or has no domain). The shared fallback recipe for a
+ * layout node that wasn't handed a scale by its parent (layer, scatter).
+ */
+export const posScaleFromSpace = (
+  // Structurally typed to avoid a domain.ts → underlyingSpace.ts import cycle;
+  // only the POSITION variant (numeric min/max domain) produces a scale.
+  space: { kind: string; domain?: any } | undefined,
+  size: number
+): ((pos: number) => number) | undefined =>
+  space &&
+  space.kind === "position" &&
+  space.domain &&
+  space.domain.min !== undefined &&
+  space.domain.max !== undefined
+    ? computePosScale(
+        continuous({
+          value: [space.domain.min, space.domain.max],
+          measure: "unit",
+        }),
+        size
+      )
+    : undefined;

@@ -28,7 +28,7 @@ import {
  * difference) or a direct `ref(...)` to the laid-out key (ordinal).
  *
  * The pass walks the tree bottom-up; any node `resolveAxes` flagged as owning an
- * axis (`axis.x/y === true | "budget"`) is wrapped. Because the axis becomes a
+ * axis (`axis.x/y === true`) is wrapped. Because the axis becomes a
  * real shape occupying real space, cross-facet alignment and the stacking of
  * outer/inner axis labels fall out of ordinary layout — there is no budget
  * reservation, `innerBaseline` doubling, or per-facet local-posScale special
@@ -42,6 +42,7 @@ import {
 const TICK_LEN = 4;
 const LABEL_TICK_GAP = 3; // gap between a continuous label and its tick mark
 const ORDINAL_LABEL_GAP = 8; // gap between content edge and the ordinal label row
+const CONTENT_NAME = "__axisContent"; // inner-tier name for the wrapped content
 const INNER_REF_NAME = "__axisInner"; // outer-tier name for the wrapped content
 const AXIS_CONTENT_GAP = 6; // gap between axis line and content
 const TICK_COUNT = 10;
@@ -56,22 +57,27 @@ export type AxisElaboration = {
 };
 
 const dirName = (dim: 0 | 1) => (dim === 0 ? "x" : "y");
+const cross = (dim: 0 | 1): 0 | 1 => (1 - dim) as 0 | 1;
+const crossName = (dim: 0 | 1) => dirName(cross(dim));
+
+/** The bare tick-mark rect, oriented for axis `dim`. */
+const tickRect = (dim: 0 | 1): GoFishNode =>
+  Rect(
+    dim === 1
+      ? { w: TICK_LEN, h: 1, fill: AXIS_COLOR }
+      : { w: 1, h: TICK_LEN, fill: AXIS_COLOR }
+  );
 
 /** Stringify a tick value without floating-point noise (0.1+0.2 → "0.3"). */
 const fmtNum = (n: number) => String(+n.toPrecision(12));
 
 /** A short label+tick mark pair, stacked along the cross axis. */
 function tickMark(dim: 0 | 1, label: string, name: string): GoFishNode {
-  const crossDim = (1 - dim) as 0 | 1;
   return (Spread as any)(
-    { dir: dirName(crossDim), spacing: LABEL_TICK_GAP, alignment: "middle" },
+    { dir: crossName(dim), spacing: LABEL_TICK_GAP, alignment: "middle" },
     [
       Text({ text: label, fontSize: LABEL_FONT_SIZE, fill: AXIS_COLOR }),
-      Rect(
-        dim === 1
-          ? { w: TICK_LEN, h: 1, fill: AXIS_COLOR }
-          : { w: 1, h: TICK_LEN, fill: AXIS_COLOR }
-      ),
+      tickRect(dim),
     ]
   ).name(name) as GoFishNode;
 }
@@ -111,17 +117,15 @@ function gutterConstraints(
   dim: 0 | 1,
   g: Record<string, any>,
   lineName: string,
-  contentName: string,
   ticks: any[],
   crossFloor?: number
 ): any[] {
   // A degenerate domain can yield zero ticks; emit no gutter rather than
   // dereferencing ticks[0]/ticks[last] (which would crash applyDistribute).
   if (ticks.length === 0) return [];
-  const cross = (1 - dim) as 0 | 1;
-  const d = dirName(cross);
+  const d = crossName(dim);
   // "inner" = the edge facing the content (cross-end of the gutter pieces).
-  const innerAlign = cross === 0 ? { x: "end" } : { y: "end" };
+  const innerAlign = cross(dim) === 0 ? { x: "end" } : { y: "end" };
   const seat =
     crossFloor !== undefined
       ? // Standoff: the line sits AXIS_CONTENT_GAP outside the plot edge, so
@@ -135,9 +139,9 @@ function gutterConstraints(
           } as any,
           [g[lineName]]
         )
-      : Constraint.distribute({ dir: d, spacing: AXIS_CONTENT_GAP } as any, [
+      : Constraint.distribute({ dir: d, spacing: AXIS_CONTENT_GAP }, [
           g[lineName],
-          g[contentName],
+          g[CONTENT_NAME],
         ]);
   return [
     seat,
@@ -155,7 +159,6 @@ function gutterConstraints(
  */
 function positionAxis(opts: {
   dim: 0 | 1;
-  contentName: string;
   prefix: string;
   lineMin: number;
   lineMax: number;
@@ -168,7 +171,7 @@ function positionAxis(opts: {
    *  seats this line at the plot corner instead of the content edge. */
   crossFloor?: number;
 }): AxisElaboration {
-  const { dim, contentName, prefix, lineMin, lineMax, tickValues } = opts;
+  const { dim, prefix, lineMin, lineMax, tickValues } = opts;
   const lineName = `${prefix}line`;
   const tickName = (i: number) => `${prefix}t${i}`;
   const labelName = (i: number) => `${prefix}l${i}`;
@@ -188,59 +191,45 @@ function positionAxis(opts: {
 
   const constraints = (g: Record<string, any>) => {
     const ticks = tickValues.map((_, i) => g[tickName(i)]);
-    const labels = extra.map((_, i) => g[labelName(i)]);
     const cs: any[] = tickValues.map((v, i) =>
       Constraint.position(pos(v), [ticks[i]])
     );
-    extra.forEach((e, i) =>
-      cs.push(Constraint.position(pos(e.value), [g[labelName(i)]]))
-    );
-    // Tick marks align flush with the line (their inner edge IS the tick).
-    cs.push(
-      ...gutterConstraints(
-        dim,
-        g,
-        lineName,
-        contentName,
-        ticks,
-        opts.crossFloor
-      )
-    );
-    // Plain delta labels have no tick of their own to provide an offset, so
-    // they DISTRIBUTE off the line instead of aligning flush against it —
-    // seated at the same outer offset as the continuous labels (tick + gap).
-    const crossDir = dirName((1 - dim) as 0 | 1);
-    labels.forEach((l) =>
+    // Each extra label is pinned at its data position along the axis, and —
+    // having no tick of its own to provide an offset — DISTRIBUTEs off the
+    // line in the gutter instead of aligning flush against it, seated at the
+    // same outer offset as the continuous labels (tick + gap).
+    extra.forEach((e, i) => {
+      const label = g[labelName(i)];
+      cs.push(Constraint.position(pos(e.value), [label]));
       cs.push(
         Constraint.distribute(
-          { dir: crossDir, spacing: TICK_LEN + LABEL_TICK_GAP } as any,
-          [l, g[lineName]]
+          { dir: crossName(dim), spacing: TICK_LEN + LABEL_TICK_GAP },
+          [label, g[lineName]]
         )
-      )
-    );
+      );
+    });
+    // Tick marks align flush with the line (their inner edge IS the tick).
+    cs.push(...gutterConstraints(dim, g, lineName, ticks, opts.crossFloor));
     return cs;
   };
 
   return { nodes: [line, ...tickNodes, ...labelNodes], constraints };
 }
 
-/** One continuous (POSITION) axis. Mirrors the hand-drawn ContinuousYAxis. */
+/** One continuous (POSITION) axis. Mirrors the hand-drawn ContinuousYAxis.
+ *  `nice` is the d3-niced [min, max] of the domain, computed once by
+ *  `elaborationsFor` (the same pair feeds the other axis's `crossFloor`, so
+ *  computing it in one place keeps the corner consistent). */
 function elaborateContinuousAxis(
   dim: 0 | 1,
-  space: Extract<UnderlyingSpace, { kind: "position" }>,
-  contentName: string,
+  nice: [number, number],
   prefix: string,
   crossFloor?: number
 ): AxisElaboration {
-  const [niceMin, niceMax] = d3Nice(
-    space.domain!.min!,
-    space.domain!.max!,
-    TICK_COUNT
-  );
+  const [niceMin, niceMax] = nice;
   const tickValues = d3Ticks(niceMin, niceMax, TICK_COUNT);
   return positionAxis({
     dim,
-    contentName,
     prefix,
     lineMin: niceMin,
     lineMax: niceMax,
@@ -254,7 +243,6 @@ function elaborateContinuousAxis(
 function elaborateDifferenceAxis(
   dim: 0 | 1,
   space: Extract<UnderlyingSpace, { kind: "difference" }>,
-  contentName: string,
   prefix: string,
   crossFloor?: number
 ): AxisElaboration {
@@ -276,17 +264,11 @@ function elaborateDifferenceAxis(
   }));
   return positionAxis({
     dim,
-    contentName,
     prefix,
     lineMin: 0,
     lineMax: width,
     tickValues,
-    tickNode: (_v, _i, name) =>
-      Rect(
-        dim === 1
-          ? { w: TICK_LEN, h: 1, fill: AXIS_COLOR }
-          : { w: 1, h: TICK_LEN, fill: AXIS_COLOR }
-      ).name(name),
+    tickNode: (_v, _i, name) => tickRect(dim).name(name),
     extraLabels,
     crossFloor,
   });
@@ -311,7 +293,7 @@ function elaborateOrdinalAxis(
 ): AxisElaboration {
   const keys = (space.domain ?? []).filter((k) => keyMap[k] !== undefined);
   const trackAxis = dirName(dim); // labels track their key along the axis dim
-  const gutterDir = dirName((1 - dim) as 0 | 1); // labels sit in the cross gutter
+  const gutterDir = crossName(dim); // labels sit in the cross gutter
   const lName = (i: number) => `${prefix}ol${i}`;
   const rName = (i: number) => `${prefix}or${i}`;
 
@@ -339,10 +321,10 @@ function elaborateOrdinalAxis(
       // the whole content layer (so the row clears any nested inner labels)
       // rather than the individual mark.
       cs.push(
-        Constraint.distribute(
-          { dir: gutterDir, spacing: ORDINAL_LABEL_GAP } as any,
-          [g[lName(i)], g[INNER_REF_NAME]]
-        )
+        Constraint.distribute({ dir: gutterDir, spacing: ORDINAL_LABEL_GAP }, [
+          g[lName(i)],
+          g[INNER_REF_NAME],
+        ])
       );
     });
     return cs;
@@ -374,8 +356,6 @@ function collectKeyMap(node: GoFishNode): Record<string, GoFishNode> {
   return out;
 }
 
-const CONTENT_NAME = "__axisContent";
-
 /**
  * Build the elaborations for whichever axes `node` owns; clears its flags.
  * Splits them into two tiers because they place differently:
@@ -392,38 +372,39 @@ function elaborationsFor(node: GoFishNode): {
 } {
   const space = node._underlyingSpace;
   if (!space) return { constrained: [], refBased: [] };
-  // Scale floor (the plot-edge value) per dim that carries a position-like
-  // axis. Each such axis seats its line at the OTHER dim's floor — the plot
-  // corner — rather than at the content's data extent (see gutterConstraints).
+  const owns = (dim: 0 | 1) => (dim === 0 ? node.axis.x : node.axis.y) === true;
+  // Niced [min, max] per owned POSITION dim, computed ONCE: it feeds both that
+  // axis's own line/ticks and the other axis's `crossFloor` (the plot corner),
+  // so a nicing change can't skew the corner. A DIFFERENCE dim's floor is 0.
+  const nices: ([number, number] | undefined)[] = [undefined, undefined];
   const floors: (number | undefined)[] = [undefined, undefined];
   for (const dim of [0, 1] as (0 | 1)[]) {
-    const flag = dim === 0 ? node.axis.x : node.axis.y;
-    if (flag !== true && flag !== "budget") continue;
+    if (!owns(dim)) continue;
     const s = space[dim];
     if (isPOSITION(s) && s.domain) {
-      floors[dim] = d3Nice(s.domain.min!, s.domain.max!, TICK_COUNT)[0];
+      nices[dim] = d3Nice(s.domain.min!, s.domain.max!, TICK_COUNT);
+      floors[dim] = nices[dim]![0];
     } else if (isDIFFERENCE(s)) {
       floors[dim] = 0;
     }
   }
+  let keyMap: Record<string, GoFishNode> | undefined;
   const constrained: AxisElaboration[] = [];
   const refBased: AxisElaboration[] = [];
   for (const dim of [0, 1] as (0 | 1)[]) {
-    const flag = dim === 0 ? node.axis.x : node.axis.y;
-    if (flag !== true && flag !== "budget") continue;
+    if (!owns(dim)) continue;
     const s = space[dim];
     const prefix = dim === 1 ? "__y" : "__x";
-    const crossFloor = floors[(1 - dim) as 0 | 1];
+    const crossFloor = floors[cross(dim)];
     if (isPOSITION(s) && s.domain) {
       constrained.push(
-        elaborateContinuousAxis(dim, s, CONTENT_NAME, prefix, crossFloor)
+        elaborateContinuousAxis(dim, nices[dim]!, prefix, crossFloor)
       );
     } else if (isDIFFERENCE(s)) {
-      constrained.push(
-        elaborateDifferenceAxis(dim, s, CONTENT_NAME, prefix, crossFloor)
-      );
+      constrained.push(elaborateDifferenceAxis(dim, s, prefix, crossFloor));
     } else if (isORDINAL(s)) {
-      refBased.push(elaborateOrdinalAxis(dim, s, collectKeyMap(node), prefix));
+      keyMap ??= collectKeyMap(node);
+      refBased.push(elaborateOrdinalAxis(dim, s, keyMap, prefix));
     } else {
       continue;
     }

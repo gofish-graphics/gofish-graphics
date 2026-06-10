@@ -10,7 +10,7 @@ import {
   Size,
 } from "../dims";
 import { Collection } from "lodash";
-import { computeAesthetic, computeSize } from "../../util";
+import { computeAesthetic, computeSize, foldFinite } from "../../util";
 import { GoFishAST } from "../_ast";
 import { createNodeOperator } from "../withGoFish";
 import * as Monotonic from "../../util/monotonic";
@@ -408,21 +408,17 @@ export const Spread = createNodeOperator(
           }
 
           // Compute alignDir intrinsicDims from extents to account for negative
-          // bars. Ignore children that report a non-finite extent on a given
-          // axis (e.g. a child with no intrinsic size there) so one `undefined`
-          // doesn't turn the whole box into NaN via `Math.min(undefined)`.
+          // bars (NaN-safe; see foldFinite for why undefined extents are
+          // skipped).
           const reduceExtent = (
             dir: Direction,
             pick: (iv: { min?: number; max?: number }) => number | undefined,
             f: (...n: number[]) => number
-          ): number => {
-            const vals = childPlaceables
-              .map((child) => pick(child.dims[dir]))
-              .filter(
-                (v): v is number => typeof v === "number" && Number.isFinite(v)
-              );
-            return vals.length ? f(...vals) : 0;
-          };
+          ): number =>
+            foldFinite(
+              childPlaceables.map((child) => pick(child.dims[dir])),
+              f
+            );
           const alignMin = reduceExtent(alignDir, (iv) => iv.min, Math.min);
           const alignMax = reduceExtent(alignDir, (iv) => iv.max, Math.max);
           const stackMin = reduceExtent(stackDir, (iv) => iv.min, Math.min);

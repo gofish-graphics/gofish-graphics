@@ -117,35 +117,6 @@ export const Table = createNodeOperator(
             child.place(1, row * (cellH + ySpacing), "min");
           }
 
-          // Store representative cells for ordinal axis label positioning.
-          // First-row cells provide x-positions for column keys.
-          // First-column cells provide y-positions for row keys.
-          // Cell (0,0) is registered under both — posRelToAncestor reads only
-          // the relevant dimension so it works correctly for either axis.
-          const ordinalKeyMap: Record<string, GoFishNode> = {};
-          if (colKeys) {
-            for (
-              let j = 0;
-              j < Math.min(numCols, childPlaceables.length);
-              j++
-            ) {
-              ordinalKeyMap[colKeys[j]] = childPlaceables[
-                j
-              ] as unknown as GoFishNode;
-            }
-          }
-          if (rowKeys) {
-            for (let i = 0; i < numRows; i++) {
-              const idx = i * numCols;
-              if (idx < childPlaceables.length) {
-                ordinalKeyMap[rowKeys[i]] = childPlaceables[
-                  idx
-                ] as unknown as GoFishNode;
-              }
-            }
-          }
-          node._ordinalKeyMap = ordinalKeyMap;
-
           const xMin = Math.min(...childPlaceables.map((c) => c.dims[0].min!));
           const xMax = Math.max(...childPlaceables.map((c) => c.dims[0].max!));
           const yMin = Math.min(...childPlaceables.map((c) => c.dims[1].min!));

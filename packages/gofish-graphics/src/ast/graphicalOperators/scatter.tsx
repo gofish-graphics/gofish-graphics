@@ -1,3 +1,4 @@
+import { computeAesthetic } from "../../util";
 import { GoFishNode, Placeable } from "../_node";
 import type { AxisOptions } from "../gofish";
 import { getValue, isValue, MaybeValue } from "../data";
@@ -227,8 +228,16 @@ export const Scatter = createNodeOperator(
             if (xMin !== undefined && xMax !== undefined) {
               // Range mode: stretch child to span [xMin, xMax] in data space
               const node = child as GoFishNode;
-              const xMinPx = effectivePosScales[0]!(getValue(xMin[index])!);
-              const xMaxPx = effectivePosScales[0]!(getValue(xMax[index])!);
+              const xMinPx = computeAesthetic(
+                xMin[index],
+                effectivePosScales[0]!,
+                undefined
+              )!;
+              const xMaxPx = computeAesthetic(
+                xMax[index],
+                effectivePosScales[0]!,
+                undefined
+              )!;
               const width = xMaxPx - xMinPx;
               node.transform!.translate![0] = xMinPx;
               node.intrinsicDims![0] = {
@@ -239,17 +248,27 @@ export const Scatter = createNodeOperator(
                 max: width,
               } as Dimensions[0];
             } else if (xPos !== undefined) {
-              const resolvedX = isValue(xPos)
-                ? effectivePosScales[0]!(getValue(xPos)!)
-                : xPos;
+              const resolvedX = computeAesthetic(
+                xPos,
+                effectivePosScales[0]!,
+                undefined
+              )!;
               setAxisTranslation(child, 0, resolvedX, "center");
             }
 
             if (yMin !== undefined && yMax !== undefined) {
               // Range mode: stretch child to span [yMin, yMax] in data space
               const node = child as GoFishNode;
-              const yMinPx = effectivePosScales[1]!(getValue(yMin[index])!);
-              const yMaxPx = effectivePosScales[1]!(getValue(yMax[index])!);
+              const yMinPx = computeAesthetic(
+                yMin[index],
+                effectivePosScales[1]!,
+                undefined
+              )!;
+              const yMaxPx = computeAesthetic(
+                yMax[index],
+                effectivePosScales[1]!,
+                undefined
+              )!;
               const height = yMaxPx - yMinPx;
               node.transform!.translate![1] = yMinPx;
               node.intrinsicDims![1] = {
@@ -260,9 +279,11 @@ export const Scatter = createNodeOperator(
                 max: height,
               } as Dimensions[1];
             } else if (yPos !== undefined) {
-              const resolvedY = isValue(yPos)
-                ? effectivePosScales[1]!(getValue(yPos)!)
-                : yPos;
+              const resolvedY = computeAesthetic(
+                yPos,
+                effectivePosScales[1]!,
+                undefined
+              )!;
               setAxisTranslation(child, 1, resolvedY, "center");
             }
           });

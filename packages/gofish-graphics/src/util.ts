@@ -73,6 +73,23 @@ export const pairs = <T>(xs: T[]): [T, T][] => {
   return result;
 };
 
+/**
+ * Fold child extents into a bbox edge, ignoring non-finite entries. A child
+ * can report an undefined extent on an axis it doesn't constrain (e.g. a
+ * `spread` over POSITION children leaves its y-min unset); dropping those
+ * keeps one `undefined` from poisoning the whole box via `Math.min(undefined)`.
+ * Falls back to 0 when nothing is measurable.
+ */
+export const foldFinite = (
+  vals: (number | undefined)[],
+  f: (...n: number[]) => number
+): number => {
+  const finite = vals.filter(
+    (v): v is number => typeof v === "number" && Number.isFinite(v)
+  );
+  return finite.length ? f(...finite) : 0;
+};
+
 // input is a value, an aesthetic literal, or undefined. behavior differs based on this
 export const computeAesthetic = (
   input: MaybeValue<number> | undefined,

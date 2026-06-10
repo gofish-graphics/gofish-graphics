@@ -1,8 +1,9 @@
 import type { Placeable } from "../_node";
-import { getValue, getValueOffset, isValue, MaybeValue } from "../data";
+import { isValue, MaybeValue } from "../data";
+import { computeAesthetic } from "../../util";
 import { placeAtAnchor } from "./align";
 import {
-  Alignment,
+  AlignAnchor,
   Axis,
   ConstraintPosScales,
   ConstraintRef,
@@ -23,15 +24,15 @@ export interface PositionOptions {
   y?: MaybeValue<number>;
   /** Which anchor of the target lands on the coordinate. Defaults to "middle"
    *  (the target's center sits on the value), matching how `scatter`/`position`
-   *  place marks at their center. */
-  anchor?: Alignment;
+   *  place marks at their center. `"baseline"` pins the target's origin. */
+  anchor?: AlignAnchor;
 }
 
 export interface PositionConstraint {
   type: "position";
   x?: MaybeValue<number>;
   y?: MaybeValue<number>;
-  anchor: Alignment;
+  anchor: AlignAnchor;
   children: ConstraintRef[];
 }
 
@@ -60,16 +61,10 @@ export function applyPosition(
 ): void {
   const placeAxis = (axis: Axis, coord: MaybeValue<number> | undefined) => {
     if (coord === undefined) return;
-    let px: number;
-    if (isValue(coord)) {
-      const scale = posScales?.[axisIndex(axis)];
-      if (scale === undefined) return;
-      // A datum's pixel offset applies AFTER the scale mapping — "this data
-      // position, plus pixels" (`datum(v).offset(px)`).
-      px = scale(getValue(coord)) + getValueOffset(coord);
-    } else {
-      px = coord;
-    }
+    const scale = posScales?.[axisIndex(axis)];
+    // A datum on an axis with no scale is a no-op; a literal needs no scale.
+    if (isValue(coord) && scale === undefined) return;
+    const px = computeAesthetic(coord, scale!, undefined)!;
     for (const target of targets) {
       placeAtAnchor(target, axis, px, constraint.anchor);
     }

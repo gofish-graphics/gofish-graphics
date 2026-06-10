@@ -162,8 +162,7 @@ export class GoFishNode {
   //            overdraw identically, which keeps their content aligned)
   // false    = explicitly suppressed via axes: override (blocks children)
   // undefined = not involved
-  public axis: { x?: true | false | "budget"; y?: true | false | "budget" } =
-    {};
+  public axis: { x?: boolean; y?: boolean } = {};
   public _axisOverride?: { x?: boolean; y?: boolean };
   /** Explicit key→node map for ordinal axis label positioning. Set by
    * operators (e.g. table) whose domain keys differ from children's .key. */

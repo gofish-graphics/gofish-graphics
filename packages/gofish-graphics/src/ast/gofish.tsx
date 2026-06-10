@@ -141,8 +141,9 @@ export async function layout(
 
     // Axis elaboration: turn inferred axes into ordinary shapes + constraints.
     // Wraps axis-owning content in a Layer with tick/label shapes and clears the
-    // handled axis flags; the new subtree is then re-resolved below. Cases not
-    // yet elaborated keep their flags and fall through to the legacy pipeline.
+    // handled axis flags; the new subtree is then re-resolved below. A flag the
+    // pass doesn't handle (e.g. an UNDEFINED space) is inert — nothing else
+    // consumes `node.axis`.
     const elaborated = await elaborateAxes(child);
     if (elaborated.changed) {
       child = elaborated.node;

@@ -10,8 +10,8 @@ import {
   isSIZE,
 } from "../underlyingSpace";
 import * as Interval from "../../util/interval";
-import { computeSize } from "../../util";
-import { computePosScale, continuous } from "../domain";
+import { computeSize, foldFinite } from "../../util";
+import { posScaleFromSpace } from "../domain";
 import { CoordinateTransform } from "../coordinateTransforms/coord";
 import { coord } from "../coordinateTransforms/coord";
 import { createNodeOperatorSequential } from "../withGoFish";
@@ -283,39 +283,26 @@ export const layer = createNodeOperatorSequential(
 
           // `position` constraints with a datum coordinate contribute a data
           // domain on their axis (see collectPositionDomains); the union is what
-          // those constraints resolve against.
+          // those constraints resolve against. `ownsAxis` is consumed again by
+          // the per-child posScale forwarding below (`childScalesFor`).
           const constraintDomains = collectPositionDomains(node.constraints);
-          const ownsPositionAxis =
-            constraintDomains.x !== undefined ||
-            constraintDomains.y !== undefined;
-
-          // Per-child posScale forwarding on the axes this layer owns happens
-          // below (`childScalesFor`): the wrapped POSITION content keeps the
-          // shared scale, while ticks and SIZE content do not. See the comment
-          // there for why a blanket rule is wrong.
+          const ownsAxis: [boolean, boolean] = [
+            constraintDomains.x !== undefined,
+            constraintDomains.y !== undefined,
+          ];
+          const ownsPositionAxis = ownsAxis[0] || ownsAxis[1];
 
           // Scale for resolving this layer's datum `position` constraints: an
           // inherited posScale, else a local one mapping the layer's own
-          // POSITION domain onto its pixel size (mirrors scatter.tsx's fallback).
-          // Only built when the layer actually owns such an axis — it is used
-          // solely by applyConstraints below, not passed to children.
+          // POSITION domain onto its pixel size (the shared fallback recipe,
+          // `posScaleFromSpace` — scatter uses the same one). Only built when
+          // the layer actually owns such an axis — it is used solely by
+          // applyConstraints below, not passed to children.
           const space = node._underlyingSpace;
-          const fallbackPosScale = (dim: 0 | 1) => {
-            const s = space?.[dim];
-            return s && isPOSITION(s) && s.domain
-              ? computePosScale(
-                  continuous({
-                    value: [s.domain.min!, s.domain.max!],
-                    measure: "unit",
-                  }),
-                  size[dim]
-                )
-              : undefined;
-          };
           const effectivePosScales: ConstraintPosScales = ownsPositionAxis
             ? [
-                posScales[0] ?? fallbackPosScale(0),
-                posScales[1] ?? fallbackPosScale(1),
+                posScales[0] ?? posScaleFromSpace(space?.[0], size[0]),
+                posScales[1] ?? posScaleFromSpace(space?.[1], size[1]),
               ]
             : [posScales[0], posScales[1]];
 
@@ -356,10 +343,6 @@ export const layer = createNodeOperatorSequential(
           // into a SIZE spread makes its alignment skip placing children). So on
           // an owned axis, forward `effectivePosScales` only to a non-target
           // child whose own space on that axis is POSITION; otherwise suppress.
-          const ownsAxis: [boolean, boolean] = [
-            constraintDomains.x !== undefined,
-            constraintDomains.y !== undefined,
-          ];
           const childScalesFor = (
             i: number,
             targetDims: Set<0 | 1> | undefined
@@ -377,10 +360,10 @@ export const layer = createNodeOperatorSequential(
 
           for (let i = 0; i < children.length; i++) {
             const child = children[i];
-            const childName0 = childNameKey(node.children[i]);
+            const childName = childNameKey(node.children[i]);
             const targetDims =
-              childName0 !== undefined
-                ? positionTargetDims.get(childName0)
+              childName !== undefined
+                ? positionTargetDims.get(childName)
                 : undefined;
             const childPlaceable = child.layout(
               size,
@@ -388,7 +371,6 @@ export const layer = createNodeOperatorSequential(
               childScalesFor(i, targetDims),
               posDomains
             );
-            const childName = childNameKey(node.children[i]);
             if (!childName || !constrainedNames.has(childName)) {
               childPlaceable.place("x", 0, "baseline");
               childPlaceable.place("y", 0, "baseline");
@@ -440,32 +422,21 @@ export const layer = createNodeOperatorSequential(
             }
           }
 
-          // Calculate the bounding box of all children. A child can report an
-          // undefined extent on an axis it doesn't constrain (e.g. a `spread`
-          // over POSITION children leaves its y-min unset); ignore those rather
-          // than letting `Math.min(undefined)` poison the box with NaN.
-          const fold = (
-            vals: (number | undefined)[],
-            f: (...n: number[]) => number
-          ): number => {
-            const finite = vals.filter(
-              (v): v is number => typeof v === "number" && Number.isFinite(v)
-            );
-            return finite.length ? f(...finite) : 0;
-          };
-          const minX = fold(
+          // Calculate the bounding box of all children (NaN-safe; see
+          // foldFinite for why undefined extents are skipped).
+          const minX = foldFinite(
             childPlaceables.map((cp) => cp.dims[0].min),
             Math.min
           );
-          const maxX = fold(
+          const maxX = foldFinite(
             childPlaceables.map((cp) => cp.dims[0].max),
             Math.max
           );
-          const minY = fold(
+          const minY = foldFinite(
             childPlaceables.map((cp) => cp.dims[1].min),
             Math.min
           );
-          const maxY = fold(
+          const maxY = foldFinite(
             childPlaceables.map((cp) => cp.dims[1].max),
             Math.max
           );

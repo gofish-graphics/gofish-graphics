@@ -1,12 +1,7 @@
+import { computeAesthetic } from "../../util";
 import { GoFishNode } from "../_node";
 import { Size, elaborateDims, FancyDims } from "../dims";
-import {
-  getMeasure,
-  getValue,
-  getValueOffset,
-  isValue,
-  MaybeValue,
-} from "../data";
+import { getValue, isValue, MaybeValue } from "../data";
 import { POSITION, UNDEFINED, UnderlyingSpace } from "../underlyingSpace";
 import { interval } from "../../util/interval";
 import { createNodeOperator } from "../withGoFish";
@@ -73,16 +68,8 @@ export const position = createNodeOperator(
           const childHeight = childPlaceable.dims[1].size ?? 0;
 
           // Handle x and y values (can be literal values or data-bound values)
-          const xPos = options.x
-            ? isValue(options.x)
-              ? posScales[0]!(getValue(options.x)!) + getValueOffset(options.x)
-              : options.x
-            : 0;
-          const yPos = options.y
-            ? isValue(options.y)
-              ? posScales[1]!(getValue(options.y)!) + getValueOffset(options.y)
-              : options.y
-            : 0;
+          const xPos = computeAesthetic(options.x, posScales[0]!, 0)!;
+          const yPos = computeAesthetic(options.y, posScales[1]!, 0)!;
 
           // Position is relative to the child's center point (SwiftUI-like behavior)
           const offsetX = xPos - childWidth / 2;
