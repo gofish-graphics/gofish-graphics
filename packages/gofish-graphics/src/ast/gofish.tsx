@@ -215,23 +215,7 @@ export async function layout(
       : undefined,
   ];
 
-  // Seed posDomains from the root nice underlying space so axis nodes
-  // deep in a layer tree use the full shared domain for tick generation.
-  // Only defined when the root space is POSITION (undefined for ORDINAL dims,
-  // which ensures facet-inner POSITION axes fall back to their local domain).
-  const posDomains: [
-    [number, number] | undefined,
-    [number, number] | undefined,
-  ] = [
-    niceUnderlyingSpaceX.kind === "position"
-      ? [niceUnderlyingSpaceX.domain!.min!, niceUnderlyingSpaceX.domain!.max!]
-      : undefined,
-    niceUnderlyingSpaceY.kind === "position"
-      ? [niceUnderlyingSpaceY.domain!.min!, niceUnderlyingSpaceY.domain!.max!]
-      : undefined,
-  ];
-
-  child.layout([w, h], rootScaleFactors, posScales, posDomains);
+  child.layout([w, h], rootScaleFactors, posScales);
   child.place("x", x ?? transform?.x ?? 0, "baseline");
   child.place("y", y ?? transform?.y ?? 0, "baseline");
 

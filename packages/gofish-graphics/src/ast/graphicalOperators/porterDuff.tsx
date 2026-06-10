@@ -140,13 +140,12 @@ const createCompositeRelation = (type: string, operator: CompositeOperator) =>
             scaleFactors,
             layoutChildren,
             posScales,
-            _node,
-            posDomains
+            _node
           ) => {
             requireTwoChildren(layoutChildren);
 
             const childPlaceables = layoutChildren.map((child) =>
-              child.layout(size, scaleFactors, posScales, posDomains)
+              child.layout(size, scaleFactors, posScales)
             );
             childPlaceables.forEach((child) => {
               child.place("x", 0, "baseline");
@@ -227,13 +226,12 @@ export const mask = createNodeOperator(
           scaleFactors,
           layoutChildren,
           posScales,
-          _node,
-          posDomains
+          _node
         ) => {
           requireTwoChildren(layoutChildren);
 
           const childPlaceables = layoutChildren.map((child) =>
-            child.layout(size, scaleFactors, posScales, posDomains)
+            child.layout(size, scaleFactors, posScales)
           );
           childPlaceables.forEach((child) => {
             child.place("x", 0, "baseline");
