@@ -56,12 +56,52 @@ Both JS and Python DOM go through identical normalization (`scripts/normalize-do
 
 ## Commands
 
-| Command                       | Description                                                   |
-| ----------------------------- | ------------------------------------------------------------- |
-| `pnpm test:visual:js`         | Capture JS snapshots and compare against baselines            |
-| `pnpm test:visual:update`     | Capture and accept as new baselines                           |
-| `pnpm test:visual`            | Full test: JS capture + Python capture + compare              |
-| `pnpm test:visual:check-sync` | Check that changed JS stories have updated Python equivalents |
+| Command                       | Description                                                     |
+| ----------------------------- | --------------------------------------------------------------- |
+| `pnpm test:visual:js`         | Capture JS snapshots and compare against baselines              |
+| `pnpm test:visual:update`     | Capture and accept as new baselines                             |
+| `pnpm test:visual`            | Full test: JS capture + Python capture + compare                |
+| `pnpm test:visual:check-sync` | Check that changed JS stories have updated Python equivalents   |
+| `pnpm capture-diff <ref>`     | Diff HEAD's rendered DOM against `<ref>` — no baselines, any OS |
+
+## Local regression signal: `capture-diff`
+
+`pnpm test:visual:js` only gives a pass/fail _in CI_ — the baselines live on a
+snapshot branch and `update-baselines` must not be run on Mac (text-metric drift
+vs CI Linux produces false regressions for every text-bearing story). So locally
+there is no pass/fail signal for a layout change.
+
+`capture-diff` fills that gap. It answers **"did my change move anything I didn't
+intend?"** by capturing the normalized DOM of every story twice — once from the
+current worktree (HEAD) and once from a throwaway git worktree checked out at a
+base ref — and diffing the two per story:
+
+```bash
+pnpm capture-diff main          # whole suite vs main
+pnpm capture-diff HEAD~1        # vs the previous commit
+pnpm capture-diff main bar      # only stories matching "bar" (faster)
+pnpm capture-diff main streamgraph
+```
+
+The diff is over **normalized geometry/DOM, not rasterized pixels**, so it is
+platform-stable — no baseline curation, works on any OS, and doesn't suffer the
+text-metric drift that makes `update-baselines` unusable locally. The optional
+second argument is a case-insensitive substring filter (matched against
+`title/name` or story id) so you can scope to one story or a group.
+
+Output:
+
+```
+tests/tmp/capture-diff/head/<path>.html   normalized DOM at HEAD
+tests/tmp/capture-diff/base/<path>.html   normalized DOM at <ref>
+tests/tmp/capture-diff/report.html        side-by-side DOM diff (changed stories)
+```
+
+It prints the changed/added/removed stories and exits non-zero when anything
+moved, so it can gate an agent's inner loop. The base capture installs deps in
+the temp worktree (`pnpm install --ignore-scripts`, mostly links from the shared
+pnpm store) and is torn down automatically. Requires Playwright's chromium
+(`npx playwright install chromium`).
 
 ## Developer Workflows
 
@@ -144,7 +184,9 @@ Stories with `derive()` use a Python HTTP server (`scripts/derive-server.py`) th
 ```
 tests/
   scripts/
+    capture-core.ts            # Shared headless-capture engine (Vite + Playwright)
     capture-js-dom.ts          # Batch capture via Vite + Playwright
+    capture-diff.ts            # Diff HEAD's DOM vs a base ref (local regression signal)
     capture-python-dom.ts      # Python story capture via harness
     compare.ts                 # Compare JS vs baselines + Python vs JS
     update-baselines.ts        # Accept current snapshots as baselines
