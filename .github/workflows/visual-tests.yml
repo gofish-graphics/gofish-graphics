@@ -384,7 +384,7 @@ jobs:
         run: pnpm install
 
       - name: Install Python dependencies
-        run: pip install -e packages/gofish-python vega_datasets
+        run: pip install -e packages/gofish-python vega_datasets scipy
 
       - name: Build gofish-graphics
         run: pnpm --filter gofish-graphics build

@@ -113,8 +113,9 @@ jobs:
       # vega_datasets is needed for several stories (otherwise they'd be
       # skipped). The local validate-python-ir run on Mac skips 7 stories
       # because vega_datasets isn't installed; CI should cover them.
+      # scipy powers the ViolinPlot port's KDE (scipy.stats.gaussian_kde).
       - name: Install Python dependencies
-        run: pip install -e packages/gofish-python vega_datasets
+        run: pip install -e packages/gofish-python vega_datasets scipy
 
       - name: Build gofish-ir
         run: pnpm --filter gofish-ir build

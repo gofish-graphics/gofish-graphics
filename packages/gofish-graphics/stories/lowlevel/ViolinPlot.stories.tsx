@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
 import { penguins } from "../../src/data/penguins";
-import { spreadX, For, frame, stackY, rect, connectY, ref, v } from "../../src/lib";
+import { spreadX, For, layer, stackY, rect, connectY, ref, v } from "../../src/lib";
 import { groupBy } from "lodash";
 import { density1d } from 'fast-kde';
 
@@ -31,7 +31,7 @@ export const Default: StoryObj<Args> = {
         const density = Array.from(
           density1d(d.map((p) => p["Body Mass (g)"]).filter((w) => w !== null))
         );
-        return frame({}, [
+        return layer({}, [
           stackY(
             { alignment: "middle" },
             For(density, (d) =>

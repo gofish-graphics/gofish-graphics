@@ -40,6 +40,21 @@ class TestOperators:
         with pytest.raises(ValueError, match="requires 'dir' option"):
             stack(by="field")
 
+    def test_stack_combinator_form(self):
+        """Test stack([marks], dir=...) returns a combinator-form Mark."""
+        m = stack([rect(h="a"), rect(h="b")], dir="y")
+        d = m.to_dict()
+        assert d["type"] == "stack"
+        assert d["__combinator"] is True
+        assert d["options"] == {"dir": "y"}
+        assert len(d["children"]) == 2
+        assert d["children"][0]["type"] == "rect"
+
+    def test_stack_combinator_rejects_by(self):
+        """Test combinator-form stack rejects the operator-only `by` kwarg."""
+        with pytest.raises(ValueError, match="does not accept"):
+            stack([rect(h="a")], by="field", dir="y")
+
     def test_derive_operator(self):
         """Test derive operator."""
         fn = lambda d: d
