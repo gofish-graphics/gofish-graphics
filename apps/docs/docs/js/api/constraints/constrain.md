@@ -132,11 +132,12 @@ at its value rather than assuming uniform spacing.
 Constraint.position({ x?, y?, anchor? }, [ref]);
 ```
 
-| Option   | Type              | Default    | Description                                         |
-| -------- | ----------------- | ---------- | --------------------------------------------------- |
-| `x`      | `number \| Value` | —          | x coordinate — literal pixel or `datum(n)` (scaled) |
-| `y`      | `number \| Value` | —          | y coordinate — literal pixel or `datum(n)` (scaled) |
-| `anchor` | `Alignment`       | `"middle"` | Which anchor of the ref lands on the coordinate     |
+| Option   | Type              | Default    | Description                                                                                   |
+| -------- | ----------------- | ---------- | --------------------------------------------------------------------------------------------- |
+| `x`      | `number \| Value` | —          | x coordinate — literal pixel or `datum(n)` (scaled)                                           |
+| `y`      | `number \| Value` | —          | y coordinate — literal pixel or `datum(n)` (scaled)                                           |
+| `anchor` | `Alignment`       | `"middle"` | Which anchor of the ref lands on the coordinate                                               |
+| `offset` | `number`          | `0`        | Pixel offset added after the coordinate resolves (e.g. a fixed standoff from a data position) |
 
 At least one of `x` / `y` is required. Only `datum` coordinates feed the layer's
 inferred scale; literal pixels are placed directly and don't define the domain.

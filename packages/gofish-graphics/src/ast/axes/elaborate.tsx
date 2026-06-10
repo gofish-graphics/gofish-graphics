@@ -124,9 +124,18 @@ function gutterConstraints(
   const innerAlign = cross === 0 ? { x: "end" } : { y: "end" };
   const seat =
     crossFloor !== undefined
-      ? Constraint.position({ [d]: datum(crossFloor), anchor: "end" } as any, [
-          g[lineName],
-        ])
+      ? // Standoff: the line sits AXIS_CONTENT_GAP outside the plot edge, so
+        // marks at the domain floor (a y=0 histogram bin) don't straddle it.
+        // Both lines get the same outward offset, so they still meet at the
+        // (offset) corner.
+        Constraint.position(
+          {
+            [d]: datum(crossFloor),
+            anchor: "end",
+            offset: -AXIS_CONTENT_GAP,
+          } as any,
+          [g[lineName]]
+        )
       : Constraint.distribute({ dir: d, spacing: AXIS_CONTENT_GAP } as any, [
           g[lineName],
           g[contentName],

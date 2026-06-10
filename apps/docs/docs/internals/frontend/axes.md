@@ -80,12 +80,14 @@ one branch per underlying-space kind — the seam a future public API would over
   `spread([text, tickMark])` per tick pinned with
   `Constraint.position({ [axis]: datum(v) })`. The gutter is negative space;
   the line seats one of two ways. When the **other** dim also carries a
-  position-like axis, the line is pinned at that axis's scale floor —
-  `position({ [cross]: datum(floor) }, anchor: "end")` — so the two lines meet
-  at the domain corner even when no datum reaches it (a scatter whose y domain
-  is niced below the lowest point must not draw its x axis at the lowest
-  point). Otherwise `distribute([line, content])` seats it just past the
-  content's bbox edge (a bar chart's y axis sits beside the bars). Either way,
+  position-like axis, the line is pinned just outside that axis's scale floor —
+  `position({ [cross]: datum(floor), anchor: "end", offset: -GAP })` — so the
+  two lines frame the domain corner even when no datum reaches it (a scatter
+  whose y domain is niced below the lowest point must not draw its x axis at
+  the lowest point), while the fixed standoff keeps marks _at_ the floor (a
+  y=0 histogram bin) from straddling the line. Otherwise
+  `distribute([line, content])` seats it just past the content's bbox edge (a
+  bar chart's y axis sits beside the bars). Either way,
   `align(end)` sets the ticks flush against the line (their inner edge _is_
   the tick mark, so the label text ends up offset by the tick + gap inside
   each tick's spread).

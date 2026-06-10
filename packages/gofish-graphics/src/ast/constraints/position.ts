@@ -25,6 +25,11 @@ export interface PositionOptions {
    *  (the target's center sits on the value), matching how `scatter`/`position`
    *  place marks at their center. */
   anchor?: Alignment;
+  /** Pixel offset added AFTER the coordinate is resolved (after a datum is
+   *  mapped through the scale). Lets a target sit at a fixed standoff from a
+   *  data position — e.g. an axis line 6px outside the plot edge. Applies to
+   *  every specified axis. */
+  offset?: number;
 }
 
 export interface PositionConstraint {
@@ -32,11 +37,12 @@ export interface PositionConstraint {
   x?: MaybeValue<number>;
   y?: MaybeValue<number>;
   anchor: Alignment;
+  offset: number;
   children: ConstraintRef[];
 }
 
 export const createPositionConstraint = (
-  { x, y, anchor }: PositionOptions,
+  { x, y, anchor, offset }: PositionOptions,
   children: ConstraintRef[]
 ): PositionConstraint => {
   if (x === undefined && y === undefined) {
@@ -44,7 +50,14 @@ export const createPositionConstraint = (
       "Constraint.position: at least one of `x` or `y` must be specified"
     );
   }
-  return { type: "position", x, y, anchor: anchor ?? "middle", children };
+  return {
+    type: "position",
+    x,
+    y,
+    anchor: anchor ?? "middle",
+    offset: offset ?? 0,
+    children,
+  };
 };
 
 /**
@@ -68,6 +81,7 @@ export function applyPosition(
     } else {
       px = coord;
     }
+    px += constraint.offset;
     for (const target of targets) {
       placeAtAnchor(target, axis, px, constraint.anchor);
     }
