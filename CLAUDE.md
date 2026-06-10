@@ -145,6 +145,13 @@ Key coordinate systems available:
   argument to list stories. The `/iterate-example` skill (`.claude/skills/iterate-example/`) drives
   this render → review → fix loop. Requires `dist/` to exist once
   (`pnpm --filter gofish-graphics build`); source edits are picked up live without rebuilding.
+- **Local regression signal for layout changes**: `pnpm capture-diff <base-ref> [filter]`
+  renders every story's normalized DOM at HEAD and at `<base-ref>` (checked out in a throwaway
+  worktree) and diffs them per story — a baseline-free, platform-stable "did my change move
+  anything I didn't intend?" check for an inner loop. Unlike the CI visual baselines, it works
+  on Mac (it diffs normalized geometry, not pixels, so no text-metric drift) and needs no
+  curation. Pass a substring to scope to one story or a group (`pnpm capture-diff main bar`).
+  Exits non-zero when anything moved; report at `tests/tmp/capture-diff/report.html`.
 - **Documentation**: VitePress site in `apps/docs/` with live chart examples
 - **Testing**: The `src/tests/` directory contains visual chart examples for development, not automated unit tests
 - **Development Server**: `pnpm dev` runs Vite dev server on port 3000

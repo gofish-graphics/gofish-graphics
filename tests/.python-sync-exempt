@@ -4,16 +4,27 @@
 # Remove entries as Python support is added.
 
 # Low-level API stories (v1/v2)
-packages/gofish-graphics/stories/lowlevel/BalloonChart.stories.tsx
-packages/gofish-graphics/stories/lowlevel/FlowerChart.stories.tsx
-packages/gofish-graphics/stories/lowlevel/IcicleChart.stories.tsx
-packages/gofish-graphics/stories/lowlevel/ImageMixedPrimitives.stories.tsx
-packages/gofish-graphics/stories/lowlevel/NestedMosaicChart.stories.tsx
-packages/gofish-graphics/stories/lowlevel/NestedWaffleChart.stories.tsx
-packages/gofish-graphics/stories/lowlevel/SankeyTree.stories.tsx
-packages/gofish-graphics/stories/lowlevel/StringlineChart.stories.tsx
+# Ported to tests/python-stories/low-level-syntax/ (#433): BalloonChart,
+# FlowerChart, IcicleChart, NestedMosaicChart, NestedWaffleChart, SankeyTree,
+# StringlineChart, Whisker — all byte-identical to the JS baseline. The ports
+# map the v1 directional operators to combinator-form spread/stack/connect,
+# frame→layer, and add the polar/wavy coord transforms to the Python wrapper +
+# IR bridge.
+#
+# ViolinPlot is ported too (tests/python-stories/low-level-syntax/
+# test_violin_plot.py) but stays exempt: the JS story uses `fast-kde`'s
+# density1d, while the idiomatic Python port uses `scipy.stats.gaussian_kde`.
+# The violins render with the same structure/colors/layout but the KDE curve
+# differs (different bandwidth/extent), so it can't byte-match the JS DOM.
+# capture-python skips file-level-exempt stories, so this port is validated
+# (IR + render) without failing the byte-parity gate.
 packages/gofish-graphics/stories/lowlevel/ViolinPlot.stories.tsx
-packages/gofish-graphics/stories/lowlevel/Whisker.stories.tsx
+
+# ImageMixedPrimitives stays exempt: it renders large binary image assets
+# (over Vite's inline threshold) whose hrefs become build-hashed URLs the DOM
+# normalizer doesn't touch, so a Python port can't byte-match the JS hrefs —
+# the same fundamental blocker as the ImageMarks shape story below.
+packages/gofish-graphics/stories/lowlevel/ImageMixedPrimitives.stories.tsx
 
 # Shape primitives
 packages/gofish-graphics/stories/shapes/TextMarks.stories.tsx

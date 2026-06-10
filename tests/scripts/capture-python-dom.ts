@@ -19,6 +19,7 @@ import {
 } from "fs";
 import { join, dirname, relative } from "path";
 import { normalizeDom } from "./normalize-dom.js";
+import { mapJsToPython } from "./path-mapping.js";
 
 // ---------------------------------------------------------------------------
 // Config
@@ -94,6 +95,30 @@ function discoverPythonStories(): PythonStory[] {
 
   scan(PYTHON_STORIES_DIR, "");
   return stories;
+}
+
+/**
+ * Python files (relative to TESTS_DIR) whose JS source story is **file-level
+ * exempt** in `.python-sync-exempt`. A Python port may still exist and be
+ * committed (e.g. the ViolinPlot scipy port, whose KDE intentionally diverges
+ * from the JS `fast-kde` baseline), but an exempt story is excluded from the
+ * byte-parity gate — so we skip capturing it rather than emit a snapshot that
+ * `compare-python` would (correctly) flag as a mismatch.
+ */
+function loadExemptPythonFiles(): Set<string> {
+  const exemptFile = join(TESTS_DIR, ".python-sync-exempt");
+  const exempt = new Set<string>();
+  if (!existsSync(exemptFile)) return exempt;
+  for (const raw of readFileSync(exemptFile, "utf-8").split("\n")) {
+    const line = raw.trim();
+    if (!line || line.startsWith("#")) continue;
+    // Per-export exemptions (`file.tsx::Export`) don't exempt the whole file.
+    if (line.includes("::")) continue;
+    // mapJsToPython returns a path under `tests/`; story.file is relative to
+    // TESTS_DIR, so strip the leading `tests/` segment to match.
+    exempt.add(mapJsToPython(line).replace(/^tests\//, ""));
+  }
+  return exempt;
 }
 
 // ---------------------------------------------------------------------------
@@ -379,6 +404,8 @@ async function main() {
   }
   console.log(`Found ${stories.length} Python stories\n`);
 
+  const exemptPythonFiles = loadExemptPythonFiles();
+
   // Start servers
   const deriveProc = startDeriveServer();
   const harnessProc = startHarnessServer();
@@ -438,6 +465,22 @@ async function main() {
       process.stdout.write(
         `  ${story.module}::${story.function} → ${story.path} ... `
       );
+
+      // Skip stories whose JS source is file-level parity-exempt — the port
+      // is intentionally not byte-identical (e.g. ViolinPlot's scipy KDE).
+      if (exemptPythonFiles.has(story.file)) {
+        console.log("SKIP (JS story is parity-exempt)");
+        skipped++;
+        const reason = "JS story is parity-exempt (.python-sync-exempt)";
+        skips.push({ story: `${story.module}::${story.function}`, reason });
+        skippedRecords.push({
+          id: story.path,
+          story: `${story.module}::${story.function}`,
+          reason,
+        });
+        flushCaptureResults();
+        continue;
+      }
 
       const ir = await loadStory(story);
       if (ir.kind === "layer-unsupported") {

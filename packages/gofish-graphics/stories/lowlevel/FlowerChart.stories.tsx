@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
 import { seafood, catchLocations } from "../../src/data/catch";
-import { frame, rect, For, petal, stackX, polar, v } from "../../src/lib";
+import { layer, rect, For, petal, stackX, polar, v } from "../../src/lib";
 import { color, color6 } from "../../src/color";
 import { mix } from "spectral.js";
 import _ from "lodash";
@@ -38,15 +38,18 @@ export const Default: StoryObj<Args> = {
   args: { w: 400, h: 400 },
   render: (args: Args) => {
     const container = initializeContainer();
-    frame(
-      For(scatterData, (sample) =>
-        frame({ x: sample.x }, [
+    layer(
+      // `.map` (not `For`) so the outer `layer(...)` receives a real array:
+      // unlike `frame`, layer's operator wrapper doesn't unwrap a bare `For`
+      // promise passed as its sole argument.
+      scatterData.map((sample) =>
+        layer({ x: sample.x }, [
           rect({
             w: 2,
             h: sample.y,
             fill: color.green[5],
           }),
-          frame(
+          layer(
             {
               y: sample.y,
               coord: polar(),

@@ -15,6 +15,8 @@
 // Source-module imports — see the note in registry.ts.
 import { chart, select } from "../ast/marks/chart";
 import { clock } from "../ast/coordinateTransforms/clock";
+import { polar } from "../ast/coordinateTransforms/polar";
+import { wavy } from "../ast/coordinateTransforms/wavy";
 import { createName, type Token } from "../ast/createName";
 import { Constraint } from "../ast/constraints";
 import { palette, gradient } from "../ast/colorSchemes";
@@ -213,6 +215,8 @@ function resolveColorConfig(colorSpec: Record<string, any>): any {
 
 function resolveCoordConfig(coordSpec: Record<string, any>): any {
   if (coordSpec.type === "clock") return clock();
+  if (coordSpec.type === "polar") return polar();
+  if (coordSpec.type === "wavy") return wavy();
   return coordSpec;
 }
 
@@ -302,7 +306,9 @@ export function mapMark(
     const childMarks = ((spec.children ?? []) as MarkSpec[]).map((c) =>
       mapMark(c, bridge, resolveToken)
     );
-    const opts = unwrapMarkOpts(spec.options ?? {}, bridge);
+    // Resolve color/coord configs (e.g. a `layer({coord: polar()})` carries
+    // its coord transform in the combinator options, not chart options).
+    const opts = resolveOptions(unwrapMarkOpts(spec.options ?? {}, bridge));
     const factory = COMBINATOR_FACTORIES[spec.type];
     if (!factory) {
       throw new Error(`Unknown combinator mark type: ${spec.type}`);

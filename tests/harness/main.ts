@@ -34,6 +34,8 @@ import {
   palette,
   gradient,
   clock,
+  polar,
+  wavy,
   layer,
   Constraint,
   ref,
@@ -61,6 +63,13 @@ const COMBINATOR_FACTORIES: Record<
   (opts: Record<string, any>, marks: Mark<any>[]) => Mark<any>
 > = {
   spread: (opts, marks) => spread(opts, marks) as unknown as Mark<any>,
+  // stack/scatter/group/table are dual-mode operators (createOperator) whose
+  // `(opts, marks)` overload yields a combinator-form Mark — Python emits the
+  // matching `__combinator: true` IR (e.g. the v1 `stackX`/`stackY` ports).
+  stack: (opts, marks) => stack(opts, marks) as unknown as Mark<any>,
+  scatter: (opts, marks) => scatter(opts, marks) as unknown as Mark<any>,
+  group: (opts, marks) => group(opts, marks) as unknown as Mark<any>,
+  table: (opts, marks) => table(opts, marks) as unknown as Mark<any>,
   layer: (opts, marks) => layer(opts, marks) as unknown as Mark<any>,
   arrow: (opts, marks) => arrow(opts, marks) as unknown as Mark<any>,
   connect: (opts, marks) => connect(opts, marks) as unknown as Mark<any>,
@@ -470,7 +479,12 @@ function mapMark(
     const childMarks = (spec.children ?? []).map((c) =>
       mapMark(c, deriveServerUrl, resolveToken)
     );
-    const opts = unwrapMarkOpts(spec.options ?? {}, deriveServerUrl);
+    // Resolve color/coord configs too — e.g. a `layer({coord: polar()})`
+    // carries its coord transform in the combinator options (BalloonChart,
+    // FlowerChart), not chart options.
+    const opts = resolveOptions(
+      unwrapMarkOpts(spec.options ?? {}, deriveServerUrl)
+    );
     const factory = COMBINATOR_FACTORIES[spec.type];
     if (!factory) {
       throw new Error(`Unknown combinator mark type: ${spec.type}`);
@@ -599,6 +613,10 @@ function resolveOptions(
   ) {
     if (resolved.coord.type === "clock") {
       resolved.coord = clock();
+    } else if (resolved.coord.type === "polar") {
+      resolved.coord = polar();
+    } else if (resolved.coord.type === "wavy") {
+      resolved.coord = wavy();
     }
   }
   return resolved;

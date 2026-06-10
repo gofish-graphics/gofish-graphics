@@ -18,8 +18,14 @@ chart(seafood, axes=True).flow(
 ## Signature
 
 ```python
-stack(*, by=None, dir, **options) -> Operator
+stack(children=None, *, by=None, dir, **options) -> Operator | Mark
 ```
+
+Like [`spread`](/python/api/operators/spread), `stack` is polymorphic: called
+with no positional argument it returns an **operator** for use inside
+[`.flow()`](/python/api/core/flow); called with a positional list of marks it
+returns a **combinator-form mark** that stacks those explicit children (the
+low-level form behind the v1 `stackX`/`stackY` operators).
 
 ## Parameters
 

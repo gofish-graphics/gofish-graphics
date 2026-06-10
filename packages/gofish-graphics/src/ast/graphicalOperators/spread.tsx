@@ -208,15 +208,7 @@ export const Spread = createNodeOperator(
           result[alignDir] = alignSpace;
           return result;
         },
-        layout: (
-          shared,
-          size,
-          scaleFactors,
-          children,
-          posScales,
-          node,
-          posDomains
-        ) => {
+        layout: (shared, size, scaleFactors, children, posScales, node) => {
           if (reverse) {
             children = children.reverse();
           }
@@ -312,12 +304,7 @@ export const Spread = createNodeOperator(
             const modifiedSize: Size = [0, 0];
             modifiedSize[stackDir] = childStackSizes[i] ?? 0;
             modifiedSize[alignDir] = size[alignDir];
-            return child.layout(
-              modifiedSize,
-              scaleFactors,
-              posScales,
-              posDomains
-            );
+            return child.layout(modifiedSize, scaleFactors, posScales);
           });
 
           // Fixed-position children have dims already defined (e.g. Ref to another layer)

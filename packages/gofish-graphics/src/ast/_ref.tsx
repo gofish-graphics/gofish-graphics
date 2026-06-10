@@ -237,8 +237,7 @@ export class GoFishRef {
   public layout(
     size: Size,
     scaleFactors: Size<number | undefined>,
-    _posScales?: Size<((pos: number) => number) | undefined>,
-    _posDomains?: Size<[number, number] | undefined>
+    _posScales?: Size<((pos: number) => number) | undefined>
   ): Placeable {
     if (!this.selectedNode) {
       throw new Error("Selected node not found");

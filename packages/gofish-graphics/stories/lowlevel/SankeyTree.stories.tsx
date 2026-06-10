@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
 import { titanic } from "../../src/data/titanic";
-import { frame, spreadX, spreadY, stackY, rect, For, connectX, ref } from "../../src/lib";
+import { layer, spreadX, spreadY, stackY, rect, For, connectX, ref } from "../../src/lib";
 import { color6, gray, neutral } from "../../src/color";
 import { groupBy } from "lodash";
 import _ from "lodash";
@@ -34,7 +34,7 @@ export const Default: StoryObj<Args> = {
     const container = initializeContainer();
     const layerSpacing = 64;
     const internalSpacing = 2;
-    frame([
+    layer([
       spreadX({ spacing: layerSpacing, alignment: "middle" }, [
         stackY(
           { spacing: 0, alignment: "middle" },

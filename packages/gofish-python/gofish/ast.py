@@ -1200,24 +1200,48 @@ def mask(children: List["Mark"], **options: Any) -> Mark:
 
 
 def stack(
+    children: Optional[List["Mark"]] = None,
     *,
     by: Optional[str] = None,
     **options: Any,
-) -> Operator:
+) -> Union[Operator, "Mark"]:
     """
-    Stack operator — like spread with no spacing between children.
+    Stack — polymorphic. Like spread with no spacing between children.
+
+    Operator form (no positional arg): partitions data by `by` (or iterates
+    per-item when omitted) and stacks children along an axis. Used inside
+    `.flow(...)`.
+
+        stack(by="category", dir="y")
+
+    Combinator form (positional list of marks): returns a low-level Mark
+    that stacks the given child marks along an axis. Used inside `.mark()`
+    when you want explicit nested marks instead of repeating a single mark
+    across data. Mirrors the v1 `stackX`/`stackY` operators.
+
+        stack([rect(h="A"), rect(h="B")], dir="y")
 
     Args:
-        by: Field name to partition by. Omit for per-item stack.
+        children: When provided, switches to combinator form. List of child
+            Marks to stack.
+        by: Field name to partition by (operator form only). Omit for
+            per-item stack.
         **options: dir ("x"|"y"), alignment, sharedScale, mode, etc.
 
     Returns:
-        Operator object
+        Operator (no children) or Mark (with children).
     """
-    if by is not None:
-        options["by"] = by
     if "dir" not in options:
         raise ValueError("stack() requires 'dir' option ('x' or 'y')")
+    if children is not None:
+        if by is not None:
+            raise ValueError(
+                "stack() combinator form (with children) does not accept "
+                "`by` — the layout is over the explicit child list, not data."
+            )
+        return Mark("stack", _children=list(children), **options)
+    if by is not None:
+        options["by"] = by
     return Operator("stack", **options)
 
 
@@ -1363,6 +1387,34 @@ def clock() -> dict:
         Coord config dict for use in chart options
     """
     return {"type": "clock"}
+
+
+def polar() -> dict:
+    """
+    Polar coordinate transform — angle θ on the x-axis, radius r on the y-axis,
+    with 0 at 12 o'clock. Use as: `layer({"coord": polar()}, [...])`.
+
+    The actual transform/domain is reconstructed on the JS side from this tag
+    (the function body can't cross the IR bridge), mirroring `clock()`.
+
+    Returns:
+        Coord config dict for use in chart/layer options
+    """
+    return {"type": "polar"}
+
+
+def wavy() -> dict:
+    """
+    Wavy coordinate transform — adds a sinusoidal ripple to both axes. Use as:
+    `layer({"coord": wavy()}, [...])`.
+
+    The actual transform/domain is reconstructed on the JS side from this tag
+    (the function body can't cross the IR bridge), mirroring `clock()`.
+
+    Returns:
+        Coord config dict for use in chart/layer options
+    """
+    return {"type": "wavy"}
 
 
 # Layer selection
@@ -1548,9 +1600,10 @@ def circle(
     opacity: Optional[float] = None,
     label: Optional[Union[bool, str]] = None,
     debug: Optional[bool] = None,
+    **kwargs: Any,
 ) -> Mark:
-    """Circle mark."""
-    kwargs: Dict[str, Any] = {}
+    """Circle mark. Extra channels (`x`, `y`, `cx`, …) accepted via `**kwargs`."""
+    mark_kwargs: Dict[str, Any] = {}
     for k, value in [
         ("r", r),
         ("fill", fill),
@@ -1561,8 +1614,9 @@ def circle(
         ("debug", debug),
     ]:
         if value is not None:
-            kwargs[k] = value
-    return Mark("circle", **kwargs)
+            mark_kwargs[k] = value
+    mark_kwargs.update(kwargs)
+    return Mark("circle", **mark_kwargs)
 
 
 def line(
@@ -1629,9 +1683,15 @@ def ellipse(
     stroke: Optional[str] = None,
     strokeWidth: Optional[int] = None,
     debug: Optional[bool] = None,
+    **kwargs: Any,
 ) -> Mark:
-    """Ellipse mark."""
-    kwargs: Dict[str, Any] = {}
+    """Ellipse mark.
+
+    Extra positioning channels (`x`, `y`, `cx`, `cy`, `emX`, …) accepted via
+    `**kwargs`, matching JS `ellipse({...})` which takes the full shape-channel
+    set — the low-level stories position ellipses with `x`/`cx`/`cy`.
+    """
+    mark_kwargs: Dict[str, Any] = {}
     for k, value in [
         ("w", w),
         ("h", h),
@@ -1641,8 +1701,9 @@ def ellipse(
         ("debug", debug),
     ]:
         if value is not None:
-            kwargs[k] = value
-    return Mark("ellipse", **kwargs)
+            mark_kwargs[k] = value
+    mark_kwargs.update(kwargs)
+    return Mark("ellipse", **mark_kwargs)
 
 
 def petal(
@@ -1652,9 +1713,10 @@ def petal(
     stroke: Optional[str] = None,
     strokeWidth: Optional[int] = None,
     debug: Optional[bool] = None,
+    **kwargs: Any,
 ) -> Mark:
-    """Petal mark."""
-    kwargs: Dict[str, Any] = {}
+    """Petal mark. Extra channels (`x`, `cx`, …) accepted via `**kwargs`."""
+    mark_kwargs: Dict[str, Any] = {}
     for k, value in [
         ("w", w),
         ("h", h),
@@ -1664,8 +1726,9 @@ def petal(
         ("debug", debug),
     ]:
         if value is not None:
-            kwargs[k] = value
-    return Mark("petal", **kwargs)
+            mark_kwargs[k] = value
+    mark_kwargs.update(kwargs)
+    return Mark("petal", **mark_kwargs)
 
 
 def text(

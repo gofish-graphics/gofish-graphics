@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
 import { seafood, catchLocations } from "../../src/data/catch";
-import { frame, ellipse, rect, wavy } from "../../src/lib";
+import { layer, ellipse, rect, wavy } from "../../src/lib";
 import { color, color6 } from "../../src/color";
 import { mix } from "spectral.js";
 import _ from "lodash";
@@ -49,7 +49,7 @@ export const Default: StoryObj<Args> = {
     };
 
     const Balloon = (options) =>
-      frame(
+      layer(
         {
           x: options?.x - 15 * (options?.scale ?? 1),
           y: options?.y + 27 * (options?.scale ?? 1),
@@ -94,10 +94,10 @@ export const Default: StoryObj<Args> = {
         ]
       );
 
-    frame(
+    layer(
       { coord: wavy(), x: 0, y: 0 },
       scatterData.map((data, i) =>
-        frame({ x: data.x }, [
+        layer({ x: data.x }, [
           rect({
             x: 0,
             y: 0,
