@@ -181,6 +181,13 @@ export async function layout(
   // (unionChildSpaces ignores the legend's UNDEFINED spaces), so the nice
   // spaces captured above remain valid.
   let legendAdded = false;
+  // Reference to the content node whose extent defines the final canvas. When a
+  // legend is added, `child` becomes the wrapper Layer (content + swatch column)
+  // and `contentNode` keeps pointing at the original content, so the final
+  // width/height (and the axis-title centering that reads them) stay measured off
+  // the content, not the content+legend bbox. The legend is reserved separately
+  // via `rightOverhang` below.
+  const contentNode = child;
   const unitScale = contexts?.session.scaleContext.unit;
   const colorMap =
     unitScale && "color" in unitScale ? unitScale.color : undefined;
@@ -274,18 +281,22 @@ export async function layout(
 
   // Final extent: a user-given dimension is authoritative; otherwise prefer the
   // content's laid-out intrinsic size (shrink-to-fit), falling back to the
-  // canvas default when the content didn't report one.
+  // canvas default when the content didn't report one. Read off `contentNode`
+  // (== `child` when no legend), never the legend wrapper — so the canvas and
+  // the axis titles that center on `finalW`/`finalH` stay content-relative; the
+  // legend is reserved separately via `rightOverhang`.
   const finalDim = (i: 0 | 1, given: number | undefined): number => {
     if (given !== undefined) return given;
-    const s = child.dims[i]?.size;
+    const s = contentNode.dims[i]?.size;
     return s !== undefined && Number.isFinite(s) ? s : DEFAULT_CANVAS_SIZE;
   };
   const finalW = finalDim(0, w);
   const finalH = finalDim(1, h);
 
-  // Measured legend overhang past the authoritative width — replaces the fixed
-  // LEGEND_MARGIN. Gated on legendAdded so legend-free charts keep byte-identical
-  // SVG widths. With w omitted, finalW already includes the legend → clamps to 0.
+  // Measured legend overhang past the content width — replaces the fixed
+  // LEGEND_MARGIN. The wrapper's max bbox includes the seated swatch column, so
+  // `wrapper.max - finalW` is exactly the gap + legend width to reserve on the
+  // right. Gated on legendAdded so legend-free charts keep byte-identical widths.
   const rightOverhang = legendAdded
     ? Math.max(0, (child.dims[0]?.max ?? 0) - finalW)
     : 0;

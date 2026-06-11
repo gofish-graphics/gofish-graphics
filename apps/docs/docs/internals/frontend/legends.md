@@ -90,22 +90,41 @@ wrapper's space is just the content's space. See
 
 ## Sizing: measured overhang, not a margin
 
-The fixed 120px `LEGEND_MARGIN` is gone. Because the legend is now a real shape
-occupying real space, `layout()` measures how far the laid-out tree (legend
-included) extends past the authoritative width:
+The fixed 120px `LEGEND_MARGIN` is gone. The canvas size and the legend
+reservation are read off **two different nodes**, which is what keeps the
+content centered and the legend reserved separately:
+
+- `finalW`/`finalH` (the canvas, and the basis for axis-title centering) read
+  off the **content node** — the original pre-wrap node, captured as
+  `contentNode` before `elaborateLegend` replaces `child` with the wrapper. So
+  the canvas is exactly the content's extent, never content + legend.
+- `rightOverhang` reads off the **wrapper** (`child`), whose bounding box
+  includes the seated swatch column, and subtracts the content width:
 
 ```ts
+const finalW = finalDim(0, w); // off contentNode
 const rightOverhang = legendAdded ? Math.max(0, child.dims[0].max - finalW) : 0;
 ```
 
-and the render pass reserves exactly that on the right of the SVG. The
-measurement is gated on `legendAdded`, so legend-free charts keep byte-identical
-SVG widths.
+`wrapper.dims[0].max - finalW` is exactly the `LEGEND_CONTENT_GAP` plus the
+swatch-column width, so the render pass reserves precisely the legend on the
+right of the SVG. The measurement is gated on `legendAdded`, so legend-free
+charts keep byte-identical SVG widths.
 
-When `w` is **omitted**, this falls out for free: the computed extent (#494's
-`finalDim` readback off the root bounding box) already includes the swatch
-column, so `finalW` covers the legend and `rightOverhang` clamps to 0 — the
-legend is simply part of the inferred graphic size.
+Reading `finalW`/`finalH` off the content (not the wrapper) matters most when
+`w`/`h` are **omitted**: the inferred graphic size is the content's computed
+extent (#494's `finalDim` readback), and the legend is then reserved on top of
+it via `rightOverhang` — rather than the legend inflating the inferred size and
+dragging the x-axis title off-center with it.
+
+This relies on the content node reporting a complete, correctly-positioned
+bounding box. Most nodes do, but the polar `coord` node historically emitted an
+`{ x, y, w, h }` intrinsic-dims form that set only `min`/`size` and left
+`max`/`center` undefined — and was positionally offset from the rendered
+content. That poisoned the `distribute` constraint (it seats the column at
+`content.dims[0].max`, which was `NaN`), so the fix lives in `coord` itself
+(reporting a placed-consistent `[0, size]` box), not in special-casing the
+legend.
 
 ## The customization seam
 
