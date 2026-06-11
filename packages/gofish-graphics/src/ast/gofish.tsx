@@ -18,7 +18,7 @@ import type { Size } from "./dims";
 import { isSIZE, type UnderlyingSpace } from "./underlyingSpace";
 import { continuous } from "./domain";
 import { elaborateAxes } from "./axes/elaborate";
-import { elaborateLegend } from "./legends/elaborate";
+import { elaborateLegend, legendOverhang } from "./legends/elaborate";
 
 export type CategoricalScale = {
   color: Map<any, string>;
@@ -180,7 +180,6 @@ export async function layout(
   // re-run). The wrapper preserves the content's underlying spaces
   // (unionChildSpaces ignores the legend's UNDEFINED spaces), so the nice
   // spaces captured above remain valid.
-  let legendAdded = false;
   // Reference to the content node whose extent defines the final canvas. When a
   // legend is added, `child` becomes the wrapper Layer (content + swatch column)
   // and `contentNode` keeps pointing at the original content, so the final
@@ -189,17 +188,11 @@ export async function layout(
   // via `rightOverhang` below.
   const contentNode = child;
   const unitScale = contexts?.session.scaleContext.unit;
-  const colorMap =
-    unitScale && "color" in unitScale ? unitScale.color : undefined;
+  const colorMap = isCategoricalScale(unitScale) ? unitScale.color : undefined;
   if (colorMap && colorMap.size > 0) {
-    const res = await elaborateLegend(child, colorMap);
-    if (res.changed) {
-      child = res.node;
-      if (contexts?.session) child.setRenderSession(contexts.session);
-      child.resolveNames();
-      child.resolveUnderlyingSpace(); // memoized: computes only the new nodes
-      legendAdded = true;
-    }
+    child = await elaborateLegend(child, colorMap);
+    if (contexts?.session) child.setRenderSession(contexts.session);
+    child.resolveUnderlyingSpace(); // memoized: computes only the new nodes
   }
 
   if (debug) {
@@ -294,12 +287,11 @@ export async function layout(
   const finalH = finalDim(1, h);
 
   // Measured legend overhang past the content width — replaces the fixed
-  // LEGEND_MARGIN. The wrapper's max bbox includes the seated swatch column, so
-  // `wrapper.max - finalW` is exactly the gap + legend width to reserve on the
-  // right. Gated on legendAdded so legend-free charts keep byte-identical widths.
-  const rightOverhang = legendAdded
-    ? Math.max(0, (child.dims[0]?.max ?? 0) - finalW)
-    : 0;
+  // LEGEND_MARGIN (see `legendOverhang`). Gated on whether a legend wrapper was
+  // added (`child !== contentNode`) so legend-free charts keep byte-identical
+  // widths.
+  const rightOverhang =
+    child !== contentNode ? legendOverhang(child, finalW) : 0;
 
   if (debug) {
     console.log("🌳 Node Tree:");
@@ -417,7 +409,7 @@ export const gofish = (
               defs,
               axes,
               axisFields,
-              rightMargin: data.rightOverhang,
+              rightOverhang: data.rightOverhang,
             },
             data.child
           );
@@ -443,7 +435,7 @@ export const render = (
     defs,
     axes,
     axisFields,
-    rightMargin,
+    rightOverhang = 0,
     svgPadding,
   }: {
     width: number;
@@ -452,7 +444,7 @@ export const render = (
     defs?: JSX.Element[];
     axes?: AxesOptions;
     axisFields?: { x?: string; y?: string };
-    rightMargin?: number;
+    rightOverhang?: number;
     svgPadding?: number;
   },
   child: GoFishNode
@@ -465,12 +457,11 @@ export const render = (
   const leftMargin = yTitle ? Y_TITLE_MARGIN : 0;
   const bottomMargin = xTitle ? X_TITLE_MARGIN : 0;
   // Right-side space reserved for a legend overhanging the content width
-  // (measured by `layout()` as `rightOverhang`; 0 when no legend / no overhang).
-  const rightSpace = rightMargin ?? 0;
+  // (measured by `layout()`; 0 when no legend / no overhang).
 
   const result = (
     <svg
-      width={width + leftMargin + pad + rightSpace + pad}
+      width={width + leftMargin + pad + rightOverhang + pad}
       height={height + pad + bottomMargin + pad}
       xmlns="http://www.w3.org/2000/svg"
     >

@@ -38,9 +38,11 @@ appears whenever a color encoding resolved to swatches). It runs after the last
 `resolveColorScale`, consuming the already-populated `scaleContext.unit.color`.
 Crucially, `resolveColorScale` is **not** re-run on the rewritten tree: legend
 swatch fills are literal color strings, never `isValue` data references, so the
-color pass has nothing to do with them. After the rewrite the pass runs
-`resolveNames()` and a memoized `resolveUnderlyingSpace()` (which computes only
-the newly inserted nodes).
+color pass has nothing to do with them. After the rewrite the pass runs only a
+memoized `resolveUnderlyingSpace()` (which computes only the newly inserted
+nodes); `resolveNames()` is unnecessary, since the legend subtree carries only
+plain string `.name()`s and its constraint refs were already resolved eagerly
+inside `elaborateLegend`.
 
 The pass wraps the chart root in a single `Layer` holding the original content
 plus a swatch column:
@@ -51,10 +53,10 @@ root = Layer([ content.name("__legendContent"), legendColumn(colorMap) ])
 
 `legendColumn` is a `Spread({ dir: "y" })` of one row per color-map entry. Each
 `legendRow` is a `Spread({ dir: "x" })` of a 10×10 `Rect` swatch and a 10px gray
-`Text` label. The rows are **reversed** before spreading: `Spread({ dir: "y" })`
+`Text` label. The column uses `Spread`'s `reverse: true`: `Spread({ dir: "y" })`
 lays children bottom→top in y-up coordinates (the first child gets the smallest
-y), so the first color-map entry has to be _last_ in the spread to render at the
-top — matching the old bespoke order, which placed entry 0 at the top.
+y), so the first color-map entry has to render _last_ in the spread to end up at
+the top — matching the old bespoke order, which placed entry 0 at the top.
 
 ### The three constraints
 
@@ -103,12 +105,14 @@ content centered and the legend reserved separately:
 
 ```ts
 const finalW = finalDim(0, w); // off contentNode
-const rightOverhang = legendAdded ? Math.max(0, child.dims[0].max - finalW) : 0;
+const rightOverhang = child !== contentNode ? legendOverhang(child, finalW) : 0;
 ```
 
-`wrapper.dims[0].max - finalW` is exactly the `LEGEND_CONTENT_GAP` plus the
-swatch-column width, so the render pass reserves precisely the legend on the
-right of the SVG. The measurement is gated on `legendAdded`, so legend-free
+`legendOverhang` (in `legends/elaborate.tsx`, next to the constraint that
+creates the overhang) returns `wrapper.dims[0].max - finalW`, which is exactly
+the `LEGEND_CONTENT_GAP` plus the swatch-column width, so the render pass
+reserves precisely the legend on the right of the SVG. The measurement is gated
+on whether a legend wrapper was added (`child !== contentNode`), so legend-free
 charts keep byte-identical SVG widths.
 
 Reading `finalW`/`finalH` off the content (not the wrapper) matters most when

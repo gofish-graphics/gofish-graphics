@@ -266,23 +266,19 @@ export const coord = createNodeOperator(
             maxY: screenBboxMaxY,
           } = screenBbox;
 
-          // When axes are enabled the circle must be centered in the full
-          // allocated space so labels aren't clipped at the edges.
-          // Without axes (e.g. pie glyphs in scatter) use the tighter
-          // content-bbox sizing so the glyph doesn't claim excess space.
+          // When axes are enabled and no placed min was allocated, the circle
+          // must be centered in the full allocated space so labels aren't
+          // clipped at the edges. Otherwise (a placed min exists, or there are
+          // no axes — e.g. pie glyphs in scatter) use the tighter content-bbox
+          // sizing so the glyph doesn't claim excess space.
           const hasAxes = !!axes;
-          const [intrinsicW, intrinsicH] =
-            dims[0].min !== undefined
-              ? [
-                  screenBboxMaxX - screenBboxMinX,
-                  screenBboxMaxY - screenBboxMinY,
-                ]
-              : hasAxes
-                ? [origW, origH]
-                : [
-                    screenBboxMaxX - screenBboxMinX,
-                    screenBboxMaxY - screenBboxMinY,
-                  ];
+          const useAllocated = dims[0].min === undefined && hasAxes;
+          const intrinsicW = useAllocated
+            ? origW
+            : screenBboxMaxX - screenBboxMinX;
+          const intrinsicH = useAllocated
+            ? origH
+            : screenBboxMaxY - screenBboxMinY;
 
           const half = Math.min(origW, origH) / 2;
           const translateX =
