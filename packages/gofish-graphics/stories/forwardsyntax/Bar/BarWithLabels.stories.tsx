@@ -10,6 +10,7 @@ import {
   text,
   sumBy,
   group,
+  pluck,
 } from "../../../src/lib";
 
 const meta: Meta = {
@@ -48,6 +49,41 @@ export const Default: StoryObj<Args> = {
             [
               d[0],
               text({ text: String(sumBy(d[0].datum, "count")) }),
+            ]
+          );
+        }) as any),
+    ] as any).render(container, {
+      w: args.w,
+      h: args.h,
+      axes: true
+    });
+
+    return container;
+  },
+};
+
+// Demonstrates `pluck` — the un-collapsed sibling of the `by: "datum.field"`
+// homogeneity collapse. Within a lake the `species` field is multi-valued, so
+// `datum.species` would NOT resolve (the "ill-posed" undefined). `pluck` is how
+// you ask for *every* distinct value: here, the count of species in each lake.
+export const SpeciesCountPerLake: StoryObj<Args> = {
+  args: { w: 400, h: 400 },
+  render: (args: Args) => {
+    const container = initializeContainer();
+
+    layer([
+      Chart(seafood)
+        .flow(spread({ by: "lake", dir: "x" }))
+        .mark(rect({ h: "count" }).name("bars")),
+      Chart(selectAll("bars") as any)
+        .flow(group({ by: "datum.lake" }) as any)
+        .mark(((d: any[]) => {
+          // `pluck(ref, "species")` → the distinct species in this lake's bag.
+          const species = pluck(d[0], "species") as string[];
+          return spread({ dir: "y", alignment: "middle", spacing: 10 },
+            [
+              d[0],
+              text({ text: `${species.length} spp` }),
             ]
           );
         }) as any),
