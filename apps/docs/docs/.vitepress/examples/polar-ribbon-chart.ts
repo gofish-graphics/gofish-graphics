@@ -15,8 +15,8 @@ gf.layer({ coord: gf.clock() }, [
     )
     .mark(gf.rect({ h: "count", fill: "species" }).name("bars")),
   gf
-    .Chart(gf.select("bars"))
-    .flow(gf.group({ by: "species" }))
+    .Chart(gf.selectAll("bars"))
+    .flow(gf.group({ by: "datum.species" }))
     .mark(gf.area({ opacity: 0.8 })),
 ]).render(root, {
   w: 500,

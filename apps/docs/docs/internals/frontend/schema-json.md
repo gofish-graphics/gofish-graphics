@@ -98,6 +98,9 @@ for the API.
             },
             "layer": {
               "type": "string"
+            },
+            "mode": {
+              "enum": ["one", "all"]
             }
           }
         },

@@ -8,7 +8,7 @@ gf.layer([
         .name("points")
     ),
   gf
-    .Chart(gf.select("points"))
+    .Chart(gf.selectAll("points"))
     .mark(gf.line({ stroke: "black", strokeWidth: 2 })),
   gf
     .Chart(drivingShifts)

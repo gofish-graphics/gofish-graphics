@@ -8,13 +8,13 @@ any other mark, but draws nothing. It is the positioning **guide** that
 :::
 
 ```python
-from gofish import Layer, chart, spread, blank, select, area
+from gofish import Layer, chart, spread, blank, selectAll, area
 
 Layer([
     chart(lake_totals)
         .flow(spread(by="lake", dir="x", spacing=64))
         .mark(blank(h="count").name("points")),
-    chart(select("points")).mark(area(opacity=0.8)),
+    chart(selectAll("points")).mark(area(opacity=0.8)),
 ]).render(w=500, h=300, axes=True)
 ```
 
@@ -36,14 +36,14 @@ Returns a `Mark` for use in [`.mark()`](/python/api/core/mark).
 
 A `blank` lets you run a full layout — `spread`, `stack`, `scatter` — and capture
 the **positions** without drawing anything. Name the result with `.name(...)`,
-then have another chart [`select()`](/python/api/core/chart#cross-chart-references)
+then have another chart [`selectAll()`](/python/api/core/chart#cross-chart-references)
 it and draw a [`line`](/python/api/marks/line), [`area`](/python/api/marks/area),
 or other mark through those positions.
 
 ```python
 # Position points, draw nothing — then connect them
 chart(data).flow(scatter(by="lake", x="x", y="y")).mark(blank().name("points"))
-chart(select("points")).mark(line())
+chart(selectAll("points")).mark(line())
 ```
 
 ## Notes

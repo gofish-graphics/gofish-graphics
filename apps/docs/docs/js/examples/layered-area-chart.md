@@ -11,7 +11,7 @@ import {
   Chart,
   spread,
   Layer,
-  select,
+  selectAll,
   blank,
   area,
   group,
@@ -24,8 +24,8 @@ Layer({ axes: true }, [
   Chart(streamgraphData)
     .flow(spread({ by: "x", dir: "x", spacing: 50 }))
     .mark(blank({ h: "y", fill: "c" }).name("points")),
-  Chart(select("points"))
-    .flow(group({ by: "c" }))
+  Chart(selectAll("points"))
+    .flow(group({ by: "datum.c" }))
     .mark(area({ opacity: 0.7 })),
 ]).render(container, {
   w: 500,

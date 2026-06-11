@@ -63,6 +63,7 @@ export const FRONTEND_IR_JSON_SCHEMA = {
           properties: {
             type: { const: "select" },
             layer: { type: "string" },
+            mode: { enum: ["one", "all"] },
           },
         },
         {

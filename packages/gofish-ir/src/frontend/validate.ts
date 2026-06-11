@@ -216,7 +216,14 @@ function walkData(node: unknown, path: string, ctx: Context): void {
       return;
     case "select":
       expectField(node, "layer", path, ctx, expectString);
-      if (ctx.strict) rejectUnknown(node, ["type", "layer"], path, ctx);
+      optionalField(node, "mode", path, ctx, (v, p) => {
+        if (v !== "one" && v !== "all")
+          ctx.errors.push({
+            path: p,
+            message: `mode must be "one" | "all", got ${JSON.stringify(v)}`,
+          });
+      });
+      if (ctx.strict) rejectUnknown(node, ["type", "layer", "mode"], path, ctx);
       return;
     case "external":
       optionalField(node, "id", path, ctx, expectString);

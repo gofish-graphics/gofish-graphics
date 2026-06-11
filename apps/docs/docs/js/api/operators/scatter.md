@@ -27,12 +27,12 @@ scatter({ by?, x?, y?, xMin?, xMax?, yMin?, yMax?, alignment? })
 
 ## Parameters
 
-| Option                      | Type                                         | Description                                                    |
-| --------------------------- | -------------------------------------------- | -------------------------------------------------------------- |
-| `by`                        | `string`                                     | Field to group by; omit for per-item scatter                   |
-| `x`, `y`                    | `string \| number`                           | Field name for position, or fixed pixel value                  |
-| `xMin`/`xMax`/`yMin`/`yMax` | `string`                                     | Range form — children span `[xMin, xMax]` (or y) in data space |
-| `alignment`                 | `"start" \| "middle" \| "end" \| "baseline"` | Alignment on axes scatter doesn't position                     |
+| Option                      | Type                                         | Description                                                                                                                                                                                                                       |
+| --------------------------- | -------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `by`                        | `string \| (item) => string`                 | Field, lodash path, or accessor to group by; omit for per-item scatter. Path-aware (use `"datum.field"` after a [selection](/js/api/selection/select)) — see [`spread` → path-aware `by`](/js/api/operators/spread#path-aware-by) |
+| `x`, `y`                    | `string \| number`                           | Field name for position, or fixed pixel value                                                                                                                                                                                     |
+| `xMin`/`xMax`/`yMin`/`yMax` | `string`                                     | Range form — children span `[xMin, xMax]` (or y) in data space                                                                                                                                                                    |
+| `alignment`                 | `"start" \| "middle" \| "end" \| "baseline"` | Alignment on axes scatter doesn't position                                                                                                                                                                                        |
 
 At least one of `x`, `y`, the `xMin`/`xMax` pair, or the `yMin`/`yMax` pair is required.
 

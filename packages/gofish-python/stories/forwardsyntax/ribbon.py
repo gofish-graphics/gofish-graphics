@@ -2,7 +2,7 @@
 
 import math
 
-from gofish import Layer, chart, spread, stack, derive, rect, select, area, group, clock
+from gofish import Layer, chart, spread, stack, derive, rect, selectAll, area, group, clock
 from stories.data.seafood import seafood
 
 TITLE = "Forward Syntax V3/Ribbon"
@@ -19,7 +19,7 @@ def basic(w=400, h=400):
         )
         .mark(rect(h="count", fill="species").name("bars"))
     )
-    overlay = chart(select("bars")).flow(group(by="species")).mark(area(opacity=0.8))
+    overlay = chart(selectAll("bars")).flow(group(by="datum.species")).mark(area(opacity=0.8))
     return Layer([bars, overlay])
 
 
@@ -34,5 +34,5 @@ def polar(w=400, h=400):
         )
         .mark(rect(w=0.1, h="count", fill="species").name("bars"))
     )
-    overlay = chart(select("bars")).flow(group(by="species")).mark(area(opacity=0.8))
+    overlay = chart(selectAll("bars")).flow(group(by="datum.species")).mark(area(opacity=0.8))
     return Layer({"coord": clock()}, [bars, overlay])

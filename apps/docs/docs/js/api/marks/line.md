@@ -1,6 +1,6 @@
 # line
 
-Connects data points center-to-center with a line. Typically used on data returned by [`select()`](/js/api/selection/select).
+Connects data points center-to-center with a line. Takes the array of refs returned by [`selectAll()`](/js/api/selection/select).
 
 ::: starfish
 
@@ -17,7 +17,7 @@ gf.Layer([
     .flow(gf.scatter({ by: "lake", x: "x", y: "y" }))
     .mark(gf.blank().name("points")),
   gf
-    .Chart(gf.select("points"))
+    .Chart(gf.selectAll("points"))
     .mark(gf.line({ stroke: "steelblue", strokeWidth: 2 })),
 ]).render(root, { w: 400, h: 250, axes: true });
 ```
@@ -49,7 +49,7 @@ chart(data)
   .render(container, { w: 500, h: 300 });
 
 // Second chart: line over the same bars
-chart(select("bars"))
+chart(selectAll("bars"))
   .mark(line({ stroke: "steelblue", strokeWidth: 2 }))
   .render(container, { w: 500, h: 300 });
 ```

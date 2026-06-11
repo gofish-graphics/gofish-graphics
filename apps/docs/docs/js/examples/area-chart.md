@@ -12,7 +12,7 @@ import {
   spread,
   derive,
   Layer,
-  select,
+  selectAll,
   blank,
   area,
 } from "gofish-graphics";
@@ -33,7 +33,7 @@ Layer({ axes: true }, [
   Chart(lakeTotals)
     .flow(spread({ by: "lake", dir: "x", spacing: 64 }))
     .mark(blank({ h: "count" }).name("points")),
-  Chart(select("points")).mark(area({ opacity: 0.8 })),
+  Chart(selectAll("points")).mark(area({ opacity: 0.8 })),
 ]).render(container, {
   w: 500,
   h: 300,

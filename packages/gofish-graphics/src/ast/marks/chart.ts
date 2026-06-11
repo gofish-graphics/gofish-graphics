@@ -1,4 +1,4 @@
-import { sumBy, v, Connect, ref } from "../../lib";
+import { sumBy, v, Connect } from "../../lib";
 import { GoFishNode } from "../_node";
 import type { Value } from "../data";
 import { GoFishRef } from "../_ref";
@@ -32,9 +32,9 @@ export type { Mark, Operator };
 export { generatedRect as rect };
 export type { LayerContext };
 
-import { ChartBuilder, LayerSelector, chart } from "./chartBuilder";
+import { ChartBuilder, RefSelection, chart } from "./chartBuilder";
 import type { ChartOptions } from "./chartBuilder";
-export { ChartBuilder, LayerSelector, chart };
+export { ChartBuilder, RefSelection, chart };
 export type { ChartOptions };
 
 /* Data Transformation Operators */
@@ -155,10 +155,16 @@ export function circle<T extends Record<string, any>>({
   return result;
 }
 
-// select() returns a lazy selector that defers layer lookup until actually needed
-// This allows layers to be registered by .name() on marks before select() tries to access them
-export function select<T>(layerName: string): LayerSelector<T> {
-  return new LayerSelector<T>(layerName);
+// select()/selectAll() return a lazy, node-unit selector that defers layer
+// lookup until resolution — so layers can be registered by .name() on marks
+// before the selector tries to access them. `select` expects exactly one
+// matching node (a single ref); `selectAll` yields one ref per matching node.
+export function select(layerName: string): RefSelection {
+  return new RefSelection(layerName, "one");
+}
+
+export function selectAll(layerName: string): RefSelection {
+  return new RefSelection(layerName, "all");
 }
 
 // line() mark connects data points using center-to-center mode
@@ -167,19 +173,14 @@ export function line<T extends Record<string, any>>(options?: {
   strokeWidth?: number;
   opacity?: number;
   interpolation?: "linear" | "bezier";
-}): Mark<Array<T & { __ref?: GoFishNode }>> {
-  const mark: Mark<Array<T & { __ref?: GoFishNode }>> = async (
-    d: Array<T & { __ref?: GoFishNode }>,
-    key?: string | number,
+}): Mark<GoFishRef[]> {
+  const mark: Mark<GoFishRef[]> = async (
+    d: GoFishRef[],
+    _key?: string | number,
     _layerContext?: LayerContext
   ) => {
-    // Use refs from enriched data (lazy resolution via __ref)
-    const refs = d.map((item) => {
-      if ("__ref" in item && item.__ref) {
-        return ref(item.__ref);
-      }
-      throw new Error("line mark expected __ref on items");
-    });
+    // `selectAll(...)` resolves to one ref per named node; connect them.
+    const refs = d;
 
     return Connect(
       {
@@ -205,19 +206,14 @@ export function area<T extends Record<string, any>>(options?: {
   mixBlendMode?: "normal" | "multiply";
   dir?: "x" | "y";
   interpolation?: "linear" | "bezier";
-}): Mark<Array<T & { __ref?: GoFishNode }>> {
-  const mark: Mark<Array<T & { __ref?: GoFishNode }>> = async (
-    d: Array<T & { __ref?: GoFishNode }>,
-    key?: string | number,
+}): Mark<GoFishRef[]> {
+  const mark: Mark<GoFishRef[]> = async (
+    d: GoFishRef[],
+    _key?: string | number,
     _layerContext?: LayerContext
   ) => {
-    // Use refs from enriched data (lazy resolution via __ref)
-    const refs = d.map((item) => {
-      if ("__ref" in item && item.__ref) {
-        return ref(item.__ref);
-      }
-      throw new Error("area mark expected __ref on items");
-    });
+    // `selectAll(...)` resolves to one ref per named node; connect them.
+    const refs = d;
 
     return Connect(
       {

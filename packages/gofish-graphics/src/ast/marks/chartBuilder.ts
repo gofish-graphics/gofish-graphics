@@ -4,6 +4,8 @@ import { type ColorConfig } from "../colorSchemes";
 import type { AxesOptions } from "../gofish";
 import { Mark, Operator } from "../types";
 import { Frame } from "../graphicalOperators/frame";
+import { GoFishRef } from "../_ref";
+import { ref } from "../shapes/ref";
 
 /** Per-chart registry of named layers for select() lookup. */
 export type LayerContext = {
@@ -93,11 +95,21 @@ function collectLayerRegistrations(
   }
 }
 
-/** A lazy selector that defers layer lookup until actually needed. */
-export class LayerSelector<T = any> {
-  constructor(public readonly layerName: string) {}
+/**
+ * A lazy, node-unit selector that defers layer lookup until resolution.
+ *
+ * Returns one `ref` per named mark node — NO flattening of array data, NO
+ * datum spreading, NO `__ref` on plain objects. `selectAll` yields the full
+ * `GoFishRef[]`; `select` ("one") yields the single matching `GoFishRef`
+ * (throwing if the layer matched zero or more than one node).
+ */
+export class RefSelection {
+  constructor(
+    public readonly layerName: string,
+    public readonly mode: "one" | "all"
+  ) {}
 
-  resolve(layerContext: LayerContext): Array<T & { __ref: GoFishNode }> {
+  resolveRefs(layerContext: LayerContext): GoFishRef | GoFishRef[] {
     const layer = layerContext[this.layerName];
 
     if (!layer) {
@@ -106,24 +118,20 @@ export class LayerSelector<T = any> {
       );
     }
 
-    const resolvedNodes: GoFishNode[] = layer.nodes;
+    const refs = layer.nodes.map((node) => ref({ __ref: node }));
 
-    // Return node-attached data enriched with refs to nodes.
-    // Option 3: flatten arrays and duplicate __ref per underlying datum.
-    const result = resolvedNodes.flatMap((node: GoFishNode) => {
-      const datum: any = (node as any).datum;
+    if (this.mode === "all") return refs;
 
-      if (!Array.isArray(datum) && typeof datum !== "object") {
-        throw new Error("datum must be an array or object");
-      }
-      const arr = Array.isArray(datum) ? datum : [datum];
-
-      return arr.map((item: any) => ({
-        ...(item as object),
-        __ref: node,
-      })) as Array<T & { __ref: GoFishNode }>;
-    });
-    return result;
+    // mode === "one": exactly one node expected.
+    if (refs.length === 0) {
+      throw new Error(`select("${this.layerName}") matched no nodes.`);
+    }
+    if (refs.length > 1) {
+      throw new Error(
+        `select("${this.layerName}") matched ${refs.length} nodes; use selectAll("${this.layerName}").`
+      );
+    }
+    return refs[0];
   }
 }
 
@@ -227,10 +235,10 @@ export class ChartBuilder<TInput, TOutput = TInput> {
       composedMark = await op(composedMark);
     }
 
-    // Resolve LayerSelector just before calling mark
+    // Resolve a RefSelection (from select/selectAll) just before calling mark
     let data = this.data;
-    if (data instanceof LayerSelector) {
-      data = data.resolve(this.layerContext) as any;
+    if (data instanceof RefSelection) {
+      data = data.resolveRefs(this.layerContext) as any;
     }
 
     // Create the node; named marks tag themselves for the post-resolve

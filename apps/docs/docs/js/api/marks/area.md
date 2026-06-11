@@ -1,6 +1,6 @@
 # area
 
-Fills the area between data points (edge-to-edge). Typically used on data returned by [`select()`](/js/api/selection/select).
+Fills the area between data points (edge-to-edge). Takes the array of refs returned by [`selectAll()`](/js/api/selection/select).
 
 ::: starfish
 
@@ -17,7 +17,7 @@ gf.Layer([
     .Chart(lakeTotals)
     .flow(gf.spread({ by: "lake", dir: "x", spacing: 64 }))
     .mark(gf.blank({ h: "count" }).name("points")),
-  gf.Chart(gf.select("points")).mark(gf.area({ opacity: 0.6 })),
+  gf.Chart(gf.selectAll("points")).mark(gf.area({ opacity: 0.6 })),
 ]).render(root, { w: 400, h: 250, axes: true });
 ```
 
@@ -43,7 +43,7 @@ area({ stroke?, strokeWidth = 0, opacity?, mixBlendMode = "normal", dir = "x", i
 ## Example
 
 ```ts
-chart(select("bars"))
+chart(selectAll("bars"))
   .mark(area({ opacity: 0.3 }))
   .render(container, { w: 500, h: 300 });
 ```

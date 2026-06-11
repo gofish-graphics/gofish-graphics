@@ -298,7 +298,12 @@ export default defineConfig({
             {
               text: "Selection",
               collapsed: true,
-              items: [{ text: "select", link: "/js/api/selection/select" }],
+              items: [
+                {
+                  text: "select / selectAll",
+                  link: "/js/api/selection/select",
+                },
+              ],
             },
             {
               text: "Coordinates",

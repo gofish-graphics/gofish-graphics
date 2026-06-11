@@ -88,6 +88,20 @@ export class GoFishRef {
     this.directNode = node;
   }
 
+  /** The raw datum carried by the node this ref points at — the *bag of rows*
+   * that flowed into the node (the operator pipeline binds this as an array;
+   * a fully-split leaf is a 1-row bag). Reads `directNode` first because
+   * `split` runs before layout/resolveNames (when only `directNode` is set);
+   * falls back to the resolved `selectedNode`.
+   *
+   * This is intentionally the *uncollapsed* bag: `sumBy(ref.datum, "count")`
+   * aggregates over the rows. Field access with homogeneity collapse (so
+   * `by: "datum.lake"` resolves to a scalar when the rows agree) lives in
+   * `projectPath` / `pluck` (see datumProjection.ts), not here. */
+  public get datum(): any {
+    return (this.directNode ?? this.selectedNode)?.datum;
+  }
+
   /** Chainable: name this ref so a layer constraint can reference it (mirrors
    * GoFishNode.name()). Returns `this` so `ref(token).name("x")` works. */
   public name(name: string | Token): this {

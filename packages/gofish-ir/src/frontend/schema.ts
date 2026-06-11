@@ -101,14 +101,16 @@ export interface RawMarkIR extends BaseIRNode {
  *
  * - **Inline rows**: `{type: "inline", rows: [...]}` for charts whose data is
  *   embedded in the IR.
- * - **Select reference**: `{type: "select", layer: "name"}` resolves a sibling
- *   chart's named-mark output at deserialize time.
+ * - **Select reference**: `{type: "select", layer: "name", mode?}` resolves a
+ *   sibling chart's named-mark output at deserialize time. The optional `mode`
+ *   discriminates `select()` (`"one"`, a single ref) from `selectAll()`
+ *   (`"all"`, an array of refs); absent defaults to `"one"`.
  * - **External**: `{type: "external", id?: "..."}` indicates data ships over a
  *   sidecar transport (anywidget's `arrow_data` trait) and the id keys into it.
  */
 export type DataIR =
   | { type: "inline"; rows: Array<Record<string, unknown>> }
-  | { type: "select"; layer: string }
+  | { type: "select"; layer: string; mode?: "one" | "all" }
   | { type: "external"; id?: string };
 
 // ---------------------------------------------------------------------------

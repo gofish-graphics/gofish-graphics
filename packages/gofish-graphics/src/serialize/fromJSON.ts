@@ -13,7 +13,7 @@
  */
 
 // Source-module imports — see the note in registry.ts.
-import { chart, select } from "../ast/marks/chart";
+import { chart, select, selectAll } from "../ast/marks/chart";
 import { clock } from "../ast/coordinateTransforms/clock";
 import { polar } from "../ast/coordinateTransforms/polar";
 import { wavy } from "../ast/coordinateTransforms/wavy";
@@ -438,7 +438,12 @@ export function buildChart(
   const dataField = (chartSpec as any).data;
   if (dataField && typeof dataField === "object") {
     if (dataField.type === "select") {
-      chartData = select(dataField.layer);
+      // `mode` discriminates select() (single ref) from selectAll() (array).
+      // Default missing/"one" → select for safety.
+      chartData =
+        dataField.mode === "all"
+          ? selectAll(dataField.layer)
+          : select(dataField.layer);
     } else if (dataField.type === "inline" && Array.isArray(dataField.rows)) {
       chartData = dataField.rows;
     }

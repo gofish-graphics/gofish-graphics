@@ -154,9 +154,14 @@ async function chartBuilderToChartIR(
 
 function dataToIR(data: unknown): Frontend.DataIR | null {
   if (data == null) return null;
-  // LayerSelector instance (from `select("name")`) — has a `.layerName` field.
+  // RefSelection instance (from `select`/`selectAll`) — has a `.layerName`
+  // field and a `.mode` discriminant ("one" | "all").
   if (typeof data === "object" && (data as any).layerName !== undefined) {
-    return { type: "select", layer: (data as any).layerName };
+    return {
+      type: "select",
+      layer: (data as any).layerName,
+      mode: (data as any).mode,
+    };
   }
   if (Array.isArray(data)) {
     return { type: "inline", rows: data as AnyObject[] };

@@ -6,7 +6,7 @@ import {
   stack,
   derive,
   layer,
-  select,
+  selectAll,
   rect,
   area,
   group,
@@ -72,8 +72,8 @@ const jsCode = `layer({ coord: clock() }, [
             stack({ by: "species", dir: "y", label: false }),
         )
         .mark(rect({ h: "count", fill: "species" }).name("bars")),
-    Chart(select("bars"))
-        .flow(group({ by: "species" }))
+    Chart(selectAll("bars"))
+        .flow(group({ by: "datum.species" }))
         .mark(area({ opacity: 0.8 })),
 ]).render(root, { w: ${CHART_WIDTH}, h: ${CHART_HEIGHT}, transform: { x: 250, y: 150 }, axes: true });`;
 
@@ -86,8 +86,8 @@ const pyCode = `Layer({"coord": clock()}, [
             stack(by="species", dir="y", label=False),
         )
         .mark(rect(h="count", fill="species").name("bars")),
-    chart(select("bars"))
-        .flow(group(by="species"))
+    chart(selectAll("bars"))
+        .flow(group(by="datum.species"))
         .mark(area(opacity=0.8)),
 ]).render(w=${CHART_WIDTH}, h=${CHART_HEIGHT}, axes=True)`;
 
@@ -156,8 +156,8 @@ function renderFixedChart() {
         stack({ by: "species", dir: "y", label: false })
       )
       .mark(rect({ h: "count", fill: "species" }).name("bars")),
-    Chart(select("bars"))
-      .flow(group({ by: "species" }))
+    Chart(selectAll("bars"))
+      .flow(group({ by: "datum.species" }))
       .mark(area({ opacity: 0.8 })),
   ]).render(root, {
     w: CHART_WIDTH,

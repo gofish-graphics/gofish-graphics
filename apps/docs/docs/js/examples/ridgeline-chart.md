@@ -11,7 +11,7 @@ import {
   Chart,
   spread,
   Layer,
-  select,
+  selectAll,
   blank,
   area,
   group,
@@ -27,8 +27,8 @@ Layer({ axes: true }, [
       spread({ by: "species", dir: "y", spacing: -16 })
     )
     .mark(blank({ h: "count", fill: "species" }).name("points")),
-  Chart(select("points"))
-    .flow(group({ by: "species" }))
+  Chart(selectAll("points"))
+    .flow(group({ by: "datum.species" }))
     .mark(area({ opacity: 0.8, mixBlendMode: "normal" })),
 ]).render(container, { w: 500, h: 300 });
 ```

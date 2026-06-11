@@ -31,12 +31,12 @@ scatter(*, by=None, **options) -> Operator
 
 ## Parameters
 
-| Parameter                      | Type  | Description                                                                            |
-| ------------------------------ | ----- | -------------------------------------------------------------------------------------- |
-| `by`                           | `str` | Field to group by — groups are placed at their **mean** x/y. Omit to position per row. |
-| `x`, `y`                       | `str` | Field-name accessors for position. At least one is required.                           |
-| `xMin`, `xMax`, `yMin`, `yMax` | `str` | Range accessors — a group spans `[min, max]` in data space.                            |
-| `alignment`                    | `str` | `"start"`, `"middle"`, `"end"`, or `"baseline"`.                                       |
+| Parameter                      | Type                | Description                                                                                                                                                                                                                                        |
+| ------------------------------ | ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `by`                           | `str` \| `Callable` | Field, dotted path, or callable to group by — groups are placed at their **mean** x/y. Omit to position per row. Path-aware (use `"datum.field"` after a selection); see [`spread` → path-aware `by`](/python/api/operators/spread#path-aware-by). |
+| `x`, `y`                       | `str`               | Field-name accessors for position. At least one is required.                                                                                                                                                                                       |
+| `xMin`, `xMax`, `yMin`, `yMax` | `str`               | Range accessors — a group spans `[min, max]` in data space.                                                                                                                                                                                        |
+| `alignment`                    | `str`               | `"start"`, `"middle"`, `"end"`, or `"baseline"`.                                                                                                                                                                                                   |
 
 Returns an `Operator` for use inside [`.flow()`](/python/api/core/flow).
 

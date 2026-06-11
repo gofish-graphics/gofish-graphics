@@ -13,7 +13,7 @@ import {
   stack,
   derive,
   Layer,
-  select,
+  selectAll,
   rect,
   blank,
   area,
@@ -32,8 +32,8 @@ Layer({ axes: true }, [
       stack({ by: "species", dir: "y", label: false })
     )
     .mark(rect({ h: "count", fill: "species" }).name("bars")),
-  Chart(select("bars"))
-    .flow(group({ by: "species" }))
+  Chart(selectAll("bars"))
+    .flow(group({ by: "datum.species" }))
     .mark(area({ opacity: 0.8 })),
 ]).render(container, {
   w: 400,

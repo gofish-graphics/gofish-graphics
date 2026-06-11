@@ -726,10 +726,16 @@ class ConstrainableMark(Mark):
 
 
 class LayerSelector:
-    """Sentinel object representing a cross-chart layer reference."""
+    """Sentinel object representing a cross-chart layer reference.
 
-    def __init__(self, layer_name: str):
+    ``mode`` discriminates ``select()`` (``"one"``, a single ref) from
+    ``selectAll()`` (``"all"``, an array of refs), mirroring the JS
+    ``RefSelection`` discriminant.
+    """
+
+    def __init__(self, layer_name: str, mode: str = "one"):
         self.layer_name = layer_name
+        self.mode = mode
 
 
 class ChartBuilder:
@@ -849,7 +855,11 @@ class ChartBuilder:
 
         # Serialize data: LayerSelector becomes a select spec, otherwise None
         if isinstance(self.data, LayerSelector):
-            data_ir: Any = {"type": "select", "layer": self.data.layer_name}
+            data_ir: Any = {
+                "type": "select",
+                "layer": self.data.layer_name,
+                "mode": self.data.mode,
+            }
         else:
             data_ir = None
 
@@ -1422,15 +1432,28 @@ def wavy() -> dict:
 
 def select(layer_name: str) -> LayerSelector:
     """
-    Select a named layer from a previous chart for cross-chart referencing.
+    Select a single named node from a previous chart (a single ref).
 
     Args:
         layer_name: Name of the layer to select (set via mark.name())
 
     Returns:
-        LayerSelector sentinel for use as chart() data argument
+        LayerSelector sentinel (mode="one") for use as chart() data argument
     """
-    return LayerSelector(layer_name)
+    return LayerSelector(layer_name, mode="one")
+
+
+def selectAll(layer_name: str) -> LayerSelector:
+    """
+    Select all named nodes from a previous chart (one ref per matching node).
+
+    Args:
+        layer_name: Name of the layer to select (set via mark.name())
+
+    Returns:
+        LayerSelector sentinel (mode="all") for use as chart() data argument
+    """
+    return LayerSelector(layer_name, mode="all")
 
 
 # Literal-value wrapper

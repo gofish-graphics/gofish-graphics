@@ -2,8 +2,8 @@ import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
 import { seafood } from "../../src/data/catch";
 import { streamgraphData } from "../../src/data/streamgraphData";
-import { Chart, spread, blank, stack, layer, select } from "../../src/lib";
-import { area, group, log } from "../../src/lib";
+import { Chart, spread, blank, stack, layer, selectAll } from "../../src/lib";
+import { area, group } from "../../src/lib";
 
 const meta: Meta = {
   title: "Forward Syntax V3/Area",
@@ -29,8 +29,7 @@ export const Basic: StoryObj<Args> = {
       Chart(seafood)
         .flow(spread({ by: "lake",  dir: "x", spacing: 64 }))
         .mark(blank({ h: "count" }).name("points")),
-      Chart(select("points")).flow(log("points")).mark(area({ opacity: 0.8 })
-    ),
+      Chart(selectAll("points")).mark(area({ opacity: 0.8 })),
     ]).render(container, {
       w: args.w,
       h: args.h,
@@ -53,8 +52,8 @@ export const Stacked: StoryObj<Args> = {
           stack({ by: "species",  dir: "y" })
         )
         .mark(blank({ h: "count", fill: "species" }).name("bars")),
-      Chart(select("bars"))
-        .flow(group({ by: "species" }))
+      Chart(selectAll("bars"))
+        .flow(group({ by: "datum.species" }))
         .mark(area({ opacity: 0.8 })),
     ]).render(container, {
       w: args.w,
@@ -74,8 +73,8 @@ export const Layered: StoryObj<Args> = {
       Chart(streamgraphData)
         .flow(group({ by: "c" }), spread({ by: "x",  dir: "x", spacing: 50 }))
         .mark(blank({ h: "y", fill: "c" }).name("points")),
-      Chart(select("points"))
-        .flow(group({ by: "c" }))
+      Chart(selectAll("points"))
+        .flow(group({ by: "datum.c" }))
         .mark(area({ opacity: 0.7 })),
     ]).render(container, {
       w: 500,

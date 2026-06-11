@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
 import { catchLocationsArray } from "../../src/data/catch";
-import { Chart, layer, select, line, blank } from "../../src/lib";
+import { Chart, layer, selectAll, line, blank } from "../../src/lib";
 import { scatter } from "../../src/lib";
 
 const meta: Meta = {
@@ -28,7 +28,7 @@ export const Default: StoryObj<Args> = {
       Chart(catchLocationsArray)
         .flow(scatter({ by: "lake",  x: "x", y: "y" }))
         .mark(blank().name("points")),
-      Chart(select("points")).mark(line()),
+      Chart(selectAll("points")).mark(line()),
     ]).render(container, {
       w: args.w,
       h: args.h,

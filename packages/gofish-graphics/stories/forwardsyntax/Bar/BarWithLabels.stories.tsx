@@ -6,9 +6,8 @@ import {
   spread,
   rect,
   layer,
-  select,
+  selectAll,
   text,
-  ref,
   sumBy,
   group,
 } from "../../../src/lib";
@@ -37,13 +36,18 @@ export const Default: StoryObj<Args> = {
       Chart(seafood)
         .flow(spread({ by: "lake",  dir: "x" }))
         .mark(rect({ h: "count" }).name("bars")),
-      Chart(select("bars") as any)
-        .flow(group({ by: "lake" }) as any)
+      // `selectAll("bars")` yields one ref per lake; each ref's datum is that
+      // lake's array of species records (an aggregate). `by: "datum.lake"`
+      // resolves because every row in a lake agrees on `lake` (homogeneity
+      // collapse), giving one frame per lake; sum the aggregate's rows for the
+      // per-lake total label.
+      Chart(selectAll("bars") as any)
+        .flow(group({ by: "datum.lake" }) as any)
         .mark(((d: any[]) => {
           return spread({ dir: "y", alignment: "middle", spacing: 10 },
             [
-              ref(d[0] as any),
-              text({ text: String(sumBy(d, "count")) }),
+              d[0],
+              text({ text: String(sumBy(d[0].datum, "count")) }),
             ]
           );
         }) as any),

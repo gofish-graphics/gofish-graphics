@@ -7,7 +7,14 @@
 ::: starfish-live {template=vanilla-ts rtl lightTheme=aquaBlue darkTheme=atomDark previewHeight=400 coderHeight=512}
 
 ```ts index.ts
-import { Chart, scatter, Layer, select, circle, line } from "gofish-graphics";
+import {
+  Chart,
+  scatter,
+  Layer,
+  selectAll,
+  circle,
+  line,
+} from "gofish-graphics";
 import { drivingShifts } from "./dataset";
 
 const container = document.getElementById("app");
@@ -20,7 +27,7 @@ Layer({ axes: true }, [
         "points"
       )
     ),
-  Chart(select("points"))
+  Chart(selectAll("points"))
     .mark(line({ stroke: "black", strokeWidth: 2 }))
     .zOrder(-1),
 ]).render(container, {

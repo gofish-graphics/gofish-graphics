@@ -150,6 +150,12 @@ Connect({ source: "middle" }, [ref("A"), ref("B"), ref("C")]);
 
 ## Notes
 
+- The high-level [`line`](/js/api/marks/line) and [`area`](/js/api/marks/area)
+  marks are thin wrappers over `connect`: they take the array of refs from
+  [`selectAll(...)`](/js/api/selection/select) and connect them. To re-partition
+  a selection before connecting (e.g. one area per species), run it through a
+  path-aware operator first — `group({ by: "datum.species" })`; see
+  [`spread` → path-aware `by`](/js/api/operators/spread#path-aware-by).
 - `ref(name)` resolves names declared via `.name(...)`. With
   `createName()` tokens, the name is global; with plain strings, it is
   layer-scoped.
