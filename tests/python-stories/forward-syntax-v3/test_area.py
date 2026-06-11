@@ -16,6 +16,16 @@ def story_basic():
     )
 
 
+def story_connect():
+    return (
+        chart(SEAFOOD)
+        .flow(spread(by="lake", dir="x", spacing=64))
+        .mark(blank(h="count"))
+        .connect(area(opacity=0.8)),
+        {"w": 500, "h": 300, "axes": True},
+    )
+
+
 def story_stacked():
     return (
         Layer([

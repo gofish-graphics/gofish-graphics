@@ -87,3 +87,13 @@ def story_connected():
         Layer([points, lines]),
         {"w": 400, "h": 400, "axes": True},
     )
+
+
+def story_connected_sugar():
+    return (
+        chart(DRIVING_SHIFTS)
+        .flow(scatter(by="year", x="miles", y="gas"))
+        .mark(circle(r=4, fill="white", stroke="black", strokeWidth=2).name("points"))
+        .connect(line(stroke="black", strokeWidth=2)),
+        {"w": 400, "h": 400, "axes": True},
+    )
