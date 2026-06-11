@@ -51,9 +51,8 @@ chart(data)
   .connect(line({ stroke: "steelblue", strokeWidth: 2 }));
 ```
 
-This positions the marks and threads the line through them (painted underneath).
-Use the explicit `layer([...])` + `selectAll` form below only to connect
-_another_ chart's marks.
+See [`.connect()`](/js/api/core/connect) for the full semantics; the explicit
+`layer([...])` + `selectAll` form below connects _another_ chart's marks.
 
 ## Example
 

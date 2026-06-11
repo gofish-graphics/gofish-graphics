@@ -126,11 +126,11 @@ The root types mirror the v3 fluent builder shapes:
 [`.connect(line())`](/js/api/core/connect) sugar. It carries an ordinary
 `MarkIR` — no special shape — and elaboration is entirely JS-side: at resolve
 time `ChartBuilder.resolve()` rewrites the chart into a layer holding the
-named-or-auto-named mark plus a sibling layer that `selectAll`s those nodes and
-draws the connector with `zOrder(-1)`. When the chart's mark already carries a
-string `.name(...)`, that name threads through; otherwise a hygienic
-auto-generated name is minted at resolve time only — it never appears in the
-serialized IR, so the JSON stays the user's spelling.
+chart's mark plus a sibling layer that refs those nodes and draws the connector
+with `zOrder(-1)`. When the chart's mark carries a string `.name(...)`, the
+targets are that registered layer (the manual `selectAll(name)` semantics);
+otherwise the produced nodes are tagged directly with a resolve-time Symbol
+marker — no name exists to mint or leak, so the JSON stays the user's spelling.
 
 Channel values (`h`, `w`, `fill`, …) accept bare primitives (the
 shorthand path) or one of three explicit tagged objects:

@@ -57,11 +57,12 @@ keeps the IR small and never leaks an extra layer into your code.
 - **Targets** are exactly the nodes the chart's final mark registers — one per
   flow leaf, identical to what `selectAll(name)` yields in the manual form.
 - **Name** — if the mark carries a string `.name("pts")`, that name is used (and
-  stays selectable by other charts). Otherwise a hygienic auto-generated name is
-  used at resolve time and never appears anywhere user-visible (including
-  serialized IR).
+  stays selectable by other charts). Otherwise no name is created at all: the
+  chart tags its mark's nodes directly at resolve time, so nothing is minted,
+  leaked, or serialized.
 - **Paint order** — the connector renders **under** the marks (the elaboration
-  applies `zOrder(-1)` to the connector layer).
+  applies `zOrder(-1)` to the connector layer). This is fixed; reach for the
+  manual `Layer([...])` form if you need a different paint order.
 - **Connector type** — any ref-consuming mark works:
   [`line()`](/python/api/marks/line), [`area()`](/python/api/marks/area).
 
@@ -69,8 +70,6 @@ keeps the IR small and never leaks an extra layer into your code.
 
 - **One call max.** A second `.connect()` raises `ValueError`.
 - **String names only.** A non-string mark name raises `TypeError`.
-- **Connector sits under the marks** — reach for the manual `Layer([...])` form
-  if you need a different paint order.
 - **Cross-chart connection** — to connect _another_ chart's marks, use the
   explicit `Layer([...])` + [`selectAll`](/python/api/selection/ref) form.
   `.connect()` only threads a chart through its own marks.

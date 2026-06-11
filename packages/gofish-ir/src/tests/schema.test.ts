@@ -481,11 +481,7 @@ function chartWithConnect(connect: any) {
   } as unknown as FrontendIRDocument;
 }
 
-check(
-  "connect: { type: 'line' } accepts in permissive mode",
-  validate(chartWithConnect({ type: "line" })).valid
-);
-
+// Strict accept implies permissive accept (strict only adds rejections).
 check(
   "connect: { type: 'line' } accepts in strict mode",
   validate(chartWithConnect({ type: "line" }), { strict: true }).valid

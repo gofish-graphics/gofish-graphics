@@ -60,9 +60,8 @@ chart(data).flow(
 ).mark(circle()).connect(line(stroke="steelblue", strokeWidth=2))
 ```
 
-This positions the marks and threads the line through them (painted underneath).
-Use the explicit `Layer([...])` + `selectAll` form only to connect _another_
-chart's marks.
+See [`.connect()`](/python/api/core/connect) for the full semantics; the
+explicit `Layer([...])` + `selectAll` form connects _another_ chart's marks.
 
 ## Examples
 

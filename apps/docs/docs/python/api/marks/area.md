@@ -63,9 +63,8 @@ chart(data).flow(
 ).mark(blank(h="count")).connect(area(opacity=0.6))
 ```
 
-This positions the marks and threads the area through them (painted underneath).
-Use the explicit `Layer([...])` + `selectAll` form only to trace _another_
-chart's marks.
+See [`.connect()`](/python/api/core/connect) for the full semantics; the
+explicit `Layer([...])` + `selectAll` form traces _another_ chart's marks.
 
 ## Examples
 

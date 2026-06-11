@@ -33,7 +33,11 @@ import { GoFishAST } from "../_ast";
 import { GoFishNode } from "../_node";
 import { GoFishRef } from "../_ref";
 import { Mark, Operator } from "../types";
-import { LayerContext, resolveMarkResult } from "./chartBuilder";
+import {
+  LayerContext,
+  resolveMarkResult,
+  stashLayerName,
+} from "./chartBuilder";
 import { inferSize, inferPos, inferColor } from "../channels";
 import type { MaybeValue, Value } from "../data";
 import type { LabelAccessor, LabelOptions } from "../labels/labelPlacement";
@@ -76,9 +80,7 @@ export function nameableMark<T>(base: Mark<T>): NameableMark<T> {
     // as the canonical top-level `name` field. Without this, every
     // `.name("...")` call would strip the serialize tag.
     propagateSerializeWithName(base, wrapped, layerName);
-    // Direct stash so ChartBuilder.connect() can detect a user-chained name
-    // without relying on the __serialize tag.
-    (wrapped as any).__layerName = layerName;
+    stashLayerName(wrapped, layerName);
     return nameableMark(wrapped);
   };
   const withLabel = (

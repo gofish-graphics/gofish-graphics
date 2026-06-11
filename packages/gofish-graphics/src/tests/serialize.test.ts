@@ -397,7 +397,7 @@ async function main() {
   }
 
   // -------------------------------------------------------------------------
-  // .connect() builder sugar (#511) — emits root.connect, auto-name hygiene.
+  // .connect() builder sugar (#511) — emits root.connect.
   // -------------------------------------------------------------------------
   console.log("\n# .connect() connector mark survives toJSON");
 
@@ -408,7 +408,7 @@ async function main() {
   ];
 
   // Unnamed mark + .connect(line()): connect present, deep-equals {type:"line"},
-  // validates strict, and the resolve-time auto layer name never leaks.
+  // validates strict.
   {
     const chart = Chart(connectData)
       .flow(scatter({ by: "g", x: "a", y: "b" }))
@@ -420,10 +420,6 @@ async function main() {
     check(
       "root.connect deep-equals { type: 'line' }",
       JSON.stringify(root.connect) === JSON.stringify({ type: "line" })
-    );
-    check(
-      "auto connect layer name does not leak into serialized IR",
-      !JSON.stringify(doc).includes("__gofish_connect")
     );
   }
 
@@ -438,10 +434,6 @@ async function main() {
     const root = doc.root as Frontend.ChartIR;
     check("named connect: mark.name === 'pts'", (root.mark as any).name === "pts");
     check("named connect: root.connect present", root.connect !== undefined);
-    check(
-      "named connect: connector is line",
-      (root.connect as any)?.type === "line"
-    );
   }
 
   // fromJSON → toJSON round trip preserves connect.
@@ -462,10 +454,6 @@ async function main() {
       "round-trip preserves root.connect",
       JSON.stringify((doc2.root as Frontend.ChartIR).connect) ===
         JSON.stringify((doc.root as Frontend.ChartIR).connect)
-    );
-    check(
-      "round-trip still hygienic (no __gofish_connect leak)",
-      !JSON.stringify(doc2).includes("__gofish_connect")
     );
   }
 

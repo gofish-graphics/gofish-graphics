@@ -67,11 +67,12 @@ keeps the IR small and never leaks an extra layer into your code.
 - **Targets** are exactly the nodes the chart's final mark registers — one per
   flow leaf, identical to what `selectAll(name)` yields in the manual form.
 - **Name** — if the mark carries a string `.name("pts")`, that name is used (and
-  stays selectable by other charts). Otherwise a hygienic auto-generated name is
-  used at resolve time and never appears anywhere user-visible (including
-  serialized IR).
-- **Paint order** — the connector renders **under** the marks. The elaboration
-  applies `zOrder(-1)` to the connector layer.
+  stays selectable by other charts). Otherwise no name is created at all: the
+  chart tags its mark's nodes directly at resolve time, so nothing is minted,
+  leaked, or serialized.
+- **Paint order** — the connector renders **under** the marks (the elaboration
+  applies `zOrder(-1)` to the connector layer). This is fixed; reach for the
+  manual `layer([...])` form if you need a different paint order.
 - **Connector type** — any `Mark<GoFishRef[]>` works: [`line()`](/js/api/marks/line),
   [`area()`](/js/api/marks/area).
 
@@ -79,8 +80,6 @@ keeps the IR small and never leaks an extra layer into your code.
 
 - **One call max.** A second `.connect()` throws.
 - **String names only.** A token (non-string) mark name throws.
-- **Connector sits under the marks** — this is fixed; reach for the manual
-  `layer([...])` form if you need a different paint order.
 - **Cross-chart connection** — to connect _another_ chart's marks, use the
   explicit [`layer([...])`](/js/api/operators/layer) +
   [`selectAll`](/js/api/selection/ref) form. `.connect()` only threads a chart

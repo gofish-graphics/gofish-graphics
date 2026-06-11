@@ -216,7 +216,8 @@ The two factories are siblings:
 
 Both use channel annotations to encode opts; both produce mark types
 supporting `.name(...)` and `.label(...)` chaining. `.name(...)` also stashes the
-passed name directly on the returned mark function as `__layerName`, so
+passed name on the returned mark function via `stashLayerName` (defined in
+`chartBuilder.ts`, called by every `.name()` implementation), so
 [`ChartBuilder.connect()`](/js/api/core/connect) can detect a user-chained name
 without parsing the `__serialize` tag.
 
