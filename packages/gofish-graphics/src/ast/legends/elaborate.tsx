@@ -1,3 +1,7 @@
+// <gofish-wiki> AUTO-GENERATED — see covers: in the essay; run `pnpm --filter docs sync-backlinks`
+// @wiki Legends — /internals/frontend/legends
+// </gofish-wiki>
+
 import { GoFishNode } from "../_node";
 import { Rect } from "../shapes/rect";
 import { Text } from "../shapes/text";

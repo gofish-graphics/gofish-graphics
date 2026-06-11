@@ -67,7 +67,7 @@ Three per-run session contexts are initialized:
 
 - **`scopeContext`**: Manages variable scoping and data bindings (type: `Map`)
 - **`scaleContext`**: Stores computed color scales and scale mappings (type: `{ unit: { color: Map<any, string> } }`)
-- **`keyContext`**: Maps string keys to nodes for axis labeling and legends (type: `{ [key: string]: GoFishNode }`)
+- **`keyContext`**: Maps string keys to nodes for axis labeling (type: `{ [key: string]: GoFishNode }`)
 
 These are attached to the render session and propagated to the node tree, rather than stored as module-global mutable state. This establishes clean state for the rendering process and ensures no interference between multiple chart renders.
 
@@ -114,7 +114,9 @@ child.resolveKeys();
 Assigns unique keys to nodes. These keys are critical for:
 
 - **Axis labeling**: Ordinal axes use keys to position category labels
-- **Legend generation**: Keys identify which nodes to include in legends
+
+(Legends do not use keys — they are elaborated from the resolved color map; see
+[Legends](/internals/frontend/legends).)
 
 **Example**: In a bar chart using `spread("category", { dir: "x" })`, each bar gets a key like `"category-value"`, which is later used to position the x-axis labels.
 
@@ -219,6 +221,13 @@ See [Axes](/internals/frontend/axes) for the full elaboration story (the
 two-tier structure, baseline pins, negative-space gutters, and the
 continuous/difference/ordinal kinds).
 
+**Legend elaboration** follows the axis block in the same `layout()`, gated on a
+non-empty color map (not on the `axes` option). `elaborateLegend` wraps the chart
+root in a `Layer` holding the content plus a swatch column of `rect`/`text` rows,
+seated to the right with `align`/`distribute` constraints — the same elaborate-
+into-ordinary-nodes treatment axes get. See
+[Legends](/internals/frontend/legends).
+
 ### Pass 8: Position Scale Computation
 
 **Location**: `src/ast/gofish.tsx:183-202`
@@ -284,7 +293,13 @@ reads the chart's _final_ extent back off the root via `child.dims[i].size`, so 
 unsized axis still yields a concrete SVG size (e.g. a no-width bar chart gets
 default-width bars and a width of `n·barWidth + spacing`). A user-supplied
 dimension is always authoritative. This computed extent — not the raw option — is
-what the render pass uses to size the SVG and place chrome like the legend.
+what the render pass uses to size the SVG. The legend is now part of the laid-out
+tree (it is elaborated into the node tree during layout, see Pass 7), so it is
+included in this computed extent when `w`/`h` are omitted. When `w` _is_ given,
+`layout()` additionally measures a `rightOverhang` (how far the tree, legend
+included, extends past the authoritative width) and the render pass reserves
+exactly that on the right of the SVG — replacing the former fixed `LEGEND_MARGIN`
+constant. See [Legends](/internals/frontend/legends).
 
 > Literal pixel sizes are invisible to the underlying-space tree (a fixed-size
 > shape resolves to `UNDEFINED`, not `SIZE`), which is why the unsized path relies
@@ -569,29 +584,14 @@ Elaboration and [Axes](/internals/frontend/axes)), so they render through the
 normal node-tree pass above with no special casing. The only axis artifact
 still drawn directly at render time is the title text (Render Pass 2).
 
-### Render Pass 8: Legend Rendering
+### Render Pass 8: Legend Rendering (removed)
 
-**Location**: `src/ast/gofish.tsx:801-830`
-
-Color legends are rendered from the `scaleContext.unit.color` map:
-
-```typescript
-<For
-  each={Array.from(
-    (scaleContext?.unit && "color" in scaleContext.unit
-      ? scaleContext.unit.color
-      : new Map()
-  ).entries()
-)}
->
-  {([key, value], i) => (
-    <g transform={`translate(${width + PADDING * 3}, ${height - i() * 20})`}>
-      <rect x={-20} y={-5} width={10} height={10} fill={value} />
-      <text ...>{key}</text>
-    </g>
-  )}
-</For>
-```
+The bespoke legend-rendering pass that used to live here (a `<For>` over
+`scaleContext.unit.color` hand-placing swatches behind a fixed `LEGEND_MARGIN`)
+was **deleted**. Color legends are now elaborated into ordinary GoFish nodes
+during layout (see Pass 7: Axis Elaboration, which the legend pass follows, and
+[Legends](/internals/frontend/legends)), so they render through the normal
+node-tree pass above with no special casing.
 
 ## Complete Example: Bar Chart Rendering
 
