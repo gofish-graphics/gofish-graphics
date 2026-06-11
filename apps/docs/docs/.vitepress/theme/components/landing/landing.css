@@ -304,44 +304,47 @@ html.landing-page .DocSearch-Button {
   flex-wrap: wrap;
 }
 .landing .install-chip {
-  display: inline-block;
-  margin-top: 22px;
+  /* reset <button> chrome */
+  appearance: none;
+  border: 0;
+  margin: 22px 0 0;
+  font: inherit;
+  text-align: left;
+
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
   font-family: "Spline Sans Mono", monospace;
   font-size: 0.85rem;
   color: var(--ink-soft);
   background: rgba(0, 0, 0, 0.045);
   padding: 8px 16px;
   border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s ease;
 }
-
-/* OPEN SOURCE stamp, relocated to the hero (upper-right of the H1) */
-.landing .hero-stamp {
-  position: absolute;
-  top: -18px;
-  right: 4px;
-  z-index: 6;
-  display: inline-block;
-  font-family: "Fraunces", serif;
-  font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
+.landing .install-chip:hover {
+  background: rgba(0, 0, 0, 0.08);
+}
+.landing .install-chip:hover .install-copy-icon {
+  opacity: 1;
+}
+.landing .install-glyph {
+  /* reserve enough room for "copied!" so the chip width does not jump */
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  min-width: 4.5em;
+}
+.landing .install-copy-icon {
+  opacity: 0.65;
+  transition: opacity 0.15s ease;
+}
+.landing .install-copied {
+  font-family: "Architects Daughter", cursive;
   color: var(--accent);
-  border: 3px solid currentColor;
-  border-radius: 8px;
-  padding: 6px 18px;
-  transform: rotate(-10deg);
-  opacity: 0.85;
-  font-size: 1.1rem;
-  pointer-events: none;
-  -webkit-mask-image: var(--noise);
-  mask-image: var(--noise);
-  -webkit-mask-size: 120px 120px;
-  mask-size: 120px 120px;
-}
-@media (max-width: 700px) {
-  .landing .hero-stamp {
-    display: none;
-  }
+  font-size: 0.95rem;
+  line-height: 1;
 }
 
 /* floating specimen cards */
@@ -831,6 +834,116 @@ html.landing-page .DocSearch-Button {
   .landing .reveal {
     opacity: 1 !important;
     transform: none !important;
+  }
+}
+
+/* ===================== wide-screen gutter navbar (home route only) =====================
+   When the desk gutters beside the 1240px sheet are roomy, lift the navbar
+   contents out of the bar and pin them as two paper cards floating on the wood.
+   Strictly scoped to html.landing-page, so docs pages keep their normal navbar
+   at every width. Between 960–1719px the ordinary paper navbar (above) stands. */
+@media (min-width: 1720px) {
+  /* Dissolve the bar shell: transparent, no hairline, click-through so the hero
+     beneath the old bar stays fully interactive. */
+  html.landing-page .VPNavBar,
+  html.landing-page .VPNavBar.has-sidebar .content,
+  html.landing-page .VPNavBar:not(.home),
+  html.landing-page .VPNavBar .content {
+    background: transparent !important;
+    background-color: transparent !important;
+  }
+  html.landing-page .VPNavBar {
+    border-bottom-color: transparent !important;
+    pointer-events: none;
+  }
+
+  /* LEFT card: logo + "GoFish Graphics" wordmark. */
+  html.landing-page .VPNavBar .VPNavBarTitle {
+    position: fixed;
+    top: 28px;
+    left: 28px;
+    width: auto;
+    pointer-events: auto;
+    background: var(--paper);
+    border-radius: 10px;
+    padding: 12px 18px;
+    box-shadow:
+      0 1px 2px var(--shadow-warm),
+      3px 6px 18px var(--shadow-warm);
+    transform: rotate(-1.2deg);
+    z-index: 30;
+  }
+
+  /* RIGHT card: search + Internals + JS/Python toggle + GitHub, stacked.
+     position/inset use !important to beat VitePress's own more-specific
+     `.content-body { position: relative }` rule. */
+  html.landing-page .VPNavBar .content-body {
+    position: fixed !important;
+    top: 28px !important;
+    right: 28px !important;
+    left: auto !important;
+    width: auto;
+    height: auto;
+    pointer-events: auto;
+    background: var(--paper) !important;
+    border-radius: 10px;
+    padding: 14px 16px;
+    box-shadow:
+      0 1px 2px var(--shadow-warm),
+      3px 6px 18px var(--shadow-warm);
+    transform: rotate(1deg);
+    z-index: 30;
+
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  /* Children opt back into pointer events and shed the row-layout spacing /
+     flex-grow so they sit flush-left in the column. */
+  html.landing-page .VPNavBar .content-body > * {
+    pointer-events: auto;
+    flex: 0 0 auto;
+    width: auto;
+    margin: 0 !important;
+    padding-left: 0 !important;
+  }
+  html.landing-page .VPNavBar .content-body > .VPNavBarSearch {
+    flex-grow: 0;
+  }
+
+  /* Gold tape strip centered on each card's top edge. CSS-only (::before) since
+     no DOM can be injected inside VitePress's nav clusters. */
+  html.landing-page .VPNavBar .VPNavBarTitle::before,
+  html.landing-page .VPNavBar .content-body::before {
+    content: "";
+    position: absolute;
+    top: -11px;
+    left: 50%;
+    width: 64px;
+    height: 22px;
+    transform: translateX(-50%) rotate(-3deg);
+    background: linear-gradient(
+      105deg,
+      rgba(244, 222, 150, 0.5),
+      rgba(250, 240, 200, 0.65) 40%,
+      rgba(238, 214, 140, 0.5)
+    );
+    clip-path: polygon(
+      0% 8%,
+      4% 0%,
+      96% 4%,
+      100% 12%,
+      98% 88%,
+      100% 96%,
+      95% 100%,
+      3% 96%,
+      0% 90%
+    );
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+    pointer-events: none;
+    z-index: 1;
   }
 }
 

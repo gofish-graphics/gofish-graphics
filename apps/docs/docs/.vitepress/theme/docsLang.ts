@@ -15,7 +15,7 @@ function fromAttr(): DocsLang {
     const v = document.documentElement.getAttribute(ATTR);
     if (v === "js" || v === "python") return v;
   }
-  return "js";
+  return "python";
 }
 
 export const docsLang = ref<DocsLang>(fromAttr());
@@ -31,7 +31,7 @@ function preference(): DocsLang | null {
 export function effectiveLang(path: string): DocsLang {
   if (path.startsWith("/python/") || path === "/python") return "python";
   if (path.startsWith("/js/") || path === "/js") return "js";
-  return preference() ?? "js";
+  return preference() ?? "python";
 }
 
 function writeAttr(lang: DocsLang): void {

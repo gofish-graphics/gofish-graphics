@@ -154,7 +154,7 @@ export default defineConfig({
     [
       "script",
       {},
-      `(function(){try{var p=location.pathname,l;if(p.indexOf('/python/')===0){l='python';}else if(p.indexOf('/js/')===0){l='js';}else{var s=localStorage.getItem('gofish-docs-lang');l=(s==='python'||s==='js')?s:'js';}document.documentElement.setAttribute('data-docs-lang',l);}catch(e){}})();`,
+      `(function(){try{var p=location.pathname,l;if(p.indexOf('/python/')===0){l='python';}else if(p.indexOf('/js/')===0){l='js';}else{var s=localStorage.getItem('gofish-docs-lang');l=(s==='python'||s==='js')?s:'python';}document.documentElement.setAttribute('data-docs-lang',l);}catch(e){}})();`,
     ],
     ["link", { rel: "preconnect", href: "https://fonts.googleapis.com" }],
     [
