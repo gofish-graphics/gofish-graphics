@@ -426,6 +426,57 @@ export const connect = createNodeOperator(
             }
           }
 
+          // Merge consecutive segments that meet at a zero-extent joint into a
+          // single region/polyline (#520). Each pair was emitted as its own path,
+          // but adjacent segments share an edge at exact coordinates, so rendering
+          // them as separate <path>s lets antialiasing open hairline ~0.5px seams
+          // off the pixel grid. One path per run is gap-proof by construction.
+          //
+          // The joint between paths[i] and paths[i+1] is child i+1; it "has no
+          // extent" when that child collapses to a point on the connection
+          // (direction) axis (area points are zero-width; bar-like children with
+          // real width genuinely don't share an edge and must stay separate).
+          const EPS = 1e-6;
+          const jointMerges = (i: number): boolean => {
+            // center mode connects exact center points — always contiguous
+            if (mode === "center") return true;
+            // the joint between paths[i] and paths[i+1] is child i+1
+            const b = childPlaceables[i + 1].dims;
+            return Math.abs((b[dir].max ?? 0) - (b[dir].min ?? 0)) < EPS;
+          };
+
+          const flushRun = (run: Path[]): Path => {
+            if (run.length === 1) return run[0];
+            if (mode === "center") {
+              // Single-segment lines → one continuous polyline.
+              return run.flat();
+            }
+            // Each edge-mode segment is a quad
+            // [leadingEdge, endCap, trailingEdge, startCap]. Trace every leading
+            // edge forward, cap the last segment, trace every trailing edge back
+            // (reverse order; interior caps are zero-length so segments chain
+            // exactly), then cap the first — one closed region.
+            return [
+              ...run.map((p) => p[0]),
+              run[run.length - 1][1],
+              ...run
+                .slice()
+                .reverse()
+                .map((p) => p[2]),
+              run[0][3],
+            ];
+          };
+
+          const mergedPaths: Path[] = [];
+          let run: Path[] = [];
+          for (let i = 0; i < paths.length; i++) {
+            run.push(paths[i]);
+            if (i === paths.length - 1 || !jointMerges(i)) {
+              mergedPaths.push(flushRun(run));
+              run = [];
+            }
+          }
+
           // If no paths were created, use zero dimensions
           const bboxW = bboxPairs.length > 0 ? bboxMaxX - bboxMinX : 0;
           const bboxH = bboxPairs.length > 0 ? bboxMaxY - bboxMinY : 0;
@@ -446,7 +497,7 @@ export const connect = createNodeOperator(
               },
             ],
             transform: { translate: [0, 0] },
-            renderData: { paths, defaultColor },
+            renderData: { paths: mergedPaths, defaultColor },
           };
         },
         render: (
@@ -485,7 +536,11 @@ export const connect = createNodeOperator(
                           (mode === "center" ? "normal" : "multiply"),
                       }}
                       d={d}
-                      fill={resolvedFill ?? "none"}
+                      // center mode is a stroked polyline, not a filled region —
+                      // a merged multi-point path would otherwise enclose area (#520)
+                      fill={
+                        mode === "center" ? "none" : (resolvedFill ?? "none")
+                      }
                       stroke={stroke ?? resolvedFill ?? "black"}
                       stroke-width={strokeWidth ?? 0}
                       opacity={opacity ?? 1}
