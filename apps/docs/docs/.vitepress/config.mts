@@ -381,6 +381,16 @@ export default defineConfig({
                 },
               ],
             },
+            {
+              text: "Selection",
+              collapsed: true,
+              items: [
+                {
+                  text: "ref / selectAll",
+                  link: "/python/api/selection/ref",
+                },
+              ],
+            },
           ],
         },
       ],

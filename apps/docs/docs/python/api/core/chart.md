@@ -21,13 +21,13 @@ chart(data, **options) -> ChartBuilder
 
 ## Parameters
 
-| Parameter | Type                        | Description                                                                                              |
-| --------- | --------------------------- | -------------------------------------------------------------------------------------------------------- |
-| `data`    | `list[dict]` \| `DataFrame` | The dataset to visualize, or [`selectAll()` / `select()`](#cross-chart-references) for a layer reference |
-| `axes`    | keyword                     | Auto-generate axes, labels, and legends. See [Axes](#axes) below.                                        |
-| `coord`   | keyword                     | Coordinate transform, e.g. `coord=clock()`                                                               |
-| `color`   | keyword                     | Color scale applied to all marks — `palette(...)` or `gradient(...)`                                     |
-| `padding` | keyword                     | Extra SVG padding (px) — useful for polar charts and overflowing labels                                  |
+| Parameter | Type                        | Description                                                                                           |
+| --------- | --------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `data`    | `list[dict]` \| `DataFrame` | The dataset to visualize, or [`selectAll()` / `ref()`](#cross-chart-references) for a layer reference |
+| `axes`    | keyword                     | Auto-generate axes, labels, and legends. See [Axes](#axes) below.                                     |
+| `coord`   | keyword                     | Coordinate transform, e.g. `coord=clock()`                                                            |
+| `color`   | keyword                     | Color scale applied to all marks — `palette(...)` or `gradient(...)`                                  |
+| `padding` | keyword                     | Extra SVG padding (px) — useful for polar charts and overflowing labels                               |
 
 Chart-level options are passed as keyword arguments:
 
@@ -104,3 +104,6 @@ After a selection the stream is refs, so re-encode with a datum path —
 `group(by="datum.species")`; see
 [`spread` → path-aware `by`](/python/api/operators/spread#path-aware-by). See
 [`mark`](/python/api/core/mark) for `.name()`.
+
+For the full reference — singular-as-data rules, node-unit selection, hygienic
+scoping, and connector use — see [`ref` / `selectAll`](/python/api/selection/ref).
