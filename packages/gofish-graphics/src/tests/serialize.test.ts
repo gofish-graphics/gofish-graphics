@@ -24,6 +24,7 @@ const {
   scatter,
   rect,
   circle,
+  line,
   text,
   layer,
   derive,
@@ -32,6 +33,7 @@ const {
   field,
   datum,
   literal,
+  Serialize,
 } = GoFish as any;
 
 declare const process: { exit(code: number): never };
@@ -392,6 +394,100 @@ async function main() {
     check("combinator stack emits", mark.type === "stack");
     check("combinator stack is flagged", mark.__combinator === true);
     check("combinator stack has children", Array.isArray(mark.children));
+  }
+
+  // -------------------------------------------------------------------------
+  // .connect() builder sugar (#511) — emits root.connect, auto-name hygiene.
+  // -------------------------------------------------------------------------
+  console.log("\n# .connect() connector mark survives toJSON");
+
+  const connectData = [
+    { g: "x", a: 1, b: 2 },
+    { g: "y", a: 2, b: 3 },
+    { g: "x", a: 3, b: 1 },
+  ];
+
+  // Unnamed mark + .connect(line()): connect present, deep-equals {type:"line"},
+  // validates strict, and the resolve-time auto layer name never leaks.
+  {
+    const chart = Chart(connectData)
+      .flow(scatter({ by: "g", x: "a", y: "b" }))
+      .mark(circle({ r: 4 }))
+      .connect(line());
+    const doc = await chart.toJSON();
+    validateDoc(doc, "connect() unnamed mark");
+    const root = doc.root as Frontend.ChartIR;
+    check(
+      "root.connect deep-equals { type: 'line' }",
+      JSON.stringify(root.connect) === JSON.stringify({ type: "line" })
+    );
+    check(
+      "auto connect layer name does not leak into serialized IR",
+      !JSON.stringify(doc).includes("__gofish_connect")
+    );
+  }
+
+  // Named mark + .connect(line()): mark.name preserved AND connect present.
+  {
+    const chart = Chart(connectData)
+      .flow(scatter({ by: "g", x: "a", y: "b" }))
+      .mark(circle({ r: 4 }).name("pts"))
+      .connect(line());
+    const doc = await chart.toJSON();
+    validateDoc(doc, "connect() named mark");
+    const root = doc.root as Frontend.ChartIR;
+    check("named connect: mark.name === 'pts'", (root.mark as any).name === "pts");
+    check("named connect: root.connect present", root.connect !== undefined);
+    check(
+      "named connect: connector is line",
+      (root.connect as any)?.type === "line"
+    );
+  }
+
+  // fromJSON → toJSON round trip preserves connect.
+  {
+    const built = Chart(connectData)
+      .flow(scatter({ by: "g", x: "a", y: "b" }))
+      .mark(circle({ r: 4 }))
+      .connect(line());
+    const doc = await built.toJSON();
+    const rebuilt = Serialize.buildChart(
+      doc.root,
+      connectData,
+      undefined,
+      Serialize.makeTokenResolver()
+    );
+    const doc2 = await rebuilt.toJSON();
+    check(
+      "round-trip preserves root.connect",
+      JSON.stringify((doc2.root as Frontend.ChartIR).connect) ===
+        JSON.stringify((doc.root as Frontend.ChartIR).connect)
+    );
+    check(
+      "round-trip still hygienic (no __gofish_connect leak)",
+      !JSON.stringify(doc2).includes("__gofish_connect")
+    );
+  }
+
+  // Double .connect() throws with a clear message.
+  {
+    let threw = false;
+    let message = "";
+    try {
+      Chart(connectData)
+        .flow(scatter({ by: "g", x: "a", y: "b" }))
+        .mark(circle({ r: 4 }))
+        .connect(line())
+        .connect(line());
+    } catch (e: any) {
+      threw = true;
+      message = String(e?.message ?? e);
+    }
+    check(
+      "double .connect() throws mentioning 'only one connector'",
+      threw && message.includes("only one connector"),
+      threw ? message : "did not throw"
+    );
   }
 
   console.log(`\n${passed} passed, ${failed} failed`);

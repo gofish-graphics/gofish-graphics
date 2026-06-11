@@ -52,6 +52,21 @@ area per series), run it through `group(by="datum.field")` — see
 Stack several areas in one `Layer` — with `opacity` or `mixBlendMode` — for
 layered and stacked area charts.
 
+## Sugar: `.connect()`
+
+When the area traces a chart's _own_ marks, skip the two-chart `selectAll`
+recipe and chain [`.connect()`](/python/api/core/connect) on the builder:
+
+```python
+chart(data).flow(
+    spread(by="lake", dir="x")
+).mark(blank(h="count")).connect(area(opacity=0.6))
+```
+
+This positions the marks and threads the area through them (painted underneath).
+Use the explicit `Layer([...])` + `selectAll` form only to trace _another_
+chart's marks.
+
 ## Examples
 
 ```python

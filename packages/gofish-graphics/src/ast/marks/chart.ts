@@ -338,6 +338,9 @@ function makeConstrainableMark<T>(base: Mark<T>): ConstrainableMark<T> {
     } else if (baseTag) {
       (named as any).__serialize = baseTag;
     }
+    // Direct stash so ChartBuilder.connect() can detect a user-chained name
+    // without relying on the __serialize tag.
+    (named as any).__layerName = layerName;
     return makeConstrainableMark(named);
   };
   const withLabel = (

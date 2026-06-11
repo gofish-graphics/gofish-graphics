@@ -116,6 +116,10 @@ list of refs and read placed geometry off them, so feed them `selectAll`:
 chart(selectAll("points")).mark(line(stroke="black"))
 ```
 
+When the connector traces a chart's _own_ marks, the builder method
+[`.connect()`](/python/api/core/connect) is sugar for this two-chart `selectAll`
+recipe — only reach for `selectAll` by hand to connect _another_ chart's marks.
+
 ## Path-aware `by` after a selection {#path-aware-by-after-a-selection}
 
 After `selectAll`, the stream items are refs, not raw records. Operators' `by`

@@ -15,3 +15,13 @@ def story_default():
         Layer([points, lines]),
         {"w": 400, "h": 400, "axes": True},
     )
+
+
+def story_connect():
+    return (
+        chart(CATCH_LOCATIONS_ARRAY)
+        .flow(scatter(by="lake", x="x", y="y"))
+        .mark(blank())
+        .connect(line()),
+        {"w": 400, "h": 400, "axes": True},
+    )

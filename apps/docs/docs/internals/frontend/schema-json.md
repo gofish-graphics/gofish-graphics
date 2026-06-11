@@ -150,6 +150,9 @@ for the API.
         "zOrder": {
           "type": "number"
         },
+        "connect": {
+          "$ref": "#/$defs/MarkIR"
+        },
         "origin": {
           "$ref": "#/$defs/Origin"
         },

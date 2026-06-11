@@ -40,6 +40,22 @@ area({ stroke?, strokeWidth = 0, opacity?, mixBlendMode = "normal", dir = "x", i
 | `dir`           | `"x" \| "y"`             | Direction axis      |
 | `interpolation` | `"linear" \| "bezier"`   | Curve interpolation |
 
+## Sugar: `.connect()`
+
+When the area traces a chart's _own_ marks, skip the two-layer `selectAll`
+recipe and chain [`.connect()`](/js/api/core/connect) on the builder:
+
+```ts
+chart(data)
+  .flow(spread({ by: "lake", dir: "x" }))
+  .mark(blank({ h: "count" }))
+  .connect(area({ opacity: 0.6 }));
+```
+
+This positions the marks and threads the area through them (painted underneath).
+Use the explicit `layer([...])` + `selectAll` form below only to trace _another_
+chart's marks.
+
 ## Example
 
 ```ts

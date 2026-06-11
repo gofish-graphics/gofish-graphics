@@ -86,6 +86,7 @@ export const FRONTEND_IR_JSON_SCHEMA = {
         mark: { $ref: "#/$defs/MarkIR" },
         options: { type: "object" },
         zOrder: { type: "number" },
+        connect: { $ref: "#/$defs/MarkIR" },
         origin: { $ref: "#/$defs/Origin" },
         meta: { $ref: "#/$defs/Meta" },
       },

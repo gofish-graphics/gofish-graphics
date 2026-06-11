@@ -748,6 +748,7 @@ class ChartBuilder:
         self.options = options or {}
         self.operators: List[Operator] = operators or []
         self._mark: Optional[Mark] = None
+        self._connect: Optional["Mark"] = None
         self._z_order = z_order
 
     def flow(self, *ops: Operator) -> "ChartBuilder":
@@ -791,6 +792,36 @@ class ChartBuilder:
             new_builder._mark = _MarkFn(mark)
         else:
             new_builder._mark = mark
+        new_builder._connect = self._connect
+        return new_builder
+
+    def connect(self, mark: "Mark") -> "ChartBuilder":
+        """
+        Overlay a connector mark under this chart's mark nodes.
+
+        Sugar for the ``Layer([...])`` + ``selectAll(name)`` pattern. Only
+        one connector per chart is supported; the JS side elaborates it at
+        resolve time.
+
+        Args:
+            mark: A connector `Mark` (e.g. `line()`, `area()`)
+
+        Returns:
+            New ChartBuilder with the connector set
+        """
+        if self._connect is not None:
+            raise ValueError(
+                ".connect() was already called on this chart; only one "
+                "connector is supported. Use Layer([...]) with "
+                "selectAll(name) for additional overlays."
+            )
+        if not isinstance(mark, Mark):
+            raise TypeError(".connect() expects a Mark (e.g. line(), area())")
+        new_builder = ChartBuilder(
+            self.data, self.options, self.operators, z_order=self._z_order
+        )
+        new_builder._mark = self._mark
+        new_builder._connect = mark
         return new_builder
 
     def zOrder(self, value: float) -> "ChartBuilder":
@@ -799,6 +830,7 @@ class ChartBuilder:
             self.data, self.options, self.operators, z_order=value
         )
         new_builder._mark = self._mark
+        new_builder._connect = self._connect
         return new_builder
 
     def zIndex(self, value: float) -> "ChartBuilder":
@@ -880,6 +912,8 @@ class ChartBuilder:
         }
         if self._z_order is not None:
             result["zOrder"] = self._z_order
+        if self._connect is not None:
+            result["connect"] = self._connect.to_dict()
         return result
 
     def render(

@@ -110,7 +110,7 @@ type FrontendIRDocument = {
 
 The root types mirror the v3 fluent builder shapes:
 
-- `ChartIR` — `{ type: "chart", data?, operators?, mark, options?, zOrder? }`
+- `ChartIR` — `{ type: "chart", data?, operators?, mark, connect?, options?, zOrder? }`
 - `LayerIR` — `{ type: "layer", charts, options? }`
 - `RawMarkIR` — `{ type: "raw-mark", mark, options? }`
 
@@ -121,6 +121,16 @@ The root types mirror the v3 fluent builder shapes:
 `image`, `polygon`, plus the Python-bridge `mark-fn`), combinators (with
 `__combinator: true` and a `children` array — `layer`, `spread`, `stack`,
 `arrow`, `connect`, `treemap`, and the Porter-Duff family), or refs.
+
+`ChartIR.connect` is the optional connector mark from the v3 builder's
+[`.connect(line())`](/js/api/core/connect) sugar. It carries an ordinary
+`MarkIR` — no special shape — and elaboration is entirely JS-side: at resolve
+time `ChartBuilder.resolve()` rewrites the chart into a layer holding the
+named-or-auto-named mark plus a sibling layer that `selectAll`s those nodes and
+draws the connector with `zOrder(-1)`. When the chart's mark already carries a
+string `.name(...)`, that name threads through; otherwise a hygienic
+auto-generated name is minted at resolve time only — it never appears in the
+serialized IR, so the JSON stays the user's spelling.
 
 Channel values (`h`, `w`, `fill`, …) accept bare primitives (the
 shorthand path) or one of three explicit tagged objects:
@@ -237,7 +247,7 @@ The high-level structure:
   },
   "$defs": {
     "Root":       { "oneOf": [ChartIR, LayerIR, RawMarkIR] },
-    "ChartIR":    { /* type, data, operators, mark, options, zOrder, ... */ },
+    "ChartIR":    { /* type, data, operators, mark, connect, options, zOrder, ... */ },
     "LayerIR":    { /* type, charts, options, ... */ },
     "RawMarkIR":  { /* type, mark, options, ... */ },
     "DataIR":     { "oneOf": [/* inline, select, external */] },

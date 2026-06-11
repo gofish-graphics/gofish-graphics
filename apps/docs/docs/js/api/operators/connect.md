@@ -150,6 +150,10 @@ Connect({ source: "middle" }, [ref("A"), ref("B"), ref("C")]);
 
 ## Notes
 
+- This is the **low-level layout operator**, distinct from the v3 builder method
+  [`ChartBuilder.connect()`](/js/api/core/connect). The builder `.connect(line())`
+  is sugar that threads a ref-consuming _mark_ through a chart's own marks; this
+  operator connects explicitly-listed `ref(...)` children inside a layout.
 - The high-level [`line`](/js/api/marks/line) and [`area`](/js/api/marks/area)
   marks are thin wrappers over `connect`: they take the array of refs from
   [`selectAll(...)`](/js/api/selection/ref) and connect them. To re-partition

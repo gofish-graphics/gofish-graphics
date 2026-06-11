@@ -215,7 +215,10 @@ The two factories are siblings:
 | `createOperator` | a layout (`Spread`, `Scatter`, …)   | a dual-mode operator (one node from many) |
 
 Both use channel annotations to encode opts; both produce mark types
-supporting `.name(...)` and `.label(...)` chaining.
+supporting `.name(...)` and `.label(...)` chaining. `.name(...)` also stashes the
+passed name directly on the returned mark function as `__layerName`, so
+[`ChartBuilder.connect()`](/js/api/core/connect) can detect a user-chained name
+without parsing the `__serialize` tag.
 
 Naming-wise: `createOperator` is the frontend factory; the low-level helper
 that produces `Spread`, `Scatter`, etc. is `createNodeOperator`

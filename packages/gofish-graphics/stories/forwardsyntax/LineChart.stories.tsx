@@ -38,3 +38,21 @@ export const Default: StoryObj<Args> = {
     return container;
   },
 };
+
+export const Connect: StoryObj<Args> = {
+  args: { w: 400, h: 400 },
+  render: (args: Args) => {
+    const container = initializeContainer();
+
+    Chart(catchLocationsArray, { axes: true })
+      .flow(scatter({ by: "lake", x: "x", y: "y" }))
+      .mark(blank())
+      .connect(line())
+      .render(container, {
+        w: args.w,
+        h: args.h,
+      });
+
+    return container;
+  },
+};

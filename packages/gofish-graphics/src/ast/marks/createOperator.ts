@@ -76,6 +76,9 @@ export function nameableMark<T>(base: Mark<T>): NameableMark<T> {
     // as the canonical top-level `name` field. Without this, every
     // `.name("...")` call would strip the serialize tag.
     propagateSerializeWithName(base, wrapped, layerName);
+    // Direct stash so ChartBuilder.connect() can detect a user-chained name
+    // without relying on the __serialize tag.
+    (wrapped as any).__layerName = layerName;
     return nameableMark(wrapped);
   };
   const withLabel = (

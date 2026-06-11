@@ -4,6 +4,7 @@ import { type ColorConfig } from "../colorSchemes";
 import type { AxesOptions } from "../gofish";
 import { Mark, Operator } from "../types";
 import { Frame } from "../graphicalOperators/frame";
+import { layer as Layer } from "../graphicalOperators/layer";
 import { GoFishRef, visibleNodes } from "../_ref";
 import { ref } from "../shapes/ref";
 
@@ -153,6 +154,31 @@ function resolveRefData(
   return refs[0];
 }
 
+/** Deterministic hygienic auto-name, unique against current layerContext keys. */
+function autoConnectName(layerContext: LayerContext): string {
+  const base = "__gofish_connect";
+  if (!(base in layerContext)) return base;
+  let i = 2;
+  while (`${base}_${i}` in layerContext) i += 1;
+  return `${base}_${i}`;
+}
+
+/** Minimal local clone of nameableMark.withName's core (name + registration
+ *  tag) — lives here, not createOperator, to keep the import graph one-way. */
+function withLayerName<T>(base: Mark<T>, layerName: string): Mark<T> {
+  return async (d, key, layerContext) => {
+    const node = await resolveMarkResult(
+      base(d, key, layerContext),
+      layerContext
+    );
+    node.name(layerName);
+    if (layerContext)
+      (node as { __layerRegistration?: string }).__layerRegistration =
+        layerName;
+    return node;
+  };
+}
+
 export class ChartBuilder<TInput, TOutput = TInput> {
   private readonly data: TInput;
   private readonly options?: ChartOptions;
@@ -160,6 +186,7 @@ export class ChartBuilder<TInput, TOutput = TInput> {
   private readonly finalMark?: Mark<TOutput>;
   private readonly layerContext: LayerContext;
   private readonly nodeZOrder?: number;
+  private readonly connector?: Mark<GoFishRef[]>;
 
   constructor(
     data: TInput,
@@ -167,7 +194,8 @@ export class ChartBuilder<TInput, TOutput = TInput> {
     operators: Operator<any, any>[] = [],
     finalMark?: Mark<TOutput>,
     layerContext: LayerContext = {},
-    nodeZOrder?: number
+    nodeZOrder?: number,
+    connector?: Mark<GoFishRef[]>
   ) {
     this.data = data;
     this.options = options;
@@ -175,6 +203,7 @@ export class ChartBuilder<TInput, TOutput = TInput> {
     this.finalMark = finalMark;
     this.layerContext = layerContext;
     this.nodeZOrder = nodeZOrder;
+    this.connector = connector;
   }
 
   // flow accumulates operators and returns a new builder for chaining
@@ -225,7 +254,8 @@ export class ChartBuilder<TInput, TOutput = TInput> {
       [...this.operators, ...ops],
       this.finalMark,
       this.layerContext,
-      this.nodeZOrder
+      this.nodeZOrder,
+      this.connector
     );
   }
 
@@ -237,7 +267,35 @@ export class ChartBuilder<TInput, TOutput = TInput> {
       this.operators,
       mark,
       this.layerContext,
-      this.nodeZOrder
+      this.nodeZOrder,
+      this.connector
+    );
+  }
+
+  /**
+   * Overlay a connector mark (e.g. `line()`, `area()`) under the nodes this
+   * chart's mark produces — sugar for the two-chart layer([...]) + selectAll
+   * pattern. If the mark has a string `.name(...)`, its registered nodes are
+   * the targets; otherwise a hygienic name is generated at resolve time (and
+   * never serialized). The connector renders beneath the marks (zOrder -1),
+   * matching the manual form's `.zOrder(-1)`.
+   */
+  connect(connector: Mark<GoFishRef[]>): ChartBuilder<TInput, TOutput> {
+    if (this.connector !== undefined) {
+      throw new Error(
+        ".connect() was already called on this chart; only one connector is " +
+          "supported. For additional overlays, use " +
+          "layer([Chart(...).mark(m.name('pts')), Chart(selectAll('pts')).mark(...)])."
+      );
+    }
+    return new ChartBuilder(
+      this.data,
+      this.options,
+      this.operators,
+      this.finalMark,
+      this.layerContext,
+      this.nodeZOrder,
+      connector
     );
   }
 
@@ -247,8 +305,29 @@ export class ChartBuilder<TInput, TOutput = TInput> {
       throw new Error("Cannot resolve: no mark specified. Call .mark() first.");
     }
 
+    // If a connector is set, determine the layer name its targets register
+    // under. A user-chained string `.name(...)` is the explicit target; an
+    // unnamed mark gets a hygienic auto-name and is wrapped pre-composition so
+    // each leaf node it produces registers under that name.
+    let connectName: string | undefined;
+    let baseMark = this.finalMark as Mark<any>;
+    if (this.connector) {
+      const userName = (this.finalMark as any).__layerName;
+      if (typeof userName === "string" && userName.length > 0) {
+        connectName = userName;
+      } else if (userName !== undefined) {
+        throw new Error(
+          ".connect() requires the mark's .name(...) to be a string; Token " +
+            "names are not supported. Use the manual layer([...]) form."
+        );
+      } else {
+        connectName = autoConnectName(this.layerContext);
+        baseMark = withLayerName(this.finalMark as Mark<any>, connectName);
+      }
+    }
+
     // Apply all operators to the mark
-    let composedMark = this.finalMark as Mark<any>;
+    let composedMark = baseMark;
     for (const op of this.operators.toReversed()) {
       composedMark = await op(composedMark);
     }
@@ -282,11 +361,37 @@ export class ChartBuilder<TInput, TOutput = TInput> {
       (node as any).colorConfig = this.options.color;
     }
 
-    if (this.nodeZOrder !== undefined) {
-      node.zOrder(this.nodeZOrder);
+    let result: GoFishNode = node;
+    if (this.connector) {
+      const entry = this.layerContext[connectName!];
+      if (!entry || entry.nodes.length === 0) {
+        throw new Error(
+          `.connect(): the chart's mark registered no nodes under "${connectName}" — nothing to connect (is the data empty?).`
+        );
+      }
+      // Same shape as resolveRefData's selectAll path: one node-backed ref per
+      // registered node, in registration (parent-iteration) order.
+      const refs = entry.nodes.map((n) => ref({ __ref: n }));
+      const connectNode = await resolveMarkResult(
+        this.connector(refs, undefined, this.layerContext),
+        this.layerContext
+      );
+      const connectFrame = await Frame({}, [
+        connectNode.setShared([true, true]),
+      ]);
+      // Connector renders under the marks — same as the manual form's
+      // Chart(selectAll(...)).mark(line()).zOrder(-1).
+      connectFrame.zOrder(-1);
+      // The connector itself may be .name()d; register it like any sibling.
+      collectLayerRegistrations(connectFrame, this.layerContext);
+      result = await Layer({}, [node, connectFrame]);
     }
 
-    return node;
+    if (this.nodeZOrder !== undefined) {
+      result.zOrder(this.nodeZOrder);
+    }
+
+    return result;
   }
 
   withLayerContext(layerContext: LayerContext): ChartBuilder<TInput, TOutput> {
@@ -296,7 +401,8 @@ export class ChartBuilder<TInput, TOutput = TInput> {
       this.operators,
       this.finalMark,
       layerContext,
-      this.nodeZOrder
+      this.nodeZOrder,
+      this.connector
     );
   }
 
@@ -307,7 +413,8 @@ export class ChartBuilder<TInput, TOutput = TInput> {
       this.operators,
       this.finalMark,
       this.layerContext,
-      value
+      value,
+      this.connector
     );
   }
 

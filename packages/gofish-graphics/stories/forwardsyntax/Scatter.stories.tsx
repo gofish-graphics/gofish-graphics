@@ -61,6 +61,24 @@ export const Connected: StoryObj<Args> = {
   },
 };
 
+export const ConnectedSugar: StoryObj<Args> = {
+  args: { w: 400, h: 400 },
+  render: (args: Args) => {
+    const container = initializeContainer();
+
+    Chart(drivingShifts, { axes: true })
+      .flow(scatter({ by: "year", x: "miles", y: "gas" }))
+      .mark(circle({ r: 4, fill: "white", stroke: "black", strokeWidth: 2 }).name("points"))
+      .connect(line({ stroke: "black", strokeWidth: 2 }))
+      .render(container, {
+        w: args.w,
+        h: args.h,
+      });
+
+    return container;
+  },
+};
+
 export const WithPieGlyphs: StoryObj<Args> = {
   args: { w: 400, h: 400 },
   render: (args: Args) => {

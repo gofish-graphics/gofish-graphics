@@ -482,6 +482,9 @@ function attachNameableMethods<T>(baseMark: Mark<T>): NameableMark<T> {
       }
       (fn as any).__serialize = nextTag;
     }
+    // Direct stash so ChartBuilder.connect() can detect a user-chained name
+    // without relying on the __serialize tag.
+    (fn as any).__layerName = layerName;
     return fn;
   };
   const labelMethod = (

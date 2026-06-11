@@ -40,6 +40,24 @@ export const Basic: StoryObj<Args> = {
   },
 };
 
+export const Connect: StoryObj<Args> = {
+  args: { w: 500, h: 300 },
+  render: (args: Args) => {
+    const container = initializeContainer();
+
+    Chart(seafood, { axes: true })
+      .flow(spread({ by: "lake", dir: "x", spacing: 64 }))
+      .mark(blank({ h: "count" }))
+      .connect(area({ opacity: 0.8 }))
+      .render(container, {
+        w: args.w,
+        h: args.h,
+      });
+
+    return container;
+  },
+};
+
 export const Stacked: StoryObj<Args> = {
   args: { w: 400, h: 400 },
   render: (args: Args) => {

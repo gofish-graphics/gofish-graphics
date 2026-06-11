@@ -39,6 +39,22 @@ line({ stroke?, strokeWidth = 1, opacity?, interpolation = "linear" })
 | `opacity`       | `number`               | Opacity (0–1)      |
 | `interpolation` | `"linear" \| "bezier"` | Line interpolation |
 
+## Sugar: `.connect()`
+
+When the line connects a chart's _own_ marks, skip the two-layer `selectAll`
+recipe and chain [`.connect()`](/js/api/core/connect) on the builder:
+
+```ts
+chart(data)
+  .flow(scatter({ by: "lake", x: "x", y: "y" }))
+  .mark(circle())
+  .connect(line({ stroke: "steelblue", strokeWidth: 2 }));
+```
+
+This positions the marks and threads the line through them (painted underneath).
+Use the explicit `layer([...])` + `selectAll` form below only to connect
+_another_ chart's marks.
+
 ## Example
 
 ```ts

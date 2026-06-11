@@ -126,7 +126,10 @@ chainable methods:
 
 - `mark.name("layerName")` — registers each produced node into the chart's
   layer context so `selectAll("layerName")` can pull the array of refs (or
-  `ref("layerName")` the single node, when the layer holds exactly one).
+  `ref("layerName")` the single node, when the layer holds exactly one). It also
+  stashes the passed name directly on the returned mark function as
+  `__layerName`, so [`ChartBuilder.connect()`](/js/api/core/connect) can detect a
+  user-chained name without parsing the `__serialize` tag.
 - `mark.label(accessor, options?)` — calls `node.label(...)` on every produced
   node, deferring label placement to the layout phase.
 
