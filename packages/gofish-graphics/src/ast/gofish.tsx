@@ -17,7 +17,7 @@ import { computePosScale } from "./domain";
 import type { Size } from "./dims";
 import { isSIZE, type UnderlyingSpace } from "./underlyingSpace";
 import { continuous } from "./domain";
-import { elaborateAxes } from "./axes/elaborate";
+import { elaborateAxes, elaborateAxisTitles } from "./axes/elaborate";
 import { elaborateLegend, legendOverhang } from "./legends/elaborate";
 
 export type CategoricalScale = {
@@ -84,6 +84,7 @@ export async function layout(
     transform,
     debug = false,
     axes = false,
+    axisFields,
   }: {
     w?: number;
     h?: number;
@@ -93,6 +94,7 @@ export async function layout(
     debug?: boolean;
     defs?: JSX.Element[];
     axes?: AxesOptions;
+    axisFields?: { x?: string; y?: string };
   },
   child: GoFishNode | Promise<GoFishNode>,
   contexts?: {
@@ -109,6 +111,8 @@ export async function layout(
   width: number;
   height: number;
   rightOverhang: number;
+  leftOverhang: number;
+  bottomOverhang: number;
 }> {
   child = await child;
   if (contexts?.session) {
@@ -130,6 +134,20 @@ export async function layout(
   child.resolveNames();
   child.resolveLabels();
   child.resolveUnderlyingSpace();
+
+  // The original root content object stays in the tree as the plot after any
+  // wrapping below (axis / legend / title elaboration each wrap, never replace,
+  // the content). Captured here so the title pass can center on it as the
+  // fallback anchor when a dim has no elaborated axis line. If axis elaboration
+  // changes nothing, `plotNode === child`.
+  const plotNode = child;
+
+  // Per-dim axis-line node for chart-level title centering (root-most owner
+  // wins). Defaults to no anchors when the `axes` block below doesn't run.
+  let titleAnchors: [GoFishNode | undefined, GoFishNode | undefined] = [
+    undefined,
+    undefined,
+  ];
 
   // Node-based axis pipeline: mark axis nodes and apply nice-rounding in-place
   if (axes) {
@@ -154,6 +172,7 @@ export async function layout(
     // pass doesn't handle (e.g. an UNDEFINED space) is inert — nothing else
     // consumes `node.axis`.
     const elaborated = await elaborateAxes(child);
+    titleAnchors = elaborated.titleAnchors;
     if (elaborated.changed) {
       child = elaborated.node;
       if (contexts?.session) child.setRenderSession(contexts.session);
@@ -173,24 +192,54 @@ export async function layout(
   const niceUnderlyingSpaceX = child._underlyingSpace![0];
   const niceUnderlyingSpaceY = child._underlyingSpace![1];
 
-  // Legend elaboration: turn the color scale into an ordinary swatch-column
-  // subtree seated beside the content (src/ast/legends/elaborate.tsx). Runs
-  // after the last resolveColorScale (it consumes the populated color map;
-  // legend fills are literal strings, never isValue, so the scale pass is NOT
-  // re-run). The wrapper preserves the content's underlying spaces
-  // (unionChildSpaces ignores the legend's UNDEFINED spaces), so the nice
-  // spaces captured above remain valid.
-  // Reference to the content node whose extent defines the final canvas. When a
-  // legend is added, `child` becomes the wrapper Layer (content + swatch column)
-  // and `contentNode` keeps pointing at the original content, so the final
-  // width/height (and the axis-title centering that reads them) stay measured off
-  // the content, not the content+legend bbox. The legend is reserved separately
-  // via `rightOverhang` below.
+  // Reference to the content node whose extent defines the final canvas
+  // (`finalW`/`finalH` via the `finalDim` readback below). Both the title pass
+  // and the legend pass wrap `child`, so `contentNode` keeps pointing at the
+  // PRE-title, pre-legend content. This matters two ways:
+  //  - The inferred canvas is measured off the content, never inflated by a long
+  //    title or a tall legend column.
+  //  - Title and legend extents past the content are reserved separately as
+  //    measured gutters (`leftOverhang`/`bottomOverhang`/`rightOverhang` below).
   const contentNode = child;
+
+  // Axis-title elaboration: seat up to two title Text nodes (x below, y rotated
+  // left) as ordinary shapes + constraints (src/ast/axes/elaborate.tsx), each
+  // centered on the axis line it describes via a `ref()` stand-in (falling back
+  // to the plot node). Runs BEFORE the legend block on purpose: the legend
+  // distributes off the titled content's bbox, and title centering must never
+  // see the legend column. Title Texts resolve UNDEFINED spaces on both dims, so
+  // the wrapper preserves the content's underlying spaces and the nice spaces
+  // captured above remain valid. The caller owns the "any title?" guard.
+  const { xTitle, yTitle } = resolveAxisTitles(axes, axisFields);
+  if (xTitle !== undefined || yTitle !== undefined) {
+    child = await elaborateAxisTitles(child, {
+      xTitle,
+      yTitle,
+      anchors: titleAnchors,
+      plotNode,
+    });
+    if (contexts?.session) child.setRenderSession(contexts.session);
+    // The title pass introduces `ref()` stand-ins (to the axis line / plot) that
+    // resolve their `selectedNode` during name resolution — without this they'd
+    // throw "Selected node not found" at layout time. Mirror the axes block:
+    // re-resolve names, then underlying space (memoized — only the new nodes).
+    child.resolveNames();
+    child.resolveUnderlyingSpace();
+  }
+
+  // Legend elaboration: turn the color scale into an ordinary swatch-column
+  // subtree seated beside the (now possibly titled) content
+  // (src/ast/legends/elaborate.tsx). Runs after the last resolveColorScale (it
+  // consumes the populated color map; legend fills are literal strings, never
+  // isValue, so the scale pass is NOT re-run). The wrapper preserves the
+  // content's underlying spaces (unionChildSpaces ignores the legend's UNDEFINED
+  // spaces), so the nice spaces captured above remain valid.
+  let legendAdded = false;
   const unitScale = contexts?.session.scaleContext.unit;
   const colorMap = isCategoricalScale(unitScale) ? unitScale.color : undefined;
   if (colorMap && colorMap.size > 0) {
     child = await elaborateLegend(child, colorMap);
+    legendAdded = true;
     if (contexts?.session) child.setRenderSession(contexts.session);
     child.resolveUnderlyingSpace(); // memoized: computes only the new nodes
   }
@@ -275,9 +324,9 @@ export async function layout(
   // Final extent: a user-given dimension is authoritative; otherwise prefer the
   // content's laid-out intrinsic size (shrink-to-fit), falling back to the
   // canvas default when the content didn't report one. Read off `contentNode`
-  // (== `child` when no legend), never the legend wrapper — so the canvas and
-  // the axis titles that center on `finalW`/`finalH` stay content-relative; the
-  // legend is reserved separately via `rightOverhang`.
+  // (== `child` when no title/legend wrapper), never an outer wrapper — so the
+  // canvas stays content-relative; title and legend extents are reserved
+  // separately as measured gutters below.
   const finalDim = (i: 0 | 1, given: number | undefined): number => {
     if (given !== undefined) return given;
     const s = contentNode.dims[i]?.size;
@@ -287,11 +336,20 @@ export async function layout(
   const finalH = finalDim(1, h);
 
   // Measured legend overhang past the content width — replaces the fixed
-  // LEGEND_MARGIN (see `legendOverhang`). Gated on whether a legend wrapper was
-  // added (`child !== contentNode`) so legend-free charts keep byte-identical
-  // widths.
-  const rightOverhang =
-    child !== contentNode ? legendOverhang(child, finalW) : 0;
+  // LEGEND_MARGIN (see `legendOverhang`). Gated on `legendAdded`, not
+  // `child !== contentNode`: a titles-only chart also wraps `child`, so the
+  // identity check would wrongly take the branch and measure a title gutter as a
+  // legend overhang.
+  const rightOverhang = legendAdded ? legendOverhang(child, finalW) : 0;
+
+  // Measured negative-space gutters off the OUTERMOST wrapper (`child`): axis
+  // tick / ordinal label rows plus any seated titles extend past the content
+  // origin into negative coordinates. This measured extent replaces the bespoke
+  // fixed Y_TITLE_MARGIN / X_TITLE_MARGIN. Same `min!` discipline as
+  // `legendOverhang`'s `max!`: a silent `?? 0` would clip the gutter and mask a
+  // layout bug, so assert the placed min is present.
+  const leftOverhang = Math.max(0, -child.dims[0].min!);
+  const bottomOverhang = Math.max(0, -child.dims[1].min!);
 
   if (debug) {
     console.log("🌳 Node Tree:");
@@ -306,6 +364,8 @@ export async function layout(
     width: finalW,
     height: finalH,
     rightOverhang,
+    leftOverhang,
+    bottomOverhang,
   };
 }
 
@@ -351,6 +411,8 @@ export const gofish = (
     width: number;
     height: number;
     rightOverhang: number;
+    leftOverhang: number;
+    bottomOverhang: number;
   };
 
   const runGofish = async (): Promise<LayoutData> => {
@@ -377,7 +439,7 @@ export const gofish = (
       }
 
       const layoutResult = await layout(
-        { w, h, x, y, transform, debug, defs, axes },
+        { w, h, x, y, transform, debug, defs, axes, axisFields },
         child,
         contexts
       );
@@ -407,9 +469,9 @@ export const gofish = (
               height: data.height,
               svgPadding,
               defs,
-              axes,
-              axisFields,
               rightOverhang: data.rightOverhang,
+              leftOverhang: data.leftOverhang,
+              bottomOverhang: data.bottomOverhang,
             },
             data.child
           );
@@ -433,72 +495,53 @@ export const render = (
     height,
     transform,
     defs,
-    axes,
-    axisFields,
     rightOverhang = 0,
+    leftOverhang = 0,
+    bottomOverhang = 0,
     svgPadding,
   }: {
     width: number;
     height: number;
     transform?: string;
     defs?: JSX.Element[];
-    axes?: AxesOptions;
-    axisFields?: { x?: string; y?: string };
     rightOverhang?: number;
+    leftOverhang?: number;
+    bottomOverhang?: number;
     svgPadding?: number;
   },
   child: GoFishNode
 ): JSX.Element => {
   const pad = svgPadding ?? PADDING;
 
-  const { xTitle, yTitle } = resolveAxisTitles(axes, axisFields);
-  const Y_TITLE_MARGIN = PADDING; // 40px left of content for rotated y-title
-  const X_TITLE_MARGIN = PADDING; // 30px below content for x-title
-  const leftMargin = yTitle ? Y_TITLE_MARGIN : 0;
-  const bottomMargin = xTitle ? X_TITLE_MARGIN : 0;
-  // Right-side space reserved for a legend overhanging the content width
-  // (measured by `layout()`; 0 when no legend / no overhang).
+  // Chrome (axis tick/label rows, titles, the legend column) is now elaborated
+  // into ordinary shapes that live in the node tree; `render()` only sizes the
+  // SVG around their measured extent — no chart-chrome special cases remain.
+  //
+  // Reserve enough on each gutter side to clear the measured overhang plus a
+  // little breathing room from the SVG edge. The `o > 0` guard keeps a chart
+  // with `padding: 0` and no chrome at zero reserve (don't invent EDGE_GAP px on
+  // an empty gutter); and because gutters ≤ `pad - EDGE_GAP` are absorbed by the
+  // existing `pad`, an untitled chart stays byte-identical to the pre-chrome
+  // output.
+  const EDGE_GAP = 8; // breathing room between gutter content and the SVG edge
+  const reserve = (o: number) => (o > 0 ? Math.max(pad, o + EDGE_GAP) : pad);
+  const leftReserve = reserve(leftOverhang);
+  const bottomReserve = reserve(bottomOverhang);
 
   const result = (
     <svg
-      width={width + leftMargin + pad + rightOverhang + pad}
-      height={height + pad + bottomMargin + pad}
+      width={leftReserve + width + rightOverhang + pad}
+      height={pad + height + bottomReserve}
       xmlns="http://www.w3.org/2000/svg"
     >
       <Show when={defs}>
         <defs>{defs}</defs>
       </Show>
       <g
-        transform={`scale(1, -1) translate(${leftMargin + pad}, ${-(height + pad)})`}
+        transform={`scale(1, -1) translate(${leftReserve}, ${-(height + pad)})`}
       >
         <Show when={transform} keyed fallback={child.INTERNAL_render()}>
           <g transform={transform ?? ""}>{child.INTERNAL_render()}</g>
-        </Show>
-        {/* x axis title */}
-        <Show when={xTitle}>
-          <text
-            transform="scale(1, -1)"
-            x={width / 2}
-            y={bottomMargin * 0.6}
-            text-anchor="middle"
-            dominant-baseline="hanging"
-            font-size="11px"
-            fill="gray"
-          >
-            {xTitle}
-          </text>
-        </Show>
-        {/* y axis title */}
-        <Show when={yTitle}>
-          <text
-            transform={`translate(${-(leftMargin * 0.5 + pad)}, ${height / 2}) scale(1, -1) rotate(-90)`}
-            text-anchor="middle"
-            dominant-baseline="middle"
-            font-size="11px"
-            fill="gray"
-          >
-            {yTitle}
-          </text>
         </Show>
       </g>
     </svg>

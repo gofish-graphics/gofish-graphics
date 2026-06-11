@@ -80,6 +80,39 @@ type TextLayout = {
   anchor: { x: number; y: number };
 };
 
+type RelBBox = { minX: number; minY: number; maxX: number; maxY: number };
+
+/**
+ * Rotate an anchor-relative bbox by `deg` (degrees, CCW in the chart's y-up
+ * world frame) about the anchor and return the axis-aligned min/max of the
+ * rotated corners. Standard rotation matrix: x' = x·cosθ − y·sinθ,
+ * y' = x·sinθ + y·cosθ.
+ *
+ * Sanity for rotate:90 — x∈[0,w], y∈[descent,ascent] (the unrotated relative
+ * box, anchor at the start baseline) maps to x∈[−ascent,−descent], y∈[0,w]:
+ * a narrow strip left of the anchor extending up — exactly the footprint a
+ * conventional y-axis title occupies in the left gutter.
+ */
+const rotateRelBBox = (b: RelBBox, deg: number): RelBBox => {
+  const rad = (deg * Math.PI) / 180;
+  const cos = Math.cos(rad);
+  const sin = Math.sin(rad);
+  const corners: [number, number][] = [
+    [b.minX, b.minY],
+    [b.maxX, b.minY],
+    [b.maxX, b.maxY],
+    [b.minX, b.maxY],
+  ];
+  const xs = corners.map(([x, y]) => x * cos - y * sin);
+  const ys = corners.map(([x, y]) => x * sin + y * cos);
+  return {
+    minX: Math.min(...xs),
+    minY: Math.min(...ys),
+    maxX: Math.max(...xs),
+    maxY: Math.max(...ys),
+  };
+};
+
 const resolveTextLayout = (
   text: string,
   fontSize: number,
@@ -125,6 +158,7 @@ export const Text = ({
   fontSize = 12,
   fontFamily = "system-ui, sans-serif",
   debugBoundingBox = false,
+  rotate = 0,
   ...fancyDims
 }: {
   key?: string;
@@ -137,6 +171,10 @@ export const Text = ({
   fontSize?: number;
   fontFamily?: string;
   debugBoundingBox?: boolean;
+  /** Rotation in degrees, applied in the chart's y-up world frame about the
+   *  text anchor. `rotate: 90` yields a conventional y-axis title — it reads
+   *  bottom-to-top with glyph tops facing left. */
+  rotate?: number;
 } & FancyDims<MaybeValue<number>>) => {
   const dims = elaborateDims(fancyDims).map(inferEmbedded);
 
@@ -160,6 +198,7 @@ export const Text = ({
         fontFamily,
         textAnchor,
         debugBoundingBox,
+        rotate,
         dims,
       },
       color: fill,
@@ -200,10 +239,21 @@ export const Text = ({
           dominantBaseline
         );
 
-        const minX = layout.bbox.minX - layout.anchor.x;
-        const maxX = layout.bbox.maxX - layout.anchor.x;
-        const minY = layout.bbox.minY - layout.anchor.y;
-        const maxY = layout.bbox.maxY - layout.anchor.y;
+        // Anchor-relative bbox. When the text is rotated, its layout footprint
+        // is the rotated box (e.g. rotate:90 turns a wide label into a tall
+        // strip left of the anchor — a y-title gutter), so we measure the
+        // axis-aligned extent of the rotated corners. rotate:0 is the identity
+        // here, but we skip the matrix so unrotated text is bit-for-bit
+        // unchanged.
+        const relRaw: RelBBox = {
+          minX: layout.bbox.minX - layout.anchor.x,
+          maxX: layout.bbox.maxX - layout.anchor.x,
+          minY: layout.bbox.minY - layout.anchor.y,
+          maxY: layout.bbox.maxY - layout.anchor.y,
+        };
+        const { minX, maxX, minY, maxY } = rotate
+          ? rotateRelBBox(relRaw, rotate)
+          : relRaw;
 
         const positionX =
           computeAesthetic(dims[0].center, posScales?.[0]!, undefined) ??
@@ -283,10 +333,19 @@ export const Text = ({
         const bboxDash = "4 3";
         const showDebugBoundingBox = debugBoundingBox;
 
-        const minXRel = layout.bbox.minX - layout.anchor.x;
-        const maxXRel = layout.bbox.maxX - layout.anchor.x;
-        const minYRel = layout.bbox.minY - layout.anchor.y;
-        const maxYRel = layout.bbox.maxY - layout.anchor.y;
+        // Debug rect shows the TRUE (rotated) footprint, so route the relative
+        // box through the same rotation the layout pass used.
+        const relRaw = {
+          minX: layout.bbox.minX - layout.anchor.x,
+          minY: layout.bbox.minY - layout.anchor.y,
+          maxX: layout.bbox.maxX - layout.anchor.x,
+          maxY: layout.bbox.maxY - layout.anchor.y,
+        };
+        const relRot = rotate ? rotateRelBBox(relRaw, rotate) : relRaw;
+        const minXRel = relRot.minX;
+        const maxXRel = relRot.maxX;
+        const minYRel = relRot.minY;
+        const maxYRel = relRot.maxY;
 
         const bbox =
           showDebugBoundingBox &&
@@ -306,13 +365,25 @@ export const Text = ({
             />
           ) : null;
 
+        // Unrotated: byte-identical markup to before (capture-diff must not
+        // see unrotated text move). Rotated: scale(1,-1) flips glyph space into
+        // the y-up world orientation, rotate(θ) is then the SAME matrix as
+        // rotateRelBBox (so render and the measured bbox agree), and translate
+        // moves the anchor to the placed position — emitted x/y are 0 because
+        // the translate already carries the placement.
+        const textTransform = rotate
+          ? `translate(${anchorX}, ${anchorY}) rotate(${rotate}) scale(1, -1)`
+          : "scale(1, -1)";
+        const textX = rotate ? 0 : anchorX;
+        const textY = rotate ? 0 : -anchorY;
+
         return (
           <>
             {bbox}
             <text
-              transform="scale(1, -1)"
-              x={anchorX}
-              y={-anchorY}
+              transform={textTransform}
+              x={textX}
+              y={textY}
               fill={resolvedFill}
               stroke={resolvedStroke}
               stroke-width={strokeWidth ?? 0}

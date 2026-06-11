@@ -39,7 +39,7 @@ const runGofish = async (): Promise<LayoutData> => {
     };
 
     const layoutResult = await layout(
-      { w, h, x, y, transform, debug, defs, axes },
+      { w, h, x, y, transform, debug, defs, axes, axisFields },
       child,
       contexts
     );
@@ -221,7 +221,31 @@ See [Axes](/internals/frontend/axes) for the full elaboration story (the
 two-tier structure, baseline pins, negative-space gutters, and the
 continuous/difference/ordinal kinds).
 
-**Legend elaboration** follows the axis block in the same `layout()`, gated on a
+**Axis-title elaboration** follows the axis block (after the nice-space capture)
+and runs _before_ the legend. `elaborateAxisTitles` wraps the chart in one more
+`Layer` carrying up to two title `Text` nodes — the x-title horizontal below the
+plot, the y-title rotated to read bottom-to-top in the left gutter — each
+centered on the axis line it describes via a `ref()` stand-in (`elaborateAxes`
+hands back those axis-line nodes as `titleAnchors`; an ordinal or absent axis
+has no line, so the title falls back to centering on the plot node). Two extra
+references thread through here:
+
+- `plotNode` — the original root content, captured _before_ `elaborateAxes`, so
+  it survives every wrapping pass and stands in as the fallback title anchor.
+- `contentNode` — the node captured _just before_ the title wrap (and so before
+  the legend wrap too). It is what `finalW`/`finalH` read off below, so a long
+  title or a tall legend can never inflate the inferred canvas; their extents
+  past the content are reserved separately as measured gutters instead.
+
+The ordering is deliberate: titles must be seated before the legend, because the
+legend distributes off the titled content's bbox — and conversely the title's
+centering must never see the legend column (it would drag the title off-center).
+This is the same elaborate-into-ordinary-nodes treatment axes and legends get;
+the former bespoke render-time title path is gone. See
+[Axes](/internals/frontend/axes) for the title recipe and the
+sibling-facet anchor limitation.
+
+**Legend elaboration** follows the title block in the same `layout()`, gated on a
 non-empty color map (not on the `axes` option). `elaborateLegend` wraps the chart
 root in a `Layer` holding the content plus a swatch column of `rect`/`text` rows,
 seated to the right with `align`/`distribute` constraints — the same elaborate-
@@ -406,21 +430,21 @@ The render function is called from `gofish()` after layout data is available:
 ```tsx
 return render(
   {
-    width: w,
-    height: h,
+    width: data.width,
+    height: data.height,
+    svgPadding,
     defs,
-    axes,
-    scaleContext: data.scaleContext,
-    keyContext: data.keyContext,
-    sizeDomains: data.sizeDomains,
-    underlyingSpaceX: data.underlyingSpaceX,
-    underlyingSpaceY: data.underlyingSpaceY,
-    posScales: data.posScales,
-    ordinalScales: data.ordinalScales,
+    rightOverhang: data.rightOverhang,
+    leftOverhang: data.leftOverhang,
+    bottomOverhang: data.bottomOverhang,
   },
   data.child
 );
 ```
+
+`render()` no longer takes `axes`/`axisFields` or the scale/space context — all
+the chrome is in the laid-out tree by now, so render only needs the computed
+extent and the three measured gutter overhangs to size the SVG.
 
 ### Render Pass 1: Context Restoration
 
@@ -433,40 +457,65 @@ keyContext = keyContextParam;
 
 The global contexts are restored so that render functions can access them.
 
-### Render Pass 2: Axis Titles
+### Render Pass 2: Chrome Reservation
 
 **Location**: `src/ast/gofish.tsx` (`render()`)
 
-Only axis **titles** are still drawn at render time. Tick marks, tick labels,
-axis lines, and ordinal category labels are no longer computed here — they
-were elaborated into ordinary nodes during layout (see Pass 7: Axis
-Elaboration) and render as part of the node tree like any other shape.
+`render()` draws **no chart chrome of its own** — no axis lines, tick marks, tick
+labels, ordinal category labels, _or titles_, and no legend swatches. All of it
+was elaborated into ordinary nodes during layout (see Pass 7: Axis Elaboration,
+the title block that follows it, and the legend block) and renders as part of the
+node tree like any other shape. The former bespoke render-time path (hand-written
+`<text>` title elements behind fixed `Y_TITLE_MARGIN` / `X_TITLE_MARGIN` gutters)
+has been deleted, so `render()` has zero chart-chrome special cases left.
+
+What `render()` _does_ do is size the SVG around the measured extent of that
+chrome. `layout()` hands it three gutter measurements — `leftOverhang`,
+`bottomOverhang` (negative-space gutters off the outermost wrapper: tick/label
+rows plus the seated y-title and x-title) and `rightOverhang` (the legend
+column) — and the render pass reserves exactly enough on each side:
+
+```typescript
+const EDGE_GAP = 8; // breathing room between gutter content and the SVG edge
+const reserve = (o: number) => (o > 0 ? Math.max(pad, o + EDGE_GAP) : pad);
+const leftReserve = reserve(leftOverhang);
+const bottomReserve = reserve(bottomOverhang);
+```
+
+The `o > 0` guard keeps a chart with `padding: 0` and no chrome at zero reserve
+(don't invent `EDGE_GAP` px on an empty gutter). Because a gutter that fits
+within the existing `pad` is absorbed by it, an untitled chart with a small
+gutter stays byte-identical to the pre-chrome output. The measured-overhang
+policy also fixes a latent bug: the old fixed 40px margins silently _clipped_ any
+gutter wider than themselves (long y tick labels), whereas `reserve()` grows to
+fit whatever the laid-out chrome actually needs.
 
 ### Render Pass 3: SVG Container Creation
 
-**Location**: `src/ast/gofish.tsx:407-417`
+**Location**: `src/ast/gofish.tsx` (`render()`)
 
 ```typescript
 <svg
-  width={width + PADDING * 6 + (axes ? 100 : 0)}
-  height={height + PADDING * 6 + (axes ? 100 : 0)}
+  width={leftReserve + width + rightOverhang + pad}
+  height={pad + height + bottomReserve}
   xmlns="http://www.w3.org/2000/svg"
 >
 ```
 
-The SVG container is created with padding and extra space for axes.
+The SVG container is sized to the content (`width`/`height`, read off the
+pre-chrome content node in layout) plus the measured reserves on each side.
 
 ### Render Pass 4: Coordinate Transform
 
-**Location**: `src/ast/gofish.tsx:416-421`
+**Location**: `src/ast/gofish.tsx` (`render()`)
 
 ```typescript
-<g
-  transform={`scale(1, -1) translate(${PADDING * 4}, ${-height - PADDING * 4})`}
->
+<g transform={`scale(1, -1) translate(${leftReserve}, ${-(height + pad)})`}>
 ```
 
-The coordinate system is flipped (Y-axis inverted) to match mathematical conventions, and the chart is positioned with padding.
+The coordinate system is flipped (Y-axis inverted) to match mathematical
+conventions, and the chart is shifted right by `leftReserve` (the left gutter)
+and down by the top `pad`.
 
 ### Render Pass 5: Node Tree Rendering
 
@@ -581,8 +630,9 @@ The bespoke axis-rendering pass that used to live here (hand-written SVG for
 continuous/ordinal axes, ~400 lines of `gofish.tsx`) was **deleted**. Axes are
 now elaborated into ordinary GoFish nodes during layout (see Pass 7: Axis
 Elaboration and [Axes](/internals/frontend/axes)), so they render through the
-normal node-tree pass above with no special casing. The only axis artifact
-still drawn directly at render time is the title text (Render Pass 2).
+normal node-tree pass above with no special casing. Axis **titles** were the
+last artifact still drawn here; they too are now elaborated during layout
+(see Render Pass 2), so nothing axis-related is drawn directly at render time.
 
 ### Render Pass 8: Legend Rendering (removed)
 
@@ -653,8 +703,8 @@ This creates:
    ```
 
 2. **Axes**: already part of the node tree (elaborated during layout), so
-   the category labels and the y tick marks render in step 1 with everything
-   else; only the axis titles are drawn separately
+   the category labels, the y tick marks, and the axis titles all render in
+   step 1 with everything else — nothing axis-related is drawn separately
 
 ## Debug Support
 

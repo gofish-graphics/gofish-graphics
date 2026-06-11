@@ -55,6 +55,11 @@ export type AxisElaboration = {
   nodes: GoFishNode[];
   /** Builds this axis's constraints from the layer's name→ref map. */
   constraints: (g: Record<string, any>) => any[];
+  /** The node a chart-level axis title should center on — the axis line.
+   *  Position-like axes (continuous/difference) set it; ordinal axes leave it
+   *  unset (they're just a label row, with no spanning line to center on, so
+   *  the title pass falls back to the plot bbox). */
+  anchor?: GoFishNode;
 };
 
 const dirName = (dim: 0 | 1) => (dim === 0 ? "x" : "y");
@@ -218,7 +223,14 @@ function positionAxis(opts: {
     return cs;
   };
 
-  return { nodes: [line, ...tickNodes, ...labelNodes], constraints };
+  // `line` is the title anchor: a chart-level title for this dim centers on the
+  // axis line's span (which may be narrower than the plot — a difference axis
+  // spans the data width, a facet-owned axis spans its facet).
+  return {
+    nodes: [line, ...tickNodes, ...labelNodes],
+    constraints,
+    anchor: line,
+  };
 }
 
 /** One continuous (POSITION) axis. Mirrors the hand-drawn ContinuousYAxis.
@@ -374,9 +386,13 @@ function collectKeyMap(node: GoFishNode): Record<string, GoFishNode> {
 function elaborationsFor(node: GoFishNode): {
   constrained: AxisElaboration[];
   refBased: AxisElaboration[];
+  /** Per-dim [x, y] title anchor (the axis line) for the constrained axes this
+   *  node owns; undefined where the node owns no position-like axis on that dim. */
+  anchors: [GoFishNode | undefined, GoFishNode | undefined];
 } {
   const space = node._underlyingSpace;
-  if (!space) return { constrained: [], refBased: [] };
+  if (!space)
+    return { constrained: [], refBased: [], anchors: [undefined, undefined] };
   const owns = (dim: 0 | 1) => (dim === 0 ? node.axis.x : node.axis.y) === true;
   // Niced [min, max] per owned POSITION dim, computed ONCE: it feeds both that
   // axis's own line/ticks and the other axis's `crossFloor` (the plot corner),
@@ -396,17 +412,23 @@ function elaborationsFor(node: GoFishNode): {
   let keyMap: Record<string, GoFishNode> | undefined;
   const constrained: AxisElaboration[] = [];
   const refBased: AxisElaboration[] = [];
+  const anchors: [GoFishNode | undefined, GoFishNode | undefined] = [
+    undefined,
+    undefined,
+  ];
   for (const dim of [0, 1] as (0 | 1)[]) {
     if (!owns(dim)) continue;
     const s = space[dim];
     const prefix = dim === 1 ? "__y" : "__x";
     const crossFloor = floors[cross(dim)];
     if (isPOSITION(s) && s.domain) {
-      constrained.push(
-        elaborateContinuousAxis(dim, nices[dim]!, prefix, crossFloor)
-      );
+      const e = elaborateContinuousAxis(dim, nices[dim]!, prefix, crossFloor);
+      constrained.push(e);
+      anchors[dim] = e.anchor;
     } else if (isDIFFERENCE(s)) {
-      constrained.push(elaborateDifferenceAxis(dim, s, prefix, crossFloor));
+      const e = elaborateDifferenceAxis(dim, s, prefix, crossFloor);
+      constrained.push(e);
+      anchors[dim] = e.anchor;
     } else if (isORDINAL(s)) {
       keyMap ??= collectKeyMap(node);
       refBased.push(elaborateOrdinalAxis(dim, s, keyMap, prefix));
@@ -416,7 +438,7 @@ function elaborationsFor(node: GoFishNode): {
     if (dim === 0) node.axis.x = undefined;
     else node.axis.y = undefined;
   }
-  return { constrained, refBased };
+  return { constrained, refBased, anchors };
 }
 
 /**
@@ -424,17 +446,42 @@ function elaborationsFor(node: GoFishNode): {
  * inner facet's axis is wrapped before its parent reads keys; the wrapper
  * inherits the wrapped node's `key`/`_name` so faceting and external refs keep
  * resolving to it.
+ *
+ * Alongside the elaborated tree it bubbles up `titleAnchors` — the per-dim
+ * [x, y] axis-line node a chart-level title should center on. Anchors flow up
+ * from the children (a child's anchor fills a still-empty dim slot), then this
+ * node's OWN axis-line anchors overwrite their dim slots. Because the walk is
+ * bottom-up (children first, then self), overwriting means the ROOT-most owner
+ * of a dim wins — which is what a chart-level title should describe (the
+ * outermost axis spanning the whole plot, not an inner facet's axis).
+ *
+ * Known limitation: multiple same-dim axis owners across SIBLING facets are
+ * ambiguous here — they overwrite the same slot, so whichever sibling is
+ * visited last wins. We don't try to disambiguate (a per-facet title is out of
+ * scope); the chart-level title just tracks one of them.
  */
-export async function elaborateAxes(
-  node: GoFishNode
-): Promise<{ node: GoFishNode; changed: boolean }> {
+export async function elaborateAxes(node: GoFishNode): Promise<{
+  node: GoFishNode;
+  changed: boolean;
+  titleAnchors: [GoFishNode | undefined, GoFishNode | undefined];
+}> {
   let changed = false;
+  const titleAnchors: [GoFishNode | undefined, GoFishNode | undefined] = [
+    undefined,
+    undefined,
+  ];
   // Bottom-up: replace each child with its elaborated form.
   for (let i = 0; i < node.children.length; i++) {
     const child = node.children[i];
     if (child instanceof GoFishNode) {
       const res = await elaborateAxes(child);
       if (res.changed) changed = true;
+      // A child's anchor fills a dim slot we haven't claimed yet.
+      for (const dim of [0, 1] as (0 | 1)[]) {
+        if (titleAnchors[dim] === undefined && res.titleAnchors[dim]) {
+          titleAnchors[dim] = res.titleAnchors[dim];
+        }
+      }
       if (res.node !== child) {
         node.children[i] = res.node;
         res.node.parent = node;
@@ -442,9 +489,15 @@ export async function elaborateAxes(
     }
   }
 
-  const { constrained, refBased } = elaborationsFor(node);
+  const { constrained, refBased, anchors } = elaborationsFor(node);
+  // This node's own axis-line anchors win their dim slots over any bubbled up
+  // from children — bottom-up recursion makes the root-most owner the winner.
+  for (const dim of [0, 1] as (0 | 1)[]) {
+    if (anchors[dim]) titleAnchors[dim] = anchors[dim];
+  }
+
   if (constrained.length === 0 && refBased.length === 0) {
-    return { node, changed };
+    return { node, changed, titleAnchors };
   }
 
   // Move identity off the content onto whatever ends up outermost (so the
@@ -492,5 +545,161 @@ export async function elaborateAxes(
     return outerRoot;
   });
 
-  return { node: root, changed: true };
+  return { node: root, changed: true, titleAnchors };
+}
+
+// ── Axis titles ──────────────────────────────────────────────────────────────
+//
+// The CHART-level title pass. Unlike the per-owner axis pass above (which wraps
+// every node that owns an axis, anywhere in the tree), titles are a single pass
+// at the root: at most one title per dim, resolved by the orchestrator from the
+// `axes` options + the inferred `axisFields`. A title is placed RELATIVE TO the
+// elaborated axis shape it describes — the axis line for that dim, which may
+// span less than the whole plot (a difference axis spans the data width; a
+// facet-owned axis spans its facet). `elaborateAxes` hands us those axis-line
+// nodes as `anchors`; we center the title on the one for its dim.
+//
+// This must run BEFORE the legend wrap: the legend seats itself off the titled
+// content's bbox, so the title must already be in place — and conversely the
+// title's centering must never see the legend column (it'd drag the title
+// off-center). Same ordering argument the legend pass makes about itself.
+
+const TITLE_FONT_SIZE = 11;
+const TITLE_COLOR = "gray";
+const TITLE_CONTENT_GAP = 8; // gap between a title and the full content bbox
+const TITLE_CONTENT_NAME = "__titleContent";
+const X_TITLE_ANCHOR_NAME = "__xTitleAnchor";
+const Y_TITLE_ANCHOR_NAME = "__yTitleAnchor";
+const X_TITLE_NAME = "__xAxisTitle";
+const Y_TITLE_NAME = "__yAxisTitle";
+
+/** The x-axis title: horizontal text below the plot. The customization seam
+ *  (like `legendColumn` / `tickMark`) — a future public API can override it. */
+export function xAxisTitle(text: string): GoFishNode {
+  return Text({ text, fontSize: TITLE_FONT_SIZE, fill: TITLE_COLOR }).name(
+    X_TITLE_NAME
+  );
+}
+
+/** The y-axis title: `rotate: 90` (the Text rotate option) makes it read
+ *  bottom-to-top in the left gutter. Customization seam, like `xAxisTitle`. */
+export function yAxisTitle(text: string): GoFishNode {
+  return Text({
+    text,
+    fontSize: TITLE_FONT_SIZE,
+    fill: TITLE_COLOR,
+    rotate: 90,
+  }).name(Y_TITLE_NAME);
+}
+
+/**
+ * Wrap `node` in a Layer carrying up to two axis titles, each centered on the
+ * axis shape it describes and seated outside the full content bbox.
+ *
+ * Per titled dim the anchor is `anchors[dim] ?? plotNode`: the axis line node
+ * elaboration produced for that dim if one exists (continuous / difference),
+ * else the plot node itself. The fallback covers ordinal axes — they're just a
+ * label row with no spanning line, and their UNDEFINED underlying space
+ * elaborates no line node — so the plot's own bbox stands in as the thing to
+ * center the title on. We reference the anchor with a `ref(node)` stand-in (the
+ * direct-node `ref` form `elaborateOrdinalAxis` already uses): the title layer
+ * is outermost, so by the time `align` reads the ref the axis line / plot is
+ * already placed, and the ref resolves to that placement — so `align` moves
+ * only the title.
+ *
+ * Both title Texts resolve UNDEFINED underlying spaces on both dims (they carry
+ * no data-bound position), so `wrapPreservingIdentity` preserves the wrapped
+ * content's underlying spaces unchanged — the same argument the legend pass
+ * makes for its swatch column.
+ *
+ * The caller owns the "is there any title at all?" guard; this always wraps and
+ * returns the new root.
+ */
+export async function elaborateAxisTitles(
+  node: GoFishNode,
+  opts: {
+    xTitle?: string;
+    yTitle?: string;
+    anchors: [GoFishNode | undefined, GoFishNode | undefined];
+    plotNode: GoFishNode;
+  }
+): Promise<GoFishNode> {
+  const { xTitle, yTitle, anchors, plotNode } = opts;
+
+  return wrapPreservingIdentity(node, async (content) => {
+    content.name(TITLE_CONTENT_NAME);
+
+    const refs: GoFishNode[] = [];
+    const titles: GoFishNode[] = [];
+    if (xTitle !== undefined) {
+      const anchorNode = anchors[0] ?? plotNode;
+      refs.push(
+        (ref(anchorNode) as any).name(X_TITLE_ANCHOR_NAME) as GoFishNode
+      );
+      titles.push(xAxisTitle(xTitle));
+    }
+    if (yTitle !== undefined) {
+      const anchorNode = anchors[1] ?? plotNode;
+      refs.push(
+        (ref(anchorNode) as any).name(Y_TITLE_ANCHOR_NAME) as GoFishNode
+      );
+      titles.push(yAxisTitle(yTitle));
+    }
+
+    const root = (await (layer as any)([
+      content,
+      ...refs,
+      ...titles,
+    ])) as GoFishNode;
+
+    // Constraint order matters; placement is first-write-wins.
+    root.constrain((g) => {
+      const cs: any[] = [
+        // Pin the content at its origin; it never moves. Everything else seats
+        // off the (already-placed) ref stand-ins and this content bbox.
+        Constraint.align({ x: "baseline", y: "baseline" }, [
+          g[TITLE_CONTENT_NAME],
+        ]),
+      ];
+      if (xTitle !== undefined) {
+        // Center the x-title on the axis line's horizontal span (the ref is
+        // already placed, so only the title moves) …
+        cs.push(
+          Constraint.align({ x: "middle" }, [
+            g[X_TITLE_ANCHOR_NAME],
+            g[X_TITLE_NAME],
+          ])
+        );
+        // … and seat it below the FULL content bbox: title listed BEFORE the
+        // placed content anchor, so distribute's backward walk places the
+        // title's far (max) edge GAP below the content's min edge — clearing
+        // the tick/ordinal label rows that are part of the content bbox.
+        cs.push(
+          Constraint.distribute({ dir: "y", spacing: TITLE_CONTENT_GAP }, [
+            g[X_TITLE_NAME],
+            g[TITLE_CONTENT_NAME],
+          ])
+        );
+      }
+      if (yTitle !== undefined) {
+        // Mirror for the y-title: center on the axis line's vertical span …
+        cs.push(
+          Constraint.align({ y: "middle" }, [
+            g[Y_TITLE_ANCHOR_NAME],
+            g[Y_TITLE_NAME],
+          ])
+        );
+        // … and seat it left of the full content bbox (the gutter).
+        cs.push(
+          Constraint.distribute({ dir: "x", spacing: TITLE_CONTENT_GAP }, [
+            g[Y_TITLE_NAME],
+            g[TITLE_CONTENT_NAME],
+          ])
+        );
+      }
+      return cs;
+    });
+
+    return root;
+  });
 }

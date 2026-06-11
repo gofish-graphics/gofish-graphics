@@ -117,13 +117,68 @@ constraint) and from SIZE content (bars), whose alignment would break if a posSc
 leaked in. This per-child decision is what lets a data-positioned chart and its
 elaborated axis share a coordinate frame.
 
+## Axis titles
+
+Axis titles are elaborated too, by a second pass in the same file —
+`elaborateAxisTitles`. It differs from `elaborateAxes` in kind: where the axis
+pass wraps _every_ node that owns an axis anywhere in the tree, the title pass is
+a single wrap at the chart root carrying **at most one title per dim**. The two
+title strings are resolved by `gofish.tsx`'s `layout()` from the chart-level
+`axes` options plus the inferred `axisFields` (the field names the chart builder
+mapped to each axis), and `layout()` calls the pass only when at least one is
+present.
+
+A title is placed **relative to the axis shape it describes**, not the plot. The
+axis pass already builds an axis-line node per position-like dim; `AxisElaboration`
+carries it as an optional `anchor`, and `elaborateAxes` bubbles those lines up the
+recursion as a per-dim `titleAnchors` pair. Because the walk is bottom-up and each
+owner overwrites its dim slot, the **root-most** owner wins — so a chart-level
+title describes the outermost axis (the one spanning the whole plot), not an inner
+facet's. (Multiple same-dim owners across _sibling_ facets are ambiguous: they
+overwrite the same slot, so the last-visited one wins. Disambiguating that — a
+per-facet title — is out of scope; a comment in the source flags it.)
+
+`elaborateAxisTitles` then wraps the content in one more `Layer` and centers each
+title on its anchor:
+
+- The anchor per dim is `anchors[dim] ?? plotNode` — the axis line if one exists
+  (continuous/difference), else the plot node. The fallback covers **ordinal**
+  axes (just a label row, no spanning line, UNDEFINED space elaborates nothing)
+  and untitled-axis dims: the plot's own bbox stands in.
+- It is referenced with a `ref(anchorNode)` stand-in — the same direct-node `ref`
+  form `elaborateOrdinalAxis` uses. The title layer is outermost, so by the time
+  the constraints read the ref the axis line / plot is already placed; the ref
+  resolves to that placement, so `align({ [dim]: "middle" }, [ref, title])` moves
+  only the title onto the line's center.
+- A `distribute` then seats the title GAP (`TITLE_CONTENT_GAP = 8`) outside the
+  **full** content bbox — past the tick/ordinal label rows, not just the plot —
+  so it never overlaps them. Listing the title _before_ the content in the pair
+  makes `distribute`'s backward walk place the title's far edge outside the
+  content's near edge.
+- The y-title is built with the `Text` `rotate: 90` option so it reads
+  bottom-to-top in the left gutter; the x-title is horizontal below the plot.
+
+The two builders `xAxisTitle` / `yAxisTitle` are **pure, exported functions** —
+the customization seam, exactly like `elaborateAxis` for the axes and
+`legendColumn` for the legend.
+
+`elaborateAxisTitles` runs in `layout()` **before** the legend wrap: the legend
+seats itself off the titled content's bbox, so the title must already be in
+place — and conversely the title's centering must never see the legend column
+(it would drag the title off-center). The pre-title content node is also what
+defines the inferred canvas when `w`/`h` are omitted, so a long title can't
+inflate it. See [Layout & Render Passes](/internals/layout/passes) and
+[Legends](/internals/frontend/legends).
+
 ## What this replaced
 
 The former bespoke pipeline — `shapes/axis.tsx` (custom `GoFishNode`s with
 hand-written SVG `render()`), plus ~260 lines of axis budget / `innerBaseline` /
 content-shift / per-facet local-posScale machinery in `_node.ts` and a baseline
 cancellation in `spread.tsx` — has been deleted. `resolveAxes` and
-`resolveNiceDomains` remain (they feed the pass); the chart-level `axes` option and
-axis _titles_ are unchanged (titles still render in `gofish.tsx`'s `render()`; folding
-them into the elaboration is future work). Polar/coord axes are still drawn by
-`coord.tsx` and are not yet elaborated.
+`resolveNiceDomains` remain (they feed the pass); the chart-level `axes` option
+still drives both the axis pass and the title pass above. Axis titles used to
+render as raw `<text>` elements in `gofish.tsx`'s `render()` behind fixed
+40px margins; that bespoke path is gone too, replaced by the title elaboration
+described above. Polar/coord axes are still drawn by `coord.tsx` and are not yet
+elaborated.

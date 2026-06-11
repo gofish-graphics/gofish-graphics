@@ -18,7 +18,8 @@ code at all.
 
 ## Why elaborate
 
-The legend was the **last bespoke piece of chrome**. It used to render as a
+The legend was the **second-to-last bespoke piece of chrome** (axis titles
+followed it; both are now elaborated). It used to render as a
 `<For>` over `scaleContext.unit.color` in `gofish.tsx`'s `render()`, hand-placing
 swatches at `translate(width + pad*3, …)` behind a fixed 120px `LEGEND_MARGIN`
 reserved on the right of the SVG. Because it was a render-time fixture rather
@@ -96,30 +97,45 @@ The fixed 120px `LEGEND_MARGIN` is gone. The canvas size and the legend
 reservation are read off **two different nodes**, which is what keeps the
 content centered and the legend reserved separately:
 
-- `finalW`/`finalH` (the canvas, and the basis for axis-title centering) read
-  off the **content node** — the original pre-wrap node, captured as
-  `contentNode` before `elaborateLegend` replaces `child` with the wrapper. So
-  the canvas is exactly the content's extent, never content + legend.
+- `finalW`/`finalH` (the canvas) read off the **content node** — the original
+  pre-wrap node, captured as `contentNode` _before_ both the title wrap and the
+  `elaborateLegend` wrap. So the canvas is exactly the content's extent, never
+  inflated by a title or a legend.
 - `rightOverhang` reads off the **wrapper** (`child`), whose bounding box
   includes the seated swatch column, and subtracts the content width:
 
 ```ts
 const finalW = finalDim(0, w); // off contentNode
-const rightOverhang = child !== contentNode ? legendOverhang(child, finalW) : 0;
+const rightOverhang = legendAdded ? legendOverhang(child, finalW) : 0;
 ```
 
 `legendOverhang` (in `legends/elaborate.tsx`, next to the constraint that
 creates the overhang) returns `wrapper.dims[0].max - finalW`, which is exactly
 the `LEGEND_CONTENT_GAP` plus the swatch-column width, so the render pass
 reserves precisely the legend on the right of the SVG. The measurement is gated
-on whether a legend wrapper was added (`child !== contentNode`), so legend-free
-charts keep byte-identical SVG widths.
+on an explicit `legendAdded` boolean rather than `child !== contentNode`:
+because the axis-title pass _also_ wraps `child`, the identity check would
+wrongly fire on a titles-only chart and measure a title gutter as a legend
+overhang. With the boolean, legend-free charts keep byte-identical SVG widths.
 
-Reading `finalW`/`finalH` off the content (not the wrapper) matters most when
+Reading `finalW`/`finalH` off the content (not any wrapper) matters most when
 `w`/`h` are **omitted**: the inferred graphic size is the content's computed
-extent (#494's `finalDim` readback), and the legend is then reserved on top of
-it via `rightOverhang` — rather than the legend inflating the inferred size and
-dragging the x-axis title off-center with it.
+extent (#494's `finalDim` readback), and the title and legend are then reserved
+on top of it via the measured gutters — rather than a long title or a tall
+legend inflating the inferred size.
+
+## Interplay with axis titles
+
+Axis titles are elaborated just before the legend (see
+[Axes](/internals/frontend/axes)), so the two wraps **nest**: the title wrap goes
+on first, then `elaborateLegend` wraps that titled subtree. This ordering is what
+lets the legend seat itself off the content's _full, titled_ bbox while the title
+centering never sees the legend column. `contentNode` stays pointed at the
+pre-title, pre-legend content throughout, so neither wrapper feeds back into the
+inferred canvas. The title gutters (left for the rotated y-title, bottom for the
+x-title) are reserved separately from `rightOverhang` as `leftOverhang` /
+`bottomOverhang`, measured off the outermost wrapper. See
+[Layout & Render Passes](/internals/layout/passes).
 
 This relies on the content node reporting a complete, correctly-positioned
 bounding box. Most nodes do, but the polar `coord` node historically emitted an
