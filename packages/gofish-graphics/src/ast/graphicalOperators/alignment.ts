@@ -13,6 +13,7 @@ import {
   isORDINAL,
   isPOSITION,
   isSIZE,
+  isUNDEFINED,
   UnderlyingSpace,
 } from "../underlyingSpace";
 import type { Size } from "../dims";
@@ -32,6 +33,11 @@ export type Alignment = "start" | "middle" | "end" | "baseline";
  * union) — the extent is known but the position is not, preserving the "no
  * inherent position" semantic so axis rendering uses interval (difference)
  * ticks rather than absolute positions.
+ *
+ * UNDEFINED children carry no opinion and are ignored throughout: the ORDINAL
+ * filter skips them, the interval-collection path skips them, and the SIZE gate
+ * filters them out before checking whether the remaining children are all SIZE.
+ * So a fixed-pixel (UNDEFINED) sibling never vetoes SIZE composition.
  */
 export function unionChildSpaces(
   children: Size<UnderlyingSpace>[],
@@ -56,8 +62,9 @@ export function unionChildSpaces(
   // when every child is SIZE on this axis, emit SIZE(Monotonic.max(...))
   // so the parent can keep solving scale factors via Monotonic.inverse.
   const axisSpaces = children.map((c) => c[axis]);
-  if (axisSpaces.length > 0 && axisSpaces.every(isSIZE)) {
-    return SIZE(Monotonic.max(...axisSpaces.map((s) => s.domain)));
+  const sized = axisSpaces.filter((s) => !isUNDEFINED(s));
+  if (sized.length > 0 && sized.every(isSIZE)) {
+    return SIZE(Monotonic.max(...sized.map((s) => s.domain)));
   }
 
   const intervals: ReturnType<typeof Interval.interval>[] = [];

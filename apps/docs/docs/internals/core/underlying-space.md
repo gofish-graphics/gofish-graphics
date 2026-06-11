@@ -226,7 +226,10 @@ scale factors via `Monotonic.inverse`. `spread({ glue: true })` (i.e.
 operator commits the data-driven extents to a positional axis. `layer`
 and overlay-style operators use `unionChildSpaces` (`alignment.ts`),
 which preserves SIZE when every child is SIZE and otherwise unions
-intervals.
+intervals. UNDEFINED children carry no opinion and are ignored
+throughout — including in the SIZE gate, so a fixed-pixel (UNDEFINED)
+sibling never vetoes SIZE composition (it would otherwise degrade the
+union to DIFFERENCE).
 
 **Coordinate-transform operators** (`coord`) annotate the resulting
 space with the transform that will later map underlying positions to
