@@ -6,7 +6,7 @@ import { Dimensions, elaborateDims, FancyDims, Size } from "../dims";
 import { createNodeOperator } from "../withGoFish";
 import { GoFishAST } from "../_ast";
 import { Collection } from "lodash";
-import { projectPath } from "../datumProjection";
+import { SplitBy, splitKeyFn } from "../datumProjection";
 import {
   isPOSITION,
   POSITION,
@@ -368,7 +368,7 @@ export const Scatter = createNodeOperator(
  * `by` is a groupBy field — omit for per-item scatter.
  */
 export type ScatterOptions = {
-  by?: string | ((r: any) => unknown);
+  by?: SplitBy;
   x?: string | number | MaybeValue<number>[];
   y?: string | number | MaybeValue<number>[];
   xMin?: string | MaybeValue<number>[];
@@ -384,17 +384,7 @@ export const scatter = createOperator<any, ScatterOptions>(Scatter as any, {
   // When no `by` is given, pass each item through as-is. Items may already be
   // arrays or scalars; downstream marks/channels handle either form.
   split: ({ by }, d) =>
-    by
-      ? // Projected/derived keys are runtime strings/numbers (or undefined for
-        // ill-posed groups); the assertion bridges projectPath's honest `unknown`.
-        Map.groupBy(
-          d,
-          (r: any) =>
-            (typeof by === "function" ? by(r) : projectPath(r, by)) as
-              | string
-              | number
-        )
-      : new Map(d.map((r, i) => [i, r])),
+    by ? Map.groupBy(d, splitKeyFn(by)) : new Map(d.map((r, i) => [i, r])),
   channels: {
     x: { type: "pos", entry: true },
     y: { type: "pos", entry: true },

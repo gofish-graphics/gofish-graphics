@@ -4,7 +4,7 @@ import { type ColorConfig } from "../colorSchemes";
 import type { AxesOptions } from "../gofish";
 import { Mark, Operator } from "../types";
 import { Frame } from "../graphicalOperators/frame";
-import { GoFishRef } from "../_ref";
+import { GoFishRef, visibleNodes } from "../_ref";
 import { ref } from "../shapes/ref";
 
 /** Per-chart registry of named layers for ref()/selectAll() lookup. */
@@ -72,11 +72,13 @@ export type ChartOptions = {
  * DFS over the resulting tree is the same canonical order we'd get from
  * sequential rendering, without paying for serialized awaits.
  *
- * Layer names follow the same component-boundary hygiene as
- * `resolveLocalString` in _ref.tsx: names registered *inside* a `createMark`
- * component (a child with `_isComponent === true`) are internal to that
- * component and not selectable from outside. So the walk does not descend
- * into a component child's subtree — but the component child's OWN
+ * Layer names follow the same component-boundary hygiene as ref/selectAll:
+ * names registered *inside* a `createMark` component (a child with
+ * `_isComponent === true`) are internal to that component and not selectable
+ * from outside. Both this registry and `findInComponent` ride the single
+ * bounded walk `visibleNodes` in _ref.tsx, so a name is registerable here
+ * exactly when it's findable by ref — the walk does not descend into a
+ * component child's subtree, but the component child's OWN
  * `__layerRegistration` is still registered (a leaf component, e.g. a `rect`
  * produced by createMark, can itself carry a name).
  */
@@ -99,15 +101,8 @@ function collectLayerRegistrations(
   node: GoFishNode,
   layerContext: LayerContext
 ): void {
-  registerLayerNode(node, layerContext);
-  for (const child of node.children ?? []) {
-    if (!(child instanceof GoFishNode)) continue;
-    if ((child as { _isComponent?: boolean })._isComponent) {
-      // Don't pierce the component boundary; only its own name is visible.
-      registerLayerNode(child, layerContext);
-    } else {
-      collectLayerRegistrations(child, layerContext);
-    }
+  for (const n of visibleNodes(node)) {
+    registerLayerNode(n, layerContext);
   }
 }
 
@@ -348,6 +343,15 @@ export class ChartBuilder<TInput, TOutput = TInput> {
   }
 }
 
+// `selectAll(...)` is typed as a single `GoFishRef` but resolves, as chart
+// data, to the full `GoFishRef[]` (one ref per matching named node). This
+// overload teaches the builder that plural-ref data flows downstream as an
+// array, so `Chart(selectAll("bars"))` typechecks without a cast.
+export function chart(
+  data: GoFishRef & { multiplicity: "all" },
+  options?: ChartOptions
+): ChartBuilder<GoFishRef[], GoFishRef[]>;
+export function chart<T>(data: T, options?: ChartOptions): ChartBuilder<T, T>;
 export function chart<T>(data: T, options?: ChartOptions): ChartBuilder<T, T> {
   return new ChartBuilder<T, T>(data, options, [], undefined, {});
 }

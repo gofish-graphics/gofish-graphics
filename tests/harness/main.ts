@@ -54,6 +54,7 @@ import {
   type Mark,
   type Token,
 } from "gofish-graphics";
+import { Frontend } from "gofish-ir";
 
 // Combinator-form factory map. Each entry takes (opts, marks) and returns
 // a Mark. JS storybook uses these directly via the dual-mode operator
@@ -86,11 +87,9 @@ const COMBINATOR_FACTORIES: Record<
 // Types
 // ---------------------------------------------------------------------------
 
-interface SelectDataSpec {
-  type: "select";
-  layer: string;
-  mode?: "one" | "all";
-}
+// Derived from the canonical frontend-IR schema rather than re-declared, so the
+// harness can't drift from the `{ type: "select" }` arm of `Frontend.DataIR`.
+type SelectDataSpec = Extract<Frontend.DataIR, { type: "select" }>;
 
 interface ChartHarnessSpec {
   data: Record<string, any>[] | SelectDataSpec | null;

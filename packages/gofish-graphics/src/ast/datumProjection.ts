@@ -64,6 +64,27 @@ export function projectPath(obj: unknown, path: string): unknown {
   return values.length === 1 ? values[0] : undefined;
 }
 
+/** The `by` selector accepted by the split operators (group/spread/scatter):
+ *  a field-path string or a key function over the row. */
+export type SplitBy = string | ((r: any) => unknown);
+
+/** Build the grouping key-function for a single split. Exists so that path
+ *  parsing happens once per split (closing over the parsed `segments`) rather
+ *  than once per row, and so the `typeof by === "function"` dispatch is resolved
+ *  once rather than re-checked for every row.
+ *
+ *  Projected keys are runtime strings/numbers (or `undefined` for ill-posed
+ *  groups, where the bag disagrees on the field); the assertion bridges the
+ *  honest `unknown` produced by projection + homogeneity collapse. */
+export function splitKeyFn(by: SplitBy): (r: any) => string | number {
+  if (typeof by === "function") return by as (r: any) => string | number;
+  const segments = toPath(by);
+  return (r: any) => {
+    const values = projectValues(r, segments);
+    return (values.length === 1 ? values[0] : undefined) as string | number;
+  };
+}
+
 /** The full set of distinct values at `path` ("every possible value"), with no
  *  collapse. `source` may be a ref (anything exposing `.datum`), a row array,
  *  or a single row. Use when you want the multiset, not a scalar key. */

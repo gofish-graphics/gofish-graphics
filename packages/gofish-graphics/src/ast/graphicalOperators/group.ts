@@ -3,10 +3,10 @@
 // want that import to transitively pull in createOperator → ChartBuilder.
 import { createOperator } from "../marks/createOperator";
 import { Frame } from "./frame";
-import { projectPath } from "../datumProjection";
+import { SplitBy, splitKeyFn } from "../datumProjection";
 
 export type GroupOptions = {
-  by?: string | ((r: any) => unknown);
+  by?: SplitBy;
 };
 
 export const group = createOperator<any, GroupOptions>(
@@ -14,15 +14,7 @@ export const group = createOperator<any, GroupOptions>(
   {
     split: ({ by }, d) => {
       if (!by) throw new Error("group requires opts.by = fieldName");
-      // Projected/derived keys are runtime strings/numbers (or undefined for
-      // ill-posed groups); the assertion bridges projectPath's honest `unknown`.
-      return Map.groupBy(
-        d,
-        (r: any) =>
-          (typeof by === "function" ? by(r) : projectPath(r, by)) as
-            | string
-            | number
-      );
+      return Map.groupBy(d, splitKeyFn(by));
     },
     serialize: { type: "group" },
   }

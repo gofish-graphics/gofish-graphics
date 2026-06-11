@@ -391,23 +391,50 @@ export class GoFishRef {
 }
 
 /**
+ * The component-boundary visibility rule, in one place. Yields `root` and every
+ * hygienically-visible descendant in DFS parent-iteration (pre-order): it
+ * descends into ordinary children, and *visits* a `_isComponent` child (it is
+ * itself visible) but does NOT descend into its subtree — so names don't leak
+ * across component boundaries.
+ *
+ * This is the single home for the bounded walk shared by `findInComponent`
+ * (ref/selectAll string lookup, below) and `collectLayerRegistrations`
+ * (chartBuilder.ts layer registry). Keeping them on one walk is what guarantees
+ * a name is reachable by `ref`/`selectAll` exactly when it's registered as a
+ * layer — the two can't drift.
+ */
+export function* visibleNodes(root: GoFishNode): Generator<GoFishNode> {
+  yield root;
+  for (const child of root.children ?? []) {
+    if (!(child instanceof GoFishNode)) continue;
+    if (child._isComponent) {
+      // Visible (a leaf component, e.g. a createMark `rect`, can carry a name)
+      // but a boundary: don't descend into it.
+      yield child;
+    } else {
+      yield* visibleNodes(child);
+    }
+  }
+}
+
+/**
  * DFS for a descendant of `node` whose `_name` (or token `__tag`) matches
  * `name`, without crossing `_isComponent` boundaries. The match is checked
  * before the descent guard so a leaf component (e.g. a `rect` produced by
  * createMark, which is itself a component) is still findable by name.
+ *
+ * The bounded traversal is `visibleNodes` above; `node` itself is the search
+ * root and is never a match target, only its visible descendants.
  */
 const findInComponent = (
   node: GoFishNode,
   name: string
 ): GoFishNode | undefined => {
-  for (const child of node.children) {
-    if (!(child instanceof GoFishNode)) continue;
-    const n = child._name;
+  for (const candidate of visibleNodes(node)) {
+    if (candidate === node) continue;
+    const n = candidate._name;
     const tag = n === undefined ? undefined : isToken(n) ? n.__tag : n;
-    if (tag === name) return child;
-    if (child._isComponent) continue;
-    const inner = findInComponent(child, name);
-    if (inner) return inner;
+    if (tag === name) return candidate;
   }
   return undefined;
 };

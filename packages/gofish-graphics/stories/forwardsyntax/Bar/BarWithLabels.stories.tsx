@@ -42,8 +42,8 @@ export const Default: StoryObj<Args> = {
       // resolves because every row in a lake agrees on `lake` (homogeneity
       // collapse), giving one frame per lake; sum the aggregate's rows for the
       // per-lake total label.
-      Chart(selectAll("bars") as any)
-        .flow(group({ by: "datum.lake" }) as any)
+      Chart(selectAll("bars"))
+        .flow(group({ by: "datum.lake" }))
         .mark(((d: any[]) => {
           return spread({ dir: "y", alignment: "middle", spacing: 10 },
             [
@@ -52,7 +52,7 @@ export const Default: StoryObj<Args> = {
             ]
           );
         }) as any),
-    ] as any).render(container, {
+    ]).render(container, {
       w: args.w,
       h: args.h,
       axes: true
@@ -75,8 +75,8 @@ export const SpeciesCountPerLake: StoryObj<Args> = {
       Chart(seafood)
         .flow(spread({ by: "lake", dir: "x" }))
         .mark(rect({ h: "count" }).name("bars")),
-      Chart(selectAll("bars") as any)
-        .flow(group({ by: "datum.lake" }) as any)
+      Chart(selectAll("bars"))
+        .flow(group({ by: "datum.lake" }))
         .mark(((d: any[]) => {
           // `pluck(ref, "species")` → the distinct species in this lake's bag.
           const species = pluck(d[0], "species") as string[];
@@ -87,7 +87,7 @@ export const SpeciesCountPerLake: StoryObj<Args> = {
             ]
           );
         }) as any),
-    ] as any).render(container, {
+    ]).render(container, {
       w: args.w,
       h: args.h,
       axes: true

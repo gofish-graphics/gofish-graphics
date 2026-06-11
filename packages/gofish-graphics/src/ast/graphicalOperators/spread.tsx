@@ -10,7 +10,7 @@ import {
   Size,
 } from "../dims";
 import { Collection } from "lodash";
-import { projectPath } from "../datumProjection";
+import { SplitBy, splitKeyFn } from "../datumProjection";
 import { computeAesthetic, computeSize, foldFinite } from "../../util";
 import { GoFishAST } from "../_ast";
 import { createNodeOperator } from "../withGoFish";
@@ -490,7 +490,7 @@ export const Spread = createNodeOperator(
 );
 
 export type SpreadOptions<T = any> = {
-  by?: (keyof T & string) | ((r: any) => unknown);
+  by?: SplitBy;
   dir: "x" | "y";
   spacing?: number;
   alignment?: "start" | "middle" | "end" | "baseline";
@@ -511,17 +511,7 @@ export const spread = createOperator<any, SpreadOptions>(Spread, {
   // arrays (e.g. after `_.chunk(...)`) or scalars; the downstream mark
   // normalizes either form internally.
   split: ({ by }, d) =>
-    by
-      ? // Projected/derived keys are runtime strings/numbers (or undefined for
-        // ill-posed groups); the assertion bridges projectPath's honest `unknown`.
-        Map.groupBy(
-          d,
-          (r: any) =>
-            (typeof by === "function" ? by(r) : projectPath(r, by)) as
-              | string
-              | number
-        )
-      : new Map(d.map((r, i) => [i, r])),
+    by ? Map.groupBy(d, splitKeyFn(by)) : new Map(d.map((r, i) => [i, r])),
   channels: { w: "size", h: "size" },
   axisFields: ({ by, dir }) =>
     typeof by === "string" ? (dir === "x" ? { x: by } : { y: by }) : undefined,

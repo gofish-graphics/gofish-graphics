@@ -161,12 +161,19 @@ export function circle<T extends Record<string, any>>({
 // matches). `selectAll(name)` is the plural form: one ref per matching named
 // node, chart-data only. Both defer layer lookup until resolution, so layers
 // can be registered by `.name()` on marks before the selector accesses them.
-export function selectAll(layerName: string): GoFishRef {
-  return new GoFishRef({ selection: layerName, multiplicity: "all" });
+export function selectAll(
+  layerName: string
+): GoFishRef & { readonly multiplicity: "all" } {
+  return new GoFishRef({
+    selection: layerName,
+    multiplicity: "all",
+  }) as GoFishRef & {
+    readonly multiplicity: "all";
+  };
 }
 
 // line() mark connects data points using center-to-center mode
-export function line<T extends Record<string, any>>(options?: {
+export function line(options?: {
   stroke?: string;
   strokeWidth?: number;
   opacity?: number;
@@ -178,8 +185,6 @@ export function line<T extends Record<string, any>>(options?: {
     _layerContext?: LayerContext
   ) => {
     // `selectAll(...)` resolves to one ref per named node; connect them.
-    const refs = d;
-
     return Connect(
       {
         direction: 0, // x direction
@@ -189,7 +194,7 @@ export function line<T extends Record<string, any>>(options?: {
         opacity: options?.opacity,
         interpolation: options?.interpolation ?? "linear",
       },
-      refs
+      d
     );
   };
   (mark as any).__serialize = { type: "line", opts: options ?? {} };
@@ -197,7 +202,7 @@ export function line<T extends Record<string, any>>(options?: {
 }
 
 // area() mark connects data points using edge-to-edge mode
-export function area<T extends Record<string, any>>(options?: {
+export function area(options?: {
   stroke?: string;
   strokeWidth?: number;
   opacity?: number;
@@ -211,8 +216,6 @@ export function area<T extends Record<string, any>>(options?: {
     _layerContext?: LayerContext
   ) => {
     // `selectAll(...)` resolves to one ref per named node; connect them.
-    const refs = d;
-
     return Connect(
       {
         direction: options?.dir ?? "x",
@@ -223,7 +226,7 @@ export function area<T extends Record<string, any>>(options?: {
         opacity: options?.opacity,
         interpolation: options?.interpolation ?? "bezier",
       },
-      refs
+      d
     );
   };
   (mark as any).__serialize = { type: "area", opts: options ?? {} };
