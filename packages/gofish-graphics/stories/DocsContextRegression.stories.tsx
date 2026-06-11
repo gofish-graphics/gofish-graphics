@@ -121,7 +121,11 @@ const renderPanel = (title: string, mount: HTMLElement) => {
 
 export const GroupedBarDocsParity: StoryObj<Args> = {
   args: { w: 400, h: 300 },
-  render: (args: Args) => {
+  // Async render: the runner awaits it (same contract as lowlevel/Treemap),
+  // so the DONE signal — and therefore DOM snapshots — can't land while the
+  // panels are still "Loading" / the status still reads "Running parity
+  // checks...". A floating promise here raced the capture's settle window.
+  render: async (args: Args) => {
     const host = document.createElement("div");
     host.style.padding = "20px";
 
@@ -195,24 +199,25 @@ export const GroupedBarDocsParity: StoryObj<Args> = {
         observer.observe(mount, { childList: true, subtree: true });
       });
 
-    void Promise.all([
+    await Promise.all([
       waitForRects(directMount),
       waitForRects(docsLikeSourceMount),
       waitForRects(docsLikePublicMount),
-    ]).then(() => {
-      // One extra frame so SolidJS finishes any post-mount effects that
-      // would update `fill` attributes (e.g. color-scale resolution).
-      requestAnimationFrame(() => {
-        const a = inspectHealth(directMount);
-        const b = inspectHealth(docsLikeSourceMount);
-        const c = inspectHealth(docsLikePublicMount);
+    ]);
+    // One extra frame so SolidJS finishes any post-mount effects that
+    // would update `fill` attributes (e.g. color-scale resolution).
+    await new Promise<void>((resolve) =>
+      requestAnimationFrame(() => resolve())
+    );
 
-        status.textContent =
-          `source: healthy=${a.isHealthy}, loading=${a.hasLoading}, uniqueFills=${a.uniqueFillCount}\n` +
-          `docs+source: healthy=${b.isHealthy}, loading=${b.hasLoading}, uniqueFills=${b.uniqueFillCount}\n` +
-          `docs+public: healthy=${c.isHealthy}, loading=${c.hasLoading}, uniqueFills=${c.uniqueFillCount}`;
-      });
-    });
+    const a = inspectHealth(directMount);
+    const b = inspectHealth(docsLikeSourceMount);
+    const c = inspectHealth(docsLikePublicMount);
+
+    status.textContent =
+      `source: healthy=${a.isHealthy}, loading=${a.hasLoading}, uniqueFills=${a.uniqueFillCount}\n` +
+      `docs+source: healthy=${b.isHealthy}, loading=${b.hasLoading}, uniqueFills=${b.uniqueFillCount}\n` +
+      `docs+public: healthy=${c.isHealthy}, loading=${c.hasLoading}, uniqueFills=${c.uniqueFillCount}`;
 
     return host;
   },
