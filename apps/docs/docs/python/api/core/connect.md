@@ -5,15 +5,17 @@ sugar for the two-layer `selectAll` recipe: it positions the chart's marks, then
 threads a [`line`](/python/api/marks/line) or [`area`](/python/api/marks/area)
 through exactly those nodes, painted underneath.
 
-::: starfish example:connected-scatter-sugar hidden
+::: starfish example:connected-scatter-plot hidden
 :::
 
 ```python
 from gofish import chart, scatter, circle, line
 
-chart(catch_locations, axes=True).flow(
-    scatter(by="lake", x="x", y="y")
-).mark(circle()).connect(line(stroke="steelblue", strokeWidth=2)).render(w=400, h=300)
+chart(driving_shifts, axes=True).flow(
+    scatter(by="year", x="miles", y="gas")
+).mark(circle(r=4, fill="white", stroke="black", strokeWidth=2)).connect(
+    line(stroke="black", strokeWidth=2)
+).render(w=500, h=300)
 ```
 
 ## Signature

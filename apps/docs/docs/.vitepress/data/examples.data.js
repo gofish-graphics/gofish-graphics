@@ -95,12 +95,6 @@ export default {
         description: "A scatter plot with lines connecting the points",
       },
       {
-        id: "connected-scatter-sugar",
-        title: "Connected Scatter (.connect sugar)",
-        description:
-          "A scatter plot connected via the .connect() builder method",
-      },
-      {
         id: "bump-chart",
         title: "Bump Chart",
         description: "A discrete line chart",

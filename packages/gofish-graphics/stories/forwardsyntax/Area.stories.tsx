@@ -25,26 +25,6 @@ export const Basic: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    layer([
-      Chart(seafood)
-        .flow(spread({ by: "lake",  dir: "x", spacing: 64 }))
-        .mark(blank({ h: "count" }).name("points")),
-      Chart(selectAll("points")).mark(area({ opacity: 0.8 })),
-    ]).render(container, {
-      w: args.w,
-      h: args.h,
-      axes: true,
-    });
-
-    return container;
-  },
-};
-
-export const Connect: StoryObj<Args> = {
-  args: { w: 500, h: 300 },
-  render: (args: Args) => {
-    const container = initializeContainer();
-
     Chart(seafood, { axes: true })
       .flow(spread({ by: "lake", dir: "x", spacing: 64 }))
       .mark(blank({ h: "count" }))

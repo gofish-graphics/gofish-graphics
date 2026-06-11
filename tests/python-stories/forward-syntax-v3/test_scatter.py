@@ -3,14 +3,12 @@
 from collections import defaultdict
 
 from gofish import (
-    Layer,
     chart,
     circle,
     clock,
     line,
     rect,
     scatter,
-    selectAll,
     stack,
 )
 from python_stories.data import (
@@ -73,27 +71,10 @@ def story_with_pie_glyphs():
 
 
 def story_connected():
-    points = (
-        chart(DRIVING_SHIFTS)
-        .flow(scatter(by="year", x="miles", y="gas"))
-        .mark(circle(r=4, fill="white", stroke="black", strokeWidth=2).name("points"))
-    )
-    lines = (
-        chart(selectAll("points"))
-        .mark(line(stroke="black", strokeWidth=2))
-        .zOrder(-1)
-    )
-    return (
-        Layer([points, lines]),
-        {"w": 400, "h": 400, "axes": True},
-    )
-
-
-def story_connected_sugar():
     return (
         chart(DRIVING_SHIFTS)
         .flow(scatter(by="year", x="miles", y="gas"))
-        .mark(circle(r=4, fill="white", stroke="black", strokeWidth=2).name("points"))
+        .mark(circle(r=4, fill="white", stroke="black", strokeWidth=2))
         .connect(line(stroke="black", strokeWidth=2)),
         {"w": 400, "h": 400, "axes": True},
     )
