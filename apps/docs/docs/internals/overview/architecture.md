@@ -56,6 +56,16 @@ a full rebuild. The [`coord` operator](/internals/layout/coord-flattening) is th
 notable special case: it flattens its subtree into a flat, absolutely-positioned list
 before applying its coordinate transform.
 
+**Chrome is just more tree.** Axes, legends, and axis titles are not privileged
+render-time fixtures. Before layout, elaboration passes rewrite each of them into
+ordinary marks and constraints — `Layer`-wrapped `Rect`/`Text` nodes seated by
+`align`/`distribute`/`position` — so chrome flows through the same three passes
+as the data marks. The orchestrator (`gofish.tsx`) then sizes the SVG off the
+laid-out tree's **measured extent** (the legend's overhang past the content, the
+axis/title gutters past the origin); there are no fixed chrome margins. See
+[Axes](/internals/frontend/axes) (which also covers axis titles) and
+[Legends](/internals/frontend/legends).
+
 The full, code-level walkthrough of all three passes is
 [Layout & Render Passes](/internals/layout/passes).
 
