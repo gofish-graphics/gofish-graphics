@@ -9,6 +9,7 @@ import { Spread } from "../graphicalOperators/spread";
 import { layer } from "../graphicalOperators/layer";
 import { ref } from "../shapes/ref";
 import { Constraint } from "../constraints";
+import { wrapPreservingIdentity } from "../elaborationUtils";
 import { datum } from "../data";
 import { ticks as d3Ticks, nice as d3Nice } from "d3-array";
 import {
@@ -446,52 +447,50 @@ export async function elaborateAxes(
     return { node, changed };
   }
 
-  // Move identity off the content onto whatever ends up outermost, so the
-  // parent (faceting/refs/select) still resolves to this node.
-  const origName = node._name;
-  const origKey = node.key;
-  node._name = undefined;
-  node.key = undefined;
+  // Move identity off the content onto whatever ends up outermost (so the
+  // parent — faceting/refs/select — still resolves to this node), build the
+  // axis tiers, then restore the identity onto the outermost wrapper.
+  const root = await wrapPreservingIdentity(node, async (content) => {
+    // Inner tier: content + constraint-based (continuous/difference) axes. The
+    // content is pinned at its own ORIGIN (baseline anchor, translate 0) so each
+    // axis grows into negative gutter space; this keeps the content on the
+    // posScale grid both axes' ticks use. The anchor must be `baseline`, not
+    // `start`: nested content (facets carrying their own ordinal labels) has a
+    // bbox extending past its origin, and pinning bbox-min would slide the marks
+    // off the tick grid by that overhang.
+    let inner: GoFishNode = content;
+    if (constrained.length > 0) {
+      content.name(CONTENT_NAME);
+      const axisNodes = constrained.flatMap((e) => e.nodes);
+      inner = (await (layer as any)([content, ...axisNodes])) as GoFishNode;
+      inner.constrain((g) => [
+        Constraint.align({ x: "baseline", y: "baseline" } as any, [
+          g[CONTENT_NAME],
+        ]),
+        ...constrained.flatMap((e) => e.constraints(g)),
+      ]);
+    }
 
-  // Inner tier: content + constraint-based (continuous/difference) axes. The
-  // content is pinned at its own ORIGIN (baseline anchor, translate 0) so each
-  // axis grows into negative gutter space; this keeps the content on the
-  // posScale grid both axes' ticks use. The anchor must be `baseline`, not
-  // `start`: nested content (facets carrying their own ordinal labels) has a
-  // bbox extending past its origin, and pinning bbox-min would slide the marks
-  // off the tick grid by that overhang.
-  let inner: GoFishNode = node;
-  if (constrained.length > 0) {
-    node.name(CONTENT_NAME);
-    const axisNodes = constrained.flatMap((e) => e.nodes);
-    inner = (await (layer as any)([node, ...axisNodes])) as GoFishNode;
-    inner.constrain((g) => [
-      Constraint.align({ x: "baseline", y: "baseline" } as any, [
-        g[CONTENT_NAME],
-      ]),
-      ...constrained.flatMap((e) => e.constraints(g)),
-    ]);
-  }
+    // Outer tier: ref-based (ordinal) labels. The labels `distribute` against
+    // `inner`, whose bbox includes any nested inner-facet labels — so an outer
+    // label row stacks below the inner row. For that anchor to be "placed",
+    // `inner` is baseline-pinned: its 0 point stays the layer's 0 point, and the
+    // labels seat past its bbox edge in negative gutter space.
+    let outerRoot = inner;
+    if (refBased.length > 0) {
+      inner.name(INNER_REF_NAME);
+      const labelNodes = refBased.flatMap((e) => e.nodes);
+      outerRoot = (await (layer as any)([inner, ...labelNodes])) as GoFishNode;
+      outerRoot.constrain((g) => [
+        Constraint.align({ x: "baseline", y: "baseline" } as any, [
+          g[INNER_REF_NAME],
+        ]),
+        ...refBased.flatMap((e) => e.constraints(g)),
+      ]);
+    }
 
-  // Outer tier: ref-based (ordinal) labels. The labels `distribute` against
-  // `inner`, whose bbox includes any nested inner-facet labels — so an outer
-  // label row stacks below the inner row. For that anchor to be "placed",
-  // `inner` is baseline-pinned: its 0 point stays the layer's 0 point, and the
-  // labels seat past its bbox edge in negative gutter space.
-  let root = inner;
-  if (refBased.length > 0) {
-    inner.name(INNER_REF_NAME);
-    const labelNodes = refBased.flatMap((e) => e.nodes);
-    root = (await (layer as any)([inner, ...labelNodes])) as GoFishNode;
-    root.constrain((g) => [
-      Constraint.align({ x: "baseline", y: "baseline" } as any, [
-        g[INNER_REF_NAME],
-      ]),
-      ...refBased.flatMap((e) => e.constraints(g)),
-    ]);
-  }
+    return outerRoot;
+  });
 
-  if (origName !== undefined) root._name = origName;
-  if (origKey !== undefined) root.setKey(origKey);
   return { node: root, changed: true };
 }

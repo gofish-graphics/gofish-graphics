@@ -35,8 +35,8 @@ import type { Token } from "./createName";
  * Options for rendering a GoFish node
  */
 export interface RenderOptions {
-  w: number;
-  h: number;
+  w?: number;
+  h?: number;
   x?: number;
   y?: number;
   transform?: { x?: number; y?: number };
