@@ -271,22 +271,18 @@ export const coord = createNodeOperator(
           // Without axes (e.g. pie glyphs in scatter) use the tighter
           // content-bbox sizing so the glyph doesn't claim excess space.
           const hasAxes = !!axes;
-          const intrinsicDims =
+          const [intrinsicW, intrinsicH] =
             dims[0].min !== undefined
-              ? {
-                  x: 0,
-                  y: 0,
-                  w: screenBboxMaxX - screenBboxMinX,
-                  h: screenBboxMaxY - screenBboxMinY,
-                }
+              ? [
+                  screenBboxMaxX - screenBboxMinX,
+                  screenBboxMaxY - screenBboxMinY,
+                ]
               : hasAxes
-                ? { x: 0, y: 0, w: origW, h: origH }
-                : {
-                    x: 0,
-                    y: 0,
-                    w: screenBboxMaxX - screenBboxMinX,
-                    h: screenBboxMaxY - screenBboxMinY,
-                  };
+                ? [origW, origH]
+                : [
+                    screenBboxMaxX - screenBboxMinX,
+                    screenBboxMaxY - screenBboxMinY,
+                  ];
 
           const half = Math.min(origW, origH) / 2;
           const translateX =
@@ -303,6 +299,35 @@ export const coord = createNodeOperator(
               : hasAxes
                 ? half
                 : -screenBboxMinY;
+
+          // Intrinsic bbox. Historically this was `{ x: 0, y: 0, w, h }`, which
+          // elaborateDims turns into min+size only — `max`/`center` stay
+          // undefined. Two problems: (1) any consumer reading the *placed* max —
+          // notably the legend's `distribute` constraint, which seats the swatch
+          // column at `content.dims[0].max` — got `NaN`; and (2) even the `min`
+          // it did report was positionally inconsistent: with the local min
+          // pinned at 0 and a preset `translate`, the placed box `[translate,
+          // size+translate]` didn't coincide with the rendered content (which is
+          // drawn centered on the coord origin, i.e. on the `translate` point).
+          //
+          // We now emit a *complete*, positionally consistent bbox on every
+          // branch by biasing the local min by `-translate`, so the placed box
+          // is exactly `[0, size]` on each axis — the same region the parent
+          // allocates (`finalW`/`finalH` read `size`). Anything reading the
+          // placed min/center/max now sees the true content box. One deliberate
+          // consequence: a polar glyph embedded in a `scatter` (placed by its
+          // `center`) is now centered on its datum, where before it sat ~radius
+          // off because the fallback `center = min + size/2` read the offset box.
+          const intrinsicDims = {
+            x: -translateX,
+            y: -translateY,
+            w: intrinsicW,
+            h: intrinsicH,
+            x2: intrinsicW - translateX,
+            y2: intrinsicH - translateY,
+            cx: intrinsicW / 2 - translateX,
+            cy: intrinsicH / 2 - translateY,
+          };
 
           return {
             intrinsicDims,
