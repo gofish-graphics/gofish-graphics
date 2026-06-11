@@ -14,8 +14,14 @@ export const group = createOperator<any, GroupOptions>(
   {
     split: ({ by }, d) => {
       if (!by) throw new Error("group requires opts.by = fieldName");
-      return Map.groupBy(d, (r: any) =>
-        typeof by === "function" ? by(r) : projectPath(r, by)
+      // Projected/derived keys are runtime strings/numbers (or undefined for
+      // ill-posed groups); the assertion bridges projectPath's honest `unknown`.
+      return Map.groupBy(
+        d,
+        (r: any) =>
+          (typeof by === "function" ? by(r) : projectPath(r, by)) as
+            | string
+            | number
       );
     },
     serialize: { type: "group" },

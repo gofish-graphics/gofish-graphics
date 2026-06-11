@@ -512,8 +512,14 @@ export const spread = createOperator<any, SpreadOptions>(Spread, {
   // normalizes either form internally.
   split: ({ by }, d) =>
     by
-      ? Map.groupBy(d, (r: any) =>
-          typeof by === "function" ? by(r) : projectPath(r, by)
+      ? // Projected/derived keys are runtime strings/numbers (or undefined for
+        // ill-posed groups); the assertion bridges projectPath's honest `unknown`.
+        Map.groupBy(
+          d,
+          (r: any) =>
+            (typeof by === "function" ? by(r) : projectPath(r, by)) as
+              | string
+              | number
         )
       : new Map(d.map((r, i) => [i, r])),
   channels: { w: "size", h: "size" },
