@@ -15,7 +15,7 @@ when it is read and written.
 
 - `scopeContext` — variable scoping for named elements and references.
 - `scaleContext` — color scales and axis/position scales.
-- `keyContext` — tracking of named elements for axis labels and `select()`.
+- `keyContext` — tracking of named elements for axis labels and reference resolution (`ref` / `selectAll`).
 - How contexts are established, nested, and torn down across the three passes.
 - Why contexts (vs. threaded parameters) — and the tradeoffs.
 

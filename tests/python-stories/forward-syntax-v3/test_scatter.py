@@ -10,7 +10,7 @@ from gofish import (
     line,
     rect,
     scatter,
-    select,
+    selectAll,
     stack,
 )
 from python_stories.data import (
@@ -79,7 +79,7 @@ def story_connected():
         .mark(circle(r=4, fill="white", stroke="black", strokeWidth=2).name("points"))
     )
     lines = (
-        chart(select("points"))
+        chart(selectAll("points"))
         .mark(line(stroke="black", strokeWidth=2))
         .zOrder(-1)
     )

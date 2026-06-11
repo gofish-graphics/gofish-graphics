@@ -23,7 +23,7 @@ group({ by });
 ```
 
 `group` is most often reached for right after a
-[`selectAll`](/js/api/selection/select), to re-partition selected nodes for a
+[`selectAll`](/js/api/selection/ref), to re-partition selected nodes for a
 ribbon or stream chart. The stream is then [`ref`](/js/api/marks/ref)s, so use
 the **datum path** — `by: "datum.species"`:
 

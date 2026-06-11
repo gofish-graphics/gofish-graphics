@@ -2,9 +2,15 @@
 
 References another node so later marks can reuse its position or bounding box — the basis for overlays, connectors, and arrows.
 
-[`select` / `selectAll`](/js/api/selection/select) produce refs too: `select(name)`
-returns a single ref and `selectAll(name)` an array of refs, one per named node.
-So everything below applies to refs you get from a selection.
+`ref` is the single reference noun, usable in two positions:
+
+- **Inline in a layout** (this page): `arrow(ref("a"), ref("b"))`,
+  `ref(token).row[2]` — resolved at layout time against the name tree.
+- **As chart data**: `Chart(ref("maxBar")).mark(text(...))` — resolved at build
+  time against the named-layer registry, where it must match **exactly one**
+  node (use [`selectAll`](/js/api/selection/ref) for many). See
+  [ref / selectAll](/js/api/selection/ref) for the chart-data role and node-unit
+  selection.
 
 See also [How to name and scope](/js/api/howto/naming-and-scoping) for when to use strings vs. tokens vs. paths.
 
@@ -117,7 +123,7 @@ Operators read this same bag when you re-encode a selection by a datum path,
 e.g. `group({ by: "datum.species" })`, but with **homogeneity collapse** applied:
 the path resolves to a scalar only if every row in the bag agrees on the field —
 see [path-aware `by`](/js/api/operators/spread#path-aware-by). To get _every_
-distinct value at a path instead, use [`pluck`](/js/api/selection/select#pluck).
+distinct value at a path instead, use [`pluck`](/js/api/selection/ref#pluck).
 
 ## Notes
 

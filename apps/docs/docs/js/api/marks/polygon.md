@@ -38,7 +38,7 @@ polygon({ points, fill?, stroke?, strokeWidth?, name? })
 | `fill`        | `string`             | `"black"` | Fill color                                                                 |
 | `stroke`      | `string`             | `fill`    | Stroke color (defaults to `fill`)                                          |
 | `strokeWidth` | `number`             | `0`       | Stroke width                                                               |
-| `name`        | `string`             | —         | Name for use with `select()` / `.constrain()`                              |
+| `name`        | `string`             | —         | Name for use with `ref` / `selectAll` / `.constrain()`                     |
 
 ## Coordinates
 

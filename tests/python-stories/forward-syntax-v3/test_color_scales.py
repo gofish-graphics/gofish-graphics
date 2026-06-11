@@ -10,7 +10,7 @@ from gofish import (
     stack,
     derive,
     rect,
-    select,
+    selectAll,
     area,
     group,
     palette,
@@ -144,7 +144,7 @@ def story_ribbon_highlight():
         )
         .mark(rect(h="count", fill="species").name("bars"))
     )
-    overlay = chart(select("bars")).flow(group(by="species")).mark(area(opacity=0.6))
+    overlay = chart(selectAll("bars")).flow(group(by="species")).mark(area(opacity=0.6))
     return (
         Layer([bars, overlay]),
         {"w": 400, "h": 400, "axes": True},

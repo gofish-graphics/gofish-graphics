@@ -37,6 +37,6 @@ circle({ r?, fill?, stroke?, strokeWidth?, debug? })
 // Circle with stroke
 .mark(circle({ r: 15, fill: "white", stroke: "black", strokeWidth: 2 }))
 
-// Named for use with select()
+// Named for use with selectAll()
 .mark(circle({ r: 8 }).name("points"))
 ```

@@ -64,7 +64,7 @@ spread({ by: "datum.species", dir: "x" }); // path (e.g. after a selection)
 spread({ by: (r) => r.datum.species, dir: "x" }); // function escape hatch
 ```
 
-Path strings matter after a [`select` / `selectAll`](/js/api/selection/select):
+Path strings matter after a [`ref` / `selectAll`](/js/api/selection/ref) selection:
 the stream items are then [`ref`](/js/api/marks/ref)s, not raw records, so you
 re-encode by the datum path — `by: "datum.species"`.
 
@@ -96,7 +96,7 @@ function escape hatch on raw rows. A fully-split cell (1 row) trivially
 collapses, so `by: "datum.species"` works once each node holds a single record.
 
 To read _every_ value at a multi-valued path instead of collapsing to a scalar,
-use [`pluck`](/js/api/selection/select#pluck) — the un-collapsed counterpart of
+use [`pluck`](/js/api/selection/ref#pluck) — the un-collapsed counterpart of
 `by`.
 
 ### `by` vs. channel: an intentional asymmetry

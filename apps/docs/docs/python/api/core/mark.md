@@ -52,7 +52,7 @@ rect(h="count", fill="#4e79a7")  # height from data, constant color
 ## Naming marks
 
 Call `.name("layerName")` on a mark so another chart can reference it with
-[`select()`](/python/api/core/chart#cross-chart-references):
+[`ref` / `selectAll`](/python/api/core/chart#cross-chart-references):
 
 ```python
 chart(data).flow(scatter(by="lake", x="x", y="y")).mark(blank().name("points"))

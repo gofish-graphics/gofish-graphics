@@ -58,7 +58,7 @@ spread(by="datum.species", dir="x")      # path (e.g. after a selection)
 spread(by=lambda r: r.datum.species, dir="x")  # callable escape hatch
 ```
 
-Path strings matter after a `select` / `selectAll`: the stream items are then
+Path strings matter after a `ref` / `selectAll` selection: the stream items are then
 **refs**, not raw records, so you re-encode by the datum path —
 `by="datum.species"`.
 

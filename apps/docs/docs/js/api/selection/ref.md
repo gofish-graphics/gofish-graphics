@@ -1,18 +1,21 @@
-# select / selectAll
+# ref / selectAll
 
-`select` and `selectAll` are a verb pair that resolve the nodes registered by a
-named mark (via `.name()`) into [`ref`](/js/api/marks/ref) values — the same
-noun used everywhere else for cross-referencing geometry. Pass the result as the
-data argument to a second [`chart()`](/js/api/core/chart) call to build overlays
-and connectors.
+`ref` is the single reference noun in GoFish, and it works in two positions:
 
-- **`selectAll(name)`** returns an **array of refs** — exactly one ref per named
-  mark node (aggregate or not; no flattening).
-- **`select(name)`** returns a **single ref**, and throws if the layer matched
-  zero or more than one node.
+- **Inline in a layout** — `arrow(ref("a"), ref("b"))`, `ref(token).row[2]` — it
+  resolves at layout time against the name tree, hygienically scoped (see
+  [scoping](#hygienic-scoping)). This is the [`ref`](/js/api/marks/ref) mark.
+- **As chart data** — `Chart(ref("maxBar")).mark(text(...))` — it resolves at
+  build time against the named-layer registry and stands in for the one node
+  registered under that name.
 
-Think of them as the DOM's `querySelectorAll` (always a collection) and
-`querySelector` (the one-or-bust singular).
+`selectAll(name)` is the **plural** chart-data verb: it returns an **array of
+refs**, one per node a named mark produced (node-unit; aggregate or not, no
+flattening). Pass either form as the data argument to a second
+[`chart()`](/js/api/core/chart) call to build overlays and connectors.
+
+Think of `selectAll` as the DOM's `querySelectorAll` (always a collection) and
+`ref(name)`-as-data as `querySelector` (the one-or-bust singular).
 
 ::: starfish
 
@@ -43,25 +46,66 @@ gf.Layer([
 ## Signature
 
 ```ts
-select(layerName: string): GoFishRef;        // one ref; errors on 0 or >1
+ref(name: string): GoFishRef;                // singular; see ref mark for all forms
 selectAll(layerName: string): GoFishRef[];   // one ref per matching node
 ```
 
+`ref` has several other inline forms (Token, path, direct node) — see the
+[`ref` mark](/js/api/marks/ref) for the full signature. This page covers its use
+as chart data alongside `selectAll`.
+
 ## Parameters
 
-| Parameter   | Type     | Description                                                          |
-| ----------- | -------- | -------------------------------------------------------------------- |
-| `layerName` | `string` | The name of the layer to select (registered via `.name()` on a mark) |
+| Parameter | Type     | Description                                                             |
+| --------- | -------- | ----------------------------------------------------------------------- |
+| `name`    | `string` | The name of the layer to reference (registered via `.name()` on a mark) |
+
+## Singular as data: exactly one
+
+When you pass `ref(name)` as chart data it must resolve to **exactly one** node:
+
+- **Zero matches → error.** Nothing was registered under that name in scope.
+- **More than one match → error**, with a hint to use `selectAll(name)` instead.
+  A named mark that produced several nodes is a collection, and the singular
+  reference refuses to silently pick one.
+
+```ts
+gf.Layer([
+  gf
+    .Chart(data)
+    .flow(/* ... */)
+    .mark(gf.rect({ h: "total" }).name("kpi")),
+  gf.text({ text: "peak" }).name("label"),
+  // ref("kpi") as the connector's target: one ref; throws on 0 or >1 nodes
+  gf.Connect({ source: "middle" }, [gf.ref("label"), gf.ref("kpi")]),
+]);
+```
+
+## Node-unit selection
+
+`selectAll` selects at **node granularity**: one ref per node the named mark
+produced, never flattened and never merged. Each ref points at a placed node, so
+overlay marks position themselves relative to it, and `ref.datum` is **that
+node's data bag**.
+
+```ts
+const bars = gf.selectAll("bars"); // GoFishRef[]
+bars[0].datum; // the raw row-bag behind the first bar
+```
+
+See [`ref.datum`](/js/api/marks/ref#datum) for what the bag contains (a 1-row
+array for a fully-split leaf, all the partition's rows for an auto-summed
+aggregate).
 
 ## Why a ref, not a "selection"?
 
 GoFish models a selection as a plain array of [`ref`](/js/api/marks/ref)s rather
 than a bespoke selection object, and this is deliberate:
 
-- **A ref is structurally a one-element selection.** `select` (one ref) and
+- **A ref is structurally a one-element selection.** `ref(name)` (one ref) and
   `selectAll` (an array of refs) are the singular/plural of the very same noun,
   so there is nothing new to learn — the ref you get from a selection behaves
-  exactly like a ref you wrote by hand.
+  exactly like a ref you wrote by hand inline.
 - **Geometry is decoupled from data.** A ref points at a placed node; you read
   its placement off the ref (that is how `line`/`area` draw) and its bound datum
   via [`ref.datum`](/js/api/marks/ref#datum). Selecting does not flatten or
@@ -71,6 +115,22 @@ than a bespoke selection object, and this is deliberate:
   selection inert. To partition, re-key, or re-encode a selection you run it
   through operators in `.flow` (e.g. `group`, `spread`) — see
   [path-aware `by`](#path-aware-by-after-a-selection) below.
+
+## Hygienic scoping {#hygienic-scoping}
+
+Layer-name lookup is **hygienic**: a name registered via `.name()` is visible
+only within its scope and does **not** cross component boundaries. A name
+registered on a mark inside a [`createMark`](/js/api/core/mark) component is
+internal to that component — it is not selectable from outside. This is the same
+component-boundary rule that string-name `ref` resolution always followed
+inline, so the inline-layout and chart-data lookup paths now share one scoping
+rule.
+
+## Inline `selectAll` is not supported yet
+
+`selectAll` is a chart-data verb only. Using it inline inside a layout throws —
+pass it as the data argument to a `chart()` instead. (Inline plural references
+may arrive later; for now use a named layer + `selectAll` as data.)
 
 ## Connectors take `selectAll` directly
 
@@ -124,20 +184,3 @@ resolve to `undefined`.
 `pluck` is exported from the JS package (`gofish-graphics`). The Python wrapper
 does not expose it yet.
 :::
-
-## Single-node references
-
-Use `select` (singular) when a layer holds exactly one node you want to point a
-diagram element at:
-
-```ts
-gf.Layer([
-  gf
-    .Chart(data)
-    .flow(/* ... */)
-    .mark(gf.rect({ h: "total" }).name("kpi")),
-  gf.text({ text: "peak" }).name("label"),
-  // select returns one ref; throws if "kpi" matched 0 or >1 nodes
-  gf.Connect({ source: "middle" }, [gf.ref("label"), gf.select("kpi")]),
-]);
-```

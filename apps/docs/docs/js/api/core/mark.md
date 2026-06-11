@@ -22,7 +22,7 @@ chart(data)
   .mark(rect({ h: "value" }));
 ```
 
-Marks can also call `.name("layerName")` to register their output nodes for later use with [`select()`](/js/api/selection/select):
+Marks can also call `.name("layerName")` to register their output nodes for later use with [`ref` / `selectAll`](/js/api/selection/ref):
 
 ```ts
 .mark(rect({ h: "value" }).name("bars"))

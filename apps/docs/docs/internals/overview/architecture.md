@@ -67,7 +67,7 @@ A few systems thread through every pass rather than belonging to one:
   carry variable scoping, color/axis scales, and named-element tracking down the tree.
 - **Coordinate transforms.** `linear`, `polar`, `bipolar`, `wavy`, `clock` — pluggable
   mappings from one plane to another, applied during render.
-- **Names & scoping.** Marks can be `name`d and referenced across charts via `select()`;
+- **Names & scoping.** Marks can be `name`d and referenced across charts via `ref(name)` (one node) or `selectAll(name)` (many);
   scoping is deliberately hygienic.
 
 ## Where to go next

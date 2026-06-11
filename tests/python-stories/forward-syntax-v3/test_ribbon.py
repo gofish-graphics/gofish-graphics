@@ -2,7 +2,7 @@
 
 import math
 
-from gofish import Layer, chart, clock, spread, stack, derive, rect, select, area, group
+from gofish import Layer, chart, clock, spread, stack, derive, rect, selectAll, area, group
 from python_stories.data import SEAFOOD
 
 
@@ -16,7 +16,7 @@ def story_basic():
         )
         .mark(rect(h="count", fill="species").name("bars"))
     )
-    overlay = chart(select("bars")).flow(group(by="species")).mark(area(opacity=0.8))
+    overlay = chart(selectAll("bars")).flow(group(by="species")).mark(area(opacity=0.8))
     return (
         Layer([bars, overlay]),
         {"w": 400, "h": 400, "axes": True},
@@ -40,7 +40,7 @@ def story_polar():
         )
         .mark(rect(w=0.1, h="count", fill="species").name("bars"))
     )
-    overlay = chart(select("bars")).flow(group(by="species")).mark(area(opacity=0.8))
+    overlay = chart(selectAll("bars")).flow(group(by="species")).mark(area(opacity=0.8))
     return (
         Layer({"coord": clock()}, [bars, overlay]),
         {"w": 400, "h": 400, "axes": True},

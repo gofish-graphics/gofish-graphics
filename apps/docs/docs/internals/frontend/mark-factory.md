@@ -117,7 +117,7 @@ Walking `withGoFish.ts:431-477`:
 4. **Call the low-level shape.** The encoded shape props go into `shapeFn`,
    producing the `GoFishNode`.
 5. **Tag the node** with `name = key` and `datum = d` so downstream
-   coordinators (`select(...)`, label placement) can find it back.
+   coordinators (`ref` / `selectAll`, label placement) can find it back.
 
 ## `.name()` and `.label()`
 
@@ -125,7 +125,8 @@ Walking `withGoFish.ts:431-477`:
 chainable methods:
 
 - `mark.name("layerName")` — registers each produced node into the chart's
-  layer context so `select("layerName")` can pull the array of refs.
+  layer context so `selectAll("layerName")` can pull the array of refs (or
+  `ref("layerName")` the single node, when the layer holds exactly one).
 - `mark.label(accessor, options?)` — calls `node.label(...)` on every produced
   node, deferring label placement to the layout phase.
 

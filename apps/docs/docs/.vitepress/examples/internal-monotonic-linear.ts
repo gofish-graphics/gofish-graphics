@@ -8,7 +8,7 @@ gf.layer([
     .flow(gf.scatter({ x: "x", y: "y" }))
     .mark(gf.circle({ r: 3.5, fill: "#3451b2" }).name("pts")),
   gf
-    .Chart(gf.select("pts"))
+    .Chart(gf.selectAll("pts"))
     .mark(gf.line({ stroke: "#3451b2", strokeWidth: 2 })),
 ]).render(root, {
   w: 460,

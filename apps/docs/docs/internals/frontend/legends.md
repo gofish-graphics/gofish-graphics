@@ -76,7 +76,7 @@ the first one places the anchor the other two read:
    content top (in y-up coordinates, `end` is the top).
 
 The wrapper inherits the wrapped node's `key` and `_name` (moved off the content
-via the identity dance), so faceting, refs, and `select` keep resolving to the
+via the identity dance), so faceting, refs, and `selectAll` keep resolving to the
 wrapped node.
 
 ### Why the wrapper preserves the content's spaces

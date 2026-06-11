@@ -5,13 +5,13 @@ through scatterplot points or filling the area between stacked bars. It works in
 two steps:
 
 1. **Name a mark** using `.name("layerName")` to register its nodes
-2. **Select those nodes** using `selectAll("layerName")` (an array of
-   [`ref`](/js/api/marks/ref)s) or `select("layerName")` (a single ref) as data
+2. **Reference those nodes** using `selectAll("layerName")` (an array of
+   [`ref`](/js/api/marks/ref)s) or `ref("layerName")` (a single ref) as data
    for another chart
 
 `selectAll` is the `querySelectorAll` of GoFish — one ref per named node, never
-flattened. `select` is the singular `querySelector`: it returns one ref and
-throws if the layer matched zero or more than one node.
+flattened. `ref(name)` as data is the singular `querySelector`: it returns one
+ref and throws if the layer matched zero or more than one node.
 
 ## Basic pattern
 
@@ -124,7 +124,7 @@ the **selection stream** (refs, so `datum.` paths), while a mark's channel like
 
 ## Example: A single-node reference
 
-When a layer holds exactly one node, `select` (singular) returns that one ref —
+When a layer holds exactly one node, `ref(name)` as data returns that one ref —
 handy for diagrammatic annotations. It throws if the layer matched more than one
 node, which catches mistakes early.
 
@@ -132,8 +132,8 @@ node, which catches mistakes early.
 Layer([
   Chart(data).flow(/* ... */).mark(blank().name("origin")),
   text({ text: "start" }).name("label"),
-  // select returns one ref; errors if "origin" matched 0 or >1 nodes
-  Connect({ source: "middle" }, [ref("label"), select("origin")]),
+  // ref("origin") returns one ref; errors if "origin" matched 0 or >1 nodes
+  Connect({ source: "middle" }, [ref("label"), ref("origin")]),
 ]);
 ```
 
@@ -142,8 +142,8 @@ Layer([
 When you call `.name("layerName")` on a mark, each node it produces is
 registered in a shared layer context during rendering. `selectAll("layerName")`
 returns a lazy selector that resolves, when the second chart renders, to one
-[`ref`](/js/api/marks/ref) per registered node; `select("layerName")` resolves
-to the single ref (erroring otherwise).
+[`ref`](/js/api/marks/ref) per registered node; `ref("layerName")` as data
+resolves to the single ref (erroring otherwise).
 
 Each ref:
 
@@ -159,4 +159,4 @@ Each ref:
 | Line through points | `circle().name("points")` → `selectAll("points")` + `line()`                              |
 | Area under line     | `blank().name("points")` → `selectAll("points")` + `area()`                               |
 | Ribbon / stream     | `rect().name("bars")` → `selectAll("bars")` + `group({ by: "datum.species" })` + `area()` |
-| Single annotation   | Name one mark → `select("name")` → `ref` it from a connector                              |
+| Single annotation   | Name one mark → `ref("name")` as data → `ref` it from a connector                         |

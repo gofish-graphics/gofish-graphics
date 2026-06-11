@@ -43,6 +43,6 @@ rect({ w?, h?, fill?, stroke?, strokeWidth = 0, rx?, ry?, label? })
 // Color encodes "category" field
 .mark(rect({ h: "value", fill: "category" }))
 
-// Named for use with select()
+// Named for use with selectAll()
 .mark(rect({ h: "value" }).name("bars"))
 ```

@@ -300,8 +300,8 @@ export default defineConfig({
               collapsed: true,
               items: [
                 {
-                  text: "select / selectAll",
-                  link: "/js/api/selection/select",
+                  text: "ref / selectAll",
+                  link: "/js/api/selection/ref",
                 },
               ],
             },

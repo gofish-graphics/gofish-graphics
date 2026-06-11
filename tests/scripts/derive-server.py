@@ -165,8 +165,8 @@ class DeriveHandler(BaseHTTPRequestHandler):
                 ChartBuilder,
                 DeriveOperator,
                 LayerBuilder,
-                LayerSelector,
                 Mark,
+                _RefProxy,
                 _collect_mark_lambdas,
                 _MarkFn,
             )
@@ -177,11 +177,11 @@ class DeriveHandler(BaseHTTPRequestHandler):
                 child_payload: {operators, mark, options, data, zOrder}
                   data is the canonical Frontend.DataIR shape:
                     - {"type": "inline", "rows": [...]} for inline rows
-                    - {"type": "select", "layer": name} for select-data
+                    - {"type": "select", "layer": name, "mode": ...} for ref/selectAll data
                   See packages/gofish-ir/src/frontend/schema.ts.
                 """
                 child_ir = child.to_ir()
-                if isinstance(child.data, LayerSelector):
+                if isinstance(child.data, _RefProxy):
                     child_data = child_ir["data"]
                 else:
                     raw = child.data
