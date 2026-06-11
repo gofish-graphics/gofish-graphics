@@ -3,7 +3,7 @@
 // @wiki Architecture Overview — /internals/overview/architecture
 // </gofish-wiki>
 
-import { createResource, For, Show, Suspense, type JSX } from "solid-js";
+import { createResource, Show, Suspense, type JSX } from "solid-js";
 import { type ColorConfig } from "./colorSchemes";
 import { render as solidRender } from "solid-js/web";
 import {
@@ -18,6 +18,7 @@ import type { Size } from "./dims";
 import { isSIZE, type UnderlyingSpace } from "./underlyingSpace";
 import { continuous } from "./domain";
 import { elaborateAxes } from "./axes/elaborate";
+import { elaborateLegend } from "./legends/elaborate";
 
 export type CategoricalScale = {
   color: Map<any, string>;
@@ -107,6 +108,7 @@ export async function layout(
   child: GoFishNode;
   width: number;
   height: number;
+  rightOverhang: number;
 }> {
   child = await child;
   if (contexts?.session) {
@@ -170,6 +172,28 @@ export async function layout(
   // Use (possibly nice-rounded) underlying spaces for posScales
   const niceUnderlyingSpaceX = child._underlyingSpace![0];
   const niceUnderlyingSpaceY = child._underlyingSpace![1];
+
+  // Legend elaboration: turn the color scale into an ordinary swatch-column
+  // subtree seated beside the content (src/ast/legends/elaborate.tsx). Runs
+  // after the last resolveColorScale (it consumes the populated color map;
+  // legend fills are literal strings, never isValue, so the scale pass is NOT
+  // re-run). The wrapper preserves the content's underlying spaces
+  // (unionChildSpaces ignores the legend's UNDEFINED spaces), so the nice
+  // spaces captured above remain valid.
+  let legendAdded = false;
+  const unitScale = contexts?.session.scaleContext.unit;
+  const colorMap =
+    unitScale && "color" in unitScale ? unitScale.color : undefined;
+  if (colorMap && colorMap.size > 0) {
+    const res = await elaborateLegend(child, colorMap);
+    if (res.changed) {
+      child = res.node;
+      if (contexts?.session) child.setRenderSession(contexts.session);
+      child.resolveNames();
+      child.resolveUnderlyingSpace(); // memoized: computes only the new nodes
+      legendAdded = true;
+    }
+  }
 
   if (debug) {
     console.log("🌳 Underlying Space Tree:");
@@ -259,6 +283,13 @@ export async function layout(
   const finalW = finalDim(0, w);
   const finalH = finalDim(1, h);
 
+  // Measured legend overhang past the authoritative width — replaces the fixed
+  // LEGEND_MARGIN. Gated on legendAdded so legend-free charts keep byte-identical
+  // SVG widths. With w omitted, finalW already includes the legend → clamps to 0.
+  const rightOverhang = legendAdded
+    ? Math.max(0, (child.dims[0]?.max ?? 0) - finalW)
+    : 0;
+
   if (debug) {
     console.log("🌳 Node Tree:");
     debugNodeTree(child);
@@ -271,6 +302,7 @@ export async function layout(
     child,
     width: finalW,
     height: finalH,
+    rightOverhang,
   };
 }
 
@@ -315,7 +347,7 @@ export const gofish = (
     child: GoFishNode;
     width: number;
     height: number;
-    scaleContext: ScaleContext;
+    rightOverhang: number;
   };
 
   const runGofish = async (): Promise<LayoutData> => {
@@ -347,12 +379,7 @@ export const gofish = (
         contexts
       );
 
-      const result = {
-        ...layoutResult,
-        scaleContext: session.scaleContext,
-      };
-
-      return result;
+      return layoutResult;
     } finally {
       if (debug) {
         console.log("scaleContext", session.scaleContext);
@@ -379,7 +406,7 @@ export const gofish = (
               defs,
               axes,
               axisFields,
-              scaleContext: data.scaleContext,
+              rightMargin: data.rightOverhang,
             },
             data.child
           );
@@ -391,7 +418,6 @@ export const gofish = (
 };
 
 const PADDING = 40;
-const LEGEND_MARGIN = 120; // right-side buffer for legend swatches + labels
 
 /**
  * Finds the translation from the top-level coord node.
@@ -406,7 +432,7 @@ export const render = (
     defs,
     axes,
     axisFields,
-    scaleContext: scaleContextParam,
+    rightMargin,
     svgPadding,
   }: {
     width: number;
@@ -415,12 +441,11 @@ export const render = (
     defs?: JSX.Element[];
     axes?: AxesOptions;
     axisFields?: { x?: string; y?: string };
-    scaleContext: ScaleContext | null;
+    rightMargin?: number;
     svgPadding?: number;
   },
   child: GoFishNode
 ): JSX.Element => {
-  const scaleContext = scaleContextParam;
   const pad = svgPadding ?? PADDING;
 
   const { xTitle, yTitle } = resolveAxisTitles(axes, axisFields);
@@ -428,17 +453,13 @@ export const render = (
   const X_TITLE_MARGIN = PADDING; // 30px below content for x-title
   const leftMargin = yTitle ? Y_TITLE_MARGIN : 0;
   const bottomMargin = xTitle ? X_TITLE_MARGIN : 0;
-  // Only reserve right-side legend space when a color legend will actually
-  // render — the legend `<For>` below iterates an empty Map otherwise, so
-  // stories without a color scale would pay 120 px for nothing.
-  const hasLegend =
-    !!(scaleContext?.unit && "color" in scaleContext.unit) &&
-    (scaleContext.unit.color as Map<unknown, unknown>).size > 0;
-  const rightMargin = hasLegend ? LEGEND_MARGIN : 0;
+  // Right-side space reserved for a legend overhanging the content width
+  // (measured by `layout()` as `rightOverhang`; 0 when no legend / no overhang).
+  const rightSpace = rightMargin ?? 0;
 
   const result = (
     <svg
-      width={width + leftMargin + pad + rightMargin + pad}
+      width={width + leftMargin + pad + rightSpace + pad}
       height={height + pad + bottomMargin + pad}
       xmlns="http://www.w3.org/2000/svg"
     >
@@ -451,34 +472,6 @@ export const render = (
         <Show when={transform} keyed fallback={child.INTERNAL_render()}>
           <g transform={transform ?? ""}>{child.INTERNAL_render()}</g>
         </Show>
-        {/* legend (discrete color for now) */}
-        <For
-          each={Array.from(
-            (scaleContext?.unit && "color" in scaleContext.unit
-              ? scaleContext.unit.color
-              : new Map()
-            ).entries()
-          )}
-        >
-          {([key, value], i) => (
-            <g
-              transform={`translate(${width + pad * 3}, ${height - i() * 20})`}
-            >
-              <rect x={-20} y={-5} width={10} height={10} fill={value} />
-              <text
-                transform="scale(1, -1)"
-                x={-5}
-                y={0}
-                text-anchor="start"
-                dominant-baseline="middle"
-                font-size="10px"
-                fill="gray"
-              >
-                {key}
-              </text>
-            </g>
-          )}
-        </For>
         {/* x axis title */}
         <Show when={xTitle}>
           <text
