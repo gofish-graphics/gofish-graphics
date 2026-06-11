@@ -524,7 +524,12 @@ export const render = (
   // existing `pad`, an untitled chart stays byte-identical to the pre-chrome
   // output.
   const EDGE_GAP = 8; // breathing room between gutter content and the SVG edge
-  const reserve = (o: number) => (o > 0 ? Math.max(pad, o + EDGE_GAP) : pad);
+  // Ceil: the reserve becomes the root <g> translate, and a fractional
+  // translate (measured overhangs are routinely fractional — text widths)
+  // shifts every shape off the pixel grid: adjacent area/bar segments grow
+  // hairline antialiasing seams and text rasterizes fuzzy.
+  const reserve = (o: number) =>
+    o > 0 ? Math.ceil(Math.max(pad, o + EDGE_GAP)) : pad;
   const leftReserve = reserve(leftOverhang);
   const bottomReserve = reserve(bottomOverhang);
 

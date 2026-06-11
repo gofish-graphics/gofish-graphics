@@ -389,10 +389,19 @@ function elaborationsFor(node: GoFishNode): {
   /** Per-dim [x, y] title anchor (the axis line) for the constrained axes this
    *  node owns; undefined where the node owns no position-like axis on that dim. */
   anchors: [GoFishNode | undefined, GoFishNode | undefined];
+  /** Per-dim [x, y]: did this node own (and elaborate) an axis on that dim at
+   *  all — including an ordinal one, which contributes no `anchors` entry. An
+   *  owner CLAIMS the dim for title-anchoring purposes (see `elaborateAxes`). */
+  owned: [boolean, boolean];
 } {
   const space = node._underlyingSpace;
   if (!space)
-    return { constrained: [], refBased: [], anchors: [undefined, undefined] };
+    return {
+      constrained: [],
+      refBased: [],
+      anchors: [undefined, undefined],
+      owned: [false, false],
+    };
   const owns = (dim: 0 | 1) => (dim === 0 ? node.axis.x : node.axis.y) === true;
   // Niced [min, max] per owned POSITION dim, computed ONCE: it feeds both that
   // axis's own line/ticks and the other axis's `crossFloor` (the plot corner),
@@ -416,6 +425,7 @@ function elaborationsFor(node: GoFishNode): {
     undefined,
     undefined,
   ];
+  const owned: [boolean, boolean] = [false, false];
   for (const dim of [0, 1] as (0 | 1)[]) {
     if (!owns(dim)) continue;
     const s = space[dim];
@@ -435,10 +445,11 @@ function elaborationsFor(node: GoFishNode): {
     } else {
       continue;
     }
+    owned[dim] = true;
     if (dim === 0) node.axis.x = undefined;
     else node.axis.y = undefined;
   }
-  return { constrained, refBased, anchors };
+  return { constrained, refBased, anchors, owned };
 }
 
 /**
@@ -449,11 +460,17 @@ function elaborationsFor(node: GoFishNode): {
  *
  * Alongside the elaborated tree it bubbles up `titleAnchors` — the per-dim
  * [x, y] axis-line node a chart-level title should center on. Anchors flow up
- * from the children (a child's anchor fills a still-empty dim slot), then this
- * node's OWN axis-line anchors overwrite their dim slots. Because the walk is
- * bottom-up (children first, then self), overwriting means the ROOT-most owner
- * of a dim wins — which is what a chart-level title should describe (the
- * outermost axis spanning the whole plot, not an inner facet's axis).
+ * from the children (a child's anchor fills a still-empty dim slot), then any
+ * dim this node OWNS an axis on is CLAIMED outright: the slot is overwritten
+ * with this node's own anchor — the axis line for a position-like axis, or
+ * `undefined` for an ordinal one (no spanning line; the title pass falls back
+ * to the plot node, i.e. the span of the whole ordinal group). Because the
+ * walk is bottom-up (children first, then self), the ROOT-most owner of a dim
+ * wins — which is what a chart-level title should describe. The clearing
+ * matters for faceted charts: the root owns the ordinal facet axis while each
+ * facet owns a continuous axis on the SAME dim, and without the claim the
+ * first facet's line would bubble past the root and drag the title onto one
+ * subchart.
  *
  * Known limitation: multiple same-dim axis owners across SIBLING facets are
  * ambiguous here — they overwrite the same slot, so whichever sibling is
@@ -489,11 +506,13 @@ export async function elaborateAxes(node: GoFishNode): Promise<{
     }
   }
 
-  const { constrained, refBased, anchors } = elaborationsFor(node);
-  // This node's own axis-line anchors win their dim slots over any bubbled up
-  // from children — bottom-up recursion makes the root-most owner the winner.
+  const { constrained, refBased, anchors, owned } = elaborationsFor(node);
+  // Any dim this node owns an axis on is claimed — its own anchor replaces
+  // whatever bubbled up from children, INCLUDING replacing it with undefined
+  // when the owned axis is ordinal (so the title pass falls back to the plot
+  // instead of centering on a nested facet's line).
   for (const dim of [0, 1] as (0 | 1)[]) {
-    if (anchors[dim]) titleAnchors[dim] = anchors[dim];
+    if (owned[dim]) titleAnchors[dim] = anchors[dim];
   }
 
   if (constrained.length === 0 && refBased.length === 0) {

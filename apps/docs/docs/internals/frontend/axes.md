@@ -131,12 +131,18 @@ present.
 A title is placed **relative to the axis shape it describes**, not the plot. The
 axis pass already builds an axis-line node per position-like dim; `AxisElaboration`
 carries it as an optional `anchor`, and `elaborateAxes` bubbles those lines up the
-recursion as a per-dim `titleAnchors` pair. Because the walk is bottom-up and each
-owner overwrites its dim slot, the **root-most** owner wins — so a chart-level
-title describes the outermost axis (the one spanning the whole plot), not an inner
-facet's. (Multiple same-dim owners across _sibling_ facets are ambiguous: they
-overwrite the same slot, so the last-visited one wins. Disambiguating that — a
-per-facet title — is out of scope; a comment in the source flags it.)
+recursion as a per-dim `titleAnchors` pair. Any dim a node owns an axis on is
+**claimed** outright: the slot is overwritten with that node's own anchor — the
+axis line for a position-like axis, or `undefined` for an **ordinal** one, which
+has no spanning line. Because the walk is bottom-up, the **root-most** owner wins —
+so a chart-level title describes the outermost axis, not an inner facet's. The
+clearing matters for faceted charts: the root owns the ordinal facet axis while
+each facet owns a continuous axis on the _same_ dim, and without the claim the
+first facet's line would bubble past the root and drag the title onto one
+subchart; with it, the title falls back to the plot node — the span of the whole
+ordinal group. (Multiple same-dim owners across _sibling_ facets are ambiguous:
+they overwrite the same slot, so the last-visited one wins. Disambiguating that —
+a per-facet title — is out of scope; a comment in the source flags it.)
 
 `elaborateAxisTitles` then wraps the content in one more `Layer` and centers each
 title on its anchor:
