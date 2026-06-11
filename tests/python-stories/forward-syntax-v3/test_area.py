@@ -25,7 +25,7 @@ def story_stacked():
                 stack(by="species", dir="y"),
             )
             .mark(blank(h="count", fill="species").name("bars")),
-            chart(selectAll("bars")).flow(group(by="species")).mark(area(opacity=0.8)),
+            chart(selectAll("bars")).flow(group(by="datum.species")).mark(area(opacity=0.8)),
         ]),
         {"w": 400, "h": 400, "axes": True},
     )
@@ -37,7 +37,7 @@ def story_layered():
             chart(STREAMGRAPH_DATA)
             .flow(group(by="c"), spread(by="x", dir="x", spacing=50))
             .mark(blank(h="y", fill="c").name("points")),
-            chart(selectAll("points")).flow(group(by="c")).mark(area(opacity=0.7)),
+            chart(selectAll("points")).flow(group(by="datum.c")).mark(area(opacity=0.7)),
         ]),
         {"w": 500, "h": 300, "axes": True},
     )
