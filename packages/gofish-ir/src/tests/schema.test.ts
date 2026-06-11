@@ -468,6 +468,31 @@ check(
 );
 
 // ---------------------------------------------------------------------------
+// Chart-level `connect` mark (from `.connect(line())`)
+// ---------------------------------------------------------------------------
+
+console.log("\n# Chart connect mark");
+
+function chartWithConnect(connect: any) {
+  return {
+    irVersion: 0,
+    ir: "gofish-frontend",
+    root: { type: "chart", mark: { type: "rect" }, connect },
+  } as unknown as FrontendIRDocument;
+}
+
+// Strict accept implies permissive accept (strict only adds rejections).
+check(
+  "connect: { type: 'line' } accepts in strict mode",
+  validate(chartWithConnect({ type: "line" }), { strict: true }).valid
+);
+
+check(
+  "connect: 5 (non-object) is rejected",
+  !validate(chartWithConnect(5)).valid
+);
+
+// ---------------------------------------------------------------------------
 // Report
 // ---------------------------------------------------------------------------
 

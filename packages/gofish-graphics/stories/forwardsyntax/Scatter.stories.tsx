@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
 import { catchLocationsArray, seafood, catchLocations } from "../../src/data/catch";
 import { drivingShifts } from "../../src/data/drivingShifts";
-import { Chart, layer, selectAll, line, rect, stack } from "../../src/lib";
+import { Chart, line, rect, stack } from "../../src/lib";
 import { circle, scatter } from "../../src/lib";
 import { clock } from "../../src/ast/coordinateTransforms/clock";
 import _ from "lodash";
@@ -44,18 +44,14 @@ export const Connected: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    layer([
-      Chart(drivingShifts)
-        .flow(scatter({ by: "year",  x: "miles", y: "gas" }))
-        .mark(circle({ r: 4, fill: "white", stroke: "black", strokeWidth: 2 }).name("points")),
-      Chart(selectAll("points"))
-        .mark(line({ stroke: "black", strokeWidth: 2 }))
-        .zOrder(-1),
-    ]).render(container, {
-      w: args.w,
-      h: args.h,
-      axes: true,
-    });
+    Chart(drivingShifts, { axes: true })
+      .flow(scatter({ by: "year", x: "miles", y: "gas" }))
+      .mark(circle({ r: 4, fill: "white", stroke: "black", strokeWidth: 2 }))
+      .connect(line({ stroke: "black", strokeWidth: 2 }))
+      .render(container, {
+        w: args.w,
+        h: args.h,
+      });
 
     return container;
   },

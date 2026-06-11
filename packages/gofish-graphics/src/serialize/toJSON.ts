@@ -110,6 +110,7 @@ interface ChartBuilderInternals {
   operators: Operator<any, any>[];
   finalMark?: Mark<any>;
   nodeZOrder?: number;
+  connector?: Mark<any>;
 }
 
 function chartBuilderInternals(
@@ -122,13 +123,14 @@ function chartBuilderInternals(
     operators: c.operators ?? [],
     finalMark: c.finalMark,
     nodeZOrder: c.nodeZOrder,
+    connector: c.connector,
   };
 }
 
 async function chartBuilderToChartIR(
   chart: ChartBuilder<any>
 ): Promise<Frontend.ChartIR> {
-  const { data, options, operators, finalMark, nodeZOrder } =
+  const { data, options, operators, finalMark, nodeZOrder, connector } =
     chartBuilderInternals(chart);
 
   const ir: Frontend.ChartIR = {
@@ -149,6 +151,9 @@ async function chartBuilderToChartIR(
   }
   if (nodeZOrder !== undefined) {
     ir.zOrder = nodeZOrder;
+  }
+  if (connector) {
+    ir.connect = await markToIR(connector);
   }
   return ir;
 }

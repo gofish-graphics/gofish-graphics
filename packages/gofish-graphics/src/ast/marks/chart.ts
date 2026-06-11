@@ -32,7 +32,7 @@ export type { Mark, Operator };
 export { generatedRect as rect };
 export type { LayerContext };
 
-import { ChartBuilder, chart } from "./chartBuilder";
+import { ChartBuilder, chart, stashLayerName } from "./chartBuilder";
 import type { ChartOptions } from "./chartBuilder";
 export { ChartBuilder, chart };
 export type { ChartOptions };
@@ -338,6 +338,7 @@ function makeConstrainableMark<T>(base: Mark<T>): ConstrainableMark<T> {
     } else if (baseTag) {
       (named as any).__serialize = baseTag;
     }
+    stashLayerName(named, layerName);
     return makeConstrainableMark(named);
   };
   const withLabel = (

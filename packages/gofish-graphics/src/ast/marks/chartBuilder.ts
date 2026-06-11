@@ -4,6 +4,7 @@ import { type ColorConfig } from "../colorSchemes";
 import type { AxesOptions } from "../gofish";
 import { Mark, Operator } from "../types";
 import { Frame } from "../graphicalOperators/frame";
+import { layer as Layer } from "../graphicalOperators/layer";
 import { GoFishRef, visibleNodes } from "../_ref";
 import { ref } from "../shapes/ref";
 
@@ -153,6 +154,33 @@ function resolveRefData(
   return refs[0];
 }
 
+/**
+ * Stash the chained `.name(...)` value directly on a mark function.
+ * `ChartBuilder.connect()` reads this to detect a user-chained name without
+ * relying on the `__serialize` tag, which is absent on untagged custom marks
+ * and omits Tokens. Every `.name()` implementation calls this.
+ */
+export function stashLayerName(mark: object, layerName: unknown): void {
+  (mark as any).__layerName = layerName;
+}
+
+/**
+ * Tag every node a mark produces with a per-resolve marker so `.connect()`
+ * can find its targets without minting a registry name. Unlike a string
+ * layer name, a Symbol key can't collide with — or leak to — sibling charts
+ * sharing the layerContext: hygiene by construction.
+ */
+function withConnectMarker<T>(base: Mark<T>, marker: symbol): Mark<T> {
+  return async (d, key, layerContext) => {
+    const node = await resolveMarkResult(
+      base(d, key, layerContext),
+      layerContext
+    );
+    (node as any)[marker] = true;
+    return node;
+  };
+}
+
 export class ChartBuilder<TInput, TOutput = TInput> {
   private readonly data: TInput;
   private readonly options?: ChartOptions;
@@ -160,6 +188,7 @@ export class ChartBuilder<TInput, TOutput = TInput> {
   private readonly finalMark?: Mark<TOutput>;
   private readonly layerContext: LayerContext;
   private readonly nodeZOrder?: number;
+  private readonly connector?: Mark<GoFishRef[]>;
 
   constructor(
     data: TInput,
@@ -167,7 +196,8 @@ export class ChartBuilder<TInput, TOutput = TInput> {
     operators: Operator<any, any>[] = [],
     finalMark?: Mark<TOutput>,
     layerContext: LayerContext = {},
-    nodeZOrder?: number
+    nodeZOrder?: number,
+    connector?: Mark<GoFishRef[]>
   ) {
     this.data = data;
     this.options = options;
@@ -175,6 +205,7 @@ export class ChartBuilder<TInput, TOutput = TInput> {
     this.finalMark = finalMark;
     this.layerContext = layerContext;
     this.nodeZOrder = nodeZOrder;
+    this.connector = connector;
   }
 
   // flow accumulates operators and returns a new builder for chaining
@@ -225,7 +256,8 @@ export class ChartBuilder<TInput, TOutput = TInput> {
       [...this.operators, ...ops],
       this.finalMark,
       this.layerContext,
-      this.nodeZOrder
+      this.nodeZOrder,
+      this.connector
     );
   }
 
@@ -237,7 +269,36 @@ export class ChartBuilder<TInput, TOutput = TInput> {
       this.operators,
       mark,
       this.layerContext,
-      this.nodeZOrder
+      this.nodeZOrder,
+      this.connector
+    );
+  }
+
+  /**
+   * Overlay a connector mark (e.g. `line()`, `area()`) under the nodes this
+   * chart's mark produces — sugar for the two-chart layer([...]) + selectAll
+   * pattern. If the mark has a string `.name(...)`, its registered nodes are
+   * the targets (exactly the manual selectAll(name) semantics); otherwise the
+   * produced nodes are tagged directly at resolve time — no name is minted or
+   * serialized. The connector renders beneath the marks (zOrder -1), matching
+   * the manual form's `.zOrder(-1)`.
+   */
+  connect(connector: Mark<GoFishRef[]>): ChartBuilder<TInput, TOutput> {
+    if (this.connector !== undefined) {
+      throw new Error(
+        ".connect() was already called on this chart; only one connector is " +
+          "supported. For additional overlays, use " +
+          "layer([Chart(...).mark(m.name('pts')), Chart(selectAll('pts')).mark(...)])."
+      );
+    }
+    return new ChartBuilder(
+      this.data,
+      this.options,
+      this.operators,
+      this.finalMark,
+      this.layerContext,
+      this.nodeZOrder,
+      connector
     );
   }
 
@@ -247,8 +308,31 @@ export class ChartBuilder<TInput, TOutput = TInput> {
       throw new Error("Cannot resolve: no mark specified. Call .mark() first.");
     }
 
+    // .connect() targets: a user-chained string `.name(...)` means "the nodes
+    // registered under that name" (exactly the manual selectAll(name) form,
+    // including any same-named siblings). An unnamed mark is wrapped
+    // pre-composition so each leaf node it produces carries a per-resolve
+    // marker instead — no registry name exists to collide or leak.
+    let connectName: string | undefined;
+    let connectMarker: symbol | undefined;
+    let baseMark = this.finalMark as Mark<any>;
+    if (this.connector) {
+      const userName = (this.finalMark as any).__layerName;
+      if (typeof userName === "string" && userName.length > 0) {
+        connectName = userName;
+      } else if (userName !== undefined) {
+        throw new Error(
+          ".connect() requires the mark's .name(...) to be a string; Token " +
+            "names are not supported. Use the manual layer([...]) form."
+        );
+      } else {
+        connectMarker = Symbol("gofish-connect-target");
+        baseMark = withConnectMarker(baseMark, connectMarker);
+      }
+    }
+
     // Apply all operators to the mark
-    let composedMark = this.finalMark as Mark<any>;
+    let composedMark = baseMark;
     for (const op of this.operators.toReversed()) {
       composedMark = await op(composedMark);
     }
@@ -282,11 +366,45 @@ export class ChartBuilder<TInput, TOutput = TInput> {
       (node as any).colorConfig = this.options.color;
     }
 
-    if (this.nodeZOrder !== undefined) {
-      node.zOrder(this.nodeZOrder);
+    let result: GoFishNode = node;
+    if (this.connector) {
+      // Collect the targets: the registered layer for a named mark, or the
+      // marker-tagged nodes for an unnamed one. Both ride the same bounded
+      // DFS walk as registration, so ordering and component-boundary hygiene
+      // match what selectAll(name) yields.
+      const targets = connectName
+        ? (this.layerContext[connectName]?.nodes ?? [])
+        : [...visibleNodes(node)].filter((n) => (n as any)[connectMarker!]);
+      if (targets.length === 0) {
+        throw new Error(
+          `.connect(): ${
+            connectName
+              ? `no nodes are registered under "${connectName}"`
+              : "the chart's mark produced no nodes"
+          } — nothing to connect (is the data empty?).`
+        );
+      }
+      // Elaborate as the literal desugaring: resolve the sibling
+      // Chart(refs).mark(connector).zOrder(-1) through this same method —
+      // one canonical Frame/setShared/registration/zOrder path — then layer
+      // it over the chart.
+      const refs = targets.map((n) => ref({ __ref: n }));
+      const connectFrame = await new ChartBuilder<GoFishRef[], GoFishRef[]>(
+        refs,
+        undefined,
+        [],
+        this.connector,
+        this.layerContext,
+        -1
+      ).resolve();
+      result = await Layer({}, [node, connectFrame]);
     }
 
-    return node;
+    if (this.nodeZOrder !== undefined) {
+      result.zOrder(this.nodeZOrder);
+    }
+
+    return result;
   }
 
   withLayerContext(layerContext: LayerContext): ChartBuilder<TInput, TOutput> {
@@ -296,7 +414,8 @@ export class ChartBuilder<TInput, TOutput = TInput> {
       this.operators,
       this.finalMark,
       layerContext,
-      this.nodeZOrder
+      this.nodeZOrder,
+      this.connector
     );
   }
 
@@ -307,7 +426,8 @@ export class ChartBuilder<TInput, TOutput = TInput> {
       this.operators,
       this.finalMark,
       this.layerContext,
-      value
+      value,
+      this.connector
     );
   }
 

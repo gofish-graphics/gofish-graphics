@@ -1,17 +1,15 @@
 """Equivalent of Area.stories.tsx — Forward Syntax V3/Area."""
 
-from gofish import Layer, chart, spread, stack, blank, selectAll, area, group, log
+from gofish import Layer, chart, spread, stack, blank, selectAll, area, group
 from python_stories.data import SEAFOOD, STREAMGRAPH_DATA
 
 
 def story_basic():
     return (
-        Layer([
-            chart(SEAFOOD)
-            .flow(spread(by="lake", dir="x", spacing=64))
-            .mark(blank(h="count").name("points")),
-            chart(selectAll("points")).flow(log("points")).mark(area(opacity=0.8)),
-        ]),
+        chart(SEAFOOD)
+        .flow(spread(by="lake", dir="x", spacing=64))
+        .mark(blank(h="count"))
+        .connect(area(opacity=0.8)),
         {"w": 500, "h": 300, "axes": True},
     )
 

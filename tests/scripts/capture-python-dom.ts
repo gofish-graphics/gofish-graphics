@@ -131,6 +131,7 @@ type ChartIR = {
   options: any;
   data: any;
   zOrder?: number | null;
+  connect?: any;
 };
 
 type IRResult =
@@ -328,6 +329,7 @@ async function captureStory(
       operators: ir.operators,
       mark: ir.mark,
       options: ir.options,
+      connect: ir.connect ?? null,
       deriveServerUrl,
     };
   }

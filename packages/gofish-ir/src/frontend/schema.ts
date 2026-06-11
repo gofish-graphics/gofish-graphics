@@ -76,6 +76,13 @@ export interface ChartIR extends BaseIRNode {
   mark: MarkIR;
   options?: Record<string, unknown>;
   zOrder?: number;
+  /**
+   * Optional connector mark (from `.connect(line())` on the v3 builder).
+   * Elaborated JS-side at resolve time into a sibling layer over the nodes
+   * the chart's mark registers; an auto-generated layer name never appears
+   * in the IR.
+   */
+  connect?: MarkIR;
 }
 
 /** Multiple charts composed on the same canvas. */

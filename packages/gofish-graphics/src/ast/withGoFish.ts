@@ -17,6 +17,7 @@ import type { ColorConfig } from "./colorSchemes";
 import _, { ListOfRecursiveArraysOrValues } from "lodash";
 import { ChartBuilder } from "./marks/chart";
 import type { LayerContext } from "./marks/chart";
+import { stashLayerName } from "./marks/chartBuilder";
 import {
   ChannelAnnotations,
   DeriveMarkProps,
@@ -482,6 +483,7 @@ function attachNameableMethods<T>(baseMark: Mark<T>): NameableMark<T> {
       }
       (fn as any).__serialize = nextTag;
     }
+    stashLayerName(fn, layerName);
     return fn;
   };
   const labelMethod = (

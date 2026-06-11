@@ -97,6 +97,7 @@ interface ChartHarnessSpec {
   mark: MarkSpec;
   options: Record<string, any>;
   zOrder?: number | null;
+  connect?: MarkSpec | null;
 }
 
 interface SingleChartHarnessSpec extends ChartHarnessSpec {
@@ -665,6 +666,11 @@ function buildChartFromSpec(
   if (chartSpec.zOrder !== undefined && chartSpec.zOrder !== null) {
     builder = builder.zOrder(chartSpec.zOrder);
   }
+  if (chartSpec.connect) {
+    builder = builder.connect(
+      mapMark(chartSpec.connect, deriveServerUrl, resolveToken) as any
+    );
+  }
   return builder;
 }
 
@@ -737,6 +743,7 @@ function renderChart(spec: HarnessSpec) {
             mark: spec.mark,
             options: chartOptsRaw,
             zOrder: spec.zOrder ?? null,
+            connect: spec.connect ?? null,
           },
           spec.deriveServerUrl,
           resolveToken

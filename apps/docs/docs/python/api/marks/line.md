@@ -49,6 +49,20 @@ A line needs points to connect. The idiomatic recipe:
 This separation lets the same positioned points back both a line and, say,
 circles drawn on top.
 
+## Sugar: `.connect()`
+
+When the line connects a chart's _own_ marks, skip the two-chart `selectAll`
+recipe and chain [`.connect()`](/python/api/core/connect) on the builder:
+
+```python
+chart(data).flow(
+    scatter(by="lake", x="x", y="y")
+).mark(circle()).connect(line(stroke="steelblue", strokeWidth=2))
+```
+
+See [`.connect()`](/python/api/core/connect) for the full semantics; the
+explicit `Layer([...])` + `selectAll` form connects _another_ chart's marks.
+
 ## Examples
 
 ```python
