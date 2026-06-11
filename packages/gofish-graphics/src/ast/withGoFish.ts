@@ -570,7 +570,8 @@ function attachNameableMethods<T>(baseMark: Mark<T>): NameableMark<T> {
  * to an outer ancestor.
  *
  * The returned mark supports `.name("layerName" | token)` so that when used
- * in a chart, each produced node is registered for `select("layerName")`.
+ * in a chart, each produced node is registered for `ref("layerName")` /
+ * `selectAll("layerName")`.
  */
 /**
  * Mark-factory IR serialization config — passed as the optional third

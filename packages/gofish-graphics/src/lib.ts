@@ -117,7 +117,6 @@ export {
   derive,
   rect,
   circle,
-  select,
   selectAll,
   line,
   blank,

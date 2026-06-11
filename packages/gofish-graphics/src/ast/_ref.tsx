@@ -56,6 +56,13 @@ export class GoFishRef {
   public _name?: string | Token;
   public parent?: GoFishNode;
 
+  // undefined/"one" = a singular reference; "all" = a plural chart-data
+  // selection (created by `selectAll`, consumed at chart-build time).
+  // Assigned unconditionally in the constructor so the key is always an own
+  // key — RESERVED_KEYS in shapes/ref.tsx is derived from Reflect.ownKeys of
+  // a sample instance and must see it regardless of field-init config.
+  public readonly multiplicity?: "one" | "all";
+
   private intrinsicDims?: Dimensions;
   /** @internal Layout-pass state. Public to match GoFishNode.transform so
    *  `(node as GoFishAST).transform` resolves on the union; external callers
@@ -63,7 +70,7 @@ export class GoFishRef {
   public transform?: Transform;
   public shared: Size<boolean>;
   private measurement!: (scaleFactors: Size) => Size;
-  private selection?: string | Token | (Token | string | number)[];
+  public readonly selection?: string | Token | (Token | string | number)[];
   private directNode?: GoFishNode;
   private selectedNode?: GoFishNode;
   private renderSession?: RenderSession;
@@ -73,11 +80,13 @@ export class GoFishRef {
     selection,
     node,
     shared = [false, false],
+    multiplicity,
   }: {
     name?: string | Token;
     selection?: string | Token | (Token | string | number)[];
     node?: GoFishNode;
     shared?: Size<boolean>;
+    multiplicity?: "one" | "all";
   }) {
     if (selection === undefined && !node) {
       throw new Error("Ref must have either selection or node");
@@ -86,6 +95,7 @@ export class GoFishRef {
     this.shared = shared;
     this.selection = selection;
     this.directNode = node;
+    this.multiplicity = multiplicity;
   }
 
   /** The raw datum carried by the node this ref points at — the *bag of rows*
@@ -110,6 +120,11 @@ export class GoFishRef {
   }
 
   public resolveNames(): void {
+    if (this.multiplicity === "all") {
+      throw new Error(
+        'selectAll(...) cannot be used inline in a layout; pass it as chart data: Chart(selectAll("name"))'
+      );
+    }
     if (this.directNode) {
       this.selectedNode = this.directNode;
     } else if (this.selection !== undefined) {

@@ -32,9 +32,9 @@ export type { Mark, Operator };
 export { generatedRect as rect };
 export type { LayerContext };
 
-import { ChartBuilder, RefSelection, chart } from "./chartBuilder";
+import { ChartBuilder, chart } from "./chartBuilder";
 import type { ChartOptions } from "./chartBuilder";
-export { ChartBuilder, RefSelection, chart };
+export { ChartBuilder, chart };
 export type { ChartOptions };
 
 /* Data Transformation Operators */
@@ -155,16 +155,14 @@ export function circle<T extends Record<string, any>>({
   return result;
 }
 
-// select()/selectAll() return a lazy, node-unit selector that defers layer
-// lookup until resolution — so layers can be registered by .name() on marks
-// before the selector tries to access them. `select` expects exactly one
-// matching node (a single ref); `selectAll` yields one ref per matching node.
-export function select(layerName: string): RefSelection {
-  return new RefSelection(layerName, "one");
-}
-
-export function selectAll(layerName: string): RefSelection {
-  return new RefSelection(layerName, "all");
+// `ref(name)` is the universal singular reference — usable inline in a layout
+// (resolved at layout time) and as chart data (resolved at build time against
+// the per-chart layer registry, erroring unless exactly one named node
+// matches). `selectAll(name)` is the plural form: one ref per matching named
+// node, chart-data only. Both defer layer lookup until resolution, so layers
+// can be registered by `.name()` on marks before the selector accesses them.
+export function selectAll(layerName: string): GoFishRef {
+  return new GoFishRef({ selection: layerName, multiplicity: "all" });
 }
 
 // line() mark connects data points using center-to-center mode
@@ -443,11 +441,12 @@ export function layer<T>(
   const opts = Array.isArray(marksOrOpts) ? {} : marksOrOpts;
   const marks = (Array.isArray(marksOrOpts) ? marksOrOpts : maybeMarks) ?? [];
   const base: Mark<T> = async (d, key, layerContext) => {
-    // Share one layerContext across all children so that select(name) in
-    // one child can find a sibling's .name(name) registration. Inherit from
-    // the caller when present (nested-layer case), else create a fresh
-    // context (top-level .render() case). Resolve sequentially so a child
-    // using select(...) sees registrations from earlier siblings.
+    // Share one layerContext across all children so that ref(name)/
+    // selectAll(name) in one child can find a sibling's .name(name)
+    // registration. Inherit from the caller when present (nested-layer case),
+    // else create a fresh context (top-level .render() case). Resolve
+    // sequentially so a child referencing a name sees registrations from
+    // earlier siblings.
     const sharedContext = layerContext ?? {};
     const resolved: GoFishNode[] = [];
     for (const m of marks) {

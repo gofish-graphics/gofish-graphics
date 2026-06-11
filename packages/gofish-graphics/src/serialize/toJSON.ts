@@ -21,6 +21,7 @@
 
 import type { Frontend } from "gofish-ir";
 import type { ChartBuilder, Mark, Operator } from "./registry";
+import { GoFishRef } from "../ast/_ref";
 
 // The widget IR uses these symbol-loose shapes; toJSON returns them as-is.
 // The validator in `gofish-ir` accepts these shapes in permissive mode.
@@ -154,14 +155,21 @@ async function chartBuilderToChartIR(
 
 function dataToIR(data: unknown): Frontend.DataIR | null {
   if (data == null) return null;
-  // RefSelection instance (from `select`/`selectAll`) — has a `.layerName`
-  // field and a `.mode` discriminant ("one" | "all").
-  if (typeof data === "object" && (data as any).layerName !== undefined) {
-    return {
-      type: "select",
-      layer: (data as any).layerName,
-      mode: (data as any).mode,
-    };
+  // A `GoFishRef` used as chart data (from `ref(name)` or `selectAll(name)`).
+  // Only string-layer references serialize; `multiplicity` ("one" | "all")
+  // becomes the wire `mode` (emitted unconditionally so JS and Python IR agree).
+  if (data instanceof GoFishRef) {
+    if (typeof data.selection === "string") {
+      return {
+        type: "select",
+        layer: data.selection,
+        mode: data.multiplicity ?? "one",
+      };
+    }
+    throw new Error(
+      "Cannot serialize a token/path/node-backed ref as chart data; only a " +
+        "string-layer ref (ref(name) / selectAll(name)) is serializable."
+    );
   }
   if (Array.isArray(data)) {
     return { type: "inline", rows: data as AnyObject[] };
@@ -177,11 +185,11 @@ function dataToIR(data: unknown): Frontend.DataIR | null {
   // Unknown shape — wrap as single-row inline so the schema is satisfied,
   // but warn so the caller can investigate. Hitting this path usually
   // indicates the chart's data argument was neither an array nor a
-  // LayerSelector and isn't structurally what the runtime expects.
+  // GoFishRef and isn't structurally what the runtime expects.
   if (typeof console !== "undefined" && typeof console.warn === "function") {
     console.warn(
       "[gofish-ir] toJSON.dataToIR: unrecognized data shape, wrapping as single-row inline. " +
-        "Expected an array, a LayerSelector, or a pre-wrapped {type:'inline', rows} value."
+        "Expected an array, a string-layer GoFishRef, or a pre-wrapped {type:'inline', rows} value."
     );
   }
   return { type: "inline", rows: [data as AnyObject] };

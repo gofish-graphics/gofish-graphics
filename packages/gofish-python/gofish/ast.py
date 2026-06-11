@@ -207,8 +207,8 @@ class Mark:
     def name(self, name_or_token: Union[str, "Token"]) -> "Mark":
         """
         Set a layer name on this mark for cross-chart referencing via
-        `select()` (string form) or hygienic in-component naming
-        (`createName(...)` token form).
+        `ref(...)` / `selectAll(...)` as chart data (string form) or
+        hygienic in-component naming (`createName(...)` token form).
 
         Args:
             name_or_token: A bare string for flat naming, or a `Token`
@@ -725,19 +725,6 @@ class ConstrainableMark(Mark):
         return new_mark
 
 
-class LayerSelector:
-    """Sentinel object representing a cross-chart layer reference.
-
-    ``mode`` discriminates ``select()`` (``"one"``, a single ref) from
-    ``selectAll()`` (``"all"``, an array of refs), mirroring the JS
-    ``RefSelection`` discriminant.
-    """
-
-    def __init__(self, layer_name: str, mode: str = "one"):
-        self.layer_name = layer_name
-        self.mode = mode
-
-
 class ChartBuilder:
     """Builder class for creating GoFish charts."""
 
@@ -752,7 +739,8 @@ class ChartBuilder:
         Initialize a ChartBuilder.
 
         Args:
-            data: Input data or LayerSelector for cross-chart references
+            data: Input data, or a `_RefProxy` (`ref(name)` /
+                `selectAll(name)`) for cross-chart references
             options: Chart options (w, h, coord, color, etc.)
             operators: List of operators to apply
         """
@@ -853,12 +841,25 @@ class ChartBuilder:
         if self._mark is None:
             raise ValueError("Chart must have a mark before converting to IR")
 
-        # Serialize data: LayerSelector becomes a select spec, otherwise None
-        if isinstance(self.data, LayerSelector):
+        # Serialize data: a `_RefProxy` used as chart data (`ref(name)` or
+        # `selectAll(name)`) becomes a select spec; otherwise None. The wire
+        # shape is `{"type": "select", "layer": <name>, "mode": "one"|"all"}`
+        # — "one" for a singular `ref(name)`, "all" for `selectAll(name)`.
+        if isinstance(self.data, _RefProxy):
+            selection = self.data._sel()
+            if (
+                len(selection) != 1
+                or not isinstance(selection[0], str)
+            ):
+                raise ValueError(
+                    "a ref used as chart data must be a flat single-name "
+                    "selection (e.g. `ref(\"bars\")` / `selectAll(\"bars\")`); "
+                    "token/path refs cannot serialize as chart data"
+                )
             data_ir: Any = {
                 "type": "select",
-                "layer": self.data.layer_name,
-                "mode": self.data.mode,
+                "layer": selection[0],
+                "mode": self.data.multiplicity or "one",
             }
         else:
             data_ir = None
@@ -917,8 +918,9 @@ class ChartBuilder:
         from .arrow_utils import dataframe_to_arrow
         import pandas as pd
 
-        # LayerSelector charts have no data of their own
-        if isinstance(self.data, LayerSelector):
+        # Ref-data charts (`ref(name)` / `selectAll(name)`) have no data of
+        # their own — they borrow nodes from a sibling chart.
+        if isinstance(self.data, _RefProxy):
             import pyarrow as pa
             schema = pa.schema([pa.field("_placeholder", pa.int32())])
             table = pa.Table.from_arrays([], schema=schema)
@@ -1065,7 +1067,7 @@ def layer(
 _REF_PROXY_RESERVED = frozenset({
     "mark_type", "kwargs", "_name", "_label", "_children", "_is_scope",
     "name", "label", "to_dict", "to_ir", "render", "_copy_meta",
-    "_repr_mimebundle_", "constrain",
+    "_repr_mimebundle_", "constrain", "multiplicity",
 })
 
 
@@ -1078,8 +1080,12 @@ class _RefProxy(Mark):
     the harness/widget reconstructs by calling JS `ref([token, "variables", i, "value"])`.
     """
 
-    def __init__(self, selection: list):
+    def __init__(self, selection: list, multiplicity: Optional[str] = None):
         super().__init__("ref", selection=list(selection))
+        # None means singular (`ref(name)`); "all" means the plural
+        # `selectAll(name)` — one ref per matching node. Only meaningful when
+        # the proxy is used as chart data; ignored for inline-layout refs.
+        self.multiplicity = multiplicity
 
     def _sel(self) -> list:
         return self.kwargs["selection"]
@@ -1098,6 +1104,14 @@ class _RefProxy(Mark):
         return _RefProxy(self._sel() + [idx])
 
     def to_dict(self) -> dict:
+        # `selectAll(...)` is a plural chart-data selector — it has no
+        # inline-layout meaning. Chart-data serialization is handled by
+        # `ChartBuilder.to_ir`, not here.
+        if self.multiplicity == "all":
+            raise ValueError(
+                "selectAll(...) cannot be used inline in a layout; pass it "
+                'as chart data: chart(selectAll("name"))'
+            )
         # Serialize each selection segment: tokens become sentinel dicts;
         # primitives pass through unchanged.
         serialized = [
@@ -1120,9 +1134,15 @@ def ref(target: Union[str, Token]) -> _RefProxy:
     - `ref(token)` — Token returned by `createName(...)`. Subsequent
       `.attr` / `[i]` / `.path(...)` calls extend the selection.
 
-    Used as a child of a combinator (spread/layer/arrow) to insert an
-    already-named-and-resolved node into the layout. Mirrors JS
-    `ref(...)` (`packages/gofish-graphics/src/ast/shapes/ref.tsx:86`).
+    Two roles, both spelled `ref(...)`:
+
+    - **Inline in a layout**: as a child of a combinator
+      (spread/layer/arrow) to insert an already-named-and-resolved node.
+    - **As chart data**: `chart(ref("bars"))` borrows the single node named
+      "bars" from a sibling chart (requires exactly one match). The plural
+      counterpart is `selectAll("bars")`.
+
+    Mirrors JS `ref(...)` (`packages/gofish-graphics/src/ast/shapes/ref.tsx:86`).
     """
     return _RefProxy([target])
 
@@ -1430,30 +1450,21 @@ def wavy() -> dict:
 # Layer selection
 
 
-def select(layer_name: str) -> LayerSelector:
+def selectAll(layer_name: str) -> _RefProxy:
     """
-    Select a single named node from a previous chart (a single ref).
+    Select all named nodes from a sibling chart — one ref per matching node.
+
+    The plural counterpart of passing `ref(name)` as chart data (which
+    requires exactly one match). Used as the `chart(...)` data argument:
+    `chart(selectAll("bars"))`.
 
     Args:
         layer_name: Name of the layer to select (set via mark.name())
 
     Returns:
-        LayerSelector sentinel (mode="one") for use as chart() data argument
+        `_RefProxy` carrying `multiplicity="all"`.
     """
-    return LayerSelector(layer_name, mode="one")
-
-
-def selectAll(layer_name: str) -> LayerSelector:
-    """
-    Select all named nodes from a previous chart (one ref per matching node).
-
-    Args:
-        layer_name: Name of the layer to select (set via mark.name())
-
-    Returns:
-        LayerSelector sentinel (mode="all") for use as chart() data argument
-    """
-    return LayerSelector(layer_name, mode="all")
+    return _RefProxy([layer_name], multiplicity="all")
 
 
 # Literal-value wrapper
@@ -1952,7 +1963,8 @@ def chart(
         spread(by="species", dir="x", axes={"x": True, "y": False})
 
     Args:
-        data: Input data or select() for cross-chart layer references
+        data: Input data, or `ref(name)` / `selectAll(name)` for cross-chart
+            layer references
         options: Chart options as a dict (JS-style positional object)
         **kwargs: Chart options as keywords — ``axes``, ``color``, ``coord``,
             ``padding``, ... (merged over ``options``)
@@ -2012,7 +2024,7 @@ class LayerBuilder:
 
         def _serialize_child_data(child: ChartBuilder) -> str:
             """Serialize a child chart's data to base64 Arrow bytes."""
-            if isinstance(child.data, LayerSelector):
+            if isinstance(child.data, _RefProxy):
                 schema = pa.schema([pa.field("_placeholder", pa.int32())])
                 table = pa.Table.from_arrays([], schema=schema)
                 sink = pa.BufferOutputStream()

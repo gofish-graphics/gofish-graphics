@@ -48,7 +48,7 @@ export type { NameableMark } from "../withGoFish";
 
 /**
  * Attach chainable .name() and .label() to a mark, registering it into the
- * layer context when named so that select(...) can find it back.
+ * layer context when named so that ref(...)/selectAll(...) can find it back.
  */
 export function nameableMark<T>(base: Mark<T>): NameableMark<T> {
   const withName = (layerName: string): NameableMark<T> => {

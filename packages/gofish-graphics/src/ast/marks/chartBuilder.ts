@@ -7,7 +7,7 @@ import { Frame } from "../graphicalOperators/frame";
 import { GoFishRef } from "../_ref";
 import { ref } from "../shapes/ref";
 
-/** Per-chart registry of named layers for select() lookup. */
+/** Per-chart registry of named layers for ref()/selectAll() lookup. */
 export type LayerContext = {
   [name: string]: {
     data: any[];
@@ -71,11 +71,16 @@ export type ChartOptions = {
  * array via `Promise.all(...)` whose return preserves input order, so a
  * DFS over the resulting tree is the same canonical order we'd get from
  * sequential rendering, without paying for serialized awaits.
+ *
+ * Layer names follow the same component-boundary hygiene as
+ * `resolveLocalString` in _ref.tsx: names registered *inside* a `createMark`
+ * component (a child with `_isComponent === true`) are internal to that
+ * component and not selectable from outside. So the walk does not descend
+ * into a component child's subtree — but the component child's OWN
+ * `__layerRegistration` is still registered (a leaf component, e.g. a `rect`
+ * produced by createMark, can itself carry a name).
  */
-function collectLayerRegistrations(
-  node: GoFishNode,
-  layerContext: LayerContext
-): void {
+function registerLayerNode(node: GoFishNode, layerContext: LayerContext): void {
   const layerName = (node as { __layerRegistration?: string })
     .__layerRegistration;
   if (layerName) {
@@ -88,51 +93,69 @@ function collectLayerRegistrations(
     // otherwise re-push the same node.
     (node as { __layerRegistration?: string }).__layerRegistration = undefined;
   }
+}
+
+function collectLayerRegistrations(
+  node: GoFishNode,
+  layerContext: LayerContext
+): void {
+  registerLayerNode(node, layerContext);
   for (const child of node.children ?? []) {
-    if (child instanceof GoFishNode) {
+    if (!(child instanceof GoFishNode)) continue;
+    if ((child as { _isComponent?: boolean })._isComponent) {
+      // Don't pierce the component boundary; only its own name is visible.
+      registerLayerNode(child, layerContext);
+    } else {
       collectLayerRegistrations(child, layerContext);
     }
   }
 }
 
 /**
- * A lazy, node-unit selector that defers layer lookup until resolution.
+ * Resolve a `GoFishRef` used as chart data against the layer registry, the
+ * node-unit way: NO flattening of array data, NO datum spreading, NO `__ref`
+ * on plain objects.
  *
- * Returns one `ref` per named mark node — NO flattening of array data, NO
- * datum spreading, NO `__ref` on plain objects. `selectAll` yields the full
- * `GoFishRef[]`; `select` ("one") yields the single matching `GoFishRef`
- * (throwing if the layer matched zero or more than one node).
+ * - A non-string selection (token / path-array / node-backed ref) is a direct
+ *   reference: it passes through unchanged as a single ref (and `selectAll`
+ *   over one is an error — it requires a string layer name).
+ * - A string selection looks up the named layer. `multiplicity === "all"`
+ *   (from `selectAll`) yields the full `GoFishRef[]`; the singular form yields
+ *   the one matching `GoFishRef`, throwing if the layer matched zero or more
+ *   than one node.
  */
-export class RefSelection {
-  constructor(
-    public readonly layerName: string,
-    public readonly mode: "one" | "all"
-  ) {}
-
-  resolveRefs(layerContext: LayerContext): GoFishRef | GoFishRef[] {
-    const layer = layerContext[this.layerName];
-
-    if (!layer) {
-      throw new Error(
-        `Layer "${this.layerName}" not found. Make sure to call .name("${this.layerName}") on the mark first.`
-      );
+function resolveRefData(
+  r: GoFishRef,
+  layerContext: LayerContext
+): GoFishRef | GoFishRef[] {
+  if (typeof r.selection !== "string") {
+    if (r.multiplicity === "all") {
+      throw new Error("selectAll requires a string layer name");
     }
-
-    const refs = layer.nodes.map((node) => ref({ __ref: node }));
-
-    if (this.mode === "all") return refs;
-
-    // mode === "one": exactly one node expected.
-    if (refs.length === 0) {
-      throw new Error(`select("${this.layerName}") matched no nodes.`);
-    }
-    if (refs.length > 1) {
-      throw new Error(
-        `select("${this.layerName}") matched ${refs.length} nodes; use selectAll("${this.layerName}").`
-      );
-    }
-    return refs[0];
+    return r;
   }
+
+  const layer = layerContext[r.selection];
+  if (!layer) {
+    throw new Error(
+      `Layer "${r.selection}" not found. Make sure to call .name("${r.selection}") on the mark first.`
+    );
+  }
+
+  const refs = layer.nodes.map((node) => ref({ __ref: node }));
+
+  if (r.multiplicity === "all") return refs;
+
+  // Singular: exactly one node expected.
+  if (refs.length === 0) {
+    throw new Error(`ref("${r.selection}") matched no nodes.`);
+  }
+  if (refs.length > 1) {
+    throw new Error(
+      `ref("${r.selection}") matched ${refs.length} nodes; use selectAll("${r.selection}").`
+    );
+  }
+  return refs[0];
 }
 
 export class ChartBuilder<TInput, TOutput = TInput> {
@@ -235,10 +258,10 @@ export class ChartBuilder<TInput, TOutput = TInput> {
       composedMark = await op(composedMark);
     }
 
-    // Resolve a RefSelection (from select/selectAll) just before calling mark
+    // Resolve a ref/selectAll used as chart data just before calling mark
     let data = this.data;
-    if (data instanceof RefSelection) {
-      data = data.resolveRefs(this.layerContext) as any;
+    if (data instanceof GoFishRef) {
+      data = resolveRefData(data, this.layerContext) as any;
     }
 
     // Create the node; named marks tag themselves for the post-resolve

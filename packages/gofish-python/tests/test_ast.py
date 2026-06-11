@@ -10,7 +10,8 @@ from gofish import (
     derive,
     log,
     clock,
-    select,
+    ref,
+    selectAll,
     palette,
     gradient,
     normalize,
@@ -24,7 +25,7 @@ from gofish import (
     text,
     image,
 )
-from gofish.ast import LayerSelector
+from gofish.ast import _RefProxy
 
 
 class TestOperators:
@@ -113,20 +114,38 @@ class TestMarkName:
         assert "name" not in d
 
 
-class TestSelect:
-    """Test select() and LayerSelector."""
+class TestRefData:
+    """Test `ref(...)` / `selectAll(...)` used as chart data."""
 
-    def test_select_returns_layer_selector(self):
-        """Test select() returns a LayerSelector."""
-        s = select("bars")
-        assert isinstance(s, LayerSelector)
-        assert s.layer_name == "bars"
+    def test_select_all_returns_ref_proxy(self):
+        """Test selectAll() returns a _RefProxy carrying multiplicity='all'."""
+        s = selectAll("bars")
+        assert isinstance(s, _RefProxy)
+        assert s.multiplicity == "all"
+        assert s._sel() == ["bars"]
 
-    def test_chart_with_select_ir(self):
-        """Test chart(select(...)) serializes data as select spec."""
-        c = chart(select("bars")).mark(line())
+    def test_ref_singular_multiplicity(self):
+        """Test ref() yields a _RefProxy with no (singular) multiplicity."""
+        r = ref("bars")
+        assert isinstance(r, _RefProxy)
+        assert r.multiplicity is None
+
+    def test_chart_with_ref_data_ir(self):
+        """Test chart(ref(...)) serializes data as select spec, mode 'one'."""
+        c = chart(ref("bars")).mark(line())
         ir = c.to_ir()
-        assert ir["data"] == {"type": "select", "layer": "bars"}
+        assert ir["data"] == {"type": "select", "layer": "bars", "mode": "one"}
+
+    def test_chart_with_select_all_data_ir(self):
+        """Test chart(selectAll(...)) serializes with mode 'all'."""
+        c = chart(selectAll("bars")).mark(line())
+        ir = c.to_ir()
+        assert ir["data"] == {"type": "select", "layer": "bars", "mode": "all"}
+
+    def test_select_all_inline_raises(self):
+        """selectAll() cannot be used inline in a layout."""
+        with pytest.raises(ValueError, match="cannot be used inline"):
+            selectAll("bars").to_dict()
 
     def test_chart_with_regular_data_ir(self):
         """Test regular chart has null data in IR."""
@@ -320,7 +339,7 @@ class TestLayerBuilder:
         """Test Layer([...]) with children only."""
         data = [{"x": 1}]
         c1 = chart(data).mark(rect(h="x").name("bars"))
-        c2 = chart(select("bars")).mark(line())
+        c2 = chart(ref("bars")).mark(line())
         lb = Layer([c1, c2])
         assert isinstance(lb, LayerBuilder)
         assert lb.options == {}
@@ -339,7 +358,7 @@ class TestLayerBuilder:
         """Test LayerBuilder.to_ir() produces correct structure."""
         data = [{"x": 1}]
         c1 = chart(data).mark(rect(h="x").name("bars"))
-        c2 = chart(select("bars")).mark(line())
+        c2 = chart(ref("bars")).mark(line())
         ir = Layer([c1, c2]).to_ir()
         assert ir["type"] == "layer"
         assert len(ir["charts"]) == 2
@@ -349,7 +368,7 @@ class TestLayerBuilder:
         """Test child chart specs are correctly embedded in layer IR."""
         data = [{"x": 1}]
         c1 = chart(data).flow(spread(by="x", dir="x")).mark(rect(h="x").name("bars"))
-        c2 = chart(select("bars")).mark(line())
+        c2 = chart(ref("bars")).mark(line())
         ir = Layer([c1, c2]).to_ir()
 
         chart0 = ir["charts"][0]
@@ -360,7 +379,7 @@ class TestLayerBuilder:
 
         chart1 = ir["charts"][1]
         assert chart1["mark"]["type"] == "line"
-        assert chart1["data"] == {"type": "select", "layer": "bars"}
+        assert chart1["data"] == {"type": "select", "layer": "bars", "mode": "one"}
 
     def test_layer_to_ir_with_options(self):
         """Test Layer options appear in IR."""
@@ -375,7 +394,7 @@ class TestLayerBuilder:
         fn1 = lambda d: d
         fn2 = lambda d: d
         c1 = chart(data).flow(derive(fn1)).mark(rect(h="x").name("bars"))
-        c2 = chart(select("bars")).flow(derive(fn2)).mark(line())
+        c2 = chart(ref("bars")).flow(derive(fn2)).mark(line())
         lb = Layer([c1, c2])
 
         # Collect derive functions manually (mirrors what render() does)
@@ -432,9 +451,9 @@ class TestChartBuilder:
         assert ir["mark"]["h"] == "value"
         assert ir["mark"]["fill"] == "grp"
 
-    def test_to_ir_select_with_line(self):
-        """Test select() chart with line mark."""
-        c = chart(select("bars")).mark(line())
+    def test_to_ir_ref_with_line(self):
+        """Test ref(...)-as-data chart with line mark."""
+        c = chart(ref("bars")).mark(line())
         ir = c.to_ir()
-        assert ir["data"] == {"type": "select", "layer": "bars"}
+        assert ir["data"] == {"type": "select", "layer": "bars", "mode": "one"}
         assert ir["mark"]["type"] == "line"
