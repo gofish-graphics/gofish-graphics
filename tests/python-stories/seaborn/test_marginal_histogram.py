@@ -46,8 +46,9 @@ def story_default():
     # Python bin()'s measure provenance can't cross the derive RPC bridge
     # (JSON drops the JS-side symbol), so the bin-edge channels would tag as
     # "start"/"end" and falsely conflict with the center's field measure.
-    # Annotate explicitly with field(name, measure=...) — the Stage-1 escape
-    # hatch the measure type error prescribes.
+    # Annotate explicitly with field(name, measure=...) — the escape hatch the
+    # measure type error prescribes. The JS story needs no annotations; #537
+    # tracks carrying provenance across the bridge so this collapses too.
     top_hist = (
         chart(data, h=80)
         .flow(
