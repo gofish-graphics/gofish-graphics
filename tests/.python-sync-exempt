@@ -70,6 +70,18 @@ packages/gofish-graphics/stories/forwardsyntax/ColorScales.stories.tsx::PairedPa
 # are ported (tests/python-stories/forward-syntax-v3/test_cut.py).
 packages/gofish-graphics/stories/forwardsyntax/Cut.stories.tsx::ImageCutWithLabels
 
+# Per-export exemption for Cut.stories.tsx — CroissantStack is ported in
+# test_cut.py (story_croissant_stack) and renders visually identically, but the
+# JS story's per-slice spacer-rect scaffolding (the "croissant recipe": each cut
+# slice wrapped in its own Stack with two zero-extent spacer rects) isn't
+# expressible through the IR bridge's flat cut expansion, which emits the N slice
+# nodes directly as combinator children with no per-slice template. The Python
+# port uses a center-aligned Spread instead, so the bands land at identical
+# geometry but the DOM differs by exactly those 12 spacer rects + 6 wrapper
+# groups and can't byte-match. Validated (IR + render) but not byte-gated;
+# remove when the bridge supports per-slice templates.
+packages/gofish-graphics/stories/forwardsyntax/Cut.stories.tsx::CroissantStack
+
 # Per-export exemptions for Labels.stories.tsx — these stories don't fit
 # the single-chart parity harness (they compose many charts in a flex div,
 # use async mark-as-function, or hand-build raw SVG).
