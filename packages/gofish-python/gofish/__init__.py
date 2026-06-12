@@ -50,7 +50,9 @@ from .ast import (
     connect,
     Connect,
     datum,
+    field,
 )
+from .transforms import bin
 
 __all__ = [
     "chart",
@@ -100,6 +102,8 @@ __all__ = [
     "connect",
     "Connect",
     "datum",
+    "field",
+    "bin",
 ]
 
 __version__ = "0.1.0"

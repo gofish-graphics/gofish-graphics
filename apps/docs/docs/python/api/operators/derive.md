@@ -67,3 +67,46 @@ derive(lambda d: normalize(d, "count"))
   game.
 - Because it round-trips to Python, a `derive` step is a callback, not a static
   transform; it re-runs whenever the chart re-renders.
+
+## Measures: keeping units across a transform
+
+A channel that encodes a field carries that field's **measure** — its
+unit-of-measure, like `"Beak Depth (mm)"` or `"count"`. GoFish uses measures to
+decide when two axes may share a scale: overlaying or aligning marks whose axes
+have the _same_ measure merges their domains, while mixing _different_ measures
+(say, a count axis with a millimeter axis) is refused with an error rather than
+silently corrupting the shared domain.
+
+By default the measure is just the field name, which is usually right. Because
+`derive` round-trips through your kernel, a transform's unit provenance does
+**not** survive the bridge — once `bin()` (or your own lambda) returns new
+columns, GoFish only knows their names, not their units. When a derived column
+is really in some existing unit and its axis should share with that unit's
+axis, annotate the channel with `field(name, measure=...)`:
+
+```python
+from gofish import bin, chart, derive, field, rect, scatter
+
+# bin edges are still beak-length millimeters, not "start"/"end" units:
+chart(penguins, h=80).flow(
+    derive(bin("Beak Length (mm)")),
+    scatter(
+        xMin=field("start", measure="Beak Length (mm)"),
+        xMax=field("end", measure="Beak Length (mm)"),
+    ),
+).mark(rect(h="count"))
+```
+
+`datum(v)` values can carry a measure the same way on the JS side.
+
+If you hit **"Cannot unify underlying spaces with different measures"**, you
+have two remedies:
+
+1. If the units really are the same, say so with `field(name, measure=...)` so
+   the axes collapse to one measure and merge.
+2. If the units really differ, give the inner chart an explicit `w`/`h`
+   (`chart(data, h=80)`) so it becomes a self-contained scale region and never
+   shares that axis.
+
+An annotation that contradicts known provenance is itself an error — measures
+are type claims, and two contradictory claims fail fast at the channel.
