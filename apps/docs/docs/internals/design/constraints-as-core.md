@@ -144,12 +144,13 @@ invertible, best-approximation elsewhere) and pushes σ back through each
 child's own claim to obtain that child's extent. The per-child _proposal_ is
 just the child's claim evaluated at the solved σ — except for children with no
 claim (UNDEFINED / "fill"), for which a **fill policy** must supply the answer
-(equal slices or `stackWeights` today). The fill policy is genuinely extra
+(equal slices today; the `stackWeights` variant has since been removed). The fill policy is genuinely extra
 information beyond align + distribute — it is the flex-layout fragment of the
 language — and it is the one place "spread = align + distribute" can never be
 made literally true without adding _something_. The smallest something: the
-distribute constraint carries the policy (weights / equal / none), and the
-Layer applies it to unclaimed children only.
+distribute constraint carries the policy, and the Layer applies it to
+unclaimed children only. (Weighted policies were later deleted; see
+[[size-claims]] for where proportional sharing actually belongs.)
 
 **Degrees of freedom: the "two of three" rule.** Per axis, every
 spread/distribute situation is one budget equation —
@@ -173,7 +174,7 @@ precisely where the operator only gestures at it:
 - all three known → over-determined: a consistency check (conflict-semantics
   bucket, residual 4).
 - one known → under-determined: a policy must designate which unknown it
-  fills — that is what `stackWeights`/equal-slices is. (E.g. data-driven
+  fills — that is what equal-slices is. (E.g. data-driven
   children _plus_ auto spacing is two unknowns; σ must be pinned — say to an
   inherited shared scale — before spacing is solvable.)
 - glue (stack) pins spacing ≡ 0, so the unknown must be σ or the container —
@@ -306,10 +307,13 @@ too: `contain` (outer's size := inner + padding — bottom-up), treemap-style
 slot assignment (top-down), and Bluefish's own unsolved "width alignment"
 (§6.2: make these elements equal-width — a max fold pushed back down, i.e.
 exactly claim-at-solved-σ). All three are the same shape as the budget
-adjoint: a size assignment derived from a fold. The clean move is to extend
-`Placeable` with a write-once size facet per axis and let constraints own
-dims the way they own positions. This should be designed once, not three
-times.
+adjoint: a size assignment derived from a fold. This should be designed once,
+not three times. _Designed (June 2026): see [[size-claims]]_ — the verdict is
+sizes-by-proposal (a size rule folded into space resolution when
+scale-dependent, a dependency-ordered proposal otherwise), with the
+linear-system bbox of #39 as the ownership ledger; a write-once post-layout
+size facet on `Placeable` was evaluated and rejected (it is only safe for
+leaves).
 
 **2. The fill policy.** Where do `stackWeights` / equal-slices live? Options:
 (a) on the distribute constraint (smallest; the prototype's choice); (b) as a
@@ -322,7 +326,12 @@ the policy should travel _with the fold descriptor_ so spread and the
 constraint path consume one shared budget allocator. Note the parity stories
 could not exercise this (all their rects carried explicit sizes, which ignore
 the slice) — fill children are exactly where an untested divergence would
-hide, so the compiled form needs a fill-child parity story.
+hide, so the compiled form needs a fill-child parity story. _Resolved (June
+2026): see [[size-claims]]_ — the weights/`stackWeights` arrays were deleted
+outright (nothing used them), and a spike confirmed option (c) in its deep
+form: a flex share is an ordinary SIZE claim in a reserved flex measure, the
+standard inversion reproduces `allocateSlices` exactly, and the data+flex mix
+is gated on the measure-keyed multi-space design (#547).
 
 **3. `sharedScale` and scale sharing.** Spread's mutation of the inherited
 `scaleFactors` array (first sibling solves, later siblings inherit) is
@@ -498,10 +507,11 @@ the core, and inventing a wire format nothing reads would be speculative.
 A corollary of the high-level-IR decision, per the maintainer's parity rule
 ("everything writable in JS should be writable in Python"): new _surface
 options_ do cross the bridge even when the machinery doesn't. The
-unification's `glue`/`weights` (distribute constraint) and `stackWeights`
-(spread) are exposed to Python — wrapper kwargs plus the typed
-`SpreadOperator` fields and validators in `gofish-ir` — and the 12
-`ConstraintParity` stories have byte-identical Python ports
-(`tests/python-stories/low-level-syntax/test_constraint_parity.py`). Parity
+unification's `glue` (distribute constraint) is exposed to Python — wrapper
+kwargs plus the typed `SpreadOperator` fields and validators in `gofish-ir` —
+and the `ConstraintParity` stories have byte-identical Python ports
+(`tests/python-stories/low-level-syntax/test_constraint_parity.py`). (The
+`weights`/`stackWeights` options that also crossed the bridge here were
+deleted in the [[size-claims]] round.) Parity
 exemptions are reserved for stories that aren't pure gofish specs; "this only
 tests the JS engine" is not a valid exemption reason.
