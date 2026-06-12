@@ -225,8 +225,10 @@ html[data-docs-lang="js"] .lang-toggle__btn[data-lang="js"] {
    the flex-growing search pushes GitHub · Internals to the right.
    NOTE: the selectors below target VitePress's internal nav class names —
    re-test the nav layout after any `vitepress` upgrade. */
+/* Nav menu (Examples · API Reference) sits between search and the
+   GitHub/Internals cluster. (This was `display: none` while `nav` was empty.) */
 .VPNavBar .content-body > .VPNavBarMenu {
-  display: none;
+  margin-right: 8px;
 }
 /* Match the toggle->search gap to the 24px logo->toggle gap. */
 .VPNavBar .content-body > .VPNavBarSearch {
