@@ -9,6 +9,7 @@ import {
   Constraint,
   selectAll,
   spread,
+  stack,
   Spread,
   cut,
   datum,
@@ -118,6 +119,44 @@ export const ImageCutWithLabels: StoryObj<Args> = {
         )) as any
       ),
     ]).render(container, { w: args.w, h: args.h, axes: false });
+
+    return container;
+  },
+};
+
+/** Two bottles, each grouped by `vintage` and cut by its own rows. The expand
+ *  `cut` mark turns each group's rows into an ARRAY of slice nodes; the inner
+ *  `stack` collapses that array into a single bottle node, so the outer
+ *  `spread({by})` has exactly one node per group to arrange. This is the
+ *  canonical way to combine `by`-grouping with an expand mark: interpose a
+ *  layout operator between the grouping and the cut. */
+export const GroupedCut: StoryObj<Args> = {
+  args: { w: 600, h: 700 },
+  render: (args: Args) => {
+    const container = initializeContainer();
+
+    const data = [
+      { vintage: "2019", category: "Water", amount: 40 },
+      { vintage: "2019", category: "Grape juice", amount: 42 },
+      { vintage: "2019", category: "Other", amount: 18 },
+      { vintage: "2021", category: "Water", amount: 55 },
+      { vintage: "2021", category: "Grape juice", amount: 30 },
+      { vintage: "2021", category: "Other", amount: 15 },
+    ];
+
+    Chart(data)
+      .flow(
+        spread({ by: "vintage", dir: "x", spacing: 40 }),
+        stack({ dir: "y", reverse: true })
+      )
+      .mark(
+        image({ href: bottlePng, w: 193, h: 600 }).cut({
+          dir: "y",
+          size: "amount",
+          inset: 4,
+        })
+      )
+      .render(container, { w: args.w, h: args.h, axes: false });
 
     return container;
   },

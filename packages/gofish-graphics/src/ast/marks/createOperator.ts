@@ -694,15 +694,18 @@ export function createOperator<Datum, Options extends Record<string, any>>(
         // the waffle grid relies on, only applies to per-item marks.) The
         // resulting N expanded nodes are then arranged by `layout` below.
         const isExpand = getMarkKind(mark) === "expand";
-        // An expand mark slices one source into N nodes; it has no per-row
-        // identity to regroup, so `by`-grouping would have to be silently
-        // dropped. Fail loudly instead — this is not yet supported.
+        // An expand mark turns a group's rows into an ARRAY of slice nodes,
+        // but a `by`-grouped operator needs exactly ONE child node per group.
+        // So the cut can't hang directly under the `by`-operator — interpose a
+        // layout operator between the grouping and the cut to collapse each
+        // group's slices into a single node first.
         if (isExpand && (opts as any).by !== undefined) {
           throw new Error(
-            `cut is an expand mark and cannot be combined with \`by\`-grouping ` +
-              `yet: it slices a single source shape, so there are no per-row ` +
-              `groups to split. Drop \`by\`, or group upstream and cut within ` +
-              `each group.`
+            `cut is an expand mark: it turns each group's rows into an array of ` +
+              `slice nodes, but a \`by\`-grouped operator needs exactly one node ` +
+              `per group. Interpose a layout operator between the by-grouping and ` +
+              `the cut so each group's slices collapse into one node, e.g. ` +
+              `.flow(spread({ by }), stack({ dir }))`
           );
         }
         const splitResult = isExpand

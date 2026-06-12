@@ -235,8 +235,13 @@ available across a naming/labeling chain.
 
 Expand marks consume a whole group at once, so the operator (traversal) form
 hands them a single leaf containing all rows regardless of its own `split`
-config. They have no per-row identity to regroup, so combining one with a
-`by`-grouping operator throws rather than silently dropping the grouping.
+config. An expand mark therefore turns each group's rows into an _array_ of
+nodes, whereas a `by`-grouped operator needs exactly one child node per group —
+so an expand mark can't hang directly under a `by`-operator, and that case
+throws. The fix is to interpose a layout operator between the grouping and the
+expand mark (`.flow(spread({ by }), stack({ dir }))`): the inner operator
+consumes the expand mark and collapses each group's slices into one node, which
+the outer `by`-operator then arranges.
 
 Naming-wise: `createOperator` is the frontend factory; the low-level helper
 that produces `Spread`, `Scatter`, etc. is `createNodeOperator`

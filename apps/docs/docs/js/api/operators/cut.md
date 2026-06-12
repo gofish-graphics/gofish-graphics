@@ -73,9 +73,27 @@ per row, treated as datum-provenance — `size: "amount"` is exactly
 taken from the data length). Each slice carries its source row, so a second
 sub-chart can `selectAll(...)` the named slices and annotate them.
 
-> `cut` is an expand mark, so it cannot yet be combined with `by`-grouping on
-> the surrounding operator — doing so throws. Group upstream and cut within
-> each group instead.
+### Combining with `by`-grouping
+
+A `by`-grouped operator expects **exactly one child node per group**. But an
+_expand_ mark turns each group's rows into an **array** of slice nodes — so you
+cannot hang the `.cut(...)` mark directly under a `by`-grouped operator; doing
+so throws. The fix is to **interpose a layout operator** between the grouping
+and the cut, so each group's slices collapse back into a single node before the
+`by`-operator arranges them:
+
+```js
+gf.chart(data)
+  .flow(
+    gf.spread({ by: "vintage", dir: "x", spacing: 40 }), // one bottle per group
+    gf.stack({ dir: "y", reverse: true }) // collapse each group's slices into one node
+  )
+  .mark(gf.image({ href, w: 193, h: 600 }).cut({ dir: "y", size: "amount" }));
+```
+
+The inner `stack` consumes the expand mark (cutting one bottle per group and
+stacking its slices back into a whole), so the outer `spread({ by })` sees a
+single node per group — no throw.
 
 ## Size semantics
 
