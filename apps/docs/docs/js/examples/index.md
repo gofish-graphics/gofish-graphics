@@ -1,10 +1,11 @@
 ---
+layout: page
 title: GoFish Examples
-description: Browse examples
+description: Walk the GoFish collection — a hall of live chart examples
 ---
 
-# GoFish Examples
+<script setup>
+import GalleryPage from "../../.vitepress/theme/components/gallery/GalleryPage.vue";
+</script>
 
-<!-- Explore our collection of visualization examples. Use the filters below to find examples that use specific marks, operators, or chart types. -->
-
-<ExampleGallery />
+<GalleryPage />
