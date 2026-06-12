@@ -316,7 +316,7 @@ html.landing-page .DocSearch-Button {
   gap: 10px;
   font-family: "Spline Sans Mono", monospace;
   font-size: 0.85rem;
-  color: var(--ink-soft);
+  color: var(--ink);
   background: rgba(0, 0, 0, 0.045);
   padding: 8px 16px;
   border-radius: 6px;
