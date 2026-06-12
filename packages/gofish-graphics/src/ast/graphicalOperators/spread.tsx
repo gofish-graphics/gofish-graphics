@@ -51,7 +51,6 @@ export const Spread = createNodeOperator(
       mode = "edge",
       reverse = false,
       glue = false,
-      stackWeights,
       axes,
       ...fancyDims
     }: {
@@ -66,12 +65,6 @@ export const Spread = createNodeOperator(
       // When true, treat as a stack: glue children together, summing their
       // sizes into a POSITION at this level. `spacing` is ignored.
       glue?: boolean;
-      /**
-       * When length matches `children`, divides space along `dir` in proportion
-       * to these weights (after subtracting `spacing`). Otherwise each child
-       * gets an equal share.
-       */
-      stackWeights?: number[];
       /** Override axis rendering for this node. true/false applies to both
        * dims; object form controls x/y independently. */
       axes?: boolean | { x?: AxisOptions; y?: AxisOptions };
@@ -102,7 +95,6 @@ export const Spread = createNodeOperator(
           mode,
           reverse,
           glue,
-          stackWeights,
           dims,
         },
         key,
@@ -219,13 +211,12 @@ export const Spread = createNodeOperator(
             scaleFactor: sfY,
           };
 
-          // Divide the stack-axis budget into per-child slices (shared fill
-          // policy; weights split it in proportion, else an equal share).
+          // Divide the stack-axis budget into equal per-child slices (the
+          // shared fill policy).
           const childStackSizes = allocateSlices(
             size[stackDir],
             effectiveSpacing,
-            children.length,
-            stackWeights
+            children.length
           );
 
           const childPlaceables = children.map((child, i) => {
@@ -388,8 +379,6 @@ export type SpreadOptions<T = any> = {
   mode?: "edge" | "center";
   reverse?: boolean;
   glue?: boolean;
-  /** Combinator form: same length as child marks; splits space along `dir` by weight. */
-  stackWeights?: number[];
   w?: number | (keyof T & string);
   h?: number | (keyof T & string);
   debug?: boolean;

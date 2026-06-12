@@ -86,7 +86,6 @@ type DistributeBudget = {
   spacing: number;
   /** Names of the distribute targets, in placement order. */
   order: string[];
-  weights?: number[];
   /** The folded SIZE Monotonic on the distribute axis, if the fold was SIZE —
    *  inverted against the layer's allotted size to derive the child scale
    *  factor (auto-fit). Absent for glue/POSITION/ORDINAL/UNDEFINED folds. */
@@ -213,7 +212,6 @@ function resolveSpreadShape(
       dAxis,
       spacing: dist.spacing,
       order,
-      weights: dist.weights,
       sizeDomain: isSIZE(foldD) ? foldD.domain : undefined,
     },
   };
@@ -579,18 +577,17 @@ export const layer = createNodeOperatorSequential(
           }
 
           // Per-child proposed size for the distribute-covered children: the
-          // fill policy (`allocateSlices`) — equal slices by default, or
-          // weight-proportional — on the distribute axis, the full size on the
-          // cross axis. A child carrying its own explicit size ignores this (its
-          // size wins), matching spread; a claim-less child consumes the slice.
+          // fill policy (`allocateSlices`) — an equal slice each — on the
+          // distribute axis, the full size on the cross axis. A child carrying
+          // its own explicit size ignores this (its size wins), matching
+          // spread; a claim-less child consumes the slice.
           const sliceByName: Map<string, number> | undefined = constraintBudget
             ? (() => {
                 const b = constraintBudget;
                 const slices = allocateSlices(
                   size[b.dAxis],
                   b.spacing,
-                  b.order.length,
-                  b.weights
+                  b.order.length
                 );
                 const m = new Map<string, number>();
                 b.order.forEach((name, i) => m.set(name, slices[i]));

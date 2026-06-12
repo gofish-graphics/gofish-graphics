@@ -167,9 +167,6 @@ export interface SpreadOperator extends BaseIRNode {
   /** Stack semantics: glue children together (sizes sum into a position at
    *  this level) instead of slicing a budget. Forces `spacing` to 0. */
   glue?: boolean;
-  /** Flex weights aligned to placement order; splits the budget in proportion
-   *  to these instead of equally. */
-  stackWeights?: number[];
   axes?: AxesOptions;
 }
 
