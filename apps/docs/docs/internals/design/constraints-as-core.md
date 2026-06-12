@@ -458,11 +458,21 @@ level.
 
 ## Python / IR implications
 
-Constraints are plain serializable data; operators are closures. If the JS
-core reduces to Layer + constraints + marks, the frontend IR can converge on
-that small vocabulary, with operator sugar elaborated per language _before_
-the bridge — fewer constructs crossing `gofish-ir`, and the Python wrapper
-gets the unified model #354 asks about for free, regardless of how long the JS
-surface keeps both spellings. (Every new constraint kind still pays the
-three-encoding schema tax — one more reason to design size-setting constraints
-once rather than per-operator.)
+**Decision: the high-level IR stays the Python bridge target.** Operators
+carry semantic information — _this is a spread of revenue by month_ — that a
+compiled layers-plus-constraints form erases, and that information is exactly
+what accessibility tooling (screen-reader navigation à la Olli / Data
+Navigator, which the Bluefish paper's future-work section points at) and any
+later analysis want to read. So the Python wrapper keeps serializing the
+high-level vocabulary unchanged, and compilation to the constraint core
+happens inside the JS engine, _after_ the bridge. The unification is invisible
+to `gofish-ir`.
+
+A serialized **core IR** (layers + constraints + marks, the post-compilation
+form) remains a coherent artifact to define — it would be the natural input
+for a non-JS renderer, a layout debugger, or an optimizer — but it is
+deferred until such a consumer exists; today the in-memory compiled form _is_
+the core, and inventing a wire format nothing reads would be speculative.
+(New constraint kinds still pay the three-encoding schema tax only if and
+when they are exposed to Python; the unification itself adds nothing to the
+schema.)
