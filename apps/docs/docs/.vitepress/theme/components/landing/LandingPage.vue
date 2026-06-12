@@ -387,9 +387,7 @@ onBeforeUnmount(() => {
       <!-- ===================== SPECTRUM ===================== -->
       <section class="section spectrum" aria-labelledby="spec-h">
         <div class="head reveal">
-          <h2 id="spec-h">
-            Simple when you want it,<br />bespoke when you need it
-          </h2>
+          <h2 id="spec-h">Simple when you want,<br />complex when you need</h2>
         </div>
 
         <div class="track reveal">
@@ -422,7 +420,7 @@ onBeforeUnmount(() => {
           </svg>
           <div class="track-labels">
             <span>simple</span>
-            <span>bespoke →</span>
+            <span>complex</span>
           </div>
         </div>
       </section>

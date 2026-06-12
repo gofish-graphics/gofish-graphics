@@ -366,11 +366,11 @@ html.landing-page .DocSearch-Button {
 }
 .landing .fc-bl {
   left: 4%;
-  bottom: 12%;
+  bottom: 6%;
 }
 .landing .fc-br {
   right: 5%;
-  bottom: 14%;
+  bottom: 7%;
 }
 @media (max-width: 1240px) {
   .landing .fc-tl {
