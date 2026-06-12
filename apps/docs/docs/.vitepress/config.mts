@@ -372,6 +372,12 @@ export default defineConfig({
                 { text: "scatter", link: "/python/api/operators/scatter" },
                 { text: "group", link: "/python/api/operators/group" },
                 { text: "derive", link: "/python/api/operators/derive" },
+                {
+                  text: "region compositing",
+                  link: "/python/api/operators/region-compositing",
+                },
+                { text: "cut", link: "/python/api/operators/cut" },
+                { text: "offset", link: "/python/api/operators/offset" },
                 { text: "log", link: "/python/api/operators/log" },
               ],
             },
