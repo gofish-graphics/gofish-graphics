@@ -119,6 +119,57 @@ function isExportExempt(
 }
 
 // ---------------------------------------------------------------------------
+// Storybook chrome stripping.
+//
+// Story-level `tags` and `parameters` (e.g. the gallery annotation) are
+// Storybook presentation metadata, not part of the chart spec that Python
+// stories mirror. A modified JS story whose spec-relevant content is
+// unchanged does not require a Python update.
+// ---------------------------------------------------------------------------
+
+function stripStorybookChrome(source: string): string {
+  const out: string[] = [];
+  let depth = 0; // > 0 while inside a `parameters: {...}` block
+  for (const line of source.split("\n")) {
+    if (depth > 0) {
+      depth += (line.match(/\{/g) ?? []).length;
+      depth -= (line.match(/\}/g) ?? []).length;
+      continue;
+    }
+    if (/^\s*tags:\s*\[[^\]]*\],?\s*$/.test(line)) continue;
+    if (/^\s*parameters:\s*\{/.test(line)) {
+      depth =
+        (line.match(/\{/g) ?? []).length - (line.match(/\}/g) ?? []).length;
+      continue;
+    }
+    out.push(line);
+  }
+  return out.join("\n");
+}
+
+/** True when the file's change between baseRef's merge-base and HEAD touches
+ * only Storybook chrome (tags/parameters). */
+function isChromeOnlyChange(jsFile: string, baseRef: string): boolean {
+  try {
+    const mergeBase = execSync(`git merge-base "${baseRef}" HEAD`, {
+      cwd: ROOT_DIR,
+      encoding: "utf-8",
+    }).trim();
+    const baseContent = execSync(`git show ${mergeBase}:"${jsFile}"`, {
+      cwd: ROOT_DIR,
+      encoding: "utf-8",
+      maxBuffer: 16 * 1024 * 1024,
+    });
+    const headContent = readFileSync(join(ROOT_DIR, jsFile), "utf-8");
+    return (
+      stripStorybookChrome(baseContent) === stripStorybookChrome(headContent)
+    );
+  } catch {
+    return false; // can't prove it — fall through to the strict check
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Walk all JS stories under packages/gofish-graphics/stories/.
 // ---------------------------------------------------------------------------
 
@@ -469,6 +520,17 @@ for (const jsFile of modifiedJs) {
   const pythonModified = allChangedFiles.has(pythonFile);
 
   if (!pythonModified) {
+    if (isChromeOnlyChange(jsFile, baseRef)) {
+      results.push({
+        jsFile,
+        pythonFile,
+        changeType: "modified",
+        status: "ok",
+        message: `Only Storybook chrome (tags/parameters) changed — no Python update needed`,
+      });
+      console.log(`  OK (chrome-only): ${jsFile}`);
+      continue;
+    }
     results.push({
       jsFile,
       pythonFile,
