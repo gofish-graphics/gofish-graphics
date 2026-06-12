@@ -340,6 +340,10 @@ constants flow through the same solve. And the one thing that breaks is
 exactly the thing the measure system exists to forbid — so flex-as-data is
 gated on #547, not on new layout machinery.
 
+> The order story, the algebra, and the proposal/scope picture sketched in the
+> next three sections are developed fully — with traced examples — in the
+> companion note [[layout-synthesis]].
+
 ## Where order lives (a clarification)
 
 "Do we topologically sort?" has three different answers because there are
