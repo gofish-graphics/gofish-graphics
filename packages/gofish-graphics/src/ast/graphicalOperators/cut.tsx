@@ -295,6 +295,24 @@ const cutFactory = createMark<
 });
 
 /**
+ * Build the v3 expand-kind cut mark directly from an options object — the
+ * deserializer entry point for a `cut` mark used in a chart `.mark(...)`
+ * position. Equivalent to `source.cut(opts)` / what `attachCut` produces, but
+ * callable without first having the source mark in hand as a method receiver.
+ * The frontend-IR deserializer reconstructs `source` from its mark-spec and
+ * passes it here. (As a combinator CHILD, a `cut` IR node is instead expanded
+ * into its N slice nodes via the pure {@link cut} — see the serializer.)
+ */
+export function cutMark(opts: {
+  source: Mark<any>;
+  dir: "x" | "y";
+  size?: string | Value<number>[];
+  inset?: number;
+}): Mark<any> {
+  return cutFactory(opts as any) as unknown as Mark<any>;
+}
+
+/**
  * Attach a `.cut(opts)` method onto an existing mark. `.cut` is a transform
  * modifier — it maps the mark to the expand-kind cut mark built from
  * `cutFactory`. `attachTransformModifiers` keeps it available across

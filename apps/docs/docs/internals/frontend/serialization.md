@@ -120,7 +120,26 @@ The root types mirror the v3 fluent builder shapes:
 (`rect`, `circle`, `line`, `area`, `blank`, `ellipse`, `petal`, `text`,
 `image`, `polygon`, plus the Python-bridge `mark-fn`), combinators (with
 `__combinator: true` and a `children` array — `layer`, `spread`, `stack`,
-`arrow`, `connect`, `treemap`, and the Porter-Duff family), or refs.
+`arrow`, `connect`, `treemap`, and the Porter-Duff family), refs, or the
+two self-discriminating wrapper marks `offset` and `cut` (below).
+
+`offset` — `{ type: "offset", x?, y?, children: [<node>] }` — wraps a single
+child and shifts it by `(x, y)` render-pixels without moving the bounds it
+advertises to its parent; it maps to the public `offset` operator.
+
+`cut` — `{ type: "cut", source: <mark>, dir, size?, inset? }` — slices a single
+`source` mark into N clipped sub-shapes along `dir`. `size` is a field-name
+string (per-row weights) or an array of absolute-pixel numbers and `datum()`
+flex-weights; omitted means equal slices. It has **two deserialization surfaces
+over one JS core**, dispatched by context so extent resolution (flexbox sizing,
+absolute-vs-weight mixing, measure-unit checks) lives in ONE place, JS-side:
+
+- used as a chart `.mark(...)` → the v3 expand-mark form (`cutMark` /
+  `source.cut(opts)`), so a chart flow treats it as an expand mark;
+- used as a **combinator child** (inside a Spread/Stack `children` array) → the
+  deserializer expands it in place into its N slice nodes — the pure
+  `cut(source, opts)` returns a `Promise<GoFishNode>[]` that combinators accept
+  directly as children (see `mapMarkChildren` in `fromJSON.ts`).
 
 `ChartIR.connect` is the optional connector mark from the v3 builder's
 [`.connect(line())`](/js/api/core/connect) sugar. It carries an ordinary
@@ -252,7 +271,7 @@ The high-level structure:
     "RawMarkIR":  { /* type, mark, options, ... */ },
     "DataIR":     { "oneOf": [/* inline, select, external */] },
     "OperatorIR": { /* type enum: derive | spread | stack | group | scatter | table | log */ },
-    "MarkIR":     { "oneOf": [LeafMarkIR, CombinatorMarkIR, RefMarkIR] },
+    "MarkIR":     { "oneOf": [LeafMarkIR, CombinatorMarkIR, RefMarkIR, OffsetMarkIR, CutMarkIR] },
     "LabelIR":      { /* accessor, position, fontSize, ... */ },
     "ConstraintIR": { /* type, options, refs */ },
     "ChannelValue": { "oneOf": [/* primitives, field, datum, literal, bridge sentinels */] }

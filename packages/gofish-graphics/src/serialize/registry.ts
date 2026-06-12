@@ -51,9 +51,20 @@ import {
   treemap as treemapOperator,
   Treemap,
 } from "../ast/graphicalOperators/treemap";
+// `cut` (the pure slice primitive, returns an array of slice node promises)
+// and `cutMark` (the v3 expand-mark form) — the deserializer dispatches
+// between them by context: a `cut` IR node used as a chart `.mark(...)` →
+// `cutMark`, used as a combinator child → expanded into slices via `cut`.
+// `offset` is the public node operator a `{type:"offset"}` IR node maps to.
+// These need recursive `mapMark` of their `source`/`children`, so unlike the
+// string-keyed MARK_MAP/COMBINATOR_FACTORIES they're applied directly in
+// fromJSON.ts rather than via a flat factory map.
+import { cut as cutSlices, cutMark } from "../ast/graphicalOperators/cut";
+import { offset as offsetOp } from "../ast/graphicalOperators/offset";
 import type { Frontend } from "gofish-ir";
 
 export type { ChartBuilder, Mark, Operator };
+export { cutSlices, cutMark, offsetOp };
 
 /**
  * Bridge used by the deserializer to invoke Python-registered lambdas.

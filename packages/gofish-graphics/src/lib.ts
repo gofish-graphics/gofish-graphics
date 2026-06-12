@@ -97,7 +97,7 @@ export {
 } from "./ast/graphicalOperators/position";
 export { arrow, arrow as Arrow } from "./ast/graphicalOperators/arrow";
 export { Table, table } from "./ast/graphicalOperators/table";
-export { cut, cut as Cut } from "./ast/graphicalOperators/cut";
+export { cut, cut as Cut, cutMark } from "./ast/graphicalOperators/cut";
 export { offset, offset as Offset } from "./ast/graphicalOperators/offset";
 // Region-compositing node operators (Figma-inspired names, #196/#202). `over`
 // is intentionally not exported — it is conceptually `layer` (#196).

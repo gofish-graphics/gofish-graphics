@@ -55,6 +55,13 @@ import {
   subtract,
   paint,
   mask,
+  // `cut` (pure slice primitive → array of slice-node promises) and `cutMark`
+  // (v3 expand-mark form). A `cut` IR node used as a chart `.mark(...)` →
+  // `cutMark`; used as a combinator child → expanded into slices via `cut`.
+  // `offset` is the public node operator a `{type:"offset"}` IR node maps to.
+  cut as cutSlices,
+  cutMark,
+  offset as offsetOp,
   createName,
   Treemap,
   type ChartBuilder,
@@ -434,6 +441,35 @@ function resolveRefSelection(selection: any, resolveToken: TokenResolver): any {
   return selection;
 }
 
+/**
+ * Map combinator-child specs to runtime children, expanding any `cut` child
+ * into its N slice nodes in place. Mirrors the deserializer's
+ * `mapMarkChildren` (packages/gofish-graphics/src/serialize/fromJSON.ts): the
+ * pure `cut(source, opts)` returns a `Promise<GoFishNode>[]` that combinators
+ * accept directly, so cut's extent resolution stays in ONE place (JS).
+ */
+function mapMarkChildren(
+  specs: MarkSpec[],
+  deriveServerUrl: string | undefined,
+  resolveToken: TokenResolver
+): any[] {
+  const out: any[] = [];
+  for (const child of specs as any[]) {
+    if (child && child.type === "cut") {
+      const sourceMark = mapMark(child.source, deriveServerUrl, resolveToken);
+      const slices = cutSlices(sourceMark as any, {
+        dir: child.dir,
+        size: unwrapMarkOpts(child.size, deriveServerUrl),
+        inset: child.inset,
+      });
+      out.push(...slices);
+    } else {
+      out.push(mapMark(child as MarkSpec, deriveServerUrl, resolveToken));
+    }
+  }
+  return out;
+}
+
 function mapMark(
   spec: MarkSpec,
   deriveServerUrl: string | undefined,
@@ -490,6 +526,44 @@ function mapMark(
     ) as unknown as Mark<any>;
   }
 
+  // `offset` node: shift a single child by (x, y) render-pixels. Maps to the
+  // public `offset` operator, which accepts a Mark child and resolves it.
+  if (spec.type === "offset") {
+    const [childMark] = mapMarkChildren(
+      spec.children ?? [],
+      deriveServerUrl,
+      resolveToken
+    );
+    return offsetOp({ x: spec.x, y: spec.y }, [
+      childMark as any,
+    ]) as unknown as Mark<any>;
+  }
+
+  // `cut` mark in a chart `.mark(...)` position → the v3 expand-mark form
+  // (`cutMark`). The field-name-string `size` sugar resolves per-row here. (A
+  // `cut` used as a combinator CHILD is expanded into its N slice nodes in
+  // place by `mapMarkChildren` — extent resolution lives in ONE place, JS.)
+  if (spec.type === "cut") {
+    const sourceMark = mapMark(spec.source, deriveServerUrl, resolveToken);
+    let mark = cutMark({
+      source: sourceMark as any,
+      dir: spec.dir,
+      size: unwrapMarkOpts(spec.size, deriveServerUrl),
+      inset: spec.inset,
+    });
+    const nameVal = resolveNameField(spec.name, resolveToken);
+    if (nameVal != null && typeof (mark as any).name === "function") {
+      mark = (mark as any).name(nameVal);
+    }
+    if (
+      typeof spec.zOrder === "number" &&
+      typeof (mark as any).zOrder === "function"
+    ) {
+      mark = (mark as any).zOrder(spec.zOrder);
+    }
+    return mark;
+  }
+
   // Combinator-form marks: a layout operator (`spread`, `layer`, or
   // `arrow`) used as a mark, with explicit nested children instead of
   // repeating a single mark across data. Python emits `{type,
@@ -497,8 +571,10 @@ function mapMark(
   // rebuild it by calling the JS operator's `(opts, marks)` overload,
   // then chain `.constrain(...)` if present.
   if (spec.__combinator) {
-    const childMarks = (spec.children ?? []).map((c) =>
-      mapMark(c, deriveServerUrl, resolveToken)
+    const childMarks = mapMarkChildren(
+      spec.children ?? [],
+      deriveServerUrl,
+      resolveToken
     );
     // Resolve color/coord configs too — e.g. a `layer({coord: polar()})`
     // carries its coord transform in the combinator options (BalloonChart,

@@ -226,7 +226,12 @@ export interface LogOperator extends BaseIRNode {
 // Marks
 // ---------------------------------------------------------------------------
 
-export type MarkIR = LeafMarkIR | CombinatorMarkIR | RefMarkIR;
+export type MarkIR =
+  | LeafMarkIR
+  | CombinatorMarkIR
+  | RefMarkIR
+  | OffsetMarkIR
+  | CutMarkIR;
 
 export type LeafMarkType =
   | "rect"
@@ -296,6 +301,45 @@ export interface RefMarkIR extends BaseIRNode {
   selection: string | Array<string | number>;
   name?: string;
   label?: LabelIR;
+  zOrder?: number;
+}
+
+/**
+ * `offset` node — shifts its single child by `(x, y)` render-pixels without
+ * moving the bounds the child advertises to its parent. Maps to the public
+ * `offset` operator (`gofish-graphics/src/ast/graphicalOperators/offset.tsx`).
+ * Exactly one child; `children` is a one-element tuple to mirror the operator's
+ * "exactly one child" contract.
+ */
+export interface OffsetMarkIR extends BaseIRNode {
+  type: "offset";
+  x?: number;
+  y?: number;
+  children: [MarkIR];
+}
+
+/**
+ * `cut` mark — slices a single `source` mark into N clipped sub-shapes along
+ * `dir`. Two deserialization surfaces over the same JS core (extent resolution
+ * stays in JS in ONE place):
+ *
+ *  - as a chart `.mark(...)` spec → the v3 expand-mark form (`cutMark` /
+ *    `source.cut(opts)`); a field-name string `size` resolves per-row.
+ *  - as a combinator CHILD (inside a Spread/Stack `children` array) → expanded
+ *    in place into its N slice nodes via the pure `cut(source, opts)`.
+ *
+ * `size` is `string` (field name, expand form only), or an array whose entries
+ * are raw `number`s (ABSOLUTE source pixels) or `datum`-wire values (relative
+ * flex weights — the same `{type:"datum", datum}` wrapper used by channel
+ * values). Omitted → equal slices (N from the data length).
+ */
+export interface CutMarkIR extends BaseIRNode {
+  type: "cut";
+  source: MarkIR;
+  dir: "x" | "y";
+  size?: string | Array<number | DatumValue>;
+  inset?: number;
+  name?: string;
   zOrder?: number;
 }
 
@@ -409,8 +453,19 @@ export function isCombinatorMarkIR(mark: MarkIR): mark is CombinatorMarkIR {
 export function isRefMarkIR(mark: MarkIR): mark is RefMarkIR {
   return mark.type === "ref";
 }
+export function isOffsetMarkIR(mark: MarkIR): mark is OffsetMarkIR {
+  return mark.type === "offset";
+}
+export function isCutMarkIR(mark: MarkIR): mark is CutMarkIR {
+  return mark.type === "cut";
+}
 export function isLeafMarkIR(mark: MarkIR): mark is LeafMarkIR {
-  return !isCombinatorMarkIR(mark) && !isRefMarkIR(mark);
+  return (
+    !isCombinatorMarkIR(mark) &&
+    !isRefMarkIR(mark) &&
+    !isOffsetMarkIR(mark) &&
+    !isCutMarkIR(mark)
+  );
 }
 
 /** The set of operator type discriminators recognized in v0. */
