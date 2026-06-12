@@ -77,3 +77,14 @@ packages/gofish-graphics/stories/lowlevel/Constraints.stories.tsx::SpreadY_Spaci
 packages/gofish-graphics/stories/lowlevel/Constraints.stories.tsx::SpreadX_Spacing_AlignEnd
 packages/gofish-graphics/stories/lowlevel/Constraints.stories.tsx::SpreadX_CenterToCenter
 packages/gofish-graphics/stories/lowlevel/Constraints.stories.tsx::SpreadY_Reversed
+
+# ConstraintParity.stories.tsx (file-level) — JS-engine regression fixtures
+# from the operators/constraints unification (#543): each pair certifies that
+# the spread operator and its layer+constraints form produce byte-identical
+# geometry. A Python port would serialize through the same IR into the same
+# JS engine, re-testing nothing Python-specific; and the constraint-side
+# stories use distribute's `glue`/`weights`, which are not exposed to Python
+# (deliberately out of #543's scope — would need wrapper kwargs + the
+# three-encoding IR schema additions). Revisit if/when those options are
+# exposed (#550 program).
+packages/gofish-graphics/stories/lowlevel/ConstraintParity.stories.tsx
