@@ -783,6 +783,8 @@ html.landing-page .DocSearch-Button {
   width: auto;
   vertical-align: middle;
   display: block;
+  /* the PNG has transparent padding baked in; pull the neighbors closer */
+  margin: 0 -5px 0 -3px;
 }
 .landing .band-foot .foot-vis {
   display: inline-flex;
@@ -798,7 +800,7 @@ html.landing-page .DocSearch-Button {
   height: 21px;
   width: auto;
   display: block;
-  transform: translateY(-1px);
+  transform: translateY(-4px);
 }
 .landing .demo .card .demo-tape {
   z-index: 0;
