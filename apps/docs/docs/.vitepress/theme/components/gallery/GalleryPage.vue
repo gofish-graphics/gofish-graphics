@@ -1778,7 +1778,7 @@ onBeforeUnmount(() => {
         </section>
 
         <section class="endcap endwall" ref="endwallEl">
-          <h2>That's the whole hall.</h2>
+          <h2>That's it!</h2>
           <p>Want yours on this wall? Open a PR.</p>
           <a
             class="btn btn-primary"
