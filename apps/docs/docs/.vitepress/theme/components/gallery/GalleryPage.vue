@@ -2,9 +2,9 @@
 import { onBeforeUnmount, onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vitepress";
 import { effectiveLang } from "../../docsLang";
-import { data as examplesData } from "../../../data/examples.data.js";
+import { data as examplesData } from "../../../data/storyExamples.data.js";
 import {
-  renderExampleRoot,
+  renderExampleInto,
   namespaceSvgIds,
 } from "../../../../../components/galleryRender";
 import "./gallery.css";
@@ -130,13 +130,18 @@ onMounted(() => {
   // gofish renders through an async (rAF-driven) layout pipeline, so the <svg> is
   // not present synchronously after .render(); the host must be connected and we
   // must wait for the svg to appear with a settled non-zero box before measuring.
+  // Rendering the example is itself async now (the story module is dynamically
+  // imported, its loaders run, and its render is awaited), so we connect the root
+  // to the measure host first — gofish's layout pass measures text via getBBox and
+  // needs the node in the document — then render into it and poll for the svg.
   async function measure(
-    code: string,
     id: string
   ): Promise<{ w: number; h: number; node: SVGElement } | null> {
-    const root = renderExampleRoot(code);
+    const root = document.createElement("div");
     measureHost.appendChild(root);
     try {
+      await renderExampleInto(root, id);
+      if (cancelled) return null;
       let svg = root.querySelector("svg") as SVGElement | null;
       for (
         let i = 0;
@@ -1667,7 +1672,6 @@ onMounted(() => {
     id: string;
     title: string;
     description?: string;
-    code: string;
   }[];
   const baseEntries: Entry[] = [];
   let cancelled = false;
@@ -1709,7 +1713,7 @@ onMounted(() => {
     for (const ex of examples) {
       if (cancelled) return;
       try {
-        const m = await measure(ex.code, ex.id);
+        const m = await measure(ex.id);
         if (m)
           baseEntries.push(addEntry(ex.id, ex.title, ex.description || "", m));
       } catch (err) {
