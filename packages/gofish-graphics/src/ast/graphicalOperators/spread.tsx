@@ -23,7 +23,7 @@ import {
   isDIFFERENCE,
   isPOSITION,
   isSIZE,
-  forgetOnConflict,
+  forgetAllMeasures,
   spaceMeasure,
 } from "../underlyingSpace";
 import { UnderlyingSpace } from "../underlyingSpace";
@@ -130,11 +130,7 @@ export const Spread = createNodeOperator(
           // spreading different fields is legitimate, so a conflict forgets to
           // undefined rather than throwing.
           const stackChildMeasure = (): Measure | undefined =>
-            stackSpaces
-              .map((s) => spaceMeasure(s))
-              .reduce<
-                Measure | undefined
-              >((acc, m) => forgetOnConflict(acc, m), undefined);
+            forgetAllMeasures(stackSpaces.map((s) => spaceMeasure(s)));
 
           // Explicit size on the spread overrides children-derived sizing.
           if (isValue(dims[stackDir].size)) {

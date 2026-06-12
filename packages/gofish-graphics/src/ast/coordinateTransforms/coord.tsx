@@ -19,9 +19,8 @@ import {
   isORDINAL,
   isPOSITION,
   isUNDEFINED,
-  forgetOnConflict,
+  forgetAllMeasures,
 } from "../underlyingSpace";
-import type { Measure } from "../data";
 import { createNodeOperator } from "../withGoFish";
 import { computeTransformedBoundingBox } from "./coordUtils";
 import { empty, union } from "../../util/bbox";
@@ -152,11 +151,7 @@ export const coord = createNodeOperator(
             // coordinate space (e.g. angle/radius). Cross-unit unions are the
             // transform's business, not the marginal-style corruption the guard
             // targets, so forget on conflict rather than throwing.
-            const xMeasure = xPos
-              .map((s) => s.measure)
-              .reduce<
-                Measure | undefined
-              >((acc, m) => forgetOnConflict(acc, m), undefined);
+            const xMeasure = forgetAllMeasures(xPos.map((s) => s.measure));
             xSpace = POSITION(domain, xMeasure, coordTransform);
           } else if (xChildrenOrdinalSpaces.length > 0) {
             // Collect and merge domains from all child ordinal spaces
@@ -188,11 +183,7 @@ export const coord = createNodeOperator(
             const domain = IntervalLib.unionAll(...yPos.map((s) => s.domain));
             // See the x branch: coord maps into its own coordinate space, so
             // forget on cross-unit conflict rather than throwing.
-            const yMeasure = yPos
-              .map((s) => s.measure)
-              .reduce<
-                Measure | undefined
-              >((acc, m) => forgetOnConflict(acc, m), undefined);
+            const yMeasure = forgetAllMeasures(yPos.map((s) => s.measure));
             ySpace = POSITION(domain, yMeasure, coordTransform);
           } else if (yChildrenOrdinalSpaces.length > 0) {
             // Collect and merge domains from all child ordinal spaces

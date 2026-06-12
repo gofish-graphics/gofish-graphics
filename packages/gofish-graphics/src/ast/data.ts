@@ -33,6 +33,25 @@ export const getMeasureProvenance = (
     ? ((data as any)[MEASURE_PROVENANCE] as MeasureProvenance | undefined)
     : undefined;
 
+/**
+ * Tag a data array with a measure-provenance map under {@link MEASURE_PROVENANCE}.
+ * Owns the non-enumerable encoding so the symbol rides the array (not each row,
+ * not an enumerable own-key that would leak into `{...d}` spreads) and survives
+ * `derive(...)`. Used by transforms like `bin()`.
+ */
+export const setMeasureProvenance = <T>(
+  data: T,
+  provenance: MeasureProvenance
+): T => {
+  Object.defineProperty(data, MEASURE_PROVENANCE, {
+    value: provenance,
+    enumerable: false,
+    configurable: true,
+    writable: true,
+  });
+  return data;
+};
+
 export type Value<T> = T | DatumValue | DatumValueImpl;
 export type MaybeValue<T> = T | Value<T>;
 

@@ -15,7 +15,8 @@ import {
   isSIZE,
   isUNDEFINED,
   mergeMeasures,
-  forgetOnConflict,
+  mergeAllMeasures,
+  forgetAllMeasures,
   spaceMeasure,
   UnderlyingSpace,
 } from "../underlyingSpace";
@@ -70,11 +71,7 @@ export function unionChildSpaces(
   const axisSpaces = children.map((c) => c[axis]);
   const sized = axisSpaces.filter((s) => !isUNDEFINED(s));
   if (sized.length > 0 && sized.every(isSIZE)) {
-    const measure = sized
-      .map((s) => s.measure)
-      .reduce<
-        Measure | undefined
-      >((acc, m) => forgetOnConflict(acc, m), undefined);
+    const measure = forgetAllMeasures(sized.map((s) => s.measure));
     return SIZE(Monotonic.max(...sized.map((s) => s.domain)), measure);
   }
 
@@ -114,15 +111,6 @@ export function resolveAlignmentSpace(
   spaces: UnderlyingSpace[],
   alignment: Alignment
 ): { space: UnderlyingSpace; fromSize: boolean } {
-  // Forget-merge of all child measures: shared when they agree (the marginal
-  // histogram's all-count children), undefined when they legitimately differ.
-  const mergedMeasure = (): Measure | undefined =>
-    spaces
-      .map((s) => spaceMeasure(s))
-      .reduce<
-        Measure | undefined
-      >((acc, m) => forgetOnConflict(acc, m), undefined);
-
   if (spaces.every((s) => isSIZE(s))) {
     const sizeValues = spaces.map((s) =>
       ((s as any).domain as { run: (x: number) => number }).run(1)
@@ -130,7 +118,8 @@ export function resolveAlignmentSpace(
     // LOAD-BEARING: the SIZE → POSITION conversion must carry the SIZE
     // children's measure forward — this is how a histogram's count axis (all
     // SIZE) gets a "count" tag that a later overlay union can compare against.
-    const measure = mergedMeasure();
+    // Forget-merge: shared when they agree, undefined when they differ.
+    const measure = forgetAllMeasures(spaces.map((s) => spaceMeasure(s)));
     if (
       alignment === "start" ||
       alignment === "end" ||
@@ -156,11 +145,10 @@ export function resolveAlignmentSpace(
   if (spaces.every((s) => isDIFFERENCE(s))) {
     // Sibling difference extents being aligned should agree in units — THROW
     // on a real conflict.
-    const measure = spaces
-      .map((s) => spaceMeasure(s))
-      .reduce<
-        Measure | undefined
-      >((acc, m) => mergeMeasures(acc, m, "alignment"), undefined);
+    const measure = mergeAllMeasures(
+      spaces.map((s) => spaceMeasure(s)),
+      "alignment"
+    );
     return {
       space: DIFFERENCE(
         Math.max(...spaces.map((s) => (s as any).width as number)),
@@ -175,11 +163,10 @@ export function resolveAlignmentSpace(
         (s) => (s as any).domain as ReturnType<typeof Interval.interval>
       )
     );
-    const measure = spaces
-      .map((s) => spaceMeasure(s))
-      .reduce<
-        Measure | undefined
-      >((acc, m) => mergeMeasures(acc, m, "alignment"), undefined);
+    const measure = mergeAllMeasures(
+      spaces.map((s) => spaceMeasure(s)),
+      "alignment"
+    );
     if (alignment === "middle") {
       return {
         space: DIFFERENCE(Interval.width(domain), measure),

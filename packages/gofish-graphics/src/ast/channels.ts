@@ -109,8 +109,11 @@ export const resolveMeasure = <T>(
   } else {
     return undefined; // function / number / literal: no field identity
   }
-  const arr = Array.isArray(provenanceData) ? provenanceData : [provenanceData];
-  const provenance = getMeasureProvenance(arr)?.[fieldName];
+  // Only an array can carry the provenance symbol (a transform tags the array,
+  // not each row), so skip the lookup for a single datum.
+  const provenance = Array.isArray(provenanceData)
+    ? getMeasureProvenance(provenanceData)?.[fieldName]
+    : undefined;
   if (
     annotation !== undefined &&
     provenance !== undefined &&
@@ -128,65 +131,48 @@ export const resolveMeasure = <T>(
 };
 
 /**
- * Infer a size value from a field name, function accessor, or literal number.
- * - number: passed through as a literal.
- * - string (field name): sums the field across the data array.
- * - function: called per-row and summed across the data array.
+ * Shared core of {@link inferSize} / {@link inferPos}: they differ only in the
+ * lodash aggregation (`sumBy` vs `meanBy`). Resolves a numeric value from a
+ * field name, function accessor, or literal number:
+ * - number / literal: passed through as a literal.
+ * - string (field name): aggregated across the data array.
+ * - function: called per-row and aggregated across the data array.
  *
- * Field/string accessors are tagged with their resolved {@link Measure} (see
- * {@link resolveMeasure}) so the underlying-space layer can unify per measure.
- * `provenanceData` carries the measure-provenance symbol when the value array
- * itself does not (e.g. a per-entry slice of a binned array).
+ * Field/string accessors are tagged with a resolved {@link Measure} so the
+ * underlying-space layer can unify per measure. The caller may pass a
+ * precomputed `measure` (createOperator resolves it once per channel from the
+ * provenance-bearing array); when omitted we resolve it locally from `d` — the
+ * same behavior as resolving against the value array directly.
  */
-export const inferSize = <T>(
-  accessor:
-    | string
-    | number
-    | ((d: T) => number)
-    | FieldAccessor
-    | LiteralValue
-    | undefined,
-  d: T | T[],
-  provenanceData: T | T[] = d
-): MaybeValue<number> | undefined => {
-  if (accessor === undefined) return undefined;
-  if (typeof accessor === "number") return accessor;
-  if (isLiteral(accessor)) return accessor.value as number;
-  const data = Array.isArray(d) ? d : [d];
-  const measure = resolveMeasure(provenanceData, accessor);
-  if (isField(accessor)) {
-    return value(sumBy(data, accessor.name as any), measure);
-  }
-  return value(sumBy(data, accessor as any), measure);
-};
+const inferNumeric =
+  (agg: typeof sumBy) =>
+  <T>(
+    accessor:
+      | string
+      | number
+      | ((d: T) => number)
+      | FieldAccessor
+      | LiteralValue
+      | undefined,
+    d: T | T[],
+    measure?: Measure
+  ): MaybeValue<number> | undefined => {
+    if (accessor === undefined) return undefined;
+    if (typeof accessor === "number") return accessor;
+    if (isLiteral(accessor)) return accessor.value as number;
+    const data = Array.isArray(d) ? d : [d];
+    const m = measure ?? resolveMeasure(d, accessor);
+    return value(
+      agg(data, (isField(accessor) ? accessor.name : accessor) as any),
+      m
+    );
+  };
 
-/**
- * Infer a position value from a field name, function accessor, or literal number.
- * - number: passed through as a literal.
- * - string (field name): averages the field across the data array.
- * - function: called per-row and averaged across the data array.
- */
-export const inferPos = <T>(
-  accessor:
-    | string
-    | number
-    | ((d: T) => number)
-    | FieldAccessor
-    | LiteralValue
-    | undefined,
-  d: T | T[],
-  provenanceData: T | T[] = d
-): MaybeValue<number> | undefined => {
-  if (accessor === undefined) return undefined;
-  if (typeof accessor === "number") return accessor;
-  if (isLiteral(accessor)) return accessor.value as number;
-  const data = Array.isArray(d) ? d : [d];
-  const measure = resolveMeasure(provenanceData, accessor);
-  if (isField(accessor)) {
-    return value(meanBy(data, accessor.name as any), measure);
-  }
-  return value(meanBy(data, accessor as any), measure);
-};
+/** Infer a size value (sums the field/function across the data array). */
+export const inferSize = inferNumeric(sumBy);
+
+/** Infer a position value (averages the field/function across the data array). */
+export const inferPos = inferNumeric(meanBy);
 
 /**
  * Infer a color value from a field name, function accessor, or literal string.

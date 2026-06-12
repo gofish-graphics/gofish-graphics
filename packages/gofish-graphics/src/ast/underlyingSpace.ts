@@ -69,7 +69,7 @@ export const POSITION = (
 ): UnderlyingSpace => ({
   kind: "position",
   domain,
-  ...(measure !== undefined ? { measure } : {}),
+  measure,
   coordinateTransform,
 });
 
@@ -82,7 +82,7 @@ export const DIFFERENCE = (
 ): UnderlyingSpace => ({
   kind: "difference",
   width,
-  ...(measure !== undefined ? { measure } : {}),
+  measure,
 });
 export const isDIFFERENCE = (
   space: UnderlyingSpace
@@ -94,7 +94,7 @@ export const SIZE = (
 ): UnderlyingSpace => ({
   kind: "size",
   domain,
-  ...(measure !== undefined ? { measure } : {}),
+  measure,
 });
 export const isSIZE = (space: UnderlyingSpace): space is SIZE_TYPE =>
   space.kind === "size";
@@ -157,3 +157,28 @@ export const forgetOnConflict = (
   if (b === undefined) return a;
   return a === b ? a : undefined;
 };
+
+/**
+ * Fold an array of measures with {@link mergeMeasures} (throws on a real
+ * conflict). The array form of the pairwise unify-as-types guard.
+ */
+export const mergeAllMeasures = (
+  ms: (Measure | undefined)[],
+  context?: string
+): Measure | undefined =>
+  ms.reduce<Measure | undefined>(
+    (acc, m) => mergeMeasures(acc, m, context),
+    undefined
+  );
+
+/**
+ * Fold an array of measures with {@link forgetOnConflict} (a conflict forgets
+ * to undefined). The array form of the permissive composition merge.
+ */
+export const forgetAllMeasures = (
+  ms: (Measure | undefined)[]
+): Measure | undefined =>
+  ms.reduce<Measure | undefined>(
+    (acc, m) => forgetOnConflict(acc, m),
+    undefined
+  );

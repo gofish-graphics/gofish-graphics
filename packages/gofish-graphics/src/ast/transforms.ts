@@ -1,5 +1,5 @@
 import { bin as d3bin } from "d3-array";
-import { MEASURE_PROVENANCE, type MeasureProvenance } from "./data";
+import { setMeasureProvenance, type MeasureProvenance } from "./data";
 
 type BinResult = { start: number; end: number; size: number; count: number };
 
@@ -35,13 +35,7 @@ function runBin<T extends Record<string, any>>(
     size: field,
     count: "count",
   };
-  Object.defineProperty(result, MEASURE_PROVENANCE, {
-    value: provenance,
-    enumerable: false,
-    configurable: true,
-    writable: true,
-  });
-  return result;
+  return setMeasureProvenance(result, provenance);
 }
 
 export function bin<T extends Record<string, any>>(

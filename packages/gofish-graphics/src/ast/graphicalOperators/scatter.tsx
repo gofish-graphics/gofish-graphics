@@ -1,14 +1,14 @@
 import { computeAesthetic } from "../../util";
 import { GoFishNode, Placeable } from "../_node";
 import type { AxisOptions } from "../gofish";
-import { getMeasure, getValue, isValue, MaybeValue, Measure } from "../data";
+import { getMeasure, getValue, isValue, MaybeValue } from "../data";
 import { Dimensions, elaborateDims, FancyDims, Size } from "../dims";
 import { createNodeOperator } from "../withGoFish";
 import { GoFishAST } from "../_ast";
 import { Collection } from "lodash";
 import { SplitBy, splitKeyFn } from "../datumProjection";
 import {
-  forgetOnConflict,
+  forgetAllMeasures,
   isPOSITION,
   POSITION,
   UNDEFINED,
@@ -75,25 +75,17 @@ function setAxisTranslation(
     (node.transform!.translate![axis] ?? 0) + delta;
 }
 
-/** Merge the measures of one channel's value array. They should all agree
- *  (same field); a mixed array forgets to undefined rather than throwing. */
-function mergeValueMeasures(values: MaybeValue<number>[]): Measure | undefined {
-  return values
-    .map((v) => getMeasure(v))
-    .reduce<
-      Measure | undefined
-    >((acc, m) => forgetOnConflict(acc, m), undefined);
-}
-
 function resolvePositionSpace(
   values: MaybeValue<number>[] | undefined
 ): UnderlyingSpace {
   if (!values || values.length === 0) return UNDEFINED;
   if (!values.every((value) => isValue(value))) return UNDEFINED;
   const rawValues = values.map((value) => getValue(value)!);
+  // Value measures should all agree (same field); a mixed array forgets to
+  // undefined rather than throwing.
   return POSITION(
     Interval.interval(Math.min(...rawValues), Math.max(...rawValues)),
-    mergeValueMeasures(values)
+    forgetAllMeasures(values.map((v) => getMeasure(v)))
   );
 }
 
@@ -158,10 +150,7 @@ export const Scatter = createNodeOperator(
                 Math.min(...xMin.map((v) => getValue(v)!)),
                 Math.max(...xMax.map((v) => getValue(v)!))
               ),
-              forgetOnConflict(
-                mergeValueMeasures(xMin),
-                mergeValueMeasures(xMax)
-              )
+              forgetAllMeasures([...xMin, ...xMax].map((v) => getMeasure(v)))
             );
           } else {
             const result = resolveAlignmentSpace(
@@ -181,10 +170,7 @@ export const Scatter = createNodeOperator(
                 Math.min(...yMin.map((v) => getValue(v)!)),
                 Math.max(...yMax.map((v) => getValue(v)!))
               ),
-              forgetOnConflict(
-                mergeValueMeasures(yMin),
-                mergeValueMeasures(yMax)
-              )
+              forgetAllMeasures([...yMin, ...yMax].map((v) => getMeasure(v)))
             );
           } else {
             const result = resolveAlignmentSpace(

@@ -13,6 +13,7 @@ import {
   UnderlyingSpace,
   isPOSITION,
   isSIZE,
+  spaceMeasure,
 } from "../underlyingSpace";
 import * as Interval from "../../util/interval";
 import { computeSize, foldFinite } from "../../util";
@@ -224,12 +225,18 @@ export const layer = createNodeOperatorSequential(
 
     const dims = elaborateDims(options);
 
-    // When this layer is given an explicit pixel size on a dim, it becomes a
-    // self-contained scaling region on that dim (see resolveUnderlyingSpace
-    // below): its data space is absorbed internally and reported as UNDEFINED.
-    // The real (POSITION/SIZE) space is stashed here so `layout` can build a
-    // local scale against the layer's own pixel box. Indexed [x, y]; last write
-    // wins if resolveUnderlyingSpace runs more than once.
+    // SELF-SCALING REGIONS. When this layer is given an explicit pixel size on
+    // a dim, it becomes a self-contained scaling region on that dim: its scales
+    // resolve against its own box at layout time, exactly like the root resolves
+    // against the canvas ("a chart embeds the way it renders"). So in
+    // `resolveUnderlyingSpace` the real POSITION/SIZE space is stashed here and
+    // UNDEFINED is reported upward — a parent layer's union then ignores this
+    // axis rather than polluting a shared domain with foreign units (e.g. a
+    // marginal histogram's count axis vs. the center's data units). `layout`
+    // reads the stash back to build the LOCAL scale. The reported space is
+    // UNDEFINED for now; issue #508's proposed CONSTANT kind is the eventual
+    // home for "known fixed pixel extent". Indexed [x, y]; last write wins if
+    // resolveUnderlyingSpace runs more than once.
     const selfScaledSpaces: [
       UnderlyingSpace | undefined,
       UnderlyingSpace | undefined,
@@ -277,27 +284,16 @@ export const layer = createNodeOperatorSequential(
                 : iv;
             // `position`-constraint datum domains (iv) are untagged — measure
             // flows from the children's POSITION (if any), permissively.
-            return POSITION(
-              merged,
-              isPOSITION(base) ? base.measure : undefined
-            );
+            return POSITION(merged, spaceMeasure(base));
           };
           const resolved: [UnderlyingSpace, UnderlyingSpace] = [
             resolveAxis(0, scaleX, posDomains.x),
             resolveAxis(1, scaleY, posDomains.y),
           ];
 
-          // An explicit pixel size on a dim makes this node a self-contained
-          // scaling region on that dim: its data space is absorbed internally
-          // and scales resolve against its own box at layout time, exactly like
-          // the root resolves against the canvas ("a chart embeds the way it
-          // renders"). So we stash the real POSITION/SIZE space and report
-          // UNDEFINED upward — a parent layer's union then ignores this axis
-          // rather than polluting a shared domain with foreign units (e.g. a
-          // marginal histogram's count axis vs. the center's data units). The
-          // reported space is UNDEFINED for now; issue #508's proposed CONSTANT
-          // kind is the eventual home for "known fixed pixel extent".
-          // (last write wins — resolveUnderlyingSpace may run more than once.)
+          // Stash the absorbed POSITION/SIZE space and report UNDEFINED upward
+          // for any dim with an explicit pixel size — self-scaling region; see
+          // selfScaledSpaces above. (last write wins — may run more than once.)
           selfScaledSpaces[0] = undefined;
           selfScaledSpaces[1] = undefined;
           for (const axis of [0, 1] as const) {
@@ -318,29 +314,37 @@ export const layer = createNodeOperatorSequential(
             computeSize(dims[1].size, scaleFactors?.[1]!, size[1]) ?? size[1],
           ];
 
-          // Self-scaling regions: for any dim whose data space we absorbed in
-          // resolveUnderlyingSpace (stashed because this layer has an explicit
-          // pixel size), build a LOCAL scale against our own pixel box — the
-          // root's recipe, applied one level down. POSITION → a local posScale
-          // mapping the stashed domain onto [0, size]; SIZE → a local scale
-          // factor inverting the Monotonic against size (cf. gofish.tsx root).
-          // These locals take precedence over anything inherited from the
-          // parent (whose scale is in foreign units). When the size couldn't be
-          // resolved (NaN), we leave the locals undefined so behavior degrades
-          // to the inherited path rather than producing NaN scales.
-          const localPosScales: ConstraintPosScales = [undefined, undefined];
-          const childSfOverride: [number | undefined, number | undefined] = [
-            undefined,
-            undefined,
+          // Build the LOCAL scale for each self-scaled (stashed) dim against our
+          // own pixel box — see selfScaledSpaces above. The recipe (cf. the
+          // gofish.tsx root): POSITION → a posScale mapping the stashed domain
+          // onto [0, size]; SIZE → a scale factor inverting the Monotonic against
+          // size. A POSITION stash touches only `basePosScales`; a SIZE stash
+          // only `childScaleFactors`. When the size can't be resolved (NaN) we
+          // leave the inherited value, degrading to the inherited path rather
+          // than emitting NaN scales.
+          //
+          // `basePosScales` is reused below as the floor for `effectivePosScales`
+          // and the per-child forwarding (`childScalesFor`), so the override
+          // applies regardless of `ownsPositionAxis`. `childScaleFactors` is a
+          // fresh array — never mutate the parent's `scaleFactors` (unlike
+          // spread, which mutates intentionally for sibling sharing).
+          const basePosScales: ConstraintPosScales = [
+            posScales[0],
+            posScales[1],
+          ];
+          const childScaleFactors: Size<number | undefined> = [
+            scaleFactors?.[0],
+            scaleFactors?.[1],
           ];
           for (const dim of [0, 1] as const) {
             const stashed = selfScaledSpaces[dim];
             if (stashed === undefined || !Number.isFinite(size[dim])) continue;
             if (isPOSITION(stashed)) {
-              localPosScales[dim] = posScaleFromSpace(stashed, size[dim]);
+              basePosScales[dim] =
+                posScaleFromSpace(stashed, size[dim]) ?? posScales[dim];
             } else if (isSIZE(stashed)) {
-              childSfOverride[dim] =
-                stashed.domain.inverse(size[dim]) ?? undefined;
+              childScaleFactors[dim] =
+                stashed.domain.inverse(size[dim]) ?? scaleFactors?.[dim];
             }
           }
 
@@ -362,16 +366,8 @@ export const layer = createNodeOperatorSequential(
           // the layer actually owns such an axis — it is used solely by
           // applyConstraints below, not passed to children.
           const space = node._underlyingSpace;
-          // `basePosScales` = the inherited scales with any self-scaled
-          // (stashed) dim overridden by its local scale. Local wins
-          // definitionally — the parent's scale is in foreign units. Used both
-          // for the per-child forwarding (`childScalesFor`) and as the floor for
-          // `effectivePosScales` so the override applies regardless of
-          // `ownsPositionAxis`.
-          const basePosScales: ConstraintPosScales = [
-            localPosScales[0] ?? posScales[0],
-            localPosScales[1] ?? posScales[1],
-          ];
+          // `basePosScales` (the inherited scales with any self-scaled dim
+          // overridden — see selfScaledSpaces above) is the floor here.
           const effectivePosScales: ConstraintPosScales = ownsPositionAxis
             ? [
                 basePosScales[0] ?? posScaleFromSpace(space?.[0], size[0]),
@@ -432,15 +428,6 @@ export const layer = createNodeOperatorSequential(
             };
             return [pick(0), pick(1)];
           };
-
-          // Fresh scale-factors array for children: a self-scaled (stashed)
-          // SIZE dim forwards its LOCAL factor instead of the inherited one.
-          // Build a new array — never mutate the parent's `scaleFactors`
-          // (unlike spread, which mutates intentionally for sibling sharing).
-          const childScaleFactors: Size<number | undefined> = [
-            childSfOverride[0] ?? scaleFactors?.[0],
-            childSfOverride[1] ?? scaleFactors?.[1],
-          ];
 
           for (let i = 0; i < children.length; i++) {
             const child = children[i];
