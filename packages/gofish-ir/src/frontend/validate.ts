@@ -277,6 +277,8 @@ function walkOperator(node: unknown, path: string, ctx: Context): void {
       "sharedScale",
       "mode",
       "reverse",
+      "glue",
+      "stackWeights",
       "axes",
       "origin",
       "meta",
@@ -334,6 +336,16 @@ function walkOperator(node: unknown, path: string, ctx: Context): void {
           ctx.errors.push({
             path: p,
             message: `mode must be "edge" | "center"`,
+          });
+      });
+      // spread-only stack options (stack operator rejects these via its own
+      // knownFields list); optionalField no-ops when the field is absent.
+      optionalField(node, "glue", path, ctx, expectBoolean);
+      optionalField(node, "stackWeights", path, ctx, (v, p) => {
+        if (!Array.isArray(v) || !v.every((n) => typeof n === "number"))
+          ctx.errors.push({
+            path: p,
+            message: "stackWeights must be an array of numbers",
           });
       });
       optionalField(node, "axes", path, ctx, walkAxesOptions);

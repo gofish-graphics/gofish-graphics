@@ -1,3 +1,7 @@
+// <gofish-wiki> AUTO-GENERATED — see covers: in the essay; run `pnpm --filter docs sync-backlinks`
+// @wiki Underlying Space — /internals/core/underlying-space
+// </gofish-wiki>
+
 import type { Placeable } from "../_node";
 import {
   AlignAnchor,
@@ -6,6 +10,26 @@ import {
   axisIndex,
   isPlacedOn,
 } from "./shared";
+import type { UnderlyingSpace } from "../underlyingSpace";
+import { resolveAlignmentSpace } from "../graphicalOperators/alignment";
+
+/**
+ * PROTOTYPE (issue #475): the align constraint's *space-resolution*
+ * contribution — the cross-axis half of the spread reduction. Defers entirely
+ * to spread's own `resolveAlignmentSpace`, so the fold is the same one spread
+ * uses (SIZE→POSITION for start/end/baseline; SIZE→DIFFERENCE for middle;
+ * POSITION union otherwise). `AlignAnchor` and spread's `Alignment` share the
+ * same string vocabulary, so the anchor passes through unchanged.
+ *
+ * Only the uniform-anchor form is handled (a single string, not a per-child
+ * array): a heterogeneous anchor array has no single spread equivalent.
+ */
+export function alignSpaceFold(
+  targetSpaces: UnderlyingSpace[],
+  anchor: AlignAnchor
+): UnderlyingSpace {
+  return resolveAlignmentSpace(targetSpaces, anchor).space;
+}
 
 /**
  * Anchor spec for one axis of an `align` constraint. A single anchor
@@ -69,6 +93,59 @@ export const placeAtAnchor = (
   else target.place(axis, value, "max");
 };
 
+/**
+ * Where the enforced alignment coordinate (the "baseline") comes from. This is
+ * the one genuine divergence between the two align callsites, so it is an
+ * explicit parameter and each callsite supplies its own:
+ *
+ *  - `readPlaced` reads the baseline off the *first already-placed* target, at
+ *    that target's anchor. The constraint path reads the target's real extent /
+ *    origin (so a `"baseline"` anchor takes its actual `transform.translate`);
+ *    spread pins a `"baseline"` anchor to 0 and tolerates missing extents.
+ *  - `fallback` supplies the baseline when *nothing* is pre-placed. The
+ *    constraint path returns the layer's own box edge (start→0, middle→size/2,
+ *    end→size, baseline→0) — axis-title elaboration relies on a title pinning to
+ *    the plot box. Spread instead returns the data scale's origin
+ *    (`posScale(0)`, or `size/2` for middle, or 0 with no scale) so a
+ *    SIZE-derived cross axis aligns at the scale's zero, not the box edge. Both
+ *    are load-bearing; neither subsumes the other.
+ */
+export interface AlignBaselinePolicy {
+  readPlaced: (target: Placeable, idx: 0 | 1, anchor: AlignAnchor) => number;
+  fallback: (anchors: AlignAnchor[], idx: 0 | 1) => number;
+}
+
+/**
+ * Place `targets` on one axis so each lands at a single shared baseline,
+ * read at its own anchor. The baseline is taken from the first already-placed
+ * target (via `policy.readPlaced`), or from `policy.fallback` when none is
+ * placed; already-placed targets are left untouched. This is the single
+ * placement walk shared by the `align` constraint and spread's cross-axis
+ * alignment — only the baseline policy differs (see `AlignBaselinePolicy`).
+ */
+export function alignTargets(
+  targets: Placeable[],
+  axis: Axis,
+  anchors: AlignAnchor[],
+  policy: AlignBaselinePolicy
+): void {
+  const idx = axisIndex(axis);
+
+  let baseline: number | undefined;
+  for (let i = 0; i < targets.length; i++) {
+    if (isPlacedOn(targets[i], idx)) {
+      baseline = policy.readPlaced(targets[i], idx, anchors[i]);
+      break;
+    }
+  }
+  if (baseline === undefined) baseline = policy.fallback(anchors, idx);
+
+  for (let i = 0; i < targets.length; i++) {
+    if (isPlacedOn(targets[i], idx)) continue;
+    placeAtAnchor(targets[i], axis, baseline, anchors[i]);
+  }
+}
+
 const fallbackFor = (
   fallback: AlignFallbackBaseline | undefined,
   a: AlignAnchor
@@ -88,8 +165,6 @@ function applyAlignAxis(
   targets: Placeable[],
   fallback?: AlignFallbackBaseline
 ): void {
-  const idx = axisIndex(axis);
-
   // Normalize to a per-child anchor array.
   let anchors: AlignAnchor[];
   if (Array.isArray(spec)) {
@@ -103,26 +178,12 @@ function applyAlignAxis(
     anchors = new Array<AlignAnchor>(targets.length).fill(spec);
   }
 
-  // Baseline = the coordinate the alignment is enforcing. Taken from the
-  // first already-placed child, read at *that child's* anchor. With a
-  // shared anchor the per-child anchor lookup collapses to the legacy
-  // behavior (read .min/.center/.max consistently).
-  let baseline: number | undefined;
-  for (let i = 0; i < targets.length; i++) {
-    if (isPlacedOn(targets[i], idx)) {
-      baseline = anchorValue(targets[i], idx, anchors[i]);
-      break;
-    }
-  }
-  if (baseline === undefined) {
-    // No placed siblings: fall back to the layer's box baseline.
-    baseline = fallbackFor(fallback, anchors[0]);
-  }
-
-  for (let i = 0; i < targets.length; i++) {
-    if (isPlacedOn(targets[i], idx)) continue;
-    placeAtAnchor(targets[i], axis, baseline, anchors[i]);
-  }
+  // Layer-box policy: read a placed sibling's real extent/origin; with no
+  // placed sibling, fall back to the layer's own box baseline.
+  alignTargets(targets, axis, anchors, {
+    readPlaced: anchorValue,
+    fallback: (as) => fallbackFor(fallback, as[0]),
+  });
 }
 
 export function applyAlign(

@@ -534,6 +534,8 @@ class Constraint:
         spacing: Optional[float] = None,
         mode: Optional[str] = None,
         order: Optional[str] = None,
+        glue: Optional[bool] = None,
+        weights: Optional[List[float]] = None,
     ) -> DistributeConstraint:
         """Distribute the given refs along an axis.
 
@@ -544,6 +546,12 @@ class Constraint:
             mode: "edge" (default) or "center" — edge-to-edge or
                 center-to-center spacing.
             order: "forward" (default) or "reverse" — distribute in reverse order.
+            glue: Stack semantics — glue the refs together (their sizes sum
+                into a position at the layer) instead of slicing a budget.
+                Forces `spacing` to 0. Mirrors spread's `glue`.
+            weights: Flex weights aligned to placement order (spread's
+                `stackWeights`); splits the budget in proportion to these
+                instead of equally.
         """
         options: Dict[str, Any] = {"dir": dir}
         if spacing is not None:
@@ -552,6 +560,10 @@ class Constraint:
             options["mode"] = mode
         if order is not None:
             options["order"] = order
+        if glue is not None:
+            options["glue"] = glue
+        if weights is not None:
+            options["weights"] = weights
         return DistributeConstraint(refs, options)
 
     @staticmethod

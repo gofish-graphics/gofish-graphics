@@ -1,6 +1,6 @@
 import { GoFishNode, Placeable } from "../_node";
 import type { AxisOptions } from "../gofish";
-import { getMeasure, getValue, isValue, MaybeValue, Measure } from "../data";
+import { MaybeValue } from "../data";
 import {
   Direction,
   elaborateDims,
@@ -14,21 +14,20 @@ import { SplitBy, splitKeyFn } from "../datumProjection";
 import { computeAesthetic, computeSize, foldFinite } from "../../util";
 import { GoFishAST } from "../_ast";
 import { createNodeOperator } from "../withGoFish";
-import * as Monotonic from "../../util/monotonic";
 import {
-  ORDINAL,
-  POSITION,
-  SIZE,
   UNDEFINED,
   isDIFFERENCE,
   isPOSITION,
   isSIZE,
-  forgetAllMeasures,
-  spaceMeasure,
 } from "../underlyingSpace";
 import { UnderlyingSpace } from "../underlyingSpace";
 import * as Interval from "../../util/interval";
 import { Alignment, alignChildren, resolveAlignmentSpace } from "./alignment";
+import {
+  distributeSpaceFold,
+  applyDistribute,
+} from "../constraints/distribute";
+import { allocateSlices } from "../constraints/folds";
 import { createOperator } from "../marks/createOperator";
 import { Mark, Operator } from "../types";
 
@@ -113,118 +112,37 @@ export const Spread = createNodeOperator(
           children: Size<UnderlyingSpace>[],
           childNodes: GoFishAST[]
         ) => {
-          /* ALIGNMENT */
-          const alignSpaces = children.map((child) => child[alignDir]);
-          const alignResult = resolveAlignmentSpace(alignSpaces, alignment);
-          const alignSpace = alignResult.space;
+          // Cross axis: defer to the shared alignment fold. Keep the
+          // `fromSize` flag so layout still baseline-aligns SIZE-derived
+          // children even when a posScale is present.
+          const alignResult = resolveAlignmentSpace(
+            children.map((child) => child[alignDir]),
+            alignment
+          );
           alignFromSize = alignResult.fromSize;
 
-          /* STACK DIR */
-          const stackSpaces = children.map((child) => child[stackDir]);
+          // Stack axis: defer to the shared distribute fold. `namedKeys` is the
+          // compacted list of children's ordinal keys (drives the ORDINAL
+          // branch); distributeSpaceFold re-filters undefined, so the compacted
+          // form is equivalent to a positional one.
           const namedKeys = childNodes
             .filter((node): node is GoFishNode => node instanceof GoFishNode)
             .map((node) => node.key)
             .filter((key): key is string => key !== undefined);
-
-          // Forget-merge of the stacking children's measures. Stacking/
-          // spreading different fields is legitimate, so a conflict forgets to
-          // undefined rather than throwing.
-          const stackChildMeasure = (): Measure | undefined =>
-            forgetAllMeasures(stackSpaces.map((s) => spaceMeasure(s)));
-
-          // Explicit size on the spread overrides children-derived sizing.
-          if (isValue(dims[stackDir].size)) {
-            const explicit: Size<UnderlyingSpace> = [UNDEFINED, UNDEFINED];
-            explicit[stackDir] = SIZE(
-              Monotonic.linear(getValue(dims[stackDir].size!), 0),
-              getMeasure(dims[stackDir].size)
-            );
-            explicit[alignDir] = alignSpace;
-            return explicit;
-          }
-
-          let stackSpace: UnderlyingSpace = UNDEFINED;
-
-          if (glue) {
-            // STACK semantics: collapse children into a single POSITION at
-            // this level. Use children's intrinsic extent at scale=1.
-            if (children.every((c) => isPOSITION(c[stackDir]))) {
-              const totalWidth = children
-                .map((c) =>
-                  isPOSITION(c[stackDir])
-                    ? Interval.width(c[stackDir].domain)
-                    : 0
-                )
-                .reduce((a, b) => a + b, 0);
-              stackSpace = POSITION(
-                Interval.interval(0, totalWidth),
-                stackChildMeasure()
-              );
-            } else if (stackSpaces.every(isSIZE)) {
-              const totalSize = stackSpaces
-                .map((s) => (s as any).domain.run(1) as number)
-                .reduce((a, b) => a + b, 0);
-              stackSpace = POSITION(
-                Interval.interval(0, totalSize),
-                stackChildMeasure()
-              );
-            } else if (namedKeys.length > 0) {
-              stackSpace = ORDINAL(namedKeys);
+          const stackSpace = distributeSpaceFold(
+            children.map((child) => child[stackDir]),
+            namedKeys,
+            {
+              spacing: effectiveSpacing,
+              mode,
+              glue,
+              size: dims[stackDir].size,
             }
-          } else {
-            // SPREAD semantics:
-            //  - All-SIZE *and* data-driven (some non-constant Monotonic)
-            //    → keep SIZE composition so parents can solve scale
-            //    factors via Monotonic.inverse. Names don't override
-            //    because the visual size is data-driven, which dominates
-            //    over categorical labeling.
-            //  - All-SIZE constant + named → ORDINAL. Each slot is the
-            //    same size; categorical axis labels are the right thing.
-            //  - Named (any other shape) → ORDINAL.
-            //  - All-SIZE constant + unnamed → SIZE composition.
-            //  - All-POSITION → POSITION(union).
-            const allSize = stackSpaces.every(isSIZE);
-            const childDomains = allSize
-              ? stackSpaces.map((s) => (s as any).domain as Monotonic.Monotonic)
-              : [];
-            const dataDriven =
-              allSize && childDomains.some((d) => !Monotonic.isConstant(d));
-            const composeSize = () =>
-              mode === "edge"
-                ? Monotonic.adds(
-                    Monotonic.add(...childDomains),
-                    effectiveSpacing * (children.length - 1)
-                  )
-                : Monotonic.unknown(
-                    (scaleFactor: number) =>
-                      childDomains[0].run(scaleFactor) / 2 +
-                      effectiveSpacing * (children.length - 1) +
-                      childDomains[childDomains.length - 1].run(scaleFactor) / 2
-                  );
-            if (dataDriven) {
-              stackSpace = SIZE(composeSize(), stackChildMeasure());
-            } else if (namedKeys.length > 0) {
-              stackSpace = ORDINAL(namedKeys);
-            } else if (allSize) {
-              stackSpace = SIZE(composeSize(), stackChildMeasure());
-            } else if (children.every((c) => isPOSITION(c[stackDir]))) {
-              const totalWidth = children
-                .map((c) =>
-                  isPOSITION(c[stackDir])
-                    ? Interval.width(c[stackDir].domain)
-                    : 0
-                )
-                .reduce((a, b) => a + b, 0);
-              stackSpace = POSITION(
-                Interval.interval(0, totalWidth),
-                stackChildMeasure()
-              );
-            }
-          }
+          );
 
           const result: Size<UnderlyingSpace> = [UNDEFINED, UNDEFINED];
           result[stackDir] = stackSpace;
-          result[alignDir] = alignSpace;
+          result[alignDir] = alignResult.space;
           return result;
         },
         layout: (shared, size, scaleFactors, children, posScales, node) => {
@@ -301,23 +219,14 @@ export const Spread = createNodeOperator(
             scaleFactor: sfY,
           };
 
-          // Calculate available space for children in stacking direction after subtracting spacing
-          const totalSpacing = effectiveSpacing * (children.length - 1);
-          const availableStackSpace = size[stackDir] - totalSpacing;
-          const n = children.length;
-          const weightsOk =
-            stackWeights !== undefined &&
-            stackWeights.length === n &&
-            stackWeights.every((w) => Number.isFinite(w) && w >= 0);
-          const weightSum = weightsOk
-            ? stackWeights!.reduce((acc, w) => acc + Math.max(w, 0), 0)
-            : 0;
-          const useWeights = weightsOk && weightSum > 0;
-          const childStackSizes: number[] = useWeights
-            ? stackWeights!.map(
-                (w) => (Math.max(w, 0) / weightSum) * availableStackSpace
-              )
-            : Array.from({ length: n }, () => availableStackSpace / n);
+          // Divide the stack-axis budget into per-child slices (shared fill
+          // policy; weights split it in proportion, else an equal share).
+          const childStackSizes = allocateSlices(
+            size[stackDir],
+            effectiveSpacing,
+            children.length,
+            stackWeights
+          );
 
           const childPlaceables = children.map((child, i) => {
             const modifiedSize: Size = [0, 0];
@@ -364,65 +273,28 @@ export const Spread = createNodeOperator(
             alignFromSize
           );
 
-          /* distribute */
-          const firstFixedIdx = childPlaceables.findIndex(isFixed(stackDir));
-          let pos: number;
-          if (firstFixedIdx === -1) {
-            pos = 0;
-          } else {
-            const firstFixed = childPlaceables[firstFixedIdx];
-            const firstFixedMin = firstFixed.dims[stackDir].min as number;
-            const firstFixedMax = firstFixed.dims[stackDir].max as number;
-            const firstFixedCenter = (firstFixedMin + firstFixedMax) / 2;
-            if (mode === "edge") {
-              pos =
-                firstFixedMin -
-                firstFixedIdx * effectiveSpacing -
-                childPlaceables
-                  .slice(0, firstFixedIdx)
-                  .reduce((acc, c) => acc + c.dims[stackDir].size!, 0);
-            } else {
-              pos = firstFixedCenter - firstFixedIdx * effectiveSpacing;
-            }
-          }
-
-          if (mode === "edge") {
-            for (const child of childPlaceables) {
-              if (isFixed(stackDir)(child)) {
-                const childMin = child.dims[stackDir].min as number;
-                const childMax = child.dims[stackDir].max as number;
-                if (Math.abs(childMin - pos) > 1e-6) {
-                  console.warn(
-                    "Stack: fixed child stack-direction position inconsistent with layout order",
-                    { expected: pos, actual: childMin }
-                  );
-                }
-                pos = childMax + effectiveSpacing;
-              } else {
-                child.place(stackDir, pos, "min");
-                const sz = child.dims[stackDir].size ?? 0;
-                pos += sz + effectiveSpacing;
-              }
-            }
-          } else if (mode === "center") {
-            for (const child of childPlaceables) {
-              if (isFixed(stackDir)(child)) {
-                const childMin = child.dims[stackDir].min as number;
-                const childMax = child.dims[stackDir].max as number;
-                const childCenter = (childMin + childMax) / 2;
-                if (Math.abs(childCenter - pos) > 1e-6) {
-                  console.warn(
-                    "Stack: fixed child stack-direction position inconsistent (center-to-center)",
-                    { expected: pos, actual: childCenter }
-                  );
-                }
-                pos = childCenter + effectiveSpacing;
-              } else {
-                child.place(stackDir, pos, "center");
-                pos += effectiveSpacing;
-              }
-            }
-          }
+          // distribute: delegate to the shared walk. `reverse` was already
+          // applied to `children` above, so the placement order is fixed
+          // (order: "forward"). The reporter surfaces spread's historical
+          // inconsistency warning for fixed children whose position disagrees
+          // with the running layout — a console-only behavior the constraint
+          // path doesn't share.
+          applyDistribute(
+            {
+              dir: stackDir === 0 ? "x" : "y",
+              spacing: effectiveSpacing,
+              mode,
+              order: "forward",
+            },
+            childPlaceables,
+            (expected, actual) =>
+              console.warn(
+                mode === "center"
+                  ? "Stack: fixed child stack-direction position inconsistent (center-to-center)"
+                  : "Stack: fixed child stack-direction position inconsistent with layout order",
+                { expected, actual }
+              )
+          );
 
           // A child the alignment step didn't place (no `alignment` given)
           // renders at its own origin (translate 0): nail it down there now so

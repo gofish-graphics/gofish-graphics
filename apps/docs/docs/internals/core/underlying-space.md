@@ -10,6 +10,9 @@ covers:
   - packages/gofish-graphics/src/ast/graphicalOperators/layer.tsx
   - packages/gofish-graphics/src/ast/channels.ts
   - packages/gofish-graphics/src/ast/data.ts
+  - packages/gofish-graphics/src/ast/constraints/folds.ts
+  - packages/gofish-graphics/src/ast/constraints/distribute.ts
+  - packages/gofish-graphics/src/ast/constraints/align.ts
 ---
 
 # The underlying space tree
@@ -203,14 +206,34 @@ Returns the node's own `[xSpace, ySpace]`, computed bottom-up from the
 already-resolved child spaces. The traversal is memoized at `_node.ts`'s
 `resolveUnderlyingSpace()`.
 
-The `constraints` argument lets constraints contribute a _fragment_ of the
-space: `layer` folds the _datum_ coordinates of its `Constraint.position`
-constraints into a POSITION domain on the constrained axis
-(`collectPositionDomains`), unioned with the children's spaces. (Literal-pixel
-coordinates are not data and don't contribute.) That domain is what the layer
-later turns into a data→pixel scale to resolve those position constraints — see
-[[operators-vs-constraints]] for why this is the seam for expressing a
-data-positioned operator as a union of constraints.
+The `constraints` argument lets constraints participate in space resolution —
+each positioning-constraint kind carries a **space fold**, a typing rule that
+composes its targets' spaces into the layer's claim on that axis:
+
+- `Constraint.position` contributes a _fragment_: the layer folds the _datum_
+  coordinates into a POSITION domain on the constrained axis
+  (`collectPositionDomains`), unioned with the children's spaces.
+  (Literal-pixel coordinates are not data and don't contribute.) That domain
+  is what the layer later turns into a data→pixel scale to resolve those
+  constraints.
+- `Constraint.distribute` contributes the stack fold (`distributeSpaceFold`,
+  `constraints/distribute.ts`): all-SIZE data-driven targets compose to
+  `SIZE(Monotonic.add(...) + spacing·(n−1))`; with `glue: true` (stack
+  semantics) the extents are committed to an anchored `POSITION([0, Σ])`;
+  constant-sized keyed targets fall back to ORDINAL.
+- `Constraint.align` contributes the alignment fold (`alignSpaceFold` →
+  `resolveAlignmentSpace`) on its axis.
+
+The layer composes these per axis — children not covered by a constraint
+max-union in as overlay siblings — and at layout time **solves the budget**:
+a fold-produced SIZE claim is inverted against the layer's allotted size to
+derive a local scale factor, and distribute-covered fill children are
+proposed slices from the shared allocator (`allocateSlices`,
+`constraints/folds.ts`). This is what makes constraint-assembled layers reach
+the same expressive ceiling as the spread pipeline, auto-fit included
+(issue #475). Composition beyond one distribute (+ one align) per axis falls
+back to `unionChildSpaces`; the general algebra is sketched in
+[[constraints-as-core]].
 
 Three patterns cover most operators:
 
@@ -226,7 +249,11 @@ combine children's spaces. `spread({ glue: false })` keeps SIZE
 composition along the stack direction so a parent can solve for shared
 scale factors via `Monotonic.inverse`. `spread({ glue: true })` (i.e.
 `stack`) sums children's SIZE values into a `POSITION([0, sum])` — the
-operator commits the data-driven extents to a positional axis. `layer`
+operator commits the data-driven extents to a positional axis. Since the
+operator/constraint unification, these folds have one home: spread's
+resolver _is_ `distributeSpaceFold` on the stack axis and
+`alignSpaceFold` on the cross axis — the same functions the constraint
+path uses (see [The contract](#the-contract)). `layer`
 and overlay-style operators use `unionChildSpaces` (`alignment.ts`),
 which preserves SIZE when every child is SIZE and otherwise unions
 intervals. UNDEFINED children carry no opinion and are ignored
@@ -342,6 +369,14 @@ spread.layout (each spread/stack node):
 
 Leaf shapes never need to compute their own scale factors — they receive
 them via the `scaleFactors` parameter and apply them in `computeSize`.
+
+A `layer` whose constraints fold to a SIZE claim runs the same inversion
+as spread's first branch — `fold.inverse(size[axis])` against its allotted
+size — to derive a local scale factor for its constrained children (and
+warns before falling back when the fold isn't invertible at that budget).
+Unlike spread, the layer never mutates the inherited `scaleFactors`
+array; sibling scale sharing via mutation is a spread-only behavior
+(`sharedScale`).
 
 This dispatch is the practical embodiment of the underlying-space-kind
 distinction. It also happens to make the rendering pipeline more readable:
@@ -597,6 +632,8 @@ companion thesis repo).
 - Per-operator resolvers (each colocated with the operator):
   `src/ast/graphicalOperators/{spread,layer,scatter,enclose,porterDuff,position,connect,arrow,table,coord}.tsx`.
 - Overlay union helpers: `src/ast/graphicalOperators/alignment.ts`.
+- Constraint space folds + the shared slice allocator:
+  `src/ast/constraints/{distribute,align,folds}.ts`.
 - The Monotonic algebra used by SIZE composition: `src/util/monotonic.ts`.
 - Layout consumption: `gofish.tsx`'s `layout()` for root-level dispatch;
   `spread.tsx`'s `layout` for the per-node `computeScaleFactor`.

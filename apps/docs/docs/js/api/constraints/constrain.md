@@ -91,14 +91,30 @@ Stacks a set of children end-to-end along an axis, with optional spacing.
 Constraint.distribute({ dir, spacing, mode, order }, [ref1, ref2, ...])
 ```
 
-| Option    | Type                     | Default     | Description                                                  |
-| --------- | ------------------------ | ----------- | ------------------------------------------------------------ |
-| `dir`     | `"x" \| "y"`             | —           | Axis to distribute along                                     |
-| `spacing` | `number`                 | `8`         | Gap between each element                                     |
-| `mode`    | `"edge" \| "center"`     | `"edge"`    | Whether spacing is measured edge-to-edge or center-to-center |
-| `order`   | `"forward" \| "reverse"` | `"forward"` | Order to place elements                                      |
+| Option    | Type                     | Default     | Description                                                                                            |
+| --------- | ------------------------ | ----------- | ------------------------------------------------------------------------------------------------------ |
+| `dir`     | `"x" \| "y"`             | —           | Axis to distribute along                                                                               |
+| `spacing` | `number`                 | `8`         | Gap between each element (forced to `0` when `glue` is set)                                            |
+| `mode`    | `"edge" \| "center"`     | `"edge"`    | Whether spacing is measured edge-to-edge or center-to-center                                           |
+| `order`   | `"forward" \| "reverse"` | `"forward"` | Order to place elements                                                                                |
+| `glue`    | `boolean`                | `false`     | Stack semantics: children touch, and their data-driven extents commit to one positional axis           |
+| `weights` | `number[]`               | —           | Per-child budget weights (one per child, positional) — how fill children share the layer's slice space |
 
 The first already-placed child acts as an anchor. Unplaced children after it are distributed forward (increasing position); unplaced children before it are distributed backward so they stack flush against the anchor's leading edge.
+
+### Space resolution and auto-fit
+
+`distribute` (and `align`) don't just position children after layout — they
+participate in **underlying-space resolution**, exactly like the operators
+built on them. A `distribute` over data-sized children composes their size
+claims (sum + spacing) into the layer's claim on that axis; when the layer is
+then given a size (an explicit `w`/`h`, or an allotted budget from its parent
+or a coordinate transform), it solves for the scale factor that makes the
+children fit, and proposes budget slices (equal, or per `weights`) to children
+with no size claim of their own. With `glue: true` the composed extents commit
+to an anchored positional axis instead — that's a stacked bar chart. In other
+words: a constraint-assembled layer auto-fits the same way a `Spread`/`Stack`
+does.
 
 ::: starfish
 
@@ -233,7 +249,10 @@ override it for the pairs they name.
 
 ## Spread equivalences
 
-Constraints are a lower-level primitive that `Spread` is built on. These pairs are equivalent:
+Constraints are the primitive `Spread` and `Stack` are built on — literally:
+the operators delegate their space resolution, budget slicing, and placement
+walks to the same machinery the constraint path uses. These pairs are
+equivalent, **including** scale solving and auto-fit, not just placement:
 
 | Spread                                                       | Constraint equivalent                                           |
 | ------------------------------------------------------------ | --------------------------------------------------------------- |
@@ -241,6 +260,17 @@ Constraints are a lower-level primitive that `Spread` is built on. These pairs a
 | `Spread({ dir: "x", alignment: "end", spacing: 10 }, items)` | `align({ y: "end" })` + `distribute({ dir: "x", spacing: 10 })` |
 | `Spread({ dir: "x", spacing: 60, mode: "center" }, items)`   | `distribute({ dir: "x", spacing: 60, mode: "center" })`         |
 | `Spread({ dir: "y", reverse: true }, items)`                 | `distribute({ dir: "y", order: "reverse" })`                    |
+| `Stack({ dir: "y" }, items)`                                 | `distribute({ dir: "y", glue: true })`                          |
+| `Spread({ dir: "x", stackWeights: [2, 1] }, items)`          | `distribute({ dir: "x", weights: [2, 1] })`                     |
+
+One caveat: when **no child is pre-placed**, the cross-axis `align` fallback
+differs. `Spread` aligns to the data-scale origin (`posScale(0)`), while the
+`align` constraint falls back to the layer's box edge (`end` → the full
+extent). For `"start"` the two coincide; for `"end"`/`"middle"` they diverge
+by the box extent. Pre-place one child (or use `Constraint.position`) when you
+need spread-identical `end`/`middle` alignment. (Unifying the two fallbacks is
+tracked in
+[#552](https://github.com/gofish-graphics/gofish-graphics/issues/552).)
 
 ## Partial placement
 
