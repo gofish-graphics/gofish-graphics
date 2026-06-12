@@ -268,7 +268,9 @@ differs. `Spread` aligns to the data-scale origin (`posScale(0)`), while the
 `align` constraint falls back to the layer's box edge (`end` → the full
 extent). For `"start"` the two coincide; for `"end"`/`"middle"` they diverge
 by the box extent. Pre-place one child (or use `Constraint.position`) when you
-need spread-identical `end`/`middle` alignment.
+need spread-identical `end`/`middle` alignment. (Unifying the two fallbacks is
+tracked in
+[#552](https://github.com/gofish-graphics/gofish-graphics/issues/552).)
 
 ## Partial placement
 
