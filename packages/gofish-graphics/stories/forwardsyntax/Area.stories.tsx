@@ -79,11 +79,18 @@ export const Stacked: StoryObj<Args> = {
 
 export const Layered: StoryObj<Args> = {
   args: { w: 500, h: 300 },
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "Layered Area Chart",
+      description: "Five overlapping series drawn as translucent filled areas so their changing magnitudes can be compared across a shared x-axis.",
+    },
+  },
   render: (args: Args) => {
     const container = initializeContainer();
     layer([
       Chart(streamgraphData)
-        .flow(group({ by: "c" }), spread({ by: "x",  dir: "x", spacing: 50 }))
+        .flow(spread({ by: "x",  dir: "x", spacing: 50 }), group({ by: "c" }))
         .mark(blank({ h: "y", fill: "c" }).name("points")),
       Chart(selectAll("points"))
         .flow(group({ by: "datum.c" }))
