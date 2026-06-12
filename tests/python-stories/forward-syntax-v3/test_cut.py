@@ -27,7 +27,7 @@ a port.
 import os
 import re
 
-from gofish import chart, cut, datum, image, layer, rect, spread, stack, text
+from gofish import chart, cut, datum, image, layer, mask, offset, rect, spread, stack, text
 from gofish import Constraint
 
 # Vite-served URL of the bottle PNG. JS imports it via
@@ -253,33 +253,60 @@ def story_croissant_stack():
     transparent spacer rects on both sides, then flush-`Stack`s the padded
     slices so the recomposed row spans the source's exact 400px. The Python IR
     bridge expands a `cut` only as flat combinator children (it has no per-slice
-    template), so we cannot pad each slice individually. Instead we drop the
-    inset cut straight into a `Spread` with `spacing=inset`: N visible-window
-    slices, each `extent_i - inset` wide, separated by `inset` gaps. The outer
-    `Constraint.align(x="middle")` centers this `400 - inset = 384`px row inside
-    the 400px-wide axis frame, which puts each band at the identical continuous-x
-    position the JS padded-Stack produces (8px end gaps, 16px inter-band gaps).
-    The only structural difference is the 12 zero-extent spacer rects the JS
-    version emits as layout scaffolding; the rendered bands are geometrically
-    identical.
+    template), so we cannot route the per-slice padding THROUGH `cut`. Instead we
+    HAND-ELABORATE each slice in user space, emitting exactly what JS pure `cut`
+    emits per slice — `mask([regionRect, offset(source)])` — and wrap it in the
+    same spacer `Stack` the JS story uses.
+
+    This hand-elaboration intentionally mirrors cut's elaboration
+    (`mask(window, offset(source))`) 1:1 — see `buildSliceNode` + the pure `cut`
+    in `packages/gofish-graphics/src/ast/graphicalOperators/cut.tsx`. It doubles
+    as a regression pin that cut's output stays expressible in user-space
+    primitives: if cut.tsx's `buildSliceNode` changes, update this story to
+    match. For `dir: "x"` (no y-flip) the recipe per slice `i` is, with source
+    extent-along `extent_i`, cumulative `offset_i`, cross extent 120:
+      insetExtent = extent_i - inset
+      insetOffset = offset_i + inset / 2
+      regionRect  = rect(x=0, y=0, w=insetExtent, h=120, fill="white")
+      slice       = mask([regionRect, offset(source, x=-insetOffset)])
+    then pad each slice back to its full logical extent with `inset/2`
+    zero-extent spacer rects on both sides (an inner `Stack`) and flush-`Stack`
+    the padded slices — identical to the JS story.
     """
     W = 400
     inset = 16
+    H = 120
     # Unequal weights: narrow bands in the tails, wide bands over the peak.
     weights = [1, 1.6, 2.4, 2.4, 1.6, 1]
 
-    bands = spread(
-        [
-            cut(
-                image(href=BELL_CURVE_SVG, w=W, h=120),
-                dir="x",
-                size=[datum(wt) for wt in weights],
-                inset=inset,
-            )
-        ],
-        dir="x",
-        spacing=inset,
-    ).name("bands")
+    # Resolve the datum() weights into pixel extents + cumulative offsets along
+    # x exactly as the pure cut's resolveExtents does for an all-datum array:
+    # the remainder is the whole source width, split proportionally.
+    total = sum(weights)
+    extents = [(wt / total) * W for wt in weights]
+    offsets = []
+    acc = 0
+    for e in extents:
+        offsets.append(acc)
+        acc += e
+
+    def make_slice(offset_i, extent_i):
+        inset_extent = extent_i - inset
+        inset_offset = offset_i + inset / 2  # dir "x" → translate by -insetOffset
+        region = rect(x=0, y=0, w=inset_extent, h=H, fill="white")
+        source = image(href=BELL_CURVE_SVG, w=W, h=H)
+        return mask([region, offset(source, x=-inset_offset)])
+
+    # Pad each slice back to its full logical extent: inset/2 of transparent
+    # space on each side along `dir`, via zero-cross-extent spacer rects.
+    def spacer():
+        return rect(w=inset / 2, h=0, fill="none", stroke="none")
+
+    padded = [
+        stack([spacer(), make_slice(o, e), spacer()], dir="x")
+        for o, e in zip(offsets, extents)
+    ]
+    bands = stack(padded, dir="x").name("bands")
 
     # Hand-composed continuous x axis (domain [-3, 3] standard deviations): a
     # full-width baseline rect plus numeric labels pinned by LITERAL pixel x
