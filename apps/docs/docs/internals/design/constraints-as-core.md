@@ -465,7 +465,12 @@ suggest it will not be needed.
    the multi-scale-per-axis design.
 
 Each step is independently shippable and behavior-preserving at the story
-level (1–3 verified so on the `unify-constraints-operators` branch).
+level (1–3 verified so on the `unify-constraints-operators` branch). The
+deferred remainder is tracked in
+[#550](https://github.com/gofish-graphics/gofish-graphics/issues/550), with
+sub-issues for size-setting constraints (#545), scatter/position (#546),
+treemap (#541), the general composition algebra (#547), table (#548), and
+sharedScale claim hoisting (#549).
 
 ## Python / IR implications
 
