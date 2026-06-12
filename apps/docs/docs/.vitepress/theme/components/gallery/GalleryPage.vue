@@ -34,6 +34,7 @@ const spotsEl = ref<HTMLElement | null>(null);
 const entranceEl = ref<HTMLElement | null>(null);
 const endwallEl = ref<HTMLElement | null>(null);
 const figuresEl = ref<HTMLElement | null>(null);
+const cardEl = ref<HTMLElement | null>(null);
 const emptyEl = ref<HTMLElement | null>(null);
 const emptyFigEl = ref<HTMLElement | null>(null);
 const searchEl = ref<HTMLInputElement | null>(null);
@@ -69,6 +70,7 @@ onMounted(() => {
   const entrance = entranceEl.value!;
   const endwall = endwallEl.value!;
   const figuresHost = figuresEl.value!;
+  const card = cardEl.value!;
   const emptyBox = emptyEl.value!;
   const search = searchEl.value!;
   const countBox = countEl.value!;
@@ -936,6 +938,21 @@ onMounted(() => {
     };
   }
 
+  // Push the entrance text block down so the centered headline clears the
+  // hanging search card. The card is viewport-fixed within the scene (it does
+  // not scroll), so its real rendered bottom — measured in scene coordinates,
+  // which coincide with the entrance's own top — is exactly the padding-top the
+  // entrance needs. Measuring (rather than guessing) absorbs the VitePress
+  // navbar height, the card's swayed bbox, and its true height including the
+  // results-count line + minimap, at desktop and the docked mobile bar alike.
+  function clearEntranceForCard(): void {
+    const sceneTop = scene.getBoundingClientRect().top;
+    const cardBottom = card.getBoundingClientRect().bottom;
+    const gap = env.mobile ? 14 : 22;
+    const clear = Math.max(0, Math.round(cardBottom - sceneTop + gap));
+    entrance.style.paddingTop = clear + "px";
+  }
+
   function pack(list: Piece[]): Layout {
     const e = env;
     const caps = endcapWidths();
@@ -1320,6 +1337,7 @@ onMounted(() => {
   let lastLayout: Layout | null = null;
   let lastFigCols = -1;
   function relayout() {
+    clearEntranceForCard();
     const list = currentList();
     const layout = pack(list);
     applyLayout(list, layout);
@@ -1617,6 +1635,13 @@ onMounted(() => {
 
   env = computeEnv();
   relayout(); // size the empty hall (wall/floor/entrance/end wall) immediately
+  // The hanging card's height depends on the (async) Fraunces label + monospace
+  // count line; re-clear the entrance once webfonts settle so it never overlaps.
+  if (document.fonts?.ready) {
+    document.fonts.ready.then(() => {
+      if (!cancelled) clearEntranceForCard();
+    });
+  }
   // enable position transitions after first paint so existing pieces animate on
   // repack/search (newly-built pieces opt out per-piece via `appearing`).
   requestAnimationFrame(() =>
@@ -1775,7 +1800,7 @@ onBeforeUnmount(() => {
       <div class="sub">try another term</div>
     </div>
 
-    <div class="searchcard">
+    <div class="searchcard" ref="cardEl">
       <div class="label">The GoFish Collection</div>
       <input
         class="search-input"
