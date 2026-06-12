@@ -1,0 +1,935 @@
+/* === GoFish example gallery — the museum hall (ported from prototypes/gallery) ===
+   Route-scoped: tokens + VitePress chrome overrides hang off html.gallery-page
+   (toggled on mount, like html.landing-page), and every museum rule is scoped
+   under .gallery-scene so no other docs page is affected. */
+
+/* =====================================================================
+   TOKENS — verbatim from the homepage (landing.css) so the hall reads as
+   the same material world: same palette, wood + paper tiles, easings.
+   ===================================================================== */
+html.gallery-page {
+  --desk: #6b5a47;
+  --paper: #f7f2e9;
+  --paper-shade: #efe7d8;
+  --ink: #26211b;
+  --ink-soft: #6e6457;
+  --graphite: #4a4540;
+  --accent: #2f9e6e;
+  --accent-deep: #1f7a52;
+  --gold: #e3aa2f;
+  --shadow-warm: rgba(38, 28, 18, 0.16);
+
+  /* near-black warm ink the visitor silhouettes are cut from */
+  --fig: #1d1813;
+
+  /* springy hover easing shared with the homepage (small hover lifts only) */
+  --spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  /* calm ease-out used for the search repack / position moves (no overshoot) */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+
+  /* procedural wood-grain tile (800x480, seamless) — verbatim from landing.css */
+  --wood: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='800'%20height='480'%3E%3Cdefs%3E%3Cfilter%20id='figure'%20x='0'%20y='0'%20width='100%25'%20height='100%25'%3E%3CfeTurbulence%20type='fractalNoise'%20baseFrequency='0.003%200.018'%20numOctaves='3'%20seed='7'%20stitchTiles='stitch'/%3E%3CfeColorMatrix%20type='matrix'%20values='0%200%200%200%200%200%200%200%200%200%200%200%200%200%200%200.6%200.6%200.6%200%20-0.45'%20result='m'/%3E%3CfeFlood%20flood-color='%233a2614'/%3E%3CfeComposite%20in2='m'%20operator='in'/%3E%3C/filter%3E%3Cfilter%20id='fibers'%20x='0'%20y='0'%20width='100%25'%20height='100%25'%3E%3CfeTurbulence%20type='fractalNoise'%20baseFrequency='0.004%200.11'%20numOctaves='5'%20seed='11'%20stitchTiles='stitch'/%3E%3CfeColorMatrix%20type='matrix'%20values='0%200%200%200%200%200%200%200%200%200%200%200%200%200%200%201.1%201.1%201.1%200%20-0.78'%20result='m'/%3E%3CfeFlood%20flood-color='%23241408'/%3E%3CfeComposite%20in2='m'%20operator='in'/%3E%3C/filter%3E%3Cfilter%20id='hl'%20x='0'%20y='0'%20width='100%25'%20height='100%25'%3E%3CfeTurbulence%20type='fractalNoise'%20baseFrequency='0.004%200.11'%20numOctaves='5'%20seed='23'%20stitchTiles='stitch'/%3E%3CfeColorMatrix%20type='matrix'%20values='0%200%200%200%200%200%200%200%200%200%200%200%200%200%200%201.1%201.1%201.1%200%20-0.82'%20result='m'/%3E%3CfeFlood%20flood-color='%23eccd9d'/%3E%3CfeComposite%20in2='m'%20operator='in'/%3E%3C/filter%3E%3C/defs%3E%3Crect%20width='800'%20height='480'%20filter='url(%23figure)'%20opacity='0.35'/%3E%3Crect%20width='800'%20height='480'%20filter='url(%23fibers)'%20opacity='0.4'/%3E%3Crect%20width='800'%20height='480'%20filter='url(%23hl)'%20opacity='0.14'/%3E%3C/svg%3E");
+
+  /* procedural paper tile (600x600) — verbatim from landing.css */
+  --paper-tex: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='600' height='600'%3E%3Cdefs%3E%3Cfilter id='tooth'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.55' numOctaves='2' seed='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.7 0.7 0.7 0 -0.5' result='m'/%3E%3CfeFlood flood-color='%238a7a64'/%3E%3CfeComposite in2='m' operator='in'/%3E%3C/filter%3E%3Cfilter id='mottle'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.012 0.014' numOctaves='4' seed='9' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.5 0.5 0.5 0 -0.34' result='m'/%3E%3CfeFlood flood-color='%23b9a98e'/%3E%3CfeComposite in2='m' operator='in'/%3E%3C/filter%3E%3Cfilter id='light'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.012 0.014' numOctaves='4' seed='27' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.5 0.5 0.5 0 -0.34' result='m'/%3E%3CfeFlood flood-color='%23fffdf6'/%3E%3CfeComposite in2='m' operator='in'/%3E%3C/filter%3E%3Cfilter id='flecks'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.3 0.3' numOctaves='2' seed='14' stitchTiles='stitch'/%3E%3CfeComponentTransfer%3E%3CfeFuncA type='discrete' tableValues='0 0 0 0 0 0 0 1'/%3E%3C/feComponentTransfer%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 0' result='m'/%3E%3CfeFlood flood-color='%236b5a44'/%3E%3CfeComposite in2='m' operator='in'/%3E%3C/filter%3E%3C/defs%3E%3Crect width='600' height='600' filter='url(%23mottle)' opacity='0.08'/%3E%3Crect width='600' height='600' filter='url(%23light)' opacity='0.06'/%3E%3Crect width='600' height='600' filter='url(%23tooth)' opacity='0.1'/%3E%3Crect width='600' height='600' filter='url(%23flecks)' opacity='0.05'/%3E%3C/svg%3E");
+}
+
+/* ===================== route-scoped page chrome ===================== */
+/* The page itself never scrolls — only the hall does. */
+html.gallery-page,
+html.gallery-page body {
+  overflow: hidden;
+}
+html.gallery-page body {
+  background: var(--desk);
+}
+/* Let the desk show through VitePress' page containers; remove their chrome so
+   the fixed museum scene owns the viewport below the navbar. */
+html.gallery-page .VPContent,
+html.gallery-page .VPContent.is-home,
+html.gallery-page .VPPage {
+  background: transparent !important;
+  padding: 0 !important;
+}
+html.gallery-page .VPFooter {
+  display: none !important;
+}
+/* This route lives under the /js/ (and /python/) sidebar config, so VitePress
+   still mounts the sidebar even under `layout: page`. The fixed museum scene owns
+   the whole viewport below the navbar, so remove the sidebar + its local-nav bar
+   and let the content span full width. */
+html.gallery-page .VPSidebar,
+html.gallery-page .VPLocalNav {
+  display: none !important;
+}
+html.gallery-page .VPContent.has-sidebar {
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+}
+
+/* ----- navbar restyle, gallery route only (mirrors the landing page) ----- */
+html.gallery-page .VPNavBar,
+html.gallery-page .VPNavBar.has-sidebar .content {
+  background-color: var(--paper) !important;
+}
+html.gallery-page .VPNavBar .content-body {
+  background-color: var(--paper) !important;
+}
+html.gallery-page .VPNavBar {
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08) !important;
+}
+html.gallery-page .VPNavBar .divider {
+  display: none;
+}
+html.gallery-page .VPNavBarTitle .text {
+  color: var(--ink);
+}
+html.gallery-page .DocSearch-Button {
+  background: rgba(0, 0, 0, 0.03);
+  border: 1.5px solid rgba(40, 28, 18, 0.18);
+}
+
+/* =====================================================================
+   THE SCENE — fills the viewport below the VitePress navbar.
+   ===================================================================== */
+.gallery-scene {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  top: var(--vp-nav-height, 64px);
+  overflow: hidden;
+  background: var(--desk);
+  font-family: "Spline Sans", sans-serif;
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+  /* --floor-h: share of the scene given to the wood floor (rest is wall). */
+  --floor-h: clamp(150px, 26dvh, 250px);
+  z-index: 1;
+}
+.gallery-scene *,
+.gallery-scene *::before,
+.gallery-scene *::after {
+  box-sizing: border-box;
+}
+.gallery-scene ::selection {
+  background: var(--accent);
+  color: var(--paper);
+}
+.gallery-scene a {
+  color: inherit;
+}
+.gallery-scene :focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: 2px;
+}
+
+/* =====================================================================
+   THE HALL — one long horizontally-scrolling wall you dolly along.
+   The wall, floor, frames, plaques and spotlights all live inside the
+   scrolling .track. Only the figures layer is viewport-fixed.
+   ===================================================================== */
+.gallery-scene .hall {
+  position: absolute;
+  inset: 0;
+  overflow-x: scroll;
+  overflow-y: hidden;
+  /* NOTE: intentionally `auto`, not `smooth` — see the prototype's note. */
+  scroll-behavior: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+}
+.gallery-scene .hall::-webkit-scrollbar {
+  height: 8px;
+}
+.gallery-scene .hall::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.18);
+}
+.gallery-scene .hall::-webkit-scrollbar-thumb {
+  background: rgba(227, 170, 47, 0.5);
+  border-radius: 4px;
+}
+
+.gallery-scene .track {
+  position: relative;
+  height: 100%;
+  min-width: 100%;
+  /* width set by JS to the packed length of the wall */
+}
+
+/* ---- WALL: the same paper material as the homepage sheet ---- */
+.gallery-scene .wall {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: var(--floor-h);
+  background-color: var(--paper);
+  background-image:
+    linear-gradient(
+      180deg,
+      rgba(40, 28, 14, 0.1),
+      rgba(40, 28, 14, 0) 16%,
+      rgba(40, 28, 14, 0) 78%,
+      rgba(40, 28, 14, 0.1)
+    ),
+    var(--paper-tex);
+  background-size:
+    auto,
+    600px 600px;
+  background-repeat: repeat, repeat;
+}
+.gallery-scene .wall::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 16px;
+  background: linear-gradient(
+    180deg,
+    #d9cdb6,
+    #c4b596 38%,
+    #8a765a 39%,
+    #6f5c44 100%
+  );
+  box-shadow:
+    0 -2px 6px rgba(38, 28, 18, 0.18),
+    inset 0 1px 0 rgba(255, 250, 240, 0.5);
+}
+
+/* ---- CEILING track rail near the top of the wall ---- */
+.gallery-scene .rail {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 30px;
+  height: 7px;
+  background: linear-gradient(180deg, #5b5048, #3c352e 60%, #2a241e);
+  box-shadow: 0 3px 7px rgba(38, 28, 18, 0.3);
+  z-index: 3;
+}
+
+/* ---- FLOOR: the homepage wood, planks running into the room ---- */
+.gallery-scene .floor {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: var(--floor-h);
+  background-color: var(--desk);
+  background-image:
+    linear-gradient(
+      96deg,
+      rgba(255, 240, 210, 0) 0%,
+      rgba(255, 240, 210, 0.1) 28%,
+      rgba(255, 240, 210, 0) 56%
+    ),
+    linear-gradient(
+      180deg,
+      rgba(20, 12, 6, 0.55) 0%,
+      rgba(20, 12, 6, 0.12) 30%,
+      rgba(20, 12, 6, 0) 70%
+    ),
+    repeating-linear-gradient(
+      90deg,
+      transparent 0,
+      transparent 116px,
+      rgba(28, 18, 10, 0.3) 116px,
+      rgba(28, 18, 10, 0.55) 118px,
+      rgba(20, 12, 6, 0.6) 118px,
+      rgba(20, 12, 6, 0.6) 120px,
+      rgba(255, 225, 185, 0.1) 120px,
+      rgba(255, 225, 185, 0.1) 122px
+    ),
+    var(--wood), linear-gradient(180deg, #5a4936, #6b5a47 50%, #7a6850);
+  background-size:
+    auto,
+    auto,
+    auto,
+    800px 480px,
+    cover;
+  background-repeat: no-repeat, no-repeat, repeat, repeat, no-repeat;
+  z-index: 1;
+}
+
+/* =====================================================================
+   FRAMES + PLAQUES
+   ===================================================================== */
+.gallery-scene .piece {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 4;
+  cursor: pointer;
+  content-visibility: auto;
+  transition: opacity 0.45s ease;
+}
+.gallery-scene .track.animate .piece {
+  transition:
+    transform 0.45s var(--ease-out),
+    opacity 0.45s ease;
+}
+.gallery-scene .piece.gone {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.gallery-scene .frame {
+  position: relative;
+  background: var(--paper); /* the white mat */
+  padding: var(--mat, 13px);
+  border-style: solid;
+  border-width: var(--bord, 11px);
+  border-radius: 2px;
+  box-shadow:
+    0 2px 3px rgba(0, 0, 0, 0.18),
+    6px 14px 26px rgba(25, 18, 10, 0.3),
+    inset 0 0 0 1px rgba(0, 0, 0, 0.18);
+  transition:
+    transform 0.3s var(--spring),
+    box-shadow 0.3s ease;
+}
+.gallery-scene .frame .art {
+  display: block;
+  background: #fff;
+  box-shadow:
+    inset 0 0 0 1px rgba(0, 0, 0, 0.06),
+    inset 0 1px 6px rgba(40, 28, 14, 0.08);
+  overflow: hidden;
+}
+.gallery-scene .frame .art svg {
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+}
+.gallery-scene .frame .art.empty {
+  background: linear-gradient(180deg, #fff, #f4efe6);
+}
+
+@media (hover: hover) {
+  .gallery-scene .piece:hover .frame {
+    transform: translateY(-4px) scale(1.012);
+    box-shadow:
+      0 3px 4px rgba(0, 0, 0, 0.2),
+      10px 20px 38px rgba(25, 18, 10, 0.36),
+      inset 0 0 0 1px rgba(0, 0, 0, 0.18);
+  }
+}
+
+/* ---- four deterministic frame materials, all in the warm palette ---- */
+.gallery-scene .f-walnut {
+  border-color: #7a5a38;
+  border-image: linear-gradient(135deg, #9c7748, #6b4a2a 45%, #4f3418) 1;
+  box-shadow:
+    0 2px 3px rgba(0, 0, 0, 0.2),
+    6px 14px 26px rgba(25, 18, 10, 0.32),
+    inset 0 0 0 2px rgba(255, 235, 200, 0.18);
+}
+.gallery-scene .f-brass {
+  border-color: #c79a3e;
+  border-image: linear-gradient(135deg, #f0cf86, #c79a3e 50%, #8a6a25) 1;
+  border-width: 7px;
+}
+.gallery-scene .f-ink {
+  border-color: #2c2620;
+  border-width: 5px;
+}
+.gallery-scene .f-float {
+  border-color: var(--paper);
+  border-width: 3px;
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.16),
+    10px 18px 34px rgba(25, 18, 10, 0.3);
+}
+
+/* ---- museum plaque mounted just below each frame ---- */
+.gallery-scene .plaque {
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  transform: translateX(-50%);
+  width: max-content;
+  min-width: 116px;
+  max-width: var(--plaque-max, 200px);
+  background: linear-gradient(180deg, #fdf9f0, #f0e7d4);
+  border: 1px solid rgba(120, 95, 55, 0.35);
+  border-radius: 4px;
+  padding: 7px 11px 8px;
+  box-shadow:
+    0 1px 2px var(--shadow-warm),
+    2px 5px 12px var(--shadow-warm),
+    inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  text-align: center;
+  pointer-events: none; /* clicks fall through to the .piece */
+}
+.gallery-scene .plaque::before,
+.gallery-scene .plaque::after {
+  content: "";
+  position: absolute;
+  top: 5px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #f3d693, #9c7a2e);
+}
+.gallery-scene .plaque::before {
+  left: 6px;
+}
+.gallery-scene .plaque::after {
+  right: 6px;
+}
+.gallery-scene .plaque .ptitle {
+  font-family: "Fraunces", serif;
+  font-weight: 600;
+  font-size: 13px;
+  line-height: 1.15;
+  color: var(--ink);
+  letter-spacing: 0.01em;
+}
+.gallery-scene .plaque .pdesc {
+  font-family: "Architects Daughter", cursive;
+  font-size: 12px;
+  line-height: 1.2;
+  color: var(--ink-soft);
+  margin-top: 3px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* =====================================================================
+   SPOTLIGHTS — one per packed column, aimed at its center.
+   ===================================================================== */
+.gallery-scene .spot {
+  position: absolute;
+  pointer-events: none;
+  z-index: 3;
+}
+.gallery-scene .spot .fixture {
+  position: absolute;
+  top: 26px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 20px;
+  height: 26px;
+  z-index: 3;
+}
+.gallery-scene .spot .cone {
+  position: absolute;
+  top: 40px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: radial-gradient(
+    118% 85% at 50% -4%,
+    rgba(255, 238, 194, 0.72) 0%,
+    rgba(255, 231, 176, 0.46) 24%,
+    rgba(255, 226, 166, 0.24) 50%,
+    rgba(255, 223, 158, 0.09) 74%,
+    rgba(255, 223, 158, 0) 90%
+  );
+  clip-path: polygon(42% 0, 58% 0, 100% 100%, 0% 100%);
+}
+.gallery-scene .spot .glow {
+  position: absolute;
+  top: 40px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: radial-gradient(
+    60% 55% at 50% 12%,
+    rgba(255, 244, 214, 0.3) 0%,
+    rgba(255, 240, 200, 0.1) 45%,
+    rgba(255, 240, 200, 0) 75%
+  );
+  mix-blend-mode: overlay;
+  z-index: 5;
+  pointer-events: none;
+}
+.gallery-scene .spot .pool {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  border-radius: 50%;
+  background: radial-gradient(
+    ellipse at center,
+    rgba(255, 232, 176, 0.55) 0%,
+    rgba(255, 228, 166, 0.26) 42%,
+    rgba(255, 226, 160, 0) 74%
+  );
+  z-index: 2;
+}
+
+/* =====================================================================
+   ENTRANCE & END WALLS — vinyl lettering directly on the plaster
+   ===================================================================== */
+.gallery-scene .endcap {
+  position: absolute;
+  top: 0;
+  bottom: var(--floor-h);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 0 56px;
+  z-index: 4;
+}
+.gallery-scene .entrance {
+  left: 0;
+}
+.gallery-scene .entrance h1 {
+  font-family: "Fraunces", serif;
+  font-weight: 800;
+  font-size: clamp(2.6rem, 5vw, 4.6rem);
+  line-height: 1.02;
+  letter-spacing: -0.025em;
+  color: var(--ink);
+  margin: 0;
+  text-shadow:
+    0 1px 0 rgba(255, 252, 245, 0.6),
+    0 -1px 1px rgba(60, 44, 26, 0.18);
+}
+.gallery-scene .entrance h1 .em {
+  color: var(--accent-deep);
+}
+.gallery-scene .entrance .sub {
+  font-family: "Architects Daughter", cursive;
+  color: var(--ink-soft);
+  font-size: clamp(1.05rem, 1.6vw, 1.45rem);
+  margin: 18px 0 26px;
+  max-width: 22ch;
+}
+.gallery-scene .entrance .arrow {
+  color: var(--accent-deep);
+}
+.gallery-scene .cta-row {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+.gallery-scene .btn {
+  display: inline-block;
+  text-decoration: none;
+  font-family: "Spline Sans", sans-serif;
+  font-weight: 600;
+  font-size: 0.98rem;
+  padding: 12px 26px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.2s ease,
+    background 0.2s ease,
+    color 0.2s ease;
+}
+.gallery-scene .btn-primary {
+  background: var(--accent);
+  color: #fff;
+  border: 2px solid var(--accent);
+}
+.gallery-scene .btn-primary:hover {
+  background: var(--accent-deep);
+  border-color: var(--accent-deep);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 18px rgba(31, 122, 82, 0.32);
+}
+.gallery-scene .btn-secondary {
+  background: transparent;
+  color: var(--accent-deep);
+  border: 2px solid var(--accent);
+}
+.gallery-scene .btn-secondary:hover {
+  background: var(--accent);
+  color: #fff;
+  transform: translateY(-2px);
+  box-shadow: 0 8px 18px rgba(31, 122, 82, 0.26);
+}
+
+.gallery-scene .endwall {
+  text-align: left;
+}
+.gallery-scene .endwall .btn {
+  align-self: flex-start;
+}
+.gallery-scene .endwall h2 {
+  font-family: "Fraunces", serif;
+  font-weight: 700;
+  font-size: clamp(1.8rem, 3vw, 2.8rem);
+  letter-spacing: -0.02em;
+  color: var(--ink);
+  margin: 0 0 14px;
+  max-width: 16ch;
+}
+.gallery-scene .endwall .fish {
+  height: 44px;
+  width: auto;
+  align-self: flex-start;
+  display: block;
+  margin-top: 22px;
+}
+.gallery-scene .endwall p {
+  font-family: "Architects Daughter", cursive;
+  color: var(--ink-soft);
+  font-size: 1.2rem;
+  margin: 0 0 22px;
+  max-width: 22ch;
+}
+
+/* =====================================================================
+   FIGURE LAYER — silhouetted visitors standing ON the floor.
+   ===================================================================== */
+.gallery-scene .figures {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 6;
+  overflow: hidden;
+}
+.gallery-scene .figure {
+  position: absolute;
+  bottom: var(--stand, 0px);
+  color: var(--fig);
+  will-change: transform;
+  content-visibility: auto;
+  contain-intrinsic-size: 140px 260px;
+}
+.gallery-scene .figure .lean {
+  transform-origin: 50% 100%;
+  will-change: transform;
+}
+.gallery-scene .figure svg {
+  display: block;
+  overflow: visible;
+}
+.gallery-scene .figure .shadow {
+  position: absolute;
+  left: 50%;
+  bottom: -6px;
+  transform: translateX(-50%);
+  width: 64%;
+  height: 16px;
+  border-radius: 50%;
+  background: radial-gradient(
+    ellipse at center,
+    rgba(20, 14, 8, 0.4),
+    rgba(20, 14, 8, 0) 70%
+  );
+}
+
+/* =====================================================================
+   SEARCH CARD — a paper card hanging from a fishing line (homepage motif)
+   ===================================================================== */
+.gallery-scene .searchcard {
+  position: absolute;
+  top: 30px;
+  left: 34px;
+  z-index: 20;
+  width: 290px;
+  background: var(--paper);
+  border-radius: 10px;
+  padding: 14px 16px 13px;
+  box-shadow:
+    0 1px 2px var(--shadow-warm),
+    3px 8px 20px var(--shadow-warm);
+  transform: rotate(-1deg);
+  transform-origin: top center;
+  animation: gallery-sway 7s ease-in-out infinite alternate;
+}
+/* Two fishing lines + J-hooks, one near each top corner, so the card hangs
+   balanced. Each pseudo carries its whole rig: a vertical line strip running
+   up from the hook's eye, over the hook svg piercing the card edge. */
+.gallery-scene .searchcard::before,
+.gallery-scene .searchcard::after {
+  content: "";
+  position: absolute;
+  bottom: calc(100% - 26px);
+  width: 26px;
+  height: 86px;
+  background-image:
+    linear-gradient(rgba(60, 50, 40, 0.4), rgba(60, 50, 40, 0.4)),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 26 52'%3E%3Cg fill='none' stroke-linecap='round' stroke-linejoin='round'%3E%3Cellipse cx='13' cy='31' rx='3.6' ry='1.9' fill='%23463422' fill-opacity='0.5' stroke='none'/%3E%3Cg stroke='%236d7278' stroke-width='2.2'%3E%3Ccircle cx='13' cy='4' r='3'/%3E%3Cpath d='M13 7 L13 24.6'/%3E%3Cpath d='M13 33 L13 36 C13 43.5 4.2 43.5 4.2 36 L4.2 32.8'/%3E%3Cpath d='M4.2 32.8 L7.6 35.8'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+  background-repeat: no-repeat, no-repeat;
+  background-position:
+    top 0 left 12.25px,
+    bottom center;
+  background-size:
+    1.5px 38px,
+    26px 52px;
+}
+.gallery-scene .searchcard::before {
+  left: 13px;
+}
+.gallery-scene .searchcard::after {
+  right: 13px;
+  transform: scaleX(-1);
+}
+@keyframes gallery-sway {
+  from {
+    transform: rotate(-1.5deg);
+  }
+  to {
+    transform: rotate(-0.3deg);
+  }
+}
+
+.gallery-scene .searchcard .label {
+  font-family: "Fraunces", serif;
+  font-weight: 700;
+  font-size: 1.05rem;
+  color: var(--ink);
+  margin: 0 0 8px;
+}
+.gallery-scene .search-input {
+  width: 100%;
+  font: inherit;
+  font-size: 0.95rem;
+  padding: 9px 12px 9px 32px;
+  border: 1.5px solid rgba(40, 28, 18, 0.2);
+  border-radius: 7px;
+  background: rgba(0, 0, 0, 0.025)
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16' fill='none' stroke='%236e6457' stroke-width='1.6'%3E%3Ccircle cx='7' cy='7' r='5'/%3E%3Cpath d='M11 11l4 4'/%3E%3C/svg%3E")
+    10px center no-repeat;
+  color: var(--ink);
+}
+.gallery-scene .search-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.gallery-scene .results-info {
+  margin-top: 9px;
+  font-family: "Spline Sans Mono", monospace;
+  font-size: 0.76rem;
+  color: var(--ink-soft);
+}
+
+/* ---- minimap (museum floor-plan strip) ---- */
+.gallery-scene .minimap {
+  position: relative;
+  margin-top: 11px;
+  height: 22px;
+  border-radius: 5px;
+  background: var(--paper-shade);
+  box-shadow:
+    inset 0 0 0 1px rgba(120, 95, 55, 0.3),
+    inset 0 1px 3px rgba(60, 44, 26, 0.14);
+  cursor: pointer;
+  overflow: hidden;
+}
+.gallery-scene .minimap .tick {
+  position: absolute;
+  top: 5px;
+  width: 2px;
+  height: 12px;
+  border-radius: 1px;
+  background: var(--ink-soft);
+  opacity: 0.55;
+}
+.gallery-scene .minimap .win {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: rgba(47, 158, 110, 0.22);
+  border: 1.5px solid var(--accent-deep);
+  border-radius: 4px;
+  min-width: 10px;
+}
+
+/* =====================================================================
+   EMPTY STATE — a single puzzled visitor alone in the hall
+   ===================================================================== */
+.gallery-scene .empty {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: var(--floor-h);
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  padding-bottom: 6px;
+  z-index: 7;
+  pointer-events: none;
+}
+.gallery-scene .empty.show {
+  display: flex;
+}
+.gallery-scene .empty .emptyfig {
+  color: var(--fig);
+  order: 3;
+}
+.gallery-scene .empty .msg {
+  order: 1;
+  font-family: "Fraunces", serif;
+  font-size: 1.7rem;
+  color: var(--ink);
+  text-shadow: 0 1px 0 rgba(255, 252, 245, 0.6);
+}
+.gallery-scene .empty .sub {
+  order: 2;
+  font-family: "Architects Daughter", cursive;
+  color: var(--ink-soft);
+  font-size: 1.1rem;
+  margin-top: 4px;
+}
+
+/* hint chip — rests on the floor at the bottom-right. */
+.gallery-scene .scrollhint {
+  position: absolute;
+  right: 20px;
+  bottom: 14px;
+  z-index: 20;
+  font-family: "Architects Daughter", cursive;
+  color: var(--paper);
+  background: rgba(38, 28, 18, 0.62);
+  box-shadow: 0 2px 8px rgba(20, 12, 6, 0.4);
+  padding: 7px 15px;
+  border-radius: 20px;
+  font-size: 0.95rem;
+  pointer-events: none;
+  transition: opacity 0.5s ease;
+}
+
+/* back-to-entrance chip — paper-chip material, bottom-left above the floor. */
+.gallery-scene .backstart {
+  position: absolute;
+  left: 20px;
+  bottom: 14px;
+  z-index: 20;
+  font-family: "Architects Daughter", cursive;
+  font-size: 0.95rem;
+  color: var(--ink);
+  background: linear-gradient(180deg, #fdf9f0, #f0e7d4);
+  border: 1px solid rgba(120, 95, 55, 0.4);
+  border-radius: 20px;
+  padding: 8px 16px;
+  box-shadow:
+    0 1px 2px var(--shadow-warm),
+    2px 5px 12px var(--shadow-warm),
+    inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  cursor: pointer;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(5px);
+  transition:
+    opacity 0.4s ease,
+    transform 0.4s var(--ease-out),
+    visibility 0.4s;
+  pointer-events: none;
+}
+.gallery-scene .backstart.show {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+@media (hover: hover) {
+  .gallery-scene .backstart:hover {
+    background: linear-gradient(180deg, #fffdf7, #f4ecda);
+    transform: translateY(-2px);
+  }
+}
+
+/* =====================================================================
+   TRANSIT (CHEAP) MODE — applied to .track during long programmatic glides.
+   ===================================================================== */
+.gallery-scene .art svg,
+.gallery-scene .spots,
+.gallery-scene .figures,
+.gallery-scene .plaque {
+  transition: opacity 120ms linear;
+}
+.gallery-scene .track.transit .art svg,
+.gallery-scene .track.transit .spots,
+.gallery-scene .track.transit .figures,
+.gallery-scene .track.transit .plaque {
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    opacity 120ms linear,
+    visibility 0s linear 120ms;
+}
+.gallery-scene .track.transit .frame {
+  box-shadow: none !important;
+}
+.gallery-scene .track.transit .piece {
+  --bw: 3px;
+  background-image:
+    linear-gradient(var(--edge, #6b4a2a), var(--edge, #6b4a2a)),
+    linear-gradient(var(--edge, #6b4a2a), var(--edge, #6b4a2a)),
+    linear-gradient(var(--edge, #6b4a2a), var(--edge, #6b4a2a)),
+    linear-gradient(var(--edge, #6b4a2a), var(--edge, #6b4a2a)),
+    linear-gradient(var(--paper), var(--paper));
+  background-repeat: no-repeat;
+  background-size:
+    100% var(--bw),
+    100% var(--bw),
+    var(--bw) var(--fh, 100%),
+    var(--bw) var(--fh, 100%),
+    100% var(--fh, 100%);
+  background-position:
+    left top,
+    left calc(var(--fh, 100%) - var(--bw)),
+    left top,
+    right top,
+    left top;
+}
+
+/* ---- mobile / small screens ---- */
+@media (max-width: 640px) {
+  .gallery-scene {
+    --floor-h: clamp(120px, 20dvh, 170px);
+  }
+  /* Docked at the BOTTOM edge on mobile — at the top it obscured the
+     top-row charts; down here it only overlaps floor. */
+  .gallery-scene .searchcard {
+    top: auto;
+    bottom: 10px;
+    left: 10px;
+    right: 10px;
+    width: auto;
+    animation: none;
+    transform: none;
+    padding: 10px 12px;
+  }
+  .gallery-scene .searchcard::before,
+  .gallery-scene .searchcard::after {
+    display: none;
+  }
+  /* The ← Entrance chip moves to the top-left so the bottom card can't
+     cover it. */
+  .gallery-scene .backstart {
+    bottom: auto;
+    top: 10px;
+    left: 10px;
+  }
+  .gallery-scene .endcap {
+    padding: 0 28px;
+  }
+  .gallery-scene .scrollhint {
+    display: none;
+  }
+}
+@media (max-height: 460px) {
+  .gallery-scene {
+    --floor-h: clamp(90px, 16dvh, 130px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gallery-scene .hall {
+    scroll-behavior: auto;
+  }
+  .gallery-scene .searchcard {
+    animation: none;
+  }
+  .gallery-scene .figure .lean {
+    transform: none !important;
+  }
+  .gallery-scene .track.animate .piece {
+    transition: opacity 0.2s ease;
+  }
+  .gallery-scene * {
+    animation-duration: 0.001ms !important;
+  }
+}
