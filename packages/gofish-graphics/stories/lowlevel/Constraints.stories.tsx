@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
-import { Constraint, layer, rect, spread } from "../../src/lib";
+import { Constraint, layer, rect, spread, value, wavy } from "../../src/lib";
 
 const meta: Meta = {
   title: "Low Level Syntax/Constraints",
@@ -153,9 +153,10 @@ export const SpreadY_AlignEnd: StoryObj<Args> = {
  *
  * Three rects of different widths, stacked vertically, center-aligned.
  *
- * TODO: Revisit center baseline semantics so this equivalence does not
- * require pinning a child first. Today, spread middle defaults to viewport
- * center while constraint align-center defaults to 0 when no child is placed.
+ * Both spread-middle and constraint align-middle fall back to box-center
+ * (size/2) when no child is placed (since #543). This story still pins one
+ * child to the canvas center so the two panels share an explicit, obvious
+ * baseline, but the pin is illustrative rather than required for equivalence.
  */
 export const SpreadY_AlignMiddle: StoryObj<Args> = {
   args: { w: 300, h: 300 },
@@ -191,6 +192,30 @@ export const SpreadY_AlignMiddle: StoryObj<Args> = {
           .render(container, { w: storyArgs.w, h: storyArgs.h });
       }
     ),
+};
+
+/**
+ * `end` alignment on a PIXEL-PURE axis: posScales don't cross a coordinate
+ * transform boundary (children of `coord` receive scale *factors* instead),
+ * so the cross-axis `end` fallback inside `wavy()` is the layer-box edge —
+ * the bar ends seat flush at the box top instead of hanging from a scale
+ * origin. Locks in the space-kind-dispatched fallback (#552): before the
+ * unification, spread's pixel-pure `end` fallback was 0 (a call-site quirk
+ * that seated the ends at the layer origin).
+ */
+export const SpreadEndUnderCoordTransform: StoryObj<Args> = {
+  args: { w: 300, h: 300 },
+  render: (args: Args) => {
+    const container = initializeContainer();
+    layer({ coord: wavy(), x: 0, y: 0 }, [
+      spread({ dir: "x", alignment: "end", spacing: 8 }, [
+        rect({ w: 40, h: value(30), fill: "#e63946" }),
+        rect({ w: 40, h: value(80), fill: "#457b9d" }),
+        rect({ w: 40, h: value(50), fill: "#2a9d8f" }),
+      ]),
+    ]).render(container, { w: args.w, h: args.h });
+    return container;
+  },
 };
 
 /**

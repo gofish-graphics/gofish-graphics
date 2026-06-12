@@ -24,10 +24,18 @@ packages/gofish-graphics/stories/lowlevel/ViolinPlot.stories.tsx
 # (over Vite's inline threshold) whose hrefs become build-hashed URLs the DOM
 # normalizer doesn't touch, so a Python port can't byte-match the JS hrefs —
 # the same fundamental blocker as the ImageMarks shape story below.
+# TODO(#404): the DOM normalizer now collapses <image> hrefs to their
+# hash-stripped basename, so this href blocker is resolved. This story (and
+# ImageMarks below) may be un-exemptable once the image-bearing DOM baselines
+# are re-accepted via the Visual Diff Review. Keeping the exemption for now;
+# revisit after re-baselining.
 packages/gofish-graphics/stories/lowlevel/ImageMixedPrimitives.stories.tsx
 
 # Shape primitives
 packages/gofish-graphics/stories/shapes/TextMarks.stories.tsx
+# TODO(#404): ImageMarks' only parity blocker was build-hashed <image> hrefs,
+# now normalized to basename by the DOM normalizer. Likely un-exemptable after
+# the image-bearing DOM baselines are re-accepted via the Visual Diff Review.
 packages/gofish-graphics/stories/shapes/ImageMarks.stories.tsx
 
 # Docs regression test
@@ -52,6 +60,15 @@ packages/gofish-graphics/stories/forwardsyntax/FacetedChart.stories.tsx
 # doesn't expose `assignGradientColor` (one chart, one color config), so
 # this story can't be ported without a workaround or a wrapper extension.
 packages/gofish-graphics/stories/forwardsyntax/ColorScales.stories.tsx::PairedPalettes
+
+# Per-export exemption for Cut.stories.tsx — ImageCutWithLabels builds a
+# per-slice `layer(...)` inside a mark-as-function over `selectAll("part")`,
+# embedding each JS ref node directly (`d.name("slice")`) and reading its bound
+# datum (`d.datum.category`). The Python mark-fn runs over the RPC bridge and
+# receives plain JSON rows, not JS ref nodes, so it cannot embed the slice nodes
+# or project `.datum` — a wrapper project, not a port. The other 10 Cut exports
+# are ported (tests/python-stories/forward-syntax-v3/test_cut.py).
+packages/gofish-graphics/stories/forwardsyntax/Cut.stories.tsx::ImageCutWithLabels
 
 # Per-export exemptions for Labels.stories.tsx — these stories don't fit
 # the single-chart parity harness (they compose many charts in a flex div,

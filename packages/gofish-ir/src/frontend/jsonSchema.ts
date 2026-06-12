@@ -176,6 +176,69 @@ export const FRONTEND_IR_JSON_SCHEMA = {
         { $ref: "#/$defs/LeafMarkIR" },
         { $ref: "#/$defs/CombinatorMarkIR" },
         { $ref: "#/$defs/RefMarkIR" },
+        { $ref: "#/$defs/OffsetMarkIR" },
+        { $ref: "#/$defs/CutMarkIR" },
+      ],
+    },
+    OffsetMarkIR: {
+      description:
+        "Shift a single child by (x, y) render-pixels without moving the bounds it advertises to its parent. Maps to the public `offset` operator.",
+      type: "object",
+      required: ["type", "children"],
+      properties: {
+        type: { const: "offset" },
+        x: { type: "number" },
+        y: { type: "number" },
+        children: {
+          type: "array",
+          minItems: 1,
+          maxItems: 1,
+          items: { $ref: "#/$defs/MarkIR" },
+        },
+        origin: { $ref: "#/$defs/Origin" },
+        meta: { $ref: "#/$defs/Meta" },
+      },
+    },
+    CutMarkIR: {
+      description:
+        "Slice a single `source` mark into N clipped sub-shapes along `dir`. As a chart `.mark(...)` spec it deserializes to the v3 expand-mark form; as a combinator child it expands in place into its N slice nodes. `size` is a field-name string (expand form) or an array of absolute-pixel numbers / datum() flex-weight wrappers; omitted means equal slices.",
+      type: "object",
+      required: ["type", "source", "dir"],
+      properties: {
+        type: { const: "cut" },
+        source: { $ref: "#/$defs/MarkIR" },
+        dir: { enum: ["x", "y"] },
+        size: { $ref: "#/$defs/CutSize" },
+        inset: { type: "number" },
+        name: { type: "string" },
+        zOrder: { type: "number" },
+        origin: { $ref: "#/$defs/Origin" },
+        meta: { $ref: "#/$defs/Meta" },
+      },
+    },
+    CutSize: {
+      description:
+        "cut slice extents: a field-name string (expand-mark form) or an array of raw numbers (absolute source pixels) and datum() wrappers (relative flex weights).",
+      oneOf: [
+        { type: "string" },
+        {
+          type: "array",
+          items: {
+            oneOf: [
+              { type: "number" },
+              {
+                type: "object",
+                required: ["type", "datum"],
+                properties: {
+                  type: { const: "datum" },
+                  datum: {},
+                  measure: { type: "string" },
+                  offset: { type: "number" },
+                },
+              },
+            ],
+          },
+        },
       ],
     },
     LeafMarkIR: {

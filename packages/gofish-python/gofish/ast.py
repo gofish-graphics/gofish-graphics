@@ -246,6 +246,21 @@ class Mark:
         new_mark._z_order = value
         return new_mark
 
+    def cut(
+        self,
+        *,
+        dir: str,
+        size: Optional[Union[str, List[Any]]] = None,
+        inset: Optional[float] = None,
+    ) -> "CutMark":
+        """Slice this mark into N clipped sub-shapes along `dir` — the v3
+        expand-mark form. Mirrors JS `image(...).cut({ dir, size, inset })`.
+
+        Returns a `CutMark` (the `{type:"cut"}` IR node) with `self` as the
+        source. See the module-level `cut(...)` for the `size` semantics.
+        """
+        return CutMark("cut", source=self, dir=dir, size=size, inset=inset)
+
     def label(
         self,
         accessor: str,
@@ -534,6 +549,8 @@ class Constraint:
         spacing: Optional[float] = None,
         mode: Optional[str] = None,
         order: Optional[str] = None,
+        glue: Optional[bool] = None,
+        weights: Optional[List[float]] = None,
     ) -> DistributeConstraint:
         """Distribute the given refs along an axis.
 
@@ -544,6 +561,12 @@ class Constraint:
             mode: "edge" (default) or "center" — edge-to-edge or
                 center-to-center spacing.
             order: "forward" (default) or "reverse" — distribute in reverse order.
+            glue: Stack semantics — glue the refs together (their sizes sum
+                into a position at the layer) instead of slicing a budget.
+                Forces `spacing` to 0. Mirrors spread's `glue`.
+            weights: Flex weights aligned to placement order (spread's
+                `stackWeights`); splits the budget in proportion to these
+                instead of equally.
         """
         options: Dict[str, Any] = {"dir": dir}
         if spacing is not None:
@@ -552,6 +575,10 @@ class Constraint:
             options["mode"] = mode
         if order is not None:
             options["order"] = order
+        if glue is not None:
+            options["glue"] = glue
+        if weights is not None:
+            options["weights"] = weights
         return DistributeConstraint(refs, options)
 
     @staticmethod
@@ -1245,41 +1272,69 @@ def arrow(
     return Mark("arrow", _children=list(children), **options)
 
 
-# ─── Porter-Duff compositing operators ────────────────────────────────────
-# Mirrors JS `over`/`inside`/`xor`/`out`/`atop`/`mask` from
+# ─── Region-compositing combinators (Porter-Duff) ──────────────────────────
+# Mirrors the JS region-compositing operators from
 # `packages/gofish-graphics/src/ast/graphicalOperators/porterDuff` (and the
-# v3 re-exports in `marks/chart.ts`). Each is a two-children combinator
-# whose IR carries the same `__combinator: true` shape as `spread`/`layer`/
-# `arrow`. The harness/widget reconstructs by calling the JS factory.
+# v3 re-exports in `marks/chart.ts`). Each is a two-children combinator whose
+# IR carries the same `__combinator: true` shape as `spread`/`layer`/`arrow`.
+# The harness/widget reconstructs by calling the JS factory.
+#
+# PR #404's Stage-2 rename (#196/#202) renamed the public Porter-Duff exports
+# to Figma-inspired names:
+#   inside → intersect, xor → exclude, out → subtract, atop → paint.
+# `over` stays internal-for-IR (conceptually `layer`, #196) — prefer `layer`
+# in user code. Only the Python user-facing NAMES changed: the emitted IR wire
+# `type` strings stay the OLD spellings ("inside"/"xor"/"out"/"atop"), which the
+# IR serializer never renamed (the COMBINATOR_FACTORIES map in tests/harness and
+# packages/gofish-graphics/src/serialize/registry.ts is still keyed by the old
+# wire types). This divergence mirrors the matching comments there.
 
 
 def over(children: List["Mark"], **options: Any) -> Mark:
-    """Porter-Duff `over` — destination painted over source."""
+    """Region union — destination painted over source.
+
+    Internal-for-IR: emits the "over" wire type, but the JS side treats it as
+    a `layer`. Prefer `layer(...)` in user code; this is re-exported only so the
+    low-level Union demo can mirror the JS storybook.
+    """
     return Mark("over", _children=list(children), **options)
 
 
-def inside(children: List["Mark"], **options: Any) -> Mark:
-    """Porter-Duff `in` — intersection of source and destination."""
+def intersect(children: List["Mark"], **options: Any) -> Mark:
+    """Region intersection — keep only where source and destination overlap.
+
+    Renamed from `inside` (#196/#202). Emits the OLD "inside" wire type.
+    """
     return Mark("inside", _children=list(children), **options)
 
 
-def xor(children: List["Mark"], **options: Any) -> Mark:
-    """Porter-Duff `xor` — symmetric difference of source and destination."""
+def exclude(children: List["Mark"], **options: Any) -> Mark:
+    """Region symmetric difference — keep where exactly one of source /
+    destination is present.
+
+    Renamed from `xor` (#196/#202). Emits the OLD "xor" wire type.
+    """
     return Mark("xor", _children=list(children), **options)
 
 
-def out(children: List["Mark"], **options: Any) -> Mark:
-    """Porter-Duff `out` — source minus destination."""
+def subtract(children: List["Mark"], **options: Any) -> Mark:
+    """Region difference — source minus destination.
+
+    Renamed from `out` (#196/#202). Emits the OLD "out" wire type.
+    """
     return Mark("out", _children=list(children), **options)
 
 
-def atop(children: List["Mark"], **options: Any) -> Mark:
-    """Porter-Duff `atop` — source painted only where destination is."""
+def paint(children: List["Mark"], **options: Any) -> Mark:
+    """Region paint — source painted only where destination is.
+
+    Renamed from `atop` (#196/#202). Emits the OLD "atop" wire type.
+    """
     return Mark("atop", _children=list(children), **options)
 
 
 def mask(children: List["Mark"], **options: Any) -> Mark:
-    """Porter-Duff `mask` — alpha-mask compositing."""
+    """Alpha-mask compositing (unchanged name)."""
     return Mark("mask", _children=list(children), **options)
 
 
@@ -2017,6 +2072,132 @@ def connect(
 
 # JS exports both spellings (`connect` and `Connect`); mirror that.
 Connect = connect
+
+
+# ─── cut: slice a source shape into N clipped sub-shapes ────────────────────
+# Mirrors JS `cut` from
+# `packages/gofish-graphics/src/ast/graphicalOperators/cut.tsx`. The Python
+# wrapper only emits the `{type:"cut", source, dir, size?, inset?}` IR node;
+# extent resolution (the flexbox-style number/datum split) lives entirely on
+# the JS side — see the harness/serializer. The SAME IR node serves both
+# surfaces:
+#   - As a chart `.mark(...)` spec → the v3 expand-mark form (`cutMark`); a
+#     field-name string `size` resolves per-row.
+#   - As a combinator CHILD (a value dropped into a `Spread`/`Stack` children
+#     list) → flat-expanded in place into its N slice nodes via the pure
+#     `cut(source, opts)`.
+
+
+class CutMark(Mark):
+    """The `{type:"cut", ...}` IR node — a sliced source shape.
+
+    Stored params live in `kwargs` (`source` is a `Mark`, `dir`/`size`/`inset`
+    are plain values) so the inherited `.name()` / `.zOrder()` clone path works;
+    `to_dict()` serializes the source mark and drops `None` options.
+    """
+
+    def to_dict(self) -> dict:
+        source = self.kwargs["source"]
+        d: dict = {
+            "type": "cut",
+            "source": source.to_dict(),
+            "dir": self.kwargs["dir"],
+        }
+        size = self.kwargs.get("size")
+        if size is not None:
+            # A field-name string passes through; a list of numbers / `datum()`
+            # values passes through too — `DatumValue` IS the `{type:"datum"}`
+            # wire dict, so no per-entry wiring is needed.
+            d["size"] = size
+        inset = self.kwargs.get("inset")
+        if inset is not None:
+            d["inset"] = inset
+        if self._name is not None:
+            d["name"] = (
+                self._name.to_dict()
+                if isinstance(self._name, Token)
+                else self._name
+            )
+        if self._z_order is not None:
+            d["zOrder"] = self._z_order
+        return d
+
+
+def cut(
+    source: "Mark",
+    *,
+    dir: str,
+    size: Optional[Union[str, List[Union[int, float, "DatumValue"]]]] = None,
+    inset: Optional[float] = None,
+) -> CutMark:
+    """Pure slice primitive — slice `source` into N clipped sub-shapes along
+    `dir`. Mirrors JS `cut(source, { dir, size, inset? })`.
+
+    The returned node is usable as a child (or list position) in a `Spread` /
+    `Stack` combinator's children list; the JS side flat-expands it into its N
+    slice nodes in place. Used inside `.mark(...)`, the same node is the v3
+    expand-mark form.
+
+    Args:
+        source: The shape to slice (`image(...)` / `rect(...)`). Must carry an
+            explicit `w` and `h`.
+        dir: `"x"` or `"y"` — the axis to slice along.
+        size: Slice extents along `dir`, resolved JS-side with CSS-flexbox
+            semantics:
+              - a field-name **string** (expand-mark form only) → per-row datum
+                weights;
+              - a **list** mixing raw numbers (ABSOLUTE source pixels, fixed
+                "flex-basis" items) and `datum(n)` values (RELATIVE weights that
+                split the remainder after the fixed items);
+              - omitted → equal slices (N taken from the data length).
+        inset: Pixels removed from each slice's source region (split half on each
+            side along `dir`), creating a gap on every slice. Default 0.
+    """
+    return CutMark("cut", source=source, dir=dir, size=size, inset=inset)
+
+
+# ─── offset: shift a single child by (x, y) render-pixels ───────────────────
+# Mirrors the public JS `offset` operator
+# (`packages/gofish-graphics/src/ast/graphicalOperators/offset.tsx`). Emits the
+# `{type:"offset", x?, y?, children:[node]}` IR node the harness maps to it.
+
+
+class OffsetMark(Mark):
+    """The `{type:"offset", ...}` IR node — a child shifted by (x, y) pixels."""
+
+    def to_dict(self) -> dict:
+        child = self.kwargs["child"]
+        d: dict = {"type": "offset", "children": [child.to_dict()]}
+        if self.kwargs.get("x") is not None:
+            d["x"] = self.kwargs["x"]
+        if self.kwargs.get("y") is not None:
+            d["y"] = self.kwargs["y"]
+        if self._name is not None:
+            d["name"] = (
+                self._name.to_dict()
+                if isinstance(self._name, Token)
+                else self._name
+            )
+        if self._z_order is not None:
+            d["zOrder"] = self._z_order
+        return d
+
+
+def offset(
+    child: "Mark",
+    *,
+    x: Optional[float] = None,
+    y: Optional[float] = None,
+) -> OffsetMark:
+    """Shift a single `child` mark by `(x, y)` render-pixels without affecting
+    sibling layout. Mirrors JS `offset({ x, y }, [child])`.
+
+    Args:
+        child: The mark to shift.
+        x: Horizontal shift in render pixels.
+        y: Vertical shift in render pixels.
+    """
+    return OffsetMark("offset", child=child, x=x, y=y)
 
 
 def chart(

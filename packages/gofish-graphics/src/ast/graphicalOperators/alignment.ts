@@ -22,6 +22,8 @@ import {
 } from "../underlyingSpace";
 import type { Measure } from "../data";
 import type { Size } from "../dims";
+import { alignTargets } from "../constraints/align";
+import type { AlignAnchor } from "../constraints/shared";
 import * as Interval from "../../util/interval";
 import * as Monotonic from "../../util/monotonic";
 
@@ -179,7 +181,13 @@ export function resolveAlignmentSpace(
 }
 
 /**
- * Align children on a single axis using spread-style semantics.
+ * Align children on a single axis using spread-style semantics. Thin wrapper
+ * over the shared `alignTargets` walk (see `constraints/align.ts`) supplying
+ * spread's `readPlaced` reader (a `"baseline"` anchor pins to 0 and missing
+ * extents are tolerated). The no-sibling fallback is the shared
+ * space-kind-dispatched rule (`alignFallbackBaseline`): a scaled (posScale)
+ * axis falls back to the scale origin `posScale(0)`, a pixel-pure axis to the
+ * layer-box edge.
  *
  * Guard: when children already have data-driven positions via posScale
  * (fromSize is false and alignment !== "middle"), skip — the children
@@ -197,36 +205,21 @@ export function alignChildren(
   // SIZE space (no inherent position) or middle alignment forces centering.
   if (posScale && !fromSize && alignment !== "middle") return;
 
-  const isFixed = (child: Placeable) => child.dims[axis].min !== undefined;
-  const fixedChildren = children.filter(isFixed);
-
-  const anchorMap = {
-    start: "min",
-    middle: "center",
-    end: "max",
-    baseline: "baseline",
-  } as const;
-
-  const getBaseline = (child: Placeable): number => {
-    const dim = child.dims[axis];
-    const anchor = anchorMap[alignment];
-    if (anchor === "baseline") return 0;
-    return dim[anchor] ?? dim.min ?? 0;
-  };
-
-  const baseline =
-    fixedChildren.length > 0
-      ? getBaseline(fixedChildren[0])
-      : alignment === "middle"
-        ? size / 2
-        : posScale
-          ? posScale(0)
-          : 0;
-
-  const placeAnchor = anchorMap[alignment];
-
-  for (const child of children) {
-    if (isFixed(child)) continue;
-    child.place(axis, baseline, placeAnchor);
-  }
+  const anchors = new Array<AlignAnchor>(children.length).fill(alignment);
+  alignTargets(
+    children,
+    axis === 0 ? "x" : "y",
+    anchors,
+    {
+      readPlaced: (child, idx, a) =>
+        a === "baseline"
+          ? 0
+          : a === "start"
+            ? (child.dims[idx].min ?? 0)
+            : a === "middle"
+              ? (child.dims[idx].center ?? child.dims[idx].min ?? 0)
+              : (child.dims[idx].max ?? child.dims[idx].min ?? 0),
+    },
+    { size, posScale }
+  );
 }

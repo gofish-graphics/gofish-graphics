@@ -10,6 +10,9 @@ covers:
   - packages/gofish-graphics/src/ast/graphicalOperators/layer.tsx
   - packages/gofish-graphics/src/ast/channels.ts
   - packages/gofish-graphics/src/ast/data.ts
+  - packages/gofish-graphics/src/ast/constraints/folds.ts
+  - packages/gofish-graphics/src/ast/constraints/distribute.ts
+  - packages/gofish-graphics/src/ast/constraints/align.ts
 ---
 
 # The underlying space tree
@@ -203,14 +206,49 @@ Returns the node's own `[xSpace, ySpace]`, computed bottom-up from the
 already-resolved child spaces. The traversal is memoized at `_node.ts`'s
 `resolveUnderlyingSpace()`.
 
-The `constraints` argument lets constraints contribute a _fragment_ of the
-space: `layer` folds the _datum_ coordinates of its `Constraint.position`
-constraints into a POSITION domain on the constrained axis
-(`collectPositionDomains`), unioned with the children's spaces. (Literal-pixel
-coordinates are not data and don't contribute.) That domain is what the layer
-later turns into a data→pixel scale to resolve those position constraints — see
-[[operators-vs-constraints]] for why this is the seam for expressing a
-data-positioned operator as a union of constraints.
+The `constraints` argument lets constraints participate in space resolution —
+each positioning-constraint kind carries a **space fold**, a typing rule that
+composes its targets' spaces into the layer's claim on that axis:
+
+- `Constraint.position` contributes a _fragment_: the layer folds the _datum_
+  coordinates into a POSITION domain on the constrained axis
+  (`collectPositionDomains`), unioned with the children's spaces.
+  (Literal-pixel coordinates are not data and don't contribute.) That domain
+  is what the layer later turns into a data→pixel scale to resolve those
+  constraints.
+- `Constraint.distribute` contributes the stack fold (`distributeSpaceFold`,
+  `constraints/distribute.ts`): all-SIZE data-driven targets compose to
+  `SIZE(Monotonic.add(...) + spacing·(n−1))`; with `glue: true` (stack
+  semantics) the extents are committed to an anchored `POSITION([0, Σ])`;
+  constant-sized keyed targets fall back to ORDINAL.
+- `Constraint.align` contributes the alignment fold (`alignSpaceFold` →
+  `resolveAlignmentSpace`) on its axis.
+
+The layer composes these per axis — children not covered by a constraint
+max-union in as overlay siblings — and at layout time **solves the budget**:
+a fold-produced SIZE claim is inverted against the layer's allotted size to
+derive a local scale factor, and distribute-covered fill children are
+proposed slices from the shared allocator (`allocateSlices`,
+`constraints/folds.ts`). This is what makes constraint-assembled layers reach
+the same expressive ceiling as the spread pipeline, auto-fit included
+(issue #475). Composition beyond one distribute (+ one align) per axis falls
+back to `unionChildSpaces`; the general algebra is sketched in
+[[constraints-as-core]].
+
+Placement-time alignment dispatches on the same resolution. When an `align`
+(the constraint or spread's cross-axis alignment) finds **no pre-placed
+sibling**, its fallback baseline is computed from what the axis carries
+(`alignFallbackBaseline`, `constraints/align.ts`): a posScale-carrying
+POSITION axis falls back to the scale origin `posScale(0)` — SIZE-derived
+bars hang from the zero line — while a pixel-pure axis falls back to the
+layer-box edge for the anchor, so axis titles and chrome pin to the plot box.
+`middle` is the box center either way (it resolves to DIFFERENCE, an extent
+with no anchored origin). The fallback is a property of the axis's space, not
+of which API assembled the layer (#552). One consequence worth knowing: a
+coordinate transform's children are pixel-pure by construction (posScales
+don't cross a nonlinear transform — children get scale _factors_ instead), so
+an `end`-aligned spread inside `coord` seats flush at the box edge rather
+than at a scale origin.
 
 Three patterns cover most operators:
 
@@ -226,7 +264,11 @@ combine children's spaces. `spread({ glue: false })` keeps SIZE
 composition along the stack direction so a parent can solve for shared
 scale factors via `Monotonic.inverse`. `spread({ glue: true })` (i.e.
 `stack`) sums children's SIZE values into a `POSITION([0, sum])` — the
-operator commits the data-driven extents to a positional axis. `layer`
+operator commits the data-driven extents to a positional axis. Since the
+operator/constraint unification, these folds have one home: spread's
+resolver _is_ `distributeSpaceFold` on the stack axis and
+`alignSpaceFold` on the cross axis — the same functions the constraint
+path uses (see [The contract](#the-contract)). `layer`
 and overlay-style operators use `unionChildSpaces` (`alignment.ts`),
 which preserves SIZE when every child is SIZE and otherwise unions
 intervals. UNDEFINED children carry no opinion and are ignored
@@ -343,9 +385,65 @@ spread.layout (each spread/stack node):
 Leaf shapes never need to compute their own scale factors — they receive
 them via the `scaleFactors` parameter and apply them in `computeSize`.
 
+A `layer` whose constraints fold to a SIZE claim runs the same inversion
+as spread's first branch — `fold.inverse(size[axis])` against its allotted
+size — to derive a local scale factor for its constrained children (and
+warns before falling back when the fold isn't invertible at that budget).
+Unlike spread, the layer never mutates the inherited `scaleFactors`
+array; sibling scale sharing via mutation is a spread-only behavior
+(`sharedScale`).
+
 This dispatch is the practical embodiment of the underlying-space-kind
 distinction. It also happens to make the rendering pipeline more readable:
 once you know the kind, you know which arithmetic applies.
+
+## Scales generalize flex factors
+
+A size scale whose range resolves to the parent's extent is doing exactly
+what CSS flexbox does with `flex` factors — and GoFish's version is strictly
+more general.
+
+In flexbox, `flex: 1` and `flex: 2` on two children split the container's
+space in a 1:2 ratio. The numbers are weights; the container's extent is the
+range; the layout normalizes the weights to fill it. That is a scale,
+narrowly construed: a domain (the sibling weights) mapped onto a range (the
+container box) so the pieces sum to the whole.
+
+This is precisely SIZE resolution. A row of `datum(n)`-sized children under a
+shared size scale composes into a Monotonic whose inverse against the
+available extent solves for the scale factor that makes the siblings fill it
+(see [Layout dispatch](#layout-dispatch)). `space.domain.inverse(size)` is
+the normalization step; the `datum(n)` weights are the flex factors. The
+`cut` operator's relative form, `cut(source, { size: [datum(1), datum(2)] })`,
+slices a region in a 1:2 ratio by normalizing those weights over the source's
+extent — flexbox, expressed as data.
+
+So flex factors are the **degenerate case** of a size scale: weights that
+happen to be literal layout constants rather than data. GoFish generalizes
+them along three axes the CSS model can't reach:
+
+- **The weights can be data.** `datum(n)` is a literal weight, but the same
+  machinery takes a field name (`rect({ h: "count" })`) so the proportions
+  come from the rows, not the spec.
+- **The scale can be shared.** A `flex` factor is local to one container; a
+  GoFish size scale can be shared across sibling charts or facets, so the same
+  weight means the same pixels everywhere it appears — proportions that
+  compose across the page, not just within one box.
+- **Absolute sizing coexists.** Flexbox bolts `flex-basis` / fixed widths
+  alongside the factors as a separate mechanism. GoFish folds both into one
+  field/datum/literal trichotomy (issue #266): a literal `10` is absolute
+  pixels, `datum(n)` is a relative weight, a field name is a per-row weight.
+  Mixing the two in one `cut` is not a conflict but exactly flex resolution:
+  the absolutes are fixed-basis claims, and the size scale's _range_ is the
+  parent extent **minus** those fixed claims, so the `datum(n)` weights
+  normalize over the remainder — `cut(source, { size: [100, datum(1), datum(2)] })`
+  fixes a 100px cap and splits what's left 1:2. The mixed case makes the
+  identification sharper, not weaker: "fixed widths next to flex items" is just
+  a size scale whose range has been shortened by the fixed children.
+
+The payoff is conceptual economy: "fill the container proportionally" is not
+a bespoke layout mode, it is what a size scale already does once its range is
+the parent's extent.
 
 ## Self-scaling regions: an explicit pixel size absorbs an axis
 
@@ -597,6 +695,8 @@ companion thesis repo).
 - Per-operator resolvers (each colocated with the operator):
   `src/ast/graphicalOperators/{spread,layer,scatter,enclose,porterDuff,position,connect,arrow,table,coord}.tsx`.
 - Overlay union helpers: `src/ast/graphicalOperators/alignment.ts`.
+- Constraint space folds + the shared slice allocator:
+  `src/ast/constraints/{distribute,align,folds}.ts`.
 - The Monotonic algebra used by SIZE composition: `src/util/monotonic.ts`.
 - Layout consumption: `gofish.tsx`'s `layout()` for root-level dispatch;
   `spread.tsx`'s `layout` for the per-node `computeScaleFactor`.

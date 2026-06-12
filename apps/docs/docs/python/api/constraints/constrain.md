@@ -45,11 +45,12 @@ Constraint.align(refs, *, x=None, y=None)
 
 The anchor is `"start" | "middle" | "end" | "baseline"`. The first three
 anchor a ref by its bounding-box edge or center. `"baseline"` anchors a ref by
-its **origin** (its local 0 point) instead of its box: `align([content],
-y="baseline")` with no placed sibling pins the ref's origin to the layer's
-origin — i.e. "stay where you were laid out" — regardless of how far its box
-overhangs the origin (a bar dipping below zero, axis labels hanging under a
-chart). Pass a single value to share one anchor across every ref; pass a list
+its **origin** (its local 0 point) instead of its box. With no placed sibling
+the fallback is the **axis origin**: the scale's zero (`posScale(0)`) on a
+scaled axis, the layer's origin on a pixel-pure one. On a pixel-pure axis,
+`align([content], y="baseline")` thus means "stay where you were laid out" —
+regardless of how far its box overhangs the origin (a bar dipping below zero,
+axis labels hanging under a chart). Pass a single value to share one anchor across every ref; pass a list
 to assign one anchor _per ref_ positionally (the list length must equal the
 number of refs) — e.g. `x=["middle", "start"]` aligns the first ref's center
 to the second ref's start. The first already-placed ref acts as the anchor;
@@ -60,15 +61,17 @@ unplaced refs move to match it.
 Stacks a set of refs end-to-end along an axis, with optional spacing.
 
 ```python
-Constraint.distribute(refs, *, dir, spacing=None, mode=None, order=None)
+Constraint.distribute(refs, *, dir, spacing=None, mode=None, order=None, glue=None, weights=None)
 ```
 
-| Parameter | Type                       | Default     | Description                                        |
-| --------- | -------------------------- | ----------- | -------------------------------------------------- |
-| `dir`     | `"x"` \| `"y"`             | —           | **Required.** Axis to distribute along.            |
-| `spacing` | `int`                      | `8`         | Gap between each element.                          |
-| `mode`    | `"edge"` \| `"center"`     | `"edge"`    | Spacing measured edge-to-edge or center-to-center. |
-| `order`   | `"forward"` \| `"reverse"` | `"forward"` | Order to place elements.                           |
+| Parameter | Type                       | Default     | Description                                                                                             |
+| --------- | -------------------------- | ----------- | ------------------------------------------------------------------------------------------------------- |
+| `dir`     | `"x"` \| `"y"`             | —           | **Required.** Axis to distribute along.                                                                 |
+| `spacing` | `int`                      | `8`         | Gap between each element (forced to `0` when `glue` is set).                                            |
+| `mode`    | `"edge"` \| `"center"`     | `"edge"`    | Spacing measured edge-to-edge or center-to-center.                                                      |
+| `order`   | `"forward"` \| `"reverse"` | `"forward"` | Order to place elements.                                                                                |
+| `glue`    | `bool`                     | `False`     | Stack semantics: children touch, and their data-driven extents commit to one positional axis.           |
+| `weights` | `list[float]`              | —           | Per-child budget weights (one per child, positional) — how fill children share the layer's slice space. |
 
 The first already-placed ref acts as an anchor; unplaced refs after it are
 distributed forward, and those before it backward so they stack flush.
@@ -82,6 +85,33 @@ layer([
     lambda a, b, c: [
         Constraint.align([a, b, c], x="start"),
         Constraint.distribute([a, b, c], dir="y", spacing=8),
+    ]
+)
+```
+
+### Space resolution and auto-fit
+
+`distribute` (and `align`) don't just position refs after layout — they
+participate in **underlying-space resolution**, exactly like the operators
+built on them. A `distribute` over data-sized children composes their size
+claims (sum + spacing) into the layer's claim on that axis; when the layer is
+then given a size (an explicit `w`/`h`, or an allotted budget from its parent
+or a coordinate transform), it solves for the scale factor that makes the
+children fit, and proposes budget slices (equal, or per `weights`) to children
+with no size claim of their own. With `glue=True` the composed extents commit
+to an anchored positional axis instead — that's a stacked bar chart. In other
+words: a constraint-assembled layer auto-fits the same way a `spread`/`stack`
+does.
+
+```python
+layer([
+    rect(w=60, h=datum(30), fill="#e63946").name("a"),
+    rect(w=60, h=datum(50), fill="#457b9d").name("b"),
+    rect(w=60, h=datum(20), fill="#2a9d8f").name("c"),
+]).constrain(
+    lambda a, b, c: [
+        Constraint.align([a, b, c], x="start"),
+        Constraint.distribute([a, b, c], dir="y", glue=True),
     ]
 )
 ```

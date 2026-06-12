@@ -22,13 +22,15 @@ spread(*, by=None, dir, **options) -> Operator
 
 ## Parameters
 
-| Parameter   | Type                | Description                                                                                                      |
-| ----------- | ------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| `by`        | `str` \| `Callable` | Field, dotted path, or callable to partition by (see [path-aware `by`](#path-aware-by)). Omit to spread per row. |
-| `dir`       | `"x"` \| `"y"`      | **Required.** Axis to lay groups out along.                                                                      |
-| `spacing`   | `int`               | Gap between groups in pixels.                                                                                    |
-| `alignment` | `str`               | Cross-axis alignment of the groups.                                                                              |
-| `label`     | `bool`              | Whether to emit an axis label for the partition field.                                                           |
+| Parameter      | Type                | Description                                                                                                                                                                                                                                        |
+| -------------- | ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `by`           | `str` \| `Callable` | Field, dotted path, or callable to partition by (see [path-aware `by`](#path-aware-by)). Omit to spread per row.                                                                                                                                   |
+| `dir`          | `"x"` \| `"y"`      | **Required.** Axis to lay groups out along.                                                                                                                                                                                                        |
+| `spacing`      | `int`               | Gap between groups in pixels. Ignored when `glue=True`.                                                                                                                                                                                            |
+| `alignment`    | `str`               | Cross-axis alignment of the groups.                                                                                                                                                                                                                |
+| `glue`         | `bool`              | Glue children together: collapse data-driven sizes into a single positional axis at this level. [`stack`](/python/api/operators/stack) sets this.                                                                                                  |
+| `stackWeights` | `list[float]`       | **Combinator form only** (explicit child list, e.g. `spread([m1, m2], ...)`). When its length matches the number of children, space along `dir` is split in proportion to these weights (after `spacing`); otherwise children share space equally. |
+| `label`        | `bool`              | Whether to emit an axis label for the partition field.                                                                                                                                                                                             |
 
 Returns an `Operator` for use inside [`.flow()`](/python/api/core/flow).
 

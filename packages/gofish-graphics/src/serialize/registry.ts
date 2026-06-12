@@ -19,19 +19,19 @@
 // dependency graph acyclic.
 import {
   area,
-  atop,
+  paint,
   blank,
   circle,
   derive,
-  inside,
+  intersect,
   layer,
   line,
   log,
   mask,
-  out,
+  subtract,
   over,
   rect,
-  xor,
+  exclude,
   type ChartBuilder,
   type Mark,
   type Operator,
@@ -51,9 +51,20 @@ import {
   treemap as treemapOperator,
   Treemap,
 } from "../ast/graphicalOperators/treemap";
+// `cut` (the pure slice primitive, returns an array of slice node promises)
+// and `cutMark` (the v3 expand-mark form) — the deserializer dispatches
+// between them by context: a `cut` IR node used as a chart `.mark(...)` →
+// `cutMark`, used as a combinator child → expanded into slices via `cut`.
+// `offset` is the public node operator a `{type:"offset"}` IR node maps to.
+// These need recursive `mapMark` of their `source`/`children`, so unlike the
+// string-keyed MARK_MAP/COMBINATOR_FACTORIES they're applied directly in
+// fromJSON.ts rather than via a flat factory map.
+import { cut as cutSlices, cutMark } from "../ast/graphicalOperators/cut";
+import { offset as offsetOp } from "../ast/graphicalOperators/offset";
 import type { Frontend } from "gofish-ir";
 
 export type { ChartBuilder, Mark, Operator };
+export { cutSlices, cutMark, offsetOp };
 
 /**
  * Bridge used by the deserializer to invoke Python-registered lambdas.
@@ -108,11 +119,14 @@ export const COMBINATOR_FACTORIES: Record<
     (connect as any)(opts, marks) as unknown as Mark<any>,
   treemap: (opts, marks) =>
     (Treemap as any)(opts, marks) as unknown as Mark<any>,
+  // Keys are the IR wire types (unchanged); values are the renamed
+  // (Figma-inspired, #196/#202) combinator factories.
   over: (opts, marks) => (over as any)(opts, marks) as unknown as Mark<any>,
-  inside: (opts, marks) => (inside as any)(opts, marks) as unknown as Mark<any>,
-  xor: (opts, marks) => (xor as any)(opts, marks) as unknown as Mark<any>,
-  out: (opts, marks) => (out as any)(opts, marks) as unknown as Mark<any>,
-  atop: (opts, marks) => (atop as any)(opts, marks) as unknown as Mark<any>,
+  inside: (opts, marks) =>
+    (intersect as any)(opts, marks) as unknown as Mark<any>,
+  xor: (opts, marks) => (exclude as any)(opts, marks) as unknown as Mark<any>,
+  out: (opts, marks) => (subtract as any)(opts, marks) as unknown as Mark<any>,
+  atop: (opts, marks) => (paint as any)(opts, marks) as unknown as Mark<any>,
   mask: (opts, marks) => (mask as any)(opts, marks) as unknown as Mark<any>,
 };
 

@@ -12,8 +12,43 @@ import { readFileSync, existsSync, writeFileSync } from "fs";
 import { join } from "path";
 import { BASELINE_DOM, PYTHON_DIR, ROOT, listHtmlFiles } from "./diff-utils.js";
 import { getSnapshotBranchName, pullSnapshots } from "./snapshot-branch.js";
+import { storyToPath } from "./path-mapping.js";
 
 const SUMMARY_PATH = join(import.meta.dirname, "../tmp/parity-summary.json");
+
+// Per-export parity exemptions (`file.stories.tsx::ExportName` lines in
+// .python-sync-exempt). A file-level exemption skips Python capture entirely
+// (capture-python-dom.ts), so its DOM never reaches this gate. A per-export
+// exemption is still captured + IR-validated — we just must not byte-gate it
+// (e.g. CroissantStack: the Python port renders identically but can't reproduce
+// the JS croissant recipe's per-slice spacer rects through the flat IR cut
+// expansion). Resolve each exempt `file::Export` to its DOM path (shared by JS
+// and Python capture via path-mapping.storyToPath) so the loop can skip it,
+// mirroring what a file-level exemption achieves: validated, not byte-gated.
+function loadExportExemptParityPaths(): Set<string> {
+  const exempt = new Set<string>();
+  const exemptFile = join(ROOT, "tests/.python-sync-exempt");
+  if (!existsSync(exemptFile)) return exempt;
+  for (const raw of readFileSync(exemptFile, "utf-8").split("\n")) {
+    const line = raw.trim();
+    if (!line || line.startsWith("#")) continue;
+    const sep = line.indexOf("::");
+    if (sep === -1) continue; // file-level — handled at capture time
+    const jsFile = line.slice(0, sep);
+    const exportName = line.slice(sep + 2);
+    let title: string | null = null;
+    try {
+      const content = readFileSync(join(ROOT, jsFile), "utf-8");
+      const m = content.match(/title:\s*["'](.+?)["']/);
+      if (m) title = m[1];
+    } catch {
+      /* file unreadable — skip */
+    }
+    if (title) exempt.add(storyToPath(title, exportName));
+  }
+  return exempt;
+}
+const exportExemptParityPaths = loadExportExemptParityPaths();
 
 /**
  * Emit a unified-style line diff to stderr for a single failing story so the
@@ -74,7 +109,18 @@ let parityMismatches = 0;
 let missingBaselines = 0;
 let passed = 0;
 
+let exemptSkipped = 0;
+
 for (const file of pyFiles) {
+  // Skip per-export parity-exempt stories: captured + IR-validated but
+  // intentionally not byte-identical to the JS baseline (.python-sync-exempt
+  // `file::Export` entries). `file` is "<dom-path>.html".
+  if (exportExemptParityPaths.has(file.replace(/\.html$/, ""))) {
+    console.log(`  SKIP (export parity-exempt): ${file}`);
+    exemptSkipped++;
+    continue;
+  }
+
   const baselinePath = join(BASELINE_DOM, file);
   const pythonPath = join(PYTHON_DIR, file);
 
@@ -104,7 +150,7 @@ if (pyFiles.length === 0) {
 }
 
 console.log(
-  `\nResults: ${passed} passed, ${parityMismatches} parity mismatches, ${missingBaselines} missing baselines`
+  `\nResults: ${passed} passed, ${parityMismatches} parity mismatches, ${missingBaselines} missing baselines, ${exemptSkipped} export-exempt skipped`
 );
 
 // Merge into any pre-existing summary (capture-python.ts writes capture

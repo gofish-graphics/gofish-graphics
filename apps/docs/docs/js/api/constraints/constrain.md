@@ -47,9 +47,9 @@ Constraint.align({ x?, y? }, [ref1, ref2, ...])
 | `x`    | `AlignAnchor \| AlignAnchor[]` | —       | Edge/center/origin to align on the x axis (omit to leave x untouched) |
 | `y`    | `AlignAnchor \| AlignAnchor[]` | —       | Edge/center/origin to align on the y axis (omit to leave y untouched) |
 
-`AlignAnchor` is `"start" \| "middle" \| "end" \| "baseline"`. The first three anchor a child by its bounding-box edge or center. `"baseline"` anchors a child by its **origin** (its local 0 point) instead of its box: `align({ y: "baseline" })` with no placed sibling pins the child's origin to the layer's origin — i.e. "stay where you were laid out" — regardless of how far its box overhangs the origin (a bar dipping below zero, axis labels hanging under a chart). Pass a single value to share one anchor across every child (the common case); pass an array to assign one anchor _per child_ positionally — the array length must equal the number of children.
+`AlignAnchor` is `"start" \| "middle" \| "end" \| "baseline"`. The first three anchor a child by its bounding-box edge or center. `"baseline"` anchors a child by its **origin** (its local 0 point) instead of its box. With no placed sibling the fallback is the **axis origin**: the scale's zero (`posScale(0)`) on a scaled axis, the layer's origin on a pixel-pure one. On a pixel-pure axis, `align({ y: "baseline" })` thus means "stay where you were laid out" — regardless of how far its box overhangs the origin (a bar dipping below zero, axis labels hanging under a chart). For an unconditional origin pin regardless of axis, use `Constraint.position({ x: 0, y: 0, anchor: "baseline" })`. Pass a single value to share one anchor across every child (the common case); pass an array to assign one anchor _per child_ positionally — the array length must equal the number of children.
 
-The first already-placed child in the list acts as the anchor on each specified axis (read at _that child's_ anchor). Unplaced children are moved to match it (placed at _their own_ anchor). If no child is placed yet, the layer's own edge is used as the fallback (`start` = 0, `middle` = midpoint, `end` = full extent, `baseline` = 0). When both `x` and `y` are given, x is resolved before y.
+The first already-placed child in the list acts as the anchor on each specified axis (read at _that child's_ anchor). Unplaced children are moved to match it (placed at _their own_ anchor). If no child is placed yet, the fallback depends on the axis's underlying space: a scaled axis uses the scale origin `posScale(0)`, a pixel-pure axis uses the layer's own edge (`start` = 0, `middle` = midpoint, `end` = full extent, `baseline` = layer origin). When both `x` and `y` are given, x is resolved before y.
 
 ### Per-child anchors
 
@@ -91,14 +91,30 @@ Stacks a set of children end-to-end along an axis, with optional spacing.
 Constraint.distribute({ dir, spacing, mode, order }, [ref1, ref2, ...])
 ```
 
-| Option    | Type                     | Default     | Description                                                  |
-| --------- | ------------------------ | ----------- | ------------------------------------------------------------ |
-| `dir`     | `"x" \| "y"`             | —           | Axis to distribute along                                     |
-| `spacing` | `number`                 | `8`         | Gap between each element                                     |
-| `mode`    | `"edge" \| "center"`     | `"edge"`    | Whether spacing is measured edge-to-edge or center-to-center |
-| `order`   | `"forward" \| "reverse"` | `"forward"` | Order to place elements                                      |
+| Option    | Type                     | Default     | Description                                                                                            |
+| --------- | ------------------------ | ----------- | ------------------------------------------------------------------------------------------------------ |
+| `dir`     | `"x" \| "y"`             | —           | Axis to distribute along                                                                               |
+| `spacing` | `number`                 | `8`         | Gap between each element (forced to `0` when `glue` is set)                                            |
+| `mode`    | `"edge" \| "center"`     | `"edge"`    | Whether spacing is measured edge-to-edge or center-to-center                                           |
+| `order`   | `"forward" \| "reverse"` | `"forward"` | Order to place elements                                                                                |
+| `glue`    | `boolean`                | `false`     | Stack semantics: children touch, and their data-driven extents commit to one positional axis           |
+| `weights` | `number[]`               | —           | Per-child budget weights (one per child, positional) — how fill children share the layer's slice space |
 
 The first already-placed child acts as an anchor. Unplaced children after it are distributed forward (increasing position); unplaced children before it are distributed backward so they stack flush against the anchor's leading edge.
+
+### Space resolution and auto-fit
+
+`distribute` (and `align`) don't just position children after layout — they
+participate in **underlying-space resolution**, exactly like the operators
+built on them. A `distribute` over data-sized children composes their size
+claims (sum + spacing) into the layer's claim on that axis; when the layer is
+then given a size (an explicit `w`/`h`, or an allotted budget from its parent
+or a coordinate transform), it solves for the scale factor that makes the
+children fit, and proposes budget slices (equal, or per `weights`) to children
+with no size claim of their own. With `glue: true` the composed extents commit
+to an anchored positional axis instead — that's a stacked bar chart. In other
+words: a constraint-assembled layer auto-fits the same way a `Spread`/`Stack`
+does.
 
 ::: gofish
 
@@ -233,7 +249,10 @@ override it for the pairs they name.
 
 ## Spread equivalences
 
-Constraints are a lower-level primitive that `Spread` is built on. These pairs are equivalent:
+Constraints are the primitive `Spread` and `Stack` are built on — literally:
+the operators delegate their space resolution, budget slicing, and placement
+walks to the same machinery the constraint path uses. These pairs are
+equivalent, **including** scale solving and auto-fit, not just placement:
 
 | Spread                                                       | Constraint equivalent                                           |
 | ------------------------------------------------------------ | --------------------------------------------------------------- |
@@ -241,6 +260,15 @@ Constraints are a lower-level primitive that `Spread` is built on. These pairs a
 | `Spread({ dir: "x", alignment: "end", spacing: 10 }, items)` | `align({ y: "end" })` + `distribute({ dir: "x", spacing: 10 })` |
 | `Spread({ dir: "x", spacing: 60, mode: "center" }, items)`   | `distribute({ dir: "x", spacing: 60, mode: "center" })`         |
 | `Spread({ dir: "y", reverse: true }, items)`                 | `distribute({ dir: "y", order: "reverse" })`                    |
+| `Stack({ dir: "y" }, items)`                                 | `distribute({ dir: "y", glue: true })`                          |
+| `Spread({ dir: "x", stackWeights: [2, 1] }, items)`          | `distribute({ dir: "x", weights: [2, 1] })`                     |
+
+When **no child is pre-placed**, the cross-axis alignment fallback depends on
+the **axis**, not the API — `Spread` and the `align` constraint resolve the
+same fallback, so the pairs above are exact. A scaled (POSITION) axis falls
+back to the scale origin `posScale(0)` (so SIZE-derived bars hang from the zero
+line); a pixel-pure axis falls back to the layer-box edge (`start` → 0,
+`middle` → midpoint, `end` → full extent).
 
 ## Partial placement
 
