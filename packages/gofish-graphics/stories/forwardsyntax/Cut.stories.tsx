@@ -16,6 +16,7 @@ import {
   datum,
 } from "../../src/lib";
 import bottlePng from "../assets/wilsonblanco.png";
+import bellCurveSvg from "../assets/bellcurve.svg";
 
 // What's actually in a bottle of wine, by volume.
 const bottleData = [
@@ -298,31 +299,44 @@ export const MixedSizes: StoryObj<Args> = {
   },
 };
 
-/** Croissant chart: cut a source with a visible `inset`, then recompose the
- *  slices in the source's CONTINUOUS space while keeping the inset gaps. cut's
- *  inset shrinks each slice's reported bbox to its visible window, so a plain
- *  `Stack({ spacing: 0 })` would pull the windows flush and drop the gaps. The
- *  fix is user-space: pad each slice back to its full logical extent by adding
- *  `inset/2` of transparent space on each side along `dir` (an inner Stack with
- *  zero-extent spacer rects), THEN stack the padded slices with spacing 0. The
- *  result spans the source's exact width (400px) with even 20px gaps at every
- *  cut point — a row of bordered "croissant" segments. */
+/** Croissant chart: slice a continuous DISTRIBUTION shape (a bell curve) into
+ *  gapped vertical bands that keep their original x positions — the gesture of
+ *  a [croissant chart](https://vis.khoury.northeastern.edu/pubs/Fygenson2026CroissantChartsModulating/).
+ *
+ *  The source is a filled gaussian SVG, cut `dir: "x"` into 6 bands of UNEQUAL
+ *  `datum()` weights (narrow in the tails, wide over the peak) so the slicing
+ *  reads as sampling a density rather than a regular grid. A visible `inset`
+ *  carves a gap out of each band.
+ *
+ *  cut's inset shrinks each slice's reported bbox to its visible window, so a
+ *  plain `Stack({ spacing: 0 })` would pull the windows flush and drop the
+ *  gaps. The fix is user-space: pad each slice back to its full logical extent
+ *  by adding `inset/2` of transparent space on each side along `dir` (an inner
+ *  Stack with zero-cross-extent spacer rects), THEN stack the padded slices
+ *  with spacing 0. The recomposed row spans the source's exact width (400px),
+ *  so every band sits at its true continuous-x position with an even `inset`
+ *  gap at each cut point.
+ *
+ *  A hand-composed continuous x axis (a thin baseline rect + a few numeric
+ *  `text` labels at known fractions of the 400px width) is layered under the
+ *  bands. The low-level Stack of masked slices carries SIZE space, not a
+ *  continuous POSITION domain, so the renderer's `axes` option can't synthesize
+ *  one — the axis here is drawn by hand from public primitives and aligned to
+ *  the band row with `Constraint`. */
 export const CroissantStack: StoryObj<Args> = {
-  args: { w: 500, h: 200 },
+  args: { w: 520, h: 260 },
   render: (args: Args) => {
     const container = initializeContainer();
 
-    const inset = 20;
-    const slices = cut(
-      rect({
-        w: 400,
-        h: 80,
-        fill: "wheat",
-        stroke: "#8a5a16",
-        strokeWidth: 2,
-      }),
-      { dir: "x", size: Array(4).fill(datum(1)), inset }
-    );
+    const W = 400;
+    const inset = 16;
+    // Unequal weights: narrow bands in the tails, wide bands over the peak.
+    const weights = [1, 1.6, 2.4, 2.4, 1.6, 1];
+    const slices = cut(image({ href: bellCurveSvg, w: W, h: 120 }), {
+      dir: "x",
+      size: weights.map((wt) => datum(wt)),
+      inset,
+    });
 
     // Pad each slice back to its full logical extent: inset/2 of transparent
     // space on each side along `dir`, via zero-cross-extent spacer rects.
@@ -332,11 +346,45 @@ export const CroissantStack: StoryObj<Args> = {
       Stack({ dir: "x", spacing: 0 }, [spacer(), slice, spacer()])
     );
 
-    Stack({ dir: "x", spacing: 0 }, padded).render(container, {
-      w: args.w,
-      h: args.h,
-      axes: false,
-    });
+    const bands = Stack({ dir: "x", spacing: 0 }, padded).name("bands");
+
+    // Hand-composed continuous x axis. The low-level Stack of masked slices has
+    // SIZE space (no continuous POSITION domain), so the renderer's `axes`
+    // option can't synthesize an axis — we draw one from public primitives. The
+    // axis is its own W-wide sub-layer: a full-width baseline rect plus numeric
+    // labels pinned by LITERAL pixel x (frac * W) in the sub-layer's frame. The
+    // domain is [-3, 3] standard deviations (the gaussian spans mu ± ~3sigma).
+    const axisTicks = [
+      { frac: 0, label: "-3" },
+      { frac: 0.25, label: "-1.5" },
+      { frac: 0.5, label: "0" },
+      { frac: 0.75, label: "1.5" },
+      { frac: 1, label: "3" },
+    ];
+    const axis = layer([
+      rect({ w: W, h: 1.5, fill: "#999" }).name("axisLine"),
+      ...axisTicks.map((t, i) =>
+        text({ text: t.label, fontSize: 12, fill: "#555" }).name(`lab${i}`)
+      ),
+    ])
+      .constrain((g: any) => [
+        // Pin the baseline rect at the sub-layer origin, then place each label's
+        // center at its literal x = frac * W and drop it below the line.
+        Constraint.align({ x: "start", y: "start" }, [g.axisLine]),
+        ...axisTicks.flatMap((t, i) => [
+          Constraint.position({ x: t.frac * W }, [g[`lab${i}`]]),
+          Constraint.distribute({ dir: "y", spacing: 6 }, [g.axisLine, g[`lab${i}`]]),
+        ]),
+      ])
+      .name("axis");
+
+    layer([bands, axis])
+      .constrain(({ bands, axis }: any) => [
+        // Axis row centered under the bands (both are W wide).
+        Constraint.align({ x: "middle" }, [bands, axis]),
+        Constraint.distribute({ dir: "y", spacing: 12 }, [axis, bands]),
+      ])
+      .render(container, { w: args.w, h: args.h, axes: false });
 
     return container;
   },
