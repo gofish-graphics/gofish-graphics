@@ -227,9 +227,16 @@ without parsing the `__serialize` tag.
 
 A second flavor, `attachTransformModifiers`, handles methods that map a mark to
 a _different_ mark rather than mutating its nodes — e.g. `image(...).cut(opts)`
-desugars to `cut(image, opts)`. Because the transform replaces the mark before
-any node exists, it wraps the existing `.name()`/`.label()` methods to re-apply
-itself, keeping `.cut` available across a naming/labeling chain.
+maps the image to an expand-kind `cut` mark (which slices the source into N
+nodes 1:1 with data, built on the pure `cut(source, opts)` array primitive).
+Because the transform replaces the mark before any node exists, it wraps the
+existing `.name()`/`.label()` methods to re-apply itself, keeping `.cut`
+available across a naming/labeling chain.
+
+Expand marks consume a whole group at once, so the operator (traversal) form
+hands them a single leaf containing all rows regardless of its own `split`
+config. They have no per-row identity to regroup, so combining one with a
+`by`-grouping operator throws rather than silently dropping the grouping.
 
 Naming-wise: `createOperator` is the frontend factory; the low-level helper
 that produces `Spread`, `Scatter`, etc. is `createNodeOperator`

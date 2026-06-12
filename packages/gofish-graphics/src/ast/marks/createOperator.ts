@@ -693,10 +693,21 @@ export function createOperator<Datum, Options extends Record<string, any>>(
         // config. (The per-operator split, e.g. spread's identity split that
         // the waffle grid relies on, only applies to per-item marks.) The
         // resulting N expanded nodes are then arranged by `layout` below.
-        const splitResult =
-          getMarkKind(mark) === "expand"
-            ? new Map<number, Datum[]>([[0, d]])
-            : cfg.split(opts, d);
+        const isExpand = getMarkKind(mark) === "expand";
+        // An expand mark slices one source into N nodes; it has no per-row
+        // identity to regroup, so `by`-grouping would have to be silently
+        // dropped. Fail loudly instead — this is not yet supported.
+        if (isExpand && (opts as any).by !== undefined) {
+          throw new Error(
+            `cut is an expand mark and cannot be combined with \`by\`-grouping ` +
+              `yet: it slices a single source shape, so there are no per-row ` +
+              `groups to split. Drop \`by\`, or group upstream and cut within ` +
+              `each group.`
+          );
+        }
+        const splitResult = isExpand
+          ? new Map<number, Datum[]>([[0, d]])
+          : cfg.split(opts, d);
         const entries =
           splitResult instanceof Map ? splitResult : splitResult.entries;
         const keys = splitResult instanceof Map ? undefined : splitResult.keys;

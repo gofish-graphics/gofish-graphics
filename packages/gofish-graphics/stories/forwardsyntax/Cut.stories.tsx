@@ -10,6 +10,8 @@ import {
   selectAll,
   spread,
   Spread,
+  cut,
+  datum,
 } from "../../src/lib";
 import bottlePng from "../assets/wilsonblanco.png";
 
@@ -121,8 +123,8 @@ export const ImageCutWithLabels: StoryObj<Args> = {
   },
 };
 
-/** Solid rect cut into 4 equal slices along x with 4px gaps and centered
- *  letter labels. */
+/** Solid rect cut into 4 equal slices along x with 4px gaps (one slice per
+ *  abcd row, sizes defaulted to equal). */
 export const RectEqualSlices: StoryObj<Args> = {
   args: { w: 600, h: 200 },
   render: (args: Args) => {
@@ -167,28 +169,46 @@ export const ImageEqualSlices: StoryObj<Args> = {
   },
 };
 
-/** Low-level form: cut + Spread combinator without a Chart — sizes given
- *  explicitly. Should produce visually identical output to the chart-flow
- *  form when the same sizes are passed. */
+/** Low-level form: the pure `cut(source, opts)` primitive returns an array of
+ *  slice nodes that drops straight into a Spread combinator — no Chart, no
+ *  async plumbing. With `datum()` weights (relative, normalized to the source
+ *  height) this is visually IDENTICAL to ImageCut, which derives the same
+ *  weights from the `amount` field. */
 export const LowLevelForm: StoryObj<Args> = {
   args: { w: 400, h: 700 },
   render: (args: Args) => {
     const container = initializeContainer();
-    const sizes = bottleData.map((d) => d.amount);
 
-    // Pre-resolve cut into N nodes, then hand them to Spread as children.
-    // `size` accepts either a field name or an explicit pixel-extent array.
-    void (async () => {
-      const slices = await image({ href: bottlePng, w: 193, h: 600 }).cut({
+    Spread(
+      { dir: "y", spacing: 4, reverse: true },
+      cut(image({ href: bottlePng, w: 193, h: 600 }), {
         dir: "y",
-        size: sizes,
+        size: bottleData.map((d) => datum(d.amount)),
         inset: 4,
-      })(bottleData, undefined, {});
-      Spread({ dir: "y", spacing: 4, reverse: true }, slices).render(
-        container,
-        { w: args.w, h: args.h, axes: false }
-      );
-    })();
+      })
+    ).render(container, { w: args.w, h: args.h, axes: false });
+
+    return container;
+  },
+};
+
+/** Absolute-pixel sizes: a 600px-wide rect cut into windows of [100, 100, 200]
+ *  along x. Raw numbers are ABSOLUTE source pixels — the windows consume the
+ *  source from the left (0–100, 100–200, 200–400) and the leftover 200px of
+ *  source (400–600) is simply omitted, never appearing in any slice. Contrast
+ *  with datum() weights, which always fill the source exactly. */
+export const RectAbsoluteSizes: StoryObj<Args> = {
+  args: { w: 600, h: 200 },
+  render: (args: Args) => {
+    const container = initializeContainer();
+
+    Spread(
+      { dir: "x", spacing: 8 },
+      cut(rect({ w: 600, h: 80, fill: "seagreen" }), {
+        dir: "x",
+        size: [100, 100, 200],
+      })
+    ).render(container, { w: args.w, h: args.h, axes: false });
 
     return container;
   },

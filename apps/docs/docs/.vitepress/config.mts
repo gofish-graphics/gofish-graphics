@@ -285,6 +285,7 @@ export default defineConfig({
                   text: "region compositing",
                   link: "/js/api/operators/region-compositing",
                 },
+                { text: "cut", link: "/js/api/operators/cut" },
                 { text: "offset", link: "/js/api/operators/offset" },
                 { text: "derive", link: "/js/api/operators/derive" },
                 { text: "log", link: "/js/api/operators/log" },
