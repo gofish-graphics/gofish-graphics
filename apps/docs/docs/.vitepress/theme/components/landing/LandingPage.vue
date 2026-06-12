@@ -387,7 +387,10 @@ onBeforeUnmount(() => {
       <!-- ===================== SPECTRUM ===================== -->
       <section class="section spectrum" aria-labelledby="spec-h">
         <div class="head reveal">
-          <h2 id="spec-h">Simple when you want,<br />complex when you need</h2>
+          <h2 id="spec-h" class="spec-title">
+            <span class="nowrap">Simple when you want,</span>{{ " " }}
+            <span class="nowrap">complex when you need</span>
+          </h2>
         </div>
 
         <div class="track reveal">

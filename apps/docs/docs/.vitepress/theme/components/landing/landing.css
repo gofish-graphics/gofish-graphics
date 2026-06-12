@@ -438,6 +438,14 @@ html.landing-page .DocSearch-Button {
 }
 
 /* TRACK */
+/* one line by default; if it must wrap, only at the comma */
+.landing .spec-title {
+  text-wrap: balance;
+}
+.landing .spec-title .nowrap {
+  white-space: nowrap;
+}
+
 .landing .track {
   position: relative;
   max-width: 1080px;
