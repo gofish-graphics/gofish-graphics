@@ -103,7 +103,24 @@ consume directly. Use `ref("layerName")` as data for the singular case: it retur
 After a selection the stream is refs, so re-encode with a datum path —
 `group(by="datum.species")`; see
 [`spread` → path-aware `by`](/python/api/operators/spread#path-aware-by). See
-[`mark`](/python/api/core/mark) for `.name()`.
+[`mark`](/python/api/core/mark) for `.name()` on a mark.
 
 For the full reference — singular-as-data rules, node-unit selection, hygienic
 scoping, and connector use — see [`ref` / `selectAll`](/python/api/selection/ref).
+
+## Naming a chart: `.name()`
+
+A **chart-level** `.name()` — distinct from naming a mark — tags the whole
+chart so a sibling `Layer([...]).constrain(...)` callback can reference it by
+that name (mirrors JS `chart.resolve().name(...)`). The constrain lambda's
+parameter names match the charts' `.name()` strings:
+
+```python
+sc = chart(data).flow(scatter(x="x", y="y")).mark(circle(r=3)).name("scatter")
+top = chart(data, h=80).flow(...).mark(rect(h="count")).name("topHist")
+
+Layer([sc, top]).constrain(lambda scatter, topHist: [
+    Constraint.align([scatter], x="baseline", y="baseline"),
+    Constraint.position([topHist], y=410, anchor="start"),
+])
+```

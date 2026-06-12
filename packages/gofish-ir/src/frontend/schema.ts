@@ -83,6 +83,13 @@ export interface ChartIR extends BaseIRNode {
    * in the IR.
    */
   connect?: MarkIR;
+  /**
+   * Chart-level name (from `chart(...).name("scatter")` in Python /
+   * `node.name(...)` on a resolved chart in JS) so a sibling
+   * `Layer([...]).constrain(...)` callback can reference this chart. A
+   * `createName(...)` token sentinel is also accepted on the wire.
+   */
+  name?: string;
 }
 
 /** Multiple charts composed on the same canvas. */
@@ -90,6 +97,9 @@ export interface LayerIR extends BaseIRNode {
   type: "layer";
   charts: ChartIR[];
   options?: Record<string, unknown>;
+  /** Layer-level constraints (from `Layer([...]).constrain(...)`), resolving
+   *  refs against the child charts' `name`s. */
+  constraints?: ConstraintIR[];
 }
 
 /** A bare mark, used when no chart-level wrapping is needed. */

@@ -134,6 +134,7 @@ function walkChart(
   optionalField(node, "options", path, ctx, expectObject);
   optionalField(node, "zOrder", path, ctx, expectNumber);
   optionalField(node, "connect", path, ctx, walkMark);
+  optionalField(node, "name", path, ctx, expectNameOrToken);
   if (ctx.strict) {
     rejectUnknown(
       node,
@@ -145,6 +146,7 @@ function walkChart(
         "options",
         "zOrder",
         "connect",
+        "name",
         "origin",
         "meta",
       ],
@@ -164,10 +166,13 @@ function walkLayer(
     walkArray(v, p, ctx, walkRootChart)
   );
   optionalField(node, "options", path, ctx, expectObject);
+  optionalField(node, "constraints", path, ctx, (v, p) =>
+    walkArray(v, p, ctx, walkConstraint)
+  );
   if (ctx.strict) {
     rejectUnknown(
       node,
-      ["type", "charts", "options", "origin", "meta"],
+      ["type", "charts", "options", "constraints", "origin", "meta"],
       path,
       ctx
     );
