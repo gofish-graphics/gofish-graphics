@@ -1,0 +1,10054 @@
+[
+  {
+    "Train": "237N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Tamien",
+    "Time": 573
+  },
+  {
+    "Train": "237N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "San Jose",
+    "Time": 580
+  },
+  {
+    "Train": "237N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Santa Clara",
+    "Time": 585
+  },
+  {
+    "Train": "237N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Lawrence",
+    "Time": 590
+  },
+  {
+    "Train": "237N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Sunnyvale",
+    "Time": 594
+  },
+  {
+    "Train": "237N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Mountain View",
+    "Time": 599
+  },
+  {
+    "Train": "237N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "San Antonio",
+    "Time": 603
+  },
+  {
+    "Train": "237N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "California Ave",
+    "Time": 607
+  },
+  {
+    "Train": "237N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Palo Alto",
+    "Time": 611
+  },
+  {
+    "Train": "237N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Menlo Park",
+    "Time": 614
+  },
+  {
+    "Train": "237N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Redwood City",
+    "Time": 619
+  },
+  {
+    "Train": "237N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "San Carlos",
+    "Time": 623
+  },
+  {
+    "Train": "237N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Belmont",
+    "Time": 626
+  },
+  {
+    "Train": "237N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Hillsdale",
+    "Time": 629
+  },
+  {
+    "Train": "237N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "San Mateo",
+    "Time": 633
+  },
+  {
+    "Train": "237N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Burlingame",
+    "Time": 636
+  },
+  {
+    "Train": "237N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Millbrae",
+    "Time": 641
+  },
+  {
+    "Train": "237N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "San Bruno",
+    "Time": 645
+  },
+  {
+    "Train": "237N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "San Francisco",
+    "Time": 662
+  },
+  {
+    "Train": "225N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "San Jose",
+    "Time": 470
+  },
+  {
+    "Train": "225N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Sunnyvale",
+    "Time": 480
+  },
+  {
+    "Train": "225N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Mountain View",
+    "Time": 485
+  },
+  {
+    "Train": "225N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "California Ave",
+    "Time": 491
+  },
+  {
+    "Train": "225N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Palo Alto",
+    "Time": 496
+  },
+  {
+    "Train": "225N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "San Carlos",
+    "Time": 504
+  },
+  {
+    "Train": "225N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Hillsdale",
+    "Time": 508
+  },
+  {
+    "Train": "225N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "San Mateo",
+    "Time": 512
+  },
+  {
+    "Train": "225N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Burlingame",
+    "Time": 515
+  },
+  {
+    "Train": "225N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "San Bruno",
+    "Time": 522
+  },
+  {
+    "Train": "225N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "San Francisco",
+    "Time": 537
+  },
+  {
+    "Train": "275N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "San Jose",
+    "Time": 1051
+  },
+  {
+    "Train": "275N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Lawrence",
+    "Time": 1059
+  },
+  {
+    "Train": "275N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Mountain View",
+    "Time": 1066
+  },
+  {
+    "Train": "275N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Palo Alto",
+    "Time": 1074
+  },
+  {
+    "Train": "275N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Menlo Park",
+    "Time": 1077
+  },
+  {
+    "Train": "275N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "San Carlos",
+    "Time": 1084
+  },
+  {
+    "Train": "275N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Hillsdale",
+    "Time": 1088
+  },
+  {
+    "Train": "275N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "San Mateo",
+    "Time": 1092
+  },
+  {
+    "Train": "275N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Burlingame",
+    "Time": 1095
+  },
+  {
+    "Train": "275N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "San Bruno",
+    "Time": 1102
+  },
+  {
+    "Train": "275N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "San Francisco",
+    "Time": 1119
+  },
+  {
+    "Train": "231N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "San Jose",
+    "Time": 502
+  },
+  {
+    "Train": "231N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Santa Clara",
+    "Time": 507
+  },
+  {
+    "Train": "231N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Mountain View",
+    "Time": 517
+  },
+  {
+    "Train": "231N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Menlo Park",
+    "Time": 525
+  },
+  {
+    "Train": "231N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Redwood City",
+    "Time": 531
+  },
+  {
+    "Train": "231N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "San Carlos",
+    "Time": 535
+  },
+  {
+    "Train": "231N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Belmont",
+    "Time": 538
+  },
+  {
+    "Train": "231N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Hillsdale",
+    "Time": 542
+  },
+  {
+    "Train": "231N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Hayward Park",
+    "Time": 545
+  },
+  {
+    "Train": "231N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "San Mateo",
+    "Time": 548
+  },
+  {
+    "Train": "231N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Burlingame",
+    "Time": 551
+  },
+  {
+    "Train": "231N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Millbrae",
+    "Time": 557
+  },
+  {
+    "Train": "231N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "San Bruno",
+    "Time": 561
+  },
+  {
+    "Train": "231N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "So. San Francisco",
+    "Time": 565
+  },
+  {
+    "Train": "231N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Bayshore",
+    "Time": 571
+  },
+  {
+    "Train": "231N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "22nd Street",
+    "Time": 577
+  },
+  {
+    "Train": "231N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "San Francisco",
+    "Time": 585
+  },
+  {
+    "Train": "151N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "San Jose",
+    "Time": 790
+  },
+  {
+    "Train": "151N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Santa Clara",
+    "Time": 795
+  },
+  {
+    "Train": "151N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Lawrence",
+    "Time": 800
+  },
+  {
+    "Train": "151N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Sunnyvale",
+    "Time": 804
+  },
+  {
+    "Train": "151N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Mountain View",
+    "Time": 809
+  },
+  {
+    "Train": "151N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "San Antonio",
+    "Time": 813
+  },
+  {
+    "Train": "151N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "California Ave",
+    "Time": 817
+  },
+  {
+    "Train": "151N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Palo Alto",
+    "Time": 821
+  },
+  {
+    "Train": "151N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Menlo Park",
+    "Time": 824
+  },
+  {
+    "Train": "151N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Redwood City",
+    "Time": 829
+  },
+  {
+    "Train": "151N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "San Carlos",
+    "Time": 833
+  },
+  {
+    "Train": "151N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Belmont",
+    "Time": 836
+  },
+  {
+    "Train": "151N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Hillsdale",
+    "Time": 839
+  },
+  {
+    "Train": "151N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Hayward Park",
+    "Time": 842
+  },
+  {
+    "Train": "151N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "San Mateo",
+    "Time": 845
+  },
+  {
+    "Train": "151N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Burlingame",
+    "Time": 848
+  },
+  {
+    "Train": "151N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Millbrae",
+    "Time": 853
+  },
+  {
+    "Train": "151N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "San Bruno",
+    "Time": 857
+  },
+  {
+    "Train": "151N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "So. San Francisco",
+    "Time": 861
+  },
+  {
+    "Train": "151N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Bayshore",
+    "Time": 867
+  },
+  {
+    "Train": "151N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "22nd Street",
+    "Time": 872
+  },
+  {
+    "Train": "151N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "San Francisco",
+    "Time": 881
+  },
+  {
+    "Train": "221N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Gilroy",
+    "Time": 390
+  },
+  {
+    "Train": "221N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "San Martin",
+    "Time": 399
+  },
+  {
+    "Train": "221N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Morgan Hill",
+    "Time": 405
+  },
+  {
+    "Train": "221N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Blossom Hill",
+    "Time": 418
+  },
+  {
+    "Train": "221N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Capitol",
+    "Time": 424
+  },
+  {
+    "Train": "221N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Tamien",
+    "Time": 432
+  },
+  {
+    "Train": "221N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "San Jose",
+    "Time": 440
+  },
+  {
+    "Train": "221N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Santa Clara",
+    "Time": 445
+  },
+  {
+    "Train": "221N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Lawrence",
+    "Time": 450
+  },
+  {
+    "Train": "221N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Mountain View",
+    "Time": 457
+  },
+  {
+    "Train": "221N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Menlo Park",
+    "Time": 465
+  },
+  {
+    "Train": "221N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Redwood City",
+    "Time": 471
+  },
+  {
+    "Train": "221N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "San Carlos",
+    "Time": 475
+  },
+  {
+    "Train": "221N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Belmont",
+    "Time": 478
+  },
+  {
+    "Train": "221N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Hillsdale",
+    "Time": 482
+  },
+  {
+    "Train": "221N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Hayward Park",
+    "Time": 485
+  },
+  {
+    "Train": "221N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "San Mateo",
+    "Time": 488
+  },
+  {
+    "Train": "221N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Burlingame",
+    "Time": 491
+  },
+  {
+    "Train": "221N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Millbrae",
+    "Time": 497
+  },
+  {
+    "Train": "221N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "San Bruno",
+    "Time": 501
+  },
+  {
+    "Train": "221N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "So. San Francisco",
+    "Time": 505
+  },
+  {
+    "Train": "221N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Bayshore",
+    "Time": 513
+  },
+  {
+    "Train": "221N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "22nd Street",
+    "Time": 520
+  },
+  {
+    "Train": "221N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "San Francisco",
+    "Time": 528
+  },
+  {
+    "Train": "313N",
+    "Direction": "northbound",
+    "Type": "Bullet",
+    "Station": "San Jose",
+    "Time": 405
+  },
+  {
+    "Train": "313N",
+    "Direction": "northbound",
+    "Type": "Bullet",
+    "Station": "Mountain View",
+    "Time": 417
+  },
+  {
+    "Train": "313N",
+    "Direction": "northbound",
+    "Type": "Bullet",
+    "Station": "Palo Alto",
+    "Time": 425
+  },
+  {
+    "Train": "313N",
+    "Direction": "northbound",
+    "Type": "Bullet",
+    "Station": "Hillsdale",
+    "Time": 436
+  },
+  {
+    "Train": "313N",
+    "Direction": "northbound",
+    "Type": "Bullet",
+    "Station": "Millbrae",
+    "Time": 444
+  },
+  {
+    "Train": "313N",
+    "Direction": "northbound",
+    "Type": "Bullet",
+    "Station": "San Francisco",
+    "Time": 462
+  },
+  {
+    "Train": "159N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "San Jose",
+    "Time": 905
+  },
+  {
+    "Train": "159N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "College Park",
+    "Time": 908
+  },
+  {
+    "Train": "159N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Santa Clara",
+    "Time": 912
+  },
+  {
+    "Train": "159N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Lawrence",
+    "Time": 917
+  },
+  {
+    "Train": "159N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Sunnyvale",
+    "Time": 921
+  },
+  {
+    "Train": "159N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Mountain View",
+    "Time": 926
+  },
+  {
+    "Train": "159N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "San Antonio",
+    "Time": 930
+  },
+  {
+    "Train": "159N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "California Ave",
+    "Time": 934
+  },
+  {
+    "Train": "159N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Palo Alto",
+    "Time": 938
+  },
+  {
+    "Train": "159N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Menlo Park",
+    "Time": 941
+  },
+  {
+    "Train": "159N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Redwood City",
+    "Time": 946
+  },
+  {
+    "Train": "159N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "San Carlos",
+    "Time": 950
+  },
+  {
+    "Train": "159N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Belmont",
+    "Time": 953
+  },
+  {
+    "Train": "159N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Hillsdale",
+    "Time": 956
+  },
+  {
+    "Train": "159N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Hayward Park",
+    "Time": 959
+  },
+  {
+    "Train": "159N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "San Mateo",
+    "Time": 962
+  },
+  {
+    "Train": "159N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Burlingame",
+    "Time": 965
+  },
+  {
+    "Train": "159N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Millbrae",
+    "Time": 970
+  },
+  {
+    "Train": "159N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "San Bruno",
+    "Time": 974
+  },
+  {
+    "Train": "159N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "So. San Francisco",
+    "Time": 978
+  },
+  {
+    "Train": "159N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Bayshore",
+    "Time": 984
+  },
+  {
+    "Train": "159N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "22nd Street",
+    "Time": 989
+  },
+  {
+    "Train": "159N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "San Francisco",
+    "Time": 998
+  },
+  {
+    "Train": "135N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "San Jose",
+    "Time": 550
+  },
+  {
+    "Train": "135N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Santa Clara",
+    "Time": 555
+  },
+  {
+    "Train": "135N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Lawrence",
+    "Time": 560
+  },
+  {
+    "Train": "135N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Sunnyvale",
+    "Time": 564
+  },
+  {
+    "Train": "135N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Mountain View",
+    "Time": 569
+  },
+  {
+    "Train": "135N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "San Antonio",
+    "Time": 573
+  },
+  {
+    "Train": "135N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "California Ave",
+    "Time": 577
+  },
+  {
+    "Train": "135N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Palo Alto",
+    "Time": 581
+  },
+  {
+    "Train": "135N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Menlo Park",
+    "Time": 584
+  },
+  {
+    "Train": "135N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Redwood City",
+    "Time": 589
+  },
+  {
+    "Train": "135N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "San Carlos",
+    "Time": 593
+  },
+  {
+    "Train": "135N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Belmont",
+    "Time": 596
+  },
+  {
+    "Train": "135N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Hillsdale",
+    "Time": 599
+  },
+  {
+    "Train": "135N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Hayward Park",
+    "Time": 602
+  },
+  {
+    "Train": "135N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "San Mateo",
+    "Time": 605
+  },
+  {
+    "Train": "135N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Burlingame",
+    "Time": 608
+  },
+  {
+    "Train": "135N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Millbrae",
+    "Time": 613
+  },
+  {
+    "Train": "135N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "San Bruno",
+    "Time": 617
+  },
+  {
+    "Train": "135N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "So. San Francisco",
+    "Time": 621
+  },
+  {
+    "Train": "135N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Bayshore",
+    "Time": 627
+  },
+  {
+    "Train": "135N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "22nd Street",
+    "Time": 632
+  },
+  {
+    "Train": "135N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "San Francisco",
+    "Time": 641
+  },
+  {
+    "Train": "383N",
+    "Direction": "northbound",
+    "Type": "Bullet",
+    "Station": "San Jose",
+    "Time": 1105
+  },
+  {
+    "Train": "383N",
+    "Direction": "northbound",
+    "Type": "Bullet",
+    "Station": "Mountain View",
+    "Time": 1117
+  },
+  {
+    "Train": "383N",
+    "Direction": "northbound",
+    "Type": "Bullet",
+    "Station": "Menlo Park",
+    "Time": 1126
+  },
+  {
+    "Train": "383N",
+    "Direction": "northbound",
+    "Type": "Bullet",
+    "Station": "Redwood City",
+    "Time": 1132
+  },
+  {
+    "Train": "383N",
+    "Direction": "northbound",
+    "Type": "Bullet",
+    "Station": "Millbrae",
+    "Time": 1145
+  },
+  {
+    "Train": "383N",
+    "Direction": "northbound",
+    "Type": "Bullet",
+    "Station": "22nd Street",
+    "Time": 1157
+  },
+  {
+    "Train": "383N",
+    "Direction": "northbound",
+    "Type": "Bullet",
+    "Station": "San Francisco",
+    "Time": 1164
+  },
+  {
+    "Train": "281N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Tamien",
+    "Time": 1078
+  },
+  {
+    "Train": "281N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "San Jose",
+    "Time": 1085
+  },
+  {
+    "Train": "281N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Santa Clara",
+    "Time": 1090
+  },
+  {
+    "Train": "281N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Palo Alto",
+    "Time": 1104
+  },
+  {
+    "Train": "281N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Redwood City",
+    "Time": 1111
+  },
+  {
+    "Train": "281N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "San Carlos",
+    "Time": 1115
+  },
+  {
+    "Train": "281N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Belmont",
+    "Time": 1118
+  },
+  {
+    "Train": "281N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Hillsdale",
+    "Time": 1122
+  },
+  {
+    "Train": "281N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Hayward Park",
+    "Time": 1125
+  },
+  {
+    "Train": "281N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "San Mateo",
+    "Time": 1128
+  },
+  {
+    "Train": "281N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Burlingame",
+    "Time": 1131
+  },
+  {
+    "Train": "281N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Millbrae",
+    "Time": 1137
+  },
+  {
+    "Train": "281N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "San Bruno",
+    "Time": 1141
+  },
+  {
+    "Train": "281N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "So. San Francisco",
+    "Time": 1145
+  },
+  {
+    "Train": "281N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Bayshore",
+    "Time": 1153
+  },
+  {
+    "Train": "281N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "22nd Street",
+    "Time": 1161
+  },
+  {
+    "Train": "281N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "San Francisco",
+    "Time": 1169
+  },
+  {
+    "Train": "285N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Tamien",
+    "Time": 1104
+  },
+  {
+    "Train": "285N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "San Jose",
+    "Time": 1111
+  },
+  {
+    "Train": "285N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Lawrence",
+    "Time": 1119
+  },
+  {
+    "Train": "285N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Mountain View",
+    "Time": 1126
+  },
+  {
+    "Train": "285N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Palo Alto",
+    "Time": 1134
+  },
+  {
+    "Train": "285N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Menlo Park",
+    "Time": 1137
+  },
+  {
+    "Train": "285N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "San Carlos",
+    "Time": 1144
+  },
+  {
+    "Train": "285N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Hillsdale",
+    "Time": 1148
+  },
+  {
+    "Train": "285N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "San Mateo",
+    "Time": 1152
+  },
+  {
+    "Train": "285N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Burlingame",
+    "Time": 1155
+  },
+  {
+    "Train": "285N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "San Bruno",
+    "Time": 1162
+  },
+  {
+    "Train": "285N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "San Francisco",
+    "Time": 1179
+  },
+  {
+    "Train": "103N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Tamien",
+    "Time": 298
+  },
+  {
+    "Train": "103N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "San Jose",
+    "Time": 305
+  },
+  {
+    "Train": "103N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Santa Clara",
+    "Time": 310
+  },
+  {
+    "Train": "103N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Lawrence",
+    "Time": 315
+  },
+  {
+    "Train": "103N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Sunnyvale",
+    "Time": 319
+  },
+  {
+    "Train": "103N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Mountain View",
+    "Time": 324
+  },
+  {
+    "Train": "103N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "San Antonio",
+    "Time": 328
+  },
+  {
+    "Train": "103N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "California Ave",
+    "Time": 332
+  },
+  {
+    "Train": "103N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Palo Alto",
+    "Time": 336
+  },
+  {
+    "Train": "103N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Menlo Park",
+    "Time": 339
+  },
+  {
+    "Train": "103N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Redwood City",
+    "Time": 344
+  },
+  {
+    "Train": "103N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "San Carlos",
+    "Time": 348
+  },
+  {
+    "Train": "103N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Belmont",
+    "Time": 351
+  },
+  {
+    "Train": "103N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Hillsdale",
+    "Time": 354
+  },
+  {
+    "Train": "103N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Hayward Park",
+    "Time": 357
+  },
+  {
+    "Train": "103N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "San Mateo",
+    "Time": 360
+  },
+  {
+    "Train": "103N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Burlingame",
+    "Time": 363
+  },
+  {
+    "Train": "103N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Millbrae",
+    "Time": 368
+  },
+  {
+    "Train": "103N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "San Bruno",
+    "Time": 372
+  },
+  {
+    "Train": "103N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "So. San Francisco",
+    "Time": 376
+  },
+  {
+    "Train": "103N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Bayshore",
+    "Time": 382
+  },
+  {
+    "Train": "103N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "22nd Street",
+    "Time": 387
+  },
+  {
+    "Train": "103N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "San Francisco",
+    "Time": 396
+  },
+  {
+    "Train": "215N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "San Jose",
+    "Time": 410
+  },
+  {
+    "Train": "215N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Sunnyvale",
+    "Time": 420
+  },
+  {
+    "Train": "215N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Mountain View",
+    "Time": 425
+  },
+  {
+    "Train": "215N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "California Ave",
+    "Time": 431
+  },
+  {
+    "Train": "215N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Palo Alto",
+    "Time": 436
+  },
+  {
+    "Train": "215N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "San Carlos",
+    "Time": 444
+  },
+  {
+    "Train": "215N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Hillsdale",
+    "Time": 448
+  },
+  {
+    "Train": "215N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "San Mateo",
+    "Time": 452
+  },
+  {
+    "Train": "215N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Burlingame",
+    "Time": 455
+  },
+  {
+    "Train": "215N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "San Bruno",
+    "Time": 462
+  },
+  {
+    "Train": "215N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "San Francisco",
+    "Time": 477
+  },
+  {
+    "Train": "369N",
+    "Direction": "northbound",
+    "Type": "Bullet",
+    "Station": "San Jose",
+    "Time": 1005
+  },
+  {
+    "Train": "369N",
+    "Direction": "northbound",
+    "Type": "Bullet",
+    "Station": "Mountain View",
+    "Time": 1018
+  },
+  {
+    "Train": "369N",
+    "Direction": "northbound",
+    "Type": "Bullet",
+    "Station": "Palo Alto",
+    "Time": 1026
+  },
+  {
+    "Train": "369N",
+    "Direction": "northbound",
+    "Type": "Bullet",
+    "Station": "Hillsdale",
+    "Time": 1037
+  },
+  {
+    "Train": "369N",
+    "Direction": "northbound",
+    "Type": "Bullet",
+    "Station": "Millbrae",
+    "Time": 1045
+  },
+  {
+    "Train": "369N",
+    "Direction": "northbound",
+    "Type": "Bullet",
+    "Station": "22nd Street",
+    "Time": 1057
+  },
+  {
+    "Train": "369N",
+    "Direction": "northbound",
+    "Type": "Bullet",
+    "Station": "San Francisco",
+    "Time": 1064
+  },
+  {
+    "Train": "379N",
+    "Direction": "northbound",
+    "Type": "Bullet",
+    "Station": "San Jose",
+    "Time": 1065
+  },
+  {
+    "Train": "379N",
+    "Direction": "northbound",
+    "Type": "Bullet",
+    "Station": "Mountain View",
+    "Time": 1078
+  },
+  {
+    "Train": "379N",
+    "Direction": "northbound",
+    "Type": "Bullet",
+    "Station": "Palo Alto",
+    "Time": 1086
+  },
+  {
+    "Train": "379N",
+    "Direction": "northbound",
+    "Type": "Bullet",
+    "Station": "Hillsdale",
+    "Time": 1097
+  },
+  {
+    "Train": "379N",
+    "Direction": "northbound",
+    "Type": "Bullet",
+    "Station": "Millbrae",
+    "Time": 1105
+  },
+  {
+    "Train": "379N",
+    "Direction": "northbound",
+    "Type": "Bullet",
+    "Station": "22nd Street",
+    "Time": 1117
+  },
+  {
+    "Train": "379N",
+    "Direction": "northbound",
+    "Type": "Bullet",
+    "Station": "San Francisco",
+    "Time": 1124
+  },
+  {
+    "Train": "195N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Tamien",
+    "Time": 1283
+  },
+  {
+    "Train": "195N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "San Jose",
+    "Time": 1290
+  },
+  {
+    "Train": "195N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Santa Clara",
+    "Time": 1295
+  },
+  {
+    "Train": "195N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Lawrence",
+    "Time": 1300
+  },
+  {
+    "Train": "195N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Sunnyvale",
+    "Time": 1304
+  },
+  {
+    "Train": "195N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Mountain View",
+    "Time": 1309
+  },
+  {
+    "Train": "195N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "San Antonio",
+    "Time": 1313
+  },
+  {
+    "Train": "195N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "California Ave",
+    "Time": 1317
+  },
+  {
+    "Train": "195N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Palo Alto",
+    "Time": 1321
+  },
+  {
+    "Train": "195N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Menlo Park",
+    "Time": 1324
+  },
+  {
+    "Train": "195N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Redwood City",
+    "Time": 1329
+  },
+  {
+    "Train": "195N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "San Carlos",
+    "Time": 1333
+  },
+  {
+    "Train": "195N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Belmont",
+    "Time": 1336
+  },
+  {
+    "Train": "195N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Hillsdale",
+    "Time": 1339
+  },
+  {
+    "Train": "195N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Hayward Park",
+    "Time": 1342
+  },
+  {
+    "Train": "195N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "San Mateo",
+    "Time": 1345
+  },
+  {
+    "Train": "195N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Burlingame",
+    "Time": 1348
+  },
+  {
+    "Train": "195N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Millbrae",
+    "Time": 1353
+  },
+  {
+    "Train": "195N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "San Bruno",
+    "Time": 1357
+  },
+  {
+    "Train": "195N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "So. San Francisco",
+    "Time": 1361
+  },
+  {
+    "Train": "195N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Bayshore",
+    "Time": 1367
+  },
+  {
+    "Train": "195N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "22nd Street",
+    "Time": 1372
+  },
+  {
+    "Train": "195N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "San Francisco",
+    "Time": 1381
+  },
+  {
+    "Train": "365N",
+    "Direction": "northbound",
+    "Type": "Bullet",
+    "Station": "San Jose",
+    "Time": 985
+  },
+  {
+    "Train": "365N",
+    "Direction": "northbound",
+    "Type": "Bullet",
+    "Station": "Mountain View",
+    "Time": 997
+  },
+  {
+    "Train": "365N",
+    "Direction": "northbound",
+    "Type": "Bullet",
+    "Station": "Menlo Park",
+    "Time": 1006
+  },
+  {
+    "Train": "365N",
+    "Direction": "northbound",
+    "Type": "Bullet",
+    "Station": "Redwood City",
+    "Time": 1012
+  },
+  {
+    "Train": "365N",
+    "Direction": "northbound",
+    "Type": "Bullet",
+    "Station": "Millbrae",
+    "Time": 1025
+  },
+  {
+    "Train": "365N",
+    "Direction": "northbound",
+    "Type": "Bullet",
+    "Station": "22nd Street",
+    "Time": 1037
+  },
+  {
+    "Train": "365N",
+    "Direction": "northbound",
+    "Type": "Bullet",
+    "Station": "San Francisco",
+    "Time": 1044
+  },
+  {
+    "Train": "261N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Tamien",
+    "Time": 937
+  },
+  {
+    "Train": "261N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "San Jose",
+    "Time": 944
+  },
+  {
+    "Train": "261N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Santa Clara",
+    "Time": 949
+  },
+  {
+    "Train": "261N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Lawrence",
+    "Time": 954
+  },
+  {
+    "Train": "261N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Sunnyvale",
+    "Time": 958
+  },
+  {
+    "Train": "261N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Mountain View",
+    "Time": 963
+  },
+  {
+    "Train": "261N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "San Antonio",
+    "Time": 967
+  },
+  {
+    "Train": "261N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "California Ave",
+    "Time": 971
+  },
+  {
+    "Train": "261N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Palo Alto",
+    "Time": 976
+  },
+  {
+    "Train": "261N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Menlo Park",
+    "Time": 979
+  },
+  {
+    "Train": "261N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Redwood City",
+    "Time": 985
+  },
+  {
+    "Train": "261N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "San Carlos",
+    "Time": 989
+  },
+  {
+    "Train": "261N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "San Mateo",
+    "Time": 996
+  },
+  {
+    "Train": "261N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Millbrae",
+    "Time": 1003
+  },
+  {
+    "Train": "261N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "22nd Street",
+    "Time": 1015
+  },
+  {
+    "Train": "261N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "San Francisco",
+    "Time": 1023
+  },
+  {
+    "Train": "271N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Tamien",
+    "Time": 1018
+  },
+  {
+    "Train": "271N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "San Jose",
+    "Time": 1025
+  },
+  {
+    "Train": "271N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Santa Clara",
+    "Time": 1030
+  },
+  {
+    "Train": "271N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Palo Alto",
+    "Time": 1044
+  },
+  {
+    "Train": "271N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Redwood City",
+    "Time": 1051
+  },
+  {
+    "Train": "271N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "San Carlos",
+    "Time": 1055
+  },
+  {
+    "Train": "271N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Belmont",
+    "Time": 1058
+  },
+  {
+    "Train": "271N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Hillsdale",
+    "Time": 1062
+  },
+  {
+    "Train": "271N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Hayward Park",
+    "Time": 1065
+  },
+  {
+    "Train": "271N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "San Mateo",
+    "Time": 1068
+  },
+  {
+    "Train": "271N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Burlingame",
+    "Time": 1071
+  },
+  {
+    "Train": "271N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Millbrae",
+    "Time": 1077
+  },
+  {
+    "Train": "271N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "San Bruno",
+    "Time": 1081
+  },
+  {
+    "Train": "271N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "So. San Francisco",
+    "Time": 1085
+  },
+  {
+    "Train": "271N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Bayshore",
+    "Time": 1093
+  },
+  {
+    "Train": "271N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "22nd Street",
+    "Time": 1101
+  },
+  {
+    "Train": "271N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "San Francisco",
+    "Time": 1109
+  },
+  {
+    "Train": "309N",
+    "Direction": "northbound",
+    "Type": "Bullet",
+    "Station": "Tamien",
+    "Time": 356
+  },
+  {
+    "Train": "309N",
+    "Direction": "northbound",
+    "Type": "Bullet",
+    "Station": "San Jose",
+    "Time": 363
+  },
+  {
+    "Train": "309N",
+    "Direction": "northbound",
+    "Type": "Bullet",
+    "Station": "Sunnyvale",
+    "Time": 373
+  },
+  {
+    "Train": "309N",
+    "Direction": "northbound",
+    "Type": "Bullet",
+    "Station": "Palo Alto",
+    "Time": 383
+  },
+  {
+    "Train": "309N",
+    "Direction": "northbound",
+    "Type": "Bullet",
+    "Station": "Redwood City",
+    "Time": 390
+  },
+  {
+    "Train": "309N",
+    "Direction": "northbound",
+    "Type": "Bullet",
+    "Station": "San Mateo",
+    "Time": 399
+  },
+  {
+    "Train": "309N",
+    "Direction": "northbound",
+    "Type": "Bullet",
+    "Station": "Millbrae",
+    "Time": 405
+  },
+  {
+    "Train": "309N",
+    "Direction": "northbound",
+    "Type": "Bullet",
+    "Station": "San Francisco",
+    "Time": 422
+  },
+  {
+    "Train": "319N",
+    "Direction": "northbound",
+    "Type": "Bullet",
+    "Station": "Tamien",
+    "Time": 416
+  },
+  {
+    "Train": "319N",
+    "Direction": "northbound",
+    "Type": "Bullet",
+    "Station": "San Jose",
+    "Time": 423
+  },
+  {
+    "Train": "319N",
+    "Direction": "northbound",
+    "Type": "Bullet",
+    "Station": "Sunnyvale",
+    "Time": 433
+  },
+  {
+    "Train": "319N",
+    "Direction": "northbound",
+    "Type": "Bullet",
+    "Station": "Palo Alto",
+    "Time": 443
+  },
+  {
+    "Train": "319N",
+    "Direction": "northbound",
+    "Type": "Bullet",
+    "Station": "Redwood City",
+    "Time": 450
+  },
+  {
+    "Train": "319N",
+    "Direction": "northbound",
+    "Type": "Bullet",
+    "Station": "San Mateo",
+    "Time": 459
+  },
+  {
+    "Train": "319N",
+    "Direction": "northbound",
+    "Type": "Bullet",
+    "Station": "Millbrae",
+    "Time": 465
+  },
+  {
+    "Train": "319N",
+    "Direction": "northbound",
+    "Type": "Bullet",
+    "Station": "San Francisco",
+    "Time": 482
+  },
+  {
+    "Train": "147N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "San Jose",
+    "Time": 730
+  },
+  {
+    "Train": "147N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Santa Clara",
+    "Time": 735
+  },
+  {
+    "Train": "147N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Lawrence",
+    "Time": 740
+  },
+  {
+    "Train": "147N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Sunnyvale",
+    "Time": 744
+  },
+  {
+    "Train": "147N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Mountain View",
+    "Time": 749
+  },
+  {
+    "Train": "147N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "San Antonio",
+    "Time": 753
+  },
+  {
+    "Train": "147N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "California Ave",
+    "Time": 757
+  },
+  {
+    "Train": "147N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Palo Alto",
+    "Time": 761
+  },
+  {
+    "Train": "147N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Menlo Park",
+    "Time": 764
+  },
+  {
+    "Train": "147N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Redwood City",
+    "Time": 769
+  },
+  {
+    "Train": "147N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "San Carlos",
+    "Time": 773
+  },
+  {
+    "Train": "147N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Belmont",
+    "Time": 776
+  },
+  {
+    "Train": "147N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Hillsdale",
+    "Time": 779
+  },
+  {
+    "Train": "147N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Hayward Park",
+    "Time": 782
+  },
+  {
+    "Train": "147N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "San Mateo",
+    "Time": 785
+  },
+  {
+    "Train": "147N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Burlingame",
+    "Time": 788
+  },
+  {
+    "Train": "147N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Millbrae",
+    "Time": 793
+  },
+  {
+    "Train": "147N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "San Bruno",
+    "Time": 797
+  },
+  {
+    "Train": "147N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "So. San Francisco",
+    "Time": 801
+  },
+  {
+    "Train": "147N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Bayshore",
+    "Time": 807
+  },
+  {
+    "Train": "147N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "22nd Street",
+    "Time": 812
+  },
+  {
+    "Train": "147N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "San Francisco",
+    "Time": 821
+  },
+  {
+    "Train": "267N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Tamien",
+    "Time": 992
+  },
+  {
+    "Train": "267N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "San Jose",
+    "Time": 999
+  },
+  {
+    "Train": "267N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Santa Clara",
+    "Time": 1004
+  },
+  {
+    "Train": "267N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Lawrence",
+    "Time": 1012
+  },
+  {
+    "Train": "267N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Sunnyvale",
+    "Time": 1018
+  },
+  {
+    "Train": "267N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Mountain View",
+    "Time": 1023
+  },
+  {
+    "Train": "267N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "San Antonio",
+    "Time": 1027
+  },
+  {
+    "Train": "267N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "California Ave",
+    "Time": 1031
+  },
+  {
+    "Train": "267N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Palo Alto",
+    "Time": 1036
+  },
+  {
+    "Train": "267N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Menlo Park",
+    "Time": 1039
+  },
+  {
+    "Train": "267N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Redwood City",
+    "Time": 1045
+  },
+  {
+    "Train": "267N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "San Carlos",
+    "Time": 1049
+  },
+  {
+    "Train": "267N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "San Mateo",
+    "Time": 1056
+  },
+  {
+    "Train": "267N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Millbrae",
+    "Time": 1063
+  },
+  {
+    "Train": "267N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "22nd Street",
+    "Time": 1075
+  },
+  {
+    "Train": "267N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "San Francisco",
+    "Time": 1082
+  },
+  {
+    "Train": "197N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "San Jose",
+    "Time": 1350
+  },
+  {
+    "Train": "197N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Santa Clara",
+    "Time": 1355
+  },
+  {
+    "Train": "197N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Lawrence",
+    "Time": 1360
+  },
+  {
+    "Train": "197N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Sunnyvale",
+    "Time": 1364
+  },
+  {
+    "Train": "197N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Mountain View",
+    "Time": 1369
+  },
+  {
+    "Train": "197N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "San Antonio",
+    "Time": 1373
+  },
+  {
+    "Train": "197N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "California Ave",
+    "Time": 1377
+  },
+  {
+    "Train": "197N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Palo Alto",
+    "Time": 1381
+  },
+  {
+    "Train": "197N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Menlo Park",
+    "Time": 1384
+  },
+  {
+    "Train": "197N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Redwood City",
+    "Time": 1389
+  },
+  {
+    "Train": "197N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "San Carlos",
+    "Time": 1393
+  },
+  {
+    "Train": "197N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Belmont",
+    "Time": 1396
+  },
+  {
+    "Train": "197N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Hillsdale",
+    "Time": 1399
+  },
+  {
+    "Train": "197N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Hayward Park",
+    "Time": 1402
+  },
+  {
+    "Train": "197N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "San Mateo",
+    "Time": 1405
+  },
+  {
+    "Train": "197N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Burlingame",
+    "Time": 1408
+  },
+  {
+    "Train": "197N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Millbrae",
+    "Time": 1413
+  },
+  {
+    "Train": "197N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "San Bruno",
+    "Time": 1417
+  },
+  {
+    "Train": "197N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "So. San Francisco",
+    "Time": 1421
+  },
+  {
+    "Train": "197N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Bayshore",
+    "Time": 1427
+  },
+  {
+    "Train": "197N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "22nd Street",
+    "Time": 1432
+  },
+  {
+    "Train": "197N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "San Francisco",
+    "Time": 1441
+  },
+  {
+    "Train": "257N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Tamien",
+    "Time": 873
+  },
+  {
+    "Train": "257N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "San Jose",
+    "Time": 880
+  },
+  {
+    "Train": "257N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Santa Clara",
+    "Time": 885
+  },
+  {
+    "Train": "257N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Lawrence",
+    "Time": 890
+  },
+  {
+    "Train": "257N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Sunnyvale",
+    "Time": 894
+  },
+  {
+    "Train": "257N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Mountain View",
+    "Time": 899
+  },
+  {
+    "Train": "257N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "San Antonio",
+    "Time": 903
+  },
+  {
+    "Train": "257N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "California Ave",
+    "Time": 907
+  },
+  {
+    "Train": "257N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Palo Alto",
+    "Time": 911
+  },
+  {
+    "Train": "257N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Menlo Park",
+    "Time": 914
+  },
+  {
+    "Train": "257N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Redwood City",
+    "Time": 919
+  },
+  {
+    "Train": "257N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "San Carlos",
+    "Time": 923
+  },
+  {
+    "Train": "257N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Belmont",
+    "Time": 926
+  },
+  {
+    "Train": "257N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Hillsdale",
+    "Time": 929
+  },
+  {
+    "Train": "257N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "San Mateo",
+    "Time": 933
+  },
+  {
+    "Train": "257N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Burlingame",
+    "Time": 936
+  },
+  {
+    "Train": "257N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Millbrae",
+    "Time": 941
+  },
+  {
+    "Train": "257N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "San Bruno",
+    "Time": 945
+  },
+  {
+    "Train": "257N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "San Francisco",
+    "Time": 962
+  },
+  {
+    "Train": "329N",
+    "Direction": "northbound",
+    "Type": "Bullet",
+    "Station": "Tamien",
+    "Time": 476
+  },
+  {
+    "Train": "329N",
+    "Direction": "northbound",
+    "Type": "Bullet",
+    "Station": "San Jose",
+    "Time": 483
+  },
+  {
+    "Train": "329N",
+    "Direction": "northbound",
+    "Type": "Bullet",
+    "Station": "Sunnyvale",
+    "Time": 493
+  },
+  {
+    "Train": "329N",
+    "Direction": "northbound",
+    "Type": "Bullet",
+    "Station": "Palo Alto",
+    "Time": 503
+  },
+  {
+    "Train": "329N",
+    "Direction": "northbound",
+    "Type": "Bullet",
+    "Station": "Redwood City",
+    "Time": 510
+  },
+  {
+    "Train": "329N",
+    "Direction": "northbound",
+    "Type": "Bullet",
+    "Station": "San Mateo",
+    "Time": 519
+  },
+  {
+    "Train": "329N",
+    "Direction": "northbound",
+    "Type": "Bullet",
+    "Station": "Millbrae",
+    "Time": 525
+  },
+  {
+    "Train": "329N",
+    "Direction": "northbound",
+    "Type": "Bullet",
+    "Station": "San Francisco",
+    "Time": 542
+  },
+  {
+    "Train": "143N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "San Jose",
+    "Time": 670
+  },
+  {
+    "Train": "143N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Santa Clara",
+    "Time": 675
+  },
+  {
+    "Train": "143N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Lawrence",
+    "Time": 680
+  },
+  {
+    "Train": "143N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Sunnyvale",
+    "Time": 684
+  },
+  {
+    "Train": "143N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Mountain View",
+    "Time": 689
+  },
+  {
+    "Train": "143N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "San Antonio",
+    "Time": 693
+  },
+  {
+    "Train": "143N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "California Ave",
+    "Time": 697
+  },
+  {
+    "Train": "143N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Palo Alto",
+    "Time": 701
+  },
+  {
+    "Train": "143N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Menlo Park",
+    "Time": 704
+  },
+  {
+    "Train": "143N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Redwood City",
+    "Time": 709
+  },
+  {
+    "Train": "143N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "San Carlos",
+    "Time": 713
+  },
+  {
+    "Train": "143N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Belmont",
+    "Time": 716
+  },
+  {
+    "Train": "143N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Hillsdale",
+    "Time": 719
+  },
+  {
+    "Train": "143N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Hayward Park",
+    "Time": 722
+  },
+  {
+    "Train": "143N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "San Mateo",
+    "Time": 725
+  },
+  {
+    "Train": "143N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Burlingame",
+    "Time": 728
+  },
+  {
+    "Train": "143N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Millbrae",
+    "Time": 733
+  },
+  {
+    "Train": "143N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "San Bruno",
+    "Time": 737
+  },
+  {
+    "Train": "143N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "So. San Francisco",
+    "Time": 741
+  },
+  {
+    "Train": "143N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Bayshore",
+    "Time": 747
+  },
+  {
+    "Train": "143N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "22nd Street",
+    "Time": 752
+  },
+  {
+    "Train": "143N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "San Francisco",
+    "Time": 761
+  },
+  {
+    "Train": "227N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Gilroy",
+    "Time": 425
+  },
+  {
+    "Train": "227N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "San Martin",
+    "Time": 434
+  },
+  {
+    "Train": "227N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Morgan Hill",
+    "Time": 440
+  },
+  {
+    "Train": "227N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Blossom Hill",
+    "Time": 453
+  },
+  {
+    "Train": "227N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Capitol",
+    "Time": 459
+  },
+  {
+    "Train": "227N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Tamien",
+    "Time": 467
+  },
+  {
+    "Train": "227N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "San Jose",
+    "Time": 475
+  },
+  {
+    "Train": "227N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "College Park",
+    "Time": 478
+  },
+  {
+    "Train": "227N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Santa Clara",
+    "Time": 482
+  },
+  {
+    "Train": "227N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Lawrence",
+    "Time": 492
+  },
+  {
+    "Train": "227N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Sunnyvale",
+    "Time": 498
+  },
+  {
+    "Train": "227N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Mountain View",
+    "Time": 503
+  },
+  {
+    "Train": "227N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "San Antonio",
+    "Time": 507
+  },
+  {
+    "Train": "227N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "California Ave",
+    "Time": 511
+  },
+  {
+    "Train": "227N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Palo Alto",
+    "Time": 516
+  },
+  {
+    "Train": "227N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Menlo Park",
+    "Time": 519
+  },
+  {
+    "Train": "227N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Redwood City",
+    "Time": 525
+  },
+  {
+    "Train": "227N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Hillsdale",
+    "Time": 531
+  },
+  {
+    "Train": "227N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Millbrae",
+    "Time": 539
+  },
+  {
+    "Train": "227N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "So. San Francisco",
+    "Time": 545
+  },
+  {
+    "Train": "227N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "San Francisco",
+    "Time": 559
+  },
+  {
+    "Train": "233N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Tamien",
+    "Time": 513
+  },
+  {
+    "Train": "233N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "San Jose",
+    "Time": 520
+  },
+  {
+    "Train": "233N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Santa Clara",
+    "Time": 525
+  },
+  {
+    "Train": "233N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Lawrence",
+    "Time": 530
+  },
+  {
+    "Train": "233N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Sunnyvale",
+    "Time": 534
+  },
+  {
+    "Train": "233N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Mountain View",
+    "Time": 539
+  },
+  {
+    "Train": "233N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "San Antonio",
+    "Time": 543
+  },
+  {
+    "Train": "233N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "California Ave",
+    "Time": 547
+  },
+  {
+    "Train": "233N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Palo Alto",
+    "Time": 551
+  },
+  {
+    "Train": "233N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Menlo Park",
+    "Time": 554
+  },
+  {
+    "Train": "233N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Redwood City",
+    "Time": 559
+  },
+  {
+    "Train": "233N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "San Carlos",
+    "Time": 563
+  },
+  {
+    "Train": "233N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Belmont",
+    "Time": 566
+  },
+  {
+    "Train": "233N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Hillsdale",
+    "Time": 569
+  },
+  {
+    "Train": "233N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "San Mateo",
+    "Time": 573
+  },
+  {
+    "Train": "233N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Burlingame",
+    "Time": 576
+  },
+  {
+    "Train": "233N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Millbrae",
+    "Time": 581
+  },
+  {
+    "Train": "233N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "San Bruno",
+    "Time": 585
+  },
+  {
+    "Train": "233N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "San Francisco",
+    "Time": 602
+  },
+  {
+    "Train": "305N",
+    "Direction": "northbound",
+    "Type": "Bullet",
+    "Station": "San Jose",
+    "Time": 345
+  },
+  {
+    "Train": "305N",
+    "Direction": "northbound",
+    "Type": "Bullet",
+    "Station": "Mountain View",
+    "Time": 357
+  },
+  {
+    "Train": "305N",
+    "Direction": "northbound",
+    "Type": "Bullet",
+    "Station": "Palo Alto",
+    "Time": 365
+  },
+  {
+    "Train": "305N",
+    "Direction": "northbound",
+    "Type": "Bullet",
+    "Station": "Hillsdale",
+    "Time": 376
+  },
+  {
+    "Train": "305N",
+    "Direction": "northbound",
+    "Type": "Bullet",
+    "Station": "Millbrae",
+    "Time": 384
+  },
+  {
+    "Train": "305N",
+    "Direction": "northbound",
+    "Type": "Bullet",
+    "Station": "San Francisco",
+    "Time": 402
+  },
+  {
+    "Train": "193N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Tamien",
+    "Time": 1223
+  },
+  {
+    "Train": "193N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "San Jose",
+    "Time": 1230
+  },
+  {
+    "Train": "193N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Santa Clara",
+    "Time": 1235
+  },
+  {
+    "Train": "193N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Lawrence",
+    "Time": 1240
+  },
+  {
+    "Train": "193N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Sunnyvale",
+    "Time": 1244
+  },
+  {
+    "Train": "193N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Mountain View",
+    "Time": 1249
+  },
+  {
+    "Train": "193N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "San Antonio",
+    "Time": 1253
+  },
+  {
+    "Train": "193N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "California Ave",
+    "Time": 1257
+  },
+  {
+    "Train": "193N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Palo Alto",
+    "Time": 1261
+  },
+  {
+    "Train": "193N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Menlo Park",
+    "Time": 1264
+  },
+  {
+    "Train": "193N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Redwood City",
+    "Time": 1269
+  },
+  {
+    "Train": "193N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "San Carlos",
+    "Time": 1273
+  },
+  {
+    "Train": "193N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Belmont",
+    "Time": 1276
+  },
+  {
+    "Train": "193N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Hillsdale",
+    "Time": 1279
+  },
+  {
+    "Train": "193N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Hayward Park",
+    "Time": 1282
+  },
+  {
+    "Train": "193N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "San Mateo",
+    "Time": 1285
+  },
+  {
+    "Train": "193N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Burlingame",
+    "Time": 1288
+  },
+  {
+    "Train": "193N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Millbrae",
+    "Time": 1293
+  },
+  {
+    "Train": "193N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "San Bruno",
+    "Time": 1297
+  },
+  {
+    "Train": "193N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "So. San Francisco",
+    "Time": 1301
+  },
+  {
+    "Train": "193N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Bayshore",
+    "Time": 1307
+  },
+  {
+    "Train": "193N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "22nd Street",
+    "Time": 1312
+  },
+  {
+    "Train": "193N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "San Francisco",
+    "Time": 1321
+  },
+  {
+    "Train": "155N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "San Jose",
+    "Time": 850
+  },
+  {
+    "Train": "155N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Santa Clara",
+    "Time": 855
+  },
+  {
+    "Train": "155N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Lawrence",
+    "Time": 860
+  },
+  {
+    "Train": "155N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Sunnyvale",
+    "Time": 864
+  },
+  {
+    "Train": "155N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Mountain View",
+    "Time": 869
+  },
+  {
+    "Train": "155N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "San Antonio",
+    "Time": 873
+  },
+  {
+    "Train": "155N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "California Ave",
+    "Time": 877
+  },
+  {
+    "Train": "155N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Palo Alto",
+    "Time": 881
+  },
+  {
+    "Train": "155N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Menlo Park",
+    "Time": 884
+  },
+  {
+    "Train": "155N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Redwood City",
+    "Time": 889
+  },
+  {
+    "Train": "155N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "San Carlos",
+    "Time": 893
+  },
+  {
+    "Train": "155N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Belmont",
+    "Time": 896
+  },
+  {
+    "Train": "155N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Hillsdale",
+    "Time": 899
+  },
+  {
+    "Train": "155N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Hayward Park",
+    "Time": 902
+  },
+  {
+    "Train": "155N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "San Mateo",
+    "Time": 905
+  },
+  {
+    "Train": "155N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Burlingame",
+    "Time": 908
+  },
+  {
+    "Train": "155N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Millbrae",
+    "Time": 913
+  },
+  {
+    "Train": "155N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "San Bruno",
+    "Time": 917
+  },
+  {
+    "Train": "155N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "So. San Francisco",
+    "Time": 921
+  },
+  {
+    "Train": "155N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Bayshore",
+    "Time": 927
+  },
+  {
+    "Train": "155N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "22nd Street",
+    "Time": 932
+  },
+  {
+    "Train": "155N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "San Francisco",
+    "Time": 941
+  },
+  {
+    "Train": "287N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "San Jose",
+    "Time": 1125
+  },
+  {
+    "Train": "287N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Lawrence",
+    "Time": 1133
+  },
+  {
+    "Train": "287N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Mountain View",
+    "Time": 1140
+  },
+  {
+    "Train": "287N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "California Ave",
+    "Time": 1146
+  },
+  {
+    "Train": "287N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Palo Alto",
+    "Time": 1150
+  },
+  {
+    "Train": "287N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Menlo Park",
+    "Time": 1153
+  },
+  {
+    "Train": "287N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Redwood City",
+    "Time": 1159
+  },
+  {
+    "Train": "287N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "San Carlos",
+    "Time": 1163
+  },
+  {
+    "Train": "287N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Hillsdale",
+    "Time": 1168
+  },
+  {
+    "Train": "287N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "San Mateo",
+    "Time": 1172
+  },
+  {
+    "Train": "287N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Burlingame",
+    "Time": 1175
+  },
+  {
+    "Train": "287N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Millbrae",
+    "Time": 1181
+  },
+  {
+    "Train": "287N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "22nd Street",
+    "Time": 1193
+  },
+  {
+    "Train": "287N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "San Francisco",
+    "Time": 1200
+  },
+  {
+    "Train": "139N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "San Jose",
+    "Time": 610
+  },
+  {
+    "Train": "139N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Santa Clara",
+    "Time": 615
+  },
+  {
+    "Train": "139N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Lawrence",
+    "Time": 620
+  },
+  {
+    "Train": "139N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Sunnyvale",
+    "Time": 624
+  },
+  {
+    "Train": "139N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Mountain View",
+    "Time": 629
+  },
+  {
+    "Train": "139N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "San Antonio",
+    "Time": 633
+  },
+  {
+    "Train": "139N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "California Ave",
+    "Time": 637
+  },
+  {
+    "Train": "139N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Palo Alto",
+    "Time": 641
+  },
+  {
+    "Train": "139N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Menlo Park",
+    "Time": 644
+  },
+  {
+    "Train": "139N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Redwood City",
+    "Time": 649
+  },
+  {
+    "Train": "139N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "San Carlos",
+    "Time": 653
+  },
+  {
+    "Train": "139N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Belmont",
+    "Time": 656
+  },
+  {
+    "Train": "139N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Hillsdale",
+    "Time": 659
+  },
+  {
+    "Train": "139N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Hayward Park",
+    "Time": 662
+  },
+  {
+    "Train": "139N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "San Mateo",
+    "Time": 665
+  },
+  {
+    "Train": "139N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Burlingame",
+    "Time": 668
+  },
+  {
+    "Train": "139N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Millbrae",
+    "Time": 673
+  },
+  {
+    "Train": "139N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "San Bruno",
+    "Time": 677
+  },
+  {
+    "Train": "139N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "So. San Francisco",
+    "Time": 681
+  },
+  {
+    "Train": "139N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Bayshore",
+    "Time": 687
+  },
+  {
+    "Train": "139N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "22nd Street",
+    "Time": 692
+  },
+  {
+    "Train": "139N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "San Francisco",
+    "Time": 701
+  },
+  {
+    "Train": "101N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "San Jose",
+    "Time": 270
+  },
+  {
+    "Train": "101N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Santa Clara",
+    "Time": 275
+  },
+  {
+    "Train": "101N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Lawrence",
+    "Time": 280
+  },
+  {
+    "Train": "101N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Sunnyvale",
+    "Time": 284
+  },
+  {
+    "Train": "101N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Mountain View",
+    "Time": 289
+  },
+  {
+    "Train": "101N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "San Antonio",
+    "Time": 293
+  },
+  {
+    "Train": "101N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "California Ave",
+    "Time": 297
+  },
+  {
+    "Train": "101N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Palo Alto",
+    "Time": 301
+  },
+  {
+    "Train": "101N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Menlo Park",
+    "Time": 304
+  },
+  {
+    "Train": "101N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Redwood City",
+    "Time": 309
+  },
+  {
+    "Train": "101N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "San Carlos",
+    "Time": 313
+  },
+  {
+    "Train": "101N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Belmont",
+    "Time": 316
+  },
+  {
+    "Train": "101N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Hillsdale",
+    "Time": 319
+  },
+  {
+    "Train": "101N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Hayward Park",
+    "Time": 322
+  },
+  {
+    "Train": "101N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "San Mateo",
+    "Time": 325
+  },
+  {
+    "Train": "101N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Burlingame",
+    "Time": 328
+  },
+  {
+    "Train": "101N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Millbrae",
+    "Time": 333
+  },
+  {
+    "Train": "101N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "San Bruno",
+    "Time": 337
+  },
+  {
+    "Train": "101N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "So. San Francisco",
+    "Time": 341
+  },
+  {
+    "Train": "101N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Bayshore",
+    "Time": 347
+  },
+  {
+    "Train": "101N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "22nd Street",
+    "Time": 352
+  },
+  {
+    "Train": "101N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "San Francisco",
+    "Time": 361
+  },
+  {
+    "Train": "211N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "San Jose",
+    "Time": 382
+  },
+  {
+    "Train": "211N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Santa Clara",
+    "Time": 387
+  },
+  {
+    "Train": "211N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Mountain View",
+    "Time": 397
+  },
+  {
+    "Train": "211N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Menlo Park",
+    "Time": 405
+  },
+  {
+    "Train": "211N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Redwood City",
+    "Time": 411
+  },
+  {
+    "Train": "211N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "San Carlos",
+    "Time": 415
+  },
+  {
+    "Train": "211N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Belmont",
+    "Time": 418
+  },
+  {
+    "Train": "211N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Hillsdale",
+    "Time": 422
+  },
+  {
+    "Train": "211N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Hayward Park",
+    "Time": 425
+  },
+  {
+    "Train": "211N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "San Mateo",
+    "Time": 428
+  },
+  {
+    "Train": "211N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Burlingame",
+    "Time": 431
+  },
+  {
+    "Train": "211N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Millbrae",
+    "Time": 437
+  },
+  {
+    "Train": "211N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "San Bruno",
+    "Time": 441
+  },
+  {
+    "Train": "211N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "So. San Francisco",
+    "Time": 445
+  },
+  {
+    "Train": "211N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Bayshore",
+    "Time": 453
+  },
+  {
+    "Train": "211N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "22nd Street",
+    "Time": 460
+  },
+  {
+    "Train": "211N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "San Francisco",
+    "Time": 468
+  },
+  {
+    "Train": "207N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Tamien",
+    "Time": 350
+  },
+  {
+    "Train": "207N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "San Jose",
+    "Time": 357
+  },
+  {
+    "Train": "207N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Santa Clara",
+    "Time": 362
+  },
+  {
+    "Train": "207N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Lawrence",
+    "Time": 372
+  },
+  {
+    "Train": "207N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Sunnyvale",
+    "Time": 378
+  },
+  {
+    "Train": "207N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Mountain View",
+    "Time": 383
+  },
+  {
+    "Train": "207N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "San Antonio",
+    "Time": 387
+  },
+  {
+    "Train": "207N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "California Ave",
+    "Time": 391
+  },
+  {
+    "Train": "207N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Palo Alto",
+    "Time": 396
+  },
+  {
+    "Train": "207N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Menlo Park",
+    "Time": 399
+  },
+  {
+    "Train": "207N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Redwood City",
+    "Time": 405
+  },
+  {
+    "Train": "207N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Hillsdale",
+    "Time": 411
+  },
+  {
+    "Train": "207N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Millbrae",
+    "Time": 419
+  },
+  {
+    "Train": "207N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "So. San Francisco",
+    "Time": 425
+  },
+  {
+    "Train": "207N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "San Francisco",
+    "Time": 439
+  },
+  {
+    "Train": "217N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Gilroy",
+    "Time": 367
+  },
+  {
+    "Train": "217N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "San Martin",
+    "Time": 376
+  },
+  {
+    "Train": "217N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Morgan Hill",
+    "Time": 382
+  },
+  {
+    "Train": "217N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Blossom Hill",
+    "Time": 395
+  },
+  {
+    "Train": "217N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Capitol",
+    "Time": 401
+  },
+  {
+    "Train": "217N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Tamien",
+    "Time": 409
+  },
+  {
+    "Train": "217N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "San Jose",
+    "Time": 417
+  },
+  {
+    "Train": "217N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Santa Clara",
+    "Time": 422
+  },
+  {
+    "Train": "217N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Lawrence",
+    "Time": 432
+  },
+  {
+    "Train": "217N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Sunnyvale",
+    "Time": 438
+  },
+  {
+    "Train": "217N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Mountain View",
+    "Time": 443
+  },
+  {
+    "Train": "217N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "San Antonio",
+    "Time": 447
+  },
+  {
+    "Train": "217N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "California Ave",
+    "Time": 451
+  },
+  {
+    "Train": "217N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Palo Alto",
+    "Time": 456
+  },
+  {
+    "Train": "217N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Menlo Park",
+    "Time": 459
+  },
+  {
+    "Train": "217N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Redwood City",
+    "Time": 465
+  },
+  {
+    "Train": "217N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Hillsdale",
+    "Time": 471
+  },
+  {
+    "Train": "217N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Millbrae",
+    "Time": 479
+  },
+  {
+    "Train": "217N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "So. San Francisco",
+    "Time": 485
+  },
+  {
+    "Train": "217N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "San Francisco",
+    "Time": 499
+  },
+  {
+    "Train": "323N",
+    "Direction": "northbound",
+    "Type": "Bullet",
+    "Station": "San Jose",
+    "Time": 465
+  },
+  {
+    "Train": "323N",
+    "Direction": "northbound",
+    "Type": "Bullet",
+    "Station": "Mountain View",
+    "Time": 477
+  },
+  {
+    "Train": "323N",
+    "Direction": "northbound",
+    "Type": "Bullet",
+    "Station": "Palo Alto",
+    "Time": 485
+  },
+  {
+    "Train": "323N",
+    "Direction": "northbound",
+    "Type": "Bullet",
+    "Station": "Hillsdale",
+    "Time": 496
+  },
+  {
+    "Train": "323N",
+    "Direction": "northbound",
+    "Type": "Bullet",
+    "Station": "Millbrae",
+    "Time": 504
+  },
+  {
+    "Train": "323N",
+    "Direction": "northbound",
+    "Type": "Bullet",
+    "Station": "San Francisco",
+    "Time": 522
+  },
+  {
+    "Train": "189N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "San Jose",
+    "Time": 1130
+  },
+  {
+    "Train": "189N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Santa Clara",
+    "Time": 1135
+  },
+  {
+    "Train": "189N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Lawrence",
+    "Time": 1140
+  },
+  {
+    "Train": "189N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Sunnyvale",
+    "Time": 1144
+  },
+  {
+    "Train": "189N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Mountain View",
+    "Time": 1149
+  },
+  {
+    "Train": "189N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "San Antonio",
+    "Time": 1153
+  },
+  {
+    "Train": "189N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "California Ave",
+    "Time": 1157
+  },
+  {
+    "Train": "189N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Palo Alto",
+    "Time": 1161
+  },
+  {
+    "Train": "189N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Menlo Park",
+    "Time": 1164
+  },
+  {
+    "Train": "189N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Redwood City",
+    "Time": 1169
+  },
+  {
+    "Train": "189N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "San Carlos",
+    "Time": 1173
+  },
+  {
+    "Train": "189N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Belmont",
+    "Time": 1176
+  },
+  {
+    "Train": "189N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Hillsdale",
+    "Time": 1179
+  },
+  {
+    "Train": "189N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Hayward Park",
+    "Time": 1182
+  },
+  {
+    "Train": "189N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "San Mateo",
+    "Time": 1185
+  },
+  {
+    "Train": "189N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Burlingame",
+    "Time": 1188
+  },
+  {
+    "Train": "189N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Millbrae",
+    "Time": 1193
+  },
+  {
+    "Train": "189N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "San Bruno",
+    "Time": 1197
+  },
+  {
+    "Train": "189N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "So. San Francisco",
+    "Time": 1201
+  },
+  {
+    "Train": "189N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Bayshore",
+    "Time": 1207
+  },
+  {
+    "Train": "189N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "22nd Street",
+    "Time": 1212
+  },
+  {
+    "Train": "189N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "San Francisco",
+    "Time": 1221
+  },
+  {
+    "Train": "191N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "San Jose",
+    "Time": 1170
+  },
+  {
+    "Train": "191N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Santa Clara",
+    "Time": 1175
+  },
+  {
+    "Train": "191N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Lawrence",
+    "Time": 1180
+  },
+  {
+    "Train": "191N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Sunnyvale",
+    "Time": 1184
+  },
+  {
+    "Train": "191N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Mountain View",
+    "Time": 1189
+  },
+  {
+    "Train": "191N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "San Antonio",
+    "Time": 1193
+  },
+  {
+    "Train": "191N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "California Ave",
+    "Time": 1197
+  },
+  {
+    "Train": "191N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Palo Alto",
+    "Time": 1201
+  },
+  {
+    "Train": "191N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Menlo Park",
+    "Time": 1204
+  },
+  {
+    "Train": "191N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Redwood City",
+    "Time": 1209
+  },
+  {
+    "Train": "191N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "San Carlos",
+    "Time": 1213
+  },
+  {
+    "Train": "191N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Belmont",
+    "Time": 1216
+  },
+  {
+    "Train": "191N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Hillsdale",
+    "Time": 1219
+  },
+  {
+    "Train": "191N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Hayward Park",
+    "Time": 1222
+  },
+  {
+    "Train": "191N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "San Mateo",
+    "Time": 1225
+  },
+  {
+    "Train": "191N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Burlingame",
+    "Time": 1228
+  },
+  {
+    "Train": "191N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Millbrae",
+    "Time": 1233
+  },
+  {
+    "Train": "191N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "San Bruno",
+    "Time": 1237
+  },
+  {
+    "Train": "191N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "So. San Francisco",
+    "Time": 1241
+  },
+  {
+    "Train": "191N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "Bayshore",
+    "Time": 1247
+  },
+  {
+    "Train": "191N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "22nd Street",
+    "Time": 1252
+  },
+  {
+    "Train": "191N",
+    "Direction": "northbound",
+    "Type": "Limited",
+    "Station": "San Francisco",
+    "Time": 1261
+  },
+  {
+    "Train": "373N",
+    "Direction": "northbound",
+    "Type": "Bullet",
+    "Station": "San Jose",
+    "Time": 1045
+  },
+  {
+    "Train": "373N",
+    "Direction": "northbound",
+    "Type": "Bullet",
+    "Station": "Mountain View",
+    "Time": 1057
+  },
+  {
+    "Train": "373N",
+    "Direction": "northbound",
+    "Type": "Bullet",
+    "Station": "Menlo Park",
+    "Time": 1066
+  },
+  {
+    "Train": "373N",
+    "Direction": "northbound",
+    "Type": "Bullet",
+    "Station": "Redwood City",
+    "Time": 1072
+  },
+  {
+    "Train": "373N",
+    "Direction": "northbound",
+    "Type": "Bullet",
+    "Station": "Millbrae",
+    "Time": 1085
+  },
+  {
+    "Train": "373N",
+    "Direction": "northbound",
+    "Type": "Bullet",
+    "Station": "22nd Street",
+    "Time": 1097
+  },
+  {
+    "Train": "373N",
+    "Direction": "northbound",
+    "Type": "Bullet",
+    "Station": "San Francisco",
+    "Time": 1104
+  },
+  {
+    "Train": "263N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Tamien",
+    "Time": 958
+  },
+  {
+    "Train": "263N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "San Jose",
+    "Time": 965
+  },
+  {
+    "Train": "263N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Santa Clara",
+    "Time": 970
+  },
+  {
+    "Train": "263N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Palo Alto",
+    "Time": 984
+  },
+  {
+    "Train": "263N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Redwood City",
+    "Time": 991
+  },
+  {
+    "Train": "263N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "San Carlos",
+    "Time": 995
+  },
+  {
+    "Train": "263N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Belmont",
+    "Time": 998
+  },
+  {
+    "Train": "263N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Hillsdale",
+    "Time": 1002
+  },
+  {
+    "Train": "263N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Hayward Park",
+    "Time": 1005
+  },
+  {
+    "Train": "263N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "San Mateo",
+    "Time": 1008
+  },
+  {
+    "Train": "263N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Burlingame",
+    "Time": 1011
+  },
+  {
+    "Train": "263N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Millbrae",
+    "Time": 1017
+  },
+  {
+    "Train": "263N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "San Bruno",
+    "Time": 1021
+  },
+  {
+    "Train": "263N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "So. San Francisco",
+    "Time": 1025
+  },
+  {
+    "Train": "263N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Bayshore",
+    "Time": 1033
+  },
+  {
+    "Train": "263N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "22nd Street",
+    "Time": 1041
+  },
+  {
+    "Train": "263N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "San Francisco",
+    "Time": 1049
+  },
+  {
+    "Train": "277N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Tamien",
+    "Time": 1052
+  },
+  {
+    "Train": "277N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "San Jose",
+    "Time": 1059
+  },
+  {
+    "Train": "277N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Santa Clara",
+    "Time": 1064
+  },
+  {
+    "Train": "277N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Lawrence",
+    "Time": 1072
+  },
+  {
+    "Train": "277N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Sunnyvale",
+    "Time": 1078
+  },
+  {
+    "Train": "277N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Mountain View",
+    "Time": 1083
+  },
+  {
+    "Train": "277N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "San Antonio",
+    "Time": 1087
+  },
+  {
+    "Train": "277N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "California Ave",
+    "Time": 1091
+  },
+  {
+    "Train": "277N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Palo Alto",
+    "Time": 1096
+  },
+  {
+    "Train": "277N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Menlo Park",
+    "Time": 1099
+  },
+  {
+    "Train": "277N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Redwood City",
+    "Time": 1105
+  },
+  {
+    "Train": "277N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "San Carlos",
+    "Time": 1109
+  },
+  {
+    "Train": "277N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "San Mateo",
+    "Time": 1116
+  },
+  {
+    "Train": "277N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "Millbrae",
+    "Time": 1123
+  },
+  {
+    "Train": "277N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "22nd Street",
+    "Time": 1135
+  },
+  {
+    "Train": "277N",
+    "Direction": "northbound",
+    "Type": "Local",
+    "Station": "San Francisco",
+    "Time": 1142
+  },
+  {
+    "Train": "138S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "San Francisco",
+    "Time": 607
+  },
+  {
+    "Train": "138S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "22nd Street",
+    "Time": 612
+  },
+  {
+    "Train": "138S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Bayshore",
+    "Time": 617
+  },
+  {
+    "Train": "138S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "So. San Francisco",
+    "Time": 623
+  },
+  {
+    "Train": "138S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "San Bruno",
+    "Time": 627
+  },
+  {
+    "Train": "138S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Millbrae",
+    "Time": 631
+  },
+  {
+    "Train": "138S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Burlingame",
+    "Time": 635
+  },
+  {
+    "Train": "138S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "San Mateo",
+    "Time": 638
+  },
+  {
+    "Train": "138S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Hayward Park",
+    "Time": 641
+  },
+  {
+    "Train": "138S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Hillsdale",
+    "Time": 644
+  },
+  {
+    "Train": "138S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Belmont",
+    "Time": 647
+  },
+  {
+    "Train": "138S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "San Carlos",
+    "Time": 650
+  },
+  {
+    "Train": "138S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Redwood City",
+    "Time": 655
+  },
+  {
+    "Train": "138S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Menlo Park",
+    "Time": 660
+  },
+  {
+    "Train": "138S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Palo Alto",
+    "Time": 663
+  },
+  {
+    "Train": "138S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "California Ave",
+    "Time": 667
+  },
+  {
+    "Train": "138S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "San Antonio",
+    "Time": 671
+  },
+  {
+    "Train": "138S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Mountain View",
+    "Time": 675
+  },
+  {
+    "Train": "138S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Sunnyvale",
+    "Time": 680
+  },
+  {
+    "Train": "138S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Lawrence",
+    "Time": 684
+  },
+  {
+    "Train": "138S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Santa Clara",
+    "Time": 689
+  },
+  {
+    "Train": "138S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "San Jose",
+    "Time": 698
+  },
+  {
+    "Train": "206S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "San Francisco",
+    "Time": 371
+  },
+  {
+    "Train": "206S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "22nd Street",
+    "Time": 376
+  },
+  {
+    "Train": "206S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Millbrae",
+    "Time": 389
+  },
+  {
+    "Train": "206S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Burlingame",
+    "Time": 393
+  },
+  {
+    "Train": "206S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "San Mateo",
+    "Time": 396
+  },
+  {
+    "Train": "206S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Hillsdale",
+    "Time": 400
+  },
+  {
+    "Train": "206S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "San Carlos",
+    "Time": 404
+  },
+  {
+    "Train": "206S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Redwood City",
+    "Time": 409
+  },
+  {
+    "Train": "206S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Menlo Park",
+    "Time": 414
+  },
+  {
+    "Train": "206S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Palo Alto",
+    "Time": 417
+  },
+  {
+    "Train": "206S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "California Ave",
+    "Time": 421
+  },
+  {
+    "Train": "206S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Mountain View",
+    "Time": 427
+  },
+  {
+    "Train": "206S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Lawrence",
+    "Time": 432
+  },
+  {
+    "Train": "206S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "San Jose",
+    "Time": 444
+  },
+  {
+    "Train": "210S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "San Francisco",
+    "Time": 404
+  },
+  {
+    "Train": "210S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "22nd Street",
+    "Time": 409
+  },
+  {
+    "Train": "210S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Millbrae",
+    "Time": 421
+  },
+  {
+    "Train": "210S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "San Mateo",
+    "Time": 427
+  },
+  {
+    "Train": "210S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "San Carlos",
+    "Time": 433
+  },
+  {
+    "Train": "210S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Redwood City",
+    "Time": 438
+  },
+  {
+    "Train": "210S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Menlo Park",
+    "Time": 443
+  },
+  {
+    "Train": "210S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Palo Alto",
+    "Time": 446
+  },
+  {
+    "Train": "210S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "California Ave",
+    "Time": 450
+  },
+  {
+    "Train": "210S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "San Antonio",
+    "Time": 454
+  },
+  {
+    "Train": "210S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Mountain View",
+    "Time": 458
+  },
+  {
+    "Train": "210S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Sunnyvale",
+    "Time": 463
+  },
+  {
+    "Train": "210S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Lawrence",
+    "Time": 469
+  },
+  {
+    "Train": "210S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Santa Clara",
+    "Time": 476
+  },
+  {
+    "Train": "210S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "College Park",
+    "Time": 479
+  },
+  {
+    "Train": "210S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "San Jose",
+    "Time": 486
+  },
+  {
+    "Train": "210S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Tamien",
+    "Time": 493
+  },
+  {
+    "Train": "312S",
+    "Direction": "southbound",
+    "Type": "Bullet",
+    "Station": "San Francisco",
+    "Time": 419
+  },
+  {
+    "Train": "312S",
+    "Direction": "southbound",
+    "Type": "Bullet",
+    "Station": "22nd Street",
+    "Time": 424
+  },
+  {
+    "Train": "312S",
+    "Direction": "southbound",
+    "Type": "Bullet",
+    "Station": "Millbrae",
+    "Time": 437
+  },
+  {
+    "Train": "312S",
+    "Direction": "southbound",
+    "Type": "Bullet",
+    "Station": "Redwood City",
+    "Time": 450
+  },
+  {
+    "Train": "312S",
+    "Direction": "southbound",
+    "Type": "Bullet",
+    "Station": "Menlo Park",
+    "Time": 455
+  },
+  {
+    "Train": "312S",
+    "Direction": "southbound",
+    "Type": "Bullet",
+    "Station": "Mountain View",
+    "Time": 464
+  },
+  {
+    "Train": "312S",
+    "Direction": "southbound",
+    "Type": "Bullet",
+    "Station": "San Jose",
+    "Time": 478
+  },
+  {
+    "Train": "368S",
+    "Direction": "southbound",
+    "Type": "Bullet",
+    "Station": "San Francisco",
+    "Time": 993
+  },
+  {
+    "Train": "368S",
+    "Direction": "southbound",
+    "Type": "Bullet",
+    "Station": "Millbrae",
+    "Time": 1009
+  },
+  {
+    "Train": "368S",
+    "Direction": "southbound",
+    "Type": "Bullet",
+    "Station": "San Mateo",
+    "Time": 1017
+  },
+  {
+    "Train": "368S",
+    "Direction": "southbound",
+    "Type": "Bullet",
+    "Station": "Redwood City",
+    "Time": 1026
+  },
+  {
+    "Train": "368S",
+    "Direction": "southbound",
+    "Type": "Bullet",
+    "Station": "Palo Alto",
+    "Time": 1032
+  },
+  {
+    "Train": "368S",
+    "Direction": "southbound",
+    "Type": "Bullet",
+    "Station": "Sunnyvale",
+    "Time": 1041
+  },
+  {
+    "Train": "368S",
+    "Direction": "southbound",
+    "Type": "Bullet",
+    "Station": "San Jose",
+    "Time": 1052
+  },
+  {
+    "Train": "368S",
+    "Direction": "southbound",
+    "Type": "Bullet",
+    "Station": "Tamien",
+    "Time": 1059
+  },
+  {
+    "Train": "102S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "San Francisco",
+    "Time": 295
+  },
+  {
+    "Train": "102S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "22nd Street",
+    "Time": 300
+  },
+  {
+    "Train": "102S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Bayshore",
+    "Time": 305
+  },
+  {
+    "Train": "102S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "So. San Francisco",
+    "Time": 311
+  },
+  {
+    "Train": "102S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "San Bruno",
+    "Time": 315
+  },
+  {
+    "Train": "102S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Millbrae",
+    "Time": 319
+  },
+  {
+    "Train": "102S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Burlingame",
+    "Time": 323
+  },
+  {
+    "Train": "102S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "San Mateo",
+    "Time": 326
+  },
+  {
+    "Train": "102S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Hayward Park",
+    "Time": 329
+  },
+  {
+    "Train": "102S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Hillsdale",
+    "Time": 332
+  },
+  {
+    "Train": "102S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Belmont",
+    "Time": 335
+  },
+  {
+    "Train": "102S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "San Carlos",
+    "Time": 338
+  },
+  {
+    "Train": "102S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Redwood City",
+    "Time": 343
+  },
+  {
+    "Train": "102S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Menlo Park",
+    "Time": 348
+  },
+  {
+    "Train": "102S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Palo Alto",
+    "Time": 351
+  },
+  {
+    "Train": "102S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "California Ave",
+    "Time": 355
+  },
+  {
+    "Train": "102S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "San Antonio",
+    "Time": 359
+  },
+  {
+    "Train": "102S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Mountain View",
+    "Time": 363
+  },
+  {
+    "Train": "102S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Sunnyvale",
+    "Time": 368
+  },
+  {
+    "Train": "102S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Lawrence",
+    "Time": 372
+  },
+  {
+    "Train": "102S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Santa Clara",
+    "Time": 377
+  },
+  {
+    "Train": "102S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "San Jose",
+    "Time": 386
+  },
+  {
+    "Train": "194S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "San Francisco",
+    "Time": 1300
+  },
+  {
+    "Train": "194S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "22nd Street",
+    "Time": 1305
+  },
+  {
+    "Train": "194S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Bayshore",
+    "Time": 1310
+  },
+  {
+    "Train": "194S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "So. San Francisco",
+    "Time": 1316
+  },
+  {
+    "Train": "194S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "San Bruno",
+    "Time": 1320
+  },
+  {
+    "Train": "194S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Millbrae",
+    "Time": 1324
+  },
+  {
+    "Train": "194S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Burlingame",
+    "Time": 1328
+  },
+  {
+    "Train": "194S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "San Mateo",
+    "Time": 1331
+  },
+  {
+    "Train": "194S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Hayward Park",
+    "Time": 1334
+  },
+  {
+    "Train": "194S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Hillsdale",
+    "Time": 1337
+  },
+  {
+    "Train": "194S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Belmont",
+    "Time": 1340
+  },
+  {
+    "Train": "194S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "San Carlos",
+    "Time": 1343
+  },
+  {
+    "Train": "194S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Redwood City",
+    "Time": 1348
+  },
+  {
+    "Train": "194S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Menlo Park",
+    "Time": 1353
+  },
+  {
+    "Train": "194S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Palo Alto",
+    "Time": 1356
+  },
+  {
+    "Train": "194S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "California Ave",
+    "Time": 1360
+  },
+  {
+    "Train": "194S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "San Antonio",
+    "Time": 1364
+  },
+  {
+    "Train": "194S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Mountain View",
+    "Time": 1368
+  },
+  {
+    "Train": "194S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Sunnyvale",
+    "Time": 1373
+  },
+  {
+    "Train": "194S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Lawrence",
+    "Time": 1377
+  },
+  {
+    "Train": "194S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Santa Clara",
+    "Time": 1382
+  },
+  {
+    "Train": "194S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "San Jose",
+    "Time": 1391
+  },
+  {
+    "Train": "194S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Tamien",
+    "Time": 1398
+  },
+  {
+    "Train": "372S",
+    "Direction": "southbound",
+    "Type": "Bullet",
+    "Station": "San Francisco",
+    "Time": 1034
+  },
+  {
+    "Train": "372S",
+    "Direction": "southbound",
+    "Type": "Bullet",
+    "Station": "Millbrae",
+    "Time": 1050
+  },
+  {
+    "Train": "372S",
+    "Direction": "southbound",
+    "Type": "Bullet",
+    "Station": "Hillsdale",
+    "Time": 1058
+  },
+  {
+    "Train": "372S",
+    "Direction": "southbound",
+    "Type": "Bullet",
+    "Station": "Palo Alto",
+    "Time": 1069
+  },
+  {
+    "Train": "372S",
+    "Direction": "southbound",
+    "Type": "Bullet",
+    "Station": "Mountain View",
+    "Time": 1076
+  },
+  {
+    "Train": "372S",
+    "Direction": "southbound",
+    "Type": "Bullet",
+    "Station": "San Jose",
+    "Time": 1091
+  },
+  {
+    "Train": "218S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "San Francisco",
+    "Time": 444
+  },
+  {
+    "Train": "218S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "22nd Street",
+    "Time": 449
+  },
+  {
+    "Train": "218S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Bayshore",
+    "Time": 454
+  },
+  {
+    "Train": "218S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "So. San Francisco",
+    "Time": 460
+  },
+  {
+    "Train": "218S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "San Bruno",
+    "Time": 464
+  },
+  {
+    "Train": "218S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Millbrae",
+    "Time": 468
+  },
+  {
+    "Train": "218S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Burlingame",
+    "Time": 472
+  },
+  {
+    "Train": "218S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "San Mateo",
+    "Time": 475
+  },
+  {
+    "Train": "218S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Hayward Park",
+    "Time": 478
+  },
+  {
+    "Train": "218S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Hillsdale",
+    "Time": 481
+  },
+  {
+    "Train": "218S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Belmont",
+    "Time": 484
+  },
+  {
+    "Train": "218S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "San Carlos",
+    "Time": 487
+  },
+  {
+    "Train": "218S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Redwood City",
+    "Time": 492
+  },
+  {
+    "Train": "218S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Palo Alto",
+    "Time": 498
+  },
+  {
+    "Train": "218S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Santa Clara",
+    "Time": 514
+  },
+  {
+    "Train": "218S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "San Jose",
+    "Time": 523
+  },
+  {
+    "Train": "218S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Tamien",
+    "Time": 530
+  },
+  {
+    "Train": "270S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "San Francisco",
+    "Time": 1016
+  },
+  {
+    "Train": "270S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "So. San Francisco",
+    "Time": 1028
+  },
+  {
+    "Train": "270S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Millbrae",
+    "Time": 1034
+  },
+  {
+    "Train": "270S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Hillsdale",
+    "Time": 1042
+  },
+  {
+    "Train": "270S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Redwood City",
+    "Time": 1048
+  },
+  {
+    "Train": "270S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Menlo Park",
+    "Time": 1054
+  },
+  {
+    "Train": "270S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Palo Alto",
+    "Time": 1058
+  },
+  {
+    "Train": "270S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "California Ave",
+    "Time": 1062
+  },
+  {
+    "Train": "270S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "San Antonio",
+    "Time": 1066
+  },
+  {
+    "Train": "270S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Mountain View",
+    "Time": 1070
+  },
+  {
+    "Train": "270S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Sunnyvale",
+    "Time": 1075
+  },
+  {
+    "Train": "270S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Lawrence",
+    "Time": 1081
+  },
+  {
+    "Train": "270S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Santa Clara",
+    "Time": 1088
+  },
+  {
+    "Train": "270S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "San Jose",
+    "Time": 1096
+  },
+  {
+    "Train": "270S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Tamien",
+    "Time": 1102
+  },
+  {
+    "Train": "270S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Capitol",
+    "Time": 1109
+  },
+  {
+    "Train": "270S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Blossom Hill",
+    "Time": 1115
+  },
+  {
+    "Train": "270S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Morgan Hill",
+    "Time": 1128
+  },
+  {
+    "Train": "270S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "San Martin",
+    "Time": 1134
+  },
+  {
+    "Train": "270S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Gilroy",
+    "Time": 1147
+  },
+  {
+    "Train": "264S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "San Francisco",
+    "Time": 979
+  },
+  {
+    "Train": "264S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "San Bruno",
+    "Time": 993
+  },
+  {
+    "Train": "264S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Burlingame",
+    "Time": 998
+  },
+  {
+    "Train": "264S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "San Mateo",
+    "Time": 1002
+  },
+  {
+    "Train": "264S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Hillsdale",
+    "Time": 1007
+  },
+  {
+    "Train": "264S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "San Carlos",
+    "Time": 1011
+  },
+  {
+    "Train": "264S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Palo Alto",
+    "Time": 1021
+  },
+  {
+    "Train": "264S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "California Ave",
+    "Time": 1025
+  },
+  {
+    "Train": "264S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Mountain View",
+    "Time": 1031
+  },
+  {
+    "Train": "264S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Sunnyvale",
+    "Time": 1036
+  },
+  {
+    "Train": "264S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "San Jose",
+    "Time": 1047
+  },
+  {
+    "Train": "236S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "San Francisco",
+    "Time": 577
+  },
+  {
+    "Train": "236S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "San Bruno",
+    "Time": 591
+  },
+  {
+    "Train": "236S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Millbrae",
+    "Time": 595
+  },
+  {
+    "Train": "236S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Burlingame",
+    "Time": 599
+  },
+  {
+    "Train": "236S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "San Mateo",
+    "Time": 602
+  },
+  {
+    "Train": "236S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Hillsdale",
+    "Time": 606
+  },
+  {
+    "Train": "236S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Belmont",
+    "Time": 609
+  },
+  {
+    "Train": "236S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "San Carlos",
+    "Time": 612
+  },
+  {
+    "Train": "236S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Redwood City",
+    "Time": 617
+  },
+  {
+    "Train": "236S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Menlo Park",
+    "Time": 622
+  },
+  {
+    "Train": "236S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Palo Alto",
+    "Time": 625
+  },
+  {
+    "Train": "236S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "California Ave",
+    "Time": 629
+  },
+  {
+    "Train": "236S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "San Antonio",
+    "Time": 633
+  },
+  {
+    "Train": "236S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Mountain View",
+    "Time": 637
+  },
+  {
+    "Train": "236S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Sunnyvale",
+    "Time": 642
+  },
+  {
+    "Train": "236S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Lawrence",
+    "Time": 646
+  },
+  {
+    "Train": "236S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Santa Clara",
+    "Time": 651
+  },
+  {
+    "Train": "236S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "San Jose",
+    "Time": 660
+  },
+  {
+    "Train": "236S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Tamien",
+    "Time": 667
+  },
+  {
+    "Train": "150S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "San Francisco",
+    "Time": 787
+  },
+  {
+    "Train": "150S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "22nd Street",
+    "Time": 792
+  },
+  {
+    "Train": "150S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Bayshore",
+    "Time": 797
+  },
+  {
+    "Train": "150S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "So. San Francisco",
+    "Time": 803
+  },
+  {
+    "Train": "150S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "San Bruno",
+    "Time": 807
+  },
+  {
+    "Train": "150S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Millbrae",
+    "Time": 811
+  },
+  {
+    "Train": "150S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Burlingame",
+    "Time": 815
+  },
+  {
+    "Train": "150S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "San Mateo",
+    "Time": 818
+  },
+  {
+    "Train": "150S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Hayward Park",
+    "Time": 821
+  },
+  {
+    "Train": "150S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Hillsdale",
+    "Time": 824
+  },
+  {
+    "Train": "150S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Belmont",
+    "Time": 827
+  },
+  {
+    "Train": "150S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "San Carlos",
+    "Time": 830
+  },
+  {
+    "Train": "150S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Redwood City",
+    "Time": 835
+  },
+  {
+    "Train": "150S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Menlo Park",
+    "Time": 840
+  },
+  {
+    "Train": "150S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Palo Alto",
+    "Time": 843
+  },
+  {
+    "Train": "150S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "California Ave",
+    "Time": 847
+  },
+  {
+    "Train": "150S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "San Antonio",
+    "Time": 851
+  },
+  {
+    "Train": "150S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Mountain View",
+    "Time": 855
+  },
+  {
+    "Train": "150S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Sunnyvale",
+    "Time": 860
+  },
+  {
+    "Train": "150S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Lawrence",
+    "Time": 864
+  },
+  {
+    "Train": "150S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Santa Clara",
+    "Time": 869
+  },
+  {
+    "Train": "150S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "San Jose",
+    "Time": 878
+  },
+  {
+    "Train": "198S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "San Francisco",
+    "Time": 1441
+  },
+  {
+    "Train": "198S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "22nd Street",
+    "Time": 1446
+  },
+  {
+    "Train": "198S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Bayshore",
+    "Time": 1451
+  },
+  {
+    "Train": "198S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "So. San Francisco",
+    "Time": 1457
+  },
+  {
+    "Train": "198S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "San Bruno",
+    "Time": 1461
+  },
+  {
+    "Train": "198S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Millbrae",
+    "Time": 1465
+  },
+  {
+    "Train": "198S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Burlingame",
+    "Time": 1469
+  },
+  {
+    "Train": "198S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "San Mateo",
+    "Time": 1472
+  },
+  {
+    "Train": "198S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Hayward Park",
+    "Time": 1475
+  },
+  {
+    "Train": "198S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Hillsdale",
+    "Time": 1478
+  },
+  {
+    "Train": "198S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Belmont",
+    "Time": 1481
+  },
+  {
+    "Train": "198S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "San Carlos",
+    "Time": 1484
+  },
+  {
+    "Train": "198S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Redwood City",
+    "Time": 1489
+  },
+  {
+    "Train": "198S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Menlo Park",
+    "Time": 1494
+  },
+  {
+    "Train": "198S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Palo Alto",
+    "Time": 1497
+  },
+  {
+    "Train": "198S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "California Ave",
+    "Time": 1501
+  },
+  {
+    "Train": "198S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "San Antonio",
+    "Time": 1505
+  },
+  {
+    "Train": "198S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Mountain View",
+    "Time": 1509
+  },
+  {
+    "Train": "198S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Sunnyvale",
+    "Time": 1514
+  },
+  {
+    "Train": "198S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Lawrence",
+    "Time": 1518
+  },
+  {
+    "Train": "198S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Santa Clara",
+    "Time": 1523
+  },
+  {
+    "Train": "198S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "San Jose",
+    "Time": 1532
+  },
+  {
+    "Train": "158S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "San Francisco",
+    "Time": 907
+  },
+  {
+    "Train": "158S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "22nd Street",
+    "Time": 912
+  },
+  {
+    "Train": "158S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Bayshore",
+    "Time": 917
+  },
+  {
+    "Train": "158S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "So. San Francisco",
+    "Time": 923
+  },
+  {
+    "Train": "158S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "San Bruno",
+    "Time": 927
+  },
+  {
+    "Train": "158S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Millbrae",
+    "Time": 931
+  },
+  {
+    "Train": "158S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Burlingame",
+    "Time": 935
+  },
+  {
+    "Train": "158S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "San Mateo",
+    "Time": 938
+  },
+  {
+    "Train": "158S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Hayward Park",
+    "Time": 941
+  },
+  {
+    "Train": "158S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Hillsdale",
+    "Time": 944
+  },
+  {
+    "Train": "158S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Belmont",
+    "Time": 947
+  },
+  {
+    "Train": "158S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "San Carlos",
+    "Time": 950
+  },
+  {
+    "Train": "158S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Redwood City",
+    "Time": 955
+  },
+  {
+    "Train": "158S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Menlo Park",
+    "Time": 960
+  },
+  {
+    "Train": "158S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Palo Alto",
+    "Time": 963
+  },
+  {
+    "Train": "158S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "California Ave",
+    "Time": 967
+  },
+  {
+    "Train": "158S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "San Antonio",
+    "Time": 971
+  },
+  {
+    "Train": "158S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Mountain View",
+    "Time": 975
+  },
+  {
+    "Train": "158S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Sunnyvale",
+    "Time": 980
+  },
+  {
+    "Train": "158S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Lawrence",
+    "Time": 984
+  },
+  {
+    "Train": "158S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Santa Clara",
+    "Time": 989
+  },
+  {
+    "Train": "158S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "College Park",
+    "Time": 992
+  },
+  {
+    "Train": "158S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "San Jose",
+    "Time": 999
+  },
+  {
+    "Train": "158S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Tamien",
+    "Time": 1005
+  },
+  {
+    "Train": "158S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Capitol",
+    "Time": 1012
+  },
+  {
+    "Train": "158S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Blossom Hill",
+    "Time": 1018
+  },
+  {
+    "Train": "158S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Morgan Hill",
+    "Time": 1031
+  },
+  {
+    "Train": "158S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "San Martin",
+    "Time": 1037
+  },
+  {
+    "Train": "158S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Gilroy",
+    "Time": 1050
+  },
+  {
+    "Train": "256S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "San Francisco",
+    "Time": 877
+  },
+  {
+    "Train": "256S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "San Bruno",
+    "Time": 891
+  },
+  {
+    "Train": "256S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Millbrae",
+    "Time": 895
+  },
+  {
+    "Train": "256S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Burlingame",
+    "Time": 899
+  },
+  {
+    "Train": "256S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "San Mateo",
+    "Time": 902
+  },
+  {
+    "Train": "256S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Hillsdale",
+    "Time": 906
+  },
+  {
+    "Train": "256S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Belmont",
+    "Time": 909
+  },
+  {
+    "Train": "256S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "San Carlos",
+    "Time": 912
+  },
+  {
+    "Train": "256S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Redwood City",
+    "Time": 917
+  },
+  {
+    "Train": "256S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Menlo Park",
+    "Time": 922
+  },
+  {
+    "Train": "256S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Palo Alto",
+    "Time": 925
+  },
+  {
+    "Train": "256S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "California Ave",
+    "Time": 929
+  },
+  {
+    "Train": "256S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "San Antonio",
+    "Time": 933
+  },
+  {
+    "Train": "256S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Mountain View",
+    "Time": 937
+  },
+  {
+    "Train": "256S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Sunnyvale",
+    "Time": 942
+  },
+  {
+    "Train": "256S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Lawrence",
+    "Time": 946
+  },
+  {
+    "Train": "256S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Santa Clara",
+    "Time": 951
+  },
+  {
+    "Train": "256S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "San Jose",
+    "Time": 960
+  },
+  {
+    "Train": "256S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Tamien",
+    "Time": 967
+  },
+  {
+    "Train": "154S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "San Francisco",
+    "Time": 847
+  },
+  {
+    "Train": "154S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "22nd Street",
+    "Time": 852
+  },
+  {
+    "Train": "154S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Bayshore",
+    "Time": 857
+  },
+  {
+    "Train": "154S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "So. San Francisco",
+    "Time": 863
+  },
+  {
+    "Train": "154S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "San Bruno",
+    "Time": 867
+  },
+  {
+    "Train": "154S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Millbrae",
+    "Time": 871
+  },
+  {
+    "Train": "154S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Burlingame",
+    "Time": 875
+  },
+  {
+    "Train": "154S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "San Mateo",
+    "Time": 878
+  },
+  {
+    "Train": "154S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Hayward Park",
+    "Time": 881
+  },
+  {
+    "Train": "154S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Hillsdale",
+    "Time": 884
+  },
+  {
+    "Train": "154S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Belmont",
+    "Time": 887
+  },
+  {
+    "Train": "154S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "San Carlos",
+    "Time": 890
+  },
+  {
+    "Train": "154S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Redwood City",
+    "Time": 895
+  },
+  {
+    "Train": "154S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Menlo Park",
+    "Time": 900
+  },
+  {
+    "Train": "154S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Palo Alto",
+    "Time": 903
+  },
+  {
+    "Train": "154S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "California Ave",
+    "Time": 907
+  },
+  {
+    "Train": "154S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "San Antonio",
+    "Time": 911
+  },
+  {
+    "Train": "154S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Mountain View",
+    "Time": 915
+  },
+  {
+    "Train": "154S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Sunnyvale",
+    "Time": 920
+  },
+  {
+    "Train": "154S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Lawrence",
+    "Time": 924
+  },
+  {
+    "Train": "154S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Santa Clara",
+    "Time": 929
+  },
+  {
+    "Train": "154S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "San Jose",
+    "Time": 938
+  },
+  {
+    "Train": "220S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "San Francisco",
+    "Time": 464
+  },
+  {
+    "Train": "220S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "22nd Street",
+    "Time": 469
+  },
+  {
+    "Train": "220S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Millbrae",
+    "Time": 481
+  },
+  {
+    "Train": "220S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "San Mateo",
+    "Time": 487
+  },
+  {
+    "Train": "220S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "San Carlos",
+    "Time": 493
+  },
+  {
+    "Train": "220S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Redwood City",
+    "Time": 498
+  },
+  {
+    "Train": "220S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Menlo Park",
+    "Time": 503
+  },
+  {
+    "Train": "220S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Palo Alto",
+    "Time": 506
+  },
+  {
+    "Train": "220S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "California Ave",
+    "Time": 510
+  },
+  {
+    "Train": "220S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "San Antonio",
+    "Time": 514
+  },
+  {
+    "Train": "220S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Mountain View",
+    "Time": 518
+  },
+  {
+    "Train": "220S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Sunnyvale",
+    "Time": 523
+  },
+  {
+    "Train": "220S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Lawrence",
+    "Time": 529
+  },
+  {
+    "Train": "220S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Santa Clara",
+    "Time": 536
+  },
+  {
+    "Train": "220S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "San Jose",
+    "Time": 545
+  },
+  {
+    "Train": "220S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Tamien",
+    "Time": 552
+  },
+  {
+    "Train": "288S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "San Francisco",
+    "Time": 1136
+  },
+  {
+    "Train": "288S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "So. San Francisco",
+    "Time": 1148
+  },
+  {
+    "Train": "288S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Millbrae",
+    "Time": 1154
+  },
+  {
+    "Train": "288S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Hillsdale",
+    "Time": 1162
+  },
+  {
+    "Train": "288S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Redwood City",
+    "Time": 1168
+  },
+  {
+    "Train": "288S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Menlo Park",
+    "Time": 1174
+  },
+  {
+    "Train": "288S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Palo Alto",
+    "Time": 1178
+  },
+  {
+    "Train": "288S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "California Ave",
+    "Time": 1182
+  },
+  {
+    "Train": "288S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "San Antonio",
+    "Time": 1186
+  },
+  {
+    "Train": "288S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Mountain View",
+    "Time": 1190
+  },
+  {
+    "Train": "288S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Sunnyvale",
+    "Time": 1195
+  },
+  {
+    "Train": "288S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Lawrence",
+    "Time": 1199
+  },
+  {
+    "Train": "288S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Santa Clara",
+    "Time": 1204
+  },
+  {
+    "Train": "288S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "San Jose",
+    "Time": 1212
+  },
+  {
+    "Train": "288S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Tamien",
+    "Time": 1219
+  },
+  {
+    "Train": "142S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "San Francisco",
+    "Time": 667
+  },
+  {
+    "Train": "142S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "22nd Street",
+    "Time": 672
+  },
+  {
+    "Train": "142S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Bayshore",
+    "Time": 677
+  },
+  {
+    "Train": "142S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "So. San Francisco",
+    "Time": 683
+  },
+  {
+    "Train": "142S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "San Bruno",
+    "Time": 687
+  },
+  {
+    "Train": "142S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Millbrae",
+    "Time": 691
+  },
+  {
+    "Train": "142S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Burlingame",
+    "Time": 695
+  },
+  {
+    "Train": "142S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "San Mateo",
+    "Time": 698
+  },
+  {
+    "Train": "142S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Hayward Park",
+    "Time": 701
+  },
+  {
+    "Train": "142S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Hillsdale",
+    "Time": 704
+  },
+  {
+    "Train": "142S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Belmont",
+    "Time": 707
+  },
+  {
+    "Train": "142S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "San Carlos",
+    "Time": 710
+  },
+  {
+    "Train": "142S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Redwood City",
+    "Time": 715
+  },
+  {
+    "Train": "142S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Menlo Park",
+    "Time": 720
+  },
+  {
+    "Train": "142S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Palo Alto",
+    "Time": 723
+  },
+  {
+    "Train": "142S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "California Ave",
+    "Time": 727
+  },
+  {
+    "Train": "142S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "San Antonio",
+    "Time": 731
+  },
+  {
+    "Train": "142S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Mountain View",
+    "Time": 735
+  },
+  {
+    "Train": "142S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Sunnyvale",
+    "Time": 740
+  },
+  {
+    "Train": "142S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Lawrence",
+    "Time": 744
+  },
+  {
+    "Train": "142S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Santa Clara",
+    "Time": 749
+  },
+  {
+    "Train": "142S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "San Jose",
+    "Time": 758
+  },
+  {
+    "Train": "190S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "San Francisco",
+    "Time": 1170
+  },
+  {
+    "Train": "190S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "22nd Street",
+    "Time": 1175
+  },
+  {
+    "Train": "190S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Bayshore",
+    "Time": 1180
+  },
+  {
+    "Train": "190S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "So. San Francisco",
+    "Time": 1186
+  },
+  {
+    "Train": "190S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "San Bruno",
+    "Time": 1190
+  },
+  {
+    "Train": "190S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Millbrae",
+    "Time": 1194
+  },
+  {
+    "Train": "190S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Burlingame",
+    "Time": 1198
+  },
+  {
+    "Train": "190S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "San Mateo",
+    "Time": 1201
+  },
+  {
+    "Train": "190S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Hayward Park",
+    "Time": 1204
+  },
+  {
+    "Train": "190S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Hillsdale",
+    "Time": 1207
+  },
+  {
+    "Train": "190S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Belmont",
+    "Time": 1210
+  },
+  {
+    "Train": "190S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "San Carlos",
+    "Time": 1213
+  },
+  {
+    "Train": "190S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Redwood City",
+    "Time": 1218
+  },
+  {
+    "Train": "190S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Menlo Park",
+    "Time": 1223
+  },
+  {
+    "Train": "190S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Palo Alto",
+    "Time": 1226
+  },
+  {
+    "Train": "190S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "California Ave",
+    "Time": 1230
+  },
+  {
+    "Train": "190S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "San Antonio",
+    "Time": 1234
+  },
+  {
+    "Train": "190S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Mountain View",
+    "Time": 1238
+  },
+  {
+    "Train": "190S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Sunnyvale",
+    "Time": 1243
+  },
+  {
+    "Train": "190S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Lawrence",
+    "Time": 1247
+  },
+  {
+    "Train": "190S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Santa Clara",
+    "Time": 1252
+  },
+  {
+    "Train": "190S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "San Jose",
+    "Time": 1261
+  },
+  {
+    "Train": "332S",
+    "Direction": "southbound",
+    "Type": "Bullet",
+    "Station": "San Francisco",
+    "Time": 539
+  },
+  {
+    "Train": "332S",
+    "Direction": "southbound",
+    "Type": "Bullet",
+    "Station": "22nd Street",
+    "Time": 544
+  },
+  {
+    "Train": "332S",
+    "Direction": "southbound",
+    "Type": "Bullet",
+    "Station": "Millbrae",
+    "Time": 557
+  },
+  {
+    "Train": "332S",
+    "Direction": "southbound",
+    "Type": "Bullet",
+    "Station": "Redwood City",
+    "Time": 570
+  },
+  {
+    "Train": "332S",
+    "Direction": "southbound",
+    "Type": "Bullet",
+    "Station": "Menlo Park",
+    "Time": 575
+  },
+  {
+    "Train": "332S",
+    "Direction": "southbound",
+    "Type": "Bullet",
+    "Station": "Mountain View",
+    "Time": 584
+  },
+  {
+    "Train": "332S",
+    "Direction": "southbound",
+    "Type": "Bullet",
+    "Station": "San Jose",
+    "Time": 598
+  },
+  {
+    "Train": "280S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "San Francisco",
+    "Time": 1076
+  },
+  {
+    "Train": "280S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "So. San Francisco",
+    "Time": 1088
+  },
+  {
+    "Train": "280S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Millbrae",
+    "Time": 1094
+  },
+  {
+    "Train": "280S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Hillsdale",
+    "Time": 1102
+  },
+  {
+    "Train": "280S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Redwood City",
+    "Time": 1108
+  },
+  {
+    "Train": "280S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Menlo Park",
+    "Time": 1114
+  },
+  {
+    "Train": "280S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Palo Alto",
+    "Time": 1118
+  },
+  {
+    "Train": "280S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "California Ave",
+    "Time": 1122
+  },
+  {
+    "Train": "280S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "San Antonio",
+    "Time": 1126
+  },
+  {
+    "Train": "280S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Mountain View",
+    "Time": 1130
+  },
+  {
+    "Train": "280S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Sunnyvale",
+    "Time": 1135
+  },
+  {
+    "Train": "280S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Lawrence",
+    "Time": 1141
+  },
+  {
+    "Train": "280S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Santa Clara",
+    "Time": 1148
+  },
+  {
+    "Train": "280S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "San Jose",
+    "Time": 1156
+  },
+  {
+    "Train": "280S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Tamien",
+    "Time": 1163
+  },
+  {
+    "Train": "284S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "San Francisco",
+    "Time": 1107
+  },
+  {
+    "Train": "284S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "22nd Street",
+    "Time": 1112
+  },
+  {
+    "Train": "284S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Bayshore",
+    "Time": 1120
+  },
+  {
+    "Train": "284S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "So. San Francisco",
+    "Time": 1128
+  },
+  {
+    "Train": "284S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "San Bruno",
+    "Time": 1132
+  },
+  {
+    "Train": "284S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Millbrae",
+    "Time": 1136
+  },
+  {
+    "Train": "284S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Burlingame",
+    "Time": 1140
+  },
+  {
+    "Train": "284S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "San Mateo",
+    "Time": 1144
+  },
+  {
+    "Train": "284S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Hayward Park",
+    "Time": 1147
+  },
+  {
+    "Train": "284S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Hillsdale",
+    "Time": 1151
+  },
+  {
+    "Train": "284S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Belmont",
+    "Time": 1154
+  },
+  {
+    "Train": "284S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "San Carlos",
+    "Time": 1158
+  },
+  {
+    "Train": "284S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Redwood City",
+    "Time": 1162
+  },
+  {
+    "Train": "284S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Menlo Park",
+    "Time": 1168
+  },
+  {
+    "Train": "284S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Mountain View",
+    "Time": 1176
+  },
+  {
+    "Train": "284S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Santa Clara",
+    "Time": 1187
+  },
+  {
+    "Train": "284S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "San Jose",
+    "Time": 1195
+  },
+  {
+    "Train": "134S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "San Francisco",
+    "Time": 547
+  },
+  {
+    "Train": "134S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "22nd Street",
+    "Time": 552
+  },
+  {
+    "Train": "134S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Bayshore",
+    "Time": 557
+  },
+  {
+    "Train": "134S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "So. San Francisco",
+    "Time": 563
+  },
+  {
+    "Train": "134S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "San Bruno",
+    "Time": 567
+  },
+  {
+    "Train": "134S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Millbrae",
+    "Time": 571
+  },
+  {
+    "Train": "134S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Burlingame",
+    "Time": 575
+  },
+  {
+    "Train": "134S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "San Mateo",
+    "Time": 578
+  },
+  {
+    "Train": "134S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Hayward Park",
+    "Time": 581
+  },
+  {
+    "Train": "134S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Hillsdale",
+    "Time": 584
+  },
+  {
+    "Train": "134S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Belmont",
+    "Time": 587
+  },
+  {
+    "Train": "134S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "San Carlos",
+    "Time": 590
+  },
+  {
+    "Train": "134S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Redwood City",
+    "Time": 595
+  },
+  {
+    "Train": "134S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Menlo Park",
+    "Time": 600
+  },
+  {
+    "Train": "134S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Palo Alto",
+    "Time": 603
+  },
+  {
+    "Train": "134S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "California Ave",
+    "Time": 607
+  },
+  {
+    "Train": "134S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "San Antonio",
+    "Time": 611
+  },
+  {
+    "Train": "134S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Mountain View",
+    "Time": 615
+  },
+  {
+    "Train": "134S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Sunnyvale",
+    "Time": 620
+  },
+  {
+    "Train": "134S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Lawrence",
+    "Time": 624
+  },
+  {
+    "Train": "134S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Santa Clara",
+    "Time": 629
+  },
+  {
+    "Train": "134S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "San Jose",
+    "Time": 638
+  },
+  {
+    "Train": "216S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "San Francisco",
+    "Time": 439
+  },
+  {
+    "Train": "216S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "San Bruno",
+    "Time": 453
+  },
+  {
+    "Train": "216S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Burlingame",
+    "Time": 458
+  },
+  {
+    "Train": "216S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "San Mateo",
+    "Time": 462
+  },
+  {
+    "Train": "216S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Hillsdale",
+    "Time": 466
+  },
+  {
+    "Train": "216S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "San Carlos",
+    "Time": 470
+  },
+  {
+    "Train": "216S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Menlo Park",
+    "Time": 478
+  },
+  {
+    "Train": "216S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Palo Alto",
+    "Time": 481
+  },
+  {
+    "Train": "216S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Mountain View",
+    "Time": 489
+  },
+  {
+    "Train": "216S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Lawrence",
+    "Time": 496
+  },
+  {
+    "Train": "216S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "San Jose",
+    "Time": 508
+  },
+  {
+    "Train": "378S",
+    "Direction": "southbound",
+    "Type": "Bullet",
+    "Station": "San Francisco",
+    "Time": 1053
+  },
+  {
+    "Train": "378S",
+    "Direction": "southbound",
+    "Type": "Bullet",
+    "Station": "Millbrae",
+    "Time": 1069
+  },
+  {
+    "Train": "378S",
+    "Direction": "southbound",
+    "Type": "Bullet",
+    "Station": "San Mateo",
+    "Time": 1077
+  },
+  {
+    "Train": "378S",
+    "Direction": "southbound",
+    "Type": "Bullet",
+    "Station": "Redwood City",
+    "Time": 1086
+  },
+  {
+    "Train": "378S",
+    "Direction": "southbound",
+    "Type": "Bullet",
+    "Station": "Palo Alto",
+    "Time": 1092
+  },
+  {
+    "Train": "378S",
+    "Direction": "southbound",
+    "Type": "Bullet",
+    "Station": "Sunnyvale",
+    "Time": 1101
+  },
+  {
+    "Train": "378S",
+    "Direction": "southbound",
+    "Type": "Bullet",
+    "Station": "San Jose",
+    "Time": 1112
+  },
+  {
+    "Train": "378S",
+    "Direction": "southbound",
+    "Type": "Bullet",
+    "Station": "Tamien",
+    "Time": 1119
+  },
+  {
+    "Train": "146S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "San Francisco",
+    "Time": 727
+  },
+  {
+    "Train": "146S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "22nd Street",
+    "Time": 732
+  },
+  {
+    "Train": "146S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Bayshore",
+    "Time": 737
+  },
+  {
+    "Train": "146S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "So. San Francisco",
+    "Time": 743
+  },
+  {
+    "Train": "146S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "San Bruno",
+    "Time": 747
+  },
+  {
+    "Train": "146S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Millbrae",
+    "Time": 751
+  },
+  {
+    "Train": "146S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Burlingame",
+    "Time": 755
+  },
+  {
+    "Train": "146S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "San Mateo",
+    "Time": 758
+  },
+  {
+    "Train": "146S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Hayward Park",
+    "Time": 761
+  },
+  {
+    "Train": "146S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Hillsdale",
+    "Time": 764
+  },
+  {
+    "Train": "146S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Belmont",
+    "Time": 767
+  },
+  {
+    "Train": "146S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "San Carlos",
+    "Time": 770
+  },
+  {
+    "Train": "146S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Redwood City",
+    "Time": 775
+  },
+  {
+    "Train": "146S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Menlo Park",
+    "Time": 780
+  },
+  {
+    "Train": "146S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Palo Alto",
+    "Time": 783
+  },
+  {
+    "Train": "146S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "California Ave",
+    "Time": 787
+  },
+  {
+    "Train": "146S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "San Antonio",
+    "Time": 791
+  },
+  {
+    "Train": "146S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Mountain View",
+    "Time": 795
+  },
+  {
+    "Train": "146S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Sunnyvale",
+    "Time": 800
+  },
+  {
+    "Train": "146S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Lawrence",
+    "Time": 804
+  },
+  {
+    "Train": "146S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Santa Clara",
+    "Time": 809
+  },
+  {
+    "Train": "146S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "San Jose",
+    "Time": 818
+  },
+  {
+    "Train": "208S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "San Francisco",
+    "Time": 384
+  },
+  {
+    "Train": "208S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "22nd Street",
+    "Time": 389
+  },
+  {
+    "Train": "208S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Bayshore",
+    "Time": 394
+  },
+  {
+    "Train": "208S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "So. San Francisco",
+    "Time": 400
+  },
+  {
+    "Train": "208S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "San Bruno",
+    "Time": 404
+  },
+  {
+    "Train": "208S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Millbrae",
+    "Time": 408
+  },
+  {
+    "Train": "208S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Burlingame",
+    "Time": 412
+  },
+  {
+    "Train": "208S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "San Mateo",
+    "Time": 415
+  },
+  {
+    "Train": "208S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Hayward Park",
+    "Time": 418
+  },
+  {
+    "Train": "208S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Hillsdale",
+    "Time": 421
+  },
+  {
+    "Train": "208S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Belmont",
+    "Time": 424
+  },
+  {
+    "Train": "208S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "San Carlos",
+    "Time": 427
+  },
+  {
+    "Train": "208S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Redwood City",
+    "Time": 432
+  },
+  {
+    "Train": "208S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Palo Alto",
+    "Time": 438
+  },
+  {
+    "Train": "208S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Santa Clara",
+    "Time": 454
+  },
+  {
+    "Train": "208S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "San Jose",
+    "Time": 463
+  },
+  {
+    "Train": "208S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Tamien",
+    "Time": 470
+  },
+  {
+    "Train": "324S",
+    "Direction": "southbound",
+    "Type": "Bullet",
+    "Station": "San Francisco",
+    "Time": 494
+  },
+  {
+    "Train": "324S",
+    "Direction": "southbound",
+    "Type": "Bullet",
+    "Station": "22nd Street",
+    "Time": 499
+  },
+  {
+    "Train": "324S",
+    "Direction": "southbound",
+    "Type": "Bullet",
+    "Station": "Millbrae",
+    "Time": 512
+  },
+  {
+    "Train": "324S",
+    "Direction": "southbound",
+    "Type": "Bullet",
+    "Station": "Hillsdale",
+    "Time": 520
+  },
+  {
+    "Train": "324S",
+    "Direction": "southbound",
+    "Type": "Bullet",
+    "Station": "Palo Alto",
+    "Time": 531
+  },
+  {
+    "Train": "324S",
+    "Direction": "southbound",
+    "Type": "Bullet",
+    "Station": "Mountain View",
+    "Time": 538
+  },
+  {
+    "Train": "324S",
+    "Direction": "southbound",
+    "Type": "Bullet",
+    "Station": "San Jose",
+    "Time": 553
+  },
+  {
+    "Train": "104S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "San Francisco",
+    "Time": 325
+  },
+  {
+    "Train": "104S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "22nd Street",
+    "Time": 330
+  },
+  {
+    "Train": "104S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Bayshore",
+    "Time": 335
+  },
+  {
+    "Train": "104S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "So. San Francisco",
+    "Time": 341
+  },
+  {
+    "Train": "104S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "San Bruno",
+    "Time": 345
+  },
+  {
+    "Train": "104S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Millbrae",
+    "Time": 349
+  },
+  {
+    "Train": "104S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Burlingame",
+    "Time": 353
+  },
+  {
+    "Train": "104S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "San Mateo",
+    "Time": 356
+  },
+  {
+    "Train": "104S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Hayward Park",
+    "Time": 359
+  },
+  {
+    "Train": "104S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Hillsdale",
+    "Time": 362
+  },
+  {
+    "Train": "104S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Belmont",
+    "Time": 365
+  },
+  {
+    "Train": "104S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "San Carlos",
+    "Time": 368
+  },
+  {
+    "Train": "104S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Redwood City",
+    "Time": 373
+  },
+  {
+    "Train": "104S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Menlo Park",
+    "Time": 378
+  },
+  {
+    "Train": "104S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Palo Alto",
+    "Time": 381
+  },
+  {
+    "Train": "104S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "California Ave",
+    "Time": 385
+  },
+  {
+    "Train": "104S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "San Antonio",
+    "Time": 389
+  },
+  {
+    "Train": "104S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Mountain View",
+    "Time": 393
+  },
+  {
+    "Train": "104S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Sunnyvale",
+    "Time": 398
+  },
+  {
+    "Train": "104S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Lawrence",
+    "Time": 402
+  },
+  {
+    "Train": "104S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Santa Clara",
+    "Time": 407
+  },
+  {
+    "Train": "104S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "San Jose",
+    "Time": 416
+  },
+  {
+    "Train": "104S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Tamien",
+    "Time": 423
+  },
+  {
+    "Train": "322S",
+    "Direction": "southbound",
+    "Type": "Bullet",
+    "Station": "San Francisco",
+    "Time": 479
+  },
+  {
+    "Train": "322S",
+    "Direction": "southbound",
+    "Type": "Bullet",
+    "Station": "22nd Street",
+    "Time": 484
+  },
+  {
+    "Train": "322S",
+    "Direction": "southbound",
+    "Type": "Bullet",
+    "Station": "Millbrae",
+    "Time": 497
+  },
+  {
+    "Train": "322S",
+    "Direction": "southbound",
+    "Type": "Bullet",
+    "Station": "Redwood City",
+    "Time": 510
+  },
+  {
+    "Train": "322S",
+    "Direction": "southbound",
+    "Type": "Bullet",
+    "Station": "Menlo Park",
+    "Time": 515
+  },
+  {
+    "Train": "322S",
+    "Direction": "southbound",
+    "Type": "Bullet",
+    "Station": "Mountain View",
+    "Time": 524
+  },
+  {
+    "Train": "322S",
+    "Direction": "southbound",
+    "Type": "Bullet",
+    "Station": "San Jose",
+    "Time": 538
+  },
+  {
+    "Train": "228S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "San Francisco",
+    "Time": 504
+  },
+  {
+    "Train": "228S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "22nd Street",
+    "Time": 509
+  },
+  {
+    "Train": "228S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Bayshore",
+    "Time": 514
+  },
+  {
+    "Train": "228S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "So. San Francisco",
+    "Time": 520
+  },
+  {
+    "Train": "228S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "San Bruno",
+    "Time": 524
+  },
+  {
+    "Train": "228S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Millbrae",
+    "Time": 528
+  },
+  {
+    "Train": "228S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Burlingame",
+    "Time": 532
+  },
+  {
+    "Train": "228S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "San Mateo",
+    "Time": 535
+  },
+  {
+    "Train": "228S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Hayward Park",
+    "Time": 538
+  },
+  {
+    "Train": "228S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Hillsdale",
+    "Time": 541
+  },
+  {
+    "Train": "228S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Belmont",
+    "Time": 544
+  },
+  {
+    "Train": "228S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "San Carlos",
+    "Time": 547
+  },
+  {
+    "Train": "228S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Redwood City",
+    "Time": 552
+  },
+  {
+    "Train": "228S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Palo Alto",
+    "Time": 558
+  },
+  {
+    "Train": "228S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Santa Clara",
+    "Time": 574
+  },
+  {
+    "Train": "228S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "San Jose",
+    "Time": 583
+  },
+  {
+    "Train": "228S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Tamien",
+    "Time": 590
+  },
+  {
+    "Train": "276S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "San Francisco",
+    "Time": 1047
+  },
+  {
+    "Train": "276S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "22nd Street",
+    "Time": 1052
+  },
+  {
+    "Train": "276S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Bayshore",
+    "Time": 1060
+  },
+  {
+    "Train": "276S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "So. San Francisco",
+    "Time": 1068
+  },
+  {
+    "Train": "276S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "San Bruno",
+    "Time": 1072
+  },
+  {
+    "Train": "276S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Millbrae",
+    "Time": 1076
+  },
+  {
+    "Train": "276S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Burlingame",
+    "Time": 1080
+  },
+  {
+    "Train": "276S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "San Mateo",
+    "Time": 1084
+  },
+  {
+    "Train": "276S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Hayward Park",
+    "Time": 1087
+  },
+  {
+    "Train": "276S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Hillsdale",
+    "Time": 1091
+  },
+  {
+    "Train": "276S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Belmont",
+    "Time": 1094
+  },
+  {
+    "Train": "276S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "San Carlos",
+    "Time": 1098
+  },
+  {
+    "Train": "276S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Redwood City",
+    "Time": 1102
+  },
+  {
+    "Train": "276S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Menlo Park",
+    "Time": 1108
+  },
+  {
+    "Train": "276S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Mountain View",
+    "Time": 1116
+  },
+  {
+    "Train": "276S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Lawrence",
+    "Time": 1123
+  },
+  {
+    "Train": "276S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Santa Clara",
+    "Time": 1128
+  },
+  {
+    "Train": "276S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "San Jose",
+    "Time": 1136
+  },
+  {
+    "Train": "276S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Tamien",
+    "Time": 1142
+  },
+  {
+    "Train": "276S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Capitol",
+    "Time": 1149
+  },
+  {
+    "Train": "276S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Blossom Hill",
+    "Time": 1155
+  },
+  {
+    "Train": "276S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Morgan Hill",
+    "Time": 1168
+  },
+  {
+    "Train": "276S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "San Martin",
+    "Time": 1174
+  },
+  {
+    "Train": "276S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Gilroy",
+    "Time": 1187
+  },
+  {
+    "Train": "260S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "San Francisco",
+    "Time": 937
+  },
+  {
+    "Train": "260S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "San Bruno",
+    "Time": 951
+  },
+  {
+    "Train": "260S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Millbrae",
+    "Time": 955
+  },
+  {
+    "Train": "260S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Burlingame",
+    "Time": 959
+  },
+  {
+    "Train": "260S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "San Mateo",
+    "Time": 962
+  },
+  {
+    "Train": "260S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Hillsdale",
+    "Time": 966
+  },
+  {
+    "Train": "260S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Belmont",
+    "Time": 969
+  },
+  {
+    "Train": "260S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "San Carlos",
+    "Time": 972
+  },
+  {
+    "Train": "260S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Redwood City",
+    "Time": 977
+  },
+  {
+    "Train": "260S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Menlo Park",
+    "Time": 982
+  },
+  {
+    "Train": "260S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Palo Alto",
+    "Time": 985
+  },
+  {
+    "Train": "260S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "California Ave",
+    "Time": 989
+  },
+  {
+    "Train": "260S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "San Antonio",
+    "Time": 993
+  },
+  {
+    "Train": "260S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Mountain View",
+    "Time": 997
+  },
+  {
+    "Train": "260S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Sunnyvale",
+    "Time": 1002
+  },
+  {
+    "Train": "260S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Lawrence",
+    "Time": 1006
+  },
+  {
+    "Train": "260S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Santa Clara",
+    "Time": 1011
+  },
+  {
+    "Train": "260S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "San Jose",
+    "Time": 1020
+  },
+  {
+    "Train": "260S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Tamien",
+    "Time": 1027
+  },
+  {
+    "Train": "362S",
+    "Direction": "southbound",
+    "Type": "Bullet",
+    "Station": "San Francisco",
+    "Time": 969
+  },
+  {
+    "Train": "362S",
+    "Direction": "southbound",
+    "Type": "Bullet",
+    "Station": "Millbrae",
+    "Time": 985
+  },
+  {
+    "Train": "362S",
+    "Direction": "southbound",
+    "Type": "Bullet",
+    "Station": "Hillsdale",
+    "Time": 993
+  },
+  {
+    "Train": "362S",
+    "Direction": "southbound",
+    "Type": "Bullet",
+    "Station": "Palo Alto",
+    "Time": 1004
+  },
+  {
+    "Train": "362S",
+    "Direction": "southbound",
+    "Type": "Bullet",
+    "Station": "Mountain View",
+    "Time": 1011
+  },
+  {
+    "Train": "362S",
+    "Direction": "southbound",
+    "Type": "Bullet",
+    "Station": "San Jose",
+    "Time": 1026
+  },
+  {
+    "Train": "226S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "San Francisco",
+    "Time": 499
+  },
+  {
+    "Train": "226S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "San Bruno",
+    "Time": 513
+  },
+  {
+    "Train": "226S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Burlingame",
+    "Time": 518
+  },
+  {
+    "Train": "226S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "San Mateo",
+    "Time": 522
+  },
+  {
+    "Train": "226S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Hillsdale",
+    "Time": 526
+  },
+  {
+    "Train": "226S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "San Carlos",
+    "Time": 530
+  },
+  {
+    "Train": "226S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Menlo Park",
+    "Time": 538
+  },
+  {
+    "Train": "226S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Palo Alto",
+    "Time": 541
+  },
+  {
+    "Train": "226S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Mountain View",
+    "Time": 549
+  },
+  {
+    "Train": "226S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Lawrence",
+    "Time": 556
+  },
+  {
+    "Train": "226S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "San Jose",
+    "Time": 568
+  },
+  {
+    "Train": "266S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "San Francisco",
+    "Time": 987
+  },
+  {
+    "Train": "266S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "22nd Street",
+    "Time": 992
+  },
+  {
+    "Train": "266S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Bayshore",
+    "Time": 1000
+  },
+  {
+    "Train": "266S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "So. San Francisco",
+    "Time": 1008
+  },
+  {
+    "Train": "266S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "San Bruno",
+    "Time": 1012
+  },
+  {
+    "Train": "266S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Millbrae",
+    "Time": 1016
+  },
+  {
+    "Train": "266S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Burlingame",
+    "Time": 1020
+  },
+  {
+    "Train": "266S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "San Mateo",
+    "Time": 1024
+  },
+  {
+    "Train": "266S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Hayward Park",
+    "Time": 1027
+  },
+  {
+    "Train": "266S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Hillsdale",
+    "Time": 1031
+  },
+  {
+    "Train": "266S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Belmont",
+    "Time": 1034
+  },
+  {
+    "Train": "266S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "San Carlos",
+    "Time": 1038
+  },
+  {
+    "Train": "266S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Redwood City",
+    "Time": 1042
+  },
+  {
+    "Train": "266S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Menlo Park",
+    "Time": 1048
+  },
+  {
+    "Train": "266S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Mountain View",
+    "Time": 1056
+  },
+  {
+    "Train": "266S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Santa Clara",
+    "Time": 1067
+  },
+  {
+    "Train": "266S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "San Jose",
+    "Time": 1075
+  },
+  {
+    "Train": "274S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "San Francisco",
+    "Time": 1040
+  },
+  {
+    "Train": "274S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "San Bruno",
+    "Time": 1054
+  },
+  {
+    "Train": "274S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Burlingame",
+    "Time": 1059
+  },
+  {
+    "Train": "274S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "San Mateo",
+    "Time": 1063
+  },
+  {
+    "Train": "274S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Hillsdale",
+    "Time": 1068
+  },
+  {
+    "Train": "274S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "San Carlos",
+    "Time": 1072
+  },
+  {
+    "Train": "274S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Palo Alto",
+    "Time": 1082
+  },
+  {
+    "Train": "274S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "California Ave",
+    "Time": 1086
+  },
+  {
+    "Train": "274S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Mountain View",
+    "Time": 1092
+  },
+  {
+    "Train": "274S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Sunnyvale",
+    "Time": 1097
+  },
+  {
+    "Train": "274S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "San Jose",
+    "Time": 1108
+  },
+  {
+    "Train": "196S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "San Francisco",
+    "Time": 1360
+  },
+  {
+    "Train": "196S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "22nd Street",
+    "Time": 1365
+  },
+  {
+    "Train": "196S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Bayshore",
+    "Time": 1370
+  },
+  {
+    "Train": "196S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "So. San Francisco",
+    "Time": 1376
+  },
+  {
+    "Train": "196S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "San Bruno",
+    "Time": 1380
+  },
+  {
+    "Train": "196S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Millbrae",
+    "Time": 1384
+  },
+  {
+    "Train": "196S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Burlingame",
+    "Time": 1388
+  },
+  {
+    "Train": "196S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "San Mateo",
+    "Time": 1391
+  },
+  {
+    "Train": "196S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Hayward Park",
+    "Time": 1394
+  },
+  {
+    "Train": "196S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Hillsdale",
+    "Time": 1397
+  },
+  {
+    "Train": "196S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Belmont",
+    "Time": 1400
+  },
+  {
+    "Train": "196S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "San Carlos",
+    "Time": 1403
+  },
+  {
+    "Train": "196S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Redwood City",
+    "Time": 1408
+  },
+  {
+    "Train": "196S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Menlo Park",
+    "Time": 1413
+  },
+  {
+    "Train": "196S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Palo Alto",
+    "Time": 1416
+  },
+  {
+    "Train": "196S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "California Ave",
+    "Time": 1420
+  },
+  {
+    "Train": "196S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "San Antonio",
+    "Time": 1424
+  },
+  {
+    "Train": "196S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Mountain View",
+    "Time": 1428
+  },
+  {
+    "Train": "196S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Sunnyvale",
+    "Time": 1433
+  },
+  {
+    "Train": "196S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Lawrence",
+    "Time": 1437
+  },
+  {
+    "Train": "196S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Santa Clara",
+    "Time": 1442
+  },
+  {
+    "Train": "196S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "San Jose",
+    "Time": 1451
+  },
+  {
+    "Train": "230S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "San Francisco",
+    "Time": 524
+  },
+  {
+    "Train": "230S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "22nd Street",
+    "Time": 529
+  },
+  {
+    "Train": "230S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Millbrae",
+    "Time": 541
+  },
+  {
+    "Train": "230S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "San Mateo",
+    "Time": 547
+  },
+  {
+    "Train": "230S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "San Carlos",
+    "Time": 553
+  },
+  {
+    "Train": "230S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Redwood City",
+    "Time": 558
+  },
+  {
+    "Train": "230S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Menlo Park",
+    "Time": 563
+  },
+  {
+    "Train": "230S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Palo Alto",
+    "Time": 566
+  },
+  {
+    "Train": "230S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "California Ave",
+    "Time": 570
+  },
+  {
+    "Train": "230S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "San Antonio",
+    "Time": 574
+  },
+  {
+    "Train": "230S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Mountain View",
+    "Time": 578
+  },
+  {
+    "Train": "230S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Sunnyvale",
+    "Time": 583
+  },
+  {
+    "Train": "230S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Lawrence",
+    "Time": 589
+  },
+  {
+    "Train": "230S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Santa Clara",
+    "Time": 596
+  },
+  {
+    "Train": "230S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "San Jose",
+    "Time": 605
+  },
+  {
+    "Train": "230S",
+    "Direction": "southbound",
+    "Type": "Local",
+    "Station": "Tamien",
+    "Time": 612
+  },
+  {
+    "Train": "314S",
+    "Direction": "southbound",
+    "Type": "Bullet",
+    "Station": "San Francisco",
+    "Time": 434
+  },
+  {
+    "Train": "314S",
+    "Direction": "southbound",
+    "Type": "Bullet",
+    "Station": "22nd Street",
+    "Time": 439
+  },
+  {
+    "Train": "314S",
+    "Direction": "southbound",
+    "Type": "Bullet",
+    "Station": "Millbrae",
+    "Time": 452
+  },
+  {
+    "Train": "314S",
+    "Direction": "southbound",
+    "Type": "Bullet",
+    "Station": "Hillsdale",
+    "Time": 460
+  },
+  {
+    "Train": "314S",
+    "Direction": "southbound",
+    "Type": "Bullet",
+    "Station": "Palo Alto",
+    "Time": 471
+  },
+  {
+    "Train": "314S",
+    "Direction": "southbound",
+    "Type": "Bullet",
+    "Station": "Mountain View",
+    "Time": 478
+  },
+  {
+    "Train": "314S",
+    "Direction": "southbound",
+    "Type": "Bullet",
+    "Station": "San Jose",
+    "Time": 493
+  },
+  {
+    "Train": "192S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "San Francisco",
+    "Time": 1240
+  },
+  {
+    "Train": "192S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "22nd Street",
+    "Time": 1245
+  },
+  {
+    "Train": "192S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Bayshore",
+    "Time": 1250
+  },
+  {
+    "Train": "192S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "So. San Francisco",
+    "Time": 1256
+  },
+  {
+    "Train": "192S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "San Bruno",
+    "Time": 1260
+  },
+  {
+    "Train": "192S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Millbrae",
+    "Time": 1264
+  },
+  {
+    "Train": "192S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Burlingame",
+    "Time": 1268
+  },
+  {
+    "Train": "192S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "San Mateo",
+    "Time": 1271
+  },
+  {
+    "Train": "192S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Hayward Park",
+    "Time": 1274
+  },
+  {
+    "Train": "192S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Hillsdale",
+    "Time": 1277
+  },
+  {
+    "Train": "192S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Belmont",
+    "Time": 1280
+  },
+  {
+    "Train": "192S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "San Carlos",
+    "Time": 1283
+  },
+  {
+    "Train": "192S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Redwood City",
+    "Time": 1288
+  },
+  {
+    "Train": "192S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Menlo Park",
+    "Time": 1293
+  },
+  {
+    "Train": "192S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Palo Alto",
+    "Time": 1296
+  },
+  {
+    "Train": "192S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "California Ave",
+    "Time": 1300
+  },
+  {
+    "Train": "192S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "San Antonio",
+    "Time": 1304
+  },
+  {
+    "Train": "192S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Mountain View",
+    "Time": 1308
+  },
+  {
+    "Train": "192S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Sunnyvale",
+    "Time": 1313
+  },
+  {
+    "Train": "192S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Lawrence",
+    "Time": 1317
+  },
+  {
+    "Train": "192S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Santa Clara",
+    "Time": 1322
+  },
+  {
+    "Train": "192S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "San Jose",
+    "Time": 1331
+  },
+  {
+    "Train": "192S",
+    "Direction": "southbound",
+    "Type": "Limited",
+    "Station": "Tamien",
+    "Time": 1338
+  },
+  {
+    "Train": "382S",
+    "Direction": "southbound",
+    "Type": "Bullet",
+    "Station": "San Francisco",
+    "Time": 1094
+  },
+  {
+    "Train": "382S",
+    "Direction": "southbound",
+    "Type": "Bullet",
+    "Station": "Millbrae",
+    "Time": 1110
+  },
+  {
+    "Train": "382S",
+    "Direction": "southbound",
+    "Type": "Bullet",
+    "Station": "Hillsdale",
+    "Time": 1118
+  },
+  {
+    "Train": "382S",
+    "Direction": "southbound",
+    "Type": "Bullet",
+    "Station": "Palo Alto",
+    "Time": 1129
+  },
+  {
+    "Train": "382S",
+    "Direction": "southbound",
+    "Type": "Bullet",
+    "Station": "Mountain View",
+    "Time": 1136
+  },
+  {
+    "Train": "382S",
+    "Direction": "southbound",
+    "Type": "Bullet",
+    "Station": "San Jose",
+    "Time": 1151
+  },
+  {
+    "Train": "386S",
+    "Direction": "southbound",
+    "Type": "Bullet",
+    "Station": "San Francisco",
+    "Time": 1113
+  },
+  {
+    "Train": "386S",
+    "Direction": "southbound",
+    "Type": "Bullet",
+    "Station": "Millbrae",
+    "Time": 1129
+  },
+  {
+    "Train": "386S",
+    "Direction": "southbound",
+    "Type": "Bullet",
+    "Station": "San Mateo",
+    "Time": 1137
+  },
+  {
+    "Train": "386S",
+    "Direction": "southbound",
+    "Type": "Bullet",
+    "Station": "Redwood City",
+    "Time": 1146
+  },
+  {
+    "Train": "386S",
+    "Direction": "southbound",
+    "Type": "Bullet",
+    "Station": "Palo Alto",
+    "Time": 1152
+  },
+  {
+    "Train": "386S",
+    "Direction": "southbound",
+    "Type": "Bullet",
+    "Station": "Sunnyvale",
+    "Time": 1161
+  },
+  {
+    "Train": "386S",
+    "Direction": "southbound",
+    "Type": "Bullet",
+    "Station": "San Jose",
+    "Time": 1172
+  },
+  {
+    "Train": "386S",
+    "Direction": "southbound",
+    "Type": "Bullet",
+    "Station": "Tamien",
+    "Time": 1179
+  }
+]

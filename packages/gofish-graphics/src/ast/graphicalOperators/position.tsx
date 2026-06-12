@@ -1,3 +1,4 @@
+import { computeAesthetic } from "../../util";
 import { GoFishNode } from "../_node";
 import { Size, elaborateDims, FancyDims } from "../dims";
 import { getMeasure, getValue, isValue, MaybeValue } from "../data";
@@ -28,14 +29,20 @@ export const position = createNodeOperator(
         ) => {
           return [
             isValue(options.x)
-              ? POSITION(interval(getValue(options.x)!, getValue(options.x)!))
+              ? POSITION(
+                  interval(getValue(options.x)!, getValue(options.x)!),
+                  getMeasure(options.x)
+                )
               : UNDEFINED,
             isValue(options.y)
-              ? POSITION(interval(getValue(options.y)!, getValue(options.y)!))
+              ? POSITION(
+                  interval(getValue(options.y)!, getValue(options.y)!),
+                  getMeasure(options.y)
+                )
               : UNDEFINED,
           ];
         },
-        layout: (shared, size, scaleFactors, children, posScales) => {
+        layout: (shared, size, scaleFactors, children, posScales, _node) => {
           if (children.length !== 1) {
             throw new Error("Position operator expects exactly one child");
           }
@@ -54,16 +61,8 @@ export const position = createNodeOperator(
           const childHeight = childPlaceable.dims[1].size ?? 0;
 
           // Handle x and y values (can be literal values or data-bound values)
-          const xPos = options.x
-            ? isValue(options.x)
-              ? posScales[0]!(getValue(options.x)!)
-              : options.x
-            : 0;
-          const yPos = options.y
-            ? isValue(options.y)
-              ? posScales[1]!(getValue(options.y)!)
-              : options.y
-            : 0;
+          const xPos = computeAesthetic(options.x, posScales[0]!, 0)!;
+          const yPos = computeAesthetic(options.y, posScales[1]!, 0)!;
 
           // Position is relative to the child's center point (SwiftUI-like behavior)
           const offsetX = xPos - childWidth / 2;

@@ -24,10 +24,10 @@ export const Default: StoryObj<Args> = {
   render: (args: Args, context: any) => {
     const container = initializeContainer();
 
-    Chart(context.loaded.barley as any[], { color: palette("tableau10") })
+    Chart(context.loaded.barley as any[], { color: palette("tableau10"), axes: true })
       .flow(spread({ by: "variety",  dir: "y" }), stack({ by: "site",  dir: "x" }))
       .mark(rect({ w: "yield", fill: "site" }))
-      .render(container, { w: args.w, h: args.h, axes: true });
+      .render(container, { w: args.w, h: args.h });
 
     return container;
   },

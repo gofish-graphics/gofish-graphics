@@ -1,5 +1,33 @@
 """Shared datasets mirroring packages/gofish-graphics/src/data/catch.ts."""
 
+import json as _json
+from pathlib import Path as _Path
+
+# Datasets for the low-level stories are mirrored byte-for-byte from the JS
+# sources in packages/gofish-graphics/src/data/*.ts (and the runtime-computed
+# color palettes from src/color.ts). They are *generated*, not hand-edited —
+# regenerate with the tsx dump used when these ports were added.
+_LOWLEVEL_DATA_DIR = _Path(__file__).parent / "_lowlevel_data"
+
+
+def _load_json(name: str):
+    with open(_LOWLEVEL_DATA_DIR / f"{name}.json") as f:
+        return _json.load(f)
+
+
+TITANIC = _load_json("titanic")
+PENGUINS = _load_json("penguins")
+CALTRAIN = _load_json("caltrain")
+CALTRAIN_STOP_ORDER = _load_json("caltrain_stop_order")
+GENDER_PAY_GAP = _load_json("gender_pay_gap")
+PAY_GRADE = _load_json("pay_grade")
+CATCH_LOCATIONS = _load_json("catch_locations")  # {lake: {"x", "y"}}
+
+# Resolved color values (color6 palette, gray/neutral, and the spectral.js
+# mix() results the stories compute at runtime — precomputed so Python emits
+# byte-identical fills).
+COLORS = _load_json("colors")
+
 SEAFOOD = [
     {"lake": "Lake A", "species": "Bass", "count": 23},
     {"lake": "Lake A", "species": "Trout", "count": 31},
@@ -241,4 +269,20 @@ MOSAIC_DATA = [
     {"origin": "USA", "cylinders": "4", "count": 72},
     {"origin": "USA", "cylinders": "6", "count": 74},
     {"origin": "USA", "cylinders": "8", "count": 108},
+]
+
+# Heatmap data — day × hour grid mirroring Heatmap.stories.tsx.
+_HEATMAP_DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri"]
+_HEATMAP_HOURS = ["9am", "10am", "11am", "12pm", "1pm", "2pm", "3pm", "4pm", "5pm"]
+_HEATMAP_RAW = [
+    10, 45, 72, 38, 90, 55, 20, 66, 30,
+    25, 60, 85, 42, 77, 33, 58, 14, 80,
+    50, 22, 95, 68, 11, 74, 39, 47, 62,
+    18, 83, 41, 57, 29, 93, 64, 76, 15,
+    70, 35, 52, 88, 23, 46, 81, 67, 44,
+]
+HEATMAP_DATA = [
+    {"day": day, "hour": hour, "value": _HEATMAP_RAW[di * len(_HEATMAP_HOURS) + hi]}
+    for di, day in enumerate(_HEATMAP_DAYS)
+    for hi, hour in enumerate(_HEATMAP_HOURS)
 ]

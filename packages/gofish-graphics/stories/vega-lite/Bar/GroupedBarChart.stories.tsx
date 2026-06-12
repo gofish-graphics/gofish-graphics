@@ -33,13 +33,13 @@ export const Default: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    Chart(values, { color: palette("tableau10") })
+    Chart(values, { color: palette("tableau10"), axes: true })
       .flow(
         spread({ by: "category",  dir: "x", spacing: 24 }),
         spread({ by: "group",  dir: "x", spacing: 0 })
       )
       .mark(rect({ h: "value", fill: "group" }))
-      .render(container, { h: args.h, axes: true } as any);
+      .render(container, { h: args.h } as any);
 
     return container;
   },

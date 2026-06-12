@@ -1,124 +1,78 @@
-import { createResource, For, Show, Suspense, type JSX } from "solid-js";
+// <gofish-wiki> AUTO-GENERATED — see covers: in the essay; run `pnpm --filter docs sync-backlinks`
+// @wiki Overview — /internals/layout/passes
+// @wiki Architecture Overview — /internals/overview/architecture
+// </gofish-wiki>
+
+import { createResource, Show, Suspense, type JSX } from "solid-js";
 import { type ColorConfig } from "./colorSchemes";
 import { render as solidRender } from "solid-js/web";
 import {
   debugInputSceneGraph,
   debugNodeTree,
   debugUnderlyingSpaceTree,
-  findPathToRoot,
   type GoFishNode,
   type RenderSession,
 } from "./_node";
 import { computePosScale } from "./domain";
 import type { Size } from "./dims";
-import { tickIncrement, ticks, nice } from "d3-array";
-import { isConstant } from "../util/monotonic";
-import {
-  isDIFFERENCE,
-  isORDINAL,
-  isPOSITION,
-  isSIZE,
-  type UnderlyingSpace,
-} from "./underlyingSpace";
+import { isSIZE, type UnderlyingSpace } from "./underlyingSpace";
 import { continuous } from "./domain";
-import { interval } from "../util/interval";
-import { path, pathToSVGPath, transformPath } from "../path";
+import { elaborateAxes, elaborateAxisTitles } from "./axes/elaborate";
+import { elaborateLegend, legendOverhang } from "./legends/elaborate";
 
-export type ScaleContext = {
-  [measure: string]:
-    | { color: Map<any, string>; colorConfig?: ColorConfig }
-    | { domain: [number, number]; scaleFactor: number };
+export type CategoricalScale = {
+  color: Map<any, string>;
+  colorConfig?: ColorConfig;
 };
 
-export type KeyContext = { [key: string]: GoFishNode };
+export type ContinuousScale = {
+  domain: [number, number];
+  scaleFactor: number;
+};
+
+export type Scale = CategoricalScale | ContinuousScale;
+
+export type ScaleContext = {
+  [measure: string]: Scale;
+};
+
+export const isCategoricalScale = (
+  s: Scale | undefined
+): s is CategoricalScale => s !== undefined && "color" in s;
 export type AxesOptions = boolean | { x?: AxisOptions; y?: AxisOptions };
 export type AxisOptions = boolean | { title?: string | false };
+
+// Fallback extent for an omitted `w`/`h` on a POSITION or data-driven SIZE axis,
+// which needs a concrete canvas to scale data into (see the per-axis comment in
+// `layout()` for the full behavior, including the shrink-to-fit case).
+const DEFAULT_CANVAS_SIZE = 400;
 
 // string: custom title, false: no title, undefined: infer from encoding
 function resolveAxisTitle(
   axisOpt: AxisOptions | undefined
 ): string | false | undefined {
-  if (axisOpt === undefined || axisOpt === false) return false; // axis hidden, title irrelevant
-  if (axisOpt === true) return undefined; // axis shown, infer title from encoding
-  return axisOpt.title; // string: custom title, false: no title, undefined: infer title
+  if (axisOpt === undefined || axisOpt === false) return false;
+  if (axisOpt === true) return undefined; // infer from axisFields
+  return axisOpt.title;
 }
 
-function resolveAxes(axes: AxesOptions | undefined): {
-  x: boolean;
-  y: boolean;
-  xTitle: string | false | undefined;
-  yTitle: string | false | undefined;
-} {
+function resolveAxisTitles(
+  axes: AxesOptions | undefined,
+  axisFields?: { x?: string; y?: string }
+): { xTitle: string | undefined; yTitle: string | undefined } {
+  let xTitleOpt: string | false | undefined = false;
+  let yTitleOpt: string | false | undefined = false;
   if (axes === true) {
-    return { x: true, y: true, xTitle: undefined, yTitle: undefined };
-  }
-  if (!axes) {
-    return { x: false, y: false, xTitle: false, yTitle: false };
+    xTitleOpt = undefined;
+    yTitleOpt = undefined;
+  } else if (axes && typeof axes === "object") {
+    xTitleOpt = resolveAxisTitle(axes.x);
+    yTitleOpt = resolveAxisTitle(axes.y);
   }
   return {
-    x: !!axes.x,
-    y: !!axes.y,
-    xTitle: resolveAxisTitle(axes.x),
-    yTitle: resolveAxisTitle(axes.y),
+    xTitle: xTitleOpt === false ? undefined : (xTitleOpt ?? axisFields?.x),
+    yTitle: yTitleOpt === false ? undefined : (yTitleOpt ?? axisFields?.y),
   };
-}
-
-type OrdinalScale = (key: string) => number | undefined;
-
-function buildOrdinalScaleX(
-  keyContext: KeyContext,
-  root: GoFishNode
-): OrdinalScale {
-  const keyToPosition = new Map<string, number>();
-
-  for (const [key, node] of Object.entries(keyContext)) {
-    if (!("intrinsicDims" in node) || !node.intrinsicDims) continue;
-
-    const pathToRoot = findPathToRoot(node);
-    const accumulatedTransform = pathToRoot.reduce(
-      (acc, n) => {
-        return {
-          x: acc.x + (n.transform?.translate?.[0] ?? 0),
-          y: acc.y + (n.transform?.translate?.[1] ?? 0),
-        };
-      },
-      { x: 0, y: 0 }
-    );
-
-    const centerX =
-      accumulatedTransform.x + (node.intrinsicDims[0]?.center ?? 0);
-    keyToPosition.set(key, centerX);
-  }
-
-  return (key: string) => keyToPosition.get(key);
-}
-
-function buildOrdinalScaleY(
-  keyContext: KeyContext,
-  root: GoFishNode
-): OrdinalScale {
-  const keyToPosition = new Map<string, number>();
-
-  for (const [key, node] of Object.entries(keyContext)) {
-    if (!("intrinsicDims" in node) || !node.intrinsicDims) continue;
-
-    const pathToRoot = findPathToRoot(node);
-    const accumulatedTransform = pathToRoot.reduce(
-      (acc, n) => {
-        return {
-          x: acc.x + (n.transform?.translate?.[0] ?? 0),
-          y: acc.y + (n.transform?.translate?.[1] ?? 0),
-        };
-      },
-      { x: 0, y: 0 }
-    );
-
-    const centerY =
-      accumulatedTransform.y + (node.intrinsicDims[1]?.center ?? 0);
-    keyToPosition.set(key, centerY);
-  }
-
-  return (key: string) => keyToPosition.get(key);
 }
 
 export async function layout(
@@ -129,17 +83,18 @@ export async function layout(
     y,
     transform,
     debug = false,
-    defs,
     axes = false,
+    axisFields,
   }: {
-    w: number;
-    h: number;
+    w?: number;
+    h?: number;
     x?: number;
     y?: number;
     transform?: { x?: number; y?: number };
     debug?: boolean;
     defs?: JSX.Element[];
     axes?: AxesOptions;
+    axisFields?: { x?: string; y?: string };
   },
   child: GoFishNode | Promise<GoFishNode>,
   contexts?: {
@@ -152,20 +107,22 @@ export async function layout(
     ((pos: number) => number) | undefined,
     ((pos: number) => number) | undefined,
   ];
-  ordinalScales: [OrdinalScale | undefined, OrdinalScale | undefined];
   child: GoFishNode;
+  width: number;
+  height: number;
+  rightOverhang: number;
+  rightContentOverhang: number;
+  topOverhang: number;
+  leftOverhang: number;
+  bottomOverhang: number;
 }> {
   child = await child;
   if (contexts?.session) {
     child.setRenderSession(contexts.session);
   }
-  if (
-    typeof document !== "undefined" &&
-    document.fonts &&
-    typeof document.fonts.ready?.then === "function"
-  ) {
-    await document.fonts.ready;
-  }
+  // Note: callers must await `document.fonts.ready` before invoking
+  // `layout()`. The public `gofish()` entry handles this; standalone
+  // callers of `layout()` are responsible for the wait themselves.
   if (debug) {
     console.log("🌳 Input Scene Graph:");
     debugInputSceneGraph(child);
@@ -177,42 +134,146 @@ export async function layout(
   // return render({ width, height, transform }, layoutAST);
   child.resolveColorScale();
   child.resolveNames();
-  child.resolveKeys();
   child.resolveLabels();
-  const [underlyingSpaceX, underlyingSpaceY] = child.resolveUnderlyingSpace();
+  child.resolveUnderlyingSpace();
 
-  // Apply nice rounding to POSITION space domains
-  let niceUnderlyingSpaceX = underlyingSpaceX;
-  let niceUnderlyingSpaceY = underlyingSpaceY;
+  // The original root content object stays in the tree as the plot after any
+  // wrapping below (axis / legend / title elaboration each wrap, never replace,
+  // the content). Captured here so the title pass can center on it as the
+  // fallback anchor when a dim has no elaborated axis line. If axis elaboration
+  // changes nothing, `plotNode === child`.
+  const plotNode = child;
 
-  if (isPOSITION(underlyingSpaceX) && underlyingSpaceX.domain) {
-    const [niceMin, niceMax] = nice(
-      underlyingSpaceX.domain.min,
-      underlyingSpaceX.domain.max,
-      10
-    );
-    niceUnderlyingSpaceX = {
-      ...underlyingSpaceX,
-      domain: interval(niceMin, niceMax),
-    };
+  // Per-dim axis-line node for chart-level title centering (root-most owner
+  // wins). Defaults to no anchors when the `axes` block below doesn't run.
+  let titleAnchors: [GoFishNode | undefined, GoFishNode | undefined] = [
+    undefined,
+    undefined,
+  ];
+
+  // Node-based axis pipeline: mark axis nodes and apply nice-rounding in-place
+  if (axes) {
+    // Which dims the chart-level `axes` option enables. `true` → both. For an
+    // `{ x?, y? }` object, a dim is enabled unless it is explicitly `false` —
+    // an unspecified (undefined) dim still shows (specifying one axis doesn't
+    // disable the other); only `false` suppresses.
+    const enabled = new Set<0 | 1>();
+    if (axes === true) {
+      enabled.add(0);
+      enabled.add(1);
+    } else if (typeof axes === "object") {
+      if (axes.x !== false) enabled.add(0);
+      if (axes.y !== false) enabled.add(1);
+    }
+    child.resolveAxes(new Set(), enabled);
+    child.resolveNiceDomains();
+
+    // Axis elaboration: turn inferred axes into ordinary shapes + constraints.
+    // Wraps axis-owning content in a Layer with tick/label shapes and clears the
+    // handled axis flags; the new subtree is then re-resolved below. A flag the
+    // pass doesn't handle (e.g. an UNDEFINED space) is inert — nothing else
+    // consumes `node.axis`.
+    const elaborated = await elaborateAxes(child);
+    titleAnchors = elaborated.titleAnchors;
+    if (elaborated.changed) {
+      child = elaborated.node;
+      if (contexts?.session) child.setRenderSession(contexts.session);
+      child.resolveColorScale();
+      child.resolveNames();
+      child.resolveLabels();
+      // The rewrite inserted new nodes (wrappers + axis shapes) and moved keys
+      // onto wrappers; `resolveUnderlyingSpace` memoizes, so clear every node's
+      // cached space and recompute the whole tree from scratch before re-nicing.
+      child.clearUnderlyingSpace();
+      child.resolveUnderlyingSpace();
+      child.resolveNiceDomains();
+    }
   }
 
-  if (isPOSITION(underlyingSpaceY) && underlyingSpaceY.domain) {
-    const [niceMin, niceMax] = nice(
-      underlyingSpaceY.domain.min,
-      underlyingSpaceY.domain.max,
-      10
-    );
-    niceUnderlyingSpaceY = {
-      ...underlyingSpaceY,
-      domain: interval(niceMin, niceMax),
-    };
+  // Use (possibly nice-rounded) underlying spaces for posScales
+  const niceUnderlyingSpaceX = child._underlyingSpace![0];
+  const niceUnderlyingSpaceY = child._underlyingSpace![1];
+
+  // Reference to the content node whose extent defines the final canvas
+  // (`finalW`/`finalH` via the `finalDim` readback below). Both the title pass
+  // and the legend pass wrap `child`, so `contentNode` keeps pointing at the
+  // PRE-title, pre-legend content. This matters two ways:
+  //  - The inferred canvas is measured off the content, never inflated by a long
+  //    title or a tall legend column.
+  //  - Title, legend, and constraint-displaced extents past the content are
+  //    reserved separately as measured per-side overhangs (`leftOverhang`,
+  //    `bottomOverhang`, `topOverhang`, the legend `rightOverhang`, and the
+  //    non-legend `rightContentOverhang` below).
+  const contentNode = child;
+
+  // Axis-title elaboration: seat up to two title Text nodes (x below, y rotated
+  // left) as ordinary shapes + constraints (src/ast/axes/elaborate.tsx), each
+  // centered on the axis line it describes via a `ref()` stand-in (falling back
+  // to the plot node). Runs BEFORE the legend block on purpose: the legend
+  // distributes off the titled content's bbox, and title centering must never
+  // see the legend column. Title Texts resolve UNDEFINED spaces on both dims, so
+  // the wrapper preserves the content's underlying spaces and the nice spaces
+  // captured above remain valid. The caller owns the "any title?" guard.
+  const { xTitle, yTitle } = resolveAxisTitles(axes, axisFields);
+  if (xTitle !== undefined || yTitle !== undefined) {
+    child = await elaborateAxisTitles(child, {
+      xTitle,
+      yTitle,
+      anchors: titleAnchors,
+      plotNode,
+    });
+    if (contexts?.session) child.setRenderSession(contexts.session);
+    // The title pass introduces `ref()` stand-ins (to the axis line / plot) that
+    // resolve their `selectedNode` during name resolution — without this they'd
+    // throw "Selected node not found" at layout time. Mirror the axes block:
+    // re-resolve names, then underlying space (memoized — only the new nodes).
+    child.resolveNames();
+    child.resolveUnderlyingSpace();
+  }
+
+  // Legend elaboration: turn the color scale into an ordinary swatch-column
+  // subtree seated beside the (now possibly titled) content
+  // (src/ast/legends/elaborate.tsx). Runs after the last resolveColorScale (it
+  // consumes the populated color map; legend fills are literal strings, never
+  // isValue, so the scale pass is NOT re-run). The wrapper preserves the
+  // content's underlying spaces (unionChildSpaces ignores the legend's UNDEFINED
+  // spaces), so the nice spaces captured above remain valid.
+  let legendAdded = false;
+  const unitScale = contexts?.session.scaleContext.unit;
+  const colorMap = isCategoricalScale(unitScale) ? unitScale.color : undefined;
+  if (colorMap && colorMap.size > 0) {
+    child = await elaborateLegend(child, colorMap);
+    legendAdded = true;
+    if (contexts?.session) child.setRenderSession(contexts.session);
+    child.resolveUnderlyingSpace(); // memoized: computes only the new nodes
   }
 
   if (debug) {
     console.log("🌳 Underlying Space Tree:");
     debugUnderlyingSpaceTree(child);
   }
+
+  // An omitted overall dimension is resolved per axis from its root underlying
+  // space:
+  //  - POSITION / data-driven SIZE (a scatter axis, or bar heights = value):
+  //    there's data to scale into pixels, so fall back to a concrete canvas
+  //    (DEFAULT_CANVAS_SIZE).
+  //  - ORDINAL / UNDEFINED (a bar chart's category axis, or a bare fixed-size
+  //    shape): nothing to scale, so lay out *unsized* — marks keep their default
+  //    sizes and the operator shrinks to fit. The natural extent is recovered by
+  //    the `finalDim` readback below, so the SVG is still sized concretely.
+  // Unsized axes are handed `UNSIZED` (NaN); marks treat a non-finite size as
+  // "use my default" (e.g. rect's DEFAULT_RECT_SIZE) via their `Number.isFinite`
+  // guards, the same path the layout engine already relies on.
+  const UNSIZED = NaN;
+  const needsCanvas = (s: UnderlyingSpace) =>
+    s.kind === "position" || isSIZE(s);
+  // Concrete canvas for scaling POSITION/SIZE axes (always a real number).
+  const canvasW = w ?? DEFAULT_CANVAS_SIZE;
+  const canvasH = h ?? DEFAULT_CANVAS_SIZE;
+  // Size handed to `child.layout`: a shrink-to-fit axis is left unsized.
+  const layoutW = w ?? (needsCanvas(niceUnderlyingSpaceX) ? canvasW : UNSIZED);
+  const layoutH = h ?? (needsCanvas(niceUnderlyingSpaceY) ? canvasH : UNSIZED);
 
   const posScales: [
     ((pos: number) => number) | undefined,
@@ -227,7 +288,7 @@ export async function layout(
             ],
             measure: "unit",
           }),
-          w
+          canvasW
         )
       : undefined,
     niceUnderlyingSpaceY.kind === "position"
@@ -239,13 +300,13 @@ export async function layout(
             ],
             measure: "unit",
           }),
-          h
+          canvasH
         )
       : undefined,
   ];
 
   if (debug) {
-    console.log("width and height constraints:", w, h);
+    console.log("width and height constraints:", layoutW, layoutH);
   }
 
   // Root scale factors come from SIZE underlying spaces by inverting the
@@ -253,37 +314,75 @@ export async function layout(
   // posScales (computed above) instead.
   const rootScaleFactors: Size<number | undefined> = [
     isSIZE(niceUnderlyingSpaceX)
-      ? (niceUnderlyingSpaceX.domain.inverse(w) ?? undefined)
+      ? (niceUnderlyingSpaceX.domain.inverse(canvasW) ?? undefined)
       : undefined,
     isSIZE(niceUnderlyingSpaceY)
-      ? (niceUnderlyingSpaceY.domain.inverse(h) ?? undefined)
+      ? (niceUnderlyingSpaceY.domain.inverse(canvasH) ?? undefined)
       : undefined,
   ];
 
-  child.layout([w, h], rootScaleFactors, posScales);
+  child.layout([layoutW, layoutH], rootScaleFactors, posScales);
   child.place("x", x ?? transform?.x ?? 0, "baseline");
   child.place("y", y ?? transform?.y ?? 0, "baseline");
+
+  // Final extent: a user-given dimension is authoritative; otherwise prefer the
+  // content's laid-out intrinsic size (shrink-to-fit), falling back to the
+  // canvas default when the content didn't report one. Read off `contentNode`
+  // (== `child` when no title/legend wrapper), never an outer wrapper — so the
+  // canvas stays content-relative; title and legend extents are reserved
+  // separately as measured gutters below.
+  const finalDim = (i: 0 | 1, given: number | undefined): number => {
+    if (given !== undefined) return given;
+    const s = contentNode.dims[i]?.size;
+    return s !== undefined && Number.isFinite(s) ? s : DEFAULT_CANVAS_SIZE;
+  };
+  const finalW = finalDim(0, w);
+  const finalH = finalDim(1, h);
+
+  // Measured overhangs off the OUTERMOST wrapper (`child`), from its laid-out
+  // extent. Anything seated beyond the content box is reserved by its placed
+  // extent minus the content box; `render()` then sizes the SVG around them.
+  // `max!` / `min!` discipline (never a silent `?? 0`): the wrapper always emits
+  // a placed extent here — a silent 0 would clip the overhang and mask a layout
+  // bug, so assert it's present.
+  //
+  // The RIGHT side has two distinct kinds of overhang that must be reserved
+  // DIFFERENTLY, and they overlap in magnitude so the color-scale flag — not the
+  // size — is what tells them apart:
+  //  - A legend swatch column reserves `legendOverhang + pad` (see the width
+  //    formula in `render`). Gated on `legendAdded`: a single-row legend can
+  //    overhang as little as ~6px — the same as a wide rightmost x-tick label —
+  //    so we cannot recover this from magnitude alone.
+  //  - Otherwise, content displaced past the canvas by a constraint (e.g. a
+  //    marginal histogram's right band) flows through `reserve()` like the other
+  //    three gutters: a small x-tick spill is absorbed into `pad` (plain axis
+  //    charts stay byte-identical) and a large band reserves its full extent.
+  // TOP, LEFT, BOTTOM have only the second (chrome / displaced-content) kind.
+  const rightOverhang = legendAdded ? legendOverhang(child, finalW) : 0;
+  const rightContentOverhang = legendAdded
+    ? 0
+    : Math.max(0, child.dims[0].max! - finalW);
+  const topOverhang = Math.max(0, child.dims[1].max! - finalH);
+  const leftOverhang = Math.max(0, -child.dims[0].min!);
+  const bottomOverhang = Math.max(0, -child.dims[1].min!);
 
   if (debug) {
     console.log("🌳 Node Tree:");
     debugNodeTree(child);
   }
 
-  const ordinalScales: [OrdinalScale | undefined, OrdinalScale | undefined] = [
-    isORDINAL(niceUnderlyingSpaceX) && contexts?.session?.keyContext
-      ? buildOrdinalScaleX(contexts.session.keyContext, child)
-      : undefined,
-    isORDINAL(niceUnderlyingSpaceY) && contexts?.session?.keyContext
-      ? buildOrdinalScaleY(contexts.session.keyContext, child)
-      : undefined,
-  ];
-
   return {
     underlyingSpaceX: niceUnderlyingSpaceX,
     underlyingSpaceY: niceUnderlyingSpaceY,
     posScales,
-    ordinalScales,
     child,
+    width: finalW,
+    height: finalH,
+    rightOverhang,
+    rightContentOverhang,
+    topOverhang,
+    leftOverhang,
+    bottomOverhang,
   };
 }
 
@@ -301,9 +400,10 @@ export const gofish = (
     axes = false,
     axisFields,
     colorConfig,
+    padding,
   }: {
-    w: number;
-    h: number;
+    w?: number;
+    h?: number;
     x?: number;
     y?: number;
     transform?: { x?: number; y?: number };
@@ -312,9 +412,11 @@ export const gofish = (
     axes?: AxesOptions;
     axisFields?: { x?: string; y?: string };
     colorConfig?: ColorConfig;
+    padding?: number;
   },
   child: GoFishNode | Promise<GoFishNode>
 ) => {
+  const svgPadding = padding ?? PADDING;
   type LayoutData = {
     underlyingSpaceX: UnderlyingSpace;
     underlyingSpaceY: UnderlyingSpace;
@@ -322,40 +424,50 @@ export const gofish = (
       ((pos: number) => number) | undefined,
       ((pos: number) => number) | undefined,
     ];
-    ordinalScales: [OrdinalScale | undefined, OrdinalScale | undefined];
     child: GoFishNode;
-    scaleContext: ScaleContext;
-    keyContext: KeyContext;
+    width: number;
+    height: number;
+    rightOverhang: number;
+    rightContentOverhang: number;
+    topOverhang: number;
+    leftOverhang: number;
+    bottomOverhang: number;
   };
 
   const runGofish = async (): Promise<LayoutData> => {
     const session: RenderSession = {
-      scopeContext: new Map(),
+      tokenContext: new Map(),
       scaleContext: { unit: { color: new Map(), colorConfig } },
-      keyContext: {},
     };
     try {
       const contexts = {
         session,
       };
 
+      // Text mark bbox measurements (via canvas measureText in
+      // text.tsx) depend on resolved font metrics. If a webfont is
+      // still loading when layout runs, measurement uses fallback
+      // metrics, baking the wrong positions into the SVG.
+      // FontFaceSet.ready resolves once all CSS-declared @font-face
+      // loads are done. System-fallback resolution (e.g. "Andale Mono"
+      // → fontconfig monospace on Linux) bypasses this entirely, so
+      // this isn't a full guarantee — but it's a strict improvement
+      // for any consumer using <link>-loaded webfonts.
+      if (typeof document !== "undefined" && document.fonts?.ready) {
+        await document.fonts.ready;
+      }
+
       const layoutResult = await layout(
-        { w, h, x, y, transform, debug, defs, axes },
+        { w, h, x, y, transform, debug, defs, axes, axisFields },
         child,
         contexts
       );
 
-      const result = {
-        ...layoutResult,
-        scaleContext: session.scaleContext,
-        keyContext: session.keyContext,
-      };
-
-      return result;
+      return layoutResult;
     } finally {
       if (debug) {
         console.log("scaleContext", session.scaleContext);
-        console.log("scopeContext", session.scopeContext);
+        console.log("tokenContext", session.tokenContext);
       }
     }
   };
@@ -372,17 +484,15 @@ export const gofish = (
           if (!data) return null;
           return render(
             {
-              width: w,
-              height: h,
+              width: data.width,
+              height: data.height,
+              svgPadding,
               defs,
-              axes,
-              axisFields,
-              scaleContext: data.scaleContext,
-              keyContext: data.keyContext,
-              underlyingSpaceX: data.underlyingSpaceX,
-              underlyingSpaceY: data.underlyingSpaceY,
-              posScales: data.posScales,
-              ordinalScales: data.ordinalScales,
+              rightOverhang: data.rightOverhang,
+              rightContentOverhang: data.rightContentOverhang,
+              topOverhang: data.topOverhang,
+              leftOverhang: data.leftOverhang,
+              bottomOverhang: data.bottomOverhang,
             },
             data.child
           );
@@ -393,819 +503,92 @@ export const gofish = (
   return container;
 };
 
-const PADDING = 10;
+const PADDING = 40;
 
 /**
  * Finds the translation from the top-level coord node.
  * Checks the node itself first, then its immediate children.
  * Returns the coord node's transform.translate values, or null if not found.
  */
-function findCoordTranslation(node: GoFishNode): [number, number] | null {
-  // Check if the node itself is a coord node
-  if (node.type === "coord" && node.transform?.translate) {
-    return [node.transform.translate[0] ?? 0, node.transform.translate[1] ?? 0];
-  }
-
-  // Check immediate children for a coord node
-  if (node.children) {
-    for (const child of node.children) {
-      // Check if child is a coord node (coord nodes are always GoFishNode, not GoFishRef)
-      if ("type" in child && child.type === "coord" && "transform" in child) {
-        const coordNode = child as GoFishNode;
-        if (coordNode.transform?.translate) {
-          return [
-            coordNode.transform.translate[0] ?? 0,
-            coordNode.transform.translate[1] ?? 0,
-          ];
-        }
-      }
-    }
-  }
-
-  return null;
-}
-
-/**
- * Finds the coordinate-space bounding box from the top-level coord node.
- * Checks the node itself first, then its immediate children.
- * Returns the coord node's coordinate-space bounding box, or null if not found.
- */
-function findCoordBoundingBox(
-  node: GoFishNode
-): { thetaMin: number; thetaMax: number; rMin: number; rMax: number } | null {
-  // Check if the node itself is a coord node
-  if (node.type === "coord" && node.renderData?.coordinateSpaceBbox) {
-    return node.renderData.coordinateSpaceBbox;
-  }
-
-  // Check immediate children for a coord node
-  if (node.children) {
-    for (const child of node.children) {
-      // Check if child is a coord node (coord nodes are always GoFishNode, not GoFishRef)
-      if ("type" in child && child.type === "coord" && "renderData" in child) {
-        const coordNode = child as GoFishNode;
-        if (coordNode.renderData?.coordinateSpaceBbox) {
-          return coordNode.renderData.coordinateSpaceBbox;
-        }
-      }
-    }
-  }
-
-  return null;
-}
-
 export const render = (
   {
     width,
     height,
     transform,
     defs,
-    axes,
-    axisFields,
-    scaleContext: scaleContextParam,
-    keyContext: keyContextParam,
-    underlyingSpaceX,
-    underlyingSpaceY,
-    posScales,
-    ordinalScales,
+    rightOverhang = 0,
+    rightContentOverhang = 0,
+    topOverhang = 0,
+    leftOverhang = 0,
+    bottomOverhang = 0,
+    svgPadding,
   }: {
     width: number;
     height: number;
     transform?: string;
     defs?: JSX.Element[];
-    axes?: AxesOptions;
-    axisFields?: { x?: string; y?: string };
-    scaleContext: ScaleContext | null;
-    keyContext: KeyContext | null;
-    underlyingSpaceX: UnderlyingSpace;
-    underlyingSpaceY: UnderlyingSpace;
-    posScales: [
-      ((pos: number) => number) | undefined,
-      ((pos: number) => number) | undefined,
-    ];
-    ordinalScales: [OrdinalScale | undefined, OrdinalScale | undefined];
+    rightOverhang?: number;
+    rightContentOverhang?: number;
+    topOverhang?: number;
+    leftOverhang?: number;
+    bottomOverhang?: number;
+    svgPadding?: number;
   },
   child: GoFishNode
 ): JSX.Element => {
-  const scaleContext = scaleContextParam;
-  const keyContext = keyContextParam;
-  const { x: axisX, y: axisY, xTitle, yTitle } = resolveAxes(axes);
-  const axisVisibility = { x: axisX, y: axisY };
-  const resolvedXTitle =
-    xTitle === false ? undefined : (xTitle ?? axisFields?.x);
-  const resolvedYTitle =
-    yTitle === false ? undefined : (yTitle ?? axisFields?.y);
-  const hasAnyVisibleAxis = axisVisibility.x || axisVisibility.y;
-  const axisPaddingX = axisVisibility.y ? 100 : 0;
-  const axisPaddingY = axisVisibility.x ? 100 : 0;
-  const leftMargin = resolvedYTitle ? PADDING * 7 : PADDING * 4;
+  const pad = svgPadding ?? PADDING;
 
-  let yTicks: number[] = [];
-  let xTicks: number[] = [];
-  if (
-    hasAnyVisibleAxis &&
-    scaleContext?.x &&
-    scaleContext?.y &&
-    "domain" in scaleContext.x &&
-    "scaleFactor" in scaleContext.x &&
-    "domain" in scaleContext.y &&
-    "scaleFactor" in scaleContext.y
-  ) {
-    const [xMin, xMax] = nice(
-      scaleContext.x.domain[0],
-      scaleContext.x.domain[1],
-      10
-    );
-    xTicks = ticks(xMin, xMax, 10);
+  // Chrome (axis tick/label rows, titles, the legend column) is now elaborated
+  // into ordinary shapes that live in the node tree; `render()` only sizes the
+  // SVG around their measured extent — no chart-chrome special cases remain.
+  // Content seated beyond the canvas by a constraint (e.g. marginal histogram
+  // bands above/right of a scatter) is measured the same way, via the per-side
+  // overhangs — including the new top and non-legend right gutters.
+  //
+  // Reserve enough on each gutter side to clear the measured overhang plus a
+  // little breathing room from the SVG edge. The `o > 0` guard keeps a chart
+  // with `padding: 0` and no chrome at zero reserve (don't invent EDGE_GAP px on
+  // an empty gutter); and because gutters ≤ `pad - EDGE_GAP` are absorbed by the
+  // existing `pad`, an untitled chart stays byte-identical to the pre-chrome
+  // output.
+  const EDGE_GAP = 8; // breathing room between gutter content and the SVG edge
+  // Ceil: the reserve becomes the root <g> translate, and a fractional
+  // translate (measured overhangs are routinely fractional — text widths)
+  // shifts every shape off the pixel grid: adjacent area/bar segments grow
+  // hairline antialiasing seams and text rasterizes fuzzy.
+  const reserve = (o: number) =>
+    o > 0 ? Math.ceil(Math.max(pad, o + EDGE_GAP)) : pad;
+  const leftReserve = reserve(leftOverhang);
+  const bottomReserve = reserve(bottomOverhang);
+  const topReserve = reserve(topOverhang);
 
-    const [yMin, yMax] = nice(
-      scaleContext.y.domain[0],
-      scaleContext.y.domain[1],
-      10
-    );
-    yTicks = ticks(yMin, yMax, 10);
-  }
-
+  // Right gutter = legend reservation + non-legend reserve. `rightOverhang` is
+  // the legend column's overhang (0 when there's no legend); it keeps a full
+  // `pad` margin beyond the column — the legend's historical reservation — via
+  // `reserve(rightContentOverhang)`, whose floor is `pad` (so a legend chart
+  // reserves `legendOverhang + pad`, byte-identical). `rightContentOverhang` is
+  // any NON-legend content displaced past the right edge (a marginal band);
+  // routing it through the same `reserve()` as the other gutters absorbs a small
+  // x-tick spill into `pad` (plain axis charts stay byte-identical) and reserves
+  // a large band's full extent plus `EDGE_GAP`. The right gutter bears no root
+  // <g> translate, so it needn't be pixel-snapped — a fractional width is
+  // harmless (legend overhangs are fractional text widths).
   const result = (
     <svg
-      width={width + leftMargin + PADDING * 2 + axisPaddingX}
-      height={height + PADDING * 6 + axisPaddingY}
+      width={
+        leftReserve + width + rightOverhang + reserve(rightContentOverhang)
+      }
+      height={topReserve + height + bottomReserve}
       xmlns="http://www.w3.org/2000/svg"
     >
       <Show when={defs}>
         <defs>{defs}</defs>
       </Show>
       <g
-        transform={`scale(1, -1) translate(${leftMargin}, ${-height - PADDING * 4})`}
+        transform={`scale(1, -1) translate(${leftReserve}, ${-(height + topReserve)})`}
       >
         <Show when={transform} keyed fallback={child.INTERNAL_render()}>
           <g transform={transform ?? ""}>{child.INTERNAL_render()}</g>
-        </Show>
-        <Show when={hasAnyVisibleAxis}>
-          {(() => {
-            // Check if we have a coordinate transform (polar/clock coordinates)
-            const hasCoordTransform =
-              (isPOSITION(underlyingSpaceX) &&
-                underlyingSpaceX.coordinateTransform) ||
-              (isPOSITION(underlyingSpaceY) &&
-                underlyingSpaceY.coordinateTransform);
-
-            // Find the coord node's translation if we have a coordinate transform
-            const coordTranslation = hasCoordTransform
-              ? findCoordTranslation(child)
-              : null;
-
-            // Apply translation if found
-            const axesTransform = coordTranslation
-              ? `translate(${coordTranslation[0]}, ${coordTranslation[1]})`
-              : undefined;
-
-            return (
-              <>
-                <g transform={axesTransform}>
-                  {/* x axis */}
-                  {/* <line
-              x1={0}
-              y1={height + PADDING}
-              x2={width + PADDING}
-              y2={height + PADDING}
-              stroke="gray"
-              stroke-width="1px"
-            /> */}
-                  {/* y axis (continuous) */}
-                  <Show when={axisVisibility.y && isPOSITION(underlyingSpaceY)}>
-                    {(() => {
-                      if (!isPOSITION(underlyingSpaceY)) return null;
-                      const spaceY = underlyingSpaceY; // Type narrowed to POSITION_TYPE
-                      const xPosScale = posScales[0];
-                      const yPosScale = posScales[1];
-                      const [yMin, yMax] = nice(
-                        spaceY.domain.min,
-                        spaceY.domain.max,
-                        10
-                      );
-                      const yTicks = ticks(yMin, yMax, 10);
-                      const coordTransform = spaceY.coordinateTransform;
-
-                      if (coordTransform && xPosScale && yPosScale) {
-                        // Map using posScales before applying coordinate transform
-                        const xDomainMin = coordTransform.domain[0].min!;
-                        const screenYMin = yPosScale(yMin);
-                        const screenYMax = yPosScale(yMax);
-                        const screenX = xPosScale(xDomainMin);
-
-                        // Create path in screen space, then transform
-                        const screenPath = path(
-                          [
-                            [screenX, screenYMin],
-                            [screenX, screenYMax],
-                          ],
-                          { subdivision: 100 }
-                        );
-                        const axisLinePath = transformPath(
-                          screenPath,
-                          coordTransform
-                        );
-
-                        return (
-                          <g>
-                            <path
-                              d={pathToSVGPath(axisLinePath)}
-                              stroke="gray"
-                              stroke-width="1px"
-                              fill="none"
-                            />
-                            <For each={yTicks}>
-                              {(tick) => {
-                                const screenTickY = yPosScale(tick);
-                                const [transformedX, transformedY] =
-                                  coordTransform.transform([
-                                    screenX,
-                                    screenTickY,
-                                  ]);
-                                return (
-                                  <>
-                                    <text
-                                      transform="scale(1, -1)"
-                                      x={transformedX - PADDING * 0.25}
-                                      y={-transformedY}
-                                      text-anchor="end"
-                                      dominant-baseline="middle"
-                                      font-size="10px"
-                                      fill="gray"
-                                    >
-                                      {tick}
-                                    </text>
-                                    {/* Tick mark - create a small line from the axis */}
-                                    <line
-                                      x1={transformedX}
-                                      y1={transformedY}
-                                      x2={transformedX - PADDING * 0.5}
-                                      y2={transformedY}
-                                      stroke="gray"
-                                    />
-                                  </>
-                                );
-                              }}
-                            </For>
-                          </g>
-                        );
-                      } else {
-                        // Standard cartesian y-axis
-                        if (!yPosScale) return null;
-                        return (
-                          <g>
-                            <line
-                              x1={-PADDING}
-                              y1={yPosScale(yTicks[0]) - 0.5}
-                              x2={-PADDING}
-                              y2={yPosScale(yTicks[yTicks.length - 1]) + 0.5}
-                              stroke="gray"
-                              stroke-width="1px"
-                            />
-                            <For each={yTicks}>
-                              {(tick) => (
-                                <>
-                                  <text
-                                    transform="scale(1, -1)"
-                                    x={-PADDING * 1.75}
-                                    y={-yPosScale(tick)}
-                                    text-anchor="end"
-                                    dominant-baseline="middle"
-                                    font-size="10px"
-                                    fill="gray"
-                                  >
-                                    {tick}
-                                  </text>
-                                  <line
-                                    x1={-PADDING * 1.5}
-                                    y1={yPosScale(tick)}
-                                    x2={-PADDING}
-                                    y2={yPosScale(tick)}
-                                    stroke="gray"
-                                  />
-                                </>
-                              )}
-                            </For>
-                          </g>
-                        );
-                      }
-                    })()}
-                  </Show>
-                  <Show
-                    when={
-                      axisVisibility.y &&
-                      isDIFFERENCE(underlyingSpaceY) &&
-                      scaleContext?.y &&
-                      "scaleFactor" in scaleContext.y
-                    }
-                  >
-                    {(() => {
-                      const yScale = scaleContext!.y as {
-                        domain: [number, number];
-                        scaleFactor: number;
-                      };
-                      if (!isDIFFERENCE(underlyingSpaceY)) return null;
-                      const [yMin, yMax] = nice(0, underlyingSpaceY.width, 10);
-                      const yTicks = ticks(yMin, yMax, 10);
-                      return (
-                        <g>
-                          <line
-                            x1={-PADDING}
-                            y1={
-                              (yTicks[0] - yTicks[0]) * yScale.scaleFactor - 0.5
-                            }
-                            x2={-PADDING}
-                            y2={
-                              (yTicks[yTicks.length - 1] - yTicks[0]) *
-                                yScale.scaleFactor +
-                              0.5
-                            }
-                            stroke="gray"
-                            stroke-width="1px"
-                          />
-                          <For each={yTicks}>
-                            {(tick) => (
-                              <>
-                                <line
-                                  x1={-PADDING * 1.5}
-                                  y1={(tick - yTicks[0]) * yScale.scaleFactor}
-                                  x2={-PADDING}
-                                  y2={(tick - yTicks[0]) * yScale.scaleFactor}
-                                  stroke="gray"
-                                />
-                              </>
-                            )}
-                          </For>
-
-                          {/* For each pair of yTicks, put text in between showing the difference */}
-                          <For
-                            each={Array.from(
-                              { length: yTicks.length - 1 },
-                              (_, i) => i
-                            )}
-                          >
-                            {(i) => {
-                              const tick1 = yTicks[i];
-                              const tick2 = yTicks[i + 1];
-                              const diff = tick2 - tick1;
-                              // Position text halfway between the two ticks
-                              const y1 =
-                                (tick1 - yTicks[0]) * yScale.scaleFactor;
-                              const y2 =
-                                (tick2 - yTicks[0]) * yScale.scaleFactor;
-                              const yMid = (y1 + y2) / 2;
-                              return (
-                                <text
-                                  transform="scale(1, -1)"
-                                  x={-PADDING * 1.5}
-                                  y={-yMid}
-                                  text-anchor="end"
-                                  dominant-baseline="middle"
-                                  font-size="10px"
-                                  fill="gray"
-                                >
-                                  {diff}
-                                </text>
-                              );
-                            }}
-                          </For>
-                        </g>
-                      );
-                    })()}
-                  </Show>
-
-                  {/* x axis (position) */}
-                  <Show when={axisVisibility.x && isPOSITION(underlyingSpaceX)}>
-                    {(() => {
-                      if (!isPOSITION(underlyingSpaceX)) return null;
-                      const spaceX = underlyingSpaceX; // Type narrowed to POSITION_TYPE
-                      const xPosScale = posScales[0];
-                      const [xMin, xMax] = nice(
-                        spaceX.domain.min,
-                        spaceX.domain.max,
-                        10
-                      );
-                      const xTicks = ticks(xMin, xMax, 10);
-                      const coordTransform = spaceX.coordinateTransform;
-
-                      if (coordTransform && xPosScale) {
-                        // Map the chart's data domain into the coordinate-space theta range.
-                        // For clock/polar, the coord transform expects theta in [0, 2π] (or whatever its domain says),
-                        // not raw data-domain values.
-                        const thetaSize =
-                          coordTransform.domain[0].size ??
-                          coordTransform.domain[0].max! -
-                            coordTransform.domain[0].min!;
-                        const thetaScale = computePosScale(
-                          continuous({
-                            value: [xMin, xMax],
-                            measure: "unit",
-                          }),
-                          thetaSize
-                        );
-
-                        const thetaMin = thetaScale(xMin);
-                        const thetaMax = thetaScale(xMax);
-
-                        // Get the maximum radius from the coordinate-space bounding box
-                        // and add padding to position axis outside chart bounds
-                        const coordBbox = findCoordBoundingBox(child);
-                        const rMax = coordBbox
-                          ? coordBbox.rMax + PADDING * 2
-                          : (coordTransform.domain[1].max ??
-                            coordTransform.domain[1].size ??
-                            100);
-
-                        const rAxis = rMax;
-                        const tickLen = PADDING * 0.5;
-                        const labelPad = PADDING * 1.25;
-
-                        const axisDomainPath = path(
-                          [
-                            [thetaMin, rMax],
-                            [thetaMax, rMax],
-                          ],
-                          { subdivision: 200 }
-                        );
-
-                        const axisLinePath = transformPath(
-                          axisDomainPath,
-                          coordTransform
-                        );
-
-                        return (
-                          <g>
-                            <path
-                              d={pathToSVGPath(axisLinePath)}
-                              stroke="gray"
-                              stroke-width="1px"
-                              fill="none"
-                            />
-                            <For each={xTicks}>
-                              {(tick) => {
-                                const thetaTick = thetaScale(tick);
-                                // Ticks/labels should point outward (increasing r), regardless of how the
-                                // coordinate transform distorts the space. Compute direction in screen space
-                                // by sampling at r and r+Δr.
-                                const [tickAxisX, tickAxisY] =
-                                  coordTransform.transform([thetaTick, rAxis]);
-                                const [tickOutX, tickOutY] =
-                                  coordTransform.transform([
-                                    thetaTick,
-                                    rAxis + tickLen,
-                                  ]);
-
-                                const dx = tickOutX - tickAxisX;
-                                const dy = tickOutY - tickAxisY;
-                                const dLen = Math.hypot(dx, dy);
-                                const dirX = dLen > 1e-6 ? dx / dLen : 0;
-                                const dirY = dLen > 1e-6 ? dy / dLen : 1;
-
-                                const labelX = tickOutX + dirX * labelPad;
-                                const labelY = tickOutY + dirY * labelPad;
-                                return (
-                                  <>
-                                    <text
-                                      transform="scale(1, -1)"
-                                      x={labelX}
-                                      y={-labelY}
-                                      text-anchor="middle"
-                                      dominant-baseline="hanging"
-                                      font-size="10px"
-                                      fill="gray"
-                                    >
-                                      {tick}
-                                    </text>
-                                    {/* Tick mark - create a small line from the axis */}
-                                    <line
-                                      x1={tickAxisX}
-                                      y1={tickAxisY}
-                                      x2={tickOutX}
-                                      y2={tickOutY}
-                                      stroke="gray"
-                                    />
-                                  </>
-                                );
-                              }}
-                            </For>
-                          </g>
-                        );
-                      } else {
-                        // Standard cartesian x-axis
-                        if (!xPosScale) return null;
-                        return (
-                          <g>
-                            <line
-                              x1={xPosScale(xTicks[0]) - 0.5}
-                              y1={-PADDING}
-                              x2={xPosScale(xTicks[xTicks.length - 1]) + 0.5}
-                              y2={-PADDING}
-                              stroke="gray"
-                              stroke-width="1px"
-                            />
-                            <For each={xTicks}>
-                              {(tick) => (
-                                <>
-                                  <text
-                                    transform="scale(1, -1)"
-                                    x={xPosScale(tick)}
-                                    y={PADDING * 1.75}
-                                    text-anchor="middle"
-                                    dominant-baseline="hanging"
-                                    font-size="10px"
-                                    fill="gray"
-                                  >
-                                    {tick}
-                                  </text>
-                                  <line
-                                    x1={xPosScale(tick)}
-                                    y1={-PADDING}
-                                    x2={xPosScale(tick)}
-                                    y2={-PADDING * 1.5}
-                                    stroke="gray"
-                                  />
-                                </>
-                              )}
-                            </For>
-                          </g>
-                        );
-                      }
-                    })()}
-                  </Show>
-
-                  {/* x axis (difference) */}
-                  <Show
-                    when={
-                      axisVisibility.x &&
-                      isDIFFERENCE(underlyingSpaceX) &&
-                      scaleContext?.x &&
-                      "scaleFactor" in scaleContext.x
-                    }
-                  >
-                    {(() => {
-                      const xScale = scaleContext!.x as {
-                        domain: [number, number];
-                        scaleFactor: number;
-                      };
-                      if (!isDIFFERENCE(underlyingSpaceX)) return null;
-                      const [xMin, xMax] = nice(0, underlyingSpaceX.width, 10);
-                      const xTicks = ticks(xMin, xMax, 10);
-                      return (
-                        <g>
-                          <line
-                            x1={
-                              (xTicks[0] - xTicks[0]) * xScale.scaleFactor - 0.5
-                            }
-                            y1={-PADDING}
-                            x2={
-                              (xTicks[xTicks.length - 1] - xTicks[0]) *
-                                xScale.scaleFactor +
-                              0.5
-                            }
-                            y2={-PADDING}
-                            stroke="gray"
-                            stroke-width="1px"
-                          />
-                          <For each={xTicks}>
-                            {(tick) => (
-                              <>
-                                <line
-                                  x1={(tick - xTicks[0]) * xScale.scaleFactor}
-                                  y1={-PADDING * 1.5}
-                                  x2={(tick - xTicks[0]) * xScale.scaleFactor}
-                                  y2={-PADDING}
-                                  stroke="gray"
-                                />
-                              </>
-                            )}
-                          </For>
-
-                          {/* For each pair of xTicks, put text in between showing the difference */}
-                          <For
-                            each={Array.from(
-                              { length: xTicks.length - 1 },
-                              (_, i) => i
-                            )}
-                          >
-                            {(i) => {
-                              const tick1 = xTicks[i];
-                              const tick2 = xTicks[i + 1];
-                              const diff = tick2 - tick1;
-                              // Position text halfway between the two ticks
-                              const x1 =
-                                (tick1 - xTicks[0]) * xScale.scaleFactor;
-                              const x2 =
-                                (tick2 - xTicks[0]) * xScale.scaleFactor;
-                              const xMid = (x1 + x2) / 2;
-                              return (
-                                <text
-                                  transform="scale(1, -1)"
-                                  x={xMid}
-                                  y={PADDING * 1.75}
-                                  text-anchor="middle"
-                                  dominant-baseline="hanging"
-                                  font-size="10px"
-                                  fill="gray"
-                                >
-                                  {diff}
-                                </text>
-                              );
-                            }}
-                          </For>
-                        </g>
-                      );
-                    })()}
-                  </Show>
-                  {/* x axis (discrete) */}
-                  <Show
-                    when={
-                      axisVisibility.x &&
-                      isORDINAL(underlyingSpaceX) &&
-                      ordinalScales[0] &&
-                      keyContext
-                    }
-                  >
-                    {(() => {
-                      const scale = ordinalScales[0]!;
-                      // Use domain from ORDINAL space for top-level keys
-                      const domain = isORDINAL(underlyingSpaceX)
-                        ? underlyingSpaceX.domain
-                        : undefined;
-                      const labelKeys =
-                        domain && domain.length > 0 ? domain : [];
-                      // Get the minimum Y position for label placement
-                      const entries = Object.entries(keyContext ?? {});
-                      const minY = entries.reduce((min, [, node]) => {
-                        if (!("intrinsicDims" in node) || !node.intrinsicDims)
-                          return min;
-                        const pathToRoot = findPathToRoot(node);
-                        const accumulatedTransform = pathToRoot.reduce(
-                          (acc, n) => {
-                            return {
-                              x: acc.x + (n.transform?.translate?.[0] ?? 0),
-                              y: acc.y + (n.transform?.translate?.[1] ?? 0),
-                            };
-                          },
-                          { x: 0, y: 0 }
-                        );
-                        const yPos =
-                          accumulatedTransform.y +
-                          (node.intrinsicDims[1]?.min ?? 0);
-                        return Math.min(min, yPos);
-                      }, Infinity);
-                      return (
-                        <g>
-                          <For each={labelKeys}>
-                            {(key) => {
-                              const xPos = scale(key);
-                              if (xPos === undefined) return null;
-                              return (
-                                <text
-                                  transform="scale(1, -1)"
-                                  x={xPos}
-                                  y={-minY + 5}
-                                  text-anchor="middle"
-                                  dominant-baseline="hanging"
-                                  font-size="10px"
-                                  fill="gray"
-                                >
-                                  {key}
-                                </text>
-                              );
-                            }}
-                          </For>
-                        </g>
-                      );
-                    })()}
-                  </Show>
-                  <Show
-                    when={
-                      axisVisibility.y &&
-                      isORDINAL(underlyingSpaceY) &&
-                      ordinalScales[1] &&
-                      keyContext
-                    }
-                  >
-                    {(() => {
-                      const scale = ordinalScales[1]!;
-                      // Use domain from ORDINAL space for top-level keys
-                      const domain = isORDINAL(underlyingSpaceY)
-                        ? underlyingSpaceY.domain
-                        : undefined;
-                      const labelKeys =
-                        domain && domain.length > 0 ? domain : [];
-                      // Get the minimum X position for label placement
-                      const entries = Object.entries(keyContext ?? {});
-                      const minX = entries.reduce((min, [, node]) => {
-                        if (!("intrinsicDims" in node) || !node.intrinsicDims)
-                          return min;
-                        const pathToRoot = findPathToRoot(node);
-                        const accumulatedTransform = pathToRoot.reduce(
-                          (acc, n) => {
-                            return {
-                              x: acc.x + (n.transform?.translate?.[0] ?? 0),
-                              y: acc.y + (n.transform?.translate?.[1] ?? 0),
-                            };
-                          },
-                          { x: 0, y: 0 }
-                        );
-                        const xPos =
-                          accumulatedTransform.x +
-                          (node.intrinsicDims[0]?.min ?? 0);
-                        return Math.min(min, xPos);
-                      }, Infinity);
-                      return (
-                        <g>
-                          <For each={labelKeys}>
-                            {(key) => {
-                              const yPos = scale(key);
-                              if (yPos === undefined) return null;
-                              return (
-                                <text
-                                  transform="scale(1, -1)"
-                                  x={minX - 5}
-                                  y={-yPos}
-                                  text-anchor="end"
-                                  dominant-baseline="middle"
-                                  font-size="10px"
-                                  fill="gray"
-                                >
-                                  {key}
-                                </text>
-                              );
-                            }}
-                          </For>
-                        </g>
-                      );
-                    })()}
-                  </Show>
-                </g>
-                {/* x axis title */}
-                <Show when={axisVisibility.x && resolvedXTitle}>
-                  <text
-                    transform="scale(1, -1)"
-                    x={width / 2}
-                    y={PADDING * 3.5}
-                    text-anchor="middle"
-                    dominant-baseline="hanging"
-                    font-size="11px"
-                    fill="gray"
-                  >
-                    {resolvedXTitle}
-                  </text>
-                </Show>
-                {/* y axis title */}
-                <Show when={axisVisibility.y && resolvedYTitle}>
-                  <text
-                    transform={`translate(${-PADDING * 3.5}, ${height / 2}) scale(1, -1) rotate(-90)`}
-                    text-anchor="middle"
-                    dominant-baseline="middle"
-                    font-size="11px"
-                    fill="gray"
-                  >
-                    {resolvedYTitle}
-                  </text>
-                </Show>
-                {/* legend (discrete color for now) */}
-                <g>
-                  <For
-                    each={Array.from(
-                      (scaleContext?.unit && "color" in scaleContext.unit
-                        ? scaleContext.unit.color
-                        : new Map()
-                      ).entries()
-                    )}
-                  >
-                    {([key, value], i) => (
-                      <g
-                        transform={`translate(${width + PADDING * 3}, ${height - i() * 20})`}
-                      >
-                        <rect
-                          x={-20}
-                          y={-5}
-                          width={10}
-                          height={10}
-                          fill={value}
-                        />
-                        <text
-                          transform="scale(1, -1)"
-                          x={-5}
-                          y={0}
-                          text-anchor="start"
-                          dominant-baseline="middle"
-                          font-size="10px"
-                          fill="gray"
-                        >
-                          {key}
-                        </text>
-                      </g>
-                    )}
-                  </For>
-                </g>
-              </>
-            );
-          })()}
         </Show>
       </g>
     </svg>

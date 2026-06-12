@@ -1,17 +1,17 @@
-import { For } from "solid-js";
 import { GoFishNode, Placeable } from "../_node";
-import { getMeasure, getValue, isValue, MaybeValue, Value } from "../data";
+import type { AxisOptions } from "../gofish";
+import { getMeasure, getValue, isValue, MaybeValue, Measure } from "../data";
 import {
   Direction,
   elaborateDims,
   elaborateDirection,
   FancyDims,
   FancyDirection,
-  FancySize,
   Size,
 } from "../dims";
-import _, { Collection, size } from "lodash";
-import { computeAesthetic, computeSize, findTargetMonotonic } from "../../util";
+import { Collection } from "lodash";
+import { SplitBy, splitKeyFn } from "../datumProjection";
+import { computeAesthetic, computeSize, foldFinite } from "../../util";
 import { GoFishAST } from "../_ast";
 import { createNodeOperator } from "../withGoFish";
 import * as Monotonic from "../../util/monotonic";
@@ -23,6 +23,8 @@ import {
   isDIFFERENCE,
   isPOSITION,
   isSIZE,
+  forgetAllMeasures,
+  spaceMeasure,
 } from "../underlyingSpace";
 import { UnderlyingSpace } from "../underlyingSpace";
 import * as Interval from "../../util/interval";
@@ -50,6 +52,8 @@ export const Spread = createNodeOperator(
       mode = "edge",
       reverse = false,
       glue = false,
+      stackWeights,
+      axes,
       ...fancyDims
     }: {
       name?: string;
@@ -63,6 +67,15 @@ export const Spread = createNodeOperator(
       // When true, treat as a stack: glue children together, summing their
       // sizes into a POSITION at this level. `spacing` is ignored.
       glue?: boolean;
+      /**
+       * When length matches `children`, divides space along `dir` in proportion
+       * to these weights (after subtracting `spacing`). Otherwise each child
+       * gets an equal share.
+       */
+      stackWeights?: number[];
+      /** Override axis rendering for this node. true/false applies to both
+       * dims; object form controls x/y independently. */
+      axes?: boolean | { x?: AxisOptions; y?: AxisOptions };
     } & FancyDims<MaybeValue<number>>,
     children: GoFishAST[] | Collection<GoFishAST>
   ) => {
@@ -77,7 +90,7 @@ export const Spread = createNodeOperator(
     // Glue mode ignores spacing.
     const effectiveSpacing = glue ? 0 : spacing;
 
-    return new GoFishNode(
+    const node = new GoFishNode(
       {
         type: "spread",
         args: {
@@ -90,6 +103,7 @@ export const Spread = createNodeOperator(
           mode,
           reverse,
           glue,
+          stackWeights,
           dims,
         },
         key,
@@ -112,14 +126,21 @@ export const Spread = createNodeOperator(
             .map((node) => node.key)
             .filter((key): key is string => key !== undefined);
 
+          // Forget-merge of the stacking children's measures. Stacking/
+          // spreading different fields is legitimate, so a conflict forgets to
+          // undefined rather than throwing.
+          const stackChildMeasure = (): Measure | undefined =>
+            forgetAllMeasures(stackSpaces.map((s) => spaceMeasure(s)));
+
           // Explicit size on the spread overrides children-derived sizing.
           if (isValue(dims[stackDir].size)) {
-            return {
-              [stackDir]: SIZE(
-                Monotonic.linear(getValue(dims[stackDir].size!), 0)
-              ),
-              [alignDir]: alignSpace,
-            };
+            const explicit: Size<UnderlyingSpace> = [UNDEFINED, UNDEFINED];
+            explicit[stackDir] = SIZE(
+              Monotonic.linear(getValue(dims[stackDir].size!), 0),
+              getMeasure(dims[stackDir].size)
+            );
+            explicit[alignDir] = alignSpace;
+            return explicit;
           }
 
           let stackSpace: UnderlyingSpace = UNDEFINED;
@@ -135,12 +156,18 @@ export const Spread = createNodeOperator(
                     : 0
                 )
                 .reduce((a, b) => a + b, 0);
-              stackSpace = POSITION(Interval.interval(0, totalWidth));
+              stackSpace = POSITION(
+                Interval.interval(0, totalWidth),
+                stackChildMeasure()
+              );
             } else if (stackSpaces.every(isSIZE)) {
               const totalSize = stackSpaces
                 .map((s) => (s as any).domain.run(1) as number)
                 .reduce((a, b) => a + b, 0);
-              stackSpace = POSITION(Interval.interval(0, totalSize));
+              stackSpace = POSITION(
+                Interval.interval(0, totalSize),
+                stackChildMeasure()
+              );
             } else if (namedKeys.length > 0) {
               stackSpace = ORDINAL(namedKeys);
             }
@@ -175,11 +202,11 @@ export const Spread = createNodeOperator(
                       childDomains[childDomains.length - 1].run(scaleFactor) / 2
                   );
             if (dataDriven) {
-              stackSpace = SIZE(composeSize());
+              stackSpace = SIZE(composeSize(), stackChildMeasure());
             } else if (namedKeys.length > 0) {
               stackSpace = ORDINAL(namedKeys);
             } else if (allSize) {
-              stackSpace = SIZE(composeSize());
+              stackSpace = SIZE(composeSize(), stackChildMeasure());
             } else if (children.every((c) => isPOSITION(c[stackDir]))) {
               const totalWidth = children
                 .map((c) =>
@@ -188,14 +215,17 @@ export const Spread = createNodeOperator(
                     : 0
                 )
                 .reduce((a, b) => a + b, 0);
-              stackSpace = POSITION(Interval.interval(0, totalWidth));
+              stackSpace = POSITION(
+                Interval.interval(0, totalWidth),
+                stackChildMeasure()
+              );
             }
           }
 
-          return {
-            [stackDir]: stackSpace,
-            [alignDir]: alignSpace,
-          };
+          const result: Size<UnderlyingSpace> = [UNDEFINED, UNDEFINED];
+          result[stackDir] = stackSpace;
+          result[alignDir] = alignSpace;
+          return result;
         },
         layout: (shared, size, scaleFactors, children, posScales, node) => {
           if (reverse) {
@@ -212,18 +242,18 @@ export const Spread = createNodeOperator(
             undefined
           );
 
-          size = {
-            [stackDir]: computeSize(
-              dims[stackDir].size,
-              scaleFactors?.[stackDir]!,
-              size[stackDir]
-            ),
-            [alignDir]: computeSize(
-              dims[alignDir].size,
-              scaleFactors?.[alignDir]!,
-              size[alignDir]
-            ),
-          };
+          const nextSize: Size = [0, 0];
+          nextSize[stackDir] = computeSize(
+            dims[stackDir].size,
+            scaleFactors?.[stackDir]!,
+            size[stackDir]
+          );
+          nextSize[alignDir] = computeSize(
+            dims[alignDir].size,
+            scaleFactors?.[alignDir]!,
+            size[alignDir]
+          );
+          size = nextSize;
 
           // Compute scale factors at this level by dispatching on
           // underlying-space kind: SIZE inverts the composed Monotonic;
@@ -260,29 +290,41 @@ export const Spread = createNodeOperator(
           }
 
           const scaleContext = node.getRenderSession().scaleContext;
+          const sfX = scaleFactors[0] ?? 1;
+          const sfY = scaleFactors[1] ?? 1;
           scaleContext.x = {
-            domain: [0, size[0] / scaleFactors[0]],
-            scaleFactor: scaleFactors[0],
+            domain: [0, size[0] / sfX],
+            scaleFactor: sfX,
           };
           scaleContext.y = {
-            domain: [0, size[1] / scaleFactors[1]],
-            scaleFactor: scaleFactors[1],
+            domain: [0, size[1] / sfY],
+            scaleFactor: sfY,
           };
 
           // Calculate available space for children in stacking direction after subtracting spacing
           const totalSpacing = effectiveSpacing * (children.length - 1);
           const availableStackSpace = size[stackDir] - totalSpacing;
-          const childStackSize = availableStackSpace / children.length;
+          const n = children.length;
+          const weightsOk =
+            stackWeights !== undefined &&
+            stackWeights.length === n &&
+            stackWeights.every((w) => Number.isFinite(w) && w >= 0);
+          const weightSum = weightsOk
+            ? stackWeights!.reduce((acc, w) => acc + Math.max(w, 0), 0)
+            : 0;
+          const useWeights = weightsOk && weightSum > 0;
+          const childStackSizes: number[] = useWeights
+            ? stackWeights!.map(
+                (w) => (Math.max(w, 0) / weightSum) * availableStackSpace
+              )
+            : Array.from({ length: n }, () => availableStackSpace / n);
 
-          // Create modified size with equal distribution for stacking direction
-          const modifiedSize: Size = [0, 0];
-          modifiedSize[stackDir] = childStackSize;
-          modifiedSize[alignDir] = size[alignDir];
-          // console.log(size[stackDir], size[alignDir]);
-
-          const childPlaceables = children.map((child) =>
-            child.layout(modifiedSize, scaleFactors, posScales)
-          );
+          const childPlaceables = children.map((child, i) => {
+            const modifiedSize: Size = [0, 0];
+            modifiedSize[stackDir] = childStackSizes[i] ?? 0;
+            modifiedSize[alignDir] = size[alignDir];
+            return child.layout(modifiedSize, scaleFactors, posScales);
+          });
 
           // Fixed-position children have dims already defined (e.g. Ref to another layer)
           const isFixed = (dir: Direction) => (child: Placeable) =>
@@ -382,19 +424,34 @@ export const Spread = createNodeOperator(
             }
           }
 
-          // Compute alignDir intrinsicDims from extents to account for negative bars
-          const alignMin = Math.min(
-            ...childPlaceables.map((child) => child.dims[alignDir].min!)
-          );
-          const alignMax = Math.max(
-            ...childPlaceables.map((child) => child.dims[alignDir].max!)
-          );
-          const stackMin = Math.min(
-            ...childPlaceables.map((child) => child.dims[stackDir].min!)
-          );
-          const stackMax = Math.max(
-            ...childPlaceables.map((child) => child.dims[stackDir].max!)
-          );
+          // A child the alignment step didn't place (no `alignment` given)
+          // renders at its own origin (translate 0): nail it down there now so
+          // the extents below measure the real box. Left unplaced, the child
+          // would be invisible to the measurement and the spread would report
+          // a zero cross extent — wrong whenever children's boxes overhang
+          // their origin (e.g. facets whose axis labels hang below baseline).
+          for (const child of childPlaceables) {
+            if (child.dims[alignDir].min === undefined) {
+              child.place(alignDir, 0, "baseline");
+            }
+          }
+
+          // Compute alignDir intrinsicDims from extents to account for negative
+          // bars (NaN-safe; see foldFinite for why undefined extents are
+          // skipped).
+          const reduceExtent = (
+            dir: Direction,
+            pick: (iv: { min?: number; max?: number }) => number | undefined,
+            f: (...n: number[]) => number
+          ): number =>
+            foldFinite(
+              childPlaceables.map((child) => pick(child.dims[dir])),
+              f
+            );
+          const alignMin = reduceExtent(alignDir, (iv) => iv.min, Math.min);
+          const alignMax = reduceExtent(alignDir, (iv) => iv.max, Math.max);
+          const stackMin = reduceExtent(stackDir, (iv) => iv.min, Math.min);
+          const stackMax = reduceExtent(stackDir, (iv) => iv.max, Math.max);
           const alignSize = alignMax - alignMin;
           const stackSize = stackMax - stackMin;
           const translateAlign =
@@ -424,7 +481,7 @@ export const Spread = createNodeOperator(
             },
           };
         },
-        render: ({ intrinsicDims, transform }, children) => {
+        render: ({ transform }, children) => {
           return (
             <g
               transform={`translate(${transform?.translate?.[0] ?? 0}, ${transform?.translate?.[1] ?? 0})`}
@@ -436,11 +493,22 @@ export const Spread = createNodeOperator(
       },
       children
     );
+    if (axes !== undefined) {
+      const toShow = (opt: AxisOptions | undefined): boolean | undefined =>
+        opt === undefined ? undefined : opt === false ? false : true;
+      node._axisOverride =
+        typeof axes === "boolean"
+          ? { x: axes, y: axes }
+          : { x: toShow(axes.x), y: toShow(axes.y) };
+    }
+    // Tag with stack direction so coord can map axis overrides to polar dimensions
+    node.axisDir = stackDir;
+    return node;
   }
 );
 
 export type SpreadOptions<T = any> = {
-  by?: keyof T & string;
+  by?: SplitBy;
   dir: "x" | "y";
   spacing?: number;
   alignment?: "start" | "middle" | "end" | "baseline";
@@ -448,21 +516,26 @@ export type SpreadOptions<T = any> = {
   mode?: "edge" | "center";
   reverse?: boolean;
   glue?: boolean;
+  /** Combinator form: same length as child marks; splits space along `dir` by weight. */
+  stackWeights?: number[];
   w?: number | (keyof T & string);
   h?: number | (keyof T & string);
   debug?: boolean;
+  axes?: boolean | { x?: AxisOptions; y?: AxisOptions };
 };
 
 export const spread = createOperator<any, SpreadOptions>(Spread, {
-  // With `by`: groupBy on the field. Without `by`: pass the whole array as a
-  // single leaf so expand-kind marks (e.g. `cut`) see all items at once.
-  // (Per-item marks see the array too and aggregate via inferSize/inferPos —
-  // but that path has no current users; every existing call site uses `by`.)
+  // With `by`: groupBy on the field. Without `by`: identity split — one leaf
+  // per row (the waffle grid relies on this to spread chunked sub-arrays).
+  // Expand-kind marks (e.g. `cut`) need the whole array in one leaf instead;
+  // that override lives in createOperator (it dispatches on the mark's kind),
+  // not here, so this split stays kind-agnostic.
   split: ({ by }, d) =>
-    by ? Map.groupBy(d, (r: any) => r[by]) : new Map([[0, d]]),
+    by ? Map.groupBy(d, splitKeyFn(by)) : new Map(d.map((r, i) => [i, r])),
   channels: { w: "size", h: "size" },
   axisFields: ({ by, dir }) =>
-    by ? (dir === "x" ? { x: by } : { y: by }) : undefined,
+    typeof by === "string" ? (dir === "x" ? { x: by } : { y: by }) : undefined,
+  serialize: { type: "spread" },
 });
 
 /** Stack glues children together, summing sizes into a POSITION at the spread
@@ -480,5 +553,22 @@ export function stack(
   marks?: Mark<any>[]
 ): ReturnType<typeof spread> | Operator<any[], any[]> {
   const stackOpts: SpreadOptions = { ...opts, glue: true };
-  return marks !== undefined ? spread(stackOpts, marks) : spread(stackOpts);
+  const result =
+    marks !== undefined ? spread(stackOpts, marks) : spread(stackOpts);
+  // Stack is `spread({glue: true})` under the hood, but the IR wire format
+  // discriminates them by type. Re-tag the produced operator/mark so the
+  // frontend-IR emitter sees `{ type: "stack", ...stripped-opts }` instead
+  // of `{ type: "spread", glue: true, ... }`. Preserve `__combinator` and
+  // `children` when present (combinator form) — dropping them would make
+  // toJSON emit a leaf-shaped node missing its children.
+  const tag = (result as any).__serialize;
+  if (tag) {
+    const { glue: _glue, ...stackPayload } = tag.opts;
+    (result as any).__serialize = {
+      ...tag,
+      type: "stack",
+      opts: stackPayload,
+    };
+  }
+  return result;
 }

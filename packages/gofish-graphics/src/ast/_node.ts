@@ -1,22 +1,25 @@
+// <gofish-wiki> AUTO-GENERATED — see covers: in the essay; run `pnpm --filter docs sync-backlinks`
+// @wiki Underlying Space — /internals/core/underlying-space
+// @wiki Color Scale Resolution — /internals/layout/color-scales
+// @wiki Overview — /internals/layout/passes
+// @wiki Architecture Overview — /internals/overview/architecture
+// </gofish-wiki>
+
 import type { JSX } from "solid-js";
 import {
   Anchor,
   Dimensions,
   elaborateDims,
   elaborateDirection,
-  elaboratePosition,
   elaborateSize,
   elaborateTransform,
   FancyDims,
   FancyDirection,
-  FancyPosition,
   FancySize,
   FancyTransform,
-  Position,
   Size,
   Transform,
 } from "./dims";
-import { ContinuousDomain } from "./domain";
 import { gofish } from "./gofish";
 import type { AxesOptions } from "./gofish";
 import { GoFishRef } from "./_ref";
@@ -25,7 +28,6 @@ import { CoordinateTransform } from "./coordinateTransforms/coord";
 import { getValue, isValue, MaybeValue } from "./data";
 import { color6 } from "../color";
 import * as Monotonic from "../util/monotonic";
-import { findTargetMonotonic } from "../util";
 import {
   isDIFFERENCE,
   isORDINAL,
@@ -33,9 +35,11 @@ import {
   isUNDEFINED,
   UnderlyingSpace,
 } from "./underlyingSpace";
-import { toJSON } from "../util/interval";
-import type { KeyContext, ScaleContext } from "./gofish";
-import type { ScopeContext } from "./scopeContext";
+import { toJSON, interval } from "../util/interval";
+import { nice } from "d3-array";
+import type { ScaleContext } from "./gofish";
+import type { TokenContext } from "./tokenContext";
+import { isToken, Token } from "./createName";
 import type { ConstraintSpec, ConstraintRef } from "./constraints";
 import { collectConstraintRefs } from "./constraints";
 import {
@@ -51,9 +55,8 @@ import {
 import { renderLabelJSX } from "./labels/renderLabel";
 
 export type RenderSession = {
-  scopeContext: ScopeContext;
+  tokenContext: TokenContext;
   scaleContext: ScaleContext;
-  keyContext: KeyContext;
 };
 
 export type ScaleFactorFunction = Monotonic.Monotonic;
@@ -73,6 +76,9 @@ export const findScaleFactor = (
 
 export type Placeable = {
   dims: Dimensions;
+  /** Placement state; `translate[i] === undefined` means "parent may place
+   *  me". Exposed so the `baseline` align anchor can read a target's origin. */
+  transform?: Transform;
   place: (axis: FancyDirection, value: number, anchor?: Anchor) => void;
 };
 
@@ -80,13 +86,7 @@ export type Layout = (
   shared: Size<boolean>,
   size: Size,
   scaleFactors: Size<number | undefined>,
-  children: {
-    layout: (
-      size: Size,
-      scaleFactors: Size<number | undefined>,
-      posScales: Size<((pos: number) => number) | undefined>
-    ) => Placeable;
-  }[],
+  children: GoFishAST[],
   posScales: Size<((pos: number) => number) | undefined>,
   node: GoFishNode
 ) => { intrinsicDims: FancyDims; transform: FancyTransform; renderData?: any };
@@ -110,7 +110,10 @@ export type Render = (
 export type ResolveUnderlyingSpace = (
   childSpaces: Size<UnderlyingSpace>[],
   childNodes: (GoFishNode | GoFishRef)[],
-  shared: Size<boolean>
+  shared: Size<boolean>,
+  /** This node's positioning constraints. `position` constraints contribute a
+   *  POSITION-domain fragment to the resolved space (see `layer.tsx`). */
+  constraints: ConstraintSpec[]
 ) => FancySize<UnderlyingSpace>;
 
 export class GoFishNode {
@@ -119,7 +122,17 @@ export class GoFishNode {
   public type: string;
   public args?: any;
   public key?: string;
-  public _name?: string;
+  public _name?: string | Token;
+  public _isScope: boolean = false;
+  /**
+   * String-name search boundary. Set ONLY by createMark — manual `.scope()`
+   * (which flips `_isScope`) does not flip this. resolveLocalString in
+   * GoFishRef stops walking up at the nearest `_isComponent` ancestor and
+   * does not descend into nested ones, so `ref("name")` lookups don't leak
+   * across component boundaries even if a future operator silently scopes.
+   */
+  public _isComponent: boolean = false;
+  public _scopeMap?: Map<string, GoFishNode>;
   public parent?: GoFishNode;
   public datum?: any;
   // private inferDomains: (childDomains: Size<Domain>[]) => FancySize<Domain | undefined>;
@@ -131,7 +144,6 @@ export class GoFishNode {
   public intrinsicDims?: Dimensions;
   public transform?: Transform;
   public shared: Size<boolean>;
-  // public posDomains: Size<Domain | undefined> = [undefined, undefined];
   public renderData?: any;
   public coordinateTransform?: CoordinateTransform;
   public color?: MaybeValue<string>;
@@ -140,6 +152,25 @@ export class GoFishNode {
   public _label?: LabelSpec;
   private _zOrder = 0;
   private renderSession?: RenderSession;
+  // Axis state per dimension. Set by `resolveAxes` and consumed by the axis
+  // elaboration pass (`elaborateAxes`), which wraps owning nodes in a Layer of
+  // ordinary tick/label shapes.
+  // true     = owns the axis (gets elaborated into shapes here)
+  // "budget" = a layer sibling owns it; also elaborated (overlapping siblings
+  //            overdraw identically, which keeps their content aligned)
+  // false    = explicitly suppressed via axes: override (blocks children)
+  // undefined = not involved
+  public axis: { x?: boolean; y?: boolean } = {};
+  public _axisOverride?: { x?: boolean; y?: boolean };
+  /** Explicit key→node map for ordinal axis label positioning. Set by
+   * operators (e.g. table) whose domain keys differ from children's .key. */
+  public _ordinalKeyMap?: Record<string, GoFishNode>;
+  /**
+   * Stack direction of the operator that created this node.
+   * Used in coord.tsx collectOverrides to route axis: overrides to the
+   * correct polar axis (theta vs radial).
+   */
+  public axisDir?: 0 | 1;
   constructor(
     {
       name,
@@ -226,11 +257,8 @@ export class GoFishNode {
           (color.startsWith("#") ||
             color.startsWith("rgb") ||
             color.startsWith("hsl"));
-        if (!isLiteralColor && !scaleContext.unit.color.has(color)) {
-          scaleContext.unit.color.set(
-            color,
-            color6[scaleContext.unit.color.size % 6]
-          );
+        if (!isLiteralColor && !unit.color.has(color)) {
+          unit.color.set(color, color6[unit.color.size % 6]);
         }
       }
       this.children.forEach((child) => {
@@ -266,20 +294,28 @@ export class GoFishNode {
   }
 
   public resolveNames(): void {
-    if (this._name !== undefined) {
-      this.getRenderSession().scopeContext.set(this._name, this);
+    if (this._isScope && !this._scopeMap) {
+      this._scopeMap = new Map();
     }
+    if (this._name !== undefined && isToken(this._name)) {
+      const token = this._name;
+      this.getRenderSession().tokenContext.set(token, this);
+      // Register the token's tag in the nearest enclosing scope root.
+      let ancestor: GoFishNode | undefined = this.parent;
+      while (ancestor) {
+        if (ancestor._isScope) {
+          if (!ancestor._scopeMap) ancestor._scopeMap = new Map();
+          ancestor._scopeMap.set(token.__tag, this);
+          break;
+        }
+        ancestor = ancestor.parent;
+      }
+    }
+    // String _name intentionally does not register anywhere global — it is
+    // only consulted by layer.tsx for constraint-callback destructuring and
+    // by ref(string) for a layer-local lookup.
     this.children.forEach((child) => {
       child.resolveNames();
-    });
-  }
-
-  public resolveKeys(): void {
-    if (this.key !== undefined) {
-      this.getRenderSession().keyContext[this.key] = this;
-    }
-    this.children.forEach((child) => {
-      child.resolveKeys();
     });
   }
 
@@ -291,10 +327,146 @@ export class GoFishNode {
       this._resolveUnderlyingSpace(
         this.children.map((child) => child.resolveUnderlyingSpace()),
         this.children,
-        this.shared
+        this.shared,
+        this.constraints
       )
     );
     return this._underlyingSpace;
+  }
+
+  /**
+   * Drop the memoized underlying space for this node and its whole subtree, so a
+   * later `resolveUnderlyingSpace()` recomputes from scratch. Used after the axis
+   * elaboration pass rewrites the tree (inserts wrappers, moves keys). Keeping
+   * the invalidation here — rather than ad hoc at the call site — means any
+   * future memoized field can be cleared in one place.
+   */
+  public clearUnderlyingSpace(): void {
+    this._underlyingSpace = undefined;
+    this.children.forEach((c) => {
+      if (c instanceof GoFishNode) c.clearUnderlyingSpace();
+    });
+  }
+
+  /**
+   * Top-down walk that marks which nodes should render axes.
+   * `claimed` tracks dimensions already claimed by an ancestor.
+   */
+  public resolveAxes(
+    claimed: Set<0 | 1> = new Set(),
+    enabled: Set<0 | 1> = new Set([0, 1])
+  ): void {
+    // Note: a `layer` is treated like any other node below — it claims the
+    // axis for its own (unioned) space ONCE, so overlaid children share a single
+    // axis instead of each drawing its own (the elaboration pass then wraps the
+    // layer). Per-child axes still happen via explicit operator `axes:` overrides
+    // (e.g. faceted scatter), which the override branch honors regardless.
+
+    // Coordinate-transform nodes (polar, clock, bipolar, etc.) manage their
+    // own coordinate space; Cartesian axes make no sense for them or their
+    // children. Collect directional axis overrides from the subtree so the
+    // coord's render function can honour per-operator axis: true/false.
+    if (this.type === "coord") {
+      let polarAxisX: boolean | undefined = undefined;
+      let polarAxisY: boolean | undefined = undefined;
+      const collectOverrides = (n: GoFishNode) => {
+        if (n._axisOverride) {
+          const dir = n.axisDir;
+          // If the node carries a direction tag, only apply override to that dim.
+          // Otherwise (e.g. scatter with no dir) apply to both.
+          if (dir !== 1 && n._axisOverride.x !== undefined)
+            polarAxisX = n._axisOverride.x;
+          if (dir !== 0 && n._axisOverride.y !== undefined)
+            polarAxisY = n._axisOverride.y;
+        }
+        n.children.forEach((c) => {
+          if (c instanceof GoFishNode) collectOverrides(c);
+        });
+      };
+      this.children.forEach((c) => {
+        if (c instanceof GoFishNode) collectOverrides(c);
+      });
+      if (polarAxisX !== undefined) (this as any)._polarAxisX = polarAxisX;
+      if (polarAxisY !== undefined) (this as any)._polarAxisY = polarAxisY;
+
+      const allClaimed = new Set<0 | 1>([0, 1]);
+      this.children.forEach((c) => {
+        if (c instanceof GoFishNode) c.resolveAxes(allClaimed, enabled);
+      });
+      // _axisOverride can set axisX/Y on descendants even when claimed,
+      // which would apply Cartesian axis budgets in polar coordinate space.
+      // Clear them so only the polar axis path (via _polarAxisX/Y) applies.
+      const clearCartesianAxes = (n: GoFishNode): void => {
+        n.axis.x = undefined;
+        n.axis.y = undefined;
+        n.children.forEach((c) => {
+          if (c instanceof GoFishNode) clearCartesianAxes(c);
+        });
+      };
+      this.children.forEach((c) => {
+        if (c instanceof GoFishNode) clearCartesianAxes(c);
+      });
+      return;
+    }
+
+    const next = new Set(claimed);
+    const space = this._underlyingSpace;
+    for (const dim of [0, 1] as (0 | 1)[]) {
+      const override =
+        dim === 0 ? this._axisOverride?.x : this._axisOverride?.y;
+      if (override !== undefined) {
+        if (dim === 0) this.axis.x = override === false ? false : true;
+        else this.axis.y = override === false ? false : true;
+        next.add(dim); // claim regardless — false blocks children too
+      } else if (
+        enabled.has(dim) &&
+        !claimed.has(dim) &&
+        space &&
+        !isUNDEFINED(space[dim]) &&
+        (isPOSITION(space[dim]) ||
+          isDIFFERENCE(space[dim]) ||
+          isORDINAL(space[dim]))
+      ) {
+        if (dim === 0) this.axis.x = true;
+        else this.axis.y = true;
+        next.add(dim);
+      }
+    }
+    this.children.forEach((c) => {
+      if (c instanceof GoFishNode) c.resolveAxes(next, enabled);
+    });
+  }
+
+  /**
+   * Walk tree after resolveAxes; apply d3.nice() to every POSITION domain
+   * so layout and ticks use rounded bounds. Applied to all nodes (not just
+   * axis-bearing ones) so that passthrough nodes like layer inherit the same
+   * niced domain that gofish.tsx uses for posScale computation.
+   */
+  public resolveNiceDomains(): void {
+    // Coord-transform nodes and their descendants have domains that map into
+    // the coordinate system's fixed space (e.g. stacked counts → [0, 2π]).
+    // Rounding those domains breaks the mapping, so stop here entirely.
+    if (this.type === "coord") {
+      return;
+    }
+
+    if (this._underlyingSpace) {
+      for (const dim of [0, 1] as (0 | 1)[]) {
+        const space = this._underlyingSpace[dim];
+        if (isPOSITION(space) && space.domain) {
+          const [niceMin, niceMax] = nice(
+            space.domain.min!,
+            space.domain.max!,
+            10
+          );
+          (space as any).domain = interval(niceMin, niceMax);
+        }
+      }
+    }
+    this.children.forEach((c) => {
+      if (c instanceof GoFishNode) c.resolveNiceDomains();
+    });
   }
 
   public layout(
@@ -302,6 +474,9 @@ export class GoFishNode {
     scaleFactors: Size<number | undefined>,
     posScales: Size<((pos: number) => number) | undefined>
   ): Placeable {
+    // Axes are no longer drawn here: they are elaborated into ordinary shapes +
+    // constraints by `elaborateAxes` (src/ast/axes/elaborate.tsx) before layout,
+    // so the layout engine has no axis-specific budget/baseline machinery.
     const { intrinsicDims, transform, renderData } = this._layout(
       this.shared,
       size,
@@ -362,7 +537,13 @@ export class GoFishNode {
     };
 
     if (anchorToDim[anchor] === undefined) {
-      this.intrinsicDims![dir][anchor] = value;
+      // Interval has min/max/center/size but not "baseline" — baseline is a
+      // synthetic anchor aliased to min above (see TODO). When the anchor is
+      // already undefined and we're being asked to set it, "baseline" can't
+      // be written back: just no-op so the translate path below is skipped.
+      if (anchor !== "baseline") {
+        this.intrinsicDims![dir][anchor] = value;
+      }
       return;
     }
 
@@ -375,6 +556,9 @@ export class GoFishNode {
       baseline: 0,
     };
 
+    if (!this.transform!.translate) {
+      this.transform!.translate = [undefined, undefined];
+    }
     this.transform!.translate![dir] = value - anchorToPoint[anchor];
   }
 
@@ -385,19 +569,20 @@ export class GoFishNode {
   public INTERNAL_render(
     coordinateTransform?: CoordinateTransform
   ): JSX.Element {
+    const contentChildrenJSX = this.children.map((child) =>
+      child.INTERNAL_render(
+        this.type !== "box" ? coordinateTransform : undefined
+      )
+    );
+
     const shapeJSX = this._render(
       {
         intrinsicDims: this.intrinsicDims,
         transform: this.transform,
         renderData: this.renderData,
-        /* TODO: do we want to add this as an object property? */
         coordinateTransform: coordinateTransform,
       },
-      this.children.map((child) =>
-        child.INTERNAL_render(
-          this.type !== "box" ? coordinateTransform : undefined
-        )
-      ),
+      contentChildrenJSX,
       this
     );
     if (this._label && this.intrinsicDims) {
@@ -442,9 +627,10 @@ export class GoFishNode {
       axes = false,
       axisFields,
       colorConfig,
+      padding,
     }: {
-      w: number;
-      h: number;
+      w?: number;
+      h?: number;
       x?: number;
       y?: number;
       transform?: { x?: number; y?: number };
@@ -453,17 +639,35 @@ export class GoFishNode {
       axes?: AxesOptions;
       axisFields?: { x?: string; y?: string };
       colorConfig?: ColorConfig;
+      padding?: number;
     }
   ) {
     return gofish(
       container,
-      { w, h, x, y, transform, debug, defs, axes, axisFields, colorConfig },
+      {
+        w,
+        h,
+        x,
+        y,
+        transform,
+        debug,
+        defs,
+        axes,
+        axisFields,
+        colorConfig,
+        padding,
+      },
       this
     );
   }
 
-  public name(name: string): this {
+  public name(name: string | Token): this {
     this._name = name;
+    return this;
+  }
+
+  public scope(): this {
+    this._isScope = true;
     return this;
   }
 
@@ -523,7 +727,7 @@ export class GoFishNode {
 
 export const findPathToRoot = (node: GoFishNode): GoFishNode[] => {
   const path: GoFishNode[] = [];
-  let current = node;
+  let current: GoFishNode | undefined = node;
   while (current) {
     path.push(current);
     current = current.parent;

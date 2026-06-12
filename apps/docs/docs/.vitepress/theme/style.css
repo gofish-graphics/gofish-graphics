@@ -130,10 +130,12 @@
 .VPHomeHero,
 .VPHero {
   margin: 0 !important;
-  padding: 0 !important;
+  /* Top-align the content just below the fixed navbar instead of centering it
+     in the viewport, which left a large void above the hero. */
+  padding: calc(var(--vp-nav-height) + 32px) 0 48px !important;
   min-height: 100vh;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
 }
 
 /* Place GoFish logo above hero title */
@@ -192,6 +194,65 @@
   padding-left: 100px !important;
   padding-right: 100px !important;
   margin: 0 !important;
+}
+
+/* Language-aware home hero + toggle. Keyed off <html data-docs-lang>, set
+   before first paint by the inline script in config.mts. These rules are
+   global on purpose — running them through a component's scoped-CSS transform
+   mangles the nested :not() selector. The :not([data-docs-lang="js"]) default
+   direction encodes Python as the default — keep in sync with DEFAULT_LANG in
+   docsLang.ts. */
+html[data-docs-lang="js"] .hero-lang-python,
+html:not([data-docs-lang="js"]) .hero-lang-js {
+  display: none;
+}
+
+html:not([data-docs-lang="js"]) .lang-toggle__btn[data-lang="python"],
+html[data-docs-lang="js"] .lang-toggle__btn[data-lang="js"] {
+  color: #fff;
+  background: var(--vp-c-brand-1);
+}
+
+/* The navbar has no nav-menu items, so the vertical divider VitePress draws
+   before the social links has nothing to separate — hide it. */
+.VPNavBar .VPNavBarSocialLinks.social-links::before {
+  display: none;
+}
+
+/* The Internals link + language toggle are injected via the
+   `nav-bar-content-after` theme slot. Reorder the right-hand cluster with
+   flexbox `order`: language toggle · search sit on the left by the logo, while
+   the flex-growing search pushes GitHub · Internals to the right.
+   NOTE: the selectors below target VitePress's internal nav class names —
+   re-test the nav layout after any `vitepress` upgrade. */
+.VPNavBar .content-body > .VPNavBarMenu {
+  display: none;
+}
+/* Match the toggle->search gap to the 24px logo->toggle gap. */
+.VPNavBar .content-body > .VPNavBarSearch {
+  padding-left: 24px;
+}
+.VPNavBar .content-body > .lang-toggle {
+  order: -1;
+}
+.VPNavBar .content-body > .VPNavBarSocialLinks {
+  order: 1;
+}
+.VPNavBar .content-body > .internals-link {
+  order: 2;
+}
+.VPNavBar .content-body > .VPNavBarExtra {
+  order: 3;
+}
+
+/* Suppress the overscroll rubber-band. Bouncing the page or the sidebar past its
+   scroll limit flashed sidebar content up into the header region. `.VPSidebar`
+   is doubled so it outweighs VitePress's own `overscroll-behavior: contain`. */
+html {
+  overscroll-behavior: none;
+}
+.VPSidebar.VPSidebar {
+  overscroll-behavior: none;
 }
 
 /**

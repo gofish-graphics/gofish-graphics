@@ -1,3 +1,7 @@
+// <gofish-wiki> AUTO-GENERATED — see covers: in the essay; run `pnpm --filter docs sync-backlinks`
+// @wiki The Operator Factory — /internals/frontend/operator-factory
+// </gofish-wiki>
+
 /**
  * createOperator: a factory for v3 layout operators.
  *
@@ -21,14 +25,21 @@
  *   operator form (inside .flow()):   createOp(opts)                -> Operator
  *   combinator form (inside a mark):  createOp(opts, marksShape)    -> Mark
  *
- * See docs/createOperator.md for a full walk-through.
+ * See the "Operator Factory" internals essay
+ * (apps/docs/docs/internals/v3/operator-factory.md) for a full walk-through.
  */
 
 import { GoFishAST } from "../_ast";
 import { GoFishNode } from "../_node";
+import { GoFishRef } from "../_ref";
 import { Mark, Operator } from "../types";
-import { LayerContext, resolveMarkResult } from "./chartBuilder";
-import { inferSize, inferPos, inferColor } from "../channels";
+import {
+  LayerContext,
+  resolveMarkResult,
+  stashLayerName,
+} from "./chartBuilder";
+import { inferSize, inferPos, inferColor, resolveMeasure } from "../channels";
+import type { Measure } from "../data";
 import type { MaybeValue, Value } from "../data";
 import type { LabelAccessor, LabelOptions } from "../labels/labelPlacement";
 import type { NameableMark } from "../withGoFish";
@@ -113,7 +124,7 @@ export async function applyMark<T>(
 
 /**
  * Attach chainable .name() and .label() to a mark, registering it into the
- * layer context when named so that select(...) can find it back.
+ * layer context when named so that ref(...)/selectAll(...) can find it back.
  */
 export function nameableMark<T>(base: Mark<T>): NameableMark<T> {
   const withName = (layerName: string): NameableMark<T> => {
@@ -144,18 +155,24 @@ export function nameableMark<T>(base: Mark<T>): NameableMark<T> {
       }
       const node = await resolveMarkResult(raw, layerContext);
       node.name(layerName);
+      // Tag for the post-resolve tree walk in ChartBuilder.resolve
+      // (collectLayerRegistrations); inline pushing here would record
+      // async-completion order instead of parent-iteration order.
       if (layerContext && layerName) {
-        if (!layerContext[layerName]) {
-          layerContext[layerName] = { data: [], nodes: [] };
-        }
-        layerContext[layerName].nodes.push(node);
-        layerContext[layerName].data.push((node as any).datum);
+        (node as { __layerRegistration?: string }).__layerRegistration =
+          layerName;
       }
       return node;
     };
     // Preserve the kind tag so applyMark dispatches correctly through the
     // wrapped mark.
     withMarkKind(wrapped, getMarkKind(base));
+    // Propagate `__serialize` through the chain so toJSON can still emit
+    // this mark's IR, and stash the layerName so the emitter surfaces it
+    // as the canonical top-level `name` field. Without this, every
+    // `.name("...")` call would strip the serialize tag.
+    propagateSerializeWithName(base, wrapped, layerName);
+    stashLayerName(wrapped, layerName);
     return nameableMark(wrapped);
   };
   const withLabel = (
@@ -180,6 +197,7 @@ export function nameableMark<T>(base: Mark<T>): NameableMark<T> {
       return node;
     };
     withMarkKind(wrapped, getMarkKind(base));
+    propagateSerializeWithLabel(base, wrapped, accessor, options);
     return nameableMark(wrapped);
   };
   const render = async (
@@ -205,6 +223,70 @@ export function nameableMark<T>(base: Mark<T>): NameableMark<T> {
     configurable: true,
   });
   return base as NameableMark<T>;
+}
+
+/**
+ * Copy the `__serialize` metadata tag from `from` to `to` and merge a
+ * chained name (and `__axisFields` for axis-title inference) onto it.
+ *
+ * `name` lives in a dedicated tag slot rather than `opts` so the
+ * frontend-IR emitter can surface it as the canonical top-level `name`
+ * field of the leaf/combinator IR (matching Python's emit shape).
+ *
+ * Layer-name tokens (`Token` from `createName`) are not yet supported by
+ * `toJSON` — when one is passed we still propagate the tag (so the mark
+ * stays serializable for its other fields) but omit the `name`.
+ */
+function propagateSerializeWithName(
+  from: object,
+  to: object,
+  layerName: unknown
+): void {
+  const tag = (from as any).__serialize;
+  if (!tag) return;
+  const nextTag: any = { ...tag };
+  if (typeof layerName === "string") {
+    nextTag.name = layerName;
+  }
+  (to as any).__serialize = nextTag;
+  // Keep axis-field inference working through the chain.
+  if ((from as any).__axisFields) {
+    (to as any).__axisFields = (from as any).__axisFields;
+  }
+}
+
+function propagateSerializeWithLabel(
+  from: object,
+  to: object,
+  accessor: unknown,
+  options: unknown
+): void {
+  const tag = (from as any).__serialize;
+  if (!tag) return;
+  const nextTag: any = { ...tag };
+  if (typeof accessor === "string") {
+    nextTag.label = {
+      accessor,
+      ...(options && typeof options === "object" ? options : {}),
+    };
+  } else if (
+    typeof accessor === "function" &&
+    typeof console !== "undefined" &&
+    typeof console.warn === "function"
+  ) {
+    // Function accessors can't be JSON-serialized. The mark stays
+    // serializable (the rest of the tag propagates) but the label is
+    // dropped from the emitted IR. Matches `dataToIR`'s warn precedent.
+    console.warn(
+      "[gofish-ir] .label(fn): function accessors aren't serializable; " +
+        "label will be omitted from the emitted IR. Use a string field " +
+        "name if you need the label to round-trip."
+    );
+  }
+  (to as any).__serialize = nextTag;
+  if ((from as any).__axisFields) {
+    (to as any).__axisFields = (from as any).__axisFields;
+  }
 }
 
 /**
@@ -319,20 +401,50 @@ export type OperatorConfig<Datum, Options> = {
    * `{x: "lake"}` so an x-axis title `lake` is inferred.
    */
   axisFields?: (opts: Options) => { x?: string; y?: string } | undefined;
+  /**
+   * Optional IR-serialization config. When set, the factory tags the
+   * produced operator with an `__serialize: { type, opts }` marker the
+   * frontend-IR emitter (gofish-graphics/serialize/toJSON) reads. Each
+   * standard-library operator should declare its IR discriminator here;
+   * user-built operators may omit it (the emitter falls back to opaque
+   * `{ type: "derive" }` for any operator that lacks a tag).
+   */
+  serialize?: {
+    /** IR discriminator (lowercase to match the wire format), e.g. "spread". */
+    type: string;
+    /**
+     * Optional shape function: takes the original options and returns the
+     * IR payload. Default behavior is to copy opts verbatim. Use this when
+     * the runtime opts diverge from what the IR should carry — e.g. to
+     * strip non-serializable fields or rename a key.
+     */
+    shape?: (opts: Options) => Record<string, unknown>;
+  };
 };
 
 export type DualModeOperator<Datum, Options> = {
   (opts: Options): Operator<Datum[], Datum[]>;
   (
     opts: Options,
-    marks: Mark<Datum>[] | Promise<Mark<Datum>[]>
+    marks: (Mark<Datum> | GoFishRef)[] | Promise<(Mark<Datum> | GoFishRef)[]>
   ): NameableMark<Datum>;
 };
 
-/** Run a single channel inference over a data slice. */
-function runChannel(type: ChannelType, val: any, data: any[]): any {
-  if (type === "size") return inferSize(val, data);
-  if (type === "pos") return inferPos(val, data);
+/**
+ * Run a single channel inference over a data slice. `measure` is the channel's
+ * resolved {@link Measure}, computed once per channel from the operator's whole
+ * input array (which carries the measure-provenance symbol even when `data` is a
+ * per-entry slice that does not) and passed down so `inferSize`/`inferPos` don't
+ * recompute it per split entry.
+ */
+function runChannel(
+  type: ChannelType,
+  val: any,
+  data: any[],
+  measure: Measure | undefined
+): any {
+  if (type === "size") return inferSize(val, data, measure);
+  if (type === "pos") return inferPos(val, data, measure);
   if (type === "color") return inferColor(val, data);
   return val;
 }
@@ -368,12 +480,23 @@ function applyChannels<Options extends Record<string, any>>(
     if (Array.isArray(val)) continue;
     const type: ChannelType = typeof spec === "string" ? spec : spec.type;
     const perEntry = typeof spec === "object" && spec.entry === true;
+    // The measure is loop-invariant across split entries (it depends only on
+    // the accessor and `wholeData`'s provenance, not on which items a given
+    // entry holds), so resolve it once per channel. Only size/pos consume it;
+    // computing it for color/raw would add a spurious conflict-throw site.
+    const measure =
+      type === "size" || type === "pos"
+        ? resolveMeasure(wholeData, val)
+        : undefined;
     if (perEntry && entries !== undefined) {
+      // Value aggregation uses each entry's items; the measure comes from
+      // `wholeData` (the binned array still carries the symbol — each per-entry
+      // slice does not).
       out[key] = [...entries.values()].map((items) =>
-        runChannel(type, val, items)
+        runChannel(type, val, items, measure)
       );
     } else {
-      out[key] = runChannel(type, val, wholeData);
+      out[key] = runChannel(type, val, wholeData, measure);
     }
   }
   return out as Options;
@@ -426,11 +549,11 @@ export function createOperator<Datum, Options extends Record<string, any>>(
   function dual(opts: Options): Operator<Datum[], Datum[]>;
   function dual(
     opts: Options,
-    marks: Mark<Datum>[] | Promise<Mark<Datum>[]>
+    marks: (Mark<Datum> | GoFishRef)[] | Promise<(Mark<Datum> | GoFishRef)[]>
   ): NameableMark<Datum>;
   function dual(
     opts: Options,
-    marks?: Mark<Datum>[] | Promise<Mark<Datum>[]>
+    marks?: (Mark<Datum> | GoFishRef)[] | Promise<(Mark<Datum> | GoFishRef)[]>
   ): Operator<Datum[], Datum[]> | NameableMark<Datum> {
     if (marks !== undefined) {
       // Combinator form: apply each mark to the same data d, then layout.
@@ -465,7 +588,23 @@ export function createOperator<Datum, Options extends Record<string, any>>(
         (node as any).datum = d;
         return node;
       };
-      return nameableMark(base);
+      const combinator = nameableMark(base);
+      // Tag combinator-form mark with IR-serialization metadata, mirroring
+      // the operator-form tagging below. The `__combinator: true` flag tells
+      // the emitter to write the spec into the mark tree (with `children`)
+      // rather than into the operators[] list. We stash the child marks on
+      // the tag so the emitter can walk them — without this, the children
+      // are trapped inside the closure of `base`.
+      if (cfg.serialize) {
+        const payload = cfg.serialize.shape ? cfg.serialize.shape(opts) : opts;
+        (combinator as any).__serialize = {
+          type: cfg.serialize.type,
+          opts: payload,
+          __combinator: true,
+          children: marks,
+        };
+      }
+      return combinator;
     }
     // Operator (traversal) form: split d, apply mark per leaf, layout.
     const operator: Operator<Datum[], Datum[]> = async (mark) => {
@@ -474,7 +613,16 @@ export function createOperator<Datum, Options extends Record<string, any>>(
         key?: string | number,
         layerContext?: LayerContext
       ) => {
-        const splitResult = cfg.split(opts, d);
+        // Expand-kind marks (e.g. `cut`) consume the whole group at once and
+        // emit N nodes 1:1 with the data — so the operator hands them a single
+        // leaf containing all rows, regardless of the operator's own `split`
+        // config. (The per-operator split, e.g. spread's identity split that
+        // the waffle grid relies on, only applies to per-item marks.) The
+        // resulting N expanded nodes are then arranged by `layout` below.
+        const splitResult =
+          getMarkKind(mark) === "expand"
+            ? new Map<number, Datum[]>([[0, d]])
+            : cfg.split(opts, d);
         const entries =
           splitResult instanceof Map ? splitResult : splitResult.entries;
         const keys = splitResult instanceof Map ? undefined : splitResult.keys;
@@ -507,6 +655,15 @@ export function createOperator<Datum, Options extends Record<string, any>>(
     const fields = cfg.axisFields?.(opts);
     if (fields && (fields.x !== undefined || fields.y !== undefined)) {
       (operator as any).__axisFields = fields;
+    }
+    // Tag the operator with IR-serialization metadata so the frontend-IR
+    // emitter can reconstruct it as `{ type, ...opts }` on the wire.
+    if (cfg.serialize) {
+      const payload = cfg.serialize.shape ? cfg.serialize.shape(opts) : opts;
+      (operator as any).__serialize = {
+        type: cfg.serialize.type,
+        opts: payload,
+      };
     }
     return operator;
   }

@@ -1,0 +1,1018 @@
+/* === GoFish landing-page styles (ported from prototypes/landing) === */
+html.landing-page {
+  --desk: #6b5a47;
+  --paper: #f7f2e9;
+  --paper-shade: #efe7d8;
+  --ink: #26211b;
+  --ink-soft: #6e6457;
+  --graphite: #4a4540;
+  --accent: #2f9e6e;
+  --accent-deep: #1f7a52;
+  --bluep: #3f6bd6;
+  --leaf: #2f9e6e;
+  --gold: #e3aa2f;
+  --shadow-warm: rgba(38, 28, 18, 0.16);
+
+  /* centered paper sheet width + how far the wide-screen gutter cards overlap
+     its edge (shared by the .sheet width and the ≥1720px gutter-card anchors) */
+  --sheet-w: 1240px;
+  --card-overlap: 22px;
+
+  /* procedural wood-grain desk tile (800x480, seamless via stitchTiles) */
+  --wood: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='800'%20height='480'%3E%3Cdefs%3E%3Cfilter%20id='figure'%20x='0'%20y='0'%20width='100%25'%20height='100%25'%3E%3CfeTurbulence%20type='fractalNoise'%20baseFrequency='0.003%200.018'%20numOctaves='3'%20seed='7'%20stitchTiles='stitch'/%3E%3CfeColorMatrix%20type='matrix'%20values='0%200%200%200%200%200%200%200%200%200%200%200%200%200%200%200.6%200.6%200.6%200%20-0.45'%20result='m'/%3E%3CfeFlood%20flood-color='%233a2614'/%3E%3CfeComposite%20in2='m'%20operator='in'/%3E%3C/filter%3E%3Cfilter%20id='fibers'%20x='0'%20y='0'%20width='100%25'%20height='100%25'%3E%3CfeTurbulence%20type='fractalNoise'%20baseFrequency='0.004%200.11'%20numOctaves='5'%20seed='11'%20stitchTiles='stitch'/%3E%3CfeColorMatrix%20type='matrix'%20values='0%200%200%200%200%200%200%200%200%200%200%200%200%200%200%201.1%201.1%201.1%200%20-0.78'%20result='m'/%3E%3CfeFlood%20flood-color='%23241408'/%3E%3CfeComposite%20in2='m'%20operator='in'/%3E%3C/filter%3E%3Cfilter%20id='hl'%20x='0'%20y='0'%20width='100%25'%20height='100%25'%3E%3CfeTurbulence%20type='fractalNoise'%20baseFrequency='0.004%200.11'%20numOctaves='5'%20seed='23'%20stitchTiles='stitch'/%3E%3CfeColorMatrix%20type='matrix'%20values='0%200%200%200%200%200%200%200%200%200%200%200%200%200%200%201.1%201.1%201.1%200%20-0.82'%20result='m'/%3E%3CfeFlood%20flood-color='%23eccd9d'/%3E%3CfeComposite%20in2='m'%20operator='in'/%3E%3C/filter%3E%3C/defs%3E%3Crect%20width='800'%20height='480'%20filter='url(%23figure)'%20opacity='0.35'/%3E%3Crect%20width='800'%20height='480'%20filter='url(%23fibers)'%20opacity='0.4'/%3E%3Crect%20width='800'%20height='480'%20filter='url(%23hl)'%20opacity='0.14'/%3E%3C/svg%3E");
+
+  /* procedural paper tile (600x600): pulp mottle + light patches + tooth + sparse flecks */
+  --paper-tex: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='600' height='600'%3E%3Cdefs%3E%3Cfilter id='tooth'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.55' numOctaves='2' seed='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.7 0.7 0.7 0 -0.5' result='m'/%3E%3CfeFlood flood-color='%238a7a64'/%3E%3CfeComposite in2='m' operator='in'/%3E%3C/filter%3E%3Cfilter id='mottle'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.012 0.014' numOctaves='4' seed='9' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.5 0.5 0.5 0 -0.34' result='m'/%3E%3CfeFlood flood-color='%23b9a98e'/%3E%3CfeComposite in2='m' operator='in'/%3E%3C/filter%3E%3Cfilter id='light'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.012 0.014' numOctaves='4' seed='27' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.5 0.5 0.5 0 -0.34' result='m'/%3E%3CfeFlood flood-color='%23fffdf6'/%3E%3CfeComposite in2='m' operator='in'/%3E%3C/filter%3E%3Cfilter id='flecks'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.3 0.3' numOctaves='2' seed='14' stitchTiles='stitch'/%3E%3CfeComponentTransfer%3E%3CfeFuncA type='discrete' tableValues='0 0 0 0 0 0 0 1'/%3E%3C/feComponentTransfer%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 0' result='m'/%3E%3CfeFlood flood-color='%236b5a44'/%3E%3CfeComposite in2='m' operator='in'/%3E%3C/filter%3E%3C/defs%3E%3Crect width='600' height='600' filter='url(%23mottle)' opacity='0.08'/%3E%3Crect width='600' height='600' filter='url(%23light)' opacity='0.06'/%3E%3Crect width='600' height='600' filter='url(%23tooth)' opacity='0.1'/%3E%3Crect width='600' height='600' filter='url(%23flecks)' opacity='0.05'/%3E%3C/svg%3E");
+}
+/* ---- end tokens ---- */
+
+/* ===================== route-scoped desk + page overrides ===================== */
+.landing *,
+.landing *::before,
+.landing *::after {
+  box-sizing: border-box;
+}
+html.landing-page {
+  scroll-behavior: smooth;
+  overflow-x: clip;
+}
+html.landing-page body {
+  font-family: "Spline Sans", sans-serif;
+  font-size: 1.05rem;
+  line-height: 1.65;
+  color: var(--ink);
+  background-color: var(--desk);
+  /* DESK: planks + wood grain + base gradient on the canvas itself */
+  background-image:
+    repeating-linear-gradient(
+      180deg,
+      transparent 0,
+      transparent 233px,
+      rgba(28, 18, 10, 0.25) 233px,
+      rgba(28, 18, 10, 0.55) 235px,
+      rgba(20, 12, 6, 0.6) 235px,
+      rgba(20, 12, 6, 0.6) 238px,
+      rgba(28, 18, 10, 0.3) 238px,
+      rgba(255, 225, 185, 0.12) 239px,
+      rgba(255, 225, 185, 0.12) 240px
+    ),
+    var(--wood), linear-gradient(168deg, #7a6850, #6b5a47 45%, #5a4936);
+  background-repeat: repeat, repeat, no-repeat;
+  background-size:
+    auto,
+    800px 480px,
+    cover;
+  background-attachment: scroll, scroll, fixed;
+  overflow-x: clip;
+  -webkit-font-smoothing: antialiased;
+}
+html.landing-page ::selection {
+  background: var(--accent);
+  color: var(--paper);
+}
+
+/* Let the desk show through VitePress' page containers; remove their chrome. */
+html.landing-page .VPContent,
+html.landing-page .VPPage {
+  background: transparent !important;
+  padding: 0 !important;
+}
+html.landing-page .VPContent.is-home {
+  padding: 0 !important;
+}
+html.landing-page .VPDoc {
+  padding: 0 !important;
+}
+html.landing-page .VPDoc .container {
+  max-width: none !important;
+  margin: 0 !important;
+}
+html.landing-page .VPDoc .content {
+  max-width: none !important;
+  padding: 0 !important;
+}
+html.landing-page .VPDoc .content-container {
+  max-width: none !important;
+}
+html.landing-page .vp-doc {
+  all: unset;
+}
+html.landing-page .Layout {
+  background: transparent;
+}
+
+/* ----- navbar restyle, home route only ----- */
+html.landing-page .VPNavBar,
+html.landing-page .VPNavBar.has-sidebar .content {
+  background-color: var(--paper) !important;
+}
+html.landing-page .VPNavBar .content-body {
+  background-color: var(--paper) !important;
+}
+html.landing-page .VPNavBar {
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08) !important;
+}
+html.landing-page .VPNavBar .divider {
+  display: none;
+}
+html.landing-page .VPNavBarTitle .text {
+  color: var(--ink);
+}
+html.landing-page .DocSearch-Button {
+  background: rgba(0, 0, 0, 0.03);
+  border: 1.5px solid rgba(40, 28, 18, 0.18);
+}
+
+/* ===================== ported landing styles ===================== */
+.landing a {
+  color: inherit;
+}
+.landing :focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: 2px;
+}
+
+/* ---------- SHEET ---------- */
+.landing {
+  display: block;
+}
+.landing .sheet {
+  position: relative;
+  z-index: 1;
+  width: min(var(--sheet-w), calc(100% - 56px));
+  margin: 36px auto 48px;
+  background: var(--paper);
+  border-radius: 3px;
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.2),
+    0 12px 24px rgba(25, 18, 10, 0.28),
+    0 36px 80px rgba(25, 18, 10, 0.35),
+    inset 0 0 60px rgba(160, 130, 90, 0.08);
+  overflow: clip;
+}
+.landing .sheet::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: var(--paper-tex);
+  background-size: 600px 600px;
+  background-repeat: repeat;
+  pointer-events: none;
+  z-index: 2;
+}
+.landing .sheet > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* ---------- TYPOGRAPHY ---------- */
+.landing h1,
+.landing h2,
+.landing h3 {
+  font-family: "Fraunces", serif;
+  font-optical-sizing: auto;
+  margin: 0;
+}
+.landing h1 {
+  font-size: clamp(2.6rem, 5.8vw, 4.9rem);
+  font-weight: 800;
+  line-height: 1.06;
+  letter-spacing: -0.025em;
+}
+/* Both section headings (spectrum + composition band) live inside .head and
+   share one typography spec; Fraunces comes from the .landing h2 rule above. */
+.landing .head h2 {
+  font-size: clamp(1.9rem, 3.4vw, 2.9rem);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+  text-wrap: balance;
+}
+
+/* ---------- SHARED PHYSICAL ELEMENTS ---------- */
+.landing .tape {
+  position: absolute;
+  width: 64px;
+  height: 22px;
+  background: linear-gradient(
+    105deg,
+    rgba(244, 222, 150, 0.5),
+    rgba(250, 240, 200, 0.65) 40%,
+    rgba(238, 214, 140, 0.5)
+  );
+  clip-path: polygon(
+    0% 8%,
+    4% 0%,
+    96% 4%,
+    100% 12%,
+    98% 88%,
+    100% 96%,
+    95% 100%,
+    3% 96%,
+    0% 90%
+  );
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+  transform: rotate(var(--tape-angle, -3deg));
+  z-index: 5;
+  pointer-events: none;
+}
+.landing .card {
+  background: #fff;
+  border-radius: 6px;
+  padding: 14px;
+  box-shadow:
+    0 1px 2px var(--shadow-warm),
+    3px 6px 18px var(--shadow-warm);
+}
+.landing .card.lift {
+  transition:
+    transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1),
+    box-shadow 0.35s ease;
+}
+.landing .card.lift:hover {
+  transform: rotate(0deg) translateY(-6px) scale(1.03);
+  box-shadow:
+    0 1px 2px var(--shadow-warm),
+    4px 14px 30px var(--shadow-warm);
+}
+
+/* ---------- BUTTONS ---------- */
+.landing .btn {
+  display: inline-block;
+  text-decoration: none;
+  font-family: "Spline Sans", sans-serif;
+  font-weight: 600;
+  padding: 14px 30px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.2s ease,
+    background 0.2s ease,
+    color 0.2s ease;
+}
+.landing .btn-primary {
+  background: var(--accent);
+  color: #fff;
+  border: 2px solid var(--accent);
+}
+.landing .btn-primary:hover {
+  background: var(--accent-deep);
+  border-color: var(--accent-deep);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 18px rgba(31, 122, 82, 0.32);
+}
+.landing .btn-secondary {
+  background: transparent;
+  color: var(--accent-deep);
+  border: 2px solid var(--accent);
+}
+.landing .btn-secondary:hover {
+  background: var(--accent);
+  color: #fff;
+  transform: translateY(-2px);
+  box-shadow: 0 8px 18px rgba(31, 122, 82, 0.26);
+}
+
+/* ---------- HERO ---------- */
+.landing .hero {
+  position: relative;
+  text-align: center;
+  padding: 90px 44px 110px;
+}
+.landing .hero .inner {
+  max-width: 760px;
+  margin: 0 auto;
+  position: relative;
+}
+.landing .hero h1 {
+  margin: 0 auto;
+  color: var(--accent-deep);
+}
+.landing .hero .subtitle {
+  font-size: 1.2rem;
+  color: var(--ink-soft);
+  max-width: 560px;
+  margin: 26px auto 0;
+}
+.landing .cta-row {
+  margin-top: 36px;
+  display: flex;
+  gap: 16px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+.landing .install-chip {
+  /* reset <button> chrome */
+  appearance: none;
+  border: 0;
+  margin: 22px 0 0;
+  font: inherit;
+  text-align: left;
+
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-family: "Spline Sans Mono", monospace;
+  font-size: 0.85rem;
+  color: var(--ink);
+  background: rgba(0, 0, 0, 0.045);
+  padding: 8px 16px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.landing .install-chip:hover {
+  background: rgba(0, 0, 0, 0.08);
+}
+.landing .install-chip:hover .install-copy-icon {
+  opacity: 1;
+}
+.landing .install-glyph {
+  /* reserve enough room for "copied!" so the chip width does not jump */
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  min-width: 4.5em;
+}
+.landing .install-copy-icon {
+  opacity: 0.65;
+  transition: opacity 0.15s ease;
+}
+.landing .install-copied {
+  font-family: "Architects Daughter", cursive;
+  color: var(--accent);
+  font-size: 0.95rem;
+  line-height: 1;
+}
+
+/* floating specimen cards */
+.landing .float-card {
+  position: absolute;
+  z-index: 4;
+  width: max-content;
+}
+.landing .float-card .card {
+  padding: 10px;
+}
+.landing .fc-tl {
+  left: 6%;
+  top: 14%;
+}
+.landing .fc-tr {
+  right: 6%;
+  top: 12%;
+}
+.landing .fc-bl {
+  left: 4%;
+  bottom: 6%;
+}
+.landing .fc-br {
+  right: 5%;
+  bottom: 7%;
+}
+/* Breakpoint must equal --sheet-w (a media query can't read a custom prop). */
+@media (max-width: 1240px) {
+  .landing .fc-tl {
+    left: 2.5%;
+    top: 3%;
+  }
+  .landing .fc-tr {
+    right: 2.5%;
+    top: 3%;
+  }
+  .landing .hero h1 {
+    font-size: clamp(2.4rem, 4.8vw, 3.9rem);
+  }
+}
+@media (max-width: 1200px) {
+  .landing .float-card.fc-bottom {
+    display: none;
+  }
+}
+@media (max-width: 1100px) {
+  .landing .float-card {
+    display: none;
+  }
+}
+
+/* hero load motion */
+.landing .rise {
+  opacity: 0;
+  transform: translateY(18px);
+  animation: gf-rise 0.7s ease-out forwards;
+}
+@keyframes gf-rise {
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.landing .float-card {
+  opacity: 0;
+  animation: gf-settle 0.8s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+@keyframes gf-settle {
+  from {
+    opacity: 0;
+    transform: rotate(0deg) translateY(10px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* ---------- SECTIONS ---------- */
+.landing .section {
+  padding: 40px 44px;
+}
+.landing .head {
+  text-align: center;
+}
+.landing .spectrum {
+  padding: 76px 44px 96px;
+}
+
+/* TRACK */
+/* one line by default; if it must wrap, only at the comma */
+.landing .spec-title {
+  text-wrap: balance;
+}
+.landing .spec-title .nowrap {
+  white-space: nowrap;
+}
+
+.landing .track {
+  position: relative;
+  max-width: 1080px;
+  margin: 36px auto 0;
+}
+.landing .track-line {
+  position: absolute;
+  left: 62px;
+  width: calc(100% - 172px);
+  bottom: -6px;
+  height: 60px;
+  pointer-events: none;
+}
+.landing .track-labels {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 18px;
+  font-family: "Architects Daughter", cursive;
+  color: var(--ink-soft);
+  font-size: 1.15rem;
+}
+.landing .specimens {
+  display: flex;
+  gap: 20px;
+  align-items: flex-end;
+  position: relative;
+}
+.landing .specimen {
+  flex: 1;
+  position: relative;
+}
+.landing .specimen .cap {
+  text-align: center;
+  font-family: "Architects Daughter", cursive;
+  color: var(--ink-soft);
+  font-size: 1rem;
+  margin-top: 8px;
+}
+.landing .specimen svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+@media (max-width: 900px) {
+  .landing .track-line,
+  .landing .track-labels {
+    display: none;
+  }
+  .landing .specimens {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 18px;
+  }
+  .landing .specimen:nth-child(5) {
+    grid-column: 1 / -1;
+    max-width: 60%;
+    margin: 0 auto;
+  }
+}
+@media (max-width: 560px) {
+  .landing .specimens {
+    grid-template-columns: 1fr;
+  }
+  .landing .specimen:nth-child(5) {
+    max-width: 100%;
+  }
+}
+
+/* ---------- COMPOSITION BAND ---------- */
+.landing .band {
+  background: var(--paper-shade);
+  padding: 110px 44px 44px;
+  border-top: 1px solid rgba(0, 0, 0, 0.04);
+}
+.landing .demo-wrap {
+  max-width: 720px;
+  margin: 88px auto 0;
+  position: relative;
+  /* above the code strip so the extended pull tab hangs in front of it */
+  z-index: 2;
+}
+.landing button.demo {
+  display: block;
+  width: 100%;
+  border: none;
+  background: none;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+}
+.landing .demo .card {
+  padding: 30px;
+  overflow: visible;
+  position: relative;
+  z-index: 1;
+}
+.landing .demo svg.pull {
+  width: 100%;
+  height: auto;
+  overflow: visible;
+  display: block;
+}
+
+/* one continuous progress variable drives the whole explosion */
+.landing .demo {
+  --pull: 0;
+  transition: --pull 0.65s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.landing .demo.exploded {
+  --pull: 1;
+}
+.landing .demo.dragging {
+  transition: none;
+}
+.landing .demo:not(.exploded):not(.dragging):hover {
+  --pull: 0.06;
+}
+
+.landing .demo .layer {
+  transform-origin: center;
+}
+.landing .demo .layer-axes {
+  transform: translate(calc(var(--pull) * -30px), calc(var(--pull) * 44px))
+    rotate(calc(var(--pull) * -1deg));
+}
+.landing .demo .layer-bars {
+  transform: translate(calc(var(--pull) * 10px), calc(var(--pull) * -22px))
+    rotate(calc(var(--pull) * 0.8deg));
+}
+.landing .demo .layer-ribbons {
+  transform: translate(calc(var(--pull) * 42px), calc(var(--pull) * -108px))
+    rotate(calc(var(--pull) * 1.8deg));
+}
+.landing .demo .layer-legend {
+  transform: translate(calc(var(--pull) * -26px), calc(var(--pull) * -118px))
+    rotate(calc(var(--pull) * -2deg));
+}
+
+.landing .demo .vellum {
+  rx: 5px;
+  stroke: rgba(120, 100, 70, 0.35);
+  stroke-width: 1;
+  opacity: calc(var(--pull) * 0.62);
+}
+.landing .demo .layer {
+  filter: drop-shadow(
+    0 calc(var(--pull) * 5px) calc(var(--pull) * 7px)
+      rgba(40, 28, 14, calc(var(--pull) * 0.25))
+  );
+}
+.landing .demo .llabel,
+.landing .demo .lleader {
+  opacity: clamp(0, calc((var(--pull) - 0.55) / 0.45), 1);
+}
+
+.landing .pulltab {
+  --pulltab-grad: linear-gradient(
+    90deg,
+    #1f7a52,
+    #36a273 30%,
+    #36a273 70%,
+    #1f7a52
+  );
+  position: absolute;
+  left: 50%;
+  bottom: calc(-46px - var(--pull) * 58px);
+  transform: translateX(-50%);
+  background: var(--pulltab-grad);
+  color: #fff;
+  font-family: "Architects Daughter", cursive;
+  font-size: 1.05rem;
+  width: 150px;
+  box-sizing: border-box;
+  text-align: center;
+  padding: 14px 0 7px;
+  border-radius: 0 0 9px 9px;
+  box-shadow: 0 4px 10px rgba(38, 28, 18, 0.25);
+  touch-action: none;
+  white-space: nowrap;
+  z-index: 0;
+}
+.landing .pulltab::before {
+  content: "";
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  width: 100%;
+  height: calc(40px + var(--pull) * 58px);
+  background: var(--pulltab-grad);
+  border-radius: 2px 2px 0 0;
+  z-index: -1;
+}
+.landing .pulltab::after {
+  content: "";
+  position: absolute;
+  top: 5px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 18px;
+  height: 7px;
+  background:
+    linear-gradient(rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0.55))
+      top/18px 2px no-repeat,
+    linear-gradient(rgba(255, 255, 255, 0.55), rgba(255, 255, 255, 0.55))
+      bottom/18px 2px no-repeat;
+}
+.landing .demo .card::after {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  left: 50%;
+  bottom: 2px;
+  transform: translateX(-50%);
+  width: 158px;
+  height: 3px;
+  border-radius: 3px;
+  background: rgba(60, 45, 30, 0.28);
+  pointer-events: none;
+}
+
+/* CODE STRIP */
+.landing .codestrip {
+  max-width: 980px;
+  margin: 110px auto 0;
+}
+.landing .codegrid {
+  display: flex;
+  justify-content: center;
+}
+.landing .codegrid .printout {
+  max-width: 640px;
+}
+.landing .printout {
+  background: #fff;
+  transform: rotate(-1deg);
+  padding: 26px 30px;
+  position: relative;
+  border-radius: 6px;
+}
+.landing .printout pre {
+  margin: 0;
+  font-family: "Spline Sans Mono", monospace;
+  font-size: 0.88rem;
+  line-height: 1.75;
+  color: var(--ink);
+  white-space: pre;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+@media (max-width: 480px) {
+  .landing .printout {
+    padding-left: 18px;
+    padding-right: 18px;
+  }
+  .landing .printout pre {
+    font-size: 0.78rem;
+  }
+}
+.landing .tok-kw {
+  color: var(--graphite);
+  font-weight: 500;
+}
+.landing .tok-str {
+  color: var(--leaf);
+}
+.landing .tok-field {
+  color: var(--bluep);
+}
+.landing .tok-num {
+  color: var(--gold);
+}
+.landing .code-brackets {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: visible;
+}
+.landing .code-brackets svg {
+  position: absolute;
+  overflow: visible;
+}
+.landing .code-brackets .clabel {
+  position: absolute;
+  font-family: "Architects Daughter", cursive;
+  color: var(--graphite);
+  font-size: 1.05rem;
+  line-height: 1;
+  white-space: nowrap;
+}
+@media (max-width: 860px) {
+  .landing .code-brackets {
+    display: none;
+  }
+}
+
+/* closing CTA block at the band's end */
+.landing .band-cta {
+  margin-top: 110px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* mobile navbar: the hamburger only holds the GitHub link — show the link
+   itself instead, and shrink Internals to its book icon when space is tight */
+html.landing-page .VPNavBarHamburger {
+  display: none !important;
+}
+html.landing-page .VPNavBarSocialLinks {
+  display: flex !important;
+}
+@media (max-width: 768px) {
+  html.landing-page .internals-link span {
+    display: none;
+  }
+  html.landing-page .internals-link {
+    padding: 0 8px;
+  }
+}
+
+/* ---------- BAND FOOT (made with … at MIT VIS) ---------- */
+.landing .band-foot {
+  margin: 96px auto 0;
+  padding: 8px 24px 0;
+  text-align: center;
+  font-family: "Architects Daughter", cursive;
+  color: var(--ink-soft);
+  font-size: 1.15rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.landing .band-foot .foot-logo {
+  height: 34px;
+  width: auto;
+  vertical-align: middle;
+  display: block;
+  /* the PNG has transparent padding baked in; pull the neighbors closer */
+  margin: 0 -5px 0 -3px;
+}
+.landing .band-foot .foot-vis {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: inherit;
+  text-decoration: none;
+}
+.landing .band-foot .foot-vis:hover .vis-logo {
+  opacity: 0.75;
+}
+.landing .band-foot .vis-logo {
+  height: 21px;
+  width: auto;
+  display: block;
+  transform: translateY(-4px);
+}
+.landing .demo .card .demo-tape {
+  z-index: 0;
+}
+.landing .demo .card .demo-art {
+  position: relative;
+  z-index: 1;
+}
+
+/* ---------- REVEAL ---------- */
+.landing .reveal {
+  transition:
+    opacity 0.8s cubic-bezier(0.34, 1.56, 0.64, 1),
+    transform 0.8s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.landing.landing--js .reveal {
+  opacity: 0;
+  transform: translateY(26px);
+}
+.landing.landing--js .reveal.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+@media (max-width: 700px) {
+  .landing .sheet {
+    width: calc(100% - 20px);
+    margin: 10px auto;
+    border-radius: 2px;
+  }
+  .landing .hero {
+    padding: 60px 22px 70px;
+  }
+  .landing .section,
+  .landing .spectrum,
+  .landing .band {
+    padding-left: 22px;
+    padding-right: 22px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html.landing-page {
+    scroll-behavior: auto;
+  }
+  .landing *,
+  .landing *::before,
+  .landing *::after {
+    animation-duration: 0.01ms !important;
+    animation-delay: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+  .landing .rise,
+  .landing .float-card {
+    opacity: 1 !important;
+    transform: none !important;
+  }
+  .landing .reveal {
+    opacity: 1 !important;
+    transform: none !important;
+  }
+}
+
+/* ===================== wide-screen gutter navbar (home route only) =====================
+   When the desk gutters beside the 1240px sheet are roomy, lift the navbar
+   contents out of the bar and pin them as two paper cards floating on the wood.
+   Strictly scoped to html.landing-page, so docs pages keep their normal navbar
+   at every width. Between 960–1719px the ordinary paper navbar (above) stands. */
+@media (min-width: 1720px) {
+  /* Dissolve the bar shell: transparent, no hairline, click-through so the hero
+     beneath the old bar stays fully interactive. */
+  html.landing-page .VPNavBar,
+  html.landing-page .VPNavBar.has-sidebar .content,
+  html.landing-page .VPNavBar .content {
+    background: transparent !important;
+    background-color: transparent !important;
+  }
+  html.landing-page .VPNavBar {
+    border-bottom-color: transparent !important;
+    pointer-events: none;
+  }
+
+  /* LEFT card: logo + "GoFish Graphics" wordmark.
+     Anchored to the centered sheet (half-width var(--sheet-w)/2) rather than the
+     viewport edge: its right edge overlaps the sheet's left edge by --card-overlap
+     so the card reads as resting on top of the paper. */
+  html.landing-page .VPNavBar .VPNavBarTitle {
+    position: fixed;
+    top: 40px;
+    left: auto;
+    right: calc(50% + var(--sheet-w) / 2 - var(--card-overlap));
+    width: auto;
+    pointer-events: auto;
+    background: var(--paper);
+    border-radius: 10px;
+    padding: 12px 18px;
+    box-shadow:
+      0 1px 2px var(--shadow-warm),
+      3px 6px 18px var(--shadow-warm);
+    transform: rotate(-1.2deg);
+    transform-origin: top center;
+    animation: gf-sway-left 6.5s ease-in-out infinite alternate;
+    z-index: 30;
+  }
+
+  /* RIGHT card: search + Internals + JS/Python toggle + GitHub, stacked.
+     position/inset use !important to beat VitePress's own more-specific
+     `.content-body { position: relative }` rule. */
+  html.landing-page .VPNavBar .content-body {
+    position: fixed !important;
+    top: 40px !important;
+    right: auto !important;
+    left: calc(50% + var(--sheet-w) / 2 - var(--card-overlap)) !important;
+    width: auto;
+    height: auto;
+    pointer-events: auto;
+    background: var(--paper) !important;
+    border-radius: 10px;
+    padding: 14px 16px;
+    box-shadow:
+      0 1px 2px var(--shadow-warm),
+      3px 6px 18px var(--shadow-warm);
+    transform: rotate(1deg);
+    transform-origin: top center;
+    animation: gf-sway-right 7s ease-in-out infinite alternate;
+    z-index: 30;
+
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  /* Children opt back into pointer events and shed the row-layout spacing /
+     flex-grow so they sit flush-left in the column. */
+  html.landing-page .VPNavBar .content-body > * {
+    pointer-events: auto;
+    flex: 0 0 auto;
+    width: auto;
+    margin: 0 !important;
+    padding-left: 0 !important;
+  }
+  html.landing-page .VPNavBar .content-body > .VPNavBarSearch {
+    flex-grow: 0;
+  }
+
+  /* HANGING METAPHOR (GoFish theme): each gutter card hangs from the top of the
+     window on a fishing line that ends in a steel J-hook piercing the card's top
+     edge. ::before draws the line, ::after draws the hook. CSS-only since no DOM
+     can be injected inside VitePress's nav clusters. */
+  html.landing-page .VPNavBar .VPNavBarTitle::before,
+  html.landing-page .VPNavBar .content-body::before {
+    content: "";
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    width: 1.5px;
+    height: 48px;
+    transform: translateX(-50%);
+    background: rgba(60, 50, 40, 0.35);
+    pointer-events: none;
+    z-index: 1;
+  }
+  html.landing-page .VPNavBar .VPNavBarTitle::after,
+  html.landing-page .VPNavBar .content-body::after {
+    content: "";
+    position: absolute;
+    bottom: calc(100% - 26px);
+    left: 50%;
+    width: 26px;
+    height: 52px;
+    transform: translateX(-50%);
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 26 52'%3E%3Cg fill='none' stroke-linecap='round' stroke-linejoin='round'%3E%3Cellipse cx='13' cy='31' rx='3.6' ry='1.9' fill='%23463422' fill-opacity='0.5' stroke='none'/%3E%3Cg stroke='%236d7278' stroke-width='2.2'%3E%3Ccircle cx='13' cy='4' r='3'/%3E%3Cpath d='M13 7 L13 24.6'/%3E%3Cpath d='M13 33 L13 36 C13 43.5 4.2 43.5 4.2 36 L4.2 32.8'/%3E%3Cpath d='M4.2 32.8 L7.6 35.8'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-size: contain;
+    background-position: center top;
+    pointer-events: none;
+    z-index: 2;
+  }
+
+  /* Subtle hanging sway: the cards drift a fraction of a degree around their
+     resting rotation, pivoting from the hook (transform-origin: top center). */
+  @keyframes gf-sway-left {
+    from {
+      transform: rotate(-1.6deg);
+    }
+    to {
+      transform: rotate(-0.8deg);
+    }
+  }
+  @keyframes gf-sway-right {
+    from {
+      transform: rotate(0.6deg);
+    }
+    to {
+      transform: rotate(1.4deg);
+    }
+  }
+}
+
+@media (min-width: 1720px) and (prefers-reduced-motion: reduce) {
+  html.landing-page .VPNavBar .VPNavBarTitle,
+  html.landing-page .VPNavBar .content-body {
+    animation: none !important;
+  }
+}
+
+/* registered custom property that animates the pull-apart explosion */
+@property --pull {
+  syntax: "<number>";
+  inherits: true;
+  initial-value: 0;
+}

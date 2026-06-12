@@ -1,0 +1,41 @@
+name: Docs Build
+
+# Verifies the VitePress docs site builds cleanly on every PR — catches broken
+# links, missing example registrations, and TypeDoc failures before they land.
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: docs-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build gofish-graphics library
+        run: pnpm --filter gofish-graphics build
+
+      - name: Build docs site
+        run: pnpm --filter docs docs:build

@@ -2,7 +2,13 @@ import * as Monotonic from "../../util/monotonic";
 import { computeAesthetic } from "../../util";
 import { interval } from "../../util/interval";
 import { GoFishNode } from "../_node";
-import { getValue, inferEmbedded, isAesthetic, isValue } from "../data";
+import {
+  getMeasure,
+  getValue,
+  inferEmbedded,
+  isAesthetic,
+  isValue,
+} from "../data";
 import { Dimensions, elaborateDims, FancyDims, Transform } from "../dims";
 import {
   DIFFERENCE,
@@ -252,15 +258,24 @@ export const Image = ({
           if (isValue(pos)) {
             const min = getValue(pos) ?? 0;
             if (isValue(dims[axis].size)) {
-              return DIFFERENCE(getValue(dims[axis].size)!);
+              return DIFFERENCE(
+                getValue(dims[axis].size)!,
+                getMeasure(dims[axis].size)
+              );
             }
-            return POSITION(interval(min, min));
+            return POSITION(interval(min, min), getMeasure(pos));
           }
           if (isAesthetic(pos) && isValue(dims[axis].size)) {
-            return DIFFERENCE(getValue(dims[axis].size)!);
+            return DIFFERENCE(
+              getValue(dims[axis].size)!,
+              getMeasure(dims[axis].size)
+            );
           }
           if (!isValue(pos) && isValue(dims[axis].size)) {
-            return SIZE(Monotonic.linear(getValue(dims[axis].size)!, 0));
+            return SIZE(
+              Monotonic.linear(getValue(dims[axis].size)!, 0),
+              getMeasure(dims[axis].size)
+            );
           }
           // No data position, no data size — image's intrinsic dimensions
           // are resolved at layout time via resolveRenderedDimensions.
@@ -342,7 +357,7 @@ export const Image = ({
             width={Math.abs(width)}
             height={Math.abs(height)}
             href={href}
-            preserveAspectRatio={preserveAspectRatio}
+            preserveAspectRatio={preserveAspectRatio as any}
             filter={filter}
             opacity={opacity}
           />
@@ -353,7 +368,7 @@ export const Image = ({
   );
 };
 
-const rawImage = createMark(Image, {});
+const rawImage = createMark(Image, {}, "image");
 
 /** Wrap an image mark so it awaits intrinsic dimension loading before producing
  *  a node. Recursively wraps .name/.label so chained calls stay awaiting. */

@@ -1,0 +1,43 @@
+{
+  "name": "gofish-ir",
+  "version": "0.1.0",
+  "description": "Serialized intermediate representation (IR) for GoFish chart specifications.",
+  "type": "module",
+  "main": "dist/index.js",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./frontend": {
+      "import": "./dist/frontend/index.js",
+      "types": "./dist/frontend/index.d.ts"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "keywords": [
+    "gofish",
+    "ir",
+    "schema",
+    "visualization"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/gofish-graphics/gofish-graphics"
+  },
+  "scripts": {
+    "build": "tsc && tsx scripts/emit-jsonschema.ts",
+    "test": "tsx src/tests/schema.test.ts",
+    "prepublishOnly": "pnpm run build"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}

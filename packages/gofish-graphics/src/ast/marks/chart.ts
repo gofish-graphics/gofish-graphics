@@ -1,5 +1,8 @@
-import { sumBy, v, Connect, ref } from "../../lib";
+import { sumBy, v, Connect } from "../../lib";
 import { GoFishNode } from "../_node";
+import type { Value } from "../data";
+import { GoFishRef } from "../_ref";
+import type { Token } from "../createName";
 import { type ColorConfig } from "../colorSchemes";
 
 export type { ColorConfig };
@@ -7,6 +10,7 @@ import { inferSize } from "../channels";
 import { rect as generatedRect } from "../shapes/rect";
 import { Ellipse } from "../shapes/ellipse";
 import { Mark, Operator } from "../types";
+import type { NameableMark } from "../withGoFish";
 import type { LabelAccessor, LabelOptions } from "../labels/labelPlacement";
 import {
   resolveMarkResult,
@@ -28,14 +32,14 @@ export type { Mark, Operator };
 export { generatedRect as rect };
 export type { LayerContext };
 
-import { ChartBuilder, LayerSelector, chart } from "./chartBuilder";
+import { ChartBuilder, chart, stashLayerName } from "./chartBuilder";
 import type { ChartOptions } from "./chartBuilder";
-export { ChartBuilder, LayerSelector, chart };
+export { ChartBuilder, chart };
 export type { ChartOptions };
 
 /* Data Transformation Operators */
 export function derive<T, U>(fn: (d: T) => U | Promise<U>): Operator<T, U> {
-  return async (mark: Mark<U>) => {
+  const op: Operator<T, U> = async (mark: Mark<U>) => {
     return (async (
       d: T,
       key?: string | number,
@@ -44,6 +48,12 @@ export function derive<T, U>(fn: (d: T) => U | Promise<U>): Operator<T, U> {
       return mark(await fn(d), key, layerContext);
     }) as Mark<T>;
   };
+  // The function body is not serializable; the frontend-IR emitter sees
+  // an opaque `{ type: "derive" }`. The Python-bridge widget emits its own
+  // `{ type: "derive", lambdaId }` shape; pure-JS callers leave the
+  // payload empty.
+  (op as any).__serialize = { type: "derive", opts: {} };
+  return op;
 }
 
 // return an array of copies of `d` repeated `d.field` times
@@ -68,7 +78,7 @@ export const normalize = <T, K extends keyof T>(
 };
 
 export function log<T>(label?: string): Operator<T, T> {
-  return async (mark: Mark<T>) => {
+  const op: Operator<T, T> = async (mark: Mark<T>) => {
     return (async (
       d: T,
       key?: string | number,
@@ -82,6 +92,11 @@ export function log<T>(label?: string): Operator<T, T> {
       return mark(d, key, layerContext);
     }) as Mark<T>;
   };
+  (op as any).__serialize = {
+    type: "log",
+    opts: label !== undefined ? { label } : {},
+  };
+  return op;
 }
 
 /* END Data Transformation Operators */
@@ -99,8 +114,9 @@ export function circle<T extends Record<string, any>>({
   stroke?: string;
   strokeWidth?: number;
   debug?: boolean;
+  label?: boolean;
 }): Mark<T> & {
-  name(layerName: string): Mark<T>;
+  name(layerName: string | Token): Mark<T>;
   label(accessor: LabelAccessor, options?: LabelOptions): Mark<T>;
 } {
   const base: Mark<T> = async (
@@ -114,11 +130,11 @@ export function circle<T extends Record<string, any>>({
     const resolvedFill =
       typeof fill === "string" && datum && fill in datum
         ? v(datum[fill as string])
-        : fill;
+        : (fill as Value<string> | undefined);
     const resolvedStroke =
       typeof stroke === "string" && datum && stroke in datum
         ? v(datum[stroke as string])
-        : stroke;
+        : (stroke as Value<string> | undefined);
     const node = Ellipse({
       w: typeof r === "number" ? r * 2 : inferSize(r, d),
       h: typeof r === "number" ? r * 2 : inferSize(r, d),
@@ -131,35 +147,44 @@ export function circle<T extends Record<string, any>>({
     (node as any).datum = d;
     return node;
   };
-  return nameableMark(base);
+  const result = nameableMark(base);
+  (result as any).__serialize = {
+    type: "circle",
+    opts: { r, fill, stroke, strokeWidth, label },
+  };
+  return result;
 }
 
-// select() returns a lazy selector that defers layer lookup until actually needed
-// This allows layers to be registered by .name() on marks before select() tries to access them
-export function select<T>(layerName: string): LayerSelector<T> {
-  return new LayerSelector<T>(layerName);
+// `ref(name)` is the universal singular reference — usable inline in a layout
+// (resolved at layout time) and as chart data (resolved at build time against
+// the per-chart layer registry, erroring unless exactly one named node
+// matches). `selectAll(name)` is the plural form: one ref per matching named
+// node, chart-data only. Both defer layer lookup until resolution, so layers
+// can be registered by `.name()` on marks before the selector accesses them.
+export function selectAll(
+  layerName: string
+): GoFishRef & { readonly multiplicity: "all" } {
+  return new GoFishRef({
+    selection: layerName,
+    multiplicity: "all",
+  }) as GoFishRef & {
+    readonly multiplicity: "all";
+  };
 }
 
 // line() mark connects data points using center-to-center mode
-export function line<T extends Record<string, any>>(options?: {
+export function line(options?: {
   stroke?: string;
   strokeWidth?: number;
   opacity?: number;
   interpolation?: "linear" | "bezier";
-}): Mark<Array<T & { __ref?: GoFishNode }>> {
-  return async (
-    d: Array<T & { __ref?: GoFishNode }>,
-    key?: string | number,
+}): Mark<GoFishRef[]> {
+  const mark: Mark<GoFishRef[]> = async (
+    d: GoFishRef[],
+    _key?: string | number,
     _layerContext?: LayerContext
   ) => {
-    // Use refs from enriched data (lazy resolution via __ref)
-    const refs = d.map((item) => {
-      if ("__ref" in item && item.__ref) {
-        return ref(item.__ref);
-      }
-      throw new Error("line mark expected __ref on items");
-    });
-
+    // `selectAll(...)` resolves to one ref per named node; connect them.
     return Connect(
       {
         direction: 0, // x direction
@@ -169,33 +194,28 @@ export function line<T extends Record<string, any>>(options?: {
         opacity: options?.opacity,
         interpolation: options?.interpolation ?? "linear",
       },
-      refs
+      d
     );
   };
+  (mark as any).__serialize = { type: "line", opts: options ?? {} };
+  return mark;
 }
 
 // area() mark connects data points using edge-to-edge mode
-export function area<T extends Record<string, any>>(options?: {
+export function area(options?: {
   stroke?: string;
   strokeWidth?: number;
   opacity?: number;
   mixBlendMode?: "normal" | "multiply";
   dir?: "x" | "y";
   interpolation?: "linear" | "bezier";
-}): Mark<Array<T & { __ref?: GoFishNode }>> {
-  return async (
-    d: Array<T & { __ref?: GoFishNode }>,
-    key?: string | number,
+}): Mark<GoFishRef[]> {
+  const mark: Mark<GoFishRef[]> = async (
+    d: GoFishRef[],
+    _key?: string | number,
     _layerContext?: LayerContext
   ) => {
-    // Use refs from enriched data (lazy resolution via __ref)
-    const refs = d.map((item) => {
-      if ("__ref" in item && item.__ref) {
-        return ref(item.__ref);
-      }
-      throw new Error("area mark expected __ref on items");
-    });
-
+    // `selectAll(...)` resolves to one ref per named node; connect them.
     return Connect(
       {
         direction: options?.dir ?? "x",
@@ -206,9 +226,11 @@ export function area<T extends Record<string, any>>(options?: {
         opacity: options?.opacity,
         interpolation: options?.interpolation ?? "bezier",
       },
-      refs
+      d
     );
   };
+  (mark as any).__serialize = { type: "area", opts: options ?? {} };
+  return mark;
 }
 
 // blank() mark creates invisible guides for positioning
@@ -236,7 +258,7 @@ export function blank<T extends Record<string, any>>({
   debug?: boolean;
 } = {}): Mark<T | T[] | { item: T | T[]; key: number | string }> {
   // blank is essentially a transparent/zero-size rect
-  return generatedRect<T>({
+  const mark = generatedRect<T>({
     emX,
     emY,
     w,
@@ -248,6 +270,13 @@ export function blank<T extends Record<string, any>>({
     stroke,
     strokeWidth,
   });
+  // Override the rect-emitted tag — blank should appear as { type: "blank" }
+  // on the wire even though it delegates to rect internally.
+  (mark as any).__serialize = {
+    type: "blank",
+    opts: { emX, emY, w, h, rx, ry, fill, debug, stroke, strokeWidth },
+  };
+  return mark;
 }
 
 /* ---- mark-combinator forms for layer and Porter-Duff operators ---- */
@@ -265,7 +294,7 @@ type PdOptions = { blendMode?: BlendMode };
  *   `chart(data).mark(layer([rect({h: "v"}), ...])).render(container, opts)`.
  */
 export type ConstrainableMark<T> = Mark<T> & {
-  name(layerName: string): ConstrainableMark<T>;
+  name(layerName: string | Token): ConstrainableMark<T>;
   label(accessor: LabelAccessor, options?: LabelOptions): ConstrainableMark<T>;
   constrain(
     fn: (refs: Record<string, ConstraintRef>) => ConstraintSpec[]
@@ -277,22 +306,39 @@ export type ConstrainableMark<T> = Mark<T> & {
 };
 
 function makeConstrainableMark<T>(base: Mark<T>): ConstrainableMark<T> {
-  const withName = (layerName: string): ConstrainableMark<T> => {
+  const withName = (layerName: string | Token): ConstrainableMark<T> => {
     const named: Mark<T> = async (d, key, layerContext) => {
       const node = await resolveMarkResult(
         base(d, key, layerContext),
         layerContext
       );
       node.name(layerName);
-      if (layerContext && layerName) {
-        if (!layerContext[layerName]) {
-          layerContext[layerName] = { data: [], nodes: [] };
-        }
-        layerContext[layerName].nodes.push(node);
-        layerContext[layerName].data.push((node as any).datum);
+      // Tag for a deterministic post-resolve collection pass instead of
+      // pushing directly into `layerContext` here — the push order would
+      // otherwise depend on which leg's `await` happened to finish first
+      // (parents fan their children out via `Promise.all`, and any async
+      // op in the chain — e.g. a Python `derive` RPC — varies per-leaf
+      // latency). ChartBuilder.resolve walks the finished node tree in
+      // parent-iteration order so consumers see canonical order. Tokens
+      // are hygienic handles and don't participate in the string-keyed
+      // layerContext registry, so we only tag for string names.
+      if (layerContext && typeof layerName === "string" && layerName) {
+        (node as { __layerRegistration?: string }).__layerRegistration =
+          layerName;
       }
       return node;
     };
+    // Propagate the IR-serialize tag through the chain and record the
+    // layerName in its `name` slot. Without this, `.name(...)` on a
+    // combinator-form mark (layer, Porter-Duff, …) would strip the tag
+    // and toJSON would fail.
+    const baseTag = (base as any).__serialize;
+    if (baseTag && typeof layerName === "string") {
+      (named as any).__serialize = { ...baseTag, name: layerName };
+    } else if (baseTag) {
+      (named as any).__serialize = baseTag;
+    }
+    stashLayerName(named, layerName);
     return makeConstrainableMark(named);
   };
   const withLabel = (
@@ -307,6 +353,31 @@ function makeConstrainableMark<T>(base: Mark<T>): ConstrainableMark<T> {
       node.label(accessor, options);
       return node;
     };
+    const baseTag = (base as any).__serialize;
+    if (baseTag && typeof accessor === "string") {
+      (labeled as any).__serialize = {
+        ...baseTag,
+        label: {
+          accessor,
+          ...(options && typeof options === "object" ? options : {}),
+        },
+      };
+    } else if (baseTag) {
+      (labeled as any).__serialize = baseTag;
+      if (
+        typeof accessor === "function" &&
+        typeof console !== "undefined" &&
+        typeof console.warn === "function"
+      ) {
+        // Function accessors don't serialize; the mark stays serializable
+        // but the label is dropped from the emitted IR.
+        console.warn(
+          "[gofish-ir] .label(fn): function accessors aren't serializable; " +
+            "label will be omitted from the emitted IR. Use a string field " +
+            "name if you need the label to round-trip."
+        );
+      }
+    }
     return makeConstrainableMark(labeled);
   };
   const withConstrain = (
@@ -360,23 +431,26 @@ function makeConstrainableMark<T>(base: Mark<T>): ConstrainableMark<T> {
  *   - already-resolved GoFishNodes (e.g. ref(...)).
  * Supports `.name()`, `.label()`, `.constrain()`, and a top-level `.render()`.
  */
-export function layer<T>(marks: Mark<any>[]): ConstrainableMark<T>;
 export function layer<T>(
-  opts: Record<string, any>,
-  marks: Mark<any>[]
+  marks: (Mark<any> | GoFishRef)[]
 ): ConstrainableMark<T>;
 export function layer<T>(
-  marksOrOpts: Mark<any>[] | Record<string, any>,
-  maybeMarks?: Mark<any>[]
+  opts: Record<string, any>,
+  marks: (Mark<any> | GoFishRef)[]
+): ConstrainableMark<T>;
+export function layer<T>(
+  marksOrOpts: (Mark<any> | GoFishRef)[] | Record<string, any>,
+  maybeMarks?: (Mark<any> | GoFishRef)[]
 ): ConstrainableMark<T> {
   const opts = Array.isArray(marksOrOpts) ? {} : marksOrOpts;
   const marks = (Array.isArray(marksOrOpts) ? marksOrOpts : maybeMarks) ?? [];
   const base: Mark<T> = async (d, key, layerContext) => {
-    // Share one layerContext across all children so that select(name) in
-    // one child can find a sibling's .name(name) registration. Inherit from
-    // the caller when present (nested-layer case), else create a fresh
-    // context (top-level .render() case). Resolve sequentially so a child
-    // using select(...) sees registrations from earlier siblings.
+    // Share one layerContext across all children so that ref(name)/
+    // selectAll(name) in one child can find a sibling's .name(name)
+    // registration. Inherit from the caller when present (nested-layer case),
+    // else create a fresh context (top-level .render() case). Resolve
+    // sequentially so a child referencing a name sees registrations from
+    // earlier siblings.
     const sharedContext = layerContext ?? {};
     const resolved: GoFishNode[] = [];
     for (const m of marks) {
@@ -387,10 +461,20 @@ export function layer<T>(
     (node as any).datum = d;
     return node;
   };
-  return makeConstrainableMark(base);
+  const result = makeConstrainableMark(base);
+  (result as any).__serialize = {
+    type: "layer",
+    opts,
+    __combinator: true,
+    children: marks,
+  };
+  return result;
 }
 
-function makePorterDuffCombinator(lowLevel: (opts: any, children: any) => any) {
+function makePorterDuffCombinator(
+  lowLevel: (opts: any, children: any) => any,
+  irType: string
+) {
   function fn<T>(marks: [Mark<any>, Mark<any>]): NameableMark<T>;
   function fn<T>(
     opts: PdOptions,
@@ -418,14 +502,21 @@ function makePorterDuffCombinator(lowLevel: (opts: any, children: any) => any) {
       (node as any).datum = d;
       return node;
     };
-    return nameableMark(base);
+    const result = nameableMark(base);
+    (result as any).__serialize = {
+      type: irType,
+      opts,
+      __combinator: true,
+      children: marks,
+    };
+    return result;
   }
   return fn;
 }
 
-export const atop = makePorterDuffCombinator(Atop);
-export const over = makePorterDuffCombinator(Over);
-export const inside = makePorterDuffCombinator(Inside);
-export const xor = makePorterDuffCombinator(Xor);
-export const out = makePorterDuffCombinator(Out);
-export const mask = makePorterDuffCombinator(Mask);
+export const atop = makePorterDuffCombinator(Atop, "atop");
+export const over = makePorterDuffCombinator(Over, "over");
+export const inside = makePorterDuffCombinator(Inside, "inside");
+export const xor = makePorterDuffCombinator(Xor, "xor");
+export const out = makePorterDuffCombinator(Out, "out");
+export const mask = makePorterDuffCombinator(Mask, "mask");

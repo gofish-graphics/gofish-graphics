@@ -49,7 +49,7 @@ const renderComposite = (
         <feBlend
           in="compositeResult"
           in2="graySource"
-          mode={blendMode}
+          mode={blendMode as "multiply" | "screen"}
           result="blendedIntersect"
         />
         <feComposite
@@ -59,7 +59,11 @@ const renderComposite = (
         />
       </>
     ) : operator === "over" || operator === "atop" ? (
-      <feBlend in="compositeResult" in2="graySource" mode={blendMode} />
+      <feBlend
+        in="compositeResult"
+        in2="graySource"
+        mode={blendMode as "multiply" | "screen"}
+      />
     ) : null;
 
   return (
@@ -130,7 +134,14 @@ const createCompositeRelation = (type: string, operator: CompositeOperator) =>
             children: Size<UnderlyingSpace>[],
             _childNodes: GoFishAST[]
           ) => [unionChildSpaces(children, 0), unionChildSpaces(children, 1)],
-          layout: (_shared, size, scaleFactors, layoutChildren, posScales) => {
+          layout: (
+            _shared,
+            size,
+            scaleFactors,
+            layoutChildren,
+            posScales,
+            _node
+          ) => {
             requireTwoChildren(layoutChildren);
 
             const childPlaceables = layoutChildren.map((child) =>
@@ -209,7 +220,14 @@ export const mask = createNodeOperator(
           children: Size<UnderlyingSpace>[],
           _childNodes: GoFishAST[]
         ) => [unionChildSpaces(children, 0), unionChildSpaces(children, 1)],
-        layout: (_shared, size, scaleFactors, layoutChildren, posScales) => {
+        layout: (
+          _shared,
+          size,
+          scaleFactors,
+          layoutChildren,
+          posScales,
+          _node
+        ) => {
           requireTwoChildren(layoutChildren);
 
           const childPlaceables = layoutChildren.map((child) =>

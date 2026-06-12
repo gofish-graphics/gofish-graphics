@@ -8,30 +8,41 @@ export type Interval<T = number> = {
 
 export type Dimensions<T = number> = Interval<T>[];
 
+export type XYWHDims<T = number> = {
+  x?: T;
+  cx?: T;
+  x2?: T;
+  w?: T;
+  emX?: boolean;
+  y?: T;
+  cy?: T;
+  y2?: T;
+  h?: T;
+  emY?: boolean;
+};
+
+export type IndexedDims<T = number> = {
+  0?: Interval<T>;
+  1?: Interval<T>;
+};
+
+export type WrappedDims<T = number> = { dims: Dimensions<T> };
+
 export type FancyDims<T = number> =
-  | {
-      x?: T;
-      cx?: T;
-      x2?: T;
-      w?: T;
-      emX?: boolean;
-      y?: T;
-      cy?: T;
-      y2?: T;
-      h?: T;
-      emY?: boolean;
-    }
-  | {
-      0?: Interval<T>;
-      1?: Interval<T>;
-    }
-  | { dims: Dimensions<T> };
+  | XYWHDims<T>
+  | IndexedDims<T>
+  | WrappedDims<T>;
+
+const isWrappedDims = <T>(d: FancyDims<T>): d is WrappedDims<T> => "dims" in d;
+
+const isIndexedDims = <T>(d: FancyDims<T>): d is IndexedDims<T> =>
+  "0" in d || "1" in d;
 
 export const elaborateDims = <T>(dims: FancyDims<T>): Dimensions<T> => {
-  if ("dims" in dims) {
+  if (isWrappedDims(dims)) {
     return dims.dims;
   }
-  if ("0" in dims || "1" in dims) {
+  if (isIndexedDims(dims)) {
     return [
       {
         min: dims[0]?.min,
@@ -53,12 +64,12 @@ export const elaborateDims = <T>(dims: FancyDims<T>): Dimensions<T> => {
   if (!("x" in dims))
     dims.x =
       dims.cx !== undefined && dims.w !== undefined
-        ? dims.cx - dims.w / 2
+        ? (((dims.cx as number) - (dims.w as number) / 2) as T)
         : undefined;
   if (!("y" in dims))
     dims.y =
       dims.cy !== undefined && dims.h !== undefined
-        ? dims.cy - dims.h / 2
+        ? (((dims.cy as number) - (dims.h as number) / 2) as T)
         : undefined;
 
   return [
@@ -97,35 +108,39 @@ export const elaborateDirection = (direction: FancyDirection): Direction => {
 
 export type Position = [number | undefined, number | undefined];
 
-export type FancyPosition =
-  | { x?: number; y?: number }
-  | { 0?: number; 1?: number }
-  | Position;
+export type XYPosition = { x?: number; y?: number };
+export type IndexedPosition = { 0?: number; 1?: number };
+
+export type FancyPosition = XYPosition | IndexedPosition | Position;
+
+const isXYPosition = (p: XYPosition | IndexedPosition): p is XYPosition =>
+  "x" in p || "y" in p;
 
 export const elaboratePosition = (position: FancyPosition): Position => {
   if (Array.isArray(position)) {
     return position;
   }
-  if ("x" in position || "y" in position) {
+  if (isXYPosition(position)) {
     return [position.x, position.y];
   }
-  if ("0" in position || "1" in position) {
-    return [position[0], position[1]];
-  }
+  return [position[0], position[1]];
 };
 
 export type Size<T = number> = [T, T];
 
-export type FancySize<T = number> =
-  | { w: T; h: T }
-  | { [K in Direction]: T }
-  | Size<T>;
+export type WHSize<T = number> = { w: T; h: T };
+export type IndexedSize<T = number> = { [K in Direction]: T };
+
+export type FancySize<T = number> = WHSize<T> | IndexedSize<T> | Size<T>;
+
+const isIndexedSize = <T>(s: WHSize<T> | IndexedSize<T>): s is IndexedSize<T> =>
+  "0" in s || "1" in s;
 
 export const elaborateSize = <T>(size: FancySize<T>): Size<T> => {
   if (Array.isArray(size)) {
     return size;
   }
-  if ("0" in size || "1" in size) {
+  if (isIndexedSize(size)) {
     return [size[0], size[1]];
   }
   return [size.w, size.h];
@@ -137,6 +152,9 @@ export type FancyTransform = { translate?: FancyPosition; scale?: FancySize };
 export const elaborateTransform = (transform: FancyTransform): Transform => {
   return {
     translate: elaboratePosition(transform?.translate ?? {}),
-    scale: elaborateSize(transform?.scale ?? {}),
+    scale:
+      transform?.scale !== undefined
+        ? elaborateSize(transform.scale)
+        : undefined,
   };
 };

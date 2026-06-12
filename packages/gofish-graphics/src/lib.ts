@@ -1,3 +1,7 @@
+// <gofish-wiki> AUTO-GENERATED — see covers: in the essay; run `pnpm --filter docs sync-backlinks`
+// @wiki Three Surfaces — /internals/design-evolution/three-surfaces
+// </gofish-wiki>
+
 // Main library exports
 export * from "./color";
 export * from "./path";
@@ -6,6 +10,12 @@ export * from "./util";
 // Data utilities
 export { value } from "./ast/data";
 export { value as v } from "./ast/data";
+// `field` / `datum` / `literal` — explicit channel-value constructors
+// matching the Vega-Lite encoding trichotomy. `datum` is an alias for
+// `value`/`v` (data-driven, scaled); `field(name)` is an explicit field
+// accessor; `literal(x)` is an explicit constant.
+export { datum, field, literal } from "./ast/data";
+export type { FieldAccessor, LiteralValue } from "./ast/data";
 export { For as map } from "./ast/iterators/for";
 
 // Coordinate Transforms
@@ -23,6 +33,11 @@ export { wavy } from "./ast/coordinateTransforms/wavy";
 export { gofish as GoFish } from "./ast/gofish";
 export { GoFishSolid } from "./ast/GoFishSolid";
 
+// Name / scope primitives
+export { createName } from "./ast/createName";
+export type { Token } from "./ast/createName";
+export { createMark } from "./ast/withGoFish";
+
 /* API v2 */
 // Data
 export { For } from "./ast/iterators/for";
@@ -33,6 +48,13 @@ export { bin } from "./ast/transforms";
 // Shapes
 export { ref } from "./ast/shapes/ref";
 
+// Datum projection — `pluck(ref, "species")` returns the full set of distinct
+// values for a field across a selected node's rows ("every possible value"),
+// the un-collapsed sibling of the `by: "datum.field"` homogeneity collapse.
+// (`projectPath`/`splitKeyFn` stay module-internal — operators import them from
+// ./ast/datumProjection directly.)
+export { pluck } from "./ast/datumProjection";
+
 // Constraints
 export { Constraint } from "./ast/constraints";
 export type {
@@ -41,6 +63,8 @@ export type {
   AlignConstraint,
   DistributeConstraint,
   DistributeOptions,
+  PositionConstraint,
+  PositionOptions,
   Axis,
   Alignment,
 } from "./ast/constraints";
@@ -55,7 +79,7 @@ export { spreadX, spreadX as SpreadX } from "./ast/graphicalOperators/spreadX";
 export { spreadY, spreadY as SpreadY } from "./ast/graphicalOperators/spreadY";
 export { layer as Layer } from "./ast/graphicalOperators/layer";
 export { connect, connect as Connect } from "./ast/graphicalOperators/connect";
-export { treemap, treemap as Treemap } from "./ast/graphicalOperators/treemap";
+export { treemap, Treemap } from "./ast/graphicalOperators/treemap";
 export {
   connectX,
   connectX as ConnectX,
@@ -86,6 +110,7 @@ export {
 // Marks (lowercase, from createMark)
 export { ellipse } from "./ast/shapes/ellipse";
 export { petal } from "./ast/shapes/petal";
+export { polygon } from "./ast/shapes/polygon";
 export { text } from "./ast/shapes/text";
 export { image } from "./ast/shapes/image";
 
@@ -95,7 +120,7 @@ export {
   derive,
   rect,
   circle,
-  select,
+  selectAll,
   line,
   blank,
   area,
@@ -119,6 +144,10 @@ export type {
 } from "./ast/marks/chart";
 // Side-effect import: attaches .facet() / .stack() to ChartBuilder.
 import "./ast/marks/builderMixins";
+
+// Frontend-IR deserializer — re-exported as a namespace so the symbol set
+// stays scoped (`Serialize.mapMark`, etc.).
+export * as Serialize from "./serialize";
 export { palette, gradient, assignGradientColor } from "./ast/colorSchemes";
 export type {
   ColorConfig,

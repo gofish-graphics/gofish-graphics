@@ -1,3 +1,4 @@
+import { computeAesthetic } from "../../util";
 import * as Monotonic from "../../util/monotonic";
 import { color6_old } from "../../color";
 import {
@@ -96,11 +97,11 @@ export const Ellipse = ({
           if (isValue(d.min)) {
             // position; treat it like a position space w/ a single element
             const min = getValue(d.min) ?? 0;
-            return POSITION(interval(min, min));
+            return POSITION(interval(min, min), getMeasure(d.min));
           }
           if (isValue(d.size)) {
             // data-driven size only — literals are handled at layout time.
-            return SIZE(axisDomain);
+            return SIZE(axisDomain, getMeasure(d.size));
           }
           return UNDEFINED;
         };
@@ -130,12 +131,8 @@ export const Ellipse = ({
           }
         }
 
-        const x = isValue(dims[0].min)
-          ? posScales[0]!(getValue(dims[0].min)!)
-          : (dims[0].min ?? undefined);
-        const y = isValue(dims[1].min)
-          ? posScales[1]!(getValue(dims[1].min)!)
-          : (dims[1].min ?? undefined);
+        const x = computeAesthetic(dims[0].min, posScales[0]!, undefined);
+        const y = computeAesthetic(dims[1].min, posScales[1]!, undefined);
 
         return {
           intrinsicDims: [
@@ -451,8 +448,12 @@ export const Ellipse = ({
   );
 };
 
-export const ellipse = createMark(Ellipse, {
-  w: "size",
-  h: "size",
-  fill: "color",
-});
+export const ellipse = createMark(
+  Ellipse,
+  {
+    w: "size",
+    h: "size",
+    fill: "color",
+  },
+  "ellipse"
+);

@@ -5,7 +5,7 @@ BLOCKED: requires Layer (multi-chart composition) and low-level v1 primitives
 
 What it would look like once Layer is supported:
 
-    from gofish import chart, spread, rect, select, group, text
+    from gofish import chart, spread, rect, ref, group, text
     from stories.data.seafood import seafood
 
     def default(w=400, h=400):
@@ -16,7 +16,7 @@ What it would look like once Layer is supported:
         )
         # The label layer uses a custom mark function with low-level Spread/ref/text.
         # Full implementation requires v1 primitive access from Python wrapper.
-        labels = chart(select("bars")).flow(group(by="lake")).mark(...)
+        labels = chart(ref("bars")).flow(group(by="lake")).mark(...)
         return Layer([bars, labels])
 """
 

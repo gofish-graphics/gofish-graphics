@@ -310,7 +310,12 @@ async function cutShape(
 const cutFactory = createMark<
   CutShapeProps & { __sizeFromField: boolean },
   { size: { type: "size"; entry: true } }
->(cutShape as any, { size: { type: "size", entry: true } }, { kind: "expand" });
+>(
+  cutShape as any,
+  { size: { type: "size", entry: true } },
+  undefined,
+  { kind: "expand" }
+);
 
 /**
  * Build a cut mark. The mark is expand-kind — when invoked with data it

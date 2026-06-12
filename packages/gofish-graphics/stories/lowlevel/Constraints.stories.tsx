@@ -108,7 +108,7 @@ export const SpreadY_AlignStart: StoryObj<Args> = {
       (container, storyArgs) => {
         layer(makeYRects())
           .constrain(({ a, b, c }) => [
-            Constraint.align({ dir: "x", alignment: "start" }, [a, b, c]),
+            Constraint.align({ x: "start" }, [a, b, c]),
             Constraint.distribute({ dir: "y" }, [a, b, c]),
           ])
           .render(container, { w: storyArgs.w, h: storyArgs.h });
@@ -139,7 +139,7 @@ export const SpreadY_AlignEnd: StoryObj<Args> = {
       (container, storyArgs) => {
         layer(makeYRects())
           .constrain(({ a, b, c }) => [
-            Constraint.align({ dir: "x", alignment: "end" }, [a, b, c]),
+            Constraint.align({ x: "end" }, [a, b, c]),
             Constraint.distribute({ dir: "y" }, [a, b, c]),
           ])
           .render(container, { w: storyArgs.w, h: storyArgs.h });
@@ -185,7 +185,7 @@ export const SpreadY_AlignMiddle: StoryObj<Args> = {
           rect({ w: 60, h: 40, fill: "#2a9d8f" }).name("c"),
         ])
           .constrain(({ a, b, c }) => [
-            Constraint.align({ dir: "x", alignment: "middle" }, [a, b, c]),
+            Constraint.align({ x: "middle" }, [a, b, c]),
             Constraint.distribute({ dir: "y" }, [a, b, c]),
           ])
           .render(container, { w: storyArgs.w, h: storyArgs.h });
@@ -216,7 +216,7 @@ export const SpreadX_AlignStart: StoryObj<Args> = {
       (container, storyArgs) => {
         layer(makeXRects())
           .constrain(({ a, b, c }) => [
-            Constraint.align({ dir: "y", alignment: "start" }, [a, b, c]),
+            Constraint.align({ y: "start" }, [a, b, c]),
             Constraint.distribute({ dir: "x" }, [a, b, c]),
           ])
           .render(container, { w: storyArgs.w, h: storyArgs.h });
@@ -248,7 +248,7 @@ export const SpreadY_Spacing: StoryObj<Args> = {
       (container, storyArgs) => {
         layer(makeYRects())
           .constrain(({ a, b, c }) => [
-            Constraint.align({ dir: "x", alignment: "start" }, [a, b, c]),
+            Constraint.align({ x: "start" }, [a, b, c]),
             Constraint.distribute({ dir: "y", spacing: 20 }, [a, b, c]),
           ])
           .render(container, { w: storyArgs.w, h: storyArgs.h });
@@ -276,7 +276,7 @@ export const SpreadX_Spacing_AlignEnd: StoryObj<Args> = {
       (container, storyArgs) => {
         layer(makeXRects())
           .constrain(({ a, b, c }) => [
-            Constraint.align({ dir: "y", alignment: "end" }, [a, b, c]),
+            Constraint.align({ y: "end" }, [a, b, c]),
             Constraint.distribute({ dir: "x", spacing: 15 }, [a, b, c]),
           ])
           .render(container, { w: storyArgs.w, h: storyArgs.h });
@@ -309,7 +309,7 @@ export const SpreadX_CenterToCenter: StoryObj<Args> = {
       (container, storyArgs) => {
         layer(makeCenterToCenterRects())
           .constrain(({ a, b, c }) => [
-            Constraint.align({ dir: "y", alignment: "start" }, [a, b, c]),
+            Constraint.align({ y: "start" }, [a, b, c]),
             Constraint.distribute(
               { dir: "x", spacing: 60, mode: "center" },
               [a, b, c]
@@ -346,7 +346,7 @@ export const SpreadY_Reversed: StoryObj<Args> = {
       (container, storyArgs) => {
         layer(makeYRects())
           .constrain(({ a, b, c }) => [
-            Constraint.align({ dir: "x", alignment: "start" }, [a, b, c]),
+            Constraint.align({ x: "start" }, [a, b, c]),
             Constraint.distribute({ dir: "y", order: "reverse" }, [a, b, c]),
           ])
           .render(container, { w: storyArgs.w, h: storyArgs.h });
@@ -372,7 +372,7 @@ export const AlignOnly: StoryObj<Args> = {
       rect({ w: 60, h: 30, fill: "#2a9d8f" }).name("c"),
     ])
       .constrain(({ a, b, c }) => [
-        Constraint.align({ dir: "x", alignment: "end" }, [a, b, c]),
+        Constraint.align({ x: "end" }, [a, b, c]),
       ])
       .render(container, { w: args.w, h: args.h });
     return container;
@@ -383,7 +383,7 @@ export const AlignOnly: StoryObj<Args> = {
  * Same as AlignOnly, but children are manually placed on y.
  * Useful for making x-alignment behavior obvious without distribution.
  */
-export const AlignOnly_ManualY: StoryObj<Args> = {
+export const AlignOnlyManualY: StoryObj<Args> = {
   args: { w: 300, h: 300 },
   render: (args: Args) => {
     const container = initializeContainer();
@@ -393,7 +393,7 @@ export const AlignOnly_ManualY: StoryObj<Args> = {
       rect({ w: 60, h: 30, y: 200, fill: "#2a9d8f" }).name("c"),
     ])
       .constrain(({ a, b, c }) => [
-        Constraint.align({ dir: "x", alignment: "end" }, [a, b, c]),
+        Constraint.align({ x: "end" }, [a, b, c]),
       ])
       .render(container, { w: args.w, h: args.h });
     return container;
@@ -444,7 +444,7 @@ export const SubsetSelection: StoryObj<Args> = {
       rect({ w: 60, h: 50, fill: "#f4a261" }).name("d"),
     ])
       .constrain(({ a, b, c, d }) => [
-        Constraint.align({ dir: "x", alignment: "end" }, [a, b, c, d]),
+        Constraint.align({ x: "end" }, [a, b, c, d]),
         Constraint.distribute({ dir: "y", spacing: 5 }, [a, b]),
         Constraint.distribute({ dir: "y", spacing: 30 }, [c, d]),
       ])
@@ -468,7 +468,7 @@ export const BackgroundNotDistributed: StoryObj<Args> = {
       rect({ w: 120, h: 40, fill: "#2a9d8f" }).name("c"),
     ])
       .constrain(({ bg, a, b, c }) => [
-        Constraint.align({ dir: "x", alignment: "start" }, [bg, a, b, c]),
+        Constraint.align({ x: "start" }, [bg, a, b, c]),
         Constraint.distribute({ dir: "y", spacing: 10 }, [a, b, c]),
       ])
       .render(container, { w: args.w, h: args.h });
@@ -495,7 +495,7 @@ export const AlignCenterDistributeY: StoryObj<Args> = {
       rect({ w: 100, h: 50, fill: "#f4a261" }).name("d"),
     ])
       .constrain(({ a, b, c, d }) => [
-        Constraint.align({ dir: "x", alignment: "middle" }, [a, b, c, d]),
+        Constraint.align({ x: "middle" }, [a, b, c, d]),
         Constraint.distribute({ dir: "y", spacing: 8 }, [a, b, c, d]),
       ])
       .render(container, { w: args.w, h: args.h });

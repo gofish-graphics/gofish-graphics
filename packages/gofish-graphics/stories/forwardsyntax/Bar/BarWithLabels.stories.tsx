@@ -6,11 +6,11 @@ import {
   spread,
   rect,
   layer,
-  select,
+  selectAll,
   text,
-  ref,
   sumBy,
   group,
+  pluck,
 } from "../../../src/lib";
 
 const meta: Meta = {
@@ -37,20 +37,60 @@ export const Default: StoryObj<Args> = {
       Chart(seafood)
         .flow(spread({ by: "lake",  dir: "x" }))
         .mark(rect({ h: "count" }).name("bars")),
-      Chart(select("bars") as any)
-        .flow(group({ by: "lake" }) as any)
+      // `selectAll("bars")` yields one ref per lake; each ref's datum is that
+      // lake's array of species records (an aggregate). `by: "datum.lake"`
+      // resolves because every row in a lake agrees on `lake` (homogeneity
+      // collapse), giving one frame per lake; sum the aggregate's rows for the
+      // per-lake total label.
+      Chart(selectAll("bars"))
+        .flow(group({ by: "datum.lake" }))
         .mark(((d: any[]) => {
           return spread({ dir: "y", alignment: "middle", spacing: 10 },
             [
-              ref(d[0] as any),
-              text({ text: String(sumBy(d, "count")) }),
+              d[0],
+              text({ text: String(sumBy(d[0].datum, "count")) }),
             ]
           );
         }) as any),
-    ] as any).render(container, {
+    ]).render(container, {
       w: args.w,
       h: args.h,
-      axes: true,
+      axes: true
+    });
+
+    return container;
+  },
+};
+
+// Demonstrates `pluck` — the un-collapsed sibling of the `by: "datum.field"`
+// homogeneity collapse. Within a lake the `species` field is multi-valued, so
+// `datum.species` would NOT resolve (the "ill-posed" undefined). `pluck` is how
+// you ask for *every* distinct value: here, the count of species in each lake.
+export const SpeciesCountPerLake: StoryObj<Args> = {
+  args: { w: 400, h: 400 },
+  render: (args: Args) => {
+    const container = initializeContainer();
+
+    layer([
+      Chart(seafood)
+        .flow(spread({ by: "lake", dir: "x" }))
+        .mark(rect({ h: "count" }).name("bars")),
+      Chart(selectAll("bars"))
+        .flow(group({ by: "datum.lake" }))
+        .mark(((d: any[]) => {
+          // `pluck(ref, "species")` → the distinct species in this lake's bag.
+          const species = pluck(d[0], "species") as string[];
+          return spread({ dir: "y", alignment: "middle", spacing: 10 },
+            [
+              d[0],
+              text({ text: `${species.length} spp` }),
+            ]
+          );
+        }) as any),
+    ]).render(container, {
+      w: args.w,
+      h: args.h,
+      axes: true
     });
 
     return container;

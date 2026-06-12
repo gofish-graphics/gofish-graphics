@@ -7,8 +7,7 @@ import {
   image,
   text,
   Constraint,
-  select,
-  ref,
+  selectAll,
   spread,
   Spread,
 } from "../../src/lib";
@@ -67,9 +66,10 @@ export const ImageCut: StoryObj<Args> = {
   },
 };
 
-/** Cut chart with labels added via select() in a separate sub-chart. The cut
+/** Cut chart with labels added via selectAll() in a separate sub-chart. The cut
  *  chart returns just the named slices; a second sub-chart selects "part"
- *  and overlays category and amount labels at each slice's position. */
+ *  (one ref per slice) and overlays category and amount labels at each slice's
+ *  position. Each ref exposes the slice's datum via `.datum`. */
 export const ImageCutWithLabels: StoryObj<Args> = {
   args: { w: 800, h: 700 },
   render: (args: Args) => {
@@ -86,43 +86,34 @@ export const ImageCutWithLabels: StoryObj<Args> = {
             .name("part")
         ),
 
-      Chart(select<Datum>("part")).mark((data) =>
+      Chart(selectAll<Datum>("part")).mark(((data: any[]) =>
         layer(
-          (data as Array<Datum & { __ref: any }>).map((d) =>
+          data.map((d) =>
             layer([
-              ref(d.__ref).setName("slice"),
+              d.name("slice"),
               text({
                 fontSize: 18,
                 fontWeight: "bold",
                 fill: "#1c5e20",
-                text: d.category,
+                text: d.datum.category,
               }).name("label"),
               text({
                 fontSize: 36,
                 fontFamily: "Impact",
                 fill: "#1c5e20",
-                text: `${d.amount}`,
+                text: `${d.datum.amount}`,
               }).name("amount"),
             ]).constrain(({ slice, label, amount }) => [
-              Constraint.align(
-                { dir: "y", alignment: "middle" },
-                [slice, label]
-              ),
+              Constraint.align({ y: "middle" }, [slice, label]),
               Constraint.distribute(
                 { dir: "x", spacing: 12 },
                 [slice, label]
               ),
-              Constraint.align(
-                { dir: "x", alignment: "middle" },
-                [slice, amount]
-              ),
-              Constraint.align(
-                { dir: "y", alignment: "middle" },
-                [slice, amount]
-              ),
+              Constraint.align({ x: "middle" }, [slice, amount]),
+              Constraint.align({ y: "middle" }, [slice, amount]),
             ])
           )
-        )
+        )) as any
       ),
     ]).render(container, { w: args.w, h: args.h, axes: false });
 
