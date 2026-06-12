@@ -235,6 +235,21 @@ the same expressive ceiling as the spread pipeline, auto-fit included
 back to `unionChildSpaces`; the general algebra is sketched in
 [[constraints-as-core]].
 
+Placement-time alignment dispatches on the same resolution. When an `align`
+(the constraint or spread's cross-axis alignment) finds **no pre-placed
+sibling**, its fallback baseline is computed from what the axis carries
+(`alignFallbackBaseline`, `constraints/align.ts`): a posScale-carrying
+POSITION axis falls back to the scale origin `posScale(0)` — SIZE-derived
+bars hang from the zero line — while a pixel-pure axis falls back to the
+layer-box edge for the anchor, so axis titles and chrome pin to the plot box.
+`middle` is the box center either way (it resolves to DIFFERENCE, an extent
+with no anchored origin). The fallback is a property of the axis's space, not
+of which API assembled the layer (#552). One consequence worth knowing: a
+coordinate transform's children are pixel-pure by construction (posScales
+don't cross a nonlinear transform — children get scale _factors_ instead), so
+an `end`-aligned spread inside `coord` seats flush at the box edge rather
+than at a scale origin.
+
 Three patterns cover most operators:
 
 **Leaf shapes** (`rect`, `ellipse`, `petal`, `text`, `image`) decide the

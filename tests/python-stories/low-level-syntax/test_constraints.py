@@ -1,12 +1,13 @@
 """Equivalent of lowlevel/Constraints.stories.tsx — Low Level Syntax/Constraints.
 
-Ports the six single-chart stories that demonstrate `layer + constrain`
-directly. The eight side-by-side equivalence stories (`SpreadY_*`,
-`SpreadX_*`) use a multi-panel DOM scaffold that doesn't fit the single-
-chart parity harness — those are per-export exempt.
+Ports the seven single-chart stories: the six that demonstrate
+`layer + constrain` directly, plus `SpreadEnd_UnderCoordTransform` (the
+pixel-pure `end` fallback canary, #552). The eight side-by-side equivalence
+stories (`SpreadY_*`, `SpreadX_*`) use a multi-panel DOM scaffold that
+doesn't fit the single-chart parity harness — those are per-export exempt.
 """
 
-from gofish import Constraint, layer, rect
+from gofish import Constraint, datum, layer, rect, spread, wavy
 
 
 # ─── partial placement ───────────────────────────────────────────────────────
@@ -86,6 +87,22 @@ def story_background_not_distributed():
 
 
 # ─── cross-axis ──────────────────────────────────────────────────────────────
+
+
+def story_spread_end_under_coord_transform():
+    # `end` alignment on a pixel-pure axis: posScales don't cross a coordinate
+    # transform boundary, so the cross-axis `end` fallback inside wavy() is the
+    # layer-box edge (#552) — the bar ends seat flush at the box top.
+    return (
+        layer([
+            spread([
+                rect(w=40, h=datum(30), fill="#e63946"),
+                rect(w=40, h=datum(80), fill="#457b9d"),
+                rect(w=40, h=datum(50), fill="#2a9d8f"),
+            ], dir="x", alignment="end", spacing=8),
+        ], coord=wavy(), x=0, y=0),
+        {"w": 300, "h": 300},
+    )
 
 
 def story_align_center_distribute_y():
