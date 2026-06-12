@@ -9,7 +9,6 @@ import {
   Constraint,
   selectAll,
   spread,
-  stack,
   Spread,
   Stack,
   cut,
@@ -126,14 +125,20 @@ export const ImageCutWithLabels: StoryObj<Args> = {
   },
 };
 
-/** Two bottles, each grouped by `vintage` and cut by its own rows. The expand
- *  `cut` mark turns each group's rows into an ARRAY of slice nodes; the inner
- *  `stack` collapses that array into a single bottle node, so the outer
- *  `spread({by})` has exactly one node per group to arrange. This is the
- *  canonical way to combine `by`-grouping with an expand mark: interpose a
- *  layout operator between the grouping and the cut. */
+/** Two vintages side by side, each bottle exploded into its own rows'
+ *  proportions. The outer `spread({ by: "vintage" })` arranges one bottle per
+ *  vintage along x; the inner `spread({ dir: "y", spacing: 14, reverse: true })`
+ *  collapses each group's array of cut slices into a single node — but with
+ *  visible 14px spacing, so each bottle reads as an EXPLODED stack of its three
+ *  slices rather than a packed-back-together whole. (We interpose `spread`, not
+ *  `stack`, precisely because `stack` recomposes the slices flush — it has no
+ *  spacing option — whereas `spread` separates them.) Compare the slice heights
+ *  between the two bottles: 2019 splits 40/42/18 (a tall middle band), 2021
+ *  splits 55/30/15 (a dominant bottom band) — the differing proportions are the
+ *  point. This is the canonical way to combine `by`-grouping with an expand
+ *  mark: interpose a layout operator between the grouping and the cut. */
 export const GroupedCut: StoryObj<Args> = {
-  args: { w: 600, h: 700 },
+  args: { w: 600, h: 760 },
   render: (args: Args) => {
     const container = initializeContainer();
 
@@ -149,7 +154,7 @@ export const GroupedCut: StoryObj<Args> = {
     Chart(data)
       .flow(
         spread({ by: "vintage", dir: "x", spacing: 40 }),
-        stack({ dir: "y", reverse: true })
+        spread({ dir: "y", spacing: 14, reverse: true })
       )
       .mark(
         image({ href: bottlePng, w: 193, h: 600 }).cut({

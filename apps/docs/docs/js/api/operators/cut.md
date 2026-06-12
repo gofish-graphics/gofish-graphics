@@ -86,14 +86,17 @@ and the cut, so each group's slices collapse back into a single node before the
 gf.chart(data)
   .flow(
     gf.spread({ by: "vintage", dir: "x", spacing: 40 }), // one bottle per group
-    gf.stack({ dir: "y", reverse: true }) // collapse each group's slices into one node
+    gf.spread({ dir: "y", spacing: 14, reverse: true }) // explode each group's slices apart
   )
   .mark(gf.image({ href, w: 193, h: 600 }).cut({ dir: "y", size: "amount" }));
 ```
 
-The inner `stack` consumes the expand mark (cutting one bottle per group and
-stacking its slices back into a whole), so the outer `spread({ by })` sees a
-single node per group — no throw.
+The inner `spread` consumes the expand mark (cutting one bottle per group and
+arranging its slices into a single node — with `spacing: 14`, so each bottle
+reads as an exploded stack of its slices), so the outer `spread({ by })` sees a
+single node per group — no throw. Use `stack` instead of `spread` here to
+recompose each bottle's slices flush into a whole (no gaps), since `stack` has
+no `spacing`.
 
 ## Size semantics
 
