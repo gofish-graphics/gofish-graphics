@@ -946,10 +946,20 @@ onMounted(() => {
   // navbar height, the card's swayed bbox, and its true height including the
   // results-count line + minimap, at desktop and the docked mobile bar alike.
   function clearEntranceForCard(): void {
-    const sceneTop = scene.getBoundingClientRect().top;
-    const cardBottom = card.getBoundingClientRect().bottom;
+    const sceneRect = scene.getBoundingClientRect();
+    const cardRect = card.getBoundingClientRect();
+    // On mobile the card docks at the BOTTOM edge — the entrance needs no top
+    // clearance then (guard by position, not media query, so it can't drift
+    // out of sync with the CSS).
+    if (cardRect.top > sceneRect.top + sceneRect.height / 2) {
+      entrance.style.paddingTop = "0px";
+      return;
+    }
     const gap = env.mobile ? 14 : 22;
-    const clear = Math.max(0, Math.round(cardBottom - sceneTop + gap));
+    const clear = Math.max(
+      0,
+      Math.round(cardRect.bottom - sceneRect.top + gap)
+    );
     entrance.style.paddingTop = clear + "px";
   }
 

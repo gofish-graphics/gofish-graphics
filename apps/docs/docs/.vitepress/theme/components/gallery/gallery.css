@@ -880,8 +880,11 @@ html.gallery-page .DocSearch-Button {
   .gallery-scene {
     --floor-h: clamp(120px, 20dvh, 170px);
   }
+  /* Docked at the BOTTOM edge on mobile — at the top it obscured the
+     top-row charts; down here it only overlaps floor. */
   .gallery-scene .searchcard {
-    top: 10px;
+    top: auto;
+    bottom: 10px;
     left: 10px;
     right: 10px;
     width: auto;
@@ -892,6 +895,13 @@ html.gallery-page .DocSearch-Button {
   .gallery-scene .searchcard::before,
   .gallery-scene .searchcard::after {
     display: none;
+  }
+  /* The ← Entrance chip moves to the top-left so the bottom card can't
+     cover it. */
+  .gallery-scene .backstart {
+    bottom: auto;
+    top: 10px;
+    left: 10px;
   }
   .gallery-scene .endcap {
     padding: 0 28px;
