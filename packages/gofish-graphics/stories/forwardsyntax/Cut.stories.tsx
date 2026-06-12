@@ -9,6 +9,7 @@ import {
   Constraint,
   selectAll,
   spread,
+  stack,
   Spread,
   Stack,
   cut,
@@ -185,19 +186,24 @@ export const RectEqualSlices: StoryObj<Args> = {
   },
 };
 
-/** Recomposition sanity check: the same rect cut into 4 equal slices with
- *  spacing 0, so adjacent slice windows touch and tile the source back into a
- *  single shape. The source rect carries a visible stroke — a CORRECT
- *  recomposition shows ONE continuous border around the whole rect, whereas
- *  misaligned slice windows would reveal repeated/broken stroke lines in the
- *  interior where the slices meet. The border is the falsifiable witness. */
-export const RectNoInset: StoryObj<Args> = {
+/** Regression coverage for `stack`'s flush recomposition of a cut. The same
+ *  rect is cut into 4 equal slices and collapsed back with the `stack`
+ *  operator, which recomposes its children flush by design — `StackOptions =
+ *  Omit<SpreadOptions, "spacing" | "glue">`, so there is NO spacing option and
+ *  adjacent slice windows necessarily tile the source back into a single shape.
+ *  The source rect carries a visible stroke — a CORRECT recomposition shows ONE
+ *  continuous border around the whole rect, whereas misaligned slice windows
+ *  would reveal repeated/broken stroke lines in the interior where the slices
+ *  meet. The continuous border is the falsifiable witness. This story exists
+ *  purely to pin that flush-recompose behavior; do not use flush `stack` as the
+ *  collapse operator in stories that demonstrate other features. */
+export const RectFlushStack: StoryObj<Args> = {
   args: { w: 600, h: 200 },
   render: (args: Args) => {
     const container = initializeContainer();
 
     Chart(abcdData)
-      .flow(spread({ dir: "x", spacing: 0 }))
+      .flow(stack({ dir: "x" }))
       .mark(
         rect({
           w: 400,
@@ -314,11 +320,12 @@ export const MixedSizes: StoryObj<Args> = {
  *  carves a gap out of each band.
  *
  *  cut's inset shrinks each slice's reported bbox to its visible window, so a
- *  plain `Stack({ spacing: 0 })` would pull the windows flush and drop the
- *  gaps. The fix is user-space: pad each slice back to its full logical extent
- *  by adding `inset/2` of transparent space on each side along `dir` (an inner
- *  Stack with zero-cross-extent spacer rects), THEN stack the padded slices
- *  with spacing 0. The recomposed row spans the source's exact width (400px),
+ *  plain flush `Stack` would pull the windows flush and drop the gaps (`Stack`
+ *  recomposes its children flush by design — it has no spacing option). The fix
+ *  is user-space: pad each slice back to its full logical extent by adding
+ *  `inset/2` of transparent space on each side along `dir` (an inner Stack with
+ *  zero-cross-extent spacer rects), THEN flush-stack the padded slices. The
+ *  recomposed row spans the source's exact width (400px),
  *  so every band sits at its true continuous-x position with an even `inset`
  *  gap at each cut point.
  *
@@ -348,10 +355,10 @@ export const CroissantStack: StoryObj<Args> = {
     const spacer = () =>
       rect({ w: inset / 2, h: 0, fill: "none", stroke: "none" });
     const padded = slices.map((slice) =>
-      Stack({ dir: "x", spacing: 0 }, [spacer(), slice, spacer()])
+      Stack({ dir: "x" }, [spacer(), slice, spacer()])
     );
 
-    const bands = Stack({ dir: "x", spacing: 0 }, padded).name("bands");
+    const bands = Stack({ dir: "x" }, padded).name("bands");
 
     // Hand-composed continuous x axis. The low-level Stack of masked slices has
     // SIZE space (no continuous POSITION domain), so the renderer's `axes`

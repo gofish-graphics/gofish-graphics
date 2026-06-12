@@ -174,14 +174,15 @@ gf.Spread(
 `inset` shrinks both the visible window **and** the slice's reported bounding
 box — a slice reports the bounds of its visible region, not its full logical
 extent. That is deliberate (`mask` reports the region's bounds). It does mean a
-plain `Stack({ spacing: 0 })` pulls the inset slices flush and drops the gaps.
+plain flush `Stack` pulls the inset slices flush and drops the gaps (`Stack`
+recomposes its children flush by design — it has no `spacing` option).
 
 To recompose the slices back into the source's **continuous** space while
 keeping the inset gaps — a
 [croissant chart](https://vis.khoury.northeastern.edu/pubs/Fygenson2026CroissantChartsModulating/) —
 pad each slice back to its full logical extent in user space: add `inset / 2`
 of transparent space on each side along `dir` (an inner `Stack` with
-zero-cross-extent spacer rects), then stack the padded slices with `spacing: 0`.
+zero-cross-extent spacer rects), then flush-stack the padded slices.
 The padding amount is the constant `inset / 2`, independent of each slice's
 extent, so the same wrapper works for any `size`:
 
@@ -193,10 +194,10 @@ const slices = gf.cut(source, { dir: "x", size, inset });
 const spacer = () =>
   gf.rect({ w: inset / 2, h: 0, fill: "none", stroke: "none" });
 const padded = slices.map((slice) =>
-  gf.Stack({ dir: "x", spacing: 0 }, [spacer(), slice, spacer()])
+  gf.Stack({ dir: "x" }, [spacer(), slice, spacer()])
 );
 
-gf.Stack({ dir: "x", spacing: 0 }, padded);
+gf.Stack({ dir: "x" }, padded);
 ```
 
 The recomposed row spans the source's **exact** extent, with an even `inset`-wide
