@@ -668,10 +668,11 @@ html.landing-page .DocSearch-Button {
   margin: 110px auto 0;
 }
 .landing .codegrid {
-  display: grid;
-  grid-template-columns: 1.15fr auto 1fr;
-  gap: 28px;
-  align-items: center;
+  display: flex;
+  justify-content: center;
+}
+.landing .codegrid .printout {
+  max-width: 640px;
 }
 .landing .printout {
   background: #fff;
@@ -716,16 +717,6 @@ html.landing-page .DocSearch-Button {
   color: #a39782;
   font-style: italic;
 }
-.landing .renders-mid {
-  text-align: center;
-  position: relative;
-}
-.landing .renders-mid .lbl {
-  font-family: "Architects Daughter", cursive;
-  color: var(--graphite);
-  font-size: 1.05rem;
-  margin-bottom: 4px;
-}
 .landing .result-card {
   transform: rotate(1.5deg);
 }
@@ -753,12 +744,6 @@ html.landing-page .DocSearch-Button {
   white-space: nowrap;
 }
 @media (max-width: 860px) {
-  .landing .codegrid {
-    grid-template-columns: 1fr;
-  }
-  .landing .renders-mid svg.arrow {
-    transform: rotate(90deg);
-  }
   .landing .code-brackets {
     display: none;
   }
