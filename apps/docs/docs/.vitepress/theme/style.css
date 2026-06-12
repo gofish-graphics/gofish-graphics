@@ -199,14 +199,16 @@
 /* Language-aware home hero + toggle. Keyed off <html data-docs-lang>, set
    before first paint by the inline script in config.mts. These rules are
    global on purpose — running them through a component's scoped-CSS transform
-   mangles the nested :not() selector. JavaScript is the default. */
-html[data-docs-lang="python"] .hero-lang-js,
-html:not([data-docs-lang="python"]) .hero-lang-python {
+   mangles the nested :not() selector. The :not([data-docs-lang="js"]) default
+   direction encodes Python as the default — keep in sync with DEFAULT_LANG in
+   docsLang.ts. */
+html[data-docs-lang="js"] .hero-lang-python,
+html:not([data-docs-lang="js"]) .hero-lang-js {
   display: none;
 }
 
-html:not([data-docs-lang="python"]) .lang-toggle__btn[data-lang="js"],
-html[data-docs-lang="python"] .lang-toggle__btn[data-lang="python"] {
+html:not([data-docs-lang="js"]) .lang-toggle__btn[data-lang="python"],
+html[data-docs-lang="js"] .lang-toggle__btn[data-lang="js"] {
   color: #fff;
   background: var(--vp-c-brand-1);
 }

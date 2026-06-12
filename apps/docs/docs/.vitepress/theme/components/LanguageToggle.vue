@@ -24,8 +24,8 @@ const hidden = computed(() => {
 });
 
 const LANGS = [
-  { id: "js", label: "JavaScript" },
   { id: "python", label: "Python" },
+  { id: "js", label: "JavaScript" },
 ] as const;
 type Lang = (typeof LANGS)[number]["id"];
 
