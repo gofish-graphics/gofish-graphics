@@ -64,10 +64,10 @@ export const createAlignConstraint = (
   return { type: "align", x, y, children };
 };
 
-/** Per-axis environment threaded to a fallback policy: the layer's box size on
- *  this axis and the axis's data→pixel position scale (if any). The two
- *  fallback policies below each consume a different part of this env, so they
- *  can sit side by side as pure functions of `(anchor, size, posScale)`. */
+/** Per-axis environment threaded to the shared fallback: the layer's box size
+ *  on this axis and the axis's data→pixel position scale (if any).
+ *  `alignFallbackBaseline` dispatches on which of these the axis carries — a
+ *  posScale picks the scale origin, otherwise the box edge. */
 export interface AlignAxisEnv {
   size: number;
   posScale: ((v: number) => number) | undefined;
@@ -98,71 +98,47 @@ export const placeAtAnchor = (
 };
 
 /**
- * Where the enforced alignment coordinate (the "baseline") comes from. This is
- * the one genuine divergence between the two align callsites, so it is an
- * explicit parameter and each callsite supplies its own:
- *
- *  - `readPlaced` reads the baseline off the *first already-placed* target, at
- *    that target's anchor. The constraint path reads the target's real extent /
- *    origin (so a `"baseline"` anchor takes its actual `transform.translate`);
- *    spread pins a `"baseline"` anchor to 0 and tolerates missing extents.
- *  - `fallback` supplies the baseline when *nothing* is pre-placed. The
- *    constraint path returns the layer's own box edge (start→0, middle→size/2,
- *    end→size, baseline→0) — axis-title elaboration relies on a title pinning to
- *    the plot box. Spread instead returns the data scale's origin
- *    (`posScale(0)`, or `size/2` for middle, or 0 with no scale) so a
- *    SIZE-derived cross axis aligns at the scale's zero, not the box edge. Both
- *    are load-bearing; neither subsumes the other.
+ * Where the enforced alignment coordinate (the "baseline") comes from when a
+ * sibling *is* already placed. This `readPlaced` reader is the one remaining
+ * per-callsite difference between the two align callsites (and is out of scope
+ * for #552): the constraint path reads the target's real extent / origin (so a
+ * `"baseline"` anchor takes its actual `transform.translate`); spread pins a
+ * `"baseline"` anchor to 0 and tolerates missing extents. The no-sibling
+ * fallback is now SHARED and space-kind-dispatched (see
+ * `alignFallbackBaseline`), so it is no longer part of this policy.
  */
 export interface AlignBaselinePolicy {
   readPlaced: (target: Placeable, idx: 0 | 1, anchor: AlignAnchor) => number;
-  fallback: (anchor: AlignAnchor, env: AlignAxisEnv) => number;
 }
 
-/**
- * Fallback baseline for the `align` *constraint* path: the layer's own box
- * edge. start→0, middle→size/2, end→size, baseline→0 (the layer's origin).
- * Ignores `posScale` — axis-title elaboration relies on a title pinning to the
- * plot box, not the data scale. NOTE: an unsized axis carries a NaN `size`, so
- * middle/end yield NaN here exactly as the layer's literal `size/2` / `size`
- * would; no finite-guard is applied (behavior is bit-identical to the old
- * `fallbackFor` reading a `{start:0, middle:size/2, end:size}` literal).
- */
-export function constraintFallbackBaseline(
-  anchor: AlignAnchor,
-  size: number,
-  _posScale: ((v: number) => number) | undefined
-): number {
-  return anchor === "start"
-    ? 0
-    : anchor === "middle"
-      ? size / 2
-      : anchor === "baseline"
-        ? 0
-        : size;
-}
-
-/**
- * Fallback baseline for *spread*'s cross-axis alignment: the data scale's
- * origin. middle→size/2; otherwise `posScale(0)` (the scale's zero), or 0 with
- * no scale. A SIZE-derived cross axis thus aligns at the scale's zero, not the
- * box edge.
- */
-export function spreadFallbackBaseline(
+/** Fallback alignment baseline when no sibling is pre-placed on the axis.
+ *  Dispatches on the axis's underlying-space kind, not the call site: a
+ *  posScale-carrying (POSITION) axis falls back to the scale origin
+ *  `posScale(0)` (bars hang from the zero line); a pixel-pure axis falls back
+ *  to the layer-box edge for the anchor (axis titles and chrome pin to the
+ *  box). `middle` is box-center either way: it resolves to DIFFERENCE space —
+ *  an extent with no anchored origin — so a scale origin is meaningless for it.
+ *  The `end` box edge is finite-guarded: an unsized axis hands NaN down, and
+ *  the fallback must stay 0 there, not inject NaN translates. */
+export const alignFallbackBaseline = (
   anchor: AlignAnchor,
   size: number,
   posScale: ((v: number) => number) | undefined
-): number {
-  return anchor === "middle" ? size / 2 : posScale ? posScale(0) : 0;
-}
+): number => {
+  if (anchor === "middle") return size / 2;
+  if (posScale) return posScale(0);
+  if (anchor === "end") return Number.isFinite(size) ? size : 0;
+  return 0; // start | baseline → layer origin
+};
 
 /**
  * Place `targets` on one axis so each lands at a single shared baseline,
  * read at its own anchor. The baseline is taken from the first already-placed
- * target (via `policy.readPlaced`), or from `policy.fallback` when none is
- * placed; already-placed targets are left untouched. This is the single
- * placement walk shared by the `align` constraint and spread's cross-axis
- * alignment — only the baseline policy differs (see `AlignBaselinePolicy`).
+ * target (via `policy.readPlaced`), or from the shared space-kind-dispatched
+ * `alignFallbackBaseline` when none is placed; already-placed targets are left
+ * untouched. This is the single placement walk shared by the `align` constraint
+ * and spread's cross-axis alignment — only the `readPlaced` reader differs (see
+ * `AlignBaselinePolicy`).
  */
 export function alignTargets(
   targets: Placeable[],
@@ -182,7 +158,8 @@ export function alignTargets(
   }
   // Note: the fallback keys on `anchors[0]` (the first child's anchor), not the
   // per-child anchor — preserved from the original `as[0]` indexing.
-  if (baseline === undefined) baseline = policy.fallback(anchors[0], env);
+  if (baseline === undefined)
+    baseline = alignFallbackBaseline(anchors[0], env.size, env.posScale);
 
   for (let i = 0; i < targets.length; i++) {
     if (isPlacedOn(targets[i], idx)) continue;
@@ -209,19 +186,10 @@ function applyAlignAxis(
     anchors = new Array<AlignAnchor>(targets.length).fill(spec);
   }
 
-  // Layer-box policy: read a placed sibling's real extent/origin; with no
-  // placed sibling, fall back to the layer's own box baseline.
-  alignTargets(
-    targets,
-    axis,
-    anchors,
-    {
-      readPlaced: anchorValue,
-      fallback: (anchor, env) =>
-        constraintFallbackBaseline(anchor, env.size, env.posScale),
-    },
-    env
-  );
+  // Read a placed sibling's real extent/origin; with no placed sibling, the
+  // shared space-kind fallback decides (scale origin on a scaled axis, box edge
+  // on a pixel-pure one).
+  alignTargets(targets, axis, anchors, { readPlaced: anchorValue }, env);
 }
 
 export function applyAlign(

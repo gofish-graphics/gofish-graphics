@@ -211,22 +211,19 @@ export const ConstraintGlue: StoryObj<Args> = {
   },
 };
 
-// ── End alignment: a PRINCIPLED DIVERGENCE, not a parity pair ───────────────
-// Unlike every pair above, this one renders DIFFERENTLY — by design. spread's
-// cross-axis alignment (alignChildren) and the align constraint use different
-// baseline POLICIES when no sibling is pre-placed (the AlignBaselinePolicy split
-// in constraints/align.ts):
-//   - spread's fallback is the data-scale origin `posScale(0)` (= 0 here),
-//     IRRESPECTIVE of the anchor — SIZE-derived bars align at the scale's zero,
-//     so the "end" (top) of every bar lands on the zero line and the bars hang
-//     into negative cross-coords (spread's SVG grows to reserve that overhang).
-//   - the constraint's fallback is the layer-box edge FOR that anchor —
-//     `end` → `size` (the box top) — so the bars sit flush at the top of the box.
-// For "start" both fallbacks are 0, so the start/bar/fit/fill/weights/glue pairs
-// above match exactly; for "end" (and "middle") they differ by the full box
-// extent. Both policies are load-bearing (axis-title elaboration needs the box
-// edge; spread needs the scale origin) and neither subsumes the other, so this
-// is reported as a genuine divergence — the policies are NOT reconciled.
+// ── End alignment: EXACT PARITY, like every pair above (#552) ───────────────
+// This pair once rendered differently by design; since #552 it is exact parity.
+// The no-sibling alignment fallback now dispatches on the axis's UNDERLYING
+// SPACE, not the call site (the shared `alignFallbackBaseline` in
+// constraints/align.ts): a posScale-carrying (POSITION) axis falls back to the
+// scale origin `posScale(0)`, a pixel-pure axis to the layer-box edge.
+// Here both layers are SIZE-derived (data-driven-height rects), so both resolve
+// the SAME `alignSpaceFold` POSITION space and the SAME posScale. The "end"
+// (top) of every bar therefore lands on the scale's zero line in BOTH the
+// spread and the constraint layer, and the bars hang into negative cross-coords
+// (the SVG grows to reserve that overhang). Identical geometry — no divergence.
+// (The remaining per-callsite difference, the `readPlaced` reader for an
+// already-placed sibling, is out of scope for #552.)
 
 /** spread({ dir: "x", alignment: "end" }) over data-driven-height rects. */
 export const SpreadEnd: StoryObj<Args> = {

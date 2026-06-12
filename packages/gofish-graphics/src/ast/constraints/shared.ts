@@ -4,8 +4,10 @@ export type Axis = "x" | "y";
 export type Alignment = "start" | "middle" | "end";
 /** Anchor for align/position constraints. The bbox anchors (`Alignment`) place
  *  a target by its extent; `"baseline"` places the target's own ORIGIN (its
- *  local coordinate 0) at the value — i.e. `align({y: "baseline"})` with a
- *  fallback of 0 means "stay where you were laid out", regardless of how far
+ *  local coordinate 0) at the value. When no sibling is pre-placed the fallback
+ *  is the axis origin — the scale's zero (`posScale(0)`) on a scaled axis, the
+ *  layer origin on a pixel-pure one — so `align({y: "baseline"})` on a
+ *  pixel-pure axis means "stay where you were laid out", regardless of how far
  *  the target's bbox extends past its origin (e.g. axis labels hanging below
  *  a chart's zero line). */
 export type AlignAnchor = Alignment | "baseline";

@@ -258,14 +258,18 @@ Two findings sharpen the theory:
   move. In other words: the placement halves were already equivalent; the
   entire semantic content of "spread beyond align + distribute" lives in
   `resolveUnderlyingSpace`.
-- **One real divergence between the duplicate align implementations.**
-  Spread's `alignChildren` seats the cross-axis baseline at `posScale(0)`;
-  `applyAlign`'s fallback seats it on the layer box
-  (`{start: 0, middle: size/2, end: size}`). These coincide at `"start"` but
-  diverge for `"end"`/`"middle"` (the pre-existing `SpreadY_AlignMiddle` story
-  already hand-pins around this). Exact parity for those alignments requires
-  the consolidation in staging step 1 to teach the constraint fallback to
-  consult the posScale — a known, bounded fix, not a structural obstacle.
+- **The align-fallback divergence, now unified (#552).** Spread's
+  `alignChildren` and `applyAlign` once used different no-sibling fallbacks —
+  spread seated the cross-axis baseline at `posScale(0)`, the constraint on the
+  layer box (`{start: 0, middle: size/2, end: size}`) — coinciding at `"start"`
+  but diverging at `"end"`/`"middle"`. They now share one fallback that
+  dispatches on the axis's underlying-space kind, not the call site: a
+  posScale-carrying (POSITION) axis falls back to the scale origin `posScale(0)`,
+  a pixel-pure axis to the layer-box edge. Both callsites resolve the same
+  `alignSpaceFold` space and posScale, so spread/constraint pairs are now exact
+  at every anchor. The only remaining per-callsite difference is the
+  `readPlaced` reader for an already-placed sibling (the constraint reads real
+  extents/origin; spread pins baseline-reads to 0), which is out of scope.
 
 ## Operator-by-operator reduction
 
@@ -399,7 +403,8 @@ brittle in five identifiable ways, none of which needs a cleverer solver:
    record an owner per (node, axis) — O(1) per write — and report both
    writers, exactly Bluefish's `bboxOwners`.
 3. _Divergent align fallbacks_ — `posScale(0)` vs layer box (found by the
-   prototype). Fix: the consolidation in staging step 1.
+   prototype). Fixed (#552): a single space-kind-dispatched fallback —
+   posScale → scale origin, pixel-pure → box edge.
 4. _Underdetermination hidden_ — children the constraints never reach are
    silently nailed at origin. Fix: a diagnostic listing them.
 5. _Inversion failure modes_ — bisection's growth cap can fail and spread's
@@ -438,11 +443,12 @@ suggest it will not be needed.
 
 ## Suggested staging (refactor-first)
 
-1. ✅ **Consolidate the two align implementations** — done: `alignTargets` +
-   `AlignBaselinePolicy` (`constraints/align.ts`) is the single walk; both
-   callsites keep their policies. The end/middle fallback divergence turned
-   out to be a genuine two-policy fact (scale-origin vs box-edge), kept
-   explicit rather than reconciled.
+1. ✅ **Consolidate the two align implementations** — done: `alignTargets`
+   (`constraints/align.ts`) is the single walk. The end/middle fallback
+   divergence was then unified (#552): a single space-kind-dispatched
+   `alignFallbackBaseline` (posScale → scale origin, pixel-pure → box edge)
+   replaced the two policies, so the only remaining per-callsite difference is
+   the `readPlaced` reader for an already-placed sibling.
 2. ✅ **Constraint space folds + Layer budget solve** — done:
    `distributeSpaceFold` (full spread dispatch incl. glue/explicit-size),
    `alignSpaceFold`, `allocateSlices`, per-axis composition in the layer with

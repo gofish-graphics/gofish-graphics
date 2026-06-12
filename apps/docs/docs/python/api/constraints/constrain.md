@@ -45,11 +45,12 @@ Constraint.align(refs, *, x=None, y=None)
 
 The anchor is `"start" | "middle" | "end" | "baseline"`. The first three
 anchor a ref by its bounding-box edge or center. `"baseline"` anchors a ref by
-its **origin** (its local 0 point) instead of its box: `align([content],
-y="baseline")` with no placed sibling pins the ref's origin to the layer's
-origin — i.e. "stay where you were laid out" — regardless of how far its box
-overhangs the origin (a bar dipping below zero, axis labels hanging under a
-chart). Pass a single value to share one anchor across every ref; pass a list
+its **origin** (its local 0 point) instead of its box. With no placed sibling
+the fallback is the **axis origin**: the scale's zero (`posScale(0)`) on a
+scaled axis, the layer's origin on a pixel-pure one. On a pixel-pure axis,
+`align([content], y="baseline")` thus means "stay where you were laid out" —
+regardless of how far its box overhangs the origin (a bar dipping below zero,
+axis labels hanging under a chart). Pass a single value to share one anchor across every ref; pass a list
 to assign one anchor _per ref_ positionally (the list length must equal the
 number of refs) — e.g. `x=["middle", "start"]` aligns the first ref's center
 to the second ref's start. The first already-placed ref acts as the anchor;

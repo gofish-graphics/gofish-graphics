@@ -171,7 +171,12 @@ def story_constraint_glue():
     )
 
 
-# ── End alignment: a principled divergence, not a parity pair ───────────────
+# ── End alignment: exact parity, like every pair above (#552) ───────────────
+# Once a principled divergence; since #552 the no-sibling fallback dispatches on
+# the axis's underlying space (posScale -> scale origin; pixel-pure -> box edge).
+# Both layers here are SIZE-derived, so both resolve the same POSITION space and
+# posScale: the bars' "end" lands on the scale's zero line in both, hanging into
+# negative cross-coords. Identical geometry — an exact parity pair.
 
 
 def story_spread_end():

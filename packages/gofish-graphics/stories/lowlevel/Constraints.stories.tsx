@@ -153,9 +153,10 @@ export const SpreadY_AlignEnd: StoryObj<Args> = {
  *
  * Three rects of different widths, stacked vertically, center-aligned.
  *
- * TODO: Revisit center baseline semantics so this equivalence does not
- * require pinning a child first. Today, spread middle defaults to viewport
- * center while constraint align-center defaults to 0 when no child is placed.
+ * Both spread-middle and constraint align-middle fall back to box-center
+ * (size/2) when no child is placed (since #543). This story still pins one
+ * child to the canvas center so the two panels share an explicit, obvious
+ * baseline, but the pin is illustrative rather than required for equivalence.
  */
 export const SpreadY_AlignMiddle: StoryObj<Args> = {
   args: { w: 300, h: 300 },

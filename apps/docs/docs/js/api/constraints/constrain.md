@@ -47,9 +47,9 @@ Constraint.align({ x?, y? }, [ref1, ref2, ...])
 | `x`    | `AlignAnchor \| AlignAnchor[]` | —       | Edge/center/origin to align on the x axis (omit to leave x untouched) |
 | `y`    | `AlignAnchor \| AlignAnchor[]` | —       | Edge/center/origin to align on the y axis (omit to leave y untouched) |
 
-`AlignAnchor` is `"start" \| "middle" \| "end" \| "baseline"`. The first three anchor a child by its bounding-box edge or center. `"baseline"` anchors a child by its **origin** (its local 0 point) instead of its box: `align({ y: "baseline" })` with no placed sibling pins the child's origin to the layer's origin — i.e. "stay where you were laid out" — regardless of how far its box overhangs the origin (a bar dipping below zero, axis labels hanging under a chart). Pass a single value to share one anchor across every child (the common case); pass an array to assign one anchor _per child_ positionally — the array length must equal the number of children.
+`AlignAnchor` is `"start" \| "middle" \| "end" \| "baseline"`. The first three anchor a child by its bounding-box edge or center. `"baseline"` anchors a child by its **origin** (its local 0 point) instead of its box. With no placed sibling the fallback is the **axis origin**: the scale's zero (`posScale(0)`) on a scaled axis, the layer's origin on a pixel-pure one. On a pixel-pure axis, `align({ y: "baseline" })` thus means "stay where you were laid out" — regardless of how far its box overhangs the origin (a bar dipping below zero, axis labels hanging under a chart). For an unconditional origin pin regardless of axis, use `Constraint.position({ x: 0, y: 0, anchor: "baseline" })`. Pass a single value to share one anchor across every child (the common case); pass an array to assign one anchor _per child_ positionally — the array length must equal the number of children.
 
-The first already-placed child in the list acts as the anchor on each specified axis (read at _that child's_ anchor). Unplaced children are moved to match it (placed at _their own_ anchor). If no child is placed yet, the layer's own edge is used as the fallback (`start` = 0, `middle` = midpoint, `end` = full extent, `baseline` = 0). When both `x` and `y` are given, x is resolved before y.
+The first already-placed child in the list acts as the anchor on each specified axis (read at _that child's_ anchor). Unplaced children are moved to match it (placed at _their own_ anchor). If no child is placed yet, the fallback depends on the axis's underlying space: a scaled axis uses the scale origin `posScale(0)`, a pixel-pure axis uses the layer's own edge (`start` = 0, `middle` = midpoint, `end` = full extent, `baseline` = layer origin). When both `x` and `y` are given, x is resolved before y.
 
 ### Per-child anchors
 
@@ -263,14 +263,12 @@ equivalent, **including** scale solving and auto-fit, not just placement:
 | `Stack({ dir: "y" }, items)`                                 | `distribute({ dir: "y", glue: true })`                          |
 | `Spread({ dir: "x", stackWeights: [2, 1] }, items)`          | `distribute({ dir: "x", weights: [2, 1] })`                     |
 
-One caveat: when **no child is pre-placed**, the cross-axis `align` fallback
-differs. `Spread` aligns to the data-scale origin (`posScale(0)`), while the
-`align` constraint falls back to the layer's box edge (`end` → the full
-extent). For `"start"` the two coincide; for `"end"`/`"middle"` they diverge
-by the box extent. Pre-place one child (or use `Constraint.position`) when you
-need spread-identical `end`/`middle` alignment. (Unifying the two fallbacks is
-tracked in
-[#552](https://github.com/gofish-graphics/gofish-graphics/issues/552).)
+When **no child is pre-placed**, the cross-axis alignment fallback depends on
+the **axis**, not the API — `Spread` and the `align` constraint resolve the
+same fallback, so the pairs above are exact. A scaled (POSITION) axis falls
+back to the scale origin `posScale(0)` (so SIZE-derived bars hang from the zero
+line); a pixel-pure axis falls back to the layer-box edge (`start` → 0,
+`middle` → midpoint, `end` → full extent).
 
 ## Partial placement
 
