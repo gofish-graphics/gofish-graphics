@@ -64,11 +64,12 @@ the top — matching the old bespoke order, which placed entry 0 at the top.
 The wrapper is wired with three constraints, and **the order matters** because
 the first one places the anchor the other two read:
 
-1. `align({ x: "baseline", y: "baseline" })` on the content — a _baseline_
-   (origin) pin meaning "stay exactly where you were laid out". The content is
-   referenced by the `distribute` below, and a constraint-referenced child skips
-   the layer's phase-1 baseline placement (placement is first-write-wins), so the
-   pin re-states that placement explicitly. It pins the **baseline**, not the
+1. `position({ x: 0, y: 0, anchor: "baseline" })` on the content — a
+   literal-pixel pin at the origin meaning "stay exactly where you were laid
+   out". The content is referenced by the `distribute` below, and a
+   constraint-referenced child skips the layer's phase-1 baseline placement
+   (placement is first-write-wins), so the pin re-states that placement
+   explicitly. It pins the **baseline** (the local 0 point), not the
    bounding-box corner, so the content never moves regardless of axis-label
    overhang.
 2. `distribute({ dir: "x", spacing: 20 }, [content, column])` — seats the column

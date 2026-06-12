@@ -35,14 +35,15 @@ root  = Layer([ inner.name("__axisInner"), ...ordinal labels ])
 The **inner tier** holds the constraint-pinned axes (continuous/difference); the
 **outer tier** holds the ordinal label rows, which need the inner tier fully laid
 out so they can seat past its bounding box. In each tier the wrapped child is
-pinned with `align({ x: "baseline", y: "baseline" })` — a _baseline_ (origin)
-pin, meaning "stay exactly where you were laid out". The pin exists because the
-content is referenced by `distribute` constraints, and a constraint-referenced
-child skips the layer's phase-1 baseline placement (placement is first-write-wins,
-so constraints must run against unplaced targets); the baseline pin re-states
-that phase-1 placement explicitly. It must be `baseline`, not `start`: `start`
-pins the _bounding-box_ corner, which slides the marks off the tick grid once
-the box overhangs the origin (nested facet labels, negative bars).
+pinned with `position({ x: 0, y: 0, anchor: "baseline" })` — a literal-pixel pin
+at the origin, meaning "stay exactly where you were laid out". The pin exists
+because the content is referenced by `distribute` constraints, and a
+constraint-referenced child skips the layer's phase-1 baseline placement
+(placement is first-write-wins, so constraints must run against unplaced
+targets); the origin pin re-states that phase-1 placement explicitly. The anchor
+must be `baseline`, not `start`: `start` pins the _bounding-box_ corner, which
+slides the marks off the tick grid once the box overhangs the origin (nested
+facet labels, negative bars).
 
 Everything else then seats around the stationary content in **negative gutter
 space** (into the SVG padding): the axis line distributes off the content's

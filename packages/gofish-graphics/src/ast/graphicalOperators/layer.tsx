@@ -39,6 +39,7 @@ import {
 import { alignSpaceFold, type AlignConstraint } from "../constraints/align";
 import { allocateSlices } from "../constraints/folds";
 import { axisIndex } from "../constraints/shared";
+import { isValue } from "../data";
 import { unionChildSpaces } from "./alignment";
 
 /** Normalize a node's _name (string or Token) to the string used as a key in
@@ -647,8 +648,12 @@ export const layer = createNodeOperatorSequential(
               ? getPositioningConstraintRefs(node.constraints)
               : new Set<string>();
 
-          // Per-AXIS targets of `position` constraints (e.g. axis ticks pinned
-          // via `Constraint.position({ y: datum(v) })`). Tracked per axis, not
+          // Per-AXIS targets of *datum*-pinned `position` constraints (e.g. axis
+          // ticks pinned via `Constraint.position({ y: datum(v) })`). A datum pin
+          // consumes the scale, so the target must not also receive it; a literal
+          // *pixel* pin (`Constraint.position({ y: 0 })`) does not consume the
+          // scale, so it's deliberately NOT tracked here — content pinned at its
+          // raw pixel origin still needs its posScale. Tracked per axis, not
           // per child: a child pinned on one axis may still need the scale on
           // the other (an axis line position-seated on its cross axis resolves
           // its own-axis datum endpoints through the scale).
@@ -658,8 +663,8 @@ export const layer = createNodeOperatorSequential(
               for (const r of c.children) {
                 if (!r) continue;
                 const dims = positionTargetDims.get(r.name) ?? new Set();
-                if (c.x !== undefined) dims.add(0);
-                if (c.y !== undefined) dims.add(1);
+                if (c.x !== undefined && isValue(c.x)) dims.add(0);
+                if (c.y !== undefined && isValue(c.y)) dims.add(1);
                 positionTargetDims.set(r.name, dims);
               }
             }

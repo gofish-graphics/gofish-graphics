@@ -218,7 +218,7 @@ keys onto wrappers, the affected resolution passes (color, names, labels,
 underlying space, nice domains) rerun on the new tree.
 
 See [Axes](/internals/frontend/axes) for the full elaboration story (the
-two-tier structure, baseline pins, negative-space gutters, and the
+two-tier structure, origin pins, negative-space gutters, and the
 continuous/difference/ordinal kinds).
 
 **Axis-title elaboration** follows the axis block (after the nice-space capture)

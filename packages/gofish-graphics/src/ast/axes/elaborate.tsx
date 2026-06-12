@@ -524,19 +524,20 @@ export async function elaborateAxes(node: GoFishNode): Promise<{
   // axis tiers, then restore the identity onto the outermost wrapper.
   const root = await wrapPreservingIdentity(node, async (content) => {
     // Inner tier: content + constraint-based (continuous/difference) axes. The
-    // content is pinned at its own ORIGIN (baseline anchor, translate 0) so each
-    // axis grows into negative gutter space; this keeps the content on the
-    // posScale grid both axes' ticks use. The anchor must be `baseline`, not
-    // `start`: nested content (facets carrying their own ordinal labels) has a
-    // bbox extending past its origin, and pinning bbox-min would slide the marks
-    // off the tick grid by that overhang.
+    // content is pinned at its own ORIGIN (a literal-pixel position pin at the
+    // origin: x:0/y:0, translate 0) so each axis grows into negative gutter
+    // space; this keeps the content on the posScale grid both axes' ticks use.
+    // The anchor must be `baseline`, not `start`: nested content (facets
+    // carrying their own ordinal labels) has a bbox extending past its origin,
+    // and pinning bbox-min would slide the marks off the tick grid by that
+    // overhang.
     let inner: GoFishNode = content;
     if (constrained.length > 0) {
       content.name(CONTENT_NAME);
       const axisNodes = constrained.flatMap((e) => e.nodes);
       inner = (await (layer as any)([content, ...axisNodes])) as GoFishNode;
       inner.constrain((g) => [
-        Constraint.align({ x: "baseline", y: "baseline" } as any, [
+        Constraint.position({ x: 0, y: 0, anchor: "baseline" }, [
           g[CONTENT_NAME],
         ]),
         ...constrained.flatMap((e) => e.constraints(g)),
@@ -546,15 +547,16 @@ export async function elaborateAxes(node: GoFishNode): Promise<{
     // Outer tier: ref-based (ordinal) labels. The labels `distribute` against
     // `inner`, whose bbox includes any nested inner-facet labels — so an outer
     // label row stacks below the inner row. For that anchor to be "placed",
-    // `inner` is baseline-pinned: its 0 point stays the layer's 0 point, and the
-    // labels seat past its bbox edge in negative gutter space.
+    // `inner` is pinned at its origin (a literal-pixel position pin, x:0/y:0):
+    // its 0 point stays the layer's 0 point, and the labels seat past its bbox
+    // edge in negative gutter space.
     let outerRoot = inner;
     if (refBased.length > 0) {
       inner.name(INNER_REF_NAME);
       const labelNodes = refBased.flatMap((e) => e.nodes);
       outerRoot = (await (layer as any)([inner, ...labelNodes])) as GoFishNode;
       outerRoot.constrain((g) => [
-        Constraint.align({ x: "baseline", y: "baseline" } as any, [
+        Constraint.position({ x: 0, y: 0, anchor: "baseline" }, [
           g[INNER_REF_NAME],
         ]),
         ...refBased.flatMap((e) => e.constraints(g)),
@@ -674,9 +676,10 @@ export async function elaborateAxisTitles(
     // Constraint order matters; placement is first-write-wins.
     root.constrain((g) => {
       const cs: any[] = [
-        // Pin the content at its origin; it never moves. Everything else seats
-        // off the (already-placed) ref stand-ins and this content bbox.
-        Constraint.align({ x: "baseline", y: "baseline" }, [
+        // Pin the content at its origin (a literal-pixel position pin, x:0/y:0);
+        // it never moves. Everything else seats off the (already-placed) ref
+        // stand-ins and this content bbox.
+        Constraint.position({ x: 0, y: 0, anchor: "baseline" }, [
           g[TITLE_CONTENT_NAME],
         ]),
       ];

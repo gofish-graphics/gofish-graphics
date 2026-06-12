@@ -86,7 +86,9 @@ export async function elaborateLegend(
     // Constraint order matters: the content pin places the anchor the others read.
     root.constrain((g) => [
       // Pin the content at its origin; it never moves.
-      Constraint.align({ x: "baseline", y: "baseline" }, [g[CONTENT_NAME]]),
+      Constraint.position({ x: 0, y: 0, anchor: "baseline" }, [
+        g[CONTENT_NAME],
+      ]),
       // Seat the column just right of the full content bbox (incl. axis labels).
       Constraint.distribute({ dir: "x", spacing: LEGEND_CONTENT_GAP }, [
         g[CONTENT_NAME],
