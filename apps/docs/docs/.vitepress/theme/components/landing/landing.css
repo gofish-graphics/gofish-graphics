@@ -186,6 +186,7 @@ html.landing-page .DocSearch-Button {
   line-height: 1.15;
 }
 .landing .band-title {
+  text-wrap: balance;
   font-family: "Fraunces", serif;
   font-size: clamp(1.9rem, 3.4vw, 2.9rem);
   font-weight: 700;
@@ -433,14 +434,14 @@ html.landing-page .DocSearch-Button {
   text-align: center;
 }
 .landing .spectrum {
-  padding: 40px 44px 96px;
+  padding: 76px 44px 96px;
 }
 
 /* TRACK */
 .landing .track {
   position: relative;
   max-width: 1080px;
-  margin: 70px auto 0;
+  margin: 36px auto 0;
 }
 .landing .track-line {
   position: absolute;
