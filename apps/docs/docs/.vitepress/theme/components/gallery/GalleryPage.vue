@@ -1759,9 +1759,8 @@ onBeforeUnmount(() => {
           <h1>The <span class="em">GoFish</span><br />Collection</h1>
           <div class="sub">walk the hall <span class="arrow">&rarr;</span></div>
           <div class="cta-row">
-            <a class="btn btn-primary" href="/">Open the docs</a>
             <a
-              class="btn btn-secondary"
+              class="btn btn-primary"
               href="https://github.com/gofish-graphics/gofish-graphics"
               target="_blank"
               rel="noopener"
