@@ -772,6 +772,23 @@ html.landing-page .DocSearch-Button {
   margin-top: 22px;
 }
 
+/* mobile navbar: the hamburger only holds the GitHub link — show the link
+   itself instead, and shrink Internals to its book icon when space is tight */
+html.landing-page .VPNavBarHamburger {
+  display: none !important;
+}
+html.landing-page .VPNavBarSocialLinks {
+  display: flex !important;
+}
+@media (max-width: 768px) {
+  html.landing-page .internals-link span {
+    display: none;
+  }
+  html.landing-page .internals-link {
+    padding: 0 8px;
+  }
+}
+
 /* ---------- BAND FOOT (made with … at MIT VIS) ---------- */
 .landing .band-foot {
   margin: 96px auto 0;
