@@ -11,10 +11,16 @@ import {
   createZBelowConstraint,
   isZOrderConstraint,
 } from "./zorder";
+import {
+  applyContain,
+  createContainConstraint,
+  isContainConstraint,
+} from "./contain";
 import type { AlignConstraint, AlignOptions } from "./align";
 import type { DistributeConstraint, DistributeOptions } from "./distribute";
 import type { PositionConstraint, PositionOptions } from "./position";
 import type { ZAboveConstraint, ZBelowConstraint } from "./zorder";
+import type { ContainConstraint, ContainOptions } from "./contain";
 import { type ConstraintPosScales, type ConstraintRef } from "./shared";
 
 export type {
@@ -31,14 +37,17 @@ export type {
   ZBelowConstraint,
   ZOrderConstraint,
 } from "./zorder";
+export type { ContainConstraint, ContainOptions } from "./contain";
 export { isZOrderConstraint } from "./zorder";
+export { isContainConstraint, containedSpace } from "./contain";
 
 export type ConstraintSpec =
   | AlignConstraint
   | DistributeConstraint
   | PositionConstraint
   | ZAboveConstraint
-  | ZBelowConstraint;
+  | ZBelowConstraint
+  | ContainConstraint;
 
 // --- Factory ---
 
@@ -63,6 +72,12 @@ export const Constraint = {
   },
   zBelow(a: ConstraintRef, b: ConstraintRef): ZBelowConstraint {
     return createZBelowConstraint(a, b);
+  },
+  contain(
+    options: ContainOptions,
+    children: [ConstraintRef, ConstraintRef]
+  ): ContainConstraint {
+    return createContainConstraint(options, children);
   },
 };
 
@@ -105,9 +120,14 @@ export function collectConstraintRefs(
 
 /**
  * The set of names referenced by *positioning* constraints (`align` /
- * `distribute`). Used by `layer.tsx` to compute `constrainedNames`, which
- * controls phase-1 baseline-placement skipping. z-order constraints don't
+ * `distribute` / `contain`). Used by `layer.tsx` to compute `constrainedNames`,
+ * which controls phase-1 baseline-placement skipping. z-order constraints don't
  * position, so they must be excluded.
+ *
+ * `contain` is special: only the inner child (`children[1]`) skips baseline
+ * placement. The outer child (`children[0]`) is left in the set so phase-1
+ * places it at baseline — `applyContain` reads outer's placed position to
+ * center inner inside it.
  */
 export function getPositioningConstraintRefs(
   constraints: ConstraintSpec[]
@@ -115,6 +135,10 @@ export function getPositioningConstraintRefs(
   const names = new Set<string>();
   for (const c of constraints) {
     if (isZOrderConstraint(c)) continue;
+    if (isContainConstraint(c)) {
+      names.add(c.children[1].name);
+      continue;
+    }
     for (const ref of c.children) if (ref) names.add(ref.name);
   }
   return names;
@@ -176,6 +200,13 @@ export function applyConstraints(
 ): void {
   for (const constraint of constraints) {
     if (isZOrderConstraint(constraint)) continue;
+
+    if (isContainConstraint(constraint)) {
+      const outer = nameToPlaceable.get(constraint.children[0].name);
+      const inner = nameToPlaceable.get(constraint.children[1].name);
+      if (outer && inner) applyContain(constraint, outer, inner);
+      continue;
+    }
 
     const targets = constraint.children
       .map((ref) => nameToPlaceable.get(ref.name))

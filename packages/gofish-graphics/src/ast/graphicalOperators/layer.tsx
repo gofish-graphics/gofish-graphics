@@ -26,10 +26,13 @@ import { GoFishAST } from "../_ast";
 import {
   applyConstraints,
   collectPositionDomains,
+  containedSpace,
   getPositioningConstraintRefs,
+  isContainConstraint,
   isZOrderConstraint,
   type ConstraintPosScales,
   type ConstraintSpec,
+  type ContainConstraint,
   type ZOrderConstraint,
 } from "../constraints";
 import {
@@ -51,6 +54,118 @@ const childNameKey = (node: GoFishAST): string | undefined => {
   if (n === undefined) return undefined;
   return isToken(n) ? n.__tag : n;
 };
+
+// ── Contain pre-pass ────────────────────────────────────────────────────────
+//
+// `Constraint.contain` drives the OUTER child's size from the INNER child's
+// extent (`outer = inner + 2·padding` per constrained axis), so the layer must
+// see it before laying children out: inner is laid out first, then `outer`'s
+// proposed size is overridden, and the union picks up the derived SIZE so a
+// contained pair participates in auto-fit. Both the space-resolution fold and
+// the layout proposal need the same outer→inner dependency map and a
+// topological layout order (inner precedes outer); this helper builds both, and
+// enforces single-ownership (see size-claims.md, "Dimension B").
+
+type ContainInfo = { innerIdx: number; padX?: number; padY?: number };
+
+type ContainPlan = {
+  /** outerChildIndex → { innerChildIndex, padX?, padY? } */
+  outerToInner: Map<number, ContainInfo>;
+  /** Child layout order with inner before outer (topological); cycles throw. */
+  order: number[];
+};
+
+/** Resolve a contain ref's outer/inner to child indices, validate single
+ *  ownership and the imposed-size-vs-own-size rule, and topologically sort the
+ *  layout order. Returns undefined when the layer has no contain constraints
+ *  (the common path stays untouched). */
+function buildContainPlan(
+  childNodes: GoFishAST[],
+  constraints: ConstraintSpec[]
+): ContainPlan | undefined {
+  const contains = constraints.filter(isContainConstraint);
+  if (contains.length === 0) return undefined;
+
+  const indexByName = new Map<string, number>();
+  for (let i = 0; i < childNodes.length; i++) {
+    const name = childNameKey(childNodes[i]);
+    if (name !== undefined && !indexByName.has(name)) indexByName.set(name, i);
+  }
+
+  const outerToInner = new Map<number, ContainInfo>();
+  const claimedBy = new Map<number, ContainConstraint>();
+  for (const c of contains) {
+    const outerName = c.children[0].name;
+    const innerName = c.children[1].name;
+    const outerIdx = indexByName.get(outerName);
+    const innerIdx = indexByName.get(innerName);
+    // A ref into a nested tier has no direct slot here — nothing to size.
+    if (outerIdx === undefined || innerIdx === undefined) continue;
+
+    // Single owner: at most one contain may size an outer per axis. (Disjoint
+    // axes on one outer would need two inner deps — also rejected, since the
+    // proposal model gives an outer a single inner-derived size.)
+    const prev = claimedBy.get(outerIdx);
+    if (prev !== undefined) {
+      const sameAxis =
+        (prev.x !== undefined && c.x !== undefined) ||
+        (prev.y !== undefined && c.y !== undefined);
+      throw new Error(
+        `Constraint.contain: child "${outerName}" is the outer of two contain ` +
+          `constraints${sameAxis ? " on the same axis" : ""} — a contained box ` +
+          `may be sized by at most one contain per axis. The conflicting ` +
+          `constraints contain inner "${prev.children[1].name}" and "${innerName}".`
+      );
+    }
+
+    // Imposed size vs own request: an outer that declares its own size on a
+    // constrained axis cannot also be sized by contain (an error, not
+    // precedence — see size-claims.md, "Dimension B").
+    const outerNode = childNodes[outerIdx];
+    const declaredDims =
+      outerNode instanceof GoFishNode ? outerNode.args?.dims : undefined;
+    for (const axis of [0, 1] as const) {
+      const pad = axis === 0 ? c.x : c.y;
+      if (pad !== undefined && declaredDims?.[axis]?.size !== undefined) {
+        throw new Error(
+          `Constraint.contain: outer "${outerName}" declares its own size on ` +
+            `the ${axis === 0 ? "x" : "y"} axis but is also sized by a contain ` +
+            `constraint. An imposed size conflicts with the box's own size ` +
+            `request; drop one of them.`
+        );
+      }
+    }
+
+    claimedBy.set(outerIdx, c);
+    outerToInner.set(outerIdx, { innerIdx, padX: c.x, padY: c.y });
+  }
+
+  // Topological layout order: an outer depends on its inner, so the inner must
+  // precede it. Cycles (A contains B contains A) throw with the index chain.
+  const order: number[] = [];
+  const visiting = new Set<number>();
+  const visited = new Set<number>();
+  const visit = (i: number, stack: number[]): void => {
+    if (visited.has(i)) return;
+    if (visiting.has(i)) {
+      throw new Error(
+        `Constraint.contain cycle detected through child indices ${[
+          ...stack,
+          i,
+        ].join(" → ")}`
+      );
+    }
+    visiting.add(i);
+    const dep = outerToInner.get(i);
+    if (dep !== undefined) visit(dep.innerIdx, [...stack, i]);
+    visiting.delete(i);
+    visited.add(i);
+    order.push(i);
+  };
+  for (let i = 0; i < childNodes.length; i++) visit(i, []);
+
+  return { outerToInner, order };
+}
 
 // ── Spread-shape recognition: the operator image of layer constraints ───────
 //
@@ -445,6 +560,39 @@ export const layer = createNodeOperatorSequential(
               ? SIZE(Monotonic.smul(scale, space.domain), space.measure)
               : space;
 
+          // Contain space fold: derive each contain-outer's effective space
+          // from its inner (`outer = inner + 2·padding` when inner is SIZE) so
+          // a contained pair participates in the union below — and hence in a
+          // parent's auto-fit solve. Computed in dependency order (inner first)
+          // so chained contains compose (A⊇B⊇C: C feeds B feeds A). When inner
+          // isn't SIZE, `containedSpace` leaves outer as-is and the layout-time
+          // pixel proposal handles sizing. The plan also enforces single
+          // ownership and the imposed-size rule (see buildContainPlan).
+          const containPlan = buildContainPlan(_childNodes, constraints ?? []);
+          let effectiveChildren = children;
+          if (containPlan !== undefined) {
+            effectiveChildren = children.map(
+              (s) => [s[0], s[1]] as Size<UnderlyingSpace>
+            );
+            for (const i of containPlan.order) {
+              const info = containPlan.outerToInner.get(i);
+              if (info === undefined) continue;
+              const innerSpaces = effectiveChildren[info.innerIdx];
+              if (info.padX !== undefined)
+                effectiveChildren[i][0] = containedSpace(
+                  effectiveChildren[i][0],
+                  innerSpaces[0],
+                  info.padX
+                );
+              if (info.padY !== undefined)
+                effectiveChildren[i][1] = containedSpace(
+                  effectiveChildren[i][1],
+                  innerSpaces[1],
+                  info.padY
+                );
+            }
+          }
+
           // `position` constraints contribute a POSITION-domain fragment per
           // axis: the union of their data values is this layer's domain on that
           // axis, merged with any POSITION domain bubbled up from children. This
@@ -456,7 +604,10 @@ export const layer = createNodeOperatorSequential(
             scale: number,
             iv: Interval.Interval | undefined
           ): UnderlyingSpace => {
-            const base = applyScale(unionChildSpaces(children, axis), scale);
+            const base = applyScale(
+              unionChildSpaces(effectiveChildren, axis),
+              scale
+            );
             if (iv === undefined) return base;
             const merged =
               isPOSITION(base) && base.domain
@@ -481,7 +632,7 @@ export const layer = createNodeOperatorSequential(
           const shape = resolveSpreadShape(
             constraints ?? [],
             _childNodes,
-            children
+            effectiveChildren
           );
           constraintBudget = shape?.budget;
           if (shape) {
@@ -634,7 +785,9 @@ export const layer = createNodeOperatorSequential(
               ]
             : [basePosScales[0], basePosScales[1]];
 
-          const childPlaceables = [];
+          const childPlaceables: ReturnType<
+            (typeof children)[number]["layout"]
+          >[] = new Array(children.length);
 
           // Collect *positioning* constraint refs only — children skipped
           // here forgo phase-1 baseline placement so a constraint can place
@@ -644,6 +797,12 @@ export const layer = createNodeOperatorSequential(
             node.constraints.length > 0
               ? getPositioningConstraintRefs(node.constraints)
               : new Set<string>();
+
+          // Contain layout order: inner before outer, so outer can be proposed
+          // `inner.dims + 2·padding` on its constrained axes (see
+          // buildContainPlan / the contain fold in resolveUnderlyingSpace).
+          const containPlan = buildContainPlan(node.children, node.constraints);
+          const layoutOrder = containPlan?.order ?? children.map((_, i) => i);
 
           // Per-AXIS targets of *datum*-pinned `position` constraints (e.g. axis
           // ticks pinned via `Constraint.position({ y: datum(v) })`). A datum pin
@@ -692,15 +851,33 @@ export const layer = createNodeOperatorSequential(
             return [pick(0), pick(1)];
           };
 
-          for (let i = 0; i < children.length; i++) {
+          for (const i of layoutOrder) {
             const child = children[i];
             const childName = childNameKey(node.children[i]);
             const targetDims =
               childName !== undefined
                 ? positionTargetDims.get(childName)
                 : undefined;
+            // Contain proposal: override the outer's size to
+            // `inner.dims + 2·padding` on each constrained axis (the inner is
+            // already laid out, ahead of us in layoutOrder). Other axes keep
+            // the normal proposal (`childSizeFor`), so contain composes with —
+            // and wins on its constrained axes over — any budget slice.
+            let layoutSize: Size = childSizeFor(childName);
+            const containInfo = containPlan?.outerToInner.get(i);
+            if (containInfo !== undefined) {
+              const innerDims = childPlaceables[containInfo.innerIdx].dims;
+              layoutSize = [
+                containInfo.padX !== undefined
+                  ? (innerDims[0].size ?? 0) + 2 * containInfo.padX
+                  : layoutSize[0],
+                containInfo.padY !== undefined
+                  ? (innerDims[1].size ?? 0) + 2 * containInfo.padY
+                  : layoutSize[1],
+              ];
+            }
             const childPlaceable = child.layout(
-              childSizeFor(childName),
+              layoutSize,
               childScaleFactors,
               childScalesFor(i, targetDims)
             );
@@ -708,7 +885,7 @@ export const layer = createNodeOperatorSequential(
               childPlaceable.place("x", 0, "baseline");
               childPlaceable.place("y", 0, "baseline");
             }
-            childPlaceables.push(childPlaceable);
+            childPlaceables[i] = childPlaceable;
           }
 
           if (node.constraints.length > 0) {

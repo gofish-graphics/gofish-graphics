@@ -13,6 +13,7 @@ covers:
   - packages/gofish-graphics/src/ast/constraints/folds.ts
   - packages/gofish-graphics/src/ast/constraints/distribute.ts
   - packages/gofish-graphics/src/ast/constraints/align.ts
+  - packages/gofish-graphics/src/ast/constraints/contain.ts
 ---
 
 # The underlying space tree
@@ -223,6 +224,21 @@ composes its targets' spaces into the layer's claim on that axis:
   constant-sized keyed targets fall back to ORDINAL.
 - `Constraint.align` contributes the alignment fold (`alignSpaceFold` →
   `resolveAlignmentSpace`) on its axis.
+- `Constraint.contain` contributes the containment fold (`containedSpace`,
+  `constraints/contain.ts`). It is the first _size-setting_ constraint: on each
+  constrained axis `outer = inner + 2·padding`, a `Monotonic.adds` of inner's
+  request. Because `adds` of a monotone function stays monotone (hence
+  invertible), a contained pair participates in auto-fit exactly like a stack —
+  a parent spread/layer solving a scale factor sees outer as inner shifted up by
+  the constant padding. The layer derives these outer spaces in dependency order
+  (inner before outer) so chained contains compose (A⊇B⊇C: C's request feeds
+  B's, B's feeds A's), then feeds them into the union below. When inner is _not_
+  SIZE (fixed-pixel or position-pinned content) there is no rule to fold; outer
+  keeps its own space and the layout-time pixel proposal
+  (`inner.dims + 2·padding`, proposed in the same dependency order) sizes it.
+  At most one contain may size an outer per axis, and an outer that declares its
+  own size on a constrained axis is an error, not a precedence — the layer
+  enforces both at constraint-collection time (see [[size-claims]]).
 
 The layer composes these per axis — children not covered by a constraint
 max-union in as overlay siblings — and at layout time **solves the budget**:
