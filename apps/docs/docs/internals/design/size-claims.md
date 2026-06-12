@@ -340,6 +340,88 @@ constants flow through the same solve. And the one thing that breaks is
 exactly the thing the measure system exists to forbid — so flex-as-data is
 gated on #547, not on new layout machinery.
 
+## Where order lives (a clarification)
+
+"Do we topologically sort?" has three different answers because there are
+three different kinds of order in play, and only one of them is a sort over
+the spec:
+
+- **The scale dimension needs no ordering at all.** It is two global passes:
+  fold size requests bottom-up, solve and propose top-down. The "three ways a
+  distribute can be solved" (solve the scale factor; solve the container;
+  solve the spacing — the "two of three" rule of [[constraints-as-core]]) are
+  _not_ three dependency directions that need sorting. They are one budget
+  equation per axis with one designated unknown; _which_ variable is unknown
+  is determined by what is already pinned, and the same two passes handle all
+  three cases. This is what keeps the system out of general-solver territory:
+  there is never a graph of simultaneous equations, only one inversion per
+  axis (per measure, after #547).
+- **Pixel-level sibling dependencies do sort.** When one child's number
+  depends on another child's _measured_ result — contain's outer needs
+  inner's laid-out extent; every PiCCL constraint works this way — the layer
+  topologically sorts the affected children and rejects cycles with an
+  explicit error. Implemented for contain in this round; z-order has used the
+  same recipe (Kahn) all along.
+- **Placement walks are the unsorted remainder.** Align/distribute/position
+  apply in declaration order with first-placed-anchor semantics. That is
+  expressive (axis elaboration chains placements through it) but
+  order-sensitive for hand-written specs; the fix is canonical emission order
+  for compiled forms plus a pre-sort of hand-written constraints by shared
+  targets ([[constraints-as-core]] residual 5), not a new solver.
+
+## What the algebra is (and what "complete" could mean)
+
+The fold layer is a **max-plus (tropical) algebra lifted to monotone
+functions of the scale factor**: the operations the constraints generate are
+sum (distribute), max (align/overlay/equal-width), plus-a-constant (spacing,
+contain padding), and scalar multiples (data values). Monotone functions are
+closed under all four, which is the entire feasibility argument: any
+constraint network built from these has a monotone composite extent, hence
+one-unknown invertible, hence auto-fittable. The `Monotonic` module _is_ the
+term representation of this algebra — `Linear` is the closed-form normal form
+for the affine fragment (where `add`/`adds`/`smul` fold symbolically and
+inversion is O(1)), and `unknown` is the general monotone closure (center
+mode, max of different intercepts) where inversion falls back to bisection.
+
+Two remarks worth recording. First, the affine-plus-max fragment has a known
+shape: max-plus polynomials over linear terms are exactly the **convex
+piecewise-linear** functions, which suggests a normal form (and an O(pieces)
+exact inversion) for every claim built from linears, `add`, `adds`, `smul`,
+and `max` — i.e. `unknown` with its bisection could in principle be reserved
+for genuinely non-PL cases only. Second, this gives the completeness question
+a crisp formulation that Bluefish never had: the constraint set
+{align, distribute, position, contain} is _complete relative to the algebra_
+if every extent expressible as a max-plus combination of child extents is
+realizable by some constraint network — align supplying max, distribute
+supplying sum(+constant), contain supplying unary +constant, position
+supplying anchors. Custom layout nodes (treemap) then sit _outside the
+generators but inside the language_: arbitrary computation that emits
+claims/proposals in the same algebra, which is exactly the
+structure-plus-expressiveness trade UI frameworks give up by having no
+algebra to emit into.
+
+## Aspect ratio: three candidate homes (open)
+
+#39 wants aspect ratio as a first-class constraint (circles, images, waffle
+cells). There are three places it could live, and the choice is deliberately
+deferred to the #39/#547 round:
+
+1. **A cross-axis equation in the linear-system bbox** (Bluefish's
+   experiment): `width = k·height` joins the x and y 2-unknown systems into
+   one 4-unknown solve. Correct and general, but it grows the solve and it
+   lives at the pixel layer — it cannot say "make the _scales_ square."
+2. **Today's hack**: `rect`'s `aspectRatio` transfers the size-request slope
+   across axes at space-resolution time (`rect.tsx:113-127`). Free, but only
+   covers the one-axis-data-driven case; it has nothing to say when both
+   axes carry scales.
+3. **Scale-level coupling**: aspect ratio as an equation between the two
+   axes' scale factors (`σ_y = k·σ_x`), substituted before solving so each
+   axis still inverts with one unknown. Stays O(1), expresses waffle-style
+   square cells (both axes scaled, cells square), and becomes natural once
+   scales are measure-keyed (#547). The pixel-layer ledger (option 1) and
+   this are complementary, not competing: one constrains boxes, the other
+   constrains scales.
+
 ## Recommendation and staging
 
 1. **This round** — implement `Constraint.contain` as the first size-setting
@@ -366,6 +448,17 @@ gated on #547, not on new layout machinery.
 
 What this note deliberately does _not_ propose: any post-layout size
 mutation, any second fill policy, or any weights-like positional side channel.
+
+A note on the epic's finish line. The spread recognizer in the layer
+(`resolveSpreadShape`) is _scaffolding_, not architecture: it pattern-matches
+one operator image instead of composing constraints generally, and it is the
+kind of inessential complexity this program exists to remove. The agreed
+simplicity metric for the composition round (#547+#548) is that the general
+per-axis algebra replaces recognition with composition and
+**`resolveSpreadShape` is deleted** — at which point the core is the fixed
+layer pipeline (fold → solve → propose → place → measure) over four
+constraint kinds, with operators as guaranteed-faithful sugar and custom
+layouts as algorithm nodes emitting into the same algebra.
 
 ## Source pointers
 
