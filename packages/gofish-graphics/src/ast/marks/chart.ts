@@ -23,11 +23,13 @@ import {
 } from "./createOperator";
 import { layer as Layer } from "../graphicalOperators/layer";
 import {
+  // `over` stays internal (not re-exported from lib) — it backs the
+  // deserializer's `"over"` wire type only; user code should use `layer`.
   over as Over,
-  inside as Inside,
-  xor as Xor,
-  out as Out,
-  atop as Atop,
+  intersect as Intersect,
+  exclude as Exclude,
+  subtract as Subtract,
+  paint as Paint,
   mask as Mask,
 } from "../graphicalOperators/porterDuff";
 import type { ConstraintRef, ConstraintSpec } from "../constraints";
@@ -423,9 +425,14 @@ function makePorterDuffCombinator(
   return fn;
 }
 
-export const atop = makePorterDuffCombinator(Atop, "atop");
+// The second arg is the IR/serialize *wire* type — kept at the original
+// Porter-Duff strings ("atop"/"over"/"inside"/"xor"/"out"/"mask") so the
+// serialize bridge and IR schema are untouched. Only the JS-facing names
+// were renamed (Figma-inspired, #196/#202).
+export const paint = makePorterDuffCombinator(Paint, "atop");
+// `over` combinator is internal (deserializer only) — not exported from lib.
 export const over = makePorterDuffCombinator(Over, "over");
-export const inside = makePorterDuffCombinator(Inside, "inside");
-export const xor = makePorterDuffCombinator(Xor, "xor");
-export const out = makePorterDuffCombinator(Out, "out");
+export const intersect = makePorterDuffCombinator(Intersect, "inside");
+export const exclude = makePorterDuffCombinator(Exclude, "xor");
+export const subtract = makePorterDuffCombinator(Subtract, "out");
 export const mask = makePorterDuffCombinator(Mask, "mask");

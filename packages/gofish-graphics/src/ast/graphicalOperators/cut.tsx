@@ -16,11 +16,11 @@
  *     sizes: [10, 20, 15],
  *   })([{}, {}, {}], undefined, {}))
  *
- * Internally each slice is a `mask([regionRect, translatedSource])` — the
- * region rect defines the visible portion, the source shape is translated so
- * the requested portion lines up under the rect.
+ * Internally each slice is a `mask([regionRect, offset(source)])` — the
+ * region rect defines the visible portion, and the source shape is shifted
+ * (via the public `offset` operator) so the requested portion lines up under
+ * the rect.
  */
-import { GoFishAST } from "../_ast";
 import { GoFishNode } from "../_node";
 import { Mark } from "../types";
 import {
@@ -30,8 +30,9 @@ import {
   LayerContext,
 } from "../marks/createOperator";
 import { mask as Mask } from "./porterDuff";
+import { offset as offsetOp } from "./offset";
 import { Rect } from "../shapes/rect";
-import { createMark, createNodeOperator } from "../withGoFish";
+import { createMark } from "../withGoFish";
 import { getValue, isValue } from "../data";
 
 /** Shape props the cut factory's shape function receives after channel
@@ -54,60 +55,6 @@ export type CutMarkOptions = {
    *  along `dir`). Creates a "chunk taken out" effect on every slice. Default 0. */
   inset?: number;
 };
-
-/**
- * A single-child wrapper that translates its child along `dir` by `offset`
- * pixels. Used to position the source shape so the requested portion lines
- * up with the slice's mask region.
- */
-const translateNode = createNodeOperator<
-  { dir: 0 | 1; offset: number },
-  GoFishAST
->((opts, children) => {
-  if (children.length !== 1) {
-    throw new Error("translateNode expects exactly one child");
-  }
-  const { dir, offset } = opts;
-  const dx = dir === 0 ? offset : 0;
-  const dy = dir === 1 ? offset : 0;
-  return new GoFishNode(
-    {
-      type: "cut-translate",
-      shared: [false, false],
-      resolveUnderlyingSpace: (childSpaces) => childSpaces[0] ?? [],
-      layout: (_shared, size, scaleFactors, layoutChildren, posScales) => {
-        const child = layoutChildren[0].layout(size, scaleFactors, posScales);
-        child.place("x", 0, "baseline");
-        child.place("y", 0, "baseline");
-        return {
-          intrinsicDims: [
-            {
-              min: child.dims[0].min ?? 0,
-              size: child.dims[0].size ?? 0,
-              center: child.dims[0].center ?? 0,
-              max: child.dims[0].max ?? 0,
-            },
-            {
-              min: child.dims[1].min ?? 0,
-              size: child.dims[1].size ?? 0,
-              center: child.dims[1].center ?? 0,
-              max: child.dims[1].max ?? 0,
-            },
-          ],
-          transform: { translate: [undefined, undefined] },
-        };
-      },
-      render: ({ transform }, renderedChildren) => {
-        const tx = (transform?.translate?.[0] ?? 0) + dx;
-        const ty = (transform?.translate?.[1] ?? 0) + dy;
-        return (
-          <g transform={`translate(${tx}, ${ty})`}>{renderedChildren[0]}</g>
-        );
-      },
-    },
-    children
-  );
-});
 
 /** Build one slice node at (offset, offset+extent) in source coords. */
 async function buildSliceNode(
@@ -143,8 +90,8 @@ async function buildSliceNode(
     fill: "white",
   });
   const sourceNode = await resolveMarkResult(source(undefined), layerContext);
-  const translated = await translateNode(
-    { dir: dirIdx, offset: translateOffset },
+  const translated = await offsetOp(
+    dirIdx === 0 ? { x: translateOffset } : { y: translateOffset },
     [sourceNode]
   );
   const node = (await Mask({}, [regionRect, translated])) as GoFishNode;

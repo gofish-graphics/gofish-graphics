@@ -1,7 +1,10 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
 import bottlePng from "../assets/wilsonblanco.png";
-import { atop, image, In, mask as MaskOp, out, over, rect, xor } from "../../src/lib";
+import { paint, image, Intersect as IntersectOp, Mask as MaskOp, subtract, rect, exclude } from "../../src/lib";
+// `over` is internal (conceptually `layer`, #196) — imported from source for
+// the low-level Union demo only; it is not part of the public lib surface.
+import { over } from "../../src/ast/marks/chart";
 
 const meta: Meta = {
   title: "Low Level Syntax/Porter-Duff Relations",
@@ -74,25 +77,25 @@ export const Union: StoryObj<Args> = {
 export const Intersect: StoryObj<Args> = {
   name: "Intersect (in)",
   args: DEFAULT_ARGS,
-  render: (args: Args) => renderComposite(args, In),
+  render: (args: Args) => renderComposite(args, IntersectOp),
 };
 
 export const Exclude: StoryObj<Args> = {
   name: "Exclude (Xor)",
   args: DEFAULT_ARGS,
-  render: (args: Args) => renderComposite(args, xor),
+  render: (args: Args) => renderComposite(args, exclude),
 };
 
 export const Subtract: StoryObj<Args> = {
   name: "Subtract (out)",
   args: DEFAULT_ARGS,
-  render: (args: Args) => renderComposite(args, out),
+  render: (args: Args) => renderComposite(args, subtract),
 };
 
 export const Paint: StoryObj<Args> = {
   name: "Paint (Atop)",
   args: DEFAULT_ARGS,
-  render: (args: Args) => renderComposite(args, atop),
+  render: (args: Args) => renderComposite(args, paint),
 };
 
 export const mask: StoryObj<Args> = {

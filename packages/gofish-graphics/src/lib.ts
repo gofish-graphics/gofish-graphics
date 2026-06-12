@@ -98,12 +98,14 @@ export {
 export { arrow, arrow as Arrow } from "./ast/graphicalOperators/arrow";
 export { Table, table } from "./ast/graphicalOperators/table";
 export { cut, cut as Cut } from "./ast/graphicalOperators/cut";
+export { offset, offset as Offset } from "./ast/graphicalOperators/offset";
+// Region-compositing node operators (Figma-inspired names, #196/#202). `over`
+// is intentionally not exported — it is conceptually `layer` (#196).
 export {
-  over as Over,
-  inside as In,
-  xor as Xor,
-  out as Out,
-  atop as Atop,
+  intersect as Intersect,
+  exclude as Exclude,
+  subtract as Subtract,
+  paint as Paint,
   mask as Mask,
 } from "./ast/graphicalOperators/porterDuff";
 
@@ -128,11 +130,10 @@ export {
   repeat,
   log,
   layer,
-  atop,
-  over,
-  inside,
-  xor,
-  out,
+  paint,
+  intersect,
+  exclude,
+  subtract,
   mask,
 } from "./ast/marks/chart";
 export type { ConstrainableMark } from "./ast/marks/chart";

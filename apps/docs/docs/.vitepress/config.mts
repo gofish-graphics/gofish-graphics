@@ -281,6 +281,11 @@ export default defineConfig({
                 { text: "group", link: "/js/api/operators/group" },
                 { text: "layer", link: "/js/api/operators/layer" },
                 { text: "connect", link: "/js/api/operators/connect" },
+                {
+                  text: "region compositing",
+                  link: "/js/api/operators/region-compositing",
+                },
+                { text: "offset", link: "/js/api/operators/offset" },
                 { text: "derive", link: "/js/api/operators/derive" },
                 { text: "log", link: "/js/api/operators/log" },
               ],

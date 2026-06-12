@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
-import { Chart, spread, rect, image, text, blank, Constraint, layer, atop, v } from "../../src/lib";
+import { Chart, spread, rect, image, text, blank, Constraint, layer, paint, v } from "../../src/lib";
 import bottlePng from "../assets/wilsonblanco.png";
 
 const data = [
@@ -35,7 +35,7 @@ export const Default: StoryObj<Args> = {
       .flow(spread({ by: "category", dir: "x", spacing: 20, axes: {x: false} }))
       .mark(layer(
         [
-          atop({blendMode: "color"}, [
+          paint({blendMode: "color"}, [
           image({ href: bottlePng, h: v(100) }),
           rect({h: "amount", fill: "#00ff00"}),
         ]).name("bottle"),

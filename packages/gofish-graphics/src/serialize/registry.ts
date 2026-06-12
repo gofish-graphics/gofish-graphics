@@ -19,19 +19,19 @@
 // dependency graph acyclic.
 import {
   area,
-  atop,
+  paint,
   blank,
   circle,
   derive,
-  inside,
+  intersect,
   layer,
   line,
   log,
   mask,
-  out,
+  subtract,
   over,
   rect,
-  xor,
+  exclude,
   type ChartBuilder,
   type Mark,
   type Operator,
@@ -108,11 +108,14 @@ export const COMBINATOR_FACTORIES: Record<
     (connect as any)(opts, marks) as unknown as Mark<any>,
   treemap: (opts, marks) =>
     (Treemap as any)(opts, marks) as unknown as Mark<any>,
+  // Keys are the IR wire types (unchanged); values are the renamed
+  // (Figma-inspired, #196/#202) combinator factories.
   over: (opts, marks) => (over as any)(opts, marks) as unknown as Mark<any>,
-  inside: (opts, marks) => (inside as any)(opts, marks) as unknown as Mark<any>,
-  xor: (opts, marks) => (xor as any)(opts, marks) as unknown as Mark<any>,
-  out: (opts, marks) => (out as any)(opts, marks) as unknown as Mark<any>,
-  atop: (opts, marks) => (atop as any)(opts, marks) as unknown as Mark<any>,
+  inside: (opts, marks) =>
+    (intersect as any)(opts, marks) as unknown as Mark<any>,
+  xor: (opts, marks) => (exclude as any)(opts, marks) as unknown as Mark<any>,
+  out: (opts, marks) => (subtract as any)(opts, marks) as unknown as Mark<any>,
+  atop: (opts, marks) => (paint as any)(opts, marks) as unknown as Mark<any>,
   mask: (opts, marks) => (mask as any)(opts, marks) as unknown as Mark<any>,
 };
 
