@@ -135,6 +135,11 @@ export {
   exclude,
   subtract,
   mask,
+  // `over` is NOT public API — use `layer` (#196). It is re-exported only so
+  // the IR test harness can key its `"over"` wire-type combinator factory off
+  // the package's public entry instead of deep-importing internals. The
+  // deserializer's registry.ts maps the "over" wire type to this same factory.
+  over,
 } from "./ast/marks/chart";
 export type { ConstrainableMark } from "./ast/marks/chart";
 export type {

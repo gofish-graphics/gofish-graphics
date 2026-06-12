@@ -41,11 +41,19 @@ import {
   ref,
   arrow,
   connect,
+  // Region-compositing combinators. PR #404's Stage-2 rename (#196/#202)
+  // renamed the public Porter-Duff exports to Figma-inspired names:
+  //   inside → intersect, xor → exclude, out → subtract, atop → paint.
+  // `over` stays internal-for-IR (re-exported from lib.ts only for this
+  // harness — use `layer` in user code). The COMBINATOR_FACTORIES map below
+  // is still keyed by the OLD wire-type strings ("inside"/"xor"/...), which
+  // the IR serializer never renamed — see the matching comments in
+  // packages/gofish-graphics/src/serialize/registry.ts and chart.ts.
   over,
-  inside,
-  xor,
-  out,
-  atop,
+  intersect,
+  exclude,
+  subtract,
+  paint,
   mask,
   createName,
   Treemap,
@@ -75,12 +83,19 @@ const COMBINATOR_FACTORIES: Record<
   arrow: (opts, marks) => arrow(opts, marks) as unknown as Mark<any>,
   connect: (opts, marks) => connect(opts, marks) as unknown as Mark<any>,
   treemap: (opts, marks) => Treemap(opts, marks) as unknown as Mark<any>,
-  over: (opts, marks) => over(opts, marks) as unknown as Mark<any>,
-  inside: (opts, marks) => inside(opts, marks) as unknown as Mark<any>,
-  xor: (opts, marks) => xor(opts, marks) as unknown as Mark<any>,
-  out: (opts, marks) => out(opts, marks) as unknown as Mark<any>,
-  atop: (opts, marks) => atop(opts, marks) as unknown as Mark<any>,
-  mask: (opts, marks) => mask(opts, marks) as unknown as Mark<any>,
+  // Keys are the IR wire types (UNCHANGED — the serializer never renamed
+  // them); values are the renamed (#196/#202) combinator factories. Mirrors
+  // packages/gofish-graphics/src/serialize/registry.ts's COMBINATOR_FACTORIES.
+  // Porter-Duff combinators have a stricter `[Mark, Mark]` tuple signature
+  // than a runtime deserializer can satisfy; cast the function at the dispatch
+  // boundary, mirroring registry.ts's COMBINATOR_FACTORIES.
+  over: (opts, marks) => (over as any)(opts, marks) as unknown as Mark<any>,
+  inside: (opts, marks) =>
+    (intersect as any)(opts, marks) as unknown as Mark<any>,
+  xor: (opts, marks) => (exclude as any)(opts, marks) as unknown as Mark<any>,
+  out: (opts, marks) => (subtract as any)(opts, marks) as unknown as Mark<any>,
+  atop: (opts, marks) => (paint as any)(opts, marks) as unknown as Mark<any>,
+  mask: (opts, marks) => (mask as any)(opts, marks) as unknown as Mark<any>,
 };
 
 // ---------------------------------------------------------------------------
