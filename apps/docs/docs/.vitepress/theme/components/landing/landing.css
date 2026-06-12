@@ -256,24 +256,26 @@ html.landing-page .DocSearch-Button {
     color 0.2s ease;
 }
 .landing .btn-primary {
-  background: var(--ink);
-  color: var(--paper);
-  border: 2px solid var(--ink);
+  background: var(--accent);
+  color: #fff;
+  border: 2px solid var(--accent);
 }
 .landing .btn-primary:hover {
+  background: var(--accent-deep);
+  border-color: var(--accent-deep);
   transform: translateY(-2px);
-  box-shadow: 0 8px 18px rgba(25, 18, 10, 0.28);
+  box-shadow: 0 8px 18px rgba(31, 122, 82, 0.32);
 }
 .landing .btn-secondary {
   background: transparent;
-  color: var(--ink);
-  border: 2px solid var(--ink);
+  color: var(--accent-deep);
+  border: 2px solid var(--accent);
 }
 .landing .btn-secondary:hover {
-  background: var(--ink);
-  color: var(--paper);
+  background: var(--accent);
+  color: #fff;
   transform: translateY(-2px);
-  box-shadow: 0 8px 18px rgba(25, 18, 10, 0.22);
+  box-shadow: 0 8px 18px rgba(31, 122, 82, 0.26);
 }
 
 /* ---------- HERO ---------- */
@@ -289,6 +291,7 @@ html.landing-page .DocSearch-Button {
 }
 .landing .hero h1 {
   margin: 0 auto;
+  color: var(--accent-deep);
 }
 .landing .hero .subtitle {
   font-size: 1.2rem;
