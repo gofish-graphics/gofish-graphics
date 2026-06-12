@@ -156,4 +156,25 @@ const codeOptions = computed(() => {
   color: var(--vp-c-text-2);
   padding: 2rem 0;
 }
+
+/*
+  Stack the Sandpack panels vertically with the rendered chart preview ABOVE
+  the code editor (the default preset puts the editor first). vitepress-plugin-
+  sandpack offers no layout prop for this, so we reach into Sandpack's internal
+  layout container. Scoped via :deep() to this page only — the get-started
+  page's inline editor keeps its default layout.
+
+  `.sp-layout` is a `flex-direction: row; flex-wrap: wrap` container; the plugin
+  already forces each panel to `min-width: 100%`, so they wrap into a vertical
+  stack. We keep row+wrap (column direction breaks Sandpack's flex height
+  sizing, collapsing the panels) and reassert full-width, then `order: -1` on
+  the preview stack (`.sp-preset-column`) floats it above the editor
+  (`.sp-editor`).
+*/
+.example-playground :deep(.sp-layout) > .sp-stack {
+  min-width: 100%;
+}
+.example-playground :deep(.sp-layout) > .sp-preset-column {
+  order: -1;
+}
 </style>
