@@ -6,15 +6,17 @@ html.landing-page {
   --ink: #26211b;
   --ink-soft: #6e6457;
   --graphite: #4a4540;
-  --persimmon: #e05d3d;
   --accent: #2f9e6e;
   --accent-deep: #1f7a52;
   --bluep: #3f6bd6;
   --leaf: #2f9e6e;
   --gold: #e3aa2f;
-  --plum: #7d5bc7;
   --shadow-warm: rgba(38, 28, 18, 0.16);
-  --noise: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+
+  /* centered paper sheet width + how far the wide-screen gutter cards overlap
+     its edge (shared by the .sheet width and the ≥1720px gutter-card anchors) */
+  --sheet-w: 1240px;
+  --card-overlap: 22px;
 
   /* procedural wood-grain desk tile (800x480, seamless via stitchTiles) */
   --wood: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='800'%20height='480'%3E%3Cdefs%3E%3Cfilter%20id='figure'%20x='0'%20y='0'%20width='100%25'%20height='100%25'%3E%3CfeTurbulence%20type='fractalNoise'%20baseFrequency='0.003%200.018'%20numOctaves='3'%20seed='7'%20stitchTiles='stitch'/%3E%3CfeColorMatrix%20type='matrix'%20values='0%200%200%200%200%200%200%200%200%200%200%200%200%200%200%200.6%200.6%200.6%200%20-0.45'%20result='m'/%3E%3CfeFlood%20flood-color='%233a2614'/%3E%3CfeComposite%20in2='m'%20operator='in'/%3E%3C/filter%3E%3Cfilter%20id='fibers'%20x='0'%20y='0'%20width='100%25'%20height='100%25'%3E%3CfeTurbulence%20type='fractalNoise'%20baseFrequency='0.004%200.11'%20numOctaves='5'%20seed='11'%20stitchTiles='stitch'/%3E%3CfeColorMatrix%20type='matrix'%20values='0%200%200%200%200%200%200%200%200%200%200%200%200%200%200%201.1%201.1%201.1%200%20-0.78'%20result='m'/%3E%3CfeFlood%20flood-color='%23241408'/%3E%3CfeComposite%20in2='m'%20operator='in'/%3E%3C/filter%3E%3Cfilter%20id='hl'%20x='0'%20y='0'%20width='100%25'%20height='100%25'%3E%3CfeTurbulence%20type='fractalNoise'%20baseFrequency='0.004%200.11'%20numOctaves='5'%20seed='23'%20stitchTiles='stitch'/%3E%3CfeColorMatrix%20type='matrix'%20values='0%200%200%200%200%200%200%200%200%200%200%200%200%200%200%201.1%201.1%201.1%200%20-0.82'%20result='m'/%3E%3CfeFlood%20flood-color='%23eccd9d'/%3E%3CfeComposite%20in2='m'%20operator='in'/%3E%3C/filter%3E%3C/defs%3E%3Crect%20width='800'%20height='480'%20filter='url(%23figure)'%20opacity='0.35'/%3E%3Crect%20width='800'%20height='480'%20filter='url(%23fibers)'%20opacity='0.4'/%3E%3Crect%20width='800'%20height='480'%20filter='url(%23hl)'%20opacity='0.14'/%3E%3C/svg%3E");
@@ -101,8 +103,7 @@ html.landing-page .Layout {
 
 /* ----- navbar restyle, home route only ----- */
 html.landing-page .VPNavBar,
-html.landing-page .VPNavBar.has-sidebar .content,
-html.landing-page .VPNavBar:not(.home) {
+html.landing-page .VPNavBar.has-sidebar .content {
   background-color: var(--paper) !important;
 }
 html.landing-page .VPNavBar .content-body {
@@ -139,7 +140,7 @@ html.landing-page .DocSearch-Button {
 .landing .sheet {
   position: relative;
   z-index: 1;
-  width: min(1240px, calc(100% - 56px));
+  width: min(var(--sheet-w), calc(100% - 56px));
   margin: 36px auto 48px;
   background: var(--paper);
   border-radius: 3px;
@@ -179,19 +180,14 @@ html.landing-page .DocSearch-Button {
   line-height: 1.06;
   letter-spacing: -0.025em;
 }
-.landing .section h2 {
+/* Both section headings (spectrum + composition band) live inside .head and
+   share one typography spec; Fraunces comes from the .landing h2 rule above. */
+.landing .head h2 {
   font-size: clamp(1.9rem, 3.4vw, 2.9rem);
   font-weight: 700;
   letter-spacing: -0.02em;
   line-height: 1.15;
-}
-.landing .band-title {
   text-wrap: balance;
-  font-family: "Fraunces", serif;
-  font-size: clamp(1.9rem, 3.4vw, 2.9rem);
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  line-height: 1.15;
 }
 
 /* ---------- SHARED PHYSICAL ELEMENTS ---------- */
@@ -376,6 +372,7 @@ html.landing-page .DocSearch-Button {
   right: 5%;
   bottom: 7%;
 }
+/* Breakpoint must equal --sheet-w (a media query can't read a custom prop). */
 @media (max-width: 1240px) {
   .landing .fc-tl {
     left: 2.5%;
@@ -605,17 +602,18 @@ html.landing-page .DocSearch-Button {
 }
 
 .landing .pulltab {
-  position: absolute;
-  left: 50%;
-  bottom: calc(-46px - var(--pull) * 58px);
-  transform: translateX(-50%);
-  background: linear-gradient(
+  --pulltab-grad: linear-gradient(
     90deg,
     #1f7a52,
     #36a273 30%,
     #36a273 70%,
     #1f7a52
   );
+  position: absolute;
+  left: 50%;
+  bottom: calc(-46px - var(--pull) * 58px);
+  transform: translateX(-50%);
+  background: var(--pulltab-grad);
   color: #fff;
   font-family: "Architects Daughter", cursive;
   font-size: 1.05rem;
@@ -636,13 +634,7 @@ html.landing-page .DocSearch-Button {
   left: 0;
   width: 100%;
   height: calc(40px + var(--pull) * 58px);
-  background: linear-gradient(
-    90deg,
-    #1f7a52,
-    #36a273 30%,
-    #36a273 70%,
-    #1f7a52
-  );
+  background: var(--pulltab-grad);
   border-radius: 2px 2px 0 0;
   z-index: -1;
 }
@@ -725,18 +717,6 @@ html.landing-page .DocSearch-Button {
 .landing .tok-num {
   color: var(--gold);
 }
-.landing .tok-com {
-  color: #a39782;
-  font-style: italic;
-}
-.landing .result-card {
-  transform: rotate(1.5deg);
-}
-.landing .result-card svg {
-  width: 100%;
-  height: auto;
-  display: block;
-}
 .landing .code-brackets {
   position: absolute;
   inset: 0;
@@ -767,9 +747,6 @@ html.landing-page .DocSearch-Button {
   display: flex;
   flex-direction: column;
   align-items: center;
-}
-.landing .band-cta .install-chip {
-  margin-top: 22px;
 }
 
 /* mobile navbar: the hamburger only holds the GitHub link — show the link
@@ -899,7 +876,6 @@ html.landing-page .VPNavBarSocialLinks {
      beneath the old bar stays fully interactive. */
   html.landing-page .VPNavBar,
   html.landing-page .VPNavBar.has-sidebar .content,
-  html.landing-page .VPNavBar:not(.home),
   html.landing-page .VPNavBar .content {
     background: transparent !important;
     background-color: transparent !important;
@@ -910,14 +886,14 @@ html.landing-page .VPNavBarSocialLinks {
   }
 
   /* LEFT card: logo + "GoFish Graphics" wordmark.
-     Anchored to the centered 1240px sheet (half-width 620px) rather than the
-     viewport edge: its right edge overlaps the sheet's left edge by ~22px so the
-     card reads as resting on top of the paper. */
+     Anchored to the centered sheet (half-width var(--sheet-w)/2) rather than the
+     viewport edge: its right edge overlaps the sheet's left edge by --card-overlap
+     so the card reads as resting on top of the paper. */
   html.landing-page .VPNavBar .VPNavBarTitle {
     position: fixed;
     top: 40px;
     left: auto;
-    right: calc(50% + 620px - 22px);
+    right: calc(50% + var(--sheet-w) / 2 - var(--card-overlap));
     width: auto;
     pointer-events: auto;
     background: var(--paper);
@@ -939,7 +915,7 @@ html.landing-page .VPNavBarSocialLinks {
     position: fixed !important;
     top: 40px !important;
     right: auto !important;
-    left: calc(50% + 620px - 22px) !important;
+    left: calc(50% + var(--sheet-w) / 2 - var(--card-overlap)) !important;
     width: auto;
     height: auto;
     pointer-events: auto;

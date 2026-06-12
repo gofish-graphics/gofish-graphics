@@ -1,6 +1,5 @@
 ---
 layout: page
-pageClass: landing
 title: GoFish — graphics that communicate
 ---
 

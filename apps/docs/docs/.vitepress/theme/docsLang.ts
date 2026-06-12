@@ -7,6 +7,12 @@ import { ref } from "vue";
 // explicit choices.
 export type DocsLang = "js" | "python";
 
+// The language a route falls back to when it is neither under /js/ nor /python/
+// and the reader has expressed no saved preference. The pre-paint inline script
+// in config.mts hardcodes this same literal (it can't import this module) — keep
+// the two in sync.
+export const DEFAULT_LANG: DocsLang = "python";
+
 const STORAGE_KEY = "gofish-docs-lang";
 const ATTR = "data-docs-lang";
 
@@ -15,7 +21,7 @@ function fromAttr(): DocsLang {
     const v = document.documentElement.getAttribute(ATTR);
     if (v === "js" || v === "python") return v;
   }
-  return "python";
+  return DEFAULT_LANG;
 }
 
 export const docsLang = ref<DocsLang>(fromAttr());
@@ -31,7 +37,7 @@ function preference(): DocsLang | null {
 export function effectiveLang(path: string): DocsLang {
   if (path.startsWith("/python/") || path === "/python") return "python";
   if (path.startsWith("/js/") || path === "/js") return "js";
-  return preference() ?? "python";
+  return preference() ?? DEFAULT_LANG;
 }
 
 function writeAttr(lang: DocsLang): void {

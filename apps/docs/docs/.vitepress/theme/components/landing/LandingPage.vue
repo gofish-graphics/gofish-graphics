@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { docsLang } from "../../docsLang";
+import CtaBlock from "./CtaBlock.vue";
 
 // Large static SVG / HTML chunks live in sibling fragment files imported as raw
 // strings and rendered with v-html, so the 400KB of inline chart art never goes
@@ -9,58 +10,8 @@ import heroCards from "./fragments/hero-cards.html?raw";
 import spectrumCards from "./fragments/spectrum-cards.html?raw";
 import demoSvg from "./fragments/demo-svg.html?raw";
 import codeStrip from "./fragments/code-strip.html?raw";
-import footLogoRaw from "./fragments/foot-logo.txt?raw";
 
 import "./landing.css";
-
-// The data-URI fragment is stored with a trailing newline; trim for a clean src.
-const footLogo = footLogoRaw.trim();
-
-// The hero CTAs follow the reader's language preference (the toggle lives in the
-// real navbar). VitePress intercepts internal <a href> for SPA navigation.
-const getStartedHref = computed(() => `/${docsLang.value}/get-started`);
-const examplesHref = computed(() => `/${docsLang.value}/examples/`);
-const apiHref = computed(() => `/${docsLang.value}/api/core/chart`);
-
-// The install chip follows the reader's language preference (the toggle lives in
-// the real navbar). The computed text is SSR-safe; clipboard/document access is
-// confined to the click handler below.
-const installCmd = computed(() =>
-  docsLang.value === "python"
-    ? "pip install gofish-graphics"
-    : "npm install gofish-graphics"
-);
-const copied = ref(false);
-let copiedTimer: ReturnType<typeof setTimeout> | undefined;
-
-function copyInstall(): void {
-  const markCopied = () => {
-    copied.value = true;
-    clearTimeout(copiedTimer);
-    copiedTimer = setTimeout(() => (copied.value = false), 1500);
-  };
-  try {
-    navigator.clipboard.writeText(installCmd.value).then(markCopied, () => {
-      fallbackCopy();
-      markCopied();
-    });
-  } catch (_) {
-    fallbackCopy();
-    markCopied();
-  }
-}
-
-function fallbackCopy(): void {
-  const ta = document.createElement("textarea");
-  ta.value = installCmd.value;
-  ta.setAttribute("readonly", "");
-  ta.style.position = "absolute";
-  ta.style.left = "-9999px";
-  document.body.appendChild(ta);
-  ta.select();
-  document.execCommand("copy");
-  document.body.removeChild(ta);
-}
 
 const rootEl = ref<HTMLElement | null>(null);
 const demoEl = ref<HTMLButtonElement | null>(null);
@@ -76,20 +27,13 @@ const GFONTS_HREF =
 
 function injectFonts(): void {
   if (document.getElementById(GFONTS_ID)) return;
-  const pre1 = document.createElement("link");
-  pre1.rel = "preconnect";
-  pre1.href = "https://fonts.googleapis.com";
-  pre1.dataset.gofishLandingFont = "1";
-  const pre2 = document.createElement("link");
-  pre2.rel = "preconnect";
-  pre2.href = "https://fonts.gstatic.com";
-  pre2.crossOrigin = "";
-  pre2.dataset.gofishLandingFont = "1";
+  // The site-wide preconnects to fonts.googleapis.com / fonts.gstatic.com are
+  // already emitted by config.mts; we only need the stylesheet link here.
   const sheet = document.createElement("link");
   sheet.id = GFONTS_ID;
   sheet.rel = "stylesheet";
   sheet.href = GFONTS_HREF;
-  document.head.append(pre1, pre2, sheet);
+  document.head.append(sheet);
 }
 
 // ---- pull-apart explosion: click toggles, drag scrubs --pull, keyboard toggles.
@@ -194,33 +138,34 @@ function wireBrackets(): void {
   if (!root) return;
 
   const buildBrackets = () => {
-    const printout = root.querySelector(".printout");
+    const printout = root.querySelector(".printout") as HTMLElement | null;
     const layer = printout?.querySelector(
       ".code-brackets"
     ) as HTMLElement | null;
+    if (!printout || !layer) return;
     // Two <pre> variants (JS / Python) live in the printout; only one is
     // visible at a time (CSS toggled off html[data-docs-lang]). Measure against
     // whichever is currently shown so the brackets land on the visible code.
-    const pres = printout
-      ? (Array.from(printout.querySelectorAll("pre")) as HTMLElement[])
-      : [];
+    const pres = Array.from(printout.querySelectorAll("pre")) as HTMLElement[];
     const pre =
       pres.find((p) => getComputedStyle(p).display !== "none") ?? pres[0];
-    if (!layer || !pre) return;
+    if (!pre) return;
     layer.innerHTML = "";
-    const lh = parseFloat(getComputedStyle(pre).lineHeight) || 24.6;
-    const preTop = pre.offsetTop;
-    const blocks = [
-      { start: 3, n: 7, label: "bars" },
-      { start: 10, n: 3, label: "ribbons" },
-    ];
+    // Each highlighted block is wrapped in a `.cblk` span carrying its label.
+    // Measure the real markup so the brackets track the actual rendered line
+    // ranges (no magic line numbers / hardcoded line-height).
+    const blocks = Array.from(pre.querySelectorAll(".cblk")) as HTMLElement[];
+    // The brackets layer is inset:0 within the (positioned) .printout, so
+    // measure each block relative to .printout's box.
+    const printRect = printout.getBoundingClientRect();
     const ns = "http://www.w3.org/2000/svg";
     const jit = (v: number) => (v + (Math.random() - 0.5) * 0.9).toFixed(2);
     const bx = 11;
     const tick = 8;
     blocks.forEach((bl) => {
-      const top = preTop + bl.start * lh;
-      const h = bl.n * lh;
+      const r = bl.getBoundingClientRect();
+      const top = r.top - printRect.top;
+      const h = r.height;
       const svg = document.createElementNS(ns, "svg");
       svg.setAttribute("width", String(tick + 3));
       svg.setAttribute("height", String(h));
@@ -255,7 +200,7 @@ function wireBrackets(): void {
       layer.appendChild(svg);
       const lab = document.createElement("span");
       lab.className = "clabel";
-      lab.textContent = bl.label;
+      lab.textContent = bl.dataset.label ?? "";
       lab.style.top = top + h / 2 - 9 + "px";
       lab.style.left = "0px";
       lab.style.visibility = "hidden";
@@ -328,7 +273,6 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   document.documentElement.classList.remove("landing-page");
-  clearTimeout(copiedTimer);
   cleanups.forEach((fn) => fn());
   cleanups.length = 0;
 });
@@ -348,38 +292,8 @@ onBeforeUnmount(() => {
             an open-source visualization library for
             Python&nbsp;and&nbsp;JavaScript
           </p>
-          <div class="cta-row rise" style="animation-delay: 180ms">
-            <a class="btn btn-primary" :href="getStartedHref">Get Started</a>
-            <a class="btn btn-secondary" :href="examplesHref">Examples</a>
-            <a class="btn btn-secondary" :href="apiHref">API Reference</a>
-          </div>
-          <div class="rise" style="animation-delay: 270ms">
-            <button
-              type="button"
-              class="install-chip"
-              aria-label="Copy install command"
-              @click="copyInstall"
-            >
-              <span class="install-cmd">{{ installCmd }}</span>
-              <span class="install-glyph" aria-hidden="true">
-                <span v-if="copied" class="install-copied">copied!</span>
-                <svg
-                  v-else
-                  class="install-copy-icon"
-                  width="14"
-                  height="14"
-                  viewBox="0 0 14 14"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="1.3"
-                >
-                  <rect x="3.4" y="3.4" width="7.2" height="7.2" rx="1.6" />
-                  <path
-                    d="M9.8 3.4V2.4A1.4 1.4 0 0 0 8.4 1H2.4A1.4 1.4 0 0 0 1 2.4v6A1.4 1.4 0 0 0 2.4 9.8h1"
-                  />
-                </svg>
-              </span>
-            </button>
+          <div class="rise" style="animation-delay: 180ms">
+            <CtaBlock />
           </div>
         </div>
       </section>
@@ -406,7 +320,7 @@ onBeforeUnmount(() => {
             <path
               d="M6 40 Q270 32 540 38 T1066 30"
               fill="none"
-              stroke="#4a4540"
+              stroke="var(--graphite)"
               stroke-width="2.2"
               stroke-linecap="round"
               vector-effect="non-scaling-stroke"
@@ -414,7 +328,7 @@ onBeforeUnmount(() => {
             <path
               d="M1057 22 L1068 30 L1056 38"
               fill="none"
-              stroke="#4a4540"
+              stroke="var(--graphite)"
               stroke-width="2.2"
               stroke-linecap="round"
               stroke-linejoin="round"
@@ -468,37 +382,7 @@ onBeforeUnmount(() => {
 
         <!-- closing CTA: easy to get started after reading the whole page -->
         <div class="band-cta reveal">
-          <div class="cta-row">
-            <a class="btn btn-primary" :href="getStartedHref">Get Started</a>
-            <a class="btn btn-secondary" :href="examplesHref">Examples</a>
-            <a class="btn btn-secondary" :href="apiHref">API Reference</a>
-          </div>
-          <button
-            type="button"
-            class="install-chip"
-            aria-label="Copy install command"
-            @click="copyInstall"
-          >
-            <span class="install-cmd">{{ installCmd }}</span>
-            <span class="install-glyph" aria-hidden="true">
-              <span v-if="copied" class="install-copied">copied!</span>
-              <svg
-                v-else
-                class="install-copy-icon"
-                width="14"
-                height="14"
-                viewBox="0 0 14 14"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1.3"
-              >
-                <rect x="3.4" y="3.4" width="7.2" height="7.2" rx="1.6" />
-                <path
-                  d="M9.8 3.4V2.4A1.4 1.4 0 0 0 8.4 1H2.4A1.4 1.4 0 0 0 1 2.4v6A1.4 1.4 0 0 0 2.4 9.8h1"
-                />
-              </svg>
-            </span>
-          </button>
+          <CtaBlock />
         </div>
 
         <!-- made with … at MIT VIS -->
@@ -506,7 +390,7 @@ onBeforeUnmount(() => {
           <span>made with</span>
           <img
             class="foot-logo"
-            :src="footLogo"
+            src="/gofish-logo.png"
             alt="GoFish"
             width="43"
             height="34"
