@@ -87,6 +87,11 @@ export const FRONTEND_IR_JSON_SCHEMA = {
         options: { type: "object" },
         zOrder: { type: "number" },
         connect: { $ref: "#/$defs/MarkIR" },
+        name: {
+          type: "string",
+          description:
+            "Chart-level name so a sibling Layer constrain callback can reference this chart.",
+        },
         origin: { $ref: "#/$defs/Origin" },
         meta: { $ref: "#/$defs/Meta" },
       },
@@ -98,6 +103,12 @@ export const FRONTEND_IR_JSON_SCHEMA = {
         type: { const: "layer" },
         charts: { type: "array", items: { $ref: "#/$defs/ChartIR" } },
         options: { type: "object" },
+        constraints: {
+          type: "array",
+          items: { $ref: "#/$defs/ConstraintIR" },
+          description:
+            "Layer-level constraints (Layer([...]).constrain(...)), resolving refs against the child charts' names.",
+        },
         origin: { $ref: "#/$defs/Origin" },
         meta: { $ref: "#/$defs/Meta" },
       },
@@ -295,6 +306,11 @@ export const FRONTEND_IR_JSON_SCHEMA = {
           properties: {
             type: { const: "field" },
             name: { type: "string" },
+            measure: {
+              type: "string",
+              description:
+                "Optional unit annotation for the channel's underlying space (a type claim; see field(name, measure)).",
+            },
           },
         },
         {

@@ -61,8 +61,10 @@ render-time fixtures. Before layout, elaboration passes rewrite each of them int
 ordinary marks and constraints — `Layer`-wrapped `Rect`/`Text` nodes seated by
 `align`/`distribute`/`position` — so chrome flows through the same three passes
 as the data marks. The orchestrator (`gofish.tsx`) then sizes the SVG off the
-laid-out tree's **measured extent** (the legend's overhang past the content, the
-axis/title gutters past the origin); there are no fixed chrome margins. See
+laid-out tree's **measured extent on all four sides** — the legend's overhang
+past the content, the axis/title gutters past the origin, and any content a
+constraint seated beyond the canvas (a marginal histogram's bands above and to
+the right of a scatter); there are no fixed chrome margins. See
 [Axes](/internals/frontend/axes) (which also covers axis titles) and
 [Legends](/internals/frontend/legends).
 

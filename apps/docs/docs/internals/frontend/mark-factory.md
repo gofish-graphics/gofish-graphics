@@ -94,6 +94,20 @@ If your prop should be a position offset (mean rather than sum), see the
 own; `createMark` could grow a `"pos"` channel the same way if a future shape
 needs one.
 
+`inferSize` and `inferPos` are two instantiations of one numeric-inference
+factory, `inferNumeric(agg)` — they differ only in the aggregation (`sumBy`
+vs `meanBy`). Both take an optional third argument, a resolved `Measure`: a
+string/`field()` accessor's produced value is tagged with its unit-of-measure
+so the underlying-space layer can unify scales per measure (see
+[Underlying Space](/internals/core/underlying-space)). When the caller doesn't
+pass one (e.g. `createMark`'s size channel), the inferer resolves it locally
+via `resolveMeasure(data, accessor)` — explicit `field(name, measure)`
+annotation, else transform provenance riding the data array (`bin()` tags its
+output), else the field name as a weak default; a contradictory
+annotation-vs-provenance pair throws at the channel. `createOperator` hoists
+`resolveMeasure` to once per channel and passes the result down, since the
+accessor and provenance are loop-invariant across split entries.
+
 A prop that does not appear in the annotations map (e.g. `Rect.cornerRadius`)
 is passed through to `shapeFn` exactly as the user wrote it.
 
@@ -166,9 +180,10 @@ channel — say `rotation: number` — passes through verbatim.
 Today's channels are `"size"` and `"color"`. To add (say) `"angle"`:
 
 1. Add `"angle"` to the `ChannelType` union in `channels.ts`.
-2. Write `inferAngle(accessor, data)` next to `inferSize` — same shape, just
-   the aggregation rule that makes sense for angles (probably a literal-or-mean
-   like `inferPos`).
+2. If a numeric aggregation fits, instantiate the existing factory —
+   `export const inferAngle = inferNumeric(meanBy)` (or whatever aggregation
+   makes sense) — and measure tagging comes along for free. Otherwise write
+   `inferAngle(accessor, data, measure?)` next to it with the same signature.
 3. Extend `DeriveMarkProps`'s conditional with the input type for `"angle"`.
 4. Extend the `if (channelType === "size") ... else if (channelType === "color")`
    chain in `withGoFish.ts` to handle it.

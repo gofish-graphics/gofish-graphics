@@ -14,8 +14,13 @@ import {
   isPOSITION,
   isSIZE,
   isUNDEFINED,
+  mergeMeasures,
+  mergeAllMeasures,
+  forgetAllMeasures,
+  spaceMeasure,
   UnderlyingSpace,
 } from "../underlyingSpace";
+import type { Measure } from "../data";
 import type { Size } from "../dims";
 import * as Interval from "../../util/interval";
 import * as Monotonic from "../../util/monotonic";
@@ -61,29 +66,40 @@ export function unionChildSpaces(
   // Preserve SIZE composition for overlay operators (layer, porterDuff):
   // when every child is SIZE on this axis, emit SIZE(Monotonic.max(...))
   // so the parent can keep solving scale factors via Monotonic.inverse.
+  // SIZE∘SIZE composition is legitimate across different fields, so FORGET
+  // the measure on conflict rather than throwing.
   const axisSpaces = children.map((c) => c[axis]);
   const sized = axisSpaces.filter((s) => !isUNDEFINED(s));
   if (sized.length > 0 && sized.every(isSIZE)) {
-    return SIZE(Monotonic.max(...sized.map((s) => s.domain)));
+    const measure = forgetAllMeasures(sized.map((s) => s.measure));
+    return SIZE(Monotonic.max(...sized.map((s) => s.domain)), measure);
   }
 
+  // Mixed/POSITION interval collection. This is where a marginal histogram's
+  // count axis (a SIZE folded into [0, run(1)]) would silently union with a
+  // scatter's millimeter POSITION — so unify the measures as TYPES and THROW
+  // on a real conflict.
   const intervals: ReturnType<typeof Interval.interval>[] = [];
   let hasPosition = false;
+  let measure: Measure | undefined;
   for (const child of children) {
     const space = child[axis];
     if (isPOSITION(space) && space.domain) {
       hasPosition = true;
       intervals.push(space.domain);
+      measure = mergeMeasures(measure, space.measure, "overlay union");
     } else if (isDIFFERENCE(space)) {
       intervals.push(Interval.interval(0, space.width));
+      measure = mergeMeasures(measure, space.measure, "overlay union");
     } else if (isSIZE(space)) {
       intervals.push(Interval.interval(0, space.domain.run(1)));
+      measure = mergeMeasures(measure, space.measure, "overlay union");
     }
   }
   if (intervals.length === 0) return UNDEFINED;
   const union = Interval.unionAll(...intervals);
-  if (!hasPosition) return DIFFERENCE(Interval.width(union));
-  return POSITION(union);
+  if (!hasPosition) return DIFFERENCE(Interval.width(union), measure);
+  return POSITION(union, measure);
 }
 
 /**
@@ -99,6 +115,11 @@ export function resolveAlignmentSpace(
     const sizeValues = spaces.map((s) =>
       ((s as any).domain as { run: (x: number) => number }).run(1)
     );
+    // LOAD-BEARING: the SIZE → POSITION conversion must carry the SIZE
+    // children's measure forward — this is how a histogram's count axis (all
+    // SIZE) gets a "count" tag that a later overlay union can compare against.
+    // Forget-merge: shared when they agree, undefined when they differ.
+    const measure = forgetAllMeasures(spaces.map((s) => spaceMeasure(s)));
     if (
       alignment === "start" ||
       alignment === "end" ||
@@ -106,22 +127,32 @@ export function resolveAlignmentSpace(
     ) {
       const intervals = sizeValues.map((v) => Interval.interval(0, v));
       return {
-        space: POSITION(Interval.unionAll(...intervals)),
+        space: POSITION(Interval.unionAll(...intervals), measure),
         fromSize: true,
       };
     }
     if (alignment === "middle") {
       return {
-        space: DIFFERENCE(Math.max(...sizeValues.map((v) => Math.abs(v)))),
+        space: DIFFERENCE(
+          Math.max(...sizeValues.map((v) => Math.abs(v))),
+          measure
+        ),
         fromSize: true,
       };
     }
     return { space: UNDEFINED, fromSize: true };
   }
   if (spaces.every((s) => isDIFFERENCE(s))) {
+    // Sibling difference extents being aligned should agree in units — THROW
+    // on a real conflict.
+    const measure = mergeAllMeasures(
+      spaces.map((s) => spaceMeasure(s)),
+      "alignment"
+    );
     return {
       space: DIFFERENCE(
-        Math.max(...spaces.map((s) => (s as any).width as number))
+        Math.max(...spaces.map((s) => (s as any).width as number)),
+        measure
       ),
       fromSize: false,
     };
@@ -132,10 +163,17 @@ export function resolveAlignmentSpace(
         (s) => (s as any).domain as ReturnType<typeof Interval.interval>
       )
     );
+    const measure = mergeAllMeasures(
+      spaces.map((s) => spaceMeasure(s)),
+      "alignment"
+    );
     if (alignment === "middle") {
-      return { space: DIFFERENCE(Interval.width(domain)), fromSize: false };
+      return {
+        space: DIFFERENCE(Interval.width(domain), measure),
+        fromSize: false,
+      };
     }
-    return { space: POSITION(domain), fromSize: false };
+    return { space: POSITION(domain, measure), fromSize: false };
   }
   return { space: UNDEFINED, fromSize: false };
 }

@@ -750,6 +750,7 @@ class ChartBuilder:
         self._mark: Optional[Mark] = None
         self._connect: Optional["Mark"] = None
         self._z_order = z_order
+        self._name: Optional[Union[str, "Token"]] = None
 
     def flow(self, *ops: Operator) -> "ChartBuilder":
         """
@@ -824,6 +825,24 @@ class ChartBuilder:
         new_builder._connect = mark
         return new_builder
 
+    def name(self, name_or_token: Union[str, "Token"]) -> "ChartBuilder":
+        """Tag this chart with a name so a `Layer([...]).constrain(...)` callback
+        can reference it (mirrors JS `chart.resolve().name(...)`).
+
+        Args:
+            name_or_token: A flat string name, or a `Token` from `createName(...)`.
+
+        Returns:
+            New ChartBuilder carrying the name.
+        """
+        new_builder = ChartBuilder(
+            self.data, self.options, self.operators, z_order=self._z_order
+        )
+        new_builder._mark = self._mark
+        new_builder._connect = self._connect
+        new_builder._name = name_or_token
+        return new_builder
+
     def zOrder(self, value: float) -> "ChartBuilder":
         """Set z-order for this chart when rendered inside a Layer."""
         new_builder = ChartBuilder(
@@ -831,6 +850,7 @@ class ChartBuilder:
         )
         new_builder._mark = self._mark
         new_builder._connect = self._connect
+        new_builder._name = self._name
         return new_builder
 
     def zIndex(self, value: float) -> "ChartBuilder":
@@ -1565,6 +1585,38 @@ def datum(value: Any) -> DatumValue:
     return DatumValue({"type": "datum", "datum": value})
 
 
+def field(name: str, measure: Optional[str] = None) -> dict:
+    """
+    Explicit field-accessor wrapper. Mirrors the JS `field(...)` constructor
+    in `packages/gofish-graphics/src/ast/data.ts` (the field/datum/literal
+    trichotomy). Equivalent to passing a bare field-name string, plus an
+    optional **measure annotation** — a unit-of-measure type claim for the
+    channel (see the underlying-space measure system).
+
+    Use the measure annotation when a transform has renamed fields so the
+    weak field-name default would mis-tag the channel. The canonical case is
+    Python-side `bin()`: its provenance map can't cross the RPC bridge, so
+    bin edges arrive as fields named "start"/"end" even though they are in
+    the source field's units:
+
+        scatter(
+            xMin=field("start", measure="Beak Length (mm)"),
+            xMax=field("end", measure="Beak Length (mm)"),
+        )
+
+    Emits the canonical `{type: "field", name, measure?}` wire shape; an
+    annotation that contradicts JS-side provenance is a type error.
+
+    Args:
+        name: The field name to read from each row.
+        measure: Optional unit-of-measure annotation for the channel.
+    """
+    out: dict = {"type": "field", "name": name}
+    if measure is not None:
+        out["measure"] = measure
+    return out
+
+
 # Data utilities (for use inside derive() callbacks)
 
 
@@ -2021,14 +2073,58 @@ class LayerBuilder:
     ):
         self.children = children
         self.options = options or {}
+        self._constraints: Optional[List[Any]] = None
+
+    def constrain(self, callback: Callable[..., List[Any]]) -> "LayerBuilder":
+        """Apply constraints relating the named children of this layer.
+
+        Mirrors the JS storybook spelling
+        ``layer([sc.name("a"), other.name("b")]).constrain(({a, b}) => [...])``:
+        each child must be tagged with ``.name(...)`` so the callback can
+        reference it. The callback receives one ``RefSentinel`` per named child
+        as a kwarg and returns a list of constraint specs
+        (``Constraint.align(...)`` / ``Constraint.position(...)`` / ...).
+
+        Returns:
+            A new LayerBuilder carrying the resolved constraints.
+        """
+
+        def _name_key(child: ChartBuilder) -> Optional[str]:
+            n = getattr(child, "_name", None)
+            if n is None:
+                return None
+            return n.tag if isinstance(n, Token) else n
+
+        refs: Dict[str, RefSentinel] = {}
+        for child in self.children:
+            key = _name_key(child)
+            if key is None:
+                raise ValueError(
+                    "every child of Layer(...) used with .constrain() must be "
+                    "named via .name(...) so the callback can reference it"
+                )
+            if key in refs:
+                raise ValueError(
+                    f".constrain() children must have unique names; saw "
+                    f"duplicate: {key!r}"
+                )
+            refs[key] = RefSentinel(key)
+
+        constraints = callback(**refs)
+        new_layer = LayerBuilder(self.children, self.options)
+        new_layer._constraints = list(constraints)
+        return new_layer
 
     def to_ir(self) -> dict:
         """Convert the layer specification to JSON IR."""
-        return {
+        result: dict = {
             "type": "layer",
             "charts": [child.to_ir() for child in self.children],
             "options": self.options,
         }
+        if self._constraints is not None:
+            result["constraints"] = [c.to_dict() for c in self._constraints]
+        return result
 
     def render(
         self,

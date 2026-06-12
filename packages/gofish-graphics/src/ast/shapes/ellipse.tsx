@@ -97,11 +97,11 @@ export const Ellipse = ({
           if (isValue(d.min)) {
             // position; treat it like a position space w/ a single element
             const min = getValue(d.min) ?? 0;
-            return POSITION(interval(min, min));
+            return POSITION(interval(min, min), getMeasure(d.min));
           }
           if (isValue(d.size)) {
             // data-driven size only — literals are handled at layout time.
-            return SIZE(axisDomain);
+            return SIZE(axisDomain, getMeasure(d.size));
           }
           return UNDEFINED;
         };

@@ -3,6 +3,7 @@ import { computeAesthetic } from "../../util";
 import { interval } from "../../util/interval";
 import { GoFishNode } from "../_node";
 import {
+  getMeasure,
   getValue,
   inferEmbedded,
   isAesthetic,
@@ -210,15 +211,24 @@ export const Text = ({
           if (isValue(pos)) {
             const min = getValue(pos) ?? 0;
             if (isValue(dims[axis].size)) {
-              return DIFFERENCE(getValue(dims[axis].size)!);
+              return DIFFERENCE(
+                getValue(dims[axis].size)!,
+                getMeasure(dims[axis].size)
+              );
             }
-            return POSITION(interval(min, min));
+            return POSITION(interval(min, min), getMeasure(pos));
           }
           if (isAesthetic(pos) && isValue(dims[axis].size)) {
-            return DIFFERENCE(getValue(dims[axis].size)!);
+            return DIFFERENCE(
+              getValue(dims[axis].size)!,
+              getMeasure(dims[axis].size)
+            );
           }
           if (!isValue(pos) && isValue(dims[axis].size)) {
-            return SIZE(Monotonic.linear(getValue(dims[axis].size)!, 0));
+            return SIZE(
+              Monotonic.linear(getValue(dims[axis].size)!, 0),
+              getMeasure(dims[axis].size)
+            );
           }
           // No data position, no data size — text's intrinsic extent is
           // handled at layout time, not via the underlying-space tree.

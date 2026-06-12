@@ -19,6 +19,7 @@ import {
   isORDINAL,
   isPOSITION,
   isUNDEFINED,
+  forgetAllMeasures,
 } from "../underlyingSpace";
 import { createNodeOperator } from "../withGoFish";
 import { computeTransformedBoundingBox } from "./coordUtils";
@@ -142,13 +143,16 @@ export const coord = createNodeOperator(
             xChildrenPositionSpaces.length > 0 &&
             xChildrenOrdinalSpaces.length === 0
           ) {
-            const domain = IntervalLib.unionAll(
-              ...xChildrenPositionSpaces
-                .map((child) => child[0])
-                .filter(isPOSITION)
-                .map((space) => space.domain)
-            );
-            xSpace = POSITION(domain, coordTransform);
+            const xPos = xChildrenPositionSpaces
+              .map((child) => child[0])
+              .filter(isPOSITION);
+            const domain = IntervalLib.unionAll(...xPos.map((s) => s.domain));
+            // A coord transform maps these data positions into its own fixed
+            // coordinate space (e.g. angle/radius). Cross-unit unions are the
+            // transform's business, not the marginal-style corruption the guard
+            // targets, so forget on conflict rather than throwing.
+            const xMeasure = forgetAllMeasures(xPos.map((s) => s.measure));
+            xSpace = POSITION(domain, xMeasure, coordTransform);
           } else if (xChildrenOrdinalSpaces.length > 0) {
             // Collect and merge domains from all child ordinal spaces
             const allKeys = new Set<string>();
@@ -173,13 +177,14 @@ export const coord = createNodeOperator(
             yChildrenPositionSpaces.length > 0 &&
             yChildrenOrdinalSpaces.length === 0
           ) {
-            const domain = IntervalLib.unionAll(
-              ...yChildrenPositionSpaces
-                .map((child) => child[1])
-                .filter(isPOSITION)
-                .map((space) => space.domain)
-            );
-            ySpace = POSITION(domain, coordTransform);
+            const yPos = yChildrenPositionSpaces
+              .map((child) => child[1])
+              .filter(isPOSITION);
+            const domain = IntervalLib.unionAll(...yPos.map((s) => s.domain));
+            // See the x branch: coord maps into its own coordinate space, so
+            // forget on cross-unit conflict rather than throwing.
+            const yMeasure = forgetAllMeasures(yPos.map((s) => s.measure));
+            ySpace = POSITION(domain, yMeasure, coordTransform);
           } else if (yChildrenOrdinalSpaces.length > 0) {
             // Collect and merge domains from all child ordinal spaces
             const allKeys = new Set<string>();

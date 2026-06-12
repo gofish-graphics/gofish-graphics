@@ -134,6 +134,7 @@ function walkChart(
   optionalField(node, "options", path, ctx, expectObject);
   optionalField(node, "zOrder", path, ctx, expectNumber);
   optionalField(node, "connect", path, ctx, walkMark);
+  optionalField(node, "name", path, ctx, expectNameOrToken);
   if (ctx.strict) {
     rejectUnknown(
       node,
@@ -145,6 +146,7 @@ function walkChart(
         "options",
         "zOrder",
         "connect",
+        "name",
         "origin",
         "meta",
       ],
@@ -164,10 +166,13 @@ function walkLayer(
     walkArray(v, p, ctx, walkRootChart)
   );
   optionalField(node, "options", path, ctx, expectObject);
+  optionalField(node, "constraints", path, ctx, (v, p) =>
+    walkArray(v, p, ctx, walkConstraint)
+  );
   if (ctx.strict) {
     rejectUnknown(
       node,
-      ["type", "charts", "options", "origin", "meta"],
+      ["type", "charts", "options", "constraints", "origin", "meta"],
       path,
       ctx
     );
@@ -412,6 +417,13 @@ function walkChannelValue(value: unknown, path: string, ctx: Context): void {
       ctx.errors.push({
         path: `${path}.name`,
         message: 'field channel must have a string "name"',
+      });
+    }
+    // Optional unit annotation (field(name, measure)); a string when present.
+    if (obj.measure !== undefined && typeof obj.measure !== "string") {
+      ctx.errors.push({
+        path: `${path}.measure`,
+        message: 'field "measure" must be a string when present',
       });
     }
     return;

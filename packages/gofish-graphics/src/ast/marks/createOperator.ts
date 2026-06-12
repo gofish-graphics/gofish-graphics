@@ -38,7 +38,8 @@ import {
   resolveMarkResult,
   stashLayerName,
 } from "./chartBuilder";
-import { inferSize, inferPos, inferColor } from "../channels";
+import { inferSize, inferPos, inferColor, resolveMeasure } from "../channels";
+import type { Measure } from "../data";
 import type { MaybeValue, Value } from "../data";
 import type { LabelAccessor, LabelOptions } from "../labels/labelPlacement";
 import type { NameableMark } from "../withGoFish";
@@ -332,10 +333,21 @@ export type DualModeOperator<Datum, Options> = {
   ): NameableMark<Datum>;
 };
 
-/** Run a single channel inference over a data slice. */
-function runChannel(type: ChannelType, val: any, data: any[]): any {
-  if (type === "size") return inferSize(val, data);
-  if (type === "pos") return inferPos(val, data);
+/**
+ * Run a single channel inference over a data slice. `measure` is the channel's
+ * resolved {@link Measure}, computed once per channel from the operator's whole
+ * input array (which carries the measure-provenance symbol even when `data` is a
+ * per-entry slice that does not) and passed down so `inferSize`/`inferPos` don't
+ * recompute it per split entry.
+ */
+function runChannel(
+  type: ChannelType,
+  val: any,
+  data: any[],
+  measure: Measure | undefined
+): any {
+  if (type === "size") return inferSize(val, data, measure);
+  if (type === "pos") return inferPos(val, data, measure);
   if (type === "color") return inferColor(val, data);
   return val;
 }
@@ -371,12 +383,23 @@ function applyChannels<Options extends Record<string, any>>(
     if (Array.isArray(val)) continue;
     const type: ChannelType = typeof spec === "string" ? spec : spec.type;
     const perEntry = typeof spec === "object" && spec.entry === true;
+    // The measure is loop-invariant across split entries (it depends only on
+    // the accessor and `wholeData`'s provenance, not on which items a given
+    // entry holds), so resolve it once per channel. Only size/pos consume it;
+    // computing it for color/raw would add a spurious conflict-throw site.
+    const measure =
+      type === "size" || type === "pos"
+        ? resolveMeasure(wholeData, val)
+        : undefined;
     if (perEntry && entries !== undefined) {
+      // Value aggregation uses each entry's items; the measure comes from
+      // `wholeData` (the binned array still carries the symbol — each per-entry
+      // slice does not).
       out[key] = [...entries.values()].map((items) =>
-        runChannel(type, val, items)
+        runChannel(type, val, items, measure)
       );
     } else {
-      out[key] = runChannel(type, val, wholeData);
+      out[key] = runChannel(type, val, wholeData, measure);
     }
   }
   return out as Options;

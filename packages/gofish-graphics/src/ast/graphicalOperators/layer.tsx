@@ -1,3 +1,7 @@
+// <gofish-wiki> AUTO-GENERATED — see covers: in the essay; run `pnpm --filter docs sync-backlinks`
+// @wiki Underlying Space — /internals/core/underlying-space
+// </gofish-wiki>
+
 import * as Monotonic from "../../util/monotonic";
 import { GoFishNode } from "../_node";
 import { isToken } from "../createName";
@@ -5,9 +9,11 @@ import { Size, elaborateDims, FancyDims } from "../dims";
 import {
   POSITION,
   SIZE,
+  UNDEFINED,
   UnderlyingSpace,
   isPOSITION,
   isSIZE,
+  spaceMeasure,
 } from "../underlyingSpace";
 import * as Interval from "../../util/interval";
 import { computeSize, foldFinite } from "../../util";
@@ -219,6 +225,23 @@ export const layer = createNodeOperatorSequential(
 
     const dims = elaborateDims(options);
 
+    // SELF-SCALING REGIONS. When this layer is given an explicit pixel size on
+    // a dim, it becomes a self-contained scaling region on that dim: its scales
+    // resolve against its own box at layout time, exactly like the root resolves
+    // against the canvas ("a chart embeds the way it renders"). So in
+    // `resolveUnderlyingSpace` the real POSITION/SIZE space is stashed here and
+    // UNDEFINED is reported upward — a parent layer's union then ignores this
+    // axis rather than polluting a shared domain with foreign units (e.g. a
+    // marginal histogram's count axis vs. the center's data units). `layout`
+    // reads the stash back to build the LOCAL scale. The reported space is
+    // UNDEFINED for now; issue #508's proposed CONSTANT kind is the eventual
+    // home for "known fixed pixel extent". Indexed [x, y]; last write wins if
+    // resolveUnderlyingSpace runs more than once.
+    const selfScaledSpaces: [
+      UnderlyingSpace | undefined,
+      UnderlyingSpace | undefined,
+    ] = [undefined, undefined];
+
     return new GoFishNode(
       {
         type: options.box === true ? "box" : "layer",
@@ -239,7 +262,7 @@ export const layer = createNodeOperatorSequential(
             scale: number
           ): UnderlyingSpace =>
             isSIZE(space) && scale !== 1
-              ? SIZE(Monotonic.smul(scale, space.domain))
+              ? SIZE(Monotonic.smul(scale, space.domain), space.measure)
               : space;
 
           // `position` constraints contribute a POSITION-domain fragment per
@@ -259,12 +282,30 @@ export const layer = createNodeOperatorSequential(
               isPOSITION(base) && base.domain
                 ? Interval.unionAll(base.domain, iv)
                 : iv;
-            return POSITION(merged);
+            // `position`-constraint datum domains (iv) are untagged — measure
+            // flows from the children's POSITION (if any), permissively.
+            return POSITION(merged, spaceMeasure(base));
           };
-          return [
+          const resolved: [UnderlyingSpace, UnderlyingSpace] = [
             resolveAxis(0, scaleX, posDomains.x),
             resolveAxis(1, scaleY, posDomains.y),
           ];
+
+          // Stash the absorbed POSITION/SIZE space and report UNDEFINED upward
+          // for any dim with an explicit pixel size — self-scaling region; see
+          // selfScaledSpaces above. (last write wins — may run more than once.)
+          selfScaledSpaces[0] = undefined;
+          selfScaledSpaces[1] = undefined;
+          for (const axis of [0, 1] as const) {
+            if (dims[axis].size === undefined) continue;
+            const sp = resolved[axis];
+            // DIFFERENCE/ORDINAL unions are left untouched (no stash).
+            if ((isPOSITION(sp) && sp.domain) || isSIZE(sp)) {
+              selfScaledSpaces[axis] = sp;
+              resolved[axis] = UNDEFINED;
+            }
+          }
+          return resolved;
         },
         layout: (shared, size, scaleFactors, children, posScales, node) => {
           // Compute size using dims (w and h) before passing to children
@@ -272,6 +313,40 @@ export const layer = createNodeOperatorSequential(
             computeSize(dims[0].size, scaleFactors?.[0]!, size[0]) ?? size[0],
             computeSize(dims[1].size, scaleFactors?.[1]!, size[1]) ?? size[1],
           ];
+
+          // Build the LOCAL scale for each self-scaled (stashed) dim against our
+          // own pixel box — see selfScaledSpaces above. The recipe (cf. the
+          // gofish.tsx root): POSITION → a posScale mapping the stashed domain
+          // onto [0, size]; SIZE → a scale factor inverting the Monotonic against
+          // size. A POSITION stash touches only `basePosScales`; a SIZE stash
+          // only `childScaleFactors`. When the size can't be resolved (NaN) we
+          // leave the inherited value, degrading to the inherited path rather
+          // than emitting NaN scales.
+          //
+          // `basePosScales` is reused below as the floor for `effectivePosScales`
+          // and the per-child forwarding (`childScalesFor`), so the override
+          // applies regardless of `ownsPositionAxis`. `childScaleFactors` is a
+          // fresh array — never mutate the parent's `scaleFactors` (unlike
+          // spread, which mutates intentionally for sibling sharing).
+          const basePosScales: ConstraintPosScales = [
+            posScales[0],
+            posScales[1],
+          ];
+          const childScaleFactors: Size<number | undefined> = [
+            scaleFactors?.[0],
+            scaleFactors?.[1],
+          ];
+          for (const dim of [0, 1] as const) {
+            const stashed = selfScaledSpaces[dim];
+            if (stashed === undefined || !Number.isFinite(size[dim])) continue;
+            if (isPOSITION(stashed)) {
+              basePosScales[dim] =
+                posScaleFromSpace(stashed, size[dim]) ?? posScales[dim];
+            } else if (isSIZE(stashed)) {
+              childScaleFactors[dim] =
+                stashed.domain.inverse(size[dim]) ?? scaleFactors?.[dim];
+            }
+          }
 
           // `position` constraints with a datum coordinate contribute a data
           // domain on their axis (see collectPositionDomains); the union is what
@@ -291,12 +366,14 @@ export const layer = createNodeOperatorSequential(
           // the layer actually owns such an axis — it is used solely by
           // applyConstraints below, not passed to children.
           const space = node._underlyingSpace;
+          // `basePosScales` (the inherited scales with any self-scaled dim
+          // overridden — see selfScaledSpaces above) is the floor here.
           const effectivePosScales: ConstraintPosScales = ownsPositionAxis
             ? [
-                posScales[0] ?? posScaleFromSpace(space?.[0], size[0]),
-                posScales[1] ?? posScaleFromSpace(space?.[1], size[1]),
+                basePosScales[0] ?? posScaleFromSpace(space?.[0], size[0]),
+                basePosScales[1] ?? posScaleFromSpace(space?.[1], size[1]),
               ]
-            : [posScales[0], posScales[1]];
+            : [basePosScales[0], basePosScales[1]];
 
           const childPlaceables = [];
 
@@ -341,7 +418,9 @@ export const layer = createNodeOperatorSequential(
           ): ConstraintPosScales => {
             const sp = (children[i] as GoFishNode)._underlyingSpace;
             const pick = (dim: 0 | 1) => {
-              if (!ownsAxis[dim]) return posScales[dim]; // inherited, unchanged
+              // Non-owned axis: forward the inherited scale, or the local one
+              // for a self-scaled (stashed) dim (basePosScales folds that in).
+              if (!ownsAxis[dim]) return basePosScales[dim];
               if (targetDims?.has(dim)) return undefined; // placed by the constraint
               return sp && isPOSITION(sp[dim])
                 ? effectivePosScales[dim]
@@ -359,7 +438,7 @@ export const layer = createNodeOperatorSequential(
                 : undefined;
             const childPlaceable = child.layout(
               size,
-              scaleFactors,
+              childScaleFactors,
               childScalesFor(i, targetDims)
             );
             if (!childName || !constrainedNames.has(childName)) {

@@ -166,6 +166,7 @@ class DeriveHandler(BaseHTTPRequestHandler):
                 DeriveOperator,
                 LayerBuilder,
                 Mark,
+                Token,
                 _RefProxy,
                 _collect_mark_lambdas,
                 _MarkFn,
@@ -234,6 +235,12 @@ class DeriveHandler(BaseHTTPRequestHandler):
 
                     _registry[mark_fn.lambda_id] = _mark_fn_wrapped
 
+                # A chart layered with `.name(...)` carries its name so a
+                # `Layer([...]).constrain(...)` callback can reference it.
+                child_name = getattr(child, "_name", None)
+                if isinstance(child_name, Token):
+                    child_name = child_name.to_dict()
+
                 return (
                     {
                         "type": "chart",
@@ -243,6 +250,7 @@ class DeriveHandler(BaseHTTPRequestHandler):
                         "data": child_data,
                         "zOrder": child_ir.get("zOrder"),
                         "connect": child_ir.get("connect"),
+                        "name": child_name,
                     },
                     child_derive_ids,
                 )
@@ -271,12 +279,19 @@ class DeriveHandler(BaseHTTPRequestHandler):
                     child_payloads.append(payload)
                     derive_ids.extend(child_derive_ids)
 
-                self._json_response(200, {
+                layer_payload = {
                     "_kind": "layer",
                     "charts": child_payloads,
                     "options": {**(builder.options or {}), **options},
                     "deriveIds": derive_ids,
-                })
+                }
+                # `.constrain(...)` constraints relating the named children.
+                layer_constraints = getattr(builder, "_constraints", None)
+                if layer_constraints is not None:
+                    layer_payload["constraints"] = [
+                        c.to_dict() for c in layer_constraints
+                    ]
+                self._json_response(200, layer_payload)
                 return
 
             chart_payload, derive_ids = serialize_chart(builder)

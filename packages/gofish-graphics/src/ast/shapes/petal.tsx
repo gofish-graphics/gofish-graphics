@@ -85,11 +85,11 @@ export const Petal = ({
           const d = dims[axis];
           if (isValue(d.min)) {
             const min = getValue(d.min) ?? 0;
-            return POSITION(interval(min, min));
+            return POSITION(interval(min, min), getMeasure(d.min));
           }
           if (isValue(d.size)) {
             // data-driven size only — literals handled at layout time.
-            return SIZE(sizeDomain(axis));
+            return SIZE(sizeDomain(axis), getMeasure(d.size));
           }
           return UNDEFINED;
         };

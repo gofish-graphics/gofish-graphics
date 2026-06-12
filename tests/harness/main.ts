@@ -98,6 +98,9 @@ interface ChartHarnessSpec {
   options: Record<string, any>;
   zOrder?: number | null;
   connect?: MarkSpec | null;
+  // Name tagged via `Layer([chart.name(...), ...])` so a layer-level
+  // `.constrain(...)` callback can reference the resolved child node.
+  name?: string | TokenSentinel | null;
 }
 
 interface SingleChartHarnessSpec extends ChartHarnessSpec {
@@ -109,6 +112,8 @@ interface LayerHarnessSpec {
   type: "layer";
   charts: ChartHarnessSpec[];
   options: Record<string, any>;
+  // Constraints relating the named children of a `Layer([...]).constrain(...)`.
+  constraints?: ConstraintSpec[];
   deriveServerUrl?: string;
 }
 
@@ -131,7 +136,7 @@ interface OperatorSpec {
 }
 
 interface ConstraintSpec {
-  type: "align" | "distribute" | "zAbove" | "zBelow";
+  type: "align" | "distribute" | "position" | "zAbove" | "zBelow";
   // Positioning constraints carry `options`; z-order constraints don't.
   options?: Record<string, any>;
   refs: string[];
@@ -721,17 +726,54 @@ function renderChart(spec: HarnessSpec) {
           buildChartFromSpec(c, spec.deriveServerUrl, resolveToken)
         );
 
-        const layerNode =
-          Object.keys(layerOpts).length > 0
-            ? Layer(layerOpts as any, childCharts)
-            : Layer(childCharts);
+        if (spec.constraints && spec.constraints.length > 0) {
+          // Constrained layer-of-charts. Mirror the JS storybook spelling:
+          // resolve each chart to a node, `.name(...)` it, then wrap the
+          // resolved nodes in the combinator-form `layer([...]).constrain(...)`.
+          const constraints = spec.constraints;
+          const resolvedNodes: any[] = [];
+          for (let i = 0; i < childCharts.length; i++) {
+            const node: any = await (childCharts[i] as any).resolve();
+            const nm = resolveNameField(spec.charts[i].name, resolveToken);
+            if (nm != null) node.name(nm);
+            resolvedNodes.push(node);
+          }
+          let layerMark: any =
+            Object.keys(layerOpts).length > 0
+              ? layer(layerOpts as any, resolvedNodes)
+              : layer(resolvedNodes);
+          layerMark = layerMark.constrain((refs: Record<string, any>) =>
+            constraints.map((c) => {
+              if (c.type === "zAbove" || c.type === "zBelow") {
+                return (Constraint as any)[c.type](
+                  ...c.refs.map((name) => refs[name])
+                );
+              }
+              return (Constraint as any)[c.type](
+                c.options,
+                c.refs.map((name) => refs[name])
+              );
+            })
+          );
+          await layerMark.render(container, {
+            w,
+            h,
+            axes: axes ?? false,
+            debug: debug ?? false,
+          } as any);
+        } else {
+          const layerNode =
+            Object.keys(layerOpts).length > 0
+              ? Layer(layerOpts as any, childCharts)
+              : Layer(childCharts);
 
-        await layerNode.render(container, {
-          w,
-          h,
-          axes: axes ?? false,
-          debug: debug ?? false,
-        } as any);
+          await layerNode.render(container, {
+            w,
+            h,
+            axes: axes ?? false,
+            debug: debug ?? false,
+          } as any);
+        }
       } else {
         // Single-chart path. Only w/h/debug are render options; rest are chart-level.
         const allOpts = spec.options || {};
