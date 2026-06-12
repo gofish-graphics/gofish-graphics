@@ -6,7 +6,7 @@ constraint — most commonly inside a [nested-tier](/internals/design/principles
 layout where the inner tier places the shapes and the outer tier draws the
 connections.
 
-::: starfish
+::: gofish
 
 ```js
 gf.Layer([

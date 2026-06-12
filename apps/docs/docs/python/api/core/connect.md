@@ -5,7 +5,7 @@ sugar for the two-layer `selectAll` recipe: it positions the chart's marks, then
 threads a [`line`](/python/api/marks/line) or [`area`](/python/api/marks/area)
 through exactly those nodes, painted underneath.
 
-::: starfish example:connected-scatter-plot hidden
+::: gofish example:connected-scatter-plot hidden
 :::
 
 ```python

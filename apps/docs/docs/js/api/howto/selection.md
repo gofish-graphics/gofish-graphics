@@ -35,7 +35,7 @@ the second chart to overlay the first.
 [`line`](/js/api/marks/line) and [`area`](/js/api/marks/area) take an array of
 refs directly and read placed geometry off them, so feed them `selectAll`:
 
-::: starfish
+::: gofish
 
 ```js
 gf.Layer([
@@ -62,7 +62,7 @@ The `line` mark connects all selected points in order.
 Sometimes you want a connecting line without visible points. Use `blank()` to
 create invisible anchor points:
 
-::: starfish
+::: gofish
 
 ```js
 const locations = Object.entries(lakeLocations).map(([lake, { x, y }]) => ({
@@ -92,7 +92,7 @@ Because the selected stream is now refs (not raw records), you re-encode by the
 **datum path**: `group({ by: "datum.species" })` rather than
 `group({ by: "species" })`.
 
-::: starfish
+::: gofish
 
 ```js
 gf.Layer([

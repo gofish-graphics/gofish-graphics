@@ -1,3 +1,3 @@
 # Nested Waffle Chart
 
-::: starfish example:nested-waffle-chart
+::: gofish example:nested-waffle-chart

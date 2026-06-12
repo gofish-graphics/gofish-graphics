@@ -5,7 +5,7 @@ Fills the region between a baseline and a set of data points. Like
 chart, selected with [`selectAll()`](/python/api/core/chart#cross-chart-references)
 — an array of refs whose placed geometry the area reads.
 
-::: starfish example:area-chart hidden
+::: gofish example:area-chart hidden
 :::
 
 ```python

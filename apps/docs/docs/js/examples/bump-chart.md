@@ -1,3 +1,3 @@
 # Bump Chart
 
-::: starfish example:bump-chart
+::: gofish example:bump-chart

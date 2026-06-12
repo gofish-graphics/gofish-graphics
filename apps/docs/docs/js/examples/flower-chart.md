@@ -1,3 +1,3 @@
 # Flower Chart
 
-::: starfish example:flower-chart
+::: gofish example:flower-chart

@@ -1,10 +1,10 @@
 # Layered Area Chart
 
-<!-- ::: starfish example:layered-area-chart -->
+<!-- ::: gofish example:layered-area-chart -->
 
 **Live Editor**
 
-::: starfish-live {template=vanilla-ts rtl lightTheme=aquaBlue darkTheme=atomDark previewHeight=400 coderHeight=512}
+::: gofish-live {template=vanilla-ts rtl lightTheme=aquaBlue darkTheme=atomDark previewHeight=400 coderHeight=512}
 
 ```ts index.ts
 import {

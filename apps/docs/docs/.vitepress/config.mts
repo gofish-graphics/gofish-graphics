@@ -1,7 +1,7 @@
 import { defineConfig } from "vitepress";
 import { transformerTwoslash } from "@shikijs/vitepress-twoslash";
 import matter from "gray-matter";
-import starfish from "./markdown-it-starfish";
+import gofish from "./markdown-it-gofish";
 import container from "markdown-it-container";
 import { renderSandbox } from "vitepress-plugin-sandpack";
 import vueJsx from "@vitejs/plugin-vue-jsx";
@@ -140,8 +140,8 @@ function collectInternalsSidebar() {
 export default defineConfig({
   vite: { plugins: [vueJsx()] },
   appearance: false,
-  // title: "Starfish Graphics",
-  // description: "Documentation for Starfish",
+  // title: "GoFish Graphics",
+  // description: "Documentation for GoFish",
   title: "GoFish Graphics",
   description: "Documentation for GoFish",
   head: [
@@ -178,10 +178,10 @@ export default defineConfig({
     // Real type-on-hover in `ts twoslash` blocks — type errors fail the build.
     codeTransformers: [transformerTwoslash()],
     config: (md) => {
-      starfish(md);
-      md.use(container, "starfish-live", {
+      gofish(md);
+      md.use(container, "gofish-live", {
         render(tokens, idx) {
-          return renderSandbox(tokens, idx, "starfish-live");
+          return renderSandbox(tokens, idx, "gofish-live");
         },
       });
     },

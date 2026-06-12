@@ -1,3 +1,3 @@
 # Icicle Chart
 
-::: starfish example:icicle-chart
+::: gofish example:icicle-chart

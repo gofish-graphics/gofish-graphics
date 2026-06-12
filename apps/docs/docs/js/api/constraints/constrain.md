@@ -17,7 +17,7 @@ Layer([
   .render(container, { w: 300, h: 200 });
 ```
 
-::: starfish
+::: gofish
 
 ```js
 gf.Layer([
@@ -66,7 +66,7 @@ This is the per-child generalization of the single-anchor form. It expresses
 "edges share" relations directly, instead of through a `distribute` with a
 negative `spacing`.
 
-::: starfish
+::: gofish
 
 ```js
 gf.Layer([
@@ -100,7 +100,7 @@ Constraint.distribute({ dir, spacing, mode, order }, [ref1, ref2, ...])
 
 The first already-placed child acts as an anchor. Unplaced children after it are distributed forward (increasing position); unplaced children before it are distributed backward so they stack flush against the anchor's leading edge.
 
-::: starfish
+::: gofish
 
 ```js
 gf.Layer([

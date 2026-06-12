@@ -3,7 +3,7 @@
 Draws a rectangle for each data item. The most common mark — bars, stacked
 bars, mosaic tiles, and waffle cells are all rectangles.
 
-::: starfish example:bar-chart hidden
+::: gofish example:bar-chart hidden
 :::
 
 ```python

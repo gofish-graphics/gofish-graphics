@@ -5,7 +5,7 @@ it is most often paired with [`selectAll()`](/python/api/core/chart#cross-chart-
 to trace a layout produced by another chart. `selectAll` hands `line` an array
 of refs, and the line reads placed geometry off them.
 
-::: starfish example:line-chart hidden
+::: gofish example:line-chart hidden
 :::
 
 ```python

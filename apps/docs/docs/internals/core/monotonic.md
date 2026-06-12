@@ -77,7 +77,7 @@ f.inverse(7); // 3 — solved directly, no search
 
 Plotted, a `Linear` is just a straight line:
 
-::: starfish example:internal-monotonic-linear hidden
+::: gofish example:internal-monotonic-linear hidden
 :::
 
 An `Unknown` only has the numeric function. It can still be inverted, but inversion

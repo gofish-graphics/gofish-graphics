@@ -27,7 +27,7 @@ Use `gradient()` for continuous data. Colors are interpolated in LAB color space
 
 Pass two color stops to interpolate between them. Lower values map to the first color, higher values to the second.
 
-::: starfish
+::: gofish
 
 ```js
 const scores = [
@@ -53,7 +53,7 @@ gf.Chart(scores, { color: gf.gradient(["#f7fbff", "#08519c"]), axes: true })
 
 Pass three stops for a diverging scale — low values get the first color, mid values the second, and high values the third.
 
-::: starfish
+::: gofish
 
 ```js
 const scores = [

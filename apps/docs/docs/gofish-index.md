@@ -42,7 +42,7 @@ layout: false
 <div style="background-color: #fdf6f3; min-height: 100vh; padding-top: 2rem; padding-bottom: 2rem; text-align: center;">
 <StackV gap="2rem">
   <StackV gap="2rem">
-    <h1 style="font-family: 'Balsamiq Sans', sans serif; color: coral; font-size: 72pt; margin: 2rem;"><b>Starfish Graphics</b></h1>
+    <h1 style="font-family: 'Balsamiq Sans', sans serif; color: coral; font-size: 72pt; margin: 2rem;"><b>GoFish Graphics</b></h1>
     <h2 style="font-family: 'Source Sans 3', sans serif; font-size: 36pt; color: #301812;">Make <span style="font-family: 'Dancing Script', cursive;">stylish</span> visualizations in JavaScript with <span style="display: inline-block;"><span style="animation: breathe-1 14s ease-in-out infinite;">e</span><span style="animation: breathe-2 14s ease-in-out infinite;">a</span><span style="animation: breathe-3 14s ease-in-out infinite;">s</span><span style="animation: breathe-4 14s ease-in-out infinite;">e</span></span></h2>
   </StackV>
 
@@ -105,19 +105,19 @@ layout: false
 
   <div style="background-color: #fff1eb; width: 65%; padding: 2rem; padding-right: 1em; padding-bottom: 1em; margin: 2rem auto; margin-top: 2rem; border-radius: 12px;">
     <StackV gap="2rem" align="flex-start" style="margin: 0 auto;">
-      <h2 style="font-family: 'Balsamiq Sans', sans serif; font-size: 36pt; color: coral;">Why Starfish?</h2>
+      <h2 style="font-family: 'Balsamiq Sans', sans serif; font-size: 36pt; color: coral;">Why GoFish?</h2>
       <StackV gap="1.5rem" width="100%" align="flex-start">
         <StackV gap="0.6rem" width="100%" align="flex-start">
           <h3 style="font-family: 'Source Sans 3', sans serif; font-size: 24pt; color: #301812;">You're a star! Express yourself!</h3>
-          <p style="font-family: 'Source Sans 3', sans serif; font-size: 16pt; color: #301812; text-align: left; margin: 0;">Minimalist? Maximalist? Formal? Whimsical? Whatever your style, Starfish is here for you.</p>
+          <p style="font-family: 'Source Sans 3', sans serif; font-size: 16pt; color: #301812; text-align: left; margin: 0;">Minimalist? Maximalist? Formal? Whimsical? Whatever your style, GoFish is here for you.</p>
         </StackV>
         <StackV gap="0.6rem" width="100%" align="flex-start">
           <h3 style="font-family: 'Source Sans 3', sans serif; font-size: 24pt; color: #301812;">Beauty by default</h3>
-          <p style="font-family: 'Source Sans 3', sans serif; font-size: 16pt; color: #301812; text-align: left; margin: 0;">Starfish's design system of colors, spacing, and arrows build on graphic design best practices helping you get beautiful results out of the box.</p>
+          <p style="font-family: 'Source Sans 3', sans serif; font-size: 16pt; color: #301812; text-align: left; margin: 0;">GoFish's design system of colors, spacing, and arrows build on graphic design best practices helping you get beautiful results out of the box.</p>
         </StackV>
         <StackV gap="0.6rem" width="100%" align="flex-start">
           <h3 style="font-family: 'Source Sans 3', sans serif; font-size: 24pt; color: #301812;">Power when you need it</h3>
-          <p style="font-family: 'Source Sans 3', sans serif; font-size: 16pt; color: #301812; text-align: left; margin: 0;">Starfish makes easy things simple, like bar charts and scatter plots. But Starfish lets you make complex custom charts and diagrams, too.</p>
+          <p style="font-family: 'Source Sans 3', sans serif; font-size: 16pt; color: #301812; text-align: left; margin: 0;">GoFish makes easy things simple, like bar charts and scatter plots. But GoFish lets you make complex custom charts and diagrams, too.</p>
         </StackV>
       </StackV>
     </StackV>

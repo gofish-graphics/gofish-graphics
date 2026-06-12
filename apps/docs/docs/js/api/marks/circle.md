@@ -2,7 +2,7 @@
 
 Draws a circle for each data item. A convenience wrapper around `rect` with equal width/height and full border radius.
 
-::: starfish
+::: gofish
 
 ```js
 gf.Chart([{ size: 40 }])

@@ -4,7 +4,7 @@ Partitions the data by a field and wraps each partition in its own frame,
 without positioning the frames. Pair it with another operator — or a nested
 mark — to lay the groups out.
 
-::: starfish example:grouped-bar-chart hidden
+::: gofish example:grouped-bar-chart hidden
 :::
 
 ```python

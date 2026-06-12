@@ -95,7 +95,7 @@ You can pass multiple operators to `.flow()` to create nested layouts. Operators
 
 To create a stacked bar chart, use `spread` to separate categories horizontally, then `stack` to stack items within each category:
 
-::: starfish
+::: gofish
 
 ```js
 const data = [
@@ -126,7 +126,7 @@ The first operator (`spread`) creates separate regions for each category along t
 
 A simple bar chart with one bar per category:
 
-::: starfish
+::: gofish
 
 ```js
 gf.Chart(seafood)
@@ -141,7 +141,7 @@ gf.Chart(seafood)
 
 To group bars side-by-side instead of stacking, use `spread` for both levels (same direction):
 
-::: starfish
+::: gofish
 
 ```js
 gf.Chart(seafood)
@@ -159,7 +159,7 @@ gf.Chart(seafood)
 
 To stack bars, use `spread` then `stack` (perpendicular directions):
 
-::: starfish
+::: gofish
 
 ```js
 gf.Chart(seafood)

@@ -1,10 +1,10 @@
 # Stacked Area Chart
 
-<!-- ::: starfish example:stacked-area-chart -->
+<!-- ::: gofish example:stacked-area-chart -->
 
 **Live Editor**
 
-::: starfish-live {template=vanilla-ts rtl lightTheme=aquaBlue darkTheme=atomDark previewHeight=400 coderHeight=512}
+::: gofish-live {template=vanilla-ts rtl lightTheme=aquaBlue darkTheme=atomDark previewHeight=400 coderHeight=512}
 
 ```ts index.ts
 import {

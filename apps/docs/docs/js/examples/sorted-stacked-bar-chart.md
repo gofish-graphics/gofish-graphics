@@ -1,10 +1,10 @@
 # Sorted Stacked Bar Chart
 
-<!-- ::: starfish example:sorted-stacked-bar-chart -->
+<!-- ::: gofish example:sorted-stacked-bar-chart -->
 
 **Live Editor**
 
-::: starfish-live {template=vanilla-ts rtl lightTheme=aquaBlue darkTheme=atomDark previewHeight=400 coderHeight=512}
+::: gofish-live {template=vanilla-ts rtl lightTheme=aquaBlue darkTheme=atomDark previewHeight=400 coderHeight=512}
 
 ```ts index.ts
 import { Chart, spread, stack, derive, rect } from "gofish-graphics";

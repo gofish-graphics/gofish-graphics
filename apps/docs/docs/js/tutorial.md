@@ -4,7 +4,7 @@ Welcome to GoFish! In this tutorial we'll start with a rectangle and gradually
 turn it into a polar ribbon chart. Along the way, we'll encounter the pieces that make up a GoFish
 chart: shapes, graphical operators, scales, and coordinate transforms.
 
-::: starfish example:polar-ribbon-chart hidden
+::: gofish example:polar-ribbon-chart hidden
 
 To start, duplicate this tab to follow along in the live editor!
 
@@ -21,7 +21,7 @@ rect({ x: 0, y: 0, w: 32, h: 300, fill: gf.color.green[5] }).render(root, {
 });
 ``` -->
 
-::: starfish-live {template=vanilla-ts rtl lightTheme=aquaBlue darkTheme=atomDark previewHeight=400 coderHeight=500}
+::: gofish-live {template=vanilla-ts rtl lightTheme=aquaBlue darkTheme=atomDark previewHeight=400 coderHeight=500}
 
 ```ts index.ts
 import * as gf from "gofish-graphics";
@@ -258,7 +258,7 @@ const root = document.getElementById("app");
 
 Next, we render a rectangle into it!
 
-:::starfish
+:::gofish
 
 ```ts
 gf.Chart(seafood)
@@ -287,7 +287,7 @@ that. To turn our stack of rectangles into a bar chart, we'll need to take a few
 bar for
 each lake in the dataset:
 
-:::starfish
+:::gofish
 
 ```ts
 gf.Chart(seafood)
@@ -312,7 +312,7 @@ six rectangles (one for each lake).
 To turn this into a bar chart, we'll change the `h` encoding of the `rect` shape to a data-driven
 quantity.
 
-:::starfish
+:::gofish
 
 ```ts
 gf.Chart(seafood)
@@ -329,7 +329,7 @@ We remove the `w` field from our spec to have GoFish infer it for us. GoFish use
 of the chart we gave to `render` (as well as information from the graphical operators) to determine the
 width of each rectangle.
 
-:::starfish
+:::gofish
 
 ```ts
 gf.Chart(seafood)
@@ -345,7 +345,7 @@ gf.Chart(seafood)
 Great! Now let's talk about how to add axes to your chart. GoFish can automatically infer axes from
 your spec as long as you pass `axes: true` in the `chart()` options like so:
 
-:::starfish
+:::gofish
 
 ```ts
 gf.Chart(seafood, { axes: true })
@@ -359,7 +359,7 @@ gf.Chart(seafood, { axes: true })
 <!-- Awesome. Now we have a y-axis. But what about the x-axis? Since the x-axis is a discrete quantity
 not tied to an argument like `h`, we'll need to pass a `key` field to the objects we want to label:
 
-:::starfish
+:::gofish
 
 ```ts
 StackX(
@@ -383,7 +383,7 @@ Now we have a sense of the number of fish in each lake. It seems like Lake B has
 we broke this down by species? We can use a stacked bar chart for that. A stacked bar chart is kinda
 like a normal bar chart, except instead of a line of rectangles, it's a line of _stacked_ rectangles.
 
-:::starfish
+:::gofish
 
 ```ts
 gf.Chart(seafood, { axes: true })
@@ -403,7 +403,7 @@ similar to `spread`, but doesn't put any spacing between the shapes it lays out.
 Now we have a rectangle for each species in each lake. But we can't tell the fish apart! Let's add a
 color encoding so that each rectangle's color corresponds to the species of fish.
 
-:::starfish
+:::gofish
 
 ```ts
 gf.Chart(seafood, { axes: true })
@@ -433,7 +433,7 @@ Now we have a sense of the break down by lake, but these lakes are connected by 
 to track how the proportion of fish changes between each lake. Let's first try ordering the bars by
 their counts:
 
-:::starfish
+:::gofish
 
 ```ts
 gf.Chart(seafood, { axes: true })
@@ -456,7 +456,7 @@ together.
 
 ### Layering and Selection
 
-:::starfish
+:::gofish
 
 ```ts
 gf.Layer({ axes: true }, [
@@ -497,7 +497,7 @@ we use `gf.group({ by: "datum.species" })` to group by species and `gf.area()` t
 To make this look more like a traditional ribbon chart, all we have to do is change the spacing of
 the `spread` operator.
 
-:::starfish
+:::gofish
 
 ```ts
 gf.Layer({ axes: true }, [
@@ -521,7 +521,7 @@ gf.Layer({ axes: true }, [
 
 :::
 
-<!-- :::starfish
+<!-- :::gofish
 
 ```ts
 Frame([
@@ -555,7 +555,7 @@ Finally it's time to make our polar ribbon chart! To do so, we'll add a `clock` 
 to the `Layer` and adjust the parameters to `spread`
 so that it looks better in polar space.
 
-:::starfish
+:::gofish
 
 ```ts
 gf.Layer({ coord: gf.clock(), axes: true }, [

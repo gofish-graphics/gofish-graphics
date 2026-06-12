@@ -14,7 +14,7 @@ import VegaLiteEmbed from "../../../components/VegaLiteEmbed.vue";
 import ObservablePlotEmbed from "../../../components/ObservablePlotEmbed.vue";
 import { Sandbox } from "vitepress-plugin-sandpack";
 import "vitepress-plugin-sandpack/dist/style.css";
-import { StarfishLive } from "../../../components/StarfishLive";
+import { GoFishLive } from "../../../components/GoFishLive";
 import LanguageToggle from "./components/LanguageToggle.vue";
 import EssayMeta from "./components/EssayMeta.vue";
 import InternalsLink from "./components/InternalsLink.vue";
@@ -41,7 +41,7 @@ export default {
     app.component("GoFishVue", GoFishVue);
     app.component("ExampleGallery", ExampleGallery);
     app.component("Sandbox", Sandbox);
-    app.component("StarfishLive", StarfishLive);
+    app.component("GoFishLive", GoFishLive);
     app.component("CheatSheet", CheatSheet);
     app.component(
       "CoordinateTransformsCheatSheet",

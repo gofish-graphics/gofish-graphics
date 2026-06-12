@@ -24,15 +24,15 @@ This is a documentation site for the GoFish Graphics library built with VitePres
 
 - **VitePress**: Static site generator with Vue 3 support
 - **Custom markdown plugins**:
-  - `starfish` containers for embedding live code examples
-  - `starfish-live` containers for Sandpack-powered interactive editors
+  - `gofish` containers for embedding live code examples
+  - `gofish-live` containers for Sandpack-powered interactive editors
 - **Example system**: Centralized example code management via `docs/.vitepress/data/examples.data.js`
 
 #### Interactive Code Execution
 
 - **GoFishVue.vue** (`components/GoFishVue.vue:1`): Vue component that executes GoFish code in a sandboxed environment using `new Function()`. Provides access to lodash, datasets, and the full GoFish API.
-- **StarfishLive.tsx** (`components/StarfishLive.tsx:1`): Sandpack-based live code editor component for interactive examples
-- **Markdown integration**: Custom markdown-it plugin (`docs/.vitepress/markdown-it-starfish.ts:22`) processes `::: starfish` containers
+- **GoFishLive.tsx** (`components/GoFishLive.tsx:1`): Sandpack-based live code editor component for interactive examples
+- **Markdown integration**: Custom markdown-it plugin (`docs/.vitepress/markdown-it-gofish.ts:22`) processes `::: gofish` containers
 
 #### Data Management
 
@@ -46,14 +46,14 @@ This is a documentation site for the GoFish Graphics library built with VitePres
 The documentation uses two approaches for interactive examples:
 
 1. **Server-side execution**: `GoFishVue` component executes code during page load
-2. **Client-side sandbox**: `StarfishLive` provides editable code playgrounds via Sandpack
+2. **Client-side sandbox**: `GoFishLive` provides editable code playgrounds via Sandpack
 
 #### Example Code Reuse
 
 Examples are defined once in `examples.data.js` and can be imported into documentation pages using:
 
 ```markdown
-::: starfish example:bar-chart
+::: gofish example:bar-chart
 :::
 ```
 
@@ -82,7 +82,7 @@ When editing the docs, keep the two language trees structurally parallel.
 **Python chart previews:** Python and JavaScript serialize to the same
 intermediate representation, so a chart renders identically regardless of
 language. Python pages show hand-written Python code in a `python` fence, then
-render the chart with the existing JS engine via `::: starfish example:<id>
+render the chart with the existing JS engine via `::: gofish example:<id>
 hidden` — which renders a registered example without showing its JS code.
 
 #### Internal Architecture Wiki (`docs/internals/`)
@@ -99,7 +99,7 @@ language toggle (`LanguageToggle.vue` hides itself on `/internals/` routes). See
   into managed `@wiki` comments in the source files. Run `pnpm sync-backlinks` after
   editing `covers:`; CI runs `pnpm check-backlinks`.
 - Code samples use ` ```ts twoslash ` fences for compiler-checked type-on-hover.
-- Every diagram is a GoFish figure embedded via `::: starfish example:internal-<id>`
+- Every diagram is a GoFish figure embedded via `::: gofish example:internal-<id>`
   (any `.vitepress/examples/internal-*.ts` file is auto-registered) — charts and
   box-and-arrow diagrams alike. There is no Mermaid dependency; if GoFish can draw it,
   GoFish draws it.

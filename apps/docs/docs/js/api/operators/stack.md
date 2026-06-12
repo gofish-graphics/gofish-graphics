@@ -4,7 +4,7 @@ Shorthand for [`spread`](/js/api/operators/spread)`({ glue: true })`. Children
 are glued together and their data-driven sizes sum into a continuous
 positional axis at this level. Used for stacked bar charts.
 
-::: starfish
+::: gofish
 
 ```js
 gf.Chart(seafood, { axes: true })

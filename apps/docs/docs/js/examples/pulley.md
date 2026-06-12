@@ -22,5 +22,5 @@ The diagram demonstrates several mid-level features in concert:
   topologically sorts them into a total order. This is what carves out the
   "rope passes _between_ two pulley wheels" effect.
 
-::: starfish example:pulley
+::: gofish example:pulley
 :::

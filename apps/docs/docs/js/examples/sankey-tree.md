@@ -1,3 +1,3 @@
 # Sankey Tree
 
-::: starfish example:sankey-tree
+::: gofish example:sankey-tree

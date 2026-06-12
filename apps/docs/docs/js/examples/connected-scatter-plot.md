@@ -1,10 +1,10 @@
 # Connected Scatter Plot
 
-<!-- ::: starfish example:connected-scatter-plot -->
+<!-- ::: gofish example:connected-scatter-plot -->
 
 **Live Editor**
 
-::: starfish-live {template=vanilla-ts rtl lightTheme=aquaBlue darkTheme=atomDark previewHeight=400 coderHeight=512}
+::: gofish-live {template=vanilla-ts rtl lightTheme=aquaBlue darkTheme=atomDark previewHeight=400 coderHeight=512}
 
 ```ts index.ts
 import { Chart, scatter, circle, line } from "gofish-graphics";

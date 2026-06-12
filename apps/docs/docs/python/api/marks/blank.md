@@ -4,7 +4,7 @@ An invisible mark. `blank` takes up space and can be positioned and named like
 any other mark, but draws nothing. It is the positioning **guide** that
 [`line`](/python/api/marks/line) and [`area`](/python/api/marks/area) trace.
 
-::: starfish example:area-chart hidden
+::: gofish example:area-chart hidden
 :::
 
 ```python

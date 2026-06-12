@@ -2,7 +2,7 @@
 
 Creates a `ChartBuilder`. This is the entry point for every GoFish chart.
 
-::: starfish
+::: gofish
 
 ```js
 gf.Chart(seafood, { axes: true })

@@ -16,7 +16,7 @@ All children are placed at position `(0, 0)` relative to the layer. The layer's 
 
 Here's a simple "badge" glyph with a rounded rectangle and a dot:
 
-::: starfish
+::: gofish
 
 ```js
 gf.Layer([
@@ -43,7 +43,7 @@ const Badge = ({ w = 50, h = 30, fill = "steelblue" }) =>
 
 Now you can create badges of different sizes and colors:
 
-::: starfish
+::: gofish
 
 ```js
 const Badge = ({ w = 50, h = 30, fill = "steelblue" }) =>
@@ -65,7 +65,7 @@ gf.Spread({ dir: "x", spacing: 20 }, [
 
 Pass a function to `.mark()` that returns your glyph. The function receives the data for each item:
 
-::: starfish
+::: gofish
 
 ```js
 const Pin = ({ fill = "tomato" }) =>
@@ -95,7 +95,7 @@ The mark function receives grouped data (an array), so `d[0]` accesses the first
 
 You can combine any shapes: rectangles, ellipses, text, and more. Here's a labeled data point glyph:
 
-::: starfish
+::: gofish
 
 ```js
 const DataPoint = ({ value, fill = "steelblue" }) =>

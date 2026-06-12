@@ -3,7 +3,7 @@
 Stacks groups edge-to-edge along an axis with no gap between them — `spread`
 without the spacing. The basis for stacked bar charts and pie charts.
 
-::: starfish example:stacked-bar-chart hidden
+::: gofish example:stacked-bar-chart hidden
 :::
 
 ```python

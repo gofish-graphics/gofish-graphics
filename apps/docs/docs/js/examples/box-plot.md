@@ -1,3 +1,3 @@
 # Box Plot
 
-::: starfish example:box-plot
+::: gofish example:box-plot

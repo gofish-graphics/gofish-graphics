@@ -1,3 +1,3 @@
 # Balloon Chart
 
-::: starfish example:balloon-chart
+::: gofish example:balloon-chart

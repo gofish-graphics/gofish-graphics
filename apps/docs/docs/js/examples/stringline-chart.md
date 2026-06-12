@@ -1,3 +1,3 @@
 # Stringline Chart
 
-::: starfish example:stringline-chart
+::: gofish example:stringline-chart

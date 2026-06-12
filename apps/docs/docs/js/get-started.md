@@ -10,7 +10,7 @@ npm install gofish-graphics
 
 ## 2. Create a chart!
 
-::: starfish example:HIDDEN-bar-chart-get-started hidden
+::: gofish example:HIDDEN-bar-chart-get-started hidden
 :::
 
 ```ts
@@ -120,7 +120,7 @@ automatically by passing `axes: true` in the `chart()` options.
 Go through [our tutorial](/js/tutorial), check out [some examples](/js/examples/index), or play with the
 live editor below!
 
-::: starfish-live {template=vanilla-ts rtl lightTheme=aquaBlue darkTheme=atomDark previewHeight=400 coderHeight=400}
+::: gofish-live {template=vanilla-ts rtl lightTheme=aquaBlue darkTheme=atomDark previewHeight=400 coderHeight=400}
 
 ```ts index.ts
 import { Chart, spread, rect } from "gofish-graphics";

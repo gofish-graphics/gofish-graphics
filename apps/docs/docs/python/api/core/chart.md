@@ -2,7 +2,7 @@
 
 Creates a `ChartBuilder`. This is the entry point for every GoFish chart.
 
-::: starfish example:bar-chart hidden
+::: gofish example:bar-chart hidden
 :::
 
 ```python

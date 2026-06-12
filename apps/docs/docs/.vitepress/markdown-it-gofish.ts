@@ -19,8 +19,8 @@ THIS SOFTWARE.
 import container from "markdown-it-container";
 import examplesData from "./data/examples.data.js";
 
-export default function starfish(md) {
-  md.use(container, "starfish", {
+export default function gofish(md) {
+  md.use(container, "gofish", {
     render(tokens, idx) {
       if (tokens[idx].nesting === 1) {
         const directives = tokens[idx].info.split(/\s+/).slice(1);
@@ -66,16 +66,16 @@ export default function starfish(md) {
             ? // ? `<div style="display: none;">\n`
               ""
             : href
-            ? `<a class="starfish-codepen no-icon" href="${md.utils.escapeHtml(
-                href
-              )}" target="_blank" title="Open in CodePen">CodePen</a>`
-            : ""
+              ? `<a class="gofish-codepen no-icon" href="${md.utils.escapeHtml(
+                  href
+                )}" target="_blank" title="Open in CodePen">CodePen</a>`
+              : ""
         }`;
 
         // return directives.includes("hidden")
-        //   ? `<div class="starfish-container">${componentSetup}`
-        //   : `<div class="starfish-container">\n${componentSetup}${""}${suffix}\n`;
-        return `<div class="starfish-container">\n${componentSetup}${codeFence}${suffix}\n`;
+        //   ? `<div class="gofish-container">${componentSetup}`
+        //   : `<div class="gofish-container">\n${componentSetup}${""}${suffix}\n`;
+        return `<div class="gofish-container">\n${componentSetup}${codeFence}${suffix}\n`;
       }
       return `\n</div>\n`;
     },

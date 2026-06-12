@@ -3,7 +3,7 @@
 Groups data by two fields and lays the groups out in a 2D grid — one axis per
 field. The primary operator for heatmaps and other grid-based visualizations.
 
-::: starfish example:HIDDEN-table-heatmap hidden
+::: gofish example:HIDDEN-table-heatmap hidden
 :::
 
 ```python

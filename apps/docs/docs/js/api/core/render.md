@@ -77,7 +77,7 @@ chart(data, { axes: { x: true, y: false } })
 
 ### Only x-axis visible
 
-::: starfish
+::: gofish
 
 ```js
 gf.Chart(seafood)
@@ -90,7 +90,7 @@ gf.Chart(seafood)
 
 ### Custom x-axis title, inferred y-axis title
 
-::: starfish
+::: gofish
 
 ```js
 gf.Chart(seafood)
@@ -107,7 +107,7 @@ gf.Chart(seafood)
 
 ### Suppress the inferred title on the x-axis
 
-::: starfish
+::: gofish
 
 ```js
 gf.Chart(seafood)

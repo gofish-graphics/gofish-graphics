@@ -1,3 +1,3 @@
 # Violin Plot
 
-::: starfish example:violin-plot
+::: gofish example:violin-plot

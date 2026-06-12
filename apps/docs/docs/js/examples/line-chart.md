@@ -1,10 +1,10 @@
 # Line Chart
 
-<!-- ::: starfish example:line-chart -->
+<!-- ::: gofish example:line-chart -->
 
 **Live Editor**
 
-::: starfish-live {template=vanilla-ts rtl lightTheme=aquaBlue darkTheme=atomDark previewHeight=400 coderHeight=512}
+::: gofish-live {template=vanilla-ts rtl lightTheme=aquaBlue darkTheme=atomDark previewHeight=400 coderHeight=512}
 
 ```ts index.ts
 import { Chart, scatter, blank, line } from "gofish-graphics";

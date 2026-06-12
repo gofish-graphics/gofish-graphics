@@ -4,7 +4,7 @@ Applies a pipeline of **operators** to the chart's data. Operators partition,
 position, and transform the data before the [mark](/python/api/core/mark) draws
 it.
 
-::: starfish example:stacked-bar-chart hidden
+::: gofish example:stacked-bar-chart hidden
 :::
 
 ```python

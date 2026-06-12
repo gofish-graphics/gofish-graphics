@@ -1,10 +1,10 @@
 # Mosaic Plot
 
-<!-- ::: starfish example:mosaic-plot -->
+<!-- ::: gofish example:mosaic-plot -->
 
 **Live Editor**
 
-::: starfish-live {template=vanilla-ts rtl lightTheme=aquaBlue darkTheme=atomDark previewHeight=400 coderHeight=512}
+::: gofish-live {template=vanilla-ts rtl lightTheme=aquaBlue darkTheme=atomDark previewHeight=400 coderHeight=512}
 
 ```ts index.ts
 import { Chart, spread, stack, derive, rect, normalize } from "gofish-graphics";

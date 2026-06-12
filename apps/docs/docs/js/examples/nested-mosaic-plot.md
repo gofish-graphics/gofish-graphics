@@ -1,3 +1,3 @@
 # Nested Mosaic Plot
 
-::: starfish example:nested-mosaic-plot
+::: gofish example:nested-mosaic-plot

@@ -17,7 +17,7 @@ flattening). Pass either form as the data argument to a second
 Think of `selectAll` as the DOM's `querySelectorAll` (always a collection) and
 `ref(name)`-as-data as `querySelector` (the one-or-bust singular).
 
-::: starfish
+::: gofish
 
 ```js
 const lakeTotals = Object.entries(_.groupBy(seafood, "lake")).map(

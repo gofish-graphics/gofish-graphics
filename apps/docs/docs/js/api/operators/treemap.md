@@ -4,7 +4,7 @@ Lays out children into a treemap: a 2D tiling of rectangles whose **areas are pr
 
 <!-- This is currently a **low-level** operator (use `Treemap(...)` directly), not a `chart(...).flow(...)` operator. -->
 
-:::: starfish
+:::: gofish
 
 ```js
 const items = [

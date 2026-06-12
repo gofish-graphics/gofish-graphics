@@ -1,10 +1,10 @@
 # Donut Chart
 
-<!-- ::: starfish example:donut-chart -->
+<!-- ::: gofish example:donut-chart -->
 
 **Live Editor**
 
-::: starfish-live {template=vanilla-ts rtl lightTheme=aquaBlue darkTheme=atomDark previewHeight=400 coderHeight=512}
+::: gofish-live {template=vanilla-ts rtl lightTheme=aquaBlue darkTheme=atomDark previewHeight=400 coderHeight=512}
 
 ```ts index.ts
 import { Chart, stack, rect } from "gofish-graphics";

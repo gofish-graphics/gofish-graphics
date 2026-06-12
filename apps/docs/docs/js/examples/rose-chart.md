@@ -1,10 +1,10 @@
 # Rose Chart
 
-<!-- ::: starfish example:rose-chart -->
+<!-- ::: gofish example:rose-chart -->
 
 **Live Editor**
 
-::: starfish-live {template=vanilla-ts rtl lightTheme=aquaBlue darkTheme=atomDark previewHeight=400 coderHeight=512}
+::: gofish-live {template=vanilla-ts rtl lightTheme=aquaBlue darkTheme=atomDark previewHeight=400 coderHeight=512}
 
 ```ts index.ts
 import { Chart, stack, derive, rect } from "gofish-graphics";

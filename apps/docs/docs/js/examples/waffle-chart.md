@@ -1,10 +1,10 @@
 # Waffle Chart
 
-<!-- ::: starfish example:waffle-chart -->
+<!-- ::: gofish example:waffle-chart -->
 
 **Live Editor**
 
-::: starfish-live {template=vanilla-ts rtl lightTheme=aquaBlue darkTheme=atomDark previewHeight=400 coderHeight=512}
+::: gofish-live {template=vanilla-ts rtl lightTheme=aquaBlue darkTheme=atomDark previewHeight=400 coderHeight=512}
 
 ```ts index.ts
 import { Chart, spread, derive, rect, repeat } from "gofish-graphics";

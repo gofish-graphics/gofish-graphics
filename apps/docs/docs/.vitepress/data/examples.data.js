@@ -180,7 +180,7 @@ export default {
     }));
 
     // Internal-wiki diagrams: any examples/internal-*.ts file is auto-registered
-    // so internals essays can embed it with `::: starfish example:internal-...`.
+    // so internals essays can embed it with `::: gofish example:internal-...`.
     const examplesDir = join(__dirname, "..", "examples");
     const internalExamples = readdirSync(examplesDir)
       .filter((f) => f.startsWith("internal-") && f.endsWith(".ts"))
