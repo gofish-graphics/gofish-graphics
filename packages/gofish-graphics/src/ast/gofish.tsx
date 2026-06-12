@@ -111,6 +111,8 @@ export async function layout(
   width: number;
   height: number;
   rightOverhang: number;
+  rightContentOverhang: number;
+  topOverhang: number;
   leftOverhang: number;
   bottomOverhang: number;
 }> {
@@ -198,8 +200,10 @@ export async function layout(
   // PRE-title, pre-legend content. This matters two ways:
   //  - The inferred canvas is measured off the content, never inflated by a long
   //    title or a tall legend column.
-  //  - Title and legend extents past the content are reserved separately as
-  //    measured gutters (`leftOverhang`/`bottomOverhang`/`rightOverhang` below).
+  //  - Title, legend, and constraint-displaced extents past the content are
+  //    reserved separately as measured per-side overhangs (`leftOverhang`,
+  //    `bottomOverhang`, `topOverhang`, the legend `rightOverhang`, and the
+  //    non-legend `rightContentOverhang` below).
   const contentNode = child;
 
   // Axis-title elaboration: seat up to two title Text nodes (x below, y rotated
@@ -335,19 +339,30 @@ export async function layout(
   const finalW = finalDim(0, w);
   const finalH = finalDim(1, h);
 
-  // Measured legend overhang past the content width — replaces the fixed
-  // LEGEND_MARGIN (see `legendOverhang`). Gated on `legendAdded`, not
-  // `child !== contentNode`: a titles-only chart also wraps `child`, so the
-  // identity check would wrongly take the branch and measure a title gutter as a
-  // legend overhang.
+  // Measured overhangs off the OUTERMOST wrapper (`child`), from its laid-out
+  // extent. Anything seated beyond the content box is reserved by its placed
+  // extent minus the content box; `render()` then sizes the SVG around them.
+  // `max!` / `min!` discipline (never a silent `?? 0`): the wrapper always emits
+  // a placed extent here — a silent 0 would clip the overhang and mask a layout
+  // bug, so assert it's present.
+  //
+  // The RIGHT side has two distinct kinds of overhang that must be reserved
+  // DIFFERENTLY, and they overlap in magnitude so the color-scale flag — not the
+  // size — is what tells them apart:
+  //  - A legend swatch column reserves `legendOverhang + pad` (see the width
+  //    formula in `render`). Gated on `legendAdded`: a single-row legend can
+  //    overhang as little as ~6px — the same as a wide rightmost x-tick label —
+  //    so we cannot recover this from magnitude alone.
+  //  - Otherwise, content displaced past the canvas by a constraint (e.g. a
+  //    marginal histogram's right band) flows through `reserve()` like the other
+  //    three gutters: a small x-tick spill is absorbed into `pad` (plain axis
+  //    charts stay byte-identical) and a large band reserves its full extent.
+  // TOP, LEFT, BOTTOM have only the second (chrome / displaced-content) kind.
   const rightOverhang = legendAdded ? legendOverhang(child, finalW) : 0;
-
-  // Measured negative-space gutters off the OUTERMOST wrapper (`child`): axis
-  // tick / ordinal label rows plus any seated titles extend past the content
-  // origin into negative coordinates. This measured extent replaces the bespoke
-  // fixed Y_TITLE_MARGIN / X_TITLE_MARGIN. Same `min!` discipline as
-  // `legendOverhang`'s `max!`: a silent `?? 0` would clip the gutter and mask a
-  // layout bug, so assert the placed min is present.
+  const rightContentOverhang = legendAdded
+    ? 0
+    : Math.max(0, child.dims[0].max! - finalW);
+  const topOverhang = Math.max(0, child.dims[1].max! - finalH);
   const leftOverhang = Math.max(0, -child.dims[0].min!);
   const bottomOverhang = Math.max(0, -child.dims[1].min!);
 
@@ -364,6 +379,8 @@ export async function layout(
     width: finalW,
     height: finalH,
     rightOverhang,
+    rightContentOverhang,
+    topOverhang,
     leftOverhang,
     bottomOverhang,
   };
@@ -411,6 +428,8 @@ export const gofish = (
     width: number;
     height: number;
     rightOverhang: number;
+    rightContentOverhang: number;
+    topOverhang: number;
     leftOverhang: number;
     bottomOverhang: number;
   };
@@ -470,6 +489,8 @@ export const gofish = (
               svgPadding,
               defs,
               rightOverhang: data.rightOverhang,
+              rightContentOverhang: data.rightContentOverhang,
+              topOverhang: data.topOverhang,
               leftOverhang: data.leftOverhang,
               bottomOverhang: data.bottomOverhang,
             },
@@ -496,6 +517,8 @@ export const render = (
     transform,
     defs,
     rightOverhang = 0,
+    rightContentOverhang = 0,
+    topOverhang = 0,
     leftOverhang = 0,
     bottomOverhang = 0,
     svgPadding,
@@ -505,6 +528,8 @@ export const render = (
     transform?: string;
     defs?: JSX.Element[];
     rightOverhang?: number;
+    rightContentOverhang?: number;
+    topOverhang?: number;
     leftOverhang?: number;
     bottomOverhang?: number;
     svgPadding?: number;
@@ -516,6 +541,9 @@ export const render = (
   // Chrome (axis tick/label rows, titles, the legend column) is now elaborated
   // into ordinary shapes that live in the node tree; `render()` only sizes the
   // SVG around their measured extent — no chart-chrome special cases remain.
+  // Content seated beyond the canvas by a constraint (e.g. marginal histogram
+  // bands above/right of a scatter) is measured the same way, via the per-side
+  // overhangs — including the new top and non-legend right gutters.
   //
   // Reserve enough on each gutter side to clear the measured overhang plus a
   // little breathing room from the SVG edge. The `o > 0` guard keeps a chart
@@ -532,18 +560,32 @@ export const render = (
     o > 0 ? Math.ceil(Math.max(pad, o + EDGE_GAP)) : pad;
   const leftReserve = reserve(leftOverhang);
   const bottomReserve = reserve(bottomOverhang);
+  const topReserve = reserve(topOverhang);
 
+  // Right gutter = legend reservation + non-legend reserve. `rightOverhang` is
+  // the legend column's overhang (0 when there's no legend); it keeps a full
+  // `pad` margin beyond the column — the legend's historical reservation — via
+  // `reserve(rightContentOverhang)`, whose floor is `pad` (so a legend chart
+  // reserves `legendOverhang + pad`, byte-identical). `rightContentOverhang` is
+  // any NON-legend content displaced past the right edge (a marginal band);
+  // routing it through the same `reserve()` as the other gutters absorbs a small
+  // x-tick spill into `pad` (plain axis charts stay byte-identical) and reserves
+  // a large band's full extent plus `EDGE_GAP`. The right gutter bears no root
+  // <g> translate, so it needn't be pixel-snapped — a fractional width is
+  // harmless (legend overhangs are fractional text widths).
   const result = (
     <svg
-      width={leftReserve + width + rightOverhang + pad}
-      height={pad + height + bottomReserve}
+      width={
+        leftReserve + width + rightOverhang + reserve(rightContentOverhang)
+      }
+      height={topReserve + height + bottomReserve}
       xmlns="http://www.w3.org/2000/svg"
     >
       <Show when={defs}>
         <defs>{defs}</defs>
       </Show>
       <g
-        transform={`scale(1, -1) translate(${leftReserve}, ${-(height + pad)})`}
+        transform={`scale(1, -1) translate(${leftReserve}, ${-(height + topReserve)})`}
       >
         <Show when={transform} keyed fallback={child.INTERNAL_render()}>
           <g transform={transform ?? ""}>{child.INTERNAL_render()}</g>

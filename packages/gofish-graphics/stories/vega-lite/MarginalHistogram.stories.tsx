@@ -58,15 +58,20 @@ export const Default: StoryObj<Args> = {
         .resolve();
       rightHist.name("rightHist");
 
+      const GAP = 10;
       await layer([sc, topHist, rightHist])
         .constrain(({ scatter, topHist, rightHist }: any) => [
           Constraint.align({ x: "baseline", y: "baseline" } as any, [scatter]),
           Constraint.align({ x: "baseline" } as any, [scatter, topHist]),
           Constraint.align({ y: "baseline" } as any, [scatter, rightHist]),
-          Constraint.distribute({ dir: "y", spacing: 10 }, [scatter, topHist]),
-          Constraint.distribute({ dir: "x", spacing: 10 }, [scatter, rightHist]),
+          Constraint.position({ y: args.h + GAP, anchor: "start" } as any, [topHist]),
+          Constraint.position({ x: args.w + GAP, anchor: "start" } as any, [rightHist]),
         ])
-        .render(container, { w: args.w, h: args.h, axes: true } as any);
+        .render(container, {
+          w: args.w,
+          h: args.h,
+          axes: { x: { title: "Beak Length (mm)" }, y: { title: "Beak Depth (mm)" } },
+        } as any);
     })();
 
     return container;

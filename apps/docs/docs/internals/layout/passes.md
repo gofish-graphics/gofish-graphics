@@ -319,11 +319,16 @@ default-width bars and a width of `n·barWidth + spacing`). A user-supplied
 dimension is always authoritative. This computed extent — not the raw option — is
 what the render pass uses to size the SVG. The legend is now part of the laid-out
 tree (it is elaborated into the node tree during layout, see Pass 7), so it is
-included in this computed extent when `w`/`h` are omitted. When `w` _is_ given,
-`layout()` additionally measures a `rightOverhang` (how far the tree, legend
-included, extends past the authoritative width) and the render pass reserves
-exactly that on the right of the SVG — replacing the former fixed `LEGEND_MARGIN`
-constant. See [Legends](/internals/frontend/legends).
+included in this computed extent when `w`/`h` are omitted. When a dimension _is_
+given, `layout()` additionally measures how far the laid-out tree extends past the
+authoritative extent on each of the four sides — including content a constraint
+seated _beyond_ the canvas, e.g. a marginal histogram's bands above and to the
+right of a scatter — and the render pass reserves exactly that, replacing the
+former fixed `LEGEND_MARGIN` constant. The right side is split into two measured
+overhangs: a `rightOverhang` for a legend swatch column (gated on whether a legend
+was added) and a `rightContentOverhang` for any non-legend content displaced past
+the right edge — see Render Pass 2 below for why the split is necessary. See
+[Legends](/internals/frontend/legends).
 
 > Literal pixel sizes are invisible to the underlying-space tree (a fixed-size
 > shape resolves to `UNDEFINED`, not `SIZE`), which is why the unsized path relies
@@ -444,7 +449,7 @@ return render(
 
 `render()` no longer takes `axes`/`axisFields` or the scale/space context — all
 the chrome is in the laid-out tree by now, so render only needs the computed
-extent and the three measured gutter overhangs to size the SVG.
+extent and the measured per-side overhangs to size the SVG.
 
 ### Render Pass 1: Context Restoration
 
@@ -470,16 +475,23 @@ node tree like any other shape. The former bespoke render-time path (hand-writte
 has been deleted, so `render()` has zero chart-chrome special cases left.
 
 What `render()` _does_ do is size the SVG around the measured extent of that
-chrome. `layout()` hands it three gutter measurements — `leftOverhang`,
-`bottomOverhang` (negative-space gutters off the outermost wrapper: tick/label
-rows plus the seated y-title and x-title) and `rightOverhang` (the legend
-column) — and the render pass reserves exactly enough on each side:
+chrome, on all four sides. `layout()` hands it five gutter measurements:
+`leftOverhang`, `bottomOverhang`, and `topOverhang` (negative-space gutters and
+top overflow off the outermost wrapper: tick/label rows, the seated y-title and
+x-title, and any content a constraint seated above the canvas), plus the two
+right-side overhangs — `rightOverhang` (the legend swatch column) and
+`rightContentOverhang` (non-legend content displaced past the right edge). The
+render pass reserves exactly enough on each side:
 
 ```typescript
 const EDGE_GAP = 8; // breathing room between gutter content and the SVG edge
-const reserve = (o: number) => (o > 0 ? Math.max(pad, o + EDGE_GAP) : pad);
+const reserve = (o: number) =>
+  o > 0 ? Math.ceil(Math.max(pad, o + EDGE_GAP)) : pad;
 const leftReserve = reserve(leftOverhang);
 const bottomReserve = reserve(bottomOverhang);
+const topReserve = reserve(topOverhang);
+// right side: legend column + non-legend displaced content
+// width = leftReserve + width + rightOverhang + reserve(rightContentOverhang)
 ```
 
 The `o > 0` guard keeps a chart with `padding: 0` and no chrome at zero reserve
@@ -487,8 +499,22 @@ The `o > 0` guard keeps a chart with `padding: 0` and no chrome at zero reserve
 within the existing `pad` is absorbed by it, an untitled chart with a small
 gutter stays byte-identical to the pre-chrome output. The measured-overhang
 policy also fixes a latent bug: the old fixed 40px margins silently _clipped_ any
-gutter wider than themselves (long y tick labels), whereas `reserve()` grows to
-fit whatever the laid-out chrome actually needs.
+gutter wider than themselves (long y tick labels, **or content a constraint
+seated past the canvas — marginal histogram bands, wide diagram nodes**), whereas
+`reserve()` grows to fit whatever the laid-out content actually needs.
+
+**Why the right side is special.** Left, bottom, and top each have a single kind
+of overhang (chrome or displaced content) and run through `reserve()` uniformly.
+The right side carries _two_ kinds that must be reserved _differently_: a legend
+column historically reserves `legendOverhang + pad`, while displaced content
+(like a marginal band) should run through `reserve()` like the other gutters. The
+two cannot be unified by magnitude — a single-row legend overhangs by roughly the
+same few pixels as a wide rightmost x-tick label, yet the legend must be _added_
+to the width while the tick spill must be _absorbed_ into `pad`. Only the
+color-scale flag (`legendAdded`) can tell them apart, so the legend keeps its own
+gated `rightOverhang` term; everything else flows through `rightContentOverhang`
+and `reserve()`. This is the one place a chart-chrome flag still influences
+sizing — kept deliberately, because the distinction is semantic, not geometric.
 
 ### Render Pass 3: SVG Container Creation
 
