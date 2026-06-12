@@ -151,13 +151,35 @@ export function distributeSpaceFold(
   return UNDEFINED;
 }
 
+/** Reports a fixed (already-placed) child whose position disagrees with where
+ *  the running distribute walk expected it. spread.tsx passes this to surface
+ *  the warning it used to emit from its own walk; the constraint path omits it
+ *  (no warning), so console output there is unchanged. Fires only past the
+ *  `1e-6` tolerance. */
+export type DistributeInconsistencyReporter = (
+  expected: number,
+  actual: number
+) => void;
+
 export function applyDistribute(
   constraint: DistributeConstraint,
-  targets: Placeable[]
+  targets: Placeable[],
+  onInconsistency?: DistributeInconsistencyReporter
 ): void {
   const idx = axisIndex(constraint.dir);
   const ordered =
     constraint.order === "reverse" ? [...targets].reverse() : targets;
+
+  // Compare a fixed child's actual edge/center against the running expected
+  // position and report past tolerance. The anchor itself is never checked —
+  // it *defines* the running position, so it is consistent by construction
+  // (matches spread's single-forward-walk, which back-computes its origin from
+  // the first fixed child).
+  const checkInconsistent = (expected: number, actual: number): void => {
+    if (onInconsistency && Math.abs(expected - actual) > 1e-6) {
+      onInconsistency(expected, actual);
+    }
+  };
 
   // Find the first already-placed child (the anchor)
   const anchorIdx = ordered.findIndex((t) => isPlacedOn(t, idx));
@@ -183,6 +205,7 @@ export function applyDistribute(
     for (let i = anchorIdx + 1; i < ordered.length; i++) {
       const t = ordered[i];
       if (isPlacedOn(t, idx)) {
+        checkInconsistent(pos, t.dims[idx].min!);
         pos = t.dims[idx].max! + constraint.spacing;
       } else {
         t.place(constraint.dir, pos);
@@ -206,6 +229,7 @@ export function applyDistribute(
     for (let i = anchorIdx + 1; i < ordered.length; i++) {
       const t = ordered[i];
       if (isPlacedOn(t, idx)) {
+        checkInconsistent(pos, t.dims[idx].center!);
         pos = t.dims[idx].center! + constraint.spacing;
       } else {
         t.place(constraint.dir, pos, "center");
