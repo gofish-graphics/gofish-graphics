@@ -61,6 +61,15 @@ packages/gofish-graphics/stories/forwardsyntax/FacetedChart.stories.tsx
 # this story can't be ported without a workaround or a wrapper extension.
 packages/gofish-graphics/stories/forwardsyntax/ColorScales.stories.tsx::PairedPalettes
 
+# Per-export exemption for Cut.stories.tsx — ImageCutWithLabels builds a
+# per-slice `layer(...)` inside a mark-as-function over `selectAll("part")`,
+# embedding each JS ref node directly (`d.name("slice")`) and reading its bound
+# datum (`d.datum.category`). The Python mark-fn runs over the RPC bridge and
+# receives plain JSON rows, not JS ref nodes, so it cannot embed the slice nodes
+# or project `.datum` — a wrapper project, not a port. The other 10 Cut exports
+# are ported (tests/python-stories/forward-syntax-v3/test_cut.py).
+packages/gofish-graphics/stories/forwardsyntax/Cut.stories.tsx::ImageCutWithLabels
+
 # Per-export exemptions for Labels.stories.tsx — these stories don't fit
 # the single-chart parity harness (they compose many charts in a flex div,
 # use async mark-as-function, or hand-build raw SVG).

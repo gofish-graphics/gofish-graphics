@@ -10,7 +10,7 @@ captured DOM is byte-identical.
 
 import os
 
-from gofish import atop, image, inside, mask, out, over, rect, xor
+from gofish import exclude, image, intersect, mask, over, paint, rect, subtract
 
 # The Vite-served URL of the bottle image. JS storybook imports it via
 # `import bottlePng from "../assets/wilsonblanco.png"`, which Vite resolves
@@ -53,19 +53,19 @@ def story_union():
 
 
 def story_intersect():
-    return inside(_build_children(), blendMode=BLEND_MODE), {"w": W, "h": H}
+    return intersect(_build_children(), blendMode=BLEND_MODE), {"w": W, "h": H}
 
 
 def story_exclude():
-    return xor(_build_children(), blendMode=BLEND_MODE), {"w": W, "h": H}
+    return exclude(_build_children(), blendMode=BLEND_MODE), {"w": W, "h": H}
 
 
 def story_subtract():
-    return out(_build_children(), blendMode=BLEND_MODE), {"w": W, "h": H}
+    return subtract(_build_children(), blendMode=BLEND_MODE), {"w": W, "h": H}
 
 
 def story_paint():
-    return atop(_build_children(), blendMode=BLEND_MODE), {"w": W, "h": H}
+    return paint(_build_children(), blendMode=BLEND_MODE), {"w": W, "h": H}
 
 
 def story_mask():
