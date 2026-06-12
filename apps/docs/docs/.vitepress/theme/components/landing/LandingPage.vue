@@ -443,17 +443,19 @@ onBeforeUnmount(() => {
             aria-pressed="false"
             aria-label="Pull the chart apart into its layers"
           >
-            <div class="card" v-html="demoSvg"></div>
-            <span
-              class="tape demo-tape"
-              style="left: 12%; top: -11px; --tape-angle: -8deg"
-              aria-hidden="true"
-            ></span>
-            <span
-              class="tape demo-tape"
-              style="right: 12%; top: -11px; --tape-angle: 5deg"
-              aria-hidden="true"
-            ></span>
+            <div class="card">
+              <span
+                class="tape demo-tape"
+                style="left: 12%; top: -11px; --tape-angle: -8deg"
+                aria-hidden="true"
+              ></span>
+              <span
+                class="tape demo-tape"
+                style="right: 12%; top: -11px; --tape-angle: 5deg"
+                aria-hidden="true"
+              ></span>
+              <div class="demo-art" v-html="demoSvg"></div>
+            </div>
             <span ref="pulltabEl" class="pulltab">pull apart</span>
           </button>
         </div>
@@ -481,10 +483,9 @@ onBeforeUnmount(() => {
             rel="noopener"
             aria-label="MIT Visualization Group"
           >
-            <span>MIT</span>
             <svg
               class="vis-logo"
-              viewBox="303 328 150 100"
+              viewBox="303 336 150 81"
               aria-hidden="true"
               focusable="false"
             >

@@ -791,14 +791,21 @@ html.landing-page .DocSearch-Button {
   color: inherit;
   text-decoration: none;
 }
-.landing .band-foot .foot-vis:hover span {
-  text-decoration: underline;
-  text-underline-offset: 3px;
+.landing .band-foot .foot-vis:hover .vis-logo {
+  opacity: 0.75;
 }
 .landing .band-foot .vis-logo {
-  height: 26px;
+  height: 21px;
   width: auto;
   display: block;
+  transform: translateY(-1px);
+}
+.landing .demo .card .demo-tape {
+  z-index: 0;
+}
+.landing .demo .card .demo-art {
+  position: relative;
+  z-index: 1;
 }
 
 /* ---------- REVEAL ---------- */
