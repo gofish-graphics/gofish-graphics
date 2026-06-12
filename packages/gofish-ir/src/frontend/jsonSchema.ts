@@ -295,6 +295,11 @@ export const FRONTEND_IR_JSON_SCHEMA = {
           properties: {
             type: { const: "field" },
             name: { type: "string" },
+            measure: {
+              type: "string",
+              description:
+                "Optional unit annotation for the channel's underlying space (a type claim; see field(name, measure)).",
+            },
           },
         },
         {

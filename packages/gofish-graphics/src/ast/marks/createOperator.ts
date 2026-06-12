@@ -332,10 +332,20 @@ export type DualModeOperator<Datum, Options> = {
   ): NameableMark<Datum>;
 };
 
-/** Run a single channel inference over a data slice. */
-function runChannel(type: ChannelType, val: any, data: any[]): any {
-  if (type === "size") return inferSize(val, data);
-  if (type === "pos") return inferPos(val, data);
+/**
+ * Run a single channel inference over a data slice. `provenanceData` is the
+ * operator's whole input array, which carries the measure-provenance symbol
+ * (e.g. from `bin()`) even when `data` is a per-entry slice that does not — so
+ * `inferSize`/`inferPos` resolve the right measure for a split entry.
+ */
+function runChannel(
+  type: ChannelType,
+  val: any,
+  data: any[],
+  provenanceData: any[]
+): any {
+  if (type === "size") return inferSize(val, data, provenanceData);
+  if (type === "pos") return inferPos(val, data, provenanceData);
   if (type === "color") return inferColor(val, data);
   return val;
 }
@@ -372,11 +382,14 @@ function applyChannels<Options extends Record<string, any>>(
     const type: ChannelType = typeof spec === "string" ? spec : spec.type;
     const perEntry = typeof spec === "object" && spec.entry === true;
     if (perEntry && entries !== undefined) {
+      // Value aggregation uses each entry's items; measure provenance comes
+      // from `wholeData` (the binned array still carries the symbol — each
+      // per-entry slice does not).
       out[key] = [...entries.values()].map((items) =>
-        runChannel(type, val, items)
+        runChannel(type, val, items, wholeData)
       );
     } else {
-      out[key] = runChannel(type, val, wholeData);
+      out[key] = runChannel(type, val, wholeData, wholeData);
     }
   }
   return out as Options;

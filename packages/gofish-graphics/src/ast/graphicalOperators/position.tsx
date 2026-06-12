@@ -1,7 +1,7 @@
 import { computeAesthetic } from "../../util";
 import { GoFishNode } from "../_node";
 import { Size, elaborateDims, FancyDims } from "../dims";
-import { getValue, isValue, MaybeValue } from "../data";
+import { getMeasure, getValue, isValue, MaybeValue } from "../data";
 import { POSITION, UNDEFINED, UnderlyingSpace } from "../underlyingSpace";
 import { interval } from "../../util/interval";
 import { createNodeOperator } from "../withGoFish";
@@ -29,10 +29,16 @@ export const position = createNodeOperator(
         ) => {
           return [
             isValue(options.x)
-              ? POSITION(interval(getValue(options.x)!, getValue(options.x)!))
+              ? POSITION(
+                  interval(getValue(options.x)!, getValue(options.x)!),
+                  getMeasure(options.x)
+                )
               : UNDEFINED,
             isValue(options.y)
-              ? POSITION(interval(getValue(options.y)!, getValue(options.y)!))
+              ? POSITION(
+                  interval(getValue(options.y)!, getValue(options.y)!),
+                  getMeasure(options.y)
+                )
               : UNDEFINED,
           ];
         },

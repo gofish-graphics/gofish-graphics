@@ -414,6 +414,13 @@ function walkChannelValue(value: unknown, path: string, ctx: Context): void {
         message: 'field channel must have a string "name"',
       });
     }
+    // Optional unit annotation (field(name, measure)); a string when present.
+    if (obj.measure !== undefined && typeof obj.measure !== "string") {
+      ctx.errors.push({
+        path: `${path}.measure`,
+        message: 'field "measure" must be a string when present',
+      });
+    }
     return;
   }
   if (obj.type === "literal") {

@@ -1,6 +1,6 @@
 import { GoFishNode, Placeable } from "../_node";
 import type { AxisOptions } from "../gofish";
-import { getValue, isValue, MaybeValue } from "../data";
+import { getMeasure, getValue, isValue, MaybeValue, Measure } from "../data";
 import {
   Direction,
   elaborateDims,
@@ -23,6 +23,8 @@ import {
   isDIFFERENCE,
   isPOSITION,
   isSIZE,
+  forgetOnConflict,
+  spaceMeasure,
 } from "../underlyingSpace";
 import { UnderlyingSpace } from "../underlyingSpace";
 import * as Interval from "../../util/interval";
@@ -124,11 +126,22 @@ export const Spread = createNodeOperator(
             .map((node) => node.key)
             .filter((key): key is string => key !== undefined);
 
+          // Forget-merge of the stacking children's measures. Stacking/
+          // spreading different fields is legitimate, so a conflict forgets to
+          // undefined rather than throwing.
+          const stackChildMeasure = (): Measure | undefined =>
+            stackSpaces
+              .map((s) => spaceMeasure(s))
+              .reduce<
+                Measure | undefined
+              >((acc, m) => forgetOnConflict(acc, m), undefined);
+
           // Explicit size on the spread overrides children-derived sizing.
           if (isValue(dims[stackDir].size)) {
             const explicit: Size<UnderlyingSpace> = [UNDEFINED, UNDEFINED];
             explicit[stackDir] = SIZE(
-              Monotonic.linear(getValue(dims[stackDir].size!), 0)
+              Monotonic.linear(getValue(dims[stackDir].size!), 0),
+              getMeasure(dims[stackDir].size)
             );
             explicit[alignDir] = alignSpace;
             return explicit;
@@ -147,12 +160,18 @@ export const Spread = createNodeOperator(
                     : 0
                 )
                 .reduce((a, b) => a + b, 0);
-              stackSpace = POSITION(Interval.interval(0, totalWidth));
+              stackSpace = POSITION(
+                Interval.interval(0, totalWidth),
+                stackChildMeasure()
+              );
             } else if (stackSpaces.every(isSIZE)) {
               const totalSize = stackSpaces
                 .map((s) => (s as any).domain.run(1) as number)
                 .reduce((a, b) => a + b, 0);
-              stackSpace = POSITION(Interval.interval(0, totalSize));
+              stackSpace = POSITION(
+                Interval.interval(0, totalSize),
+                stackChildMeasure()
+              );
             } else if (namedKeys.length > 0) {
               stackSpace = ORDINAL(namedKeys);
             }
@@ -187,11 +206,11 @@ export const Spread = createNodeOperator(
                       childDomains[childDomains.length - 1].run(scaleFactor) / 2
                   );
             if (dataDriven) {
-              stackSpace = SIZE(composeSize());
+              stackSpace = SIZE(composeSize(), stackChildMeasure());
             } else if (namedKeys.length > 0) {
               stackSpace = ORDINAL(namedKeys);
             } else if (allSize) {
-              stackSpace = SIZE(composeSize());
+              stackSpace = SIZE(composeSize(), stackChildMeasure());
             } else if (children.every((c) => isPOSITION(c[stackDir]))) {
               const totalWidth = children
                 .map((c) =>
@@ -200,7 +219,10 @@ export const Spread = createNodeOperator(
                     : 0
                 )
                 .reduce((a, b) => a + b, 0);
-              stackSpace = POSITION(Interval.interval(0, totalWidth));
+              stackSpace = POSITION(
+                Interval.interval(0, totalWidth),
+                stackChildMeasure()
+              );
             }
           }
 

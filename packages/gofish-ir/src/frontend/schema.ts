@@ -312,8 +312,18 @@ export type ChannelValue =
   | number
   | boolean
   | null
+  | FieldAccessor
   | DatumValue
   | BridgeLambdaSentinel;
+
+/** Explicit field-accessor form, emitted by `field(name, measure?)`. The
+ *  optional `measure` is a unit annotation on the channel's underlying space
+ *  (a type claim — see gofish-graphics' `resolveMeasure`). */
+export interface FieldAccessor {
+  type: "field";
+  name: string;
+  measure?: string;
+}
 
 export interface DatumValue {
   type: "datum";

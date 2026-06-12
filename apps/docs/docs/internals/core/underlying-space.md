@@ -7,6 +7,9 @@ covers:
   - packages/gofish-graphics/src/ast/underlyingSpace.ts
   - packages/gofish-graphics/src/ast/_node.ts
   - packages/gofish-graphics/src/ast/graphicalOperators/alignment.ts
+  - packages/gofish-graphics/src/ast/graphicalOperators/layer.tsx
+  - packages/gofish-graphics/src/ast/channels.ts
+  - packages/gofish-graphics/src/ast/data.ts
 ---
 
 # The underlying space tree
@@ -343,6 +346,150 @@ them via the `scaleFactors` parameter and apply them in `computeSize`.
 This dispatch is the practical embodiment of the underlying-space-kind
 distinction. It also happens to make the rendering pipeline more readable:
 once you know the kind, you know which arithmetic applies.
+
+## Self-scaling regions: an explicit pixel size absorbs an axis
+
+The root resolves its scales against the canvas: POSITION → a posScale onto
+the pixel box, SIZE → invert the Monotonic against the canvas size. A
+`layer` (or `frame`) given an **explicit pixel size on a dim** does the same
+thing one level down — "a chart embeds the way it renders." On that dim it
+becomes a self-contained **scaling region**: its data space is absorbed
+internally rather than contributed to whatever shared space its parent is
+building.
+
+The motivating case is a marginal histogram, seaborn-jointplot style: a
+center scatter in data units, with a count histogram pinned along each edge.
+The histograms are sized to a fixed pixel band (`Chart(data, { h: 80 })`),
+and their count axis must not union into the scatter's shared x/y domains —
+counts and beak-length millimeters are foreign units. The explicit pixel
+size is exactly the signal that this region carries its own scale.
+
+The rule lives in `layer`'s resolver and layout
+(`graphicalOperators/layer.tsx`), in two halves:
+
+- **`resolveUnderlyingSpace`.** After resolving each axis normally, for any
+  dim that has an explicit pixel size and whose resolved space is
+  POSITION-with-domain or SIZE, the real space is **stashed** and `UNDEFINED`
+  is reported upward. A parent layer's `unionChildSpaces` then ignores that
+  axis (UNDEFINED carries no opinion — see [The contract](#the-contract))
+  instead of polluting a shared domain with the absorbed region's units.
+  ORDINAL and DIFFERENCE unions are left untouched.
+- **`layout`.** The stashed space gets a **local** scale built against the
+  layer's own pixel box, applying the root's recipe: POSITION →
+  `posScaleFromSpace(stashed, size[dim])`, SIZE → a local scale factor from
+  `stashed.domain.inverse(size[dim])` (the Monotonic inverted against the
+  box). These locals override the inherited posScale / scale factor on that
+  dim — definitionally, since the inherited scale is in the parent's foreign
+  units — for both the children and the layer's own constraint resolution. If
+  the size can't be resolved (NaN), the locals are left undefined and the dim
+  degrades to the inherited path rather than producing NaN scales.
+
+Note that a histogram's count axis is **not** SIZE at the frame boundary.
+Under start/end/baseline alignment, `resolveAlignmentSpace` (`alignment.ts`)
+converts all-SIZE children into `POSITION([0, max], fromSize)` — it commits
+the data-driven extents to a positional axis so they can be aligned. Without
+the self-scaling rule, that count POSITION would union straight into the
+shared axes as if it were data units; the rule is what keeps the absorbed
+axis from leaking.
+
+The space reported upward is plain `UNDEFINED` for now. Issue #508's
+proposed CONSTANT kind — "this axis has a known fixed pixel extent" — is the
+eventual, more honest home for what a self-scaling region contributes to its
+parent.
+
+## Measures: units are types
+
+The self-scaling region above is the heavy hammer — give a sub-chart an
+explicit pixel size and its axis stops talking to the outside entirely. But
+the marginal histogram has a subtler need at the _shared_ boundary. When the
+top count histogram and the center scatter overlay on x, the union should
+succeed (both are beak-length millimeters along x) and the count axis, folded
+into a position interval, should _not_ pollute that millimeter domain. The
+shared union has to tell "same units, merge" from "foreign units, refuse"
+without a human reading the field names.
+
+That distinction is a **measure**: a unit-of-measure tag carried on a space.
+POSITION, DIFFERENCE, and SIZE each gain an optional `measure?: Measure`
+(`Measure` is just a string — a field name like `"Beak Depth (mm)"`, or
+`"count"`). It is the dead `source?` slot's replacement, but with teeth:
+spaces now **unify per measure**.
+
+```ts
+// underlyingSpace.ts
+export type POSITION_TYPE = { kind: "position"; domain: Interval; measure?: Measure; ... };
+```
+
+**Merging.** Two helpers in `underlyingSpace.ts` decide what happens when two
+measures meet. `undefined` is always permissive — it means "no claim", unifies
+with anything, and yields the other side (this is why `getMeasure` returns
+`undefined` rather than a `"unit"`/`"unknown"` sentinel: a measureless value
+must merge silently into a tagged one).
+
+- `mergeMeasures(a, b, context)` — unify as **types**. Equal measures unify to
+  themselves; two _different_ defined measures are a type error and it
+  **throws**. This is the guard on the shared union: `unionChildSpaces`'
+  mixed/POSITION collection (`alignment.ts`) and `resolveAlignmentSpace`'s
+  DIFFERENCE/POSITION branches use it, so overlaying a count axis onto a
+  millimeter axis fails loudly instead of corrupting the domain.
+- `forgetOnConflict(a, b)` — a conflict **forgets** (returns `undefined`)
+  rather than throwing. Used where composing differently-measured spaces is
+  legitimate: stacking two different fields' SIZEs produces a real extent that
+  carries no single unit, so SIZE∘SIZE composition in `unionChildSpaces`
+  forgets on conflict, and `resolveAlignmentSpace`'s all-SIZE reduce uses it
+  too.
+
+So the rule of thumb: **aligning/overlaying siblings throws on a unit clash;
+composing them into a new extent forgets.**
+
+**Where measures come from** is itself a small type system with three sources,
+checked (not silently prioritized) in `resolveMeasure` (`channels.ts`):
+
+1. **Explicit annotation** — `field(name, measure)` / `datum(v, measure)`
+   (`data.ts`). A real type claim about the channel's unit.
+2. **Inferred provenance** — a transform tags its output array. `bin()`
+   (`transforms.ts`) attaches a field→measure map under the well-known
+   `MEASURE_PROVENANCE` symbol (`data.ts`): its `start`/`end`/`size` columns
+   are still in the _source_ field's units (e.g. millimeters), and `count` is
+   `"count"`. The symbol rides the array, not each row, so it survives
+   `derive(...)`. Also a real type claim.
+3. **Field-name default** — a bare string accessor's field name. A _weak_
+   binding, not a claim; it yields to either of the above.
+
+`resolveMeasure` reads annotation and provenance together: if both are present
+and **disagree**, it throws immediately at the channel — before any space union
+runs — naming the field and both measures. Otherwise annotation refines the
+weak default, and with no annotation the result is `provenance ?? field-name`.
+This completes the field/datum/literal trichotomy of issue #266: a literal has
+no field identity (no measure), a bare field name is a weak default, and an
+annotation or provenance is a hard claim. `inferSize`/`inferPos` tag the
+`value(...)` they emit with this resolved measure, which is what eventually
+lands on the space.
+
+**Propagation through the SIZE→POSITION conversion.** A histogram's count axis
+is all-SIZE at the children, and `resolveAlignmentSpace`'s start/end/baseline
+branch converts all-SIZE children into `POSITION([0, max])`. That conversion
+now carries the merged child measure forward (a `forgetOnConflict` reduce) — it
+is load-bearing, because it is exactly how the count POSITION acquires its
+`"count"` tag so a later overlay union can recognize it as foreign and refuse.
+
+**The error and its remedies.** A clash from `mergeMeasures` reads:
+
+> Cannot unify underlying spaces with different measures: `"A"` and `"B"`. If
+> these are the same units, assert that with `field(name, measure)` or
+> `datum(v, measure)`. If they are different units, give the inner chart an
+> explicit `w`/`h` so it becomes a self-scaling region.
+
+The two remedies are the two escape hatches this essay already describes:
+annotate to declare the units _are_ the same (collapsing them to one measure),
+or wrap the foreign region in an explicit pixel size so it absorbs its own
+axis (the [self-scaling region](#self-scaling-regions-an-explicit-pixel-size-absorbs-an-axis)
+above) and never reaches the shared union at all.
+
+**Stage 2.** This is Stage 1: one measure per axis, unified or refused. The
+sequel is a measure-keyed _family_ of underlying spaces per axis — true
+multi-scale, where a single axis can host several measures at once (dual axes).
+That is also the natural place for axis titles to read a measure off the space
+they describe (cf. issues #452, #386).
 
 ## Axis inference
 

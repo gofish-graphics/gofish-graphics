@@ -13,7 +13,7 @@ import { GoFishNode, Placeable } from "../_node";
 import { GoFishAST } from "../_ast";
 import { createNodeOperator } from "../withGoFish";
 import { FancyDims, Size, Direction, elaborateDims } from "../dims";
-import { getValue, isValue, MaybeValue } from "../data";
+import { getMeasure, getValue, isValue, MaybeValue } from "../data";
 import { computeAesthetic, computeSize } from "../../util";
 import {
   POSITION,
@@ -132,7 +132,10 @@ export const Treemap = createNodeOperator(
           // positioned box that fills the slot it is given.
           const axisSpace = (i: Direction): UnderlyingSpace =>
             isValue(dims[i].size)
-              ? SIZE(Monotonic.linear(getValue(dims[i].size!)!, 0))
+              ? SIZE(
+                  Monotonic.linear(getValue(dims[i].size!)!, 0),
+                  getMeasure(dims[i].size)
+                )
               : POSITION(interval(0, 1));
           return [axisSpace(0), axisSpace(1)];
         },

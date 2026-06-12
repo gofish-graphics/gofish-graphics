@@ -36,6 +36,7 @@ import {
   SIZE,
   UNDEFINED,
   UnderlyingSpace,
+  forgetOnConflict,
 } from "../underlyingSpace";
 import { interval } from "../../util/interval";
 import { createMark } from "../withGoFish";
@@ -130,7 +131,10 @@ export const Rect = ({
         ): UnderlyingSpace => {
           const d = dims[axis];
           if (isValue(d.min) && isValue(d.max)) {
-            return POSITION(interval(getValue(d.min)!, getValue(d.max)!));
+            return POSITION(
+              interval(getValue(d.min)!, getValue(d.max)!),
+              forgetOnConflict(getMeasure(d.min), getMeasure(d.max))
+            );
           }
           if (!isValue(d.min) && !isValue(d.size)) {
             // Nothing data-driven on this axis. Literal pixel sizes are
@@ -139,16 +143,16 @@ export const Rect = ({
             return UNDEFINED;
           }
           if (isAesthetic(d.min) && isValue(d.size)) {
-            return DIFFERENCE(getValue(d.size)!);
+            return DIFFERENCE(getValue(d.size)!, getMeasure(d.size));
           }
           if (!isValue(d.min) && isValue(d.size)) {
             // No data position; data-driven size → SIZE with Monotonic.
-            return SIZE(axisDomain);
+            return SIZE(axisDomain, getMeasure(d.size));
           }
           // has position (data-driven), maybe with literal/no size → POSITION.
           const min = isValue(d.min) ? getValue(d.min)! : 0;
           const size = isValue(d.size) ? getValue(d.size)! : 0;
-          return POSITION(interval(min, min + size));
+          return POSITION(interval(min, min + size), getMeasure(d.min));
         };
 
         return [resolveAxis(0, wDomain), resolveAxis(1, hDomain)];

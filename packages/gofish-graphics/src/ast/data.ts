@@ -1,8 +1,37 @@
+// <gofish-wiki> AUTO-GENERATED — see covers: in the essay; run `pnpm --filter docs sync-backlinks`
+// @wiki Underlying Space — /internals/core/underlying-space
+// </gofish-wiki>
+
 import { Interval } from "./dims";
 
 export type Measure = string;
 
 export const measure = (unit: string): Measure => unit;
+
+/**
+ * Well-known symbol used to tag a data ARRAY with the *measure provenance* of
+ * its columns — a map from field name to the {@link Measure} that produced it.
+ * This is how a data-transform like `bin()` declares that its output `start`/
+ * `end`/`size` columns are still expressed in the *source* field's units (e.g.
+ * "Beak Length (mm)") rather than the literal field-name "start". The symbol
+ * rides the array (not each row) so it survives `derive(...)`, which passes the
+ * transformed array straight through to the next operator.
+ *
+ * Channel inference (`resolveMeasure` in channels.ts) reads this as one of the
+ * three measure sources; see issue #266 for the field/datum/literal trichotomy.
+ */
+export const MEASURE_PROVENANCE: unique symbol = Symbol.for(
+  "gofish.measureProvenance"
+);
+export type MeasureProvenance = Record<string, Measure>;
+
+/** Read the measure-provenance map a data array carries, if any. */
+export const getMeasureProvenance = (
+  data: unknown
+): MeasureProvenance | undefined =>
+  data != null
+    ? ((data as any)[MEASURE_PROVENANCE] as MeasureProvenance | undefined)
+    : undefined;
 
 export type Value<T> = T | DatumValue | DatumValueImpl;
 export type MaybeValue<T> = T | Value<T>;
@@ -68,16 +97,25 @@ export const value = <T>(datum: T, measure?: Measure): DatumValueImpl =>
 export const datum = value;
 
 /**
- * `field(name)` is an explicit field-accessor wrapper. The channel inference
- * functions (`inferSize` / `inferPos` / `inferColor` / `inferRaw`) recognize
- * the tag and resolve it to a per-row value, identical to passing a bare
- * string. Use this when the field name could be confused with a literal
+ * `field(name, measure?)` is an explicit field-accessor wrapper. The channel
+ * inference functions (`inferSize` / `inferPos` / `inferColor` / `inferRaw`)
+ * recognize the tag and resolve it to a per-row value, identical to passing a
+ * bare string. Use this when the field name could be confused with a literal
  * (e.g. `field("0.5")`).
+ *
+ * The optional `measure` is an *explicit unit annotation* — a real type claim
+ * about the channel's underlying space (see {@link Measure}). It is one of the
+ * three measure sources `resolveMeasure` (channels.ts) checks: a bare string
+ * accessor's field-name is only a *weak default*, whereas this annotation (and
+ * `bin()`'s {@link MEASURE_PROVENANCE}) is a hard claim that triggers a type
+ * error if it contradicts inferred provenance. Issue #266 is the field/datum/
+ * literal trichotomy this completes.
  */
-export type FieldAccessor = { type: "field"; name: string };
-export const field = (name: string): FieldAccessor => ({
+export type FieldAccessor = { type: "field"; name: string; measure?: Measure };
+export const field = (name: string, measure?: Measure): FieldAccessor => ({
   type: "field",
   name,
+  ...(measure !== undefined ? { measure } : {}),
 });
 export const isField = (v: unknown): v is FieldAccessor =>
   typeof v === "object" &&
@@ -126,11 +164,20 @@ export const getValue = <T>(value: MaybeValue<T>): T => {
   return value as T;
 };
 
-export const getMeasure = <T>(value: MaybeValue<T>): Measure => {
+/**
+ * The {@link Measure} carried by a datum value, or `undefined` when it carries
+ * none (a measureless datum) or is a raw aesthetic (not a datum at all).
+ *
+ * Returns `undefined` rather than a sentinel string ("unit"/"unknown") so that
+ * a measureless value unifies *permissively* with a tagged one — see
+ * `mergeMeasures` in underlyingSpace.ts, whose undefined-permissive rule is the
+ * whole point of distinguishing "no claim" from "a specific unit".
+ */
+export const getMeasure = <T>(value: MaybeValue<T>): Measure | undefined => {
   if (isValue(value)) {
-    return (value as DatumValue).measure ?? "unit";
+    return (value as DatumValue).measure;
   }
-  return "unknown";
+  return undefined;
 };
 
 /**

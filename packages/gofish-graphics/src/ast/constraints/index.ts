@@ -128,6 +128,12 @@ export function getPositioningConstraintRefs(
  * domain on that axis. Literal (raw-pixel) coordinates are *not* data and don't
  * contribute. The layer's `resolveUnderlyingSpace` merges this with the
  * children's spaces (see `layer.tsx`).
+ *
+ * Measure note (Stage-1 guard): these constraint-datum domains are left
+ * UNTAGGED (no Measure). The layer merges them permissively into the
+ * children's POSITION, whose measure wins. A `datum(v, measure)` coordinate's
+ * unit is therefore not yet enforced against the children's — a deliberate
+ * permissive edge until constraint domains carry measures end-to-end.
  */
 export function collectPositionDomains(constraints: ConstraintSpec[]): {
   x?: Interval.Interval;

@@ -41,6 +41,20 @@ chart(data)
   .render(container, { h: 300 });
 ```
 
+### Explicit size makes a self-contained scale region
+
+When you give a (sub)chart an explicit `w`/`h` on a dimension, its scale on that
+dimension resolves against that pixel box rather than against any larger layout it
+is composed into. The axis becomes self-contained: a chart sized this way can be
+dropped into a bigger graphic without sharing — or polluting — the surrounding
+axes with its own units.
+
+This is what makes composed layouts like a marginal histogram work. The count
+histograms are sized to a fixed pixel band (`Chart(data, { h: 80 })` /
+`Chart(data, { w: 80 })`) and laid out alongside a center scatter; because each
+histogram absorbs its own count scale, only the scatter's data units drive the
+shared x/y axes.
+
 ## Axes
 
 The `axes` option controls per-axis visibility and titles:
