@@ -481,14 +481,21 @@ what accessibility tooling (screen-reader navigation à la Olli / Data
 Navigator, which the Bluefish paper's future-work section points at) and any
 later analysis want to read. So the Python wrapper keeps serializing the
 high-level vocabulary unchanged, and compilation to the constraint core
-happens inside the JS engine, _after_ the bridge. The unification is invisible
-to `gofish-ir`.
+happens inside the JS engine, _after_ the bridge. The unification's machinery
+is invisible to `gofish-ir`; its new surface _options_ are not — see below.
 
 A serialized **core IR** (layers + constraints + marks, the post-compilation
 form) remains a coherent artifact to define — it would be the natural input
 for a non-JS renderer, a layout debugger, or an optimizer — but it is
 deferred until such a consumer exists; today the in-memory compiled form _is_
 the core, and inventing a wire format nothing reads would be speculative.
-(New constraint kinds still pay the three-encoding schema tax only if and
-when they are exposed to Python; the unification itself adds nothing to the
-schema.)
+A corollary of the high-level-IR decision, per the maintainer's parity rule
+("everything writable in JS should be writable in Python"): new _surface
+options_ do cross the bridge even when the machinery doesn't. The
+unification's `glue`/`weights` (distribute constraint) and `stackWeights`
+(spread) are exposed to Python — wrapper kwargs plus the typed
+`SpreadOperator` fields and validators in `gofish-ir` — and the 12
+`ConstraintParity` stories have byte-identical Python ports
+(`tests/python-stories/low-level-syntax/test_constraint_parity.py`). Parity
+exemptions are reserved for stories that aren't pure gofish specs; "this only
+tests the JS engine" is not a valid exemption reason.
