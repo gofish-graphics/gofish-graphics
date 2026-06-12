@@ -1,5 +1,18 @@
 import type { Placeable } from "../_node";
 import { Axis, ConstraintRef, axisIndex, isPlacedOn } from "./shared";
+import {
+  ORDINAL,
+  POSITION,
+  SIZE,
+  UNDEFINED,
+  UnderlyingSpace,
+  forgetAllMeasures,
+  isPOSITION,
+  isSIZE,
+  spaceMeasure,
+} from "../underlyingSpace";
+import * as Monotonic from "../../util/monotonic";
+import * as Interval from "../../util/interval";
 
 export interface DistributeOptions {
   dir: Axis;
@@ -28,6 +41,65 @@ export const createDistributeConstraint = (
   order: options.order ?? "forward",
   children,
 });
+
+/**
+ * PROTOTYPE (issue #475): the distribute constraint's *space-resolution*
+ * contribution — the missing half that makes `layer + distribute` claim the
+ * same underlying space a `spread` does. Mirrors spread.tsx's non-glue stack
+ * dispatch exactly (resolveUnderlyingSpace, ~lines 174-223):
+ *   - all-SIZE & data-driven (some non-constant Monotonic) → SIZE composition
+ *     (Monotonic.add of the children + spacing·(n−1) for "edge"; the
+ *     unknown-Monotonic center form for "center"), so a parent can solve a
+ *     scale factor via Monotonic.inverse (auto-fit).
+ *   - all-SIZE constant + named (carry a `key`) → ORDINAL.
+ *   - all-SIZE constant + unnamed → SIZE composition.
+ *   - all-POSITION → POSITION([0, Σ widths]).
+ *   - anything else → UNDEFINED (caller falls back to its default union).
+ * Measures forget-merge on conflict, like spread.
+ *
+ * `keys` are the targets' ordinal keys (node.key) in the same order as
+ * `targetSpaces`; only used to pick the ORDINAL branch.
+ */
+export function distributeSpaceFold(
+  targetSpaces: UnderlyingSpace[],
+  constraint: Pick<DistributeConstraint, "spacing" | "mode">,
+  keys: (string | undefined)[] = []
+): UnderlyingSpace {
+  const n = targetSpaces.length;
+  if (n === 0) return UNDEFINED;
+  const namedKeys = keys.filter((k): k is string => k !== undefined);
+  const measure = forgetAllMeasures(targetSpaces.map((s) => spaceMeasure(s)));
+
+  const allSize = targetSpaces.every(isSIZE);
+  const childDomains = allSize
+    ? targetSpaces.map((s) => (s as any).domain as Monotonic.Monotonic)
+    : [];
+  const dataDriven =
+    allSize && childDomains.some((d) => !Monotonic.isConstant(d));
+  const composeSize = (): Monotonic.Monotonic =>
+    constraint.mode === "center"
+      ? Monotonic.unknown(
+          (scaleFactor: number) =>
+            childDomains[0].run(scaleFactor) / 2 +
+            constraint.spacing * (n - 1) +
+            childDomains[childDomains.length - 1].run(scaleFactor) / 2
+        )
+      : Monotonic.adds(
+          Monotonic.add(...childDomains),
+          constraint.spacing * (n - 1)
+        );
+
+  if (dataDriven) return SIZE(composeSize(), measure);
+  if (namedKeys.length === n && n > 0) return ORDINAL(namedKeys);
+  if (allSize) return SIZE(composeSize(), measure);
+  if (targetSpaces.every((s) => isPOSITION(s) && s.domain)) {
+    const total = targetSpaces
+      .map((s) => Interval.width((s as any).domain))
+      .reduce((a, b) => a + b, 0);
+    return POSITION(Interval.interval(0, total), measure);
+  }
+  return UNDEFINED;
+}
 
 export function applyDistribute(
   constraint: DistributeConstraint,

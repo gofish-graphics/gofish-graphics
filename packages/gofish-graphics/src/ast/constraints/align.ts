@@ -6,6 +6,26 @@ import {
   axisIndex,
   isPlacedOn,
 } from "./shared";
+import type { UnderlyingSpace } from "../underlyingSpace";
+import { resolveAlignmentSpace } from "../graphicalOperators/alignment";
+
+/**
+ * PROTOTYPE (issue #475): the align constraint's *space-resolution*
+ * contribution — the cross-axis half of the spread reduction. Defers entirely
+ * to spread's own `resolveAlignmentSpace`, so the fold is the same one spread
+ * uses (SIZE→POSITION for start/end/baseline; SIZE→DIFFERENCE for middle;
+ * POSITION union otherwise). `AlignAnchor` and spread's `Alignment` share the
+ * same string vocabulary, so the anchor passes through unchanged.
+ *
+ * Only the uniform-anchor form is handled (a single string, not a per-child
+ * array): a heterogeneous anchor array has no single spread equivalent.
+ */
+export function alignSpaceFold(
+  targetSpaces: UnderlyingSpace[],
+  anchor: AlignAnchor
+): UnderlyingSpace {
+  return resolveAlignmentSpace(targetSpaces, anchor).space;
+}
 
 /**
  * Anchor spec for one axis of an `align` constraint. A single anchor
