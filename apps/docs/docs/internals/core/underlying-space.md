@@ -382,10 +382,14 @@ them along three axes the CSS model can't reach:
 - **Absolute sizing coexists.** Flexbox bolts `flex-basis` / fixed widths
   alongside the factors as a separate mechanism. GoFish folds both into one
   field/datum/literal trichotomy (issue #266): a literal `10` is absolute
-  pixels, `datum(n)` is a relative weight, a field name is a per-row weight —
-  and mixing relative and absolute weights in one `cut` is a provenance error
-  that throws, because the two answer different questions about where the
-  pixels come from.
+  pixels, `datum(n)` is a relative weight, a field name is a per-row weight.
+  Mixing the two in one `cut` is not a conflict but exactly flex resolution:
+  the absolutes are fixed-basis claims, and the size scale's _range_ is the
+  parent extent **minus** those fixed claims, so the `datum(n)` weights
+  normalize over the remainder — `cut(source, { size: [100, datum(1), datum(2)] })`
+  fixes a 100px cap and splits what's left 1:2. The mixed case makes the
+  identification sharper, not weaker: "fixed widths next to flex items" is just
+  a size scale whose range has been shortened by the fixed children.
 
 The payoff is conceptual economy: "fill the container proportionally" is not
 a bespoke layout mode, it is what a size scale already does once its range is

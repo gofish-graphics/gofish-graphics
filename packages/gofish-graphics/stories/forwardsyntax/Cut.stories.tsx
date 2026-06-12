@@ -11,6 +11,7 @@ import {
   spread,
   stack,
   Spread,
+  Stack,
   cut,
   datum,
 } from "../../src/lib";
@@ -263,6 +264,79 @@ export const RectAbsoluteSizes: StoryObj<Args> = {
         size: [100, 100, 200],
       })
     ).render(container, { w: args.w, h: args.h, axes: false });
+
+    return container;
+  },
+};
+
+/** Flexbox-style mixed sizes: a 600px-wide stroked rect cut into four windows
+ *  `[100, datum(1), datum(2), 50]` along x. The raw numbers (100, 50) are FIXED
+ *  end caps that claim their pixels first; the two `datum()` weights split the
+ *  remaining 450px in a 1:2 ratio (150px, 300px). Spread with an 8px gap so the
+ *  fixed caps and the weighted middle slices are individually visible: widths
+ *  read left-to-right as 100, 150, 300, 50. */
+export const MixedSizes: StoryObj<Args> = {
+  args: { w: 700, h: 200 },
+  render: (args: Args) => {
+    const container = initializeContainer();
+
+    Spread(
+      { dir: "x", spacing: 8 },
+      cut(
+        rect({
+          w: 600,
+          h: 80,
+          fill: "mediumpurple",
+          stroke: "#2e1065",
+          strokeWidth: 3,
+        }),
+        { dir: "x", size: [100, datum(1), datum(2), 50] }
+      )
+    ).render(container, { w: args.w, h: args.h, axes: false });
+
+    return container;
+  },
+};
+
+/** Croissant chart: cut a source with a visible `inset`, then recompose the
+ *  slices in the source's CONTINUOUS space while keeping the inset gaps. cut's
+ *  inset shrinks each slice's reported bbox to its visible window, so a plain
+ *  `Stack({ spacing: 0 })` would pull the windows flush and drop the gaps. The
+ *  fix is user-space: pad each slice back to its full logical extent by adding
+ *  `inset/2` of transparent space on each side along `dir` (an inner Stack with
+ *  zero-extent spacer rects), THEN stack the padded slices with spacing 0. The
+ *  result spans the source's exact width (400px) with even 20px gaps at every
+ *  cut point — a row of bordered "croissant" segments. */
+export const CroissantStack: StoryObj<Args> = {
+  args: { w: 500, h: 200 },
+  render: (args: Args) => {
+    const container = initializeContainer();
+
+    const inset = 20;
+    const slices = cut(
+      rect({
+        w: 400,
+        h: 80,
+        fill: "wheat",
+        stroke: "#8a5a16",
+        strokeWidth: 2,
+      }),
+      { dir: "x", size: Array(4).fill(datum(1)), inset }
+    );
+
+    // Pad each slice back to its full logical extent: inset/2 of transparent
+    // space on each side along `dir`, via zero-cross-extent spacer rects.
+    const spacer = () =>
+      rect({ w: inset / 2, h: 0, fill: "none", stroke: "none" });
+    const padded = slices.map((slice) =>
+      Stack({ dir: "x", spacing: 0 }, [spacer(), slice, spacer()])
+    );
+
+    Stack({ dir: "x", spacing: 0 }, padded).render(container, {
+      w: args.w,
+      h: args.h,
+      axes: false,
+    });
 
     return container;
   },

@@ -101,23 +101,48 @@ single node per group — no throw.
 `dir`, with a **field / datum / literal** trichotomy
 ([#266](https://github.com/joshpoll/gofish/issues/266)):
 
-| `size` element        | Meaning                                                                                                                                                                                                                                  |
-| --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `number` (e.g. `100`) | **Absolute** source pixels. Windows consume the source in order from offset 0; leftover source past the summed extents is **omitted** (never appears in any slice). If the extents sum to **more** than the source extent, `cut` throws. |
-| `datum(n)`            | **Relative** weight. The whole array is normalized to fill the source extent exactly.                                                                                                                                                    |
-| field name (string)   | _Modifier form only._ Resolved per row and treated as a `datum` weight.                                                                                                                                                                  |
+| `size` element        | Meaning                                                                                                                     |
+| --------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `number` (e.g. `100`) | **Absolute** source pixels — a fixed-size slice. Claims its pixels in place.                                                |
+| `datum(n)`            | **Relative** weight — a flex slice. Splits whatever source extent the fixed slices leave over, in proportion to its weight. |
+| field name (string)   | _Modifier form only._ Resolved per row and treated as a `datum` weight.                                                     |
 
-Mixing raw numbers and `datum()` in one array is a provenance/type error and
-**throws** — pick one. Equal slices are `Array(n).fill(datum(1))` (or, in the
-modifier form, simply omit `size`).
+The two compose with **CSS-flexbox semantics**: fixed-size items sit beside
+flex items. The raw numbers claim their absolute pixels first; the `datum()`
+weights then split the **remainder** (source extent − sum of the absolutes)
+proportionally. The two degenerate ends are the common cases:
+
+- **All `datum()`** → the remainder is the whole source extent, so the weights
+  normalize over the full source (a pure flex split).
+- **All numbers** → no remainder is needed; each slice is exactly its pixels.
+  Leftover source past the summed extents is simply **omitted** (never appears
+  in any slice).
 
 ```js
-// Absolute pixels: a 600px source, only 0–400 sliced; 400–600 omitted.
+// Pure flex: weights fill the source exactly, whatever its extent.
+gf.cut(rect, { dir: "x", size: [datum(1), datum(1), datum(2)] });
+
+// Pure fixed: a 600px source, only 0–400 sliced; 400–600 omitted.
 gf.cut(rect, { dir: "x", size: [100, 100, 200] });
 
-// Relative weights: always fills the source, whatever its extent.
-gf.cut(rect, { dir: "x", size: [datum(1), datum(1), datum(2)] });
+// Mixed: 100px + 50px fixed end caps; datum() weights split the middle
+// (450px) 1:2 → 150px and 300px slices.
+gf.cut(rect, { dir: "x", size: [100, datum(1), datum(2), 50] });
 ```
+
+Equal slices are `Array(n).fill(datum(1))` (or, in the modifier form, simply
+omit `size`).
+
+`cut` **throws** on the genuinely meaningless cases:
+
+- the **absolutes alone exceed the source extent** (the fixed claims don't fit);
+- there are `datum()` weights but **no remainder is left** for them (the
+  absolutes already consume the whole source);
+- two `datum()` entries carry **different, both-defined measure tags**
+  (`datum(v, measure)`) — an incompatible-units error. Untagged weights are
+  permissive and unify with anything; this reuses the same measure unification
+  as the underlying-space type system
+  ([#527](https://github.com/joshpoll/gofish/issues/527)).
 
 ## inset
 
@@ -140,6 +165,41 @@ gf.Spread(
   gf.cut(source, { dir: "y", size })
 );
 ```
+
+## Croissant charts: recomposing in continuous space
+
+`inset` shrinks both the visible window **and** the slice's reported bounding
+box — a slice reports the bounds of its visible region, not its full logical
+extent. That is deliberate (`mask` reports the region's bounds). It does mean a
+plain `Stack({ spacing: 0 })` pulls the inset slices flush and drops the gaps.
+
+To recompose the slices back into the source's **continuous** space while
+keeping the inset gaps — a
+[croissant chart](https://vis.khoury.northeastern.edu/pubs/Fygenson2026CroissantChartsModulating/) —
+pad each slice back to its full logical extent in user space: add `inset / 2`
+of transparent space on each side along `dir` (an inner `Stack` with
+zero-cross-extent spacer rects), then stack the padded slices with `spacing: 0`.
+The padding amount is the constant `inset / 2`, independent of each slice's
+extent, so the same wrapper works for any `size`:
+
+```js
+const inset = 20;
+const slices = gf.cut(source, { dir: "x", size, inset });
+
+// inset/2 of transparent space on each side restores the carved-out gap.
+const spacer = () =>
+  gf.rect({ w: inset / 2, h: 0, fill: "none", stroke: "none" });
+const padded = slices.map((slice) =>
+  gf.Stack({ dir: "x", spacing: 0 }, [spacer(), slice, spacer()])
+);
+
+gf.Stack({ dir: "x", spacing: 0 }, padded);
+```
+
+The recomposed row spans the source's **exact** extent, with an even `inset`-wide
+gap at every cut point. (There is no built-in one-axis padding operator —
+`Frame`/`layer` size to their content, so they can't pad a smaller child;
+the spacer rects are the spelling.)
 
 ## Signatures
 

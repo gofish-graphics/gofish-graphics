@@ -15,13 +15,16 @@
  *        cut(rect({ w: 400, h: 80 }), { dir: "x", size: [100, 100, 200] }))
  *
  *    `size` is a `(number | DatumValue)[]` with a field/datum/literal-style
- *    trichotomy (issue #266):
- *      - raw `number` = ABSOLUTE source pixels. Windows consume the source in
- *        order from offset 0; leftover source is simply not sliced. If the
- *        extents sum to MORE than the source extent along `dir`, we throw.
- *      - `datum(n)` = RELATIVE weight; the whole array is normalized to fill
- *        the source extent exactly.
- *      - mixing the two in one array throws (a provenance/type error).
+ *    trichotomy (issue #266), resolved with CSS-flexbox semantics:
+ *      - raw `number` = ABSOLUTE source pixels (a fixed "flex-basis" item).
+ *        It claims its pixels in place; if the absolutes alone exceed the
+ *        source extent along `dir`, we throw.
+ *      - `datum(n)` = RELATIVE weight (a flex item). The datum entries split
+ *        the REMAINDER (source extent − sum of absolutes) in proportion to
+ *        their weights. All-datum = the remainder is the whole extent.
+ *      - mixing the two is well-defined (fixed caps + weighted middle), but
+ *        we throw if the remainder ≤ 0 (datums with no room) or if datum
+ *        entries carry incompatible measure tags (a unit error).
  *    N = `size.length`. Equal slices = `Array(n).fill(datum(1))`.
  *
  * 2. The v3 expand-mark form `image({...}).cut({ dir, size, inset })` stays,
@@ -45,13 +48,16 @@ import { mask as Mask } from "./porterDuff";
 import { offset as offsetOp } from "./offset";
 import { Rect } from "../shapes/rect";
 import { createMark } from "../withGoFish";
-import { datum, getValue, isValue, type Value } from "../data";
+import { datum, getValue, getMeasure, isValue, type Value } from "../data";
+import { mergeAllMeasures } from "../underlyingSpace";
 
 /** User-facing options for the pure `cut(source, opts)` form. */
 export type CutOptions = {
   dir: "x" | "y";
-  /** Slice extents along `dir`. Raw numbers = absolute source pixels; `datum(n)`
-   *  = relative weights normalized to the source extent. Don't mix the two. */
+  /** Slice extents along `dir`, resolved flexbox-style. Raw numbers = absolute
+   *  source pixels (fixed items); `datum(n)` = relative weights that split the
+   *  remainder after the fixed items. The two compose (fixed caps + weighted
+   *  middle). */
   size: Value<number>[];
   /** Pixels removed from each slice's source region (split half on each side
    *  along `dir`). Creates a "chunk taken out" effect on every slice. Default 0. */
@@ -119,43 +125,80 @@ async function buildSliceNode(
 
 /**
  * Resolve a `(number | DatumValue)[]` `size` array into pixel extents along
- * `dir`, enforcing the trichotomy:
- *   - all raw numbers → ABSOLUTE pixels; pass through. Throw if they sum to
- *     more than the source extent (windows would run off the source).
- *   - all `datum(n)` → RELATIVE weights; normalize to fill the source extent.
- *   - a mix → throw (provenance/type error).
+ * `dir` using CSS-flexbox semantics: fixed-width items sit next to flex items.
+ *   - raw `number` entries are ABSOLUTE source pixels; they claim their pixels
+ *     first, in place.
+ *   - `datum(n)` entries are RELATIVE weights; they split the *remainder*
+ *     (source extent − sum of absolutes) proportionally to their weights.
+ *
+ * The two degenerate ends are exactly as before: an all-absolute array passes
+ * its pixels through (remainder unused); an all-datum array has remainder =
+ * the whole extent, so the weights normalize over the full source.
+ *
+ * Throws on the genuinely meaningless cases:
+ *   (a) the absolutes alone already sum to more than the source extent
+ *       (the fixed claims don't fit);
+ *   (b) there are datum entries but the remainder is ≤ 0 (no flex space left
+ *       for them to fill);
+ *   (c) two datum entries carry different, both-defined measure tags
+ *       (incompatible units). Untagged entries are permissive — they unify
+ *       with anything. The comparison reuses {@link mergeAllMeasures}, the same
+ *       undefined-permissive measure unification the underlying-space type
+ *       system uses (#527).
  */
 function resolveExtents(
   size: Value<number>[],
   sourceDimAlong: number,
   dir: "x" | "y"
 ): number[] {
-  const allNumbers = size.every((v) => typeof v === "number");
-  const allData = size.every((v) => isValue(v));
-  if (!allNumbers && !allData) {
+  const dimName = dir === "x" ? "width" : "height";
+  const isAbsolute = (v: Value<number>): v is number => typeof v === "number";
+
+  const absoluteTotal = size.reduce<number>(
+    (sum, v) => (isAbsolute(v) ? sum + v : sum),
+    0
+  );
+  if (absoluteTotal > sourceDimAlong + 1e-6) {
     throw new Error(
-      `cut: \`size\` mixes raw numbers (absolute source pixels) and datum() ` +
-        `values (relative weights). These are contradictory size provenances — ` +
-        `use all numbers (e.g. [100, 100, 200]) or all datum() weights ` +
-        `(e.g. data.map((d) => datum(d.amount))), not both.`
+      `cut: absolute slice sizes sum to ${absoluteTotal}px but the source ` +
+        `${dimName} is only ${sourceDimAlong}px along "${dir}". Reduce the ` +
+        `fixed sizes so they fit within the source, or use datum() weights to ` +
+        `fill it exactly.`
     );
   }
-  const dimName = dir === "x" ? "width" : "height";
-  if (allNumbers) {
-    const extents = size as number[];
-    const total = extents.reduce((a, b) => a + b, 0);
-    if (total > sourceDimAlong + 1e-6) {
-      throw new Error(
-        `cut: absolute slice sizes sum to ${total}px but the source ${dimName} ` +
-          `is only ${sourceDimAlong}px along "${dir}". Reduce the sizes so they ` +
-          `fit within the source, or use datum() weights to fill it exactly.`
-      );
-    }
-    return extents;
+
+  const datumEntries = size.filter((v): v is Exclude<Value<number>, number> =>
+    isValue(v)
+  );
+  if (datumEntries.length === 0) {
+    // All-absolute: pass the fixed pixels through unchanged.
+    return size as number[];
   }
-  const weights = size.map((v) => Number(getValue(v)) || 0);
-  const total = weights.reduce((a, b) => a + b, 0) || 1;
-  return weights.map((w) => (w / total) * sourceDimAlong);
+
+  // Datum entries split the remainder left after the fixed claims (flexbox).
+  const remainder = sourceDimAlong - absoluteTotal;
+  if (remainder <= 1e-6) {
+    throw new Error(
+      `cut: \`size\` has datum() weights but the absolute sizes already ` +
+        `consume the entire source ${dimName} (${sourceDimAlong}px along ` +
+        `"${dir}"), leaving no room (${remainder}px) for the weighted slices. ` +
+        `Reduce the fixed sizes so a positive remainder is left to distribute.`
+    );
+  }
+
+  // Incompatible-measures guard: datum entries with different, both-defined
+  // measure tags are a unit error. mergeAllMeasures is undefined-permissive
+  // (untagged entries unify with anything) and throws on a real conflict.
+  mergeAllMeasures(
+    datumEntries.map((v) => getMeasure(v)),
+    `cut: \`size\` datum() weights carry incompatible measures`
+  );
+
+  const weightTotal =
+    datumEntries.reduce((sum, v) => sum + (Number(getValue(v)) || 0), 0) || 1;
+  return size.map((v) =>
+    isAbsolute(v) ? v : ((Number(getValue(v)) || 0) / weightTotal) * remainder
+  );
 }
 
 /**
