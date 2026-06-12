@@ -139,7 +139,12 @@ export const RectEqualSlices: StoryObj<Args> = {
   },
 };
 
-/** Same shape with no spacing — adjacent slices should touch. */
+/** Recomposition sanity check: the same rect cut into 4 equal slices with
+ *  spacing 0, so adjacent slice windows touch and tile the source back into a
+ *  single shape. The source rect carries a visible stroke — a CORRECT
+ *  recomposition shows ONE continuous border around the whole rect, whereas
+ *  misaligned slice windows would reveal repeated/broken stroke lines in the
+ *  interior where the slices meet. The border is the falsifiable witness. */
 export const RectNoInset: StoryObj<Args> = {
   args: { w: 600, h: 200 },
   render: (args: Args) => {
@@ -147,21 +152,31 @@ export const RectNoInset: StoryObj<Args> = {
 
     Chart(abcdData)
       .flow(spread({ dir: "x", spacing: 0 }))
-      .mark(rect({ w: 400, h: 80, fill: "tomato" }).cut({ dir: "x" }))
+      .mark(
+        rect({
+          w: 400,
+          h: 80,
+          fill: "tomato",
+          stroke: "#333",
+          strokeWidth: 3,
+        }).cut({ dir: "x" })
+      )
       .render(container, { w: args.w, h: args.h, axes: false });
 
     return container;
   },
 };
 
-/** Image cut into 3 equal slices along y. */
+/** Image cut into 3 equal slices along y, then exploded vertically with a 14px
+ *  gap between bands — so the bottle reads as three separated horizontal slabs
+ *  (top / middle / bottom) rather than one intact image. */
 export const ImageEqualSlices: StoryObj<Args> = {
   args: { w: 600, h: 700 },
   render: (args: Args) => {
     const container = initializeContainer();
 
     Chart([{ k: "top" }, { k: "mid" }, { k: "bot" }])
-      .flow(spread({ dir: "y", spacing: 0, reverse: true }))
+      .flow(spread({ dir: "y", spacing: 14, reverse: true }))
       .mark(image({ href: bottlePng, w: 193, h: 600 }).cut({ dir: "y" }))
       .render(container, { w: args.w, h: args.h, axes: false });
 
@@ -214,9 +229,18 @@ export const RectAbsoluteSizes: StoryObj<Args> = {
   },
 };
 
-/** dir: "x" — bottle laid horizontally, sliced vertically with size weights. */
+/** dir: "x" — the upright bottle sliced into vertical strips of varying width
+ *  by `weight`, then exploded apart along x. The bottle keeps its natural
+ *  193×600 aspect so every strip masks real image content.
+ *
+ *  Pitfall this replaces: an earlier version rendered the portrait bottle at a
+ *  non-intrinsic w:800,h:200. With the image mark's default
+ *  preserveAspectRatio "xMidYMid meet", the bottle letterboxes into a small
+ *  centered upright figure, so most dir-x slice windows masked empty
+ *  whitespace and the story looked like one tiny intact bottle. Keep the
+ *  intrinsic aspect (as here), or pass preserveAspectRatio "none" to stretch. */
 export const ImageHorizontalCut: StoryObj<Args> = {
-  args: { w: 1100, h: 500 },
+  args: { w: 700, h: 700 },
   render: (args: Args) => {
     const container = initializeContainer();
 
@@ -229,9 +253,9 @@ export const ImageHorizontalCut: StoryObj<Args> = {
     ];
 
     Chart(data)
-      .flow(spread({ dir: "x", spacing: 6 }))
+      .flow(spread({ dir: "x", spacing: 12 }))
       .mark(
-        image({ href: bottlePng, w: 800, h: 200 }).cut({
+        image({ href: bottlePng, w: 193, h: 600 }).cut({
           dir: "x",
           size: "weight",
           inset: 4,
