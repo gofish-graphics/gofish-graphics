@@ -152,17 +152,21 @@ async function main() {
 
     const status = issues.length ? "FAIL" : ex.isFallback ? "fallback" : "ok";
     if (issues.length) failures++;
-    rows.push({ id: ex.id, status, issues });
+    const deps = Object.entries(ex.npmDeps ?? {})
+      .map(([name, version]) => `${name}@${version}`)
+      .join(", ");
+    rows.push({ id: ex.id, status, deps, issues });
   }
 
   // table
   const idWidth = Math.max(...rows.map((r) => r.id.length), 2);
+  const statusWidth = Math.max(...rows.map((r) => r.status.length), 6);
   console.log("");
-  console.log(`${"id".padEnd(idWidth)}  status`);
-  console.log(`${"-".repeat(idWidth)}  ------`);
+  console.log(`${"id".padEnd(idWidth)}  ${"status".padEnd(statusWidth)}  deps`);
+  console.log(`${"-".repeat(idWidth)}  ${"-".repeat(statusWidth)}  ----`);
   for (const r of rows) {
     console.log(
-      `${r.id.padEnd(idWidth)}  ${r.status}${r.issues.length ? "  :: " + r.issues.join("; ") : ""}`
+      `${r.id.padEnd(idWidth)}  ${r.status.padEnd(statusWidth)}  ${r.deps || "-"}${r.issues.length ? "  :: " + r.issues.join("; ") : ""}`
     );
   }
 

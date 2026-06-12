@@ -8,13 +8,22 @@ import { Sandbox, sandboxProps } from "vitepress-plugin-sandpack";
  */
 export const GoFishLive = defineComponent({
   name: "GoFishLive",
-  props: sandboxProps,
+  props: {
+    ...sandboxProps,
+    // Extra npm dependencies merged into Sandpack's customSetup.deps alongside
+    // gofish-graphics, so examples that import e.g. vega-datasets resolve.
+    extraDeps: {
+      type: Object,
+      default: () => ({}),
+    },
+  },
   setup(props, { slots }) {
     return () => {
       // Convert string numbers to actual numbers for numeric props
       // This is needed because markdown passes all props as strings
+      const { extraDeps, ...rest } = props;
       const normalizedProps = {
-        ...props,
+        ...rest,
         previewHeight:
           props.previewHeight != null
             ? typeof props.previewHeight === "string"
@@ -38,6 +47,7 @@ export const GoFishLive = defineComponent({
           customSetup={{
             deps: {
               "gofish-graphics": "nightly",
+              ...(extraDeps ?? {}),
             },
           }}
         >

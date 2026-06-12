@@ -41,6 +41,14 @@ export interface StoryExample {
   code: string;
   /** generated `./dataset` module content, when the story imports from src/data */
   datasetCode?: string;
+  /**
+   * Bare npm packages imported by `code` + `datasetCode` (excluding
+   * `gofish-graphics`), mapped to a version. Versions are read from the
+   * gofish-graphics package.json (where the stories' deps live), falling back
+   * to `"latest"`. Declared to Sandpack's customSetup so the preview can
+   * resolve them.
+   */
+  npmDeps: Record<string, string>;
   /** true when the snippet is a clearly-marked fallback (couldn't be fully transformed) */
   isFallback: boolean;
 }
@@ -51,6 +59,10 @@ const __dirname = dirname(__filename);
 const REPO_ROOT = resolve(__dirname, "../../../../..");
 const STORIES_DIR = join(REPO_ROOT, "packages/gofish-graphics/stories");
 const DATA_DIR = join(REPO_ROOT, "packages/gofish-graphics/src/data");
+const GOFISH_PKG_JSON = join(
+  REPO_ROOT,
+  "packages/gofish-graphics/package.json"
+);
 
 const ASSET_EXTENSIONS = [".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp"];
 
@@ -832,6 +844,62 @@ function resolveJsonPath(modulePath: string, spec: string): string {
 }
 
 // ---------------------------------------------------------------------------
+// npm dependency resolution
+// ---------------------------------------------------------------------------
+
+const ASSET_RE = /\.(png|jpe?g|gif|svg|webp)$/;
+
+/** Version map from the gofish-graphics package.json (deps + devDeps). */
+let pkgVersionsCache: Record<string, string> | undefined;
+function pkgVersions(): Record<string, string> {
+  if (pkgVersionsCache) return pkgVersionsCache;
+  const pkg = JSON.parse(readFileSync(GOFISH_PKG_JSON, "utf-8"));
+  pkgVersionsCache = {
+    ...(pkg.devDependencies ?? {}),
+    ...(pkg.dependencies ?? {}),
+  };
+  return pkgVersionsCache;
+}
+
+/** All `from "<spec>"` and bare side-effect import specifiers in a snippet. */
+function importSpecifiers(code: string): string[] {
+  const specs: string[] = [];
+  const re = /^\s*import\s[^;]*?from\s+["']([^"']+)["']/gm;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(code)) !== null) specs.push(m[1]);
+  const re2 = /^\s*import\s+["']([^"']+)["']/gm;
+  while ((m = re2.exec(code)) !== null) specs.push(m[1]);
+  return specs;
+}
+
+/** Package name of a bare specifier (`@scope/name/sub` → `@scope/name`). */
+function packageName(spec: string): string {
+  const parts = spec.split("/");
+  return spec.startsWith("@") ? parts.slice(0, 2).join("/") : parts[0];
+}
+
+/** Bare npm deps imported by code + datasetCode, mapped to a version. */
+function computeNpmDeps(
+  code: string,
+  datasetCode: string | undefined
+): Record<string, string> {
+  const versions = pkgVersions();
+  const out: Record<string, string> = {};
+  for (const src of [code, datasetCode]) {
+    if (!src) continue;
+    for (const spec of importSpecifiers(src)) {
+      if (spec.startsWith(".")) continue;
+      if (spec === "gofish-graphics") continue;
+      if (ASSET_RE.test(spec)) continue;
+      const pkg = packageName(spec);
+      if (pkg === "gofish-graphics") continue;
+      out[pkg] = versions[pkg] ?? "latest";
+    }
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
 
@@ -893,6 +961,7 @@ export function loadStoryExamples(): StoryExample[] {
         storyId: harnessStoryId(parsed.metaTitle, ex.exportName),
         code: result.code,
         datasetCode: result.datasetCode,
+        npmDeps: computeNpmDeps(result.code, result.datasetCode),
         isFallback: result.isFallback,
       });
     }

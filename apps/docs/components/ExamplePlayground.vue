@@ -28,6 +28,7 @@ interface Example {
   description: string;
   code: string;
   datasetCode?: string;
+  npmDeps?: Record<string, string>;
 }
 
 const byId = storyData.byId as Record<string, Example>;
@@ -65,27 +66,47 @@ const codeOptions = computed(() => {
         <p v-if="example.description" class="playground-desc">
           {{ example.description }}
         </p>
+        <!--
+          Emit one <div><pre>{code}</pre></div> per virtual file as direct
+          slot children (matching the `gofish-live` markdown container). Sandpack's
+          getSandpackFiles only keeps top-level `div` slot vnodes and zips them
+          positionally with `codeOptions` — index.ts first, then the optional
+          dataset.ts. The slot contents must be EXACTLY those divs: comments or
+          v-if placeholders inside the slot leave extra vnodes in dev builds
+          (Vue strips them in prod) and silently break the file parsing, so the
+          one-file and two-file shapes are separate static branches.
+        -->
         <GoFishLive
+          v-if="example.datasetCode"
           :key="example.id"
           template="vanilla-ts"
           :codeOptions="codeOptions"
+          :extraDeps="example.npmDeps"
           :previewHeight="400"
           :coderHeight="512"
           lightTheme="aquaBlue"
           darkTheme="atomDark"
         >
-          <!--
-            Emit one <div><pre>{code}</pre></div> per virtual file as direct
-            slot children (matching the `gofish-live` markdown container). Sandpack's
-            getSandpackFiles only sees top-level `div` vnodes, so the file divs must
-            not be nested inside a wrapper component — index.ts first, then the
-            optional dataset.ts, in the same order as `codeOptions`.
-          -->
           <div>
             <pre>{{ example.code }}</pre>
           </div>
-          <div v-if="example.datasetCode">
+          <div>
             <pre>{{ example.datasetCode }}</pre>
+          </div>
+        </GoFishLive>
+        <GoFishLive
+          v-else
+          :key="example.id"
+          template="vanilla-ts"
+          :codeOptions="codeOptions"
+          :extraDeps="example.npmDeps"
+          :previewHeight="400"
+          :coderHeight="512"
+          lightTheme="aquaBlue"
+          darkTheme="atomDark"
+        >
+          <div>
+            <pre>{{ example.code }}</pre>
           </div>
         </GoFishLive>
       </template>
