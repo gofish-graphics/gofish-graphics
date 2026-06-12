@@ -733,10 +733,7 @@ export const layer = createNodeOperatorSequential(
             applyConstraints(
               node.constraints,
               nameToPlaceable,
-              {
-                x: { start: 0, middle: size[0] / 2, end: size[0] },
-                y: { start: 0, middle: size[1] / 2, end: size[1] },
-              },
+              size,
               effectivePosScales
             );
 

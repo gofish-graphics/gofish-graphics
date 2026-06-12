@@ -22,7 +22,7 @@ import {
 } from "../underlyingSpace";
 import type { Measure } from "../data";
 import type { Size } from "../dims";
-import { alignTargets } from "../constraints/align";
+import { alignTargets, spreadFallbackBaseline } from "../constraints/align";
 import type { AlignAnchor } from "../constraints/shared";
 import * as Interval from "../../util/interval";
 import * as Monotonic from "../../util/monotonic";
@@ -204,16 +204,22 @@ export function alignChildren(
   if (posScale && !fromSize && alignment !== "middle") return;
 
   const anchors = new Array<AlignAnchor>(children.length).fill(alignment);
-  alignTargets(children, axis === 0 ? "x" : "y", anchors, {
-    readPlaced: (child, idx, a) =>
-      a === "baseline"
-        ? 0
-        : a === "start"
-          ? (child.dims[idx].min ?? 0)
-          : a === "middle"
-            ? (child.dims[idx].center ?? child.dims[idx].min ?? 0)
-            : (child.dims[idx].max ?? child.dims[idx].min ?? 0),
-    fallback: (as) =>
-      as[0] === "middle" ? size / 2 : posScale ? posScale(0) : 0,
-  });
+  alignTargets(
+    children,
+    axis === 0 ? "x" : "y",
+    anchors,
+    {
+      readPlaced: (child, idx, a) =>
+        a === "baseline"
+          ? 0
+          : a === "start"
+            ? (child.dims[idx].min ?? 0)
+            : a === "middle"
+              ? (child.dims[idx].center ?? child.dims[idx].min ?? 0)
+              : (child.dims[idx].max ?? child.dims[idx].min ?? 0),
+      fallback: (anchor, env) =>
+        spreadFallbackBaseline(anchor, env.size, env.posScale),
+    },
+    { size, posScale }
+  );
 }

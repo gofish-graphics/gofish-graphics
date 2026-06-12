@@ -164,16 +164,14 @@ export function collectPositionDomains(constraints: ConstraintSpec[]): {
  *
  * @param constraints - The constraint specs to apply in order
  * @param nameToPlaceable - Map from child name to its Placeable
- * @param fallbackBaselines - Layer box baselines for unanchored `align`s
+ * @param sizes - The layer's box size `[w, h]`, used to derive an unanchored
+ *   `align`'s fallback baseline (layer-box edge) per axis
  * @param posScales - Per-axis data→pixel scales for `position` constraints
  */
 export function applyConstraints(
   constraints: ConstraintSpec[],
   nameToPlaceable: Map<string, Placeable>,
-  fallbackBaselines?: {
-    x?: { start?: number; middle?: number; end?: number };
-    y?: { start?: number; middle?: number; end?: number };
-  },
+  sizes: [number, number],
   posScales?: ConstraintPosScales
 ): void {
   for (const constraint of constraints) {
@@ -186,7 +184,7 @@ export function applyConstraints(
     if (targets.length === 0) continue;
 
     if (constraint.type === "align") {
-      applyAlign(constraint, targets, fallbackBaselines);
+      applyAlign(constraint, targets, sizes, posScales);
     } else if (constraint.type === "position") {
       applyPosition(constraint, targets, posScales);
     } else {

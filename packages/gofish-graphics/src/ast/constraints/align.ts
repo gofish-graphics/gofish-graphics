@@ -7,6 +7,7 @@ import {
   AlignAnchor,
   Axis,
   ConstraintRef,
+  ConstraintPosScales,
   axisIndex,
   isPlacedOn,
 } from "./shared";
@@ -63,10 +64,13 @@ export const createAlignConstraint = (
   return { type: "align", x, y, children };
 };
 
-export interface AlignFallbackBaseline {
-  start?: number;
-  middle?: number;
-  end?: number;
+/** Per-axis environment threaded to a fallback policy: the layer's box size on
+ *  this axis and the axis's data→pixel position scale (if any). The two
+ *  fallback policies below each consume a different part of this env, so they
+ *  can sit side by side as pure functions of `(anchor, size, posScale)`. */
+export interface AlignAxisEnv {
+  size: number;
+  posScale: ((v: number) => number) | undefined;
 }
 
 /** Read the coordinate of `target` along axis `idx` at anchor `a`. */
@@ -112,7 +116,44 @@ export const placeAtAnchor = (
  */
 export interface AlignBaselinePolicy {
   readPlaced: (target: Placeable, idx: 0 | 1, anchor: AlignAnchor) => number;
-  fallback: (anchors: AlignAnchor[], idx: 0 | 1) => number;
+  fallback: (anchor: AlignAnchor, env: AlignAxisEnv) => number;
+}
+
+/**
+ * Fallback baseline for the `align` *constraint* path: the layer's own box
+ * edge. start→0, middle→size/2, end→size, baseline→0 (the layer's origin).
+ * Ignores `posScale` — axis-title elaboration relies on a title pinning to the
+ * plot box, not the data scale. NOTE: an unsized axis carries a NaN `size`, so
+ * middle/end yield NaN here exactly as the layer's literal `size/2` / `size`
+ * would; no finite-guard is applied (behavior is bit-identical to the old
+ * `fallbackFor` reading a `{start:0, middle:size/2, end:size}` literal).
+ */
+export function constraintFallbackBaseline(
+  anchor: AlignAnchor,
+  size: number,
+  _posScale: ((v: number) => number) | undefined
+): number {
+  return anchor === "start"
+    ? 0
+    : anchor === "middle"
+      ? size / 2
+      : anchor === "baseline"
+        ? 0
+        : size;
+}
+
+/**
+ * Fallback baseline for *spread*'s cross-axis alignment: the data scale's
+ * origin. middle→size/2; otherwise `posScale(0)` (the scale's zero), or 0 with
+ * no scale. A SIZE-derived cross axis thus aligns at the scale's zero, not the
+ * box edge.
+ */
+export function spreadFallbackBaseline(
+  anchor: AlignAnchor,
+  size: number,
+  posScale: ((v: number) => number) | undefined
+): number {
+  return anchor === "middle" ? size / 2 : posScale ? posScale(0) : 0;
 }
 
 /**
@@ -127,7 +168,8 @@ export function alignTargets(
   targets: Placeable[],
   axis: Axis,
   anchors: AlignAnchor[],
-  policy: AlignBaselinePolicy
+  policy: AlignBaselinePolicy,
+  env: AlignAxisEnv
 ): void {
   const idx = axisIndex(axis);
 
@@ -138,7 +180,9 @@ export function alignTargets(
       break;
     }
   }
-  if (baseline === undefined) baseline = policy.fallback(anchors, idx);
+  // Note: the fallback keys on `anchors[0]` (the first child's anchor), not the
+  // per-child anchor — preserved from the original `as[0]` indexing.
+  if (baseline === undefined) baseline = policy.fallback(anchors[0], env);
 
   for (let i = 0; i < targets.length; i++) {
     if (isPlacedOn(targets[i], idx)) continue;
@@ -146,24 +190,11 @@ export function alignTargets(
   }
 }
 
-const fallbackFor = (
-  fallback: AlignFallbackBaseline | undefined,
-  a: AlignAnchor
-): number =>
-  (a === "start"
-    ? fallback?.start
-    : a === "middle"
-      ? fallback?.middle
-      : a === "baseline"
-        ? // Baseline-anchored targets pin their origin to the layer's origin.
-          0
-        : fallback?.end) ?? 0;
-
 function applyAlignAxis(
   axis: Axis,
   spec: AlignAxisSpec,
   targets: Placeable[],
-  fallback?: AlignFallbackBaseline
+  env: AlignAxisEnv
 ): void {
   // Normalize to a per-child anchor array.
   let anchors: AlignAnchor[];
@@ -180,21 +211,35 @@ function applyAlignAxis(
 
   // Layer-box policy: read a placed sibling's real extent/origin; with no
   // placed sibling, fall back to the layer's own box baseline.
-  alignTargets(targets, axis, anchors, {
-    readPlaced: anchorValue,
-    fallback: (as) => fallbackFor(fallback, as[0]),
-  });
+  alignTargets(
+    targets,
+    axis,
+    anchors,
+    {
+      readPlaced: anchorValue,
+      fallback: (anchor, env) =>
+        constraintFallbackBaseline(anchor, env.size, env.posScale),
+    },
+    env
+  );
 }
 
 export function applyAlign(
   constraint: AlignConstraint,
   targets: Placeable[],
-  fallback?: { x?: AlignFallbackBaseline; y?: AlignFallbackBaseline }
+  sizes: [number, number],
+  posScales: ConstraintPosScales | undefined
 ): void {
   if (constraint.x !== undefined) {
-    applyAlignAxis("x", constraint.x, targets, fallback?.x);
+    applyAlignAxis("x", constraint.x, targets, {
+      size: sizes[0],
+      posScale: posScales?.[0],
+    });
   }
   if (constraint.y !== undefined) {
-    applyAlignAxis("y", constraint.y, targets, fallback?.y);
+    applyAlignAxis("y", constraint.y, targets, {
+      size: sizes[1],
+      posScale: posScales?.[1],
+    });
   }
 }
