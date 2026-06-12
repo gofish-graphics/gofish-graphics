@@ -281,13 +281,10 @@ export const Spread = createNodeOperator(
           // path doesn't share.
           applyDistribute(
             {
-              type: "distribute",
               dir: stackDir === 0 ? "x" : "y",
               spacing: effectiveSpacing,
               mode,
               order: "forward",
-              glue,
-              children: [],
             },
             childPlaceables,
             (expected, actual) =>

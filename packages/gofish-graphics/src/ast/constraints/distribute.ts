@@ -165,8 +165,17 @@ export type DistributeInconsistencyReporter = (
   actual: number
 ) => void;
 
+/** The subset of a distribute constraint the placement walk reads. The
+ *  constraint path passes its full constraint (which satisfies this shape
+ *  structurally); spread passes just these fields — `children` is never
+ *  consumed here, since targets arrive as Placeables. */
+export type DistributeWalkOptions = Pick<
+  DistributeConstraint,
+  "dir" | "spacing" | "mode" | "order"
+>;
+
 export function applyDistribute(
-  constraint: DistributeConstraint,
+  constraint: DistributeWalkOptions,
   targets: Placeable[],
   onInconsistency?: DistributeInconsistencyReporter
 ): void {
