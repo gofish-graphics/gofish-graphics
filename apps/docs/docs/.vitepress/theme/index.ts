@@ -5,6 +5,7 @@ import DefaultTheme from "vitepress/theme";
 import custom from "./custom.css";
 import "./style.css";
 import GoFishVue from "../../../components/GoFishVue.vue";
+import GoFishExample from "../../../components/GoFishExample.vue";
 import ExampleGallery from "../../../components/ExampleGallery.vue";
 import CheatSheet from "../../../components/MarksCheatSheet.vue";
 import CoordinateTransformsCheatSheet from "../../../components/CoordinateTransformsCheatSheet.vue";
@@ -39,6 +40,7 @@ export default {
   enhanceApp({ app, router }) {
     app.use(TwoslashFloatingVue);
     app.component("GoFishVue", GoFishVue);
+    app.component("GoFishExample", GoFishExample);
     app.component("ExampleGallery", ExampleGallery);
     app.component("Sandbox", Sandbox);
     app.component("GoFishLive", GoFishLive);

@@ -26,18 +26,22 @@ This is a documentation site for the GoFish Graphics library built with VitePres
 - **Custom markdown plugins**:
   - `gofish` containers for embedding live code examples
   - `gofish-live` containers for Sandpack-powered interactive editors
-- **Example system**: Centralized example code management via `docs/.vitepress/data/examples.data.js`
+- **Example system**: Examples are **gallery-tagged Storybook stories**, scanned at
+  build time by `docs/.vitepress/data/storyExamples.ts` (exposed via the
+  `storyExamples.data.js` loader). There is no hand-maintained registry — the set of
+  valid `example:<id>` ids is exactly the gallery story ids (`pnpm check-story-examples`).
 
 #### Interactive Code Execution
 
-- **GoFishVue.vue** (`components/GoFishVue.vue:1`): Vue component that executes GoFish code in a sandboxed environment using `new Function()`. Provides access to lodash, datasets, and the full GoFish API.
-- **GoFishLive.tsx** (`components/GoFishLive.tsx:1`): Sandpack-based live code editor component for interactive examples
-- **Markdown integration**: Custom markdown-it plugin (`docs/.vitepress/markdown-it-gofish.ts:22`) processes `::: gofish` containers
+- **GoFishVue.vue** (`components/GoFishVue.vue`): Vue component that executes GoFish code in a sandboxed environment using `new Function()`. Provides access to lodash, datasets, and the full GoFish API. Used by the inline fenced-code `::: gofish` mode and by `internal-*` wiki diagrams.
+- **GoFishExample.vue** (`components/GoFishExample.vue`): client-only renderer that executes the **real Storybook story module** (SolidJS) for a gallery example. Targeted by `id` (gallery story id) or `storyId` (any story's harness id). Story `.stories.tsx` are compiled by `vite-plugin-solid` (scoped to the gofish-graphics package in `config.mts`; vue-jsx is excluded from that package so the two JSX compilers don't collide).
+- **GoFishLive.tsx** (`components/GoFishLive.tsx`): Sandpack-based live code editor component for interactive examples
+- **Markdown integration**: Custom markdown-it plugin (`docs/.vitepress/markdown-it-gofish.ts`) processes `::: gofish` containers
 
 #### Data Management
 
 - **Dataset modules**: Located in `components/data/` - TypeScript modules exporting chart datasets (titanic, penguins, streamgraph data, etc.)
-- **Examples registry**: `docs/.vitepress/data/examples.data.js:1` contains all chart examples with reusable code snippets
+- **Example data layer**: `docs/.vitepress/data/storyExamples.ts` scans gallery-tagged stories and synthesizes a standalone snippet (+ dataset) for each. The legacy `examples.data.js` registry is gone; only `internal-*` wiki diagrams (`.vitepress/examples/internal-*.ts`) are still loaded directly by the markdown plugin.
 
 ### Key Architecture Patterns
 
@@ -50,12 +54,28 @@ The documentation uses two approaches for interactive examples:
 
 #### Example Code Reuse
 
-Examples are defined once in `examples.data.js` and can be imported into documentation pages using:
+Examples come from gallery-tagged Storybook stories. Embed one by its gallery id
+(the kebab-case of the story's `gallery.title`):
 
 ```markdown
 ::: gofish example:bar-chart
 :::
 ```
+
+The `::: gofish` container has four modes:
+
+- `example:<id>` — gallery story example. Renders the chart via `GoFishExample`
+  plus a code fence of the synthesized snippet (and the dataset in a `<details>`
+  when the story uses one). **An unknown `<id>` is a build-time error** — this is
+  what replaced the registry as the source of truth. Add `hidden` to render the
+  chart only (used by Python pages, which show hand-written `python` separately).
+- `example:internal-<id>` — wiki diagram. `GoFishVue` executes the code from
+  `.vitepress/examples/internal-<id>.ts` (any such file is embeddable, no
+  registration). `hidden` suppresses the code fence.
+- `story:<storyId>` — render-only embed of **any** story (even untagged ones) by
+  its harness story id (kebab of `meta.title--ExportName`). No code fence.
+- inline fenced-code — a `::: gofish` wrapping a ` ```ts ` block runs that code
+  via `GoFishVue`. `hidden` renders the chart only (no visible code).
 
 #### Coordinate System Integration
 
@@ -83,7 +103,7 @@ When editing the docs, keep the two language trees structurally parallel.
 intermediate representation, so a chart renders identically regardless of
 language. Python pages show hand-written Python code in a `python` fence, then
 render the chart with the existing JS engine via `::: gofish example:<id>
-hidden` — which renders a registered example without showing its JS code.
+hidden` — which renders the gallery example without showing its JS code.
 
 #### Internal Architecture Wiki (`docs/internals/`)
 
@@ -116,8 +136,8 @@ language toggle (`LanguageToggle.vue` hides itself on `/internals/` routes). See
 - `index.md` - shared home page
 - `.vitepress/config.mts` - VitePress configuration (per-language + internals sidebars)
 - `.vitepress/theme/` - Custom theme components (incl. `LanguageToggle.vue`, `EssayMeta.vue`)
-- `.vitepress/examples/` - `.ts` source for registered live examples (incl. `internal-*.ts` diagrams)
-- `.vitepress/data/` - build-time data loaders (`examples.data.js`, `routes.data.ts`)
+- `.vitepress/examples/` - `.ts` source for `internal-*.ts` wiki diagrams (the only live examples still sourced from files; chart examples come from stories)
+- `.vitepress/data/` - build-time data loaders (`storyExamples.ts` + `storyExamples.data.js` for gallery examples, `routes.data.ts`)
 
 ### Scripts (`scripts/`)
 

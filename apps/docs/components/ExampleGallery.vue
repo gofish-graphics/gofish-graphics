@@ -57,13 +57,12 @@
         :key="example.id"
         class="example-card"
       >
-        <a :href="example.demoUrl + '.html'" class="card-link">
+        <a :href="`/js/examples/${example.id}.html`" class="card-link">
           <div class="card-thumbnail">
-            <GoFishVue
-              :code="example.code"
-              :transform="`scale(${scaleFactor}, ${
-                scaleFactor * aspectRatioTransform
-              })`"
+            <LazyExampleThumb
+              :id="example.id"
+              :title="example.title"
+              :scale="gridScale"
             />
           </div>
 
@@ -80,15 +79,14 @@
       <a
         v-for="example in filteredExamples"
         :key="example.id"
-        :href="example.demoUrl + '.html'"
+        :href="`/js/examples/${example.id}.html`"
         class="example-row"
       >
         <div class="row-thumbnail">
-          <GoFishVue
-            :code="example.code"
-            :transform="`scale(${listScaleFactor}, ${
-              listScaleFactor * aspectRatioTransform
-            })`"
+          <LazyExampleThumb
+            :id="example.id"
+            :title="example.title"
+            :scale="listScale"
           />
         </div>
         <div class="row-content">
@@ -112,8 +110,8 @@
 
 <script setup>
 import { ref, computed, onMounted } from "vue";
-import { data as examplesData } from "../docs/.vitepress/data/examples.data.js";
-import GoFishVue from "./GoFishVue.vue";
+import { data as storyData } from "../docs/.vitepress/data/storyExamples.data.js";
+import LazyExampleThumb from "./LazyExampleThumb.vue";
 
 const examples = ref([]);
 const searchQuery = ref("");
@@ -135,12 +133,12 @@ const clearAllFilters = () => {
 };
 
 onMounted(() => {
-  examples.value = examplesData.examples;
+  examples.value = storyData.examples;
 });
 
-const scaleFactor = 0.28;
-const listScaleFactor = 0.2;
-const aspectRatioTransform = 16 / 10 / (688 / 400);
+// Down-scale factors applied to the live-rendered story thumbnails.
+const gridScale = 0.42;
+const listScale = 0.26;
 </script>
 
 <style scoped>

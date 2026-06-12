@@ -152,8 +152,12 @@ Key coordinate systems available:
   `parameters: { gallery: { title, description } }`, where `description` is one
   human-quality sentence about what the visualization shows. Test-like stories
   (alignment checks, constraint permutations, regression repros) and mechanical
-  permutations of an already-tagged chart get no tag. The external example gallery
-  enumerates stories by this annotation.
+  permutations of an already-tagged chart get no tag. Tagging a story is all it
+  takes to publish it: the docs build scans the annotation and auto-generates a docs
+  example page (with the code extracted from the story), a gallery entry, and a
+  live-editor playground — no hand-maintained registry. The `<id>` everything keys
+  off is the kebab-case of `gallery.title`, so titles must be unique, and the docs
+  build fails on any `::: gofish example:<id>` reference to an unknown id.
 - **Local regression signal for layout changes**: `pnpm capture-diff <base-ref> [filter]`
   renders every story's normalized DOM at HEAD and at `<base-ref>` (checked out in a throwaway
   worktree) and diffs them per story — a baseline-free, platform-stable "did my change move
