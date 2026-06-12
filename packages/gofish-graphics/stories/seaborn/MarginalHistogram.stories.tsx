@@ -3,8 +3,13 @@ import { initializeContainer } from "../helper";
 import { Chart, scatter, circle, rect, derive, bin, layer, Constraint } from "../../src/lib";
 import { penguins } from "../../src/data/penguins";
 
+// Mirrors seaborn's jointplot:
+//   sns.jointplot(data=penguins, x="bill_length_mm", y="bill_depth_mm")
+// https://seaborn.pydata.org/generated/seaborn.jointplot.html
+// (Our penguins export renames the fields to "Beak ..." rather than "bill ...".)
+
 const meta: Meta = {
-  title: "Vega-Lite/Marginal Histogram",
+  title: "Seaborn/Marginal Histogram",
   argTypes: {
     w: { control: { type: "number", min: 100, max: 1000, step: 10 } },
     h: {
