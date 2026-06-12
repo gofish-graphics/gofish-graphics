@@ -99,3 +99,163 @@ export const ConstraintFit: StoryObj<Args> = {
     return container;
   },
 };
+
+// ── Fill children: NO explicit size on the distribute axis ─────────────────
+// Each child has a fixed height but no width, so it must CONSUME its budget
+// slice on x. This exercises `allocateSlices` (equal split), which the
+// explicit-width pairs above never reach (their widths win over the slice).
+
+/** spread({ dir: "x" }) over fixed-height, width-less rects: equal slices. */
+export const SpreadFill: StoryObj<Args> = {
+  args: { w: 300, h: 80 },
+  render: (args: Args) => {
+    const container = initializeContainer();
+    spread(
+      { dir: "x", alignment: "start", spacing: 8 },
+      COLORS.map((c) => rect({ h: 40, fill: c }))
+    ).render(container, { w: args.w, h: args.h });
+    return container;
+  },
+};
+
+/** Layer + align(y, start) + distribute(x) over the same width-less rects. */
+export const ConstraintFill: StoryObj<Args> = {
+  args: { w: 300, h: 80 },
+  render: (args: Args) => {
+    const container = initializeContainer();
+    layer(
+      COLORS.map((c, i) => rect({ h: 40, fill: c }).name(`r${i}`))
+    )
+      .constrain(({ r0, r1, r2 }) => [
+        Constraint.align({ y: "start" }, [r0, r1, r2]),
+        Constraint.distribute({ dir: "x", spacing: 8 }, [r0, r1, r2]),
+      ])
+      .render(container, { w: args.w, h: args.h });
+    return container;
+  },
+};
+
+// ── Weighted fill children: budget split by weights, not equally ───────────
+
+const WEIGHTS = [1, 2, 3];
+
+/** spread({ stackWeights }) over width-less rects: proportional slices. */
+export const SpreadWeights: StoryObj<Args> = {
+  args: { w: 300, h: 80 },
+  render: (args: Args) => {
+    const container = initializeContainer();
+    spread(
+      { dir: "x", alignment: "start", spacing: 8, stackWeights: WEIGHTS },
+      COLORS.map((c) => rect({ h: 40, fill: c }))
+    ).render(container, { w: args.w, h: args.h });
+    return container;
+  },
+};
+
+/** Layer + distribute({ weights }) over the same width-less rects. */
+export const ConstraintWeights: StoryObj<Args> = {
+  args: { w: 300, h: 80 },
+  render: (args: Args) => {
+    const container = initializeContainer();
+    layer(
+      COLORS.map((c, i) => rect({ h: 40, fill: c }).name(`r${i}`))
+    )
+      .constrain(({ r0, r1, r2 }) => [
+        Constraint.align({ y: "start" }, [r0, r1, r2]),
+        Constraint.distribute({ dir: "x", spacing: 8, weights: WEIGHTS }, [
+          r0,
+          r1,
+          r2,
+        ]),
+      ])
+      .render(container, { w: args.w, h: args.h });
+    return container;
+  },
+};
+
+// ── Glue (stack): data-driven heights summed into a POSITION ───────────────
+// Stacked bars: equal-width rects with data-driven heights glued on y. The
+// glue fold sums the heights into POSITION([0, Σh]); children touch (spacing 0).
+
+const STACK_HEIGHTS = [30, 50, 20];
+
+/** spread({ dir: "y", glue: true }) over data-driven-height rects. */
+export const SpreadGlue: StoryObj<Args> = {
+  args: { w: 120, h: 200 },
+  render: (args: Args) => {
+    const container = initializeContainer();
+    spread(
+      { dir: "y", glue: true, alignment: "start" },
+      STACK_HEIGHTS.map((v, i) => rect({ w: 60, h: value(v), fill: COLORS[i] }))
+    ).render(container, { w: args.w, h: args.h });
+    return container;
+  },
+};
+
+/** Layer + align(x, start) + distribute({ dir: "y", glue: true }). */
+export const ConstraintGlue: StoryObj<Args> = {
+  args: { w: 120, h: 200 },
+  render: (args: Args) => {
+    const container = initializeContainer();
+    layer(
+      STACK_HEIGHTS.map((v, i) =>
+        rect({ w: 60, h: value(v), fill: COLORS[i] }).name(`r${i}`)
+      )
+    )
+      .constrain(({ r0, r1, r2 }) => [
+        Constraint.align({ x: "start" }, [r0, r1, r2]),
+        Constraint.distribute({ dir: "y", glue: true }, [r0, r1, r2]),
+      ])
+      .render(container, { w: args.w, h: args.h });
+    return container;
+  },
+};
+
+// ── End alignment: a PRINCIPLED DIVERGENCE, not a parity pair ───────────────
+// Unlike every pair above, this one renders DIFFERENTLY — by design. spread's
+// cross-axis alignment (alignChildren) and the align constraint use different
+// baseline POLICIES when no sibling is pre-placed (the AlignBaselinePolicy split
+// in constraints/align.ts):
+//   - spread's fallback is the data-scale origin `posScale(0)` (= 0 here),
+//     IRRESPECTIVE of the anchor — SIZE-derived bars align at the scale's zero,
+//     so the "end" (top) of every bar lands on the zero line and the bars hang
+//     into negative cross-coords (spread's SVG grows to reserve that overhang).
+//   - the constraint's fallback is the layer-box edge FOR that anchor —
+//     `end` → `size` (the box top) — so the bars sit flush at the top of the box.
+// For "start" both fallbacks are 0, so the start/bar/fit/fill/weights/glue pairs
+// above match exactly; for "end" (and "middle") they differ by the full box
+// extent. Both policies are load-bearing (axis-title elaboration needs the box
+// edge; spread needs the scale origin) and neither subsumes the other, so this
+// is reported as a genuine divergence — the policies are NOT reconciled.
+
+/** spread({ dir: "x", alignment: "end" }) over data-driven-height rects. */
+export const SpreadEnd: StoryObj<Args> = {
+  args: { w: 300, h: 200 },
+  render: (args: Args) => {
+    const container = initializeContainer();
+    spread(
+      { dir: "x", alignment: "end", spacing: 8 },
+      BAR_HEIGHTS.map((v, i) => rect({ w: 40, h: value(v), fill: COLORS[i] }))
+    ).render(container, { w: args.w, h: args.h });
+    return container;
+  },
+};
+
+/** Layer + align(y, end) + distribute(x) over the same rects. */
+export const ConstraintEnd: StoryObj<Args> = {
+  args: { w: 300, h: 200 },
+  render: (args: Args) => {
+    const container = initializeContainer();
+    layer(
+      BAR_HEIGHTS.map((v, i) =>
+        rect({ w: 40, h: value(v), fill: COLORS[i] }).name(`r${i}`)
+      )
+    )
+      .constrain(({ r0, r1, r2 }) => [
+        Constraint.align({ y: "end" }, [r0, r1, r2]),
+        Constraint.distribute({ dir: "x", spacing: 8 }, [r0, r1, r2]),
+      ])
+      .render(container, { w: args.w, h: args.h });
+    return container;
+  },
+};

@@ -37,6 +37,7 @@ import {
   type DistributeConstraint,
 } from "../constraints/distribute";
 import { alignSpaceFold, type AlignConstraint } from "../constraints/align";
+import { allocateSlices } from "../constraints/folds";
 import { axisIndex } from "../constraints/shared";
 import { unionChildSpaces } from "./alignment";
 
@@ -50,102 +51,158 @@ const childNameKey = (node: GoFishAST): string | undefined => {
   return isToken(n) ? n.__tag : n;
 };
 
-// ── Constraint space fold (PROTOTYPE, issue #475) ──────────────────────────
+// ── Spread-shape recognition: the operator image of layer constraints ───────
 //
-// Constraints are normally pure post-layout positioners. `spread`, by
-// contrast, also folds its children's underlying spaces into a composed claim
-// (a Monotonic sum + spacing on the stack axis, an alignment fold on the cross
-// axis) so a parent can invert that claim to auto-fit. This makes
-// `layer + align + distribute` carry that *same* claim for the simplest case:
-// exactly one `distribute` covering EVERY direct named child, optionally one
-// cross-axis `align` over the same set, and nothing else (no `position` /
-// z-order). Anything outside that shape returns undefined and the layer keeps
-// its existing `unionChildSpaces` behavior, so no existing constraint set —
-// including the heavily constraint-driven axis-elaboration layers — is touched.
+// Constraints are normally pure post-layout positioners. `spread`, by contrast,
+// also folds its children's underlying spaces into a composed claim (a Monotonic
+// sum + spacing on the stack axis via `distributeSpaceFold`, an alignment fold
+// on the cross axis via `alignSpaceFold`) so a parent can invert that claim to
+// auto-fit, and at layout time it *sizes* its children from a budget (the flex
+// fragment, `allocateSlices`). This recognizer detects when a layer's
+// constraints form that same operator image and reproduces both halves, so
+// `layer + align + distribute` is geometrically identical to `spread`.
+//
+// The recognized image: exactly ONE `distribute` (optionally `glue`), at most
+// one cross-axis `align` with a uniform string anchor, and nothing else (no
+// `position` / z-order). This is the same guard the prototype used minus the
+// "distribute covers every child" requirement: children NOT covered by the
+// distribute are unconstrained siblings that overlay (max-union with the
+// distribute's claim). The structural guards keep every existing constraint set
+// untouched — axis-elaboration layers carry `position` constraints, and the
+// legend layer carries two `align`s, so both fall out of the image and keep
+// their `unionChildSpaces` behavior. Anything beyond the image (multiple
+// distributes per axis, distribute + position on one axis) likewise falls back
+// to `unionChildSpaces`; the general max-plus composition that would handle it
+// is the residual in
+// apps/docs/docs/internals/design/constraints-as-core.md ("Composition and
+// conflict semantics").
 
-type ConstraintFold = {
-  /** Per-axis space overrides; undefined leaves the default union in place. */
-  spaces: [UnderlyingSpace | undefined, UnderlyingSpace | undefined];
-  /** Distribute budget descriptor, consumed by `layout`. */
-  budget: {
-    dAxis: 0 | 1;
-    spacing: number;
-    /** Names of the distribute targets, in placement order. */
-    order: string[];
-    /** The folded SIZE Monotonic on the distribute axis, if SIZE — inverted
-     *  against the layer's allotted size to derive the child scale factor. */
-    sizeDomain?: Monotonic.Monotonic;
-  };
+/** Distribute budget descriptor, stashed by `resolveUnderlyingSpace` and
+ *  consumed by `layout` to solve a scale factor and propose per-child sizes. */
+type DistributeBudget = {
+  dAxis: 0 | 1;
+  /** Already glue-zeroed (see createDistributeConstraint). */
+  spacing: number;
+  /** Names of the distribute targets, in placement order. */
+  order: string[];
+  weights?: number[];
+  /** The folded SIZE Monotonic on the distribute axis, if the fold was SIZE —
+   *  inverted against the layer's allotted size to derive the child scale
+   *  factor (auto-fit). Absent for glue/POSITION/ORDINAL/UNDEFINED folds. */
+  sizeDomain?: Monotonic.Monotonic;
 };
 
-function resolveConstraintFold(
+type SpreadShape = {
+  /** Per-axis space overrides; undefined leaves the default union in place. */
+  spaces: [UnderlyingSpace | undefined, UnderlyingSpace | undefined];
+  budget: DistributeBudget;
+};
+
+/** Build a per-axis Size carrying `space` on `axis` and UNDEFINED elsewhere, so
+ *  a single space can be fed to `unionChildSpaces` as a pseudo-child. */
+const axisSize = (
+  space: UnderlyingSpace,
+  axis: 0 | 1
+): Size<UnderlyingSpace> =>
+  axis === 0 ? [space, UNDEFINED] : [UNDEFINED, space];
+
+/** Max-union a folded claim with any unconstrained siblings' spaces on `axis`
+ *  (the distribute's claim and overlay siblings co-occupy the layer box, so
+ *  the extent is their union). With no siblings this returns `claim`
+ *  unchanged — preserving exact parity with spread for the covers-all image. */
+function maxUnionWith(
+  claim: UnderlyingSpace,
+  others: UnderlyingSpace[],
+  axis: 0 | 1
+): UnderlyingSpace {
+  if (others.length === 0) return claim;
+  return unionChildSpaces(
+    [axisSize(claim, axis), ...others.map((s) => axisSize(s, axis))],
+    axis
+  );
+}
+
+function resolveSpreadShape(
   constraints: ConstraintSpec[],
   childNodes: GoFishAST[],
   childSpaces: Size<UnderlyingSpace>[]
-): ConstraintFold | undefined {
+): SpreadShape | undefined {
   if (constraints.length === 0) return undefined;
   const distributes = constraints.filter((c) => c.type === "distribute");
   const aligns = constraints.filter((c) => c.type === "align");
-  // Only align/distribute may appear; a `position`/z-order constraint means a
-  // different layout regime that this fold does not model.
+  // Operator image: exactly one distribute, at most one align, nothing else.
+  // Any `position`/z-order constraint is a different layout regime.
   if (distributes.length !== 1) return undefined;
   if (aligns.length > 1) return undefined;
   if (distributes.length + aligns.length !== constraints.length) {
     return undefined;
   }
 
-  // Every direct child must be named (so "covers all named" == "covers all").
-  const names: string[] = [];
   const indexByName = new Map<string, number>();
   for (let i = 0; i < childNodes.length; i++) {
     const name = childNameKey(childNodes[i]);
-    if (name === undefined) return undefined;
-    names.push(name);
-    indexByName.set(name, i);
+    if (name !== undefined && !indexByName.has(name)) indexByName.set(name, i);
   }
-  const nameSet = new Set(names);
-  const coversAll = (refs: ReadonlyArray<{ name: string }>): boolean =>
-    refs.length === nameSet.size && refs.every((r) => nameSet.has(r.name));
+  const keyOf = (i: number): string | undefined =>
+    childNodes[i] instanceof GoFishNode
+      ? (childNodes[i] as GoFishNode).key
+      : undefined;
 
   const dist = distributes[0] as DistributeConstraint;
-  if (!coversAll(dist.children)) return undefined;
   const dAxis = axisIndex(dist.dir);
   const aAxis = (1 - dAxis) as 0 | 1;
 
   // Distribute targets in placement order (matches applyDistribute's `order`).
+  // Every target must be a direct child (so we can slice it); a ref into a
+  // nested tier has no slot here, so bail to the general union.
   const order = (
     dist.order === "reverse" ? [...dist.children].reverse() : dist.children
   ).map((r) => r.name);
+  if (!order.every((n) => indexByName.has(n))) return undefined;
   const dIdx = order.map((n) => indexByName.get(n)!);
-  const dTargetSpaces = dIdx.map((i) => childSpaces[i][dAxis]);
-  const dKeys = dIdx.map((i) =>
-    childNodes[i] instanceof GoFishNode
-      ? (childNodes[i] as GoFishNode).key
-      : undefined
+  const coveredSet = new Set(dIdx);
+
+  const foldD = distributeSpaceFold(
+    dIdx.map((i) => childSpaces[i][dAxis]),
+    dIdx.map(keyOf),
+    { spacing: dist.spacing, mode: dist.mode, glue: dist.glue }
   );
-  const foldD = distributeSpaceFold(dTargetSpaces, dist, dKeys);
+
+  // Unconstrained siblings (children outside the distribute) overlay the
+  // distribute's claim on both axes.
+  const otherSpaces = (axis: 0 | 1): UnderlyingSpace[] =>
+    childSpaces.filter((_, i) => !coveredSet.has(i)).map((c) => c[axis]);
 
   const spaces: [UnderlyingSpace | undefined, UnderlyingSpace | undefined] = [
     undefined,
     undefined,
   ];
-  if (!isUNDEFINED(foldD)) spaces[dAxis] = foldD;
+  if (!isUNDEFINED(foldD)) {
+    spaces[dAxis] = maxUnionWith(foldD, otherSpaces(dAxis), dAxis);
+  }
 
-  // Optional cross-axis align over the same set: a single uniform anchor on the
-  // distribute's cross axis only (a per-child anchor array or a same-axis spec
-  // has no single spread equivalent).
+  // Optional cross-axis align: a single uniform anchor on the distribute's
+  // cross axis only (a per-child anchor array or a same-axis spec has no single
+  // spread equivalent). Folded over the children the align covers.
   if (aligns.length === 1) {
     const al = aligns[0] as AlignConstraint;
     const anchor = aAxis === 0 ? al.x : al.y;
     const distAxisSpec = dAxis === 0 ? al.x : al.y;
+    const aIdx = al.children
+      .map((r) => indexByName.get(r.name))
+      .filter((i): i is number => i !== undefined);
     if (
-      coversAll(al.children) &&
       typeof anchor === "string" &&
-      distAxisSpec === undefined
+      distAxisSpec === undefined &&
+      aIdx.length > 0
     ) {
-      const aTargetSpaces = dIdx.map((i) => childSpaces[i][aAxis]);
-      const foldA = alignSpaceFold(aTargetSpaces, anchor);
-      if (!isUNDEFINED(foldA)) spaces[aAxis] = foldA;
+      const foldA = alignSpaceFold(
+        aIdx.map((i) => childSpaces[i][aAxis]),
+        anchor
+      );
+      if (!isUNDEFINED(foldA)) {
+        spaces[aAxis] = maxUnionWith(foldA, otherSpaces(aAxis), aAxis);
+      }
     }
   }
 
@@ -155,6 +212,7 @@ function resolveConstraintFold(
       dAxis,
       spacing: dist.spacing,
       order,
+      weights: dist.weights,
       sizeDomain: isSIZE(foldD) ? foldD.domain : undefined,
     },
   };
@@ -360,10 +418,10 @@ export const layer = createNodeOperatorSequential(
       UnderlyingSpace | undefined,
     ] = [undefined, undefined];
 
-    // PROTOTYPE (#475): distribute budget descriptor from the constraint fold,
-    // stashed by `resolveUnderlyingSpace` and consumed by `layout` to invert
-    // the composed SIZE against the allotted size and propose per-child slices.
-    let constraintBudget: ConstraintFold["budget"] | undefined;
+    // Distribute budget descriptor from the recognized spread shape, stashed by
+    // `resolveUnderlyingSpace` and consumed by `layout` to invert the composed
+    // SIZE against the allotted size and propose per-child slices.
+    let constraintBudget: DistributeBudget | undefined;
 
     return new GoFishNode(
       {
@@ -414,21 +472,22 @@ export const layer = createNodeOperatorSequential(
             resolveAxis(1, scaleY, posDomains.y),
           ];
 
-          // PROTOTYPE (#475): a simple spread expressed as align + distribute.
-          // When the constraints match that shape, override the constrained
-          // axes with spread's own space folds (SIZE sum + spacing on the
-          // distribute axis, the alignment fold on the cross axis). Applied
-          // BEFORE the self-scaling stash below so an explicit-size layer
-          // builds its LOCAL scale from the folded space, exactly like spread.
-          const fold = resolveConstraintFold(
+          // A simple spread expressed as align + distribute. When the
+          // constraints match that operator image (see resolveSpreadShape),
+          // override the constrained axes with spread's own space folds (SIZE
+          // sum + spacing on the distribute axis, the alignment fold on the
+          // cross axis). Applied BEFORE the self-scaling stash below so an
+          // explicit-size layer builds its LOCAL scale from the folded space,
+          // exactly like spread.
+          const shape = resolveSpreadShape(
             constraints ?? [],
             _childNodes,
             children
           );
-          constraintBudget = fold?.budget;
-          if (fold) {
+          constraintBudget = shape?.budget;
+          if (shape) {
             for (const axis of [0, 1] as const) {
-              const s = fold.spaces[axis];
+              const s = shape.spaces[axis];
               if (s !== undefined) resolved[axis] = s;
             }
           }
@@ -490,42 +549,63 @@ export const layer = createNodeOperatorSequential(
             }
           }
 
-          // PROTOTYPE (#475): layer budget solve for a constraint fold. When
-          // the distribute fold composed a SIZE claim, invert it against this
+          // Layer budget solve for a recognized spread shape. When the
+          // distribute fold composed a SIZE claim, invert it against this
           // layer's resolved size on the distribute axis to derive the child
           // scale factor (the same Monotonic.inverse recipe as the selfScaled
           // path, but driven by the *allotted* size, not only an explicit
-          // w/h). Idempotent with the root's own inversion of the same SIZE.
+          // w/h, and passing `upperBoundGuess` like spread does). Idempotent
+          // with the root's own inversion of the same SIZE.
           if (
             constraintBudget?.sizeDomain &&
             Number.isFinite(size[constraintBudget.dAxis])
           ) {
-            const sf = constraintBudget.sizeDomain.inverse(
-              size[constraintBudget.dAxis]
-            );
-            if (sf !== undefined)
-              childScaleFactors[constraintBudget.dAxis] = sf;
+            const dAxis = constraintBudget.dAxis;
+            const sf = constraintBudget.sizeDomain.inverse(size[dAxis], {
+              upperBoundGuess: size[dAxis],
+            });
+            if (sf !== undefined) childScaleFactors[dAxis] = sf;
+            else
+              // A non-invertible fold-produced Monotonic would otherwise
+              // silently vanish the content (spread's `?? 0`); name the axis and
+              // budget so the failure is visible, then keep the inherited factor.
+              console.warn(
+                `layer: could not invert distribute SIZE claim on ${
+                  dAxis === 0 ? "x" : "y"
+                } axis for budget ${size[dAxis]}px; keeping inherited scale factor.`,
+                constraintBudget
+              );
           }
 
-          // Per-child proposed size for the constrained children: spread's
-          // equal-slice default — (size − spacing·(n−1))/n on the distribute
-          // axis, the full size on the cross axis. A child carrying its own
-          // explicit size ignores this (its size wins), matching spread.
-          const constrainedSet = constraintBudget
-            ? new Set(constraintBudget.order)
+          // Per-child proposed size for the distribute-covered children: the
+          // fill policy (`allocateSlices`) — equal slices by default, or
+          // weight-proportional — on the distribute axis, the full size on the
+          // cross axis. A child carrying its own explicit size ignores this (its
+          // size wins), matching spread; a claim-less child consumes the slice.
+          const sliceByName: Map<string, number> | undefined = constraintBudget
+            ? (() => {
+                const b = constraintBudget;
+                const slices = allocateSlices(
+                  size[b.dAxis],
+                  b.spacing,
+                  b.order.length,
+                  b.weights
+                );
+                const m = new Map<string, number>();
+                b.order.forEach((name, i) => m.set(name, slices[i]));
+                return m;
+              })()
             : undefined;
           const childSizeFor = (childName: string | undefined): Size => {
             if (
               !constraintBudget ||
               childName === undefined ||
-              !constrainedSet!.has(childName)
+              !sliceByName!.has(childName)
             ) {
               return size;
             }
-            const d = constraintBudget.dAxis;
-            const n = constraintBudget.order.length;
             const sliced: Size = [size[0], size[1]];
-            sliced[d] = (size[d] - constraintBudget.spacing * (n - 1)) / n;
+            sliced[constraintBudget.dAxis] = sliceByName!.get(childName)!;
             return sliced;
           };
 
