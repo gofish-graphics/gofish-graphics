@@ -429,7 +429,7 @@ onBeforeUnmount(() => {
       <section class="band" aria-labelledby="comp-h">
         <div class="head reveal">
           <h2 id="comp-h" class="band-title">
-            Because everything is a composition<br />of the same basic stuff
+            Because graphics are all made<br />of the same stuff
           </h2>
         </div>
 
