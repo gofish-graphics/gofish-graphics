@@ -20,6 +20,14 @@ type Args = { w: number; h: number };
 
 export const Default: StoryObj<Args> = {
   args: { w: 400, h: 400 },
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "Mosaic Chart",
+      description:
+        "A mosaic plot of car counts by region of origin and cylinder count, where column widths show each region's share and stacked segments show the cylinder distribution within it.",
+    },
+  },
   render: (args: Args) => {
     const container = initializeContainer();
 

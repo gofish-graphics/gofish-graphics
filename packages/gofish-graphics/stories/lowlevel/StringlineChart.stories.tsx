@@ -22,6 +22,14 @@ type Args = { w: number; h: number };
 
 export const Default: StoryObj<Args> = {
   args: { w: 500, h: 400 },
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "Stringline Chart",
+      description:
+        "A Marey train schedule plotting Caltrain stations against time, with each colored diagonal line tracing a single northbound or southbound run.",
+    },
+  },
   render: (args: Args) => {
     const container = initializeContainer();
     const caltrainProcessed = caltrain.filter((d) => d.Type !== "Bullet");

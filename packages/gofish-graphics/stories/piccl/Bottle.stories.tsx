@@ -28,6 +28,13 @@ type Args = { w: number; h: number };
 
 export const Default: StoryObj<Args> = {
   args: { w: 1000, h: 400 },
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "Bottle Fill Chart",
+      description: "A row of wine bottles filled with green liquid to heights that encode percentage values, an isotype-style bar chart with labeled fill lines.",
+    },
+  },
   render: (args: Args) => {
     const container = initializeContainer();
 

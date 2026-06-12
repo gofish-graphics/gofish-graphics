@@ -22,6 +22,13 @@ type Args = { w: number; h: number };
 export const Default: StoryObj<Args> = {
   args: { w: 300, h: 50 },
   loaders: [async () => ({ weather: await data["seattle-weather.csv"]() })],
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "1D Strip Plot",
+      description: "A one-dimensional strip plot showing the distribution of daily precipitation in Seattle as thin tick marks along a single axis.",
+    },
+  },
   render: (args: Args, context: any) => {
     const container = initializeContainer();
 

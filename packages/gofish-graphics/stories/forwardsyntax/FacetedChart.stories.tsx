@@ -63,6 +63,13 @@ export const FacetedScatterDriving: StoryObj<Args> = {
 
 export const FacetedScatterY: StoryObj<Args> = {
   args: { w: 400, h: 800 },
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "Faceted Scatter Plot",
+      description: "Gas prices over the years shown as small-multiple scatter panels stacked vertically, one per side of the road.",
+    },
+  },
   render: (args: Args) => {
     const container = initializeContainer();
 

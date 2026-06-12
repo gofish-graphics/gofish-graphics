@@ -50,6 +50,14 @@ const edge = { stroke: "#90a4ae", strokeWidth: 2 } as const;
 
 export const NodeLink: StoryObj<Args> = {
   args: { w: 420, h: 220 },
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "Node-Link Diagram",
+      description:
+        "A small directed graph of labeled boxes connected by named edges, laying out nodes and relationships as a node-link diagram.",
+    },
+  },
   render: (args: Args) => {
     const container = initializeContainer();
 

@@ -21,6 +21,13 @@ type Args = { w: number; h: number };
 export const Default: StoryObj<Args> = {
   args: { w: 500, h: 400 },
   loaders: [async () => ({ barley: await data["barley.json"]() })],
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "Horizontal Stacked Bar Chart",
+      description: "A horizontal stacked bar chart of barley yield by variety, with each bar segmented and colored by the six experimental field sites.",
+    },
+  },
   render: (args: Args, context: any) => {
     const container = initializeContainer();
 

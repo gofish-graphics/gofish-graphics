@@ -30,6 +30,13 @@ type Args = { w: number; h: number; paddingInner: number };
 
 export const Default: StoryObj<Args> = {
   args: { w: 720, h: 480, paddingInner: 0 },
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "Titanic Survival Unit Grid",
+      description: "A faceted grid of unit dots showing each Titanic passenger colored by survival, broken out by passenger class and sex.",
+    },
+  },
   render: (args: Args) => {
     const container = initializeContainer();
     

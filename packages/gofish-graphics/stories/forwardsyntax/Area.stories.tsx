@@ -22,6 +22,13 @@ type Args = { w: number; h: number };
 
 export const Basic: StoryObj<Args> = {
   args: { w: 500, h: 300 },
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "Area Chart",
+      description: "Fish catch counts across six lakes drawn as a single smoothed filled area.",
+    },
+  },
   render: (args: Args) => {
     const container = initializeContainer();
 
@@ -40,6 +47,13 @@ export const Basic: StoryObj<Args> = {
 
 export const Stacked: StoryObj<Args> = {
   args: { w: 400, h: 400 },
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "Stacked Area Chart",
+      description: "Fish catch counts by lake split into stacked bands by species, each a colored filled area.",
+    },
+  },
   render: (args: Args) => {
     const container = initializeContainer();
 

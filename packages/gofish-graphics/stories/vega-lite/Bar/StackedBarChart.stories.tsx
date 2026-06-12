@@ -37,6 +37,13 @@ type Args = { w: number; h: number };
 export const Default: StoryObj<Args> = {
   args: { w: 600, h: 300 },
   loaders: [async () => ({ weather: await data["seattle-weather.csv"]() })],
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "Seattle Weather Stacked Bar Chart",
+      description: "A vertical stacked bar chart of the count of Seattle weather days per month, with each bar segmented and colored by weather type.",
+    },
+  },
   render: (args: Args, context: any) => {
     const container = initializeContainer();
 

@@ -21,6 +21,14 @@ type Args = { w: number; h: number };
 
 export const Default: StoryObj<Args> = {
   args: { w: 400, h: 400 },
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "Streamgraph",
+      description:
+        "A streamgraph of fish catch by species across six lakes, with the stacked bands centered around a wandering baseline so each species reads as a flowing organic layer.",
+    },
+  },
   render: (args: Args) => {
     const container = initializeContainer();
 

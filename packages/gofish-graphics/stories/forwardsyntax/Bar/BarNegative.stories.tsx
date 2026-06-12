@@ -19,6 +19,14 @@ type Args = { w: number; h: number };
 
 export const Default: StoryObj<Args> = {
   args: { w: 400, h: 400 },
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "Bar Chart with Negative Values",
+      description:
+        "A bar chart whose values span positive and negative, with bars extending above and below the zero baseline.",
+    },
+  },
   render: (args: Args) => {
     const container = initializeContainer();
 

@@ -53,6 +53,14 @@ export const PairBoxWhisker: StoryObj<Args> = {
 
 export const BoxWhisker: StoryObj<Args> = {
   args: { w: 320, h: 400 },
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "Grouped Box-and-Whisker Plot",
+      description:
+        "Paired distributions across five categories shown as grouped box-and-whisker plots, with male and female boxes side by side over a labeled value axis.",
+    },
+  },
   render: (args: Args) => {
     const container = initializeContainer();
 

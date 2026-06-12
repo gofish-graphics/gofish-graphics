@@ -22,6 +22,14 @@ type Args = { w: number; h: number };
 
 export const Default: StoryObj<Args> = {
   args: { w: 400, h: 400 },
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "Waffle Chart",
+      description:
+        "A waffle chart of fish catch across six lakes, where each catch becomes a colored square tiled into per-lake columns so the species mix reads as a grid of unit cells.",
+    },
+  },
   render: (args: Args) => {
     const container = initializeContainer();
 
