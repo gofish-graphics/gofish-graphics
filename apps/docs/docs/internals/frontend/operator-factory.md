@@ -215,11 +215,21 @@ The two factories are siblings:
 | `createOperator` | a layout (`Spread`, `Scatter`, …)   | a dual-mode operator (one node from many) |
 
 Both use channel annotations to encode opts; both produce mark types
-supporting `.name(...)` and `.label(...)` chaining. `.name(...)` also stashes the
-passed name on the returned mark function via `stashLayerName` (defined in
-`chartBuilder.ts`, called by every `.name()` implementation), so
+supporting `.name(...)` and `.label(...)` chaining. That chaining is wired by
+the **modifier factory** that also lives in this file — `createModifier` +
+`attachModifiers` — a single config-driven system shared by `nameableMark`
+(combinator marks), `createMark` (leaf marks), and `makeConstrainableMark`
+(layer / Porter-Duff marks, which add `.constrain()`). `.name(...)` also
+stashes the passed name on the returned mark function via `stashLayerName`
+(defined in `chartBuilder.ts`, called by the `name` modifier's `tag` hook), so
 [`ChartBuilder.connect()`](/js/api/core/connect) can detect a user-chained name
 without parsing the `__serialize` tag.
+
+A second flavor, `attachTransformModifiers`, handles methods that map a mark to
+a _different_ mark rather than mutating its nodes — e.g. `image(...).cut(opts)`
+desugars to `cut(image, opts)`. Because the transform replaces the mark before
+any node exists, it wraps the existing `.name()`/`.label()` methods to re-apply
+itself, keeping `.cut` available across a naming/labeling chain.
 
 Naming-wise: `createOperator` is the frontend factory; the low-level helper
 that produces `Spread`, `Scatter`, etc. is `createNodeOperator`

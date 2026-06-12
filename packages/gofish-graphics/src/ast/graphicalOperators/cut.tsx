@@ -25,6 +25,7 @@ import { GoFishNode } from "../_node";
 import { Mark } from "../types";
 import {
   resolveMarkResult,
+  attachTransformModifiers,
   NameableMark,
   LayerContext,
 } from "../marks/createOperator";
@@ -239,29 +240,19 @@ function resolveExtents(
 }
 
 /**
- * Attach a `.cut(opts)` method onto an existing mark. The method returns
- * `cut(mark, opts)` — the chained sugar form. Propagates through `.name()`
- * and `.label()` so chained calls retain `.cut`.
+ * Attach a `.cut(opts)` method onto an existing mark. `.cut` is a transform
+ * modifier — it maps the mark to `cut(mark, opts)` (the chained sugar form)
+ * rather than mutating produced nodes. `attachTransformModifiers` keeps it
+ * available across `.name()`/`.label()` chains.
  */
 export function attachCut<M>(mark: M): M {
   if (typeof mark !== "function") return mark;
-  const m: any = mark;
-  Object.defineProperty(m, "cut", {
-    value: (cutOpts: CutMarkOptions) => cut(m, cutOpts),
-    writable: true,
-    configurable: true,
-  });
-  for (const methodName of ["name", "label"] as const) {
-    const original = m[methodName];
-    if (typeof original === "function") {
-      Object.defineProperty(m, methodName, {
-        value: (...args: any[]) => attachCut(original.call(m, ...args)),
-        writable: true,
-        configurable: true,
-      });
-    }
-  }
-  return mark;
+  return attachTransformModifiers(mark as object, [
+    {
+      name: "cut",
+      transform: (m, cutOpts) => cut(m, cutOpts as CutMarkOptions),
+    },
+  ]) as M;
 }
 
 /**
@@ -310,12 +301,9 @@ async function cutShape(
 const cutFactory = createMark<
   CutShapeProps & { __sizeFromField: boolean },
   { size: { type: "size"; entry: true } }
->(
-  cutShape as any,
-  { size: { type: "size", entry: true } },
-  undefined,
-  { kind: "expand" }
-);
+>(cutShape as any, { size: { type: "size", entry: true } }, undefined, {
+  kind: "expand",
+});
 
 /**
  * Build a cut mark. The mark is expand-kind — when invoked with data it

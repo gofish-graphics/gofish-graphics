@@ -15,6 +15,10 @@ import type { LabelAccessor, LabelOptions } from "../labels/labelPlacement";
 import {
   resolveMarkResult,
   nameableMark,
+  attachModifiers,
+  createModifier,
+  nameModifier,
+  labelModifier,
   LayerContext,
 } from "./createOperator";
 import { layer as Layer } from "../graphicalOperators/layer";
@@ -32,7 +36,7 @@ export type { Mark, Operator };
 export { generatedRect as rect };
 export type { LayerContext };
 
-import { ChartBuilder, chart, stashLayerName } from "./chartBuilder";
+import { ChartBuilder, chart } from "./chartBuilder";
 import type { ChartOptions } from "./chartBuilder";
 export { ChartBuilder, chart };
 export type { ChartOptions };
@@ -305,122 +309,27 @@ export type ConstrainableMark<T> = Mark<T> & {
   ): Promise<ReturnType<GoFishNode["render"]>>;
 };
 
+/**
+ * `.constrain(fn)` — attaches a constraint callback to each produced node.
+ * Unlike `.name()`/`.label()`, it intentionally carries no `tag`: a
+ * constrained mark drops its IR-serialize tag (constrained marks aren't
+ * serialized), matching the pre-factory behavior.
+ */
+const constrainModifier = createModifier<
+  [fn: (refs: Record<string, ConstraintRef>) => ConstraintSpec[]]
+>({
+  name: "constrain",
+  apply: (node, _layerContext, fn) => {
+    node.constrain(fn);
+  },
+});
+
 function makeConstrainableMark<T>(base: Mark<T>): ConstrainableMark<T> {
-  const withName = (layerName: string | Token): ConstrainableMark<T> => {
-    const named: Mark<T> = async (d, key, layerContext) => {
-      const node = await resolveMarkResult(
-        base(d, key, layerContext),
-        layerContext
-      );
-      node.name(layerName);
-      // Tag for a deterministic post-resolve collection pass instead of
-      // pushing directly into `layerContext` here — the push order would
-      // otherwise depend on which leg's `await` happened to finish first
-      // (parents fan their children out via `Promise.all`, and any async
-      // op in the chain — e.g. a Python `derive` RPC — varies per-leaf
-      // latency). ChartBuilder.resolve walks the finished node tree in
-      // parent-iteration order so consumers see canonical order. Tokens
-      // are hygienic handles and don't participate in the string-keyed
-      // layerContext registry, so we only tag for string names.
-      if (layerContext && typeof layerName === "string" && layerName) {
-        (node as { __layerRegistration?: string }).__layerRegistration =
-          layerName;
-      }
-      return node;
-    };
-    // Propagate the IR-serialize tag through the chain and record the
-    // layerName in its `name` slot. Without this, `.name(...)` on a
-    // combinator-form mark (layer, Porter-Duff, …) would strip the tag
-    // and toJSON would fail.
-    const baseTag = (base as any).__serialize;
-    if (baseTag && typeof layerName === "string") {
-      (named as any).__serialize = { ...baseTag, name: layerName };
-    } else if (baseTag) {
-      (named as any).__serialize = baseTag;
-    }
-    stashLayerName(named, layerName);
-    return makeConstrainableMark(named);
-  };
-  const withLabel = (
-    accessor: LabelAccessor,
-    options?: LabelOptions
-  ): ConstrainableMark<T> => {
-    const labeled: Mark<T> = async (d, key, layerContext) => {
-      const node = await resolveMarkResult(
-        base(d, key, layerContext),
-        layerContext
-      );
-      node.label(accessor, options);
-      return node;
-    };
-    const baseTag = (base as any).__serialize;
-    if (baseTag && typeof accessor === "string") {
-      (labeled as any).__serialize = {
-        ...baseTag,
-        label: {
-          accessor,
-          ...(options && typeof options === "object" ? options : {}),
-        },
-      };
-    } else if (baseTag) {
-      (labeled as any).__serialize = baseTag;
-      if (
-        typeof accessor === "function" &&
-        typeof console !== "undefined" &&
-        typeof console.warn === "function"
-      ) {
-        // Function accessors don't serialize; the mark stays serializable
-        // but the label is dropped from the emitted IR.
-        console.warn(
-          "[gofish-ir] .label(fn): function accessors aren't serializable; " +
-            "label will be omitted from the emitted IR. Use a string field " +
-            "name if you need the label to round-trip."
-        );
-      }
-    }
-    return makeConstrainableMark(labeled);
-  };
-  const withConstrain = (
-    fn: (refs: Record<string, ConstraintRef>) => ConstraintSpec[]
-  ): ConstrainableMark<T> => {
-    const constrained: Mark<T> = async (d, key, layerContext) => {
-      const node = await resolveMarkResult(
-        base(d, key, layerContext),
-        layerContext
-      );
-      node.constrain(fn);
-      return node;
-    };
-    return makeConstrainableMark(constrained);
-  };
-  const render = async (
-    container: Parameters<GoFishNode["render"]>[0],
-    options: Parameters<GoFishNode["render"]>[1]
-  ) => {
-    const node = await resolveMarkResult(base(undefined as any));
-    return node.render(container, options);
-  };
-  Object.defineProperty(base, "name", {
-    value: withName,
-    writable: true,
-    configurable: true,
-  });
-  Object.defineProperty(base, "label", {
-    value: withLabel,
-    writable: true,
-    configurable: true,
-  });
-  Object.defineProperty(base, "constrain", {
-    value: withConstrain,
-    writable: true,
-    configurable: true,
-  });
-  Object.defineProperty(base, "render", {
-    value: render,
-    writable: true,
-    configurable: true,
-  });
-  return base as ConstrainableMark<T>;
+  return attachModifiers(base, [
+    nameModifier,
+    labelModifier,
+    constrainModifier,
+  ]) as unknown as ConstrainableMark<T>;
 }
 
 /**

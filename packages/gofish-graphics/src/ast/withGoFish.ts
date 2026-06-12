@@ -17,7 +17,6 @@ import type { ColorConfig } from "./colorSchemes";
 import _, { ListOfRecursiveArraysOrValues } from "lodash";
 import { ChartBuilder } from "./marks/chart";
 import type { LayerContext } from "./marks/chart";
-import { stashLayerName } from "./marks/chartBuilder";
 import {
   ChannelAnnotations,
   DeriveMarkProps,
@@ -27,7 +26,11 @@ import {
   inferRaw,
   inferEntrySize,
 } from "./channels";
-import { withMarkKind, getMarkKind, type MarkKind } from "./marks/createOperator";
+import {
+  withMarkKind,
+  nameableMark,
+  type MarkKind,
+} from "./marks/createOperator";
 import { isValue } from "./data";
 import { Mark } from "./types";
 import type { ConstraintSpec, ConstraintRef } from "./constraints";
@@ -445,135 +448,6 @@ export type NameableMark<T> = Mark<T> & {
 };
 
 /**
- * Attach .name / .label / .render chainable methods to a bare Mark, producing
- * a NameableMark. Each chained call returns a new mark that, when invoked,
- * applies the chained mutation (name/label) to the node produced by baseMark.
- */
-function attachNameableMethods<T>(baseMark: Mark<T>): NameableMark<T> {
-  const nameMethod = (layerName: string | Token): Mark<T> => {
-    const wrapped: Mark<T> = async (input, keyParam, layerContext) => {
-      const result = await baseMark(input, keyParam, layerContext);
-      // layerContext is keyed by string name (v3 chart-layer selection);
-      // tokens are hygienic handles and do not participate in that registry.
-      // Tag here; the actual push into `layerContext[layerName]` happens in
-      // ChartBuilder.resolve's post-resolve tree walk (chartBuilder.ts:
-      // collectLayerRegistrations) so the order matches parent-iteration
-      // order rather than which leg's async chain happened to finish first.
-      const tagOne = (node: GoFishNode) => {
-        node.name(layerName);
-        if (layerContext && typeof layerName === "string" && layerName) {
-          (node as { __layerRegistration?: string }).__layerRegistration =
-            layerName;
-        }
-      };
-      // Expand-kind marks return an array of nodes — name + tag every slice.
-      if (Array.isArray(result)) {
-        for (const node of result as unknown as GoFishNode[]) tagOne(node);
-        return result as unknown as GoFishAST;
-      }
-      tagOne(result as GoFishNode);
-      return result as GoFishAST;
-    };
-    // Preserve the dispatch kind so applyMark routes the chained mark
-    // correctly (per-item vs expand).
-    withMarkKind(wrapped, getMarkKind(baseMark));
-    return wrapped;
-  };
-  const nameMethodWithFields = (layerName: string | Token): Mark<T> => {
-    const fn = nameMethod(layerName);
-    if ((baseMark as any).__axisFields) {
-      (fn as any).__axisFields = (baseMark as any).__axisFields;
-    }
-    // Propagate the IR-serialize tag through the chain so toJSON still
-    // sees this mark, and stash the layerName so the emitter surfaces it
-    // as the canonical top-level `name` field. String names only in v0;
-    // Token names are dropped (the rest of the tag still propagates).
-    const baseTag = (baseMark as any).__serialize;
-    if (baseTag) {
-      const nextTag: any = { ...baseTag };
-      if (typeof layerName === "string") {
-        nextTag.name = layerName;
-      }
-      (fn as any).__serialize = nextTag;
-    }
-    stashLayerName(fn, layerName);
-    return fn;
-  };
-  const labelMethod = (
-    accessor: LabelAccessor,
-    options?: LabelOptions
-  ): Mark<T> => {
-    const fn: Mark<T> = async (input, keyParam, layerContext) => {
-      // baseMark returns GoFishAST; cast to GoFishNode to invoke .label().
-      const result = await baseMark(input, keyParam, layerContext);
-      // Expand-kind marks return an array of nodes — label every slice.
-      if (Array.isArray(result)) {
-        for (const node of result as unknown as GoFishNode[]) {
-          node.label(accessor, options);
-        }
-        return result as unknown as GoFishAST;
-      }
-      (result as GoFishNode).label(accessor, options);
-      return result as GoFishAST;
-    };
-    withMarkKind(fn, getMarkKind(baseMark));
-    // Same as nameMethodWithFields — keep the serialize tag alive and
-    // record the label in the dedicated tag slot so the emitter writes
-    // it as a top-level LabelIR object.
-    const baseTag = (baseMark as any).__serialize;
-    if (baseTag) {
-      const nextTag: any = { ...baseTag };
-      if (typeof accessor === "string") {
-        nextTag.label = {
-          accessor,
-          ...(options && typeof options === "object" ? options : {}),
-        };
-      } else if (
-        typeof accessor === "function" &&
-        typeof console !== "undefined" &&
-        typeof console.warn === "function"
-      ) {
-        // Function accessors don't serialize. The mark stays
-        // serializable; only the label is dropped from the emitted IR.
-        console.warn(
-          "[gofish-ir] .label(fn): function accessors aren't serializable; " +
-            "label will be omitted from the emitted IR. Use a string field " +
-            "name if you need the label to round-trip."
-        );
-      }
-      (fn as any).__serialize = nextTag;
-    }
-    if ((baseMark as any).__axisFields) {
-      (fn as any).__axisFields = (baseMark as any).__axisFields;
-    }
-    return fn;
-  };
-  const renderMethod = async (
-    container: Parameters<GoFishNode["render"]>[0],
-    options: Parameters<GoFishNode["render"]>[1]
-  ) => {
-    const node = (await baseMark(undefined as any)) as GoFishNode;
-    return node.render(container, options);
-  };
-  Object.defineProperty(baseMark, "name", {
-    value: nameMethodWithFields,
-    writable: true,
-    configurable: true,
-  });
-  Object.defineProperty(baseMark, "label", {
-    value: labelMethod,
-    writable: true,
-    configurable: true,
-  });
-  Object.defineProperty(baseMark, "render", {
-    value: renderMethod,
-    writable: true,
-    configurable: true,
-  });
-  return baseMark as NameableMark<T>;
-}
-
-/**
  * Creates a high-level mark from a low-level shape function plus optional
  * channel annotations. Channel annotations describe how each prop encodes data:
  * - "size":  accepts `number | keyof T`, uses inferSize
@@ -757,6 +631,6 @@ export function createMark(
       };
     }
 
-    return attachNameableMethods(baseMark);
+    return nameableMark(baseMark);
   };
 }

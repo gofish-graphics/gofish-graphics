@@ -122,171 +122,245 @@ export async function applyMark<T>(
   return [node];
 }
 
+/* ------------------------------------------------------------------------ *
+ * Modifier factory
+ *
+ * Every chainable mark method (`.name`, `.label`, `.constrain`) shares one
+ * shape: calling it returns a NEW mark that, when invoked, applies a mutation
+ * to each node the base mark produced — one node for a per-item mark, every
+ * slice for an expand mark (`cut`) — then returns the node(s). The returned
+ * mark is re-decorated with the full modifier set so chains stay extensible,
+ * and the mark-kind tag + IR-serialize metadata ride along.
+ *
+ * `createModifier` captures that shape as a config; `attachModifiers` wires a
+ * set of them (plus a top-level `.render()`) onto a base mark. This is the one
+ * system behind `nameableMark` (here), `createMark` (withGoFish.ts), and
+ * `makeConstrainableMark` (chart.ts) — replacing three hand-rolled copies.
+ * ------------------------------------------------------------------------ */
+
 /**
- * Attach chainable .name() and .label() to a mark, registering it into the
- * layer context when named so that ref(...)/selectAll(...) can find it back.
+ * A chainable mark modifier. `apply` mutates one produced node in place; the
+ * factory iterates it over every node (expand marks yield N). `tag` runs once
+ * on the wrapped mark function (not per node) to propagate metadata such as
+ * the IR-serialize tag or the stashed layer name.
  */
-export function nameableMark<T>(base: Mark<T>): NameableMark<T> {
-  const withName = (layerName: string): NameableMark<T> => {
-    const wrapped: Mark<T> = async (
-      d: T,
+export type ModifierConfig<Args extends any[] = any[]> = {
+  /** Method name exposed on the mark, e.g. "name" | "label" | "constrain". */
+  name: string;
+  apply: (
+    node: GoFishNode,
+    layerContext: LayerContext | undefined,
+    ...args: Args
+  ) => void;
+  tag?: (wrapped: Mark<any>, base: Mark<any>, ...args: Args) => void;
+};
+
+/** Register a modifier. Identity at runtime; the value is the typed config. */
+export function createModifier<Args extends any[]>(
+  cfg: ModifierConfig<Args>
+): ModifierConfig<Args> {
+  return cfg;
+}
+
+/**
+ * Copy `from`'s `__serialize` tag (and `__axisFields`) onto `to`, letting the
+ * modifier merge its own fields into the cloned tag. The merge callback (and
+ * any side effect it carries, e.g. the warn on a function label accessor) runs
+ * only when a base tag exists — matching the pre-factory behavior where an
+ * untagged mark produced no warning and no tag.
+ */
+function propagateSerialize(
+  from: object,
+  to: object,
+  merge: (tag: Record<string, any>) => void
+): void {
+  const tag = (from as any).__serialize;
+  if (tag) {
+    const nextTag: any = { ...tag };
+    merge(nextTag);
+    (to as any).__serialize = nextTag;
+  }
+  if ((from as any).__axisFields) {
+    (to as any).__axisFields = (from as any).__axisFields;
+  }
+}
+
+/** Build a single chainable method from a modifier config. */
+function modifierMethod(
+  base: Mark<any>,
+  cfg: ModifierConfig,
+  redecorate: (m: Mark<any>) => Mark<any>
+): (...args: any[]) => Mark<any> {
+  return (...args: any[]) => {
+    const wrapped: Mark<any> = async (
+      d: any,
       key?: string | number,
       layerContext?: LayerContext
     ) => {
       const raw = await (base as any)(d, key, layerContext);
       // Expand-kind marks return an array of nodes; per-item return one.
-      // Name + register each produced node so select(layerName) returns them
-      // all (per-item: 1 entry; expand: N entries).
+      // Apply the modifier to each produced node either way.
       if (Array.isArray(raw)) {
         const nodes = await Promise.all(
           raw.map((r) => resolveMarkResult(r, layerContext))
         );
-        for (const node of nodes) {
-          node.name(layerName);
-          if (layerContext && layerName) {
-            if (!layerContext[layerName]) {
-              layerContext[layerName] = { data: [], nodes: [] };
-            }
-            layerContext[layerName].nodes.push(node);
-            layerContext[layerName].data.push((node as any).datum);
-          }
-        }
+        for (const node of nodes) cfg.apply(node, layerContext, ...args);
         return nodes as unknown as GoFishNode;
       }
       const node = await resolveMarkResult(raw, layerContext);
-      node.name(layerName);
-      // Tag for the post-resolve tree walk in ChartBuilder.resolve
-      // (collectLayerRegistrations); inline pushing here would record
-      // async-completion order instead of parent-iteration order.
-      if (layerContext && layerName) {
-        (node as { __layerRegistration?: string }).__layerRegistration =
-          layerName;
-      }
+      cfg.apply(node, layerContext, ...args);
       return node;
     };
     // Preserve the kind tag so applyMark dispatches correctly through the
-    // wrapped mark.
+    // wrapped mark, then let the modifier stamp its own metadata.
     withMarkKind(wrapped, getMarkKind(base));
-    // Propagate `__serialize` through the chain so toJSON can still emit
-    // this mark's IR, and stash the layerName so the emitter surfaces it
-    // as the canonical top-level `name` field. Without this, every
-    // `.name("...")` call would strip the serialize tag.
-    propagateSerializeWithName(base, wrapped, layerName);
-    stashLayerName(wrapped, layerName);
-    return nameableMark(wrapped);
+    cfg.tag?.(wrapped, base, ...args);
+    return redecorate(wrapped);
   };
-  const withLabel = (
-    accessor: LabelAccessor,
-    options?: LabelOptions
-  ): NameableMark<T> => {
-    const wrapped: Mark<T> = async (
-      d: T,
-      key?: string | number,
-      layerContext?: LayerContext
-    ) => {
-      const raw = await (base as any)(d, key, layerContext);
-      if (Array.isArray(raw)) {
-        const nodes = await Promise.all(
-          raw.map((r) => resolveMarkResult(r, layerContext))
-        );
-        for (const node of nodes) node.label(accessor, options);
-        return nodes as unknown as GoFishNode;
-      }
-      const node = await resolveMarkResult(raw, layerContext);
-      node.label(accessor, options);
-      return node;
-    };
-    withMarkKind(wrapped, getMarkKind(base));
-    propagateSerializeWithLabel(base, wrapped, accessor, options);
-    return nameableMark(wrapped);
-  };
-  const render = async (
-    container: Parameters<GoFishNode["render"]>[0],
-    options: Parameters<GoFishNode["render"]>[1]
-  ) => {
-    const node = await resolveMarkResult(base(undefined as any));
-    return node.render(container, options);
-  };
-  Object.defineProperty(base, "name", {
-    value: withName,
-    writable: true,
-    configurable: true,
-  });
-  Object.defineProperty(base, "label", {
-    value: withLabel,
-    writable: true,
-    configurable: true,
-  });
-  Object.defineProperty(base, "render", {
-    value: render,
-    writable: true,
-    configurable: true,
-  });
-  return base as NameableMark<T>;
 }
 
 /**
- * Copy the `__serialize` metadata tag from `from` to `to` and merge a
- * chained name (and `__axisFields` for axis-title inference) onto it.
- *
- * `name` lives in a dedicated tag slot rather than `opts` so the
- * frontend-IR emitter can surface it as the canonical top-level `name`
- * field of the leaf/combinator IR (matching Python's emit shape).
- *
- * Layer-name tokens (`Token` from `createName`) are not yet supported by
- * `toJSON` — when one is passed we still propagate the tag (so the mark
- * stays serializable for its other fields) but omit the `name`.
+ * Attach a set of chainable modifiers (plus a top-level `.render()`) to a base
+ * mark. Each method returns a mark re-decorated with the same set, so chains
+ * keep every modifier available.
  */
-function propagateSerializeWithName(
-  from: object,
-  to: object,
-  layerName: unknown
-): void {
-  const tag = (from as any).__serialize;
-  if (!tag) return;
-  const nextTag: any = { ...tag };
-  if (typeof layerName === "string") {
-    nextTag.name = layerName;
+export function attachModifiers<T>(
+  base: Mark<T>,
+  configs: ModifierConfig[]
+): Mark<T> {
+  const redecorate = (m: Mark<any>) => attachModifiers(m, configs);
+  for (const cfg of configs) {
+    Object.defineProperty(base, cfg.name, {
+      value: modifierMethod(base, cfg, redecorate),
+      writable: true,
+      configurable: true,
+    });
   }
-  (to as any).__serialize = nextTag;
-  // Keep axis-field inference working through the chain.
-  if ((from as any).__axisFields) {
-    (to as any).__axisFields = (from as any).__axisFields;
-  }
+  Object.defineProperty(base, "render", {
+    value: async (
+      container: Parameters<GoFishNode["render"]>[0],
+      options: Parameters<GoFishNode["render"]>[1]
+    ) => {
+      const node = await resolveMarkResult((base as any)(undefined));
+      return node.render(container, options);
+    },
+    writable: true,
+    configurable: true,
+  });
+  return base;
 }
 
-function propagateSerializeWithLabel(
-  from: object,
-  to: object,
-  accessor: unknown,
-  options: unknown
-): void {
-  const tag = (from as any).__serialize;
-  if (!tag) return;
-  const nextTag: any = { ...tag };
-  if (typeof accessor === "string") {
-    nextTag.label = {
-      accessor,
-      ...(options && typeof options === "object" ? options : {}),
-    };
-  } else if (
-    typeof accessor === "function" &&
-    typeof console !== "undefined" &&
-    typeof console.warn === "function"
-  ) {
-    // Function accessors can't be JSON-serialized. The mark stays
-    // serializable (the rest of the tag propagates) but the label is
-    // dropped from the emitted IR. Matches `dataToIR`'s warn precedent.
-    console.warn(
-      "[gofish-ir] .label(fn): function accessors aren't serializable; " +
-        "label will be omitted from the emitted IR. Use a string field " +
-        "name if you need the label to round-trip."
-    );
+/**
+ * `.name(layerName)` — names each produced node and tags it for the chart's
+ * post-resolve layer-registration walk (collectLayerRegistrations), so
+ * `ref(...)`/`selectAll(...)` can find it back. Registration is deferred (a
+ * `__layerRegistration` tag) rather than an inline `layerContext` push so
+ * registry order follows parent-iteration order, not async-completion order.
+ * Tokens are hygienic handles and don't join the string-keyed registry.
+ */
+export const nameModifier = createModifier<[layerName: string | symbol]>({
+  name: "name",
+  apply: (node, layerContext, layerName) => {
+    node.name(layerName as any);
+    if (layerContext && typeof layerName === "string" && layerName) {
+      (node as { __layerRegistration?: string }).__layerRegistration =
+        layerName;
+    }
+  },
+  tag: (wrapped, base, layerName) => {
+    // Propagate `__serialize` through the chain (so toJSON still emits this
+    // mark) and surface the name as the IR's canonical top-level `name` field.
+    // Tokens aren't supported by toJSON — the tag still propagates, the name
+    // is omitted. Also stash the name for ChartBuilder.connect()'s lookup.
+    propagateSerialize(base, wrapped, (tag) => {
+      if (typeof layerName === "string") tag.name = layerName;
+    });
+    stashLayerName(wrapped, layerName);
+  },
+});
+
+/** `.label(accessor, options?)` — defers label placement on each node. */
+export const labelModifier = createModifier<
+  [accessor: LabelAccessor, options?: LabelOptions]
+>({
+  name: "label",
+  apply: (node, _layerContext, accessor, options) => {
+    node.label(accessor, options);
+  },
+  tag: (wrapped, base, accessor, options) => {
+    propagateSerialize(base, wrapped, (tag) => {
+      if (typeof accessor === "string") {
+        tag.label = {
+          accessor,
+          ...(options && typeof options === "object" ? options : {}),
+        };
+      } else if (
+        typeof accessor === "function" &&
+        typeof console !== "undefined" &&
+        typeof console.warn === "function"
+      ) {
+        // Function accessors can't be JSON-serialized. The mark stays
+        // serializable (the rest of the tag propagates) but the label is
+        // dropped from the emitted IR. Matches `dataToIR`'s warn precedent.
+        console.warn(
+          "[gofish-ir] .label(fn): function accessors aren't serializable; " +
+            "label will be omitted from the emitted IR. Use a string field " +
+            "name if you need the label to round-trip."
+        );
+      }
+    });
+  },
+});
+
+/**
+ * Attach chainable .name() and .label() to a mark, registering it into the
+ * layer context when named so that ref(...)/selectAll(...) can find it back.
+ */
+export function nameableMark<T>(base: Mark<T>): NameableMark<T> {
+  return attachModifiers(base, [
+    nameModifier,
+    labelModifier,
+  ]) as NameableMark<T>;
+}
+
+/**
+ * A "transform" modifier maps a mark to a new mark (e.g. `.cut`), rather than
+ * mutating produced nodes. The transform result already carries its own
+ * modifiers, so it isn't re-decorated; instead, the existing `.name()`/
+ * `.label()` methods are wrapped to re-apply this decoration, keeping the
+ * transform available after a naming/labeling chain.
+ */
+export type TransformModifier<Args extends any[] = any[]> = {
+  name: string;
+  transform: (mark: Mark<any>, ...args: Args) => Mark<any>;
+};
+
+/** Add transform modifiers to a mark (used by `attachCut`). */
+export function attachTransformModifiers<M extends object>(
+  mark: M,
+  transforms: TransformModifier[]
+): M {
+  if (typeof mark !== "function") return mark;
+  const m: any = mark;
+  for (const t of transforms) {
+    Object.defineProperty(m, t.name, {
+      value: (...args: any[]) => t.transform(m, ...args),
+      writable: true,
+      configurable: true,
+    });
   }
-  (to as any).__serialize = nextTag;
-  if ((from as any).__axisFields) {
-    (to as any).__axisFields = (from as any).__axisFields;
+  for (const methodName of ["name", "label"] as const) {
+    const original = m[methodName];
+    if (typeof original === "function") {
+      Object.defineProperty(m, methodName, {
+        value: (...args: any[]) =>
+          attachTransformModifiers(original.call(m, ...args), transforms),
+        writable: true,
+        configurable: true,
+      });
+    }
   }
+  return mark;
 }
 
 /**

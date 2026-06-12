@@ -151,6 +151,21 @@ chainable methods:
 Both wrap the base mark in a new closure rather than mutating it, so naming
 or labeling one mark never affects another.
 
+These methods are not hand-rolled here. `createMark` calls `nameableMark`,
+which is one application of the shared **modifier factory** in
+`createOperator.ts`: a `createModifier({ name, apply, tag? })` config plus
+`attachModifiers(base, configs)`. `apply` mutates each produced node (once per
+node — every slice for an expand mark like `cut`); `tag` stamps metadata on the
+wrapped mark function once (propagating the `__serialize`/`__axisFields` tags
+and stashing the layer name). `attachModifiers` wires the set onto the base and
+adds a top-level `.render()`, re-decorating each method's result with the same
+set so chains stay extensible and the mark-kind tag rides along. `.name()`
+defers its layer registration via a `__layerRegistration` tag collected in a
+single post-resolve DFS walk (`collectLayerRegistrations`), so registry order
+follows parent-iteration order, not async-completion order. The same factory
+backs `makeConstrainableMark` (which adds `.constrain()`) and the combinator
+marks — one wiring, not three copies.
+
 ## Adding a new mark
 
 Suppose you write a new low-level shape `Diamond({ w, h, fill, stroke })`.
