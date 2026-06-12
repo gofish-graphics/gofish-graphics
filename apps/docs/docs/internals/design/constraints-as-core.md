@@ -438,23 +438,34 @@ suggest it will not be needed.
 
 ## Suggested staging (refactor-first)
 
-1. **Consolidate the two align implementations** (`graphicalOperators/alignment.ts`
-   vs `constraints/align.ts`) — pure refactor, already flagged in
-   [[operators-vs-constraints]].
-2. **Constraint space folds + Layer budget solve** — productionize the
-   prototype; closes #475 (constraints reach operator expressive power,
-   including under coord). Bring `contain` back from the gotree branch with
-   its fold.
-3. **Compile `spread`/`stack` to Layer + constraints**; delete the duplicated
-   placement code in `spread.tsx` (per the no-back-compat norm: migrate
-   callsites, no shims). `capture-diff` is the safety net.
+1. ✅ **Consolidate the two align implementations** — done: `alignTargets` +
+   `AlignBaselinePolicy` (`constraints/align.ts`) is the single walk; both
+   callsites keep their policies. The end/middle fallback divergence turned
+   out to be a genuine two-policy fact (scale-origin vs box-edge), kept
+   explicit rather than reconciled.
+2. ✅ **Constraint space folds + Layer budget solve** — done:
+   `distributeSpaceFold` (full spread dispatch incl. glue/explicit-size),
+   `alignSpaceFold`, `allocateSlices`, per-axis composition in the layer with
+   max-union for uncovered overlay siblings, budget inversion with a warning
+   on non-invertible folds. Parity certified for bar/fit/fill/weights/glue.
+   Addresses #475. (`contain` was not revived here — it lives with the
+   size-setting design, residual 1.)
+3. ✅ **`spread`/`stack` on the shared machinery** — done as _delegation_
+   rather than literal `Layer.constrain()` compilation: spread keeps its node
+   type (home for sharedScale mutation, scaleContext, axisDir, reverse,
+   explicit-dims translate, measure-and-report) but its fold, slicing, align
+   walk, and distribute walk are the constraint implementations; the bespoke
+   copies are deleted (−128 lines). `capture-diff` vs main: zero geometry
+   changes. Literal compilation is now a small step if a reason for it
+   appears, since both spellings already share one engine.
 4. **`scatter`/`position` via `Constraint.position`** (fold already exists);
-   design the size-setting facet alongside (residual 1).
+   design the size-setting facet alongside (residual 1; see also #541 for
+   treemap as a derived-constraint generator on top of that facet).
 5. **`table` as nested folds; revisit `sharedScale` as claim hoisting** with
    the multi-scale-per-axis design.
 
 Each step is independently shippable and behavior-preserving at the story
-level.
+level (1–3 verified so on the `unify-constraints-operators` branch).
 
 ## Python / IR implications
 

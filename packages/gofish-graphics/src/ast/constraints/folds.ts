@@ -1,3 +1,7 @@
+// <gofish-wiki> AUTO-GENERATED — see covers: in the essay; run `pnpm --filter docs sync-backlinks`
+// @wiki Underlying Space — /internals/core/underlying-space
+// </gofish-wiki>
+
 // Shared layout machinery for the distribute constraint and (phase 3) spread.
 //
 // A constraint's *space fold* (bottom-up, pre-layout) composes child claims
