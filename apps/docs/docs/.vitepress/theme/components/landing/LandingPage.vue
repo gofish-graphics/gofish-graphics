@@ -444,6 +444,16 @@ onBeforeUnmount(() => {
             aria-label="Pull the chart apart into its layers"
           >
             <div class="card" v-html="demoSvg"></div>
+            <span
+              class="tape demo-tape"
+              style="left: 12%; top: -11px; --tape-angle: -8deg"
+              aria-hidden="true"
+            ></span>
+            <span
+              class="tape demo-tape"
+              style="right: 12%; top: -11px; --tape-angle: 5deg"
+              aria-hidden="true"
+            ></span>
             <span ref="pulltabEl" class="pulltab">pull apart</span>
           </button>
         </div>
