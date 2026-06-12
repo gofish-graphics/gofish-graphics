@@ -647,7 +647,7 @@ html.gallery-page .DocSearch-Button {
 .gallery-scene .searchcard::after {
   content: "";
   position: absolute;
-  bottom: calc(100% - 16px);
+  bottom: calc(100% - 26px);
   left: 13px;
   width: 26px;
   height: 52px;

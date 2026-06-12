@@ -215,7 +215,14 @@ export default defineConfig({
     // No top-nav items — section navigation lives in the per-language
     // sidebar, the language toggle is a theme slot, and the internals wiki
     // is reached via a quiet icon link in the nav bar (InternalsLink.vue).
-    nav: [],
+    nav: [
+      { text: "Examples", link: "/js/examples/", activeMatch: "/examples/" },
+      {
+        text: "API Reference",
+        link: "/js/api/core/chart",
+        activeMatch: "/api/",
+      },
+    ],
 
     // One sidebar per top-level area. JS/Python are hand-maintained and kept
     // structurally parallel; /internals/ is generated from essay frontmatter.

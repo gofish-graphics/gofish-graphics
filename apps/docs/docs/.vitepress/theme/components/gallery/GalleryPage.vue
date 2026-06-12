@@ -1765,13 +1765,6 @@ onBeforeUnmount(() => {
               href="https://github.com/gofish-graphics/gofish-graphics"
               target="_blank"
               rel="noopener"
-              >GitHub</a
-            >
-            <a
-              class="btn btn-secondary"
-              href="https://github.com/gofish-graphics/gofish-graphics"
-              target="_blank"
-              rel="noopener"
               >Contribute an example</a
             >
           </div>
