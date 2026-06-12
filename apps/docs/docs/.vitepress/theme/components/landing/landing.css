@@ -749,7 +749,18 @@ html.landing-page .DocSearch-Button {
   }
 }
 
-/* ---------- BAND FOOT (made with … at MIT CSAIL) ---------- */
+/* closing CTA block at the band's end */
+.landing .band-cta {
+  margin-top: 110px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.landing .band-cta .install-chip {
+  margin-top: 22px;
+}
+
+/* ---------- BAND FOOT (made with … at MIT VIS) ---------- */
 .landing .band-foot {
   margin: 96px auto 0;
   padding: 8px 24px 0;
