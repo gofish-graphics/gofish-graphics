@@ -18,6 +18,7 @@ import {
   UNDEFINED,
 } from "../underlyingSpace";
 import { createMark } from "../withGoFish";
+import { attachCut } from "../graphicalOperators/cut";
 
 type ImageDimensions = {
   width: number;
@@ -388,7 +389,8 @@ const withDimsAwait = (mark: any, href: unknown): any => {
     writable: true,
     configurable: true,
   });
-  return wrapped;
+  // Method-form cut: `image({...}).cut({...})` is sugar for `cut(image, opts)`.
+  return attachCut(wrapped);
 };
 
 export const image: typeof rawImage = ((opts: any) =>

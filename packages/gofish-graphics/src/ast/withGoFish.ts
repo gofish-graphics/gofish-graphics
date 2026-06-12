@@ -17,7 +17,6 @@ import type { ColorConfig } from "./colorSchemes";
 import _, { ListOfRecursiveArraysOrValues } from "lodash";
 import { ChartBuilder } from "./marks/chart";
 import type { LayerContext } from "./marks/chart";
-import { stashLayerName } from "./marks/chartBuilder";
 import {
   ChannelAnnotations,
   DeriveMarkProps,
@@ -25,7 +24,13 @@ import {
   inferPos,
   inferColor,
   inferRaw,
+  inferEntrySize,
 } from "./channels";
+import {
+  withMarkKind,
+  nameableMark,
+  type MarkKind,
+} from "./marks/createOperator";
 import { isValue } from "./data";
 import { Mark } from "./types";
 import type { ConstraintSpec, ConstraintRef } from "./constraints";
@@ -443,117 +448,6 @@ export type NameableMark<T> = Mark<T> & {
 };
 
 /**
- * Attach .name / .label / .render chainable methods to a bare Mark, producing
- * a NameableMark. Each chained call returns a new mark that, when invoked,
- * applies the chained mutation (name/label) to the node produced by baseMark.
- */
-function attachNameableMethods<T>(baseMark: Mark<T>): NameableMark<T> {
-  const nameMethod = (layerName: string | Token): Mark<T> => {
-    const wrapped: Mark<T> = async (input, keyParam, layerContext) => {
-      const node = (await baseMark(input, keyParam, layerContext)) as GoFishAST;
-      (node as GoFishNode).name(layerName);
-      // layerContext is keyed by string name (v3 chart-layer selection);
-      // tokens are hygienic handles and do not participate in that registry.
-      // Tag here; the actual push into `layerContext[layerName]` happens in
-      // ChartBuilder.resolve's post-resolve tree walk (chartBuilder.ts:
-      // collectLayerRegistrations) so the order matches parent-iteration
-      // order rather than which leg's async chain happened to finish first.
-      if (layerContext && typeof layerName === "string" && layerName) {
-        (node as { __layerRegistration?: string }).__layerRegistration =
-          layerName;
-      }
-      return node;
-    };
-    return wrapped;
-  };
-  const nameMethodWithFields = (layerName: string | Token): Mark<T> => {
-    const fn = nameMethod(layerName);
-    if ((baseMark as any).__axisFields) {
-      (fn as any).__axisFields = (baseMark as any).__axisFields;
-    }
-    // Propagate the IR-serialize tag through the chain so toJSON still
-    // sees this mark, and stash the layerName so the emitter surfaces it
-    // as the canonical top-level `name` field. String names only in v0;
-    // Token names are dropped (the rest of the tag still propagates).
-    const baseTag = (baseMark as any).__serialize;
-    if (baseTag) {
-      const nextTag: any = { ...baseTag };
-      if (typeof layerName === "string") {
-        nextTag.name = layerName;
-      }
-      (fn as any).__serialize = nextTag;
-    }
-    stashLayerName(fn, layerName);
-    return fn;
-  };
-  const labelMethod = (
-    accessor: LabelAccessor,
-    options?: LabelOptions
-  ): Mark<T> => {
-    const fn: Mark<T> = async (input, keyParam, layerContext) => {
-      // main's typing fix: baseMark returns GoFishAST; cast to GoFishNode
-      // to invoke .label(). Both branches do the same runtime work.
-      const node = (await baseMark(input, keyParam, layerContext)) as GoFishAST;
-      (node as GoFishNode).label(accessor, options);
-      return node;
-    };
-    // Same as nameMethodWithFields — keep the serialize tag alive and
-    // record the label in the dedicated tag slot so the emitter writes
-    // it as a top-level LabelIR object.
-    const baseTag = (baseMark as any).__serialize;
-    if (baseTag) {
-      const nextTag: any = { ...baseTag };
-      if (typeof accessor === "string") {
-        nextTag.label = {
-          accessor,
-          ...(options && typeof options === "object" ? options : {}),
-        };
-      } else if (
-        typeof accessor === "function" &&
-        typeof console !== "undefined" &&
-        typeof console.warn === "function"
-      ) {
-        // Function accessors don't serialize. The mark stays
-        // serializable; only the label is dropped from the emitted IR.
-        console.warn(
-          "[gofish-ir] .label(fn): function accessors aren't serializable; " +
-            "label will be omitted from the emitted IR. Use a string field " +
-            "name if you need the label to round-trip."
-        );
-      }
-      (fn as any).__serialize = nextTag;
-    }
-    if ((baseMark as any).__axisFields) {
-      (fn as any).__axisFields = (baseMark as any).__axisFields;
-    }
-    return fn;
-  };
-  const renderMethod = async (
-    container: Parameters<GoFishNode["render"]>[0],
-    options: Parameters<GoFishNode["render"]>[1]
-  ) => {
-    const node = (await baseMark(undefined as any)) as GoFishNode;
-    return node.render(container, options);
-  };
-  Object.defineProperty(baseMark, "name", {
-    value: nameMethodWithFields,
-    writable: true,
-    configurable: true,
-  });
-  Object.defineProperty(baseMark, "label", {
-    value: labelMethod,
-    writable: true,
-    configurable: true,
-  });
-  Object.defineProperty(baseMark, "render", {
-    value: renderMethod,
-    writable: true,
-    configurable: true,
-  });
-  return baseMark as NameableMark<T>;
-}
-
-/**
  * Creates a high-level mark from a low-level shape function plus optional
  * channel annotations. Channel annotations describe how each prop encodes data:
  * - "size":  accepts `number | keyof T`, uses inferSize
@@ -607,17 +501,27 @@ export function createMark<
   ShapeProps extends Record<string, any>,
   C extends ChannelAnnotations<ShapeProps>,
 >(
-  shapeFn: (opts: ShapeProps) => GoFishNode | PromiseLike<GoFishNode>,
+  shapeFn: (
+    opts: ShapeProps,
+    data?: any[]
+  ) =>
+    | GoFishNode
+    | GoFishNode[]
+    | PromiseLike<GoFishNode>
+    | PromiseLike<GoFishNode[]>,
   channels: C,
-  serialize?: MarkSerializeConfig
+  serialize?: MarkSerializeConfig,
+  cfg?: { kind?: MarkKind }
 ): <T extends Record<string, any>>(
   opts: DeriveMarkProps<ShapeProps, C, T>
 ) => NameableMark<T | T[] | { item: T | T[]; key: number | string }>;
 export function createMark(
   shapeFn: any,
   channels: Record<string, any> = {},
-  serialize?: MarkSerializeConfig
+  serialize?: MarkSerializeConfig,
+  cfg?: { kind?: MarkKind }
 ): any {
+  const kind: MarkKind = cfg?.kind ?? "per-item";
   const serializeConfig: { type: string; shape?: (o: any) => any } | undefined =
     typeof serialize === "string" ? { type: serialize } : serialize;
   return (markOpts: Record<string, any>) => {
@@ -642,17 +546,27 @@ export function createMark(
 
       const data = Array.isArray(d) ? d : [d];
 
-      // Build shape props by encoding each channel. Unannotated props (which
+      // Build shape props by encoding each channel. The plain string spec
+      // ("size"/"pos"/"color"/"raw") aggregates over `data` and produces a
+      // single value. The object form `{type, entry: true}` produces a
+      // per-row array — used by expand-kind marks. Unannotated props (which
       // is everything when channels is omitted/empty) pass through.
       const shapeProps: Record<string, any> = {};
       for (const propName of Object.keys(markOpts)) {
         if (propName === "debug") continue;
-        const channelType = channels[propName];
+        const channelSpec = channels[propName];
         const markValue = markOpts[propName];
+
+        const channelType =
+          typeof channelSpec === "string" ? channelSpec : channelSpec?.type;
+        const isEntry =
+          typeof channelSpec === "object" && channelSpec?.entry === true;
 
         if (isValue(markValue)) {
           // Already a Value wrapper (e.g. v(...)) — pass through directly
           shapeProps[propName] = markValue;
+        } else if (isEntry && channelType === "size") {
+          shapeProps[propName] = inferEntrySize(markValue, data);
         } else if (channelType === "size") {
           shapeProps[propName] = inferSize(markValue, data);
         } else if (channelType === "pos") {
@@ -669,9 +583,22 @@ export function createMark(
         }
       }
 
-      const result = shapeFn(shapeProps);
-      const node: GoFishNode =
-        result instanceof GoFishNode ? result : await result;
+      // For expand-kind marks, hand the data array to shapeFn so it can
+      // build N output nodes 1:1 with input rows. shapeFn may be async.
+      const result = await shapeFn(
+        shapeProps,
+        kind === "expand" ? data : undefined
+      );
+      if (Array.isArray(result)) {
+        // Expand path: stamp each slice with its own datum.
+        for (let i = 0; i < result.length; i++) {
+          const node = result[i];
+          node.name(key?.toString() ?? "");
+          (node as any).datum = data[i] ?? d;
+        }
+        return result as unknown as GoFishNode;
+      }
+      const node = result as GoFishNode;
       node.name(key?.toString() ?? "");
       (node as any).datum = d;
       node.scope();
@@ -681,6 +608,7 @@ export function createMark(
       node._isComponent = true;
       return node;
     };
+    withMarkKind(baseMark, kind);
 
     // Infer axis field names from string-valued size/pos channels
     const axisFields: { x?: string; y?: string } = {};
@@ -703,6 +631,6 @@ export function createMark(
       };
     }
 
-    return attachNameableMethods(baseMark);
+    return nameableMark(baseMark);
   };
 }

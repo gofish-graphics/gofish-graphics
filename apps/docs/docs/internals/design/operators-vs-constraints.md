@@ -7,6 +7,17 @@ status: speculative
 
 # Re-unifying Operators and Constraints
 
+> **Status update.** Option 1 below (operators-on-top-of-constraints, one
+> machinery) **has landed** for the spread/stack family: constraints carry
+> space folds (`distributeSpaceFold`/`alignSpaceFold`), the layer solves
+> budgets against folded claims, and `spread`/`stack` delegate their space
+> resolution, slicing, align walk, and distribute walk to that shared
+> machinery — verified geometry-identical across all stories. The feasibility
+> analysis and the remaining program (scatter/position, size-setting
+> constraints, sharedScale-as-claim-hoisting) live in [[constraints-as-core]].
+> The sections below predate that work and are kept for the motivating
+> history; the `scatter`/`connect` questions at the bottom are still open.
+
 Open design question: should the layout operators (`spread`, `stack`, `layer`,
 `connect`, ...) and the constraint primitives (`Constraint.align`,
 `Constraint.distribute`, `Constraint.zAbove` / `zBelow`) sit on the same axis,

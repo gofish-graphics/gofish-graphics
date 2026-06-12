@@ -97,12 +97,15 @@ export {
 } from "./ast/graphicalOperators/position";
 export { arrow, arrow as Arrow } from "./ast/graphicalOperators/arrow";
 export { Table, table } from "./ast/graphicalOperators/table";
+export { cut, cut as Cut, cutMark } from "./ast/graphicalOperators/cut";
+export { offset, offset as Offset } from "./ast/graphicalOperators/offset";
+// Region-compositing node operators (Figma-inspired names, #196/#202). `over`
+// is intentionally not exported — it is conceptually `layer` (#196).
 export {
-  over as Over,
-  inside as In,
-  xor as Xor,
-  out as Out,
-  atop as Atop,
+  intersect as Intersect,
+  exclude as Exclude,
+  subtract as Subtract,
+  paint as Paint,
   mask as Mask,
 } from "./ast/graphicalOperators/porterDuff";
 
@@ -127,12 +130,16 @@ export {
   repeat,
   log,
   layer,
-  atop,
-  over,
-  inside,
-  xor,
-  out,
+  paint,
+  intersect,
+  exclude,
+  subtract,
   mask,
+  // `over` is NOT public API — use `layer` (#196). It is re-exported only so
+  // the IR test harness can key its `"over"` wire-type combinator factory off
+  // the package's public entry instead of deep-importing internals. The
+  // deserializer's registry.ts maps the "over" wire type to this same factory.
+  over,
 } from "./ast/marks/chart";
 export type { ConstrainableMark } from "./ast/marks/chart";
 export type {

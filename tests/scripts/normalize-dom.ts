@@ -177,6 +177,56 @@ export function normalizeIds(html: string): string {
 }
 
 // ---------------------------------------------------------------------------
+// 3b. Normalize <image> hrefs (build-hashed / absolute asset URLs → basename)
+// ---------------------------------------------------------------------------
+
+/**
+ * Reduce an asset URL to its hash-stripped basename so that the same image
+ * matches across environments. Vite serves assets differently depending on
+ * mode: the dev server emits absolute `/@fs/<abs-path>/wilsonblanco.png`
+ * URLs, while a production/Storybook-static build emits content-hashed
+ * `/assets/wilsonblanco-Bf3k2.png` names. Both must collapse to
+ * `wilsonblanco.png` for an image-bearing story's DOM to byte-match between
+ * the JS Storybook capture and the Python harness.
+ *
+ * `data:` URIs are returned untouched (they carry the bytes inline and are
+ * already environment-independent).
+ */
+function imageHrefBasename(url: string): string {
+  // Take the basename, dropping any query/fragment suffix.
+  const base = url.split(/[?#]/)[0].split("/").pop() ?? url;
+  const dot = base.lastIndexOf(".");
+  const stem = dot === -1 ? base : base.slice(0, dot);
+  const ext = dot === -1 ? "" : base.slice(dot);
+  // Strip a trailing `-<hash>` segment (the final hyphen-delimited group)
+  // when it looks like a build content hash rather than part of the real
+  // filename. Vite hashes mix letters and digits (e.g. `Bf3k2`); semantic
+  // filename words/segments such as `isolated` or `2451180_1280` do not.
+  const stripped = stem.replace(/-([A-Za-z0-9_]+)$/, (match, seg) => {
+    const hasLetter = /[A-Za-z]/.test(seg);
+    const hasDigit = /\d/.test(seg);
+    const looksLikeHash =
+      hasLetter && hasDigit && (/[A-Z]/.test(seg) || seg.length >= 8);
+    return looksLikeHash ? "" : match;
+  });
+  return stripped + ext;
+}
+
+/**
+ * Normalize `href` / `xlink:href` on `<image>` elements to their hash-stripped
+ * basename. Only `<image>` hrefs are touched; `data:` URIs and fragment refs
+ * (`#...`, handled by {@link normalizeIds}) are left alone.
+ */
+export function normalizeImageHrefs(html: string): string {
+  return html.replace(/<image\b[^>]*>/gi, (tag) =>
+    tag.replace(/\bhref="([^"]*)"/g, (whole, val) => {
+      if (val.startsWith("data:") || val.startsWith("#")) return whole;
+      return `href="${imageHrefBasename(val)}"`;
+    })
+  );
+}
+
+// ---------------------------------------------------------------------------
 // 4. Sort attributes alphabetically per element
 // ---------------------------------------------------------------------------
 
@@ -274,6 +324,7 @@ export function normalizeDom(
   s = stripWrapper(s);
   s = roundFloats(s, decimals);
   s = normalizeIds(s);
+  s = normalizeImageHrefs(s);
   s = sortAttributes(s);
   s = normalizeWhitespace(s);
 

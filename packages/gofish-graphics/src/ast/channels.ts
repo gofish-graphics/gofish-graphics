@@ -18,8 +18,17 @@ import {
 
 export type ChannelType = "size" | "pos" | "color" | "raw";
 
+/**
+ * Channel spec. The plain string form is the default (aggregate over all data
+ * via `inferSize`/`inferPos`/`inferColor` — produces a single value). The
+ * object form adds flags — `entry: true` produces a per-row array instead of
+ * an aggregate, used by expand-kind marks (e.g. `cut`) where each datum maps
+ * to one output node and the channel value differs per node.
+ */
+export type ChannelSpec = ChannelType | { type: ChannelType; entry?: boolean };
+
 export type ChannelAnnotations<T> = {
-  [K in keyof T]?: ChannelType;
+  [K in keyof T]?: ChannelSpec;
 };
 
 /**
@@ -35,36 +44,40 @@ export type DeriveMarkProps<
   T extends Record<string, any>,
 > = {
   [K in keyof ShapeProps]: K extends keyof Channels
-    ? Channels[K] extends "size"
-      ?
-          | number
-          | (keyof T & string)
-          | ((d: T) => number)
-          | Value<number>
-          | undefined
-      : Channels[K] extends "pos"
+    ? // Entry-flagged size: mark accepts a field name or an explicit
+      // per-row array (used by expand-kind marks like `cut`).
+      Channels[K] extends { type: "size"; entry: true }
+      ? (keyof T & string) | MaybeValue<number>[] | undefined
+      : Channels[K] extends "size" | { type: "size" }
         ?
             | number
             | (keyof T & string)
             | ((d: T) => number)
             | Value<number>
             | undefined
-        : Channels[K] extends "color"
+        : Channels[K] extends "pos" | { type: "pos" }
           ?
-              | string
+              | number
               | (keyof T & string)
-              | ((d: T) => string)
-              | Value<string>
+              | ((d: T) => number)
+              | Value<number>
               | undefined
-          : Channels[K] extends "raw"
+          : Channels[K] extends "color" | { type: "color" }
             ?
                 | string
-                | number
                 | (keyof T & string)
-                | ((d: T) => string | number)
-                | Value<string | number>
+                | ((d: T) => string)
+                | Value<string>
                 | undefined
-            : ShapeProps[K]
+            : Channels[K] extends "raw" | { type: "raw" }
+              ?
+                  | string
+                  | number
+                  | (keyof T & string)
+                  | ((d: T) => string | number)
+                  | Value<string | number>
+                  | undefined
+              : ShapeProps[K]
     : ShapeProps[K];
 } & { debug?: boolean };
 
@@ -128,6 +141,31 @@ export const resolveMeasure = <T>(
   }
   if (annotation !== undefined) return annotation;
   return provenance ?? fieldName;
+};
+
+/**
+ * Entry-flagged size resolver: produces a per-row array instead of a sum.
+ * Used by expand-kind marks (e.g. `cut`) where each datum maps to one output
+ * node and the channel value differs per node.
+ *
+ * - `number[]` / `MaybeValue<number>[]`: passed through.
+ * - `string` (field name): mapped per-row to `Number(d[field]) || 0`.
+ * - function: called per-row.
+ * - `undefined`: returns `undefined` (caller decides default — typically equal slices).
+ */
+export const inferEntrySize = <T>(
+  accessor: string | MaybeValue<number>[] | ((d: T) => number) | undefined,
+  data: T[]
+): MaybeValue<number>[] | undefined => {
+  if (accessor === undefined) return undefined;
+  if (Array.isArray(accessor)) return accessor;
+  if (typeof accessor === "function") {
+    return data.map((d) => value(accessor(d)));
+  }
+  if (typeof accessor === "string") {
+    return data.map((d) => value(Number((d as any)[accessor]) || 0));
+  }
+  return undefined;
 };
 
 /**

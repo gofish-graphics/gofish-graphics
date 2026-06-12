@@ -409,11 +409,27 @@ for (const diff of parityDiffs) {
       // even when export name casing differs.
       pair.exports.find((e) => jsExportToKebab(e.name) === exportSlug);
     if (exp) {
+      // A parity-exempt export (file- or export-level) is captured + IR-
+      // validated but intentionally NOT byte-gated against the JS baseline —
+      // compare-python.ts SKIPs it rather than failing. A DOM mismatch on such
+      // an export must therefore stay in the "exempt" warning bucket, not flip
+      // to a parity-mismatch failure (which is why the gate passed while this
+      // page used to show a spurious "1 failures"). Attach the diff so it's
+      // viewable, but keep the warning status/category.
+      if (exp.category === "exempt") {
+        exp.message =
+          "Parity-exempt — captured Python DOM differs from the JS baseline " +
+          "(intentionally not byte-gated)";
+        exp.hasDomDiff = hasDomDiff;
+        exp.hasScreenshots = hasScreenshots;
+        pair.hasDomDiff = pair.hasDomDiff || hasDomDiff;
+        pair.hasScreenshots = pair.hasScreenshots || hasScreenshots;
+        continue;
+      }
       // Decrement whatever category counter the original status used
       // before overwriting it with parity-mismatch.
       if (exp.category === "covered") exportsCovered--;
       else if (exp.category === "missing") exportsMissing--;
-      else if (exp.category === "exempt") exportsExempt--;
       else if (exp.category === "capture-failed") exportsCaptureFailed--;
       else if (exp.category === "capture-skipped") exportsCaptureSkipped--;
       exportsParityMismatch++;

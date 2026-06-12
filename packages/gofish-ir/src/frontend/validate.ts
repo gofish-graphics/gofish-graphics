@@ -17,12 +17,14 @@ import {
   type ChannelValue,
   type CombinatorMarkIR,
   type ConstraintIR,
+  type CutMarkIR,
   type DataIR,
   type FrontendIRDocument,
   type LabelIR,
   type LeafMarkIR,
   type MarkIR,
   type Meta,
+  type OffsetMarkIR,
   type Origin,
   type RefMarkIR,
 } from "./schema.js";
@@ -277,6 +279,8 @@ function walkOperator(node: unknown, path: string, ctx: Context): void {
       "sharedScale",
       "mode",
       "reverse",
+      "glue",
+      "stackWeights",
       "axes",
       "origin",
       "meta",
@@ -334,6 +338,16 @@ function walkOperator(node: unknown, path: string, ctx: Context): void {
           ctx.errors.push({
             path: p,
             message: `mode must be "edge" | "center"`,
+          });
+      });
+      // spread-only stack options (stack operator rejects these via its own
+      // knownFields list); optionalField no-ops when the field is absent.
+      optionalField(node, "glue", path, ctx, expectBoolean);
+      optionalField(node, "stackWeights", path, ctx, (v, p) => {
+        if (!Array.isArray(v) || !v.every((n) => typeof n === "number"))
+          ctx.errors.push({
+            path: p,
+            message: "stackWeights must be an array of numbers",
           });
       });
       optionalField(node, "axes", path, ctx, walkAxesOptions);
@@ -499,6 +513,14 @@ function walkMark(node: unknown, path: string, ctx: Context): void {
     walkRefMark(node, path, ctx);
     return;
   }
+  if (t === "offset") {
+    walkOffsetMark(node, path, ctx);
+    return;
+  }
+  if (t === "cut") {
+    walkCutMark(node, path, ctx);
+    return;
+  }
   if (node.__combinator === true) {
     walkCombinatorMark(node, path, ctx);
     return;
@@ -534,6 +556,111 @@ function walkRefMark(
     rejectUnknown(
       node,
       ["type", "selection", "name", "label", "zOrder", "origin", "meta"],
+      path,
+      ctx
+    );
+  }
+}
+
+function walkOffsetMark(
+  node: Record<string, unknown>,
+  path: string,
+  ctx: Context
+): void {
+  walkBaseFields(node, path, ctx);
+  optionalField(node, "x", path, ctx, expectNumber);
+  optionalField(node, "y", path, ctx, expectNumber);
+  expectField(node, "children", path, ctx, (v, p) => {
+    if (!Array.isArray(v)) {
+      ctx.errors.push({ path: p, message: "children must be an array" });
+      return;
+    }
+    if (v.length !== 1) {
+      ctx.errors.push({
+        path: p,
+        message: `offset expects exactly one child, got ${v.length}`,
+      });
+    }
+    v.forEach((item, i) => walkMark(item, `${p}[${i}]`, ctx));
+  });
+  if (ctx.strict) {
+    rejectUnknown(
+      node,
+      ["type", "x", "y", "children", "origin", "meta"],
+      path,
+      ctx
+    );
+  }
+}
+
+/**
+ * `cut.size` — either a field-name string (expand-mark form) or an array whose
+ * entries are absolute-pixel numbers or `{type:"datum"}` flex-weight wrappers.
+ */
+function walkCutSize(value: unknown, path: string, ctx: Context): void {
+  if (typeof value === "string") return;
+  if (!Array.isArray(value)) {
+    ctx.errors.push({
+      path,
+      message: `cut.size must be a field-name string or an array of numbers / datum() values, got ${typeNameOf(
+        value
+      )}`,
+    });
+    return;
+  }
+  value.forEach((item, i) => {
+    const p = `${path}[${i}]`;
+    if (typeof item === "number") return;
+    if (isObject(item) && item.type === "datum") {
+      if (item.offset !== undefined && typeof item.offset !== "number") {
+        ctx.errors.push({
+          path: `${p}.offset`,
+          message: 'datum "offset" must be a number',
+        });
+      }
+      return;
+    }
+    ctx.errors.push({
+      path: p,
+      message: `cut.size entries must be a number or a datum() value, got ${typeNameOf(
+        item
+      )}`,
+    });
+  });
+}
+
+function walkCutMark(
+  node: Record<string, unknown>,
+  path: string,
+  ctx: Context
+): void {
+  walkBaseFields(node, path, ctx);
+  expectField(node, "source", path, ctx, walkMark);
+  expectField(node, "dir", path, ctx, (v, p) => {
+    if (v !== "x" && v !== "y")
+      ctx.errors.push({
+        path: p,
+        message: `cut.dir must be "x" | "y", got ${JSON.stringify(v)}`,
+      });
+  });
+  optionalField(node, "size", path, ctx, walkCutSize);
+  optionalField(node, "inset", path, ctx, expectNumber);
+  optionalField(node, "name", path, ctx, expectNameOrToken);
+  optionalField(node, "zOrder", path, ctx, expectNumber);
+  if (ctx.strict) {
+    rejectUnknown(
+      node,
+      [
+        "type",
+        "source",
+        "dir",
+        "size",
+        "inset",
+        "name",
+        "zOrder",
+        "origin",
+        "meta",
+      ],
       path,
       ctx
     );
@@ -838,12 +965,14 @@ export type {
   ChannelValue,
   CombinatorMarkIR,
   ConstraintIR,
+  CutMarkIR,
   DataIR,
   FrontendIRDocument,
   LabelIR,
   LeafMarkIR,
   MarkIR,
   Meta,
+  OffsetMarkIR,
   Origin,
   RefMarkIR,
 };

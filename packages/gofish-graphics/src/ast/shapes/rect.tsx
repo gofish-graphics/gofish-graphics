@@ -40,6 +40,7 @@ import {
 } from "../underlyingSpace";
 import { interval } from "../../util/interval";
 import { createMark } from "../withGoFish";
+import { attachCut } from "../graphicalOperators/cut";
 
 const computeIntrinsicSize = (
   input: MaybeValue<number> | undefined
@@ -570,7 +571,7 @@ export const Rect = ({
   );
 };
 
-export const rect = createMark(
+const baseRect = createMark(
   Rect,
   {
     w: "size",
@@ -588,3 +589,6 @@ export const rect = createMark(
   },
   "rect"
 );
+
+export const rect: typeof baseRect = ((opts: any) =>
+  attachCut(baseRect(opts))) as typeof baseRect;
