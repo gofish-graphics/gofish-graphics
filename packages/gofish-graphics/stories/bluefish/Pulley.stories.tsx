@@ -87,6 +87,14 @@ const Weight = createMark(
 
 export const Pulley: StoryObj<Args> = {
   args: { w: 360, h: 440 },
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "Pulley Diagram",
+      description:
+        "A constraint-based physics diagram of three pulley wheels suspended from a ceiling bar by labeled ropes, lifting two hanging weights.",
+    },
+  },
   render: (args: Args) => {
     const container = initializeContainer();
 

@@ -2,7 +2,7 @@
 
 Connects data points center-to-center with a line. Takes the array of refs returned by [`selectAll()`](/js/api/selection/ref).
 
-::: starfish
+::: gofish
 
 ```js
 const locations = Object.entries(lakeLocations).map(([lake, { x, y }]) => ({

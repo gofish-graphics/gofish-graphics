@@ -16,6 +16,8 @@ interface StoryInfo {
   name: string;
   moduleKey: string;
   hasLoaders: boolean;
+  tags: string[];
+  gallery?: { title: string; description: string };
 }
 
 /** Build a flat list of all stories from the imported modules. */
@@ -35,12 +37,16 @@ function buildStoryList(): StoryInfo[] {
         .toLowerCase()
         .replace(/[\s/]+/g, "-");
 
+      const s = story as any;
+
       stories.push({
         id,
         title: meta.title,
         name: exportName,
         moduleKey,
-        hasLoaders: !!(story as any).loaders?.length,
+        hasLoaders: !!s.loaders?.length,
+        tags: [...(meta.tags ?? []), ...(s.tags ?? [])],
+        gallery: s.parameters?.gallery,
       });
     }
   }

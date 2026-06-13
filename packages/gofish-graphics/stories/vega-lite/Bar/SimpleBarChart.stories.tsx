@@ -31,6 +31,13 @@ type Args = { h: number };
 
 export const Default: StoryObj<Args> = {
   args: { h: 300 },
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "Simple Bar Chart",
+      description: "A simple vertical bar chart with one bar per category, each bar's height encoding its value.",
+    },
+  },
   render: (args: Args) => {
     const container = initializeContainer();
 

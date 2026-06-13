@@ -62,6 +62,14 @@ export const Simplified: StoryObj<Args> = {
 
 export const Default: StoryObj<Args> = {
   args: { w: 500, h: 300 },
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "Icicle Chart",
+      description:
+        "Titanic passengers broken down by class and then survival as an icicle diagram, with nested rectangles in successive columns sized to encode each group's count.",
+    },
+  },
   render: (args: Args) => {
     const container = initializeContainer();
 

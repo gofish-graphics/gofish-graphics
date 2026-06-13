@@ -2,7 +2,7 @@
 
 Transforms data before it reaches the next operator or mark. The function receives the current data group and returns a new one.
 
-::: starfish
+::: gofish
 
 ```js
 gf.Chart(seafood, { axes: true })

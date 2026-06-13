@@ -34,6 +34,13 @@ const scores = [
 export const PaletteNamedScheme: StoryObj<Args> = {
   name: "Palette / Named Scheme",
   args: defaultArgs,
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "Categorical Color Palette",
+      description: "Fish catch totals per species as a bar chart colored by a categorical tableau10 palette.",
+    },
+  },
   render: (args: Args) => {
     const container = initializeContainer();
 
@@ -66,6 +73,13 @@ export const PaletteStringArray: StoryObj<Args> = {
 export const GradientNamedScheme: StoryObj<Args> = {
   name: "Gradient / Named Scheme",
   args: defaultArgs,
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "Sequential Color Gradient",
+      description: "Ascending values as a bar chart whose fill interpolates along a sequential blues gradient.",
+    },
+  },
   render: (args: Args) => {
     const container = initializeContainer();
 
@@ -208,6 +222,13 @@ export const SelectiveDerive: StoryObj<Args> = {
 export const SelectiveGroup: StoryObj<Args> = {
   name: "Selective / Highlight Group",
   args: defaultArgs,
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "Selective Highlight",
+      description: "Stacked catch bars by lake with only the Salmon segments colored and every other species muted to gray.",
+    },
+  },
   render: (args: Args) => {
     const container = initializeContainer();
 
@@ -227,6 +248,13 @@ export const SelectiveGroup: StoryObj<Args> = {
 export const RibbonHighlight: StoryObj<Args> = {
   name: "Ribbon / Two Highlighted",
   args: defaultArgs,
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "Highlighted Ribbon Chart",
+      description: "Species catch flows across lakes as stacked ribbons, with Salmon and Trout picked out in color against gray.",
+    },
+  },
   render: (args: Args) => {
     const container = initializeContainer();
 
@@ -263,6 +291,13 @@ const roseData = Array.from({ length: NUM_RINGS * NUM_SECTORS }, (_, i) => {
 export const RoseGradient: StoryObj<Args> = {
   name: "Rose / Concentric Gradient",
   args: defaultArgs,
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "Nightingale Rose Diagram",
+      description: "A polar rose chart of values across twelve sectors and six concentric rings shaded by a blues gradient.",
+    },
+  },
   render: (args: Args) => {
     const container = initializeContainer();
 

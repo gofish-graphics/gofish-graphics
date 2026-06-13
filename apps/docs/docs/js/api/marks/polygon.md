@@ -4,7 +4,7 @@ Draws a closed polygon from explicit local-coordinate points. Useful for
 non-rectangular glyphs (trapezoids, arrows, custom shapes) that can't be
 expressed by the standard shape primitives.
 
-::: starfish
+::: gofish
 
 ```js
 gf.Chart([{}])

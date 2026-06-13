@@ -22,6 +22,13 @@ type Args = { w: number; h: number };
 export const Default: StoryObj<Args> = {
   args: { w: 300, h: 300 },
   loaders: [async () => ({ cars: await data["cars.json"]() })],
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "Scatter Plot",
+      description: "A scatter plot of car horsepower against fuel efficiency in miles per gallon, revealing the downward trend between the two.",
+    },
+  },
   render: (args: Args, context: any) => {
     const container = initializeContainer();
     const cars = (context.loaded.cars as any[]).filter(d => d.Horsepower !== null && d.Miles_per_Gallon !== null);

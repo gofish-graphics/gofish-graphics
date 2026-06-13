@@ -2,7 +2,7 @@
 
 Overlays multiple children in the same coordinate space without any layout offset.
 
-::: starfish
+::: gofish
 
 ```js
 gf.Layer([

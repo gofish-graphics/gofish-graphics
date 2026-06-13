@@ -6,7 +6,7 @@ Add text labels to marks using the `.label()` method. Labels automatically posit
 
 Call `.label(field)` on any mark to display a data field as text.
 
-::: starfish
+::: gofish
 
 ```js
 gf.Chart(seafood, { axes: true })
@@ -21,7 +21,7 @@ gf.Chart(seafood, { axes: true })
 
 Labels use a `side-edge-align` position system.
 
-::: starfish
+::: gofish
 
 ```js
 gf.Chart(seafood, { axes: true })
@@ -79,7 +79,7 @@ Special values:
 
 Labels inside shapes (`center`, `inset-*`) automatically pick white or black text based on the fill color's luminance. Labels outside shapes use a darkened version of the fill color. You can override this with the `color` option.
 
-::: starfish
+::: gofish
 
 ```js
 const heatData = ["Mon", "Tue", "Wed", "Thu", "Fri"].flatMap((day, di) =>
@@ -108,7 +108,7 @@ gf.Chart(heatData, { color: gf.gradient(["#e0f3ff", "#08519c"]), axes: true })
 
 Use the `rotate` option for angled labels. Positive values rotate clockwise.
 
-::: starfish
+::: gofish
 
 ```js
 gf.Chart(seafood, { axes: true })

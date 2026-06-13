@@ -25,6 +25,14 @@ type Args = { w: number; h: number; padding: number };
 
 export const Basic: StoryObj<Args> = {
   args: { w: 400, h: 400, padding: 80 },
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "Pie Chart",
+      description:
+        "A pie chart breaking down total fish catch by species, with each wedge's angle proportional to its share of the catch.",
+    },
+  },
   render: (args: Args) => {
     const container = initializeContainer();
 
@@ -42,6 +50,14 @@ export const Basic: StoryObj<Args> = {
 
 export const Donut: StoryObj<Args> = {
   args: { w: 400, h: 400, padding: 60 },
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "Donut Chart",
+      description:
+        "A donut chart of fish catch by species, where the open center leaves a ring of wedges sized by each species' share of the total.",
+    },
+  },
   render: (args: Args) => {
     const container = initializeContainer();
 
@@ -59,6 +75,14 @@ export const Donut: StoryObj<Args> = {
 
 export const Rose: StoryObj<Args> = {
   args: { w: 400, h: 400 },
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "Nightingale Rose Chart",
+      description:
+        "A recreation of Florence Nightingale's polar-area diagram of Crimean War mortality, with each month's wedge extending by cause of death (disease, wounds, and other).",
+    },
+  },
   render: (args: Args) => {
     const container = initializeContainer();
 

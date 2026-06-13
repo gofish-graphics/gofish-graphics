@@ -22,6 +22,13 @@ type Args = { w: number; h: number; paddingInner: number };
 
 export const Default: StoryObj<Args> = {
   args: { w: 1000, h: 320, paddingInner: 0 },
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "Titanic Fare Circle Treemap",
+      description: "Each Titanic passenger drawn as a circle sized by fare paid and colored by survival, packed into a squarified treemap and faceted by passenger class.",
+    },
+  },
   render: (args: Args) => {
     const container = initializeContainer();
     Chart(titanicPassengers, { color: palette(["#2b8cbe", "#ff8408"]) }).facet({by: "pclass", dir: "x"})

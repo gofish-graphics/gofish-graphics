@@ -34,7 +34,7 @@ from the [mark](/internals/frontend/mark-factory) and
 Rendering the tree is not one traversal but three, each answering a different question.
 A node implements only the passes it participates in.
 
-::: starfish example:internal-render-pipeline hidden
+::: gofish example:internal-render-pipeline hidden
 :::
 
 **1 · Domain inference.** Before anything can be sized, the engine works out the data

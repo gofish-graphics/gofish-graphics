@@ -40,6 +40,13 @@ const heatmapData = days.flatMap((day, di) =>
 
 export const Default: StoryObj<Args> = {
   args: { w: 600, h: 400 },
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "Activity Heatmap",
+      description: "A day-by-hour grid of activity values where each cell is shaded along a yellow-to-red intensity gradient.",
+    },
+  },
   render: (args: Args) => {
     const container = initializeContainer();
 

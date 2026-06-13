@@ -36,6 +36,14 @@ const scatterData = _(seafood)
 
 export const Default: StoryObj<Args> = {
   args: { w: 400, h: 400 },
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "Flower Chart",
+      description:
+        "A distribution rendered as a meadow, where each binned count grows a layered flower of colored petals atop a green stem.",
+    },
+  },
   render: (args: Args) => {
     const container = initializeContainer();
     layer(

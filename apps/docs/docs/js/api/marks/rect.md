@@ -2,7 +2,7 @@
 
 Draws a rectangle for each data item.
 
-::: starfish
+::: gofish
 
 ```js
 gf.Chart([{ value: 80 }])

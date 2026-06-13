@@ -58,7 +58,7 @@ size themselves and report back; the parent then places them in its own coordina
 space. No node reasons about more than its immediate neighborhood, and the whole
 thing runs in **time linear in the size of the tree**.
 
-::: starfish example:internal-local-propagation hidden
+::: gofish example:internal-local-propagation hidden
 :::
 
 The alternative is a **global constraint solver** — Cassowary-style linear

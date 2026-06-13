@@ -10,7 +10,7 @@ you just need to slide the underlying content beneath it. It is the primitive
 the `cut` mark uses to align each slice's source under its
 clip region.
 
-::: starfish
+::: gofish
 
 ```js
 gf.Layer([

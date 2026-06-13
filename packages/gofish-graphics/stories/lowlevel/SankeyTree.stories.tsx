@@ -30,6 +30,14 @@ const classColor = {
 
 export const Default: StoryObj<Args> = {
   args: { w: 500, h: 400 },
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "Sankey Tree",
+      description:
+        "A branching flow diagram where the width of each tapering band encodes the magnitude of a quantity as it splits across successive tiers.",
+    },
+  },
   render: (args: Args) => {
     const container = initializeContainer();
     const layerSpacing = 64;

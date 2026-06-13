@@ -91,7 +91,7 @@ Author the figure as a `.vitepress/examples/internal-<name>.ts` file (any
 so the page shows only the figure, not the GoFish code that draws it:
 
 ```md
-::: starfish example:internal-<name> hidden
+::: gofish example:internal-<name> hidden
 :::
 ```
 

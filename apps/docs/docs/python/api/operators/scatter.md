@@ -3,7 +3,7 @@
 Positions groups by `x` and `y` data fields rather than packing them along an
 axis. The basis for scatter plots and any chart with continuous positioning.
 
-::: starfish example:scatter-plot hidden
+::: gofish example:scatter-plot hidden
 :::
 
 ```python

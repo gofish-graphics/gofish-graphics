@@ -36,6 +36,14 @@ const scatterData = _(seafood)
 
 export const Default: StoryObj<Args> = {
   args: { w: 400, h: 400 },
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "Balloon Chart",
+      description:
+        "A whimsical scatterplot of fishing-catch locations where each lake's value floats as a colored balloon on a wavy string.",
+    },
+  },
   render: (args: Args) => {
     const container = initializeContainer();
 

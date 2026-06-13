@@ -22,6 +22,14 @@ type Args = { w: number; h: number };
 
 export const Default: StoryObj<Args> = {
   args: { w: 500, h: 300 },
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "Violin Plot",
+      description:
+        "Body-mass distributions for three penguin species drawn as violins, where each silhouette's width shows the density of measurements at that value.",
+    },
+  },
   render: (args: Args) => {
     const container = initializeContainer();
 

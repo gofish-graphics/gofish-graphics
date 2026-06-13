@@ -29,6 +29,14 @@ const classColor = {
 
 export const Default: StoryObj<Args> = {
   args: { w: 500, h: 340 },
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "Nested Waffle Chart",
+      description:
+        "Titanic survival by passenger class shown as nested waffle grids, where colored dots fill each block in proportion to the count it represents.",
+    },
+  },
   render: (args: Args) => {
     const container = initializeContainer();
     spreadY({ dir: "y", spacing: 8, alignment: "middle", sharedScale: true },

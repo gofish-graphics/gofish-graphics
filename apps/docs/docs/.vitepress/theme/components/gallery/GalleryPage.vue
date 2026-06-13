@@ -2,9 +2,9 @@
 import { onBeforeUnmount, onMounted, ref } from "vue";
 import { useRoute, useRouter } from "vitepress";
 import { effectiveLang } from "../../docsLang";
-import { data as examplesData } from "../../../data/examples.data.js";
+import { data as examplesData } from "../../../data/storyExamples.data.js";
 import {
-  renderExampleRoot,
+  renderExampleInto,
   namespaceSvgIds,
 } from "../../../../../components/galleryRender";
 import "./gallery.css";
@@ -130,13 +130,18 @@ onMounted(() => {
   // gofish renders through an async (rAF-driven) layout pipeline, so the <svg> is
   // not present synchronously after .render(); the host must be connected and we
   // must wait for the svg to appear with a settled non-zero box before measuring.
+  // Rendering the example is itself async now (the story module is dynamically
+  // imported, its loaders run, and its render is awaited), so we connect the root
+  // to the measure host first — gofish's layout pass measures text via getBBox and
+  // needs the node in the document — then render into it and poll for the svg.
   async function measure(
-    code: string,
     id: string
   ): Promise<{ w: number; h: number; node: SVGElement } | null> {
-    const root = renderExampleRoot(code);
+    const root = document.createElement("div");
     measureHost.appendChild(root);
     try {
+      await renderExampleInto(root, id);
+      if (cancelled) return null;
       let svg = root.querySelector("svg") as SVGElement | null;
       for (
         let i = 0;
@@ -611,61 +616,73 @@ onMounted(() => {
     caps: { entrance: number; endwall: number };
   };
 
-  function distributeFigures(list: Piece[], layout: Layout) {
-    const cols = (layout && layout.spots) || [];
-    if (!cols.length) return [];
+  // The crowd is a fixed fixture of the hall, NOT a function of the art. Visitors
+  // are placed once at absolute positions along the wall (≈ one band per pitch),
+  // appended only as the wall extends past them during load, and never re-posed.
+  // Relayouts (progressive load, repack, filter) reposition/clip this persistent
+  // set — they don't regenerate it — so the same people stay put as art loads or
+  // a search shortens the hall. Seeded by a constant so the crowd is deterministic.
+  type CrowdFig = { x: number; h: number; op: number; pose: string };
+  const crowd: CrowdFig[] = [];
+  const crowdRng = mulberry32(0x6d2b79f5);
+  let crowdSlots = 0; // primary-visitor count, drives the along-wall spacing
+  let crowdBenchUsed = false;
+
+  // Append visitors for any wall section revealed since the last call. Append-only:
+  // existing figures keep their absolute x, height, and pose forever.
+  function growCrowd(wallStart: number, wallEnd: number) {
     const e = env;
-    const wallStart = layout.caps.entrance;
-    const wallEnd = layout.artRight;
-    const span = Math.max(1, wallEnd - wallStart);
     const cap = e.mobile ? 3 : 80;
-    let target = Math.round(span / 620);
-    target = Math.max(1, Math.min(cap, target));
-
-    const rng = mulberry32((list.length * 2654435761 + 1013904223) >>> 0);
-    const stride = cols.length / target;
-    const figs: { x: number; h: number; op: number; pose: string }[] = [];
-    let benchPlaced = false;
-
-    for (let i = 0; i < target && figs.length < cap; i++) {
-      let idx = Math.floor(i * stride + (rng() - 0.5) * stride * 0.7);
-      idx = Math.max(0, Math.min(cols.length - 1, idx));
-      const col = cols[idx];
-      const off = (rng() - 0.5) * Math.min(120, (col.w || 200) * 0.7);
-      const x = col.cx + off;
-      const depth = rng();
+    const pitch = e.mobile ? 520 : 640; // px between primary visitors along the wall
+    const r = crowdRng;
+    while (crowd.length < cap) {
+      const baseX = wallStart + (crowdSlots + 0.5) * pitch;
+      if (baseX > wallEnd) break; // only populate wall that actually exists yet
+      crowdSlots++;
+      const x = baseX + (r() - 0.5) * 120;
+      const depth = r();
       const h = Math.round(
         (e.mobile ? 150 : 185) + depth * (e.mobile ? 40 : 85)
       );
       const op = +(0.84 + depth * 0.16).toFixed(3);
-      let pose = STAND_POSES[Math.floor(rng() * STAND_POSES.length)];
+      let pose = STAND_POSES[Math.floor(r() * STAND_POSES.length)];
 
-      const frac = i / target;
-      if (!benchPlaced && frac > 0.33 && frac < 0.66 && rng() < 0.6) {
+      if (!crowdBenchUsed && crowdSlots > 1 && r() < 0.5) {
         pose = "sitting";
-        benchPlaced = true;
+        crowdBenchUsed = true;
       }
-      figs.push({ x, h, op, pose });
+      crowd.push({ x, h, op, pose });
 
-      if (pose !== "sitting" && figs.length < cap && rng() < 0.2) {
-        const d2 = rng();
-        figs.push({
-          x: x + 52 + rng() * 46,
+      if (pose !== "sitting" && crowd.length < cap && r() < 0.2) {
+        const d2 = r();
+        crowd.push({
+          x: x + 52 + r() * 46,
           h: Math.round((e.mobile ? 150 : 175) + d2 * (e.mobile ? 35 : 75)),
           op: +(0.84 + d2 * 0.16).toFixed(3),
-          pose: STAND_POSES[Math.floor(rng() * STAND_POSES.length)],
+          pose: STAND_POSES[Math.floor(r() * STAND_POSES.length)],
         });
       }
-      if (figs.length < cap && rng() < 0.16) {
-        figs.push({
-          x: x - 40 - rng() * 28,
-          h: Math.round((e.mobile ? 96 : 112) + rng() * 22),
+      if (crowd.length < cap && r() < 0.16) {
+        crowd.push({
+          x: x - 40 - r() * 28,
+          h: Math.round((e.mobile ? 96 : 112) + r() * 22),
           op: 0.9,
           pose: "child",
         });
       }
     }
-    return figs;
+  }
+
+  // Visitors standing within the currently-visible wall. Filtering shortens the
+  // wall, so fewer pass the clip — same people, same spots, just the front of the
+  // hall — and they all return when the filter clears.
+  function visibleFigures(layout: Layout): CrowdFig[] {
+    if (!layout || !layout.caps) return [];
+    const wallStart = layout.caps.entrance;
+    const wallEnd = layout.artRight;
+    if (wallEnd <= wallStart) return [];
+    growCrowd(wallStart, wallEnd);
+    return crowd.filter((f) => f.x >= wallStart - 60 && f.x <= wallEnd + 60);
   }
 
   // ---- pointer repulsion config (see prototype's 6 documented behaviors) ----
@@ -1345,7 +1362,7 @@ onMounted(() => {
   }
 
   let lastLayout: Layout | null = null;
-  let lastFigCols = -1;
+  let lastFigSig = "";
   function relayout() {
     clearEntranceForCard();
     const list = currentList();
@@ -1362,15 +1379,18 @@ onMounted(() => {
     endwall.style.display = isEmpty ? "none" : "";
     if (isEmpty) {
       renderFigures([]);
-      lastFigCols = 0;
+      lastFigSig = "";
       if (!loading) hall.scrollLeft = 0;
     } else {
-      // Throttle the crowd re-derivation during the progressive load (re-render
-      // only when the column count changes); refresh fully once loaded / on filter.
-      const cols = layout.columns.length;
-      if (!loading || cols !== lastFigCols) {
-        renderFigures(distributeFigures(list, layout));
-        lastFigCols = cols;
+      // The crowd is persistent (see growCrowd) — only rebuild the figure DOM when
+      // the *visible set* actually changes (a visitor revealed as the wall grows, or
+      // clipped as a filter shortens it). Otherwise leave the existing figures (and
+      // their in-flight repulsion animation) untouched.
+      const figs = visibleFigures(layout);
+      const sig = figs.length + ":" + (figs.length ? Math.round(figs[0].x) : 0);
+      if (sig !== lastFigSig) {
+        renderFigures(figs);
+        lastFigSig = sig;
         kickFigures();
       }
     }
@@ -1616,7 +1636,7 @@ onMounted(() => {
     clearTimeout(rt);
     rt = setTimeout(() => {
       env = computeEnv();
-      lastFigCols = -1;
+      lastFigSig = ""; // force one figure re-render at the new wall positions
       relayout();
     }, 150);
   };
@@ -1667,7 +1687,6 @@ onMounted(() => {
     id: string;
     title: string;
     description?: string;
-    code: string;
   }[];
   const baseEntries: Entry[] = [];
   let cancelled = false;
@@ -1709,7 +1728,7 @@ onMounted(() => {
     for (const ex of examples) {
       if (cancelled) return;
       try {
-        const m = await measure(ex.code, ex.id);
+        const m = await measure(ex.id);
         if (m)
           baseEntries.push(addEntry(ex.id, ex.title, ex.description || "", m));
       } catch (err) {
@@ -1744,8 +1763,7 @@ onMounted(() => {
     }
 
     loading = false;
-    lastFigCols = -1;
-    relayout(); // final pack + full crowd derivation
+    relayout(); // final pack + reveal any remaining visitors
   })();
 });
 

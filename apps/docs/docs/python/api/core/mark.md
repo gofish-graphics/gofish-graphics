@@ -3,7 +3,7 @@
 Sets the visual **mark** drawn for each data item — the shape that turns rows
 into pixels.
 
-::: starfish example:bar-chart hidden
+::: gofish example:bar-chart hidden
 :::
 
 ```python

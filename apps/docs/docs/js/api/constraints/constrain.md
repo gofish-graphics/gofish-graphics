@@ -17,7 +17,7 @@ Layer([
   .render(container, { w: 300, h: 200 });
 ```
 
-::: starfish
+::: gofish
 
 ```js
 gf.Layer([
@@ -66,7 +66,7 @@ This is the per-child generalization of the single-anchor form. It expresses
 "edges share" relations directly, instead of through a `distribute` with a
 negative `spacing`.
 
-::: starfish
+::: gofish
 
 ```js
 gf.Layer([
@@ -116,7 +116,7 @@ to an anchored positional axis instead — that's a stacked bar chart. In other
 words: a constraint-assembled layer auto-fits the same way a `Spread`/`Stack`
 does.
 
-::: starfish
+::: gofish
 
 ```js
 gf.Layer([

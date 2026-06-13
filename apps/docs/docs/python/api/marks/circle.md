@@ -3,7 +3,7 @@
 Draws a circle for each data item. The mark for scatter plots, bubble charts,
 and dot-based glyphs.
 
-::: starfish example:scatter-plot hidden
+::: gofish example:scatter-plot hidden
 :::
 
 ```python

@@ -30,6 +30,14 @@ type Args = { w: number; h: number };
 
 export const Default: StoryObj<Args> = {
   args: { w: 400, h: 400 },
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "Bar Chart with Value Labels",
+      description:
+        "A bar chart of total fish catch per lake with each bar's total annotated above it.",
+    },
+  },
   render: (args: Args) => {
     const container = initializeContainer();
 

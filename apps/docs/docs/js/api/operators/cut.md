@@ -11,7 +11,7 @@ leaves the arrangement to whatever you wrap it in — a combinator
 a chart-flow operator. (APIs in GoFish are named by the shape of value they
 return; `cut` returns an array, so there is no fused single-shape mode.)
 
-::: starfish
+::: gofish
 
 ```js
 gf.Spread(

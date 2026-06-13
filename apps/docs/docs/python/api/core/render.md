@@ -3,7 +3,7 @@
 Renders the chart as an [anywidget](https://anywidget.dev/) that displays in
 Jupyter, JupyterLab, VS Code notebooks, and marimo.
 
-::: starfish example:bar-chart hidden
+::: gofish example:bar-chart hidden
 :::
 
 ```python

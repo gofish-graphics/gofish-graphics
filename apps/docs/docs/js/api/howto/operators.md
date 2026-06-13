@@ -34,7 +34,7 @@ const segments = [
 
 **Wrong: Using spread** — each segment gets its own independent region:
 
-::: starfish
+::: gofish
 
 ```js
 const segments = [
@@ -55,7 +55,7 @@ This is **not** a stacked bar. The three rectangles are placed in separate slots
 
 **Correct: Using stack** — segments share a continuous scale:
 
-::: starfish
+::: gofish
 
 ```js
 const segments = [
