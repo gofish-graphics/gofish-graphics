@@ -57,20 +57,33 @@ shared x/y axes.
 
 ## Axes
 
-The `axes` option controls per-axis visibility and titles:
+The `axes` option controls per-axis visibility and titles. It accepts a boolean, a
+per-dimension object, or per-dimension title control:
 
 ```ts
-chart(data, { axes: true })
-  .flow(spread({ by: "category", dir: "x" }))
-  .mark(rect({ h: "value" }))
-  .render(container, { w: 500, h: 300 });
+axes: true                                     // both axes, titles inferred
+axes: false                                    // no axes (the default)
+axes: { x: true, y: false }                    // x only
+axes: { x: { title: "Year" }, y: true }        // custom x title, inferred y title
+axes: { x: { title: false }, y: true }         // suppress the inferred x title
 ```
 
-```ts
-chart(data, { axes: { x: true, y: false } })
-  .flow(spread({ by: "category", dir: "x" }))
-  .mark(rect({ h: "value" }))
-  .render(container, { w: 500, h: 300 });
+`axes` is most naturally a `chart()`/`Chart()` option (e.g.
+`gf.Chart(data, { axes: true })`); it is also accepted directly on `.render()`, as
+the examples below show.
+
+### Axes with inferred titles
+
+When `axes: true` (or `{ title }` is omitted), each axis title is inferred from the
+field that dimension encodes — `lake` on x, `count` on y here.
+
+::: gofish
+
+```js
+gf.Chart(seafood)
+  .flow(gf.spread({ by: "lake", dir: "x" }))
+  .mark(gf.rect({ h: "count" }))
+  .render(root, { w: 400, h: 250, axes: true });
 ```
 
 :::
