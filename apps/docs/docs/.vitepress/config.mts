@@ -223,10 +223,35 @@ export default defineConfig({
     ],
   },
   appearance: false,
-  // title: "GoFish Graphics",
-  // description: "Documentation for GoFish",
   title: "GoFish Graphics",
-  description: "Documentation for GoFish",
+  description:
+    "GoFish is an open-source visualization library for Python and JavaScript.",
+  // Per-page social-preview tags. The invariant og:image / twitter:card etc.
+  // live in `head` above; here we fill in the title / description / url for the
+  // specific page so a shared deep link previews with that page's own heading
+  // rather than the site default. Pushed onto the page's frontmatter head so
+  // they render into each generated HTML file.
+  transformPageData(pageData) {
+    const path = pageData.relativePath
+      .replace(/(^|\/)index\.md$/, "$1")
+      .replace(/\.md$/, ".html");
+    const url = `https://gofish.graphics/${path}`;
+    const title = pageData.title
+      ? `${pageData.title} | GoFish Graphics`
+      : "GoFish Graphics";
+    const description =
+      pageData.description ||
+      pageData.frontmatter.description ||
+      "GoFish is an open-source visualization library for Python and JavaScript.";
+    pageData.frontmatter.head ??= [];
+    pageData.frontmatter.head.push(
+      ["meta", { property: "og:title", content: title }],
+      ["meta", { property: "og:description", content: description }],
+      ["meta", { property: "og:url", content: url }],
+      ["meta", { name: "twitter:title", content: title }],
+      ["meta", { name: "twitter:description", content: description }]
+    );
+  },
   head: [
     // Set <html data-docs-lang> before first paint so the language toggle and
     // hero render in the reader's preferred language with no flash of the
@@ -256,6 +281,35 @@ export default defineConfig({
       },
     ],
     ["link", { rel: "icon", href: "/gofish-logo.png" }],
+    // Social-media preview (Open Graph + Twitter cards). These are the
+    // invariant tags; transformPageData below adds the per-page og:title /
+    // og:description / og:url / twitter:title / twitter:description so a link to
+    // any deep page previews with that page's own title. The image URL is
+    // absolute against the canonical domain — scrapers (Facebook / Slack /
+    // Twitter) don't resolve site-relative paths.
+    ["meta", { property: "og:type", content: "website" }],
+    ["meta", { property: "og:site_name", content: "GoFish Graphics" }],
+    [
+      "meta",
+      { property: "og:image", content: "https://gofish.graphics/og-image.png" },
+    ],
+    ["meta", { property: "og:image:width", content: "1200" }],
+    ["meta", { property: "og:image:height", content: "630" }],
+    [
+      "meta",
+      {
+        property: "og:image:alt",
+        content: "GoFish — graphics that communicate",
+      },
+    ],
+    ["meta", { name: "twitter:card", content: "summary_large_image" }],
+    [
+      "meta",
+      {
+        name: "twitter:image",
+        content: "https://gofish.graphics/og-image.png",
+      },
+    ],
   ],
   markdown: {
     // Real type-on-hover in `ts twoslash` blocks — type errors fail the build.

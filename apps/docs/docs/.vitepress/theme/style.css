@@ -234,6 +234,13 @@ html[data-docs-lang="js"] .lang-toggle__btn[data-lang="js"] {
 .VPNavBar .content-body > .VPNavBarSearch {
   padding-left: 24px;
 }
+/* On mobile the row is tight — the Internals icon was getting pushed off the
+   right edge. Drop the toggle->search gap so the cluster fits. */
+@media (max-width: 768px) {
+  .VPNavBar .content-body > .VPNavBarSearch {
+    padding-left: 0;
+  }
+}
 .VPNavBar .content-body > .lang-toggle {
   order: -1;
 }
@@ -245,6 +252,33 @@ html[data-docs-lang="js"] .lang-toggle__btn[data-lang="js"] {
 }
 .VPNavBar .content-body > .VPNavBarExtra {
   order: 3;
+}
+
+/* Persistent language toggle for the landing page. On narrow screens the
+   non-sticky navbar (and its toggle) scrolls away, and VitePress pins a fixed
+   "Return to top" bar (.VPLocalNav.empty.fixed, z-index 20, 48px tall) in its
+   place. This copy — rendered in the layout-top slot, so it sits above that bar
+   — docks into the bar's empty right side so the switcher stays reachable.
+   Hidden by default; shown only on the landing page, below 960px (where the bar
+   is visible), and only while the bar itself is up (:has(.VPLocalNav.fixed)). */
+.lang-toggle--localnav {
+  display: none;
+  position: fixed;
+  top: 8px;
+  right: 16px;
+  z-index: var(--vp-z-index-layout-top);
+}
+@media (max-width: 959px) {
+  html.landing-page body:has(.VPLocalNav.fixed) .lang-toggle--localnav {
+    display: inline-flex;
+  }
+}
+/* Icon-only in the slim bar, matching the compact mobile navbar toggle. */
+.lang-toggle--localnav .lang-toggle__btn {
+  padding: 5px 8px;
+}
+.lang-toggle--localnav .lang-toggle__btn span {
+  display: none;
 }
 
 /* Suppress the overscroll rubber-band. Bouncing the page or the sidebar past its

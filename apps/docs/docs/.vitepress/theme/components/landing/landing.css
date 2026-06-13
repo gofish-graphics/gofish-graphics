@@ -601,6 +601,28 @@ html.landing-page .DocSearch-Button {
   opacity: clamp(0, calc((var(--pull) - 0.55) / 0.45), 1);
 }
 
+/* The "bars / ribbons / legend / axes" callouts live in the SVG's 700-unit
+   coordinate space, so they shrink with the chart on small screens (down to
+   ~7px) while the HTML "pull apart" tab stays at 1.05rem and legible. Scale the
+   label font up in step with how far the SVG has shrunk so the callouts stay
+   roughly the size of the pull-tab text on mobile. Breakpoints track the SVG's
+   render scale (≈ viewport·0.69 / 700); re-measure if the demo width changes. */
+@media (max-width: 768px) {
+  .landing .demo .llabel {
+    font-size: 22px;
+  }
+}
+@media (max-width: 560px) {
+  .landing .demo .llabel {
+    font-size: 32px;
+  }
+}
+@media (max-width: 420px) {
+  .landing .demo .llabel {
+    font-size: 44px;
+  }
+}
+
 .landing .pulltab {
   --pulltab-grad: linear-gradient(
     90deg,
@@ -677,6 +699,12 @@ html.landing-page .DocSearch-Button {
 }
 .landing .codegrid .printout {
   max-width: 640px;
+  /* Let the card shrink below the code's longest line on narrow screens.
+     Without this the flex item stays min-content-wide and the page clips it
+     (.landing has overflow-x: clip), so the code runs off the right edge with
+     no way to scroll. With min-width: 0 the inner <pre>'s overflow-x: auto
+     kicks in and the code scrolls horizontally within the card instead. */
+  min-width: 0;
 }
 .landing .printout {
   background: #fff;

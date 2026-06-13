@@ -31,6 +31,11 @@ export default {
         h(LanguageToggle, { placement: "nav" }),
       ],
       "sidebar-nav-before": () => h(LanguageToggle, { placement: "sidebar" }),
+      // A persistent copy of the toggle that docks into the fixed "Return to
+      // top" bar (VitePress's VPLocalNav) shown when the navbar scrolls away on
+      // the narrow-screen landing page. Renders nothing off the home route and
+      // is positioned/shown via CSS (see .lang-toggle--localnav in style.css).
+      "layout-top": () => h(LanguageToggle, { placement: "localnav" }),
       // Status banner + "Source files" box for internals essays
       // (the component renders nothing on pages without the frontmatter).
       "doc-before": () => h(EssayMeta),

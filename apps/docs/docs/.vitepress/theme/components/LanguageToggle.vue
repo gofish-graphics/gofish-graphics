@@ -3,9 +3,12 @@ import { computed, watch } from "vue";
 import { useData, useRoute, useRouter } from "vitepress";
 import { docsLang, setDocsLang, syncDocsLang } from "../docsLang";
 
-const props = withDefaults(defineProps<{ placement?: "nav" | "sidebar" }>(), {
-  placement: "nav",
-});
+const props = withDefaults(
+  defineProps<{ placement?: "nav" | "sidebar" | "localnav" }>(),
+  {
+    placement: "nav",
+  }
+);
 
 const route = useRoute();
 const router = useRouter();
@@ -13,11 +16,13 @@ const { theme } = useData();
 
 // The nav-bar copy of the toggle shows only on the home page — every doc page
 // carries the toggle in its sidebar instead, so the nav copy would be a
-// duplicate. The sidebar copy shows wherever it renders, except the
-// language-agnostic internals wiki.
+// duplicate. The localnav copy is the same home-only toggle, docked into the
+// fixed "Return to top" bar that replaces the navbar once you scroll the long
+// landing page on narrow screens (so the switcher persists there). The sidebar
+// copy shows wherever it renders, except the language-agnostic internals wiki.
 const hidden = computed(() => {
   const p = route.path;
-  if (props.placement === "nav") {
+  if (props.placement === "nav" || props.placement === "localnav") {
     return !(p === "/" || p === "/index.html" || p === "/index");
   }
   return /^\/internals(\/|\.html|$)/.test(p);
@@ -94,6 +99,7 @@ function switchTo(lang: Lang) {
         type="button"
         class="lang-toggle__btn"
         :data-lang="lang.id"
+        :aria-label="lang.label"
         :aria-pressed="docsLang === lang.id"
         @click="switchTo(lang.id)"
       >
@@ -179,14 +185,26 @@ function switchTo(lang: Lang) {
   display: block;
 }
 
-/* Nav placement: a small gap from the logo. Hide on narrow screens where the
-   navbar collapses (the sidebar copy covers mobile). */
+/* Nav placement: a small gap from the logo. */
 .lang-toggle--nav {
   margin-left: 24px;
 }
 
+/* On narrow screens the navbar collapses its menu links behind the hamburger,
+   but the content-after slot (search, social icon, hamburger, and this toggle)
+   stays visible. The home page is the only route showing the nav copy and it has
+   no sidebar fallback, so keep the toggle here rather than hiding it — just
+   collapse it to icon-only buttons with a tighter gap so it fits beside the
+   GitHub icon and hamburger. The buttons keep their aria-label, so hiding the
+   text labels doesn't cost the accessible name. */
 @media (max-width: 768px) {
   .lang-toggle--nav {
+    margin-left: 8px;
+  }
+  .lang-toggle--nav .lang-toggle__btn {
+    padding: 5px 8px;
+  }
+  .lang-toggle--nav .lang-toggle__btn span {
     display: none;
   }
 }
