@@ -770,12 +770,13 @@ function walkConstraint(node: unknown, path: string, ctx: Context): void {
     t !== "align" &&
     t !== "distribute" &&
     t !== "position" &&
+    t !== "contain" &&
     t !== "zAbove" &&
     t !== "zBelow"
   ) {
     ctx.errors.push({
       path: `${path}.type`,
-      message: `constraint type must be "align" | "distribute" | "position" | "zAbove" | "zBelow"`,
+      message: `constraint type must be "align" | "distribute" | "position" | "contain" | "zAbove" | "zBelow"`,
     });
     return;
   }
@@ -783,8 +784,39 @@ function walkConstraint(node: unknown, path: string, ctx: Context): void {
     if (!Array.isArray(v) || !v.every((x) => typeof x === "string")) {
       ctx.errors.push({ path: p, message: "refs must be an array of strings" });
     }
+    // `contain` relates exactly two refs: [outer, inner].
+    if (t === "contain" && Array.isArray(v) && v.length !== 2) {
+      ctx.errors.push({
+        path: p,
+        message: `contain refs must be exactly [outer, inner], got ${v.length}`,
+      });
+    }
   });
-  optionalField(node, "options", path, ctx, expectObject);
+  if (t === "contain") {
+    // contain options: per-axis padding `{ x?: number, y?: number }`, at least
+    // one axis present. (The space-fold / centering direction is resolved
+    // engine-side; the IR carries only the padding.)
+    expectField(node, "options", path, ctx, (v, p) => {
+      if (!isObject(v)) {
+        ctx.errors.push({
+          path: p,
+          message: "expected object, got " + typeNameOf(v),
+        });
+        return;
+      }
+      optionalField(v, "x", p, ctx, expectNumber);
+      optionalField(v, "y", p, ctx, expectNumber);
+      if (v.x === undefined && v.y === undefined) {
+        ctx.errors.push({
+          path: p,
+          message: "contain options must specify at least one of x, y",
+        });
+      }
+      if (ctx.strict) rejectUnknown(v, ["x", "y"], p, ctx);
+    });
+  } else {
+    optionalField(node, "options", path, ctx, expectObject);
+  }
   if (ctx.strict) {
     rejectUnknown(node, ["type", "refs", "options"], path, ctx);
   }

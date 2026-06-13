@@ -184,6 +184,60 @@ Layer([
 ]);
 ```
 
+## Constraint.contain
+
+Sizes one child to wrap (or be wrapped by) another with a fixed padding — the
+first **size-setting** constraint. Given `[outer, inner]`, the relation
+`outer = inner + 2·padding` holds on each constrained axis, and `inner` is
+centered inside `outer` there.
+
+```ts
+Constraint.contain({ x?, y? }, [outer, inner]);
+```
+
+| Option | Type     | Default | Description                                                         |
+| ------ | -------- | ------- | ------------------------------------------------------------------- |
+| `x`    | `number` | —       | Per-axis padding (px) on the x axis (omit to leave x unconstrained) |
+| `y`    | `number` | —       | Per-axis padding (px) on the y axis (omit to leave y unconstrained) |
+
+At least one of `x` / `y` must be specified; `[outer, inner]` must be exactly two
+refs. Padding is always known — the unknown per axis is _which_ side is derived,
+resolved from which side carries the size:
+
+- **Inside-out** (`outer = inner + 2·padding`): the inner is sized and the outer
+  is not — a box that shrink-wraps its content. Because the derived outer size
+  enters the layer's size request, a contained pair inside an auto-fit context
+  (a `Spread` of contained pairs) participates in the scale solve.
+- **Outside-in** (`inner = outer − 2·padding`): the outer carries the size and
+  the inner is claim-less — exactly CSS `padding`.
+- **Center only**: when neither side is sized, the layer fills the outer, then
+  resolves outside-in over that filled box.
+
+```ts
+// inner 60×40, padding 10 → outer 80×60; inner centered (inner.min = 10).
+Layer([
+  rect({ fill: "#dbe6f3" }).name("outer"),
+  rect({ w: 60, h: 40, fill: "#e63946" }).name("inner"),
+]).constrain(({ outer, inner }) => [
+  Constraint.contain({ x: 10, y: 10 }, [outer, inner]),
+]);
+```
+
+::: starfish
+
+```js
+gf.Layer([
+  gf.rect({ fill: gf.color.blue[1], stroke: gf.color.blue[3] }).name("outer"),
+  gf.rect({ w: 60, h: 40, fill: gf.color.red[4] }).name("inner"),
+])
+  .constrain(({ outer, inner }) => [
+    gf.Constraint.contain({ x: 10, y: 10 }, [outer, inner]),
+  ])
+  .render(root, { w: 200, h: 160 });
+```
+
+:::
+
 ## Constraint.zAbove / Constraint.zBelow
 
 Declare a partial-order relation between two named children for **paint order**
