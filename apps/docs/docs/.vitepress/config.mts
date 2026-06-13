@@ -357,6 +357,8 @@ export default defineConfig({
                 { text: "area", link: "/js/api/marks/area" },
                 { text: "blank", link: "/js/api/marks/blank" },
                 { text: "polygon", link: "/js/api/marks/polygon" },
+                { text: "text", link: "/js/api/marks/text" },
+                { text: "image", link: "/js/api/marks/image" },
                 { text: "ref", link: "/js/api/marks/ref" },
               ],
             },
@@ -369,8 +371,10 @@ export default defineConfig({
                 { text: "table", link: "/js/api/operators/table" },
                 { text: "scatter", link: "/js/api/operators/scatter" },
                 { text: "group", link: "/js/api/operators/group" },
+                { text: "treemap", link: "/js/api/operators/treemap" },
                 { text: "layer", link: "/js/api/operators/layer" },
                 { text: "connect", link: "/js/api/operators/connect" },
+                { text: "arrow", link: "/js/api/operators/arrow" },
                 {
                   text: "region compositing",
                   link: "/js/api/operators/region-compositing",
@@ -427,6 +431,22 @@ export default defineConfig({
           ],
         },
         {
+          text: "How To",
+          items: [
+            { text: "Create a chart", link: "/python/api/howto/create-chart" },
+            { text: "Create a glyph", link: "/python/api/howto/create-glyph" },
+            {
+              text: "Pick a layout operator",
+              link: "/python/api/howto/operators",
+            },
+            { text: "Use selection", link: "/python/api/howto/selection" },
+            {
+              text: "Name and scope",
+              link: "/python/api/howto/naming-and-scoping",
+            },
+          ],
+        },
+        {
           text: "API Reference",
           items: [
             {
@@ -450,6 +470,10 @@ export default defineConfig({
                 { text: "line", link: "/python/api/marks/line" },
                 { text: "area", link: "/python/api/marks/area" },
                 { text: "blank", link: "/python/api/marks/blank" },
+                { text: "polygon", link: "/python/api/marks/polygon" },
+                { text: "text", link: "/python/api/marks/text" },
+                { text: "image", link: "/python/api/marks/image" },
+                { text: "ref", link: "/python/api/marks/ref" },
               ],
             },
             {
@@ -461,6 +485,10 @@ export default defineConfig({
                 { text: "table", link: "/python/api/operators/table" },
                 { text: "scatter", link: "/python/api/operators/scatter" },
                 { text: "group", link: "/python/api/operators/group" },
+                { text: "treemap", link: "/python/api/operators/treemap" },
+                { text: "layer", link: "/python/api/operators/layer" },
+                { text: "connect", link: "/python/api/operators/connect" },
+                { text: "arrow", link: "/python/api/operators/arrow" },
                 { text: "derive", link: "/python/api/operators/derive" },
                 {
                   text: "region compositing",
@@ -497,6 +525,14 @@ export default defineConfig({
                   text: "ref / selectAll",
                   link: "/python/api/selection/ref",
                 },
+              ],
+            },
+            {
+              text: "Coordinates",
+              collapsed: true,
+              items: [
+                { text: "polar", link: "/python/api/coords/polar" },
+                { text: "clock", link: "/python/api/coords/clock" },
               ],
             },
           ],

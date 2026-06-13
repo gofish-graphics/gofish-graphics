@@ -50,11 +50,34 @@ the fallback is the **axis origin**: the scale's zero (`posScale(0)`) on a
 scaled axis, the layer's origin on a pixel-pure one. On a pixel-pure axis,
 `align([content], y="baseline")` thus means "stay where you were laid out" —
 regardless of how far its box overhangs the origin (a bar dipping below zero,
-axis labels hanging under a chart). Pass a single value to share one anchor across every ref; pass a list
+axis labels hanging under a chart). For an unconditional origin pin regardless
+of axis, use `Constraint.position([ref], x=0, y=0, anchor="baseline")` instead.
+Pass a single value to share one anchor across every ref; pass a list
 to assign one anchor _per ref_ positionally (the list length must equal the
 number of refs) — e.g. `x=["middle", "start"]` aligns the first ref's center
 to the second ref's start. The first already-placed ref acts as the anchor;
-unplaced refs move to match it.
+unplaced refs move to match it. When both `x` and `y` are given, `x` is
+resolved before `y`.
+
+When no ref is placed yet, the fallback depends on the axis's underlying space:
+a scaled axis uses the scale origin `posScale(0)`, a pixel-pure axis uses the
+layer's own edge (`start` = 0, `middle` = midpoint, `end` = full extent,
+`baseline` = layer origin).
+
+### Per-ref anchors
+
+The list form of `x` / `y` expresses "edges share" relations directly — the
+per-ref generalization of the single-anchor form, instead of going through a
+`distribute` with a negative `spacing`:
+
+```python
+# "A's center aligns with B's start" — shared-edge layouts where two refs
+# overlap by a known fraction of their bbox.
+Constraint.align([a, b], x=["middle", "start"])
+
+# "B's end touches C's start" — adjacent placement.
+Constraint.align([b, c], x=["end", "start"])
+```
 
 ## Constraint.distribute
 
@@ -187,7 +210,66 @@ Constraint.z_below(a, b)  # a paints behind b (under in z)
 
 `z_below(a, b)` is equivalent to `z_above(b, a)`; both are provided so the spec
 reads naturally either way. When a `layer` carries any z-order constraint, the
-render flattens the subtree and topologically sorts it; a cycle raises an error.
+render flattens the (non-component) subtree into a single paint list and
+**topologically sorts** it. Within the order the constraints don't pin, the
+existing default order is preserved (`.z_order(n)` hints first, then declaration
+order); a cycle (`z_above(a, b)` + `z_above(b, a)`) raises an error at render
+time.
+
+```python
+layer([
+    rect(w=80, h=40, fill="lightgray").name("bg"),
+    rect(w=60, h=60, fill="steelblue").name("box"),
+    text(text="label", fontSize=14).name("label"),
+]).constrain(
+    lambda bg, box, label: [
+        # box paints over bg; label paints over both.
+        Constraint.z_above(box, bg),
+        Constraint.z_above(label, box),
+    ]
+)
+```
+
+### Cross-tier references
+
+Z-order refs can reach into the layer's _direct_ children and into any
+**plain (non-component) nested `layer`** below — the same descent rule `ref()`
+uses inside `mark` composites. This makes patterns like "rope on the outer
+layer slots in z between two pulleys in the inner layer" expressible without
+restructuring the AST.
+
+### When to use this vs `.z_order(n)`
+
+- Use `.z_order(n)` when you want a _global tier_ (e.g. "all ropes go behind
+  all wheels").
+- Use `Constraint.z_above` / `z_below` when you want a _relational_ exception
+  (e.g. "this specific rope sits between these two specific wheels").
+
+The two compose: `.z_order(n)` sets the default order; z-order constraints
+override it for the pairs they name.
+
+## spread equivalences
+
+Constraints are the primitive `spread` and `stack` are built on — literally:
+the operators delegate their space resolution, budget slicing, and placement
+walks to the same machinery the constraint path uses. These pairs are
+equivalent, **including** scale solving and auto-fit, not just placement:
+
+| spread                                                | Constraint equivalent                                |
+| ----------------------------------------------------- | ---------------------------------------------------- |
+| `spread(items, dir="y", alignment="start")`           | `align(x="start")` + `distribute(dir="y")`           |
+| `spread(items, dir="x", alignment="end", spacing=10)` | `align(y="end")` + `distribute(dir="x", spacing=10)` |
+| `spread(items, dir="x", spacing=60, mode="center")`   | `distribute(dir="x", spacing=60, mode="center")`     |
+| `spread(items, dir="y", reverse=True)`                | `distribute(dir="y", order="reverse")`               |
+| `stack(items, dir="y")`                               | `distribute(dir="y", glue=True)`                     |
+| `spread(items, dir="x", stackWeights=[2, 1])`         | `distribute(dir="x", weights=[2, 1])`                |
+
+When **no ref is pre-placed**, the cross-axis alignment fallback depends on the
+**axis**, not the API — `spread` and the `align` constraint resolve the same
+fallback, so the pairs above are exact. A scaled (POSITION) axis falls back to
+the scale origin `posScale(0)` (so SIZE-derived bars hang from the zero line); a
+pixel-pure axis falls back to the layer-box edge (`start` → 0, `middle` →
+midpoint, `end` → full extent).
 
 ## Partial placement
 
