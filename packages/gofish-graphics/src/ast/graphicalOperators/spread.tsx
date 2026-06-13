@@ -120,8 +120,14 @@ export const Spread = createNodeOperator(
     )) as GoFishNode;
     node.constrain((ref) => {
       const refs = names.map((n) => ref[n] ?? { name: n });
+      // Carry the bespoke spread's data-positioned alignment guard: on a
+      // posScale cross axis whose children already hold their own data
+      // positions (not SIZE-derived), a non-`middle` align is a no-op. The
+      // layer fills in `fromSize` (from pre-fold child spaces) at resolve time.
+      const alignC = Constraint.align({ [alignAxis]: alignment }, refs);
+      alignC.guardDataPositioned = true;
       return [
-        Constraint.align({ [alignAxis]: alignment }, refs),
+        alignC,
         Constraint.distribute(
           {
             dir: stackAxis,

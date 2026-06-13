@@ -619,6 +619,23 @@ export const layer = createNodeOperatorSequential(
             }
           }
 
+          // Fill in each spread-guarded align's per-axis `fromSize` from the
+          // PRE-fold child spaces (mirrors bespoke `resolveAlignmentSpace()
+          // .fromSize`). Consumed by `applyAlign`'s data-positioned guard
+          // (align.ts) so a posScale cross axis whose children carry their own
+          // data positions isn't pulled to the scale's `posScale(0)` fallback.
+          const alignNameIdx = buildNameIndex(_childNodes);
+          for (const c of constraints ?? []) {
+            if (c.type !== "align" || !c.guardDataPositioned) continue;
+            const idxs = c.children
+              .map((r) => alignNameIdx.get(r.name))
+              .filter((i): i is number => i !== undefined);
+            const allSizeOn = (axis: 0 | 1): boolean =>
+              idxs.length > 0 &&
+              idxs.every((i) => isSIZE(effectiveChildren[i][axis]));
+            c.fromSize = [allSizeOn(0), allSizeOn(1)];
+          }
+
           // Stash the absorbed POSITION/SIZE space and report UNDEFINED upward
           // for any dim with an explicit pixel size — self-scaling region; see
           // selfScaledSpaces above. (last write wins — may run more than once.)

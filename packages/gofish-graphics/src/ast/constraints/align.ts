@@ -45,6 +45,18 @@ export interface AlignConstraint {
   x?: AlignAxisSpec;
   y?: AlignAxisSpec;
   children: ConstraintRef[];
+  /** Set by `spread`'s elaboration: apply the bespoke spread's data-positioned
+   *  guard — on a posScale axis whose target children are NOT all SIZE-derived
+   *  (`fromSize === false`), a non-`middle` anchor is a no-op (the children
+   *  already know where they belong; the scale's `posScale(0)` zero-line
+   *  fallback would fling a non-zero-origin axis off-canvas). Off (undefined) for
+   *  axis/legend/table aligns, which keep the unconditional align. */
+  guardDataPositioned?: boolean;
+  /** Per-axis "every target child's space on this axis is SIZE", computed from
+   *  the PRE-fold child spaces in the layer's `resolveUnderlyingSpace` (mirrors
+   *  bespoke `resolveAlignmentSpace().fromSize`). Only consulted when
+   *  `guardDataPositioned` is set. */
+  fromSize?: [boolean, boolean];
 }
 
 export interface AlignOptions {
@@ -171,8 +183,29 @@ function applyAlignAxis(
   axis: Axis,
   spec: AlignAxisSpec,
   targets: Placeable[],
-  env: AlignAxisEnv
+  env: AlignAxisEnv,
+  guardDataPositioned: boolean,
+  fromSize: boolean | undefined
 ): void {
+  // Data-positioned guard (mirrors bespoke spread's `alignChildren`:
+  // `posScale && !fromSize && alignment !== "middle"` → return). When the spread
+  // elaboration sets `guardDataPositioned` and the target children are NOT
+  // SIZE-derived on this axis (`fromSize === false`), a non-`middle` anchor on a
+  // posScale axis is a no-op: the children carry their own data positions, and
+  // the `alignFallbackBaseline` `posScale(0)` would otherwise fling a
+  // non-zero-origin axis (e.g. faceted year panels [1955,2010]) far off-canvas.
+  // Leaving them unplaced lets the layer's baseline placement keep them at the
+  // local origin. `middle` still centers (DIFFERENCE extent, no anchored origin).
+  if (
+    guardDataPositioned &&
+    fromSize === false &&
+    env.posScale !== undefined &&
+    !Array.isArray(spec) &&
+    spec !== "middle"
+  ) {
+    return;
+  }
+
   // Normalize to a per-child anchor array.
   let anchors: AlignAnchor[];
   if (Array.isArray(spec)) {
@@ -198,16 +231,25 @@ export function applyAlign(
   sizes: [number, number],
   posScales: ConstraintPosScales | undefined
 ): void {
+  const guard = constraint.guardDataPositioned ?? false;
   if (constraint.x !== undefined) {
-    applyAlignAxis("x", constraint.x, targets, {
-      size: sizes[0],
-      posScale: posScales?.[0],
-    });
+    applyAlignAxis(
+      "x",
+      constraint.x,
+      targets,
+      { size: sizes[0], posScale: posScales?.[0] },
+      guard,
+      constraint.fromSize?.[0]
+    );
   }
   if (constraint.y !== undefined) {
-    applyAlignAxis("y", constraint.y, targets, {
-      size: sizes[1],
-      posScale: posScales?.[1],
-    });
+    applyAlignAxis(
+      "y",
+      constraint.y,
+      targets,
+      { size: sizes[1], posScale: posScales?.[1] },
+      guard,
+      constraint.fromSize?.[1]
+    );
   }
 }
