@@ -226,19 +226,27 @@ composes its targets' spaces into the layer's claim on that axis:
   `resolveAlignmentSpace`) on its axis.
 - `Constraint.contain` contributes the containment fold (`containedSpace`,
   `constraints/contain.ts`). It is the first _size-setting_ constraint: on each
-  constrained axis `outer = inner + 2·padding`, a `Monotonic.adds` of inner's
-  request. Because `adds` of a monotone function stays monotone (hence
-  invertible), a contained pair participates in auto-fit exactly like a stack —
-  a parent spread/layer solving a scale factor sees outer as inner shifted up by
-  the constant padding. The layer derives these outer spaces in dependency order
-  (inner before outer) so chained contains compose (A⊇B⊇C: C's request feeds
-  B's, B's feeds A's), then feeds them into the union below. When inner is _not_
-  SIZE (fixed-pixel or position-pinned content) there is no rule to fold; outer
-  keeps its own space and the layout-time pixel proposal
-  (`inner.dims + 2·padding`, proposed in the same dependency order) sizes it.
-  At most one contain may size an outer per axis, and an outer that declares its
-  own size on a constrained axis is an error, not a precedence — the layer
-  enforces both at constraint-collection time (see [[size-claims]]).
+  constrained axis `outer = inner + 2·padding`, with padding always known, so
+  the unknown is _which_ side is derived. The layer's contain pre-pass dispatches
+  on which side carries the size (an own `args.dims`, a composite that
+  shrink-wraps, or an inside-out-derived outer): inner sized and outer not →
+  **inside-out** (`outer = inner + 2·padding`); outer sized, or neither (the
+  layer sizes outer) → **outside-in** (`inner = outer − 2·padding` — CSS
+  padding). Only the **inside-out** direction folds a space here: outer's request
+  is a `Monotonic.adds` of inner's, which stays monotone (hence invertible), so a
+  contained pair participates in auto-fit exactly like a stack — a parent
+  spread/layer solving a scale factor sees outer as inner shifted up by the
+  constant padding. The layer derives these outer spaces in dependency order
+  (source before derived) so chained contains compose (A⊇B⊇C: C's request feeds
+  B's, B's feeds A's), then feeds them into the union below. The **outside-in**
+  direction derives _nothing_ at space-resolution time — outer's own claim (or
+  fill/undefined) flows through the union normally, and `inner = outer −
+2·padding` is handled purely as a layout-time pixel proposal. (Likewise when an
+  inside-out inner is not SIZE — fixed-pixel or position-pinned content — there
+  is no rule to fold; the proposal `inner.dims + 2·padding` sizes outer.) At most
+  one contain may derive a given (node, axis), and a contain that resolves
+  inside-out on one axis and outside-in on the other is rejected as mixed — the
+  layer enforces both at constraint-collection time (see [[size-claims]]).
 
 The layer composes these per axis — children not covered by a constraint
 max-union in as overlay siblings — and at layout time **solves the budget**:

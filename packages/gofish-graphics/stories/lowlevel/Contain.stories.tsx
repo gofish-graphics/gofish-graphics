@@ -3,18 +3,18 @@ import { initializeContainer } from "../helper";
 import { Constraint, Layer, rect, spread, value } from "../../src/lib";
 
 /**
- * `Constraint.contain({x?, y?}, [outer, inner])`: outer's size becomes inner's
- * size + 2·padding on each constrained axis, and inner is centered in outer.
- *
- * The three cases below exercise the three things that make contain a real
- * size-setting constraint:
- *   - Basic: outer wraps a fixed-pixel inner (the layout-time pixel proposal).
- *   - Chained: three nested levels (sizes propagate inner→outer in dep. order).
- *   - AutoFit: a fixed-width spread of contained pairs whose inners are
- *     data-driven — the contain SIZE fold (`outer = inner + 2·padding`)
- *     participates in the parent's auto-fit solve, so the pairs scale to fit a
- *     budget. This is the case PR #461 could not do (its derived size never
- *     reached the upward claim).
+ * `Constraint.contain({x?, y?}, [outer, inner])`: the relation `outer = inner +
+ * 2·padding` holds per constrained axis, and inner is centered in outer. Which
+ * side is *derived* is dispatched on which side carries the size:
+ *   - Basic / Chained / AutoFit: inner is sized, outer is not → INSIDE_OUT
+ *     (`outer = inner + 2p`). Basic wraps a fixed-pixel inner; Chained nests
+ *     three levels (sizes propagate inner→outer in dependency order); AutoFit's
+ *     data-driven inners make the contain SIZE fold participate in the parent
+ *     spread's auto-fit solve (the case PR #461 could not do).
+ *   - OutsideIn: outer is sized, inner is not → OUTSIDE_IN (`inner = outer −
+ *     2p`). This is CSS padding — the direction PR #461 errored on.
+ *   - FillOuter: neither is sized → the layer fills the outer, then `inner =
+ *     outer − 2p` (outside-in over a fill outer).
  */
 const meta: Meta = {
   title: "Low Level Syntax/Contain",
@@ -107,6 +107,53 @@ export const AutoFit: StoryObj<Args> = {
         ])
       )
     ).render(container, { w: args.w, h: args.h });
+    return container;
+  },
+};
+
+// ── Outside-in: CSS padding ─────────────────────────────────────────────────
+// The OUTER carries the size (200×140) and the INNER is claim-less, so contain
+// resolves outside-in: inner = outer − 2·16 = 168×108, centered (inner.min =
+// outer.min + 16). This is the direction PR #461 errored on; it is exactly CSS
+// `padding: 16px`.
+
+export const OutsideIn: StoryObj<Args> = {
+  args: { w: 280, h: 220 },
+  render: (args: Args) => {
+    const container = initializeContainer();
+    Layer([
+      rect({ w: 200, h: 140, fill: "#dbe6f3", stroke: "#5a7da6", strokeWidth: 1.5, rx: 6 }).name(
+        "outer"
+      ),
+      rect({ fill: "#e63946", rx: 4 }).name("inner"),
+    ])
+      .constrain(({ outer, inner }) => [
+        Constraint.contain({ x: 16, y: 16 }, [outer, inner]),
+      ])
+      .render(container, { w: args.w, h: args.h });
+    return container;
+  },
+};
+
+// ── Fill outer: neither side sized ──────────────────────────────────────────
+// Neither outer nor inner declares a size, so the layer sizes the outer (it
+// fills the layer box) and contain resolves outside-in: inner = layer − 2·20 on
+// each axis, centered. At 240×180 the inner is 200×140.
+
+export const FillOuter: StoryObj<Args> = {
+  args: { w: 240, h: 180 },
+  render: (args: Args) => {
+    const container = initializeContainer();
+    Layer([
+      rect({ fill: "#dbe6f3", stroke: "#5a7da6", strokeWidth: 1.5, rx: 6 }).name(
+        "outer"
+      ),
+      rect({ fill: "#2a9d8f", rx: 4 }).name("inner"),
+    ])
+      .constrain(({ outer, inner }) => [
+        Constraint.contain({ x: 20, y: 20 }, [outer, inner]),
+      ])
+      .render(container, { w: args.w, h: args.h });
     return container;
   },
 };

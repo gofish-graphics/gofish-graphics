@@ -57,28 +57,60 @@ const childNameKey = (node: GoFishAST): string | undefined => {
 
 // ── Contain pre-pass ────────────────────────────────────────────────────────
 //
-// `Constraint.contain` drives the OUTER child's size from the INNER child's
-// extent (`outer = inner + 2·padding` per constrained axis), so the layer must
-// see it before laying children out: inner is laid out first, then `outer`'s
-// proposed size is overridden, and the union picks up the derived SIZE so a
-// contained pair participates in auto-fit. Both the space-resolution fold and
-// the layout proposal need the same outer→inner dependency map and a
-// topological layout order (inner precedes outer); this helper builds both, and
-// enforces single-ownership (see size-claims.md, "Dimension B").
+// `Constraint.contain` is a two-of-three size relation on each constrained
+// axis: `outer = inner + 2·padding`, with padding always known. So per axis the
+// unknown is which of {outer, inner} is derived from the other, dispatched on
+// which side carries the size:
+//   inner sized, outer not  → 'in'   INSIDE_OUT  (outer = inner + 2p; boxes)
+//   outer sized, inner not  → 'out'  OUTSIDE_IN  (inner = outer − 2p; padding)
+//   neither sized           → 'out'  OUTSIDE_IN  (the layer sizes outer — a
+//                             distribute slice or the layer box as a fill child
+//                             — then inner = outer − 2p)
+//   both sized              → CENTER_ONLY (no derivation; only center inner —
+//                             over-determination checked for two literal-px sizes)
+//
+// "Sized" here means the node carries a *definite, non-fill* extent on the axis:
+// an own declared size (`args.dims[axis].size` — literal px or data-driven
+// `value(v)`), a composite that shrink-wraps to its content (any node with
+// children — a nested contained box, a stack, a layer), or the inside-out-
+// derived outer of another same-layer contain. A claim-less *leaf* (a bare
+// rect/ellipse with no size) is the only "fill": it stretches to its proposal,
+// which is what makes the neither-sized case outside-in. This is the structural
+// reading of the firing model (layout-synthesis.md Part 3): an intrinsic inner
+// fires inside-out, a fill inner fires outside-in.
+//
+// A contain resolves ONE direction; 'in' on one axis and 'out' on the other is
+// rejected (mixed). The plan emits a directed edge per non-CENTER contain
+// (source → derived) and a topological layout order (source before derived).
+// The space-resolution fold derives a space only from an 'in' edge whose inner
+// is SIZE; the layout proposal reads every edge. Single-ownership is enforced
+// per (derivedNode, axis). See size-claims.md "Dimension B".
 
-type ContainInfo = { innerIdx: number; padX?: number; padY?: number };
+type ContainEdge = {
+  derivedIdx: number;
+  sourceIdx: number;
+  /** 'in' = inside-out (outer derived from inner); 'out' = outside-in (inner
+   *  derived from outer). */
+  dir: "in" | "out";
+  padX?: number;
+  padY?: number;
+};
 
 type ContainPlan = {
-  /** outerChildIndex → { innerChildIndex, padX?, padY? } */
-  outerToInner: Map<number, ContainInfo>;
-  /** Child layout order with inner before outer (topological); cycles throw. */
+  edges: ContainEdge[];
+  /** derivedChildIndex → edges deriving it (one per axis-group); read by the
+   *  space fold and the layout proposal. */
+  byDerived: Map<number, ContainEdge[]>;
+  /** Child layout order with source before derived (topological); cycles throw. */
   order: number[];
 };
 
-/** Resolve a contain ref's outer/inner to child indices, validate single
- *  ownership and the imposed-size-vs-own-size rule, and topologically sort the
- *  layout order. Returns undefined when the layer has no contain constraints
- *  (the common path stays untouched). */
+/** Classify each contain by which side carries the size, resolve a single
+ *  resolution direction per contain, validate single-ownership and
+ *  over-determination, and topologically sort the layout order (source before
+ *  derived). Returns undefined when the layer has no size-deriving contain
+ *  (the common path, and CENTER_ONLY-only contains, stay on the untouched
+ *  proposal path — their centering is handled by `applyContain`). */
 function buildContainPlan(
   childNodes: GoFishAST[],
   constraints: ConstraintSpec[]
@@ -92,8 +124,14 @@ function buildContainPlan(
     if (name !== undefined && !indexByName.has(name)) indexByName.set(name, i);
   }
 
-  const outerToInner = new Map<number, ContainInfo>();
-  const claimedBy = new Map<number, ContainConstraint>();
+  type ResolvedContain = {
+    c: ContainConstraint;
+    outerName: string;
+    innerName: string;
+    outerIdx: number;
+    innerIdx: number;
+  };
+  const resolved: ResolvedContain[] = [];
   for (const c of contains) {
     const outerName = c.children[0].name;
     const innerName = c.children[1].name;
@@ -101,47 +139,156 @@ function buildContainPlan(
     const innerIdx = indexByName.get(innerName);
     // A ref into a nested tier has no direct slot here — nothing to size.
     if (outerIdx === undefined || innerIdx === undefined) continue;
-
-    // Single owner: at most one contain may size an outer per axis. (Disjoint
-    // axes on one outer would need two inner deps — also rejected, since the
-    // proposal model gives an outer a single inner-derived size.)
-    const prev = claimedBy.get(outerIdx);
-    if (prev !== undefined) {
-      const sameAxis =
-        (prev.x !== undefined && c.x !== undefined) ||
-        (prev.y !== undefined && c.y !== undefined);
-      throw new Error(
-        `Constraint.contain: child "${outerName}" is the outer of two contain ` +
-          `constraints${sameAxis ? " on the same axis" : ""} — a contained box ` +
-          `may be sized by at most one contain per axis. The conflicting ` +
-          `constraints contain inner "${prev.children[1].name}" and "${innerName}".`
-      );
-    }
-
-    // Imposed size vs own request: an outer that declares its own size on a
-    // constrained axis cannot also be sized by contain (an error, not
-    // precedence — see size-claims.md, "Dimension B").
-    const outerNode = childNodes[outerIdx];
-    const declaredDims =
-      outerNode instanceof GoFishNode ? outerNode.args?.dims : undefined;
-    for (const axis of [0, 1] as const) {
-      const pad = axis === 0 ? c.x : c.y;
-      if (pad !== undefined && declaredDims?.[axis]?.size !== undefined) {
-        throw new Error(
-          `Constraint.contain: outer "${outerName}" declares its own size on ` +
-            `the ${axis === 0 ? "x" : "y"} axis but is also sized by a contain ` +
-            `constraint. An imposed size conflicts with the box's own size ` +
-            `request; drop one of them.`
-        );
-      }
-    }
-
-    claimedBy.set(outerIdx, c);
-    outerToInner.set(outerIdx, { innerIdx, padX: c.x, padY: c.y });
+    resolved.push({ c, outerName, innerName, outerIdx, innerIdx });
   }
 
-  // Topological layout order: an outer depends on its inner, so the inner must
-  // precede it. Cycles (A contains B contains A) throw with the index chain.
+  // Per-axis outer→inner map over resolved contains, for the `sized` recursion.
+  const outerInnerByAxis: [Map<number, number>, Map<number, number>] = [
+    new Map(),
+    new Map(),
+  ];
+  for (const r of resolved) {
+    if (r.c.x !== undefined) outerInnerByAxis[0].set(r.outerIdx, r.innerIdx);
+    if (r.c.y !== undefined) outerInnerByAxis[1].set(r.outerIdx, r.innerIdx);
+  }
+
+  /** The node's own declared size on `axis` (literal px or `value(v)`), or
+   *  undefined when it is a fill/derived child. */
+  const ownSize = (idx: number, axis: 0 | 1) => {
+    const n = childNodes[idx];
+    return n instanceof GoFishNode ? n.args?.dims?.[axis]?.size : undefined;
+  };
+  // A composite (any node with children — a stack, a layer, a nested contained
+  // box) shrink-wraps to its content, so it carries a definite extent without
+  // declaring `args.dims`. A claim-less *leaf* (a bare rect) is the only fill.
+  const isComposite = (idx: number): boolean => {
+    const n = childNodes[idx];
+    return n instanceof GoFishNode && n.children.length > 0;
+  };
+  // Is `idx`'s extent on `axis` determined independently of an enclosing
+  // contain (i.e. NOT a fill)? True for an own size, a composite, or an
+  // inside-out-derived outer (the outer of a contain whose inner is itself
+  // sized) — the last makes nested same-layer inside-out chains resolve
+  // inside-out at every level. Well-founded on the (acyclic) outer→inner DAG;
+  // cycles are caught by the topo sort below.
+  const sizedMemo = new Map<string, boolean>();
+  const sized = (idx: number, axis: 0 | 1): boolean => {
+    if (ownSize(idx, axis) !== undefined) return true;
+    if (isComposite(idx)) return true;
+    const innerIdx = outerInnerByAxis[axis].get(idx);
+    if (innerIdx === undefined) return false;
+    const key = `${idx}:${axis}`;
+    const cached = sizedMemo.get(key);
+    if (cached !== undefined) return cached;
+    sizedMemo.set(key, false); // break self-reference on a (rejected) cycle
+    const result = sized(innerIdx, axis);
+    sizedMemo.set(key, result);
+    return result;
+  };
+
+  const edges: ContainEdge[] = [];
+  // (derivedIdx, axis) → the contain that derives it; at most one (single owner).
+  const ownerOf = new Map<
+    string,
+    { derivedName: string; sourceName: string }
+  >();
+
+  for (const { c, outerName, innerName, outerIdx, innerIdx } of resolved) {
+    // Classify each constrained axis, then resolve ONE direction. A contain may
+    // not mix 'in' and 'out'.
+    let hasIn = false;
+    let hasOut = false;
+    const derivedAxes: { axis: 0 | 1; pad: number }[] = [];
+    for (const axis of [0, 1] as const) {
+      const pad = axis === 0 ? c.x : c.y;
+      if (pad === undefined) continue; // unconstrained axis
+
+      const outerSized = ownSize(outerIdx, axis) !== undefined;
+      const innerSized = sized(innerIdx, axis);
+
+      if (innerSized && outerSized) {
+        // BOTH sized → CENTER_ONLY: no derivation, just center (applyContain).
+        // Verify consistency only when both are literal px — a data-driven or
+        // composite side may legitimately resolve to anything.
+        const inner = ownSize(innerIdx, axis);
+        const outer = ownSize(outerIdx, axis);
+        if (
+          typeof inner === "number" &&
+          typeof outer === "number" &&
+          Math.abs(outer - (inner + 2 * pad)) > 1e-6
+        ) {
+          throw new Error(
+            `Constraint.contain: outer "${outerName}" (${outer}) and inner ` +
+              `"${innerName}" (${inner}) over-determine the ${
+                axis === 0 ? "x" : "y"
+              } axis: inner + 2·${pad} = ${inner + 2 * pad} ≠ ${outer}. ` +
+              `Drop one of the two sizes.`
+          );
+        }
+        continue; // CENTER_ONLY contributes no edge on this axis
+      }
+
+      // inner sized → inside-out; otherwise (outer sized, or neither: the layer
+      // sizes the outer) → outside-in.
+      if (innerSized) hasIn = true;
+      else hasOut = true;
+      derivedAxes.push({ axis, pad });
+    }
+
+    // All constrained axes were CENTER_ONLY → no size derivation (centering
+    // still happens via applyContain).
+    if (derivedAxes.length === 0) continue;
+
+    if (hasIn && hasOut) {
+      throw new Error(
+        `Constraint.contain: inner is sized on one axis and outer on the ` +
+          `other (inner "${innerName}", outer "${outerName}") — mixed ` +
+          `inside-out/outside-in is not supported; split into two contains ` +
+          `or size consistently.`
+      );
+    }
+    const dir: "in" | "out" = hasIn ? "in" : "out";
+
+    // 'in' (inside-out) derives the outer from the inner; 'out' (outside-in)
+    // derives the inner from the outer.
+    const derivedIsOuter = dir === "in";
+    const derivedIdx = derivedIsOuter ? outerIdx : innerIdx;
+    const sourceIdx = derivedIsOuter ? innerIdx : outerIdx;
+    const derivedName = derivedIsOuter ? outerName : innerName;
+    const sourceName = derivedIsOuter ? innerName : outerName;
+
+    const edge: ContainEdge = { derivedIdx, sourceIdx, dir };
+    for (const { axis, pad } of derivedAxes) {
+      // Single owner: at most one contain may derive a given (node, axis).
+      const key = `${derivedIdx}:${axis}`;
+      const prev = ownerOf.get(key);
+      if (prev !== undefined) {
+        throw new Error(
+          `Constraint.contain: child "${derivedName}" is sized by two contain ` +
+            `constraints on the ${axis === 0 ? "x" : "y"} axis (from ` +
+            `"${prev.sourceName}" and "${sourceName}") — a box may be sized by ` +
+            `at most one contain per axis.`
+        );
+      }
+      ownerOf.set(key, { derivedName, sourceName });
+      if (axis === 0) edge.padX = pad;
+      else edge.padY = pad;
+    }
+    edges.push(edge);
+  }
+
+  if (edges.length === 0) return undefined;
+
+  const byDerived = new Map<number, ContainEdge[]>();
+  for (const e of edges) {
+    const arr = byDerived.get(e.derivedIdx) ?? [];
+    arr.push(e);
+    byDerived.set(e.derivedIdx, arr);
+  }
+
+  // Topological layout order: a derived node depends on its source(s), so each
+  // source must precede it. Cycles (A contains B contains A) throw with the
+  // index chain.
   const order: number[] = [];
   const visiting = new Set<number>();
   const visited = new Set<number>();
@@ -156,15 +303,14 @@ function buildContainPlan(
       );
     }
     visiting.add(i);
-    const dep = outerToInner.get(i);
-    if (dep !== undefined) visit(dep.innerIdx, [...stack, i]);
+    for (const e of byDerived.get(i) ?? []) visit(e.sourceIdx, [...stack, i]);
     visiting.delete(i);
     visited.add(i);
     order.push(i);
   };
   for (let i = 0; i < childNodes.length; i++) visit(i, []);
 
-  return { outerToInner, order };
+  return { edges, byDerived, order };
 }
 
 // ── Spread-shape recognition: the operator image of layer constraints ───────
@@ -560,14 +706,15 @@ export const layer = createNodeOperatorSequential(
               ? SIZE(Monotonic.smul(scale, space.domain), space.measure)
               : space;
 
-          // Contain space fold: derive each contain-outer's effective space
-          // from its inner (`outer = inner + 2·padding` when inner is SIZE) so
-          // a contained pair participates in the union below — and hence in a
-          // parent's auto-fit solve. Computed in dependency order (inner first)
-          // so chained contains compose (A⊇B⊇C: C feeds B feeds A). When inner
-          // isn't SIZE, `containedSpace` leaves outer as-is and the layout-time
-          // pixel proposal handles sizing. The plan also enforces single
-          // ownership and the imposed-size rule (see buildContainPlan).
+          // Contain space fold: only INSIDE_OUT edges (`dir: 'in'`) derive a
+          // space — `outer = inner + 2·padding` when inner is SIZE — so a
+          // contained pair participates in the union below, hence in a parent's
+          // auto-fit solve. Computed in dependency (source-first) order so
+          // chained contains compose (A⊇B⊇C: C feeds B feeds A). OUTSIDE_IN
+          // edges derive NOTHING here: the outer is a normal child whose own
+          // claim (or fill/undefined) flows through the union, and `inner =
+          // outer − 2p` is purely a layout-time proposal. When inner isn't SIZE,
+          // `containedSpace` leaves outer as-is and the proposal handles sizing.
           const containPlan = buildContainPlan(_childNodes, constraints ?? []);
           let effectiveChildren = children;
           if (containPlan !== undefined) {
@@ -575,21 +722,22 @@ export const layer = createNodeOperatorSequential(
               (s) => [s[0], s[1]] as Size<UnderlyingSpace>
             );
             for (const i of containPlan.order) {
-              const info = containPlan.outerToInner.get(i);
-              if (info === undefined) continue;
-              const innerSpaces = effectiveChildren[info.innerIdx];
-              if (info.padX !== undefined)
-                effectiveChildren[i][0] = containedSpace(
-                  effectiveChildren[i][0],
-                  innerSpaces[0],
-                  info.padX
-                );
-              if (info.padY !== undefined)
-                effectiveChildren[i][1] = containedSpace(
-                  effectiveChildren[i][1],
-                  innerSpaces[1],
-                  info.padY
-                );
+              for (const e of containPlan.byDerived.get(i) ?? []) {
+                if (e.dir !== "in") continue;
+                const sourceSpaces = effectiveChildren[e.sourceIdx];
+                if (e.padX !== undefined)
+                  effectiveChildren[i][0] = containedSpace(
+                    effectiveChildren[i][0],
+                    sourceSpaces[0],
+                    e.padX
+                  );
+                if (e.padY !== undefined)
+                  effectiveChildren[i][1] = containedSpace(
+                    effectiveChildren[i][1],
+                    sourceSpaces[1],
+                    e.padY
+                  );
+              }
             }
           }
 
@@ -798,9 +946,9 @@ export const layer = createNodeOperatorSequential(
               ? getPositioningConstraintRefs(node.constraints)
               : new Set<string>();
 
-          // Contain layout order: inner before outer, so outer can be proposed
-          // `inner.dims + 2·padding` on its constrained axes (see
-          // buildContainPlan / the contain fold in resolveUnderlyingSpace).
+          // Contain layout order: source before derived, so the derived node
+          // can be proposed `source.dims ± 2·padding` on its constrained axes
+          // (see buildContainPlan / the contain fold in resolveUnderlyingSpace).
           const containPlan = buildContainPlan(node.children, node.constraints);
           const layoutOrder = containPlan?.order ?? children.map((_, i) => i);
 
@@ -858,23 +1006,32 @@ export const layer = createNodeOperatorSequential(
               childName !== undefined
                 ? positionTargetDims.get(childName)
                 : undefined;
-            // Contain proposal: override the outer's size to
-            // `inner.dims + 2·padding` on each constrained axis (the inner is
-            // already laid out, ahead of us in layoutOrder). Other axes keep
-            // the normal proposal (`childSizeFor`), so contain composes with —
-            // and wins on its constrained axes over — any budget slice.
+            // Contain proposal: override the DERIVED node's size from its
+            // SOURCE on each derived axis — `outer = inner + 2p` for 'in',
+            // `inner = outer − 2p` for 'out'. The source is already laid out
+            // (ahead of us in layoutOrder, since the plan orders source before
+            // derived). Clamp ≥ 0; non-derived axes keep the normal proposal
+            // (`childSizeFor`), so contain composes with — and wins on its
+            // derived axes over — any budget slice.
             let layoutSize: Size = childSizeFor(childName);
-            const containInfo = containPlan?.outerToInner.get(i);
-            if (containInfo !== undefined) {
-              const innerDims = childPlaceables[containInfo.innerIdx].dims;
-              layoutSize = [
-                containInfo.padX !== undefined
-                  ? (innerDims[0].size ?? 0) + 2 * containInfo.padX
-                  : layoutSize[0],
-                containInfo.padY !== undefined
-                  ? (innerDims[1].size ?? 0) + 2 * containInfo.padY
-                  : layoutSize[1],
-              ];
+            const containEdges = containPlan?.byDerived.get(i);
+            if (containEdges !== undefined) {
+              const next: Size = [layoutSize[0], layoutSize[1]];
+              for (const e of containEdges) {
+                const sourceDims = childPlaceables[e.sourceIdx].dims;
+                const sign = e.dir === "in" ? 1 : -1;
+                if (e.padX !== undefined)
+                  next[0] = Math.max(
+                    0,
+                    (sourceDims[0].size ?? 0) + sign * 2 * e.padX
+                  );
+                if (e.padY !== undefined)
+                  next[1] = Math.max(
+                    0,
+                    (sourceDims[1].size ?? 0) + sign * 2 * e.padY
+                  );
+              }
+              layoutSize = next;
             }
             const childPlaceable = child.layout(
               layoutSize,

@@ -10,17 +10,24 @@ import type { ConstraintRef } from "./shared";
 /**
  * Containment relation between two named children of a layer.
  *
- * `contain({x?, y?}, [outer, inner])`: `outer`'s size is driven by `inner`'s
- * intrinsic dims plus `2 * padding` symmetrically on each constrained axis;
- * `inner` is centered inside `outer` along each constrained axis.
+ * `contain({x?, y?}, [outer, inner])`: the relation `outer = inner + 2·padding`
+ * holds symmetrically on each constrained axis, and `inner` is centered inside
+ * `outer` there. Padding is always known, so the unknown per axis is *which*
+ * side is derived — dispatched by the layer's contain pre-pass on which side
+ * carries the size (see `layer.tsx` and size-claims.md "Dimension B"):
+ *   - inner sized, outer not → INSIDE_OUT: `outer = inner + 2·padding` (boxes
+ *     that shrink-wrap their content).
+ *   - outer sized (or neither: the layer sizes outer) → OUTSIDE_IN:
+ *     `inner = outer − 2·padding` (CSS padding).
  *
  * Unlike align/distribute, this constraint *drives sizing* — it is the first
  * size-setting constraint (see apps/docs/docs/internals/design/size-claims.md).
  * It contributes a triple: a *space fold* (`containedSpace`, folded into the
- * layer's space resolution so a contained pair participates in auto-fit), a
- * *layout proposal* (the layer lays inner out first, then proposes
- * `inner + 2·padding` to outer — see `layer.tsx`'s contain pre-pass), and the
- * *placement walk* below (`applyContain`).
+ * layer's space resolution for the inside-out direction so a contained pair
+ * participates in auto-fit), a *layout proposal* (the layer lays the source out
+ * first, then proposes `source ± 2·padding` to the derived node — see
+ * `layer.tsx`'s contain pre-pass), and the *placement walk* below
+ * (`applyContain`, identical for both directions).
  *
  * A missing axis (`{x: 4}` only) leaves the other axis unconstrained: `inner`
  * keeps its natural position there and `outer` keeps the layer's allotted size.
@@ -60,8 +67,11 @@ export const isContainConstraint = (
 ): c is ContainConstraint => c !== undefined && c.type === "contain";
 
 /**
- * The contain constraint's *space-resolution* contribution on one axis — the
- * fold that lets a contained pair participate in the layer's auto-fit solve.
+ * The contain constraint's *space-resolution* contribution on one axis for the
+ * INSIDE_OUT direction — the fold that lets a contained pair participate in the
+ * layer's auto-fit solve. (The OUTSIDE_IN direction derives nothing here: the
+ * outer's own claim flows through the union, and `inner = outer − 2·padding` is
+ * a pure layout-time proposal.)
  *
  * When inner's space is SIZE (a data-driven extent, e.g. `rect({ w: value(v) })`),
  * outer's extent is that same Monotonic shifted up by `2·padding` — a
@@ -89,8 +99,9 @@ export function containedSpace(
 
 /**
  * Position the inner child centered inside outer on each constrained axis.
- * `layer.tsx` has already sized outer to `inner.dims + 2·padding` on the same
- * axes, so centering inner yields `inner.min = outer.min + padding` naturally.
+ * `layer.tsx` has already resolved the pair so `outer = inner + 2·padding` holds
+ * on the same axes (whichever side was derived), so centering inner yields
+ * `inner.min = outer.min + padding` naturally — identical for both directions.
  *
  * Both targets are expected to already have positions on the constrained axes:
  * outer was placed at baseline by phase-1 (it is deliberately NOT skipped — see
