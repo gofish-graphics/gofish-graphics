@@ -26,6 +26,14 @@ const planets = [
 
 export const PlanetsOnly: StoryObj<Args> = {
   args: { w: 800, h: 200 },
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "Inner Planets to Scale",
+      description:
+        "The four inner planets rendered as colored circles sized by their relative radii and spread in a row.",
+    },
+  },
   render: (args: Args) => {
     const container = initializeContainer();
 
@@ -170,6 +178,14 @@ export const PlanetsWithLabelBelowNoSpacing: StoryObj<Args> = {
 
 export const PlanetsWithArrow: StoryObj<Args> = {
   args: { w: 800, h: 200 },
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "Annotated Planets",
+      description:
+        "The inner planets drawn as scaled circles with a labeled callout arrow pointing to one of them.",
+    },
+  },
   render: (args: Args) => {
     const container = initializeContainer();
 

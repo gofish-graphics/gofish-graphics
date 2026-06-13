@@ -33,7 +33,7 @@ def story_layered():
     return (
         Layer([
             chart(STREAMGRAPH_DATA)
-            .flow(group(by="c"), spread(by="x", dir="x", spacing=50))
+            .flow(spread(by="x", dir="x", spacing=50), group(by="c"))
             .mark(blank(h="y", fill="c").name("points")),
             chart(selectAll("points")).flow(group(by="datum.c")).mark(area(opacity=0.7)),
         ]),

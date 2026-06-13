@@ -3,7 +3,7 @@
 Partitions the data and lays the groups out along an axis, with a gap between
 them. The workhorse operator for bar charts and small multiples.
 
-::: starfish example:bar-chart hidden
+::: gofish example:bar-chart hidden
 :::
 
 ```python

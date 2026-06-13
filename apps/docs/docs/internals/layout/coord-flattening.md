@@ -31,7 +31,7 @@ decide final positions, and they have finished.
 So before `coord` can apply its transform, it needs every descendant expressed in one
 shared, absolute frame. That is what flattening produces.
 
-::: starfish example:internal-scenegraph-flatten hidden
+::: gofish example:internal-scenegraph-flatten hidden
 :::
 
 Each leaf in the flattened list carries the **sum** of every `translate` and the

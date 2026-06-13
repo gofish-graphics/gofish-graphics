@@ -41,6 +41,14 @@ export const Basic: StoryObj<Args> = {
 
 export const Connected: StoryObj<Args> = {
   args: { w: 400, h: 400 },
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "Connected Scatter Plot",
+      description:
+        "A connected scatter plot tracing gas price against miles driven over successive years, with a line threading the points in chronological order to reveal the path through time.",
+    },
+  },
   render: (args: Args) => {
     const container = initializeContainer();
 
@@ -59,6 +67,14 @@ export const Connected: StoryObj<Args> = {
 
 export const WithPieGlyphs: StoryObj<Args> = {
   args: { w: 400, h: 400 },
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "Scatter Plot with Pie Glyphs",
+      description:
+        "A scatter plot placing each lake at its geographic location and drawing a miniature pie chart of its species composition as the point glyph.",
+    },
+  },
   render: (args: Args) => {
     const container = initializeContainer();
 

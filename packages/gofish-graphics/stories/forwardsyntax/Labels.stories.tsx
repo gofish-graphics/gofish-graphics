@@ -52,6 +52,13 @@ export const Default: StoryObj<Args> = {
 export const Center: StoryObj<Args> = {
   name: "Position: center",
   args: { w: 400, h: 300 },
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "Stacked Bar with Centered Labels",
+      description: "Catch counts by lake stacked by species, with each segment's value centered inside it in auto-contrasting text.",
+    },
+  },
   render: (args) => {
     const container = initializeContainer();
     Chart(seafood, { axes: true })
@@ -302,6 +309,13 @@ const heatData = ["Mon", "Tue", "Wed", "Thu", "Fri"].flatMap((day, di) =>
 export const HeatmapWithLabels: StoryObj<Args> = {
   name: "Heatmap – center labels (auto-contrast)",
   args: { w: 420, h: 280 },
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "Labeled Heatmap",
+      description: "A day-by-hour heatmap shaded along a blue gradient with each cell's value labeled in auto-contrasting text.",
+    },
+  },
   render: (args) => {
     const container = initializeContainer();
     Chart(heatData, { color: gradient(["#e0f3ff", "#08519c"]), axes: true })
@@ -374,6 +388,13 @@ export const NormalizedStackedBarWithLabels: StoryObj<Args> = {
   name: "Normalized stacked bar – center labels",
   args: { w: 350, h: 400 },
   loaders: [async () => ({ population: await data["population.json"]() })],
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "Normalized Stacked Bar with Labels",
+      description: "US population by age group split into Male and Female shares, normalized so each horizontal bar spans 100% with raw counts labeled inside.",
+    },
+  },
   render: (args: Args, context: any) => {
     const container = initializeContainer();
 

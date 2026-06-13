@@ -1,13 +1,50 @@
 import { defineConfig } from "vitepress";
 import { transformerTwoslash } from "@shikijs/vitepress-twoslash";
 import matter from "gray-matter";
-import starfish from "./markdown-it-starfish";
+import gofish from "./markdown-it-gofish";
 import container from "markdown-it-container";
 import { renderSandbox } from "vitepress-plugin-sandpack";
 import vueJsx from "@vitejs/plugin-vue-jsx";
+import solidPlugin from "vite-plugin-solid";
 import { readdirSync, readFileSync } from "fs";
-import { join, relative } from "path";
+import { dirname, join, relative } from "path";
 import { fileURLToPath } from "url";
+import { createRequire } from "module";
+
+// SolidJS must resolve to exactly ONE physical copy, with every entrypoint
+// pointing at its *client* (DOM) build. Two failure modes converge here:
+//
+//   1. Two copies. The docs package and the gofish-graphics package each carry
+//      their own solid-js (different versions). If `solid-js/web` resolves to
+//      one copy while bare `solid-js` resolves to the other, SolidJS's reactive
+//      runtime state is split across two module instances — Suspense in
+//      gofish.tsx never resolves and every chart hangs on "Loading...". We pin
+//      to the copy the library sources naturally pair with: gofish-graphics's.
+//
+//   2. SSR build conditions. VitePress builds a server (SSR) bundle alongside
+//      the client one. Under the `node` export condition, bare `solid-js`
+//      resolves to `dist/server.js` and `solid-js/web` to its server build —
+//      which omits DOM-only exports like `use` (the `use:` directive) and,
+//      worse, is a *different* module instance than `solid-js/jsx-runtime`
+//      (whose only export is the client `dist/solid.js`), re-splitting the
+//      runtime even within a single copy.
+//
+// So we resolve solid-js from the gofish-graphics package context and alias
+// every entrypoint the library imports (grepped from packages/gofish-graphics/
+// src: `solid-js`, `solid-js/web`, `solid-js/jsx-runtime`) to that copy's
+// client builds. We also force Solid DOM codegen (below). The story chunks and
+// the dist build only ever execute in the browser (GoFishExample/GoFishVue
+// mount in onMounted), so pointing SSR at the DOM builds is harmless.
+const require = createRequire(import.meta.url);
+const GOFISH_PKG_DIR = join(
+  dirname(fileURLToPath(import.meta.url)),
+  "../../../../packages/gofish-graphics"
+);
+const SOLID_DIR = dirname(
+  require.resolve("solid-js/package.json", { paths: [GOFISH_PKG_DIR] })
+);
+const SOLID_CORE_CLIENT = join(SOLID_DIR, "dist/solid.js");
+const SOLID_WEB_CLIENT = join(SOLID_DIR, "web/dist/web.js");
 
 // Build-time manifest of every JS/Python doc route. Exposed via themeConfig so
 // the language toggle knows whether a mirrored page exists before navigating.
@@ -138,10 +175,56 @@ function collectInternalsSidebar() {
 
 // https://vitepress.dev/reference/site-config
 export default defineConfig({
-  vite: { plugins: [vueJsx()] },
+  vite: {
+    resolve: {
+      // See SOLID_CORE_CLIENT above — pin every solid-js entrypoint the library
+      // imports to a single physical copy's client (DOM) builds, in both the
+      // client and SSR bundles. jsx-runtime's only export is the client core
+      // build, so aliasing core + web to the matching client builds keeps all
+      // three on one runtime instance.
+      alias: [
+        { find: /^solid-js\/web$/, replacement: SOLID_WEB_CLIENT },
+        { find: /^solid-js\/jsx-runtime$/, replacement: SOLID_CORE_CLIENT },
+        { find: /^solid-js$/, replacement: SOLID_CORE_CLIENT },
+      ],
+    },
+    plugins: [
+      // The Storybook stories rendered by GoFishExample are SolidJS source.
+      // Scope each JSX compiler to its own slice of the tree so they never fight
+      // over the same .tsx files: vue-jsx owns the docs' own Vue .tsx components
+      // (and must NOT touch the gofish-graphics package), while vite-plugin-solid
+      // owns only the library package's .ts(x) sources and its .stories.tsx files.
+      // `generate: "dom"` forces DOM codegen even in the SSR bundle (the stories
+      // only execute client-side, so SSR-flavoured codegen is never needed).
+      vueJsx({ exclude: [/packages\/gofish-graphics\/.*\.[jt]sx?$/] }),
+      solidPlugin({
+        include: [/packages\/gofish-graphics\/.*\.[jt]sx?$/],
+        solid: { generate: "dom", hydratable: false },
+      }),
+      // vue-jsx's config() narrows vite's esbuild to `/\.ts$/` (it expects to own
+      // every .tsx itself). We instead route the gofish-graphics .tsx — including
+      // the .stories.tsx rendered by GoFishExample — through vite-plugin-solid,
+      // which only compiles JSX and leaves the remaining TS types for esbuild to
+      // strip. So re-widen esbuild back to .tsx/.jsx. This plugin's config() runs
+      // after vue-jsx's, so its esbuild.include wins.
+      //
+      // CRITICAL: `jsx: "preserve"`. esbuild's default JSX handling compiles any
+      // JSX it sees with the React.createElement pragma. With esbuild widened to
+      // .tsx, that pragma would hit the docs' OWN .tsx (e.g. components/
+      // GoFishLive.tsx, the Sandpack wrapper) before vue-jsx transforms it,
+      // emitting `React.createElement(...)` → "React is not defined" at runtime
+      // (the playground rendered blank). `preserve` makes esbuild strip TS types
+      // only and leave JSX untouched, so the real JSX compilers own it: vue-jsx
+      // for the docs' Vue .tsx, vite-plugin-solid for the gofish-graphics sources.
+      {
+        name: "gofish-restore-esbuild-tsx",
+        config: () => ({ esbuild: { include: /\.[jt]sx?$/, jsx: "preserve" } }),
+      },
+    ],
+  },
   appearance: false,
-  // title: "Starfish Graphics",
-  // description: "Documentation for Starfish",
+  // title: "GoFish Graphics",
+  // description: "Documentation for GoFish",
   title: "GoFish Graphics",
   description: "Documentation for GoFish",
   head: [
@@ -178,10 +261,10 @@ export default defineConfig({
     // Real type-on-hover in `ts twoslash` blocks — type errors fail the build.
     codeTransformers: [transformerTwoslash()],
     config: (md) => {
-      starfish(md);
-      md.use(container, "starfish-live", {
+      gofish(md);
+      md.use(container, "gofish-live", {
         render(tokens, idx) {
-          return renderSandbox(tokens, idx, "starfish-live");
+          return renderSandbox(tokens, idx, "gofish-live");
         },
       });
     },

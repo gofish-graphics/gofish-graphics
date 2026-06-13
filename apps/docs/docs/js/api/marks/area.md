@@ -2,7 +2,7 @@
 
 Fills the area between data points (edge-to-edge). Takes the array of refs returned by [`selectAll()`](/js/api/selection/ref).
 
-::: starfish
+::: gofish
 
 ```js
 const lakeTotals = Object.entries(_.groupBy(seafood, "lake")).map(

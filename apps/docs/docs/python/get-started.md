@@ -13,7 +13,7 @@ pip install gofish-graphics
 
 Import it as `gofish`:
 
-::: starfish example:bar-chart hidden
+::: gofish example:bar-chart hidden
 :::
 
 ```python

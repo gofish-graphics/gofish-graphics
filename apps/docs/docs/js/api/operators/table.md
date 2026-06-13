@@ -2,7 +2,7 @@
 
 Groups data by two fields and lays out groups in a 2D grid — one axis per field. The primary operator for heatmaps and other grid-based visualizations.
 
-::: starfish
+::: gofish
 
 ```js
 const days = ["Mon", "Tue", "Wed", "Thu", "Fri"];

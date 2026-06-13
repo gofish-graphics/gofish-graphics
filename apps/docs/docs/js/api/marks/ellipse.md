@@ -2,7 +2,7 @@
 
 Draws an ellipse. Unlike `circle`, allows independent control of width and height.
 
-::: starfish
+::: gofish
 
 ```js
 gf.ellipse({ w: 100, h: 60, fill: "mediumseagreen" }).render(root, {

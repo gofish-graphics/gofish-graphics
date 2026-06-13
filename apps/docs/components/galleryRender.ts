@@ -1,75 +1,28 @@
 // Live example renderer shared by the museum gallery (GalleryPage.vue).
 //
-// The docs example gallery renders every registered example LIVE in the browser
-// (the same sandboxed `new Function` mechanism GoFishVue uses) rather than
-// shipping a multi-megabyte file of baked SVG strings. This module isolates that
-// execution so the gallery component can render an example, measure its true
-// rendered size, and keep the resulting <svg> node in memory.
-//
-// It deliberately mirrors GoFishVue.vue's sandbox surface (same injected globals,
-// same default size) so any example that renders there renders here identically.
-import * as gf from "gofish-graphics";
-import { mix } from "spectral.js";
-import _ from "lodash";
-import { streamgraphData } from "./data/streamgraphData";
-import { titanic } from "./data/titanic";
-import { nightingale } from "./data/nightingale";
-import { drivingShifts } from "./data/drivingShifts";
-import { newCarColors } from "./data/newCarColors";
-import { caltrain, caltrainStopOrder } from "./data/caltrain";
-import { penguins } from "./data/penguins";
-import { density1d } from "fast-kde";
-import { genderPayGap, payGrade } from "./data/genderPayGap";
-import { seafood, lakeLocations } from "./data/seafood";
+// The docs example gallery renders every gallery example LIVE in the browser by
+// executing the REAL Storybook story module (SolidJS) — the same mechanism
+// GoFishExample.vue uses — rather than shipping a multi-megabyte file of baked
+// SVG strings. The resolve/render surface lives in ./storyRender so the gallery
+// and the single-example component share one implementation; this module adds
+// the gallery's "render into a measure host" entry point plus the svg-id
+// namespacing the wall needs to hang many charts side by side.
+import { resolveById, renderStoryInto } from "./storyRender";
 
-// Run one example's code in the sandbox. The example appends its chart svg to the
-// passed `root` (every registered example calls `.render(root, …)`). Returns the
-// `root` element holding the rendered svg, or throws on a bad example.
-export function renderExampleRoot(code: string): HTMLElement {
-  const fn = new Function(
-    "_",
-    "root",
-    "size",
-    "gf",
-    "streamgraphData",
-    "titanic",
-    "nightingale",
-    "drivingShifts",
-    "newCarColors",
-    "caltrain",
-    "caltrainStopOrder",
-    "penguins",
-    "density1d",
-    "genderPayGap",
-    "payGrade",
-    "mix",
-    "seafood",
-    "lakeLocations",
-    code
-  );
-  const root = document.createElement("div");
-  const size = { width: 500, height: 300 }; // GoFishVue default
-  fn(
-    _,
-    root,
-    size,
-    gf,
-    streamgraphData,
-    titanic,
-    nightingale,
-    drivingShifts,
-    newCarColors,
-    caltrain,
-    caltrainStopOrder,
-    penguins,
-    density1d,
-    genderPayGap,
-    payGrade,
-    mix,
-    seafood,
-    lakeLocations
-  );
-  return root;
+// Render one gallery example (by its story-example id) into `container`. Resolves
+// the example to its `*.stories.tsx` module export, runs the story's loaders, and
+// invokes its render. gofish renders through an async, rAF-driven layout
+// pipeline, so the chart `<svg>` is generally NOT present synchronously when this
+// promise resolves — the caller (the gallery's measure pass) waits for the svg to
+// appear with a settled non-zero box before measuring. `container` should already
+// be connected to the document so layout measurement (getBBox / getBoundingClientRect)
+// resolves correctly. Throws on an unknown id or a story that fails to render.
+export async function renderExampleInto(
+  container: HTMLElement,
+  id: string
+): Promise<void> {
+  const story = await resolveById(id);
+  await renderStoryInto(story, container);
 }
 
 // Namespace any internal svg ids (gradients / clipPaths) so multiple inlined

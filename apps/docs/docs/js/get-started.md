@@ -10,7 +10,31 @@ npm install gofish-graphics
 
 ## 2. Create a chart!
 
-::: starfish example:HIDDEN-bar-chart-get-started hidden
+::: gofish hidden
+
+```ts
+const alphabet = [
+  { letter: "A", frequency: 28 },
+  { letter: "B", frequency: 55 },
+  { letter: "C", frequency: 43 },
+  { letter: "D", frequency: 91 },
+  { letter: "E", frequency: 81 },
+  { letter: "F", frequency: 53 },
+  { letter: "G", frequency: 19 },
+  { letter: "H", frequency: 87 },
+  { letter: "I", frequency: 52 },
+];
+
+gf.Chart(alphabet)
+  .flow(gf.spread({ by: "letter", dir: "x" }))
+  .mark(gf.rect({ h: "frequency" }))
+  .render(root, {
+    w: 500,
+    h: 300,
+    axes: true,
+  });
+```
+
 :::
 
 ```ts
@@ -120,7 +144,7 @@ automatically by passing `axes: true` in the `chart()` options.
 Go through [our tutorial](/js/tutorial), check out [some examples](/js/examples/index), or play with the
 live editor below!
 
-::: starfish-live {template=vanilla-ts rtl lightTheme=aquaBlue darkTheme=atomDark previewHeight=400 coderHeight=400}
+::: gofish-live {template=vanilla-ts rtl lightTheme=aquaBlue darkTheme=atomDark previewHeight=400 coderHeight=400}
 
 ```ts index.ts
 import { Chart, spread, rect } from "gofish-graphics";

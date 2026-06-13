@@ -1,4 +1,4 @@
-# Starfish Graphics
+# GoFish Graphics
 
 A graphics library with interactive documentation featuring a live code sandbox.
 

@@ -30,6 +30,14 @@ const classColor = {
 
 export const Default: StoryObj<Args> = {
   args: { w: 500, h: 300 },
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "Nested Mosaic Chart",
+      description:
+        "Titanic survival broken down by passenger class as a mosaic plot, where each cell's width and height encode the proportions of a two-way contingency table.",
+    },
+  },
   render: (args: Args) => {
     const container = initializeContainer();
     spreadY(

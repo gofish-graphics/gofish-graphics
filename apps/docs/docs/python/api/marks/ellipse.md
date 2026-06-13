@@ -3,7 +3,7 @@
 Draws an ellipse for each data item. Like [`circle`](/python/api/marks/circle),
 but with independent width and height.
 
-::: starfish example:balloon-chart hidden
+::: gofish example:balloon-chart hidden
 :::
 
 ```python

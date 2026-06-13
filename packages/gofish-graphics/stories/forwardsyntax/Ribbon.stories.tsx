@@ -23,6 +23,14 @@ type Args = { w: number; h: number };
 
 export const Basic: StoryObj<Args> = {
   args: { w: 400, h: 400 },
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "Ribbon Chart",
+      description:
+        "A ribbon chart tracking fish catch by species across six lakes, where each species' band is reordered at every lake so the largest sits on top and ribbons cross as rankings change.",
+    },
+  },
   render: (args: Args) => {
     const container = initializeContainer();
 
@@ -49,6 +57,14 @@ export const Basic: StoryObj<Args> = {
 
 export const Polar: StoryObj<Args> = {
   args: { w: 400, h: 400 },
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "Polar Ribbon Chart",
+      description:
+        "The lake-by-lake fish catch ribbons wrapped around a polar layout, coiling each species into a swirling spiral of nested colored bands.",
+    },
+  },
   render: (args: Args) => {
     const container = initializeContainer();
 

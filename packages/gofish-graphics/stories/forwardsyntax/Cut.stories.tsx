@@ -77,6 +77,14 @@ export const ImageCut: StoryObj<Args> = {
  *  position. Each ref exposes the slice's datum via `.datum`. */
 export const ImageCutWithLabels: StoryObj<Args> = {
   args: { w: 800, h: 700 },
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "What's in a Bottle of Wine",
+      description:
+        "A wine bottle sliced into proportional bands by ingredient and exploded into a vertical stack, with each slice labeled by category and its share of the bottle.",
+    },
+  },
   render: (args: Args) => {
     const container = initializeContainer();
 
@@ -337,6 +345,14 @@ export const MixedSizes: StoryObj<Args> = {
  *  the band row with `Constraint`. */
 export const CroissantStack: StoryObj<Args> = {
   args: { w: 520, h: 260 },
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "Croissant Chart",
+      description:
+        "A gaussian density sliced into gapped vertical bands of unequal width that hold their true x positions, sampling the distribution as a croissant chart over a hand-drawn standard-deviation axis.",
+    },
+  },
   render: (args: Args) => {
     const container = initializeContainer();
 

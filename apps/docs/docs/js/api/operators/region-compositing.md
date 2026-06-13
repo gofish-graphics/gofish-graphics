@@ -25,7 +25,7 @@ visible surface, while `mask` uses A only as a stencil and never draws it.
 Union (`A ∪ B`) is intentionally **not** exported — it is conceptually
 [`layer`](/js/api/operators/layer) (#196). Use `layer` to overlay regions.
 
-::: starfish
+::: gofish
 
 ```js
 gf.Paint([

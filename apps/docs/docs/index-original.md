@@ -3,7 +3,7 @@
 layout: home
 
 hero:
-  name: "Starfish Graphics"
+  name: "GoFish Graphics"
   text: "Make stylish charts and diagrams in JavaScript with ease"
   # tagline: Make stylish charts and diagrams with ease
   image:

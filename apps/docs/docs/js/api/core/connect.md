@@ -5,7 +5,7 @@ sugar for the two-layer `selectAll` recipe: it positions the chart's marks, then
 threads a [`line`](/js/api/marks/line) or [`area`](/js/api/marks/area) through
 exactly those nodes, painted underneath.
 
-::: starfish
+::: gofish
 
 ```js
 const locations = Object.entries(lakeLocations).map(([lake, { x, y }]) => ({

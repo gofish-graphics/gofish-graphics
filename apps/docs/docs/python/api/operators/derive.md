@@ -4,7 +4,7 @@ Transforms the data mid-pipeline with an arbitrary **Python function**. This is
 the Python API's most powerful operator — your function runs in your kernel,
 with the full power of pandas, NumPy, or plain Python.
 
-::: starfish example:mosaic-plot hidden
+::: gofish example:mosaic-chart hidden
 :::
 
 ```python

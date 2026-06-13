@@ -65,7 +65,7 @@ arg means operator form.
 Pick any layout operator and you'll find the same three steps — a fan-out
 into N pieces, followed by a fan-in back to a single node:
 
-::: starfish example:internal-operator-factory-pipeline hidden
+::: gofish example:internal-operator-factory-pipeline hidden
 :::
 
 1. **Split.** Partition the data into pieces. For `spread`, this is

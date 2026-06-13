@@ -24,6 +24,13 @@ type Args = { w: number; h: number };
 
 export const Default: StoryObj<Args> = {
   args: { w: 400, h: 400 },
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "Marginal Histogram (Jointplot)",
+      description: "A scatter plot of penguin beak length against beak depth framed by marginal histograms of each variable along the top and right edges.",
+    },
+  },
   render: (args: Args) => {
     const container = initializeContainer();
 

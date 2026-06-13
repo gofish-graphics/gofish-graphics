@@ -21,6 +21,13 @@ type Args = { w: number; h: number };
 export const Default: StoryObj<Args> = {
   args: { w: 500, h: 300 },
   loaders: [async () => ({ population: await data["population.json"]() })],
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "Normalized Stacked Bar Chart",
+      description: "A normalized stacked bar chart showing the male and female proportion of the US population within each age group, with every bar scaled to a full height of one.",
+    },
+  },
   render: (args: Args, context: any) => {
     const container = initializeContainer();
 

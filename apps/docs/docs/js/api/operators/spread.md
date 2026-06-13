@@ -2,7 +2,7 @@
 
 Partitions data by the `by` field and lays out one child per partition along an axis. The primary layout operator.
 
-::: starfish
+::: gofish
 
 ```js
 gf.Chart(seafood, { axes: true })

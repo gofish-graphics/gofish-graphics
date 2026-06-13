@@ -28,6 +28,14 @@ type Args = { w: number; h: number };
 
 export const PythonTutor: StoryObj<Args> = {
   args: { w: 1250, h: 600 },
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "Python Tutor Memory Diagram",
+      description:
+        "A Python Tutor style runtime memory diagram showing a global frame of variables whose pointers fan out with arrows into a heap of linked tuples.",
+    },
+  },
   render: (args: Args) => {
     const container = initializeContainer();
     const data = {

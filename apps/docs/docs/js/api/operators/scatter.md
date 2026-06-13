@@ -2,7 +2,7 @@
 
 Positions children at per-group means (when `by` is given) or per-item (when `by` is omitted).
 
-::: starfish
+::: gofish
 
 ```js
 const locations = Object.entries(lakeLocations).map(([lake, { x, y }]) => ({
