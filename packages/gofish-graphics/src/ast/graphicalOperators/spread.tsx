@@ -1,4 +1,5 @@
 import { GoFishNode } from "../_node";
+import { GoFishRef } from "../_ref";
 import type { AxisOptions } from "../gofish";
 import { MaybeValue } from "../data";
 import {
@@ -75,13 +76,17 @@ export const Spread = createNodeOperator(
     const stackAxis = stackDir === 0 ? "x" : "y";
 
     // Each child needs a name so the constraints can reference it; reuse its
-    // existing constraint name/key, else synthesize one.
+    // existing constraint name/key, else synthesize one. A child may be a
+    // `ref` (e.g. an axis label's `ref(bar)`), which is a GoFishRef proxy, not
+    // a GoFishNode — it carries `_name` too, so it must also be named or the
+    // layer's `nameToPlaceable` won't have an entry for it and the constraint
+    // silently drops it (the ref then never participates in align/distribute).
     const childList = children as GoFishAST[];
     const names = childList.map((c, i) => {
       const existing = childNameKey(c);
       if (existing !== undefined) return existing;
       const nm = (c instanceof GoFishNode && c.key) || `__spread_${i}`;
-      if (c instanceof GoFishNode) c._name = nm;
+      if (c instanceof GoFishNode || c instanceof GoFishRef) c._name = nm;
       return nm;
     });
 
