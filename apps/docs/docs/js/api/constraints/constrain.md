@@ -223,7 +223,7 @@ Layer([
 ]);
 ```
 
-::: starfish
+::: gofish
 
 ```js
 gf.Layer([
