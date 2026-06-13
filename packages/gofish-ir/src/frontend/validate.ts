@@ -797,13 +797,8 @@ function walkConstraint(node: unknown, path: string, ctx: Context): void {
     // one axis present. (The space-fold / centering direction is resolved
     // engine-side; the IR carries only the padding.)
     expectField(node, "options", path, ctx, (v, p) => {
-      if (!isObject(v)) {
-        ctx.errors.push({
-          path: p,
-          message: "expected object, got " + typeNameOf(v),
-        });
-        return;
-      }
+      expectObject(v, p, ctx);
+      if (!isObject(v)) return;
       optionalField(v, "x", p, ctx, expectNumber);
       optionalField(v, "y", p, ctx, expectNumber);
       if (v.x === undefined && v.y === undefined) {

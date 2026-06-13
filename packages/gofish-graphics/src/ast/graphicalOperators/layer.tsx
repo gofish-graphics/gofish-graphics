@@ -97,7 +97,6 @@ type ContainEdge = {
 };
 
 type ContainPlan = {
-  edges: ContainEdge[];
   /** derivedChildIndex → edges deriving it (one per axis-group); read by the
    *  space fold and the layout proposal. */
   byDerived: Map<number, ContainEdge[]>;
@@ -115,8 +114,9 @@ function buildContainPlan(
   childNodes: GoFishAST[],
   constraints: ConstraintSpec[]
 ): ContainPlan | undefined {
+  // Common case: no contain constraints — bail before allocating anything.
+  if (!constraints.some(isContainConstraint)) return undefined;
   const contains = constraints.filter(isContainConstraint);
-  if (contains.length === 0) return undefined;
 
   const indexByName = new Map<string, number>();
   for (let i = 0; i < childNodes.length; i++) {
@@ -310,7 +310,7 @@ function buildContainPlan(
   };
   for (let i = 0; i < childNodes.length; i++) visit(i, []);
 
-  return { edges, byDerived, order };
+  return { byDerived, order };
 }
 
 // ── Spread-shape recognition: the operator image of layer constraints ───────
