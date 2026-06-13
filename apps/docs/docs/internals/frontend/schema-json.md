@@ -564,7 +564,14 @@ for the API.
       "required": ["type", "refs"],
       "properties": {
         "type": {
-          "enum": ["align", "distribute", "position", "zAbove", "zBelow"]
+          "enum": [
+            "align",
+            "distribute",
+            "position",
+            "nest",
+            "zAbove",
+            "zBelow"
+          ]
         },
         "options": {
           "type": "object"

@@ -108,37 +108,6 @@ def story_constraint_fill():
     )
 
 
-# ── Weighted fill children: budget split by weights, not equally ───────────
-WEIGHTS = [1, 2, 3]
-
-
-def story_spread_weights():
-    return (
-        spread(
-            [rect(h=40, fill=c) for c in COLORS],
-            dir="x",
-            alignment="start",
-            spacing=8,
-            stackWeights=WEIGHTS,
-        ),
-        {"w": 300, "h": 80},
-    )
-
-
-def story_constraint_weights():
-    return (
-        layer([
-            rect(h=40, fill=c).name(f"r{i}") for i, c in enumerate(COLORS)
-        ]).constrain(lambda r0, r1, r2: [
-            Constraint.align([r0, r1, r2], y="start"),
-            Constraint.distribute(
-                [r0, r1, r2], dir="x", spacing=8, weights=WEIGHTS
-            ),
-        ]),
-        {"w": 300, "h": 80},
-    )
-
-
 # ── Glue (stack): data-driven heights summed into a position ───────────────
 STACK_HEIGHTS = [30, 50, 20]
 

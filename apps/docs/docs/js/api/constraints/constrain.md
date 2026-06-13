@@ -91,14 +91,13 @@ Stacks a set of children end-to-end along an axis, with optional spacing.
 Constraint.distribute({ dir, spacing, mode, order }, [ref1, ref2, ...])
 ```
 
-| Option    | Type                     | Default     | Description                                                                                            |
-| --------- | ------------------------ | ----------- | ------------------------------------------------------------------------------------------------------ |
-| `dir`     | `"x" \| "y"`             | —           | Axis to distribute along                                                                               |
-| `spacing` | `number`                 | `8`         | Gap between each element (forced to `0` when `glue` is set)                                            |
-| `mode`    | `"edge" \| "center"`     | `"edge"`    | Whether spacing is measured edge-to-edge or center-to-center                                           |
-| `order`   | `"forward" \| "reverse"` | `"forward"` | Order to place elements                                                                                |
-| `glue`    | `boolean`                | `false`     | Stack semantics: children touch, and their data-driven extents commit to one positional axis           |
-| `weights` | `number[]`               | —           | Per-child budget weights (one per child, positional) — how fill children share the layer's slice space |
+| Option    | Type                     | Default     | Description                                                                                  |
+| --------- | ------------------------ | ----------- | -------------------------------------------------------------------------------------------- |
+| `dir`     | `"x" \| "y"`             | —           | Axis to distribute along                                                                     |
+| `spacing` | `number`                 | `8`         | Gap between each element (forced to `0` when `glue` is set)                                  |
+| `mode`    | `"edge" \| "center"`     | `"edge"`    | Whether spacing is measured edge-to-edge or center-to-center                                 |
+| `order`   | `"forward" \| "reverse"` | `"forward"` | Order to place elements                                                                      |
+| `glue`    | `boolean`                | `false`     | Stack semantics: children touch, and their data-driven extents commit to one positional axis |
 
 The first already-placed child acts as an anchor. Unplaced children after it are distributed forward (increasing position); unplaced children before it are distributed backward so they stack flush against the anchor's leading edge.
 
@@ -110,7 +109,7 @@ built on them. A `distribute` over data-sized children composes their size
 claims (sum + spacing) into the layer's claim on that axis; when the layer is
 then given a size (an explicit `w`/`h`, or an allotted budget from its parent
 or a coordinate transform), it solves for the scale factor that makes the
-children fit, and proposes budget slices (equal, or per `weights`) to children
+children fit, and proposes equal budget slices to children
 with no size claim of their own. With `glue: true` the composed extents commit
 to an anchored positional axis instead — that's a stacked bar chart. In other
 words: a constraint-assembled layer auto-fits the same way a `Spread`/`Stack`
@@ -184,6 +183,60 @@ Layer([
   ),
 ]);
 ```
+
+## Constraint.nest
+
+Sizes one child to wrap (or be wrapped by) another with a fixed padding — the
+first **size-setting** constraint. Given `[outer, inner]`, the relation
+`outer = inner + 2·padding` holds on each constrained axis, and `inner` is
+centered inside `outer` there.
+
+```ts
+Constraint.nest({ x?, y? }, [outer, inner]);
+```
+
+| Option | Type     | Default | Description                                                         |
+| ------ | -------- | ------- | ------------------------------------------------------------------- |
+| `x`    | `number` | —       | Per-axis padding (px) on the x axis (omit to leave x unconstrained) |
+| `y`    | `number` | —       | Per-axis padding (px) on the y axis (omit to leave y unconstrained) |
+
+At least one of `x` / `y` must be specified; `[outer, inner]` must be exactly two
+refs. Padding is always known — the unknown per axis is _which_ side is derived,
+resolved from which side carries the size:
+
+- **Inside-out** (`outer = inner + 2·padding`): the inner is sized and the outer
+  is not — a box that shrink-wraps its content. Because the derived outer size
+  enters the layer's size request, a nested pair inside an auto-fit context
+  (a `Spread` of nested pairs) participates in the scale solve.
+- **Outside-in** (`inner = outer − 2·padding`): the outer carries the size and
+  the inner is claim-less — exactly CSS `padding`.
+- **Center only**: when neither side is sized, the layer fills the outer, then
+  resolves outside-in over that filled box.
+
+```ts
+// inner 60×40, padding 10 → outer 80×60; inner centered (inner.min = 10).
+Layer([
+  rect({ fill: "#dbe6f3" }).name("outer"),
+  rect({ w: 60, h: 40, fill: "#e63946" }).name("inner"),
+]).constrain(({ outer, inner }) => [
+  Constraint.nest({ x: 10, y: 10 }, [outer, inner]),
+]);
+```
+
+::: gofish
+
+```js
+gf.Layer([
+  gf.rect({ fill: gf.color.blue[1], stroke: gf.color.blue[3] }).name("outer"),
+  gf.rect({ w: 60, h: 40, fill: gf.color.red[4] }).name("inner"),
+])
+  .constrain(({ outer, inner }) => [
+    gf.Constraint.nest({ x: 10, y: 10 }, [outer, inner]),
+  ])
+  .render(root, { w: 200, h: 160 });
+```
+
+:::
 
 ## Constraint.zAbove / Constraint.zBelow
 
@@ -261,7 +314,6 @@ equivalent, **including** scale solving and auto-fit, not just placement:
 | `Spread({ dir: "x", spacing: 60, mode: "center" }, items)`   | `distribute({ dir: "x", spacing: 60, mode: "center" })`         |
 | `Spread({ dir: "y", reverse: true }, items)`                 | `distribute({ dir: "y", order: "reverse" })`                    |
 | `Stack({ dir: "y" }, items)`                                 | `distribute({ dir: "y", glue: true })`                          |
-| `Spread({ dir: "x", stackWeights: [2, 1] }, items)`          | `distribute({ dir: "x", weights: [2, 1] })`                     |
 
 When **no child is pre-placed**, the cross-axis alignment fallback depends on
 the **axis**, not the API — `Spread` and the `align` constraint resolve the

@@ -25,18 +25,17 @@ spread({ dir, ... }, [m1, m2, ...])
 
 ## Parameters
 
-| Option         | Type                                         | Default      | Description                                                                                                                                                                                                      |
-| -------------- | -------------------------------------------- | ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `by`           | `string`                                     | —            | Field to partition by; omit for per-item spread                                                                                                                                                                  |
-| `dir`          | `"x" \| "y"`                                 | —            | **Required.** Layout axis                                                                                                                                                                                        |
-| `spacing`      | `number`                                     | `8`          | Gap between children. Ignored when `glue: true`                                                                                                                                                                  |
-| `alignment`    | `"start" \| "middle" \| "end" \| "baseline"` | `"baseline"` | Alignment along the off-axis                                                                                                                                                                                     |
-| `mode`         | `"edge" \| "center"`                         | `"edge"`     | Whether `spacing` is measured edge-to-edge or center-to-center                                                                                                                                                   |
-| `reverse`      | `boolean`                                    | `false`      | Reverse children order along `dir`                                                                                                                                                                               |
-| `sharedScale`  | `boolean`                                    | `false`      | Share scale across all children                                                                                                                                                                                  |
-| `glue`         | `boolean`                                    | `false`      | Glue children together: collapse data-driven sizes into a single positional axis at this level (the underlying-space kind becomes POSITION). [`stack`](./stack) sets this.                                       |
-| `stackWeights` | `number[]`                                   | —            | **Combinator form only** (explicit child list). When length matches the number of children, space along `dir` is split in proportion to these weights (after `spacing`). Otherwise children share space equally. |
-| `w`, `h`       | `number \| string`                           | —            | Fixed dimension, or field name to encode size from data                                                                                                                                                          |
+| Option        | Type                                         | Default      | Description                                                                                                                                                                |
+| ------------- | -------------------------------------------- | ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `by`          | `string`                                     | —            | Field to partition by; omit for per-item spread                                                                                                                            |
+| `dir`         | `"x" \| "y"`                                 | —            | **Required.** Layout axis                                                                                                                                                  |
+| `spacing`     | `number`                                     | `8`          | Gap between children. Ignored when `glue: true`                                                                                                                            |
+| `alignment`   | `"start" \| "middle" \| "end" \| "baseline"` | `"baseline"` | Alignment along the off-axis                                                                                                                                               |
+| `mode`        | `"edge" \| "center"`                         | `"edge"`     | Whether `spacing` is measured edge-to-edge or center-to-center                                                                                                             |
+| `reverse`     | `boolean`                                    | `false`      | Reverse children order along `dir`                                                                                                                                         |
+| `sharedScale` | `boolean`                                    | `false`      | Share scale across all children                                                                                                                                            |
+| `glue`        | `boolean`                                    | `false`      | Glue children together: collapse data-driven sizes into a single positional axis at this level (the underlying-space kind becomes POSITION). [`stack`](./stack) sets this. |
+| `w`, `h`      | `number \| string`                           | —            | Fixed dimension, or field name to encode size from data                                                                                                                    |
 
 ## Examples
 
@@ -49,9 +48,6 @@ spread({ dir, ... }, [m1, m2, ...])
 
 // Combinator form: apply different marks to the same datum
 spread({ dir: "x" }, [rect({ h: "v" }), text({ text: "n" })])
-
-// Combinator form: unequal column widths (e.g. facet width ∝ group total)
-spread({ dir: "x", stackWeights: [300, 80, 40] }, [treemap1st, treemap2nd, treemap3rd])
 ```
 
 ## Path-aware `by` {#path-aware-by}

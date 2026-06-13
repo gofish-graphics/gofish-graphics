@@ -135,44 +135,6 @@ export const ConstraintFill: StoryObj<Args> = {
   },
 };
 
-// ── Weighted fill children: budget split by weights, not equally ───────────
-
-const WEIGHTS = [1, 2, 3];
-
-/** spread({ stackWeights }) over width-less rects: proportional slices. */
-export const SpreadWeights: StoryObj<Args> = {
-  args: { w: 300, h: 80 },
-  render: (args: Args) => {
-    const container = initializeContainer();
-    spread(
-      { dir: "x", alignment: "start", spacing: 8, stackWeights: WEIGHTS },
-      COLORS.map((c) => rect({ h: 40, fill: c }))
-    ).render(container, { w: args.w, h: args.h });
-    return container;
-  },
-};
-
-/** Layer + distribute({ weights }) over the same width-less rects. */
-export const ConstraintWeights: StoryObj<Args> = {
-  args: { w: 300, h: 80 },
-  render: (args: Args) => {
-    const container = initializeContainer();
-    layer(
-      COLORS.map((c, i) => rect({ h: 40, fill: c }).name(`r${i}`))
-    )
-      .constrain(({ r0, r1, r2 }) => [
-        Constraint.align({ y: "start" }, [r0, r1, r2]),
-        Constraint.distribute({ dir: "x", spacing: 8, weights: WEIGHTS }, [
-          r0,
-          r1,
-          r2,
-        ]),
-      ])
-      .render(container, { w: args.w, h: args.h });
-    return container;
-  },
-};
-
 // ── Glue (stack): data-driven heights summed into a POSITION ───────────────
 // Stacked bars: equal-width rects with data-driven heights glued on y. The
 // glue fold sums the heights into POSITION([0, Σh]); children touch (spacing 0).

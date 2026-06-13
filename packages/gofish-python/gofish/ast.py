@@ -480,6 +480,29 @@ class PositionConstraint:
         }
 
 
+class NestConstraint:
+    """IR carrier for `Constraint.nest([outer, inner], x=..., y=...)`.
+
+    A size-setting constraint: `outer = inner + 2*padding` holds per constrained
+    axis (`outer = refs[0]`, `inner = refs[1]`), and `inner` is centered in
+    `outer`. Which side is *derived* is resolved engine-side from which side
+    carries the size — inside-out (`outer = inner + 2p`) when the inner is sized,
+    outside-in / CSS padding (`inner = outer - 2p`) when the outer is sized — so
+    the IR carries only the padding (`x` / `y`, in pixels).
+    """
+
+    def __init__(self, refs: List[RefSentinel], options: Dict[str, Any]):
+        self.refs = refs
+        self.options = options
+
+    def to_dict(self) -> dict:
+        return {
+            "type": "nest",
+            "options": self.options,
+            "refs": [r.ref_name for r in self.refs],
+        }
+
+
 class ZOrderConstraint:
     """IR carrier for `Constraint.zAbove(a, b)` / `Constraint.zBelow(a, b)`.
 
@@ -550,7 +573,6 @@ class Constraint:
         mode: Optional[str] = None,
         order: Optional[str] = None,
         glue: Optional[bool] = None,
-        weights: Optional[List[float]] = None,
     ) -> DistributeConstraint:
         """Distribute the given refs along an axis.
 
@@ -564,9 +586,6 @@ class Constraint:
             glue: Stack semantics — glue the refs together (their sizes sum
                 into a position at the layer) instead of slicing a budget.
                 Forces `spacing` to 0. Mirrors spread's `glue`.
-            weights: Flex weights aligned to placement order (spread's
-                `stackWeights`); splits the budget in proportion to these
-                instead of equally.
         """
         options: Dict[str, Any] = {"dir": dir}
         if spacing is not None:
@@ -577,8 +596,6 @@ class Constraint:
             options["order"] = order
         if glue is not None:
             options["glue"] = glue
-        if weights is not None:
-            options["weights"] = weights
         return DistributeConstraint(refs, options)
 
     @staticmethod
@@ -616,6 +633,48 @@ class Constraint:
         if anchor is not None:
             options["anchor"] = anchor
         return PositionConstraint(refs, options)
+
+    @staticmethod
+    def nest(
+        refs: List[RefSentinel],
+        *,
+        x: Optional[float] = None,
+        y: Optional[float] = None,
+    ) -> NestConstraint:
+        """Nest `inner` inside `outer` with per-axis padding.
+
+        `refs` is exactly `[outer, inner]`. On each constrained axis the relation
+        `outer = inner + 2*padding` holds and `inner` is centered in `outer`.
+        Which side is *derived* is resolved engine-side from which side carries
+        the size: inside-out (`outer = inner + 2p`, a box that shrink-wraps its
+        content) when the inner is sized, outside-in (`inner = outer - 2p`, CSS
+        padding) when the outer carries the size. An unspecified axis is left
+        unconstrained.
+
+        Args:
+            refs: Exactly `[outer, inner]` — outer nests inner.
+            x: Per-axis padding in pixels on the x axis (omit to leave x
+                unconstrained).
+            y: Per-axis padding in pixels on the y axis.
+
+        At least one of `x` / `y` must be provided, and `refs` must have exactly
+        two entries.
+        """
+        if x is None and y is None:
+            raise ValueError(
+                "Constraint.nest requires at least one of x, y"
+            )
+        if len(refs) != 2:
+            raise ValueError(
+                "Constraint.nest requires exactly 2 refs [outer, inner], "
+                f"got {len(refs)}"
+            )
+        options: Dict[str, Any] = {}
+        if x is not None:
+            options["x"] = x
+        if y is not None:
+            options["y"] = y
+        return NestConstraint(refs, options)
 
     @staticmethod
     def z_above(a: RefSentinel, b: RefSentinel) -> ZOrderConstraint:

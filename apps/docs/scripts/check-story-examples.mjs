@@ -3,7 +3,7 @@
  * check-story-examples.mjs — build-time guard for the gallery data layer.
  *
  * Asserts that loadStoryExamples():
- *   - yields the expected number of examples (64)
+ *   - yields the expected number of examples (65)
  *   - has unique ids
  *   - every snippet transpiles as TypeScript with no syntax errors
  *   - every snippet contains a `.render(` call
@@ -24,7 +24,7 @@ const require = createRequire(import.meta.url);
 const ts = require("typescript");
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const EXPECTED_COUNT = 64;
+const EXPECTED_COUNT = 65;
 
 // The data module is TypeScript and this package is `type: commonjs`, so raw
 // Node won't import it as ESM. Transpile it to a temp `.mjs` *in the same

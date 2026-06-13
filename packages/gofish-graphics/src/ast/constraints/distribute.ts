@@ -28,9 +28,6 @@ export interface DistributeOptions {
    *  layer) instead of slicing a budget. Forces `spacing` to 0. Mirrors
    *  spread's `glue`. */
   glue?: boolean;
-  /** Flex weights aligned to placement order (spread's `stackWeights`); splits
-   *  the budget in proportion to these instead of equally. */
-  weights?: number[];
 }
 
 export interface DistributeConstraint {
@@ -40,7 +37,6 @@ export interface DistributeConstraint {
   mode: "edge" | "center";
   order: "forward" | "reverse";
   glue: boolean;
-  weights?: number[];
   children: ConstraintRef[];
 }
 
@@ -56,7 +52,6 @@ export const createDistributeConstraint = (
   mode: options.mode ?? "edge",
   order: options.order ?? "forward",
   glue: options.glue ?? false,
-  weights: options.weights,
   children,
 });
 

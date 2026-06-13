@@ -175,6 +175,50 @@ layer(
 )
 ```
 
+## Constraint.nest
+
+Sizes one ref to wrap (or be wrapped by) another with a fixed padding — the
+first **size-setting** constraint. Given `[outer, inner]`, the relation
+`outer = inner + 2*padding` holds on each constrained axis, and `inner` is
+centered inside `outer` there.
+
+```python
+Constraint.nest(refs, *, x=None, y=None)
+```
+
+| Parameter | Type    | Description                                                 |
+| --------- | ------- | ----------------------------------------------------------- |
+| `refs`    | `list`  | Exactly `[outer, inner]` — outer nests inner.               |
+| `x`       | `float` | Per-axis padding (px) on x (omit to leave x unconstrained). |
+| `y`       | `float` | Per-axis padding (px) on y (omit to leave y unconstrained). |
+
+At least one of `x` / `y` must be given; `refs` must be exactly two. Padding is
+always known — the unknown per axis is _which_ side is derived, resolved from
+which side carries the size:
+
+- **Inside-out** (`outer = inner + 2*padding`): the inner is sized and the outer
+  is not — a box that shrink-wraps its content. The derived outer size enters the
+  layer's size request, so a nested pair inside an auto-fit context (a
+  `spread` of nested pairs) participates in the scale solve.
+- **Outside-in** (`inner = outer - 2*padding`): the outer carries the size and
+  the inner is claim-less — exactly CSS `padding`.
+- **Center only**: when neither side is sized, the layer fills the outer, then
+  resolves outside-in over that filled box.
+
+```python
+from gofish import layer, rect, Constraint
+
+# inner 60x40, padding 10 -> outer 80x60; inner centered (inner.min = 10).
+layer([
+    rect(fill="#dbe6f3").name("outer"),
+    rect(w=60, h=40, fill="#e63946").name("inner"),
+]).constrain(
+    lambda outer, inner: [
+        Constraint.nest([outer, inner], x=10, y=10),
+    ]
+)
+```
+
 ## Constraint.z_above / Constraint.z_below
 
 Declare a partial-order relation between two named children for **paint order**

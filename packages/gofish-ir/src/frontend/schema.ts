@@ -167,9 +167,6 @@ export interface SpreadOperator extends BaseIRNode {
   /** Stack semantics: glue children together (sizes sum into a position at
    *  this level) instead of slicing a budget. Forces `spacing` to 0. */
   glue?: boolean;
-  /** Flex weights aligned to placement order; splits the budget in proportion
-   *  to these instead of equally. */
-  stackWeights?: number[];
   axes?: AxesOptions;
 }
 
@@ -427,9 +424,10 @@ export type LabelIR =
     };
 
 export interface ConstraintIR {
-  type: "align" | "distribute" | "position" | "zAbove" | "zBelow";
-  /** Positioning constraints (`align`/`distribute`/`position`) carry `options`;
-   *  z-order constraints don't. */
+  type: "align" | "distribute" | "position" | "nest" | "zAbove" | "zBelow";
+  /** Positioning/sizing constraints (`align`/`distribute`/`position`/`nest`)
+   *  carry `options`; z-order constraints don't. `nest` options are
+   *  `{ x?: number, y?: number }` (per-axis padding) over `refs: [outer, inner]`. */
   options?: Record<string, unknown>;
   refs: string[];
 }

@@ -280,7 +280,6 @@ function walkOperator(node: unknown, path: string, ctx: Context): void {
       "mode",
       "reverse",
       "glue",
-      "stackWeights",
       "axes",
       "origin",
       "meta",
@@ -343,13 +342,6 @@ function walkOperator(node: unknown, path: string, ctx: Context): void {
       // spread-only stack options (stack operator rejects these via its own
       // knownFields list); optionalField no-ops when the field is absent.
       optionalField(node, "glue", path, ctx, expectBoolean);
-      optionalField(node, "stackWeights", path, ctx, (v, p) => {
-        if (!Array.isArray(v) || !v.every((n) => typeof n === "number"))
-          ctx.errors.push({
-            path: p,
-            message: "stackWeights must be an array of numbers",
-          });
-      });
       optionalField(node, "axes", path, ctx, walkAxesOptions);
       break;
     case "group":
@@ -778,12 +770,13 @@ function walkConstraint(node: unknown, path: string, ctx: Context): void {
     t !== "align" &&
     t !== "distribute" &&
     t !== "position" &&
+    t !== "nest" &&
     t !== "zAbove" &&
     t !== "zBelow"
   ) {
     ctx.errors.push({
       path: `${path}.type`,
-      message: `constraint type must be "align" | "distribute" | "position" | "zAbove" | "zBelow"`,
+      message: `constraint type must be "align" | "distribute" | "position" | "nest" | "zAbove" | "zBelow"`,
     });
     return;
   }
@@ -791,8 +784,34 @@ function walkConstraint(node: unknown, path: string, ctx: Context): void {
     if (!Array.isArray(v) || !v.every((x) => typeof x === "string")) {
       ctx.errors.push({ path: p, message: "refs must be an array of strings" });
     }
+    // `nest` relates exactly two refs: [outer, inner].
+    if (t === "nest" && Array.isArray(v) && v.length !== 2) {
+      ctx.errors.push({
+        path: p,
+        message: `nest refs must be exactly [outer, inner], got ${v.length}`,
+      });
+    }
   });
-  optionalField(node, "options", path, ctx, expectObject);
+  if (t === "nest") {
+    // nest options: per-axis padding `{ x?: number, y?: number }`, at least
+    // one axis present. (The space-fold / centering direction is resolved
+    // engine-side; the IR carries only the padding.)
+    expectField(node, "options", path, ctx, (v, p) => {
+      expectObject(v, p, ctx);
+      if (!isObject(v)) return;
+      optionalField(v, "x", p, ctx, expectNumber);
+      optionalField(v, "y", p, ctx, expectNumber);
+      if (v.x === undefined && v.y === undefined) {
+        ctx.errors.push({
+          path: p,
+          message: "nest options must specify at least one of x, y",
+        });
+      }
+      if (ctx.strict) rejectUnknown(v, ["x", "y"], p, ctx);
+    });
+  } else {
+    optionalField(node, "options", path, ctx, expectObject);
+  }
   if (ctx.strict) {
     rejectUnknown(node, ["type", "refs", "options"], path, ctx);
   }

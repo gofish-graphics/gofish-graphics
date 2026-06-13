@@ -1,0 +1,123 @@
+// <gofish-wiki> AUTO-GENERATED — see covers: in the essay; run `pnpm --filter docs sync-backlinks`
+// @wiki Underlying Space — /internals/core/underlying-space
+// </gofish-wiki>
+
+import type { Placeable } from "../_node";
+import { SIZE, UnderlyingSpace, isSIZE } from "../underlyingSpace";
+import * as Monotonic from "../../util/monotonic";
+import type { ConstraintRef } from "./shared";
+
+/**
+ * Nesting relation between two named children of a layer.
+ *
+ * `nest({x?, y?}, [outer, inner])`: the relation `outer = inner + 2·padding`
+ * holds symmetrically on each constrained axis, and `inner` is centered inside
+ * `outer` there. Padding is always known, so the unknown per axis is *which*
+ * side is derived — dispatched by the layer's nest pre-pass on which side
+ * carries the size (see `layer.tsx` and size-claims.md "Dimension B"):
+ *   - inner sized, outer not → INSIDE_OUT: `outer = inner + 2·padding` (boxes
+ *     that shrink-wrap their content).
+ *   - outer sized (or neither: the layer sizes outer) → OUTSIDE_IN:
+ *     `inner = outer − 2·padding` (CSS padding).
+ *
+ * Unlike align/distribute, this constraint *drives sizing* — it is the first
+ * size-setting constraint (see apps/docs/docs/internals/design/size-claims.md).
+ * It contributes a triple: a *space fold* (`nestedSpace`, folded into the
+ * layer's space resolution for the inside-out direction so a nested pair
+ * participates in auto-fit), a *layout proposal* (the layer lays the source out
+ * first, then proposes `source ± 2·padding` to the derived node — see
+ * `layer.tsx`'s nest pre-pass), and the *placement walk* below
+ * (`applyNest`, identical for both directions).
+ *
+ * A missing axis (`{x: 4}` only) leaves the other axis unconstrained: `inner`
+ * keeps its natural position there and `outer` keeps the layer's allotted size.
+ */
+export interface NestConstraint {
+  type: "nest";
+  x?: number;
+  y?: number;
+  /** `[outer, inner]` — outer nests inner. */
+  children: [ConstraintRef, ConstraintRef];
+}
+
+export interface NestOptions {
+  x?: number;
+  y?: number;
+}
+
+export const createNestConstraint = (
+  { x, y }: NestOptions,
+  children: [ConstraintRef, ConstraintRef]
+): NestConstraint => {
+  if (x === undefined && y === undefined) {
+    throw new Error(
+      "Constraint.nest: at least one of `x` or `y` must be specified"
+    );
+  }
+  if (children.length !== 2) {
+    throw new Error(
+      `Constraint.nest: expected exactly 2 children [outer, inner], got ${children.length}`
+    );
+  }
+  return { type: "nest", x, y, children };
+};
+
+export const isNestConstraint = (
+  c: { type: string } | undefined
+): c is NestConstraint => c !== undefined && c.type === "nest";
+
+/**
+ * The nest constraint's *space-resolution* contribution on one axis for the
+ * INSIDE_OUT direction — the fold that lets a nested pair participate in the
+ * layer's auto-fit solve. (The OUTSIDE_IN direction derives nothing here: the
+ * outer's own claim flows through the union, and `inner = outer − 2·padding` is
+ * a pure layout-time proposal.)
+ *
+ * When inner's space is SIZE (a data-driven extent, e.g. `rect({ w: value(v) })`),
+ * outer's extent is that same Monotonic shifted up by `2·padding` — a
+ * `Monotonic.adds`, which stays invertible, so a parent spread/layer solving a
+ * scale factor sees `outer = inner + 2·padding`. Chained nests compose: the
+ * layer feeds an already-derived outer back in as the next nest's inner.
+ *
+ * When inner is *not* SIZE (fixed-pixel / position-pinned content), there is no
+ * rule to fold; `outer` keeps its own space and the layout-time pixel proposal
+ * (`inner.dims + 2·padding`) handles the sizing.
+ */
+export function nestedSpace(
+  outerSpace: UnderlyingSpace,
+  innerSpace: UnderlyingSpace,
+  padding: number
+): UnderlyingSpace {
+  if (isSIZE(innerSpace)) {
+    return SIZE(
+      Monotonic.adds(innerSpace.domain, 2 * padding),
+      innerSpace.measure
+    );
+  }
+  return outerSpace;
+}
+
+/**
+ * Position the inner child centered inside outer on each constrained axis.
+ * `layer.tsx` has already resolved the pair so `outer = inner + 2·padding` holds
+ * on the same axes (whichever side was derived), so centering inner yields
+ * `inner.min = outer.min + padding` naturally — identical for both directions.
+ *
+ * Both targets are expected to already have positions on the constrained axes:
+ * outer was placed at baseline by phase-1 (it is deliberately NOT skipped — see
+ * `getPositioningConstraintRefs`), and inner is placed here.
+ */
+export function applyNest(
+  constraint: NestConstraint,
+  outer: Placeable,
+  inner: Placeable
+): void {
+  if (constraint.x !== undefined) {
+    const outerCenter = outer.dims[0].center;
+    if (outerCenter !== undefined) inner.place("x", outerCenter, "center");
+  }
+  if (constraint.y !== undefined) {
+    const outerCenter = outer.dims[1].center;
+    if (outerCenter !== undefined) inner.place("y", outerCenter, "center");
+  }
+}
