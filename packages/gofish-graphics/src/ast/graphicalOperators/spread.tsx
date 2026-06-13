@@ -190,26 +190,25 @@ export const Spread = createNodeOperator(
             return undefined;
           };
 
+          // `sharedScale` makes this spread a scale SCOPE: it solves σ from its
+          // own box and hands it to its DESCENDANTS via a FRESH child array —
+          // it never mutates the parent's `scaleFactors`, so the solved σ does
+          // not leak to this node's siblings. This is the claim-hoisting form of
+          // `sharedScale` (#549): a scale solves at the lowest node where its
+          // measure stops being shared. `false` = pass-through, inheriting the σ
+          // handed down from above. (Mirrors `layer.tsx`'s fresh-array recipe.)
+          const childScaleFactors: Size<number | undefined> = [
+            scaleFactors[0],
+            scaleFactors[1],
+          ];
           if (shared[stackDir]) {
             const sf = computeScaleFactor(stackDir);
-            if (sf !== undefined) scaleFactors[stackDir] = sf;
+            if (sf !== undefined) childScaleFactors[stackDir] = sf;
           }
           if (shared[alignDir]) {
             const sf = computeScaleFactor(alignDir);
-            if (sf !== undefined) scaleFactors[alignDir] = sf;
+            if (sf !== undefined) childScaleFactors[alignDir] = sf;
           }
-
-          const scaleContext = node.getRenderSession().scaleContext;
-          const sfX = scaleFactors[0] ?? 1;
-          const sfY = scaleFactors[1] ?? 1;
-          scaleContext.x = {
-            domain: [0, size[0] / sfX],
-            scaleFactor: sfX,
-          };
-          scaleContext.y = {
-            domain: [0, size[1] / sfY],
-            scaleFactor: sfY,
-          };
 
           // Divide the stack-axis budget into equal per-child slices (the
           // shared fill policy).
@@ -223,7 +222,7 @@ export const Spread = createNodeOperator(
             const modifiedSize: Size = [0, 0];
             modifiedSize[stackDir] = childStackSizes[i] ?? 0;
             modifiedSize[alignDir] = size[alignDir];
-            return child.layout(modifiedSize, scaleFactors, posScales);
+            return child.layout(modifiedSize, childScaleFactors, posScales);
           });
 
           // Fixed-position children have dims already defined (e.g. Ref to another layer)

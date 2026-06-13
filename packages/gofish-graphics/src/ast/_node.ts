@@ -82,6 +82,11 @@ export type Placeable = {
   place: (axis: FancyDirection, value: number, anchor?: Anchor) => void;
 };
 
+// `scaleFactors` is the σ (pixels-per-data-unit) handed down per axis. A node
+// MUST NOT mutate this array: to establish a local scale for its descendants
+// (the `shared` scoping annotation, below) it copies into a fresh array and
+// passes that down — never writing back to the parent's, so a solved σ can't
+// leak to the node's siblings (see spread.tsx / layer.tsx).
 export type Layout = (
   shared: Size<boolean>,
   size: Size,
@@ -143,6 +148,11 @@ export class GoFishNode {
   public children: GoFishAST[];
   public intrinsicDims?: Dimensions;
   public transform?: Transform;
+  /** Per-axis scope annotation: `true` = this node is a scale scope (it solves
+   *  σ from its own box and hands it to descendants via a fresh array — claim
+   *  hoisting, #549); `false` (default) = pass-through, inheriting σ from above.
+   *  It is NOT a mutation flag — no node writes back to the parent's
+   *  `scaleFactors`. Currently set only by `spread`/`stack` (`sharedScale`). */
   public shared: Size<boolean>;
   public renderData?: any;
   public coordinateTransform?: CoordinateTransform;
