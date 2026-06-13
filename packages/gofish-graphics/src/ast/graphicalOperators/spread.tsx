@@ -81,18 +81,7 @@ export const Spread = createNodeOperator(
     // a GoFishNode — it carries `_name` too, so it must also be named or the
     // layer's `nameToPlaceable` won't have an entry for it and the constraint
     // silently drops it (the ref then never participates in align/distribute).
-    // `reverse` is handled by REVERSING the child array up front, then a plain
-    // forward distribute — exactly as the bespoke spread did (`if (reverse)
-    // children = children.reverse()`). This is NOT equivalent to a forward array
-    // with `order: "reverse"`: a reversed WALK keeps per-child positions but
-    // leaves the layer's child order, POSITION fold, and bbox/baseline forward,
-    // so a glued (stack) column's baseline (its local origin, which bubbles up to
-    // the parent's alignment) ends up flipped — the nested-mosaic regression.
-    // Reversing the array makes the fold, bbox, baseline, and walk all agree
-    // with bespoke. No-op for the common forward case.
-    const childList = reverse
-      ? [...(children as GoFishAST[])].reverse()
-      : (children as GoFishAST[]);
+    const childList = children as GoFishAST[];
     // Track names already claimed so a collision is disambiguated rather than
     // collapsing two children onto one slot. The bespoke spread placed children
     // POSITIONALLY, so same-named children were harmless; the layer addresses
@@ -152,8 +141,7 @@ export const Spread = createNodeOperator(
             spacing: glue ? 0 : spacing,
             mode,
             glue,
-            // Always forward — `reverse` already reordered `childList` above.
-            order: "forward",
+            order: reverse ? "reverse" : "forward",
           },
           refs
         ),
