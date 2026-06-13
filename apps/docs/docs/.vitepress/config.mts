@@ -2,6 +2,7 @@ import { defineConfig } from "vitepress";
 import { transformerTwoslash } from "@shikijs/vitepress-twoslash";
 import matter from "gray-matter";
 import gofish from "./markdown-it-gofish";
+import wikilink, { type WikiTarget } from "./markdown-it-wikilink";
 import container from "markdown-it-container";
 import { renderSandbox } from "vitepress-plugin-sandpack";
 import vueJsx from "@vitejs/plugin-vue-jsx";
@@ -86,6 +87,37 @@ const INTERNALS_SECTION_ORDER = [
   "Design Evolution",
   "Speculative Notes",
 ];
+
+/** Map each internals essay's filename slug → its link + title, for `[[slug]]`
+ *  wiki-link resolution (see markdown-it-wikilink). */
+function collectWikiTargets(): Map<string, WikiTarget> {
+  const targets = new Map<string, WikiTarget>();
+  const walk = (dir: string) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      if (entry.isDirectory()) {
+        if (entry.name !== "api") walk(join(dir, entry.name));
+        continue;
+      }
+      if (!entry.name.endsWith(".md")) continue;
+      const full = join(dir, entry.name);
+      const fm = matter(readFileSync(full, "utf-8")).data as Record<
+        string,
+        unknown
+      >;
+      let rel = relative(docsDir, full)
+        .replace(/\\/g, "/")
+        .replace(/\.md$/, "");
+      if (rel.endsWith("/index")) rel = rel.slice(0, -"/index".length);
+      const slug = entry.name.replace(/\.md$/, "");
+      targets.set(slug, {
+        link: "/" + rel,
+        title: typeof fm.title === "string" ? fm.title : slug,
+      });
+    }
+  };
+  walk(join(docsDir, "internals"));
+  return targets;
+}
 
 function collectInternalsSidebar() {
   type Page = {
@@ -312,10 +344,14 @@ export default defineConfig({
     ],
   ],
   markdown: {
+    // KaTeX/MathJax `$…$` and `$$…$$` (markdown-it-mathjax3, VitePress's math dep).
+    math: true,
     // Real type-on-hover in `ts twoslash` blocks — type errors fail the build.
     codeTransformers: [transformerTwoslash()],
     config: (md) => {
       gofish(md);
+      // `[[slug]]` wiki links between internals essays → resolved internal links.
+      wikilink(md, collectWikiTargets());
       md.use(container, "gofish-live", {
         render(tokens, idx) {
           return renderSandbox(tokens, idx, "gofish-live");
