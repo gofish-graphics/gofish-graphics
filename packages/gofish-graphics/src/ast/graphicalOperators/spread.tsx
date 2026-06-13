@@ -103,8 +103,15 @@ export const Spread = createNodeOperator(
     const used = new Set<string>();
     const names = childList.map((c, i) => {
       const existing = childNameKey(c);
+      // `||` (not `??`): an EMPTY-string name is as useless as a missing one and
+      // must be synthesized. An empty `childName` is falsy, so the layer's
+      // phase-1 guard `!childName` would baseline-place it even though it's a
+      // constraint target — then a `middle` align centers siblings on its
+      // (origin) center instead of the box center (the icicle/nested-waffle
+      // regression). A real Token name (`createName`) is a non-empty string, so
+      // `||` still preserves it.
       let nm =
-        existing ?? ((c instanceof GoFishNode && c.key) || `__spread_${i}`);
+        existing || (c instanceof GoFishNode && c.key) || `__spread_${i}`;
       if (used.has(nm)) nm = `${nm}__spread_${i}`;
       used.add(nm);
       // Write the name back ONLY when we assigned or disambiguated it, so the
