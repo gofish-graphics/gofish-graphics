@@ -1,4 +1,6 @@
-import type { Placeable } from "../_node";
+import { GoFishNode, type Placeable } from "../_node";
+import type { GoFishAST } from "../_ast";
+import { isToken } from "../createName";
 
 export type Axis = "x" | "y";
 export type Alignment = "start" | "middle" | "end";
@@ -29,3 +31,13 @@ export const axisIndex = (axis: Axis): 0 | 1 => (axis === "x" ? 0 : 1);
 /** Check if a placeable has been placed on a given axis */
 export const isPlacedOn = (p: Placeable, axisIdx: 0 | 1): boolean =>
   p.dims[axisIdx].min !== undefined;
+
+/** Normalize a node's _name (string or Token) to the string used as a key in
+ * the Layer's nameToPlaceable and constraint refs. Tokens contribute their
+ * `__tag`. */
+export const childNameKey = (node: GoFishAST): string | undefined => {
+  if (!("_name" in node)) return undefined;
+  const n = (node as GoFishNode)._name;
+  if (n === undefined) return undefined;
+  return isToken(n) ? n.__tag : n;
+};
