@@ -12,11 +12,13 @@ import {
   isZOrderConstraint,
 } from "./zorder";
 import { applyNest, createNestConstraint, isNestConstraint } from "./nest";
+import { applyGrid, createGridConstraint, isGridConstraint } from "./grid";
 import type { AlignConstraint, AlignOptions } from "./align";
 import type { DistributeConstraint, DistributeOptions } from "./distribute";
 import type { PositionConstraint, PositionOptions } from "./position";
 import type { ZAboveConstraint, ZBelowConstraint } from "./zorder";
 import type { NestConstraint, NestOptions } from "./nest";
+import type { GridConstraint, GridOptions } from "./grid";
 import { type ConstraintPosScales, type ConstraintRef } from "./shared";
 
 export type {
@@ -34,8 +36,10 @@ export type {
   ZOrderConstraint,
 } from "./zorder";
 export type { NestConstraint, NestOptions } from "./nest";
+export type { GridConstraint, GridOptions } from "./grid";
 export { isZOrderConstraint } from "./zorder";
 export { isNestConstraint, nestedSpace } from "./nest";
+export { isGridConstraint, gridSpaces, gridCellSize } from "./grid";
 
 export type ConstraintSpec =
   | AlignConstraint
@@ -43,7 +47,8 @@ export type ConstraintSpec =
   | PositionConstraint
   | ZAboveConstraint
   | ZBelowConstraint
-  | NestConstraint;
+  | NestConstraint
+  | GridConstraint;
 
 // --- Factory ---
 
@@ -74,6 +79,9 @@ export const Constraint = {
     children: [ConstraintRef, ConstraintRef]
   ): NestConstraint {
     return createNestConstraint(options, children);
+  },
+  grid(options: GridOptions, children: ConstraintRef[]): GridConstraint {
+    return createGridConstraint(options, children);
   },
 };
 
@@ -135,6 +143,7 @@ export function getPositioningConstraintRefs(
       names.add(c.children[1].name);
       continue;
     }
+    // grid: every cell is placed by `applyGrid`, so all skip phase-1 baseline.
     for (const ref of c.children) if (ref) names.add(ref.name);
   }
   return names;
@@ -201,6 +210,11 @@ export function applyConstraints(
       const outer = nameToPlaceable.get(constraint.children[0].name);
       const inner = nameToPlaceable.get(constraint.children[1].name);
       if (outer && inner) applyNest(constraint, outer, inner);
+      continue;
+    }
+
+    if (isGridConstraint(constraint)) {
+      applyGrid(constraint, nameToPlaceable, sizes);
       continue;
     }
 

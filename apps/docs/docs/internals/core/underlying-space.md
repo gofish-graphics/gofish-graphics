@@ -15,6 +15,7 @@ covers:
   - packages/gofish-graphics/src/ast/constraints/distribute.ts
   - packages/gofish-graphics/src/ast/constraints/align.ts
   - packages/gofish-graphics/src/ast/constraints/nest.ts
+  - packages/gofish-graphics/src/ast/constraints/grid.ts
 ---
 
 # The underlying space tree
