@@ -13,7 +13,6 @@ import {
   UnderlyingSpace,
   isPOSITION,
   isSIZE,
-  isUNDEFINED,
   spaceMeasure,
 } from "../underlyingSpace";
 import * as Interval from "../../util/interval";
