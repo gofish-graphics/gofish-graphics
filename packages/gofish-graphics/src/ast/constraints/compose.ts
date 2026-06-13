@@ -197,10 +197,16 @@ export function composeConstraintSpaces(
 
     const composed =
       fragments.length > 0 ? unionChildSpaces(fragments, axis) : UNDEFINED;
-    if (!isUNDEFINED(composed)) {
-      spaces[axis] = composed;
-      if (isSIZE(composed)) sizeDomain[axis] = composed.domain;
-    }
+    // This axis is covered by an align/distribute, so the FOLD is authoritative
+    // — set it even when UNDEFINED, to OVERRIDE (suppress) the layer's default
+    // `unionChildSpaces`. The bespoke spread always reported its cross-axis fold
+    // (`resolveAlignmentSpace`), and for ORDINAL children that fold is UNDEFINED
+    // (no axis). Letting the default union win instead resurrects an ORDINAL —
+    // e.g. the waffle's row index leaks a spurious "Lake B-N" y-axis. (axisSize
+    // pads the off-axis with UNDEFINED, so `spaces[axis]` only ever carries this
+    // axis's contribution.)
+    spaces[axis] = composed;
+    if (isSIZE(composed)) sizeDomain[axis] = composed.domain;
   }
 
   return {
