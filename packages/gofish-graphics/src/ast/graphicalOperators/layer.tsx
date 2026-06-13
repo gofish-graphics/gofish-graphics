@@ -11,6 +11,7 @@ import {
   SIZE,
   UNDEFINED,
   UnderlyingSpace,
+  isDIFFERENCE,
   isPOSITION,
   isSIZE,
   spaceMeasure,
@@ -707,6 +708,32 @@ export const layer = createNodeOperatorSequential(
                   constraintBudget
                 );
             }
+          }
+
+          // `sharedScale` scale scope (claim hoisting, #549): on an axis this
+          // layer is a scope for (set by `spread`'s `sharedScale`; default
+          // [false,false] → no-op for every plain layer/table), solve σ locally
+          // from its composed claim against its own box and hand it to
+          // descendants via the FRESH array — the dispatch the bespoke spread
+          // used (computeScaleFactor): SIZE inverts, POSITION/DIFFERENCE divide
+          // by the domain/width.
+          for (const axis of [0, 1] as const) {
+            if (!shared[axis] || !Number.isFinite(size[axis])) continue;
+            const sp = selfScaledSpaces[axis] ?? node._underlyingSpace?.[axis];
+            if (sp === undefined) continue;
+            let sf: number | undefined;
+            if (isSIZE(sp)) {
+              sf =
+                sp.domain.inverse(size[axis], {
+                  upperBoundGuess: size[axis],
+                }) ?? 0;
+            } else if (isPOSITION(sp) && sp.domain) {
+              const w = Interval.width(sp.domain);
+              sf = w !== 0 ? size[axis] / w : 0;
+            } else if (isDIFFERENCE(sp)) {
+              sf = sp.width !== 0 ? size[axis] / sp.width : 0;
+            }
+            if (sf !== undefined) childScaleFactors[axis] = sf;
           }
 
           // Per-child proposed size for distribute-covered children: each
