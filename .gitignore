@@ -26,3 +26,6 @@ _static/
 !.claude/skills/
 tests/tmp/
 __snapshots__/
+
+# gallery prototype: generated screenshots
+prototypes/gallery/shots/

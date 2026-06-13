@@ -11,3 +11,4 @@ packages/gofish-graphics/stories/**
 pnpm-lock.yaml
 __snapshots__/
 tests/tmp/
+prototypes/gallery/renders.js

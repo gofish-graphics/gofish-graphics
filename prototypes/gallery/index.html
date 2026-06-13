@@ -1,0 +1,2872 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
+    <title>The GoFish Collection — example gallery</title>
+
+    <!-- Same Google Fonts as the homepage (Fraunces / Spline Sans / Spline Sans Mono / Architects Daughter) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Architects+Daughter&family=Fraunces:ital,opsz,wght@0,9..144,400..900;1,9..144,400..700&family=Spline+Sans+Mono:wght@400;500&family=Spline+Sans:wght@400;500;600&display=swap"
+    />
+
+    <style>
+      /* =====================================================================
+   TOKENS — copied verbatim from the homepage (landing.css) so the hall
+   reads as the same material world: same palette, same procedural wood
+   and paper tiles, same shadows/easings.
+   ===================================================================== */
+      :root {
+        --desk: #6b5a47;
+        --paper: #f7f2e9;
+        --paper-shade: #efe7d8;
+        --ink: #26211b;
+        --ink-soft: #6e6457;
+        --graphite: #4a4540;
+        --accent: #2f9e6e;
+        --accent-deep: #1f7a52;
+        --bluep: #3f6bd6;
+        --leaf: #2f9e6e;
+        --gold: #e3aa2f;
+        --shadow-warm: rgba(38, 28, 18, 0.16);
+
+        /* near-black warm ink the visitor silhouettes are cut from */
+        --fig: #1d1813;
+
+        /* springy hover easing shared with the homepage (small hover lifts only) */
+        --spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+        /* calm ease-out used for the search repack / position moves (no overshoot) */
+        --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+
+        /* procedural wood-grain tile (800x480, seamless) — verbatim from landing.css */
+        --wood: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='800'%20height='480'%3E%3Cdefs%3E%3Cfilter%20id='figure'%20x='0'%20y='0'%20width='100%25'%20height='100%25'%3E%3CfeTurbulence%20type='fractalNoise'%20baseFrequency='0.003%200.018'%20numOctaves='3'%20seed='7'%20stitchTiles='stitch'/%3E%3CfeColorMatrix%20type='matrix'%20values='0%200%200%200%200%200%200%200%200%200%200%200%200%200%200%200.6%200.6%200.6%200%20-0.45'%20result='m'/%3E%3CfeFlood%20flood-color='%233a2614'/%3E%3CfeComposite%20in2='m'%20operator='in'/%3E%3C/filter%3E%3Cfilter%20id='fibers'%20x='0'%20y='0'%20width='100%25'%20height='100%25'%3E%3CfeTurbulence%20type='fractalNoise'%20baseFrequency='0.004%200.11'%20numOctaves='5'%20seed='11'%20stitchTiles='stitch'/%3E%3CfeColorMatrix%20type='matrix'%20values='0%200%200%200%200%200%200%200%200%200%200%200%200%200%200%201.1%201.1%201.1%200%20-0.78'%20result='m'/%3E%3CfeFlood%20flood-color='%23241408'/%3E%3CfeComposite%20in2='m'%20operator='in'/%3E%3C/filter%3E%3Cfilter%20id='hl'%20x='0'%20y='0'%20width='100%25'%20height='100%25'%3E%3CfeTurbulence%20type='fractalNoise'%20baseFrequency='0.004%200.11'%20numOctaves='5'%20seed='23'%20stitchTiles='stitch'/%3E%3CfeColorMatrix%20type='matrix'%20values='0%200%200%200%200%200%200%200%200%200%200%200%200%200%200%201.1%201.1%201.1%200%20-0.82'%20result='m'/%3E%3CfeFlood%20flood-color='%23eccd9d'/%3E%3CfeComposite%20in2='m'%20operator='in'/%3E%3C/filter%3E%3C/defs%3E%3Crect%20width='800'%20height='480'%20filter='url(%23figure)'%20opacity='0.35'/%3E%3Crect%20width='800'%20height='480'%20filter='url(%23fibers)'%20opacity='0.4'/%3E%3Crect%20width='800'%20height='480'%20filter='url(%23hl)'%20opacity='0.14'/%3E%3C/svg%3E");
+
+        /* procedural paper tile (600x600) — verbatim from landing.css */
+        --paper-tex: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='600' height='600'%3E%3Cdefs%3E%3Cfilter id='tooth'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.55' numOctaves='2' seed='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.7 0.7 0.7 0 -0.5' result='m'/%3E%3CfeFlood flood-color='%238a7a64'/%3E%3CfeComposite in2='m' operator='in'/%3E%3C/filter%3E%3Cfilter id='mottle'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.012 0.014' numOctaves='4' seed='9' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.5 0.5 0.5 0 -0.34' result='m'/%3E%3CfeFlood flood-color='%23b9a98e'/%3E%3CfeComposite in2='m' operator='in'/%3E%3C/filter%3E%3Cfilter id='light'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.012 0.014' numOctaves='4' seed='27' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.5 0.5 0.5 0 -0.34' result='m'/%3E%3CfeFlood flood-color='%23fffdf6'/%3E%3CfeComposite in2='m' operator='in'/%3E%3C/filter%3E%3Cfilter id='flecks'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.3 0.3' numOctaves='2' seed='14' stitchTiles='stitch'/%3E%3CfeComponentTransfer%3E%3CfeFuncA type='discrete' tableValues='0 0 0 0 0 0 0 1'/%3E%3C/feComponentTransfer%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1 0' result='m'/%3E%3CfeFlood flood-color='%236b5a44'/%3E%3CfeComposite in2='m' operator='in'/%3E%3C/filter%3E%3C/defs%3E%3Crect width='600' height='600' filter='url(%23mottle)' opacity='0.08'/%3E%3Crect width='600' height='600' filter='url(%23light)' opacity='0.06'/%3E%3Crect width='600' height='600' filter='url(%23tooth)' opacity='0.1'/%3E%3Crect width='600' height='600' filter='url(%23flecks)' opacity='0.05'/%3E%3C/svg%3E");
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        /* The page itself never scrolls — only the hall does. */
+        overflow: hidden;
+        background: var(--desk);
+        font-family: "Spline Sans", sans-serif;
+        color: var(--ink);
+        -webkit-font-smoothing: antialiased;
+      }
+      ::selection {
+        background: var(--accent);
+        color: var(--paper);
+      }
+      a {
+        color: inherit;
+      }
+      :focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 3px;
+        border-radius: 2px;
+      }
+
+      /* The scene fills the viewport; dvh handles mobile browser chrome. */
+      .scene {
+        position: fixed;
+        inset: 0;
+        height: 100vh;
+        height: 100dvh;
+        overflow: hidden;
+        /* --floor-h: share of the viewport given to the wood floor (rest is wall). */
+        --floor-h: clamp(150px, 26dvh, 250px);
+      }
+
+      /* =====================================================================
+   THE HALL — one long horizontally-scrolling wall you dolly along.
+   The wall, floor, frames, plaques and spotlights all live inside the
+   scrolling .track. Only the figures layer is viewport-fixed.
+   ===================================================================== */
+      .hall {
+        position: absolute;
+        inset: 0;
+        overflow-x: scroll;
+        overflow-y: hidden;
+        /* NOTE: intentionally `auto`, not `smooth`. A global smooth scroll-behavior
+     animates every `scrollLeft = …` write, which made minimap-window drags and
+     wheel scrolls lag/glide behind the input. Smooth motion is opt-in per call
+     via scrollTo({behavior:'smooth'}) for discrete jumps (minimap track click,
+     keyboard paging); pointer drags and wheel write scrollLeft directly. */
+        scroll-behavior: auto;
+        -webkit-overflow-scrolling: touch;
+        overscroll-behavior-x: contain;
+      }
+      /* slim brass scrollbar so it doesn't read as a UI chrome bar */
+      .hall::-webkit-scrollbar {
+        height: 8px;
+      }
+      .hall::-webkit-scrollbar-track {
+        background: rgba(0, 0, 0, 0.18);
+      }
+      .hall::-webkit-scrollbar-thumb {
+        background: rgba(227, 170, 47, 0.5);
+        border-radius: 4px;
+      }
+
+      .track {
+        position: relative;
+        height: 100%;
+        min-width: 100%;
+        /* width set by JS to the packed length of the wall */
+      }
+
+      /* ---- WALL: the same paper material as the homepage sheet ---- */
+      .wall {
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: 0;
+        bottom: var(--floor-h);
+        background-color: var(--paper);
+        background-image:
+    /* gentle ceiling-to-floor wash so the wall has volume */
+          linear-gradient(
+            180deg,
+            rgba(40, 28, 14, 0.1),
+            rgba(40, 28, 14, 0) 16%,
+            rgba(40, 28, 14, 0) 78%,
+            rgba(40, 28, 14, 0.1)
+          ),
+          var(--paper-tex);
+        background-size:
+          auto,
+          600px 600px;
+        background-repeat: repeat, repeat;
+      }
+      /* baseboard molding where wall meets floor */
+      .wall::after {
+        content: "";
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        height: 16px;
+        background: linear-gradient(
+          180deg,
+          #d9cdb6,
+          #c4b596 38%,
+          #8a765a 39%,
+          #6f5c44 100%
+        );
+        box-shadow:
+          0 -2px 6px rgba(38, 28, 18, 0.18),
+          inset 0 1px 0 rgba(255, 250, 240, 0.5);
+      }
+
+      /* ---- CEILING track rail near the top of the wall ---- */
+      .rail {
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: 30px;
+        height: 7px;
+        background: linear-gradient(180deg, #5b5048, #3c352e 60%, #2a241e);
+        box-shadow: 0 3px 7px rgba(38, 28, 18, 0.3);
+        z-index: 3;
+      }
+
+      /* ---- FLOOR: the homepage wood, planks running into the room ---- */
+      .floor {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        height: var(--floor-h);
+        background-color: var(--desk);
+        background-image:
+    /* sheen sweep */
+          linear-gradient(
+            96deg,
+            rgba(255, 240, 210, 0) 0%,
+            rgba(255, 240, 210, 0.1) 28%,
+            rgba(255, 240, 210, 0) 56%
+          ),
+          /* darker toward the back wall (top of the floor) for depth */
+            linear-gradient(
+              180deg,
+              rgba(20, 12, 6, 0.55) 0%,
+              rgba(20, 12, 6, 0.12) 30%,
+              rgba(20, 12, 6, 0) 70%
+            ),
+          /* plank seams running away from the viewer */
+            repeating-linear-gradient(
+              90deg,
+              transparent 0,
+              transparent 116px,
+              rgba(28, 18, 10, 0.3) 116px,
+              rgba(28, 18, 10, 0.55) 118px,
+              rgba(20, 12, 6, 0.6) 118px,
+              rgba(20, 12, 6, 0.6) 120px,
+              rgba(255, 225, 185, 0.1) 120px,
+              rgba(255, 225, 185, 0.1) 122px
+            ),
+          var(--wood),
+          linear-gradient(180deg, #5a4936, #6b5a47 50%, #7a6850);
+        background-size:
+          auto,
+          auto,
+          auto,
+          800px 480px,
+          cover;
+        background-repeat: no-repeat, no-repeat, repeat, repeat, no-repeat;
+        z-index: 1;
+      }
+
+      /* =====================================================================
+   FRAMES + PLAQUES
+   A .piece is positioned by transform: translate(x,y) rotate(jitter).
+   content-visibility:auto + contain-intrinsic-size keep off-screen
+   pieces cheap; the heavy chart SVG is lazy-injected by IntersectionObserver.
+   ===================================================================== */
+      .piece {
+        position: absolute;
+        left: 0;
+        top: 0;
+        z-index: 4;
+        cursor: pointer;
+        content-visibility: auto;
+        /* contain-intrinsic-size is set inline per-piece to its real box */
+        transition: opacity 0.45s ease;
+      }
+      .track.animate .piece {
+        /* calm ease-out for repack/position moves — the springy overshoot read as
+     too bouncy. The springy curve is kept only for the small hover lift below. */
+        transition:
+          transform 0.45s var(--ease-out),
+          opacity 0.45s ease;
+      }
+      .piece.gone {
+        opacity: 0;
+        pointer-events: none;
+      }
+
+      .frame {
+        position: relative;
+        background: var(--paper); /* the white mat */
+        padding: var(--mat, 13px);
+        border-style: solid;
+        border-width: var(--bord, 11px);
+        border-radius: 2px;
+        box-shadow:
+          0 2px 3px rgba(0, 0, 0, 0.18),
+          6px 14px 26px rgba(25, 18, 10, 0.3),
+          inset 0 0 0 1px rgba(0, 0, 0, 0.18);
+        transition:
+          transform 0.3s var(--spring),
+          box-shadow 0.3s ease;
+      }
+      .frame .art {
+        display: block;
+        background: #fff;
+        box-shadow:
+          inset 0 0 0 1px rgba(0, 0, 0, 0.06),
+          inset 0 1px 6px rgba(40, 28, 14, 0.08);
+        overflow: hidden;
+      }
+      .frame .art svg {
+        display: block;
+        width: 100% !important;
+        height: 100% !important;
+      }
+      /* placeholder shimmer before the chart is injected */
+      .frame .art.empty {
+        background: linear-gradient(180deg, #fff, #f4efe6);
+      }
+
+      /* hover: lift the piece a touch and brighten its spotlight.
+   NB: no z-index pop on hover — that made a hovered chart jump in front of an
+   overlapping visitor, which read as jarring. Visitors (z6) always stay in
+   front of the art (z4); the pointer-repulsion (figures step aside) is what
+   resolves any overlap now, so the gentle scale lift is all that remains. */
+      @media (hover: hover) {
+        .piece:hover .frame {
+          transform: translateY(-4px) scale(1.012);
+          box-shadow:
+            0 3px 4px rgba(0, 0, 0, 0.2),
+            10px 20px 38px rgba(25, 18, 10, 0.36),
+            inset 0 0 0 1px rgba(0, 0, 0, 0.18);
+        }
+      }
+
+      /* ---- four deterministic frame materials, all in the warm palette ---- */
+      .f-walnut {
+        border-color: #7a5a38;
+        border-image: linear-gradient(135deg, #9c7748, #6b4a2a 45%, #4f3418) 1;
+      }
+      .f-walnut {
+        box-shadow:
+          0 2px 3px rgba(0, 0, 0, 0.2),
+          6px 14px 26px rgba(25, 18, 10, 0.32),
+          inset 0 0 0 2px rgba(255, 235, 200, 0.18);
+      }
+      .f-brass {
+        border-color: #c79a3e;
+        border-image: linear-gradient(135deg, #f0cf86, #c79a3e 50%, #8a6a25) 1;
+        border-width: 7px;
+      }
+      .f-ink {
+        border-color: #2c2620;
+        border-width: 5px;
+      }
+      .f-float {
+        border-color: var(--paper);
+        border-width: 3px;
+        box-shadow:
+          0 1px 2px rgba(0, 0, 0, 0.16),
+          10px 18px 34px rgba(25, 18, 10, 0.3);
+      }
+
+      /* ---- museum plaque mounted just below each frame ----
+   Anchored to the BOTTOM of the .piece box (whose height is set to include
+   the plaque), not at top:100% — content-visibility:auto applies paint
+   containment that clips anything outside the piece box, so a top:100% plaque
+   would be invisible. The piece reserves plaqueGap+plaqueH below the frame. */
+      .plaque {
+        position: absolute;
+        left: 50%;
+        bottom: 0;
+        transform: translateX(-50%);
+        /* Grow to fit the title (max-content), but never wider than the frame so the
+     plaque is never clipped by the piece's paint-containment. Titles that would
+     exceed the frame wrap to a second line — a chart name is never truncated. */
+        width: max-content;
+        min-width: 116px;
+        max-width: var(--plaque-max, 200px);
+        background: linear-gradient(180deg, #fdf9f0, #f0e7d4);
+        border: 1px solid rgba(120, 95, 55, 0.35);
+        border-radius: 4px;
+        padding: 7px 11px 8px;
+        box-shadow:
+          0 1px 2px var(--shadow-warm),
+          2px 5px 12px var(--shadow-warm),
+          inset 0 1px 0 rgba(255, 255, 255, 0.7);
+        text-align: center;
+        pointer-events: none; /* clicks fall through to the .piece */
+      }
+      /* two brass mounting screws */
+      .plaque::before,
+      .plaque::after {
+        content: "";
+        position: absolute;
+        top: 5px;
+        width: 4px;
+        height: 4px;
+        border-radius: 50%;
+        background: radial-gradient(circle at 35% 30%, #f3d693, #9c7a2e);
+      }
+      .plaque::before {
+        left: 6px;
+      }
+      .plaque::after {
+        right: 6px;
+      }
+      .plaque .ptitle {
+        font-family: "Fraunces", serif;
+        font-weight: 600;
+        font-size: 13px;
+        line-height: 1.15;
+        color: var(--ink);
+        letter-spacing: 0.01em;
+      }
+      .plaque .pdesc {
+        font-family: "Architects Daughter", cursive;
+        font-size: 12px;
+        line-height: 1.2;
+        color: var(--ink-soft);
+        margin-top: 3px;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+      }
+
+      /* =====================================================================
+   SPOTLIGHTS — one per packed column, aimed at its center.
+   Built from the packing output so light actually falls on the art.
+   ===================================================================== */
+      .spot {
+        position: absolute;
+        pointer-events: none;
+        z-index: 3;
+      }
+      /* the little ceiling fixture glyph hanging off the rail */
+      .spot .fixture {
+        position: absolute;
+        top: 26px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 20px;
+        height: 26px;
+        z-index: 3;
+      }
+      /* the soft warm cone of light falling on the wall. Plain warm haze (no
+   blend mode) so it reliably reads as light on the pale paper wall — a
+   soft-light/overlay blend washes out to nothing on a near-white surface. */
+      .spot .cone {
+        position: absolute;
+        top: 40px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: radial-gradient(
+          118% 85% at 50% -4%,
+          rgba(255, 238, 194, 0.72) 0%,
+          rgba(255, 231, 176, 0.46) 24%,
+          rgba(255, 226, 166, 0.24) 50%,
+          rgba(255, 223, 158, 0.09) 74%,
+          rgba(255, 223, 158, 0) 90%
+        );
+        clip-path: polygon(42% 0, 58% 0, 100% 100%, 0% 100%);
+      }
+      /* a faint bright spill above the frames so the art it lands on lifts a touch */
+      .spot .glow {
+        position: absolute;
+        top: 40px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: radial-gradient(
+          60% 55% at 50% 12%,
+          rgba(255, 244, 214, 0.3) 0%,
+          rgba(255, 240, 200, 0.1) 45%,
+          rgba(255, 240, 200, 0) 75%
+        );
+        mix-blend-mode: overlay;
+        z-index: 5;
+        pointer-events: none;
+      }
+      /* elliptical pool of light on the floor under the cone */
+      .spot .pool {
+        position: absolute;
+        left: 50%;
+        transform: translateX(-50%);
+        border-radius: 50%;
+        background: radial-gradient(
+          ellipse at center,
+          rgba(255, 232, 176, 0.55) 0%,
+          rgba(255, 228, 166, 0.26) 42%,
+          rgba(255, 226, 160, 0) 74%
+        );
+        z-index: 2;
+      }
+
+      /* =====================================================================
+   ENTRANCE & END WALLS — vinyl lettering directly on the plaster
+   ===================================================================== */
+      .endcap {
+        position: absolute;
+        top: 0;
+        bottom: var(--floor-h);
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        padding: 0 56px;
+        z-index: 4;
+      }
+      .entrance {
+        left: 0;
+      }
+      .entrance h1 {
+        font-family: "Fraunces", serif;
+        font-weight: 800;
+        font-size: clamp(2.6rem, 5vw, 4.6rem);
+        line-height: 1.02;
+        letter-spacing: -0.025em;
+        color: var(--ink);
+        margin: 0;
+        /* engraved vinyl-letter feel */
+        text-shadow:
+          0 1px 0 rgba(255, 252, 245, 0.6),
+          0 -1px 1px rgba(60, 44, 26, 0.18);
+      }
+      .entrance h1 .em {
+        color: var(--accent-deep);
+      }
+      .entrance .sub {
+        font-family: "Architects Daughter", cursive;
+        color: var(--ink-soft);
+        font-size: clamp(1.05rem, 1.6vw, 1.45rem);
+        margin: 18px 0 26px;
+        max-width: 22ch;
+      }
+      .entrance .arrow {
+        color: var(--accent-deep);
+      }
+      .cta-row {
+        display: flex;
+        gap: 14px;
+        flex-wrap: wrap;
+      }
+      .btn {
+        display: inline-block;
+        text-decoration: none;
+        font-family: "Spline Sans", sans-serif;
+        font-weight: 600;
+        font-size: 0.98rem;
+        padding: 12px 26px;
+        border-radius: 8px;
+        cursor: pointer;
+        transition:
+          transform 0.2s ease,
+          box-shadow 0.2s ease,
+          background 0.2s ease,
+          color 0.2s ease;
+      }
+      .btn-primary {
+        background: var(--accent);
+        color: #fff;
+        border: 2px solid var(--accent);
+      }
+      .btn-primary:hover {
+        background: var(--accent-deep);
+        border-color: var(--accent-deep);
+        transform: translateY(-2px);
+        box-shadow: 0 8px 18px rgba(31, 122, 82, 0.32);
+      }
+      .btn-secondary {
+        background: transparent;
+        color: var(--accent-deep);
+        border: 2px solid var(--accent);
+      }
+      .btn-secondary:hover {
+        background: var(--accent);
+        color: #fff;
+        transform: translateY(-2px);
+        box-shadow: 0 8px 18px rgba(31, 122, 82, 0.26);
+      }
+
+      .endwall {
+        text-align: left;
+      }
+      .endwall .btn {
+        align-self: flex-start;
+      }
+      .endwall h2 {
+        font-family: "Fraunces", serif;
+        font-weight: 700;
+        font-size: clamp(1.8rem, 3vw, 2.8rem);
+        letter-spacing: -0.02em;
+        color: var(--ink);
+        margin: 0 0 14px;
+        max-width: 16ch;
+      }
+      .endwall .fish {
+        height: 44px;
+        width: auto;
+        align-self: flex-start;
+        display: block;
+        margin-top: 22px;
+      }
+      .endwall p {
+        font-family: "Architects Daughter", cursive;
+        color: var(--ink-soft);
+        font-size: 1.2rem;
+        margin: 0 0 22px;
+        max-width: 22ch;
+      }
+
+      /* =====================================================================
+   FIGURE LAYER — silhouetted visitors standing ON the floor, in front of
+   the art. This layer lives INSIDE the scrolling .track, so the visitors
+   walk past with the floor planks (a viewport-fixed layer read as the
+   people skating/gliding while the floor moved). Their rest positions are
+   derived from the packing output so they cluster near the pieces, and they
+   step aside from the pointer (which is, spatially, another visitor).
+   ===================================================================== */
+      .figures {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        z-index: 6;
+        overflow: hidden;
+      }
+      .figure {
+        position: absolute;
+        bottom: var(--stand, 0px);
+        color: var(--fig);
+        will-change: transform;
+        /* cheap when off the (potentially very long) wall at n=150 */
+        content-visibility: auto;
+        contain-intrinsic-size: 140px 260px;
+      }
+      /* lean wrapper: the body tilts a few degrees in the direction it steps aside,
+   pivoting at the feet. Kept separate from .body so the JS-set lean has its own
+   transform layer and doesn't fight the silhouette markup. */
+      .figure .lean {
+        transform-origin: 50% 100%;
+        will-change: transform;
+      }
+      .figure svg {
+        display: block;
+        overflow: visible;
+      }
+      .figure .shadow {
+        position: absolute;
+        left: 50%;
+        bottom: -6px;
+        transform: translateX(-50%);
+        width: 64%;
+        height: 16px;
+        border-radius: 50%;
+        background: radial-gradient(
+          ellipse at center,
+          rgba(20, 14, 8, 0.4),
+          rgba(20, 14, 8, 0) 70%
+        );
+      }
+
+      /* =====================================================================
+   SEARCH CARD — a paper card hanging from a fishing line (homepage motif)
+   ===================================================================== */
+      .searchcard {
+        position: absolute;
+        top: 30px;
+        left: 34px;
+        z-index: 20;
+        width: 290px;
+        background: var(--paper);
+        border-radius: 10px;
+        padding: 14px 16px 13px;
+        box-shadow:
+          0 1px 2px var(--shadow-warm),
+          3px 8px 20px var(--shadow-warm);
+        transform: rotate(-1deg);
+        transform-origin: top center;
+        animation: sway 7s ease-in-out infinite alternate;
+      }
+      /* Two fishing lines + J-hooks (reused from the homepage gutter cards),
+         one near each top corner, so the card hangs balanced. Each pseudo
+         carries its whole rig: a vertical line strip running up from the
+         hook's eye, over the hook svg piercing the card edge. */
+      .searchcard::before,
+      .searchcard::after {
+        content: "";
+        position: absolute;
+        bottom: calc(100% - 26px);
+        width: 26px;
+        height: 86px;
+        background-image:
+          linear-gradient(rgba(60, 50, 40, 0.4), rgba(60, 50, 40, 0.4)),
+          url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 26 52'%3E%3Cg fill='none' stroke-linecap='round' stroke-linejoin='round'%3E%3Cellipse cx='13' cy='31' rx='3.6' ry='1.9' fill='%23463422' fill-opacity='0.5' stroke='none'/%3E%3Cg stroke='%236d7278' stroke-width='2.2'%3E%3Ccircle cx='13' cy='4' r='3'/%3E%3Cpath d='M13 7 L13 24.6'/%3E%3Cpath d='M13 33 L13 36 C13 43.5 4.2 43.5 4.2 36 L4.2 32.8'/%3E%3Cpath d='M4.2 32.8 L7.6 35.8'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+        background-repeat: no-repeat, no-repeat;
+        background-position:
+          top 0 left 12.25px,
+          bottom center;
+        background-size:
+          1.5px 38px,
+          26px 52px;
+      }
+      .searchcard::before {
+        left: 13px;
+      }
+      .searchcard::after {
+        right: 13px;
+        transform: scaleX(-1);
+      }
+      @keyframes sway {
+        from {
+          transform: rotate(-1.5deg);
+        }
+        to {
+          transform: rotate(-0.3deg);
+        }
+      }
+
+      .searchcard .label {
+        font-family: "Fraunces", serif;
+        font-weight: 700;
+        font-size: 1.05rem;
+        color: var(--ink);
+        margin: 0 0 8px;
+      }
+      .search-input {
+        width: 100%;
+        font: inherit;
+        font-size: 0.95rem;
+        padding: 9px 12px 9px 32px;
+        border: 1.5px solid rgba(40, 28, 18, 0.2);
+        border-radius: 7px;
+        background: rgba(0, 0, 0, 0.025)
+          url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16' fill='none' stroke='%236e6457' stroke-width='1.6'%3E%3Ccircle cx='7' cy='7' r='5'/%3E%3Cpath d='M11 11l4 4'/%3E%3C/svg%3E")
+          10px center no-repeat;
+        color: var(--ink);
+      }
+      .search-input:focus {
+        outline: none;
+        border-color: var(--accent);
+      }
+      .results-info {
+        margin-top: 9px;
+        font-family: "Spline Sans Mono", monospace;
+        font-size: 0.76rem;
+        color: var(--ink-soft);
+      }
+
+      /* ---- minimap (museum floor-plan strip): tick per piece + viewport window ---- */
+      .minimap {
+        position: relative;
+        margin-top: 11px;
+        height: 22px;
+        border-radius: 5px;
+        background: var(--paper-shade);
+        box-shadow:
+          inset 0 0 0 1px rgba(120, 95, 55, 0.3),
+          inset 0 1px 3px rgba(60, 44, 26, 0.14);
+        cursor: pointer;
+        overflow: hidden;
+      }
+      .minimap .tick {
+        position: absolute;
+        top: 5px;
+        width: 2px;
+        height: 12px;
+        border-radius: 1px;
+        background: var(--ink-soft);
+        opacity: 0.55;
+      }
+      .minimap .win {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        background: rgba(47, 158, 110, 0.22);
+        border: 1.5px solid var(--accent-deep);
+        border-radius: 4px;
+        min-width: 10px;
+      }
+
+      /* =====================================================================
+   EMPTY STATE — a single puzzled visitor alone in the hall
+   ===================================================================== */
+      .empty {
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: 0;
+        bottom: var(--floor-h);
+        display: none;
+        flex-direction: column;
+        align-items: center;
+        justify-content: flex-end; /* the lone visitor stands on the floor */
+        padding-bottom: 6px;
+        z-index: 7;
+        pointer-events: none;
+      }
+      .empty.show {
+        display: flex;
+      }
+      .empty #emptyfig {
+        color: var(--fig);
+        order: 3;
+      }
+      .empty .msg {
+        order: 1;
+        font-family: "Fraunces", serif;
+        font-size: 1.7rem;
+        color: var(--ink);
+        text-shadow: 0 1px 0 rgba(255, 252, 245, 0.6);
+      }
+      .empty .sub {
+        order: 2;
+      }
+      .empty .sub {
+        font-family: "Architects Daughter", cursive;
+        color: var(--ink-soft);
+        font-size: 1.1rem;
+        margin-top: 4px;
+      }
+
+      /* hint chip — rests on the floor at the bottom-right, well below the figures'
+   feet so it never collides with a silhouette; fades out after the first scroll. */
+      .scrollhint {
+        position: absolute;
+        right: 20px;
+        bottom: 14px;
+        z-index: 20;
+        font-family: "Architects Daughter", cursive;
+        color: var(--paper);
+        background: rgba(38, 28, 18, 0.62);
+        box-shadow: 0 2px 8px rgba(20, 12, 6, 0.4);
+        padding: 7px 15px;
+        border-radius: 20px;
+        font-size: 0.95rem;
+        pointer-events: none;
+        transition: opacity 0.5s ease;
+      }
+
+      /* back-to-entrance chip — paper-chip material (same plaque gradient + brass
+   hairline), anchored bottom-LEFT above the floor edge so it clears the search
+   card (top-left), the hint pill (bottom-right) and the minimap. Fades in/out
+   with no layout shift: it's always laid out, only opacity/visibility toggle. */
+      .backstart {
+        position: absolute;
+        left: 20px;
+        bottom: 14px;
+        z-index: 20;
+        font-family: "Architects Daughter", cursive;
+        font-size: 0.95rem;
+        color: var(--ink);
+        background: linear-gradient(180deg, #fdf9f0, #f0e7d4);
+        border: 1px solid rgba(120, 95, 55, 0.4);
+        border-radius: 20px;
+        padding: 8px 16px;
+        box-shadow:
+          0 1px 2px var(--shadow-warm),
+          2px 5px 12px var(--shadow-warm),
+          inset 0 1px 0 rgba(255, 255, 255, 0.7);
+        cursor: pointer;
+        opacity: 0;
+        visibility: hidden;
+        transform: translateY(5px);
+        transition:
+          opacity 0.4s ease,
+          transform 0.4s var(--ease-out),
+          visibility 0.4s;
+        pointer-events: none;
+      }
+      .backstart.show {
+        opacity: 1;
+        visibility: visible;
+        transform: translateY(0);
+        pointer-events: auto;
+      }
+      @media (hover: hover) {
+        .backstart:hover {
+          background: linear-gradient(180deg, #fffdf7, #f4ecda);
+          transform: translateY(-2px);
+        }
+      }
+
+      /* =====================================================================
+   TRANSIT (CHEAP) MODE — applied to .track only during long programmatic
+   glides (Home/End/Entrance/minimap-click). The viewport sweeps the ~33k px
+   layer far faster than raster threads can fill newly-exposed tiles, which
+   presents CHECKERBOARDED frames. So while sweeping we strip the swept content
+   down to what's trivially rasterizable: the white mats + frame borders + the
+   flat wall/floor remain (they read right at speed), but the expensive raster
+   work is removed — chart SVGs, plaque text, the spotlight gradient cones, the
+   visitor silhouettes, and the multi-layer frame box-shadows. Detail fades out
+   over 120ms (then flips to visibility:hidden so it costs zero raster), and
+   fades back in instantly-visible on settle — quick fades, never pops.
+   ===================================================================== */
+      .art svg,
+      .spots,
+      .figures,
+      .plaque {
+        /* fade DETAIL in/out; on the way OUT, go visibility:hidden only AFTER the
+     120ms opacity fade so it stops costing raster; on the way IN, become
+     visible immediately (no delay) and fade opacity 0→1. */
+        transition: opacity 120ms linear;
+      }
+      .track.transit .art svg,
+      .track.transit .spots,
+      .track.transit .figures,
+      .track.transit .plaque {
+        opacity: 0;
+        visibility: hidden;
+        transition:
+          opacity 120ms linear,
+          visibility 0s linear 120ms;
+      }
+      /* drop the raster-expensive frame shadows while sweeping (snapped, not
+   transitioned — at glide speed the shadow change is imperceptible, and
+   animating a shadow is itself per-frame raster work). */
+      .track.transit .frame {
+        box-shadow: none !important;
+      }
+      /* Make each piece read as a framed picture while sweeping WITHOUT rendering its
+   children. content-visibility:auto skips a piece's SUBTREE (the .frame + .art +
+   .plaque) when off-screen, but still paints the .piece element's OWN background.
+   So we draw a cheap proxy "frame" directly on the .piece: a flat paper mat fill
+   plus a 3px frame-colored outline, both sized to the FRAME box via the inline
+   --fh (leaving the plaque gap below as bare wall). --edge is the per-material
+   frame color (walnut/brass/ink/float), set inline in JS, so frames still read as
+   framed — and keep their colored edge — at speed.
+
+   This REPLACES the old `.piece { content-visibility: visible }` pin, which forced
+   the browser to render EVERY piece on the whole ~33k px track in a single frame
+   at glide start (the "initial ramp feels laggy" spike). The proxy paints with the
+   element's own background, so no subtree render is forced and there is no storm. */
+      .track.transit .piece {
+        --bw: 3px;
+        background-image:
+          linear-gradient(var(--edge, #6b4a2a), var(--edge, #6b4a2a)),
+          linear-gradient(var(--edge, #6b4a2a), var(--edge, #6b4a2a)),
+          linear-gradient(var(--edge, #6b4a2a), var(--edge, #6b4a2a)),
+          linear-gradient(var(--edge, #6b4a2a), var(--edge, #6b4a2a)),
+          linear-gradient(var(--paper), var(--paper));
+        background-repeat: no-repeat;
+        background-size:
+          100% var(--bw),
+          100% var(--bw),
+          var(--bw) var(--fh, 100%),
+          var(--bw) var(--fh, 100%),
+          100% var(--fh, 100%);
+        background-position:
+          left top,
+          left calc(var(--fh, 100%) - var(--bw)),
+          left top,
+          right top,
+          left top;
+      }
+
+      /* ---- mobile / small screens ---- */
+      @media (max-width: 640px) {
+        .scene {
+          --floor-h: clamp(120px, 20dvh, 170px);
+        }
+        /* Docked at the BOTTOM edge on mobile — at the top it obscured the
+           top-row charts; down here it only overlaps floor. */
+        .searchcard {
+          top: auto;
+          bottom: 10px;
+          left: 10px;
+          right: 10px;
+          width: auto;
+          animation: none;
+          transform: none;
+          padding: 10px 12px;
+        }
+        .searchcard::before,
+        .searchcard::after {
+          display: none;
+        }
+        /* The ← Entrance chip moves to the top-left so the bottom card
+           can't cover it. */
+        .backstart {
+          bottom: auto;
+          top: 10px;
+          left: 10px;
+        }
+        .endcap {
+          padding: 0 28px;
+        }
+        .scrollhint {
+          display: none;
+        }
+      }
+      @media (max-height: 460px) {
+        .scene {
+          --floor-h: clamp(90px, 16dvh, 130px);
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .hall {
+          scroll-behavior: auto;
+        }
+        .searchcard {
+          animation: none;
+        }
+        /* figures still step aside under reduced motion, but no body lean */
+        .figure .lean {
+          transform: none !important;
+        }
+        .track.animate .piece {
+          transition: opacity 0.2s ease;
+        }
+        * {
+          animation-duration: 0.001ms !important;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="scene" id="scene">
+      <div class="hall" id="hall">
+        <div class="track" id="track">
+          <div class="wall"></div>
+          <div class="rail"></div>
+          <div class="floor"></div>
+          <!-- entrance / end walls and pieces / spotlights injected by JS -->
+          <div class="spots" id="spots"></div>
+
+          <section class="endcap entrance" id="entrance">
+            <h1>The <span class="em">GoFish</span><br />Collection</h1>
+            <div class="sub">
+              walk the hall <span class="arrow">&rarr;</span>
+            </div>
+            <div class="cta-row">
+              <a
+                class="btn btn-primary"
+                href="https://github.com/"
+                target="_blank"
+                rel="noopener"
+                >Contribute an example</a
+              >
+            </div>
+          </section>
+
+          <section class="endcap endwall" id="endwall">
+            <h2>That's it!</h2>
+            <p>Want yours on this wall? Open a PR.</p>
+            <a
+              class="btn btn-primary"
+              href="https://github.com/"
+              target="_blank"
+              rel="noopener"
+              >Contribute an example</a
+            >
+            <img
+              class="fish"
+              src="gofish-logo.png"
+              alt="GoFish Graphics logo"
+            />
+          </section>
+
+          <!-- visitors stand on the floor and scroll WITH the wall (inside .track) -->
+          <div class="figures" id="figures"></div>
+        </div>
+      </div>
+
+      <!-- empty state -->
+      <div class="empty" id="empty">
+        <div id="emptyfig"></div>
+        <div class="msg">Nothing on view</div>
+        <div class="sub">try another term</div>
+      </div>
+
+      <!-- hanging search card -->
+      <div class="searchcard">
+        <div class="label">The GoFish Collection</div>
+        <input
+          class="search-input"
+          id="search"
+          type="text"
+          placeholder="Search the hall…"
+          aria-label="Search examples"
+          autocomplete="off"
+        />
+        <div class="results-info" id="count"></div>
+        <div class="minimap" id="minimap" title="Jump along the hall">
+          <div class="win" id="win"></div>
+        </div>
+      </div>
+
+      <div class="scrollhint" id="hint">scroll → to walk the hall</div>
+
+      <!-- back-to-entrance chip — hidden until the visitor scrolls a viewport in -->
+      <button
+        class="backstart"
+        id="backstart"
+        type="button"
+        aria-label="Return to the entrance"
+      >
+        &larr; Entrance
+      </button>
+    </div>
+
+    <!-- real rendered chart SVGs (plain script tag so file:// works) -->
+    <script src="renders.js"></script>
+    <script>
+      (function () {
+        "use strict";
+
+        // Placeholder docs origin — swap this one const to point at the real site.
+        const DOCS_ORIGIN = "https://gofish-graphics.dev/js/examples/";
+
+        const RAW = (window.GALLERY_RENDERS || []).filter((d) => d && d.svg);
+        const reduceMotion = window.matchMedia(
+          "(prefers-reduced-motion: reduce)"
+        ).matches;
+
+        // ---- test mode ?n=150 : synthesize a bigger dataset by cycling real renders.
+        const params = new URLSearchParams(location.search);
+        const N = parseInt(params.get("n") || "0", 10);
+        let DATA;
+        if (N > 0 && RAW.length) {
+          DATA = [];
+          for (let i = 0; i < N; i++) {
+            const base = RAW[i % RAW.length];
+            const cycle = Math.floor(i / RAW.length) + 1;
+            DATA.push({
+              uid: i,
+              id: base.id + (cycle > 1 ? "-" + cycle : ""),
+              title: base.title + (cycle > 1 ? " " + cycle : ""),
+              description: base.description || "",
+              w: base.w,
+              h: base.h,
+              svg: base.svg,
+            });
+          }
+        } else {
+          DATA = RAW.map((d, i) => ({
+            uid: i,
+            id: d.id,
+            title: d.title,
+            description: d.description || "",
+            w: d.w,
+            h: d.h,
+            svg: d.svg,
+          }));
+        }
+
+        // ---- seeded deterministic jitter, stable across repaints in a session.
+        function mulberry32(a) {
+          return function () {
+            a |= 0;
+            a = (a + 0x6d2b79f5) | 0;
+            let t = Math.imul(a ^ (a >>> 15), 1 | a);
+            t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+            return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+          };
+        }
+        for (const d of DATA) {
+          const r = mulberry32(d.uid * 2654435761 + 12345);
+          d.jY = (r() - 0.5) * 10; // ±5px vertical hand-hung wobble
+          d.jRot = (r() - 0.5) * 1.2; // ±0.6° rotation
+          d.frameClass = ["f-walnut", "f-brass", "f-ink", "f-float"][d.uid % 4];
+        }
+
+        // Per-material frame-edge color for the cheap TRANSIT proxy outline (the flat
+        // 3px border drawn on the .piece's own background while sweeping, so frames keep
+        // their material color at speed). Picked to match each frame's border-image tone.
+        const FRAME_EDGE = {
+          "f-walnut": "#6b4a2a",
+          "f-brass": "#c79a3e",
+          "f-ink": "#2c2620",
+          "f-float": "#cdbfa3",
+        };
+
+        // Inject a chart SVG into a frame's .art, defensively ensuring the svg has a
+        // viewBox so it SCALES to the frame instead of cropping (the "blank frames"
+        // bug: an svg with fixed width/height and no viewBox shows only a corner when
+        // drawn smaller than 1:1). Old renders.js files may lack the viewBox, so we
+        // synthesize one from the entry's true w/h and force responsive sizing.
+        function injectChart(artEl, d) {
+          artEl.innerHTML = d.svg;
+          const svg = artEl.querySelector("svg");
+          if (svg) {
+            if (!svg.getAttribute("viewBox")) {
+              const w = svg.getAttribute("width"),
+                h = svg.getAttribute("height");
+              const vw = (w && parseFloat(w)) || d.w,
+                vh = (h && parseFloat(h)) || d.h;
+              if (vw && vh) svg.setAttribute("viewBox", "0 0 " + vw + " " + vh);
+            }
+            svg.setAttribute("width", "100%");
+            svg.setAttribute("height", "100%");
+            if (!svg.getAttribute("preserveAspectRatio"))
+              svg.setAttribute("preserveAspectRatio", "xMidYMid meet");
+          }
+          artEl.classList.remove("empty");
+        }
+
+        const scene = document.getElementById("scene");
+        const hall = document.getElementById("hall");
+        const track = document.getElementById("track");
+        const spotsEl = document.getElementById("spots");
+        const entrance = document.getElementById("entrance");
+        const endwall = document.getElementById("endwall");
+        const figuresEl = document.getElementById("figures");
+        const emptyEl = document.getElementById("empty");
+        const searchEl = document.getElementById("search");
+        const countEl = document.getElementById("count");
+        const minimap = document.getElementById("minimap");
+        const winEl = document.getElementById("win");
+        const hint = document.getElementById("hint");
+
+        // =====================================================================
+        // FIGURES — smooth single-silhouette visitors built from same-colored
+        // round-capped capsules (limbs/torso) + a head circle. Same fill = one
+        // cohesive silhouette, with smooth joints, posed by moving joint points.
+        // Drawn large (viewBox 120x230, ~210u tall) so curves stay smooth.
+        // Head ≈ 1/7.5 of height. currentColor is the warm ink.
+        // =====================================================================
+        function limb(pts, w) {
+          let d = "M" + pts[0][0] + "," + pts[0][1];
+          for (let i = 1; i < pts.length; i++)
+            d += "L" + pts[i][0] + "," + pts[i][1];
+          return (
+            '<path d="' +
+            d +
+            '" fill="none" stroke="currentColor" stroke-width="' +
+            w +
+            '" stroke-linecap="round" stroke-linejoin="round"/>'
+          );
+        }
+        // smooth torso outline: shoulders -> waist -> hips, rounded
+        function torso(opt) {
+          const o = opt || {};
+          const shY = o.shY || 50,
+            lean = o.lean || 0;
+          // lean shifts the shoulders horizontally for a relaxed forward tilt
+          return (
+            '<path d="M' +
+            (40 + lean) +
+            "," +
+            shY +
+            " C" +
+            (40 + lean) +
+            "," +
+            (shY - 7) +
+            " " +
+            (50 + lean) +
+            "," +
+            (shY - 9) +
+            " 60," +
+            (shY - 9) +
+            " C" +
+            (70 - lean) +
+            "," +
+            (shY - 9) +
+            " " +
+            (80 - lean) +
+            "," +
+            (shY - 7) +
+            " " +
+            (80 - lean) +
+            "," +
+            shY +
+            " C" +
+            (80 - lean) +
+            "," +
+            (shY + 30) +
+            " 77," +
+            (shY + 52) +
+            " 73," +
+            (shY + 74) +
+            " C72," +
+            (shY + 80) +
+            " 48," +
+            (shY + 80) +
+            " 47," +
+            (shY + 74) +
+            " C43," +
+            (shY + 52) +
+            " " +
+            (40 + lean) +
+            "," +
+            (shY + 30) +
+            " " +
+            (40 + lean) +
+            "," +
+            shY +
+            ' Z"' +
+            ' fill="currentColor"/>'
+          );
+        }
+        function head(cx, cy, r) {
+          return (
+            '<circle cx="' +
+            cx +
+            '" cy="' +
+            cy +
+            '" r="' +
+            (r || 15) +
+            '" fill="currentColor"/>'
+          );
+        }
+
+        // Each pose returns inner SVG markup in the 120x230 box (feet near y=222).
+        const POSES = {
+          // hands clasped behind back, leaning toward the art
+          leaning: () =>
+            head(64, 26, 14) +
+            torso({ shY: 48, lean: 3 }) +
+            limb(
+              [
+                [60, 122],
+                [56, 170],
+                [58, 220],
+              ],
+              16
+            ) + // back leg
+            limb(
+              [
+                [64, 122],
+                [70, 168],
+                [74, 220],
+              ],
+              16
+            ) + // front leg
+            limb(
+              [
+                [44, 56],
+                [40, 92],
+                [50, 118],
+              ],
+              11
+            ) + // arm tucked behind
+            limb(
+              [
+                [80, 56],
+                [84, 92],
+                [72, 116],
+              ],
+              11
+            ),
+          // pondering — hand on chin. ONE arm wraps across the waist and its hand
+          // supports the OTHER arm's elbow; that other forearm rises vertically with
+          // the hand at the chin. Head tilts slightly toward the hand. The chin
+          // contact + the L of (horizontal support arm) ∧ (vertical thinking arm) are
+          // the two cues that read unmistakably in silhouette.
+          pondering: () =>
+            '<g transform="rotate(8 60 26)">' +
+            head(58, 25, 14) +
+            "</g>" +
+            torso({ shY: 50 }) +
+            limb(
+              [
+                [56, 124],
+                [54, 172],
+                [54, 220],
+              ],
+              16
+            ) +
+            limb(
+              [
+                [66, 124],
+                [70, 172],
+                [72, 220],
+              ],
+              16
+            ) +
+            // support arm: from the left shoulder, elbow juts OUT past the left torso
+            // edge, then the forearm sweeps HORIZONTAL across the waist to cradle the
+            // thinking arm's elbow on the right (the side bump + flat lower edge read
+            // as a forearm laid across the belly).
+            limb(
+              [
+                [44, 56],
+                [30, 88],
+                [84, 96],
+              ],
+              11
+            ) +
+            // thinking arm (matches the reference thinker poses): the upper arm
+            // hangs from the RIGHT SHOULDER nearly vertical, drifting out to an
+            // elbow at LOWER-CHEST height — a compact fold, not a wing at the hip —
+            // resting just above the support hand; the forearm folds sharply back
+            // up so the fist meets the tilted head at the jaw. What reads in solid
+            // silhouette: the elbow point past the torso edge at chest height, the
+            // head tilted toward the hand, and the fist notching the jaw.
+            limb(
+              [
+                [80, 54],
+                [92, 88],
+                [70, 38],
+              ],
+              11
+            ) +
+            limb(
+              [
+                [70, 38],
+                [66, 34],
+              ],
+              10
+            ), // fist resting at the cheek/jaw
+          // pointing up at a chart — bent elbow so it reads as a gesture, not a salute
+          pointing: () =>
+            head(58, 26, 14) +
+            torso({ shY: 50, lean: 2 }) +
+            limb(
+              [
+                [56, 124],
+                [54, 172],
+                [54, 220],
+              ],
+              16
+            ) +
+            limb(
+              [
+                [66, 124],
+                [70, 172],
+                [72, 220],
+              ],
+              16
+            ) +
+            limb(
+              [
+                [44, 58],
+                [40, 92],
+                [44, 116],
+              ],
+              11
+            ) + // resting arm
+            limb(
+              [
+                [78, 56],
+                [105, 40],
+                [112, 16],
+              ],
+              11
+            ) + // raised arm: shoulder -> jutting elbow -> forearm up
+            limb(
+              [
+                [112, 16],
+                [115, 8],
+              ],
+              6
+            ), // tapered pointing hand/finger
+          // standing, hands in pockets, looking up with a slight head tilt
+          lookup: () =>
+            '<g transform="rotate(-7 60 28)">' +
+            head(60, 26, 14) +
+            "</g>" +
+            torso({ shY: 50 }) +
+            limb(
+              [
+                [57, 124],
+                [55, 172],
+                [55, 220],
+              ],
+              16
+            ) +
+            limb(
+              [
+                [66, 124],
+                [68, 172],
+                [69, 220],
+              ],
+              16
+            ) +
+            limb(
+              [
+                [44, 58],
+                [46, 92],
+                [52, 112],
+              ],
+              11
+            ) +
+            limb(
+              [
+                [78, 58],
+                [76, 92],
+                [70, 112],
+              ],
+              11
+            ),
+          // a child — smaller proportions, head a touch bigger
+          child: () =>
+            head(60, 30, 16) +
+            '<path d="M44,56 C44,50 52,48 60,48 C68,48 76,50 76,56 C76,78 73,96 71,112 C70,118 50,118 49,112 C47,96 44,78 44,56 Z" fill="currentColor"/>' +
+            limb(
+              [
+                [55, 116],
+                [54, 150],
+                [54, 188],
+              ],
+              14
+            ) +
+            limb(
+              [
+                [66, 116],
+                [68, 150],
+                [69, 188],
+              ],
+              14
+            ) +
+            limb(
+              [
+                [46, 60],
+                [42, 86],
+                [44, 104],
+              ],
+              9
+            ) +
+            limb(
+              [
+                [75, 60],
+                [80, 86],
+                [80, 104],
+              ],
+              9
+            ),
+          // person seated on a bench
+          sitting: () =>
+            head(60, 40, 14) +
+            '<path d="M44,64 C44,58 52,56 60,56 C68,56 76,58 76,64 C76,86 74,104 72,120 C71,126 49,126 48,120 C46,104 44,86 44,64 Z" fill="currentColor"/>' +
+            limb(
+              [
+                [52, 124],
+                [54, 150],
+                [80, 150],
+              ],
+              16
+            ) + // thigh
+            limb(
+              [
+                [80, 150],
+                [82, 186],
+                [84, 220],
+              ],
+              16
+            ) + // shin
+            limb(
+              [
+                [66, 124],
+                [66, 150],
+                [88, 150],
+              ],
+              16
+            ) +
+            limb(
+              [
+                [88, 150],
+                [90, 186],
+                [92, 220],
+              ],
+              16
+            ) +
+            limb(
+              [
+                [46, 70],
+                [44, 100],
+                [52, 126],
+              ],
+              11
+            ) +
+            limb(
+              [
+                [76, 70],
+                [80, 100],
+                [76, 126],
+              ],
+              11
+            ) +
+            '<rect x="36" y="150" width="72" height="9" rx="3" fill="currentColor" opacity="0.85"/>' + // bench seat
+            '<rect x="40" y="159" width="6" height="58" fill="currentColor" opacity="0.85"/>' +
+            '<rect x="98" y="159" width="6" height="58" fill="currentColor" opacity="0.85"/>',
+          // a puzzled visitor for the empty state (hand on chin)
+          puzzled: () =>
+            '<g transform="rotate(6 60 28)">' +
+            head(60, 26, 14) +
+            "</g>" +
+            torso({ shY: 50 }) +
+            limb(
+              [
+                [57, 124],
+                [55, 172],
+                [55, 220],
+              ],
+              16
+            ) +
+            limb(
+              [
+                [66, 124],
+                [68, 172],
+                [69, 220],
+              ],
+              16
+            ) +
+            limb(
+              [
+                [44, 58],
+                [42, 92],
+                [50, 114],
+              ],
+              11
+            ) +
+            limb(
+              [
+                [78, 58],
+                [70, 80],
+                [58, 40],
+              ],
+              11
+            ), // hand up to chin
+        };
+
+        function figureSVG(pose, h) {
+          const body = POSES[pose]();
+          // viewBox carries 30u of transparent horizontal padding EACH SIDE (content
+          // stays in 0..120, centered at 60). The .figure box sizes to this svg, and
+          // because content-visibility:auto implies paint containment (which CLIPS
+          // overflow at the .figure border box), the padding is what keeps a raised
+          // arm from being clipped when the repulsion lean rotates the figure. Width
+          // scales with the wider box so pixels-per-unit — and the rendered body — are
+          // unchanged; the padding is invisible and symmetric, so nothing shifts.
+          return (
+            '<svg width="' +
+            (h * 180) / 230 +
+            '" height="' +
+            h +
+            '" viewBox="-30 0 180 230" aria-hidden="true">' +
+            body +
+            "</svg>"
+          );
+        }
+        window.__figureSVG = figureSVG; // throwaway hook for the pose-review loop
+
+        // =====================================================================
+        // FIGURE DISTRIBUTION — derive visitor rest-positions from the packing
+        // output so people actually stand near the art, spread along the WHOLE
+        // wall (which may be 30 or 150 pieces long), re-derived on every repack.
+        //
+        // Rule (deterministic, seeded by the filtered count so it's stable within a
+        // session but changes when the filter changes):
+        //   - target count ≈ one figure per ~620px of hung wall, capped (desktop 80,
+        //     mobile 3). Cheap inline SVGs, but content-visibility:auto keeps the
+        //     off-screen ones free at n=150.
+        //   - lay `target` "anchor" viewers across the columns at an even stride with
+        //     ±70% stride jitter, so they cluster near pieces yet leave natural gaps
+        //     (not a uniform comb). Each anchor stands slightly off its column center.
+        //   - depth variation: nearer figures are taller + more opaque.
+        //   - garnish for believability: one bench sitter in the middle third, an
+        //     occasional companion pair, and an occasional child beside a "parent".
+        // =====================================================================
+        const STAND_POSES = [
+          "leaning",
+          "pondering",
+          "pointing",
+          "lookup",
+          "leaning",
+          "pondering",
+        ];
+
+        function distributeFigures(list, layout) {
+          const cols = (layout && layout.spots) || [];
+          if (!cols.length) return [];
+          const e = env;
+          const wallStart = layout.caps.entrance;
+          const wallEnd = layout.artRight;
+          const span = Math.max(1, wallEnd - wallStart);
+          const cap = e.mobile ? 3 : 80;
+          let target = Math.round(span / 620);
+          target = Math.max(1, Math.min(cap, target));
+
+          const rng = mulberry32((list.length * 2654435761 + 1013904223) >>> 0);
+          const stride = cols.length / target;
+          const figs = [];
+          let benchPlaced = false;
+
+          for (let i = 0; i < target && figs.length < cap; i++) {
+            let idx = Math.floor(i * stride + (rng() - 0.5) * stride * 0.7);
+            idx = Math.max(0, Math.min(cols.length - 1, idx));
+            const col = cols[idx];
+            const off = (rng() - 0.5) * Math.min(120, (col.w || 200) * 0.7);
+            const x = col.cx + off;
+            const depth = rng(); // 0 far .. 1 near
+            const h = Math.round(
+              (e.mobile ? 150 : 185) + depth * (e.mobile ? 40 : 85)
+            );
+            const op = +(0.84 + depth * 0.16).toFixed(3);
+            let pose = STAND_POSES[Math.floor(rng() * STAND_POSES.length)];
+
+            const frac = i / target;
+            // one bench sitter, somewhere in the middle stretch of the hall
+            if (!benchPlaced && frac > 0.33 && frac < 0.66 && rng() < 0.6) {
+              pose = "sitting";
+              benchPlaced = true;
+            }
+            figs.push({ x, h, op, pose });
+
+            // occasional companion pair beside this viewer
+            if (pose !== "sitting" && figs.length < cap && rng() < 0.2) {
+              const d2 = rng();
+              figs.push({
+                x: x + 52 + rng() * 46,
+                h: Math.round(
+                  (e.mobile ? 150 : 175) + d2 * (e.mobile ? 35 : 75)
+                ),
+                op: +(0.84 + d2 * 0.16).toFixed(3),
+                pose: STAND_POSES[Math.floor(rng() * STAND_POSES.length)],
+              });
+            }
+            // a child near a parent, occasionally
+            if (figs.length < cap && rng() < 0.16) {
+              figs.push({
+                x: x - 40 - rng() * 28,
+                h: Math.round((e.mobile ? 96 : 112) + rng() * 22),
+                op: 0.9,
+                pose: "child",
+              });
+            }
+          }
+          return figs;
+        }
+
+        // =====================================================================
+        // FIGURE RENDER + POINTER REPULSION
+        // Figures step aside from the pointer in exactly two situations, and
+        // otherwise stay put:
+        //   (1) 2D PROXIMITY — the pointer is close BOTH horizontally (within
+        //       `radius`) AND vertically (inside the figure's body band — feet→head
+        //       — plus a `bandMargin` soft zone). The x falloff is multiplied by a
+        //       smoothstep over vertical distance, so figures ease in/out rather
+        //       than snapping when the cursor crosses a height threshold. Moving the
+        //       mouse high on the wall above people's heads does NOT scatter them.
+        //   (2) READING A CHART — the pointer is over a piece (frame or its plaque).
+        //       A figure steps fully clear of the nearest frame edge (+`edgeMargin`)
+        //       only when its silhouette overlaps that frame BOTH horizontally AND
+        //       vertically — i.e. the frame's bottom edge reaches below the figure's
+        //       head (with a small `headTol` so a frame merely grazing a head doesn't
+        //       trigger). A chart hanging entirely above the figure's head (e.g. the
+        //       top row of a stacked column) is not in the way, so the figure stays
+        //       put. This displacement is geometric and may exceed `maxDisp`.
+        // When both apply, the larger displacement wins (they are not summed).
+        // Motion is rAF-lerped (not a CSS snap) with a tiny body lean. Touch never
+        // triggers either rule.
+        // =====================================================================
+        const REP = reduceMotion
+          ? {
+              radius: 150,
+              maxDisp: 44,
+              lerp: 0.08,
+              lean: 0,
+              bandMargin: 30,
+              edgeMargin: 14,
+              headTol: 10,
+            }
+          : {
+              radius: 172,
+              maxDisp: 94,
+              lerp: 0.12,
+              lean: 2.2,
+              bandMargin: 40,
+              edgeMargin: 18,
+              headTol: 10,
+            };
+        // smoothstep — eased 0→1 ramp between two edges, used for the vertical falloff.
+        const smoothstep = (e0, e1, x) => {
+          const t = Math.max(0, Math.min(1, (x - e0) / (e1 - e0)));
+          return t * t * (3 - 2 * t);
+        };
+
+        let figureState = [];
+        function renderFigures(figs) {
+          figuresEl.innerHTML = "";
+          figureState = [];
+          for (const v of figs) {
+            const el = document.createElement("div");
+            el.className = "figure";
+            el.style.left = Math.round(v.x) + "px"; // rest position, in track coords
+            el.style.opacity = v.op;
+            el.style.setProperty(
+              "--stand",
+              "calc(var(--floor-h) - " + Math.round(v.h * 0.1) + "px)"
+            );
+            el.style.transform = "translateX(-50%)";
+            el.innerHTML =
+              '<div class="shadow"></div><div class="lean"><div class="body">' +
+              figureSVG(v.pose, v.h) +
+              "</div></div>";
+            figuresEl.appendChild(el);
+            figureState.push({
+              el,
+              leanEl: el.querySelector(".lean"),
+              // half the rendered silhouette width (svg is h*120/230 wide), so we can
+              // test frame overlap and clear the whole body past a frame edge.
+              restX: v.x,
+              halfW: (v.h * 120) / 230 / 2,
+              disp: 0,
+              prevTotal: 0,
+            });
+          }
+        }
+        // puzzled figure for the empty state (separate, in the viewport-fixed overlay)
+        document.getElementById("emptyfig").innerHTML = figureSVG(
+          "puzzled",
+          240
+        );
+
+        // pointer state, converted to track coordinates each frame (so it tracks
+        // correctly as the hall scrolls under a stationary pointer). pointerClientY
+        // stays in client coords (the hall only scrolls horizontally, so a figure's
+        // vertical band is stable in viewport space). `hoveredPiece` is the piece the
+        // pointer is currently reading (frame or plaque), or null — it drives rule 2.
+        let pointerClientX = 0,
+          pointerClientY = 0,
+          pointerActive = false,
+          figRAF = 0;
+        let hoveredPiece = null;
+        function figureTick() {
+          figRAF = 0;
+          let busy = false;
+          let ptx = -1e9;
+          if (pointerActive) {
+            const rect = hall.getBoundingClientRect();
+            ptx = hall.scrollLeft + (pointerClientX - rect.left);
+          }
+          // rule 2's avoidance region is the hovered piece's full HUNG FOOTPRINT — the
+          // UNION of its frame box and its plaque box — so a figure must clear both the
+          // chart and its label (the plaque hangs below the frame at body height, right
+          // where figures stand). Computed ONCE per frame for the hovered piece (two
+          // getBoundingClientRect calls total, independent of the figure count) — never
+          // per figure. Horizontal span is in track coords (to match figure restX); the
+          // union's bottom is in client coords (figure silhouettes are measured there,
+          // same as rule 1, race-free with the depth-varied figure heights).
+          let unionLeft = 0,
+            unionRight = 0,
+            unionBottomClient = 0,
+            reading = false;
+          if (hoveredPiece) {
+            const fr = hoveredPiece.frameEl.getBoundingClientRect();
+            if (fr.width > 0 && fr.height > 0) {
+              // hovered piece is on-screen
+              const pr = hoveredPiece.plaqueEl.getBoundingClientRect();
+              // plaque is centered on the piece (left:50%) at its own max-content
+              // width: capped at boxW but min 116px, so it can overhang a narrow frame.
+              const cx = hoveredPiece.x + hoveredPiece.boxW / 2;
+              const plaqueHalfW = (pr.width || 0) / 2;
+              unionLeft = Math.min(hoveredPiece.x, cx - plaqueHalfW);
+              unionRight = Math.max(
+                hoveredPiece.x + hoveredPiece.boxW,
+                cx + plaqueHalfW
+              );
+              // union bottom = the PLAQUE's bottom (it hangs below the frame), so
+              // virtually any figure standing in front of a plaque now qualifies.
+              unionBottomClient = Math.max(fr.bottom, pr.bottom);
+              reading = true;
+            }
+          }
+          for (const f of figureState) {
+            // --- rule 1: 2D proximity (signed displacement away from the pointer) ---
+            let prox = 0;
+            if (pointerActive) {
+              const dx = f.restX - ptx;
+              const ad = Math.abs(dx);
+              if (ad < REP.radius) {
+                const fallX = 1 - ad / REP.radius; // 1 near .. 0 at edge
+                // vertical band: full effect inside the body (head→feet), easing to 0
+                // over bandMargin above the head / below the feet via smoothstep.
+                const r = f.el.getBoundingClientRect();
+                let vFall = 1;
+                if (pointerClientY < r.top || pointerClientY > r.bottom) {
+                  const dv =
+                    pointerClientY < r.top
+                      ? r.top - pointerClientY
+                      : pointerClientY - r.bottom;
+                  vFall = 1 - smoothstep(0, REP.bandMargin, dv);
+                }
+                prox = Math.sign(dx || 1) * REP.maxDisp * fallX * fallX * vFall;
+              }
+            }
+            // --- rule 2: step fully clear of the piece the pointer is reading ---
+            let clear = 0;
+            if (
+              reading &&
+              f.restX + f.halfW > unionLeft &&
+              f.restX - f.halfW < unionRight
+            ) {
+              // require VERTICAL overlap too: the union's bottom edge must reach below
+              // the figure's head (with `headTol` slack), else the piece hangs entirely
+              // above the figure (e.g. top row of a stacked column) and is not in the
+              // way. content-visibility:auto can null out an off-screen figure's rect;
+              // an empty rect means it can't overlap the on-screen hovered piece, so
+              // we skip it. Compared in client coords, same space as the union bottom.
+              const fc = f.el.getBoundingClientRect();
+              const overlapsV =
+                fc.height > 0 && unionBottomClient > fc.top + REP.headTol;
+              if (overlapsV) {
+                // exit toward the nearer union edge, body fully past it + a margin, so
+                // the figure clears both the chart and its plaque label.
+                const toLeft = f.restX - unionLeft <= unionRight - f.restX;
+                const targetCx = toLeft
+                  ? unionLeft - REP.edgeMargin - f.halfW
+                  : unionRight + REP.edgeMargin + f.halfW;
+                clear = targetCx - f.restX;
+              }
+            }
+            // both rules: take the larger displacement, never the sum.
+            let tgt = Math.abs(clear) > Math.abs(prox) ? clear : prox;
+            f.disp += (tgt - f.disp) * REP.lerp;
+            const total = f.disp;
+            const moved = Math.abs(total - f.prevTotal) > 0.05;
+            if (moved) {
+              f.el.style.transform =
+                "translateX(calc(-50% + " + total.toFixed(1) + "px))";
+              if (REP.lean && f.leanEl) {
+                const lean = Math.max(
+                  -5,
+                  Math.min(5, (total - f.prevTotal) * REP.lean)
+                );
+                f.leanEl.style.transform = "rotate(" + lean.toFixed(2) + "deg)";
+              }
+            }
+            f.prevTotal = total;
+            if (Math.abs(tgt - f.disp) > 0.1) busy = true;
+          }
+          if (busy || pointerActive) figRAF = requestAnimationFrame(figureTick);
+        }
+        function kickFigures() {
+          if (!figRAF) figRAF = requestAnimationFrame(figureTick);
+        }
+
+        scene.addEventListener("pointermove", (e) => {
+          if (e.pointerType === "touch") return; // touch: repulsion never triggers
+          pointerClientX = e.clientX;
+          pointerClientY = e.clientY;
+          pointerActive = true;
+          kickFigures();
+        });
+        scene.addEventListener("pointerleave", () => {
+          pointerActive = false;
+          hoveredPiece = null;
+          kickFigures();
+        });
+        window.addEventListener("blur", () => {
+          pointerActive = false;
+          hoveredPiece = null;
+          kickFigures();
+        });
+
+        // =====================================================================
+        // PACKING — greedy column-fill strip packing, O(n).
+        //
+        // The wall is a fixed-height band centered on the "gallery line" (museum
+        // eye level, a little above wall center). We walk the (filtered) pieces
+        // in order and drop each into the current column, top to bottom, until
+        // adding the next piece would overflow the band — then we start a new
+        // column to the right. Each column's stack is then centered vertically on
+        // the gallery line with a constant gap, so single tall portraits hang
+        // alone at eye level and pairs sit balanced around it. Frame box sizes
+        // come straight from the chart's true w×h × one global scale, so the
+        // natural size variation becomes the salon-wall irregularity.
+        //
+        // One spotlight is emitted per column, aimed at the column's center, so
+        // light always lands on real art. Result feeds absolute transforms +
+        // CSS transitions, so a re-filter animates pieces to new homes.
+        // =====================================================================
+        let pieces = []; // {data, el, frameEl, artEl, injected, ...}
+        let env = {};
+
+        function computeEnv() {
+          const vw = window.innerWidth;
+          const sceneH = scene.clientHeight;
+          // Measure the floor's real pixel height (its clamp()/dvh resolved): the
+          // raw custom-property string can't be parseFloat'd reliably.
+          const floorEl = document.querySelector(".floor");
+          const floorH =
+            floorEl.getBoundingClientRect().height || Math.round(sceneH * 0.26);
+          const wallH = sceneH - floorH; // wall region height (track coords)
+
+          const mobile = vw <= 640;
+          // Reserve a strip below the ceiling (rail + light fixtures + the mouth of
+          // the light cone) and a margin above the baseboard, so frames never crop
+          // into the ceiling fixtures or run off the floor. The packing BAND is what
+          // remains; every piece is constrained to it (and scaled down if too tall).
+          const ceilPad = mobile ? 56 : 78; // rail@30 + fixture@26..52 + cone mouth
+          const basePad = mobile ? 16 : 24; // breathing room above the baseboard
+          const band = Math.max(140, wallH - ceilPad - basePad);
+
+          const mat = mobile ? 9 : 13;
+          const bord = mobile ? 6 : 11; // average; per-frame border varies but box uses this
+          const plaqueGap = mobile ? 10 : 12;
+          const plaqueH = mobile ? 44 : 48; // tall enough for a 2-line title + desc
+          const vGap = mobile ? 26 : 36; // gap between stacked pieces in a column
+          const hGap = mobile ? 38 : 64; // gap between columns
+          const perFixed = mat * 2 + bord * 2 + plaqueGap + plaqueH; // non-art height of a piece
+
+          // GLOBAL FRAME SCALE — the lever that creates the salon hang. We pick the
+          // single scale S so that TWO reference short-landscape charts (the dominant
+          // ~380-tall cluster; ref height 420 leaves a little headroom) plus their
+          // plaques and the inter-piece gap exactly fill the band:
+          //     2·(refH·S + perFixed) + vGap = band.
+          // Consequence: the common short charts pair up two-to-a-column, while any
+          // chart taller than the reference (box plot 680, polar ribbon/rose 588)
+          // overflows a 2-stack and is forced to hang alone — so the natural variation
+          // in chart height becomes the irregular salon arrangement, automatically.
+          const refH = 420;
+          let S = (band - vGap - 2 * perFixed) / (2 * refH);
+          S = Math.max(mobile ? 0.24 : 0.3, Math.min(mobile ? 0.42 : 0.46, S));
+
+          return {
+            S,
+            mat,
+            bord,
+            plaqueGap,
+            plaqueH,
+            vGap,
+            hGap,
+            wallH,
+            band,
+            bandTop: ceilPad, // top of the packing band, below the fixtures
+            leftPad: mobile ? 320 : 0, // entrance wall reserved width (see layout)
+            mobile,
+          };
+        }
+
+        // measure entrance/end wall widths so pieces never collide with the copy
+        function endcapWidths() {
+          // On phones, cap the entrance at ~66% of the viewport so the first frame
+          // peeks in from the right edge — an invitation to swipe rather than a full
+          // intro screen that hides all the art until you scroll.
+          const mobileCap = Math.round(window.innerWidth * 0.66);
+          return {
+            entrance: Math.min(
+              entrance.scrollWidth + 70,
+              env.mobile ? mobileCap : 560
+            ),
+            endwall: Math.min(endwall.scrollWidth + 70, env.mobile ? 320 : 460),
+          };
+        }
+
+        let lastPackMs = 0;
+        function pack(list) {
+          const t0 = performance.now();
+          const e = env;
+          const caps = endcapWidths();
+          const startX = caps.entrance + e.hGap;
+
+          // box dimensions per piece. If a single piece (frame + plaque) is taller
+          // than the band, scale just THAT piece down so it fits rather than letting
+          // it crop into the ceiling/floor.
+          const chrome = e.mat * 2 + e.bord * 2;
+          for (const p of list) {
+            let fw = p.data.w * e.S,
+              fh = p.data.h * e.S;
+            let total = fh + chrome + e.plaqueGap + e.plaqueH;
+            if (total > e.band) {
+              // shrink the art (chart) box so the whole piece fits the band height
+              const artMax = e.band - e.plaqueGap - e.plaqueH - chrome;
+              const f = Math.max(0.1, artMax / fh);
+              fw *= f;
+              fh *= f;
+            }
+            p.boxW = fw + chrome;
+            p.boxH = fh + chrome;
+            p.artW = fw;
+            p.artH = fh;
+            p.totalH = p.boxH + e.plaqueGap + e.plaqueH;
+          }
+
+          // greedy column fill
+          const columns = [];
+          let col = [],
+            colH = 0,
+            colW = 0;
+          const flush = () => {
+            if (col.length) {
+              columns.push({ items: col, h: colH, w: colW });
+            }
+            col = [];
+            colH = 0;
+            colW = 0;
+          };
+          for (const p of list) {
+            const add = (col.length ? e.vGap : 0) + p.totalH;
+            if (col.length && colH + add > e.band) flush();
+            colH += (col.length ? e.vGap : 0) + p.totalH;
+            colW = Math.max(colW, p.boxW);
+            col.push(p);
+          }
+          flush();
+
+          // place columns left→right, centering each stack on the gallery line
+          let x = startX;
+          const spots = [];
+          for (const c of columns) {
+            const cx = x + c.w / 2;
+            let y = e.bandTop + (e.band - c.h) / 2;
+            const top = y;
+            for (const p of c.items) {
+              p.x = cx - p.boxW / 2;
+              p.y = y;
+              y += p.boxH + e.plaqueGap + e.plaqueH + e.vGap;
+            }
+            const bottom = y - e.vGap;
+            spots.push({
+              cx,
+              top: e.bandTop,
+              aimTop: top,
+              aimBottom: bottom,
+              w: c.w,
+            });
+            x = cx + c.w / 2 + e.hGap;
+          }
+
+          const artRight = columns.length ? x : startX;
+          lastPackMs = performance.now() - t0;
+          return { columns, spots, artRight, caps };
+        }
+
+        // =====================================================================
+        // BUILD pieces (once). Charts are lazy-injected by IntersectionObserver.
+        // =====================================================================
+        function escapeHTML(s) {
+          return String(s).replace(
+            /[&<>"]/g,
+            (c) =>
+              ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]
+          );
+        }
+
+        function buildPieces() {
+          const frag = document.createDocumentFragment();
+          for (const d of DATA) {
+            const el = document.createElement("div");
+            el.className = "piece";
+            el.tabIndex = 0;
+            el.setAttribute("role", "link");
+            el.setAttribute("aria-label", d.title + " — open example");
+
+            const frame = document.createElement("div");
+            frame.className = "frame " + d.frameClass;
+            const art = document.createElement("div");
+            art.className = "art empty";
+            frame.appendChild(art);
+
+            const plaque = document.createElement("div");
+            plaque.className = "plaque";
+            plaque.innerHTML =
+              '<div class="ptitle">' +
+              escapeHTML(d.title) +
+              "</div>" +
+              (d.description
+                ? '<div class="pdesc">' + escapeHTML(d.description) + "</div>"
+                : "");
+
+            el.appendChild(frame);
+            el.appendChild(plaque);
+
+            const go = () =>
+              window.open(DOCS_ORIGIN + d.id + ".html", "_blank", "noopener");
+            el.addEventListener("click", go);
+            el.addEventListener("keydown", (ev) => {
+              if (ev.key === "Enter") go();
+            });
+
+            const p = {
+              data: d,
+              el,
+              frameEl: frame,
+              artEl: art,
+              plaqueEl: plaque,
+              injected: false,
+            };
+            // reading-a-chart hover (rule 2): the plaque is pointer-events:none so its
+            // hovers bubble to the piece — pointerenter/leave on the piece covers both
+            // frame and plaque. Touch never arms repulsion.
+            el.addEventListener("pointerenter", (ev) => {
+              if (ev.pointerType === "touch") return;
+              hoveredPiece = p;
+              kickFigures();
+            });
+            el.addEventListener("pointerleave", (ev) => {
+              if (ev.pointerType === "touch") return;
+              if (hoveredPiece === p) hoveredPiece = null;
+              kickFigures();
+            });
+            el._piece = p;
+            pieces.push(p);
+            frag.appendChild(el);
+          }
+          track.appendChild(frag);
+        }
+
+        // =====================================================================
+        // TRANSIT VELOCITY GATE — the fix for the Home/End / minimap-drag / fling lag.
+        //
+        // A smooth glide across the whole hall sweeps the viewport past every column.
+        // Without a gate, the lazy loader injects AND then reclaims every chart SVG en
+        // route mid-animation (incl. a 627KB violin svg) — massive DOM churn + GC that
+        // tanks the frame rate and tears the screen. The pieces you fly past are pure
+        // waste: injected one frame, destroyed the next.
+        //
+        // So we measure scroll velocity (Δ scrollLeft per frame, sampled in a rAF loop
+        // so it keeps decaying after scroll events stop and can detect the landing) and
+        // while the hall is moving fast we INJECT NOTHING — frames show their cheap
+        // empty mat — and DEFER reclamation into `pendingReclaim`. When velocity drops
+        // below the gate for a couple of frames (the glide lands / scrolling settles),
+        // one settle pass injects what's actually near the viewport and flushes the
+        // deferred reclaims for whatever is still far away. This fixes Home/End glides,
+        // minimap drags AND fast wheel flings with one mechanism. The gate threshold is
+        // set well above normal wheel-scroll velocity so ordinary browsing still injects
+        // promptly with no visible empty frames.
+        // =====================================================================
+        const VEL_GATE = 55; // px/frame; above this, suppress injection mid-flight
+        const SETTLE_FRAMES = 2; // frames at/below the gate before the settle pass runs
+        let hallVel = 0; // px/frame, sampled each animation frame
+        let lastSampleLeft = hall.scrollLeft;
+        let velRAF = 0,
+          settleFrames = 0;
+        const pendingReclaim = new Set();
+        function isFast() {
+          return hallVel > VEL_GATE;
+        }
+
+        function reclaim(p) {
+          p.artEl.innerHTML = "";
+          p.artEl.classList.add("empty");
+          p.injected = false;
+          p._queued = false;
+          pendingReclaim.delete(p);
+        }
+
+        // ---- budgeted injection queue: parse at most ONE chart svg per frame.
+        // Even after the gate suppresses transit churn, the moment a glide LANDS we'd
+        // otherwise inject the whole destination band (incl. the 627KB violin svg) in a
+        // single synchronous frame — a ~800ms hitch. Draining one piece per frame caps
+        // each frame to a single chart's parse cost (≈ the violin alone, unavoidable),
+        // so the destination fills in over a few frames instead of one giant stall.
+        const injectQueue = [];
+        let injectRAF = 0;
+        function enqueueInject(p) {
+          if (!p || p.injected || p._queued || p.data._gone) return;
+          p._queued = true;
+          injectQueue.push(p);
+          if (!injectRAF) injectRAF = requestAnimationFrame(drainInject);
+        }
+        function drainInject() {
+          injectRAF = 0;
+          // one per frame; if the hall is flung again mid-drain, isFast() pauses us.
+          if (!isFast()) {
+            const p = injectQueue.shift();
+            if (p) {
+              p._queued = false;
+              if (!p.injected && !p.data._gone) {
+                injectChart(p.artEl, p.data);
+                p.injected = true;
+              }
+            }
+          }
+          if (injectQueue.length)
+            injectRAF = requestAnimationFrame(drainInject);
+        }
+
+        // settle pass: scrolling has slowed/stopped — inject near the viewport now and
+        // reclaim anything we deferred that ended up far away (pieces still near the
+        // viewport stay injected; we just cancel their deferred reclaim).
+        function onSettle() {
+          hallVel = 0;
+          ensureVisible();
+          if (pendingReclaim.size) {
+            const left = hall.scrollLeft - 1900;
+            const right = hall.scrollLeft + hall.clientWidth + 1900;
+            for (const p of [...pendingReclaim]) {
+              if (p.x == null || p.x + p.boxW < left || p.x > right) reclaim(p);
+              else pendingReclaim.delete(p);
+            }
+          }
+        }
+
+        function velTick() {
+          velRAF = 0;
+          const sl = hall.scrollLeft;
+          hallVel = Math.abs(sl - lastSampleLeft);
+          lastSampleLeft = sl;
+          if (hallVel > VEL_GATE) {
+            settleFrames = 0;
+            velRAF = requestAnimationFrame(velTick); // keep sampling while in transit
+          } else if (settleFrames < SETTLE_FRAMES) {
+            settleFrames++;
+            velRAF = requestAnimationFrame(velTick); // confirm the hall really stopped
+          } else {
+            onSettle(); // landed — inject + flush reclaims
+          }
+        }
+        function kickVel() {
+          if (!velRAF) velRAF = requestAnimationFrame(velTick);
+        }
+
+        // An instant (non-glide) jump — reduced-motion Home/End — has no transit frames
+        // to protect, so it must inject immediately and not wait on the gate/settle cycle.
+        function instantJumpInject() {
+          hallVel = 0;
+          settleFrames = SETTLE_FRAMES;
+          lastSampleLeft = hall.scrollLeft;
+          ensureVisible();
+        }
+
+        // ---- lazy chart injection: inject when a piece nears the viewport,
+        // and drop the (possibly heavy) SVG DOM again when it's far away, so even
+        // in ?n=150 mode only a viewport-band of charts ever lives in the DOM.
+        // Both gated by the velocity gate above: mid-glide we neither inject nor
+        // reclaim (reclaims are deferred), so a fly-past costs nothing.
+        const io = new IntersectionObserver(
+          (entries) => {
+            for (const en of entries) {
+              const p = en.target._piece;
+              if (!p) continue;
+              if (en.isIntersecting) {
+                pendingReclaim.delete(p); // back in view — cancel any defer
+                if (!isFast()) enqueueInject(p); // budgeted: 1 chart parse / frame
+              } else if (p.injected) {
+                // far outside the generous rootMargin — reclaim, unless we're in transit
+                // (then defer: reclaiming a piece we're flying past is wasted work).
+                if (isFast()) pendingReclaim.add(p);
+                else reclaim(p);
+              }
+            }
+          },
+          { root: hall, rootMargin: "300px 1800px 300px 1800px", threshold: 0 }
+        );
+
+        // =====================================================================
+        // APPLY a layout: position every visible piece + draw spotlights.
+        // =====================================================================
+        function applyLayout(list, layout) {
+          const e = env;
+          // size + place visible pieces
+          for (const p of list) {
+            const d = p.data;
+            p.el.classList.remove("gone");
+            p.el.style.display = "";
+            if (p._hideT) {
+              clearTimeout(p._hideT);
+              p._hideT = 0;
+            } // cancel a pending hide
+            // intrinsic size keeps content-visibility:auto cheap when off-screen
+            p.el.style.containIntrinsicSize =
+              Math.round(p.boxW) + "px " + Math.round(p.totalH) + "px";
+            p.el.style.width = Math.round(p.boxW) + "px";
+            // height must include the plaque so paint-containment doesn't clip it
+            p.el.style.height = Math.round(p.totalH) + "px";
+            // transit proxy: frame-box height + material edge color, read by the
+            // .track.transit .piece background that paints the cheap mat+outline.
+            p.el.style.setProperty("--fh", Math.round(p.boxH) + "px");
+            p.el.style.setProperty(
+              "--edge",
+              FRAME_EDGE[d.frameClass] || "#6b4a2a"
+            );
+            p.frameEl.style.setProperty("--mat", e.mat + "px");
+            p.artEl.style.width = Math.round(p.artW) + "px";
+            p.artEl.style.height = Math.round(p.artH) + "px";
+            p.plaqueEl.style.setProperty("--plaque-gap", e.plaqueGap + "px");
+            // cap the plaque at the frame width so it grows to fit the title up to the
+            // frame edge, then wraps — and is never clipped by paint containment.
+            p.plaqueEl.style.setProperty(
+              "--plaque-max",
+              Math.round(p.boxW) + "px"
+            );
+            const tx = Math.round(p.x);
+            const ty = Math.round(p.y + d.jY);
+            p.el.style.transform =
+              "translate(" +
+              tx +
+              "px," +
+              ty +
+              "px) rotate(" +
+              d.jRot.toFixed(2) +
+              "deg)";
+          }
+          // Hide filtered-out pieces (kept in DOM, cheap). They fade via the opacity
+          // transition, THEN drop to display:none so their old far-right transforms
+          // stop inflating the scroll width — otherwise the hall keeps scrolling out
+          // to the unfiltered length into empty wall (the item-4 bug).
+          const visible = new Set(list);
+          for (const p of pieces) {
+            if (!visible.has(p)) {
+              p.data._gone = true;
+              if (p.el.style.display !== "none" && !p._hideT) {
+                p.el.classList.add("gone");
+                p._hideT = setTimeout(
+                  () => {
+                    p.el.style.display = "none";
+                    p._hideT = 0;
+                    // once it's out of flow the scroll content shrinks; re-clamp.
+                    const max = Math.max(
+                      0,
+                      parseFloat(track.style.width) - hall.clientWidth
+                    );
+                    if (hall.scrollLeft > max) hall.scrollLeft = max;
+                  },
+                  reduceMotion ? 220 : 480
+                );
+              }
+            } else {
+              p.data._gone = false;
+            }
+          }
+
+          // ---- spotlights from packing output ----
+          spotsEl.innerHTML = "";
+          const floorTop = e.wallH; // top of floor in track coords
+          for (const s of layout.spots) {
+            const wrap = document.createElement("div");
+            wrap.className = "spot";
+            wrap.style.left = Math.round(s.cx) + "px";
+            wrap.style.top = "0px";
+            const coneW = Math.max(s.w * 2.1, 220);
+            const coneH = floorTop - 40;
+            const glowW = Math.max(s.w * 1.25, 180);
+            const glowH = Math.min(coneH, s.aimBottom - 40 || coneH);
+            const fixture =
+              '<svg class="fixture" viewBox="0 0 20 26" aria-hidden="true">' +
+              '<rect x="8" y="0" width="4" height="8" fill="#3a332c"/>' +
+              '<ellipse cx="10" cy="9" rx="9" ry="4" fill="#4a4038"/>' +
+              '<path d="M2 9 L18 9 L15 20 L5 20 Z" fill="#5b5048"/>' +
+              '<ellipse cx="10" cy="20" rx="5.4" ry="2.2" fill="#ffe9b0"/>' +
+              "</svg>";
+            const poolW = coneW * 0.85,
+              poolH = e.mobile ? 26 : 42;
+            wrap.innerHTML =
+              fixture +
+              '<div class="cone" style="width:' +
+              Math.round(coneW) +
+              "px;height:" +
+              Math.round(coneH) +
+              'px"></div>' +
+              '<div class="glow" style="width:' +
+              Math.round(glowW) +
+              "px;height:" +
+              Math.round(glowH) +
+              'px"></div>' +
+              '<div class="pool" style="top:' +
+              Math.round(floorTop + 10) +
+              "px;width:" +
+              Math.round(poolW) +
+              "px;height:" +
+              Math.round(poolH) +
+              'px"></div>';
+            spotsEl.appendChild(wrap);
+          }
+
+          // ---- size the track + place end wall ----
+          const caps = layout.caps;
+          const total = list.length
+            ? layout.artRight + caps.endwall + (e.mobile ? 40 : 80)
+            : caps.entrance + (e.mobile ? 300 : 520);
+          // Resize the scroll content to the packed extent so a filtered hall no
+          // longer scrolls into empty wall. wall/floor (left:0;right:0) follow this
+          // width automatically; the end wall is repositioned right after the last
+          // column; then clamp scrollLeft into the new (possibly much shorter) range.
+          const trackW = Math.max(total, window.innerWidth);
+          track.style.width = trackW + "px";
+          entrance.style.width = caps.entrance + "px";
+          endwall.style.left =
+            (list.length ? layout.artRight : caps.entrance + e.hGap) + "px";
+          endwall.style.width = caps.endwall + "px";
+          endwall.style.right = "auto";
+
+          const maxScroll = Math.max(0, trackW - hall.clientWidth);
+          if (hall.scrollLeft > maxScroll) hall.scrollLeft = maxScroll;
+
+          updateMinimap(list, layout);
+          ensureVisible();
+        }
+
+        // Inject any piece whose packed x falls within a wide window of the current
+        // scroll position. Complements the IntersectionObserver (which can lag an
+        // instant scrollLeft jump from the minimap/keyboard): this only ever injects,
+        // the observer still reclaims DOM when pieces drift far away.
+        function ensureVisible() {
+          // mid-glide we inject nothing — the settle pass (onSettle) will inject once
+          // the hall stops sweeping past columns. This is what kills the transit churn.
+          if (isFast()) return;
+          const sl = hall.scrollLeft;
+          const left = sl - 1900;
+          const right = sl + hall.clientWidth + 1900;
+          for (const p of pieces) {
+            if (p.data._gone || p.injected || p._queued) continue;
+            if (p.x != null && p.x + p.boxW > left && p.x < right)
+              enqueueInject(p);
+          }
+        }
+
+        // =====================================================================
+        // FILTER + REPACK
+        // =====================================================================
+        function currentList() {
+          const q = searchEl.value.trim().toLowerCase();
+          if (!q) return pieces.slice();
+          return pieces.filter(
+            (p) =>
+              p.data.title.toLowerCase().includes(q) ||
+              (p.data.description &&
+                p.data.description.toLowerCase().includes(q))
+          );
+        }
+
+        function relayout() {
+          const list = currentList();
+          const layout = pack(list);
+          applyLayout(list, layout);
+          lastLayout = layout;
+
+          countEl.textContent =
+            "Showing " + list.length + " of " + pieces.length + " pieces";
+          const isEmpty = list.length === 0;
+          emptyEl.classList.toggle("show", isEmpty);
+          // in the empty hall, drop the end wall and the scrolling crowd; only the
+          // lone puzzled visitor (viewport-fixed overlay) remains, standing in the
+          // visible hall near the entrance — so reset the scroll to the entrance.
+          endwall.style.display = isEmpty ? "none" : "";
+          if (isEmpty) {
+            renderFigures([]);
+            hall.scrollLeft = 0;
+          } else {
+            // re-derive the crowd from the (filtered) packing so nobody stands in
+            // the now-empty void, then start the repulsion loop.
+            renderFigures(distributeFigures(list, layout));
+            kickFigures();
+          }
+        }
+
+        // =====================================================================
+        // MINIMAP — tick per piece, draggable viewport window = scroll progress.
+        // =====================================================================
+        let mmTicks = [];
+        function updateMinimap(list, layout) {
+          // clear old ticks (keep the window element)
+          for (const t of mmTicks) t.remove();
+          mmTicks = [];
+          const total = parseFloat(track.style.width);
+          const mmW = minimap.clientWidth;
+          for (const p of list) {
+            const t = document.createElement("div");
+            t.className = "tick";
+            t.style.left = (p.x / total) * mmW + "px";
+            minimap.appendChild(t);
+            mmTicks.push(t);
+          }
+          syncWindow();
+        }
+        function syncWindow() {
+          const total = parseFloat(track.style.width) || hall.scrollWidth;
+          const mmW = minimap.clientWidth;
+          const winW = Math.max((hall.clientWidth / total) * mmW, 12);
+          const winX = (hall.scrollLeft / total) * mmW;
+          winEl.style.width = winW + "px";
+          winEl.style.left = Math.min(winX, mmW - winW) + "px";
+        }
+        // Direct, 1:1 drag: place the window's left edge at (pointer - grab offset)
+        // and write scrollLeft synchronously so the green window stays glued to the
+        // hand. The mapping is the exact inverse of syncWindow's winX, so releasing
+        // mid-drag never causes a jump. behavior:'auto' (the default now) keeps the
+        // write instant.
+        function dragTo(clientX) {
+          const rect = minimap.getBoundingClientRect();
+          const mmW = rect.width;
+          const winW = winEl.offsetWidth;
+          const total = parseFloat(track.style.width) || hall.scrollWidth;
+          let winLeft = clientX - rect.left - mmGrabDX;
+          winLeft = Math.max(0, Math.min(winLeft, mmW - winW));
+          hall.scrollLeft = (winLeft / mmW) * total; // synchronous, no smooth glide
+          winEl.style.left = winLeft + "px"; // glue the window this frame
+        }
+        // Discrete click on the track (outside the window): glide smoothly to center
+        // the viewport on the clicked point. A click can be anywhere on the strip, so
+        // it's exactly the long-sweep case the clamp exists for — route through glideTo.
+        function jumpTo(clientX) {
+          const rect = minimap.getBoundingClientRect();
+          const frac = (clientX - rect.left) / rect.width;
+          const total = parseFloat(track.style.width) || hall.scrollWidth;
+          glideTo(frac * total - hall.clientWidth / 2);
+        }
+        let mmDrag = false;
+        let mmGrabDX = 0;
+        minimap.addEventListener("pointerdown", (e) => {
+          minimap.setPointerCapture(e.pointerId);
+          const winRect = winEl.getBoundingClientRect();
+          if (e.clientX >= winRect.left && e.clientX <= winRect.right) {
+            // Grabbed the window itself → direct drag, preserving the grab offset.
+            cancelGlide(); // a direct drag takes over from any in-flight glide
+            mmDrag = true;
+            mmGrabDX = e.clientX - winRect.left;
+          } else {
+            // Clicked the bare track → smooth jump; subsequent moves scrub directly
+            // with the window centered under the pointer.
+            mmGrabDX = winEl.offsetWidth / 2;
+            mmDrag = true;
+            jumpTo(e.clientX);
+          }
+        });
+        minimap.addEventListener("pointermove", (e) => {
+          if (mmDrag) dragTo(e.clientX);
+        });
+        minimap.addEventListener("pointerup", (e) => {
+          mmDrag = false;
+        });
+        minimap.addEventListener("pointercancel", (e) => {
+          mmDrag = false;
+        });
+
+        // =====================================================================
+        // FULL-DISTANCE GLIDE + TRANSIT MODE — the fix for fast-glide tearing
+        // (Home/End, ← Entrance, minimap track-click). A CDP raster trace of an
+        // uncapped smooth End-glide at n=150 showed ~half of the in-transit compositor
+        // frames CHECKERBOARDED (un-rastered tiles presented): the viewport sweeps the
+        // ~33k px layer faster than the raster threads can fill newly-exposed tiles,
+        // which reads as banding/tearing. (A textured-vs-flat A/B ruled out the
+        // procedural wall/floor tiles — they decode to a bitmap once and tile cheaply.)
+        //
+        // The earlier fix teleported most of the way then glided a short tail — but
+        // that killed the *feeling* of scrolling the hall. So now we genuinely sweep
+        // the WHOLE distance with a custom rAF animation (not scrollTo({smooth}), so we
+        // own the velocity curve): ease-in-out with a peak-velocity cap, duration
+        // growing with distance but capped for the full hall. We win the raster race
+        // not by sweeping less, but by entering TRANSIT MODE during the sweep (.track
+        // .transit) — which strips the swept content to trivially-rasterizable mats +
+        // borders + flat wall/floor, hiding chart SVGs, plaque text, spotlight cones,
+        // visitors, and frame shadows (see the CSS block). The velocity gate already
+        // suppresses NEW chart injection mid-glide; transit mode removes the raster
+        // cost of what's still in the DOM. On settle we exit transit and run the normal
+        // settle injection. Reduced motion stays an INSTANT jump (no glide, no transit).
+        // NOT applied to minimap DRAG (direct 1:1) or wheel — those write scrollLeft
+        // directly and CANCEL any active glide.
+        const GLIDE_PEAK_VEL = 11000; // px/s — cruise velocity cap (honored until the
+        // duration cap kicks in for the longest sweeps)
+        const GLIDE_MIN_MS = 260;
+        const GLIDE_MAX_MS = 2000; // full-hall glide caps here (~2.0s rush)
+        // a sweep longer than this enters transit mode (short hops don't checkerboard)
+        const TRANSIT_MIN_DIST = () => hall.clientWidth * 1.2;
+
+        // ---- ASYMMETRIC glide curve. The old symmetric easeInOutCubic started too
+        // gently (peak slope 3× the average, all of it spent ramping), which read as a
+        // laggy, slow takeoff. Instead we sweep on a TRAPEZOIDAL velocity profile:
+        // accelerate hard over the first GLIDE_IN of the time, hold a flat CRUISE for
+        // the long middle, then ease out over the last GLIDE_OUT for a soft landing.
+        // Integrating that velocity gives the position curve glideEase(). The cruise
+        // (= peak) slope is only ~1.29× the average, so the glide spends its time
+        // cruising, not ramping — the first ~200ms already feels like real movement.
+        const GLIDE_IN = 0.15,
+          GLIDE_OUT = 0.3; // ease-in / ease-out time fractions
+        const GLIDE_CRUISE_SLOPE =
+          1 / (GLIDE_IN / 2 + (1 - GLIDE_IN - GLIDE_OUT) + GLIDE_OUT / 2);
+        function glideEase(t) {
+          const a = GLIDE_IN,
+            b = 1 - GLIDE_OUT,
+            vc = GLIDE_CRUISE_SLOPE;
+          if (t < a) return (vc * t * t) / (2 * a); // accelerate
+          const dA = (vc * a) / 2; // dist via ease-in
+          if (t < b) return dA + vc * (t - a); // cruise
+          const td = (t - b) / (1 - b);
+          return dA + vc * (b - a) + vc * (1 - b) * (td - (td * td) / 2); // ease-out landing
+        }
+
+        let glideRAF = 0,
+          glideActive = false,
+          transitOn = false;
+
+        function enterTransit() {
+          if (transitOn) return;
+          transitOn = true;
+          track.classList.add("transit");
+        }
+        function exitTransit() {
+          if (!transitOn) return;
+          transitOn = false;
+          track.classList.remove("transit");
+        }
+        // Cancel an in-flight glide cleanly (wheel/pointer input, or a new glide).
+        // Always leaves transit mode so a hijacked glide never gets stuck cheap.
+        function cancelGlide() {
+          if (glideRAF) {
+            cancelAnimationFrame(glideRAF);
+            glideRAF = 0;
+          }
+          glideActive = false;
+          exitTransit();
+        }
+
+        function maxScrollNow() {
+          return Math.max(
+            0,
+            (parseFloat(track.style.width) || hall.scrollWidth) -
+              hall.clientWidth
+          );
+        }
+        function glideTo(target) {
+          cancelGlide();
+          const max = maxScrollNow();
+          target = Math.max(0, Math.min(target, max));
+          if (reduceMotion) {
+            hall.scrollLeft = target;
+            instantJumpInject();
+            return;
+          }
+          const from = hall.scrollLeft;
+          const dist = target - from;
+          const adist = Math.abs(dist);
+          if (adist < 2) {
+            hall.scrollLeft = target;
+            return;
+          }
+
+          // Duration honors the cruise-velocity cap: peak (cruise) slope is
+          // GLIDE_CRUISE_SLOPE × average, so peak = SLOPE·dist/dur ⇒ dur = SLOPE·dist/peak.
+          // Clamp to [MIN, MAX]; once MAX clamps (≈ the full hall) the sweep simply runs
+          // faster and transit mode carries the raster load. Short/mid jumps stay
+          // velocity-capped (not instant) so they read as a real move, not a teleport.
+          let dur = ((GLIDE_CRUISE_SLOPE * adist) / GLIDE_PEAK_VEL) * 1000;
+          dur = Math.max(GLIDE_MIN_MS, Math.min(GLIDE_MAX_MS, dur));
+
+          const longSweep = adist > TRANSIT_MIN_DIST();
+          if (longSweep) enterTransit();
+          glideActive = true;
+          const t0 = performance.now();
+          function step(now) {
+            const t = Math.min(1, (now - t0) / dur);
+            const e = glideEase(t);
+            hall.scrollLeft = from + dist * e;
+            if (t < 1) {
+              glideRAF = requestAnimationFrame(step);
+            } else {
+              glideRAF = 0;
+              glideActive = false;
+              hall.scrollLeft = target;
+              if (longSweep) exitTransit(); // fades detail back in
+              onSettle(); // inject the destination band promptly
+            }
+          }
+          glideRAF = requestAnimationFrame(step);
+        }
+
+        // =====================================================================
+        // INPUT — wheel→horizontal, keyboard paging, hint fade, scroll sync.
+        // =====================================================================
+        // Only translate a *dominant-vertical* wheel into horizontal scroll, so
+        // trackpad two-finger horizontal pans and touch swipes are left native.
+        hall.addEventListener(
+          "wheel",
+          (e) => {
+            cancelGlide(); // any wheel input cancels an in-flight glide cleanly
+            if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
+              hall.scrollLeft += e.deltaY;
+              e.preventDefault();
+            }
+          },
+          { passive: false }
+        );
+        // a touch/pointer grab on the hall also takes over from an active glide
+        hall.addEventListener("pointerdown", (e) => {
+          if (glideActive) cancelGlide();
+        });
+
+        // Arrow keys page by < 1 viewport (always a smooth glide; too short to clamp).
+        // Home/End/Entrance/minimap-click route through glideTo, which sweeps the full
+        // distance in transit mode and handles the reduced-motion instant jump internally.
+        window.addEventListener("keydown", (e) => {
+          if (e.target === searchEl) return;
+          if (e.key === "ArrowRight") {
+            hall.scrollTo({
+              left: hall.scrollLeft + hall.clientWidth * 0.8,
+              behavior: "smooth",
+            });
+            e.preventDefault();
+          } else if (e.key === "ArrowLeft") {
+            hall.scrollTo({
+              left: hall.scrollLeft - hall.clientWidth * 0.8,
+              behavior: "smooth",
+            });
+            e.preventDefault();
+          }
+          // Home (fn+Left on Mac) glides back to the entrance; End to the end wall —
+          // a full-distance rAF glide in transit mode (glideTo handles the
+          // reduced-motion instant case + destination injection internally).
+          else if (e.key === "Home") {
+            glideTo(0);
+            e.preventDefault();
+          } else if (e.key === "End") {
+            glideTo(maxScrollNow());
+            e.preventDefault();
+          }
+        });
+
+        // ---- back-to-entrance chip: a paper chip that fades in once the visitor has
+        // walked meaningfully into the hall (> one viewport in), like a back-to-top.
+        const backstart = document.getElementById("backstart");
+        backstart.addEventListener("click", () => {
+          glideTo(0);
+        });
+
+        let hintHidden = false;
+        let scrollRAF = 0;
+        hall.addEventListener(
+          "scroll",
+          () => {
+            syncWindow();
+            if (!hintHidden && hall.scrollLeft > 80) {
+              hint.style.opacity = "0";
+              hintHidden = true;
+            }
+            // reveal the entrance chip once the visitor is more than a viewport in
+            backstart.classList.toggle(
+              "show",
+              hall.scrollLeft > hall.clientWidth
+            );
+            if (pointerActive) kickFigures(); // re-evaluate repulsion as the wall moves
+            // sample scroll velocity → gates injection during transit and runs the settle
+            // pass when the glide lands (keeps sampling a few frames past the last event).
+            kickVel();
+            // ensureVisible self-gates on velocity: a no-op mid-glide, prompt during slow
+            // browsing. The settle pass covers the landing.
+            if (!scrollRAF)
+              scrollRAF = requestAnimationFrame(() => {
+                scrollRAF = 0;
+                ensureVisible();
+              });
+          },
+          { passive: true }
+        );
+
+        searchEl.addEventListener("input", relayout);
+
+        // =====================================================================
+        // INIT
+        // =====================================================================
+        function init() {
+          buildPieces();
+          pieces.forEach((p) => io.observe(p.el));
+          env = computeEnv();
+          relayout(); // packs, places pieces, and derives the crowd from the packing
+          // enable position transitions only after the first paint, so pieces
+          // don't fly in from (0,0) on load.
+          requestAnimationFrame(() =>
+            requestAnimationFrame(() => {
+              if (!reduceMotion) track.classList.add("animate");
+              // mark first wall paint for the capture script's metrics
+              window.__galleryReady = performance.now();
+            })
+          );
+          window.__galleryPackMs = () => lastPackMs;
+          // packing diagnostics for the capture script: column count + stack histogram
+          window.__galleryStacks = () => {
+            const cols = (lastLayout && lastLayout.columns) || [];
+            const hist = {};
+            for (const c of cols) {
+              const n = c.items.length;
+              hist[n] = (hist[n] || 0) + 1;
+            }
+            return {
+              columns: cols.length,
+              hist,
+              scale: +env.S.toFixed(3),
+              band: Math.round(env.band),
+            };
+          };
+          window.__galleryFigures = () => figureState.length;
+          // packing → DOM bridge for verification: columns with each piece's
+          // .frame DOM index + track-coord geometry (x/y/boxW/boxH).
+          window.__galleryLayout = () => {
+            const cols = (lastLayout && lastLayout.columns) || [];
+            const frames = [...document.querySelectorAll(".frame")];
+            return cols.map((c) => ({
+              items: c.items.map((p) => ({
+                frameIndex: frames.indexOf(p.frameEl),
+                x: p.x,
+                y: p.y,
+                boxW: p.boxW,
+                boxH: p.boxH,
+              })),
+            }));
+          };
+        }
+        let lastLayout = null;
+
+        let rt;
+        window.addEventListener("resize", () => {
+          clearTimeout(rt);
+          rt = setTimeout(() => {
+            env = computeEnv();
+            relayout(); // re-derives the crowd for the new width
+          }, 150);
+        });
+
+        if (RAW.length === 0) {
+          countEl.textContent = "renders.js failed to load";
+        } else {
+          init();
+        }
+      })();
+    </script>
+  </body>
+</html>

@@ -948,6 +948,19 @@ html.landing-page .VPNavBarSocialLinks {
   html.landing-page .VPNavBar .content-body > .VPNavBarSearch {
     flex-grow: 0;
   }
+  /* The nav menu (Examples · API Reference) joins the card's vertical list
+     instead of rendering as a horizontal row above it. */
+  html.landing-page .VPNavBar .content-body > .VPNavBarMenu {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+  html.landing-page .VPNavBar .content-body > .VPNavBarMenu .VPNavBarMenuLink {
+    padding: 0;
+    line-height: 1.4;
+    height: auto;
+  }
 
   /* HANGING METAPHOR (GoFish theme): each gutter card hangs from the top of the
      window on a fishing line that ends in a steel J-hook piercing the card's top
