@@ -102,6 +102,14 @@ function buildSubtree(node: TreeNode, depth: number): any {
 
 export const NestedBoxesTree: StoryObj<Args> = {
   args: { w: 720, h: 560 },
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "Nested Boxes Tree",
+      description:
+        "A file-tree diagram built purely from the nest constraint — each subtree is a box sized to wrap its children plus padding, sizes propagating outward.",
+    },
+  },
   render: (args: Args) => {
     const container = initializeContainer();
     buildSubtree(sample, 0).render(container, { w: args.w, h: args.h });
