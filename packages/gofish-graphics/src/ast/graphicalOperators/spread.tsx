@@ -82,11 +82,32 @@ export const Spread = createNodeOperator(
     // layer's `nameToPlaceable` won't have an entry for it and the constraint
     // silently drops it (the ref then never participates in align/distribute).
     const childList = children as GoFishAST[];
+    // Track names already claimed so a collision is disambiguated rather than
+    // collapsing two children onto one slot. The bespoke spread placed children
+    // POSITIONALLY, so same-named children were harmless; the layer addresses
+    // them through `nameToPlaceable`, which keys by name — duplicates there map
+    // every constraint ref to a single placeable (e.g. cut returns N slices that
+    // all carry the source mark's name, so the distribute would place one slice
+    // and no-op the rest, collapsing them onto each other).
+    const used = new Set<string>();
     const names = childList.map((c, i) => {
       const existing = childNameKey(c);
-      if (existing !== undefined) return existing;
-      const nm = (c instanceof GoFishNode && c.key) || `__spread_${i}`;
-      if (c instanceof GoFishNode || c instanceof GoFishRef) c._name = nm;
+      let nm =
+        existing ?? ((c instanceof GoFishNode && c.key) || `__spread_${i}`);
+      if (used.has(nm)) nm = `${nm}__spread_${i}`;
+      used.add(nm);
+      // Write the name back ONLY when we assigned or disambiguated it, so the
+      // layer's `nameToPlaceable` keys match the constraint refs. A `ref` (e.g.
+      // an axis label's `ref(bar)`) is a GoFishRef proxy, not a GoFishNode, but
+      // carries `_name` too — name it as well or the constraint drops it. Leave
+      // an UNCHANGED existing name untouched: it may be a Token (created via
+      // `createName`), and overwriting it with a plain string would break
+      // token-based `ref`/`selectAll` resolution.
+      if (
+        nm !== existing &&
+        (c instanceof GoFishNode || c instanceof GoFishRef)
+      )
+        c._name = nm;
       return nm;
     });
 
