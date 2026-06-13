@@ -624,16 +624,25 @@ export const layer = createNodeOperatorSequential(
           // .fromSize`). Consumed by `applyAlign`'s data-positioned guard
           // (align.ts) so a posScale cross axis whose children carry their own
           // data positions isn't pulled to the scale's `posScale(0)` fallback.
-          const alignNameIdx = buildNameIndex(_childNodes);
-          for (const c of constraints ?? []) {
-            if (c.type !== "align" || !c.guardDataPositioned) continue;
-            const idxs = c.children
-              .map((r) => alignNameIdx.get(r.name))
-              .filter((i): i is number => i !== undefined);
-            const allSizeOn = (axis: 0 | 1): boolean =>
-              idxs.length > 0 &&
-              idxs.every((i) => isSIZE(effectiveChildren[i][axis]));
-            c.fromSize = [allSizeOn(0), allSizeOn(1)];
+          // Gated on a guarded align existing so the common case (every plain
+          // layer/table — `resolveUnderlyingSpace` is a hot path that can run
+          // more than once) skips the O(n) `buildNameIndex` build entirely.
+          if (
+            (constraints ?? []).some(
+              (c) => c.type === "align" && c.guardDataPositioned
+            )
+          ) {
+            const alignNameIdx = buildNameIndex(_childNodes);
+            for (const c of constraints ?? []) {
+              if (c.type !== "align" || !c.guardDataPositioned) continue;
+              const idxs = c.children
+                .map((r) => alignNameIdx.get(r.name))
+                .filter((i): i is number => i !== undefined);
+              const allSizeOn = (axis: 0 | 1): boolean =>
+                idxs.length > 0 &&
+                idxs.every((i) => isSIZE(effectiveChildren[i][axis]));
+              c.fromSize = [allSizeOn(0), allSizeOn(1)];
+            }
           }
 
           // Stash the absorbed POSITION/SIZE space and report UNDEFINED upward
