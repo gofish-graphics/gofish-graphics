@@ -48,7 +48,7 @@ import { unionChildSpaces } from "../graphicalOperators/alignment";
 import { type ConstraintSpec } from ".";
 import { distributeSpaceFold, type DistributeConstraint } from "./distribute";
 import { alignSpaceFold, type AlignConstraint } from "./align";
-import { axisIndex, childNameKey, type AlignAnchor } from "./shared";
+import { axisIndex, buildNameIndex, type AlignAnchor } from "./shared";
 
 /** One distribute's slice of the layout budget: equal shares of the axis size
  *  among its covered children (consumed by `layer.tsx`'s `layout`). */
@@ -102,14 +102,14 @@ export function composeConstraintSpaces(
   // layer's default union, which already merges position data domains.
   if (distributes.length + aligns.length !== constraints.length)
     return undefined;
-  // No series → the layer is a pure overlay; its default union already says it.
+  // No series → a pure overlay. Align-only composition WOULD fold (alignSpaceFold
+  // converts SIZE→POSITION), but for a pure overlay that conversion only changes
+  // the layer's reported space (e.g. a legend's), so defer it: fall to the
+  // default union. (The per-axis loop already handles align-only axes when a
+  // distribute exists on the other axis.)
   if (distributes.length === 0) return undefined;
 
-  const indexByName = new Map<string, number>();
-  for (let i = 0; i < childNodes.length; i++) {
-    const name = childNameKey(childNodes[i]);
-    if (name !== undefined && !indexByName.has(name)) indexByName.set(name, i);
-  }
+  const indexByName = buildNameIndex(childNodes);
   const keyOf = (i: number): string | undefined =>
     childNodes[i] instanceof GoFishNode
       ? (childNodes[i] as GoFishNode).key
@@ -145,7 +145,7 @@ export function composeConstraintSpaces(
 
   // Each align contributes an overlay fold on the axis it specifies, but only
   // for a uniform string anchor (a per-child array has no single fold form).
-  type Al = { axis: 0 | 1; anchor: string; idx: number[] };
+  type Al = { axis: 0 | 1; anchor: AlignAnchor; idx: number[] };
   const alignFolds: Al[] = [];
   for (const a of aligns) {
     const idx = idxOf(a.children);
@@ -186,7 +186,7 @@ export function composeConstraintSpaces(
       a.idx.forEach((i) => covered.add(i));
       const fold = alignSpaceFold(
         a.idx.map((i) => childSpaces[i][axis]),
-        a.anchor as never
+        a.anchor
       );
       if (!isUNDEFINED(fold)) fragments.push(axisSize(fold, axis));
     }

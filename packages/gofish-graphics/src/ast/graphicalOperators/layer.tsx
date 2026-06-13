@@ -36,7 +36,7 @@ import {
   type ZOrderConstraint,
 } from "../constraints";
 import { allocateSlices } from "../constraints/folds";
-import { childNameKey } from "../constraints/shared";
+import { childNameKey, buildNameIndex } from "../constraints/shared";
 import {
   composeConstraintSpaces,
   type ComposeBudget,
@@ -107,11 +107,7 @@ function buildNestPlan(
   if (!constraints.some(isNestConstraint)) return undefined;
   const nests = constraints.filter(isNestConstraint);
 
-  const indexByName = new Map<string, number>();
-  for (let i = 0; i < childNodes.length; i++) {
-    const name = childNameKey(childNodes[i]);
-    if (name !== undefined && !indexByName.has(name)) indexByName.set(name, i);
-  }
+  const indexByName = buildNameIndex(childNodes);
 
   type ResolvedNest = {
     c: NestConstraint;

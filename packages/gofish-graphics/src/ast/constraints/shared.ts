@@ -41,3 +41,17 @@ export const childNameKey = (node: GoFishAST): string | undefined => {
   if (n === undefined) return undefined;
   return isToken(n) ? n.__tag : n;
 };
+
+/** Map each direct child's name (`childNameKey`) to its index; first occurrence
+ *  wins. Shared by the layer's constraint passes (nest plan, composition) to
+ *  resolve `ConstraintRef`s against child positions. */
+export const buildNameIndex = (
+  childNodes: GoFishAST[]
+): Map<string, number> => {
+  const m = new Map<string, number>();
+  for (let i = 0; i < childNodes.length; i++) {
+    const name = childNameKey(childNodes[i]);
+    if (name !== undefined && !m.has(name)) m.set(name, i);
+  }
+  return m;
+};
