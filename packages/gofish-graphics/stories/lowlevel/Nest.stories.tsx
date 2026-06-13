@@ -3,13 +3,13 @@ import { initializeContainer } from "../helper";
 import { Constraint, Layer, rect, spread, value } from "../../src/lib";
 
 /**
- * `Constraint.contain({x?, y?}, [outer, inner])`: the relation `outer = inner +
+ * `Constraint.nest({x?, y?}, [outer, inner])`: the relation `outer = inner +
  * 2·padding` holds per constrained axis, and inner is centered in outer. Which
  * side is *derived* is dispatched on which side carries the size:
  *   - Basic / Chained / AutoFit: inner is sized, outer is not → INSIDE_OUT
  *     (`outer = inner + 2p`). Basic wraps a fixed-pixel inner; Chained nests
  *     three levels (sizes propagate inner→outer in dependency order); AutoFit's
- *     data-driven inners make the contain SIZE fold participate in the parent
+ *     data-driven inners make the nest SIZE fold participate in the parent
  *     spread's auto-fit solve (the case PR #461 could not do).
  *   - OutsideIn: outer is sized, inner is not → OUTSIDE_IN (`inner = outer −
  *     2p`). This is CSS padding — the direction PR #461 errored on.
@@ -17,7 +17,7 @@ import { Constraint, Layer, rect, spread, value } from "../../src/lib";
  *     outer − 2p` (outside-in over a fill outer).
  */
 const meta: Meta = {
-  title: "Low Level Syntax/Contain",
+  title: "Low Level Syntax/Nest",
   argTypes: {
     w: { control: { type: "number", min: 100, max: 1200, step: 20 } },
     h: { control: { type: "number", min: 100, max: 1000, step: 20 } },
@@ -43,7 +43,7 @@ export const Basic: StoryObj<Args> = {
       rect({ w: 60, h: 40, fill: "#e63946", rx: 4 }).name("inner"),
     ])
       .constrain(({ outer, inner }) => [
-        Constraint.contain({ x: 10, y: 10 }, [outer, inner]),
+        Constraint.nest({ x: 10, y: 10 }, [outer, inner]),
       ])
       .render(container, { w: args.w, h: args.h });
     return container;
@@ -63,7 +63,7 @@ export const Chained: StoryObj<Args> = {
       ),
       rect({ w: 40, h: 30, fill: "#2a9d8f", rx: 3 }).name("core"),
     ]).constrain(({ midOuter, core }) => [
-      Constraint.contain({ x: 8, y: 8 }, [midOuter, core]),
+      Constraint.nest({ x: 8, y: 8 }, [midOuter, core]),
     ]);
 
     Layer([
@@ -73,14 +73,14 @@ export const Chained: StoryObj<Args> = {
       mid.name("mid"),
     ])
       .constrain(({ shell, mid }) => [
-        Constraint.contain({ x: 12, y: 12 }, [shell, mid]),
+        Constraint.nest({ x: 12, y: 12 }, [shell, mid]),
       ])
       .render(container, { w: args.w, h: args.h });
     return container;
   },
 };
 
-// ── Auto-fit: a fixed-width spread of contained pairs ───────────────────────
+// ── Auto-fit: a fixed-width spread of nested pairs ──────────────────────────
 // Inner widths are data-driven (value); each pair's outer = inner + 2·8. The
 // spread sums the pairs' SIZE claims and inverts against the 300px budget:
 //   Σ(σ·vᵢ + 16) + 2·spacing = 300, with Σvᵢ = 190, spacing = 10
@@ -103,7 +103,7 @@ export const AutoFit: StoryObj<Args> = {
           ),
           rect({ w: value(v), h: 18, fill: COLORS[i], rx: 3 }).name("inner"),
         ]).constrain(({ outer, inner }) => [
-          Constraint.contain({ x: 8, y: 8 }, [outer, inner]),
+          Constraint.nest({ x: 8, y: 8 }, [outer, inner]),
         ])
       )
     ).render(container, { w: args.w, h: args.h });
@@ -112,7 +112,7 @@ export const AutoFit: StoryObj<Args> = {
 };
 
 // ── Outside-in: CSS padding ─────────────────────────────────────────────────
-// The OUTER carries the size (200×140) and the INNER is claim-less, so contain
+// The OUTER carries the size (200×140) and the INNER is claim-less, so nest
 // resolves outside-in: inner = outer − 2·16 = 168×108, centered (inner.min =
 // outer.min + 16). This is the direction PR #461 errored on; it is exactly CSS
 // `padding: 16px`.
@@ -128,7 +128,7 @@ export const OutsideIn: StoryObj<Args> = {
       rect({ fill: "#e63946", rx: 4 }).name("inner"),
     ])
       .constrain(({ outer, inner }) => [
-        Constraint.contain({ x: 16, y: 16 }, [outer, inner]),
+        Constraint.nest({ x: 16, y: 16 }, [outer, inner]),
       ])
       .render(container, { w: args.w, h: args.h });
     return container;
@@ -137,7 +137,7 @@ export const OutsideIn: StoryObj<Args> = {
 
 // ── Fill outer: neither side sized ──────────────────────────────────────────
 // Neither outer nor inner declares a size, so the layer sizes the outer (it
-// fills the layer box) and contain resolves outside-in: inner = layer − 2·20 on
+// fills the layer box) and nest resolves outside-in: inner = layer − 2·20 on
 // each axis, centered. At 240×180 the inner is 200×140.
 
 export const FillOuter: StoryObj<Args> = {
@@ -151,7 +151,7 @@ export const FillOuter: StoryObj<Args> = {
       rect({ fill: "#2a9d8f", rx: 4 }).name("inner"),
     ])
       .constrain(({ outer, inner }) => [
-        Constraint.contain({ x: 20, y: 20 }, [outer, inner]),
+        Constraint.nest({ x: 20, y: 20 }, [outer, inner]),
       ])
       .render(container, { w: args.w, h: args.h });
     return container;

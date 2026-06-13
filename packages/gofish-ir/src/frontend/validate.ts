@@ -770,13 +770,13 @@ function walkConstraint(node: unknown, path: string, ctx: Context): void {
     t !== "align" &&
     t !== "distribute" &&
     t !== "position" &&
-    t !== "contain" &&
+    t !== "nest" &&
     t !== "zAbove" &&
     t !== "zBelow"
   ) {
     ctx.errors.push({
       path: `${path}.type`,
-      message: `constraint type must be "align" | "distribute" | "position" | "contain" | "zAbove" | "zBelow"`,
+      message: `constraint type must be "align" | "distribute" | "position" | "nest" | "zAbove" | "zBelow"`,
     });
     return;
   }
@@ -784,16 +784,16 @@ function walkConstraint(node: unknown, path: string, ctx: Context): void {
     if (!Array.isArray(v) || !v.every((x) => typeof x === "string")) {
       ctx.errors.push({ path: p, message: "refs must be an array of strings" });
     }
-    // `contain` relates exactly two refs: [outer, inner].
-    if (t === "contain" && Array.isArray(v) && v.length !== 2) {
+    // `nest` relates exactly two refs: [outer, inner].
+    if (t === "nest" && Array.isArray(v) && v.length !== 2) {
       ctx.errors.push({
         path: p,
-        message: `contain refs must be exactly [outer, inner], got ${v.length}`,
+        message: `nest refs must be exactly [outer, inner], got ${v.length}`,
       });
     }
   });
-  if (t === "contain") {
-    // contain options: per-axis padding `{ x?: number, y?: number }`, at least
+  if (t === "nest") {
+    // nest options: per-axis padding `{ x?: number, y?: number }`, at least
     // one axis present. (The space-fold / centering direction is resolved
     // engine-side; the IR carries only the padding.)
     expectField(node, "options", path, ctx, (v, p) => {
@@ -804,7 +804,7 @@ function walkConstraint(node: unknown, path: string, ctx: Context): void {
       if (v.x === undefined && v.y === undefined) {
         ctx.errors.push({
           path: p,
-          message: "contain options must specify at least one of x, y",
+          message: "nest options must specify at least one of x, y",
         });
       }
       if (ctx.strict) rejectUnknown(v, ["x", "y"], p, ctx);

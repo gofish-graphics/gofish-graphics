@@ -148,7 +148,7 @@ Resolution order, as it actually happens:
 
 1. **Scope A folds and solves.** The shared x claims from _both_ panels
    combine (max — they overlay on x) and invert against 400px once: one
-   σ_x for the whole figure. That is what "shared axis" _means_.
+   σ*x for the whole figure. That is what "shared axis" \_means*.
 2. On y, neither panel claims in a shared measure; both are fill children of
    the vstack. The fill policy splits 300 − 10 into 145px each — these
    proposals are **policy verdicts**, not evaluations.
@@ -243,7 +243,7 @@ your intuition kept noticing.
 
 ## Part 3: Who fires when — order is discovered, not chosen
 
-The remaining mystery is ordering: contain can resolve outside-in (CSS
+The remaining mystery is ordering: nest can resolve outside-in (CSS
 padding: interior = box − 2·padding) or inside-out (gotree boxes: box =
 content + 2·padding), just as a distribute can solve for the scale, the
 container, or the spacing ("two of three"). Who decides?
@@ -252,19 +252,19 @@ Nobody. Treat every constraint as a **relation** that _fires_ the moment all
 but one of its variables are known. Then run the dumbest loop: fire anything
 fireable, repeat to fixpoint. Direction is an _outcome_, not a choice.
 
-**Traced.** A 300px-wide layer with a 60px box `A`, and a contain pair
+**Traced.** A 300px-wide layer with a 60px box `A`, and a nest pair
 (outer `O`, inner `I`, padding 10), with `A` and `O` distributed at gap 8:
 
 ```
-start:    A = 60 (own claim).  O, I unknown — contain has TWO unknowns, stuck.
+start:    A = 60 (own claim).  O, I unknown — nest has TWO unknowns, stuck.
 fire distribute:  O is the only fill child → O = 300 − 60 − 8 = 232.
-fire contain:     one unknown left → outside-in: I = 232 − 2·10 = 212.
+fire nest:        one unknown left → outside-in: I = 232 − 2·10 = 212.
 ```
 
 Swap one fact — make `I` a 100px image and `O` claim-less — and the _same
-loop_ runs the other direction: contain fires first (inside-out, `O` = 120),
+loop_ runs the other direction: nest fires first (inside-out, `O` = 120),
 then the distribute walks `A` and `O` into place. The spec didn't encode a
-direction; the information flow did. (This corrects the first contain
+direction; the information flow did. (This corrects the first nest
 implementation, which hard-coded inside-out and rejected sized outers.)
 
 Three guarantees make this principled rather than hopeful:
@@ -341,7 +341,7 @@ per scope, per axis, per measure:
      ║ at a scope boundary: the evaluated pixel size is the inner scope's
      ║ budget; recurse. (fill → policy verdict; opaque → measurement arg)
   4. PROPAGATE pixel relations fire at one-unknown — confluent, owned, sorted
-     by information flow (contain, intervals, PiCCL-style equalities)
+     by information flow (nest, intervals, PiCCL-style equalities)
   5. PLACE     difference constraints     — (min,+) path sums from anchors
 ```
 
@@ -350,9 +350,9 @@ a named diagnosis (under-determined → policy; simultaneous → out of language
 over-determined → ownership report; cycle → error).
 
 **The completeness conjecture**, stated so it can be proved or refuted:
-networks of {align, distribute, position, contain} realize _exactly_ the
+networks of {align, distribute, position, nest} realize _exactly_ the
 (max, +) closure of child extents on the size side (align ↦ max, distribute ↦
-sum + constant, contain ↦ unary + constant, position ↦ pins), and forests of
+sum + constant, nest ↦ unary + constant, position ↦ pins), and forests of
 difference constraints on the position side. Custom layouts (treemap, force
 layouts, wrapping) sit outside the _generators_ but inside the _language_:
 arbitrary computation that emits claims, proposals, and placements under the

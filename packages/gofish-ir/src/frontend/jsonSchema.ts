@@ -351,14 +351,7 @@ export const FRONTEND_IR_JSON_SCHEMA = {
       required: ["type", "refs"],
       properties: {
         type: {
-          enum: [
-            "align",
-            "distribute",
-            "position",
-            "contain",
-            "zAbove",
-            "zBelow",
-          ],
+          enum: ["align", "distribute", "position", "nest", "zAbove", "zBelow"],
         },
         options: { type: "object" },
         refs: { type: "array", items: { type: "string" } },

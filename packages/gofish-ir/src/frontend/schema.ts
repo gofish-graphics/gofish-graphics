@@ -424,9 +424,9 @@ export type LabelIR =
     };
 
 export interface ConstraintIR {
-  type: "align" | "distribute" | "position" | "contain" | "zAbove" | "zBelow";
-  /** Positioning/sizing constraints (`align`/`distribute`/`position`/`contain`)
-   *  carry `options`; z-order constraints don't. `contain` options are
+  type: "align" | "distribute" | "position" | "nest" | "zAbove" | "zBelow";
+  /** Positioning/sizing constraints (`align`/`distribute`/`position`/`nest`)
+   *  carry `options`; z-order constraints don't. `nest` options are
    *  `{ x?: number, y?: number }` (per-axis padding) over `refs: [outer, inner]`. */
   options?: Record<string, unknown>;
   refs: string[];

@@ -26,7 +26,7 @@ below) reproduces `spread` exactly — including Monotonic-inversion auto-fit �
 from `layer + align + distribute`. Three things do **not** reduce to today's
 align/distribute and are the genuine design work: a _fill policy_ for
 unclaimed children (the proposed-size slice), _size-setting_ constraints
-(contain, treemap slots, min/max-pinned extents), and a principled replacement
+(nest, treemap slots, min/max-pinned extents), and a principled replacement
 for `sharedScale`'s mutation-based sibling sharing. None of them looks like a
 blocker; each has a natural home in the same architecture.
 
@@ -124,13 +124,13 @@ codebase, split across operators:
   variant.
 - **distribute fold = sum (+ constant).** `spread.tsx:192-203` folds with
   `Monotonic.add` and `Monotonic.adds(·, spacing·(n−1))`.
-- **contain fold = inner + padding** — another `adds` (the gotree-branch
-  `Constraint.contain`; not on main yet).
+- **nest fold = inner + padding** — another `adds` (landed this round as
+  `Constraint.nest`; prototyped on the gotree branch as `Constraint.contain`).
 
 Sum, max, +constant, and scalar multiples of monotone functions are monotone
 and closed under composition — a **max-plus algebra** over Monotonics. That
 closure is the feasibility theorem in miniature: _the extent of any network of
-align/distribute/contain constraints over children with monotone size claims
+align/distribute/nest constraints over children with monotone size claims
 is itself a Monotonic, hence invertible, hence auto-fittable._ Nothing about
 nesting or mixing the constraints breaks the solve; `spread`'s special status
 evaporates.
@@ -303,7 +303,7 @@ than mechanical migration.
 **1. Size-setting constraints (the missing fourth kind).** Today's protocol is
 single-assignment _positions_ (`place()` write-once per axis = Bluefish's
 dimension-level ownership). Three pressures want single-assignment _sizes_
-too: `contain` (outer's size := inner + padding — bottom-up), treemap-style
+too: `nest` (outer's size := inner + padding — bottom-up), treemap-style
 slot assignment (top-down), and Bluefish's own unsolved "width alignment"
 (§6.2: make these elements equal-width — a max fold pushed back down, i.e.
 exactly claim-at-solved-σ). All three are the same shape as the budget
@@ -463,7 +463,7 @@ suggest it will not be needed.
    `alignSpaceFold`, `allocateSlices`, per-axis composition in the layer with
    max-union for uncovered overlay siblings, budget inversion with a warning
    on non-invertible folds. Parity certified for bar/fit/fill/weights/glue.
-   Addresses #475. (`contain` was not revived here — it lives with the
+   Addresses #475. (`nest` was not revived here — it lives with the
    size-setting design, residual 1.)
 3. ✅ **`spread`/`stack` on the shared machinery** — done as _delegation_
    rather than literal `Layer.constrain()` compilation: spread keeps its node

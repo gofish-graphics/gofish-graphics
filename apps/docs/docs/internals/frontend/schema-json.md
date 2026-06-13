@@ -568,7 +568,7 @@ for the API.
             "align",
             "distribute",
             "position",
-            "contain",
+            "nest",
             "zAbove",
             "zBelow"
           ]

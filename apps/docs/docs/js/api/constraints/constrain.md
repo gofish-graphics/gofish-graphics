@@ -184,7 +184,7 @@ Layer([
 ]);
 ```
 
-## Constraint.contain
+## Constraint.nest
 
 Sizes one child to wrap (or be wrapped by) another with a fixed padding — the
 first **size-setting** constraint. Given `[outer, inner]`, the relation
@@ -192,7 +192,7 @@ first **size-setting** constraint. Given `[outer, inner]`, the relation
 centered inside `outer` there.
 
 ```ts
-Constraint.contain({ x?, y? }, [outer, inner]);
+Constraint.nest({ x?, y? }, [outer, inner]);
 ```
 
 | Option | Type     | Default | Description                                                         |
@@ -206,8 +206,8 @@ resolved from which side carries the size:
 
 - **Inside-out** (`outer = inner + 2·padding`): the inner is sized and the outer
   is not — a box that shrink-wraps its content. Because the derived outer size
-  enters the layer's size request, a contained pair inside an auto-fit context
-  (a `Spread` of contained pairs) participates in the scale solve.
+  enters the layer's size request, a nested pair inside an auto-fit context
+  (a `Spread` of nested pairs) participates in the scale solve.
 - **Outside-in** (`inner = outer − 2·padding`): the outer carries the size and
   the inner is claim-less — exactly CSS `padding`.
 - **Center only**: when neither side is sized, the layer fills the outer, then
@@ -219,7 +219,7 @@ Layer([
   rect({ fill: "#dbe6f3" }).name("outer"),
   rect({ w: 60, h: 40, fill: "#e63946" }).name("inner"),
 ]).constrain(({ outer, inner }) => [
-  Constraint.contain({ x: 10, y: 10 }, [outer, inner]),
+  Constraint.nest({ x: 10, y: 10 }, [outer, inner]),
 ]);
 ```
 
@@ -231,7 +231,7 @@ gf.Layer([
   gf.rect({ w: 60, h: 40, fill: gf.color.red[4] }).name("inner"),
 ])
   .constrain(({ outer, inner }) => [
-    gf.Constraint.contain({ x: 10, y: 10 }, [outer, inner]),
+    gf.Constraint.nest({ x: 10, y: 10 }, [outer, inner]),
   ])
   .render(root, { w: 200, h: 160 });
 ```

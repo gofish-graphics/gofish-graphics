@@ -175,7 +175,7 @@ layer(
 )
 ```
 
-## Constraint.contain
+## Constraint.nest
 
 Sizes one ref to wrap (or be wrapped by) another with a fixed padding — the
 first **size-setting** constraint. Given `[outer, inner]`, the relation
@@ -183,12 +183,12 @@ first **size-setting** constraint. Given `[outer, inner]`, the relation
 centered inside `outer` there.
 
 ```python
-Constraint.contain(refs, *, x=None, y=None)
+Constraint.nest(refs, *, x=None, y=None)
 ```
 
 | Parameter | Type    | Description                                                 |
 | --------- | ------- | ----------------------------------------------------------- |
-| `refs`    | `list`  | Exactly `[outer, inner]` — outer contains inner.            |
+| `refs`    | `list`  | Exactly `[outer, inner]` — outer nests inner.               |
 | `x`       | `float` | Per-axis padding (px) on x (omit to leave x unconstrained). |
 | `y`       | `float` | Per-axis padding (px) on y (omit to leave y unconstrained). |
 
@@ -198,8 +198,8 @@ which side carries the size:
 
 - **Inside-out** (`outer = inner + 2*padding`): the inner is sized and the outer
   is not — a box that shrink-wraps its content. The derived outer size enters the
-  layer's size request, so a contained pair inside an auto-fit context (a
-  `spread` of contained pairs) participates in the scale solve.
+  layer's size request, so a nested pair inside an auto-fit context (a
+  `spread` of nested pairs) participates in the scale solve.
 - **Outside-in** (`inner = outer - 2*padding`): the outer carries the size and
   the inner is claim-less — exactly CSS `padding`.
 - **Center only**: when neither side is sized, the layer fills the outer, then
@@ -214,7 +214,7 @@ layer([
     rect(w=60, h=40, fill="#e63946").name("inner"),
 ]).constrain(
     lambda outer, inner: [
-        Constraint.contain([outer, inner], x=10, y=10),
+        Constraint.nest([outer, inner], x=10, y=10),
     ]
 )
 ```

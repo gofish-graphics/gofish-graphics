@@ -11,16 +11,12 @@ import {
   createZBelowConstraint,
   isZOrderConstraint,
 } from "./zorder";
-import {
-  applyContain,
-  createContainConstraint,
-  isContainConstraint,
-} from "./contain";
+import { applyNest, createNestConstraint, isNestConstraint } from "./nest";
 import type { AlignConstraint, AlignOptions } from "./align";
 import type { DistributeConstraint, DistributeOptions } from "./distribute";
 import type { PositionConstraint, PositionOptions } from "./position";
 import type { ZAboveConstraint, ZBelowConstraint } from "./zorder";
-import type { ContainConstraint, ContainOptions } from "./contain";
+import type { NestConstraint, NestOptions } from "./nest";
 import { type ConstraintPosScales, type ConstraintRef } from "./shared";
 
 export type {
@@ -37,9 +33,9 @@ export type {
   ZBelowConstraint,
   ZOrderConstraint,
 } from "./zorder";
-export type { ContainConstraint, ContainOptions } from "./contain";
+export type { NestConstraint, NestOptions } from "./nest";
 export { isZOrderConstraint } from "./zorder";
-export { isContainConstraint, containedSpace } from "./contain";
+export { isNestConstraint, nestedSpace } from "./nest";
 
 export type ConstraintSpec =
   | AlignConstraint
@@ -47,7 +43,7 @@ export type ConstraintSpec =
   | PositionConstraint
   | ZAboveConstraint
   | ZBelowConstraint
-  | ContainConstraint;
+  | NestConstraint;
 
 // --- Factory ---
 
@@ -73,11 +69,11 @@ export const Constraint = {
   zBelow(a: ConstraintRef, b: ConstraintRef): ZBelowConstraint {
     return createZBelowConstraint(a, b);
   },
-  contain(
-    options: ContainOptions,
+  nest(
+    options: NestOptions,
     children: [ConstraintRef, ConstraintRef]
-  ): ContainConstraint {
-    return createContainConstraint(options, children);
+  ): NestConstraint {
+    return createNestConstraint(options, children);
   },
 };
 
@@ -120,13 +116,13 @@ export function collectConstraintRefs(
 
 /**
  * The set of names referenced by *positioning* constraints (`align` /
- * `distribute` / `contain`). Used by `layer.tsx` to compute `constrainedNames`,
+ * `distribute` / `nest`). Used by `layer.tsx` to compute `constrainedNames`,
  * which controls phase-1 baseline-placement skipping. z-order constraints don't
  * position, so they must be excluded.
  *
- * `contain` is special: only the inner child (`children[1]`) skips baseline
+ * `nest` is special: only the inner child (`children[1]`) skips baseline
  * placement. The outer child (`children[0]`) is left in the set so phase-1
- * places it at baseline — `applyContain` reads outer's placed position to
+ * places it at baseline — `applyNest` reads outer's placed position to
  * center inner inside it.
  */
 export function getPositioningConstraintRefs(
@@ -135,7 +131,7 @@ export function getPositioningConstraintRefs(
   const names = new Set<string>();
   for (const c of constraints) {
     if (isZOrderConstraint(c)) continue;
-    if (isContainConstraint(c)) {
+    if (isNestConstraint(c)) {
       names.add(c.children[1].name);
       continue;
     }
@@ -201,10 +197,10 @@ export function applyConstraints(
   for (const constraint of constraints) {
     if (isZOrderConstraint(constraint)) continue;
 
-    if (isContainConstraint(constraint)) {
+    if (isNestConstraint(constraint)) {
       const outer = nameToPlaceable.get(constraint.children[0].name);
       const inner = nameToPlaceable.get(constraint.children[1].name);
-      if (outer && inner) applyContain(constraint, outer, inner);
+      if (outer && inner) applyNest(constraint, outer, inner);
       continue;
     }
 

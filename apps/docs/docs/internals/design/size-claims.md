@@ -88,12 +88,12 @@ discipline:
 
 And four pending features each need a fourth answer unless we design one:
 
-| consumer                                                                                                  | direction | where the number comes from                        | units                                                                             |
-| --------------------------------------------------------------------------------------------------------- | --------- | -------------------------------------------------- | --------------------------------------------------------------------------------- |
-| `contain` (outer := inner + padding; [#461](https://github.com/gofish-graphics/gofish-graphics/pull/461)) | bottom-up | another child's measured extent, plus a constant   | px (padding) over whatever inner's units are                                      |
-| treemap slots ([#541](https://github.com/gofish-graphics/gofish-graphics/issues/541))                     | top-down  | an external algorithm                              | **area** — d3 owns each rectangle's aspect ratio; weights are not per-axis shares |
-| equal-width (Bluefish §6.2's unsolved case)                                                               | sideways  | the max of the targets' requests, pushed back down | the targets' shared units                                                         |
-| interval channels (`xMin`/`xMax`; [#546](https://github.com/gofish-graphics/gofish-graphics/issues/546))  | derived   | two placed anchors on one axis                     | the position scale's units                                                        |
+| consumer                                                                                                 | direction | where the number comes from                        | units                                                                             |
+| -------------------------------------------------------------------------------------------------------- | --------- | -------------------------------------------------- | --------------------------------------------------------------------------------- |
+| `nest` (outer := inner + padding; [#461](https://github.com/gofish-graphics/gofish-graphics/pull/461))   | bottom-up | another child's measured extent, plus a constant   | px (padding) over whatever inner's units are                                      |
+| treemap slots ([#541](https://github.com/gofish-graphics/gofish-graphics/issues/541))                    | top-down  | an external algorithm                              | **area** — d3 owns each rectangle's aspect ratio; weights are not per-axis shares |
+| equal-width (Bluefish §6.2's unsolved case)                                                              | sideways  | the max of the targets' requests, pushed back down | the targets' shared units                                                         |
+| interval channels (`xMin`/`xMax`; [#546](https://github.com/gofish-graphics/gofish-graphics/issues/546)) | derived   | two placed anchors on one axis                     | the position scale's units                                                        |
 
 Plus the flex question (#553): a fill child's share of leftover space is
 conceptually a _per-child datum_ ("this child gets 2 shares"), yet until this
@@ -127,13 +127,13 @@ the solved values. This is [#39](https://github.com/gofish-graphics/gofish-graph
 just "the equation count is capped by the rank."
 
 **The gotree branch** (PR #461) carries a working pre-unification
-`Constraint.contain`: a layer pre-pass topologically sorts children so inner
+prototype of this constraint (named `Constraint.contain` there): a layer pre-pass topologically sorts children so inner
 precedes outer, lays inner out, then _proposes_ `inner + 2·padding` to outer
 as its layout size; a post-pass centers inner in outer. No post-layout
 mutation anywhere — the size flows through the proposal. Its one gap is the
 other half of the unification lesson ("the crux is the fold, not the walk"):
 the derived outer size never enters the layer's upward size request, so a
-contained pair inside an auto-fit context doesn't participate in the solve.
+nested pair inside an auto-fit context doesn't participate in the solve.
 
 **CSS flex/grid.** `fr` units and `flex-grow` numbers are the precedent for
 "shares of leftover as a unit distinct from absolute units" — a grid track of
@@ -173,7 +173,7 @@ be resolved by the time the target's proposal is computed.
 
 **(c) Size rules resolved inside the solve.** The constraint contributes the
 target's extent _as a function of other extents_, at space-resolution time:
-contain is `outer = inner + 2·padding` (a `Monotonic.adds` on inner's
+nest is `outer = inner + 2·padding` (a `Monotonic.adds` on inner's
 request); equal-width is `each = max(requests)`; flex is `share × scaleFactor`
 in its own unit. The combined request stays invertible (sum, max, +constant,
 and scalar multiples of monotone functions are closed under composition — the
@@ -195,7 +195,7 @@ is no rule to fold.
 
 |                   | (a) post-layout facet | (b) linsys ledger          | (c) rule in the solve               | (d) proposal in dep. order            |
 | ----------------- | --------------------- | -------------------------- | ----------------------------------- | ------------------------------------- |
-| contain           | leaves only           | ledger only                | ✓ auto-fit-compatible               | ✓ but invisible to auto-fit           |
+| nest              | leaves only           | ledger only                | ✓ auto-fit-compatible               | ✓ but invisible to auto-fit           |
 | treemap slots     | leaves only           | ledger only                | n/a (algorithm, not a rule)         | ✓ (this is what treemap already does) |
 | equal-width       | leaves only           | ledger only                | ✓ (max pushed down)                 | ✓ for px-only targets                 |
 | interval channels | = today's hack        | ✓ (two equations → rank 2) | ✓ (interval width is scale-derived) | ✓                                     |
@@ -214,7 +214,7 @@ So the recommended shape of a size-setting constraint is a triple:
 2. **proposal step** — at layout time, in dependency order, the target is
    proposed its derived size (rule at the solved scale factor, or measured
    pixels);
-3. **placement step** — the existing post-layout walk (e.g. contain centers
+3. **placement step** — the existing post-layout walk (e.g. nest centers
    inner in outer; nothing new).
 
 with the layer topologically sorting child layout by constraint dependency
@@ -229,7 +229,7 @@ Positions today: second `place()` on an axis is a **silent no-op**
 - **One owner per (node, axis, kind)** where kind ∈ {position, size}: at most
   one constraint may compute a target's proposal per axis, and at most one
   may place it. The recognizer/layer enforces this at constraint-collection
-  time — two contain constraints claiming one outer on the same axis is a
+  time — two nest constraints claiming one outer on the same axis is a
   spec error, reported with both writers named (Bluefish's `bboxOwners`
   pattern, PiCCL's by-construction uniqueness).
 - **Over-determination is a check, not a crash.** Two anchors + an explicit
@@ -240,7 +240,7 @@ Positions today: second `place()` on an axis is a **silent no-op**
 - **Upgrade the silent no-op** to a structured warning naming both writers.
   Cheap (one owner record per write) and turns the most common constraint
   authoring mistake from invisible to visible. This piggybacks on the linsys
-  adoption (#39) and can ship with it rather than with contain.
+  adoption (#39) and can ship with it rather than with nest.
 - **Imposed size vs own request:** a child that carries its own size request
   on an axis cannot also be a size-setting target on that axis — error, not
   precedence. (Precedence is how the scatter hack behaves today, and it is
@@ -308,13 +308,13 @@ area/linear distinction is also expressible as a unit: px² is not px.)
 
 ## Units, summarized
 
-| size write      | unit it carries              | merge policy on contact                                           |
-| --------------- | ---------------------------- | ----------------------------------------------------------------- |
-| contain padding | px (constant)                | constants are measure-free; outer inherits inner's measure        |
-| treemap slot    | px (algorithm output)        | none — proposals, not claims                                      |
-| equal-width     | the targets' shared measure  | strict — equalizing differently-measured widths is a type error   |
-| interval width  | the position scale's measure | permissive today (`forgetAllMeasures`, scatter.tsx:147-154); keep |
-| flex share      | reserved flex measure        | never unifies with data measures (#547); constants are free       |
+| size write     | unit it carries              | merge policy on contact                                           |
+| -------------- | ---------------------------- | ----------------------------------------------------------------- |
+| nest padding   | px (constant)                | constants are measure-free; outer inherits inner's measure        |
+| treemap slot   | px (algorithm output)        | none — proposals, not claims                                      |
+| equal-width    | the targets' shared measure  | strict — equalizing differently-measured widths is a type error   |
+| interval width | the position scale's measure | permissive today (`forgetAllMeasures`, scatter.tsx:147-154); keep |
+| flex share     | reserved flex measure        | never unifies with data measures (#547); constants are free       |
 
 ## Empirical evidence
 
@@ -361,10 +361,10 @@ the spec:
   there is never a graph of simultaneous equations, only one inversion per
   axis (per measure, after #547).
 - **Pixel-level sibling dependencies do sort.** When one child's number
-  depends on another child's _measured_ result — contain's outer needs
+  depends on another child's _measured_ result — nest's outer needs
   inner's laid-out extent; every PiCCL constraint works this way — the layer
   topologically sorts the affected children and rejects cycles with an
-  explicit error. Implemented for contain in this round; z-order has used the
+  explicit error. Implemented for nest in this round; z-order has used the
   same recipe (Kahn) all along.
 - **Placement walks are the unsorted remainder.** Align/distribute/position
   apply in declaration order with first-placed-anchor semantics. That is
@@ -378,7 +378,7 @@ the spec:
 The fold layer is a **max-plus (tropical) algebra lifted to monotone
 functions of the scale factor**: the operations the constraints generate are
 sum (distribute), max (align/overlay/equal-width), plus-a-constant (spacing,
-contain padding), and scalar multiples (data values). Monotone functions are
+nest padding), and scalar multiples (data values). Monotone functions are
 closed under all four, which is the entire feasibility argument: any
 constraint network built from these has a monotone composite extent, hence
 one-unknown invertible, hence auto-fittable. The `Monotonic` module _is_ the
@@ -394,10 +394,10 @@ exact inversion) for every claim built from linears, `add`, `adds`, `smul`,
 and `max` — i.e. `unknown` with its bisection could in principle be reserved
 for genuinely non-PL cases only. Second, this gives the completeness question
 a crisp formulation that Bluefish never had: the constraint set
-{align, distribute, position, contain} is _complete relative to the algebra_
+{align, distribute, position, nest} is _complete relative to the algebra_
 if every extent expressible as a max-plus combination of child extents is
 realizable by some constraint network — align supplying max, distribute
-supplying sum(+constant), contain supplying unary +constant, position
+supplying sum(+constant), nest supplying unary +constant, position
 supplying anchors. Custom layout nodes (treemap) then sit _outside the
 generators but inside the language_: arbitrary computation that emits
 claims/proposals in the same algebra, which is exactly the
@@ -428,12 +428,12 @@ deferred to the #39/#547 round:
 
 ## Recommendation and staging
 
-1. **This round** — implement `Constraint.contain` as the first size-setting
+1. **This round** — implement `Constraint.nest` as the first size-setting
    constraint, in the recommended shape: dependency-ordered layout pre-pass
    and centering walk (ported from PR #461), **plus** the size rule
    (`outer = inner + 2·padding` as a `Monotonic.adds` transform of inner's
-   request) folded into the layer's space resolution so contained pairs
-   auto-fit. Single-owner enforcement for contain targets (two contains on
+   request) folded into the layer's space resolution so nested pairs
+   auto-fit. Single-owner enforcement for nest targets (two nests on
    one outer/axis = named error). The gotree branch then rebases onto the
    core primitive (its `__contain-outer`/`__contain-inner` wrapper trick
    becomes unnecessary).
@@ -471,7 +471,7 @@ no-op at 550), size-request folds (`constraints/distribute.ts:89-156`,
 `constraints/align.ts`), the budget solve (`layer.tsx` "Layer budget solve",
 `spread.tsx` scale solve), the fill policy (`constraints/folds.ts`), the
 scatter interval hack (`scatter.tsx:227-248`), treemap's slot assignment
-(`graphicalOperators/treemap.tsx`). Prior art: gotree contain (PR #461:
+(`graphicalOperators/treemap.tsx`). Prior art: the gotree `nest` prototype (PR #461, named `contain` there:
 `constraints/contain.ts` + layer pre-pass), Bluefish
 `createLinSysBBox` (`packages/bluefish-solid/src/util/bbox.ts`), PiCCL
 `equal` (`PiCCL_core/src/solver/solverNodes.ts`).

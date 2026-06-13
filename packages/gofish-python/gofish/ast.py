@@ -480,8 +480,8 @@ class PositionConstraint:
         }
 
 
-class ContainConstraint:
-    """IR carrier for `Constraint.contain([outer, inner], x=..., y=...)`.
+class NestConstraint:
+    """IR carrier for `Constraint.nest([outer, inner], x=..., y=...)`.
 
     A size-setting constraint: `outer = inner + 2*padding` holds per constrained
     axis (`outer = refs[0]`, `inner = refs[1]`), and `inner` is centered in
@@ -497,7 +497,7 @@ class ContainConstraint:
 
     def to_dict(self) -> dict:
         return {
-            "type": "contain",
+            "type": "nest",
             "options": self.options,
             "refs": [r.ref_name for r in self.refs],
         }
@@ -635,13 +635,13 @@ class Constraint:
         return PositionConstraint(refs, options)
 
     @staticmethod
-    def contain(
+    def nest(
         refs: List[RefSentinel],
         *,
         x: Optional[float] = None,
         y: Optional[float] = None,
-    ) -> ContainConstraint:
-        """Contain `inner` inside `outer` with per-axis padding.
+    ) -> NestConstraint:
+        """Nest `inner` inside `outer` with per-axis padding.
 
         `refs` is exactly `[outer, inner]`. On each constrained axis the relation
         `outer = inner + 2*padding` holds and `inner` is centered in `outer`.
@@ -652,7 +652,7 @@ class Constraint:
         unconstrained.
 
         Args:
-            refs: Exactly `[outer, inner]` — outer contains inner.
+            refs: Exactly `[outer, inner]` — outer nests inner.
             x: Per-axis padding in pixels on the x axis (omit to leave x
                 unconstrained).
             y: Per-axis padding in pixels on the y axis.
@@ -662,11 +662,11 @@ class Constraint:
         """
         if x is None and y is None:
             raise ValueError(
-                "Constraint.contain requires at least one of x, y"
+                "Constraint.nest requires at least one of x, y"
             )
         if len(refs) != 2:
             raise ValueError(
-                "Constraint.contain requires exactly 2 refs [outer, inner], "
+                "Constraint.nest requires exactly 2 refs [outer, inner], "
                 f"got {len(refs)}"
             )
         options: Dict[str, Any] = {}
@@ -674,7 +674,7 @@ class Constraint:
             options["x"] = x
         if y is not None:
             options["y"] = y
-        return ContainConstraint(refs, options)
+        return NestConstraint(refs, options)
 
     @staticmethod
     def z_above(a: RefSentinel, b: RefSentinel) -> ZOrderConstraint:
