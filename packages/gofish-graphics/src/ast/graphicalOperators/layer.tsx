@@ -39,7 +39,7 @@ import { allocateSlices } from "../constraints/folds";
 import { childNameKey } from "../constraints/shared";
 import {
   composeConstraintSpaces,
-  type DistributeBudget,
+  type ComposeBudget,
 } from "../constraints/compose";
 import { isValue } from "../data";
 import { unionChildSpaces } from "./alignment";
@@ -505,7 +505,7 @@ export const layer = createNodeOperatorSequential(
     // Distribute budget descriptor from the recognized spread shape, stashed by
     // `resolveUnderlyingSpace` and consumed by `layout` to invert the composed
     // SIZE against the allotted size and propose per-child slices.
-    let constraintBudget: DistributeBudget | undefined;
+    let constraintBudget: ComposeBudget | undefined;
 
     return new GoFishNode(
       {
@@ -671,63 +671,67 @@ export const layer = createNodeOperatorSequential(
             }
           }
 
-          // Layer budget solve for a recognized spread shape. When the
-          // distribute fold composed a SIZE claim, invert it against this
-          // layer's resolved size on the distribute axis to derive the child
-          // scale factor (the same Monotonic.inverse recipe as the selfScaled
-          // path, but driven by the *allotted* size, not only an explicit
-          // w/h, and passing `upperBoundGuess` like spread does). Idempotent
-          // with the root's own inversion of the same SIZE.
-          if (
-            constraintBudget?.sizeDomain &&
-            Number.isFinite(size[constraintBudget.dAxis])
-          ) {
-            const dAxis = constraintBudget.dAxis;
-            const sf = constraintBudget.sizeDomain.inverse(size[dAxis], {
-              upperBoundGuess: size[dAxis],
-            });
-            if (sf !== undefined) childScaleFactors[dAxis] = sf;
-            else
-              // A non-invertible fold-produced Monotonic would otherwise
-              // silently vanish the content (spread's `?? 0`); name the axis and
-              // budget so the failure is visible, then keep the inherited factor.
-              console.warn(
-                `layer: could not invert distribute SIZE claim on ${
-                  dAxis === 0 ? "x" : "y"
-                } axis for budget ${size[dAxis]}px; keeping inherited scale factor.`,
-                constraintBudget
-              );
+          // Layer budget solve. For each axis whose composed claim is SIZE
+          // (the max-plus longest path), invert it against this layer's resolved
+          // size to derive the child scale factor (the same Monotonic.inverse
+          // recipe as the selfScaled path, but driven by the *allotted* size,
+          // not only an explicit w/h, and passing `upperBoundGuess` like spread
+          // does). Idempotent with the root's own inversion of the same SIZE.
+          if (constraintBudget) {
+            for (const axis of [0, 1] as const) {
+              const dom = constraintBudget.sizeDomain[axis];
+              if (dom === undefined || !Number.isFinite(size[axis])) continue;
+              const sf = dom.inverse(size[axis], {
+                upperBoundGuess: size[axis],
+              });
+              if (sf !== undefined) childScaleFactors[axis] = sf;
+              else
+                // A non-invertible fold-produced Monotonic would otherwise
+                // silently vanish the content (spread's `?? 0`); name the axis
+                // and budget so the failure is visible, then keep the inherited
+                // factor.
+                console.warn(
+                  `layer: could not invert distribute SIZE claim on ${
+                    axis === 0 ? "x" : "y"
+                  } axis for budget ${size[axis]}px; keeping inherited scale factor.`,
+                  constraintBudget
+                );
+            }
           }
 
-          // Per-child proposed size for the distribute-covered children: the
-          // fill policy (`allocateSlices`) — an equal slice each — on the
-          // distribute axis, the full size on the cross axis. A child carrying
-          // its own explicit size ignores this (its size wins), matching
-          // spread; a claim-less child consumes the slice.
-          const sliceByName: Map<string, number> | undefined = constraintBudget
+          // Per-child proposed size for distribute-covered children: each
+          // distribute segment slices its axis size equally (`allocateSlices`)
+          // among its covered children; a child covered on both axes (a table
+          // cell) draws an x-slice and a y-slice. Uncovered axes get the full
+          // size. A child carrying its own explicit size ignores this (its size
+          // wins), matching spread; a claim-less child consumes the slice.
+          const sliceByName: Map<string, Size> | undefined = constraintBudget
             ? (() => {
-                const b = constraintBudget;
-                const slices = allocateSlices(
-                  size[b.dAxis],
-                  b.spacing,
-                  b.order.length
-                );
-                const m = new Map<string, number>();
-                b.order.forEach((name, i) => m.set(name, slices[i]));
+                const m = new Map<string, Size>();
+                for (const seg of constraintBudget.segments) {
+                  const slices = allocateSlices(
+                    size[seg.dAxis],
+                    seg.spacing,
+                    seg.order.length
+                  );
+                  seg.order.forEach((name, i) => {
+                    const cur = m.get(name) ?? ([size[0], size[1]] as Size);
+                    cur[seg.dAxis] = slices[i];
+                    m.set(name, cur);
+                  });
+                }
                 return m;
               })()
             : undefined;
           const childSizeFor = (childName: string | undefined): Size => {
             if (
-              !constraintBudget ||
+              sliceByName === undefined ||
               childName === undefined ||
-              !sliceByName!.has(childName)
+              !sliceByName.has(childName)
             ) {
               return size;
             }
-            const sliced: Size = [size[0], size[1]];
-            sliced[constraintBudget.dAxis] = sliceByName!.get(childName)!;
-            return sliced;
+            return sliceByName.get(childName)!;
           };
 
           // `position` constraints with a datum coordinate contribute a data
