@@ -27,6 +27,7 @@
 import { GoFishNode, type Placeable } from "../_node";
 import type { GoFishAST } from "../_ast";
 import { type ConstraintRef } from "./shared";
+import { sliceExtent } from "./folds";
 import { ORDINAL, UNDEFINED, type UnderlyingSpace } from "../underlyingSpace";
 
 export interface GridOptions {
@@ -70,18 +71,14 @@ export const isGridConstraint = (c: { type: string }): c is GridConstraint =>
 const numRowsOf = (c: GridConstraint): number =>
   Math.ceil(c.children.length / c.numCols);
 
-/** One track's extent: the box split into `n` tracks after reserving `spacing`
- *  between adjacent ones (the equal-flex-track solve). */
-export const cellExtent = (size: number, spacing: number, n: number): number =>
-  (size - spacing * (n - 1)) / n;
-
-/** Per-cell proposed size `[cellW, cellH]` for a grid laid into `size`. */
+/** Per-cell proposed size `[cellW, cellH]` for a grid laid into `size` — each
+ *  axis split into equal flex tracks via the shared `sliceExtent` (folds.ts). */
 export const gridCellSize = (
   c: GridConstraint,
   size: readonly [number, number]
 ): [number, number] => [
-  cellExtent(size[0], c.xSpacing, c.numCols),
-  cellExtent(size[1], c.ySpacing, numRowsOf(c)),
+  sliceExtent(size[0], c.xSpacing, c.numCols),
+  sliceExtent(size[1], c.ySpacing, numRowsOf(c)),
 ];
 
 /**

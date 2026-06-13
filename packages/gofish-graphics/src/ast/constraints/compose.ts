@@ -18,9 +18,10 @@
 // apps/docs/docs/internals/design/layout-synthesis.md: a distribute is a series
 // (sum) on its axis, align/overlay is `max`, and any network of the two folds to
 // a single monotone claim — so the inversion (auto-fit) stays a one-unknown
-// solve. `spread` is the one-distribute + one-cross-axis-align instance; a grid
-// (`table`) is two cross-cutting distributes; SubsetSelection is two disjoint
-// distributes on one axis (their sub-sums overlay, hence `max`).
+// solve. `spread` is the one-distribute + one-cross-axis-align instance;
+// SubsetSelection is two disjoint distributes on one axis (their sub-sums
+// overlay, hence `max`). (A grid/`table` is its own `grid` constraint with
+// ORDINAL track axes — see constraints/grid.ts — not composed here.)
 //
 // The align fold is load-bearing, not cosmetic: in a bar chart (distribute on x,
 // bars aligned on y) it is `alignSpaceFold` that turns the bars' SIZE heights

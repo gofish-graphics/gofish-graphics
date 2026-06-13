@@ -4,6 +4,7 @@ import { createNodeOperator } from "../withGoFish";
 import { createOperator } from "../marks/createOperator";
 import { layer } from "./layer";
 import { Constraint } from "../constraints";
+import { childNameKey } from "../constraints/shared";
 
 /**
  * `Table` arranges cells in a `numCols`-wide grid. It elaborates to a flat
@@ -36,13 +37,13 @@ export const Table = createNodeOperator(
     // Each cell needs a name so the grid constraint can reference it; reuse the
     // cell's key (from the table split) when present, else synthesize one.
     const cellNames = children.map((c, i) => {
-      if (c instanceof GoFishNode) {
-        if (typeof c._name === "string") return c._name;
-        const nm = c.key ?? `__grid_cell_${i}`;
-        c._name = nm;
-        return nm;
-      }
-      return `__grid_cell_${i}`;
+      // Reuse the cell's existing constraint name (string or Token, via
+      // `childNameKey`); synthesize and stamp one only when it has none.
+      const existing = childNameKey(c);
+      if (existing !== undefined) return existing;
+      const nm = (c instanceof GoFishNode && c.key) || `__grid_cell_${i}`;
+      if (c instanceof GoFishNode) c._name = nm;
+      return nm;
     });
 
     const node = (await layer(children)) as GoFishNode;

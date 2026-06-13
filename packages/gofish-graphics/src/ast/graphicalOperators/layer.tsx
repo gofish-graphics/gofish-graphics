@@ -641,13 +641,11 @@ export const layer = createNodeOperatorSequential(
             computeSize(dims[1].size, scaleFactors?.[1]!, size[1]) ?? size[1],
           ];
 
-          // Grid budget: every cell fills its flex track, so it's proposed the
-          // equal track size (box-division). `applyGrid` then centers it.
+          // Grid budget: a grid layer is exclusively cells (table elaboration),
+          // and every cell fills its flex track — so all children get the equal
+          // track size (box-division); `applyGrid` then centers them.
           const gridC = node.constraints.find(isGridConstraint);
           const gridCell = gridC ? gridCellSize(gridC, size) : undefined;
-          const gridNames = gridC
-            ? new Set(gridC.children.map((r) => r.name))
-            : undefined;
 
           // Build the LOCAL scale for each self-scaled (stashed) dim against our
           // own pixel box — see selfScaledSpaces above. The recipe (cf. the
@@ -736,13 +734,8 @@ export const layer = createNodeOperatorSequential(
               })()
             : undefined;
           const childSizeFor = (childName: string | undefined): Size => {
-            if (
-              gridCell !== undefined &&
-              childName !== undefined &&
-              gridNames!.has(childName)
-            ) {
-              return gridCell;
-            }
+            // Grid is exclusive: every child is a cell, so all get the track size.
+            if (gridCell !== undefined) return gridCell;
             if (
               sliceByName === undefined ||
               childName === undefined ||
