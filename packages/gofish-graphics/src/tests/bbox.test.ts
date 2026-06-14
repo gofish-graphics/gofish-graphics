@@ -10,6 +10,7 @@
  */
 
 import { BBox } from "../ast/constraints/bbox";
+import * as Monotonic from "../util/monotonic";
 
 let passed = 0;
 let failed = 0;
@@ -120,6 +121,45 @@ console.log("# bbox: ownership / over-determination");
   b.add("min", 10);
   b.add("max", 30); // size implied = 20, center implied = 20
   ok("consistent 3rd facet absorbed", b.add("center", 20) === undefined);
+}
+
+console.log("# bbox: σ-affine (Monotonic) facets");
+{
+  // A σ-valued size + a numeric min → max = min + count·σ (a bar's edge).
+  const b = new BBox();
+  b.add("min", 100); // a pinned pixel position (constant)
+  b.add("size", Monotonic.linear(10, 0)); // 10·σ
+  const max = b.readMono("max");
+  ok(
+    "numeric min + σ size ⇒ σ-affine max",
+    max !== undefined && near(max.run(0), 100) && near(max.run(1), 110)
+  );
+  // read() evaluates at σ: at σ=2 the box top is 100 + 10·2 = 120.
+  ok("read(max, σ=2) evaluates", near(b.read("max", 2), 120));
+  // center = min + size/2 = 100 + 5σ.
+  ok("center is σ-affine", near(b.read("center", 2), 110));
+}
+{
+  // A consistent σ-valued 3rd facet is absorbed; a contradicting one conflicts.
+  const b = new BBox();
+  b.add("min", 0);
+  b.add("max", Monotonic.linear(10, 0)); // size now implied = 10σ
+  ok(
+    "consistent σ 3rd facet absorbed",
+    b.add("size", Monotonic.linear(10, 0)) === undefined
+  );
+  const c = b.add("size", Monotonic.linear(20, 0)); // 20σ ≠ 10σ
+  ok(
+    "contradicting σ facet reports conflict",
+    c !== undefined && c.facet === "size"
+  );
+}
+{
+  // A constant facet still reads back as a plain number via read() (default σ=0).
+  const b = new BBox();
+  b.add("min", 10);
+  b.add("size", 20);
+  ok("constant facets read as numbers", b.read("max") === 30);
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

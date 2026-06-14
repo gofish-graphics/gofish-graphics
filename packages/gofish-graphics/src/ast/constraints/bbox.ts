@@ -2,6 +2,8 @@
 // @wiki Underlying Space — /internals/core/underlying-space
 // </gofish-wiki>
 
+import * as Monotonic from "../../util/monotonic";
+
 /**
  * A per-axis linear-system bounding box (#39), modeled on Bluefish's
  * `createLinSysBBox`/`solveSystem` (`bbox.ts`). Each axis is a **2-unknown
@@ -30,8 +32,20 @@
  * size-setting constraints write into (size-claims.md "Dimension B"); GoFish's
  * `(intrinsic-local box, translate)` split is bridged at the call site by
  * stamping `min` into the translate and `[0, size]` into the local box.
+ *
+ * **σ-affine facet values (unified-propagation.md, stage 1).** A facet's value
+ * is a {@link Monotonic} — `slope·σ + intercept` — not just a number, so the
+ * ledger can hold a claim that still depends on its scope's scale factor σ (a
+ * bar's `size = count·σ`) and resolve it once σ is solved. A plain `number` is
+ * accepted and coerced to a constant (`slope 0`); the all-numeric case (every
+ * caller today) behaves exactly as before, and {@link read} evaluates at σ
+ * (default 0), so a constant reads back as its number. The σ-aware value is
+ * {@link readMono}. Equations stay printable via `Monotonic.print`.
  */
 export type BBoxFacet = "min" | "max" | "center" | "size";
+
+/** A facet value: a σ-affine claim, or a plain number (a constant claim). */
+export type FacetValue = number | Monotonic.Monotonic;
 
 const COEFFS: Record<BBoxFacet, [number, number]> = {
   min: [1, 0],
@@ -40,11 +54,27 @@ const COEFFS: Record<BBoxFacet, [number, number]> = {
   size: [0, 1],
 };
 
+/** Coerce a number to a constant Monotonic; pass a Monotonic through. */
+const asMono = (v: FacetValue): Monotonic.Monotonic =>
+  typeof v === "number" ? Monotonic.linear(0, v) : v;
+
+/** Equality of two σ-affine claims, by probing at two distinct σ (two points
+ *  pin a line). v1 limitation: exact only for linear claims; a piecewise claim
+ *  agreeing at 0 and 1 but differing on another segment would read as equal —
+ *  acceptable until a size-setting constraint produces a piecewise facet. */
+const monoEqual = (
+  a: Monotonic.Monotonic,
+  b: Monotonic.Monotonic,
+  tolerance: number
+): boolean =>
+  Math.abs(a.run(0) - b.run(0)) <= tolerance &&
+  Math.abs(a.run(1) - b.run(1)) <= tolerance;
+
 export interface BBoxConflict {
   facet: BBoxFacet;
-  /** Value the new equation asserts. */
+  /** Value the new equation asserts (evaluated at σ=0 for the message). */
   asserted: number;
-  /** Value the already-solved system implies. */
+  /** Value the already-solved system implies (evaluated at σ=0). */
   implied: number;
   owner: string | undefined;
   priorOwner: string | undefined;
@@ -52,12 +82,12 @@ export interface BBoxConflict {
 
 interface Equation {
   facet: BBoxFacet;
-  value: number;
+  value: Monotonic.Monotonic;
   owner: string | undefined;
 }
 
-/** Solved unknowns `[min, size]`, or undefined when rank < 2. */
-type Solution = [number, number] | undefined;
+/** Solved unknowns `[min, size]` (σ-affine), or undefined when rank < 2. */
+type Solution = [Monotonic.Monotonic, Monotonic.Monotonic] | undefined;
 
 export class BBox {
   /** Independent equations retained (at most 2 drive the solve). */
@@ -72,20 +102,21 @@ export class BBox {
    */
   add(
     facet: BBoxFacet,
-    value: number,
+    value: FacetValue,
     owner?: string,
     tolerance = 1e-6
   ): BBoxConflict | undefined {
+    const mono = asMono(value);
     // If the system already determines this facet, the write is a redundant
     // check rather than new information (rank-2 over-determination, or a repeat
     // of an existing facet). Verify consistency; report on violation.
     if (this.solution !== undefined) {
-      const implied = this.read(facet)!;
-      if (Math.abs(implied - value) > tolerance) {
+      const implied = this.readMono(facet)!;
+      if (!monoEqual(implied, mono, tolerance)) {
         return {
           facet,
-          asserted: value,
-          implied,
+          asserted: mono.run(0),
+          implied: implied.run(0),
           owner,
           priorOwner: this.eqs[0]?.owner,
         };
@@ -96,11 +127,11 @@ export class BBox {
     if (existing) {
       // Same facet again: a consistent repeat is ignored; a contradiction is a
       // single-owner conflict.
-      if (Math.abs(existing.value - value) > tolerance) {
+      if (!monoEqual(existing.value, mono, tolerance)) {
         return {
           facet,
-          asserted: value,
-          implied: existing.value,
+          asserted: mono.run(0),
+          implied: existing.value.run(0),
           owner,
           priorOwner: existing.owner,
         };
@@ -111,7 +142,7 @@ export class BBox {
     // `min` then `min`): handled above by the same-facet check. Distinct facets
     // are always independent here (the four facets are pairwise independent in
     // 2 unknowns), so two distinct facets solve the system.
-    this.eqs.push({ facet, value, owner });
+    this.eqs.push({ facet, value: mono, owner });
     if (this.eqs.length === 2) this.solve();
     return undefined;
   }
@@ -122,8 +153,10 @@ export class BBox {
     const [b0, b1] = COEFFS[b.facet];
     const det = a0 * b1 - a1 * b0;
     if (Math.abs(det) < 1e-12) return; // dependent (shouldn't happen for distinct facets)
-    const min = (a.value * b1 - b.value * a1) / det;
-    const size = (a0 * b.value - b0 * a.value) / det;
+    // min  = (a·b1 − b·a1) / det,  size = (a0·b − b0·a) / det — as Monotonics.
+    const lin = (k: number, m: Monotonic.Monotonic) => Monotonic.smul(k, m);
+    const min = Monotonic.add(lin(b1 / det, a.value), lin(-a1 / det, b.value));
+    const size = Monotonic.add(lin(a0 / det, b.value), lin(-b0 / det, a.value));
     this.solution = [min, size];
   }
 
@@ -132,14 +165,21 @@ export class BBox {
     return this.solution !== undefined;
   }
 
-  /** Read a facet: from the solve when determined, else from a direct pin, else
-   *  undefined (under-determined). */
-  read(facet: BBoxFacet): number | undefined {
+  /** Read a facet as a σ-affine claim: from the solve when determined, else
+   *  from a direct pin, else undefined (under-determined). */
+  readMono(facet: BBoxFacet): Monotonic.Monotonic | undefined {
     if (this.solution !== undefined) {
       const [min, size] = this.solution;
       const [c0, c1] = COEFFS[facet];
-      return c0 * min + c1 * size;
+      return Monotonic.add(Monotonic.smul(c0, min), Monotonic.smul(c1, size));
     }
     return this.eqs.find((e) => e.facet === facet)?.value;
+  }
+
+  /** Read a facet evaluated at scale factor `sigma` (default 0). A constant
+   *  (all-numeric) facet reads back as its number — the path every caller uses
+   *  today. */
+  read(facet: BBoxFacet, sigma = 0): number | undefined {
+    return this.readMono(facet)?.run(sigma);
   }
 }
