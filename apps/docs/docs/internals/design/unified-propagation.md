@@ -116,12 +116,14 @@ resolve with a spike before committing the solver.
 ## What it takes (staged, each gated `capture-diff` REAL = 0)
 
 1. **Ledger holds `Monotonic` facets** — σ-affine values, not only numbers
-   (finishes #39 step 1). Type + tests only; no behavior change.
+   (finishes #39 step 1). Type + tests only; no behavior change. ✅ **Landed**
+   (`BBox` now holds a `Monotonic` per facet; `read(facet, σ)` evaluates,
+   `readMono` returns the claim; all-numeric callers unchanged).
 2. **`dims` reads the ledger; `place`/`setExtent`/intrinsic writes record into
-   it** — the risky core (~38 `place()` callers). Behavior-preserving; switch
-   readers over one at a time. Watch the `baseline` anchor, `embedded`, and the
-   `translate === undefined` "unplaced" signal (it must survive as "facet not yet
-   determined", never become 0).
+   it** — the risky core. Behavior-preserving; switch readers over one at a time.
+   Watch the `baseline` anchor, `embedded`, and the `translate === undefined`
+   "unplaced" signal (it must survive as "facet not yet determined", never
+   become 0).
 3. **Migrate each constraint to a facet-equation emitter** behind today's
    `apply*` signatures, one at a time, gated.
 4. **Replace the placement walk with the propagation solver** — σ solved per
@@ -130,11 +132,37 @@ resolve with a spike before committing the solver.
    into the σ-claim (the label-fits-the-box behavior below).
 5. **Aspect ratio + σ-scope as explicit cross-cutting equations** on top.
 
+### Stage 2 is not a `place()` refactor — it's a representation migration
+
+The size of stage 2 was initially under-estimated as "~38 `place()` callers".
+The reality, measured: **`intrinsicDims` is referenced 108 times across 20
+files, and `transform.translate` across 23** — and crucially it is **not
+encapsulated**. Shapes _set_ their own `intrinsicDims` (`rect`/`ellipse`/`text`/
+`petal`/`polygon`/`image`), and operators _read and write_ it and `translate`
+directly (`treemap`, `offset`, `porterDuff`, `scatter`, `arrow`, `connect`,
+`enclose`, `position`, `coord`). Making a per-node ledger the **authoritative**
+source for `dims` therefore means migrating every one of those sites off direct
+`intrinsicDims`/`translate` manipulation and onto facet writes — not flipping a
+single getter. A purely additive shadow ledger (one that records but doesn't
+drive geometry) would be redundant state, not authority. And the local-frame /
+absolute-position split that `(intrinsicDims, translate)` encodes — used during
+a node's _own_ layout, before its parent places it — has to be reconstructed in
+the ledger (a node knows its size before its position: rank-1, the `min`/`center`
+facets `undefined`). The asymmetric-center / baseline cases are where a naive
+absolute-only ledger silently diverges.
+
+So stage 2 is a **deliberate, interactive, multi-session migration**, gated story
+by story — _not_ something to land in one blind pass. (See the judgment-call note
+on the PR.) Stages 3–5 sit on top of it; stage 4 additionally _changes pixels_
+(labels fit the box), so it needs human "is this better?" judgment per story
+([[feedback_pixel_not_dom_gate]]), and stage 5's aspect-ratio home is an open
+design fork — neither is gate-decidable alone.
+
 Blast radius is the whole layout core (`_node.ts`, `layer.tsx`, every `apply*`,
-`compose.ts`); the pixel gate is the net. Step 4 is the one that can fail to
-converge — it is, in effect, adopting a Bluefish-style constraint solver while
-carrying the max-plus σ-scope and the measure type-system on top. Realistically
-several sessions.
+`compose.ts`, all shapes + geometry operators); the pixel gate is the net. Step 4
+is the one that can fail to converge — it is, in effect, adopting a Bluefish-style
+constraint solver while carrying the max-plus σ-scope and the measure type-system
+on top. Realistically several sessions.
 
 ## The motivating consequence: labels that fit
 
