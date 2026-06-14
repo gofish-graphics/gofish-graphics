@@ -576,10 +576,7 @@ export class GoFishNode {
       baseline: 0,
     };
 
-    if (!this.transform!.translate) {
-      this.transform!.translate = [undefined, undefined];
-    }
-    this.transform!.translate![dir] = value - anchorToPoint[anchor];
+    this.ensureTranslate()[dir] = value - anchorToPoint[anchor];
   }
 
   /**
@@ -618,25 +615,20 @@ export class GoFishNode {
     const bbox = new BBox();
     for (const [facet, value] of facets) bbox.add(facet, value, owner);
     if (!sizeOwned) {
-      // Rank-1 position pin: the size comes from the node's own layout.
-      const [facet, value] = facets[0];
-      if (localSize === undefined || facet === "size") {
-        // No local box to size against (a bare mark) — fall back to the
-        // write-once place(), which defines the anchor.
-        if (facet !== "size") this.place(axis, value, facet);
-        return;
-      }
-      bbox.add("size", localSize, "layout");
+      // Rank-1 position pin: the second equation (the size) comes from the
+      // node's own layout — `0` for a point-like / unsized mark, matching the
+      // old `placePinned`'s `size ?? 0`, so the pin still rewrites the translate
+      // rather than silently dropping.
+      const [facet] = facets[0];
+      if (facet === "size") return; // a lone size can't determine a position
+      bbox.add("size", localSize ?? 0, "layout");
     }
 
     const absMin = bbox.read("min");
     const size = bbox.read("size");
     if (absMin === undefined || size === undefined) return; // under-determined
 
-    if (!this.transform) this.transform = { translate: [undefined, undefined] };
-    if (!this.transform.translate)
-      this.transform.translate = [undefined, undefined];
-
+    const translate = this.ensureTranslate();
     if (sizeOwned) {
       // The box is (re)sized: its local frame becomes [0, size], placed at absMin.
       if (!this.intrinsicDims) this.intrinsicDims = [];
@@ -647,12 +639,22 @@ export class GoFishNode {
         center: size / 2,
         max: size,
       };
-      this.transform.translate![dir] = absMin;
+      translate[dir] = absMin;
     } else {
       // Position pin: keep the local box, move the origin so the box's absolute
       // min lands at absMin.
-      this.transform.translate![dir] = absMin - localMin;
+      translate[dir] = absMin - localMin;
     }
+  }
+
+  /** Lazily ensure `transform.translate` exists (preserving any `scale`) and
+   *  return it. Shared by `place()` and `setExtent` — the one place the
+   *  `[undefined, undefined]` "unplaced on both axes" seed is written. */
+  private ensureTranslate(): (number | undefined)[] {
+    if (!this.transform) this.transform = { translate: [undefined, undefined] };
+    if (!this.transform.translate)
+      this.transform.translate = [undefined, undefined];
+    return this.transform.translate;
   }
 
   public embed(direction: FancyDirection): void {
