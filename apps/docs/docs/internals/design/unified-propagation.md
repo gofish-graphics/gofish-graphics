@@ -123,17 +123,23 @@ resolve with a spike before committing the solver.
    it** — the risky core. Behavior-preserving; switch readers over one at a time.
    Watch the `baseline` anchor, `embedded`, and the `translate === undefined`
    "unplaced" signal (it must survive as "facet not yet determined", never
-   become 0). 🟡 **Down-payment landed:** `place()`'s positional write now routes
-   through the bbox-backed `setExtent` (rank-1) instead of bespoke
-   `value − anchorPoint` arithmetic. Because `align` (`placeAtAnchor`),
-   `distribute`, `nest`, and `position` all place via `place()`, and `span` /
-   override-`position` already used `setExtent`, **every placement now funnels
-   through the one bbox primitive** — the atomic "land this facet at this
-   coordinate" op is unified (gated REAL = 0). What remains for full stage 2 is
-   the _authoritative read_ side: making `dims` read a **persistent** per-node
-   ledger (today `setExtent` materializes into `(intrinsicDims, translate)` and
-   `dims` reads those), and migrating the 108 direct `intrinsicDims` sites — the
-   interactive part below.
+   become 0). 🟡 **Down-payment attempted and reverted** (recorded so the next
+   attempt doesn't repeat it): rerouting `place()`'s positional write through
+   `setExtent` (so all of align/distribute/nest/position/span funnel through one
+   bbox primitive) was gated REAL = 0, but `/code-review` found a **latent
+   divergence** — `setExtent` reconstructs a `center`/`max` anchor geometrically
+   (`min + size/2`, `min + size`), which disagrees with `place()`'s use of the
+   _stored_ `intrinsic.center`/`max` when a box is asymmetric (e.g. nodes
+   `position.tsx` builds with a nonzero local min, reached via nest/distribute/
+   grid/treemap center-placement). No current story triggers it, but a latent
+   divergence in the hottest layout method — plus a per-placement `BBox`
+   allocation — is not worth a standalone reroute. The correct form is the
+   _authoritative_ stage 2: a **persistent** per-node ledger that `place`,
+   `setExtent`, and `dims` all share, with the local-frame/absolute split
+   reconstructed faithfully (a node knows its size before its position: rank-1,
+   `min`/`center` `undefined`), plus migrating the 108 direct `intrinsicDims`
+   sites. That is the interactive, story-by-story migration below — _not_ a blind
+   reroute.
 3. **Migrate each constraint to a facet-equation emitter** behind today's
    `apply*` signatures, one at a time, gated.
 4. **Replace the placement walk with the propagation solver** — σ solved per
