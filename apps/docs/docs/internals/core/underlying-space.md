@@ -643,6 +643,19 @@ annotation or provenance is a hard claim. `inferSize`/`inferPos` tag the
 `value(...)` they emit with this resolved measure, which is what eventually
 lands on the space.
 
+**Constraint-domain measures.** A `position`/`span` constraint's datum
+coordinate carries the same resolved measure, and `collectPositionDomains`
+folds those per axis with `mergeMeasures` — so a layer's own positioning
+constraints in clashing units (a span with one endpoint in `mm` and the other
+in `inch`) throw at the source. The layer's `resolveAxis` (`layer.tsx`) then
+treats this constraint-domain measure as the axis's unit: it **prefers** the
+constraint measure and falls back to the children's POSITION measure only when
+the coordinates are untagged (literal pixels). It deliberately does _not_
+strict-unify the two — a self-scaling child (a `scatter`'s pie glyph) can leak
+its own inner unit into the children's space, and that leak is not a competing
+claim about the scatter's data axis. This restores the unit tag the scatter
+operator's reduction onto constraints had dropped.
+
 **Propagation through the SIZE→POSITION conversion.** A histogram's count axis
 is all-SIZE at the children, and `resolveAlignmentSpace`'s start/end/baseline
 branch converts all-SIZE children into `POSITION([0, max])`. That conversion

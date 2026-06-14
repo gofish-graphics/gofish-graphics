@@ -44,7 +44,7 @@ import {
   composeConstraintSpaces,
   type ComposeBudget,
 } from "../constraints/compose";
-import { isValue } from "../data";
+import { isValue, type Measure } from "../data";
 import { unionChildSpaces } from "./alignment";
 
 // ── Nest pre-pass ───────────────────────────────────────────────────────────
@@ -579,7 +579,8 @@ export const layer = createNodeOperatorSequential(
           const resolveAxis = (
             axis: 0 | 1,
             scale: number,
-            iv: Interval.Interval | undefined
+            iv: Interval.Interval | undefined,
+            ivMeasure: Measure | undefined
           ): UnderlyingSpace => {
             const base = applyScale(
               unionChildSpaces(effectiveChildren, axis),
@@ -590,13 +591,18 @@ export const layer = createNodeOperatorSequential(
               isPOSITION(base) && base.domain
                 ? Interval.unionAll(base.domain, iv)
                 : iv;
-            // `position`-constraint datum domains (iv) are untagged — measure
-            // flows from the children's POSITION (if any), permissively.
-            return POSITION(merged, spaceMeasure(base));
+            // The position/span constraints' OWN measure is the authoritative
+            // unit for this axis's data domain (they define it); it wins, falling
+            // back to the children's POSITION measure when the constraints are
+            // untagged (literal-pixel coords). We do NOT strict-unify the two: a
+            // self-scaling child (e.g. a pie glyph) can leak its inner unit into
+            // `base`, and that is not a competing claim about the scatter axis.
+            // Same-layer conflicts ARE caught — inside collectPositionDomains.
+            return POSITION(merged, ivMeasure ?? spaceMeasure(base));
           };
           const resolved: [UnderlyingSpace, UnderlyingSpace] = [
-            resolveAxis(0, scaleX, posDomains.x),
-            resolveAxis(1, scaleY, posDomains.y),
+            resolveAxis(0, scaleX, posDomains.x, posDomains.xMeasure),
+            resolveAxis(1, scaleY, posDomains.y, posDomains.yMeasure),
           ];
 
           // A simple spread expressed as align + distribute. When the
