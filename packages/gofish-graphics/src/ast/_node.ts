@@ -569,14 +569,23 @@ export class GoFishNode {
 
     if (this.transform?.translate?.[dir] !== undefined) return;
 
-    const anchorToPoint = {
-      min: intrinsic!.min ?? 0,
-      max: intrinsic!.max ?? 0,
-      center: intrinsic!.center ?? 0,
-      baseline: 0,
-    };
-
-    this.ensureTranslate()[dir] = value - anchorToPoint[anchor];
+    // `baseline` pins the LOCAL origin (point 0) directly — it is not a bbox
+    // facet, so it stays a direct translate write.
+    if (anchor === "baseline") {
+      this.ensureTranslate()[dir] = value;
+      return;
+    }
+    // min/center/max: land the anchor at the absolute `value` via the same
+    // bbox-backed mechanism `span`/`position` use (`setExtent` rank-1 — keep the
+    // local box, move only the translate). This is the unified
+    // "position pin → owned facet" path (unified-propagation.md), replacing the
+    // bespoke `value − anchorPoint` arithmetic. Write-once is preserved by the
+    // guard above (we only reach here when the translate is unset).
+    this.setExtent(
+      axis,
+      { [anchor]: value } as Partial<Record<BBoxFacet, number>>,
+      "place"
+    );
   }
 
   /**
