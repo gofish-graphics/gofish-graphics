@@ -1,5 +1,4 @@
 import { GoFishNode } from "../_node";
-import { GoFishRef } from "../_ref";
 import type { AxisOptions } from "../gofish";
 import { MaybeValue } from "../data";
 import {
@@ -15,7 +14,7 @@ import { createNodeOperator } from "../withGoFish";
 import { Alignment } from "./alignment";
 import { layer } from "./layer";
 import { Constraint } from "../constraints";
-import { childNameKey } from "../constraints/shared";
+import { ensureChildNames } from "../constraints/shared";
 import { createOperator } from "../marks/createOperator";
 import { Mark, Operator } from "../types";
 
@@ -75,48 +74,10 @@ export const Spread = createNodeOperator(
     const alignAxis = alignDir === 0 ? "x" : "y";
     const stackAxis = stackDir === 0 ? "x" : "y";
 
-    // Each child needs a name so the constraints can reference it; reuse its
-    // existing constraint name/key, else synthesize one. A child may be a
-    // `ref` (e.g. an axis label's `ref(bar)`), which is a GoFishRef proxy, not
-    // a GoFishNode — it carries `_name` too, so it must also be named or the
-    // layer's `nameToPlaceable` won't have an entry for it and the constraint
-    // silently drops it (the ref then never participates in align/distribute).
+    // Give each child a unique constraint name so the align/distribute can
+    // reference it (shared with scatter — see `ensureChildNames`).
     const childList = children as GoFishAST[];
-    // Track names already claimed so a collision is disambiguated rather than
-    // collapsing two children onto one slot. The bespoke spread placed children
-    // POSITIONALLY, so same-named children were harmless; the layer addresses
-    // them through `nameToPlaceable`, which keys by name — duplicates there map
-    // every constraint ref to a single placeable (e.g. cut returns N slices that
-    // all carry the source mark's name, so the distribute would place one slice
-    // and no-op the rest, collapsing them onto each other).
-    const used = new Set<string>();
-    const names = childList.map((c, i) => {
-      const existing = childNameKey(c);
-      // `||` (not `??`): an EMPTY-string name is as useless as a missing one and
-      // must be synthesized. An empty `childName` is falsy, so the layer's
-      // phase-1 guard `!childName` would baseline-place it even though it's a
-      // constraint target — then a `middle` align centers siblings on its
-      // (origin) center instead of the box center (the icicle/nested-waffle
-      // regression). A real Token name (`createName`) is a non-empty string, so
-      // `||` still preserves it.
-      let nm =
-        existing || (c instanceof GoFishNode && c.key) || `__spread_${i}`;
-      if (used.has(nm)) nm = `${nm}__spread_${i}`;
-      used.add(nm);
-      // Write the name back ONLY when we assigned or disambiguated it, so the
-      // layer's `nameToPlaceable` keys match the constraint refs. A `ref` (e.g.
-      // an axis label's `ref(bar)`) is a GoFishRef proxy, not a GoFishNode, but
-      // carries `_name` too — name it as well or the constraint drops it. Leave
-      // an UNCHANGED existing name untouched: it may be a Token (created via
-      // `createName`), and overwriting it with a plain string would break
-      // token-based `ref`/`selectAll` resolution.
-      if (
-        nm !== existing &&
-        (c instanceof GoFishNode || c instanceof GoFishRef)
-      )
-        c._name = nm;
-      return nm;
-    });
+    const names = ensureChildNames(childList, "spread");
 
     // Elaborate to a layer carrying the cross-axis align + the stack distribute.
     // `fancyDims` (explicit w/h) flow to the layer, whose self-scaling region

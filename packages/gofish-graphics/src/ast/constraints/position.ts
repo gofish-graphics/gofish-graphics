@@ -82,7 +82,12 @@ export interface PositionOptions {
    *  its own layout (a Frame / coord glyph arrives with a translate, which makes
    *  the write-once `place()` a no-op). Set by `scatter`, whose `x`/`y` ARE the
    *  child's placement. Off (default) for axis/pie/legend pins, where a
-   *  pre-placed target keeps its position (the write-once no-op). */
+   *  pre-placed target keeps its position (the write-once no-op).
+   *
+   *  Interim: once #39's linsys ledger ({@link BBox}) becomes the node's actual
+   *  dimension state, per-equation ownership subsumes this — a pin would simply
+   *  own the position facet, and a second writer would be a named conflict
+   *  rather than a silent no-op needing a per-call opt-out. */
   override?: boolean;
 }
 

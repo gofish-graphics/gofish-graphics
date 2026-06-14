@@ -1,4 +1,5 @@
 import { GoFishNode, type Placeable } from "../_node";
+import { GoFishRef } from "../_ref";
 import type { GoFishAST } from "../_ast";
 import { isToken } from "../createName";
 
@@ -40,6 +41,38 @@ export const childNameKey = (node: GoFishAST): string | undefined => {
   const n = (node as GoFishNode)._name;
   if (n === undefined) return undefined;
   return isToken(n) ? n.__tag : n;
+};
+
+/**
+ * Give every child a UNIQUE constraint name and return the names in order, so an
+ * operator that elaborates to `layer(children).constrain(...)` (spread, scatter)
+ * can reference each child. Reuses an existing name/key; else synthesizes
+ * `__${prefix}_${i}`. Two subtleties both elaborations need (and both got wrong
+ * before being shared):
+ *   - `||` not `??`: an EMPTY-string name is as useless as a missing one (it's
+ *     falsy, so the layer's phase-1 `!childName` guard would baseline-place a
+ *     constraint target).
+ *   - duplicates are disambiguated (cut returns N slices that all carry the
+ *     source mark's name — without this they collapse onto one placeable).
+ * The (possibly new) name is written back to `_name` ONLY when it changed, so an
+ * unchanged `createName` Token survives for token-based `ref`/`selectAll`. A
+ * `ref` child is a GoFishRef proxy (not a GoFishNode) but carries `_name` too.
+ */
+export const ensureChildNames = (
+  children: GoFishAST[],
+  prefix: string
+): string[] => {
+  const used = new Set<string>();
+  return children.map((c, i) => {
+    const existing = childNameKey(c);
+    let nm =
+      existing || (c instanceof GoFishNode && c.key) || `__${prefix}_${i}`;
+    if (used.has(nm)) nm = `${nm}__${prefix}_${i}`;
+    used.add(nm);
+    if (nm !== existing && (c instanceof GoFishNode || c instanceof GoFishRef))
+      c._name = nm;
+    return nm;
+  });
 };
 
 /** Map each direct child's name (`childNameKey`) to its index; first occurrence

@@ -10,8 +10,7 @@ import { Alignment } from "./alignment";
 import { createOperator } from "../marks/createOperator";
 import { layer } from "./layer";
 import { Constraint, type ConstraintSpec } from "../constraints";
-import { childNameKey } from "../constraints/shared";
-import { GoFishRef } from "../_ref";
+import { ensureChildNames } from "../constraints/shared";
 
 const unwrapLodashArray = function <T>(value: T[] | Collection<T>): T[] {
   if (typeof value === "object" && value !== null && "value" in value) {
@@ -90,20 +89,7 @@ export const Scatter = createNodeOperator(
     // The layer derives the data→pixel posScale from the position/span datum
     // coords (collectPositionDomains).
     const childList = children as GoFishAST[];
-    const used = new Set<string>();
-    const names = childList.map((c, i) => {
-      const existing = childNameKey(c);
-      let nm =
-        existing || (c instanceof GoFishNode && c.key) || `__scatter_${i}`;
-      if (used.has(nm)) nm = `${nm}__scatter_${i}`;
-      used.add(nm);
-      if (
-        nm !== existing &&
-        (c instanceof GoFishNode || c instanceof GoFishRef)
-      )
-        c._name = nm;
-      return nm;
-    });
+    const names = ensureChildNames(childList, "scatter");
     const node = (await layer(
       { key, ...fancyDims } as any,
       childList
