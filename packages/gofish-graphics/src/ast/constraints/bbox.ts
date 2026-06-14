@@ -154,9 +154,14 @@ export class BBox {
     const det = a0 * b1 - a1 * b0;
     if (Math.abs(det) < 1e-12) return; // dependent (shouldn't happen for distinct facets)
     // min  = (a·b1 − b·a1) / det,  size = (a0·b − b0·a) / det — as Monotonics.
-    const lin = (k: number, m: Monotonic.Monotonic) => Monotonic.smul(k, m);
-    const min = Monotonic.add(lin(b1 / det, a.value), lin(-a1 / det, b.value));
-    const size = Monotonic.add(lin(a0 / det, b.value), lin(-b0 / det, a.value));
+    const min = Monotonic.add(
+      Monotonic.smul(b1 / det, a.value),
+      Monotonic.smul(-a1 / det, b.value)
+    );
+    const size = Monotonic.add(
+      Monotonic.smul(a0 / det, b.value),
+      Monotonic.smul(-b0 / det, a.value)
+    );
     this.solution = [min, size];
   }
 
