@@ -253,7 +253,7 @@ export function applyConstraints(
     } else if (constraint.type === "position") {
       applyPosition(constraint, targets, posScales);
     } else if (isSpanConstraint(constraint)) {
-      applySpan(constraint, targets, posScales, (msg) => console.warn(msg));
+      applySpan(constraint, targets, posScales);
     } else {
       applyDistribute(constraint, targets);
     }

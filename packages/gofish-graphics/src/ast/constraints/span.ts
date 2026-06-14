@@ -5,7 +5,6 @@
 import type { Placeable } from "../_node";
 import { getValue, isValue, MaybeValue } from "../data";
 import { computeAesthetic } from "../../util";
-import { BBox } from "./bbox";
 import { Axis, ConstraintPosScales, ConstraintRef, axisIndex } from "./shared";
 import * as Interval from "../../util/interval";
 
@@ -65,66 +64,31 @@ export function spanDatumInterval(
 }
 
 /**
- * Resolve each axis's `[min, max]` to pixels (datum → posScale, literal as-is),
- * solve the bbox (rank 2 → size), and stamp `(local [0, size], translate=min)`
- * into every target. A datum endpoint on an axis with no scale is a no-op
- * (mirrors `applyPosition`).
+ * Resolve each axis's `[min, max]` to pixels (datum → posScale, literal as-is)
+ * and hand both edges to each target's `setExtent` — the bbox-backed primitive
+ * that solves the extent (two edges ⇒ rank 2 ⇒ size) and stamps it into the
+ * node's `(local box, translate)` split. A datum endpoint on an axis with no
+ * scale is a no-op (mirrors `applyPosition`).
  */
 export function applySpan(
   constraint: SpanConstraint,
   targets: Placeable[],
-  posScales: ConstraintPosScales | undefined,
-  onConflict?: (msg: string) => void
+  posScales: ConstraintPosScales | undefined
 ): void {
   const spanAxis = (
     axis: Axis,
     span: [MaybeValue<number>, MaybeValue<number>] | undefined
   ) => {
     if (span === undefined) return;
-    const idx = axisIndex(axis);
-    const scale = posScales?.[idx];
+    const scale = posScales?.[axisIndex(axis)];
     const toPx = (coord: MaybeValue<number>): number | undefined => {
       if (isValue(coord) && scale === undefined) return undefined; // datum, no scale
       return computeAesthetic(coord, scale!, undefined)!;
     };
-    const minPx = toPx(span[0]);
-    const maxPx = toPx(span[1]);
-    if (minPx === undefined || maxPx === undefined) return;
-
-    const bbox = new BBox();
-    bbox.add("min", minPx, "span");
-    const conflict = bbox.add("max", maxPx, "span");
-    if (conflict && onConflict)
-      onConflict(
-        `Constraint.span: ${axis} over-determined — max asserts ${conflict.asserted} but the system implies ${conflict.implied}`
-      );
-    const min = bbox.read("min")!;
-    const size = bbox.read("size")!;
-
-    for (const target of targets) {
-      const node = target as {
-        intrinsicDims?: {
-          min?: number;
-          size?: number;
-          center?: number;
-          max?: number;
-          embedded?: boolean;
-        }[];
-        transform?: { translate?: (number | undefined)[] };
-      };
-      if (!node.intrinsicDims) node.intrinsicDims = [];
-      node.intrinsicDims[idx] = {
-        ...(node.intrinsicDims[idx] ?? {}),
-        min: 0,
-        size,
-        center: size / 2,
-        max: size,
-      };
-      if (!node.transform) node.transform = {};
-      if (!node.transform.translate)
-        node.transform.translate = [undefined, undefined];
-      node.transform.translate[idx] = min;
-    }
+    const min = toPx(span[0]);
+    const max = toPx(span[1]);
+    if (min === undefined || max === undefined) return;
+    for (const target of targets) target.setExtent!(axis, { min, max }, "span");
   };
   spanAxis("x", constraint.x);
   spanAxis("y", constraint.y);

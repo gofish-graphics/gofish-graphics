@@ -33,33 +33,23 @@ function placePinned(
   anchor: AlignAnchor,
   override: boolean
 ): void {
-  const idx = axisIndex(axis);
-  const node = target as {
-    intrinsicDims?: {
-      min?: number;
-      size?: number;
-      center?: number;
-      max?: number;
-    }[];
-    transform?: { translate?: (number | undefined)[] };
-  };
-  if (!override || node.transform?.translate?.[idx] === undefined) {
+  if (
+    !override ||
+    target.transform?.translate?.[axisIndex(axis)] === undefined
+  ) {
     placeAtAnchor(target, axis, px, anchor);
     return;
   }
-  const dim = node.intrinsicDims?.[idx] ?? {};
-  const t = node.transform.translate[idx]!;
-  const min = dim.min ?? 0;
-  const size = dim.size ?? 0;
-  const cur =
-    anchor === "start"
-      ? min + t
-      : anchor === "end"
-        ? (dim.max ?? min + size) + t
-        : anchor === "baseline"
-          ? t
-          : (dim.center ?? min + size / 2) + t; // "middle"
-  node.transform.translate[idx] = t + (px - cur);
+  // Authoritative override of a self-placed target. The origin (`baseline`) is
+  // pinned directly; the box anchors go through the bbox-backed `setExtent`
+  // (a single owned facet ⇒ rank-1 pin: keep the local box, move the translate).
+  if (anchor === "baseline") {
+    target.transform!.translate![axisIndex(axis)] = px;
+    return;
+  }
+  const facet =
+    anchor === "start" ? "min" : anchor === "end" ? "max" : "center";
+  target.setExtent!(axis, { [facet]: px }, "position");
 }
 
 /**
