@@ -251,7 +251,15 @@ composes its targets' spaces into the layer's claim on that axis:
   layer enforces both at constraint-collection time (see [[size-claims]]).
 
 The layer composes these per axis — children not covered by a constraint
-max-union in as overlay siblings — and at layout time **solves the budget**:
+max-union in as overlay siblings. On an axis a constraint **does** cover, that
+fold is authoritative and overrides the layer's default `unionChildSpaces` —
+**even when the fold is UNDEFINED**. This matters for an `align` over ORDINAL
+cross-axis children: the alignment fold is UNDEFINED (no anchored axis), and if
+the default union were allowed to win it would resurrect an ORDINAL space and a
+spurious axis (a waffle's chunked-row index leaking a row "axis"). The
+covered-axis fold — UNDEFINED included — is what `composeConstraintSpaces`
+reports (`constraints/compose.ts`). At layout time the layer then **solves the
+budget**:
 a fold-produced SIZE claim is inverted against the layer's allotted size to
 derive a local scale factor, and distribute-covered fill children are
 proposed slices from the shared allocator (`allocateSlices`,
@@ -275,6 +283,21 @@ coordinate transform's children are pixel-pure by construction (posScales
 don't cross a nonlinear transform — children get scale _factors_ instead), so
 an `end`-aligned spread inside `coord` seats flush at the box edge rather
 than at a scale origin.
+
+The `posScale(0)` fallback is right only when the children are SIZE-derived
+(bars hanging from the zero line). When a `spread`'s cross-axis children
+**already hold their own data positions** — their pre-fold space is POSITION,
+not SIZE — a non-`middle` alignment must instead be a **no-op**: the children
+know where they belong, and forcing them to `posScale(0)` off a domain that
+doesn't straddle zero (e.g. faceted year panels over `[1955, 2010]`) flings
+them far off-canvas. The elaborated `align` constraint carries this as
+`guardDataPositioned` + a per-axis `fromSize` flag (`constraints/align.ts`):
+`spread.tsx` sets the flag, and the layer fills in `fromSize` from the
+**pre-fold** child spaces in `resolveUnderlyingSpace` (mirroring
+`resolveAlignmentSpace().fromSize` — the post-fold node space is wrong here,
+since a SIZE→POSITION fold has already erased the distinction). The guard is
+scoped to spread-emitted aligns; axis/legend/table aligns keep the
+unconditional fallback.
 
 Three patterns cover most operators:
 
@@ -400,8 +423,8 @@ gofish.tsx (root):
                                        to seed the root scale factor
   pass both downward as (scaleFactors, posScales)
 
-spread.layout (each spread/stack node):
-  if shared[axis]:
+layer.layout, on an axis the node scopes (node.shared[axis] — set by
+`spread`/`stack`'s `sharedScale`; default [false, false] is a no-op):
     if myUSpace[axis].kind === "size"       → space.domain.inverse(size[axis])
     if myUSpace[axis].kind === "position"   → size[axis] / Interval.width(domain)
     if myUSpace[axis].kind === "difference" → size[axis] / space.width
@@ -411,13 +434,18 @@ spread.layout (each spread/stack node):
 Leaf shapes never need to compute their own scale factors — they receive
 them via the `scaleFactors` parameter and apply them in `computeSize`.
 
-A `layer` whose constraints fold to a SIZE claim runs the same inversion
-as spread's first branch — `fold.inverse(size[axis])` against its allotted
-size — to derive a local scale factor for its constrained children (and
-warns before falling back when the fold isn't invertible at that budget).
-Unlike spread, the layer never mutates the inherited `scaleFactors`
-array; sibling scale sharing via mutation is a spread-only behavior
-(`sharedScale`).
+`spread`/`stack` no longer have their own `layout` — they **elaborate to
+`layer + align + distribute`** (`spread.tsx`), so the dispatch above lives
+entirely in `layer.layout`. A `layer` whose constraints fold to a SIZE claim
+inverts that fold against its allotted size (`fold.inverse(size[axis])`) to
+derive a local scale factor for its constrained children (warning before
+falling back when the fold isn't invertible at that budget); a `layer` that is
+a `sharedScale` scope runs the per-axis solve in the pseudocode above. Either
+way it writes into a **fresh `childScaleFactors` array** and hands that to
+descendants — **no node ever mutates the inherited `scaleFactors`**. That is
+the claim-hoisting form of `sharedScale` (#549): a scale solves at the lowest
+node where its measure stops being shared, and the result flows to descendants
+only, never leaking to siblings.
 
 This dispatch is the practical embodiment of the underlying-space-kind
 distinction. It also happens to make the rendering pipeline more readable:
@@ -725,7 +753,9 @@ companion thesis repo).
   `src/ast/constraints/{distribute,align,folds}.ts`.
 - The Monotonic algebra used by SIZE composition: `src/util/monotonic.ts`.
 - Layout consumption: `gofish.tsx`'s `layout()` for root-level dispatch;
-  `spread.tsx`'s `layout` for the per-node `computeScaleFactor`.
+  `layer.tsx`'s `layout` for the per-scope scale-factor solve and the
+  constraint budget inversion (`spread`/`stack` elaborate to `layer`, so they
+  have no `layout` of their own).
 - Companion factory docs:
   [The Mark Factory](/internals/frontend/mark-factory),
   [The Operator Factory](/internals/frontend/operator-factory).
