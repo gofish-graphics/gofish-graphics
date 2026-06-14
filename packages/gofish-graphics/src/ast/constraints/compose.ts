@@ -97,18 +97,26 @@ export function composeConstraintSpaces(
   const aligns = constraints.filter(
     (c): c is AlignConstraint => c.type === "align"
   );
-  // Compose only layers that are PURELY distributes + aligns. A `position` pin
-  // (or z-order) puts the layer in a different regime — the distribute-relative-
-  // to-a-pin solve is deferred (layout-synthesis.md) — so leave it to the
-  // layer's default union, which already merges position data domains.
-  if (distributes.length + aligns.length !== constraints.length)
+  // `span` (the size-setting interval constraint, #39/#546) establishes its
+  // axis's extent like a distribute does — its datum range already feeds the
+  // layer's POSITION domain via `collectPositionDomains`, so it needs no fold
+  // here, but its PRESENCE means this is NOT a pure overlay: the cross-axis
+  // align fold (SIZE→POSITION) must still run (e.g. a histogram = span on x,
+  // align on y; the align fold is what makes the count axis).
+  const spans = constraints.filter((c) => c.type === "span");
+  // Compose only layers that are PURELY distributes + aligns + spans. A
+  // `position` pin (or z-order) puts the layer in a different regime — the
+  // distribute-relative-to-a-pin solve is deferred (layout-synthesis.md) — so
+  // leave it to the layer's default union, which already merges position
+  // data domains.
+  if (distributes.length + aligns.length + spans.length !== constraints.length)
     return undefined;
-  // No series → a pure overlay. Align-only composition WOULD fold (alignSpaceFold
-  // converts SIZE→POSITION), but for a pure overlay that conversion only changes
-  // the layer's reported space (e.g. a legend's), so defer it: fall to the
-  // default union. (The per-axis loop already handles align-only axes when a
-  // distribute exists on the other axis.)
-  if (distributes.length === 0) return undefined;
+  // No series and no span → a pure overlay. Align-only composition WOULD fold
+  // (alignSpaceFold converts SIZE→POSITION), but for a pure overlay that
+  // conversion only changes the layer's reported space (e.g. a legend's), so
+  // defer it: fall to the default union. (A span on the other axis makes it not
+  // an overlay, so the align fold runs.)
+  if (distributes.length === 0 && spans.length === 0) return undefined;
 
   const indexByName = buildNameIndex(childNodes);
   const keyOf = (i: number): string | undefined =>

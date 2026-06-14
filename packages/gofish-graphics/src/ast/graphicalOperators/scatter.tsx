@@ -1,25 +1,15 @@
-import { computeAesthetic } from "../../util";
-import { GoFishNode, Placeable } from "../_node";
+import { GoFishNode } from "../_node";
 import type { AxisOptions } from "../gofish";
-import { getMeasure, getValue, isValue, MaybeValue } from "../data";
-import { Dimensions, elaborateDims, FancyDims, Size } from "../dims";
+import { MaybeValue } from "../data";
+import { FancyDims } from "../dims";
 import { createNodeOperator } from "../withGoFish";
 import { GoFishAST } from "../_ast";
 import { Collection } from "lodash";
 import { SplitBy, splitKeyFn } from "../datumProjection";
-import {
-  forgetAllMeasures,
-  isPOSITION,
-  POSITION,
-  UNDEFINED,
-  UnderlyingSpace,
-} from "../underlyingSpace";
-import { computePosScale, continuous } from "../domain";
-import * as Interval from "../../util/interval";
-import { Alignment, alignChildren, resolveAlignmentSpace } from "./alignment";
+import { Alignment } from "./alignment";
 import { createOperator } from "../marks/createOperator";
 import { layer } from "./layer";
-import { Constraint } from "../constraints";
+import { Constraint, type ConstraintSpec } from "../constraints";
 import { childNameKey } from "../constraints/shared";
 import { GoFishRef } from "../_ref";
 
@@ -44,55 +34,6 @@ export type ScatterProps = {
   axes?: boolean | { x?: AxisOptions; y?: AxisOptions };
 } & FancyDims<MaybeValue<number>>;
 
-function getCurrentAnchor(
-  child: Placeable,
-  axis: 0 | 1,
-  anchor: "min" | "center" | "max" | "baseline"
-) {
-  const dims = child.dims[axis];
-  const min = dims.min ?? 0;
-  const size = dims.size ?? 0;
-  const max = dims.max ?? min + size;
-  const center = dims.center ?? min + size / 2;
-
-  switch (anchor) {
-    case "min":
-      return min;
-    case "center":
-      return center;
-    case "max":
-      return max;
-    case "baseline":
-      return 0;
-  }
-}
-
-function setAxisTranslation(
-  child: Placeable,
-  axis: 0 | 1,
-  target: number,
-  anchor: "min" | "center" | "max" | "baseline"
-) {
-  const node = child as GoFishNode;
-  const delta = target - getCurrentAnchor(child, axis, anchor);
-  node.transform!.translate![axis] =
-    (node.transform!.translate![axis] ?? 0) + delta;
-}
-
-function resolvePositionSpace(
-  values: MaybeValue<number>[] | undefined
-): UnderlyingSpace {
-  if (!values || values.length === 0) return UNDEFINED;
-  if (!values.every((value) => isValue(value))) return UNDEFINED;
-  const rawValues = values.map((value) => getValue(value)!);
-  // Value measures should all agree (same field); a mixed array forgets to
-  // undefined rather than throwing.
-  return POSITION(
-    Interval.interval(Math.min(...rawValues), Math.max(...rawValues)),
-    forgetAllMeasures(values.map((v) => getMeasure(v)))
-  );
-}
-
 export const Scatter = createNodeOperator(
   async (
     options: ScatterProps,
@@ -112,7 +53,6 @@ export const Scatter = createNodeOperator(
       ...fancyDims
     } = options;
     children = unwrapLodashArray(children);
-    const dims = elaborateDims(fancyDims);
 
     const hasX = x !== undefined || (xMin !== undefined && xMax !== undefined);
     const hasY = y !== undefined || (yMin !== undefined && yMax !== undefined);
@@ -136,310 +76,76 @@ export const Scatter = createNodeOperator(
       throw new Error("Scatter operator xMax array must match children length");
     }
 
-    // Plain x/y channels reduce to `layer + per-child Constraint.position`
-    // (#546): the layer derives the data→pixel posScale from the position
-    // constraints' datum coords (`collectPositionDomains`) and places each child
-    // centered on its coordinate — sharing the constraint path instead of a
-    // bespoke layout, exactly as `spread` delegates to distribute/align. The
-    // range channels (`xMin`/`xMax`/`yMin`/`yMax`) set a SIZE from two positions,
-    // which needs the size-setting ledger (#39); those keep the bespoke node
-    // below until that lands.
-    const noRange =
-      xMin === undefined &&
-      xMax === undefined &&
-      yMin === undefined &&
-      yMax === undefined;
-    if (noRange) {
-      const childList = children as GoFishAST[];
-      const used = new Set<string>();
-      const names = childList.map((c, i) => {
-        const existing = childNameKey(c);
-        let nm =
-          existing || (c instanceof GoFishNode && c.key) || `__scatter_${i}`;
-        if (used.has(nm)) nm = `${nm}__scatter_${i}`;
-        used.add(nm);
-        if (
-          nm !== existing &&
-          (c instanceof GoFishNode || c instanceof GoFishRef)
-        )
-          c._name = nm;
-        return nm;
+    // Elaborate to a layer carrying per-child placement constraints (#546),
+    // sharing the constraint path instead of a bespoke layout (as spread
+    // delegates to distribute/align):
+    //   - plain x / y      → Constraint.position (centers the child on its datum;
+    //                        `override` repositions a child that self-placed in
+    //                        its own layout, e.g. a Frame / coord glyph).
+    //   - range xMin/xMax  → Constraint.span: two edges DETERMINE the size via
+    //                        the linsys bbox (#39) — the size-setting the bespoke
+    //                        layout used to do by hand on intrinsicDims.
+    //   - an axis with neither → a guarded cross-axis align (the old
+    //                        alignChildren, fromSize guard included).
+    // The layer derives the data→pixel posScale from the position/span datum
+    // coords (collectPositionDomains).
+    const childList = children as GoFishAST[];
+    const used = new Set<string>();
+    const names = childList.map((c, i) => {
+      const existing = childNameKey(c);
+      let nm =
+        existing || (c instanceof GoFishNode && c.key) || `__scatter_${i}`;
+      if (used.has(nm)) nm = `${nm}__scatter_${i}`;
+      used.add(nm);
+      if (
+        nm !== existing &&
+        (c instanceof GoFishNode || c instanceof GoFishRef)
+      )
+        c._name = nm;
+      return nm;
+    });
+    const node = (await layer(
+      { key, ...fancyDims } as any,
+      childList
+    )) as GoFishNode;
+    node.constrain((ref) => {
+      const refs = names.map((n) => ref[n] ?? { name: n });
+      const cs: ConstraintSpec[] = [];
+      childList.forEach((_, i) => {
+        const pos: {
+          x?: MaybeValue<number>;
+          y?: MaybeValue<number>;
+          override: boolean;
+        } = { override: true };
+        if (x?.[i] !== undefined) pos.x = x[i];
+        if (y?.[i] !== undefined) pos.y = y[i];
+        if (pos.x !== undefined || pos.y !== undefined)
+          cs.push(Constraint.position(pos, [refs[i]]));
+
+        const span: {
+          x?: [MaybeValue<number>, MaybeValue<number>];
+          y?: [MaybeValue<number>, MaybeValue<number>];
+        } = {};
+        if (xMin?.[i] !== undefined && xMax?.[i] !== undefined)
+          span.x = [xMin[i], xMax[i]];
+        if (yMin?.[i] !== undefined && yMax?.[i] !== undefined)
+          span.y = [yMin[i], yMax[i]];
+        if (span.x !== undefined || span.y !== undefined)
+          cs.push(Constraint.span(span, [refs[i]]));
       });
-      const elaborated = (await layer(
-        { key, ...fancyDims } as any,
-        childList
-      )) as GoFishNode;
-      elaborated.constrain((ref) => {
-        const refs = names.map((n) => ref[n] ?? { name: n });
-        const cs: ReturnType<typeof Constraint.position>[] = [];
-        childList.forEach((_, i) => {
-          const opts: {
-            x?: MaybeValue<number>;
-            y?: MaybeValue<number>;
-            override: boolean;
-          } = { override: true };
-          if (x?.[i] !== undefined) opts.x = x[i];
-          if (y?.[i] !== undefined) opts.y = y[i];
-          // `anchor` defaults to "middle" — the child centers on its coordinate,
-          // matching the bespoke `setAxisTranslation(..., "center")`. `override`
-          // repositions a child that self-placed during layout (a Frame / coord
-          // glyph), which the write-once `place()` would otherwise strand.
-          if (opts.x !== undefined || opts.y !== undefined)
-            cs.push(Constraint.position(opts, [refs[i]]));
-        });
-        // Cross-axis alignment for the axis scatter does NOT position (mirrors
-        // the bespoke `alignChildren`, data-positioned guard included).
-        const out: (
-          | ReturnType<typeof Constraint.position>
-          | ReturnType<typeof Constraint.align>
-        )[] = [...cs];
-        if (!hasX) {
-          const a = Constraint.align({ x: alignment }, refs);
-          a.guardDataPositioned = true;
-          out.push(a);
-        }
-        if (!hasY) {
-          const a = Constraint.align({ y: alignment }, refs);
-          a.guardDataPositioned = true;
-          out.push(a);
-        }
-        return out;
-      });
-      if (name !== undefined) elaborated._name = name;
-      if (axes !== undefined) {
-        const toShow = (opt: AxisOptions | undefined): boolean | undefined =>
-          opt === undefined ? undefined : opt === false ? false : true;
-        elaborated._axisOverride =
-          typeof axes === "boolean"
-            ? { x: axes, y: axes }
-            : { x: toShow(axes.x), y: toShow(axes.y) };
+      if (!hasX) {
+        const a = Constraint.align({ x: alignment }, refs);
+        a.guardDataPositioned = true;
+        cs.push(a);
       }
-      return elaborated;
-    }
-
-    // Track whether the align axis came from SIZE (so alignChildren knows to run)
-    let xFromSize = false;
-    let yFromSize = false;
-
-    const node = new GoFishNode(
-      {
-        type: "scatter",
-        key,
-        name,
-        args: { key, name, x, y, xMin, xMax, yMin, yMax, alignment, dims },
-        shared: [false, false],
-        resolveUnderlyingSpace: (childSpaces: Size<UnderlyingSpace>[]) => {
-          let xSpace: UnderlyingSpace;
-          if (x !== undefined) {
-            xSpace = resolvePositionSpace(x);
-          } else if (xMin !== undefined && xMax !== undefined) {
-            xSpace = POSITION(
-              Interval.interval(
-                Math.min(...xMin.map((v) => getValue(v)!)),
-                Math.max(...xMax.map((v) => getValue(v)!))
-              ),
-              forgetAllMeasures([...xMin, ...xMax].map((v) => getMeasure(v)))
-            );
-          } else {
-            const result = resolveAlignmentSpace(
-              childSpaces.map((child) => child[0]),
-              alignment
-            );
-            xSpace = result.space;
-            xFromSize = result.fromSize;
-          }
-
-          let ySpace: UnderlyingSpace;
-          if (y !== undefined) {
-            ySpace = resolvePositionSpace(y);
-          } else if (yMin !== undefined && yMax !== undefined) {
-            ySpace = POSITION(
-              Interval.interval(
-                Math.min(...yMin.map((v) => getValue(v)!)),
-                Math.max(...yMax.map((v) => getValue(v)!))
-              ),
-              forgetAllMeasures([...yMin, ...yMax].map((v) => getMeasure(v)))
-            );
-          } else {
-            const result = resolveAlignmentSpace(
-              childSpaces.map((child) => child[1]),
-              alignment
-            );
-            ySpace = result.space;
-            yFromSize = result.fromSize;
-          }
-
-          return [xSpace, ySpace];
-        },
-        layout: (_shared, size, scaleFactors, childNodes, posScales, node) => {
-          // In a faceted context the outer x/y may be ORDINAL, giving undefined
-          // posScales for those dims. Scatter has its own POSITION domain, so
-          // compute local posScales as a fallback for any undefined dim.
-          const space = node._underlyingSpace;
-          const effectivePosScales: typeof posScales = [
-            posScales[0] ??
-              (space && isPOSITION(space[0]) && space[0].domain
-                ? computePosScale(
-                    continuous({
-                      value: [space[0].domain.min!, space[0].domain.max!],
-                      measure: "unit",
-                    }),
-                    size[0]
-                  )
-                : undefined),
-            posScales[1] ??
-              (space && isPOSITION(space[1]) && space[1].domain
-                ? computePosScale(
-                    continuous({
-                      value: [space[1].domain.min!, space[1].domain.max!],
-                      measure: "unit",
-                    }),
-                    size[1]
-                  )
-                : undefined),
-          ];
-
-          const childPlaceables = childNodes.map((child) =>
-            child.layout(size, scaleFactors, effectivePosScales)
-          );
-
-          childPlaceables.forEach((child) => {
-            child.place("x", 0);
-            child.place("y", 0);
-          });
-
-          childPlaceables.forEach((child, index) => {
-            const xPos = x?.[index];
-            const yPos = y?.[index];
-
-            if (xMin !== undefined && xMax !== undefined) {
-              // Range mode: stretch child to span [xMin, xMax] in data space
-              const node = child as GoFishNode;
-              const xMinPx = computeAesthetic(
-                xMin[index],
-                effectivePosScales[0]!,
-                undefined
-              )!;
-              const xMaxPx = computeAesthetic(
-                xMax[index],
-                effectivePosScales[0]!,
-                undefined
-              )!;
-              const width = xMaxPx - xMinPx;
-              node.transform!.translate![0] = xMinPx;
-              node.intrinsicDims![0] = {
-                ...(node.intrinsicDims![0] ?? {}),
-                min: 0,
-                size: width,
-                center: width / 2,
-                max: width,
-              } as Dimensions[0];
-            } else if (xPos !== undefined) {
-              const resolvedX = computeAesthetic(
-                xPos,
-                effectivePosScales[0]!,
-                undefined
-              )!;
-              setAxisTranslation(child, 0, resolvedX, "center");
-            }
-
-            if (yMin !== undefined && yMax !== undefined) {
-              // Range mode: stretch child to span [yMin, yMax] in data space
-              const node = child as GoFishNode;
-              const yMinPx = computeAesthetic(
-                yMin[index],
-                effectivePosScales[1]!,
-                undefined
-              )!;
-              const yMaxPx = computeAesthetic(
-                yMax[index],
-                effectivePosScales[1]!,
-                undefined
-              )!;
-              const height = yMaxPx - yMinPx;
-              node.transform!.translate![1] = yMinPx;
-              node.intrinsicDims![1] = {
-                ...(node.intrinsicDims![1] ?? {}),
-                min: 0,
-                size: height,
-                center: height / 2,
-                max: height,
-              } as Dimensions[1];
-            } else if (yPos !== undefined) {
-              const resolvedY = computeAesthetic(
-                yPos,
-                effectivePosScales[1]!,
-                undefined
-              )!;
-              setAxisTranslation(child, 1, resolvedY, "center");
-            }
-          });
-
-          // Align children on axes scatter doesn't position (spread-style semantics)
-          ([0, 1] as const).forEach((axis) => {
-            const positions = axis === 0 ? x : y;
-            const isRangeAxis =
-              axis === 0
-                ? xMin !== undefined && xMax !== undefined
-                : yMin !== undefined && yMax !== undefined;
-            if (positions !== undefined || isRangeAxis) return;
-
-            const fromSize = axis === 0 ? xFromSize : yFromSize;
-            alignChildren(
-              childPlaceables,
-              axis,
-              alignment,
-              size[axis],
-              effectivePosScales?.[axis],
-              fromSize
-            );
-          });
-
-          const minX = Math.min(
-            ...childPlaceables.map((child) => child.dims[0].min!)
-          );
-          const maxX = Math.max(
-            ...childPlaceables.map((child) => child.dims[0].max!)
-          );
-          const minY = Math.min(
-            ...childPlaceables.map((child) => child.dims[1].min!)
-          );
-          const maxY = Math.max(
-            ...childPlaceables.map((child) => child.dims[1].max!)
-          );
-
-          return {
-            intrinsicDims: [
-              {
-                min: minX,
-                size: maxX - minX,
-                center: minX + (maxX - minX) / 2,
-                max: maxX,
-              },
-              {
-                min: minY,
-                size: maxY - minY,
-                center: minY + (maxY - minY) / 2,
-                max: maxY,
-              },
-            ],
-            transform: {
-              translate: [hasX ? 0 : undefined, hasY ? 0 : undefined],
-            },
-          };
-        },
-        render: ({ transform }, children) => {
-          return (
-            <g
-              transform={`translate(${transform?.translate?.[0] ?? 0}, ${transform?.translate?.[1] ?? 0})`}
-            >
-              {children}
-            </g>
-          );
-        },
-      },
-      children
-    );
+      if (!hasY) {
+        const a = Constraint.align({ y: alignment }, refs);
+        a.guardDataPositioned = true;
+        cs.push(a);
+      }
+      return cs;
+    });
+    if (name !== undefined) node._name = name;
     if (axes !== undefined) {
       const toShow = (opt: AxisOptions | undefined): boolean | undefined =>
         opt === undefined ? undefined : opt === false ? false : true;

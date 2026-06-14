@@ -13,12 +13,19 @@ import {
 } from "./zorder";
 import { applyNest, createNestConstraint, isNestConstraint } from "./nest";
 import { applyGrid, createGridConstraint, isGridConstraint } from "./grid";
+import {
+  applySpan,
+  createSpanConstraint,
+  isSpanConstraint,
+  spanDatumInterval,
+} from "./span";
 import type { AlignConstraint, AlignOptions } from "./align";
 import type { DistributeConstraint, DistributeOptions } from "./distribute";
 import type { PositionConstraint, PositionOptions } from "./position";
 import type { ZAboveConstraint, ZBelowConstraint } from "./zorder";
 import type { NestConstraint, NestOptions } from "./nest";
 import type { GridConstraint, GridOptions } from "./grid";
+import type { SpanConstraint, SpanOptions } from "./span";
 import { type ConstraintPosScales, type ConstraintRef } from "./shared";
 
 export type {
@@ -37,9 +44,12 @@ export type {
 } from "./zorder";
 export type { NestConstraint, NestOptions } from "./nest";
 export type { GridConstraint, GridOptions } from "./grid";
+export type { SpanConstraint, SpanOptions } from "./span";
 export { isZOrderConstraint } from "./zorder";
 export { isNestConstraint, nestedSpace } from "./nest";
 export { isGridConstraint, gridSpaces, gridCellSize } from "./grid";
+export { isSpanConstraint } from "./span";
+export { BBox } from "./bbox";
 
 export type ConstraintSpec =
   | AlignConstraint
@@ -48,7 +58,8 @@ export type ConstraintSpec =
   | ZAboveConstraint
   | ZBelowConstraint
   | NestConstraint
-  | GridConstraint;
+  | GridConstraint
+  | SpanConstraint;
 
 // --- Factory ---
 
@@ -82,6 +93,9 @@ export const Constraint = {
   },
   grid(options: GridOptions, children: ConstraintRef[]): GridConstraint {
     return createGridConstraint(options, children);
+  },
+  span(options: SpanOptions, children: ConstraintRef[]): SpanConstraint {
+    return createSpanConstraint(options, children);
   },
 };
 
@@ -179,10 +193,20 @@ export function collectPositionDomains(constraints: ConstraintSpec[]): {
     const iv = Interval.interval(n, n);
     return acc ? Interval.unionAll(acc, iv) : iv;
   };
+  const unionIv = (
+    acc: Interval.Interval | undefined,
+    iv: Interval.Interval | undefined
+  ) => (iv === undefined ? acc : acc ? Interval.unionAll(acc, iv) : iv);
   for (const c of constraints) {
-    if (c.type !== "position") continue;
-    x = fold(x, c.x);
-    y = fold(y, c.y);
+    if (c.type === "position") {
+      x = fold(x, c.x);
+      y = fold(y, c.y);
+    } else if (isSpanConstraint(c)) {
+      // A span's two endpoints contribute their data range to the axis domain,
+      // so the layer builds a posScale covering the spanned interval.
+      x = unionIv(x, spanDatumInterval(c.x));
+      y = unionIv(y, spanDatumInterval(c.y));
+    }
   }
   return { x, y };
 }
@@ -228,6 +252,8 @@ export function applyConstraints(
       applyAlign(constraint, targets, sizes, posScales);
     } else if (constraint.type === "position") {
       applyPosition(constraint, targets, posScales);
+    } else if (isSpanConstraint(constraint)) {
+      applySpan(constraint, targets, posScales, (msg) => console.warn(msg));
     } else {
       applyDistribute(constraint, targets);
     }
