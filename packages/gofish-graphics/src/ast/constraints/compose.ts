@@ -49,6 +49,7 @@ import { unionChildSpaces } from "../graphicalOperators/alignment";
 import { type ConstraintSpec } from ".";
 import { distributeSpaceFold, type DistributeConstraint } from "./distribute";
 import { alignSpaceFold, type AlignConstraint } from "./align";
+import type { SpanConstraint } from "./span";
 import { axisIndex, buildNameIndex, type AlignAnchor } from "./shared";
 
 /** One distribute's slice of the layout budget: equal shares of the axis size
@@ -103,7 +104,9 @@ export function composeConstraintSpaces(
   // here, but its PRESENCE means this is NOT a pure overlay: the cross-axis
   // align fold (SIZE→POSITION) must still run (e.g. a histogram = span on x,
   // align on y; the align fold is what makes the count axis).
-  const spans = constraints.filter((c) => c.type === "span");
+  const spans = constraints.filter(
+    (c): c is SpanConstraint => c.type === "span"
+  );
   // Compose only layers that are PURELY distributes + aligns + spans. A
   // `position` pin (or z-order) puts the layer in a different regime — the
   // distribute-relative-to-a-pin solve is deferred (layout-synthesis.md) — so
@@ -166,6 +169,20 @@ export function composeConstraintSpaces(
     }
   }
 
+  // A span COVERS its children on the axis it sizes (it sets their extent
+  // directly via `applySpan`, and their datum range already feeds the POSITION
+  // domain through `collectPositionDomains`). It contributes no fold here, but
+  // its children must be marked covered so the per-axis loop below does not also
+  // fold their raw extent in as an overlay sibling (double-counting) when a
+  // distribute/align shares the same axis.
+  const spanCover: [Set<number>, Set<number>] = [new Set(), new Set()];
+  for (const s of spans) {
+    const idx = idxOf(s.children);
+    if (idx === undefined) continue;
+    if (s.x !== undefined) idx.forEach((i) => spanCover[0].add(i));
+    if (s.y !== undefined) idx.forEach((i) => spanCover[1].add(i));
+  }
+
   const spaces: [UnderlyingSpace | undefined, UnderlyingSpace | undefined] = [
     undefined,
     undefined,
@@ -181,7 +198,7 @@ export function composeConstraintSpaces(
     if (dists.length === 0 && als.length === 0) continue; // keep default union
 
     const fragments: Size<UnderlyingSpace>[] = [];
-    const covered = new Set<number>();
+    const covered = new Set<number>(spanCover[axis]);
     for (const s of dists) {
       s.idx.forEach((i) => covered.add(i));
       const fold = distributeSpaceFold(

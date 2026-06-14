@@ -74,6 +74,12 @@ export const Scatter = createNodeOperator(
     if (xMax !== undefined && xMax.length !== children.length) {
       throw new Error("Scatter operator xMax array must match children length");
     }
+    if (yMin !== undefined && yMin.length !== children.length) {
+      throw new Error("Scatter operator yMin array must match children length");
+    }
+    if (yMax !== undefined && yMax.length !== children.length) {
+      throw new Error("Scatter operator yMax array must match children length");
+    }
 
     // Elaborate to a layer carrying per-child placement constraints (#546),
     // sharing the constraint path instead of a bespoke layout (as spread
