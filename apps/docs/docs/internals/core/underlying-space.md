@@ -16,6 +16,8 @@ covers:
   - packages/gofish-graphics/src/ast/constraints/align.ts
   - packages/gofish-graphics/src/ast/constraints/nest.ts
   - packages/gofish-graphics/src/ast/constraints/grid.ts
+  - packages/gofish-graphics/src/ast/constraints/span.ts
+  - packages/gofish-graphics/src/ast/constraints/bbox.ts
 ---
 
 # The underlying space tree
@@ -249,6 +251,30 @@ composes its targets' spaces into the layer's claim on that axis:
   one nest may derive a given (node, axis), and a nest that resolves
   inside-out on one axis and outside-in on the other is rejected as mixed — the
   layer enforces both at constraint-collection time (see [[size-claims]]).
+
+- `Constraint.span` (`constraints/span.ts`) is the second size-setting
+  constraint: pin BOTH edges of a target on an axis (`x: [min, max]`) and the
+  **size falls out** — the relation `place()`'s position-only protocol cannot
+  express. It is built on the **linear-system bbox** (`constraints/bbox.ts`,
+  #39): a per-axis 2-unknown system in `(min, size)` where each facet
+  (`min`/`max`/`center`/`size`) is one equation; two independent facets are
+  rank 2, so the rest are inferred (two edges ⇒ a size), and a third, dependent
+  write is a structured over-determination report rather than a silent
+  last-writer-wins. A span's datum endpoints feed the axis's POSITION domain via
+  `collectPositionDomains` (like a `position` pin's coordinate), and
+  `composeConstraintSpaces` treats a span as an **extent-establisher** (like a
+  distribute), so the cross-axis `align` fold still runs — a histogram is a span
+  on x plus an `align` on y, and it is that align fold (SIZE→POSITION) that makes
+  the count axis. The solved `(min, size)` is bridged into GoFish's
+  `(local box, translate)` split by stamping `[0, size]` into the local box and
+  the absolute `min` into the translate. The bbox is currently a per-constraint
+  solver used by `span` (and stamped into the existing dimension model), not yet
+  the node's authoritative dimension ledger — that full adoption (the linsys
+  _as_ `Placeable`'s dims, plus aspect ratio) is the larger remainder of #39
+  ([[size-claims]]); until then a target may not be both spanned and pinned on
+  the same axis. `scatter` uses both: plain `x`/`y` → `Constraint.position`,
+  range `xMin`/`xMax`/`yMin`/`yMax` → `Constraint.span` (the operator no longer
+  has a bespoke layout).
 
 The layer composes these per axis — children not covered by a constraint
 max-union in as overlay siblings. On an axis a constraint **does** cover, that
