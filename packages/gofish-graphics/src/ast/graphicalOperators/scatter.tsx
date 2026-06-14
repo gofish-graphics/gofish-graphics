@@ -18,6 +18,10 @@ import { computePosScale, continuous } from "../domain";
 import * as Interval from "../../util/interval";
 import { Alignment, alignChildren, resolveAlignmentSpace } from "./alignment";
 import { createOperator } from "../marks/createOperator";
+import { layer } from "./layer";
+import { Constraint } from "../constraints";
+import { childNameKey } from "../constraints/shared";
+import { GoFishRef } from "../_ref";
 
 const unwrapLodashArray = function <T>(value: T[] | Collection<T>): T[] {
   if (typeof value === "object" && value !== null && "value" in value) {
@@ -90,7 +94,10 @@ function resolvePositionSpace(
 }
 
 export const Scatter = createNodeOperator(
-  (options: ScatterProps, children: GoFishAST[] | Collection<GoFishAST>) => {
+  async (
+    options: ScatterProps,
+    children: GoFishAST[] | Collection<GoFishAST>
+  ) => {
     const {
       name,
       key,
@@ -127,6 +134,87 @@ export const Scatter = createNodeOperator(
     }
     if (xMax !== undefined && xMax.length !== children.length) {
       throw new Error("Scatter operator xMax array must match children length");
+    }
+
+    // Plain x/y channels reduce to `layer + per-child Constraint.position`
+    // (#546): the layer derives the data→pixel posScale from the position
+    // constraints' datum coords (`collectPositionDomains`) and places each child
+    // centered on its coordinate — sharing the constraint path instead of a
+    // bespoke layout, exactly as `spread` delegates to distribute/align. The
+    // range channels (`xMin`/`xMax`/`yMin`/`yMax`) set a SIZE from two positions,
+    // which needs the size-setting ledger (#39); those keep the bespoke node
+    // below until that lands.
+    const noRange =
+      xMin === undefined &&
+      xMax === undefined &&
+      yMin === undefined &&
+      yMax === undefined;
+    if (noRange) {
+      const childList = children as GoFishAST[];
+      const used = new Set<string>();
+      const names = childList.map((c, i) => {
+        const existing = childNameKey(c);
+        let nm =
+          existing || (c instanceof GoFishNode && c.key) || `__scatter_${i}`;
+        if (used.has(nm)) nm = `${nm}__scatter_${i}`;
+        used.add(nm);
+        if (
+          nm !== existing &&
+          (c instanceof GoFishNode || c instanceof GoFishRef)
+        )
+          c._name = nm;
+        return nm;
+      });
+      const elaborated = (await layer(
+        { key, ...fancyDims } as any,
+        childList
+      )) as GoFishNode;
+      elaborated.constrain((ref) => {
+        const refs = names.map((n) => ref[n] ?? { name: n });
+        const cs: ReturnType<typeof Constraint.position>[] = [];
+        childList.forEach((_, i) => {
+          const opts: {
+            x?: MaybeValue<number>;
+            y?: MaybeValue<number>;
+            override: boolean;
+          } = { override: true };
+          if (x?.[i] !== undefined) opts.x = x[i];
+          if (y?.[i] !== undefined) opts.y = y[i];
+          // `anchor` defaults to "middle" — the child centers on its coordinate,
+          // matching the bespoke `setAxisTranslation(..., "center")`. `override`
+          // repositions a child that self-placed during layout (a Frame / coord
+          // glyph), which the write-once `place()` would otherwise strand.
+          if (opts.x !== undefined || opts.y !== undefined)
+            cs.push(Constraint.position(opts, [refs[i]]));
+        });
+        // Cross-axis alignment for the axis scatter does NOT position (mirrors
+        // the bespoke `alignChildren`, data-positioned guard included).
+        const out: (
+          | ReturnType<typeof Constraint.position>
+          | ReturnType<typeof Constraint.align>
+        )[] = [...cs];
+        if (!hasX) {
+          const a = Constraint.align({ x: alignment }, refs);
+          a.guardDataPositioned = true;
+          out.push(a);
+        }
+        if (!hasY) {
+          const a = Constraint.align({ y: alignment }, refs);
+          a.guardDataPositioned = true;
+          out.push(a);
+        }
+        return out;
+      });
+      if (name !== undefined) elaborated._name = name;
+      if (axes !== undefined) {
+        const toShow = (opt: AxisOptions | undefined): boolean | undefined =>
+          opt === undefined ? undefined : opt === false ? false : true;
+        elaborated._axisOverride =
+          typeof axes === "boolean"
+            ? { x: axes, y: axes }
+            : { x: toShow(axes.x), y: toShow(axes.y) };
+      }
+      return elaborated;
     }
 
     // Track whether the align axis came from SIZE (so alignChildren knows to run)

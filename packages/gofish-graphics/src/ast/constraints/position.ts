@@ -11,6 +11,58 @@ import {
 } from "./shared";
 
 /**
+ * Place `target` on `axis` so its `anchor` lands at pixel `px`. A `position`
+ * constraint is an authoritative pin (one owner per target/axis).
+ *
+ * Default (`override` false) is exactly `placeAtAnchor` (the write-once
+ * `place()`): unchanged behavior for axis / pie / legend pins, including their
+ * already-placed targets (a 2nd write is a no-op).
+ *
+ * With `override` (set by `scatter`, whose `x`/`y` ARE the placement): an
+ * already-placed target — one that self-placed during its OWN layout (e.g. a
+ * Frame / coord glyph arrives with a translate) — would be stranded by
+ * `place()`'s no-op. The pin must win, so OVERRIDE: compute the additive delta
+ * from the target's current anchor (intrinsicDims + translate) and rewrite the
+ * translate so the anchor lands at `px` (the arithmetic the bespoke scatter
+ * used). Anchor maps start→min, middle→center, end→max, baseline→origin.
+ */
+function placePinned(
+  target: Placeable,
+  axis: Axis,
+  px: number,
+  anchor: AlignAnchor,
+  override: boolean
+): void {
+  const idx = axisIndex(axis);
+  const node = target as {
+    intrinsicDims?: {
+      min?: number;
+      size?: number;
+      center?: number;
+      max?: number;
+    }[];
+    transform?: { translate?: (number | undefined)[] };
+  };
+  if (!override || node.transform?.translate?.[idx] === undefined) {
+    placeAtAnchor(target, axis, px, anchor);
+    return;
+  }
+  const dim = node.intrinsicDims?.[idx] ?? {};
+  const t = node.transform.translate[idx]!;
+  const min = dim.min ?? 0;
+  const size = dim.size ?? 0;
+  const cur =
+    anchor === "start"
+      ? min + t
+      : anchor === "end"
+        ? (dim.max ?? min + size) + t
+        : anchor === "baseline"
+          ? t
+          : (dim.center ?? min + size / 2) + t; // "middle"
+  node.transform.translate[idx] = t + (px - cur);
+}
+
+/**
  * Options for a `position` constraint. Mirrors how you position a shape (or use
  * the `position` operator): give an `x` and/or `y` that is either a **literal**
  * pixel coordinate or a **datum** (`datum(n)` / `value(n)`). A literal is placed
@@ -26,6 +78,12 @@ export interface PositionOptions {
    *  (the target's center sits on the value), matching how `scatter`/`position`
    *  place marks at their center. `"baseline"` pins the target's origin. */
   anchor?: AlignAnchor;
+  /** Authoritative pin: also reposition a target that ALREADY self-placed during
+   *  its own layout (a Frame / coord glyph arrives with a translate, which makes
+   *  the write-once `place()` a no-op). Set by `scatter`, whose `x`/`y` ARE the
+   *  child's placement. Off (default) for axis/pie/legend pins, where a
+   *  pre-placed target keeps its position (the write-once no-op). */
+  override?: boolean;
 }
 
 export interface PositionConstraint {
@@ -33,11 +91,12 @@ export interface PositionConstraint {
   x?: MaybeValue<number>;
   y?: MaybeValue<number>;
   anchor: AlignAnchor;
+  override: boolean;
   children: ConstraintRef[];
 }
 
 export const createPositionConstraint = (
-  { x, y, anchor }: PositionOptions,
+  { x, y, anchor, override }: PositionOptions,
   children: ConstraintRef[]
 ): PositionConstraint => {
   if (x === undefined && y === undefined) {
@@ -45,7 +104,14 @@ export const createPositionConstraint = (
       "Constraint.position: at least one of `x` or `y` must be specified"
     );
   }
-  return { type: "position", x, y, anchor: anchor ?? "middle", children };
+  return {
+    type: "position",
+    x,
+    y,
+    anchor: anchor ?? "middle",
+    override: override ?? false,
+    children,
+  };
 };
 
 /**
@@ -66,7 +132,7 @@ export function applyPosition(
     if (isValue(coord) && scale === undefined) return;
     const px = computeAesthetic(coord, scale!, undefined)!;
     for (const target of targets) {
-      placeAtAnchor(target, axis, px, constraint.anchor);
+      placePinned(target, axis, px, constraint.anchor, constraint.override);
     }
   };
   placeAxis("x", constraint.x);
