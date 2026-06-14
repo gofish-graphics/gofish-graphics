@@ -123,7 +123,17 @@ resolve with a spike before committing the solver.
    it** — the risky core. Behavior-preserving; switch readers over one at a time.
    Watch the `baseline` anchor, `embedded`, and the `translate === undefined`
    "unplaced" signal (it must survive as "facet not yet determined", never
-   become 0).
+   become 0). 🟡 **Down-payment landed:** `place()`'s positional write now routes
+   through the bbox-backed `setExtent` (rank-1) instead of bespoke
+   `value − anchorPoint` arithmetic. Because `align` (`placeAtAnchor`),
+   `distribute`, `nest`, and `position` all place via `place()`, and `span` /
+   override-`position` already used `setExtent`, **every placement now funnels
+   through the one bbox primitive** — the atomic "land this facet at this
+   coordinate" op is unified (gated REAL = 0). What remains for full stage 2 is
+   the _authoritative read_ side: making `dims` read a **persistent** per-node
+   ledger (today `setExtent` materializes into `(intrinsicDims, translate)` and
+   `dims` reads those), and migrating the 108 direct `intrinsicDims` sites — the
+   interactive part below.
 3. **Migrate each constraint to a facet-equation emitter** behind today's
    `apply*` signatures, one at a time, gated.
 4. **Replace the placement walk with the propagation solver** — σ solved per
