@@ -673,6 +673,14 @@ export class GoFishNode {
    *  translate writes the mutators make can be retired one site at a time without
    *  moving render. Returns `undefined` when the node has no transform at all
    *  (an unplaced leaf), matching the old `this.transform` read. */
+  /** Public read of {@link _projectTranslate} for cross-node geometry. `_ref`
+   *  accumulates the parent-frame translate up/down the tree to position a ref;
+   *  reading the ledger-derived value (== the written field today) keeps refs
+   *  working once stage 3-C retires the direct translate writes. */
+  public projectedTranslate(dir: Direction): number | undefined {
+    return this._projectTranslate(dir);
+  }
+
   private get _displayTransform(): Transform | undefined {
     if (!this.transform) return undefined;
     return {

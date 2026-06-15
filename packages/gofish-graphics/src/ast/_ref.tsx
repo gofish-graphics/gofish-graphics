@@ -277,14 +277,21 @@ export class GoFishRef {
     // Find the least common ancestor between this ref and the selected node
     const lca = findLeastCommonAncestor(this, this.selectedNode);
 
+    // Stage 3-C (#39): accumulate the LEDGER-DERIVED translate for nodes, so ref
+    // geometry survives retiring the direct translate writes. Identical to the
+    // written field today (projected == written where solved, else falls back to
+    // it). Refs in the chain have no ledger — read their computed transform.
+    const translateOf = (n: GoFishAST, dir: 0 | 1): number =>
+      (n instanceof GoFishNode
+        ? n.projectedTranslate(dir)
+        : n.transform?.translate?.[dir]) ?? 0;
+
     // Compute transform from selected node up to LCA
     const upwardTranslate: [number, number] = [0, 0];
     let current: GoFishAST | undefined = this.selectedNode;
     while (current && current !== lca) {
-      if (current.transform) {
-        upwardTranslate[0] += current.transform.translate?.[0] ?? 0;
-        upwardTranslate[1] += current.transform.translate?.[1] ?? 0;
-      }
+      upwardTranslate[0] += translateOf(current, 0);
+      upwardTranslate[1] += translateOf(current, 1);
       current = current.parent;
     }
 
@@ -292,10 +299,8 @@ export class GoFishRef {
     const downwardTranslate: [number, number] = [0, 0];
     current = this;
     while (current && current !== lca) {
-      if (current.transform) {
-        downwardTranslate[0] += current.transform.translate?.[0] ?? 0;
-        downwardTranslate[1] += current.transform.translate?.[1] ?? 0;
-      }
+      downwardTranslate[0] += translateOf(current, 0);
+      downwardTranslate[1] += translateOf(current, 1);
       current = current.parent;
     }
 
