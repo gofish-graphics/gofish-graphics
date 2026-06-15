@@ -96,36 +96,32 @@ export type FancyDirection = "x" | "y" | Direction;
 export type Anchor = "min" | "max" | "center" | "baseline";
 
 /**
- * Local-frame coordinate of an anchor on a box `[localMin, localMin + localSize]`.
- * `center` and `max` are DERIVED here (`localMin + size/2`, `localMin + size`),
- * never read from a separately-stored facet — so the two node placement paths
- * (`place()` and `setExtent`'s rank-1 pin) agree on the geometry even for an
- * (only latently reachable) asymmetric box, where a stored `center` could
- * diverge from `min + size/2`. That divergence is exactly what reverted the
- * earlier `place()→setExtent` reroute (#39 stage 2); deriving removes it at the
- * source. `baseline` is the local origin (point 0).
+ * The single derivation of an anchor's coordinate on a box anchored at `start`
+ * with signed extent `size`: `min → start`, `center → start + |size|/2`,
+ * `max → start + |size|`, `baseline → 0` (the origin). center/max are DERIVED
+ * here, never read from a separately-stored facet — so every site that needs them
+ * agrees: the two placement paths (`place()` / `setExtent`'s rank-1 pin), the
+ * `dims` getters (GoFishNode + GoFishRef), and `displayDims`. That removed the
+ * asymmetric-box divergence that reverted the earlier `place()→setExtent` reroute
+ * (#39 stage 2).
  *
- * This is the LOCAL-frame (pre-translate) reader. Anchor readers that consume a
- * node's ABSOLUTE placed extent (`constraints/align.ts` `anchorValue`,
- * `constraints/distribute.ts`) read `node.dims[...]` post-translate instead and
- * are not callers of this.
+ * Pure arithmetic on `(start, size)` — works in any frame. `|size|` is the
+ * MAGNITUDE: a negative bar stores a signed size with `start` (its `min`) carrying
+ * the direction, so its box is `[start, start + |size|]`.
  */
 export const localAnchorPoint = (
   anchor: Anchor,
-  localMin: number,
-  localSize: number
+  start: number,
+  size: number
 ): number => {
-  // Extent is the MAGNITUDE of size — a negative bar stores a signed size with
-  // `min` carrying the direction (box `[min, min + |size|]`), so center/max are
-  // anchored off `|size|` (matches the `dims` getter / `displayDims`).
-  const extent = Math.abs(localSize);
+  const extent = Math.abs(size);
   switch (anchor) {
     case "min":
-      return localMin;
+      return start;
     case "center":
-      return localMin + extent / 2;
+      return start + extent / 2;
     case "max":
-      return localMin + extent;
+      return start + extent;
     case "baseline":
       return 0;
   }
@@ -201,11 +197,12 @@ export const displayDims = (
     const min =
       (transform?.translate?.[i] ?? 0) + (intrinsicDims?.[i]?.min ?? 0);
     const size = intrinsicDims?.[i]?.size ?? 0;
-    // Extent is the MAGNITUDE of size: a negative bar stores a signed size with
-    // `min` carrying the direction (box `[min, min + |size|]`), so center/max use
-    // `|size|`. `size` itself stays raw for callers that read it directly.
-    const extent = Math.abs(size);
-    return { min, size, center: min + extent / 2, max: min + extent };
+    return {
+      min,
+      size, // raw (signed) — callers read it directly for width/height
+      center: localAnchorPoint("center", min, size),
+      max: localAnchorPoint("max", min, size),
+    };
   });
 
 export const elaborateTransform = (transform: FancyTransform): Transform => {

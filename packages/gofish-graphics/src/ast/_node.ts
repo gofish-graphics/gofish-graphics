@@ -530,14 +530,15 @@ export class GoFishNode {
         hasTranslate && intrinsic?.min !== undefined
           ? intrinsic.min + translate
           : undefined;
+      // center/max are derived from the placed (min, size) via the shared
+      // `localAnchorPoint` (off |size|), and read back only once placed AND sized.
       const placedAndSized = min !== undefined && size !== undefined;
-      // center/max use |size| (a negative bar stores a signed size with `min`
-      // carrying the direction — box `[min, min + |size|]`).
-      const extent = size !== undefined ? Math.abs(size) : 0;
       return {
         min,
-        center: placedAndSized ? min + extent / 2 : undefined,
-        max: placedAndSized ? min + extent : undefined,
+        center: placedAndSized
+          ? localAnchorPoint("center", min!, size!)
+          : undefined,
+        max: placedAndSized ? localAnchorPoint("max", min!, size!) : undefined,
         size,
         embedded: intrinsic?.embedded,
       };
