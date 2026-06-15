@@ -148,10 +148,28 @@ resolve with a spike before committing the solver.
    two paths cannot diverge on an asymmetric box, and the rank-1 pin allocates no
    `BBox` (the genuine 2-unknown solve stays only for rank-2 size-setting). Both
    of the reasons the reroute was reverted are gone, gated REAL = 0 across 189
-   stories + a `localAnchorPoint` contract test. The redundant stored
-   `center`/`max` are now provably dead at the placement readers; _removing_ them
-   from the `Interval` (and migrating the 108 writers off direct `intrinsicDims`)
-   remains the story-by-story work below.
+   stories + a `localAnchorPoint` contract test.
+
+   ✅ **All `dims` readers now derive `center`/`max`** (next gated step): the
+   `dims` getter (`GoFishNode` + the `GoFishRef` mirror) and `place()`'s anchor
+   guard compute `center`/`max` from the placed `(min, size)` instead of reading
+   the stored facet — they read back only once a box is placed AND sized. This
+   **closes the stored-vs-derived inconsistency**: a stored asymmetric `center`
+   (what `position.tsx` wrote as `center: xPos`) can no longer be observed
+   through `dims` by `align`/`distribute`/etc. `position()` now stores only its
+   local `(min, size)`. REAL = 0.
+
+   🟡 **Remaining before `center`/`max` leave `Interval`.** Two readers still
+   consume the _stored_ facets, so the type can't drop them yet: (a) **shape
+   `_render` functions** (`rect`/`ellipse`/`petal`/`image`/…) read their own
+   `intrinsicDims[i].center`/`max` directly to draw — which is why `setExtent`
+   must still refresh them when `span` resizes a shape; (b) the type itself is
+   shared between the **stored** local box (wants `{min, size}`) and the
+   **computed** `dims` output (legitimately needs `center`/`max` for the readers
+   above). Finishing the removal is therefore: migrate the ~6 shape renders to
+   derive, drop `setExtent`'s `center`/`max` write, then split `Interval`
+   (stored) from the computed `Dimensions` (~160 type sites, mostly read-side).
+   Plus the 108-writer migration off direct `intrinsicDims`.
 
 3. **Migrate each constraint to a facet-equation emitter** behind today's
    `apply*` signatures, one at a time, gated.
