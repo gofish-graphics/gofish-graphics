@@ -110,14 +110,10 @@ export const Petal = ({
             {
               min: 0,
               size: w,
-              center: w / 2,
-              max: w,
             },
             {
               min: 0,
               size: h,
-              center: h / 2,
-              max: h,
             },
           ],
           transform: {

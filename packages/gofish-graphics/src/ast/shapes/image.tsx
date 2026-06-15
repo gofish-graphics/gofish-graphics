@@ -318,15 +318,11 @@ export const Image = ({
             {
               min: 0,
               size: resolvedDimensions.width,
-              center: resolvedDimensions.width / 2,
-              max: resolvedDimensions.width,
               embedded: dims[0].embedded,
             },
             {
               min: 0,
               size: resolvedDimensions.height,
-              center: resolvedDimensions.height / 2,
-              max: resolvedDimensions.height,
               embedded: dims[1].embedded,
             },
           ],

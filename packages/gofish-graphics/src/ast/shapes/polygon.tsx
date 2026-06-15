@@ -50,14 +50,10 @@ export const Polygon = ({
           {
             min: minX,
             size: maxX - minX,
-            center: (minX + maxX) / 2,
-            max: maxX,
           },
           {
             min: minY,
             size: maxY - minY,
-            center: (minY + maxY) / 2,
-            max: maxY,
           },
         ],
         // translate is set by the parent's constraint placement.

@@ -261,15 +261,11 @@ export const Rect = ({
               {
                 min: w >= 0 ? 0 : w,
                 size: w,
-                center: w / 2,
-                max: w >= 0 ? w : 0,
                 embedded: dims[0].embedded,
               },
               {
                 min: h >= 0 ? 0 : h,
                 size: h,
-                center: h / 2,
-                max: h >= 0 ? h : 0,
                 embedded: dims[1].embedded,
               },
             ],

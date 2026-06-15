@@ -277,15 +277,11 @@ export const Text = ({
             {
               min: minX,
               size: maxX - minX,
-              center: (minX + maxX) / 2,
-              max: maxX,
               embedded: dims[0].embedded,
             },
             {
               min: minY,
               size: maxY - minY,
-              center: (minY + maxY) / 2,
-              max: maxY,
               embedded: dims[1].embedded,
             },
           ],
