@@ -16,6 +16,7 @@ import {
 import { computePosScale } from "./domain";
 import type { Size } from "./dims";
 import { isSIZE, type UnderlyingSpace } from "./underlyingSpace";
+import { shadowCheckScaleRoot } from "./solver/shadow";
 import { continuous } from "./domain";
 import { elaborateAxes, elaborateAxisTitles } from "./axes/elaborate";
 import { elaborateLegend, legendOverhang } from "./legends/elaborate";
@@ -320,6 +321,12 @@ export async function layout(
       ? (niceUnderlyingSpaceY.domain.inverse(canvasH) ?? undefined)
       : undefined,
   ];
+
+  // Solver shadow (#39): the ROOT σ-scope — the SIZE frame equation
+  // content(σ)=canvas the whole chart resolves against. No-op unless
+  // GOFISH_SOLVER_CHECK is set.
+  shadowCheckScaleRoot(niceUnderlyingSpaceX, canvasW, rootScaleFactors[0], 0);
+  shadowCheckScaleRoot(niceUnderlyingSpaceY, canvasH, rootScaleFactors[1], 1);
 
   child.layout([layoutW, layoutH], rootScaleFactors, posScales);
   child.place("x", x ?? transform?.x ?? 0, "baseline");

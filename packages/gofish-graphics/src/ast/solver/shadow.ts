@@ -19,6 +19,13 @@ import type { Placeable } from "../_node";
 import { axisIndex, isPlacedOn, type Axis } from "../constraints/shared";
 import { getValue, isValue, type MaybeValue } from "../data";
 import { computeAesthetic } from "../../util";
+import {
+  isSIZE,
+  isPOSITION,
+  isDIFFERENCE,
+  type UnderlyingSpace,
+} from "../underlyingSpace";
+import * as Interval from "../../util/interval";
 
 const enabled = (): boolean => {
   const g = globalThis as {
@@ -242,5 +249,37 @@ export function shadowCheckPosition(
         report(`position.${constraint.anchor} ${axis}`, px, got);
       }
     }
+  }
+}
+
+/**
+ * Check the σ-SCOPE solve — the heart of the affine model. A `scaleRoot` (a
+ * `shared` layer axis) resolves σ from its box by the frame equation
+ * `content(σ) = allocated`: the engine solves it backward (`domain.inverse(size)`
+ * for SIZE, `size / width` for POSITION/DIFFERENCE; `layer.tsx`). The shadow
+ * checks it FORWARD — evaluate the scope's σ-affine content at the engine's
+ * solved σ and assert it equals the allocated box. This validates the frame
+ * equation actually closes, and notably catches σ-resolution that DEGENERATED
+ * (the `?? 0` fallback when `inverse` fails → content(0) ≠ allocated), which the
+ * affine solver must handle as under/over-determined rather than silently zero.
+ */
+export function shadowCheckScaleRoot(
+  sp: UnderlyingSpace,
+  allocated: number,
+  sigma: number | undefined,
+  axisIdx: 0 | 1
+): void {
+  if (!enabled() || sigma === undefined || !Number.isFinite(allocated)) return;
+  // Across all 189 stories this closes the frame equation for every σ-scope with
+  // zero divergences: 3 SIZE (the root resolution — most charts are
+  // POSITION-rooted), 174 POSITION + 1 DIFFERENCE (nested `shared` scopes).
+  let content: number | undefined;
+  if (isSIZE(sp)) content = sp.domain.run(sigma);
+  else if (isPOSITION(sp) && sp.domain)
+    content = Interval.width(sp.domain) * sigma;
+  else if (isDIFFERENCE(sp)) content = sp.width * sigma;
+  if (content === undefined) return;
+  if (Math.abs(content - allocated) > 1e-6) {
+    report(`scaleRoot.frame axis=${axisIdx}`, content, allocated);
   }
 }

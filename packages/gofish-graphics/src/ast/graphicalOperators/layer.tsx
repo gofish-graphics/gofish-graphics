@@ -4,6 +4,7 @@
 
 import * as Monotonic from "../../util/monotonic";
 import { GoFishNode } from "../_node";
+import { shadowCheckScaleRoot } from "../solver/shadow";
 import { isToken } from "../createName";
 import { Size, elaborateDims, FancyDims, displayTranslate } from "../dims";
 import {
@@ -765,6 +766,9 @@ export const layer = createNodeOperatorSequential(
               sf = sp.width !== 0 ? size[axis] / sp.width : 0;
             }
             if (sf !== undefined) childScaleFactors[axis] = sf;
+            // Solver shadow (#39): assert the frame equation content(σ)=allocated
+            // closes for this σ-scope. No-op unless GOFISH_SOLVER_CHECK is set.
+            shadowCheckScaleRoot(sp, size[axis], sf, axis);
           }
 
           // Per-child proposed size for distribute-covered children: each
