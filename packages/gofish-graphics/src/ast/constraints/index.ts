@@ -6,7 +6,7 @@ import { mergeMeasures } from "../underlyingSpace";
 import * as Interval from "../../util/interval";
 import { applyAlign, createAlignConstraint } from "./align";
 import { applyDistribute, createDistributeConstraint } from "./distribute";
-import { shadowCheckDistribute } from "../solver/shadow";
+import { shadowCheckAlign, shadowCheckDistribute } from "../solver/shadow";
 import { applyPosition, createPositionConstraint } from "./position";
 import {
   createZAboveConstraint,
@@ -290,7 +290,13 @@ export function applyConstraints(
     if (targets.length === 0) continue;
 
     if (constraint.type === "align") {
+      // Capture per-axis pre-placement BEFORE align so the shadow can tell which
+      // targets align actually placed (vs pre-placed / data-positioned no-op).
+      const prePlacedAlign = targets.map(
+        (t) => [isPlacedOn(t, 0), isPlacedOn(t, 1)] as [boolean, boolean]
+      );
       applyAlign(constraint, targets, sizes, posScales);
+      shadowCheckAlign(constraint, targets, prePlacedAlign);
     } else if (constraint.type === "position") {
       applyPosition(constraint, targets, posScales);
     } else if (isSpanConstraint(constraint)) {

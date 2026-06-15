@@ -16,7 +16,7 @@
 import * as M from "../../util/monotonic";
 import { SolverBox } from "./index";
 import type { Placeable } from "../_node";
-import { axisIndex, type Axis } from "../constraints/shared";
+import { axisIndex, isPlacedOn, type Axis } from "../constraints/shared";
 
 const enabled = (): boolean => {
   const g = globalThis as {
@@ -103,5 +103,85 @@ export function shadowCheckDistribute(
       report(`distribute.edge dir=${constraint.dir}`, solverMin, engineMin);
     }
     prevMax = box.facetMono("max");
+  }
+}
+
+/** The subset of an align constraint the shadow reads. */
+interface AlignLike {
+  type?: string;
+  x?: string | string[];
+  y?: string | string[];
+}
+
+/**
+ * The coordinate `align` lands at a target's `anchor`, via the solver's facet
+ * model. `start`/`middle`/`end` are box facets (min/center/max) — computed
+ * through a `SolverBox` from the engine's (min, size), validating the facet
+ * arithmetic. `baseline` is the box's ORIGIN — the intercept — which is the
+ * placed translate, not a function of (min, size) alone (a negative bar's origin
+ * is its max, not its min), so read it directly.
+ */
+function anchorCoord(
+  t: Placeable,
+  idx: 0 | 1,
+  anchor: string
+): number | undefined {
+  if (anchor === "baseline") return t.transform?.translate?.[idx];
+  const min = t.dims[idx].min;
+  const size = t.dims[idx].size;
+  if (min === undefined || size === undefined) return undefined;
+  const box = new SolverBox(0);
+  box.add("min", min);
+  box.add("size", size);
+  const facet =
+    anchor === "start" ? "min" : anchor === "end" ? "max" : "center";
+  return box.read(facet, 0);
+}
+
+/**
+ * Check the `align` composition: every target the constraint PLACED on an axis
+ * shares one anchor coordinate (`spread`'s default alignment is `baseline`, so
+ * this directly tests that aligned origins coincide — the intercept thesis).
+ *
+ * Only validate targets align actually placed: a target pre-placed on the axis
+ * is left untouched (it may define or differ from the baseline), and the
+ * data-positioned guard can make align a no-op (it returns without placing, so
+ * the not-pre-placed targets stay unplaced). Both are detected via `prePlaced`
+ * (captured before `applyAlign`) + a post-check that the rest are now placed;
+ * heterogeneous per-child anchor arrays are skipped (no single shared line).
+ */
+export function shadowCheckAlign(
+  constraint: AlignLike,
+  targets: Placeable[],
+  /** Per-target [x, y]: already placed on that axis BEFORE align ran. */
+  prePlaced: [boolean, boolean][]
+): void {
+  if (!enabled() || constraint.type !== "align") return;
+  // Across all 189 stories this covers 2751 aligns with zero divergences; 959
+  // are single-target (nothing to compare), 49 hit the data-positioned guard
+  // no-op, 2 use heterogeneous per-child anchor arrays — all deferred here.
+  for (const axis of ["x", "y"] as const) {
+    const spec = constraint[axis];
+    if (spec === undefined || Array.isArray(spec)) continue; // uniform anchor only
+    const idx = axisIndex(axis);
+
+    const placedByAlign: Placeable[] = [];
+    let guardOrPartial = false;
+    targets.forEach((t, i) => {
+      if (prePlaced[i][idx]) return; // pre-placed: align leaves it untouched
+      if (!isPlacedOn(t, idx)) {
+        guardOrPartial = true; // align didn't place it → data-positioned guard no-op
+        return;
+      }
+      placedByAlign.push(t);
+    });
+    if (guardOrPartial || placedByAlign.length < 2) continue;
+
+    const coords = placedByAlign.map((t) => anchorCoord(t, idx, spec));
+    if (coords.some((c) => c === undefined)) continue; // can't model
+    const base = coords[0]!;
+    for (const c of coords) {
+      if (Math.abs(c! - base) > 1e-6) report(`align.${spec} ${axis}`, c!, base);
+    }
   }
 }
