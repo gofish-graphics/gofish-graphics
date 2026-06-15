@@ -1011,19 +1011,14 @@ export const layer = createNodeOperatorSequential(
             dims[1].min !== undefined ? dims[1].min - minY : undefined;
 
           return {
+            // Store only the local box `(min, size)`; the `dims` getter derives
+            // center/max from it via `localAnchorPoint` (`size = max − min ≥ 0`,
+            // both ends from the same child fold). Writing them here was dead —
+            // every consumer reads `.dims`, and layer's own render ignores
+            // `intrinsicDims` entirely (#39 stage 3).
             intrinsicDims: [
-              {
-                min: minX,
-                size: maxX - minX,
-                center: minX + (maxX - minX) / 2,
-                max: maxX,
-              },
-              {
-                min: minY,
-                size: maxY - minY,
-                center: minY + (maxY - minY) / 2,
-                max: maxY,
-              },
+              { min: minX, size: maxX - minX },
+              { min: minY, size: maxY - minY },
             ],
             transform: {
               translate: [
