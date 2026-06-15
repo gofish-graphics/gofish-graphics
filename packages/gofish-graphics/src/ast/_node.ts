@@ -703,7 +703,9 @@ export class GoFishNode {
     // from `(min, size)`, so they need both; `min`/`baseline` need only the local
     // `min`. When not determined, the only thing place() can record is the local
     // `min` (the lone stored anchor — `center`/`max` aren't stored); `baseline`
-    // pins the origin, not a stored facet, so it just no-ops here.
+    // can't resolve its origin without `localMin`, so it no-ops here (when
+    // determined it IS recorded, as the absolute min the origin implies — see
+    // `_pinAnchor`).
     const determined =
       anchor === "center" || anchor === "max"
         ? localMin !== undefined && size !== undefined
@@ -807,16 +809,25 @@ export class GoFishNode {
       value -
       localAnchorPoint(anchor, intrinsic?.min ?? 0, intrinsic?.size ?? 0);
 
-    // Stage 1 (#39): record the pin into the ledger (observe-only). `baseline`
-    // pins the origin, not a box facet, so it records nothing. A `setExtent`
-    // rank-1 pin can OVERRIDE an already-placed box, which is a new position,
-    // so rebuild the axis ledger (re-seeding the frame-invariant size).
-    if (anchor === "baseline") return;
+    // Stage 3 (#39): record the pin into the ledger so it represents EVERY
+    // anchor — including `baseline`, the one that was missing. A `baseline` pin
+    // sets the box's local-0 ORIGIN (not a min/max/center edge); record the
+    // absolute min that origin implies — screen-min = origin + localMin =
+    // value + intrinsicDims.min — so `_projectTranslate`/`dims` derive a
+    // baseline-placed node's geometry like any other anchor. That closes the gap
+    // the σ-affine model is built on (origin = the intercept) and that blocked
+    // retiring the `transform.translate` writes. A `setExtent` rank-1 /
+    // re-placement OVERRIDE rebuilds the axis ledger (a new position), re-seeding
+    // the frame-invariant size.
     this._bbox ??= [undefined, undefined];
     if (override || !this._bbox[dir]) this._bbox[dir] = new BBox();
     const ledger = this._bbox[dir]!;
     if (intrinsic?.size !== undefined) ledger.add("size", intrinsic.size);
-    ledger.add(anchor, value);
+    if (anchor === "baseline") {
+      ledger.add("min", value + (intrinsic?.min ?? 0));
+    } else {
+      ledger.add(anchor, value);
+    }
   }
 
   /** Lazily ensure `transform.translate` exists (preserving any `scale`) and

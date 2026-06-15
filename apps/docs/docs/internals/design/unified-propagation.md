@@ -231,8 +231,10 @@ value − localAnchorPoint(...)`.
      (`GOFISH_LEDGER_CHECK`, zero-cost off) compares ledger-derived `(min,size)`
      against `combineDims` on every `dims` read; **zero divergences across all
      189 stories**, the confidence stage 2 needs before flipping the read.
-     (`baseline` and `embedded` stay out of the ledger — origin pin / layout-fold
-     flag, not linear-system facets.) Gated REAL = 0 + 64 tests.
+     (At this stage `baseline` and `embedded` stayed out of the ledger — origin
+     pin / layout-fold flag, not min/max/center facets. `baseline` was folded in
+     later, in stage 3, once the σ-affine model recognized the origin as the
+     intercept; `embedded` is still out.) Gated REAL = 0 + 64 tests.
    - ✅ **Stage 2 — `dims` reads from the ledger (the risky flip).** The `dims`
      getter now derives its absolute `(min, size)` from the persistent ledger on
      every axis the ledger fully solves (re-deriving center/max via
@@ -277,17 +279,20 @@ value − localAnchorPoint(...)`.
        retire the writes. _Value reads migrated (both inert, REAL = 0):_ render reads
        a ledger-derived `_displayTransform` getter, and `_ref` accumulation reads
        `projectedTranslate` — so no value-reader depends on the raw written field
-       where the ledger is solved. _Write retirement is blocked on a real gap:_
-       deleting the writes needs the placement-state checks (`place()`'s
+       where the ledger is solved. _Then write retirement hit a real gap, now
+       closed:_ deleting the writes needs the placement-state checks (`place()`'s
        already-placed short-circuit, `_pinAnchor`'s override) to read the ledger
-       instead, which needs **ledger-min-defined ⟺ translate-defined**. That holds
-       everywhere except `baseline`: a `baseline` pin writes the translate but
-       records **no** ledger facet (it pins the local-0 origin, not a box
-       min/max/center), and `baseline` is pervasive (the root placement, coord
-       placing its children). So `transform.translate` encodes baseline-origin
-       placement the bbox ledger cannot yet represent — retiring the writes requires
-       first **modeling the baseline/origin in the ledger**. A design step, not a
-       mechanical deletion.
+       instead, which needs **ledger-min-defined ⟺ translate-defined**. That held
+       everywhere except `baseline`: a `baseline` pin wrote the translate but
+       recorded **no** ledger facet, and `baseline` is pervasive (the root
+       placement, coord placing its children). The σ-affine model resolved it: a
+       `baseline` pin sets the box's local-0 **origin** (the affine's intercept),
+       and screen-min = origin + localMin, so `_pinAnchor` now records
+       `min = value + localMin` for a baseline pin — the ledger represents
+       baseline like any other anchor and `_projectTranslate`/`dims` derive it.
+       Gated REAL = 0 + the `GOFISH_LEDGER_CHECK` mirror clean across all stories.
+       _Next:_ migrate the placement-state checks off `transform.translate` (now
+       that ⟺ holds), then retire the translate writes one site at a time.
 
 3. **Migrate each constraint to a facet-equation emitter** behind today's
    `apply*` signatures, one at a time, gated.
