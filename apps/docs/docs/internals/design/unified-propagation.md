@@ -166,7 +166,9 @@ resolve with a spike before committing the solver.
    six shape `layout()`s stopped writing `center`/`max` — every stored box is now
    `{min, size}` only. All four derivation sites (`localAnchorPoint`, both `dims`
    getters, `displayDims`) anchor `center`/`max` off the **magnitude `|size|`**,
-   so a negative bar (signed `size`, `min` carrying direction) stays correct.
+   so a negative bar stays correct. (As of the item below, `rect` stores that
+   box canonically — true `min` + unsigned `size` — so `|size|` is now belt-and-
+   suspenders rather than load-bearing.)
 
    **`center`/`max` do NOT leave `Interval` — and shouldn't.** The investigation
    corrected the premise: `Interval` is a _general_ dim type with three uses that
@@ -196,14 +198,18 @@ resolve with a spike before committing the solver.
    - ✅ **Extracted a private `_pinAnchor`** shared by `place()`'s determined
      branch and `setExtent`'s rank-1 pin — both were `ensureTranslate()[dir] =
 value − localAnchorPoint(...)`.
-   - **Normalize `rect`'s signed `size` at the source** (RISKY — audit first).
-     `rect.tsx` stores `size: w` with `w` possibly negative; that signed size is
-     why all derivation sites need `Math.abs`. Storing `|w|` with direction in
-     `min` would let `localAnchorPoint`/`displayDims`/the getters drop the abs.
-     BLOCKED on auditing every reader of the signed `displayDims[i].size` — it is
-     used directly as SVG `width`/`height` in `rect`'s non-embedded branch and as
-     `-displayDims[0].size / 2` in `petal`. Don't do this without a full
-     consumer audit + pixel gate.
+   - ✅ **Normalized `rect`'s signed `size` at the source.** `rect.tsx` now
+     stores `min: Math.min(0, w)` + `size: Math.abs(w)` — true min, unsigned
+     extent — instead of `min: w>=0?0:w` + `size: w`. The consumer audit found
+     that `min` was already canonical and `max`/`center` were already derived via
+     `|size|`, so the only signed reads were `rect`'s own `_render`: branch-1's
+     manual `min + size/2` (a latent wrong-center for negative point-rendered
+     rects, now `displayDims.center`) and the SVG `width`/`height`. The
+     `Math.abs(rawWidth)` / `rawWidth < 0` sign-correction in the line/area
+     branches was already dead (`max − min` is the unsigned extent) and is now
+     removed. `petal`'s `-size/2` reads `petal`'s own dims, unaffected. Gated:
+     capture-diff REAL = 0 (189 stories, incl. the negative-bar story), 64 tests
+     pass, negative bar verified by screenshot.
 
    The big remaining structural work is the **108-writer migration** off direct
    `intrinsicDims`/`translate` manipulation onto facet/ledger writes (stage 2
