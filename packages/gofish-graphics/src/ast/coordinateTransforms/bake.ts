@@ -3,20 +3,19 @@
 // </gofish-wiki>
 
 import type { GoFishAST } from "../_ast";
+import type { DisplayObject } from "../_displayObject";
 import { displayTranslate } from "../dims";
 
-/* takes in a GoFishNode and converts it to some set of DisplayObjects
+/* takes in a GoFishNode and bakes it into a flat list of DisplayObjects (the
+   rendering IR; see `../_displayObject.ts`)
 - layout: during layout, they flatten their child hierarchy completely, so it's easy to transform them (and
   also because coord doesn't care about graphical operators, only positions)
 - rendering: then, during rendering, each mark applies its coordinate transform context. its behavior is
   influenced by its mark embedding "mode"
 - DisplayObjects don't have children (inspired by tldraw a bit). also makes stuff like z-indexing
   easier later...
-- TODO: we can actually mix DisplayObjects with GoFishNodes and Refs, which wil require some
-  additional thought...
-
-  For now we'll just assume that it's a GoFishNode tho... maybe it's a GoFishNode that contains DisplayObjects
-  inside it?
+- TODO: a DisplayObject still references its source GoFishAST as the renderer; the end-state
+  is self-contained primitives with no `node` back-reference.
 */
 
 /* TODO: implement this. I don't actually need it until I have more complex examples tho */
@@ -24,13 +23,14 @@ export const flattenLayout = (
   node: GoFishAST,
   transform: [number, number] = [0, 0],
   scale: [number, number] = [1, 1]
-): GoFishAST[] => {
+): DisplayObject[] => {
   // recursive function
   // as we go down the tree we accumulate transforms
   // we apply the cumulative transform to all nodes we hit and remove their children
   //   this includes operators and marks
-  // for now we return GoFishNodes, but we could return DisplayObjects
-  // DisplayObjects are probably more principled b/c of how rendering them works... idk yet
+  // we EMIT the baked absolute transform on each DisplayObject rather than
+  // MUTATING node.transform — render reads it via INTERNAL_render's transform
+  // override, so the scenegraph's parent-relative transforms stay intact.
 
   /* TODO: `connect` is a hack to get the operator to render in coordinate spaces
        A more principled way to do this would be to have "connect" produce a child path mark.
@@ -43,14 +43,18 @@ export const flattenLayout = (
     node.type === "box"
   ) {
     const [ownTx, ownTy] = displayTranslate(node.transform);
-    node.transform = {
-      translate: [ownTx + transform[0]!, ownTy + transform[1]!],
-      scale: [
-        (node.transform?.scale?.[0] ?? 1) * (scale[0] ?? 1),
-        (node.transform?.scale?.[1] ?? 1) * (scale[1] ?? 1),
-      ],
-    };
-    return [node];
+    return [
+      {
+        node,
+        transform: {
+          translate: [ownTx + transform[0]!, ownTy + transform[1]!],
+          scale: [
+            (node.transform?.scale?.[0] ?? 1) * (scale[0] ?? 1),
+            (node.transform?.scale?.[1] ?? 1) * (scale[1] ?? 1),
+          ],
+        },
+      },
+    ];
   }
 
   const [ownTx, ownTy] = displayTranslate(node.transform);

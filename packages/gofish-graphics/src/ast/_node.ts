@@ -808,7 +808,12 @@ export class GoFishNode {
   }
 
   public INTERNAL_render(
-    coordinateTransform?: CoordinateTransform
+    coordinateTransform?: CoordinateTransform,
+    // Baked absolute transform supplied by the coord bake pass (a DisplayObject's
+    // transform). When present it overrides this node's own (parent-relative)
+    // transform for THIS node's draw — but not for its children's recursion,
+    // which keep composing their own transforms. See `_displayObject.ts`.
+    transformOverride?: Transform
   ): JSX.Element {
     const contentChildrenJSX = this.children.map((child) =>
       child.INTERNAL_render(
@@ -816,10 +821,11 @@ export class GoFishNode {
       )
     );
 
+    const transform = transformOverride ?? this.transform;
     const shapeJSX = this._render(
       {
         intrinsicDims: this.intrinsicDims,
-        transform: this.transform,
+        transform,
         renderData: this.renderData,
         coordinateTransform: coordinateTransform,
       },
@@ -827,7 +833,7 @@ export class GoFishNode {
       this
     );
     if (this._label && this.intrinsicDims) {
-      const labelJSX = this._renderLabel();
+      const labelJSX = this._renderLabel(transform);
       if (labelJSX) return [shapeJSX, labelJSX] as unknown as JSX.Element;
     }
     return shapeJSX;
@@ -934,8 +940,8 @@ export class GoFishNode {
     }
   }
 
-  private _renderLabel(): JSX.Element | null {
-    return renderLabelJSX(this);
+  private _renderLabel(transformOverride?: Transform): JSX.Element | null {
+    return renderLabelJSX(this, transformOverride);
   }
 
   public setKey(key: string): this {

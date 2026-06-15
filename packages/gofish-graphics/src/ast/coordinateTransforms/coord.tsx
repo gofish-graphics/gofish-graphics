@@ -354,7 +354,7 @@ export const coord = createNodeOperator(
             );
           };
 
-          const flattenedChildren = children.flatMap((child) =>
+          const displayObjects = children.flatMap((child) =>
             flattenLayout(child)
           );
 
@@ -546,8 +546,8 @@ export const coord = createNodeOperator(
 
           return (
             <g transform={translateString(transform)}>
-              {flattenedChildren.map((child) =>
-                child.INTERNAL_render(coordTransform)
+              {displayObjects.map((d) =>
+                d.node.INTERNAL_render(coordTransform, d.transform)
               )}
               <Show when={grid}>{gridLines()}</Show>
               {polarAxisJSX()}
