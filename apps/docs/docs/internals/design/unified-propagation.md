@@ -184,19 +184,18 @@ resolve with a spike before committing the solver.
    remains the larger structural work.
 
    **Deferred follow-ups (PR #576, stage-2 cleanup), roughly in order:**
-   - **Kill the `GoFishNode`↔`GoFishRef` duplication.** Their `dims` getter and
-     `place()` are near-verbatim copies (`/simplify` flagged this hardest). Extract
-     a shared `combineDims(intrinsicDims, transform)` for the getter body (it is
-     `displayDims` but returning `undefined` for an unplaced/unsized facet instead
-     of `?? 0` — parameterize the fallback or have the getter post-process) and a
-     shared `placeAnchor(state, axis, value, anchor)` for `place()`. A `Placeable`
-     base/mixin is the deeper version. Gate `capture-diff REAL = 0`.
-   - **Remove the dead operator `center`/`max` writes** (`treemap`/`offset`/
-     `arrow`/`connect` `intrinsicDims` literals). Dead since the getter derives;
-     varied multi-line, so edit per-file and gate. Cosmetic, low risk.
-   - **(maybe) Extract a private `_placeAnchor`** shared by `place()` and
-     `setExtent`'s rank-1 pin — both are `ensureTranslate()[dir] = value −
-localAnchorPoint(...)`. Minor.
+   - ✅ **Killed the `GoFishNode`↔`GoFishRef` `dims`-getter duplication.** Both
+     getters were verbatim copies; the body is now the shared
+     `combineDims(intrinsicDims, transform)` in `dims.ts` — the
+     `undefined`-preserving sibling of `displayDims`. `place()` stays per-class
+     (Node has a write-once guard + `ensureTranslate`; Ref does not), so a shared
+     `placeAnchor` / `Placeable` base is still the deeper version available later.
+   - ✅ **Removed the dead operator `center`/`max` writes** (`treemap`/`offset`/
+     `arrow`/`connect` `intrinsicDims` literals). Dead since the getter derives,
+     and `size = max − min ≥ 0` at every site, so the derivation reproduced them.
+   - ✅ **Extracted a private `_pinAnchor`** shared by `place()`'s determined
+     branch and `setExtent`'s rank-1 pin — both were `ensureTranslate()[dir] =
+value − localAnchorPoint(...)`.
    - **Normalize `rect`'s signed `size` at the source** (RISKY — audit first).
      `rect.tsx` stores `size: w` with `w` possibly negative; that signed size is
      why all derivation sites need `Math.abs`. Storing `|w|` with direction in
