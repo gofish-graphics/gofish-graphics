@@ -245,7 +245,25 @@ value − localAnchorPoint(...)`.
      now fed `combineDims` independently of the getter's result, and reports
      **zero divergences across all 189 stories**. Gated REAL = 0 + 64 tests.
    - **Stage 3** — `(intrinsicDims, transform)` becomes a projection of the
-     ledger; the ~29 direct write sites stop double-writing, migrated one PR each.
+     ledger; the ~29 direct write sites stop double-writing, migrated one
+     increment each, each gated REAL = 0 + 64 tests:
+     - **3-A (done)** — dropped the last operator center/max literal writes
+       (`layer`; `treemap`/`offset`/`arrow`/`connect` went in stage-2 cleanup), so
+       stored boxes are `{min, size}` only and `dims`/the ledger re-derive
+       center/max.
+     - **3-B (done)** — `transform.translate` becomes a derived view of the
+       ledger: `ledger.min − intrinsicDims.min` on a fully solved axis, else the
+       written translate. Added as a private projector plus a dev assertion
+       (`GOFISH_LEDGER_CHECK`) that projected == written translate on every solved
+       axis — **zero divergences across all stories**. The field is still written
+       (render/flatten untouched), so this is provably inert; it establishes the
+       invariant 3-C relies on.
+     - **3-C (next)** — stop writing `transform.translate` in the mutators
+       (`place`/`_pinAnchor`/`setExtent`, then the operator `_layout` returns),
+       one site at a time, reading the projector instead.
+     - **3-D** — move `flattenLayout` out of `_layout` into a terminal,
+       boundary-recursive bake-to-screen pass (the coord boundary); render
+       consumes baked absolute coords. The architectural step; pixel-gated.
 
 3. **Migrate each constraint to a facet-equation emitter** behind today's
    `apply*` signatures, one at a time, gated.

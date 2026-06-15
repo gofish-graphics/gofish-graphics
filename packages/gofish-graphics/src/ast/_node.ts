@@ -627,7 +627,40 @@ export class GoFishNode {
           reportLedgerDivergence(this.type, dir, facet, fromLedger, fromDims);
         }
       }
+      // Stage 3-B (#39): the projected translate (ledger.min − localMin) must
+      // equal the WRITTEN translate on every solved axis — the invariant that
+      // lets stage 3-C delete the direct translate writes. Compare only where
+      // both exist (an unsolved axis falls back to the written value).
+      const projected = this._projectTranslate(dir);
+      const written = this.transform?.translate?.[dir];
+      if (projected !== undefined && written !== undefined) {
+        if (Math.abs(projected - written) > 1e-6) {
+          reportLedgerDivergence(
+            this.type,
+            dir,
+            "translate",
+            projected,
+            written
+          );
+        }
+      }
     }
+  }
+
+  /** Stage 3-B (#39): the node's parent-frame offset (`transform.translate`) as
+   *  a DERIVED VIEW of the ledger — `ledger.min − localMin` on a fully solved
+   *  axis, else the written `transform.translate` (the unplaced/under-determined
+   *  fallback). This reproduces what `place()`/`_pinAnchor`/`setExtent` write
+   *  today (proven exact by `_assertLedgerMatches` across all stories), so a
+   *  later increment can stop writing the field and read this instead. Uses the
+   *  CURRENT `intrinsicDims.min` (a rank-2 `setExtent` resets it to 0), never a
+   *  stale local box. */
+  private _projectTranslate(dir: Direction): number | undefined {
+    const ledger = this._bbox?.[dir];
+    if (!ledger?.solved) return this.transform?.translate?.[dir];
+    const min = ledger.read("min");
+    if (min === undefined) return this.transform?.translate?.[dir];
+    return min - (this.intrinsicDims?.[dir]?.min ?? 0);
   }
 
   public place(
