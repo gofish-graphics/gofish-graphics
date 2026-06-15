@@ -261,13 +261,23 @@ value − localAnchorPoint(...)`.
      - **3-C (next)** — stop writing `transform.translate` in the mutators
        (`place`/`_pinAnchor`/`setExtent`, then the operator `_layout` returns),
        one site at a time, reading the projector instead.
-     - **3-D** — move `flattenLayout` out of `_layout` into a terminal,
-       boundary-recursive bake-to-screen pass (the coord boundary); render
-       consumes baked absolute coords. The architectural step; pixel-gated.
+     - **3-D** — move `flattenLayout` out of the coord render closure into a
+       terminal, boundary-recursive bake-to-screen pass (the coord boundary);
+       render consumes baked absolute coords. The architectural step; pixel-gated.
        _Groundwork landed:_ every render-side `transform.translate` read now goes
        through a single `displayTranslate`/`translateString` chokepoint in
        `dims.ts` (was ~15 scattered `?? 0` sites), so switching render to baked
        coordinates becomes a one-function change rather than a corpus-wide sweep.
+       _D0 (done)_ — extracted `flattenLayout` into its own `bake.ts` module (pure
+       move). _D1 (done)_ — the bake now **emits a `DisplayObject[]` rendering IR**
+       (`_displayObject.ts`, formerly an empty stub) rather than mutating
+       `node.transform`; each entry pairs a mark with its baked absolute transform,
+       which coord feeds into `INTERNAL_render(coordTransform, transform)` as an
+       override threaded to the node's `_render`/`_renderLabel`. The scenegraph's
+       parent-relative transforms stay intact, removing the one place the split and
+       the ledger diverged. _Next:_ D2 lifts the bake to a terminal whole-tree pass
+       in `gofish.tsx`; D3 collapses the nested relative `<g transform>` wrappers;
+       D4 then unblocks 3-C.
 
 3. **Migrate each constraint to a facet-equation emitter** behind today's
    `apply*` signatures, one at a time, gated.
