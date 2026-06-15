@@ -72,20 +72,15 @@ export const position = createNodeOperator(
           childPlaceable.place("x", offsetX);
           childPlaceable.place("y", offsetY);
 
+          // Store only the local box (min, size); center/max are derived from
+          // them by the `dims` getter. Previously this stored `center: xPos`,
+          // which diverged from `min + size/2` when the child had a nonzero local
+          // min — the asymmetric box that complicated the placement ledger (#39
+          // stage 2). The geometric center (`min + size/2`) is the placed center.
           return {
             intrinsicDims: [
-              {
-                min: childPlaceable.dims[0].min! + offsetX,
-                size: childWidth,
-                center: xPos,
-                max: childPlaceable.dims[0].max! + offsetX,
-              },
-              {
-                min: childPlaceable.dims[1].min! + offsetY,
-                size: childHeight,
-                center: yPos,
-                max: childPlaceable.dims[1].max! + offsetY,
-              },
+              { min: childPlaceable.dims[0].min! + offsetX, size: childWidth },
+              { min: childPlaceable.dims[1].min! + offsetY, size: childHeight },
             ],
             transform: {
               translate: [offsetX, offsetY],
