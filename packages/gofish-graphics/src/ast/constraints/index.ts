@@ -6,6 +6,7 @@ import { mergeMeasures } from "../underlyingSpace";
 import * as Interval from "../../util/interval";
 import { applyAlign, createAlignConstraint } from "./align";
 import { applyDistribute, createDistributeConstraint } from "./distribute";
+import { shadowCheckDistribute } from "../solver/shadow";
 import { applyPosition, createPositionConstraint } from "./position";
 import {
   createZAboveConstraint,
@@ -27,7 +28,12 @@ import type { ZAboveConstraint, ZBelowConstraint } from "./zorder";
 import type { NestConstraint, NestOptions } from "./nest";
 import type { GridConstraint, GridOptions } from "./grid";
 import type { SpanConstraint, SpanOptions } from "./span";
-import { type ConstraintPosScales, type ConstraintRef } from "./shared";
+import {
+  axisIndex,
+  isPlacedOn,
+  type ConstraintPosScales,
+  type ConstraintRef,
+} from "./shared";
 
 export type {
   Axis,
@@ -290,7 +296,16 @@ export function applyConstraints(
     } else if (isSpanConstraint(constraint)) {
       applySpan(constraint, targets, posScales);
     } else {
+      // Capture which targets were already placed on the stack axis BEFORE
+      // distribute — those are data-positioned (distribute only consistency-
+      // checks them, doesn't pack), so the solver shadow must skip them. The
+      // distinction only exists pre-placement.
+      const stackIdx = axisIndex(constraint.dir);
+      const prePlaced = targets.map((t) => isPlacedOn(t, stackIdx));
       applyDistribute(constraint, targets);
+      // Stage-1 solver shadow (#39): assert the σ-affine solver reproduces this
+      // distribute's placement. No-op unless GOFISH_SOLVER_CHECK is set.
+      shadowCheckDistribute(constraint, targets, prePlaced);
     }
   }
 }
