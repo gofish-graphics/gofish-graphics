@@ -44,14 +44,10 @@ export const offset = createNodeOperator<{ x?: number; y?: number }, GoFishAST>(
               {
                 min: child.dims[0].min ?? 0,
                 size: child.dims[0].size ?? 0,
-                center: child.dims[0].center ?? 0,
-                max: child.dims[0].max ?? 0,
               },
               {
                 min: child.dims[1].min ?? 0,
                 size: child.dims[1].size ?? 0,
-                center: child.dims[1].center ?? 0,
-                max: child.dims[1].max ?? 0,
               },
             ],
             transform: { translate: [undefined, undefined] },

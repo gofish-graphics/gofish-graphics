@@ -262,8 +262,8 @@ export const Treemap = createNodeOperator(
           if (childAsts.length === 0) {
             return {
               intrinsicDims: {
-                0: { min: 0, size: 0, center: 0, max: 0 },
-                1: { min: 0, size: 0, center: 0, max: 0 },
+                0: { min: 0, size: 0 },
+                1: { min: 0, size: 0 },
               },
               transform: { translate: { 0: undefined, 1: undefined } },
             };
@@ -310,14 +310,10 @@ export const Treemap = createNodeOperator(
               0: {
                 min: xMin,
                 size: xMax - xMin,
-                center: (xMin + xMax) / 2,
-                max: xMax,
               },
               1: {
                 min: yMin,
                 size: yMax - yMin,
-                center: (yMin + yMax) / 2,
-                max: yMax,
               },
             },
             transform: {

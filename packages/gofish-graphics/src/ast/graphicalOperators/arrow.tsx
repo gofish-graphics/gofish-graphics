@@ -58,8 +58,8 @@ export const arrow = createNodeOperator(
           if (layoutChildren.length < 2) {
             return {
               intrinsicDims: [
-                { min: 0, size: 0, center: 0, max: 0 },
-                { min: 0, size: 0, center: 0, max: 0 },
+                { min: 0, size: 0 },
+                { min: 0, size: 0 },
               ],
               transform: { translate: [0, 0] },
               renderData: undefined,
@@ -99,18 +99,10 @@ export const arrow = createNodeOperator(
               {
                 min: combinedBBox.minX,
                 size: combinedBBox.maxX - combinedBBox.minX,
-                center:
-                  combinedBBox.minX +
-                  (combinedBBox.maxX - combinedBBox.minX) / 2,
-                max: combinedBBox.maxX,
               },
               {
                 min: combinedBBox.minY,
                 size: combinedBBox.maxY - combinedBBox.minY,
-                center:
-                  combinedBBox.minY +
-                  (combinedBBox.maxY - combinedBBox.minY) / 2,
-                max: combinedBBox.maxY,
               },
             ],
             transform: { translate: [0, 0] },
