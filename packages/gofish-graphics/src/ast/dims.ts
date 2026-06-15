@@ -104,6 +104,11 @@ export type Anchor = "min" | "max" | "center" | "baseline";
  * diverge from `min + size/2`. That divergence is exactly what reverted the
  * earlier `place()→setExtent` reroute (#39 stage 2); deriving removes it at the
  * source. `baseline` is the local origin (point 0).
+ *
+ * This is the LOCAL-frame (pre-translate) reader. Anchor readers that consume a
+ * node's ABSOLUTE placed extent (`constraints/align.ts` `anchorValue`,
+ * `constraints/distribute.ts`) read `node.dims[...]` post-translate instead and
+ * are not callers of this.
  */
 export const localAnchorPoint = (
   anchor: Anchor,

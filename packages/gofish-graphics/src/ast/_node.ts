@@ -608,8 +608,6 @@ export class GoFishNode {
     if (facets.length === 0) return;
 
     const intrinsic = this.intrinsicDims?.[dir];
-    const localMin = intrinsic?.min ?? 0;
-    const localSize = intrinsic?.size;
     const sizeOwned = facets.length >= 2;
 
     if (!sizeOwned) {
@@ -622,7 +620,8 @@ export class GoFishNode {
       const [facet, value] = facets[0];
       if (facet === "size") return; // a lone size can't determine a position
       this.ensureTranslate()[dir] =
-        value - localAnchorPoint(facet, localMin, localSize ?? 0);
+        value -
+        localAnchorPoint(facet, intrinsic?.min ?? 0, intrinsic?.size ?? 0);
       return;
     }
 
