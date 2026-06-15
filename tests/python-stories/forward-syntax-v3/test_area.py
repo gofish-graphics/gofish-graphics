@@ -5,12 +5,18 @@ from python_stories.data import SEAFOOD, STREAMGRAPH_DATA
 
 
 def story_basic():
+    # An area chart has no intrinsic width, so it fills the container: the six
+    # lakes are spread to span `w` (five gaps between them) instead of a fixed
+    # pixel spacing, which would leave the canvas partly empty. Mirrors
+    # Area.stories.tsx's Basic export.
+    w = 500
+    lakes = 6
     return (
         chart(SEAFOOD)
-        .flow(spread(by="lake", dir="x", spacing=64))
+        .flow(spread(by="lake", dir="x", spacing=w / (lakes - 1)))
         .mark(blank(h="count"))
         .connect(area(opacity=0.8)),
-        {"w": 500, "h": 300, "axes": True},
+        {"w": w, "h": 300, "axes": True},
     )
 
 

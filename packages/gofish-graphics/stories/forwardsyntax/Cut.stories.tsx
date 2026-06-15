@@ -128,7 +128,7 @@ export const ImageCutWithLabels: StoryObj<Args> = {
           )
         )) as any
       ),
-    ]).render(container, { w: args.w, h: args.h, axes: false });
+    ]).render(container, { axes: false });
 
     return container;
   },
@@ -412,7 +412,7 @@ export const CroissantStack: StoryObj<Args> = {
         Constraint.align({ x: "middle" }, [bands, axis]),
         Constraint.distribute({ dir: "y", spacing: 12 }, [axis, bands]),
       ])
-      .render(container, { w: args.w, h: args.h, axes: false });
+      .render(container, { axes: false });
 
     return container;
   },

@@ -32,8 +32,12 @@ export const Basic: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
+    // An area chart has no intrinsic width, so it fills the container: the
+    // six lakes are spread to span `args.w` (five gaps between them) instead of
+    // a fixed pixel spacing, which would leave the canvas partly empty.
+    const lakes = 6;
     Chart(seafood, { axes: true })
-      .flow(spread({ by: "lake", dir: "x", spacing: 64 }))
+      .flow(spread({ by: "lake", dir: "x", spacing: args.w / (lakes - 1) }))
       .mark(blank({ h: "count" }))
       .connect(area({ opacity: 0.8 }))
       .render(container, {

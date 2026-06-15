@@ -101,5 +101,5 @@ def story_python_tutor():
                 *heap_arrows,
             ]
         ),
-        {"w": 1250, "h": 600},
+        {},
     )

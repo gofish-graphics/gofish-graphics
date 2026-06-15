@@ -130,14 +130,16 @@ export interface AlignBaselinePolicy {
  *  to the layer-box edge for the anchor (axis titles and chrome pin to the
  *  box). `middle` is box-center either way: it resolves to DIFFERENCE space —
  *  an extent with no anchored origin — so a scale origin is meaningless for it.
- *  The `end` box edge is finite-guarded: an unsized axis hands NaN down, and
- *  the fallback must stay 0 there, not inject NaN translates. */
+ *  The `middle` and `end` box edges are finite-guarded: an unsized axis hands
+ *  NaN down, and the fallback must stay 0 there, not inject NaN translates (a
+ *  `size/2` center would otherwise become NaN and poison every placed
+ *  descendant — e.g. a legend column laid out on an unsized canvas). */
 export const alignFallbackBaseline = (
   anchor: AlignAnchor,
   size: number,
   posScale: ((v: number) => number) | undefined
 ): number => {
-  if (anchor === "middle") return size / 2;
+  if (anchor === "middle") return Number.isFinite(size) ? size / 2 : 0;
   if (posScale) return posScale(0);
   if (anchor === "end") return Number.isFinite(size) ? size : 0;
   return 0; // start | baseline → layer origin

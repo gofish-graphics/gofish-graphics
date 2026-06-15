@@ -361,5 +361,5 @@ def story_croissant_stack():
                 Constraint.distribute([axis, bands], dir="y", spacing=12),
             ]
         ),
-        {"w": 520, "h": 260, "axes": False},
+        {"axes": False},
     )

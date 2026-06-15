@@ -8,14 +8,6 @@ import _ from "lodash";
 
 const meta: Meta = {
   title: "Low Level Syntax/Flower Chart",
-  argTypes: {
-    w: {
-      control: { type: "number", min: 100, max: 1000, step: 10 },
-    },
-    h: {
-      control: { type: "number", min: 100, max: 1000, step: 10 },
-    },
-  },
 };
 export default meta;
 
@@ -35,7 +27,6 @@ const scatterData = _(seafood)
   .value();
 
 export const Default: StoryObj<Args> = {
-  args: { w: 400, h: 400 },
   tags: ["gallery"],
   parameters: {
     gallery: {
@@ -82,8 +73,6 @@ export const Default: StoryObj<Args> = {
         ])
       )
     ).render(container, {
-      w: args.w,
-      h: args.h,
       axes: true,
     });
 

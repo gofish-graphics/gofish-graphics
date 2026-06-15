@@ -63,5 +63,5 @@ def story_default():
 
     return (
         layer([stations_tier, *train_lines]),
-        {"w": 500, "h": 400, "axes": True},
+        {"axes": True},
     )

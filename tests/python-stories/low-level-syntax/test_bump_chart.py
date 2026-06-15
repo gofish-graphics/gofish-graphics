@@ -207,5 +207,5 @@ def story_default():
 
     return (
         layer([*year_columns, *color_lines]),
-        {"w": 500, "h": 300},
+        {},
     )

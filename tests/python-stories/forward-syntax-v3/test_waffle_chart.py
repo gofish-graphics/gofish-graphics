@@ -15,5 +15,5 @@ def story_default():
             spread(spacing=2, dir="x"),
         )
         .mark(rect(w=8, h=8, fill="species")),
-        {"w": 400, "h": 400, "axes": True},
+        {"axes": True},
     )

@@ -7,14 +7,6 @@ import _ from "lodash";
 
 const meta: Meta = {
   title: "Low Level Syntax/Nested Waffle Chart",
-  argTypes: {
-    w: {
-      control: { type: "number", min: 100, max: 1000, step: 10 },
-    },
-    h: {
-      control: { type: "number", min: 100, max: 1000, step: 10 },
-    },
-  },
 };
 export default meta;
 
@@ -28,7 +20,6 @@ const classColor = {
 };
 
 export const Default: StoryObj<Args> = {
-  args: { w: 500, h: 340 },
   tags: ["gallery"],
   parameters: {
     gallery: {
@@ -82,8 +73,6 @@ export const Default: StoryObj<Args> = {
         )
         .value()
     ).render(container, {
-      w: args.w,
-      h: args.h,
       axes: true,
     });
     return container;

@@ -11,7 +11,7 @@ from gofish import layer, spread, connect, rect, ref, datum
 from python_stories.data import GENDER_PAY_GAP, PAY_GRADE
 from python_stories._lowlevel_helpers import group_by, order_by
 
-_RENDER = {"w": 320, "h": 400, "axes": True}
+_RENDER = {"axes": True}
 
 
 def _box_and_whisker(d, tag):

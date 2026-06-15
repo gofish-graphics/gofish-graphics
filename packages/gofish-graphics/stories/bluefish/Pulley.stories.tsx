@@ -25,10 +25,6 @@ import {
 
 const meta: Meta = {
   title: "Bluefish/Pulley",
-  argTypes: {
-    w: { control: { type: "number", min: 100, max: 1000, step: 10 } },
-    h: { control: { type: "number", min: 100, max: 1000, step: 10 } },
-  },
 };
 export default meta;
 
@@ -86,7 +82,6 @@ const Weight = createMark(
 );
 
 export const Pulley: StoryObj<Args> = {
-  args: { w: 360, h: 440 },
   tags: ["gallery"],
   parameters: {
     gallery: {
@@ -235,7 +230,7 @@ export const Pulley: StoryObj<Args> = {
         Constraint.zAbove(c.ropeSupport, c.B), // ceiling→B over B
         Constraint.zAbove(c.ropeS, c.C), // s over C
       ])
-      .render(container, { w: args.w, h: args.h });
+      .render(container, {});
 
     return container;
   },

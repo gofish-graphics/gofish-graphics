@@ -13,21 +13,12 @@ import { binding, isPointer, pointer, tuple } from "./types";
 
 const meta: Meta = {
   title: "Bluefish/Python Tutor/Python Tutor",
-  argTypes: {
-    w: {
-      control: { type: "number", min: 400, max: 2000, step: 20 },
-    },
-    h: {
-      control: { type: "number", min: 200, max: 1200, step: 20 },
-    },
-  },
 };
 export default meta;
 
 type Args = { w: number; h: number };
 
 export const PythonTutor: StoryObj<Args> = {
-  args: { w: 1250, h: 600 },
   tags: ["gallery"],
   parameters: {
     gallery: {
@@ -123,7 +114,7 @@ export const PythonTutor: StoryObj<Args> = {
       ]),
       ...stackArrows,
       ...heapArrows,
-    ]).render(container, { w: args.w, h: args.h });
+    ]).render(container, {});
 
     return container;
   },

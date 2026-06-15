@@ -68,5 +68,5 @@ def story_default():
             alignment="middle",
             sharedScale=True,
         ),
-        {"w": 500, "h": 340, "axes": True},
+        {"axes": True},
     )

@@ -10,10 +10,6 @@ import { Layer, Constraint, StackY, rect, text } from "../../src/lib";
 
 const meta: Meta = {
   title: "Low Level Syntax/Nested Boxes Tree",
-  argTypes: {
-    w: { control: { type: "number", min: 100, max: 1200, step: 20 } },
-    h: { control: { type: "number", min: 100, max: 1000, step: 20 } },
-  },
 };
 export default meta;
 
@@ -101,7 +97,6 @@ function buildSubtree(node: TreeNode, depth: number): any {
 }
 
 export const NestedBoxesTree: StoryObj<Args> = {
-  args: { w: 720, h: 560 },
   tags: ["gallery"],
   parameters: {
     gallery: {
@@ -112,7 +107,7 @@ export const NestedBoxesTree: StoryObj<Args> = {
   },
   render: (args: Args) => {
     const container = initializeContainer();
-    buildSubtree(sample, 0).render(container, { w: args.w, h: args.h });
+    buildSubtree(sample, 0).render(container, {});
     return container;
   },
 };

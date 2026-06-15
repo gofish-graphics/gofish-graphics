@@ -43,5 +43,5 @@ def story_default():
 
     return (
         layer(flowers),
-        {"w": 400, "h": 400, "axes": True},
+        {"axes": True},
     )

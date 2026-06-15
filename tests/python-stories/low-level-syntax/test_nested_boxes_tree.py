@@ -100,4 +100,4 @@ def buildSubtree(node, depth):
 
 
 def story_nested_boxes_tree():
-    return (buildSubtree(sample, 0), {"w": 720, "h": 560})
+    return (buildSubtree(sample, 0), {})
