@@ -6,7 +6,11 @@ import { mergeMeasures } from "../underlyingSpace";
 import * as Interval from "../../util/interval";
 import { applyAlign, createAlignConstraint } from "./align";
 import { applyDistribute, createDistributeConstraint } from "./distribute";
-import { shadowCheckAlign, shadowCheckDistribute } from "../solver/shadow";
+import {
+  shadowCheckAlign,
+  shadowCheckDistribute,
+  shadowCheckPosition,
+} from "../solver/shadow";
 import { applyPosition, createPositionConstraint } from "./position";
 import {
   createZAboveConstraint,
@@ -299,6 +303,7 @@ export function applyConstraints(
       shadowCheckAlign(constraint, targets, prePlacedAlign);
     } else if (constraint.type === "position") {
       applyPosition(constraint, targets, posScales);
+      shadowCheckPosition(constraint, targets, posScales);
     } else if (isSpanConstraint(constraint)) {
       applySpan(constraint, targets, posScales);
     } else {

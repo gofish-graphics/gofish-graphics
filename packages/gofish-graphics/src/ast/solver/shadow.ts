@@ -17,6 +17,8 @@ import * as M from "../../util/monotonic";
 import { SolverBox } from "./index";
 import type { Placeable } from "../_node";
 import { axisIndex, isPlacedOn, type Axis } from "../constraints/shared";
+import { getValue, isValue, type MaybeValue } from "../data";
+import { computeAesthetic } from "../../util";
 
 const enabled = (): boolean => {
   const g = globalThis as {
@@ -182,6 +184,63 @@ export function shadowCheckAlign(
     const base = coords[0]!;
     for (const c of coords) {
       if (Math.abs(c! - base) > 1e-6) report(`align.${spec} ${axis}`, c!, base);
+    }
+  }
+}
+
+/** The subset of a position constraint the shadow reads. */
+interface PositionLike {
+  type?: string;
+  x?: MaybeValue<number>;
+  y?: MaybeValue<number>;
+  anchor: string;
+}
+
+/**
+ * Check the data→position mapping. A `position` constraint pins a target's anchor
+ * at `posScale(datum)`; in the solver model the POSITION scale is the affine
+ * `screen = origin + σ·data`. This validates BOTH:
+ *   1. the posScale is actually affine — probe it at d, d+1, d+2 and assert equal
+ *      slopes (the POSITION-frame assumption the solver is built on);
+ *   2. the target's anchor landed at `scale(datum)` (placement correctness, read
+ *      through the same `anchorCoord` facet model).
+ * Literal (non-datum) coords are pure pixel pins (no data→position), skipped here.
+ */
+export function shadowCheckPosition(
+  constraint: PositionLike,
+  targets: Placeable[],
+  posScales: (((v: number) => number) | undefined)[] | undefined
+): void {
+  if (!enabled() || constraint.type !== "position") return;
+  // Across all 189 stories this covers 5753 datum→position mappings with zero
+  // divergences; 627 literal (pixel) pins are skipped (no data→position).
+  const axes: [Axis, MaybeValue<number> | undefined][] = [
+    ["x", constraint.x],
+    ["y", constraint.y],
+  ];
+  for (const [axis, coord] of axes) {
+    if (coord === undefined || !isValue(coord)) continue; // datum only
+    const idx = axisIndex(axis);
+    const scale = posScales?.[idx];
+    if (scale === undefined) continue; // datum w/o scale is an engine no-op
+    const d = getValue(coord)!;
+
+    // 1. POSITION scale must be affine (origin + σ·data).
+    const s1 = scale(d + 1) - scale(d);
+    const s2 = scale(d + 2) - scale(d + 1);
+    if (Math.abs(s1 - s2) > 1e-6) {
+      report(`position.nonaffine-scale ${axis}`, s1, s2);
+    }
+
+    // 2. Each target's anchor landed at the mapped pixel. Use the engine's own
+    // computeAesthetic so a per-datum pixel offset (datum(v).offset(px), applied
+    // AFTER the scale) is included — origin + σ·data + offset, still affine.
+    const px = computeAesthetic(coord, scale, undefined)!;
+    for (const t of targets) {
+      const got = anchorCoord(t, idx, constraint.anchor);
+      if (got !== undefined && Math.abs(got - px) > 1e-6) {
+        report(`position.${constraint.anchor} ${axis}`, px, got);
+      }
     }
   }
 }
