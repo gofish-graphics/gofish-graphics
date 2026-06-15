@@ -134,6 +134,38 @@ export type ResolveUnderlyingSpace = (
   constraints: ConstraintSpec[]
 ) => FancySize<UnderlyingSpace>;
 
+/** Stage-1 dev gate (#39): set `GOFISH_LEDGER_CHECK=1` to assert, on every
+ *  `dims` read, that the per-node ledger agrees with `combineDims`. Off (and
+ *  zero-cost) in prod. */
+const LEDGER_CHECK =
+  !!(
+    globalThis as {
+      GOFISH_LEDGER_CHECK?: unknown;
+      process?: { env?: Record<string, string | undefined> };
+    }
+  ).GOFISH_LEDGER_CHECK ||
+  !!(globalThis as { process?: { env?: Record<string, string | undefined> } })
+    .process?.env?.GOFISH_LEDGER_CHECK;
+
+const _ledgerDivergences = new Set<string>();
+/** Report a ledger/`combineDims` mismatch once per (type, axis, facet) so the
+ *  inventory is readable. Only called when {@link LEDGER_CHECK} is on. */
+const reportLedgerDivergence = (
+  type: string,
+  dir: 0 | 1,
+  facet: string,
+  fromLedger: number,
+  fromDims: number
+): void => {
+  const key = `${type}|${dir}|${facet}`;
+  if (_ledgerDivergences.has(key)) return;
+  _ledgerDivergences.add(key);
+
+  console.warn(
+    `[ledger-check] ${type} axis ${dir} ${facet}: ledger=${fromLedger} combineDims=${fromDims}`
+  );
+};
+
 export class GoFishNode {
   public readonly uid: string;
   private static uidCounter = 0;
@@ -161,15 +193,17 @@ export class GoFishNode {
   public children: GoFishAST[];
   public intrinsicDims?: Dimensions;
   public transform?: Transform;
-  /** Persistent per-axis bbox ledger (#39 stage 2). Accumulates the facet
-   *  equations `setExtent` pins so over-determination is detected ACROSS
-   *  separate constraints pinning the same axis — not just within one call (the
-   *  fresh-per-call bbox this replaces could only see the latter). Lazily
-   *  created on first rank-2 `setExtent`; the hot rank-1 pin / `place()` path
-   *  still allocates nothing. Today only `setExtent` records into it and only
-   *  `setExtent` reads it back; `dims`/render still derive from
-   *  `(intrinsicDims, transform)`. Making it the shared authority that `place`
-   *  and the `dims` getter also use is the remaining stage-2 work. */
+  /** Persistent per-axis bbox ledger (#39 stage 2). Records the facet equations
+   *  that determine this node's box, so it mirrors the authoritative
+   *  `(intrinsicDims, transform)`: `layout()` seeds the self-layout size (+ a
+   *  self-placed absolute min), `_pinAnchor` records the absolute anchor a pin
+   *  lands at, and a rank-2 `setExtent` resets the axis to its determining
+   *  facets (overriding the self-layout seed). Lazily created (the hot single
+   *  pin / `place()` path allocates only on first touch). Today `dims`/render
+   *  still derive from `(intrinsicDims, transform)` and the ledger is recorded
+   *  only — a dev assertion ({@link reportLedgerDivergence}) checks the two
+   *  agree. Making this the shared authority the `dims` getter reads from is the
+   *  remaining stage-2 work. */
   private _bbox?: [BBox?, BBox?];
   /** Per-axis scope annotation: `true` = this node is a scale scope (it solves
    *  σ from its own box and hands it to descendants via a fresh array — claim
@@ -522,6 +556,25 @@ export class GoFishNode {
     this.intrinsicDims = elaborateDims(intrinsicDims);
     this.transform = elaborateTransform(transform);
     this.renderData = renderData;
+
+    // Stage 1 (#39): seed the per-axis ledger from this node's own layout. The
+    // `size` is frame-invariant; if the node also self-placed (`translate`
+    // defined), record the absolute `min` too, so a self-placing shape's ledger
+    // is fully determined and matches `combineDims`. While unplaced (`translate`
+    // undefined) only `size` is recorded — rank-1, `min`/`center`/`max` read
+    // `undefined`, the same "not yet placed" state `combineDims` encodes. The
+    // ledger is recorded only; `dims`/render still read `(intrinsicDims,
+    // transform)` until stage 2.
+    for (const dir of [0, 1] as const) {
+      const id = this.intrinsicDims?.[dir];
+      if (id?.size === undefined && id?.min === undefined) continue;
+      this._bbox ??= [undefined, undefined];
+      const ledger = (this._bbox[dir] ??= new BBox());
+      if (id?.size !== undefined) ledger.add("size", id.size);
+      const tr = this.transform?.translate?.[dir];
+      if (tr !== undefined && id?.min !== undefined)
+        ledger.add("min", tr + id.min);
+    }
     return this;
   }
 
@@ -529,7 +582,28 @@ export class GoFishNode {
     // Shared with GoFishRef.dims: combine the local box (`intrinsicDims`) with
     // its placement (`translate`), deriving center/max from the placed
     // (min, size). See {@link combineDims}.
-    return combineDims(this.intrinsicDims, this.transform);
+    const dims = combineDims(this.intrinsicDims, this.transform);
+    if (LEDGER_CHECK) this._assertLedgerMatches(dims);
+    return dims;
+  }
+
+  /** Stage-1 dev assertion (#39): where the ledger is fully solved, its derived
+   *  `(min, size)` must equal what `combineDims` produces from `(intrinsicDims,
+   *  transform)`. Proves the ledger is a faithful mirror before stage 2 makes
+   *  `dims` read from it. Guarded by `GOFISH_LEDGER_CHECK`; never runs in prod. */
+  private _assertLedgerMatches(dims: Dimensions): void {
+    for (const dir of [0, 1] as const) {
+      const ledger = this._bbox?.[dir];
+      if (!ledger?.solved) continue;
+      for (const facet of ["min", "size"] as const) {
+        const fromLedger = ledger.read(facet);
+        const fromDims = dims[dir]?.[facet];
+        if (fromLedger === undefined || fromDims === undefined) continue;
+        if (Math.abs(fromLedger - fromDims) > 1e-6) {
+          reportLedgerDivergence(this.type, dir, facet, fromLedger, fromDims);
+        }
+      }
+    }
   }
 
   public place(
@@ -576,12 +650,14 @@ export class GoFishNode {
    * cannot. Anchor facets map start→min, end→max, middle→center; `baseline`
    * (the origin) is not a bbox facet, so a baseline pin still uses `place()`.
    *
-   * The rank-2 solve accumulates into a PERSISTENT per-axis ledger
-   * ({@link _bbox}), so over-determination is detected across separate
-   * constraints pinning the same axis, not just within one call. The remaining
-   * #39 step is to make that ledger the shared authority `place()` and the
-   * `dims` getter also read from (today they still use the
-   * `(intrinsicDims, transform)` split).
+   * The rank-2 solve writes through the PERSISTENT per-axis ledger
+   * ({@link _bbox}) so it mirrors the node's authoritative geometry — a
+   * determining constraint resets the axis (overriding the self-layout seed),
+   * matching the local-frame reset below. The remaining #39 step is to make that
+   * ledger the shared authority `place()` and the `dims` getter also read from
+   * (today they still use the `(intrinsicDims, transform)` split). Cross-call
+   * over-determination detection (two constraints fighting over one axis) waits
+   * on the authority model — a self-layout default vs a hard constraint pin.
    */
   public setExtent(
     axis: FancyDirection,
@@ -610,13 +686,14 @@ export class GoFishNode {
       return;
     }
 
-    // Rank-2: two+ owned facets DETERMINE the box (size included). Accumulate
-    // into the PERSISTENT per-axis ledger so a second constraint pinning this
-    // same axis is checked for consistency against the first (a named
-    // over-determination, not a silent re-solve). Then reset the local frame to
-    // [0, size] at the absolute min.
+    // Rank-2: two+ owned facets DETERMINE the box (size included). This is an
+    // overriding determination — it discards whatever the node's own layout seed
+    // (or an earlier pin) recorded for this axis, exactly as it resets the local
+    // frame to [0, size] at the absolute min. So the persistent ledger is RESET
+    // to hold just these facets, keeping it a faithful mirror of the geometry
+    // written below.
     this._bbox ??= [undefined, undefined];
-    const bbox = (this._bbox[dir] ??= new BBox());
+    const bbox = (this._bbox[dir] = new BBox());
     for (const [facet, value] of facets) bbox.add(facet, value, owner);
     const absMin = bbox.read("min");
     const size = bbox.read("size");
@@ -641,9 +718,21 @@ export class GoFishNode {
    */
   private _pinAnchor(dir: Direction, anchor: Anchor, value: number): void {
     const intrinsic = this.intrinsicDims?.[dir];
+    const override = this.transform?.translate?.[dir] !== undefined;
     this.ensureTranslate()[dir] =
       value -
       localAnchorPoint(anchor, intrinsic?.min ?? 0, intrinsic?.size ?? 0);
+
+    // Stage 1 (#39): record the pin into the ledger (observe-only). `baseline`
+    // pins the origin, not a box facet, so it records nothing. A `setExtent`
+    // rank-1 pin can OVERRIDE an already-placed box, which is a new position,
+    // so rebuild the axis ledger (re-seeding the frame-invariant size).
+    if (anchor === "baseline") return;
+    this._bbox ??= [undefined, undefined];
+    if (override || !this._bbox[dir]) this._bbox[dir] = new BBox();
+    const ledger = this._bbox[dir]!;
+    if (intrinsic?.size !== undefined) ledger.add("size", intrinsic.size);
+    ledger.add(anchor, value);
   }
 
   /** Lazily ensure `transform.translate` exists (preserving any `scale`) and

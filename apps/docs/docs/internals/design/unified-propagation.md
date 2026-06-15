@@ -222,9 +222,17 @@ value − localAnchorPoint(...)`.
      over-determination, not a silent re-solve — the debt the old interim note
      flagged). `dims`/render still derive from `(intrinsicDims, transform)`, so
      output is byte-identical (REAL = 0, 64 tests).
-   - **Stage 1** — every mutator (`place`/`_pinAnchor`, the `layout()` size
-     seed) records into the same ledger, plus a dev-only assertion that
-     ledger-derived dims equal `combineDims` across all stories.
+   - ✅ **Stage 1 — every mutator records into the ledger, faithfully.** The
+     `layout()` wrapper seeds each axis's `size` (and the absolute `min` for a
+     self-placing shape); `_pinAnchor` records the absolute anchor facet (and
+     rebuilds the axis on an override pin); a rank-2 `setExtent` resets the axis
+     and records its determining facets — so the ledger always mirrors the
+     written `(intrinsicDims, transform)`. A dev-only assertion
+     (`GOFISH_LEDGER_CHECK`, zero-cost off) compares ledger-derived `(min,size)`
+     against `combineDims` on every `dims` read; **zero divergences across all
+     189 stories**, the confidence stage 2 needs before flipping the read.
+     (`baseline` and `embedded` stay out of the ledger — origin pin / layout-fold
+     flag, not linear-system facets.) Gated REAL = 0 + 64 tests.
    - **Stage 2** — `dims` reads from the ledger (the risky flip), render still
      reads `(intrinsicDims, transform)`.
    - **Stage 3** — `(intrinsicDims, transform)` becomes a projection of the
