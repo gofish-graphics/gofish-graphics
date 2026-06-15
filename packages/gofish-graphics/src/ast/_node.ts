@@ -619,6 +619,13 @@ export class GoFishNode {
     for (const dir of [0, 1] as const) {
       const ledger = this._bbox?.[dir];
       if (!ledger?.solved) continue;
+      // Stage 3 (#39): once a mutator stops writing `transform.translate` (rank-2
+      // `setExtent` is the first), the `combineDims` split is intentionally no
+      // longer a mirror on that axis — it has no translate to combine. Skip the
+      // comparison where the split is retired (translate undefined); the ledger
+      // is the sole authority there. The check stays meaningful for axes whose
+      // split is still written.
+      if (this.transform?.translate?.[dir] === undefined) continue;
       for (const facet of ["min", "size"] as const) {
         const fromLedger = ledger.read(facet);
         const fromDims = dims[dir]?.[facet];
@@ -682,11 +689,17 @@ export class GoFishNode {
   }
 
   private get _displayTransform(): Transform | undefined {
-    if (!this.transform) return undefined;
-    return {
-      translate: [this._projectTranslate(0), this._projectTranslate(1)],
-      scale: this.transform.scale,
-    };
+    const tx = this._projectTranslate(0);
+    const ty = this._projectTranslate(1);
+    // Derive a transform whenever the ledger supplies a translate OR one was
+    // written — so render still sees the position once a mutator records it in
+    // the ledger but stops writing `transform` (stage 3 retiring the writes,
+    // starting with rank-2 `setExtent`). Returns undefined only for a node with
+    // neither (an unplaced leaf). Inert today: a solved ledger still coincides
+    // with a written transform until the first write is retired.
+    if (tx === undefined && ty === undefined && !this.transform)
+      return undefined;
+    return { translate: [tx, ty], scale: this.transform?.scale };
   }
 
   public place(
@@ -782,8 +795,8 @@ export class GoFishNode {
     // overriding determination — it discards whatever the node's own layout seed
     // (or an earlier pin) recorded for this axis, exactly as it resets the local
     // frame to [0, size] at the absolute min. So the persistent ledger is RESET
-    // to hold just these facets, keeping it a faithful mirror of the geometry
-    // written below.
+    // to hold just these facets — and is now the SOLE record of this axis's
+    // position.
     this._bbox ??= [undefined, undefined];
     const bbox = (this._bbox[dir] = new BBox());
     for (const [facet, value] of facets) bbox.add(facet, value, owner);
@@ -798,7 +811,14 @@ export class GoFishNode {
       min: 0,
       size,
     };
-    this.ensureTranslate()[dir] = absMin;
+    // Stage 3 (#39): the translate is NO LONGER WRITTEN. The ledger is solved
+    // here (absMin + size), so `_projectTranslate` derives translate = absMin −
+    // localMin = absMin − 0, and render (`_displayTransform`), `dims`, `_ref`
+    // (`projectedTranslate`) and the placement-state checks all read that
+    // projection. This is the first retired `transform.translate` write — the
+    // split is now a derived view of the ledger on this axis, not a written
+    // mirror. (`absMin` — read above for the determinacy guard — is the value the
+    // old write set.)
   }
 
   /**
