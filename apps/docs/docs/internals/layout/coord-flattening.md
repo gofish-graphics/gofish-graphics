@@ -6,6 +6,7 @@ group: Layout
 status: draft
 covers:
   - packages/gofish-graphics/src/ast/coordinateTransforms/coord.tsx
+  - packages/gofish-graphics/src/ast/coordinateTransforms/bake.ts
 ---
 
 # Flattening the Scenegraph
