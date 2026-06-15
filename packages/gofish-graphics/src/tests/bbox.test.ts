@@ -11,6 +11,7 @@
 
 import { BBox } from "../ast/constraints/bbox";
 import * as Monotonic from "../util/monotonic";
+import { localAnchorPoint } from "../ast/dims";
 
 let passed = 0;
 let failed = 0;
@@ -160,6 +161,24 @@ console.log("# bbox: σ-affine (Monotonic) facets");
   b.add("min", 10);
   b.add("size", 20);
   ok("constant facets read as numbers", b.read("max") === 30);
+}
+
+// `place()` and `setExtent`'s rank-1 pin both place an anchor through
+// `localAnchorPoint`, which DERIVES center/max from (min, size) rather than
+// reading a separately-stored facet. This is what lets an asymmetric box (a
+// stored center ≠ min + size/2, as `position.tsx` can build) place identically
+// through both paths — the #39 stage-2 fix the earlier place()→setExtent reroute
+// got wrong by reading the stored center. On box [min=2, size=10]: center=7,
+// max=12, regardless of any stale stored facet.
+console.log("# localAnchorPoint: center/max are DERIVED from (min, size)");
+{
+  ok("min anchor", localAnchorPoint("min", 2, 10) === 2);
+  ok("center anchor = min + size/2", localAnchorPoint("center", 2, 10) === 7);
+  ok("max anchor = min + size", localAnchorPoint("max", 2, 10) === 12);
+  ok("baseline anchor = local origin 0", localAnchorPoint("baseline", 2, 10) === 0);
+  // The translate `place(value, anchor)` writes is `value − localAnchorPoint`;
+  // pinning center=50 on this box yields 50 − 7 = 43 (never 50 − a stored center).
+  ok("center pin translate = value − derived center", 50 - localAnchorPoint("center", 2, 10) === 43);
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

@@ -17,6 +17,7 @@ import {
   FancyDirection,
   FancySize,
   FancyTransform,
+  localAnchorPoint,
   Size,
   Transform,
 } from "./dims";
@@ -569,14 +570,13 @@ export class GoFishNode {
 
     if (this.transform?.translate?.[dir] !== undefined) return;
 
-    const anchorToPoint = {
-      min: intrinsic!.min ?? 0,
-      max: intrinsic!.max ?? 0,
-      center: intrinsic!.center ?? 0,
-      baseline: 0,
-    };
-
-    this.ensureTranslate()[dir] = value - anchorToPoint[anchor];
+    // Derive the anchor's local point from `(min, size)` (shared with
+    // `setExtent`'s rank-1 pin via `localAnchorPoint`) rather than reading a
+    // separately-stored `center`/`max` — so the two placement paths can never
+    // disagree on an asymmetric box.
+    this.ensureTranslate()[dir] =
+      value -
+      localAnchorPoint(anchor, intrinsic!.min ?? 0, intrinsic!.size ?? 0);
   }
 
   /**
@@ -612,39 +612,38 @@ export class GoFishNode {
     const localSize = intrinsic?.size;
     const sizeOwned = facets.length >= 2;
 
-    const bbox = new BBox();
-    for (const [facet, value] of facets) bbox.add(facet, value, owner);
     if (!sizeOwned) {
-      // Rank-1 position pin: the second equation (the size) comes from the
-      // node's own layout — `0` for a point-like / unsized mark, matching the
-      // old `placePinned`'s `size ?? 0`, so the pin still rewrites the translate
-      // rather than silently dropping.
-      const [facet] = facets[0];
+      // Rank-1 position pin: a single anchor facet lands at its value; the size
+      // is the node's own layout (the second equation). No BBox needed — the
+      // anchor's local point is derived directly, the SAME `localAnchorPoint`
+      // arithmetic `place()` uses, so the two paths can't diverge (and the hot
+      // pin path allocates nothing). The local box is left intact; only the
+      // translate moves, so the pin OVERRIDES a self-placed translate.
+      const [facet, value] = facets[0];
       if (facet === "size") return; // a lone size can't determine a position
-      bbox.add("size", localSize ?? 0, "layout");
+      this.ensureTranslate()[dir] =
+        value - localAnchorPoint(facet, localMin, localSize ?? 0);
+      return;
     }
 
+    // Rank-2: two+ owned facets DETERMINE the box (size included). Solve the
+    // 2-unknown system, then reset the local frame to [0, size] at the absolute
+    // min.
+    const bbox = new BBox();
+    for (const [facet, value] of facets) bbox.add(facet, value, owner);
     const absMin = bbox.read("min");
     const size = bbox.read("size");
     if (absMin === undefined || size === undefined) return; // under-determined
 
-    const translate = this.ensureTranslate();
-    if (sizeOwned) {
-      // The box is (re)sized: its local frame becomes [0, size], placed at absMin.
-      if (!this.intrinsicDims) this.intrinsicDims = [];
-      this.intrinsicDims[dir] = {
-        ...(this.intrinsicDims[dir] ?? {}),
-        min: 0,
-        size,
-        center: size / 2,
-        max: size,
-      };
-      translate[dir] = absMin;
-    } else {
-      // Position pin: keep the local box, move the origin so the box's absolute
-      // min lands at absMin.
-      translate[dir] = absMin - localMin;
-    }
+    if (!this.intrinsicDims) this.intrinsicDims = [];
+    this.intrinsicDims[dir] = {
+      ...(this.intrinsicDims[dir] ?? {}),
+      min: 0,
+      size,
+      center: size / 2,
+      max: size,
+    };
+    this.ensureTranslate()[dir] = absMin;
   }
 
   /** Lazily ensure `transform.translate` exists (preserving any `scale`) and

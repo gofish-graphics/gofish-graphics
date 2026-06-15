@@ -140,6 +140,19 @@ resolve with a spike before committing the solver.
    `min`/`center` `undefined`), plus migrating the 108 direct `intrinsicDims`
    sites. That is the interactive, story-by-story migration below — _not_ a blind
    reroute.
+
+   ✅ **Down-payment re-landed correctly** (the root cause, not the reroute):
+   `place()` and `setExtent`'s rank-1 pin now both place an anchor through a
+   single pure `localAnchorPoint(anchor, min, size)` (`dims.ts`) that **derives**
+   `center`/`max` from `(min, size)` instead of reading a stored facet — so the
+   two paths cannot diverge on an asymmetric box, and the rank-1 pin allocates no
+   `BBox` (the genuine 2-unknown solve stays only for rank-2 size-setting). Both
+   of the reasons the reroute was reverted are gone, gated REAL = 0 across 189
+   stories + a `localAnchorPoint` contract test. The redundant stored
+   `center`/`max` are now provably dead at the placement readers; _removing_ them
+   from the `Interval` (and migrating the 108 writers off direct `intrinsicDims`)
+   remains the story-by-story work below.
+
 3. **Migrate each constraint to a facet-equation emitter** behind today's
    `apply*` signatures, one at a time, gated.
 4. **Replace the placement walk with the propagation solver** — σ solved per

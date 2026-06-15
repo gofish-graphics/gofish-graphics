@@ -95,6 +95,33 @@ export type FancyDirection = "x" | "y" | Direction;
 
 export type Anchor = "min" | "max" | "center" | "baseline";
 
+/**
+ * Local-frame coordinate of an anchor on a box `[localMin, localMin + localSize]`.
+ * `center` and `max` are DERIVED here (`localMin + size/2`, `localMin + size`),
+ * never read from a separately-stored facet — so the two node placement paths
+ * (`place()` and `setExtent`'s rank-1 pin) agree on the geometry even for an
+ * (only latently reachable) asymmetric box, where a stored `center` could
+ * diverge from `min + size/2`. That divergence is exactly what reverted the
+ * earlier `place()→setExtent` reroute (#39 stage 2); deriving removes it at the
+ * source. `baseline` is the local origin (point 0).
+ */
+export const localAnchorPoint = (
+  anchor: Anchor,
+  localMin: number,
+  localSize: number
+): number => {
+  switch (anchor) {
+    case "min":
+      return localMin;
+    case "center":
+      return localMin + localSize / 2;
+    case "max":
+      return localMin + localSize;
+    case "baseline":
+      return 0;
+  }
+};
+
 export const elaborateDirection = (direction: FancyDirection): Direction => {
   switch (direction) {
     case "x":
