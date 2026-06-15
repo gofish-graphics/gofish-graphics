@@ -835,9 +835,6 @@ export class GoFishNode {
     // a defined `min` means already positioned (`ledger.min ⟺ translate`). Read
     // before `ensureTranslate`/the ledger block mutate this call's state.
     const override = this._bbox?.[dir]?.read("min") !== undefined;
-    this.ensureTranslate()[dir] =
-      value -
-      localAnchorPoint(anchor, intrinsic?.min ?? 0, intrinsic?.size ?? 0);
 
     // Stage 3 (#39): record the pin into the ledger so it represents EVERY
     // anchor — including `baseline`, the one that was missing. A `baseline` pin
@@ -845,10 +842,9 @@ export class GoFishNode {
     // absolute min that origin implies — screen-min = origin + localMin =
     // value + intrinsicDims.min — so `_projectTranslate`/`dims` derive a
     // baseline-placed node's geometry like any other anchor. That closes the gap
-    // the σ-affine model is built on (origin = the intercept) and that blocked
-    // retiring the `transform.translate` writes. A `setExtent` rank-1 /
-    // re-placement OVERRIDE rebuilds the axis ledger (a new position), re-seeding
-    // the frame-invariant size.
+    // the σ-affine model is built on (origin = the intercept). A `setExtent`
+    // rank-1 / re-placement OVERRIDE rebuilds the axis ledger (a new position),
+    // re-seeding the frame-invariant size.
     this._bbox ??= [undefined, undefined];
     if (override || !this._bbox[dir]) this._bbox[dir] = new BBox();
     const ledger = this._bbox[dir]!;
@@ -857,6 +853,25 @@ export class GoFishNode {
       ledger.add("min", value + (intrinsic?.min ?? 0));
     } else {
       ledger.add(anchor, value);
+    }
+
+    // Stage 3 (#39): retire the translate write where the ledger fully solves the
+    // axis — the readers (`dims`, render's `_displayTransform`, `_ref`'s
+    // `projectedTranslate`) derive translate from it there. CLEAR any stale
+    // translate rather than leaving it: a pin can OVERRIDE a self-placed
+    // translate (an operator's `_layout` wrote one — e.g. scatter positioning a
+    // coord glyph), and the override now lives only in the ledger; leaving the
+    // old value would make the split a stale, divergent mirror. Setting it
+    // `undefined` makes the split honestly carry "no opinion" (the ledger is
+    // authoritative; the placement-state checks read the ledger too). Keep the
+    // write only when the axis is under-determined (size unknown → ledger rank-1,
+    // not solved), where the readers still fall back to the written split.
+    if (ledger.solved) {
+      if (this.transform?.translate) this.transform.translate[dir] = undefined;
+    } else {
+      this.ensureTranslate()[dir] =
+        value -
+        localAnchorPoint(anchor, intrinsic?.min ?? 0, intrinsic?.size ?? 0);
     }
   }
 
