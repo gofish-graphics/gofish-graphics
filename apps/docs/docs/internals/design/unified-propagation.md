@@ -159,17 +159,29 @@ resolve with a spike before committing the solver.
    through `dims` by `align`/`distribute`/etc. `position()` now stores only its
    local `(min, size)`. REAL = 0.
 
-   🟡 **Remaining before `center`/`max` leave `Interval`.** Two readers still
-   consume the _stored_ facets, so the type can't drop them yet: (a) **shape
-   `_render` functions** (`rect`/`ellipse`/`petal`/`image`/…) read their own
-   `intrinsicDims[i].center`/`max` directly to draw — which is why `setExtent`
-   must still refresh them when `span` resizes a shape; (b) the type itself is
-   shared between the **stored** local box (wants `{min, size}`) and the
-   **computed** `dims` output (legitimately needs `center`/`max` for the readers
-   above). Finishing the removal is therefore: migrate the ~6 shape renders to
-   derive, drop `setExtent`'s `center`/`max` write, then split `Interval`
-   (stored) from the computed `Dimensions` (~160 type sites, mostly read-side).
-   Plus the 108-writer migration off direct `intrinsicDims`.
+   ✅ **Shape renders derive; stored-box `center`/`max` writes removed.** The
+   shape `_render` functions (`rect`/`ellipse`/`petal`) shared an identical block
+   that read their own `intrinsicDims[i].center`/`max` to draw; they now call one
+   `displayDims()` helper that derives. With no reader left, `setExtent` and all
+   six shape `layout()`s stopped writing `center`/`max` — every stored box is now
+   `{min, size}` only. All four derivation sites (`localAnchorPoint`, both `dims`
+   getters, `displayDims`) anchor `center`/`max` off the **magnitude `|size|`**,
+   so a negative bar (signed `size`, `min` carrying direction) stays correct.
+
+   **`center`/`max` do NOT leave `Interval` — and shouldn't.** The investigation
+   corrected the premise: `Interval` is a _general_ dim type with three uses that
+   legitimately carry `center`/`max` — input elaboration (`cx`/`x2`, read by
+   `image`/`text` for center-positioning and `rect` for min/max spans via
+   `elaborateDims`), the computed `dims` output (read by `align`/`distribute`/
+   `coord`/overhang), and coordinate-transform **domains** (`{min, max, size}`,
+   where `max` is a real domain endpoint). Only the _stored node box_ should omit
+   them, and it now does. A dedicated `LocalBox` type for `intrinsicDims` would
+   add compiler enforcement but buys little (structural typing already accepts the
+   narrower shape), and the remaining operator writes (`treemap`/`offset`/`arrow`/
+   `connect`) are now **dead** — the getter derives, ignoring them — so they're
+   cosmetic cleanup, not correctness. The 108-writer migration off direct
+   `intrinsicDims` manipulation (the path to a single authoritative ledger)
+   remains the larger structural work.
 
 3. **Migrate each constraint to a facet-equation emitter** behind today's
    `apply*` signatures, one at a time, gated.
