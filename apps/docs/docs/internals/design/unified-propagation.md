@@ -199,3 +199,42 @@ That single change — _a placed position's extent participates in solving σ_ �
 both the headline simplification and the behavior the two-pass split can't
 express. Everything else here is the refactor that makes it a one-line
 consequence instead of a special case.
+
+## The visible symptom today: content sits at the origin, not fitted to the canvas
+
+The label-overhang above is the small version. The large, _already-visible_ bug
+(pre-dating this work) is that many graphics render **translated too low / into
+the bottom-left**, with empty space above and to the right. Confirmed examples:
+the bump, croissant, flower, nested-boxes-tree, and python-tutor-memory diagrams.
+
+Measured mechanism (`gofish.tsx`, `PADDING = 40`): the root frame is
+`scale(1, -1) translate(leftReserve, -(height + topReserve))`, i.e. content is
+pinned at the **origin** with a 40px margin, and the canvas is the _requested_
+size. When the content is smaller than the request, it does not fill or center —
+it piles up at the origin, which y-up renders at the **bottom-left**. Two
+variants of one gap:
+
+- **Diagrams** (nested-boxes-tree requests 720×560; the tree is ~150×400):
+  there is no data scale to stretch, so the content is simply origin-anchored in
+  an over-large canvas. It should fit-to-canvas (scale and/or center) or the
+  canvas should shrink-wrap it.
+- **Data charts** (flower: x-axis runs to 140, data reaches ~50): the σ / data
+  scale is not fit to the content's actual extent, so the marks occupy a corner.
+
+Both are the four observations converging: the content's **bbox** must drive the
+**σ-solve** (so the chart fills its canvas), the **baseline = origin** anchoring
+is exactly what drops content to the bottom-left (and is
+[[feedback_baseline_origin_semantics]]'s underdeveloped corner — `place()` still
+carries a `// TODO: revisit baseline case`, aliasing `baseline` to `min`), and
+the fix is "**pick scales to fit the whole chart**". This is _not_ a band-aid
+(don't special-case "center when canvas > content"): charts must _fill_ (their
+axes span the canvas) while a fixed-size diagram may want to _center_, and that
+choice should fall out of whether the axis carries a data scale — which is
+exactly what the unified solve, with the bbox edges folded into the per-scope σ,
+decides. So this symptom is the acceptance test for stage 4, and the reason
+stage 4's pixel changes are _wanted_, not regressions: a chart that now fills its
+canvas where it used to sit in a corner is **correct**.
+
+(Diagram-vs-chart fit — scale-to-fill vs center vs shrink-wrap when content < an
+explicit canvas — is a design sub-decision to settle alongside stage 4, governed
+by whether the scope's axis is a data POSITION or pixel-pure.)
