@@ -514,27 +514,28 @@ export class GoFishNode {
   }
 
   public get dims(): Dimensions {
-    // Combine intrinsicDims and transform. Return undefined for min/center/max/size
-    // when either the intrinsic dim or translation for that dimension is undefined,
-    // so callers can distinguish "not yet placed" from "at 0".
+    // Combine the local box (`intrinsicDims`) with its placement (`translate`).
+    // `min`/`size` are returned undefined when the local dim or the translation
+    // is missing, so callers can distinguish "not yet placed" from "at 0".
+    // `center`/`max` are DERIVED from the placed `min` and `size` (a box has no
+    // independent center/max — the same `localAnchorPoint` relation `place()`/
+    // `setExtent` use): they read back only once the box is both placed AND
+    // sized, never from a separately-stored facet.
     const dim = (i: 0 | 1) => {
       const intrinsic = this.intrinsicDims?.[i];
       const translate = this.transform?.translate?.[i];
       const hasTranslate = translate !== undefined;
+      const size = intrinsic?.size;
+      const min =
+        hasTranslate && intrinsic?.min !== undefined
+          ? intrinsic.min + translate
+          : undefined;
+      const placedAndSized = min !== undefined && size !== undefined;
       return {
-        min:
-          hasTranslate && intrinsic?.min !== undefined
-            ? (intrinsic!.min ?? 0) + translate!
-            : undefined,
-        center:
-          hasTranslate && intrinsic?.center !== undefined
-            ? (intrinsic!.center ?? 0) + translate!
-            : undefined,
-        max:
-          hasTranslate && intrinsic?.max !== undefined
-            ? (intrinsic!.max ?? 0) + translate!
-            : undefined,
-        size: intrinsic?.size,
+        min,
+        center: placedAndSized ? min + size / 2 : undefined,
+        max: placedAndSized ? min + size : undefined,
+        size,
         embedded: intrinsic?.embedded,
       };
     };
@@ -548,23 +549,20 @@ export class GoFishNode {
   ): void {
     const dir = elaborateDirection(axis);
     const intrinsic = this.intrinsicDims?.[dir];
+    const localMin = intrinsic?.min;
+    const size = intrinsic?.size;
 
-    const anchorToDim = {
-      min: intrinsic?.min,
-      max: intrinsic?.max,
-      center: intrinsic?.center,
-      // TODO: revisit baseline case
-      baseline: intrinsic?.min,
-    };
-
-    if (anchorToDim[anchor] === undefined) {
-      // Interval has min/max/center/size but not "baseline" — baseline is a
-      // synthetic anchor aliased to min above (see TODO). When the anchor is
-      // already undefined and we're being asked to set it, "baseline" can't
-      // be written back: just no-op so the translate path below is skipped.
-      if (anchor !== "baseline") {
-        this.intrinsicDims![dir][anchor] = value;
-      }
+    // Is this anchor's local point determined yet? `center`/`max` are DERIVED
+    // from `(min, size)`, so they need both; `min`/`baseline` need only the local
+    // `min`. When not determined, the only thing place() can record is the local
+    // `min` (the lone stored anchor — `center`/`max` aren't stored); `baseline`
+    // pins the origin, not a stored facet, so it just no-ops here.
+    const determined =
+      anchor === "center" || anchor === "max"
+        ? localMin !== undefined && size !== undefined
+        : localMin !== undefined;
+    if (!determined) {
+      if (anchor === "min") this.intrinsicDims![dir].min = value;
       return;
     }
 
@@ -575,8 +573,7 @@ export class GoFishNode {
     // separately-stored `center`/`max` — so the two placement paths can never
     // disagree on an asymmetric box.
     this.ensureTranslate()[dir] =
-      value -
-      localAnchorPoint(anchor, intrinsic!.min ?? 0, intrinsic!.size ?? 0);
+      value - localAnchorPoint(anchor, localMin ?? 0, size ?? 0);
   }
 
   /**

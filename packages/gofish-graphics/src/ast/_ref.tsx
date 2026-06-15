@@ -12,6 +12,7 @@ import {
   FancyPosition,
   FancySize,
   FancyTransform,
+  localAnchorPoint,
   Position,
   Size,
   Transform,
@@ -318,20 +319,18 @@ export class GoFishRef {
       const intrinsic = this.intrinsicDims?.[i];
       const translate = this.transform?.translate?.[i];
       const hasTranslate = translate !== undefined;
+      const size = intrinsic?.size;
+      const min =
+        hasTranslate && intrinsic?.min !== undefined
+          ? intrinsic.min + translate
+          : undefined;
+      // center/max DERIVED from the placed min + size (see GoFishNode.dims).
+      const placedAndSized = min !== undefined && size !== undefined;
       return {
-        min:
-          hasTranslate && intrinsic?.min !== undefined
-            ? (intrinsic!.min ?? 0) + translate!
-            : undefined,
-        center:
-          hasTranslate && intrinsic?.center !== undefined
-            ? (intrinsic!.center ?? 0) + translate!
-            : undefined,
-        max:
-          hasTranslate && intrinsic?.max !== undefined
-            ? (intrinsic!.max ?? 0) + translate!
-            : undefined,
-        size: intrinsic?.size,
+        min,
+        center: placedAndSized ? min + size / 2 : undefined,
+        max: placedAndSized ? min + size : undefined,
+        size,
         embedded: intrinsic?.embedded,
       };
     };
@@ -345,34 +344,23 @@ export class GoFishRef {
   ): void {
     const dir = elaborateDirection(axis);
     const intrinsic = this.intrinsicDims?.[dir];
+    const localMin = intrinsic?.min;
+    const size = intrinsic?.size;
 
-    const anchorToDim = {
-      min: intrinsic?.min,
-      max: intrinsic?.max,
-      center: intrinsic?.center,
-      // TODO: revisit baseline case
-      baseline: intrinsic?.min,
-    };
-
-    if (anchorToDim[anchor] === undefined) {
-      // Interval has min/max/center/size but not "baseline" — baseline is a
-      // synthetic anchor aliased to min above (see TODO). When the anchor is
-      // already undefined and we're being asked to set it, "baseline" can't
-      // be written back: just no-op so the translate path below is skipped.
-      if (anchor !== "baseline") {
-        this.intrinsicDims![dir][anchor] = value;
-      }
+    // center/max are DERIVED from (min, size) (mirrors GoFishNode.place): they're
+    // determined only when both are; min/baseline need only min. When not
+    // determined, only the local min is recordable (center/max aren't stored).
+    const determined =
+      anchor === "center" || anchor === "max"
+        ? localMin !== undefined && size !== undefined
+        : localMin !== undefined;
+    if (!determined) {
+      if (anchor === "min") this.intrinsicDims![dir].min = value;
       return;
     }
 
-    const anchorToPoint = {
-      min: intrinsic!.min ?? 0,
-      max: intrinsic!.max ?? 0,
-      center: intrinsic!.center ?? 0,
-      baseline: 0,
-    };
-
-    this.transform!.translate![dir] = value - anchorToPoint[anchor];
+    this.transform!.translate![dir] =
+      value - localAnchorPoint(anchor, localMin ?? 0, size ?? 0);
   }
 
   public INTERNAL_render(): JSX.Element {
