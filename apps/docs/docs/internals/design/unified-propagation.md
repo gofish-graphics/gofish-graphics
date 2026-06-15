@@ -258,26 +258,36 @@ value − localAnchorPoint(...)`.
        axis — **zero divergences across all stories**. The field is still written
        (render/flatten untouched), so this is provably inert; it establishes the
        invariant 3-C relies on.
-     - **3-C (next)** — stop writing `transform.translate` in the mutators
-       (`place`/`_pinAnchor`/`setExtent`, then the operator `_layout` returns),
-       one site at a time, reading the projector instead.
-     - **3-D** — move `flattenLayout` out of the coord render closure into a
-       terminal, boundary-recursive bake-to-screen pass (the coord boundary);
-       render consumes baked absolute coords. The architectural step; pixel-gated.
-       _Groundwork landed:_ every render-side `transform.translate` read now goes
-       through a single `displayTranslate`/`translateString` chokepoint in
-       `dims.ts` (was ~15 scattered `?? 0` sites), so switching render to baked
-       coordinates becomes a one-function change rather than a corpus-wide sweep.
-       _D0 (done)_ — extracted `flattenLayout` into its own `bake.ts` module (pure
-       move). _D1 (done)_ — the bake now **emits a `DisplayObject[]` rendering IR**
-       (`_displayObject.ts`, formerly an empty stub) rather than mutating
-       `node.transform`; each entry pairs a mark with its baked absolute transform,
-       which coord feeds into `INTERNAL_render(coordTransform, transform)` as an
-       override threaded to the node's `_render`/`_renderLabel`. The scenegraph's
-       parent-relative transforms stay intact, removing the one place the split and
-       the ledger diverged. _Next:_ D2 lifts the bake to a terminal whole-tree pass
-       in `gofish.tsx`; D3 collapses the nested relative `<g transform>` wrappers;
-       D4 then unblocks 3-C.
+     - **3-D (the coord-render decoupling, done as the unblock)** — `flattenLayout`
+       no longer mutates `node.transform`. _D0_ extracted it into its own `bake.ts`
+       module (pure move). _D1_ made the bake **emit a `DisplayObject[]` rendering
+       IR** (`_displayObject.ts`, formerly an empty stub) rather than mutating: each
+       entry pairs a mark with its baked absolute transform, which coord feeds into
+       `INTERNAL_render(coordTransform, transform)` as an override threaded to the
+       node's `_render`/`_renderLabel`. The scenegraph's parent-relative transforms
+       stay intact, removing the one place the split and the ledger diverged — which
+       was the whole reason 3-D blocked 3-C. (The originally-planned terminal
+       whole-tree bake pass was **dropped**: a global post-layout bake would make a
+       coord-transformed node's screen bbox unreadable by downstream layout — e.g. a
+       radar chart's cartesian layer connecting refs to polar points — so the coord
+       boundary must bake _during_ layout. Tracked as a separate future track.)
+       Groundwork from earlier: render-side `transform.translate` reads go through a
+       single `displayTranslate`/`translateString` chokepoint in `dims.ts`.
+     - **3-C (in progress)** — make `transform.translate` a ledger projection and
+       retire the writes. _Value reads migrated (both inert, REAL = 0):_ render reads
+       a ledger-derived `_displayTransform` getter, and `_ref` accumulation reads
+       `projectedTranslate` — so no value-reader depends on the raw written field
+       where the ledger is solved. _Write retirement is blocked on a real gap:_
+       deleting the writes needs the placement-state checks (`place()`'s
+       already-placed short-circuit, `_pinAnchor`'s override) to read the ledger
+       instead, which needs **ledger-min-defined ⟺ translate-defined**. That holds
+       everywhere except `baseline`: a `baseline` pin writes the translate but
+       records **no** ledger facet (it pins the local-0 origin, not a box
+       min/max/center), and `baseline` is pervasive (the root placement, coord
+       placing its children). So `transform.translate` encodes baseline-origin
+       placement the bbox ledger cannot yet represent — retiring the writes requires
+       first **modeling the baseline/origin in the ledger**. A design step, not a
+       mechanical deletion.
 
 3. **Migrate each constraint to a facet-equation emitter** behind today's
    `apply*` signatures, one at a time, gated.
