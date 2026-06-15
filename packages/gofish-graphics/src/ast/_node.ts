@@ -161,6 +161,16 @@ export class GoFishNode {
   public children: GoFishAST[];
   public intrinsicDims?: Dimensions;
   public transform?: Transform;
+  /** Persistent per-axis bbox ledger (#39 stage 2). Accumulates the facet
+   *  equations `setExtent` pins so over-determination is detected ACROSS
+   *  separate constraints pinning the same axis — not just within one call (the
+   *  fresh-per-call bbox this replaces could only see the latter). Lazily
+   *  created on first rank-2 `setExtent`; the hot rank-1 pin / `place()` path
+   *  still allocates nothing. Today only `setExtent` records into it and only
+   *  `setExtent` reads it back; `dims`/render still derive from
+   *  `(intrinsicDims, transform)`. Making it the shared authority that `place`
+   *  and the `dims` getter also use is the remaining stage-2 work. */
+  private _bbox?: [BBox?, BBox?];
   /** Per-axis scope annotation: `true` = this node is a scale scope (it solves
    *  σ from its own box and hands it to descendants via a fresh array — claim
    *  hoisting, #549); `false` (default) = pass-through, inheriting σ from above.
@@ -566,10 +576,12 @@ export class GoFishNode {
    * cannot. Anchor facets map start→min, end→max, middle→center; `baseline`
    * (the origin) is not a bbox facet, so a baseline pin still uses `place()`.
    *
-   * NOTE (interim): each call builds a FRESH bbox, so over-determination is
-   * detected only WITHIN one call (e.g. span's two edges), not across separate
-   * constraints pinning the same target — the cross-constraint ledger is the
-   * remaining #39 step (accumulate facets per target, then solve once).
+   * The rank-2 solve accumulates into a PERSISTENT per-axis ledger
+   * ({@link _bbox}), so over-determination is detected across separate
+   * constraints pinning the same axis, not just within one call. The remaining
+   * #39 step is to make that ledger the shared authority `place()` and the
+   * `dims` getter also read from (today they still use the
+   * `(intrinsicDims, transform)` split).
    */
   public setExtent(
     axis: FancyDirection,
@@ -598,10 +610,13 @@ export class GoFishNode {
       return;
     }
 
-    // Rank-2: two+ owned facets DETERMINE the box (size included). Solve the
-    // 2-unknown system, then reset the local frame to [0, size] at the absolute
-    // min.
-    const bbox = new BBox();
+    // Rank-2: two+ owned facets DETERMINE the box (size included). Accumulate
+    // into the PERSISTENT per-axis ledger so a second constraint pinning this
+    // same axis is checked for consistency against the first (a named
+    // over-determination, not a silent re-solve). Then reset the local frame to
+    // [0, size] at the absolute min.
+    this._bbox ??= [undefined, undefined];
+    const bbox = (this._bbox[dir] ??= new BBox());
     for (const [facet, value] of facets) bbox.add(facet, value, owner);
     const absMin = bbox.read("min");
     const size = bbox.read("size");

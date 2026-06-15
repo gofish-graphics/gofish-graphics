@@ -211,9 +211,24 @@ value − localAnchorPoint(...)`.
      capture-diff REAL = 0 (189 stories, incl. the negative-bar story), 64 tests
      pass, negative bar verified by screenshot.
 
-   The big remaining structural work is the **108-writer migration** off direct
-   `intrinsicDims`/`translate` manipulation onto facet/ledger writes (stage 2
-   proper → the authoritative per-node ledger), then stages 3–4 below.
+   The big remaining structural work is the migration off the dual
+   `(intrinsicDims-local box, translate)` representation onto **one persistent
+   per-node ledger** that `place`/`setExtent`/`dims` all share, then stages 3–4
+   below. It proceeds in gated increments:
+   - ✅ **Stage 0 — persistent ledger, observe-only.** `setExtent`'s rank-2 solve
+     now accumulates into a persistent per-axis `BBox` on the node
+     (`GoFishNode._bbox`) instead of a fresh-per-call one, so a second constraint
+     pinning the same axis is checked against the first (a named
+     over-determination, not a silent re-solve — the debt the old interim note
+     flagged). `dims`/render still derive from `(intrinsicDims, transform)`, so
+     output is byte-identical (REAL = 0, 64 tests).
+   - **Stage 1** — every mutator (`place`/`_pinAnchor`, the `layout()` size
+     seed) records into the same ledger, plus a dev-only assertion that
+     ledger-derived dims equal `combineDims` across all stories.
+   - **Stage 2** — `dims` reads from the ledger (the risky flip), render still
+     reads `(intrinsicDims, transform)`.
+   - **Stage 3** — `(intrinsicDims, transform)` becomes a projection of the
+     ledger; the ~29 direct write sites stop double-writing, migrated one PR each.
 
 3. **Migrate each constraint to a facet-equation emitter** behind today's
    `apply*` signatures, one at a time, gated.
