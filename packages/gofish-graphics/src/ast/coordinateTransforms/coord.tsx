@@ -8,7 +8,14 @@ import type { JSX } from "solid-js";
 import { path, pathToSVGPath, transformPath } from "../../path";
 import { GoFishAST } from "../_ast";
 import { GoFishNode } from "../_node";
-import { elaborateDims, FancyDims, Interval, Size } from "../dims";
+import {
+  displayTranslate,
+  elaborateDims,
+  FancyDims,
+  Interval,
+  Size,
+  translateString,
+} from "../dims";
 import * as IntervalLib from "../../util/interval";
 import { black } from "../../color";
 import {
@@ -56,11 +63,9 @@ const flattenLayout = (
     node.type === "connect" ||
     node.type === "box"
   ) {
+    const [ownTx, ownTy] = displayTranslate(node.transform);
     node.transform = {
-      translate: [
-        (node.transform?.translate?.[0] ?? 0) + transform[0]!,
-        (node.transform?.translate?.[1] ?? 0) + transform[1]!,
-      ],
+      translate: [ownTx + transform[0]!, ownTy + transform[1]!],
       scale: [
         (node.transform?.scale?.[0] ?? 1) * (scale[0] ?? 1),
         (node.transform?.scale?.[1] ?? 1) * (scale[1] ?? 1),
@@ -69,9 +74,10 @@ const flattenLayout = (
     return [node];
   }
 
+  const [ownTx, ownTy] = displayTranslate(node.transform);
   const newTransform: [number, number] = [
-    transform[0]! + (node.transform?.translate?.[0] ?? 0),
-    transform[1]! + (node.transform?.translate?.[1] ?? 0),
+    transform[0]! + ownTx,
+    transform[1]! + ownTy,
   ];
 
   const newScale: [number, number] = [
@@ -602,9 +608,7 @@ export const coord = createNodeOperator(
           };
 
           return (
-            <g
-              transform={`translate(${transform?.translate?.[0] ?? 0}, ${transform?.translate?.[1] ?? 0})`}
-            >
+            <g transform={translateString(transform)}>
               {flattenedChildren.map((child) =>
                 child.INTERNAL_render(coordTransform)
               )}

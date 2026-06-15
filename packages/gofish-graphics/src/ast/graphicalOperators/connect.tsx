@@ -3,7 +3,13 @@ import { Path, PathSegment, pathToSVGPath, transformPath } from "../../path";
 import { GoFishAST } from "../_ast";
 import { GoFishNode } from "../_node";
 import { isCategoricalScale } from "../gofish";
-import { Dimensions, elaborateDirection, FancyDirection, Size } from "../dims";
+import {
+  Dimensions,
+  elaborateDirection,
+  FancyDirection,
+  Size,
+  translateString,
+} from "../dims";
 import { pairs } from "../../util";
 import { linear } from "../coordinateTransforms/linear";
 import { getValue, isValue, MaybeValue } from "../data";
@@ -508,9 +514,7 @@ export const connect = createNodeOperator(
             : (rawFill as string | undefined);
 
           return (
-            <g
-              transform={`translate(${transform?.translate?.[0] ?? 0}, ${transform?.translate?.[1]! ?? 0})`}
-            >
+            <g transform={translateString(transform)}>
               <For each={renderData.paths}>
                 {(path) => {
                   const transformedPath = coordinateTransform

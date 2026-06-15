@@ -2,6 +2,7 @@ import type { JSX } from "solid-js";
 import chroma from "chroma-js";
 import { luv } from "culori";
 import type { GoFishNode } from "../_node";
+import { displayTranslate } from "../dims";
 import { getValue } from "../data";
 import {
   type LabelPosition,
@@ -98,8 +99,9 @@ export function renderLabelJSX(node: GoFishNode): JSX.Element | null {
     offset: node._label.offset,
   });
 
-  const cx = (node.transform?.translate?.[0] ?? 0) + w / 2;
-  const cy = (node.transform?.translate?.[1] ?? 0) + h / 2;
+  const [tx, ty] = displayTranslate(node.transform);
+  const cx = tx + w / 2;
+  const cy = ty + h / 2;
 
   const labelColor = node._label.color ?? autoLabelColor(node, position);
   const textAnchor = getLabelTextAnchor(position);

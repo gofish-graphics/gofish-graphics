@@ -1,6 +1,6 @@
 import * as BubbleSets from "bubblesets-js";
 import { GoFishNode } from "../_node";
-import { Size } from "../dims";
+import { Size, translateString } from "../dims";
 import { GoFishAST } from "../_ast";
 import { black, gray, tailwindColors } from "../../color";
 import { Domain } from "../domain";
@@ -58,9 +58,7 @@ export const enclose = createNodeOperator(
         },
         render: ({ intrinsicDims, transform, renderData }, children) => {
           return (
-            <g
-              transform={`translate(${transform?.translate?.[0] ?? 0}, ${transform?.translate?.[1] ?? 0})`}
-            >
+            <g transform={translateString(transform)}>
               {children}
               <rect
                 x={-padding}

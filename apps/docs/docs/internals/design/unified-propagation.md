@@ -264,6 +264,10 @@ value − localAnchorPoint(...)`.
      - **3-D** — move `flattenLayout` out of `_layout` into a terminal,
        boundary-recursive bake-to-screen pass (the coord boundary); render
        consumes baked absolute coords. The architectural step; pixel-gated.
+       _Groundwork landed:_ every render-side `transform.translate` read now goes
+       through a single `displayTranslate`/`translateString` chokepoint in
+       `dims.ts` (was ~15 scattered `?? 0` sites), so switching render to baked
+       coordinates becomes a one-function change rather than a corpus-wide sweep.
 
 3. **Migrate each constraint to a facet-equation emitter** behind today's
    `apply*` signatures, one at a time, gated.

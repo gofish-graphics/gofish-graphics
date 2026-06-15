@@ -2,7 +2,7 @@ import type { JSX } from "solid-js";
 import { GoFishAST } from "../_ast";
 import { GoFishNode } from "../_node";
 import type { Placeable } from "../_node";
-import { Size } from "../dims";
+import { Size, translateString } from "../dims";
 import { UnderlyingSpace } from "../underlyingSpace";
 import { createNodeOperator } from "../withGoFish";
 import { unionChildSpaces } from "./alignment";
@@ -181,11 +181,7 @@ const createCompositeRelation = (type: string, operator: CompositeOperator) =>
           render: ({ intrinsicDims, transform }, renderedChildren, node) => {
             requireTwoChildren(renderedChildren);
             return (
-              <g
-                transform={`translate(${transform?.translate?.[0] ?? 0}, ${
-                  transform?.translate?.[1] ?? 0
-                })`}
-              >
+              <g transform={translateString(transform)}>
                 {renderComposite(
                   node,
                   renderedChildren,
@@ -321,11 +317,7 @@ export const mask = createNodeOperator(
           const maskId = `${uid}-mask`;
 
           return (
-            <g
-              transform={`translate(${transform?.translate?.[0] ?? 0}, ${
-                transform?.translate?.[1] ?? 0
-              })`}
-            >
+            <g transform={translateString(transform)}>
               <defs>
                 <g id={sourceId}>{renderedChildren[0]}</g>
                 <g id={destinationId}>{renderedChildren[1]}</g>

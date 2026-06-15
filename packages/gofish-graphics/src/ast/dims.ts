@@ -206,6 +206,34 @@ export const displayDims = (
   });
 
 /**
+ * A node's render-side translate offset as a concrete `[tx, ty]` tuple, with the
+ * `?? 0` fallback every shape/operator `_render` wants for drawing (an unplaced
+ * axis draws at the origin). This is the single chokepoint for render's
+ * `transform.translate` reads: making the move to baked absolute coordinates
+ * (#39 stage 3-D) a one-function change rather than a ~15-site sweep. Scale is
+ * left to the callers that compose it.
+ */
+export const displayTranslate = (transform?: {
+  translate?: (number | undefined)[];
+}): [number, number] => [
+  transform?.translate?.[0] ?? 0,
+  transform?.translate?.[1] ?? 0,
+];
+
+/**
+ * The SVG `translate(tx, ty)` attribute string for a node's transform — the
+ * render-wrapper form of {@link displayTranslate}, shared by every container/mark
+ * that emits a `<g transform="translate(...)">`. These wrappers are exactly the
+ * ones #39 stage 3-D collapses once render consumes baked absolute coordinates.
+ */
+export const translateString = (transform?: {
+  translate?: (number | undefined)[];
+}): string => {
+  const [tx, ty] = displayTranslate(transform);
+  return `translate(${tx}, ${ty})`;
+};
+
+/**
  * The `dims` getter body shared by {@link GoFishNode} and {@link GoFishRef}:
  * combine a node's local box (`intrinsicDims`) with its `transform.translate`
  * into absolute per-axis dims, returning `undefined` facets for "not yet placed

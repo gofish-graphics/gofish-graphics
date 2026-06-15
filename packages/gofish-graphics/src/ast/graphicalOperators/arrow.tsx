@@ -1,7 +1,7 @@
 import { Show } from "solid-js";
 import { GoFishAST } from "../_ast";
 import { GoFishNode } from "../_node";
-import { Size } from "../dims";
+import { Size, translateString } from "../dims";
 import { UNDEFINED, UnderlyingSpace } from "../underlyingSpace";
 import { createNodeOperator } from "../withGoFish";
 import { type ArrowOptions, getBoxToBoxArrow } from "perfect-arrows";
@@ -132,9 +132,7 @@ export const arrow = createNodeOperator(
             .map((p) => p.join(","))
             .join(" ");
           return (
-            <g
-              transform={`translate(${transform?.translate?.[0] ?? 0}, ${transform?.translate?.[1] ?? 0})`}
-            >
+            <g transform={translateString(transform)}>
               <Show when={props.start} fallback={<></>}>
                 <circle
                   cx={data.sx}

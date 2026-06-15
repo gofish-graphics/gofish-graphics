@@ -1,6 +1,6 @@
 import { computeAesthetic } from "../../util";
 import { GoFishNode } from "../_node";
-import { Size, elaborateDims, FancyDims } from "../dims";
+import { Size, elaborateDims, FancyDims, translateString } from "../dims";
 import { getMeasure, getValue, isValue, MaybeValue } from "../data";
 import { POSITION, UNDEFINED, UnderlyingSpace } from "../underlyingSpace";
 import { interval } from "../../util/interval";
@@ -88,15 +88,7 @@ export const position = createNodeOperator(
           };
         },
         render: ({ intrinsicDims, transform }, children) => {
-          return (
-            <g
-              transform={`translate(${transform?.translate?.[0] ?? 0}, ${
-                transform?.translate?.[1] ?? 0
-              })`}
-            >
-              {children}
-            </g>
-          );
+          return <g transform={translateString(transform)}>{children}</g>;
         },
       },
       children

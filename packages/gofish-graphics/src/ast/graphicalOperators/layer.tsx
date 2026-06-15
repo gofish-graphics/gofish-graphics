@@ -5,7 +5,7 @@
 import * as Monotonic from "../../util/monotonic";
 import { GoFishNode } from "../_node";
 import { isToken } from "../createName";
-import { Size, elaborateDims, FancyDims } from "../dims";
+import { Size, elaborateDims, FancyDims, displayTranslate } from "../dims";
 import {
   POSITION,
   SIZE,
@@ -344,9 +344,8 @@ function flattenForZOrder(children: GoFishAST[]): PaintItem[] {
       // Plain (non-component) nested layers are transparent for paint
       // ordering — their children are hoisted into this paint context.
       if (!child._isComponent && child.type === "layer") {
-        const cTx = accTx + (child.transform?.translate?.[0] ?? 0);
-        const cTy = accTy + (child.transform?.translate?.[1] ?? 0);
-        walk(child.children, cTx, cTy);
+        const [childTx, childTy] = displayTranslate(child.transform);
+        walk(child.children, accTx + childTx, accTy + childTy);
       } else {
         out.push({
           node: child,
@@ -1032,9 +1031,8 @@ export const layer = createNodeOperatorSequential(
         render: ({ transform, coordinateTransform }, children, node) => {
           const scaleX = options.transform?.scale?.x ?? 1;
           const scaleY = options.transform?.scale?.y ?? 1;
-          const wrapTransform = `translate(${transform?.translate?.[0] ?? 0}, ${
-            transform?.translate?.[1] ?? 0
-          }) scale(${scaleX}, ${scaleY})`;
+          const [wrapTx, wrapTy] = displayTranslate(transform);
+          const wrapTransform = `translate(${wrapTx}, ${wrapTy}) scale(${scaleX}, ${scaleY})`;
 
           // Z-order resolution: when this layer carries any zAbove/zBelow
           // constraints, flatten the (non-component) subtree and emit in
