@@ -9,6 +9,7 @@ import type { JSX } from "solid-js";
 import {
   Anchor,
   Dimensions,
+  Direction,
   elaborateDims,
   elaborateDirection,
   elaborateSize,
@@ -547,12 +548,10 @@ export class GoFishNode {
 
     if (this.transform?.translate?.[dir] !== undefined) return;
 
-    // Derive the anchor's local point from `(min, size)` (shared with
-    // `setExtent`'s rank-1 pin via `localAnchorPoint`) rather than reading a
-    // separately-stored `center`/`max` — so the two placement paths can never
-    // disagree on an asymmetric box.
-    this.ensureTranslate()[dir] =
-      value - localAnchorPoint(anchor, localMin ?? 0, size ?? 0);
+    // Pin the anchor to `value` (shared with `setExtent`'s rank-1 pin), rather
+    // than reading a separately-stored `center`/`max` — so the two placement
+    // paths can never disagree on an asymmetric box.
+    this._pinAnchor(dir, anchor, value);
   }
 
   /**
@@ -595,9 +594,7 @@ export class GoFishNode {
       // translate moves, so the pin OVERRIDES a self-placed translate.
       const [facet, value] = facets[0];
       if (facet === "size") return; // a lone size can't determine a position
-      this.ensureTranslate()[dir] =
-        value -
-        localAnchorPoint(facet, intrinsic?.min ?? 0, intrinsic?.size ?? 0);
+      this._pinAnchor(dir, facet, value);
       return;
     }
 
@@ -618,6 +615,20 @@ export class GoFishNode {
       size,
     };
     this.ensureTranslate()[dir] = absMin;
+  }
+
+  /**
+   * Pin one axis so the box's `anchor` facet lands at `value`, deriving the
+   * anchor's local point from `(min, size)` via `localAnchorPoint`. The single
+   * arithmetic shared by `place()`'s determined branch and `setExtent`'s rank-1
+   * position pin, so the two placement paths can never disagree on an asymmetric
+   * box. Writes only the translate; the local box is left intact.
+   */
+  private _pinAnchor(dir: Direction, anchor: Anchor, value: number): void {
+    const intrinsic = this.intrinsicDims?.[dir];
+    this.ensureTranslate()[dir] =
+      value -
+      localAnchorPoint(anchor, intrinsic?.min ?? 0, intrinsic?.size ?? 0);
   }
 
   /** Lazily ensure `transform.translate` exists (preserving any `scale`) and
