@@ -663,6 +663,24 @@ export class GoFishNode {
     return min - (this.intrinsicDims?.[dir]?.min ?? 0);
   }
 
+  /** Stage 3-C (#39): this node's `transform` as RENDER should see it — the
+   *  translate DERIVED from the ledger per axis ({@link _projectTranslate}),
+   *  scale passed through. Where the ledger is solved this equals the written
+   *  `transform.translate` (proven exact by {@link _assertLedgerMatches} across
+   *  all stories); where it isn't, `_projectTranslate` falls back to the written
+   *  field — so reading this is provably inert today. `INTERNAL_render` feeds it
+   *  to `_render`/`_renderLabel` instead of the raw `transform`, so the redundant
+   *  translate writes the mutators make can be retired one site at a time without
+   *  moving render. Returns `undefined` when the node has no transform at all
+   *  (an unplaced leaf), matching the old `this.transform` read. */
+  private get _displayTransform(): Transform | undefined {
+    if (!this.transform) return undefined;
+    return {
+      translate: [this._projectTranslate(0), this._projectTranslate(1)],
+      scale: this.transform.scale,
+    };
+  }
+
   public place(
     axis: FancyDirection,
     value: number,
@@ -821,7 +839,7 @@ export class GoFishNode {
       )
     );
 
-    const transform = transformOverride ?? this.transform;
+    const transform = transformOverride ?? this._displayTransform;
     const shapeJSX = this._render(
       {
         intrinsicDims: this.intrinsicDims,
