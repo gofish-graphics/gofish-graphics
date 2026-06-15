@@ -205,6 +205,42 @@ export const displayDims = (
     };
   });
 
+/**
+ * The `dims` getter body shared by {@link GoFishNode} and {@link GoFishRef}:
+ * combine a node's local box (`intrinsicDims`) with its `transform.translate`
+ * into absolute per-axis dims, returning `undefined` facets for "not yet placed
+ * / not yet sized" so callers can distinguish that from "at 0". center/max are
+ * DERIVED from the placed `(min, size)` via {@link localAnchorPoint} — never read
+ * from a separately-stored facet, and only once the box is both placed AND sized.
+ *
+ * This is the `undefined`-preserving sibling of {@link displayDims}: same
+ * derivation, but `displayDims` substitutes `?? 0` because a shape `_render`
+ * wants a concrete number to draw with.
+ */
+export const combineDims = (
+  intrinsicDims: Dimensions | undefined,
+  transform: { translate?: (number | undefined)[] } | undefined
+): Dimensions =>
+  ([0, 1] as const).map((i) => {
+    const intrinsic = intrinsicDims?.[i];
+    const translate = transform?.translate?.[i];
+    const size = intrinsic?.size;
+    const min =
+      translate !== undefined && intrinsic?.min !== undefined
+        ? intrinsic.min + translate
+        : undefined;
+    const placedAndSized = min !== undefined && size !== undefined;
+    return {
+      min,
+      center: placedAndSized
+        ? localAnchorPoint("center", min!, size!)
+        : undefined,
+      max: placedAndSized ? localAnchorPoint("max", min!, size!) : undefined,
+      size,
+      embedded: intrinsic?.embedded,
+    };
+  });
+
 export const elaborateTransform = (transform: FancyTransform): Transform => {
   return {
     translate: elaboratePosition(transform?.translate ?? {}),

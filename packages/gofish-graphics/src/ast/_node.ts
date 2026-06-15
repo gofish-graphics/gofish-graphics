@@ -17,6 +17,7 @@ import {
   FancyDirection,
   FancySize,
   FancyTransform,
+  combineDims,
   localAnchorPoint,
   Size,
   Transform,
@@ -514,36 +515,10 @@ export class GoFishNode {
   }
 
   public get dims(): Dimensions {
-    // Combine the local box (`intrinsicDims`) with its placement (`translate`).
-    // `min`/`size` are returned undefined when the local dim or the translation
-    // is missing, so callers can distinguish "not yet placed" from "at 0".
-    // `center`/`max` are DERIVED from the placed `min` and `size` (a box has no
-    // independent center/max — the same `localAnchorPoint` relation `place()`/
-    // `setExtent` use): they read back only once the box is both placed AND
-    // sized, never from a separately-stored facet.
-    const dim = (i: 0 | 1) => {
-      const intrinsic = this.intrinsicDims?.[i];
-      const translate = this.transform?.translate?.[i];
-      const hasTranslate = translate !== undefined;
-      const size = intrinsic?.size;
-      const min =
-        hasTranslate && intrinsic?.min !== undefined
-          ? intrinsic.min + translate
-          : undefined;
-      // center/max are derived from the placed (min, size) via the shared
-      // `localAnchorPoint` (off |size|), and read back only once placed AND sized.
-      const placedAndSized = min !== undefined && size !== undefined;
-      return {
-        min,
-        center: placedAndSized
-          ? localAnchorPoint("center", min!, size!)
-          : undefined,
-        max: placedAndSized ? localAnchorPoint("max", min!, size!) : undefined,
-        size,
-        embedded: intrinsic?.embedded,
-      };
-    };
-    return [dim(0), dim(1)];
+    // Shared with GoFishRef.dims: combine the local box (`intrinsicDims`) with
+    // its placement (`translate`), deriving center/max from the placed
+    // (min, size). See {@link combineDims}.
+    return combineDims(this.intrinsicDims, this.transform);
   }
 
   public place(
