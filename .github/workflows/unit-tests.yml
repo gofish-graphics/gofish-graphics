@@ -78,7 +78,7 @@ jobs:
       - name: gofish-ir tests
         run: pnpm --filter gofish-ir test
 
-      - name: gofish-graphics tests (path + font + serialize)
+      - name: gofish-graphics tests (path + font + bbox + solver + serialize)
         run: pnpm --filter gofish-graphics test
 
   python-ir-validation:
