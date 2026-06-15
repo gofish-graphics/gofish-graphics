@@ -324,12 +324,13 @@ export class GoFishRef {
         hasTranslate && intrinsic?.min !== undefined
           ? intrinsic.min + translate
           : undefined;
-      // center/max DERIVED from the placed min + size (see GoFishNode.dims).
+      // center/max DERIVED from the placed min + |size| (see GoFishNode.dims).
       const placedAndSized = min !== undefined && size !== undefined;
+      const extent = size !== undefined ? Math.abs(size) : 0;
       return {
         min,
-        center: placedAndSized ? min + size / 2 : undefined,
-        max: placedAndSized ? min + size : undefined,
+        center: placedAndSized ? min + extent / 2 : undefined,
+        max: placedAndSized ? min + extent : undefined,
         size,
         embedded: intrinsic?.embedded,
       };

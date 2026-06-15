@@ -115,13 +115,17 @@ export const localAnchorPoint = (
   localMin: number,
   localSize: number
 ): number => {
+  // Extent is the MAGNITUDE of size — a negative bar stores a signed size with
+  // `min` carrying the direction (box `[min, min + |size|]`), so center/max are
+  // anchored off `|size|` (matches the `dims` getter / `displayDims`).
+  const extent = Math.abs(localSize);
   switch (anchor) {
     case "min":
       return localMin;
     case "center":
-      return localMin + localSize / 2;
+      return localMin + extent / 2;
     case "max":
-      return localMin + localSize;
+      return localMin + extent;
     case "baseline":
       return 0;
   }
@@ -180,6 +184,29 @@ export const elaborateSize = <T>(size: FancySize<T>): Size<T> => {
 
 export type Transform = { translate: Position; scale?: Size };
 export type FancyTransform = { translate?: FancyPosition; scale?: FancySize };
+
+/**
+ * Combine a node's local box (`intrinsicDims`) with its `transform.translate`
+ * into absolute per-axis display dims, DERIVING center/max from `(min, size)`
+ * (the same relation as {@link localAnchorPoint} / the `dims` getter). Mirrors
+ * the getter but with `?? 0` fallbacks — an unplaced/unsized facet reads 0,
+ * which is what a shape `_render` wants for drawing. Shapes share this instead
+ * of each re-deriving center/max from a separately-stored facet.
+ */
+export const displayDims = (
+  intrinsicDims: Dimensions | undefined,
+  transform: { translate?: (number | undefined)[] } | undefined
+): { min: number; size: number; center: number; max: number }[] =>
+  ([0, 1] as const).map((i) => {
+    const min =
+      (transform?.translate?.[i] ?? 0) + (intrinsicDims?.[i]?.min ?? 0);
+    const size = intrinsicDims?.[i]?.size ?? 0;
+    // Extent is the MAGNITUDE of size: a negative bar stores a signed size with
+    // `min` carrying the direction (box `[min, min + |size|]`), so center/max use
+    // `|size|`. `size` itself stays raw for callers that read it directly.
+    const extent = Math.abs(size);
+    return { min, size, center: min + extent / 2, max: min + extent };
+  });
 
 export const elaborateTransform = (transform: FancyTransform): Transform => {
   return {

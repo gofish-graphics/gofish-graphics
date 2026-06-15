@@ -531,10 +531,13 @@ export class GoFishNode {
           ? intrinsic.min + translate
           : undefined;
       const placedAndSized = min !== undefined && size !== undefined;
+      // center/max use |size| (a negative bar stores a signed size with `min`
+      // carrying the direction — box `[min, min + |size|]`).
+      const extent = size !== undefined ? Math.abs(size) : 0;
       return {
         min,
-        center: placedAndSized ? min + size / 2 : undefined,
-        max: placedAndSized ? min + size : undefined,
+        center: placedAndSized ? min + extent / 2 : undefined,
+        max: placedAndSized ? min + extent : undefined,
         size,
         embedded: intrinsic?.embedded,
       };
@@ -632,12 +635,11 @@ export class GoFishNode {
     if (absMin === undefined || size === undefined) return; // under-determined
 
     if (!this.intrinsicDims) this.intrinsicDims = [];
+    // Store only the local box (min, size); the `dims` getter derives center/max.
     this.intrinsicDims[dir] = {
       ...(this.intrinsicDims[dir] ?? {}),
       min: 0,
       size,
-      center: size / 2,
-      max: size,
     };
     this.ensureTranslate()[dir] = absMin;
   }

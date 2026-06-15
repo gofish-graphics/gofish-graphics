@@ -22,6 +22,7 @@ import {
 } from "../data";
 import {
   Dimensions,
+  displayDims as displayDimsOf,
   elaborateDims,
   FancyDims,
   FancySize,
@@ -151,28 +152,8 @@ export const Petal = ({
         const isYEmbedded = dims[1].embedded;
 
         // combine intrinsicDims with transform
-        const displayDims = [
-          {
-            min:
-              (transform?.translate?.[0] ?? 0) + (intrinsicDims?.[0]?.min ?? 0),
-            size: intrinsicDims?.[0]?.size ?? 0,
-            center:
-              (transform?.translate?.[0] ?? 0) +
-              (intrinsicDims?.[0]?.center ?? 0),
-            max:
-              (transform?.translate?.[0] ?? 0) + (intrinsicDims?.[0]?.max ?? 0),
-          },
-          {
-            min:
-              (transform?.translate?.[1] ?? 0) + (intrinsicDims?.[1]?.min ?? 0),
-            size: intrinsicDims?.[1]?.size ?? 0,
-            center:
-              (transform?.translate?.[1] ?? 0) +
-              (intrinsicDims?.[1]?.center ?? 0),
-            max:
-              (transform?.translate?.[1] ?? 0) + (intrinsicDims?.[1]?.max ?? 0),
-          },
-        ];
+        // center/max derived from min+size (shared helper)
+        const displayDims = displayDimsOf(intrinsicDims, transform);
 
         // Both dimensions are aesthetic - render as transformed point
         if (!isXEmbedded && !isYEmbedded) {
