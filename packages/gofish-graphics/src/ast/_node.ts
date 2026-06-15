@@ -199,11 +199,12 @@ export class GoFishNode {
    *  self-placed absolute min), `_pinAnchor` records the absolute anchor a pin
    *  lands at, and a rank-2 `setExtent` resets the axis to its determining
    *  facets (overriding the self-layout seed). Lazily created (the hot single
-   *  pin / `place()` path allocates only on first touch). Today `dims`/render
-   *  still derive from `(intrinsicDims, transform)` and the ledger is recorded
-   *  only — a dev assertion ({@link reportLedgerDivergence}) checks the two
-   *  agree. Making this the shared authority the `dims` getter reads from is the
-   *  remaining stage-2 work. */
+   *  pin / `place()` path allocates only on first touch). As of stage 2 the
+   *  `dims` getter READS from this ledger wherever an axis is fully solved
+   *  (falling back to the `(intrinsicDims, transform)` split otherwise); render
+   *  still reads the split directly, so `(intrinsicDims, transform)` stays
+   *  written. Making the split a projection of the ledger (dropping the
+   *  redundant writes) is the remaining stage-3 work. */
   private _bbox?: [BBox?, BBox?];
   /** Per-axis scope annotation: `true` = this node is a scale scope (it solves
    *  σ from its own box and hands it to descendants via a fresh array — claim
@@ -579,18 +580,41 @@ export class GoFishNode {
   }
 
   public get dims(): Dimensions {
-    // Shared with GoFishRef.dims: combine the local box (`intrinsicDims`) with
-    // its placement (`translate`), deriving center/max from the placed
-    // (min, size). See {@link combineDims}.
-    const dims = combineDims(this.intrinsicDims, this.transform);
-    if (LEDGER_CHECK) this._assertLedgerMatches(dims);
-    return dims;
+    // Stage 2 (#39): the persistent per-axis ledger is the geometry AUTHORITY
+    // wherever it is fully solved (rank 2) — `dims` derives its absolute
+    // `(min, size)` from the ledger and re-derives center/max via
+    // `localAnchorPoint`, exactly as `combineDims` does. Where the ledger is
+    // under-determined or absent, fall back to the `(intrinsicDims, transform)`
+    // split (`combineDims`). The split is still WRITTEN by every mutator (render
+    // reads it directly via `INTERNAL_render`/`displayDims`), so this flips only
+    // `dims`-getter consumers (constraints, align/distribute, layer bbox fold) —
+    // never pixels-from-render. The two agree for every solved node (proven by
+    // the stage-1 assertion across all stories), so this is REAL=0.
+    const fromSplit = combineDims(this.intrinsicDims, this.transform);
+    if (LEDGER_CHECK) this._assertLedgerMatches(fromSplit);
+    return ([0, 1] as const).map((dir) => {
+      const ledger = this._bbox?.[dir];
+      if (!ledger?.solved) return fromSplit[dir];
+      const min = ledger.read("min")!;
+      const size = ledger.read("size")!;
+      return {
+        min,
+        center: localAnchorPoint("center", min, size),
+        max: localAnchorPoint("max", min, size),
+        size,
+        // `embedded` is a layout-fold flag, never a ledger facet — read it from
+        // the local box (see the stage-2 invariants in the essay).
+        embedded: this.intrinsicDims?.[dir]?.embedded,
+      };
+    });
   }
 
-  /** Stage-1 dev assertion (#39): where the ledger is fully solved, its derived
+  /** Dev assertion (#39): where the ledger is fully solved, its derived
    *  `(min, size)` must equal what `combineDims` produces from `(intrinsicDims,
-   *  transform)`. Proves the ledger is a faithful mirror before stage 2 makes
-   *  `dims` read from it. Guarded by `GOFISH_LEDGER_CHECK`; never runs in prod. */
+   *  transform)`. In stage 2 the `dims` getter now READS from the ledger, so
+   *  this is fed the `combineDims` split independently (not the getter's result)
+   *  to keep verifying the two stay a faithful mirror. Guarded by
+   *  `GOFISH_LEDGER_CHECK`; never runs in prod. */
   private _assertLedgerMatches(dims: Dimensions): void {
     for (const dir of [0, 1] as const) {
       const ledger = this._bbox?.[dir];
@@ -653,9 +677,10 @@ export class GoFishNode {
    * The rank-2 solve writes through the PERSISTENT per-axis ledger
    * ({@link _bbox}) so it mirrors the node's authoritative geometry — a
    * determining constraint resets the axis (overriding the self-layout seed),
-   * matching the local-frame reset below. The remaining #39 step is to make that
-   * ledger the shared authority `place()` and the `dims` getter also read from
-   * (today they still use the `(intrinsicDims, transform)` split). Cross-call
+   * matching the local-frame reset below. As of stage 2 the `dims` getter reads
+   * from this ledger where solved; the remaining #39 step is to make `place()`
+   * and render read it too, retiring the redundant `(intrinsicDims, transform)`
+   * writes (stage 3). Cross-call
    * over-determination detection (two constraints fighting over one axis) waits
    * on the authority model — a self-layout default vs a hard constraint pin.
    */

@@ -233,8 +233,17 @@ value − localAnchorPoint(...)`.
      189 stories**, the confidence stage 2 needs before flipping the read.
      (`baseline` and `embedded` stay out of the ledger — origin pin / layout-fold
      flag, not linear-system facets.) Gated REAL = 0 + 64 tests.
-   - **Stage 2** — `dims` reads from the ledger (the risky flip), render still
-     reads `(intrinsicDims, transform)`.
+   - ✅ **Stage 2 — `dims` reads from the ledger (the risky flip).** The `dims`
+     getter now derives its absolute `(min, size)` from the persistent ledger on
+     every axis the ledger fully solves (re-deriving center/max via
+     `localAnchorPoint`), falling back to `combineDims` on the
+     `(intrinsicDims, transform)` split where the ledger is under-determined or
+     absent. Render still reads the split directly, so only `dims`-getter
+     consumers (constraints, align/distribute, the layer bbox fold) change — no
+     pixels move through render. `embedded` is still read off the local box (a
+     layout-fold flag, not a ledger facet). The stage-1 assertion stays wired in,
+     now fed `combineDims` independently of the getter's result, and reports
+     **zero divergences across all 189 stories**. Gated REAL = 0 + 64 tests.
    - **Stage 3** — `(intrinsicDims, transform)` becomes a projection of the
      ledger; the ~29 direct write sites stop double-writing, migrated one PR each.
 
@@ -246,16 +255,20 @@ value − localAnchorPoint(...)`.
    into the σ-claim (the label-fits-the-box behavior below).
 5. **Aspect ratio + σ-scope as explicit cross-cutting equations** on top.
 
-### Stage 2 is not a `place()` refactor — it's a representation migration
+### Making the ledger authoritative is a representation migration, not a `place()` refactor
 
-The size of stage 2 was initially under-estimated as "~38 `place()` callers".
-The reality, measured: **`intrinsicDims` is referenced 108 times across 20
-files, and `transform.translate` across 23** — and crucially it is **not
-encapsulated**. Shapes _set_ their own `intrinsicDims` (`rect`/`ellipse`/`text`/
+Flipping the `dims` getter to read the ledger (stage 2) was the small step — it
+landed as a clean getter change because stages 0–1 had already made the ledger a
+faithful mirror, so the read-flip was provably REAL = 0. The _big_ remaining work
+is retiring the redundant split writes (stage 3), and that was initially
+under-estimated as "~38 `place()` callers". The reality, measured:
+**`intrinsicDims` is referenced 108 times across 20 files, and
+`transform.translate` across 23** — and crucially it is **not encapsulated**.
+Shapes _set_ their own `intrinsicDims` (`rect`/`ellipse`/`text`/
 `petal`/`polygon`/`image`), and operators _read and write_ it and `translate`
 directly (`treemap`, `offset`, `porterDuff`, `scatter`, `arrow`, `connect`,
-`enclose`, `position`, `coord`). Making a per-node ledger the **authoritative**
-source for `dims` therefore means migrating every one of those sites off direct
+`enclose`, `position`, `coord`). Making the per-node ledger the **sole**
+source of geometry therefore means migrating every one of those sites off direct
 `intrinsicDims`/`translate` manipulation and onto facet writes — not flipping a
 single getter. A purely additive shadow ledger (one that records but doesn't
 drive geometry) would be redundant state, not authority. And the local-frame /
@@ -265,9 +278,9 @@ the ledger (a node knows its size before its position: rank-1, the `min`/`center
 facets `undefined`). The asymmetric-center / baseline cases are where a naive
 absolute-only ledger silently diverges.
 
-So stage 2 is a **deliberate, interactive, multi-session migration**, gated story
+So stage 3 is a **deliberate, interactive, multi-session migration**, gated story
 by story — _not_ something to land in one blind pass. (See the judgment-call note
-on the PR.) Stages 3–5 sit on top of it; stage 4 additionally _changes pixels_
+on the PR.) Stages 3–5 sit on top of the read-flip; stage 4 additionally _changes pixels_
 (labels fit the box), so it needs human "is this better?" judgment per story
 ([[feedback_pixel_not_dom_gate]]), and stage 5's aspect-ratio home is an open
 design fork — neither is gate-decidable alone.
