@@ -183,6 +183,33 @@ resolve with a spike before committing the solver.
    `intrinsicDims` manipulation (the path to a single authoritative ledger)
    remains the larger structural work.
 
+   **Deferred follow-ups (PR #576, stage-2 cleanup), roughly in order:**
+   - **Kill the `GoFishNode`↔`GoFishRef` duplication.** Their `dims` getter and
+     `place()` are near-verbatim copies (`/simplify` flagged this hardest). Extract
+     a shared `combineDims(intrinsicDims, transform)` for the getter body (it is
+     `displayDims` but returning `undefined` for an unplaced/unsized facet instead
+     of `?? 0` — parameterize the fallback or have the getter post-process) and a
+     shared `placeAnchor(state, axis, value, anchor)` for `place()`. A `Placeable`
+     base/mixin is the deeper version. Gate `capture-diff REAL = 0`.
+   - **Remove the dead operator `center`/`max` writes** (`treemap`/`offset`/
+     `arrow`/`connect` `intrinsicDims` literals). Dead since the getter derives;
+     varied multi-line, so edit per-file and gate. Cosmetic, low risk.
+   - **(maybe) Extract a private `_placeAnchor`** shared by `place()` and
+     `setExtent`'s rank-1 pin — both are `ensureTranslate()[dir] = value −
+localAnchorPoint(...)`. Minor.
+   - **Normalize `rect`'s signed `size` at the source** (RISKY — audit first).
+     `rect.tsx` stores `size: w` with `w` possibly negative; that signed size is
+     why all derivation sites need `Math.abs`. Storing `|w|` with direction in
+     `min` would let `localAnchorPoint`/`displayDims`/the getters drop the abs.
+     BLOCKED on auditing every reader of the signed `displayDims[i].size` — it is
+     used directly as SVG `width`/`height` in `rect`'s non-embedded branch and as
+     `-displayDims[0].size / 2` in `petal`. Don't do this without a full
+     consumer audit + pixel gate.
+
+   The big remaining structural work is the **108-writer migration** off direct
+   `intrinsicDims`/`translate` manipulation onto facet/ledger writes (stage 2
+   proper → the authoritative per-node ledger), then stages 3–4 below.
+
 3. **Migrate each constraint to a facet-equation emitter** behind today's
    `apply*` signatures, one at a time, gated.
 4. **Replace the placement walk with the propagation solver** — σ solved per
