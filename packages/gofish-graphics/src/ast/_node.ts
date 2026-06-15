@@ -715,7 +715,13 @@ export class GoFishNode {
       return;
     }
 
-    if (this.transform?.translate?.[dir] !== undefined) return;
+    // Already placed on this axis? Stage 3 (#39): read the LEDGER, not the
+    // written `transform.translate`. Now that every pin (incl. baseline) records
+    // a positioning facet, a defined `min` means the axis is positioned — the
+    // same "I have an opinion, don't move me" signal `translate !== undefined`
+    // carried, but off the field we're retiring. (`ledger.min ⟺ translate` holds
+    // since the origin facet landed.)
+    if (this._bbox?.[dir]?.read("min") !== undefined) return;
 
     // Pin the anchor to `value` (shared with `setExtent`'s rank-1 pin), rather
     // than reading a separately-stored `center`/`max` — so the two placement
@@ -804,7 +810,11 @@ export class GoFishNode {
    */
   private _pinAnchor(dir: Direction, anchor: Anchor, value: number): void {
     const intrinsic = this.intrinsicDims?.[dir];
-    const override = this.transform?.translate?.[dir] !== undefined;
+    // Is this a re-pin of an already-placed axis (so rebuild the ledger below)?
+    // Stage 3 (#39): read the LEDGER's prior state, not the written translate —
+    // a defined `min` means already positioned (`ledger.min ⟺ translate`). Read
+    // before `ensureTranslate`/the ledger block mutate this call's state.
+    const override = this._bbox?.[dir]?.read("min") !== undefined;
     this.ensureTranslate()[dir] =
       value -
       localAnchorPoint(anchor, intrinsic?.min ?? 0, intrinsic?.size ?? 0);
