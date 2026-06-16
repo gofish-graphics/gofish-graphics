@@ -33,10 +33,11 @@ function placePinned(
   anchor: AlignAnchor,
   override: boolean
 ): void {
-  if (
-    !override ||
-    target.transform?.translate?.[axisIndex(axis)] === undefined
-  ) {
+  // Is the target already placed on this axis? Stage 3 (#39): detect it via the
+  // ledger-backed `dims.min`, not the raw `transform.translate` — a node placed
+  // by a pin or self-placing operator now records the ledger and clears the
+  // written translate, so reading translate would miss it.
+  if (!override || target.dims?.[axisIndex(axis)]?.min === undefined) {
     placeAtAnchor(target, axis, px, anchor);
     return;
   }

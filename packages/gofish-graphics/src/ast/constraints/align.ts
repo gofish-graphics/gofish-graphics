@@ -92,8 +92,12 @@ const anchorValue = (target: Placeable, idx: 0 | 1, a: AlignAnchor): number =>
     : a === "middle"
       ? target.dims[idx].center!
       : a === "baseline"
-        ? // The target's origin: its placed translate (0 if intrinsic-only).
-          (target.transform?.translate?.[idx] ?? 0)
+        ? // The target's origin: the ledger-projected translate (#39 stage 3 —
+          // survives retiring the written translate), falling back to the raw
+          // field for `ref` targets, then 0 for intrinsic-only.
+          (target.projectedTranslate?.(idx) ??
+          target.transform?.translate?.[idx] ??
+          0)
         : target.dims[idx].max!;
 
 /** Place `target` on `axis` so its anchor `a` lands at `value`. */

@@ -83,6 +83,11 @@ export type Placeable = {
   /** Placement state; `translate[i] === undefined` means "parent may place
    *  me". Exposed so the `baseline` align anchor can read a target's origin. */
   transform?: Transform;
+  /** The node's origin (`baseline`) as a ledger projection — `transform.translate`
+   *  where written, else derived from the ledger (#39 stage 3). The `baseline`
+   *  align anchor reads this so it survives retiring the translate writes; `ref`
+   *  stand-ins omit it (they keep a computed `transform`). */
+  projectedTranslate?: (dir: Direction) => number | undefined;
   place: (axis: FancyDirection, value: number, anchor?: Anchor) => void;
   /** Write an axis extent from owned bbox facets (the size-setting primitive
    *  #39 — `span` and an authoritative `position` pin go through it). Optional
