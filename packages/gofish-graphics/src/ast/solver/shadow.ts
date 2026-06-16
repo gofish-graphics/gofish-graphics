@@ -19,6 +19,8 @@ import type { Placeable } from "../_node";
 import { axisIndex, isPlacedOn, type Axis } from "../constraints/shared";
 import { getValue, isValue, type MaybeValue } from "../data";
 import { computeAesthetic } from "../../util";
+import { localAnchorPoint } from "../dims";
+import type { ConstraintSpec, ConstraintPosScales } from "../constraints";
 import {
   isSIZE,
   isPOSITION,
@@ -27,13 +29,16 @@ import {
 } from "../underlyingSpace";
 import * as Interval from "../../util/interval";
 
-const enabled = (): boolean => {
+/** Whether the solver shadow assertions run. Off (and zero-cost) in prod, so the
+ *  per-constraint pre-state capture the checks need is only built when set. */
+export const solverCheckEnabled = (): boolean => {
   const g = globalThis as {
     GOFISH_SOLVER_CHECK?: unknown;
     process?: { env?: Record<string, string | undefined> };
   };
   return !!g.GOFISH_SOLVER_CHECK || !!g.process?.env?.GOFISH_SOLVER_CHECK;
 };
+const enabled = solverCheckEnabled;
 
 // Report each (tag) once so a story's output stays readable (mirrors the ledger
 // check). A gate cares about "any divergence", not the count.
@@ -135,16 +140,16 @@ function anchorCoord(
   idx: 0 | 1,
   anchor: string
 ): number | undefined {
-  if (anchor === "baseline") return t.transform?.translate?.[idx];
+  if (anchor === "baseline")
+    return t.projectedTranslate?.(idx) ?? t.transform?.translate?.[idx];
   const min = t.dims[idx].min;
   const size = t.dims[idx].size;
   if (min === undefined || size === undefined) return undefined;
-  const box = new SolverBox(0);
-  box.add("min", min);
-  box.add("size", size);
+  // start/middle/end are the box facets — the same single derivation every other
+  // anchor read uses (negative-size safe).
   const facet =
     anchor === "start" ? "min" : anchor === "end" ? "max" : "center";
-  return box.read(facet, 0);
+  return localAnchorPoint(facet, min, size);
 }
 
 /**
@@ -281,5 +286,35 @@ export function shadowCheckScaleRoot(
   if (content === undefined) return;
   if (Math.abs(content - allocated) > 1e-6) {
     report(`scaleRoot.frame axis=${axisIdx}`, content, allocated);
+  }
+}
+
+/**
+ * Single per-constraint shadow hook for the constraint dispatcher — one line in
+ * `applyConstraints` instead of three interleaved calls with bespoke pre-state
+ * capture, so this disposable observe→assert scaffolding lifts out cleanly when
+ * the solver lands. `prePlaced` is the per-target `[x, y]` placement snapshot the
+ * caller takes BEFORE applying the constraint (only when the check is enabled);
+ * it's `undefined` (and this no-ops) in production.
+ */
+export function shadowCheckConstraint(
+  constraint: ConstraintSpec,
+  targets: Placeable[],
+  posScales: ConstraintPosScales | undefined,
+  prePlaced: [boolean, boolean][] | undefined
+): void {
+  if (!enabled() || !prePlaced) return;
+  const c = constraint as { type?: string; dir?: Axis };
+  if (c.type === "align") {
+    shadowCheckAlign(constraint as AlignLike, targets, prePlaced);
+  } else if (c.type === "distribute") {
+    const idx = axisIndex(c.dir!);
+    shadowCheckDistribute(
+      constraint as DistributeLike,
+      targets,
+      prePlaced.map((p) => p[idx])
+    );
+  } else if (c.type === "position") {
+    shadowCheckPosition(constraint as PositionLike, targets, posScales);
   }
 }

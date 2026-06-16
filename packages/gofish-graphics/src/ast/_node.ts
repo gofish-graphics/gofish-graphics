@@ -581,15 +581,11 @@ export class GoFishNode {
       if (tr !== undefined && id?.min !== undefined)
         ledger.add("min", tr + id.min);
       // Stage 3 (#39): the ledger now records the operator's self-placement
-      // (`min = translate + localMin`). On a solved axis it is the authority, so
-      // CLEAR the redundant written translate — retiring the operator `_layout`
-      // self-placement writes wholesale, at the one wrapper they all flow through,
-      // instead of editing each operator. Readers derive from the ledger; the
-      // placement-state checks (place()/_pinAnchor) and align/position already
-      // read it. The parent's later `place()` short-circuits on the solved ledger,
-      // so the cleared translate doesn't read as "unplaced, move me".
-      if (ledger.solved && this.transform?.translate)
-        this.transform.translate[dir] = undefined;
+      // (`min = translate + localMin`), so retire the redundant written translate
+      // — wholesale, at the one wrapper every operator `_layout` flows through,
+      // instead of editing each operator. The parent's later `place()` then
+      // short-circuits on the solved ledger, not the cleared translate.
+      this._clearTranslateIfSolved(dir);
     }
     return this;
   }
@@ -685,16 +681,24 @@ export class GoFishNode {
     return min - (this.intrinsicDims?.[dir]?.min ?? 0);
   }
 
-  /** Stage 3-C (#39): this node's `transform` as RENDER should see it — the
-   *  translate DERIVED from the ledger per axis ({@link _projectTranslate}),
-   *  scale passed through. Where the ledger is solved this equals the written
-   *  `transform.translate` (proven exact by {@link _assertLedgerMatches} across
-   *  all stories); where it isn't, `_projectTranslate` falls back to the written
-   *  field — so reading this is provably inert today. `INTERNAL_render` feeds it
-   *  to `_render`/`_renderLabel` instead of the raw `transform`, so the redundant
-   *  translate writes the mutators make can be retired one site at a time without
-   *  moving render. Returns `undefined` when the node has no transform at all
-   *  (an unplaced leaf), matching the old `this.transform` read. */
+  /** Stage 3 (#39): "is this axis already placed?" — read the LEDGER (a defined
+   *  `min` means positioned), not the written `transform.translate`, which is
+   *  retired where solved. The placement-state predicate `place()`'s short-circuit
+   *  and `_pinAnchor`'s override check share. */
+  private _isPlacedOn(dir: Direction): boolean {
+    return this._bbox?.[dir]?.read("min") !== undefined;
+  }
+
+  /** Stage 3 (#39): the single reconciliation every ledger write does — once the
+   *  position is recorded, the ledger is the authority on a solved axis, so CLEAR
+   *  the redundant written translate (the split becomes a projection, not a stale
+   *  mirror). An under-determined axis keeps its written fallback (left untouched).
+   *  Shared by the `layout()` seed, `_pinAnchor`, and rank-2 `setExtent`. */
+  private _clearTranslateIfSolved(dir: Direction): void {
+    if (this._bbox?.[dir]?.solved && this.transform?.translate)
+      this.transform.translate[dir] = undefined;
+  }
+
   /** Public read of {@link _projectTranslate} for cross-node geometry. `_ref`
    *  accumulates the parent-frame translate up/down the tree to position a ref;
    *  reading the ledger-derived value (== the written field today) keeps refs
@@ -743,13 +747,9 @@ export class GoFishNode {
       return;
     }
 
-    // Already placed on this axis? Stage 3 (#39): read the LEDGER, not the
-    // written `transform.translate`. Now that every pin (incl. baseline) records
-    // a positioning facet, a defined `min` means the axis is positioned — the
-    // same "I have an opinion, don't move me" signal `translate !== undefined`
-    // carried, but off the field we're retiring. (`ledger.min ⟺ translate` holds
-    // since the origin facet landed.)
-    if (this._bbox?.[dir]?.read("min") !== undefined) return;
+    // Already placed on this axis? The "I have an opinion, don't move me" signal,
+    // now read off the ledger (see `_isPlacedOn`), not the retired translate.
+    if (this._isPlacedOn(dir)) return;
 
     // Pin the anchor to `value` (shared with `setExtent`'s rank-1 pin), rather
     // than reading a separately-stored `center`/`max` — so the two placement
@@ -826,14 +826,9 @@ export class GoFishNode {
       min: 0,
       size,
     };
-    // Stage 3 (#39): the translate is NO LONGER WRITTEN. The ledger is solved
-    // here (absMin + size), so `_projectTranslate` derives translate = absMin −
-    // localMin = absMin − 0, and render (`_displayTransform`), `dims`, `_ref`
-    // (`projectedTranslate`) and the placement-state checks all read that
-    // projection. This is the first retired `transform.translate` write — the
-    // split is now a derived view of the ledger on this axis, not a written
-    // mirror. (`absMin` — read above for the determinacy guard — is the value the
-    // old write set.)
+    // Stage 3 (#39): translate is derived from the solved ledger now, not written
+    // here; clear any stale prior value (see `_clearTranslateIfSolved`).
+    this._clearTranslateIfSolved(dir);
   }
 
   /**
@@ -846,10 +841,9 @@ export class GoFishNode {
   private _pinAnchor(dir: Direction, anchor: Anchor, value: number): void {
     const intrinsic = this.intrinsicDims?.[dir];
     // Is this a re-pin of an already-placed axis (so rebuild the ledger below)?
-    // Stage 3 (#39): read the LEDGER's prior state, not the written translate —
-    // a defined `min` means already positioned (`ledger.min ⟺ translate`). Read
-    // before `ensureTranslate`/the ledger block mutate this call's state.
-    const override = this._bbox?.[dir]?.read("min") !== undefined;
+    // Read the ledger's prior state (see `_isPlacedOn`) before the block below
+    // mutates it.
+    const override = this._isPlacedOn(dir);
 
     // Stage 3 (#39): record the pin into the ledger so it represents EVERY
     // anchor — including `baseline`, the one that was missing. A `baseline` pin
@@ -870,24 +864,15 @@ export class GoFishNode {
       ledger.add(anchor, value);
     }
 
-    // Stage 3 (#39): retire the translate write where the ledger fully solves the
-    // axis — the readers (`dims`, render's `_displayTransform`, `_ref`'s
-    // `projectedTranslate`) derive translate from it there. CLEAR any stale
-    // translate rather than leaving it: a pin can OVERRIDE a self-placed
-    // translate (an operator's `_layout` wrote one — e.g. scatter positioning a
-    // coord glyph), and the override now lives only in the ledger; leaving the
-    // old value would make the split a stale, divergent mirror. Setting it
-    // `undefined` makes the split honestly carry "no opinion" (the ledger is
-    // authoritative; the placement-state checks read the ledger too). Keep the
-    // write only when the axis is under-determined (size unknown → ledger rank-1,
-    // not solved), where the readers still fall back to the written split.
-    if (ledger.solved) {
-      if (this.transform?.translate) this.transform.translate[dir] = undefined;
-    } else {
-      this.ensureTranslate()[dir] =
-        value -
-        localAnchorPoint(anchor, intrinsic?.min ?? 0, intrinsic?.size ?? 0);
-    }
+    // Write the pin's translate, then reconcile: on a solved axis the ledger is
+    // the authority so the write is cleared (a re-pin OVERRIDING an earlier
+    // written translate has its stale value cleared too, not left to diverge);
+    // on an under-determined axis (size unknown) the write stays as the readers'
+    // fallback. See `_clearTranslateIfSolved`.
+    this.ensureTranslate()[dir] =
+      value -
+      localAnchorPoint(anchor, intrinsic?.min ?? 0, intrinsic?.size ?? 0);
+    this._clearTranslateIfSolved(dir);
   }
 
   /** Lazily ensure `transform.translate` exists (preserving any `scale`) and

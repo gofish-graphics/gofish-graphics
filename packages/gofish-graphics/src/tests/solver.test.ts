@@ -160,13 +160,14 @@ console.log("# solver: case 5 — POSITION scatter (origin=intercept, σ=range/d
 console.log("# solver: case 6 — negative bar (intercept sign-invariant)");
 {
   // Downward bar (minCoeff -1): baseline is the TOP (local 0); it grows down.
-  const mk = (sigma: number) => {
+  // The box is σ-independent; σ is supplied at read time below.
+  const mk = () => {
     const b = new SolverBox(-1);
     b.add("baseline", 100); // top pinned at 100
     b.add("size", dataSize(40));
     return b;
   };
-  const b2 = mk(2), b3 = mk(3);
+  const b2 = mk(), b3 = mk();
   ok("σ=2: spans [20,100], baseline(top)=100",
     near(b2.read("min", 2), 20) && near(b2.read("max", 2), 100) && near(b2.read("baseline", 2), 100));
   ok("baseline(=origin) is σ-invariant: 100 at σ=2 and σ=3",

@@ -6,11 +6,7 @@ import { mergeMeasures } from "../underlyingSpace";
 import * as Interval from "../../util/interval";
 import { applyAlign, createAlignConstraint } from "./align";
 import { applyDistribute, createDistributeConstraint } from "./distribute";
-import {
-  shadowCheckAlign,
-  shadowCheckDistribute,
-  shadowCheckPosition,
-} from "../solver/shadow";
+import { shadowCheckConstraint, solverCheckEnabled } from "../solver/shadow";
 import { applyPosition, createPositionConstraint } from "./position";
 import {
   createZAboveConstraint,
@@ -33,7 +29,6 @@ import type { NestConstraint, NestOptions } from "./nest";
 import type { GridConstraint, GridOptions } from "./grid";
 import type { SpanConstraint, SpanOptions } from "./span";
 import {
-  axisIndex,
   isPlacedOn,
   type ConstraintPosScales,
   type ConstraintRef,
@@ -293,30 +288,24 @@ export function applyConstraints(
 
     if (targets.length === 0) continue;
 
+    // Solver shadow (#39, disposable observe→assert): snapshot each target's
+    // per-axis placement BEFORE the constraint runs — only when the check is on,
+    // so production pays nothing. The single hook below dispatches/no-ops.
+    const prePlaced = solverCheckEnabled()
+      ? targets.map(
+          (t) => [isPlacedOn(t, 0), isPlacedOn(t, 1)] as [boolean, boolean]
+        )
+      : undefined;
+
     if (constraint.type === "align") {
-      // Capture per-axis pre-placement BEFORE align so the shadow can tell which
-      // targets align actually placed (vs pre-placed / data-positioned no-op).
-      const prePlacedAlign = targets.map(
-        (t) => [isPlacedOn(t, 0), isPlacedOn(t, 1)] as [boolean, boolean]
-      );
       applyAlign(constraint, targets, sizes, posScales);
-      shadowCheckAlign(constraint, targets, prePlacedAlign);
     } else if (constraint.type === "position") {
       applyPosition(constraint, targets, posScales);
-      shadowCheckPosition(constraint, targets, posScales);
     } else if (isSpanConstraint(constraint)) {
       applySpan(constraint, targets, posScales);
     } else {
-      // Capture which targets were already placed on the stack axis BEFORE
-      // distribute — those are data-positioned (distribute only consistency-
-      // checks them, doesn't pack), so the solver shadow must skip them. The
-      // distinction only exists pre-placement.
-      const stackIdx = axisIndex(constraint.dir);
-      const prePlaced = targets.map((t) => isPlacedOn(t, stackIdx));
       applyDistribute(constraint, targets);
-      // Stage-1 solver shadow (#39): assert the σ-affine solver reproduces this
-      // distribute's placement. No-op unless GOFISH_SOLVER_CHECK is set.
-      shadowCheckDistribute(constraint, targets, prePlaced);
     }
+    shadowCheckConstraint(constraint, targets, posScales, prePlaced);
   }
 }
