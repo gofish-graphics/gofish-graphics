@@ -244,42 +244,36 @@ export const coord = createNodeOperator(
                 ? half
                 : -screenBboxMinY;
 
-          // Intrinsic bbox. Historically this was `{ x: 0, y: 0, w, h }`, which
-          // elaborateDims turns into min+size only — `max`/`center` stay
-          // undefined. Two problems: (1) any consumer reading the *placed* max —
-          // notably the legend's `distribute` constraint, which seats the swatch
-          // column at `content.dims[0].max` — got `NaN`; and (2) even the `min`
-          // it did report was positionally inconsistent: with the local min
-          // pinned at 0 and a preset `translate`, the placed box `[translate,
-          // size+translate]` didn't coincide with the rendered content (which is
-          // drawn centered on the coord origin, i.e. on the `translate` point).
-          //
-          // We now emit a *complete*, positionally consistent bbox on every
-          // branch by biasing the local min by `-translate`, so the placed box
-          // is exactly `[0, size]` on each axis — the same region the parent
-          // allocates (`finalW`/`finalH` read `size`). Anything reading the
-          // placed min/center/max now sees the true content box. One deliberate
-          // consequence: a polar glyph embedded in a `scatter` (placed by its
-          // `center`) is now centered on its datum, where before it sat ~radius
-          // off because the fallback `center = min + size/2` read the offset box.
+          // coord's box is simply `[0, size]` on each axis — the region the
+          // parent allocates (`finalW`/`finalH` read `size`) — with `max`/`center`
+          // reported so consumers like the legend's `distribute` (reads the placed
+          // `max`) and a `scatter` glyph (placed by its `center`) get real values.
           const intrinsicDims = {
-            x: -translateX,
-            y: -translateY,
+            x: 0,
+            y: 0,
             w: intrinsicW,
             h: intrinsicH,
-            x2: intrinsicW - translateX,
-            y2: intrinsicH - translateY,
-            cx: intrinsicW / 2 - translateX,
-            cy: intrinsicH / 2 - translateY,
+            x2: intrinsicW,
+            y2: intrinsicH,
+            cx: intrinsicW / 2,
+            cy: intrinsicH / 2,
           };
 
+          // coord does NOT self-place. `translateX/Y` is a CONTENT OFFSET — where
+          // to draw the coord origin within the box — not placement: the polar
+          // content is drawn centered on the origin (spanning negative screen
+          // coords), so it must be shifted to sit inside `[0, size]`. Carrying it
+          // as `transform.translate` (as before) collided with the parent placing
+          // the node: a `scatter` positioning a polar glyph had to OVERRIDE that
+          // self-placed translate, the one case no other node creates. So emit it
+          // as `renderData.contentOffset`, applied in render, and leave
+          // `transform.translate` unplaced — the parent places coord like any node.
           return {
             intrinsicDims,
-            transform: {
-              translate: [translateX, translateY],
-            },
+            transform: { translate: [undefined, undefined] },
             renderData: {
               coordinateSpaceBbox: coordSpaceBbox,
+              contentOffset: [translateX, translateY] as [number, number],
             },
           };
         },
@@ -544,8 +538,19 @@ export const coord = createNodeOperator(
             return elements.length > 0 ? <g>{elements}</g> : null;
           };
 
+          // Parent placement (`transform`) then coord's content offset (where the
+          // coord origin sits inside the box — coord's own render concern, NOT
+          // placement). The two compose to the single translate coord used to
+          // self-place with, so it's pixel-equivalent — but now `transform` is the
+          // parent's placement and the offset is separate, so coord no longer
+          // collides with being placed.
+          const [offsetX, offsetY] = (renderData?.contentOffset as
+            | [number, number]
+            | undefined) ?? [0, 0];
           return (
-            <g transform={translateString(transform)}>
+            <g
+              transform={`${translateString(transform)} translate(${offsetX}, ${offsetY})`}
+            >
               {displayObjects.map((d) =>
                 d.node.INTERNAL_render(coordTransform, d.transform)
               )}
