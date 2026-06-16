@@ -345,7 +345,13 @@ function flattenForZOrder(children: GoFishAST[]): PaintItem[] {
       // Plain (non-component) nested layers are transparent for paint
       // ordering — their children are hoisted into this paint context.
       if (!child._isComponent && child.type === "layer") {
-        const [childTx, childTy] = displayTranslate(child.transform);
+        // Stage 3 (#39): read the LEDGER projection, not the raw
+        // `transform.translate` — a placed nested layer has its written translate
+        // cleared on solved axes, so `displayTranslate(child.transform)` would
+        // hoist its children at [0,0]. `projectedTranslate` derives the real
+        // offset (the same retirement bake.ts/`_ref` already use).
+        const childTx = child.projectedTranslate(0) ?? 0;
+        const childTy = child.projectedTranslate(1) ?? 0;
         walk(child.children, accTx + childTx, accTy + childTy);
       } else {
         out.push({
