@@ -417,28 +417,26 @@ size. When the content is smaller than the request, it does not fill or center �
 it piles up at the origin, which y-up renders at the **bottom-left**. Two
 variants of one gap:
 
-- **Diagrams** (nested-boxes-tree requests 720×560; the tree is ~150×400):
-  there is no data scale to stretch, so the content is simply origin-anchored in
-  an over-large canvas. It should fit-to-canvas (scale and/or center) or the
-  canvas should shrink-wrap it.
-- **Data charts** (flower: x-axis runs to 140, data reaches ~50): the σ / data
-  scale is not fit to the content's actual extent, so the marks occupy a corner.
+There are **two genuinely different situations**, and they must NOT be treated
+the same:
 
-Both are the four observations converging: the content's **bbox** must drive the
-**σ-solve** (so the chart fills its canvas), the **baseline = origin** anchoring
-is exactly what drops content to the bottom-left (and is
-[[feedback_baseline_origin_semantics]]'s underdeveloped corner — `place()` still
-carries a `// TODO: revisit baseline case`, aliasing `baseline` to `min`), and
-the fix is "**pick scales to fit the whole chart**". This is _not_ a band-aid
-(don't special-case "center when canvas > content"): charts must _fill_ (their
-axes span the canvas) while a fixed-size diagram may want to _center_, and that
-choice should fall out of whether the axis carries a data scale. Note this needs
-**no fusion**: "the σ-solve fits the content's bbox" is a sizing-pass concern
-(resolve σ against the actual content extent, not a stale request), and the
-fill-vs-center choice is a placement-pass decision keyed on whether the axis is a
-data POSITION or pixel-pure. So a chart that now fills its canvas where it used to
-sit in a corner is **correct** — and reachable within the two separate passes.
+- **Data charts that DO have a σ-scope DOF** (flower: x-axis runs to 140, data
+  reaches ~50): here the scale _can_ stretch, so it _should_ — fit σ to the
+  content's actual extent so the axes span the canvas. This is a **sizing-pass**
+  fix (resolve σ against the real content bbox, not a stale request); no fusion.
+- **Fixed-size content with NO scaling DOF** (nested-boxes-tree requests 720×560;
+  the tree is ~150×400): there is **nothing to fill with** — no σ to stretch, no
+  rule for how a diagram would grow to 720×560. So it must **not** be stretched.
+  The only question is _where the intrinsic-size content sits_ in the larger
+  canvas. It currently lands **bottom-left** purely because of the coordinate
+  system (`scale(1,-1)` + origin anchoring) — that's not "filling," it's just the
+  default origin. The open call is **top-left vs centered** (charts naturally want
+  a bottom-left origin; free-space / diagrammy graphics want top-left), and it's
+  deferred. Tracked at **#574** (centered-origin roots) and addressed in part by
+  PR 575 (render intrinsic-size content at its intrinsic size).
 
-(Diagram-vs-chart fit — scale-to-fill vs center vs shrink-wrap when content < an
-explicit canvas — is its own design sub-decision, governed by whether the scope's
-axis is a data POSITION or pixel-pure.)
+So "fill the canvas" applies **only** to the σ-DOF case; the no-DOF case is a
+placement/coordinate-origin question, not a scaling one. The `baseline = origin`
+anchoring ([[feedback_baseline_origin_semantics]]; `place()` still carries a
+`// TODO: revisit baseline case`) is what fixes the corner. Both are reachable
+within the two separate passes — neither needs the fusion.
