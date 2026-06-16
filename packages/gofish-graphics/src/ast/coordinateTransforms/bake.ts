@@ -27,7 +27,6 @@ const bakeTranslate = (node: GoFishAST): [number, number] => [
   is self-contained primitives with no `node` back-reference.
 */
 
-/* TODO: implement this. I don't actually need it until I have more complex examples tho */
 export const flattenLayout = (
   node: GoFishAST,
   transform: [number, number] = [0, 0],
