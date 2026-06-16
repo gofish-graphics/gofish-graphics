@@ -2,7 +2,7 @@
 // @wiki Overview — /internals/layout/passes
 // </gofish-wiki>
 
-import { applyColorOps, color6, color6_old } from "../../color";
+import { color6, color6_old, resolveColorChannel } from "../../color";
 import { path, Path, pathToSVGPath, segment, transformPath } from "../../path";
 import { GoFishNode } from "../_node";
 import { GoFishAST } from "../_ast";
@@ -11,7 +11,6 @@ import { linear } from "../coordinateTransforms/linear";
 import {
   getMeasure,
   getValue,
-  getValueColorOps,
   inferEmbedded,
   isAesthetic,
   isValue,
@@ -308,24 +307,8 @@ export const Rect = ({
         const unit = scaleContext?.unit;
         const unitColorScale = unit && "color" in unit ? unit.color : undefined;
         const originalFill = fill;
-        const originalStroke = stroke;
-        fill = isValue(fill)
-          ? applyColorOps(
-              (unitColorScale
-                ? (unitColorScale.get(getValue(fill)) ?? getValue(fill))
-                : getValue(fill)) as string,
-              getValueColorOps(originalFill)
-            )
-          : fill;
-
-        stroke = isValue(stroke)
-          ? applyColorOps(
-              (unitColorScale
-                ? (unitColorScale.get(getValue(stroke)) ?? getValue(stroke))
-                : getValue(stroke)) as string,
-              getValueColorOps(originalStroke)
-            )
-          : stroke;
+        fill = resolveColorChannel(fill, unitColorScale);
+        stroke = resolveColorChannel(stroke, unitColorScale);
 
         const resolvedFill = fill as string | undefined;
         const resolvedStroke =

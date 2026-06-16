@@ -1,5 +1,5 @@
 import { mix } from "spectral.js";
-import { black, white } from "../../color";
+import { black, resolveColorChannel, white } from "../../color";
 import {
   path,
   Path,
@@ -15,13 +15,11 @@ import { linear } from "../coordinateTransforms/linear";
 import {
   getMeasure,
   getValue,
-  getValueColorOps,
   inferEmbedded,
   isValue,
   MaybeValue,
   Value,
 } from "../data";
-import { applyColorOps } from "../../color";
 import {
   Dimensions,
   displayDims as displayDimsOf,
@@ -167,15 +165,9 @@ export const Petal = ({
         const scaleContext = node.getRenderSession().scaleContext;
         const unit = scaleContext?.unit;
         const unitColorScale = unit && "color" in unit ? unit.color : undefined;
-        const resolveColor = (c: MaybeValue<string>): string | undefined => {
-          if (!isValue(c)) return c as string | undefined;
-          const scaled = unitColorScale
-            ? (unitColorScale.get(getValue(c)) ?? getValue(c))
-            : getValue(c);
-          return applyColorOps(scaled as string, getValueColorOps(c));
-        };
-        const resolvedFill = resolveColor(fill);
-        const resolvedStroke = resolveColor(stroke) ?? resolvedFill;
+        const resolvedFill = resolveColorChannel(fill, unitColorScale);
+        const resolvedStroke =
+          resolveColorChannel(stroke, unitColorScale) ?? resolvedFill;
 
         // Both dimensions are aesthetic - render as transformed point
         if (!isXEmbedded && !isYEmbedded) {

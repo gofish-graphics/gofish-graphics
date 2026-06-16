@@ -1,7 +1,13 @@
 import { lerp, rybHsl2rgb } from "rybitten";
 import { ColorCoords, cubes } from "rybitten/cubes";
 import { mix, palette } from "spectral.js";
-import type { ColorOp } from "./ast/data";
+import {
+  type ColorOp,
+  getValue,
+  getValueColorOps,
+  isValue,
+  type MaybeValue,
+} from "./ast/data";
 export const rgbToString = (rgb: ColorCoords) =>
   `rgb(${rgb.map((x) => Math.round(x * 255)).join(", ")})`;
 
@@ -19,6 +25,24 @@ export const applyColorOps = (color: string, ops: ColorOp[]): string => {
     out = mix(out, op === "lighten" ? "#ffffff" : "#000000", amount);
   }
   return out;
+};
+
+/**
+ * Resolve a mark's color channel: a data-bound value maps through the unit
+ * color scale (falling back to the raw value if unscaled), then its post-scale
+ * color ops (`.lighten`/`.darken`) are applied; a literal color passes through
+ * unchanged. Shared by the `rect`, `ellipse`, and `petal` render paths so a
+ * new color-channel mark gets scale-lookup + color ops for free.
+ */
+export const resolveColorChannel = (
+  value: MaybeValue<string>,
+  unitColorScale: Map<unknown, string> | undefined
+): string | undefined => {
+  if (!isValue(value)) return value as string | undefined;
+  const scaled = unitColorScale
+    ? (unitColorScale.get(getValue(value)) ?? getValue(value))
+    : getValue(value);
+  return applyColorOps(scaled as string, getValueColorOps(value));
 };
 
 export const createColorRange = (hue: number) =>
