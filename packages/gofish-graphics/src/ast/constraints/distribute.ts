@@ -169,14 +169,33 @@ export type DistributeWalkOptions = Pick<
   "dir" | "spacing" | "mode" | "order"
 >;
 
-export function applyDistribute(
+/** One emitted placement equation: the target's `anchor` facet lands at `value`.
+ *  `min`/`max`/`center` are the box facets the distribute pins. */
+export interface DistributePlacement {
+  target: Placeable;
+  anchor: "min" | "max" | "center";
+  value: number;
+}
+
+/**
+ * EMIT the distribute as a list of facet-placement equations (each target's
+ * anchor → a value) WITHOUT applying them — the facet-equation-emitter form of
+ * the constraint (#39). The relational contiguity chain
+ * (`child[i+1].min = child[i].max + spacing`) is resolved to absolute pins from
+ * the children's sizes and any pre-placed anchor; the walk reads only
+ * pre-existing geometry, never a placement it emits, so the emit is pure. The
+ * `apply` path commits these via `place()`; a future per-scope solver can consume
+ * the same equations instead of pinning eagerly.
+ */
+export function emitDistribute(
   constraint: DistributeWalkOptions,
   targets: Placeable[],
   onInconsistency?: DistributeInconsistencyReporter
-): void {
+): DistributePlacement[] {
   const idx = axisIndex(constraint.dir);
   const ordered =
     constraint.order === "reverse" ? [...targets].reverse() : targets;
+  const out: DistributePlacement[] = [];
 
   // Compare a fixed child's actual edge/center against the running expected
   // position and report past tolerance. The anchor itself is never checked —
@@ -197,14 +216,14 @@ export function applyDistribute(
     let pos = 0;
     for (const target of ordered) {
       if (constraint.mode === "center") {
-        target.place(constraint.dir, pos, "center");
+        out.push({ target, anchor: "center", value: pos });
         pos += constraint.spacing;
       } else {
-        target.place(constraint.dir, pos);
+        out.push({ target, anchor: "min", value: pos });
         pos += (target.dims[idx].size ?? 0) + constraint.spacing;
       }
     }
-    return;
+    return out;
   }
 
   if (constraint.mode === "edge") {
@@ -216,7 +235,7 @@ export function applyDistribute(
         checkInconsistent(pos, t.dims[idx].min!);
         pos = t.dims[idx].max! + constraint.spacing;
       } else {
-        t.place(constraint.dir, pos);
+        out.push({ target: t, anchor: "min", value: pos });
         pos += (t.dims[idx].size ?? 0) + constraint.spacing;
       }
     }
@@ -227,7 +246,7 @@ export function applyDistribute(
       if (isPlacedOn(t, idx)) {
         pos = t.dims[idx].min! - constraint.spacing;
       } else {
-        t.place(constraint.dir, pos, "max");
+        out.push({ target: t, anchor: "max", value: pos });
         pos -= (t.dims[idx].size ?? 0) + constraint.spacing;
       }
     }
@@ -240,7 +259,7 @@ export function applyDistribute(
         checkInconsistent(pos, t.dims[idx].center!);
         pos = t.dims[idx].center! + constraint.spacing;
       } else {
-        t.place(constraint.dir, pos, "center");
+        out.push({ target: t, anchor: "center", value: pos });
         pos += constraint.spacing;
       }
     }
@@ -250,9 +269,23 @@ export function applyDistribute(
       if (isPlacedOn(t, idx)) {
         pos = t.dims[idx].center! - constraint.spacing;
       } else {
-        t.place(constraint.dir, pos, "center");
+        out.push({ target: t, anchor: "center", value: pos });
         pos -= constraint.spacing;
       }
     }
+  }
+  return out;
+}
+
+/** Commit the emitted distribute equations: pin each target's anchor at its
+ *  value. Behind today's signature; the emit/commit split is the seam a per-scope
+ *  solver slots into (consume {@link emitDistribute} instead of pinning here). */
+export function applyDistribute(
+  constraint: DistributeWalkOptions,
+  targets: Placeable[],
+  onInconsistency?: DistributeInconsistencyReporter
+): void {
+  for (const p of emitDistribute(constraint, targets, onInconsistency)) {
+    p.target.place(constraint.dir, p.value, p.anchor);
   }
 }
