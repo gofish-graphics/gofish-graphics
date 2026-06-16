@@ -30,7 +30,7 @@ chart(data, options?)
 | `options.color` | `ColorConfig`         | Color scale applied to all marks in this chart. Use [`palette()`](/js/api/color/palette) for categorical data or [`gradient()`](/js/api/color/gradient) for continuous data. |
 | `options.axes`  | `AxesOptions`         | Auto-generate axes, labels, and legends. See [Axes](#axes) below.                                                                                                            |
 
-Returns a `ChartBuilder<T>` with [`.flow()`](/js/api/core/flow), [`.mark()`](/js/api/core/mark), [`.render()`](/js/api/core/render), and [`.zOrder()`](#zorder) methods.
+Returns a `ChartBuilder<T>` with [`.flow()`](/js/api/core/flow), [`.mark()`](/js/api/core/mark), [`.render()`](/js/api/core/render), [`.zOrder()`](#zorder), and [`.name()`](#name) methods.
 
 ## Axes
 
@@ -88,4 +88,34 @@ Layer([
     .zOrder(1),
 ]);
 // circles are always drawn on top of the line, regardless of array position
+```
+
+## .name()
+
+Names a whole chart's resolved node — the builder-level counterpart to a mark's
+[`.name()`](/js/api/core/mark). A named nested chart can be a target of a
+[`.constrain()`](/js/api/constraints/constrain) callback on its enclosing
+[`layer`](/js/api/operators/layer), and is resolvable through
+[`ref` / `selectAll`](/js/api/selection/ref).
+
+```ts
+chartBuilder.name(layerName: string): ChartBuilder
+```
+
+This is what lets you assemble a compound glyph from sub-charts and snap the
+pieces together. For example, a flower built from a green stem and a polar petal
+head, where the head is its own `chart(...)` named `"flower"` so the layer can
+align its center onto the stem's top:
+
+```ts
+layer([
+  rect({ w: 4, h: "total", fill: "green" }).name("stem"),
+  chart(species, { coord: polar() })
+    .flow(stack({ by: "species", dir: "x" }))
+    .mark(petal({ w: "count", fill: "species" }))
+    .name("flower"),
+]).constrain(({ stem, flower }) => [
+  Constraint.align({ x: "middle" }, [stem, flower]),
+  Constraint.align({ y: ["end", "middle"] }, [stem, flower]),
+]);
 ```
