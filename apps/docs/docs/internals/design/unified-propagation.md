@@ -7,6 +7,25 @@ status: speculative
 
 # Collapsing the Two Passes: One Propagation, Printable Equations
 
+> **Outcome (June 2026) — the fusion this note explores was NOT adopted.** What
+> landed from it (all gated REAL = 0): the per-node `Monotonic` **bbox ledger** is
+> the geometry authority and `(intrinsicDims, transform)` is now a _projection_ of
+> it (the redundant `transform.translate` writes are retired across pins and
+> operator self-placement; `intrinsicDims` stays the frame-invariant local box);
+> the constraints (`distribute`/`align`/`position`/`span`) are **facet-equation
+> emitters** (`emit*` produces the equations as data, `apply*` commits). What was
+> **rejected** is the headline — _fusing_ sizing and placement into one
+> simultaneous solver. On inspection its justification (a placed edge feeding back
+> into σ) didn't hold: genuine size↔place **cycles are rare-to-nonexistent** in
+> dataviz (layout is one-way, size→place); the "labels fit" motivation is a
+> **sizing-time** claim (text extent is known without placement — see that section,
+> now reframed); aspect-ratio is a trivial cross-axis `min` (#582); floors/caps are
+> piecewise sizing claims (#580). So the direction is **two constraint-based passes
+> kept separate** — sizing (already σ-affine) then a placement pass that _derives_
+> from the sizing solution where determined, leaving the free DOF (a scope's
+> origin) to bubble up. Read the rest as the explored target; the roadmap section
+> below records what's actually true.
+
 **Claim.** GoFish's layout core is two passes — a max-plus **fold** that solves
 the scale factor σ from size claims, then a separate **placement** walk that
 positions things once σ is known. Most of the engine's apparent complexity is
@@ -18,8 +37,10 @@ ledger of facet equations whose values are σ-affine `Monotonic`s, solved by
 single-assignment propagation — and that zoo collapses into "emit equations,
 then propagate." The payoff is not fewer lines; it is **uniformity** (one
 mechanism to reason about) and **printable equations** (every facet is a
-`max(aσ+b, …)` you can read off), and it makes a placed thing's extent feed back
-into the scale solve so labels stop overhanging.
+`max(aσ+b, …)` you can read off). _(The original claim went further — that fusing
+the passes lets a placed extent feed back into σ so labels stop overhanging. The
+emitter half landed; the fusion did not — see the Outcome banner above. The
+ledger + emitters give the uniformity and printability without it.)_
 
 This note records the target, what genuinely collapses, the three couplings that
 deliberately _don't_, the one open fork, and a staged path. It is the
@@ -63,8 +84,10 @@ These stop being separate code paths:
 | pass-1 SIZE fold **and** pass-2 placement                 | one propagation                                                    |
 | `align`'s SIZE→POSITION conversion (makes the count axis) | read the axis domain off the resolved facets                       |
 
-Most `apply*` functions, the `setExtent` rank dispatch, and the two-pass
-structure fuse into one solver. Edge-vs-center survives only as _which facet the
+Most `apply*` functions and the `setExtent` rank dispatch reduce to emitting
+facet equations (this part landed — `emit*`/`apply*`). The two-pass _structure_,
+though, was kept (the Outcome banner): sizing and placement stay separate solves,
+not one fused propagation. Edge-vs-center survives only as _which facet the
 difference constraint relates_ — a parameter, not a branch.
 
 And because every facet is a `Monotonic`, the equations are **printable**:
@@ -294,13 +317,26 @@ value − localAnchorPoint(...)`.
        _Next:_ migrate the placement-state checks off `transform.translate` (now
        that ⟺ holds), then retire the translate writes one site at a time.
 
-3. **Migrate each constraint to a facet-equation emitter** behind today's
-   `apply*` signatures, one at a time, gated.
-4. **Replace the placement walk with the propagation solver** — σ solved per
-   scope inside it; cycles / over-determination → the named-conflict report.
-   _This_ is where the two passes fuse, and where a placed edge first feeds back
-   into the σ-claim (the label-fits-the-box behavior below).
-5. **Aspect ratio + σ-scope as explicit cross-cutting equations** on top.
+3. ✅ **Constraints are facet-equation emitters.** `distribute`/`align`/
+   `position`/`span` each split into a pure `emit*` (produces the placement
+   equations as data) + a thin `apply*` commit, behind unchanged signatures —
+   the seam a constraint-based placement pass consumes. Gated REAL = 0.
+4. **Two constraint-based passes — kept separate (NOT fused).** _Decision
+   (June 2026): do not fuse sizing and placement into one solver._ Sizing is
+   already a σ-affine constraint solve (the `Monotonic` SIZE domains composed
+   bottom-up and inverted per scope — see below). Placement becomes its own
+   constraint-based pass that **resolves the emitted equations**, and — the key
+   point — for the determined common case it is a _derivation_ of the sizing
+   solution, not a separate solve: a stack's positions are the running cumsum of
+   the solved sizes. Only genuinely **under-determined** placement needs solving,
+   and then the lone free DOF is the scope **origin** (it bubbles up as
+   `translate`-undefined / baseline for the parent to pin); **over-determined** →
+   a named conflict (`BBox` already returns these). The two passes run one-way
+   (size → place); placement reads the sizing solution but they stay distinct.
+5. **Cross-cutting features layer on the sizing pass, additively** — not via
+   fusion: equal-aspect / shared scale across axes (`σ_x = σ_y` reconciliation,
+   #582) and min/max size floors & caps (piecewise σ-affine claims, #580). Both
+   sit on the already-σ-affine sizing solve; neither needs the placement pass.
 
 ### Making the ledger authoritative is a representation migration, not a `place()` refactor
 
@@ -325,38 +361,47 @@ the ledger (a node knows its size before its position: rank-1, the `min`/`center
 facets `undefined`). The asymmetric-center / baseline cases are where a naive
 absolute-only ledger silently diverges.
 
-So stage 3 is a **deliberate, interactive, multi-session migration**, gated story
-by story — _not_ something to land in one blind pass. (See the judgment-call note
-on the PR.) Stages 3–5 sit on top of the read-flip; stage 4 additionally _changes pixels_
-(labels fit the box), so it needs human "is this better?" judgment per story
-([[feedback_pixel_not_dom_gate]]), and stage 5's aspect-ratio home is an open
-design fork — neither is gate-decidable alone.
+Stage 3 was a **deliberate, interactive, multi-session migration**, gated story
+by story — _not_ landed in one blind pass — and it is now substantially **done**:
+the ledger is the geometry authority and `(intrinsicDims, transform)` is a
+projection of it on every solved axis (`transform.translate` retired across pins
+and operator self-placement; `intrinsicDims` stays as the frame-invariant local
+box). Its blast radius was the whole layout core (`_node.ts`, `layer.tsx`, every
+`apply*`, `compose.ts`, all shapes + geometry operators); the pixel gate was the
+net, REAL = 0 throughout.
 
-Blast radius is the whole layout core (`_node.ts`, `layer.tsx`, every `apply*`,
-`compose.ts`, all shapes + geometry operators); the pixel gate is the net. Step 4
-is the one that can fail to converge — it is, in effect, adopting a Bluefish-style
-constraint solver while carrying the max-plus σ-scope and the measure type-system
-on top. Realistically several sessions.
+**A fused solver was considered and rejected (June 2026).** The plan once had a
+step 4 that _fused_ sizing and placement into one Bluefish-style constraint
+solver — justified by "a placed edge feeds back into the σ-claim." On inspection
+that justification didn't hold: the motivating cases reduce to the sizing pass
+(which is already σ-affine) or to trivial cross-axis reconciliation, and genuine
+size↔place **cycles are rare-to-nonexistent** in dataviz (layout is one-way: size
+then place). So the two passes stay **separate and constraint-based** (item 4
+above) — placement _derives_ from the sizing solution where determined, which is
+REAL = 0 and carries no convergence risk, rather than adopting a simultaneous
+solver the corpus doesn't need.
 
-## The motivating consequence: labels that fit
+## A motivating consequence: labels that fit (a sizing-pass claim, not a fusion)
 
 Today the label overhang is structural. Bars A=10, B=30, C=20; a value label
 `spacing = 10` above each σ-scaled bar top, label height `th`:
 
-- **Two-pass (today).** Pass 1 solves the bars' claim `max(10σ, 30σ, 20σ) = 30σ`
-  against height `H` ⇒ `σ = H/30`. The label's `+10+th` is not in that claim
-  (labels are placed in pass 2, post-σ), so the tallest bar's label overhangs the
-  top by `10 + th`.
-- **Unified.** The label's top edge is `30σ + 10 + th` — still a `Monotonic`. Fold
-  it into the scope claim: `max(30σ + 10 + th, …) = H` ⇒ `σ = (H − 10 − th)/30`.
-  The bars shrink just enough that the tallest label fits. No new mechanism —
-  `Monotonic.smul` then `Monotonic.adds`, max-folded, inverted — just placement
-  feeding edges back into the solve it was previously downstream of.
+- **Today.** The bars' claim `max(10σ, 30σ, 20σ) = 30σ` solves against height `H`
+  ⇒ `σ = H/30`. The label's `+10+th` is not in that claim, so the tallest bar's
+  label overhangs the top by `10 + th`.
+- **The fix.** The "bar + its label" effective top edge is `30σ + 10 + th` — and
+  crucially **`th` is known at sizing time** (text metrics need only the string +
+  font, not placement), and `+10` is a constant. So this is a _richer sizing
+  claim_, not placement feedback: fold the label's extent into the bar's own SIZE
+  claim — `max(30σ + 10 + th, …) = H` ⇒ `σ = (H − 10 − th)/30` — and the bars
+  shrink just enough that the tallest label fits. `Monotonic.smul`/`adds`,
+  max-folded, inverted — entirely within the **sizing** pass.
 
-That single change — _a placed position's extent participates in solving σ_ — is
-both the headline simplification and the behavior the two-pass split can't
-express. Everything else here is the refactor that makes it a one-line
-consequence instead of a special case.
+This is the case that once seemed to require fusing placement back into σ. It
+doesn't: because the label's size is a sizing-time fact (size↔size, not
+size↔place), "the mark's claim includes its label" lives in the sizing solve. It
+is the same family as the floors/caps work (#580) — enriching what a size claim
+can express — and needs neither the placement pass nor a fused solver.
 
 ## The visible symptom today: content sits at the origin, not fitted to the canvas
 
@@ -387,12 +432,13 @@ carries a `// TODO: revisit baseline case`, aliasing `baseline` to `min`), and
 the fix is "**pick scales to fit the whole chart**". This is _not_ a band-aid
 (don't special-case "center when canvas > content"): charts must _fill_ (their
 axes span the canvas) while a fixed-size diagram may want to _center_, and that
-choice should fall out of whether the axis carries a data scale — which is
-exactly what the unified solve, with the bbox edges folded into the per-scope σ,
-decides. So this symptom is the acceptance test for stage 4, and the reason
-stage 4's pixel changes are _wanted_, not regressions: a chart that now fills its
-canvas where it used to sit in a corner is **correct**.
+choice should fall out of whether the axis carries a data scale. Note this needs
+**no fusion**: "the σ-solve fits the content's bbox" is a sizing-pass concern
+(resolve σ against the actual content extent, not a stale request), and the
+fill-vs-center choice is a placement-pass decision keyed on whether the axis is a
+data POSITION or pixel-pure. So a chart that now fills its canvas where it used to
+sit in a corner is **correct** — and reachable within the two separate passes.
 
 (Diagram-vs-chart fit — scale-to-fill vs center vs shrink-wrap when content < an
-explicit canvas — is a design sub-decision to settle alongside stage 4, governed
-by whether the scope's axis is a data POSITION or pixel-pure.)
+explicit canvas — is its own design sub-decision, governed by whether the scope's
+axis is a data POSITION or pixel-pure.)
