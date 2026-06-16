@@ -13,7 +13,6 @@ from gofish import (
     chart,
     circle,
     derive,
-    field,
     rect,
     scatter,
 )
@@ -43,20 +42,15 @@ def story_default():
         .name("scatter")
     )
 
-    # Python bin()'s measure provenance can't cross the derive RPC bridge
-    # (JSON drops the JS-side symbol), so the bin-edge channels would tag as
-    # "start"/"end" and falsely conflict with the center's field measure.
-    # Annotate explicitly with field(name, measure=...) — the escape hatch the
-    # measure type error prescribes. The JS story needs no annotations; #537
-    # tracks carrying provenance across the bridge so this collapses too.
+    # bin()'s measure provenance now rides the derive operator's IR across the
+    # RPC bridge (#537), so the bin edges auto-tag with the source field's
+    # measure — no explicit field(name, measure=...) needed. The bare "start"/
+    # "end" channels unify on the source axis just like the JS story.
     top_hist = (
         chart(data, h=80)
         .flow(
             derive(bin("Beak Length (mm)")),
-            scatter(
-                xMin=field("start", measure="Beak Length (mm)"),
-                xMax=field("end", measure="Beak Length (mm)"),
-            ),
+            scatter(xMin="start", xMax="end"),
         )
         .mark(rect(h="count", fill="steelblue"))
         .name("topHist")
@@ -66,10 +60,7 @@ def story_default():
         chart(data, w=80)
         .flow(
             derive(bin("Beak Depth (mm)")),
-            scatter(
-                yMin=field("start", measure="Beak Depth (mm)"),
-                yMax=field("end", measure="Beak Depth (mm)"),
-            ),
+            scatter(yMin="start", yMax="end"),
         )
         .mark(rect(w="count", fill="steelblue"))
         .name("rightHist")

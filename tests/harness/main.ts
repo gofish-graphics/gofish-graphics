@@ -64,7 +64,9 @@ import {
   offset as offsetOp,
   createName,
   Treemap,
+  setMeasureProvenance,
   type ChartBuilder,
+  type MeasureProvenance,
   type Operator,
   type Mark,
   type Token,
@@ -363,6 +365,10 @@ function mapOperator(
       if (!deriveServerUrl)
         throw new Error("derive operator requires deriveServerUrl");
 
+      // A transform (e.g. `bin`) declares measure provenance for its output
+      // columns in the IR; the array symbol can't cross the RPC, so re-apply it
+      // to the returned rows (mirrors serialize/registry.ts and the JS bin).
+      const provenance = opts.provenance as MeasureProvenance | undefined;
       return derive(async (d: any) => {
         const rows = Array.isArray(d) ? d : d == null ? [] : [d];
         if (rows.length === 0) return Array.isArray(d) ? d : (d ?? null);
@@ -380,7 +386,11 @@ function mapOperator(
         }
 
         const result = await resp.json();
-        return Array.isArray(d) ? result : (result[0] ?? null);
+        const tagged =
+          provenance !== undefined
+            ? setMeasureProvenance(result, provenance)
+            : result;
+        return Array.isArray(d) ? tagged : (tagged[0] ?? null);
       });
     }
     // Modern v3 operators all take a single options object with `by`,

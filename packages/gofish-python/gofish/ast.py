@@ -21,14 +21,23 @@ class Operator:
 class DeriveOperator(Operator):
     """Operator for deriving new data via Python function."""
 
-    def __init__(self, fn: Callable):
+    def __init__(self, fn: Callable, provenance: Optional[dict] = None):
         super().__init__("derive")
         self.fn = fn
         self.lambda_id = str(uuid.uuid4())
+        # Measure provenance a data transform (e.g. `bin`) declares for its
+        # output columns. It can't ride the data rows across the derive RPC
+        # bridge, so it travels in the operator IR and is re-applied JS-side via
+        # `setMeasureProvenance` — mirroring the JS bin's array-symbol
+        # provenance so a histogram's edges unify on the source field's axis.
+        self.provenance = provenance
 
     def to_dict(self) -> dict:
-        """Convert to dict - return lambda ID."""
-        return {"type": "derive", "lambdaId": self.lambda_id}
+        """Convert to dict - return lambda ID (+ measure provenance, if any)."""
+        out = {"type": "derive", "lambdaId": self.lambda_id}
+        if self.provenance:
+            out["provenance"] = self.provenance
+        return out
 
 
 class _MarkFn:
@@ -1452,8 +1461,15 @@ def derive(fn: Callable) -> DeriveOperator:
 
     Returns:
         DeriveOperator object
+
+    A transform may declare measure provenance for its output columns by
+    setting `_gofish_measure_provenance` on the callable (e.g. `bin`); it is
+    carried into the operator IR so the JS side can re-tag the rows after the
+    RPC. This is what lets `derive(bin("X"))` produce `start`/`end` edges that
+    unify on X's axis without an explicit `field(name, measure=...)`.
     """
-    return DeriveOperator(fn)
+    provenance = getattr(fn, "_gofish_measure_provenance", None)
+    return DeriveOperator(fn, provenance)
 
 
 def group(*, by: str, **options: Any) -> Operator:
@@ -1707,19 +1723,22 @@ def field(name: str, measure: Optional[str] = None) -> dict:
     optional **measure annotation** — a unit-of-measure type claim for the
     channel (see the underlying-space measure system).
 
-    Use the measure annotation when a transform has renamed fields so the
-    weak field-name default would mis-tag the channel. The canonical case is
-    Python-side `bin()`: its provenance map can't cross the RPC bridge, so
-    bin edges arrive as fields named "start"/"end" even though they are in
-    the source field's units:
+    Use the measure annotation when YOUR OWN derive transform has renamed
+    fields so the weak field-name default would mis-tag the channel — e.g. a
+    lambda that renames a length column to "lo"/"hi":
 
         scatter(
-            xMin=field("start", measure="Beak Length (mm)"),
-            xMax=field("end", measure="Beak Length (mm)"),
+            xMin=field("lo", measure="Beak Length (mm)"),
+            xMax=field("hi", measure="Beak Length (mm)"),
         )
 
+    Built-in transforms like `bin()` declare their output provenance, which now
+    travels in the derive operator's IR (see DeriveOperator), so a binned
+    histogram's `start`/`end` edges auto-tag with the source field's units — no
+    explicit annotation needed.
+
     Emits the canonical `{type: "field", name, measure?}` wire shape; an
-    annotation that contradicts JS-side provenance is a type error.
+    annotation that contradicts known provenance is a type error.
 
     Args:
         name: The field name to read from each row.

@@ -61,6 +61,7 @@ import {
 // fromJSON.ts rather than via a flat factory map.
 import { cut as cutSlices, cutMark } from "../ast/graphicalOperators/cut";
 import { offset as offsetOp } from "../ast/graphicalOperators/offset";
+import { setMeasureProvenance, type MeasureProvenance } from "../ast/data";
 import type { Frontend } from "gofish-ir";
 
 export type { ChartBuilder, Mark, Operator };
@@ -161,13 +162,22 @@ export const OPERATOR_MAP: Record<
         "derive operator references a Python lambda but no DeriveBridge was supplied"
       );
     }
+    // A data transform (e.g. `bin`) declares measure provenance for its output
+    // columns in the IR (the array-symbol provenance can't ride the rows across
+    // the RPC). Re-apply it to the returned rows so channel inference unifies a
+    // histogram's edges on the source field's axis (mirrors the JS bin).
+    const provenance = opts.provenance as MeasureProvenance | undefined;
     return derive(async (d: any) => {
       const rows = Array.isArray(d) ? d : d == null ? [] : [d];
       if (rows.length === 0) {
         return Array.isArray(d) ? d : (d ?? null);
       }
       const result = await bridge.applyLambda(lambdaId, rows);
-      return Array.isArray(d) ? result : (result[0] ?? null);
+      const tagged =
+        provenance !== undefined
+          ? setMeasureProvenance(result, provenance)
+          : result;
+      return Array.isArray(d) ? tagged : (tagged[0] ?? null);
     });
   },
   spread: (opts) => spread(opts as any),

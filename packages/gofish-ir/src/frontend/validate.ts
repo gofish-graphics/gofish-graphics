@@ -269,7 +269,7 @@ function walkOperator(node: unknown, path: string, ctx: Context): void {
   // Per-type field validation. Each operator has a known set of optional
   // and required fields; in strict mode, unknown fields are rejected.
   const knownFields: Record<string, string[]> = {
-    derive: ["type", "lambdaId", "origin", "meta"],
+    derive: ["type", "lambdaId", "provenance", "origin", "meta"],
     spread: [
       "type",
       "by",
@@ -317,6 +317,7 @@ function walkOperator(node: unknown, path: string, ctx: Context): void {
   switch (node.type) {
     case "derive":
       optionalField(node, "lambdaId", path, ctx, expectString);
+      optionalField(node, "provenance", path, ctx, expectStringRecord);
       break;
     case "spread":
     case "stack":
@@ -966,6 +967,26 @@ function expectObject(value: unknown, path: string, ctx: Context): void {
       path,
       message: `expected object, got ${typeNameOf(value)}`,
     });
+  }
+}
+
+/** An object whose every value is a string — e.g. a measure-provenance map
+ *  (field name → measure). */
+function expectStringRecord(value: unknown, path: string, ctx: Context): void {
+  if (!isObject(value)) {
+    ctx.errors.push({
+      path,
+      message: `expected object, got ${typeNameOf(value)}`,
+    });
+    return;
+  }
+  for (const [k, v] of Object.entries(value)) {
+    if (typeof v !== "string") {
+      ctx.errors.push({
+        path: `${path}.${k}`,
+        message: `expected string, got ${typeNameOf(v)}`,
+      });
+    }
   }
 }
 

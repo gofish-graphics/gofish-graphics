@@ -153,6 +153,12 @@ export type OperatorIR =
 export interface DeriveOperator extends BaseIRNode {
   type: "derive";
   lambdaId?: string;
+  /** Measure provenance a transform (e.g. `bin`) declares for its output
+   *  columns — a map from output field name to the measure it carries (the
+   *  source field's units). Travels in the IR because the JS-side array symbol
+   *  can't ride the data rows across the derive RPC; the deserializer re-applies
+   *  it via `setMeasureProvenance`. */
+  provenance?: Record<string, string>;
 }
 
 export interface SpreadOperator extends BaseIRNode {

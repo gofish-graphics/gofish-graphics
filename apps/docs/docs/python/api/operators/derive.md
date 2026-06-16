@@ -77,23 +77,35 @@ have the _same_ measure merges their domains, while mixing _different_ measures
 (say, a count axis with a millimeter axis) is refused with an error rather than
 silently corrupting the shared domain.
 
-By default the measure is just the field name, which is usually right. Because
-`derive` round-trips through your kernel, a transform's unit provenance does
-**not** survive the bridge — once `bin()` (or your own lambda) returns new
-columns, GoFish only knows their names, not their units. When a derived column
-is really in some existing unit and its axis should share with that unit's
-axis, annotate the channel with `field(name, measure=...)`:
+By default the measure is just the field name, which is usually right. A
+built-in transform like `bin()` declares the measure of its output columns —
+the bin edges `start`/`end` are still in the source field's units, not the
+literal column names — and that **provenance now travels in the operator's IR
+across the bridge**, so a binned histogram's edges auto-unify on the source
+axis with no annotation:
 
 ```python
-from gofish import bin, chart, derive, field, rect, scatter
+from gofish import bin, chart, derive, rect, scatter
 
-# bin edges are still beak-length millimeters, not "start"/"end" units:
+# bin edges auto-tag as "Beak Length (mm)" — no field(..., measure=...) needed:
 chart(penguins, h=80).flow(
     derive(bin("Beak Length (mm)")),
-    scatter(
-        xMin=field("start", measure="Beak Length (mm)"),
-        xMax=field("end", measure="Beak Length (mm)"),
-    ),
+    scatter(xMin="start", xMax="end"),
+).mark(rect(h="count"))
+```
+
+Your **own** `derive` lambda is opaque to GoFish — once it returns new columns,
+GoFish only knows their names, not their units. When such a derived column is
+really in some existing unit and its axis should share with that unit's axis,
+annotate the channel with `field(name, measure=...)`:
+
+```python
+from gofish import chart, derive, field, rect, scatter
+
+chart(data, h=80).flow(
+    derive(my_transform),  # renames a length column to "lo"/"hi"
+    scatter(xMin=field("lo", measure="Beak Length (mm)"),
+            xMax=field("hi", measure="Beak Length (mm)")),
 ).mark(rect(h="count"))
 ```
 

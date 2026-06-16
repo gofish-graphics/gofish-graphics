@@ -16,6 +16,11 @@ export { value as v } from "./ast/data";
 // accessor; `literal(x)` is an explicit constant.
 export { datum, field, literal } from "./ast/data";
 export type { FieldAccessor, LiteralValue } from "./ast/data";
+// Measure-provenance tagging: how a data transform (e.g. `bin`) declares that
+// its output columns are in a source field's units. The deserializer re-applies
+// it to RPC-returned rows (the array symbol can't cross the bridge).
+export { setMeasureProvenance } from "./ast/data";
+export type { MeasureProvenance } from "./ast/data";
 export { For as map } from "./ast/iterators/for";
 
 // Coordinate Transforms
