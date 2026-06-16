@@ -179,12 +179,11 @@ export const Ellipse = ({
         const unit = scaleContext?.unit;
         const unitColorScale = unit && "color" in unit ? unit.color : undefined;
         const originalFill = fill;
-        fill = resolveColorChannel(fill, unitColorScale);
-        stroke = resolveColorChannel(stroke, unitColorScale);
-
-        const resolvedFill = fill as string | undefined;
+        const resolvedFill = resolveColorChannel(fill, unitColorScale);
         const resolvedStroke =
-          (stroke as string | undefined) ?? resolvedFill ?? "black";
+          resolveColorChannel(stroke, unitColorScale) ??
+          resolvedFill ??
+          "black";
 
         const labelText =
           label && originalFill && isValue(originalFill)

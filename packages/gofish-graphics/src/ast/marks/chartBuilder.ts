@@ -440,13 +440,17 @@ export class ChartBuilder<TInput, TOutput = TInput> {
     if (this.nodeName !== undefined) {
       result.name(this.nodeName);
       stashLayerName(this, this.nodeName);
-      if (!this.layerContext[this.nodeName]) {
-        this.layerContext[this.nodeName] = { data: [], nodes: [] };
+      const entry = (this.layerContext[this.nodeName] ??= {
+        data: [],
+        nodes: [],
+      });
+      // One-shot per resolved node: a re-resolve against the same shared
+      // layerContext (e.g. an embedded Layer render) must not re-register the
+      // same node, or selectAll/ref(name) would see duplicates.
+      if (!entry.nodes.includes(result)) {
+        entry.nodes.push(result);
+        entry.data.push((result as { datum?: unknown }).datum);
       }
-      this.layerContext[this.nodeName].nodes.push(result);
-      this.layerContext[this.nodeName].data.push(
-        (result as { datum?: unknown }).datum
-      );
     }
 
     return result;

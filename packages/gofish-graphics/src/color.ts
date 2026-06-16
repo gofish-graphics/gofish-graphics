@@ -42,7 +42,13 @@ export const resolveColorChannel = (
   const scaled = unitColorScale
     ? (unitColorScale.get(getValue(value)) ?? getValue(value))
     : getValue(value);
-  return applyColorOps(scaled as string, getValueColorOps(value));
+  // Color ops mix against the resolved color; only apply when the scale
+  // produced an actual color string (a scale miss on a non-string datum, e.g.
+  // a numeric value, passes through unchanged rather than feeding `mix` a
+  // non-color and throwing).
+  return typeof scaled === "string"
+    ? applyColorOps(scaled, getValueColorOps(value))
+    : (scaled as string | undefined);
 };
 
 export const createColorRange = (hue: number) =>
