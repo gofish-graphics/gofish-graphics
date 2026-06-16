@@ -417,6 +417,30 @@ function walkChannelValue(value: unknown, path: string, ctx: Context): void {
         message: 'datum "offset" must be a number (post-scale pixel offset)',
       });
     }
+    if (obj.colorOps !== undefined) {
+      if (!Array.isArray(obj.colorOps)) {
+        ctx.errors.push({
+          path: `${path}.colorOps`,
+          message: 'datum "colorOps" must be an array of color transforms',
+        });
+      } else {
+        obj.colorOps.forEach((c, i) => {
+          const cop = c as Record<string, unknown>;
+          if (cop?.op !== "lighten" && cop?.op !== "darken") {
+            ctx.errors.push({
+              path: `${path}.colorOps[${i}].op`,
+              message: 'colorOp "op" must be "lighten" or "darken"',
+            });
+          }
+          if (typeof cop?.amount !== "number") {
+            ctx.errors.push({
+              path: `${path}.colorOps[${i}].amount`,
+              message: 'colorOp "amount" must be a number',
+            });
+          }
+        });
+      }
+    }
     return;
   }
   if (obj.type === "field") {

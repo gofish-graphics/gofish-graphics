@@ -388,6 +388,21 @@ for the API.
                   },
                   "offset": {
                     "type": "number"
+                  },
+                  "colorOps": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "required": ["op", "amount"],
+                      "properties": {
+                        "op": {
+                          "enum": ["lighten", "darken"]
+                        },
+                        "amount": {
+                          "type": "number"
+                        }
+                      }
+                    }
                   }
                 }
               }

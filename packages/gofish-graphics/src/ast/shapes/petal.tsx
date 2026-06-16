@@ -15,11 +15,13 @@ import { linear } from "../coordinateTransforms/linear";
 import {
   getMeasure,
   getValue,
+  getValueColorOps,
   inferEmbedded,
   isValue,
   MaybeValue,
   Value,
 } from "../data";
+import { applyColorOps } from "../../color";
 import {
   Dimensions,
   displayDims as displayDimsOf,
@@ -160,23 +162,20 @@ export const Petal = ({
 
         // Resolve data-bound fill/stroke through the unit color scale, the same
         // way `rect` and `ellipse` do (e.g. `fill: "species"` → a categorical
-        // color). A literal color string passes through unchanged.
+        // color), then apply any post-scale color ops (`.lighten`/`.darken`).
+        // A literal color string passes through unchanged.
         const scaleContext = node.getRenderSession().scaleContext;
         const unit = scaleContext?.unit;
         const unitColorScale = unit && "color" in unit ? unit.color : undefined;
-        const resolvedFill = (
-          isValue(fill)
-            ? unitColorScale
-              ? (unitColorScale.get(getValue(fill)) ?? getValue(fill))
-              : getValue(fill)
-            : fill
-        ) as string | undefined;
-        const resolvedStroke =
-          ((isValue(stroke)
-            ? unitColorScale
-              ? (unitColorScale.get(getValue(stroke)) ?? getValue(stroke))
-              : getValue(stroke)
-            : stroke) as string | undefined) ?? resolvedFill;
+        const resolveColor = (c: MaybeValue<string>): string | undefined => {
+          if (!isValue(c)) return c as string | undefined;
+          const scaled = unitColorScale
+            ? (unitColorScale.get(getValue(c)) ?? getValue(c))
+            : getValue(c);
+          return applyColorOps(scaled as string, getValueColorOps(c));
+        };
+        const resolvedFill = resolveColor(fill);
+        const resolvedStroke = resolveColor(stroke) ?? resolvedFill;
 
         // Both dimensions are aesthetic - render as transformed point
         if (!isXEmbedded && !isYEmbedded) {

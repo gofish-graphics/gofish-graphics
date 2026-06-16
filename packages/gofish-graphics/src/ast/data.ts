@@ -60,11 +60,21 @@ export type MaybeValue<T> = T | Value<T>;
  *  offset added AFTER the datum maps through its scale ("a fixed standoff
  *  from a data position"); set via `datum(v).offset(px)` in JS or
  *  `datum(v) + px` in Python, read with {@link getValueOffset}. */
+/**
+ * A post-scale color transform carried by a datum value, applied AFTER the
+ * datum maps through its color scale ("this category's color, lightened"). The
+ * color analog of {@link DatumValue.offset}; set via `datum(v).lighten(t)` /
+ * `.darken(t)` in JS (`datum(v).lighten(t)` in Python). Read with
+ * {@link getValueColorOps}, applied with `applyColorOps` (color.ts).
+ */
+export type ColorOp = { op: "lighten" | "darken"; amount: number };
+
 type DatumValue = {
   type: "datum";
   datum: any;
   measure?: Measure;
   offset?: number;
+  colorOps?: ColorOp[];
 };
 
 /**
@@ -81,7 +91,9 @@ export class DatumValueImpl {
     public readonly datum: any,
     public readonly measure?: Measure,
     /** @internal accumulated pixel offset; read via {@link getValueOffset} */
-    public readonly _offset?: number
+    public readonly _offset?: number,
+    /** @internal accumulated color transforms; read via {@link getValueColorOps} */
+    public readonly _colorOps?: ColorOp[]
   ) {}
 
   /** A new value at the same datum, shifted `px` pixels post-scale —
@@ -90,8 +102,30 @@ export class DatumValueImpl {
     return new DatumValueImpl(
       this.datum,
       this.measure,
-      (this._offset ?? 0) + px
+      (this._offset ?? 0) + px,
+      this._colorOps
     );
+  }
+
+  /** A new value whose resolved color is lightened by `amount` (0–1) toward
+   *  white, applied AFTER the color scale maps the datum — "this category's
+   *  color, lightened". Chains with `.darken`. */
+  lighten(amount: number): DatumValueImpl {
+    return this._withColorOp({ op: "lighten", amount });
+  }
+
+  /** A new value whose resolved color is darkened by `amount` (0–1) toward
+   *  black, applied AFTER the color scale maps the datum. Chains with
+   *  `.lighten`. */
+  darken(amount: number): DatumValueImpl {
+    return this._withColorOp({ op: "darken", amount });
+  }
+
+  private _withColorOp(op: ColorOp): DatumValueImpl {
+    return new DatumValueImpl(this.datum, this.measure, this._offset, [
+      ...(this._colorOps ?? []),
+      op,
+    ]);
   }
 
   toJSON(): DatumValue {
@@ -100,6 +134,7 @@ export class DatumValueImpl {
       datum: this.datum,
       ...(this.measure !== undefined ? { measure: this.measure } : {}),
       ...(this._offset ? { offset: this._offset } : {}),
+      ...(this._colorOps?.length ? { colorOps: this._colorOps } : {}),
     };
   }
 }
@@ -210,6 +245,20 @@ export const getValueOffset = <T>(value: MaybeValue<T>): number => {
   const v = value as any;
   if (typeof v.offset === "number") return v.offset;
   return typeof v._offset === "number" ? v._offset : 0;
+};
+
+/**
+ * The post-scale color transforms carried by a datum value, in either of its
+ * two forms: a JS {@link DatumValueImpl} instance (ops in `_colorOps`;
+ * `lighten`/`darken` are the chaining methods) or the deserialized wire shape
+ * (a plain object with a `colorOps` array, as the Python wrapper emits for
+ * `datum(v).lighten(t)`). Empty when the value carries no color transform.
+ */
+export const getValueColorOps = <T>(value: MaybeValue<T>): ColorOp[] => {
+  if (!isValue(value)) return [];
+  const v = value as any;
+  if (Array.isArray(v.colorOps)) return v.colorOps;
+  return Array.isArray(v._colorOps) ? v._colorOps : [];
 };
 
 export const inferEmbedded = <T>(interval: Interval<T>): Interval<T> => {

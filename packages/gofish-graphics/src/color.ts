@@ -1,8 +1,25 @@
 import { lerp, rybHsl2rgb } from "rybitten";
 import { ColorCoords, cubes } from "rybitten/cubes";
 import { mix, palette } from "spectral.js";
+import type { ColorOp } from "./ast/data";
 export const rgbToString = (rgb: ColorCoords) =>
   `rgb(${rgb.map((x) => Math.round(x * 255)).join(", ")})`;
+
+/**
+ * Apply a datum value's post-scale color transforms (`.lighten` / `.darken`)
+ * to an already-resolved color. `lighten(t)` mixes `t` toward white, `darken(t)`
+ * mixes `t` toward black — the same spectral-mix the original flower chart used
+ * by hand (`mix(c, white, 0.5)`), now expressed as a reusable color op. The
+ * color analog of a datum's pixel `offset`; see {@link ColorOp} and
+ * `getValueColorOps` in ast/data.ts.
+ */
+export const applyColorOps = (color: string, ops: ColorOp[]): string => {
+  let out = color;
+  for (const { op, amount } of ops) {
+    out = mix(out, op === "lighten" ? "#ffffff" : "#000000", amount);
+  }
+  return out;
+};
 
 export const createColorRange = (hue: number) =>
   Array.from({ length: 10 }, (_, i) => (i + 2) * (1 / (10 + 2)))

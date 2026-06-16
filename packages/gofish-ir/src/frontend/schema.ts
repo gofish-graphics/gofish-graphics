@@ -388,12 +388,24 @@ export interface FieldAccessor {
   measure?: string;
 }
 
+/** A post-scale color transform carried by a datum value, applied AFTER the
+ *  datum maps through its color scale — the color analog of {@link
+ *  DatumValue.offset}. Emitted by `datum(v).lighten(t)` / `.darken(t)`. */
+export interface ColorOp {
+  op: "lighten" | "darken";
+  amount: number;
+}
+
 export interface DatumValue {
   type: "datum";
   /** Pixel offset applied AFTER the datum maps through its scale — "this
    *  data position, plus pixels". Emitted by `datum(v) + px` in Python and
    *  `datum(v).offset(px)` in JS. */
   offset?: number;
+  /** Post-scale color transforms applied in order AFTER the datum maps through
+   *  its color scale — "this category's color, lightened". Emitted by
+   *  `datum(v).lighten(t)` / `.darken(t)`. */
+  colorOps?: ColorOp[];
   [key: string]: unknown;
 }
 

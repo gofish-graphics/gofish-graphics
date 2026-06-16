@@ -1,6 +1,6 @@
 import { computeAesthetic } from "../../util";
 import * as Monotonic from "../../util/monotonic";
-import { color6_old } from "../../color";
+import { applyColorOps, color6_old } from "../../color";
 import {
   path,
   Path,
@@ -16,6 +16,7 @@ import { linear } from "../coordinateTransforms/linear";
 import {
   getMeasure,
   getValue,
+  getValueColorOps,
   inferEmbedded,
   isValue,
   MaybeValue,
@@ -179,16 +180,23 @@ export const Ellipse = ({
         const unit = scaleContext?.unit;
         const unitColorScale = unit && "color" in unit ? unit.color : undefined;
         const originalFill = fill;
+        const originalStroke = stroke;
         fill = isValue(fill)
-          ? unitColorScale
-            ? (unitColorScale.get(getValue(fill)) ?? getValue(fill))
-            : getValue(fill)
+          ? applyColorOps(
+              (unitColorScale
+                ? (unitColorScale.get(getValue(fill)) ?? getValue(fill))
+                : getValue(fill)) as string,
+              getValueColorOps(originalFill)
+            )
           : fill;
 
         stroke = isValue(stroke)
-          ? unitColorScale
-            ? (unitColorScale.get(getValue(stroke)) ?? getValue(stroke))
-            : getValue(stroke)
+          ? applyColorOps(
+              (unitColorScale
+                ? (unitColorScale.get(getValue(stroke)) ?? getValue(stroke))
+                : getValue(stroke)) as string,
+              getValueColorOps(originalStroke)
+            )
           : stroke;
 
         const resolvedFill = fill as string | undefined;

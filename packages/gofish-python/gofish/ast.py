@@ -1688,6 +1688,28 @@ class DatumValue(dict):
         """Method form, for parity with JS ``datum(v).offset(px)``."""
         return self._with_offset(px)
 
+    def _with_color_op(self, op, amount):
+        if isinstance(amount, bool) or not isinstance(amount, (int, float)):
+            raise TypeError("lighten/darken amount must be a number in 0..1")
+        out = DatumValue(self)
+        out["colorOps"] = list(self.get("colorOps", [])) + [
+            {"op": op, "amount": amount}
+        ]
+        return out
+
+    def lighten(self, amount):
+        """A new datum whose resolved color is lightened by ``amount`` (0–1)
+        toward white, applied AFTER the color scale maps the datum — the color
+        analog of ``offset``. Mirrors JS ``datum(v).lighten(t)``. Chains with
+        ``darken``."""
+        return self._with_color_op("lighten", amount)
+
+    def darken(self, amount):
+        """A new datum whose resolved color is darkened by ``amount`` (0–1)
+        toward black, applied AFTER the color scale maps the datum. Mirrors JS
+        ``datum(v).darken(t)``. Chains with ``lighten``."""
+        return self._with_color_op("darken", amount)
+
 
 def datum(value: Any) -> DatumValue:
     """
