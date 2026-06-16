@@ -144,38 +144,6 @@ export type ResolveUnderlyingSpace = (
   constraints: ConstraintSpec[]
 ) => FancySize<UnderlyingSpace>;
 
-/** Stage-1 dev gate (#39): set `GOFISH_LEDGER_CHECK=1` to assert, on every
- *  `dims` read, that the per-node ledger agrees with `combineDims`. Off (and
- *  zero-cost) in prod. */
-const LEDGER_CHECK =
-  !!(
-    globalThis as {
-      GOFISH_LEDGER_CHECK?: unknown;
-      process?: { env?: Record<string, string | undefined> };
-    }
-  ).GOFISH_LEDGER_CHECK ||
-  !!(globalThis as { process?: { env?: Record<string, string | undefined> } })
-    .process?.env?.GOFISH_LEDGER_CHECK;
-
-const _ledgerDivergences = new Set<string>();
-/** Report a ledger/`combineDims` mismatch once per (type, axis, facet) so the
- *  inventory is readable. Only called when {@link LEDGER_CHECK} is on. */
-const reportLedgerDivergence = (
-  type: string,
-  dir: 0 | 1,
-  facet: string,
-  fromLedger: number,
-  fromDims: number
-): void => {
-  const key = `${type}|${dir}|${facet}`;
-  if (_ledgerDivergences.has(key)) return;
-  _ledgerDivergences.add(key);
-
-  console.warn(
-    `[ledger-check] ${type} axis ${dir} ${facet}: ledger=${fromLedger} combineDims=${fromDims}`
-  );
-};
-
 /** Dev gate (#39, placement pass): set `GOFISH_CONFLICT_CHECK=1` to surface
  *  OVER-DETERMINATION the `BBox` ledger detects but the placement commit silently
  *  absorbs — a single owner writing inconsistent facets on an axis (the
@@ -635,7 +603,6 @@ export class GoFishNode {
     // never pixels-from-render. The two agree for every solved node (proven by
     // the stage-1 assertion across all stories), so this is REAL=0.
     const fromSplit = combineDims(this.intrinsicDims, this.transform);
-    if (LEDGER_CHECK) this._assertLedgerMatches(fromSplit);
     return ([0, 1] as const).map((dir) => {
       const ledger = this._bbox?.[dir];
       if (!ledger?.solved) return fromSplit[dir];
@@ -653,56 +620,11 @@ export class GoFishNode {
     });
   }
 
-  /** Dev assertion (#39): where the ledger is fully solved, its derived
-   *  `(min, size)` must equal what `combineDims` produces from `(intrinsicDims,
-   *  transform)`. In stage 2 the `dims` getter now READS from the ledger, so
-   *  this is fed the `combineDims` split independently (not the getter's result)
-   *  to keep verifying the two stay a faithful mirror. Guarded by
-   *  `GOFISH_LEDGER_CHECK`; never runs in prod. */
-  private _assertLedgerMatches(dims: Dimensions): void {
-    for (const dir of [0, 1] as const) {
-      const ledger = this._bbox?.[dir];
-      if (!ledger?.solved) continue;
-      // Stage 3 (#39): once a mutator stops writing `transform.translate` (rank-2
-      // `setExtent` is the first), the `combineDims` split is intentionally no
-      // longer a mirror on that axis — it has no translate to combine. Skip the
-      // comparison where the split is retired (translate undefined); the ledger
-      // is the sole authority there. The check stays meaningful for axes whose
-      // split is still written.
-      if (this.transform?.translate?.[dir] === undefined) continue;
-      for (const facet of ["min", "size"] as const) {
-        const fromLedger = ledger.read(facet);
-        const fromDims = dims[dir]?.[facet];
-        if (fromLedger === undefined || fromDims === undefined) continue;
-        if (Math.abs(fromLedger - fromDims) > 1e-6) {
-          reportLedgerDivergence(this.type, dir, facet, fromLedger, fromDims);
-        }
-      }
-      // Stage 3-B (#39): the projected translate (ledger.min − localMin) must
-      // equal the WRITTEN translate on every solved axis — the invariant that
-      // lets stage 3-C delete the direct translate writes. Compare only where
-      // both exist (an unsolved axis falls back to the written value).
-      const projected = this._projectTranslate(dir);
-      const written = this.transform?.translate?.[dir];
-      if (projected !== undefined && written !== undefined) {
-        if (Math.abs(projected - written) > 1e-6) {
-          reportLedgerDivergence(
-            this.type,
-            dir,
-            "translate",
-            projected,
-            written
-          );
-        }
-      }
-    }
-  }
-
   /** Stage 3-B (#39): the node's parent-frame offset (`transform.translate`) as
    *  a DERIVED VIEW of the ledger — `ledger.min − localMin` on a fully solved
    *  axis, else the written `transform.translate` (the unplaced/under-determined
    *  fallback). This reproduces what `place()`/`_pinAnchor`/`setExtent` write
-   *  today (proven exact by `_assertLedgerMatches` across all stories), so a
+   *  today (proven exact by the now-retired ledger mirror across all stories), so a
    *  later increment can stop writing the field and read this instead. Uses the
    *  CURRENT `intrinsicDims.min` (a rank-2 `setExtent` resets it to 0), never a
    *  stale local box. */
