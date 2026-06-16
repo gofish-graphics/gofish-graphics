@@ -193,6 +193,7 @@ export class ChartBuilder<TInput, TOutput = TInput> {
   private readonly layerContext: LayerContext;
   private readonly nodeZOrder?: number;
   private readonly connector?: Mark<GoFishRef[]>;
+  private readonly nodeName?: string;
 
   constructor(
     data: TInput,
@@ -201,7 +202,8 @@ export class ChartBuilder<TInput, TOutput = TInput> {
     finalMark?: Mark<TOutput>,
     layerContext: LayerContext = {},
     nodeZOrder?: number,
-    connector?: Mark<GoFishRef[]>
+    connector?: Mark<GoFishRef[]>,
+    nodeName?: string
   ) {
     this.data = data;
     this.options = options;
@@ -210,6 +212,7 @@ export class ChartBuilder<TInput, TOutput = TInput> {
     this.layerContext = layerContext;
     this.nodeZOrder = nodeZOrder;
     this.connector = connector;
+    this.nodeName = nodeName;
   }
 
   // flow accumulates operators and returns a new builder for chaining
@@ -261,7 +264,8 @@ export class ChartBuilder<TInput, TOutput = TInput> {
       this.finalMark,
       this.layerContext,
       this.nodeZOrder,
-      this.connector
+      this.connector,
+      this.nodeName
     );
   }
 
@@ -274,7 +278,27 @@ export class ChartBuilder<TInput, TOutput = TInput> {
       mark,
       this.layerContext,
       this.nodeZOrder,
-      this.connector
+      this.connector,
+      this.nodeName
+    );
+  }
+
+  /**
+   * Name this chart's resolved node so it can be referenced — both by a
+   * `.constrain(...)` callback on an enclosing `layer([...])` (which looks up
+   * children by `_name` via `collectConstraintRefs`) and by a cross-chart
+   * `selectAll(name)` / `ref(name)`. Mirrors the `.name(...)` wrapper on marks.
+   */
+  name(layerName: string): ChartBuilder<TInput, TOutput> {
+    return new ChartBuilder(
+      this.data,
+      this.options,
+      this.operators,
+      this.finalMark,
+      this.layerContext,
+      this.nodeZOrder,
+      this.connector,
+      layerName
     );
   }
 
@@ -302,7 +326,8 @@ export class ChartBuilder<TInput, TOutput = TInput> {
       this.finalMark,
       this.layerContext,
       this.nodeZOrder,
-      connector
+      connector,
+      this.nodeName
     );
   }
 
@@ -408,6 +433,22 @@ export class ChartBuilder<TInput, TOutput = TInput> {
       result.zOrder(this.nodeZOrder);
     }
 
+    // A user-chained `.name(...)` names the resolved node so it's a valid
+    // `.constrain(...)` target on an enclosing layer (looked up by `_name`)
+    // and resolvable via cross-chart `selectAll`/`ref`. `stashLayerName` keeps
+    // `.connect()`/serialize detection consistent with named marks.
+    if (this.nodeName !== undefined) {
+      result.name(this.nodeName);
+      stashLayerName(this, this.nodeName);
+      if (!this.layerContext[this.nodeName]) {
+        this.layerContext[this.nodeName] = { data: [], nodes: [] };
+      }
+      this.layerContext[this.nodeName].nodes.push(result);
+      this.layerContext[this.nodeName].data.push(
+        (result as { datum?: unknown }).datum
+      );
+    }
+
     return result;
   }
 
@@ -419,7 +460,8 @@ export class ChartBuilder<TInput, TOutput = TInput> {
       this.finalMark,
       layerContext,
       this.nodeZOrder,
-      this.connector
+      this.connector,
+      this.nodeName
     );
   }
 
@@ -431,7 +473,8 @@ export class ChartBuilder<TInput, TOutput = TInput> {
       this.finalMark,
       this.layerContext,
       value,
-      this.connector
+      this.connector,
+      this.nodeName
     );
   }
 
