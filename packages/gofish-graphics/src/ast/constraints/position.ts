@@ -1,3 +1,4 @@
+import type { Anchor } from "../dims";
 import type { Placeable } from "../_node";
 import { isValue, MaybeValue } from "../data";
 import { computeAesthetic } from "../../util";
@@ -10,6 +11,16 @@ import {
   axisIndex,
 } from "./shared";
 
+/** The align-vocabulary anchor (`start`/`middle`/`end`/`baseline`) as the box
+ *  anchor a node pins to (`min`/`center`/`max`/`baseline`). The same mapping
+ *  `placeAtAnchor` applies for the write-once path. */
+const toBoxAnchor: Record<AlignAnchor, Anchor> = {
+  start: "min",
+  middle: "center",
+  end: "max",
+  baseline: "baseline",
+};
+
 /**
  * Place `target` on `axis` so its `anchor` lands at pixel `px`. A `position`
  * constraint is an authoritative pin (one owner per target/axis).
@@ -21,10 +32,10 @@ import {
  * With `override` (set by `scatter`, whose `x`/`y` ARE the placement): an
  * already-placed target — one that self-placed during its OWN layout (e.g. a
  * Frame / coord glyph arrives with a translate) — would be stranded by
- * `place()`'s no-op. The pin must win, so OVERRIDE: compute the additive delta
- * from the target's current anchor (intrinsicDims + translate) and rewrite the
- * translate so the anchor lands at `px` (the arithmetic the bespoke scatter
- * used). Anchor maps start→min, middle→center, end→max, baseline→origin.
+ * `place()`'s no-op. The pin must win, so OVERRIDE via `pinAnchor`, which lands
+ * the anchor at `px` and REBUILDS the ledger (start→min, middle→center,
+ * end→max, baseline→origin) — every override goes through the ledger, including
+ * `baseline`, so no reader sees a stale self-placement.
  */
 function placePinned(
   target: Placeable,
@@ -41,16 +52,11 @@ function placePinned(
     placeAtAnchor(target, axis, px, anchor);
     return;
   }
-  // Authoritative override of a self-placed target. The origin (`baseline`) is
-  // pinned directly; the box anchors go through the bbox-backed `setExtent`
-  // (a single owned facet ⇒ rank-1 pin: keep the local box, move the translate).
-  if (anchor === "baseline") {
-    target.transform!.translate![axisIndex(axis)] = px;
-    return;
-  }
-  const facet =
-    anchor === "start" ? "min" : anchor === "end" ? "max" : "center";
-  target.setExtent!(axis, { [facet]: px }, "position");
+  // Authoritative override of a self-placed target: one ledger-recording pin for
+  // every anchor (origin/min/center/max). A single owned facet ⇒ rank-1 pin —
+  // keep the local box, move the translate, rebuilding the ledger so the override
+  // wins over the self-placement.
+  target.pinAnchor!(axis, px, toBoxAnchor[anchor]);
 }
 
 /**

@@ -103,6 +103,11 @@ export type Placeable = {
     owned: Partial<Record<BBoxFacet, number>>,
     owner?: string
   ) => void;
+  /** Authoritative override pin (#39): land `anchor` at `value`, rebuilding the
+   *  ledger when the axis already self-placed (the write-once `place()` can't).
+   *  Handles `baseline` too, so a scatter override never bypasses the ledger.
+   *  Optional for the same reason as `setExtent` (a `ref` stand-in omits it). */
+  pinAnchor?: (axis: FancyDirection, value: number, anchor: Anchor) => void;
 };
 
 // `scaleFactors` is the σ (pixels-per-data-unit) handed down per axis. A node
@@ -804,11 +809,26 @@ export class GoFishNode {
   }
 
   /**
+   * Authoritative override pin (#39): land `anchor` at `value`, REBUILDING the
+   * ledger when the axis was already self-placed — which the write-once `place()`
+   * cannot do. The public face of {@link _pinAnchor}, shared by an authoritative
+   * `position` pin (scatter repositioning a self-placed glyph). Handles EVERY
+   * anchor, `baseline` (the origin) included, so no override bypasses the ledger
+   * — every reader (`dims`/render via `_projectTranslate`) derives the new
+   * position. Optional on `Placeable` for the same reason as `setExtent` (a `ref`
+   * stand-in doesn't implement it; only real constraint targets are ever pinned).
+   */
+  public pinAnchor(axis: FancyDirection, value: number, anchor: Anchor): void {
+    this._pinAnchor(elaborateDirection(axis), anchor, value);
+  }
+
+  /**
    * Pin one axis so the box's `anchor` facet lands at `value`, deriving the
    * anchor's local point from `(min, size)` via `localAnchorPoint`. The single
-   * arithmetic shared by `place()`'s determined branch and `setExtent`'s rank-1
-   * position pin, so the two placement paths can never disagree on an asymmetric
-   * box. Writes only the translate; the local box is left intact.
+   * arithmetic shared by `place()`'s determined branch, `setExtent`'s rank-1
+   * position pin, and the public {@link pinAnchor}, so the placement paths can
+   * never disagree on an asymmetric box. Writes only the translate; the local
+   * box is left intact.
    */
   private _pinAnchor(dir: Direction, anchor: Anchor, value: number): void {
     const intrinsic = this.intrinsicDims?.[dir];
