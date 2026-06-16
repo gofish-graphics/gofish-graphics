@@ -45,7 +45,12 @@ import type { TokenContext } from "./tokenContext";
 import { isToken, Token } from "./createName";
 import type { ConstraintSpec, ConstraintRef } from "./constraints";
 import { collectConstraintRefs } from "./constraints";
-import { BBox, type BBoxFacet } from "./constraints/bbox";
+import {
+  BBox,
+  type BBoxFacet,
+  type BBoxConflict,
+  type FacetValue,
+} from "./constraints/bbox";
 import {
   assignPaletteColor,
   assignGradientColor,
@@ -168,6 +173,34 @@ const reportLedgerDivergence = (
 
   console.warn(
     `[ledger-check] ${type} axis ${dir} ${facet}: ledger=${fromLedger} combineDims=${fromDims}`
+  );
+};
+
+/** Dev gate (#39, placement pass): set `GOFISH_CONFLICT_CHECK=1` to surface
+ *  OVER-DETERMINATION the `BBox` ledger detects but the placement commit silently
+ *  absorbs — a single owner writing inconsistent facets on an axis (the
+ *  authority-independent half of "conflicts → named"). Off / zero-cost in prod. */
+const CONFLICT_CHECK =
+  !!(
+    globalThis as {
+      GOFISH_CONFLICT_CHECK?: unknown;
+      process?: { env?: Record<string, string | undefined> };
+    }
+  ).GOFISH_CONFLICT_CHECK ||
+  !!(globalThis as { process?: { env?: Record<string, string | undefined> } })
+    .process?.env?.GOFISH_CONFLICT_CHECK;
+
+const _conflicts = new Set<string>();
+/** Report a `BBox` over-determination (a facet pinned inconsistent with the
+ *  already-determined axis), once per (type, axis, facet). The placement pass's
+ *  "named conflict instead of silent last-writer-wins" — for the single-owner
+ *  case; cross-constraint authority is the open fork (#583). */
+const reportConflict = (type: string, dir: 0 | 1, c: BBoxConflict): void => {
+  const key = `${type}|${dir}|${c.facet}`;
+  if (_conflicts.has(key)) return;
+  _conflicts.add(key);
+  console.warn(
+    `[bbox-conflict] ${type} axis ${dir} ${c.facet}: asserted=${c.asserted} implied=${c.implied} (owner=${c.owner} prior=${c.priorOwner})`
   );
 };
 
@@ -576,10 +609,10 @@ export class GoFishNode {
       if (id?.size === undefined && id?.min === undefined) continue;
       this._bbox ??= [undefined, undefined];
       const ledger = (this._bbox[dir] ??= new BBox());
-      if (id?.size !== undefined) ledger.add("size", id.size);
+      if (id?.size !== undefined) this._addFacet(ledger, dir, "size", id.size);
       const tr = this.transform?.translate?.[dir];
       if (tr !== undefined && id?.min !== undefined)
-        ledger.add("min", tr + id.min);
+        this._addFacet(ledger, dir, "min", tr + id.min);
       // Stage 3 (#39): the ledger now records the operator's self-placement
       // (`min = translate + localMin`), so retire the redundant written translate
       // — wholesale, at the one wrapper every operator `_layout` flows through,
@@ -699,6 +732,22 @@ export class GoFishNode {
       this.transform.translate[dir] = undefined;
   }
 
+  /** Add a facet equation to a per-axis ledger, surfacing any over-determination
+   *  the `BBox` detects (the placement pass's "named conflict, not silent
+   *  last-writer" — single-owner case; observe-only behind GOFISH_CONFLICT_CHECK).
+   *  Every ledger write goes through here so no conflict is silently dropped. */
+  private _addFacet(
+    box: BBox,
+    dir: Direction,
+    facet: BBoxFacet,
+    value: FacetValue,
+    owner?: string
+  ): void {
+    const conflict = box.add(facet, value, owner);
+    if (CONFLICT_CHECK && conflict)
+      reportConflict(this.type, dir as 0 | 1, conflict);
+  }
+
   /** Public read of {@link _projectTranslate} for cross-node geometry. `_ref`
    *  accumulates the parent-frame translate up/down the tree to position a ref;
    *  reading the ledger-derived value (== the written field today) keeps refs
@@ -814,7 +863,8 @@ export class GoFishNode {
     // position.
     this._bbox ??= [undefined, undefined];
     const bbox = (this._bbox[dir] = new BBox());
-    for (const [facet, value] of facets) bbox.add(facet, value, owner);
+    for (const [facet, value] of facets)
+      this._addFacet(bbox, dir, facet, value, owner);
     const absMin = bbox.read("min");
     const size = bbox.read("size");
     if (absMin === undefined || size === undefined) return; // under-determined
@@ -857,11 +907,12 @@ export class GoFishNode {
     this._bbox ??= [undefined, undefined];
     if (override || !this._bbox[dir]) this._bbox[dir] = new BBox();
     const ledger = this._bbox[dir]!;
-    if (intrinsic?.size !== undefined) ledger.add("size", intrinsic.size);
+    if (intrinsic?.size !== undefined)
+      this._addFacet(ledger, dir, "size", intrinsic.size);
     if (anchor === "baseline") {
-      ledger.add("min", value + (intrinsic?.min ?? 0));
+      this._addFacet(ledger, dir, "min", value + (intrinsic?.min ?? 0));
     } else {
-      ledger.add(anchor, value);
+      this._addFacet(ledger, dir, anchor, value);
     }
 
     // Write the pin's translate, then reconcile: on a solved axis the ledger is
