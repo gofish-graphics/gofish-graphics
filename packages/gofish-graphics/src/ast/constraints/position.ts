@@ -110,27 +110,53 @@ export const createPositionConstraint = (
   };
 };
 
+/** One emitted position equation: the target's `anchor` lands at `value` px on
+ *  `axis`. */
+export interface PositionPlacement {
+  target: Placeable;
+  axis: Axis;
+  anchor: AlignAnchor;
+  value: number;
+}
+
 /**
- * Apply a `position` constraint: for each specified axis, place every target so
- * its `anchor` sits at the resolved pixel coordinate — a literal value as-is, a
- * datum value mapped through that axis's `posScale`. A datum on an axis with no
- * scale (the layer has no POSITION domain there) is a no-op.
+ * EMIT a `position` constraint as facet-placement equations (#39 facet-equation-
+ * emitter form) WITHOUT applying them: for each specified axis, every target's
+ * `anchor` lands at the resolved pixel — a literal as-is, a datum mapped through
+ * that axis's `posScale`. A datum on a scale-less axis is a no-op (skipped).
+ * Pure: it only resolves the coordinate, no placement state read.
+ */
+export function emitPosition(
+  constraint: PositionConstraint,
+  targets: Placeable[],
+  posScales: ConstraintPosScales | undefined
+): PositionPlacement[] {
+  const out: PositionPlacement[] = [];
+  const emitAxis = (axis: Axis, coord: MaybeValue<number> | undefined) => {
+    if (coord === undefined) return;
+    const scale = posScales?.[axisIndex(axis)];
+    // A datum on an axis with no scale is a no-op; a literal needs no scale.
+    if (isValue(coord) && scale === undefined) return;
+    const px = computeAesthetic(coord, scale!, undefined)!;
+    for (const target of targets)
+      out.push({ target, axis, anchor: constraint.anchor, value: px });
+  };
+  emitAxis("x", constraint.x);
+  emitAxis("y", constraint.y);
+  return out;
+}
+
+/**
+ * Commit the emitted position equations: pin each target's anchor at its pixel.
+ * `placePinned` carries the authoritative-`override` detail (scatter
+ * repositioning a self-placed target). The emit/commit seam is where a per-scope
+ * solver slots in (consume {@link emitPosition} instead of pinning here).
  */
 export function applyPosition(
   constraint: PositionConstraint,
   targets: Placeable[],
   posScales: ConstraintPosScales | undefined
 ): void {
-  const placeAxis = (axis: Axis, coord: MaybeValue<number> | undefined) => {
-    if (coord === undefined) return;
-    const scale = posScales?.[axisIndex(axis)];
-    // A datum on an axis with no scale is a no-op; a literal needs no scale.
-    if (isValue(coord) && scale === undefined) return;
-    const px = computeAesthetic(coord, scale!, undefined)!;
-    for (const target of targets) {
-      placePinned(target, axis, px, constraint.anchor, constraint.override);
-    }
-  };
-  placeAxis("x", constraint.x);
-  placeAxis("y", constraint.y);
+  for (const p of emitPosition(constraint, targets, posScales))
+    placePinned(p.target, p.axis, p.value, p.anchor, constraint.override);
 }

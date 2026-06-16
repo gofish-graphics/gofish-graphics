@@ -63,19 +63,27 @@ export function spanDatumInterval(
   return Interval.interval(Math.min(...vals), Math.max(...vals));
 }
 
+/** One emitted span equation: the target OWNS both edges (`min`, `max`) on
+ *  `axis` — two facets, rank 2, so the size falls out. */
+export interface SpanPlacement {
+  target: Placeable;
+  axis: Axis;
+  owned: { min: number; max: number };
+}
+
 /**
- * Resolve each axis's `[min, max]` to pixels (datum → posScale, literal as-is)
- * and hand both edges to each target's `setExtent` — the bbox-backed primitive
- * that solves the extent (two edges ⇒ rank 2 ⇒ size) and stamps it into the
- * node's `(local box, translate)` split. A datum endpoint on an axis with no
- * scale is a no-op (mirrors `applyPosition`).
+ * EMIT a `span` as facet-equation sets (#39 facet-equation-emitter form) WITHOUT
+ * applying them: resolve each axis's `[min, max]` to pixels (datum → posScale,
+ * literal as-is) and pair both owned edges with each target. A datum endpoint on
+ * a scale-less axis is a no-op (skipped). Pure — only resolves coordinates.
  */
-export function applySpan(
+export function emitSpan(
   constraint: SpanConstraint,
   targets: Placeable[],
   posScales: ConstraintPosScales | undefined
-): void {
-  const spanAxis = (
+): SpanPlacement[] {
+  const out: SpanPlacement[] = [];
+  const emitAxis = (
     axis: Axis,
     span: [MaybeValue<number>, MaybeValue<number>] | undefined
   ) => {
@@ -88,8 +96,25 @@ export function applySpan(
     const min = toPx(span[0]);
     const max = toPx(span[1]);
     if (min === undefined || max === undefined) return;
-    for (const target of targets) target.setExtent!(axis, { min, max }, "span");
+    for (const target of targets)
+      out.push({ target, axis, owned: { min, max } });
   };
-  spanAxis("x", constraint.x);
-  spanAxis("y", constraint.y);
+  emitAxis("x", constraint.x);
+  emitAxis("y", constraint.y);
+  return out;
+}
+
+/**
+ * Commit the emitted span equations: hand each target's owned edges to
+ * `setExtent` — the bbox-backed primitive that solves the extent (two edges ⇒
+ * rank 2 ⇒ size) and records the node's geometry. The emit/commit seam is where a
+ * per-scope solver slots in (consume {@link emitSpan} instead of solving here).
+ */
+export function applySpan(
+  constraint: SpanConstraint,
+  targets: Placeable[],
+  posScales: ConstraintPosScales | undefined
+): void {
+  for (const p of emitSpan(constraint, targets, posScales))
+    p.target.setExtent!(p.axis, p.owned, "span");
 }
