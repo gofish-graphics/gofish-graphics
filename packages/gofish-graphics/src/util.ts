@@ -1,5 +1,15 @@
 import { getValue, getValueOffset, isValue, MaybeValue } from "./ast/data";
 
+/** Read a dev-gate flag from `globalThis.<name>` or `process.env.<name>` (truthy
+ *  = on). Zero-cost when off; the single reader for the #39 dev gates
+ *  (`GOFISH_SOLVER_CHECK`, `GOFISH_CONFLICT_CHECK`). */
+export const envFlag = (name: string): boolean => {
+  const g = globalThis as Record<string, unknown> & {
+    process?: { env?: Record<string, string | undefined> };
+  };
+  return !!g[name] || !!g.process?.env?.[name];
+};
+
 export const lerp = (a: number, b: number, t: number): number => {
   return a + t * (b - a);
 };

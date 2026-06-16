@@ -4,18 +4,16 @@
 
 import type { GoFishAST } from "../_ast";
 import type { DisplayObject } from "../_displayObject";
-import { displayTranslate } from "../dims";
-import { GoFishNode } from "../_node";
 
-/** The node's parent-frame translate as the bake should compose it: a
- *  `GoFishNode` reports the LEDGER projection (`projectedTranslate`), so the
- *  bake stays correct once a mutator records a position in the ledger but stops
- *  writing `transform.translate` (stage 3). A `GoFishRef` has no ledger — read
- *  its computed transform directly. Inert today (projection == written field). */
-const bakeTranslate = (node: GoFishAST): [number, number] =>
-  node instanceof GoFishNode
-    ? [node.projectedTranslate(0) ?? 0, node.projectedTranslate(1) ?? 0]
-    : displayTranslate(node.transform);
+/** The node's parent-frame translate as the bake should compose it, via the
+ *  polymorphic `projectedTranslate`: a `GoFishNode` reports the LEDGER projection
+ *  (so the bake stays correct once a mutator records a position in the ledger but
+ *  stops writing `transform.translate`, stage 3); a `GoFishRef` has no ledger and
+ *  reports its computed transform. Inert today (projection == written field). */
+const bakeTranslate = (node: GoFishAST): [number, number] => [
+  node.projectedTranslate(0) ?? 0,
+  node.projectedTranslate(1) ?? 0,
+];
 
 /* takes in a GoFishNode and bakes it into a flat list of DisplayObjects (the
    rendering IR; see `../_displayObject.ts`)

@@ -39,6 +39,7 @@ import {
   UnderlyingSpace,
 } from "./underlyingSpace";
 import { toJSON, interval } from "../util/interval";
+import { envFlag } from "../util";
 import { nice } from "d3-array";
 import type { ScaleContext } from "./gofish";
 import type { TokenContext } from "./tokenContext";
@@ -153,15 +154,7 @@ export type ResolveUnderlyingSpace = (
  *  OVER-DETERMINATION the `BBox` ledger detects but the placement commit silently
  *  absorbs — a single owner writing inconsistent facets on an axis (the
  *  authority-independent half of "conflicts → named"). Off / zero-cost in prod. */
-const CONFLICT_CHECK =
-  !!(
-    globalThis as {
-      GOFISH_CONFLICT_CHECK?: unknown;
-      process?: { env?: Record<string, string | undefined> };
-    }
-  ).GOFISH_CONFLICT_CHECK ||
-  !!(globalThis as { process?: { env?: Record<string, string | undefined> } })
-    .process?.env?.GOFISH_CONFLICT_CHECK;
+const CONFLICT_CHECK = envFlag("GOFISH_CONFLICT_CHECK");
 
 const _conflicts = new Set<string>();
 /** Report a `BBox` over-determination (a facet pinned inconsistent with the
@@ -605,12 +598,16 @@ export class GoFishNode {
     // split (`combineDims`). The split is still WRITTEN by every mutator (render
     // reads it directly via `INTERNAL_render`/`displayDims`), so this flips only
     // `dims`-getter consumers (constraints, align/distribute, layer bbox fold) —
-    // never pixels-from-render. The two agree for every solved node (proven by
-    // the stage-1 assertion across all stories), so this is REAL=0.
-    const fromSplit = combineDims(this.intrinsicDims, this.transform);
+    // never pixels-from-render. The two agree for every solved node (was proven by
+    // the now-retired stage-1 ledger mirror across all stories), so this is REAL=0.
+    // The split is only the fallback for an under-determined axis, so derive it
+    // lazily — a fully-solved node (the common post-layout case) never pays for it.
+    let split: Dimensions | undefined;
+    const fromSplit = (dir: Direction) =>
+      (split ??= combineDims(this.intrinsicDims, this.transform))[dir];
     return ([0, 1] as const).map((dir) => {
       const ledger = this._bbox?.[dir];
-      if (!ledger?.solved) return fromSplit[dir];
+      if (!ledger?.solved) return fromSplit(dir);
       const min = ledger.read("min")!;
       const size = ledger.read("size")!;
       return {

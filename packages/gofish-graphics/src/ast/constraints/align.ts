@@ -93,11 +93,10 @@ const anchorValue = (target: Placeable, idx: 0 | 1, a: AlignAnchor): number =>
       ? target.dims[idx].center!
       : a === "baseline"
         ? // The target's origin: the ledger-projected translate (#39 stage 3 —
-          // survives retiring the written translate), falling back to the raw
-          // field for `ref` targets, then 0 for intrinsic-only.
-          (target.projectedTranslate?.(idx) ??
-          target.transform?.translate?.[idx] ??
-          0)
+          // survives retiring the written translate). Polymorphic across the
+          // union (a ref's projection is its computed transform), so no
+          // `instanceof`/raw-field fallback; 0 for an unplaced intrinsic-only box.
+          (target.projectedTranslate?.(idx) ?? 0)
         : target.dims[idx].max!;
 
 /** Place `target` on `axis` so its anchor `a` lands at `value`. */

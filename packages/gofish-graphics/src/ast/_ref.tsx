@@ -2,6 +2,7 @@ import type { JSX } from "solid-js";
 import {
   Anchor,
   Dimensions,
+  Direction,
   elaborateDims,
   elaborateDirection,
   elaboratePosition,
@@ -277,14 +278,13 @@ export class GoFishRef {
     // Find the least common ancestor between this ref and the selected node
     const lca = findLeastCommonAncestor(this, this.selectedNode);
 
-    // Stage 3-C (#39): accumulate the LEDGER-DERIVED translate for nodes, so ref
-    // geometry survives retiring the direct translate writes. Identical to the
-    // written field today (projected == written where solved, else falls back to
-    // it). Refs in the chain have no ledger — read their computed transform.
-    const translateOf = (n: GoFishAST, dir: 0 | 1): number =>
-      (n instanceof GoFishNode
-        ? n.projectedTranslate(dir)
-        : n.transform?.translate?.[dir]) ?? 0;
+    // Stage 3-C (#39): accumulate the LEDGER-DERIVED translate, so ref geometry
+    // survives retiring the direct translate writes. `projectedTranslate` is
+    // polymorphic across the union — a node returns its ledger projection (==
+    // written field where solved, else the fallback); a ref has no ledger so it
+    // returns its computed transform directly.
+    const translateOf = (n: GoFishAST, dir: Direction): number =>
+      n.projectedTranslate(dir) ?? 0;
 
     // Compute transform from selected node up to LCA
     const upwardTranslate: [number, number] = [0, 0];
@@ -322,6 +322,15 @@ export class GoFishRef {
     // box (`intrinsicDims`) with its placement (`translate`), deriving center/max
     // from the placed (min, size).
     return combineDims(this.intrinsicDims, this.transform);
+  }
+
+  /** The ref's origin as a `Placeable.projectedTranslate` (#39). A ref has no
+   *  ledger, so the projection IS its computed `transform.translate` — exposing
+   *  it lets every translate reader (the coord bake, `_ref` accumulation,
+   *  baseline align) call `projectedTranslate` polymorphically across the
+   *  `GoFishNode | GoFishRef` union instead of branching on `instanceof`. */
+  public projectedTranslate(dir: Direction): number | undefined {
+    return this.transform?.translate?.[dir];
   }
 
   public place(

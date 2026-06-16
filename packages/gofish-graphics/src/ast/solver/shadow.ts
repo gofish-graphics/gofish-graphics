@@ -18,7 +18,7 @@ import { SolverBox } from "./index";
 import type { Placeable } from "../_node";
 import { axisIndex, isPlacedOn, type Axis } from "../constraints/shared";
 import { getValue, isValue, type MaybeValue } from "../data";
-import { computeAesthetic } from "../../util";
+import { computeAesthetic, envFlag } from "../../util";
 import { localAnchorPoint } from "../dims";
 import type { ConstraintSpec, ConstraintPosScales } from "../constraints";
 import {
@@ -31,13 +31,7 @@ import * as Interval from "../../util/interval";
 
 /** Whether the solver shadow assertions run. Off (and zero-cost) in prod, so the
  *  per-constraint pre-state capture the checks need is only built when set. */
-export const solverCheckEnabled = (): boolean => {
-  const g = globalThis as {
-    GOFISH_SOLVER_CHECK?: unknown;
-    process?: { env?: Record<string, string | undefined> };
-  };
-  return !!g.GOFISH_SOLVER_CHECK || !!g.process?.env?.GOFISH_SOLVER_CHECK;
-};
+export const solverCheckEnabled = (): boolean => envFlag("GOFISH_SOLVER_CHECK");
 const enabled = solverCheckEnabled;
 
 // Report each (tag) once so a story's output stays readable (mirrors the ledger
