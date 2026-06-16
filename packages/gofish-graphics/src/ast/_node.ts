@@ -580,6 +580,16 @@ export class GoFishNode {
       const tr = this.transform?.translate?.[dir];
       if (tr !== undefined && id?.min !== undefined)
         ledger.add("min", tr + id.min);
+      // Stage 3 (#39): the ledger now records the operator's self-placement
+      // (`min = translate + localMin`). On a solved axis it is the authority, so
+      // CLEAR the redundant written translate — retiring the operator `_layout`
+      // self-placement writes wholesale, at the one wrapper they all flow through,
+      // instead of editing each operator. Readers derive from the ledger; the
+      // placement-state checks (place()/_pinAnchor) and align/position already
+      // read it. The parent's later `place()` short-circuits on the solved ledger,
+      // so the cleared translate doesn't read as "unplaced, move me".
+      if (ledger.solved && this.transform?.translate)
+        this.transform.translate[dir] = undefined;
     }
     return this;
   }
