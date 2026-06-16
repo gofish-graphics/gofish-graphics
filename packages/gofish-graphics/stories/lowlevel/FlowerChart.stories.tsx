@@ -4,11 +4,12 @@ import { seafood, catchLocations } from "../../src/data/catch";
 import {
   Chart,
   scatter,
-  stack,
   layer,
   rect,
   petal,
+  stackX,
   polar,
+  v,
   Constraint,
 } from "../../src/lib";
 import { color } from "../../src/color";
@@ -25,9 +26,13 @@ export default meta;
 
 type Args = { w: number; h: number };
 
-// One flower per lake: petals are species (color), petal length encodes the
-// species' catch, and the stem height encodes the lake's total catch. Flowers
-// are planted in a row by lake location (a 1-D scatter on x).
+// Fixed radius of every flower head, in pixels. The petals fan out to this
+// shared length; only their colors and angular widths vary with the data.
+const FLOWER_RADIUS = 40;
+
+// One flower per lake: petals are species (color), each petal sized by the
+// species' catch, and the stem's height encodes the lake's total catch.
+// Flowers are planted in a row by lake location (a 1-D scatter on x).
 const scatterData = _(seafood)
   .groupBy("lake")
   .map((lakeData, lake) => ({
@@ -40,13 +45,8 @@ const scatterData = _(seafood)
   }))
   .value();
 
-// Pixels of stem per unit of total catch — keeps stem heights comparable
-// across flowers (a shared linear mapping, the gofish analog of PICCL's
-// `stem.mapValue("height", "avg")`).
-const STEM_SCALE = 1.5;
-
 export const Default: StoryObj<Args> = {
-  args: { w: 1000, h: 500 },
+  args: { w: 400, h: 400 },
   tags: ["gallery"],
   parameters: {
     gallery: {
@@ -61,29 +61,42 @@ export const Default: StoryObj<Args> = {
     Chart(scatterData, { axes: false })
       // 1-D scatter: position each flower by its lake's x location; all
       // flowers share a common ground line (alignment on the unpositioned y).
-      .flow(scatter({ by: "lake", x: "x", alignment: "start" }))
+      .flow(scatter({ by: "lake", x: "x", alignment: "baseline" }))
       .mark((data) => {
-        const sample = data[0];
-        const total = _(sample.collection).sumBy("count");
+        const collection = data[0].collection;
 
-        return layer([
-          rect({
-            w: 4,
-            h: total * STEM_SCALE,
-            fill: color.green[5],
-          }).name("stem"),
-          // The flower head: petals radiating in polar coordinates, one per
-          // species, length encoding catch and color encoding species.
-          Chart(sample.collection, { coord: polar() })
-            .flow(stack({ by: "species", dir: "x", h: total / 2, alignment: "start" }))
-            .mark(petal({ w: "count", fill: "species" }))
-            .name("flower"),
-        ]).constrain(({ stem, flower }) => [
-          // Center the flower head over the stem and snap its center onto the
-          // stem's top (PICCL's pointSnap(flower, stem, [.5,.5] -> [.5,1])).
-          Constraint.align({ x: "middle" }, [stem, flower]),
-          Constraint.align({ y: ["end", "middle"] }, [stem, flower]),
-        ]);
+        return Chart(collection).mark(
+          layer([
+            // Stem: a single green bar whose height is the lake's total catch —
+            // the `count` size channel auto-sums across the species rows, so no
+            // hand-computed total or scale factor is needed.
+            rect({ w: 4, h: "count", fill: color.green[5] }).name("stem"),
+            // Flower head: petals fanning out to a fixed radius in polar
+            // coordinates, one per species — angular width encodes catch, color
+            // encodes species (lightened toward white via `.lighten`).
+            layer({ coord: polar() }, [
+              stackX(
+                {
+                  h: FLOWER_RADIUS,
+                  spacing: 0,
+                  alignment: "start",
+                  sharedScale: true,
+                },
+                collection.map((d) =>
+                  petal({
+                    w: v(d.count),
+                    fill: v(d.species).lighten(0.5),
+                  })
+                )
+              ),
+            ]).name("flower"),
+          ]).constrain(({ stem, flower }) => [
+            // Center the flower head over the stem and snap its center onto
+            // the stem's top (PICCL's pointSnap(flower, stem, [.5,.5]->[.5,1])).
+            Constraint.align({ x: "middle" }, [stem, flower]),
+            Constraint.align({ y: ["end", "middle"] }, [stem, flower]),
+          ])
+        );
       })
       .render(container, {
         w: args.w,
