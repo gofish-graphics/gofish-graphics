@@ -11,6 +11,19 @@ marimo notebooks.
 pip install gofish-graphics
 ```
 
+::: tip Recommended while GoFish is pre-1.0: use the nightly build
+GoFish is moving fast, and the published stable release lags well behind active
+development. While the library is in early development we recommend early
+adopters install the latest **dev** build with `--pre`:
+
+```bash
+pip install --pre gofish-graphics
+```
+
+Dev builds are published whenever `main` changes. Pin a specific one with
+`gofish-graphics==<version>` once you find a build you like.
+:::
+
 Import it as `gofish`:
 
 ::: gofish example:bar-chart hidden

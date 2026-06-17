@@ -177,11 +177,17 @@ jobs:
         run: |
           MODE="${{ steps.plan.outputs.mode }}"
           if [ "$MODE" = "nightly" ]; then
-            # Same base as the npm nightly (pre-bump gofish-graphics version),
-            # rendered as a PEP 440 dev release.
+            # Dev release of the NEXT patch version, dated. It must target the
+            # next version, not the current one: a PEP 440 dev release sorts
+            # BEFORE the final release of the same X.Y.Z, so `0.1.0.devN` loses
+            # to a published `0.1.0` and `pip install --pre` would never pick
+            # it. Bumping the patch makes `0.1.1.devN` sort after `0.1.0`, so
+            # `--pre` resolves to the latest nightly, while any future final
+            # release still wins over its own dev builds.
             BASE=$(node -p "require('./packages/gofish-graphics/package.json').version" | sed 's/-nightly.*//')
+            NEXT=$(echo "$BASE" | awk -F. '{printf "%d.%d.%d", $1, $2, $3 + 1}')
             DATE=$(date +'%Y%m%d')
-            PY_VERSION="${BASE}.dev${DATE}"
+            PY_VERSION="${NEXT}.dev${DATE}"
           else
             # Lockstep with the npm release version computed above (e.g. 0.2.0).
             PY_VERSION="${{ steps.version.outputs.version }}"

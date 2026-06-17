@@ -8,6 +8,19 @@ GoFish is a JavaScript library for making bespoke graphics.
 npm install gofish-graphics
 ```
 
+::: tip Recommended while GoFish is pre-1.0: use the nightly build
+GoFish is moving fast, and the published stable release lags well behind active
+development. While the library is in early development we recommend early
+adopters install the **nightly** build to get the latest features and fixes:
+
+```bash
+npm install gofish-graphics@nightly
+```
+
+Nightlies are published whenever `main` changes. Pin a specific one with
+`gofish-graphics@<version>` once you find a build you like.
+:::
+
 ## 2. Create a chart!
 
 ::: gofish hidden
