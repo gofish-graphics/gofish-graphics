@@ -393,10 +393,10 @@ The `intrinsicDims` represent the element's size in its local coordinate system 
 **Location**: `src/ast/gofish.tsx`
 
 ```typescript
-const placeRoot = (axis, value, shrinkToFit) => {
-  if (shrinkToFit && child.pinAnchor) child.pinAnchor(axis, value, "min");
-  else child.place(axis, value, shrinkToFit ? "min" : "baseline");
-};
+const placeRoot = (axis, value, shrinkToFit) =>
+  shrinkToFit
+    ? child.pinAnchor(axis, value, "min")
+    : child.place(axis, value, "baseline");
 placeRoot("x", x ?? transform?.x ?? 0, w === undefined);
 placeRoot("y", y ?? transform?.y ?? 0, h === undefined);
 ```

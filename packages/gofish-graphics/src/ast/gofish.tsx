@@ -329,26 +329,21 @@ export async function layout(
   shadowCheckScaleRoot(niceUnderlyingSpaceY, canvasH, rootScaleFactors[1], 1);
 
   child.layout([layoutW, layoutH], rootScaleFactors, posScales);
-  // Root placement anchor: when a dimension is GIVEN, the canvas box is the
-  // baseline-anchored [0, given], and content seated outside it (axis labels
-  // below 0, ticks above `given`) is reserved as per-side overhangs below. When
-  // a dimension is SHRINK-TO-FIT (`finalH = size`), the canvas box IS the
-  // content's full [min, max] extent, so we pin the content's `min` edge to 0:
-  // content then fills [0, size] exactly and the overhang formulas compute 0 for
-  // that axis with no special-casing. Pinning the baseline (or leaving a
-  // self-placed root where it sits) instead would leave `min` off origin, which
-  // the per-side overhangs re-reserve as a phantom empty band — the #574
-  // double-count (a negative `min` bloats the canvas via `-min`; a positive one
-  // both gaps the near side and overhangs the far side, e.g. the pulley diagram).
-  //
-  // `pinAnchor` (not the write-once `place()`) so the min-pin is AUTHORITATIVE:
-  // it rebuilds the ledger even when the root self-placed (a diagram with its own
-  // root transform), which `place()` short-circuits. For an unplaced root it
-  // matches what `place(…, "min")` did.
-  const placeRoot = (axis: "x" | "y", value: number, shrinkToFit: boolean) => {
-    if (shrinkToFit && child.pinAnchor) child.pinAnchor(axis, value, "min");
-    else child.place(axis, value, shrinkToFit ? "min" : "baseline");
-  };
+  // Root placement anchor. A GIVEN dimension keeps the baseline-anchored canvas
+  // box [0, given]; content seated outside it (axis labels below 0, ticks above
+  // `given`) is reserved as the per-side overhangs below. A SHRINK-TO-FIT
+  // dimension makes the canvas box the content's full [min, max] extent, so pin
+  // its `min` edge to 0 — content then fills [0, size] and every overhang
+  // formula computes 0 for that axis. Leaving `min` off origin is the #574
+  // double-count: the overhangs re-reserve it as a phantom band (a negative
+  // `min` bloats the canvas via `-min`; a positive one gaps the near side and
+  // overhangs the far side, e.g. the pulley diagram). The pin uses `pinAnchor`,
+  // not the write-once `place()`, so it lands even when the root self-placed (a
+  // diagram with its own root transform) — `place()` short-circuits a placed axis.
+  const placeRoot = (axis: "x" | "y", value: number, shrinkToFit: boolean) =>
+    shrinkToFit
+      ? child.pinAnchor(axis, value, "min")
+      : child.place(axis, value, "baseline");
   placeRoot("x", x ?? transform?.x ?? 0, w === undefined);
   placeRoot("y", y ?? transform?.y ?? 0, h === undefined);
 
