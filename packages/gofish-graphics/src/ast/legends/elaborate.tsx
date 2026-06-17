@@ -69,18 +69,23 @@ export function legendColumn(colorMap: Map<any, string>): GoFishNode {
 const BAR_WIDTH = 14;
 const BAR_HEIGHT = 120;
 const BAND_COUNT = 40; // gradient sampling resolution (≈3px bands → reads smooth)
+const BAND_OVERLAP = 1; // px each band overhangs the next, so no sub-pixel seam shows
 const COLORBAR_TICK_COUNT = 5;
 const TICK_MARK_LEN = 4;
 const BAR_LABEL_GAP = 4; // gap between a tick mark and its label
 
 /**
  * The colorbar: a vertical gradient bar sampled from `scaleFn` over `domain`,
- * with tick labels pinned at d3 tick values. Built as a `layer` of fixed-pixel
- * shapes — `BAND_COUNT` thin band `Rect`s stacked to form the bar, plus a tick
- * mark + label per tick — each placed by a literal-pixel `Constraint.position`
- * in the bar's own y-up frame (value `v` → `t·BAR_HEIGHT` from the bottom, so
- * the domain max sits at the top). The layer's bbox is the union of these, so
- * the colorbar is measured by normal layout exactly like the swatch column.
+ * with tick labels pinned at the domain endpoints plus d3 "nice" ticks between
+ * them. Built as a `layer` of fixed-pixel shapes — `BAND_COUNT` thin band
+ * `Rect`s stacked bottom→top to form the bar, plus a tick mark + label per tick
+ * — each placed by a literal-pixel `Constraint.position` in the bar's own y-up
+ * frame (value `v` → `t·BAR_HEIGHT` from the bottom, so the domain max sits at
+ * the top). Each band is pinned by its bottom edge and overhangs the next by
+ * `BAND_OVERLAP` px (the next band, drawn on top, hides the seam) so the bar
+ * reads as a smooth gradient rather than discrete bands. The layer's bbox is
+ * the union of these, so the colorbar is measured by normal layout exactly like
+ * the swatch column.
  */
 export async function legendColorbar(
   scaleFn: (v: number) => string,
@@ -97,12 +102,24 @@ export async function legendColorbar(
 
   const bands = Array.from({ length: BAND_COUNT }, (_, i) => {
     const value = min + ((i + 0.5) / BAND_COUNT) * (max - min);
-    return Rect({ w: BAR_WIDTH, h: bandH, fill: scaleFn(value) }).name(
-      bandName(i)
-    );
+    return Rect({
+      w: BAR_WIDTH,
+      h: bandH + BAND_OVERLAP,
+      fill: scaleFn(value),
+    }).name(bandName(i));
   });
 
-  const tickValues = d3Ticks(min, max, COLORBAR_TICK_COUNT);
+  // Always show the domain endpoints; fill in d3 "nice" ticks strictly between.
+  const tickValues =
+    max === min
+      ? [min]
+      : [
+          min,
+          ...d3Ticks(min, max, COLORBAR_TICK_COUNT).filter(
+            (t) => t > min && t < max
+          ),
+          max,
+        ];
   const tickMarks = tickValues.map((_, i) =>
     Rect({ w: TICK_MARK_LEN, h: 1, fill: LABEL_COLOR }).name(tickName(i))
   );
@@ -122,13 +139,20 @@ export async function legendColorbar(
 
   root.constrain((g: Record<string, any>) => {
     const cs: any[] = [];
-    // Bands: centered in the bar column, stacked bottom→top to fill BAR_HEIGHT.
+    // Bands: centered in the bar column (x), pinned by their BOTTOM edge at
+    // `i * bandH` (y) and stacked bottom→top to fill BAR_HEIGHT. Pinning the
+    // bottom keeps the bar's base at y=0 while each band overhangs upward by
+    // BAND_OVERLAP; the next band (drawn on top) covers that overhang, so no
+    // sub-pixel seam shows between bands. (x uses anchor "middle", y uses
+    // "start" — separate constraints since one shared anchor can't do both.)
     bands.forEach((_, i) => {
-      const cy = (i + 0.5) * bandH;
       cs.push(
-        Constraint.position({ x: BAR_WIDTH / 2, y: cy, anchor: "middle" }, [
+        Constraint.position({ x: BAR_WIDTH / 2, anchor: "middle" }, [
           g[bandName(i)],
         ])
+      );
+      cs.push(
+        Constraint.position({ y: i * bandH, anchor: "start" }, [g[bandName(i)]])
       );
     });
     // Ticks + labels pinned at their value's pixel. x and y are pinned by
