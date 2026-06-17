@@ -105,7 +105,7 @@ export const PythonTutor: StoryObj<Args> = {
     );
 
     Layer([
-      Spread({ dir: "x", alignment: "start", spacing: 100 }, [
+      Spread({ dir: "x", alignment: "end", spacing: 100 }, [
         globalFrame({ stack: data.stack }).name(globalFrameName),
         heap({
           heap: data.heap,
