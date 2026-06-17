@@ -319,9 +319,12 @@ default-width bars and a width of `n·barWidth + spacing`). A user-supplied
 dimension is always authoritative. This computed extent — not the raw option — is
 what the render pass uses to size the SVG. The legend is now part of the laid-out
 tree (it is elaborated into the node tree during layout, see Pass 7), so it is
-included in this computed extent when `w`/`h` are omitted. When a dimension _is_
-given, `layout()` additionally measures how far the laid-out tree extends past the
-authoritative extent on each of the four sides — including content a constraint
+included in this computed extent when `w`/`h` are omitted. (When a dimension is
+shrink-to-fit, Pass 10 pins the content's `min` edge to `0` so it fills `[0, size]`
+exactly; the per-side overhangs below then measure `0` on that axis — there is no
+gutter to reserve because the canvas already _is_ the content extent.) When a
+dimension _is_ given, `layout()` additionally measures how far the laid-out tree
+extends past the authoritative extent on each of the four sides — including content a constraint
 seated _beyond_ the canvas, e.g. a marginal histogram's bands above and to the
 right of a scatter — and the render pass reserves exactly that, replacing the
 former fixed `LEGEND_MARGIN` constant. The right side is split into two measured
@@ -387,15 +390,34 @@ The `intrinsicDims` represent the element's size in its local coordinate system 
 
 ### Pass 10: Placement
 
-**Location**: `src/ast/gofish.tsx:209`
+**Location**: `src/ast/gofish.tsx`
 
 ```typescript
-child.place({ x: x ?? transform?.x ?? 0, y: y ?? transform?.y ?? 0 });
+child.place("x", x ?? transform?.x ?? 0, w === undefined ? "min" : "baseline");
+child.place("y", y ?? transform?.y ?? 0, h === undefined ? "min" : "baseline");
 ```
 
-**Implementation**: `src/ast/_node.ts:284-309`
+**Implementation**: `src/ast/_node.ts`
 
-Applies final positioning offsets. This is typically used for positioning the entire chart within its container.
+Pins the whole chart into the container by landing one anchor of the root's bbox
+at a target coordinate. _Which_ anchor depends on whether the axis is sized:
+
+- **Given dimension** → pin the **baseline** (local `0`) to `0`. The canvas box is
+  the baseline-anchored `[0, given]`, and any content seated outside it (axis labels
+  below `0`, ticks above `given`) is reserved as the per-side overhangs in the render
+  pass.
+- **Shrink-to-fit dimension** (`w`/`h` omitted, so `finalH = size`) → pin the **`min`
+  edge** to `0`. The canvas box _is_ the content's full `[min, max]` extent, so the
+  content fills `[0, size]` exactly and the overhang formulas (`-min`, `max - finalH`)
+  compute `0` for that axis with no special-casing.
+
+  Pinning the baseline in this case would leave `min` at a negative offset that
+  `bottomOverhang = -min` (and the left analogue) re-reserves as a _phantom empty band_
+  equal to the offset — the canvas would be ~2× the content on the side where the
+  content sits below/left of its baseline. That double-count was
+  [#574](https://github.com/gofish-graphics/gofish-graphics/issues/574); choosing the
+  anchor by sized-ness is the fix, and it keeps the overhang reservation purely a
+  _given-dimension_ concern.
 
 ### Pass 11: Ordinal Scale Building
 
