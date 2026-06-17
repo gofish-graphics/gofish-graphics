@@ -5,7 +5,7 @@
 
 # Low-level API stories (v1/v2)
 # Ported to tests/python-stories/low-level-syntax/ (#433): BalloonChart,
-# FlowerChart, IcicleChart, NestedMosaicChart, NestedWaffleChart, SankeyTree,
+# IcicleChart, NestedMosaicChart, NestedWaffleChart, SankeyTree,
 # StringlineChart, Whisker — all byte-identical to the JS baseline. The ports
 # map the v1 directional operators to combinator-form spread/stack/connect,
 # frame→layer, and add the polar/wavy coord transforms to the Python wrapper +
@@ -47,6 +47,16 @@ packages/gofish-graphics/stories/forwardsyntax/Bar/BarTemplate.stories.tsx
 
 # Forward syntax stories needing mark-as-function or nested chart
 packages/gofish-graphics/stories/forwardsyntax/FacetedChart.stories.tsx
+
+# FlowerChart is a labeled-bar-chart shape: the stems are a real bar chart
+# (one chart, so their heights share a scale) and each flower is the stem's
+# "label", placed on top via `Chart(selectAll("stems")).flow(group(...)).mark(d
+# => spread([d[0], <petal fan built from d[0].datum>]))`. This is the same
+# bridge blocker as Cut.stories.tsx::ImageCutWithLabels and BarWithLabels: the
+# Python mark-fn runs over the RPC bridge and receives plain JSON rows, not the
+# JS ref nodes, so it can neither embed `d[0]` nor project `d[0].datum`.
+# Tracked by #591 (bridge selectAll-label / ref-datum mark-fns to Python).
+packages/gofish-graphics/stories/lowlevel/FlowerChart.stories.tsx
 
 # Forward syntax stories needing coord transforms other than clock
 # (clock is now supported)
