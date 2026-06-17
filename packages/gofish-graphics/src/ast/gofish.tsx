@@ -333,22 +333,24 @@ export async function layout(
   // baseline-anchored [0, given], and content seated outside it (axis labels
   // below 0, ticks above `given`) is reserved as per-side overhangs below. When
   // a dimension is SHRINK-TO-FIT (`finalH = size`), the canvas box IS the
-  // content's full [min, max] extent, so we pin the content's `min` edge to 0
-  // instead of its baseline — content then fills [0, size] exactly and the
-  // overhang formulas compute 0 for that axis with no special-casing. Pinning
-  // the baseline here would leave `min` at a negative offset that
-  // `bottomOverhang = -min` re-reserves as a phantom empty band equal to the
-  // offset (#574).
-  child.place(
-    "x",
-    x ?? transform?.x ?? 0,
-    w === undefined ? "min" : "baseline"
-  );
-  child.place(
-    "y",
-    y ?? transform?.y ?? 0,
-    h === undefined ? "min" : "baseline"
-  );
+  // content's full [min, max] extent, so we pin the content's `min` edge to 0:
+  // content then fills [0, size] exactly and the overhang formulas compute 0 for
+  // that axis with no special-casing. Pinning the baseline (or leaving a
+  // self-placed root where it sits) instead would leave `min` off origin, which
+  // the per-side overhangs re-reserve as a phantom empty band — the #574
+  // double-count (a negative `min` bloats the canvas via `-min`; a positive one
+  // both gaps the near side and overhangs the far side, e.g. the pulley diagram).
+  //
+  // `pinAnchor` (not the write-once `place()`) so the min-pin is AUTHORITATIVE:
+  // it rebuilds the ledger even when the root self-placed (a diagram with its own
+  // root transform), which `place()` short-circuits. For an unplaced root it
+  // matches what `place(…, "min")` did.
+  const placeRoot = (axis: "x" | "y", value: number, shrinkToFit: boolean) => {
+    if (shrinkToFit && child.pinAnchor) child.pinAnchor(axis, value, "min");
+    else child.place(axis, value, shrinkToFit ? "min" : "baseline");
+  };
+  placeRoot("x", x ?? transform?.x ?? 0, w === undefined);
+  placeRoot("y", y ?? transform?.y ?? 0, h === undefined);
 
   // Final extent: a user-given dimension is authoritative; otherwise prefer the
   // content's laid-out intrinsic size (shrink-to-fit), falling back to the

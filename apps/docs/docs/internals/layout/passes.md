@@ -393,8 +393,12 @@ The `intrinsicDims` represent the element's size in its local coordinate system 
 **Location**: `src/ast/gofish.tsx`
 
 ```typescript
-child.place("x", x ?? transform?.x ?? 0, w === undefined ? "min" : "baseline");
-child.place("y", y ?? transform?.y ?? 0, h === undefined ? "min" : "baseline");
+const placeRoot = (axis, value, shrinkToFit) => {
+  if (shrinkToFit && child.pinAnchor) child.pinAnchor(axis, value, "min");
+  else child.place(axis, value, shrinkToFit ? "min" : "baseline");
+};
+placeRoot("x", x ?? transform?.x ?? 0, w === undefined);
+placeRoot("y", y ?? transform?.y ?? 0, h === undefined);
 ```
 
 **Implementation**: `src/ast/_node.ts`
@@ -411,13 +415,19 @@ at a target coordinate. _Which_ anchor depends on whether the axis is sized:
   content fills `[0, size]` exactly and the overhang formulas (`-min`, `max - finalH`)
   compute `0` for that axis with no special-casing.
 
-  Pinning the baseline in this case would leave `min` at a negative offset that
-  `bottomOverhang = -min` (and the left analogue) re-reserves as a _phantom empty band_
-  equal to the offset — the canvas would be ~2× the content on the side where the
-  content sits below/left of its baseline. That double-count was
-  [#574](https://github.com/gofish-graphics/gofish-graphics/issues/574); choosing the
-  anchor by sized-ness is the fix, and it keeps the overhang reservation purely a
-  _given-dimension_ concern.
+  Leaving `min` off origin in this case is the
+  [#574](https://github.com/gofish-graphics/gofish-graphics/issues/574) double-count:
+  a _negative_ `min` (content below/left of baseline) makes `bottomOverhang = -min`
+  re-reserve a phantom band ~equal to the offset, so the canvas comes out ~2× the
+  content; a _positive_ `min` (a self-placed diagram seated at, say, `(20, 20)`) both
+  gaps the near side and overhangs the far side. Pinning `min` to 0 collapses both,
+  and it keeps the overhang reservation purely a _given-dimension_ concern.
+
+  The min-pin uses **`pinAnchor`**, not the write-once `place()`: a chart whose root
+  carries its own transform (a hand-built diagram like the pulley) has already
+  self-placed that axis, and `place()` short-circuits on a placed axis. `pinAnchor` is
+  the authoritative override — it rebuilds the axis ledger so the pin lands regardless
+  — and for an unplaced root it matches what `place(…, "min")` would have done.
 
 ### Pass 11: Ordinal Scale Building
 

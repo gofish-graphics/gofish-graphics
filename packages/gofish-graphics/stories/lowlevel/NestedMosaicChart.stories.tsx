@@ -8,18 +8,8 @@ import _ from "lodash";
 
 const meta: Meta = {
   title: "Low Level Syntax/Nested Mosaic Chart",
-  argTypes: {
-    w: {
-      control: { type: "number", min: 100, max: 1000, step: 10 },
-    },
-    h: {
-      control: { type: "number", min: 100, max: 1000, step: 10 },
-    },
-  },
 };
 export default meta;
-
-type Args = { w: number; h: number };
 
 const classColor = {
   First: color6[0],
@@ -28,8 +18,7 @@ const classColor = {
   Crew: color6[3],
 };
 
-export const Default: StoryObj<Args> = {
-  args: { w: 500, h: 300 },
+export const Default: StoryObj = {
   tags: ["gallery"],
   parameters: {
     gallery: {
@@ -38,7 +27,7 @@ export const Default: StoryObj<Args> = {
         "Titanic survival broken down by passenger class as a mosaic plot, where each cell's width and height encode the proportions of a two-way contingency table.",
     },
   },
-  render: (args: Args) => {
+  render: () => {
     const container = initializeContainer();
     spreadY(
       { reverse: true, spacing: 4, alignment: "start" },
@@ -64,8 +53,6 @@ export const Default: StoryObj<Args> = {
         )
       )
     ).render(container, {
-      w: args.w,
-      h: args.h,
       axes: true,
     });
     return container;
