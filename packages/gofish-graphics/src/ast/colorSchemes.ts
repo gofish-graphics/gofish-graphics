@@ -80,3 +80,27 @@ export function assignGradientColor(config: GradientScale, t: number): string {
   }
   return chroma.scale(stops).mode("lab")(t).hex();
 }
+
+/**
+ * Build a continuous color scale `(value: number) => string` for a gradient
+ * config over `[min, max]`. The chroma scale is constructed once and reused for
+ * every lookup; values are normalized into the domain and clamped to `[0, 1]`.
+ * This is the source of truth for a gradient color encoding — shared by the
+ * mark fills (`resolveColorChannel`) and the colorbar legend, so a value and
+ * its swatch on the bar always agree.
+ */
+export function createGradientScale(
+  config: GradientScale,
+  domain: [number, number]
+): (value: number) => string {
+  const [min, max] = domain;
+  const stops =
+    typeof config.stops === "string"
+      ? (schemes[config.stops]?.colors ?? [config.stops])
+      : config.stops;
+  const chromaScale = chroma.scale(stops).mode("lab");
+  return (value: number) => {
+    const t = max === min ? 0 : (value - min) / (max - min);
+    return chromaScale(Math.max(0, Math.min(1, t))).hex();
+  };
+}

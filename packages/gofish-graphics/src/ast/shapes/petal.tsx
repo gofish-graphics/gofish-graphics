@@ -163,11 +163,10 @@ export const Petal = ({
         // color), then apply any post-scale color ops (`.lighten`/`.darken`).
         // A literal color string passes through unchanged.
         const scaleContext = node.getRenderSession().scaleContext;
-        const unit = scaleContext?.unit;
-        const unitColorScale = unit && "color" in unit ? unit.color : undefined;
-        const resolvedFill = resolveColorChannel(fill, unitColorScale);
+        const unitScale = scaleContext?.unit;
+        const resolvedFill = resolveColorChannel(fill, unitScale);
         const resolvedStroke =
-          resolveColorChannel(stroke, unitColorScale) ?? resolvedFill;
+          resolveColorChannel(stroke, unitScale) ?? resolvedFill;
 
         // Both dimensions are aesthetic - render as transformed point
         if (!isXEmbedded && !isYEmbedded) {

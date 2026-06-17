@@ -304,14 +304,11 @@ export const Rect = ({
         const displayDims = displayDimsOf(intrinsicDims, transform);
 
         const scaleContext = node.getRenderSession().scaleContext;
-        const unit = scaleContext?.unit;
-        const unitColorScale = unit && "color" in unit ? unit.color : undefined;
+        const unitScale = scaleContext?.unit;
         const originalFill = fill;
-        const resolvedFill = resolveColorChannel(fill, unitColorScale);
+        const resolvedFill = resolveColorChannel(fill, unitScale);
         const resolvedStroke =
-          resolveColorChannel(stroke, unitColorScale) ??
-          resolvedFill ??
-          "black";
+          resolveColorChannel(stroke, unitScale) ?? resolvedFill ?? "black";
 
         const labelText =
           label && originalFill && isValue(originalFill)

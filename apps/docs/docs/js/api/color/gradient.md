@@ -5,7 +5,9 @@ gradient(stops);
 ```
 
 Creates a continuous color scale. Colors are interpolated across the numeric
-range of the `fill` field.
+range of the `fill` field. The legend for a gradient renders as a **continuous
+colorbar** (a gradient bar with tick labels), not per-value swatches — so a
+heatmap with many distinct values still gets one compact legend.
 
 | `stops` type | Behavior                                       |
 | ------------ | ---------------------------------------------- |

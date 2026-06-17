@@ -2,7 +2,7 @@ import { For } from "solid-js";
 import { Path, PathSegment, pathToSVGPath, transformPath } from "../../path";
 import { GoFishAST } from "../_ast";
 import { GoFishNode } from "../_node";
-import { isCategoricalScale } from "../gofish";
+import { resolveColorChannel } from "../../color";
 import {
   Dimensions,
   elaborateDirection,
@@ -12,7 +12,7 @@ import {
 } from "../dims";
 import { pairs } from "../../util";
 import { linear } from "../coordinateTransforms/linear";
-import { getValue, isValue, MaybeValue } from "../data";
+import { MaybeValue } from "../data";
 import { Domain } from "../domain";
 import { UNDEFINED, UnderlyingSpace } from "../underlyingSpace";
 import { createNodeOperator } from "../withGoFish";
@@ -507,11 +507,10 @@ export const connect = createNodeOperator(
           const rawFill: MaybeValue<string> | undefined =
             fill ?? renderData.defaultColor;
           const unitScale = scaleContext?.unit;
-          const resolvedFill: string | undefined = isValue(rawFill)
-            ? isCategoricalScale(unitScale)
-              ? unitScale.color.get(getValue(rawFill))
-              : getValue(rawFill)
-            : (rawFill as string | undefined);
+          const resolvedFill: string | undefined = resolveColorChannel(
+            rawFill as MaybeValue<string>,
+            unitScale
+          );
 
           return (
             <g transform={translateString(transform)}>

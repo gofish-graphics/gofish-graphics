@@ -7,6 +7,7 @@ status: draft
 covers:
   - packages/gofish-graphics/src/ast/colorSchemes.ts
   - packages/gofish-graphics/src/ast/_node.ts
+  - packages/gofish-graphics/src/color.ts
 ---
 
 # GoFish Color Scales
@@ -64,7 +65,7 @@ gradient(stops); // constructor
 
 - `string` → named scheme stops, interpolate in lab space via chroma-js
 - `string[]` → use as stops, interpolate in lab space via chroma-js
-- Position `t = (value - min) / (max - min)` computed across full subtree domain
+- A gradient becomes a single **continuous color scale** — `createGradientScale(config, [min, max])` returns a reusable `(value) => string` (chroma scale built once, `t = (value - min) / (max - min)` clamped to `[0, 1]`). This one `scaleFn` is the source of truth for the encoding: both the mark fills (`resolveColorChannel`) and the [colorbar legend](/internals/frontend/legends) read it, so a value and its swatch on the bar always agree. `min`/`max` span the full subtree domain.
 
 ### Named scheme registry (`colorSchemes.ts`)
 
@@ -79,8 +80,8 @@ gradient(stops); // constructor
 
 1. `collectColorValues()` walks subtree, collects unique fill values in encounter order
 2. Dispatch on `_tag`:
-   - `"gradient"` → compute min/max, assign `assignGradientColor(config, t)` per value
-   - `"palette"` → assign `assignPaletteColor(config, key, index)` per value
+   - `"gradient"` → compute numeric min/max, build one continuous scale via `createGradientScale(config, [min, max])` and store it (with the domain) on `scaleContext.unit` as a `ContinuousColorScale`. First writer wins: the root resolves the full-subtree domain, and deeper re-entries are skipped (a `resolved` flag) so they can't shrink it. No per-value color map is enumerated for gradients.
+   - `"palette"` → assign `assignPaletteColor(config, key, index)` per value into the `color` map (`CategoricalScale`)
 3. Falls back to `color6` cycling when no `colorConfig` is set
 
 ### Literal hex passthrough
@@ -91,13 +92,14 @@ Fill values that are pre-computed hex strings (e.g. from `derive`) pass through 
 
 ## Files
 
-| File                      | Role                                                                                                 |
-| ------------------------- | ---------------------------------------------------------------------------------------------------- |
-| `src/ast/colorSchemes.ts` | Types, constructors, `assignPaletteColor`, `assignGradientColor`, scheme registry                    |
-| `src/ast/_node.ts`        | `collectColorValues`, `resolveColorScale` two-pass dispatch                                          |
-| `src/ast/shapes/rect.tsx` | Color map lookup with hex passthrough fallback                                                       |
-| `src/ast/marks/chart.ts`  | `ChartOptions.color?: ColorConfig`; passes `colorConfig` to render                                   |
-| `src/lib.ts`              | Exports `palette`, `gradient`, `assignGradientColor`, `ColorConfig`, `PaletteScale`, `GradientScale` |
+| File                      | Role                                                                                                     |
+| ------------------------- | -------------------------------------------------------------------------------------------------------- |
+| `src/ast/colorSchemes.ts` | Types, constructors, `assignPaletteColor`, `assignGradientColor`, `createGradientScale`, scheme registry |
+| `src/ast/_node.ts`        | `collectColorValues`, `resolveColorScale` two-pass dispatch (categorical map vs continuous scaleFn)      |
+| `src/color.ts`            | `resolveColorChannel` — shared categorical/continuous lookup + color ops for mark fills                  |
+| `src/ast/shapes/rect.tsx` | Resolves fill/stroke via `resolveColorChannel`                                                           |
+| `src/ast/marks/chart.ts`  | `ChartOptions.color?: ColorConfig`; passes `colorConfig` to render                                       |
+| `src/lib.ts`              | Exports `palette`, `gradient`, `assignGradientColor`, `ColorConfig`, `PaletteScale`, `GradientScale`     |
 
 ---
 

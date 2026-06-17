@@ -54,7 +54,7 @@ import {
 } from "./constraints/bbox";
 import {
   assignPaletteColor,
-  assignGradientColor,
+  createGradientScale,
   type ColorConfig,
 } from "./colorSchemes";
 import {
@@ -299,9 +299,16 @@ export class GoFishNode {
 
   public resolveColorScale(): void {
     const scaleContext = this.getRenderSession().scaleContext;
+    // The unit scale is either a categorical scale (a `color` Map) or a
+    // continuous color scale (a `scaleFn` over a numeric `domain`). It is
+    // mutated in place here (shapes read the same `scaleContext.unit` object at
+    // render time), so we keep a loose shape.
     const unit = scaleContext.unit as {
-      color: Map<any, string>;
+      color?: Map<any, string>;
       colorConfig?: ColorConfig;
+      scaleFn?: (v: number) => string;
+      domain?: [number, number];
+      resolved?: boolean;
     };
 
     // If this node carries its own colorConfig (set by ChartBuilder.resolve()),
@@ -322,7 +329,7 @@ export class GoFishNode {
       this._applyColorConfig(unit);
     } else {
       // No colorConfig — single-pass: cycle color6, skip literal CSS colors
-      if (this.color !== undefined && isValue(this.color)) {
+      if (unit.color && this.color !== undefined && isValue(this.color)) {
         const color = getValue(this.color);
         const isLiteralColor =
           typeof color === "string" &&
@@ -340,26 +347,40 @@ export class GoFishNode {
   }
 
   private _applyColorConfig(unit: {
-    color: Map<any, string>;
+    color?: Map<any, string>;
     colorConfig?: ColorConfig;
+    scaleFn?: (v: number) => string;
+    domain?: [number, number];
+    resolved?: boolean;
   }): void {
-    const orderedKeys: any[] = [];
-    this.collectColorValues(orderedKeys);
     const colorConfig = unit.colorConfig!;
 
     if (colorConfig._tag === "gradient") {
-      const min = Math.min(...orderedKeys);
-      const max = Math.max(...orderedKeys);
-      orderedKeys.forEach((key) => {
-        if (!unit.color.has(key)) {
-          const t = max === min ? 0 : (key - min) / (max - min);
-          unit.color.set(key, assignGradientColor(colorConfig, t));
-        }
-      });
+      // First writer wins: the first node to resolve a gradient (the root,
+      // which sees the whole subtree) sets the domain over every value. Deeper
+      // nodes re-entering this pass would otherwise recompute a narrower domain
+      // from their own subtree and clobber it.
+      if (unit.resolved) return;
+      const orderedKeys: any[] = [];
+      this.collectColorValues(orderedKeys);
+      const numericKeys = orderedKeys.filter((k) => typeof k === "number");
+      const min = numericKeys.length > 0 ? Math.min(...numericKeys) : 0;
+      const max = numericKeys.length > 0 ? Math.max(...numericKeys) : 1;
+      // Upgrade the shared unit scale to a continuous color scale: one scaleFn
+      // over [min, max], the source of truth for both mark fills and the
+      // colorbar legend. The per-value `color` Map is not used for gradients.
+      unit.scaleFn = createGradientScale(colorConfig, [min, max]);
+      unit.domain = [min, max];
+      unit.resolved = true;
+      delete unit.color;
     } else {
+      const orderedKeys: any[] = [];
+      this.collectColorValues(orderedKeys);
+      if (!(unit.color instanceof Map)) unit.color = new Map();
+      const color = unit.color;
       orderedKeys.forEach((key, i) => {
-        if (!unit.color.has(key)) {
-          unit.color.set(key, assignPaletteColor(colorConfig, String(key), i));
+        if (!color.has(key)) {
+          color.set(key, assignPaletteColor(colorConfig, String(key), i));
         }
       });
     }

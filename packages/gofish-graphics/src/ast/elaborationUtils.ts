@@ -17,3 +17,7 @@ export async function wrapPreservingIdentity(
   if (origKey !== undefined) root.setKey(origKey);
   return root;
 }
+
+/** Stringify a tick value without floating-point noise (0.1 + 0.2 → "0.3").
+ *  Shared by the axis and legend (colorbar) tick-label builders. */
+export const fmtNum = (n: number): string => String(+n.toPrecision(12));

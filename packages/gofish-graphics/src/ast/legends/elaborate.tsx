@@ -8,23 +8,25 @@ import { Text } from "../shapes/text";
 import { Spread } from "../graphicalOperators/spread";
 import { layer } from "../graphicalOperators/layer";
 import { Constraint } from "../constraints";
-import { wrapPreservingIdentity } from "../elaborationUtils";
+import { wrapPreservingIdentity, fmtNum } from "../elaborationUtils";
+import { ticks as d3Ticks } from "d3-array";
+import type { CategoricalScale, ContinuousColorScale } from "../gofish";
 
 /**
- * Legend elaboration: turn the resolved categorical color scale into ordinary
- * GoFish shapes + constraints, the same way axes/elaborate.tsx turns an axis
- * into Rect/Text/Spread/Layer nodes. This replaces the bespoke render-time
- * legend (the `<For>` over `scaleContext.unit.color` in gofish.tsx that
- * hand-placed swatches at `translate(width + pad*3, ...)` behind a fixed
- * `LEGEND_MARGIN`): the legend is no longer a privileged render-time fixture,
- * it's a swatch column wrapped in a `Layer` beside the content, participating
- * in normal layout (so its extent is measured, not reserved as a constant).
+ * Legend elaboration: turn the resolved color scale into ordinary GoFish shapes
+ * + constraints, the same way axes/elaborate.tsx turns an axis into
+ * Rect/Text/Spread/Layer nodes. This replaces the bespoke render-time legend
+ * (the `<For>` over `scaleContext.unit.color` in gofish.tsx that hand-placed
+ * swatches at `translate(width + pad*3, ...)` behind a fixed `LEGEND_MARGIN`):
+ * the legend is no longer a privileged render-time fixture, it's a subtree
+ * wrapped in a `Layer` beside the content, participating in normal layout (so
+ * its extent is measured, not reserved as a constant).
  *
- * `legendRow` / `legendColumn` are pure builders (the customization seam): a
- * future public API can override how a legend renders.
- *
- * Note: a gradient color config currently yields one row per color-map entry
- * (parity with the bespoke path). A continuous colorbar is a follow-up.
+ * A **categorical** scale yields a swatch column (`legendColumn`); a
+ * **continuous** (gradient) scale yields a colorbar (`legendColorbar`) — a
+ * sampled gradient bar with tick labels pinned at d3 tick values. Both are pure
+ * builders (the customization seam): a future public API can override how a
+ * legend renders.
  */
 
 // Visual constants — chosen to match the previous bespoke legend styling.
@@ -63,25 +65,145 @@ export function legendColumn(colorMap: Map<any, string>): GoFishNode {
   ).name(LEGEND_NAME) as GoFishNode;
 }
 
+// Colorbar constants.
+const BAR_WIDTH = 14;
+const BAR_HEIGHT = 120;
+const BAND_COUNT = 40; // gradient sampling resolution (≈3px bands → reads smooth)
+const BAND_OVERLAP = 1; // px each band overhangs the next, so no sub-pixel seam shows
+const COLORBAR_TICK_COUNT = 5;
+const TICK_MARK_LEN = 4;
+const BAR_LABEL_GAP = 4; // gap between a tick mark and its label
+
 /**
- * Wrap `node` in a Layer with a swatch column seated to its right. Mirrors the
- * axes/elaborate.tsx wrapper recipe (identity move → layer wrap → constrain via
- * the name→ref map → identity restore, via `wrapPreservingIdentity`).
+ * The colorbar: a vertical gradient bar sampled from `scaleFn` over `domain`,
+ * with tick labels pinned at the domain endpoints plus d3 "nice" ticks between
+ * them. Built as a `layer` of fixed-pixel shapes — `BAND_COUNT` thin band
+ * `Rect`s stacked bottom→top to form the bar, plus a tick mark + label per tick
+ * — each placed by a literal-pixel `Constraint.position` in the bar's own y-up
+ * frame (value `v` → `t·BAR_HEIGHT` from the bottom, so the domain max sits at
+ * the top). Each band is pinned by its bottom edge and overhangs the next by
+ * `BAND_OVERLAP` px (the next band, drawn on top, hides the seam) so the bar
+ * reads as a smooth gradient rather than discrete bands. The layer's bbox is
+ * the union of these, so the colorbar is measured by normal layout exactly like
+ * the swatch column.
+ */
+export async function legendColorbar(
+  scaleFn: (v: number) => string,
+  domain: [number, number]
+): Promise<GoFishNode> {
+  const [min, max] = domain;
+  const bandH = BAR_HEIGHT / BAND_COUNT;
+  const valueToPx = (v: number) =>
+    (max === min ? 0 : (v - min) / (max - min)) * BAR_HEIGHT;
+
+  const bandName = (i: number) => `__cbBand${i}`;
+  const tickName = (i: number) => `__cbTick${i}`;
+  const labelName = (i: number) => `__cbLabel${i}`;
+
+  const bands = Array.from({ length: BAND_COUNT }, (_, i) => {
+    const value = min + ((i + 0.5) / BAND_COUNT) * (max - min);
+    return Rect({
+      w: BAR_WIDTH,
+      h: bandH + BAND_OVERLAP,
+      fill: scaleFn(value),
+    }).name(bandName(i));
+  });
+
+  // Always show the domain endpoints; fill in d3 "nice" ticks strictly between.
+  const tickValues =
+    max === min
+      ? [min]
+      : [
+          min,
+          ...d3Ticks(min, max, COLORBAR_TICK_COUNT).filter(
+            (t) => t > min && t < max
+          ),
+          max,
+        ];
+  const tickMarks = tickValues.map((_, i) =>
+    Rect({ w: TICK_MARK_LEN, h: 1, fill: LABEL_COLOR }).name(tickName(i))
+  );
+  const tickLabels = tickValues.map((v, i) =>
+    Text({
+      text: fmtNum(v),
+      fontSize: LABEL_FONT_SIZE,
+      fill: LABEL_COLOR,
+    }).name(labelName(i))
+  );
+
+  const root = (await (layer as any)([
+    ...bands,
+    ...tickMarks,
+    ...tickLabels,
+  ])) as GoFishNode;
+
+  root.constrain((g: Record<string, any>) => {
+    const cs: any[] = [];
+    // Bands: centered in the bar column (x), pinned by their BOTTOM edge at
+    // `i * bandH` (y) and stacked bottom→top to fill BAR_HEIGHT. Pinning the
+    // bottom keeps the bar's base at y=0 while each band overhangs upward by
+    // BAND_OVERLAP; the next band (drawn on top) covers that overhang, so no
+    // sub-pixel seam shows between bands. (x uses anchor "middle", y uses
+    // "start" — separate constraints since one shared anchor can't do both.)
+    bands.forEach((_, i) => {
+      cs.push(
+        Constraint.position({ x: BAR_WIDTH / 2, anchor: "middle" }, [
+          g[bandName(i)],
+        ])
+      );
+      cs.push(
+        Constraint.position({ y: i * bandH, anchor: "start" }, [g[bandName(i)]])
+      );
+    });
+    // Ticks + labels pinned at their value's pixel. x and y are pinned by
+    // separate position constraints so the label can sit start-aligned in x
+    // while staying middle-aligned in y (one shared anchor can't do both).
+    tickValues.forEach((v, i) => {
+      const cy = valueToPx(v);
+      cs.push(
+        Constraint.position(
+          { x: BAR_WIDTH + TICK_MARK_LEN / 2, y: cy, anchor: "middle" },
+          [g[tickName(i)]]
+        )
+      );
+      cs.push(
+        Constraint.position({ y: cy, anchor: "middle" }, [g[labelName(i)]])
+      );
+      cs.push(
+        Constraint.position(
+          { x: BAR_WIDTH + TICK_MARK_LEN + BAR_LABEL_GAP, anchor: "start" },
+          [g[labelName(i)]]
+        )
+      );
+    });
+    return cs;
+  });
+
+  return root.name(LEGEND_NAME);
+}
+
+/**
+ * Wrap `node` in a Layer with a legend seated to its right — a swatch column
+ * for a categorical scale, or a colorbar for a continuous (gradient) one.
+ * Mirrors the axes/elaborate.tsx wrapper recipe (identity move → layer wrap →
+ * constrain via the name→ref map → identity restore, via
+ * `wrapPreservingIdentity`).
  *
- * The caller owns the "is there anything to draw?" guard (a non-empty color
- * map); this always wraps and returns the new root.
+ * The caller owns the "is there anything to draw?" guard (a non-empty color map
+ * or a continuous scale); this always wraps and returns the new root.
  */
 export async function elaborateLegend(
   node: GoFishNode,
-  colorMap: Map<any, string>
+  scale: CategoricalScale | ContinuousColorScale
 ): Promise<GoFishNode> {
+  const legend =
+    "scaleFn" in scale
+      ? await legendColorbar(scale.scaleFn, scale.domain)
+      : legendColumn(scale.color);
   return wrapPreservingIdentity(node, async (content) => {
     content.name(CONTENT_NAME);
 
-    const root = (await (layer as any)([
-      content,
-      legendColumn(colorMap),
-    ])) as GoFishNode;
+    const root = (await (layer as any)([content, legend])) as GoFishNode;
 
     // Constraint order matters: the content pin places the anchor the others read.
     root.constrain((g) => [
