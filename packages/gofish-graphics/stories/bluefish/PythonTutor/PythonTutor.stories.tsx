@@ -16,9 +16,7 @@ const meta: Meta = {
 };
 export default meta;
 
-type Args = { w: number; h: number };
-
-export const PythonTutor: StoryObj<Args> = {
+export const PythonTutor: StoryObj = {
   tags: ["gallery"],
   parameters: {
     gallery: {
@@ -27,7 +25,7 @@ export const PythonTutor: StoryObj<Args> = {
         "A Python Tutor style runtime memory diagram showing a global frame of variables whose pointers fan out with arrows into a heap of linked tuples.",
     },
   },
-  render: (args: Args) => {
+  render: () => {
     const container = initializeContainer();
     const data = {
       stack: [
