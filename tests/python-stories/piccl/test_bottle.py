@@ -51,7 +51,7 @@ def story_default():
                 paint(
                     [
                         image(href=BOTTLE_PNG, h=datum(100)),
-                        rect(h="amount", fill="#00ff00"),
+                        rect(h="amount", w=175, fill="#00ff00"),
                     ],
                     blendMode="color",
                 ).name("bottle"),
