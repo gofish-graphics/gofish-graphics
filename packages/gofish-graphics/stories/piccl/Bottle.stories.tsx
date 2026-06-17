@@ -33,7 +33,7 @@ export const Default: StoryObj = {
         [
           paint({blendMode: "color"}, [
           image({ href: bottlePng, h: v(100) }),
-          rect({h: "amount", fill: "#00ff00"}),
+          rect({h: "amount", w: 175, fill: "#00ff00"}),
         ]).name("bottle"),
         rect({h: 1, fill: "#666", w: 175, y: "amount"}).name("line"),
         text({fontSize: 35, fill: "#666", text: (d) => `${d.amount}%`}).name("label")
