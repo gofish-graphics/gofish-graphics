@@ -1,0 +1,35 @@
+# Deprecation tombstone for the PyPI project `gofish-python`.
+#
+# The GoFish Python package is published as `gofish-graphics` (see
+# packages/gofish-python/pyproject.toml). `gofish-python` was an earlier name
+# for the same thing and is now deprecated. This directory builds a final
+# meta-release of `gofish-python`: it ships NO code of its own, only metadata
+# and a dependency on `gofish-graphics`, so `pip install gofish-python`
+# transparently installs the canonical package (both import as `gofish`).
+#
+# This is a one-time manual publish — it is intentionally NOT part of the
+# recurring release workflow and has no package.json, so pnpm ignores it.
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gofish-python"
+# Higher than the last real `gofish-python` (0.1.0) so this tombstone is what
+# `pip install gofish-python` resolves to by default.
+version = "0.2.0"
+description = "Deprecated: install 'gofish-graphics' instead. This package now just pulls in gofish-graphics."
+readme = "README.md"
+requires-python = ">=3.8"
+license = { text = "MIT" }
+dependencies = ["gofish-graphics>=0.1.0"]
+
+[project.urls]
+Homepage = "https://github.com/gofish-graphics/gofish-graphics"
+"Canonical package" = "https://pypi.org/project/gofish-graphics/"
+
+# A meta-package: no importable modules of its own (the `gofish` import comes
+# from the gofish-graphics dependency).
+[tool.setuptools]
+packages = []
+py-modules = []
