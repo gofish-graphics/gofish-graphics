@@ -90,6 +90,14 @@ export interface PromiseWithRender<T> extends Promise<T> {
     container: HTMLElement,
     options: RenderOptions
   ): HTMLElement | Promise<HTMLElement>;
+  toSVG(options?: Parameters<GoFishNode["toSVG"]>[0]): Promise<string>;
+  toSVGElement(
+    options?: Parameters<GoFishNode["toSVGElement"]>[0]
+  ): Promise<SVGSVGElement>;
+  save(
+    filename: string,
+    options?: Parameters<GoFishNode["save"]>[1]
+  ): Promise<void>;
   name(name: string | Token): PromiseWithRender<T>;
   label(accessor: LabelAccessor, options?: LabelOptions): PromiseWithRender<T>;
   setKey(key: string): PromiseWithRender<T>;
@@ -133,6 +141,41 @@ export function addRenderMethod<T>(promise: Promise<T>): PromiseWithRender<T> {
       }
       throw new Error(
         "Cannot call render on this result. Only GoFishNode instances have a render method."
+      );
+    });
+  };
+
+  // SVG-export terminals, mirroring `.render()` above.
+  (promise as any).toSVG = function (
+    options?: Parameters<GoFishNode["toSVG"]>[0]
+  ): Promise<string> {
+    return promise.then((result) => {
+      if (hasRenderMethod(result)) return result.toSVG(options);
+      throw new Error(
+        "Cannot call toSVG on this result. Only GoFishNode instances support export."
+      );
+    });
+  };
+
+  (promise as any).toSVGElement = function (
+    options?: Parameters<GoFishNode["toSVGElement"]>[0]
+  ): Promise<SVGSVGElement> {
+    return promise.then((result) => {
+      if (hasRenderMethod(result)) return result.toSVGElement(options);
+      throw new Error(
+        "Cannot call toSVGElement on this result. Only GoFishNode instances support export."
+      );
+    });
+  };
+
+  (promise as any).save = function (
+    filename: string,
+    options?: Parameters<GoFishNode["save"]>[1]
+  ): Promise<void> {
+    return promise.then((result) => {
+      if (hasRenderMethod(result)) return result.save(filename, options);
+      throw new Error(
+        "Cannot call save on this result. Only GoFishNode instances support export."
       );
     });
   };
@@ -445,6 +488,14 @@ export type NameableMark<T> = Mark<T> & {
     container: Parameters<GoFishNode["render"]>[0],
     options: Parameters<GoFishNode["render"]>[1]
   ): Promise<ReturnType<GoFishNode["render"]>>;
+  toSVG(options?: Parameters<GoFishNode["toSVG"]>[0]): Promise<string>;
+  toSVGElement(
+    options?: Parameters<GoFishNode["toSVGElement"]>[0]
+  ): Promise<SVGSVGElement>;
+  save(
+    filename: string,
+    options?: Parameters<GoFishNode["save"]>[1]
+  ): Promise<void>;
 };
 
 /**

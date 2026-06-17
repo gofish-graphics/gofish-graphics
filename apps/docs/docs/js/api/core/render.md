@@ -1,6 +1,7 @@
 # render
 
-Renders the chart into a DOM element.
+Renders the chart into a DOM element. To get the SVG out as a string or file
+instead, see [export](/js/api/core/export).
 
 ## Signature
 

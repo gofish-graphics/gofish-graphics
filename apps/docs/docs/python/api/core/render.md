@@ -65,6 +65,6 @@ chart(seafood).flow(spread(by="lake", dir="x")).mark(rect(h="count")).to_ir()
 
 ## Notes
 
-- Rendering requires a notebook kernel — `render()` produces a widget, not a
-  static image or an SVG string.
+- Rendering requires a notebook kernel — `render()` produces a widget. To get
+  an SVG file or string, use [`save` / `to_svg`](/python/api/core/export).
 - A chart must have a [mark](/python/api/core/mark) before it can be rendered.

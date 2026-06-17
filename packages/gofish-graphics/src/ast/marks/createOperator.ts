@@ -247,6 +247,34 @@ export function attachModifiers<T>(
     writable: true,
     configurable: true,
   });
+  // SVG-export terminals, mirroring `.render()` above.
+  Object.defineProperty(base, "toSVG", {
+    value: async (options?: Parameters<GoFishNode["toSVG"]>[0]) => {
+      const node = await resolveMarkResult((base as any)(undefined));
+      return node.toSVG(options);
+    },
+    writable: true,
+    configurable: true,
+  });
+  Object.defineProperty(base, "toSVGElement", {
+    value: async (options?: Parameters<GoFishNode["toSVGElement"]>[0]) => {
+      const node = await resolveMarkResult((base as any)(undefined));
+      return node.toSVGElement(options);
+    },
+    writable: true,
+    configurable: true,
+  });
+  Object.defineProperty(base, "save", {
+    value: async (
+      filename: string,
+      options?: Parameters<GoFishNode["save"]>[1]
+    ) => {
+      const node = await resolveMarkResult((base as any)(undefined));
+      return node.save(filename, options);
+    },
+    writable: true,
+    configurable: true,
+  });
   return base;
 }
 

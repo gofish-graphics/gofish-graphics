@@ -309,6 +309,14 @@ export type ConstrainableMark<T> = Mark<T> & {
     container: Parameters<GoFishNode["render"]>[0],
     options: Parameters<GoFishNode["render"]>[1]
   ): Promise<ReturnType<GoFishNode["render"]>>;
+  toSVG(options?: Parameters<GoFishNode["toSVG"]>[0]): Promise<string>;
+  toSVGElement(
+    options?: Parameters<GoFishNode["toSVGElement"]>[0]
+  ): Promise<SVGSVGElement>;
+  save(
+    filename: string,
+    options?: Parameters<GoFishNode["save"]>[1]
+  ): Promise<void>;
 };
 
 /**

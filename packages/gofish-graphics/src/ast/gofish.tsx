@@ -386,10 +386,56 @@ export async function layout(
   };
 }
 
-/* global pass handler */
-export const gofish = (
-  container: HTMLElement,
-  {
+/* top-level pass handler */
+
+/** Options shared by every render terminal (`render`, `toSVG`, …). */
+export type GoFishRenderOptions = {
+  w?: number;
+  h?: number;
+  x?: number;
+  y?: number;
+  transform?: { x?: number; y?: number };
+  debug?: boolean;
+  defs?: JSX.Element[];
+  axes?: AxesOptions;
+  axisFields?: { x?: string; y?: string };
+  colorConfig?: ColorConfig;
+  padding?: number;
+};
+
+/** Extra options for the SVG-export terminals (`toSVG` / `toSVGElement` / `save`). */
+export type GoFishExportOptions = GoFishRenderOptions & {
+  /** Background fill painted behind the chart. `null`/omitted = transparent. */
+  background?: string | null;
+};
+
+type LayoutData = {
+  underlyingSpaceX: UnderlyingSpace;
+  underlyingSpaceY: UnderlyingSpace;
+  posScales: [
+    ((pos: number) => number) | undefined,
+    ((pos: number) => number) | undefined,
+  ];
+  child: GoFishNode;
+  width: number;
+  height: number;
+  rightOverhang: number;
+  rightContentOverhang: number;
+  topOverhang: number;
+  leftOverhang: number;
+  bottomOverhang: number;
+};
+
+/**
+ * Run the domain-inference + layout passes for `child` and return the
+ * measured layout data. The single place the pipeline is driven — shared by
+ * the live `gofish()` render path and the `gofishToSVG*` export paths.
+ */
+async function runLayout(
+  options: GoFishRenderOptions,
+  child: GoFishNode | Promise<GoFishNode>
+): Promise<LayoutData> {
+  const {
     w,
     h,
     x,
@@ -400,79 +446,70 @@ export const gofish = (
     axes = false,
     axisFields,
     colorConfig,
-    padding,
-  }: {
-    w?: number;
-    h?: number;
-    x?: number;
-    y?: number;
-    transform?: { x?: number; y?: number };
-    debug?: boolean;
-    defs?: JSX.Element[];
-    axes?: AxesOptions;
-    axisFields?: { x?: string; y?: string };
-    colorConfig?: ColorConfig;
-    padding?: number;
-  },
+  } = options;
+  const session: RenderSession = {
+    tokenContext: new Map(),
+    scaleContext: { unit: { color: new Map(), colorConfig } },
+  };
+  try {
+    const contexts = { session };
+
+    // Text mark bbox measurements (via canvas measureText in
+    // text.tsx) depend on resolved font metrics. If a webfont is
+    // still loading when layout runs, measurement uses fallback
+    // metrics, baking the wrong positions into the SVG.
+    // FontFaceSet.ready resolves once all CSS-declared @font-face
+    // loads are done. System-fallback resolution (e.g. "Andale Mono"
+    // → fontconfig monospace on Linux) bypasses this entirely, so
+    // this isn't a full guarantee — but it's a strict improvement
+    // for any consumer using <link>-loaded webfonts.
+    if (typeof document !== "undefined" && document.fonts?.ready) {
+      await document.fonts.ready;
+    }
+
+    return await layout(
+      { w, h, x, y, transform, debug, defs, axes, axisFields },
+      child,
+      contexts
+    );
+  } finally {
+    if (debug) {
+      console.log("scaleContext", session.scaleContext);
+      console.log("tokenContext", session.tokenContext);
+    }
+  }
+}
+
+/** Build the `<svg>` JSX element from already-computed layout data. */
+function renderLayout(
+  data: LayoutData,
+  svgPadding: number,
+  defs?: JSX.Element[]
+): JSX.Element {
+  return render(
+    {
+      width: data.width,
+      height: data.height,
+      svgPadding,
+      defs,
+      rightOverhang: data.rightOverhang,
+      rightContentOverhang: data.rightContentOverhang,
+      topOverhang: data.topOverhang,
+      leftOverhang: data.leftOverhang,
+      bottomOverhang: data.bottomOverhang,
+    },
+    data.child
+  );
+}
+
+export const gofish = (
+  container: HTMLElement,
+  options: GoFishRenderOptions,
   child: GoFishNode | Promise<GoFishNode>
 ) => {
-  const svgPadding = padding ?? PADDING;
-  type LayoutData = {
-    underlyingSpaceX: UnderlyingSpace;
-    underlyingSpaceY: UnderlyingSpace;
-    posScales: [
-      ((pos: number) => number) | undefined,
-      ((pos: number) => number) | undefined,
-    ];
-    child: GoFishNode;
-    width: number;
-    height: number;
-    rightOverhang: number;
-    rightContentOverhang: number;
-    topOverhang: number;
-    leftOverhang: number;
-    bottomOverhang: number;
-  };
+  const svgPadding = options.padding ?? PADDING;
 
-  const runGofish = async (): Promise<LayoutData> => {
-    const session: RenderSession = {
-      tokenContext: new Map(),
-      scaleContext: { unit: { color: new Map(), colorConfig } },
-    };
-    try {
-      const contexts = {
-        session,
-      };
-
-      // Text mark bbox measurements (via canvas measureText in
-      // text.tsx) depend on resolved font metrics. If a webfont is
-      // still loading when layout runs, measurement uses fallback
-      // metrics, baking the wrong positions into the SVG.
-      // FontFaceSet.ready resolves once all CSS-declared @font-face
-      // loads are done. System-fallback resolution (e.g. "Andale Mono"
-      // → fontconfig monospace on Linux) bypasses this entirely, so
-      // this isn't a full guarantee — but it's a strict improvement
-      // for any consumer using <link>-loaded webfonts.
-      if (typeof document !== "undefined" && document.fonts?.ready) {
-        await document.fonts.ready;
-      }
-
-      const layoutResult = await layout(
-        { w, h, x, y, transform, debug, defs, axes, axisFields },
-        child,
-        contexts
-      );
-
-      return layoutResult;
-    } finally {
-      if (debug) {
-        console.log("scaleContext", session.scaleContext);
-        console.log("tokenContext", session.tokenContext);
-      }
-    }
-  };
-
-  const [layoutData] = createResource(runGofish);
+  const [layoutData] = createResource(() => runLayout(options, child));
 
   // Render to the provided container
   solidRender(() => {
@@ -482,26 +519,154 @@ export const gofish = (
         {(() => {
           const data = layoutData();
           if (!data) return null;
-          return render(
-            {
-              width: data.width,
-              height: data.height,
-              svgPadding,
-              defs,
-              rightOverhang: data.rightOverhang,
-              rightContentOverhang: data.rightContentOverhang,
-              topOverhang: data.topOverhang,
-              leftOverhang: data.leftOverhang,
-              bottomOverhang: data.bottomOverhang,
-            },
-            data.child
-          );
+          return renderLayout(data, svgPadding, options.defs);
         })()}
       </Suspense>
     );
   }, container);
   return container;
 };
+
+const SVG_NS = "http://www.w3.org/2000/svg";
+const XLINK_NS = "http://www.w3.org/1999/xlink";
+
+/**
+ * Serialize an `<svg>` element to a standalone SVG markup string suitable for
+ * writing to a `.svg` file: ensures the SVG/xlink namespaces and a `viewBox`
+ * are present, and optionally paints a background rect. Works on a clone, so
+ * the passed element is left untouched.
+ */
+export function serializeSVG(
+  svg: SVGSVGElement,
+  opts?: { background?: string | null }
+): string {
+  const el = svg.cloneNode(true) as SVGSVGElement;
+
+  el.setAttribute("xmlns", SVG_NS);
+  if (!el.getAttribute("xmlns:xlink")) el.setAttribute("xmlns:xlink", XLINK_NS);
+
+  // viewBox so the SVG scales when a consumer overrides width/height.
+  const width = el.getAttribute("width");
+  const height = el.getAttribute("height");
+  if (!el.getAttribute("viewBox") && width && height) {
+    el.setAttribute("viewBox", `0 0 ${width} ${height}`);
+  }
+
+  const background = opts?.background;
+  if (background) {
+    const rect = el.ownerDocument.createElementNS(SVG_NS, "rect");
+    rect.setAttribute("x", "0");
+    rect.setAttribute("y", "0");
+    rect.setAttribute("width", "100%");
+    rect.setAttribute("height", "100%");
+    rect.setAttribute("fill", background);
+    el.insertBefore(rect, el.firstChild);
+  }
+
+  const markup = new XMLSerializer().serializeToString(el);
+  return markup.startsWith("<?xml")
+    ? markup
+    : `<?xml version="1.0" encoding="UTF-8"?>\n${markup}`;
+}
+
+/**
+ * Produce a detached `<svg>` element for `child` by running the same
+ * layout + render pipeline as `gofish()`, but mounting into a throwaway
+ * container and returning a clone of the resulting SVG.
+ *
+ * Requires a DOM (browser or notebook front-end). In Node this throws —
+ * headless rendering is tracked in #577.
+ */
+export async function gofishToSVGElement(
+  options: GoFishExportOptions,
+  child: GoFishNode | Promise<GoFishNode>
+): Promise<SVGSVGElement> {
+  if (typeof document === "undefined") {
+    throw new Error(
+      "toSVG requires a DOM (browser or notebook front-end). " +
+        "Headless Node rendering is tracked in #577."
+    );
+  }
+  const data = await runLayout(options, child);
+  const svgPadding = options.padding ?? PADDING;
+  const root = document.createElement("div");
+  // Layout is already awaited, so the SVG mounts synchronously — no Suspense.
+  const dispose = solidRender(
+    () => renderLayout(data, svgPadding, options.defs),
+    root
+  );
+  const svg = root.querySelector("svg");
+  if (!svg) {
+    dispose();
+    throw new Error("toSVG: no <svg> element was produced by the render pass");
+  }
+  // Clone before disposing the reactive root so disposal can't strip it.
+  const clone = svg.cloneNode(true) as SVGSVGElement;
+  dispose();
+  return clone;
+}
+
+/** Produce a standalone SVG markup string for `child`. See {@link gofishToSVGElement}. */
+export async function gofishToSVG(
+  options: GoFishExportOptions,
+  child: GoFishNode | Promise<GoFishNode>
+): Promise<string> {
+  return serializeSVG(await gofishToSVGElement(options, child), options);
+}
+
+/**
+ * Write or download an SVG string to `filename`. Format is inferred from the
+ * extension (only `.svg` today; PNG/HTML tracked in #578). In a browser this
+ * triggers a download; in Node it writes the file.
+ */
+export async function saveSVGString(
+  svg: string,
+  filename: string
+): Promise<void> {
+  const dot = filename.lastIndexOf(".");
+  const ext = dot >= 0 ? filename.slice(dot).toLowerCase() : "";
+  if (ext !== ".svg") {
+    throw new Error(
+      `save(): only ".svg" is supported today (got "${ext || filename}"). ` +
+        "PNG and HTML export are tracked in #578."
+    );
+  }
+
+  // Browser: trigger a download via a temporary anchor + object URL.
+  if (
+    typeof document !== "undefined" &&
+    typeof URL !== "undefined" &&
+    typeof URL.createObjectURL === "function"
+  ) {
+    const blob = new Blob([svg], { type: "image/svg+xml" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    return;
+  }
+
+  // Node: write to disk. Dynamic import keeps `fs` out of the browser bundle;
+  // the indirect specifier stops the bundler/TS from resolving it at build time.
+  const fsModule = "node:fs/promises";
+  const { writeFile } = (await import(/* @vite-ignore */ fsModule)) as {
+    writeFile: (path: string, data: string, encoding: string) => Promise<void>;
+  };
+  await writeFile(filename, svg, "utf-8");
+}
+
+/** Layout + serialize + save for `child`. See {@link saveSVGString}. */
+export async function gofishSave(
+  filename: string,
+  options: GoFishExportOptions,
+  child: GoFishNode | Promise<GoFishNode>
+): Promise<void> {
+  await saveSVGString(await gofishToSVG(options, child), filename);
+}
 
 const PADDING = 40;
 
