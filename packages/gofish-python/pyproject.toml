@@ -2,8 +2,13 @@
 requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
+# NOTE: the PyPI distribution name is `gofish-graphics` (installed via
+# `pip install gofish-graphics`, imported as `gofish`). The pnpm workspace
+# package is still named `gofish-python` in package.json — that name is
+# internal and never published to npm. The release workflow rewrites the
+# version here in lockstep with the npm packages before building the wheel.
 [project]
-name = "gofish-python"
+name = "gofish-graphics"
 version = "0.1.0"
 description = "Clean AST implementation for GoFish graphics library"
 readme = "README.md"

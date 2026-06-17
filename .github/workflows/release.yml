@@ -1,10 +1,18 @@
 name: Release
 
-# Unified publish workflow. Publishes `gofish-graphics` and `gofish-ir`
-# in lockstep — they always carry the same version, npm tag, and (for
-# `release` mode) git tag. `gofish-ir` publishes first so the
-# `workspace:*` dependency declared by `gofish-graphics` resolves to a
-# concrete already-published version on the registry.
+# Unified publish workflow. Publishes the npm packages `gofish-graphics`
+# and `gofish-ir`, plus the Python package `gofish-graphics` (PyPI), all in
+# lockstep — they always carry the same version, npm tag, and (for `release`
+# mode) git tag. `gofish-ir` publishes first so the `workspace:*` dependency
+# declared by `gofish-graphics` resolves to a concrete already-published
+# version on the registry.
+#
+# The Python package ships the same version: PyPI has no dist-tags, so the
+# nightly maps to a PEP 440 dev release (`X.Y.Z.devYYYYMMDD`), which pip
+# ignores unless `--pre` is passed. PyPI auth uses trusted publishing (OIDC)
+# — configure a publisher for project `gofish-graphics` pointing at
+# owner/repo `gofish-graphics/gofish-graphics`, workflow `release.yml`, with
+# the environment field left blank.
 #
 #   - Scheduled (4am UTC daily): publishes a nightly-tagged prerelease if
 #     there are commits from the last 24h.
@@ -149,6 +157,57 @@ jobs:
         working-directory: packages/gofish-graphics
         run: pnpm publish --tag "${{ steps.version.outputs.npm_tag }}" --access public --no-git-checks
 
+      # --- Python package (gofish-graphics on PyPI) ---
+      # Published in lockstep with the npm packages. PyPI has no dist-tags, so
+      # nightly builds ship as PEP 440 dev releases (`X.Y.Z.devYYYYMMDD`), which
+      # `pip install` ignores unless `--pre` is passed — the PyPI analogue of the
+      # npm `nightly` tag. Release modes publish the final `X.Y.Z`. Auth is via
+      # PyPI trusted publishing (OIDC), reusing this job's `id-token: write`; no
+      # token secret is needed. The wheel bundles the widget ESM, which is built
+      # from the gofish-graphics/gofish-ir dist produced earlier in this job.
+      - name: Setup Python
+        if: steps.plan.outputs.skip == 'false'
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Compute Python version
+        if: steps.plan.outputs.skip == 'false'
+        id: pyversion
+        run: |
+          MODE="${{ steps.plan.outputs.mode }}"
+          if [ "$MODE" = "nightly" ]; then
+            # Same base as the npm nightly (pre-bump gofish-graphics version),
+            # rendered as a PEP 440 dev release.
+            BASE=$(node -p "require('./packages/gofish-graphics/package.json').version" | sed 's/-nightly.*//')
+            DATE=$(date +'%Y%m%d')
+            PY_VERSION="${BASE}.dev${DATE}"
+          else
+            # Lockstep with the npm release version computed above (e.g. 0.2.0).
+            PY_VERSION="${{ steps.version.outputs.version }}"
+          fi
+          sed -i -E "s/^version = \".*\"/version = \"${PY_VERSION}\"/" packages/gofish-python/pyproject.toml
+          sed -i -E "s/^__version__ = \".*\"/__version__ = \"${PY_VERSION}\"/" packages/gofish-python/gofish/__init__.py
+          echo "py_version=$PY_VERSION" >> "$GITHUB_OUTPUT"
+          echo "Publishing gofish-graphics (PyPI) version: $PY_VERSION"
+
+      - name: Build widget bundle
+        if: steps.plan.outputs.skip == 'false'
+        run: pnpm --filter gofish-python build:widget
+
+      - name: Build Python distribution
+        if: steps.plan.outputs.skip == 'false'
+        run: |
+          python -m pip install --upgrade build
+          python -m build --outdir packages/gofish-python/dist packages/gofish-python
+
+      - name: Publish gofish-graphics to PyPI
+        if: steps.plan.outputs.skip == 'false'
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: packages/gofish-python/dist
+          skip-existing: true
+
       - name: Commit, tag, and push (release only)
         if: steps.plan.outputs.skip == 'false' && steps.plan.outputs.mode != 'nightly'
         env:
@@ -170,7 +229,8 @@ jobs:
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add packages/gofish-graphics/package.json packages/gofish-ir/package.json
+          git add packages/gofish-graphics/package.json packages/gofish-ir/package.json \
+                  packages/gofish-python/pyproject.toml packages/gofish-python/gofish/__init__.py
           git commit -m "chore(release): v${VERSION}"
           git tag "${TAG}"
           REMOTE="https://x-access-token:${RELEASE_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
