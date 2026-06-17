@@ -38,6 +38,16 @@ export { wavy } from "./ast/coordinateTransforms/wavy";
 export { gofish as GoFish } from "./ast/gofish";
 export { GoFishSolid } from "./ast/GoFishSolid";
 
+// SVG export
+export {
+  serializeSVG,
+  gofishToSVG,
+  gofishToSVGElement,
+  saveSVGString,
+  gofishSave,
+} from "./ast/gofish";
+export type { GoFishRenderOptions, GoFishExportOptions } from "./ast/gofish";
+
 // Name / scope primitives
 export { createName } from "./ast/createName";
 export type { Token } from "./ast/createName";

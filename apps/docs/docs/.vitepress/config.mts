@@ -434,6 +434,7 @@ export default defineConfig({
                 { text: "mark", link: "/js/api/core/mark" },
                 { text: "connect", link: "/js/api/core/connect" },
                 { text: "render", link: "/js/api/core/render" },
+                { text: "export (SVG)", link: "/js/api/core/export" },
               ],
             },
             {
@@ -548,6 +549,7 @@ export default defineConfig({
                 { text: "mark", link: "/python/api/core/mark" },
                 { text: "connect", link: "/python/api/core/connect" },
                 { text: "render", link: "/python/api/core/render" },
+                { text: "export (SVG)", link: "/python/api/core/export" },
               ],
             },
             {

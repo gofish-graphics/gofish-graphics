@@ -415,6 +415,19 @@ class Mark:
         )
         return widget
 
+    def save(
+        self,
+        path,
+        w: int = 800,
+        h: int = 600,
+        axes: bool = False,
+        debug: bool = False,
+    ):
+        """Save this mark's render to ``path`` (see ``ChartBuilder.save``)."""
+        widget = self.render(w=w, h=h, axes=axes, debug=debug)
+        widget.save(path)
+        return widget
+
     def _repr_mimebundle_(self, include=None, exclude=None):
         """Auto-display in notebooks (see ChartBuilder._repr_mimebundle_)."""
         return self.render()._repr_mimebundle_(include=include, exclude=exclude)
@@ -1118,6 +1131,22 @@ class ChartBuilder:
             debug=debug,
         )
 
+        return widget
+
+    def save(self, path, w: int = 800, h: int = 600, debug: bool = False):
+        """Save the rendered chart to ``path`` (format inferred from the
+        extension — ``.svg`` today; PNG/HTML tracked in #578).
+
+        The SVG is produced by the notebook front-end, so this returns a widget
+        that writes the file *once it renders*. Make it the last expression in a
+        cell (or otherwise display it) so the render — and the write — happen.
+        Truly synchronous, headless export is tracked in #577.
+
+        Example:
+            >>> chart(data).mark(rect(h="y")).save("chart.svg")
+        """
+        widget = self.render(w=w, h=h, debug=debug)
+        widget.save(path)
         return widget
 
     def _repr_mimebundle_(self, include=None, exclude=None):
@@ -2481,6 +2510,19 @@ class LayerBuilder:
             axes=axes,
             debug=debug,
         )
+        return widget
+
+    def save(
+        self,
+        path,
+        w: int = 800,
+        h: int = 600,
+        axes: bool = False,
+        debug: bool = False,
+    ):
+        """Save the layer's render to ``path`` (see ``ChartBuilder.save``)."""
+        widget = self.render(w=w, h=h, axes=axes, debug=debug)
+        widget.save(path)
         return widget
 
     def _repr_mimebundle_(self, include=None, exclude=None):

@@ -482,14 +482,10 @@ export class ChartBuilder<TInput, TOutput = TInput> {
     );
   }
 
-  // render calls resolve and then renders
-  async render(
-    container: Parameters<GoFishNode["render"]>[0],
-    options: Omit<Parameters<GoFishNode["render"]>[1], "axes">
-  ): Promise<ReturnType<GoFishNode["render"]>> {
-    // Auto-infer axis titles from field encodings on the mark and operators.
-    // Mark fields take priority (they encode measured values, e.g. h: "count");
-    // operator fields fill remaining gaps (grouping/layout, e.g. spread by "lake").
+  // Auto-infer axis titles from field encodings on the mark and operators.
+  // Mark fields take priority (they encode measured values, e.g. h: "count");
+  // operator fields fill remaining gaps (grouping/layout, e.g. spread by "lake").
+  private inferAxisFields(): { x?: string; y?: string } {
     const axisFields: { x?: string; y?: string } = {};
     const markMeta = (this.finalMark as any)?.__axisFields as
       | { x?: string; y?: string }
@@ -503,14 +499,62 @@ export class ChartBuilder<TInput, TOutput = TInput> {
       if (meta?.x) axisFields.x ??= meta.x;
       if (meta?.y) axisFields.y ??= meta.y;
     }
+    return axisFields;
+  }
 
+  // The chart-level options every terminal threads through to the node:
+  // resolved axes/color config plus the inferred axis fields.
+  private async resolveForRender<T extends Record<string, unknown>>(
+    options: T
+  ): Promise<{ node: GoFishNode; options: T & Record<string, unknown> }> {
+    const axisFields = this.inferAxisFields();
     const node = await this.resolve();
-    return node.render(container, {
-      ...options,
-      axes: this.options?.axes,
-      colorConfig: this.options?.color,
-      axisFields,
-    });
+    return {
+      node,
+      options: {
+        ...options,
+        axes: this.options?.axes,
+        colorConfig: this.options?.color,
+        axisFields,
+      },
+    };
+  }
+
+  // render calls resolve and then renders
+  async render(
+    container: Parameters<GoFishNode["render"]>[0],
+    options: Omit<Parameters<GoFishNode["render"]>[1], "axes">
+  ): Promise<ReturnType<GoFishNode["render"]>> {
+    const { node, options: opts } = await this.resolveForRender(options);
+    return node.render(container, opts);
+  }
+
+  /** Resolve and render to a standalone SVG markup string. */
+  async toSVG(
+    options: Omit<Parameters<GoFishNode["toSVG"]>[0], "axes"> = {}
+  ): Promise<string> {
+    const { node, options: opts } = await this.resolveForRender(options);
+    return node.toSVG(opts);
+  }
+
+  /** Resolve and render to a detached `<svg>` element. */
+  async toSVGElement(
+    options: Omit<Parameters<GoFishNode["toSVGElement"]>[0], "axes"> = {}
+  ): Promise<SVGSVGElement> {
+    const { node, options: opts } = await this.resolveForRender(options);
+    return node.toSVGElement(opts);
+  }
+
+  /**
+   * Resolve, render, and save to `filename` (format inferred from the
+   * extension — `.svg` today). Browser downloads; Node writes the file.
+   */
+  async save(
+    filename: string,
+    options: Omit<Parameters<GoFishNode["save"]>[1], "axes"> = {}
+  ): Promise<void> {
+    const { node, options: opts } = await this.resolveForRender(options);
+    return node.save(filename, opts);
   }
 }
 

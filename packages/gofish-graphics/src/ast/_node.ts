@@ -23,8 +23,8 @@ import {
   Size,
   Transform,
 } from "./dims";
-import { gofish } from "./gofish";
-import type { AxesOptions } from "./gofish";
+import { gofish, gofishToSVGElement, gofishToSVG, gofishSave } from "./gofish";
+import type { AxesOptions, GoFishExportOptions } from "./gofish";
 import { GoFishRef } from "./_ref";
 import { GoFishAST } from "./_ast";
 import { CoordinateTransform } from "./coordinateTransforms/coord";
@@ -999,6 +999,34 @@ export class GoFishNode {
       },
       this
     );
+  }
+
+  /**
+   * Render to a detached `<svg>` element instead of mounting into the page.
+   * Same options as {@link render}, plus `background`. Requires a DOM
+   * (browser or notebook front-end); headless Node is tracked in #577.
+   */
+  public toSVGElement(
+    options: GoFishExportOptions = {}
+  ): Promise<SVGSVGElement> {
+    return gofishToSVGElement(options, this);
+  }
+
+  /** Render to a standalone SVG markup string. See {@link toSVGElement}. */
+  public toSVG(options: GoFishExportOptions = {}): Promise<string> {
+    return gofishToSVG(options, this);
+  }
+
+  /**
+   * Render and save to `filename`. Format is inferred from the extension
+   * (only `.svg` today). In a browser this downloads; in Node it writes the
+   * file.
+   */
+  public save(
+    filename: string,
+    options: GoFishExportOptions = {}
+  ): Promise<void> {
+    return gofishSave(filename, options, this);
   }
 
   public name(name: string | Token): this {

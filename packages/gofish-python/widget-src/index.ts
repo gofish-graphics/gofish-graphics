@@ -16,7 +16,12 @@
  */
 
 import * as Arrow from "apache-arrow";
-import { Layer, Serialize, type ChartBuilder } from "gofish-graphics";
+import {
+  Layer,
+  Serialize,
+  serializeSVG,
+  type ChartBuilder,
+} from "gofish-graphics";
 import type { Frontend } from "gofish-ir";
 
 // Type aliases pointing at the canonical IR schema. Internal usages below
@@ -378,6 +383,65 @@ function renderChart(
 }
 
 // ---------------------------------------------------------------------------
+// SVG export capture (#571)
+// ---------------------------------------------------------------------------
+
+/**
+ * Resolve once an `<svg>` is present in `container`. The chart mounts
+ * asynchronously (Solid Suspense + async layout/derives swap a "Loading…"
+ * fallback for the `<svg>`), so we observe the container rather than reading
+ * it synchronously. Resolves `null` if none appears within `timeoutMs`.
+ */
+function waitForSVG(
+  container: HTMLElement,
+  timeoutMs = 15_000
+): Promise<SVGSVGElement | null> {
+  const existing = container.querySelector("svg");
+  if (existing) return Promise.resolve(existing as SVGSVGElement);
+  return new Promise((resolve) => {
+    let done = false;
+    const finish = (v: SVGSVGElement | null) => {
+      if (done) return;
+      done = true;
+      observer.disconnect();
+      clearTimeout(timer);
+      resolve(v);
+    };
+    const observer = new MutationObserver(() => {
+      const svg = container.querySelector("svg");
+      if (svg) finish(svg as SVGSVGElement);
+    });
+    observer.observe(container, { childList: true, subtree: true });
+    const timer = setTimeout(
+      () => finish(container.querySelector("svg") as SVGSVGElement | null),
+      timeoutMs
+    );
+  });
+}
+
+/**
+ * Wait for the rendered `<svg>`, serialize it, and report it to the kernel via
+ * the `svg_result` trait so Python's `.save()` / `.to_svg()` can write it.
+ * Best-effort: export is optional, so failures are swallowed.
+ */
+async function captureSVG(
+  model: WidgetModel,
+  container: HTMLElement,
+  log: (...args: any[]) => void
+): Promise<void> {
+  try {
+    const svg = await waitForSVG(container);
+    if (!svg) return;
+    const markup = serializeSVG(svg);
+    model.set("svg_result", { value: markup });
+    model.save_changes();
+    log("Reported svg_result to kernel");
+  } catch (e) {
+    log("captureSVG failed (export unavailable):", e);
+  }
+}
+
+// ---------------------------------------------------------------------------
 // AnyWidget entry point
 // ---------------------------------------------------------------------------
 
@@ -435,6 +499,10 @@ export default {
       } catch {
         /* ignore */
       }
+      // Report the rendered SVG to the kernel for Python-side export (#571).
+      // Fire-and-forget: it waits for the async mount, independent of the
+      // synchronous render_result above.
+      void captureSVG(model, container, log);
     } catch (error) {
       const err = error instanceof Error ? error : new Error(String(error));
       log("Error in render():", err);
