@@ -8,13 +8,26 @@
 
 ## Installation
 
+GoFish is moving fast and the stable release lags well behind active
+development. While the library is pre-1.0, we recommend early adopters install
+the **nightly** build (published whenever `main` changes):
+
+```bash
+npm install gofish-graphics@nightly
+# or
+pnpm add gofish-graphics@nightly
+# or
+yarn add gofish-graphics@nightly
+```
+
+For the last stable release, drop the `@nightly` tag:
+
 ```bash
 npm install gofish-graphics
-# or
-pnpm add gofish-graphics
-# or
-yarn add gofish-graphics
 ```
+
+Using Python? `pip install --pre gofish-graphics` (see the
+[docs](https://gofish.graphics/python/get-started)).
 
 ## Usage
 
