@@ -61,16 +61,19 @@ export const Default: StoryObj<Args> = {
     Chart(scatterData, { axes: false })
       // 1-D scatter: position each flower by its lake's x location; all
       // flowers share a common ground line (alignment on the unpositioned y).
-      .flow(scatter({ by: "lake", x: "x", alignment: "baseline" }))
+      .flow(scatter({ by: "lake", x: "x", alignment: "start" }))
       .mark((data) => {
         const collection = data[0].collection;
+        // Stem height = the lake's total catch, in pixels (1px per fish). Each
+        // flower is its own glyph chart, so a data-bound `h: "count"` would be
+        // re-fit to that flower's own scale (every stem filling the full
+        // height); an absolute height keeps the stems comparable across flowers.
+        const total = _.sumBy(collection, "count");
 
         return Chart(collection).mark(
           layer([
-            // Stem: a single green bar whose height is the lake's total catch —
-            // the `count` size channel auto-sums across the species rows, so no
-            // hand-computed total or scale factor is needed.
-            rect({ w: 4, h: "count", fill: color.green[5] }).name("stem"),
+            // Stem: a single green bar whose height encodes the lake's total catch.
+            rect({ w: 4, h: total, fill: color.green[5] }).name("stem"),
             // Flower head: petals fanning out to a fixed radius in polar
             // coordinates, one per species — angular width encodes catch, color
             // encodes species (lightened toward white via `.lighten`).

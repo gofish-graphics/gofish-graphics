@@ -28,7 +28,7 @@ from gofish import (
     Constraint,
 )
 from python_stories.data import SEAFOOD, CATCH_LOCATIONS, COLORS
-from python_stories._lowlevel_helpers import group_by
+from python_stories._lowlevel_helpers import group_by, sum_by
 
 _GREEN5 = COLORS["colorGreen5"]
 
@@ -50,10 +50,15 @@ _scatter_data = [
 def story_default():
     def _flower(data):
         collection = data[0]["collection"]
+        # Stem height = the lake's total catch in pixels (1px per fish). Each
+        # flower is its own glyph chart, so a data-bound h="count" would re-fit
+        # to that flower's own scale (every stem filling the full height); an
+        # absolute height keeps the stems comparable across flowers.
+        total = sum_by(collection, "count")
         return chart(collection).mark(
             layer(
                 [
-                    rect(w=4, h="count", fill=_GREEN5).name("stem"),
+                    rect(w=4, h=total, fill=_GREEN5).name("stem"),
                     layer(
                         [
                             stack(
@@ -84,7 +89,7 @@ def story_default():
 
     return (
         chart(_scatter_data, axes=False)
-        .flow(scatter(by="lake", x="x", alignment="baseline"))
+        .flow(scatter(by="lake", x="x", alignment="start"))
         .mark(_flower),
         {"w": 400, "h": 400},
     )
