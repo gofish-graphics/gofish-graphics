@@ -3,7 +3,8 @@ import chroma from "chroma-js";
 import { luv } from "culori";
 import type { GoFishNode } from "../_node";
 import { displayTranslate, type Transform } from "../dims";
-import { getValue } from "../data";
+import { getValue, type MaybeValue } from "../data";
+import { resolveColorChannel } from "../../color";
 import {
   type LabelPosition,
   type ShapeInfo,
@@ -14,23 +15,26 @@ import {
 } from "./labelPlacement";
 
 /**
- * Resolve the fill color of a node to a CSS color string.
- * Checks scaleContext for category-key colors first, falls back to literal values.
+ * Resolve the fill color of a node to a CSS color string — the SAME resolution
+ * the shape's own fill uses (`resolveColorChannel`), so a label contrasts
+ * against the color actually drawn: a categorical swatch, a continuous gradient
+ * `scaleFn(value)`, or a literal color. Falls back to a literal string value.
  */
 function resolveNodeFill(node: GoFishNode): string | null {
   if (node.color == null) return null;
 
-  const colorValue = getValue(node.color);
-  if (colorValue == null) return null;
-
   try {
     const scaleContext = node.getRenderSession().scaleContext;
-    const resolved = (scaleContext as any)?.unit?.color?.get(colorValue);
-    if (resolved) return resolved as string;
+    const resolved = resolveColorChannel(
+      node.color as MaybeValue<string>,
+      scaleContext?.unit
+    );
+    if (typeof resolved === "string") return resolved;
   } catch {
     // no session yet
   }
 
+  const colorValue = getValue(node.color);
   return typeof colorValue === "string" ? colorValue : null;
 }
 

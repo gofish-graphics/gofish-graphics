@@ -9,7 +9,7 @@ import { Spread } from "../graphicalOperators/spread";
 import { layer } from "../graphicalOperators/layer";
 import { ref } from "../shapes/ref";
 import { Constraint } from "../constraints";
-import { wrapPreservingIdentity } from "../elaborationUtils";
+import { wrapPreservingIdentity, fmtNum } from "../elaborationUtils";
 import { datum } from "../data";
 import { ticks as d3Ticks, nice as d3Nice } from "d3-array";
 import {
@@ -73,9 +73,6 @@ const tickRect = (dim: 0 | 1): GoFishNode =>
       ? { w: TICK_LEN, h: 1, fill: AXIS_COLOR }
       : { w: 1, h: TICK_LEN, fill: AXIS_COLOR }
   );
-
-/** Stringify a tick value without floating-point noise (0.1+0.2 → "0.3"). */
-const fmtNum = (n: number) => String(+n.toPrecision(12));
 
 /** A short label+tick mark pair, stacked along the cross axis. */
 function tickMark(dim: 0 | 1, label: string, name: string): GoFishNode {

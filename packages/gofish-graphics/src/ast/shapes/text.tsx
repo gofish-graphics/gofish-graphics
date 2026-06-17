@@ -1,4 +1,5 @@
 import * as Monotonic from "../../util/monotonic";
+import { resolveColorChannel } from "../../color";
 import { computeAesthetic } from "../../util";
 import { interval } from "../../util/interval";
 import { GoFishNode } from "../_node";
@@ -316,18 +317,9 @@ export const Text = ({
 
         const [anchorX, anchorY] = displayTranslate(transform);
 
-        const unit = node.getRenderSession().scaleContext?.unit;
-        const unitColorScale = unit && "color" in unit ? unit.color : undefined;
-        const resolvedFill = isValue(fill)
-          ? unitColorScale
-            ? unitColorScale.get(getValue(fill))
-            : getValue(fill)
-          : (fill as string | undefined);
-        const resolvedStroke = isValue(stroke)
-          ? unitColorScale
-            ? unitColorScale.get(getValue(stroke))
-            : getValue(stroke)
-          : (stroke as string | undefined);
+        const unitScale = node.getRenderSession().scaleContext?.unit;
+        const resolvedFill = resolveColorChannel(fill, unitScale);
+        const resolvedStroke = resolveColorChannel(stroke, unitScale);
 
         const layout =
           renderData?.layout ??

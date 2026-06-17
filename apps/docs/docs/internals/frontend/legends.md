@@ -9,12 +9,13 @@ covers:
 
 # Legends
 
-GoFish draws a color legend — a column of swatches and labels — automatically
-from the categorical color scale it infers. Like [axes](/internals/frontend/axes),
-a legend is **not a privileged node type**. It is _elaborated_ into ordinary
-GoFish shapes (`rect`, `text`) and operators (`spread`, `layer`) wired together
-with constraints (`align`, `distribute`). The render pass has no legend-specific
-code at all.
+GoFish draws a color legend automatically from the color scale it infers — a
+column of swatches and labels for a **categorical** scale, or a **colorbar** (a
+sampled gradient bar with tick labels) for a **continuous** (gradient) one. Like
+[axes](/internals/frontend/axes), a legend is **not a privileged node type**. It
+is _elaborated_ into ordinary GoFish shapes (`rect`, `text`) and operators
+(`spread`, `layer`) wired together with constraints (`align`, `distribute`,
+`position`). The render pass has no legend-specific code at all.
 
 ## Why elaborate
 
@@ -34,11 +35,15 @@ functions a future public API can override.
 
 `elaborateLegend` (`src/ast/legends/elaborate.tsx`) runs inside `gofish.tsx`'s
 `layout()`, _after_ the axis-elaboration block and after the nice-space capture,
-and is gated on a **non-empty color map** (not on the `axes` option — a legend
-appears whenever a color encoding resolved to swatches). It runs after the last
-`resolveColorScale`, consuming the already-populated `scaleContext.unit.color`.
+and is gated on a **resolved color scale** (not on the `axes` option — a legend
+appears whenever a color encoding resolved): a non-empty categorical color map,
+or a continuous color scale. It runs after the last `resolveColorScale`,
+consuming the already-resolved `scaleContext.unit` (the `color` map for a
+categorical scale, or the `scaleFn` + `domain` for a continuous one), and
+dispatches to `legendColumn` or `legendColorbar` accordingly.
 Crucially, `resolveColorScale` is **not** re-run on the rewritten tree: legend
-swatch fills are literal color strings, never `isValue` data references, so the
+shape fills are literal color strings (each colorbar band is `scaleFn(value)`,
+baked at elaboration time), never `isValue` data references, so the
 color pass has nothing to do with them. After the rewrite the pass runs only a
 memoized `resolveUnderlyingSpace()` (which computes only the newly inserted
 nodes); `resolveNames()` is unnecessary, since the legend subtree carries only
@@ -149,15 +154,21 @@ legend.
 
 ## The customization seam
 
-`legendRow` and `legendColumn` are **pure, exported builders** (no mutation, no
-context) — the seam a future public legend API would override, exactly as
-`elaborateAxis` is for axes. The visual constants (swatch size, gaps, label font
-and color) live as module constants chosen to match the previous bespoke styling.
+`legendRow` / `legendColumn` (categorical) and `legendColorbar` (continuous) are
+**pure, exported builders** (no mutation, no context) — the seam a future public
+legend API would override, exactly as `elaborateAxis` is for axes. The visual
+constants (swatch/bar size, gaps, label font and color) live as module constants
+chosen to match the previous bespoke styling.
+
+`legendColorbar` builds the bar as a `layer` of fixed-pixel shapes —
+`BAND_COUNT` thin band `Rect`s (each filled `scaleFn(value)`) plus a tick mark +
+label per d3 tick — each placed by a literal-pixel `Constraint.position` in the
+bar's own y-up frame (value `v` → `t·BAR_HEIGHT` from the bottom, so the domain
+max sits at the top). The layer's bbox is the union of those shapes, so the
+colorbar is measured by normal layout exactly like the swatch column.
 
 ## Limitations
 
-- A **gradient** color config currently yields one swatch row per color-map
-  entry, matching the bespoke path. A continuous **colorbar** is a follow-up.
 - A **tall legend** (more entries than the content is tall) can extend below the
   content bottom. This is a pre-existing failure mode carried over from the
   bespoke layout and is out of scope here.

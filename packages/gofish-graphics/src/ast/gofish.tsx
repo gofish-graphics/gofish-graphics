@@ -4,7 +4,7 @@
 // </gofish-wiki>
 
 import { createResource, Show, Suspense, type JSX } from "solid-js";
-import { type ColorConfig } from "./colorSchemes";
+import { type ColorConfig, type GradientScale } from "./colorSchemes";
 import { render as solidRender } from "solid-js/web";
 import {
   debugInputSceneGraph,
@@ -31,7 +31,25 @@ export type ContinuousScale = {
   scaleFactor: number;
 };
 
-export type Scale = CategoricalScale | ContinuousScale;
+/**
+ * A continuous (gradient) color scale: a single `scaleFn` over the numeric
+ * `domain`, built by `createGradientScale`. It is the source of truth for a
+ * gradient color encoding — mark fills and the colorbar legend both read it,
+ * rather than enumerating one swatch per distinct value (which is what
+ * {@link CategoricalScale} does for palettes).
+ */
+export type ContinuousColorScale = {
+  scaleFn: (value: number) => string;
+  domain: [number, number];
+  colorConfig: GradientScale;
+  /**
+   * Internal: set once the gradient domain has been resolved over the full
+   * subtree (first writer wins), so deeper nodes don't recompute a narrower one.
+   */
+  resolved?: boolean;
+};
+
+export type Scale = CategoricalScale | ContinuousScale | ContinuousColorScale;
 
 export type ScaleContext = {
   [measure: string]: Scale;
@@ -40,6 +58,10 @@ export type ScaleContext = {
 export const isCategoricalScale = (
   s: Scale | undefined
 ): s is CategoricalScale => s !== undefined && "color" in s;
+
+export const isContinuousColorScale = (
+  s: Scale | undefined
+): s is ContinuousColorScale => s !== undefined && "scaleFn" in s;
 export type AxesOptions = boolean | { x?: AxisOptions; y?: AxisOptions };
 export type AxisOptions = boolean | { title?: string | false };
 
@@ -232,18 +254,24 @@ export async function layout(
     child.resolveUnderlyingSpace();
   }
 
-  // Legend elaboration: turn the color scale into an ordinary swatch-column
-  // subtree seated beside the (now possibly titled) content
-  // (src/ast/legends/elaborate.tsx). Runs after the last resolveColorScale (it
-  // consumes the populated color map; legend fills are literal strings, never
-  // isValue, so the scale pass is NOT re-run). The wrapper preserves the
-  // content's underlying spaces (unionChildSpaces ignores the legend's UNDEFINED
-  // spaces), so the nice spaces captured above remain valid.
+  // Legend elaboration: turn the color scale into an ordinary subtree seated
+  // beside the (now possibly titled) content (src/ast/legends/elaborate.tsx) —
+  // a swatch column for a categorical scale, or a colorbar for a continuous
+  // (gradient) one. Runs after the last resolveColorScale (it consumes the
+  // resolved scale; legend fills are literal strings, never isValue, so the
+  // scale pass is NOT re-run). The wrapper preserves the content's underlying
+  // spaces (unionChildSpaces ignores the legend's UNDEFINED spaces), so the
+  // nice spaces captured above remain valid.
   let legendAdded = false;
   const unitScale = contexts?.session.scaleContext.unit;
-  const colorMap = isCategoricalScale(unitScale) ? unitScale.color : undefined;
-  if (colorMap && colorMap.size > 0) {
-    child = await elaborateLegend(child, colorMap);
+  const hasLegend =
+    (isCategoricalScale(unitScale) && unitScale.color.size > 0) ||
+    isContinuousColorScale(unitScale);
+  if (hasLegend && unitScale) {
+    child = await elaborateLegend(
+      child,
+      unitScale as CategoricalScale | ContinuousColorScale
+    );
     legendAdded = true;
     if (contexts?.session) child.setRenderSession(contexts.session);
     child.resolveUnderlyingSpace(); // memoized: computes only the new nodes
@@ -442,9 +470,23 @@ export const gofish = (
   };
 
   const runGofish = async (): Promise<LayoutData> => {
+    // Seed the unit color scale by config kind. A gradient is a continuous
+    // color scale (its `scaleFn`/`domain` are finalized in resolveColorScale
+    // once the data domain is known); anything else is categorical. A
+    // node-local gradient `colorConfig` (set by ChartBuilder) upgrades the
+    // categorical seed in place during resolveColorScale.
     const session: RenderSession = {
       tokenContext: new Map(),
-      scaleContext: { unit: { color: new Map(), colorConfig } },
+      scaleContext: {
+        unit:
+          colorConfig?._tag === "gradient"
+            ? {
+                scaleFn: () => "#cccccc",
+                domain: [0, 1] as [number, number],
+                colorConfig,
+              }
+            : { color: new Map(), colorConfig },
+      },
     };
     try {
       const contexts = {
