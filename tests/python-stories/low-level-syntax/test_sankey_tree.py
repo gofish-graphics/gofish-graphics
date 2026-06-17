@@ -167,5 +167,5 @@ def story_default():
 
     return (
         layer([bars, *ribbons]),
-        {"w": 500, "h": 400, "axes": True},
+        {"axes": True},
     )

@@ -67,5 +67,5 @@ def story_default():
                 Constraint.align([label, line], x="end"),
             ])
         ),
-        {"w": 1000, "h": 400, "axes": False},
+        {"axes": False},
     )
