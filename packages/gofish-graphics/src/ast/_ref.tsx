@@ -31,6 +31,7 @@ import { isToken, Token } from "./createName";
 
 export type Placeable = {
   dims: Dimensions;
+  localAnchor?: (axis: FancyDirection, anchor: Anchor) => number | undefined;
   place: (axis: FancyDirection, value: number, anchor?: Anchor) => void;
 };
 
@@ -333,6 +334,18 @@ export class GoFishRef {
     return this.transform?.translate?.[dir];
   }
 
+  public localAnchor(axis: FancyDirection, anchor: Anchor): number | undefined {
+    const dir = elaborateDirection(axis);
+    const intrinsic = this.intrinsicDims?.[dir];
+    if (intrinsic?.min === undefined) return undefined;
+    if (
+      (anchor === "center" || anchor === "max") &&
+      intrinsic.size === undefined
+    )
+      return undefined;
+    return localAnchorPoint(anchor, intrinsic.min, intrinsic.size ?? 0);
+  }
+
   public place(
     axis: FancyDirection,
     value: number,
@@ -357,6 +370,18 @@ export class GoFishRef {
 
     this.transform!.translate![dir] =
       value - localAnchorPoint(anchor, localMin ?? 0, size ?? 0);
+  }
+
+  /** Authoritative placement counterpart to `GoFishNode.pinAnchor`. A ref has no
+   *  bbox ledger, so overriding means directly replacing its computed translate. */
+  public pinAnchor(axis: FancyDirection, value: number, anchor: Anchor): void {
+    const dir = elaborateDirection(axis);
+    const intrinsic = this.intrinsicDims?.[dir];
+    this.transform ??= { translate: [undefined, undefined] };
+    this.transform.translate ??= [undefined, undefined];
+    this.transform.translate[dir] =
+      value -
+      localAnchorPoint(anchor, intrinsic?.min ?? 0, intrinsic?.size ?? 0);
   }
 
   public INTERNAL_render(): JSX.Element {

@@ -967,8 +967,9 @@ export const layer = createNodeOperatorSequential(
               }
             }
 
-            // Apply constraints in declaration order. When a constraint has no
-            // pre-placed target, fall back to this layer's own box baselines.
+            // Compose and solve placement constraints as one per-axis relational
+            // problem. Declaration order does not choose an anchor; unanchored
+            // components receive a deterministic weak origin.
             applyConstraints(
               node.constraints,
               nameToPlaceable,

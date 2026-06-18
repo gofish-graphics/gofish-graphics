@@ -2,8 +2,7 @@
 // @wiki Underlying Space — /internals/core/underlying-space
 // </gofish-wiki>
 
-import type { Placeable } from "../_node";
-import { Axis, ConstraintRef, axisIndex, isPlacedOn } from "./shared";
+import { Axis, ConstraintRef } from "./shared";
 import { getMeasure, getValue, isValue, type MaybeValue } from "../data";
 import {
   ORDINAL,
@@ -150,142 +149,10 @@ export function distributeSpaceFold(
   return UNDEFINED;
 }
 
-/** Reports a fixed (already-placed) child whose position disagrees with where
- *  the running distribute walk expected it. spread.tsx passes this to surface
- *  the warning it used to emit from its own walk; the constraint path omits it
- *  (no warning), so console output there is unchanged. Fires only past the
- *  `1e-6` tolerance. */
-export type DistributeInconsistencyReporter = (
-  expected: number,
-  actual: number
-) => void;
-
-/** The subset of a distribute constraint the placement walk reads. The
- *  constraint path passes its full constraint (which satisfies this shape
- *  structurally); spread passes just these fields — `children` is never
- *  consumed here, since targets arrive as Placeables. */
-export type DistributeWalkOptions = Pick<
-  DistributeConstraint,
-  "dir" | "spacing" | "mode" | "order"
->;
-
-/** One emitted placement equation: the target's `anchor` facet lands at `value`.
- *  `min`/`max`/`center` are the box facets the distribute pins. */
-export interface DistributePlacement {
-  target: Placeable;
-  anchor: "min" | "max" | "center";
-  value: number;
-}
-
-/**
- * EMIT the distribute as a list of facet-placement equations (each target's
- * anchor → a value) WITHOUT applying them — the facet-equation-emitter form of
- * the constraint (#39). The relational contiguity chain
- * (`child[i+1].min = child[i].max + spacing`) is resolved to absolute pins from
- * the children's sizes and any pre-placed anchor; the walk reads only
- * pre-existing geometry, never a placement it emits, so the emit is pure. The
- * `apply` path commits these via `place()`; a future per-scope solver can consume
- * the same equations instead of pinning eagerly.
- */
-export function emitDistribute(
-  constraint: DistributeWalkOptions,
-  targets: Placeable[],
-  onInconsistency?: DistributeInconsistencyReporter
-): DistributePlacement[] {
-  const idx = axisIndex(constraint.dir);
-  const ordered =
-    constraint.order === "reverse" ? [...targets].reverse() : targets;
-  const out: DistributePlacement[] = [];
-
-  // Compare a fixed child's actual edge/center against the running expected
-  // position and report past tolerance. The anchor itself is never checked —
-  // it *defines* the running position, so it is consistent by construction
-  // (matches spread's single-forward-walk, which back-computes its origin from
-  // the first fixed child).
-  const checkInconsistent = (expected: number, actual: number): void => {
-    if (onInconsistency && Math.abs(expected - actual) > 1e-6) {
-      onInconsistency(expected, actual);
-    }
-  };
-
-  // Find the first already-placed child (the anchor)
-  const anchorIdx = ordered.findIndex((t) => isPlacedOn(t, idx));
-
-  if (anchorIdx === -1) {
-    // No pre-placed items — start from 0, walk forward
-    let pos = 0;
-    for (const target of ordered) {
-      if (constraint.mode === "center") {
-        out.push({ target, anchor: "center", value: pos });
-        pos += constraint.spacing;
-      } else {
-        out.push({ target, anchor: "min", value: pos });
-        pos += (target.dims[idx].size ?? 0) + constraint.spacing;
-      }
-    }
-    return out;
-  }
-
-  if (constraint.mode === "edge") {
-    // Walk forward from anchor (items after it)
-    let pos = ordered[anchorIdx].dims[idx].max! + constraint.spacing;
-    for (let i = anchorIdx + 1; i < ordered.length; i++) {
-      const t = ordered[i];
-      if (isPlacedOn(t, idx)) {
-        checkInconsistent(pos, t.dims[idx].min!);
-        pos = t.dims[idx].max! + constraint.spacing;
-      } else {
-        out.push({ target: t, anchor: "min", value: pos });
-        pos += (t.dims[idx].size ?? 0) + constraint.spacing;
-      }
-    }
-    // Walk backward from anchor (items before it), placing via "max" anchor
-    pos = ordered[anchorIdx].dims[idx].min! - constraint.spacing;
-    for (let i = anchorIdx - 1; i >= 0; i--) {
-      const t = ordered[i];
-      if (isPlacedOn(t, idx)) {
-        pos = t.dims[idx].min! - constraint.spacing;
-      } else {
-        out.push({ target: t, anchor: "max", value: pos });
-        pos -= (t.dims[idx].size ?? 0) + constraint.spacing;
-      }
-    }
-  } else {
-    // center-to-center: same bidirectional pattern using center anchor
-    let pos = ordered[anchorIdx].dims[idx].center! + constraint.spacing;
-    for (let i = anchorIdx + 1; i < ordered.length; i++) {
-      const t = ordered[i];
-      if (isPlacedOn(t, idx)) {
-        checkInconsistent(pos, t.dims[idx].center!);
-        pos = t.dims[idx].center! + constraint.spacing;
-      } else {
-        out.push({ target: t, anchor: "center", value: pos });
-        pos += constraint.spacing;
-      }
-    }
-    pos = ordered[anchorIdx].dims[idx].center! - constraint.spacing;
-    for (let i = anchorIdx - 1; i >= 0; i--) {
-      const t = ordered[i];
-      if (isPlacedOn(t, idx)) {
-        pos = t.dims[idx].center! - constraint.spacing;
-      } else {
-        out.push({ target: t, anchor: "center", value: pos });
-        pos -= constraint.spacing;
-      }
-    }
-  }
-  return out;
-}
-
-/** Commit the emitted distribute equations: pin each target's anchor at its
- *  value. Behind today's signature; the emit/commit split is the seam a per-scope
- *  solver slots into (consume {@link emitDistribute} instead of pinning here). */
-export function applyDistribute(
-  constraint: DistributeWalkOptions,
-  targets: Placeable[],
-  onInconsistency?: DistributeInconsistencyReporter
-): void {
-  for (const p of emitDistribute(constraint, targets, onInconsistency)) {
-    p.target.place(constraint.dir, p.value, p.anchor);
-  }
-}
+export {
+  applyDistribute,
+  emitDistribute,
+  type DistributeInconsistencyReporter,
+  type DistributePlacement,
+  type DistributeWalkOptions,
+} from "./distributePlacement";

@@ -366,12 +366,13 @@ the spec:
   topologically sorts the affected children and rejects cycles with an
   explicit error. Implemented for nest in this round; z-order has used the
   same recipe (Kahn) all along.
-- **Placement walks are the unsorted remainder.** Align/distribute/position
-  apply in declaration order with first-placed-anchor semantics. That is
-  expressive (axis elaboration chains placements through it) but
-  order-sensitive for hand-written specs; the fix is canonical emission order
-  for compiled forms plus a pre-sort of hand-written constraints by shared
-  targets ([[constraints-as-core]] residual 5), not a new solver.
+- **Known-size placement is relational and confluent.** Align, distribute,
+  position, nest-centering, and grid placement emit per-axis equalities over box
+  facets. The layer solves each connected component as a batch, validates
+  contradictory cycles/pins, chooses one deterministic weak origin only when a
+  component has a free translation, then commits every position atomically.
+  `span` and nest/grid proposal sizing remain outside this pass: they determine
+  sizes before the known-size placement solve.
 
 ## What the algebra is (and what "complete" could mean)
 

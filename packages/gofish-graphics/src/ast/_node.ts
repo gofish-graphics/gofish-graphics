@@ -94,6 +94,10 @@ export type Placeable = {
    *  align anchor reads this so it survives retiring the translate writes; `ref`
    *  stand-ins omit it (they keep a computed `transform`). */
   projectedTranslate?: (dir: Direction) => number | undefined;
+  /** Coordinate of one box anchor in the node's local frame. Placement solving
+   *  uses this to express every anchor as `absoluteMin + constant`, including
+   *  `baseline` for asymmetric boxes such as text and negative bars. */
+  localAnchor?: (axis: FancyDirection, anchor: Anchor) => number | undefined;
   place: (axis: FancyDirection, value: number, anchor?: Anchor) => void;
   /** Write an axis extent from owned bbox facets (the size-setting primitive
    *  #39 — `span` and an authoritative `position` pin go through it). Optional
@@ -699,6 +703,18 @@ export class GoFishNode {
    *  working once stage 3-C retires the direct translate writes. */
   public projectedTranslate(dir: Direction): number | undefined {
     return this._projectTranslate(dir);
+  }
+
+  public localAnchor(axis: FancyDirection, anchor: Anchor): number | undefined {
+    const dir = elaborateDirection(axis);
+    const intrinsic = this.intrinsicDims?.[dir];
+    if (intrinsic?.min === undefined) return undefined;
+    if (
+      (anchor === "center" || anchor === "max") &&
+      intrinsic.size === undefined
+    )
+      return undefined;
+    return localAnchorPoint(anchor, intrinsic.min, intrinsic.size ?? 0);
   }
 
   private get _displayTransform(): Transform | undefined {

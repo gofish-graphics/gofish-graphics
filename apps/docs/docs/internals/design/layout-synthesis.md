@@ -252,6 +252,12 @@ Nobody. Treat every constraint as a **relation** that _fires_ the moment all
 but one of its variables are known. Then run the dumbest loop: fire anything
 fireable, repeat to fixpoint. Direction is an _outcome_, not a choice.
 
+> **Implementation status.** Known-size placement now uses the batch equivalent
+> of this loop: per-axis facet equalities are collected into connected
+> components, solved without declaration order, checked for contradictions, and
+> committed atomically. Size-setting relations still resolve first through the
+> existing span/nest/grid proposal machinery.
+
 **Traced.** A 300px-wide layer with a 60px box `A`, and a nest pair
 (outer `O`, inner `I`, padding 10), with `A` and `O` distributed at gap 8:
 
