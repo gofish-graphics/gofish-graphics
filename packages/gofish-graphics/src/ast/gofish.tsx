@@ -13,11 +13,14 @@ import {
   type GoFishNode,
   type RenderSession,
 } from "./_node";
-import { computePosScale } from "./domain";
+import { posScaleFromSpace } from "./domain";
 import type { Size } from "./dims";
-import { isSIZE, type UnderlyingSpace } from "./underlyingSpace";
+import {
+  hasBaseline,
+  isBaselineMagnitude,
+  type UnderlyingSpace,
+} from "./underlyingSpace";
 import { shadowCheckScaleRoot } from "./solver/shadow";
-import { continuous } from "./domain";
 import { elaborateAxes, elaborateAxisTitles } from "./axes/elaborate";
 import { elaborateLegend, legendOverhang } from "./legends/elaborate";
 
@@ -295,58 +298,36 @@ export async function layout(
   // "use my default" (e.g. rect's DEFAULT_RECT_SIZE) via their `Number.isFinite`
   // guards, the same path the layout engine already relies on.
   const UNSIZED = NaN;
-  const needsCanvas = (s: UnderlyingSpace) =>
-    s.kind === "position" || isSIZE(s);
-  // Concrete canvas for scaling POSITION/SIZE axes (always a real number).
+  const needsCanvas = (s: UnderlyingSpace) => hasBaseline(s);
+  // Concrete canvas for scaling a CONTINUOUS axis (always a real number).
   const canvasW = w ?? DEFAULT_CANVAS_SIZE;
   const canvasH = h ?? DEFAULT_CANVAS_SIZE;
   // Size handed to `child.layout`: a shrink-to-fit axis is left unsized.
   const layoutW = w ?? (needsCanvas(niceUnderlyingSpaceX) ? canvasW : UNSIZED);
   const layoutH = h ?? (needsCanvas(niceUnderlyingSpaceY) ? canvasH : UNSIZED);
 
+  // An anchored CONTINUOUS root builds a posScale over its data interval.
   const posScales: [
     ((pos: number) => number) | undefined,
     ((pos: number) => number) | undefined,
   ] = [
-    niceUnderlyingSpaceX.kind === "position"
-      ? computePosScale(
-          continuous({
-            value: [
-              niceUnderlyingSpaceX.domain!.min,
-              niceUnderlyingSpaceX.domain!.max,
-            ],
-            measure: "unit",
-          }),
-          canvasW
-        )
-      : undefined,
-    niceUnderlyingSpaceY.kind === "position"
-      ? computePosScale(
-          continuous({
-            value: [
-              niceUnderlyingSpaceY.domain!.min,
-              niceUnderlyingSpaceY.domain!.max,
-            ],
-            measure: "unit",
-          }),
-          canvasH
-        )
-      : undefined,
+    posScaleFromSpace(niceUnderlyingSpaceX, canvasW),
+    posScaleFromSpace(niceUnderlyingSpaceY, canvasH),
   ];
 
   if (debug) {
     console.log("width and height constraints:", layoutW, layoutH);
   }
 
-  // Root scale factors come from SIZE underlying spaces by inverting the
-  // composed Monotonic against the canvas. POSITION-rooted axes use
-  // posScales (computed above) instead.
+  // Root scale factor: a baseline magnitude ("free") root inverts its Monotonic
+  // against the canvas. Anchored roots use the posScale (above) instead; a
+  // difference root shrink-to-fits.
   const rootScaleFactors: Size<number | undefined> = [
-    isSIZE(niceUnderlyingSpaceX)
-      ? (niceUnderlyingSpaceX.domain.inverse(canvasW) ?? undefined)
+    isBaselineMagnitude(niceUnderlyingSpaceX)
+      ? (niceUnderlyingSpaceX.width.inverse(canvasW) ?? undefined)
       : undefined,
-    isSIZE(niceUnderlyingSpaceY)
-      ? (niceUnderlyingSpaceY.domain.inverse(canvasH) ?? undefined)
+    isBaselineMagnitude(niceUnderlyingSpaceY)
+      ? (niceUnderlyingSpaceY.width.inverse(canvasH) ?? undefined)
       : undefined,
   ];
 

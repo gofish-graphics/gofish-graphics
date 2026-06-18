@@ -42,7 +42,7 @@ import { Size } from "../dims";
 import {
   UNDEFINED,
   UnderlyingSpace,
-  isSIZE,
+  isBaselineMagnitude,
   isUNDEFINED,
 } from "../underlyingSpace";
 import { unionChildSpaces } from "../graphicalOperators/alignment";
@@ -231,7 +231,11 @@ export function composeConstraintSpaces(
     // pads the off-axis with UNDEFINED, so `spaces[axis]` only ever carries this
     // axis's contribution.)
     spaces[axis] = composed;
-    if (isSIZE(composed)) sizeDomain[axis] = composed.domain;
+    // Only a baseline magnitude ("free", from a distribute) is a budget the
+    // layer σ-solves against via `width.inverse`. An anchored POSITION (from an
+    // align fold) is driven by its posScale, not a σ-budget, so it must NOT
+    // contribute a sizeDomain (else the layer derives a spurious scale factor).
+    if (isBaselineMagnitude(composed)) sizeDomain[axis] = composed.width;
   }
 
   return {

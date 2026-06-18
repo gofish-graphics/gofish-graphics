@@ -24,9 +24,7 @@ import { computeAesthetic, computeSize } from "../../util";
 import {
   POSITION,
   SIZE,
-  isSIZE,
-  isPOSITION,
-  isDIFFERENCE,
+  isCONTINUOUS,
   UnderlyingSpace,
 } from "../underlyingSpace";
 import { interval } from "../../util/interval";
@@ -163,19 +161,12 @@ export const Treemap = createNodeOperator(
           const myUSpace = node._underlyingSpace!;
           const localScaleFactor = (dir: Direction): number | undefined => {
             const space = myUSpace[dir];
-            if (isSIZE(space)) {
+            if (isCONTINUOUS(space)) {
               return (
-                space.domain.inverse(size[dir], {
+                space.width.inverse(size[dir], {
                   upperBoundGuess: size[dir],
                 }) ?? 0
               );
-            }
-            if (isPOSITION(space) && space.domain) {
-              const w = Interval.width(space.domain);
-              return w !== 0 ? size[dir] / w : 0;
-            }
-            if (isDIFFERENCE(space)) {
-              return space.width !== 0 ? size[dir] / space.width : 0;
             }
             return undefined;
           };

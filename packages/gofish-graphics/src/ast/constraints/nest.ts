@@ -3,7 +3,11 @@
 // </gofish-wiki>
 
 import type { Placeable } from "../_node";
-import { SIZE, UnderlyingSpace, isSIZE } from "../underlyingSpace";
+import {
+  CONTINUOUS,
+  UnderlyingSpace,
+  isBaselineMagnitude,
+} from "../underlyingSpace";
 import * as Monotonic from "../../util/monotonic";
 import type { ConstraintRef } from "./shared";
 
@@ -88,9 +92,12 @@ export function nestedSpace(
   innerSpace: UnderlyingSpace,
   padding: number
 ): UnderlyingSpace {
-  if (isSIZE(innerSpace)) {
-    return SIZE(
-      Monotonic.adds(innerSpace.domain, 2 * padding),
+  // Only a baseline magnitude (origin 0) folds `outer = inner + 2·padding`;
+  // data-positioned (nonzero origin) or origin-less content keeps `outer`.
+  if (isBaselineMagnitude(innerSpace)) {
+    return CONTINUOUS(
+      Monotonic.adds(innerSpace.width, 2 * padding),
+      0,
       innerSpace.measure
     );
   }

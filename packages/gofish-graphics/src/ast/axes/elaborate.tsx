@@ -16,6 +16,8 @@ import {
   isPOSITION,
   isORDINAL,
   isDIFFERENCE,
+  continuousInterval,
+  type CONTINUOUS_TYPE,
   type UnderlyingSpace,
 } from "../underlyingSpace";
 
@@ -256,7 +258,7 @@ function elaborateContinuousAxis(
 /** One difference axis: bare tick marks at tick values, delta labels at midpoints. */
 function elaborateDifferenceAxis(
   dim: 0 | 1,
-  space: Extract<UnderlyingSpace, { kind: "difference" }>,
+  space: CONTINUOUS_TYPE,
   prefix: string,
   crossFloor?: number
 ): AxisElaboration {
@@ -264,7 +266,7 @@ function elaborateDifferenceAxis(
   // content's own width-based scaleFactor (size/width) and ticks line up with
   // the marks they annotate. The axis line spans [0, width]; ticks are nice
   // values within it. (The old bespoke path used v*scaleFactor for the same.)
-  const width = space.width;
+  const width = space.width.run(1);
   const base = d3Ticks(0, width, TICK_COUNT);
   // End cap: the line's far end always carries a tick (the old bespoke axis
   // got this by overshooting to the next nice value; here the scale must stay
@@ -408,8 +410,9 @@ function elaborationsFor(node: GoFishNode): {
   for (const dim of [0, 1] as (0 | 1)[]) {
     if (!owns(dim)) continue;
     const s = space[dim];
-    if (isPOSITION(s) && s.domain) {
-      nices[dim] = d3Nice(s.domain.min!, s.domain.max!, TICK_COUNT);
+    const iv = continuousInterval(s);
+    if (isPOSITION(s) && iv) {
+      nices[dim] = d3Nice(iv.min, iv.max, TICK_COUNT);
       floors[dim] = nices[dim]![0];
     } else if (isDIFFERENCE(s)) {
       floors[dim] = 0;
@@ -428,7 +431,7 @@ function elaborationsFor(node: GoFishNode): {
     const s = space[dim];
     const prefix = dim === 1 ? "__y" : "__x";
     const crossFloor = floors[cross(dim)];
-    if (isPOSITION(s) && s.domain) {
+    if (isPOSITION(s)) {
       const e = elaborateContinuousAxis(dim, nices[dim]!, prefix, crossFloor);
       constrained.push(e);
       anchors[dim] = e.anchor;

@@ -21,13 +21,7 @@ import { getValue, isValue, type MaybeValue } from "../data";
 import { computeAesthetic, envFlag } from "../../util";
 import { localAnchorPoint } from "../dims";
 import type { ConstraintSpec, ConstraintPosScales } from "../constraints";
-import {
-  isSIZE,
-  isPOSITION,
-  isDIFFERENCE,
-  type UnderlyingSpace,
-} from "../underlyingSpace";
-import * as Interval from "../../util/interval";
+import { isCONTINUOUS, type UnderlyingSpace } from "../underlyingSpace";
 
 /** Whether the solver shadow assertions run. Off (and zero-cost) in prod, so the
  *  per-constraint pre-state capture the checks need is only built when set. */
@@ -254,8 +248,8 @@ export function shadowCheckPosition(
 /**
  * Check the σ-SCOPE solve — the heart of the affine model. A `scaleRoot` (a
  * `shared` layer axis) resolves σ from its box by the frame equation
- * `content(σ) = allocated`: the engine solves it backward (`domain.inverse(size)`
- * for SIZE, `size / width` for POSITION/DIFFERENCE; `layer.tsx`). The shadow
+ * `content(σ) = allocated`: the engine solves it backward (`width.inverse(size)`
+ * for every continuous extent; `layer.tsx`). The shadow
  * checks it FORWARD — evaluate the scope's σ-affine content at the engine's
  * solved σ and assert it equals the allocated box. This validates the frame
  * equation actually closes, and notably catches σ-resolution that DEGENERATED
@@ -269,14 +263,11 @@ export function shadowCheckScaleRoot(
   axisIdx: 0 | 1
 ): void {
   if (!enabled() || sigma === undefined || !Number.isFinite(allocated)) return;
-  // Across all 189 stories this closes the frame equation for every σ-scope with
-  // zero divergences: 3 SIZE (the root resolution — most charts are
-  // POSITION-rooted), 174 POSITION + 1 DIFFERENCE (nested `shared` scopes).
+  // Every continuous σ-scope closes the same frame equation: the extent at σ is
+  // `width.run(σ)` (anchored or not — a former POSITION/DIFFERENCE width is just
+  // `linear(extent, 0)`, so `run(σ) = extent·σ`).
   let content: number | undefined;
-  if (isSIZE(sp)) content = sp.domain.run(sigma);
-  else if (isPOSITION(sp) && sp.domain)
-    content = Interval.width(sp.domain) * sigma;
-  else if (isDIFFERENCE(sp)) content = sp.width * sigma;
+  if (isCONTINUOUS(sp)) content = sp.width.run(sigma);
   if (content === undefined) return;
   if (Math.abs(content - allocated) > 1e-6) {
     report(`scaleRoot.frame axis=${axisIdx}`, content, allocated);

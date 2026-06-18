@@ -32,10 +32,13 @@ import { getValue, isValue, MaybeValue } from "./data";
 import { color6 } from "../color";
 import * as Monotonic from "../util/monotonic";
 import {
+  isCONTINUOUS,
   isDIFFERENCE,
   isORDINAL,
   isPOSITION,
   isUNDEFINED,
+  continuousInterval,
+  CONTINUOUS_TYPE,
   UnderlyingSpace,
 } from "./underlyingSpace";
 import { toJSON, interval } from "../util/interval";
@@ -516,6 +519,8 @@ export class GoFishNode {
         !claimed.has(dim) &&
         space &&
         !isUNDEFINED(space[dim]) &&
+        // A baseline magnitude ("free") owns no guide yet — only an anchored
+        // (POSITION), unanchored (DIFFERENCE), or ORDINAL axis does.
         (isPOSITION(space[dim]) ||
           isDIFFERENCE(space[dim]) ||
           isORDINAL(space[dim]))
@@ -547,13 +552,14 @@ export class GoFishNode {
     if (this._underlyingSpace) {
       for (const dim of [0, 1] as (0 | 1)[]) {
         const space = this._underlyingSpace[dim];
-        if (isPOSITION(space) && space.domain) {
-          const [niceMin, niceMax] = nice(
-            space.domain.min!,
-            space.domain.max!,
-            10
+        if (isPOSITION(space)) {
+          const iv = continuousInterval(space)!;
+          const [niceMin, niceMax] = nice(iv.min, iv.max, 10);
+          (space as CONTINUOUS_TYPE).origin = niceMin;
+          (space as CONTINUOUS_TYPE).width = Monotonic.linear(
+            niceMax - niceMin,
+            0
           );
-          (space as any).domain = interval(niceMin, niceMax);
         }
       }
     }
@@ -1204,35 +1210,22 @@ export const debugUnderlyingSpaceTree = (
   const formatUnderlyingSpace = (
     space: UnderlyingSpace | Size<UnderlyingSpace>
   ): string => {
-    if (Array.isArray(space)) {
-      return `[${space
-        .map((s) => {
-          if (isPOSITION(s)) {
-            return `position(${toJSON(s.domain)})`;
-          } else if (isDIFFERENCE(s)) {
-            return `difference(${s.width})`;
-          } else if (isORDINAL(s)) {
-            return `ordinal(${s.domain})`;
-          } else if (isUNDEFINED(s)) {
-            return `undefined`;
-          } else {
-            return s.kind;
-          }
-        })
-        .join(", ")}]`;
-    } else {
-      if (isPOSITION(space)) {
-        return `position(${toJSON(space.domain)})`;
-      } else if (isDIFFERENCE(space)) {
-        return `difference(${space.width})`;
-      } else if (isORDINAL(space)) {
-        return `ordinal(${space.domain})`;
-      } else if (isUNDEFINED(space)) {
+    const fmt = (s: UnderlyingSpace): string => {
+      if (isCONTINUOUS(s)) {
+        return typeof s.origin === "number"
+          ? `position(${toJSON(continuousInterval(s)!)})`
+          : s.origin === "free"
+            ? `size(${s.width.run(1)})`
+            : `difference(${s.width.run(1)})`;
+      } else if (isORDINAL(s)) {
+        return `ordinal(${s.domain})`;
+      } else if (isUNDEFINED(s)) {
         return `undefined`;
       } else {
-        return space.kind;
+        return "unknown";
       }
-    }
+    };
+    return Array.isArray(space) ? `[${space.map(fmt).join(", ")}]` : fmt(space);
   };
 
   // Get the name for display (handle both GoFishNode and GoFishRef)

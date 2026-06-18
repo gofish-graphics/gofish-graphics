@@ -8,38 +8,52 @@ import { CoordinateTransform } from "./coordinateTransforms/coord";
 import * as Monotonic from "../util/monotonic";
 import type { Measure } from "./data";
 
-export type UnderlyingSpaceKind =
-  | "position"
-  | "difference"
-  | "size"
-  | "ordinal"
-  | "undefined";
+export type UnderlyingSpaceKind = "continuous" | "ordinal" | "undefined";
 
-export type POSITION_TYPE = {
-  kind: "position";
-  domain: Interval;
+/**
+ * A data-driven extent on one shared scale. Collapses the former POSITION /
+ * SIZE / DIFFERENCE trichotomy (issue #586): the extent is always a `width`
+ * Monotonic in σ, and the only surviving distinction is `origin`:
+ *
+ * `origin` answers "can this extent be given an absolute position?", and has
+ * three states — the old POSITION/SIZE/DIFFERENCE distinction re-expressed as
+ * one field instead of three kinds:
+ *
+ *   - `origin: "free"` — a BASELINE MAGNITUDE (the old `SIZE`): a sized-but-
+ *     unplaced extent with a local baseline at 0 but no committed position. Its
+ *     origin is not yet assigned but CAN be (a baseline-align anchors it → a
+ *     numeric origin; a middle-align makes it `"impossible"`). Builds no
+ *     posScale; composes as a magnitude (measures FORGET on conflict), scales
+ *     with a parent `transform.scale`, and is never niced.
+ *   - `origin: number` — ANCHORED (the old `POSITION`): the origin IS assigned,
+ *     at this data-space coordinate (which may be 0!). Builds a posScale, is
+ *     niced, renders an absolute axis over `[origin, origin + width.run(1)]`.
+ *     Measures unify as TYPES (THROW on a clash) — a count axis must not
+ *     silently merge with millimeters.
+ *   - `origin: "impossible"` — UNANCHORED (the old `DIFFERENCE`): an absolute
+ *     origin is impossible — only differences are meaningful (a centered /
+ *     difference extent). No posScale; renders a delta axis over
+ *     `[0, width.run(1)]`. Produced by middle-align, which drops the anchor;
+ *     absorbing — alignment never re-anchors it.
+ *
+ * The subtlety #586's first cut got wrong: a baseline magnitude (`"free"`) is
+ * NOT the same as a data axis anchored at 0 (`origin: 0`) — the former builds no
+ * posScale and forgets measures, the latter does the opposite. Conflating them
+ * via `origin === 0` silently dropped the unit-clash guard and over-niced; the
+ * named `"free"`/`"impossible"` states keep them apart. A former DIFFERENCE
+ * width `w` is `linear(w, 0)`; a former POSITION `[a,b]` is
+ * `width = linear(b-a, 0), origin = a`.
+ */
+export type CONTINUOUS_TYPE = {
+  kind: "continuous";
+  width: Monotonic.Monotonic;
+  origin: number | "free" | "impossible";
   spacing?: number;
   ordinalGroupId?: string;
   /** The measure (unit) of this axis. Spaces unify per measure — see
    *  {@link mergeMeasures}. Undefined = "no claim" (permissive). */
   measure?: Measure;
   coordinateTransform?: CoordinateTransform;
-};
-
-export type DIFFERENCE_TYPE = {
-  kind: "difference";
-  width: number;
-  spacing?: number;
-  ordinalGroupId?: string;
-  measure?: Measure;
-};
-
-export type SIZE_TYPE = {
-  kind: "size";
-  domain: Monotonic.Monotonic;
-  spacing?: number;
-  ordinalGroupId?: string;
-  measure?: Measure;
 };
 
 export type ORDINAL_TYPE = {
@@ -55,49 +69,87 @@ export type UNDEFINED_TYPE = {
   ordinalGroupId?: string;
 };
 
-export type UnderlyingSpace =
-  | POSITION_TYPE
-  | DIFFERENCE_TYPE
-  | SIZE_TYPE
-  | ORDINAL_TYPE
-  | UNDEFINED_TYPE;
+export type UnderlyingSpace = CONTINUOUS_TYPE | ORDINAL_TYPE | UNDEFINED_TYPE;
 
+export const CONTINUOUS = (
+  width: Monotonic.Monotonic,
+  origin: number | "free" | "impossible",
+  measure?: Measure,
+  coordinateTransform?: CoordinateTransform
+): CONTINUOUS_TYPE => ({
+  kind: "continuous",
+  width,
+  origin,
+  measure,
+  coordinateTransform,
+});
+export const isCONTINUOUS = (
+  space: UnderlyingSpace
+): space is CONTINUOUS_TYPE => space.kind === "continuous";
+
+/** The `[min, max]` data interval of an ANCHORED CONTINUOUS space (numeric
+ *  origin), or undefined for a baseline magnitude (`"free"`) or unanchored
+ *  (`"impossible"`) extent. `max = origin + width.run(1)` — the extent at σ = 1. */
+export const continuousInterval = (
+  space: UnderlyingSpace
+): Interval | undefined =>
+  isCONTINUOUS(space) && typeof space.origin === "number"
+    ? interval(space.origin, space.origin + space.width.run(1))
+    : undefined;
+
+/** The extent interval of a CONTINUOUS space, treating a non-numeric origin
+ *  (`"free"` / `"impossible"`) as anchored at 0 — `[origin, origin + width.run(1)]`.
+ *  The fold variant of {@link continuousInterval}: where the latter reports
+ *  "no anchor" as `undefined`, this collapses it to `[0, extent]` so an extent
+ *  can be unioned regardless of anchoring (overlay / alignment). */
+export const continuousExtentInterval = (space: CONTINUOUS_TYPE): Interval => {
+  const o = typeof space.origin === "number" ? space.origin : 0;
+  return interval(o, o + space.width.run(1));
+};
+
+/** A baseline magnitude — a sized-but-unplaced extent (the old `SIZE`): local
+ *  baseline at 0, no committed position. Distinct from a data-positioned
+ *  anchored extent ({@link isPOSITION}, even at data-min 0) and an unanchored
+ *  one ({@link isDIFFERENCE}). */
+export const isBaselineMagnitude = (
+  space: UnderlyingSpace
+): space is CONTINUOUS_TYPE => isCONTINUOUS(space) && space.origin === "free";
+
+/** ANCHORED continuous space (old POSITION) — a numeric data origin; builds a
+ *  posScale and an absolute axis. */
 export const POSITION = (
   domain: Interval,
   measure?: Measure,
   coordinateTransform?: CoordinateTransform
-): UnderlyingSpace => ({
-  kind: "position",
-  domain,
-  measure,
-  coordinateTransform,
-});
+): UnderlyingSpace =>
+  CONTINUOUS(
+    Monotonic.linear(domain.max - domain.min, 0),
+    domain.min,
+    measure,
+    coordinateTransform
+  );
+export const isPOSITION = (space: UnderlyingSpace): space is CONTINUOUS_TYPE =>
+  isCONTINUOUS(space) && typeof space.origin === "number";
 
-export const isPOSITION = (space: UnderlyingSpace): space is POSITION_TYPE =>
-  space.kind === "position";
-
-export const DIFFERENCE = (
-  width: number,
-  measure?: Measure
-): UnderlyingSpace => ({
-  kind: "difference",
-  width,
-  measure,
-});
+/** UNANCHORED continuous space (old DIFFERENCE) — origin-less, delta axis. */
+export const DIFFERENCE = (width: number, measure?: Measure): UnderlyingSpace =>
+  CONTINUOUS(Monotonic.linear(width, 0), "impossible", measure);
 export const isDIFFERENCE = (
   space: UnderlyingSpace
-): space is DIFFERENCE_TYPE => space.kind === "difference";
+): space is CONTINUOUS_TYPE =>
+  isCONTINUOUS(space) && space.origin === "impossible";
 
+/** A sized-but-unpositioned extent (the old `SIZE`): a baseline magnitude. */
 export const SIZE = (
   domain: Monotonic.Monotonic,
   measure?: Measure
-): UnderlyingSpace => ({
-  kind: "size",
-  domain,
-  measure,
-});
-export const isSIZE = (space: UnderlyingSpace): space is SIZE_TYPE =>
-  space.kind === "size";
+): UnderlyingSpace => CONTINUOUS(domain, "free", measure);
+
+/** Has a baseline (a place it hangs from): a baseline magnitude (`"free"`) or an
+ *  anchored coordinate (numeric origin), but NOT an unanchored difference. The
+ *  gate for "can be a self-scaling region / needs a concrete canvas". */
+export const hasBaseline = (space: UnderlyingSpace): space is CONTINUOUS_TYPE =>
+  isCONTINUOUS(space) && space.origin !== "impossible";
 
 export const ORDINAL = (domain?: string[]): UnderlyingSpace => ({
   kind: "ordinal",
@@ -114,9 +166,7 @@ export const isUNDEFINED = (space: UnderlyingSpace): space is UNDEFINED_TYPE =>
 export const spaceMeasure = (
   space: UnderlyingSpace | undefined
 ): Measure | undefined =>
-  space && (isPOSITION(space) || isDIFFERENCE(space) || isSIZE(space))
-    ? space.measure
-    : undefined;
+  space && isCONTINUOUS(space) ? space.measure : undefined;
 
 /**
  * Unify two measures as TYPES (the Stage-1 guard). Undefined is permissive —

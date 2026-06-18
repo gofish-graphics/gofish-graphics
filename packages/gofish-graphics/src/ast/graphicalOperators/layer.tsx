@@ -8,13 +8,15 @@ import { shadowCheckScaleRoot } from "../solver/shadow";
 import { isToken } from "../createName";
 import { Size, elaborateDims, FancyDims, displayTranslate } from "../dims";
 import {
+  CONTINUOUS,
   POSITION,
-  SIZE,
   UNDEFINED,
   UnderlyingSpace,
-  isDIFFERENCE,
+  continuousInterval,
+  hasBaseline,
+  isBaselineMagnitude,
+  isCONTINUOUS,
   isPOSITION,
-  isSIZE,
   spaceMeasure,
 } from "../underlyingSpace";
 import * as Interval from "../../util/interval";
@@ -529,16 +531,17 @@ export const layer = createNodeOperatorSequential(
           const gridC = (constraints ?? []).find(isGridConstraint);
           if (gridC !== undefined) return gridSpaces(gridC, _childNodes);
 
-          // Apply layer's own transform.scale to any SIZE spaces produced
-          // by unionChildSpaces (the SIZE-preserving overlay path).
+          // Apply layer's own transform.scale to any baseline magnitude
+          // (origin 0) produced by unionChildSpaces (the symbolic-Monotonic
+          // overlay path).
           const scaleX = options.transform?.scale?.x ?? 1;
           const scaleY = options.transform?.scale?.y ?? 1;
           const applyScale = (
             space: UnderlyingSpace,
             scale: number
           ): UnderlyingSpace =>
-            isSIZE(space) && scale !== 1
-              ? SIZE(Monotonic.smul(scale, space.domain), space.measure)
+            isBaselineMagnitude(space) && scale !== 1
+              ? CONTINUOUS(Monotonic.smul(scale, space.width), 0, space.measure)
               : space;
 
           // Nest space fold: only INSIDE_OUT edges (`dir: 'in'`) derive a
@@ -593,10 +596,8 @@ export const layer = createNodeOperatorSequential(
               scale
             );
             if (iv === undefined) return base;
-            const merged =
-              isPOSITION(base) && base.domain
-                ? Interval.unionAll(base.domain, iv)
-                : iv;
+            const baseIv = continuousInterval(base);
+            const merged = baseIv ? Interval.unionAll(baseIv, iv) : iv;
             // The position/span constraints' OWN measure is the authoritative
             // unit for this axis's data domain (they define it); it wins, falling
             // back to the children's POSITION measure when the constraints are
@@ -631,42 +632,17 @@ export const layer = createNodeOperatorSequential(
             }
           }
 
-          // Fill in each spread-guarded align's per-axis `fromSize` from the
-          // PRE-fold child spaces (mirrors bespoke `resolveAlignmentSpace()
-          // .fromSize`). Consumed by `applyAlign`'s data-positioned guard
-          // (align.ts) so a posScale cross axis whose children carry their own
-          // data positions isn't pulled to the scale's `posScale(0)` fallback.
-          // Gated on a guarded align existing so the common case (every plain
-          // layer/table — `resolveUnderlyingSpace` is a hot path that can run
-          // more than once) skips the O(n) `buildNameIndex` build entirely.
-          if (
-            (constraints ?? []).some(
-              (c) => c.type === "align" && c.guardDataPositioned
-            )
-          ) {
-            const alignNameIdx = buildNameIndex(_childNodes);
-            for (const c of constraints ?? []) {
-              if (c.type !== "align" || !c.guardDataPositioned) continue;
-              const idxs = c.children
-                .map((r) => alignNameIdx.get(r.name))
-                .filter((i): i is number => i !== undefined);
-              const allSizeOn = (axis: 0 | 1): boolean =>
-                idxs.length > 0 &&
-                idxs.every((i) => isSIZE(effectiveChildren[i][axis]));
-              c.fromSize = [allSizeOn(0), allSizeOn(1)];
-            }
-          }
-
-          // Stash the absorbed POSITION/SIZE space and report UNDEFINED upward
-          // for any dim with an explicit pixel size — self-scaling region; see
+          // Stash the absorbed anchored extent and report UNDEFINED upward for
+          // any dim with an explicit pixel size — self-scaling region; see
           // selfScaledSpaces above. (last write wins — may run more than once.)
           selfScaledSpaces[0] = undefined;
           selfScaledSpaces[1] = undefined;
           for (const axis of [0, 1] as const) {
             if (dims[axis].size === undefined) continue;
             const sp = resolved[axis];
-            // DIFFERENCE/ORDINAL unions are left untouched (no stash).
-            if ((isPOSITION(sp) && sp.domain) || isSIZE(sp)) {
+            // Stash anything with a baseline (an anchored POSITION or a "free"
+            // magnitude); a difference / ORDINAL is left untouched (no stash).
+            if (hasBaseline(sp)) {
               selfScaledSpaces[axis] = sp;
               resolved[axis] = UNDEFINED;
             }
@@ -711,12 +687,17 @@ export const layer = createNodeOperatorSequential(
           for (const dim of [0, 1] as const) {
             const stashed = selfScaledSpaces[dim];
             if (stashed === undefined || !Number.isFinite(size[dim])) continue;
+            // Build the LOCAL scale against our own box: an anchored POSITION
+            // gives a posScale (its data-positioned children read it); a "free"
+            // magnitude gives a scale factor (its sized children read it). A
+            // stashed space is exactly one of the two.
             if (isPOSITION(stashed)) {
               basePosScales[dim] =
                 posScaleFromSpace(stashed, size[dim]) ?? posScales[dim];
-            } else if (isSIZE(stashed)) {
+            }
+            if (isBaselineMagnitude(stashed)) {
               childScaleFactors[dim] =
-                stashed.domain.inverse(size[dim]) ?? scaleFactors?.[dim];
+                stashed.width.inverse(size[dim]) ?? scaleFactors?.[dim];
             }
           }
 
@@ -752,24 +733,19 @@ export const layer = createNodeOperatorSequential(
           // layer is a scope for (set by `spread`'s `sharedScale`; default
           // [false,false] → no-op for every plain layer/table), solve σ locally
           // from its composed claim against its own box and hand it to
-          // descendants via the FRESH array — the dispatch the bespoke spread
-          // used (computeScaleFactor): SIZE inverts, POSITION/DIFFERENCE divide
-          // by the domain/width.
+          // descendants via the FRESH array — one rule for every continuous
+          // extent: σ = width.inverse(box) (a former POSITION/DIFFERENCE width
+          // is linear(extent, 0), so this is the old size/width divide).
           for (const axis of [0, 1] as const) {
             if (!shared[axis] || !Number.isFinite(size[axis])) continue;
             const sp = selfScaledSpaces[axis] ?? node._underlyingSpace?.[axis];
             if (sp === undefined) continue;
             let sf: number | undefined;
-            if (isSIZE(sp)) {
+            if (isCONTINUOUS(sp)) {
               sf =
-                sp.domain.inverse(size[axis], {
+                sp.width.inverse(size[axis], {
                   upperBoundGuess: size[axis],
                 }) ?? 0;
-            } else if (isPOSITION(sp) && sp.domain) {
-              const w = Interval.width(sp.domain);
-              sf = w !== 0 ? size[axis] / w : 0;
-            } else if (isDIFFERENCE(sp)) {
-              sf = sp.width !== 0 ? size[axis] / sp.width : 0;
             }
             if (sf !== undefined) childScaleFactors[axis] = sf;
             // Solver shadow (#39): assert the frame equation content(σ)=allocated
@@ -884,12 +860,11 @@ export const layer = createNodeOperatorSequential(
 
           // Per-child posScales on the axes this layer owns. The blanket
           // suppression of a layer-owned axis is too coarse for elaborated axes:
-          // the wrapped *content* may be POSITION (e.g. a scatter) and genuinely
+          // the wrapped *content* (a scatter, or a sized magnitude) genuinely
           // needs the shared scale, while the *ticks* (position-constraint
-          // targets) and any SIZE content must not get it (a posScale leaking
-          // into a SIZE spread makes its alignment skip placing children). So on
-          // an owned axis, forward `effectivePosScales` only to a non-target
-          // child whose own space on that axis is POSITION; otherwise suppress.
+          // targets) must not get it. So on an owned axis, forward
+          // `effectivePosScales` only to a non-target child whose own space on
+          // that axis is anchored (CONTINUOUS with an origin); otherwise suppress.
           const childScalesFor = (
             i: number,
             targetDims: Set<0 | 1> | undefined

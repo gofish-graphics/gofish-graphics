@@ -73,18 +73,25 @@ export const computePosScale = (
  */
 export const posScaleFromSpace = (
   // Structurally typed to avoid a domain.ts → underlyingSpace.ts import cycle;
-  // only the POSITION variant (numeric min/max domain) produces a scale.
-  space: { kind: string; domain?: any } | undefined,
+  // only an ANCHORED CONTINUOUS space (numeric origin) produces a scale — a
+  // baseline magnitude (origin "free") and a difference (origin null) do not.
+  // Its data interval is `[origin, origin + width.run(1)]`.
+  space:
+    | {
+        kind: string;
+        origin?: number | "free" | "impossible";
+        width?: { run: (x: number) => number };
+      }
+    | undefined,
   size: number
 ): ((pos: number) => number) | undefined =>
   space &&
-  space.kind === "position" &&
-  space.domain &&
-  space.domain.min !== undefined &&
-  space.domain.max !== undefined
+  space.kind === "continuous" &&
+  typeof space.origin === "number" &&
+  space.width
     ? computePosScale(
         continuous({
-          value: [space.domain.min, space.domain.max],
+          value: [space.origin, space.origin + space.width.run(1)],
           measure: "unit",
         }),
         size

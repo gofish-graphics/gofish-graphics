@@ -6,14 +6,14 @@ import type { Placeable } from "../_node";
 import { Axis, ConstraintRef, axisIndex, isPlacedOn } from "./shared";
 import { getMeasure, getValue, isValue, type MaybeValue } from "../data";
 import {
+  CONTINUOUS_TYPE,
   ORDINAL,
   POSITION,
   SIZE,
   UNDEFINED,
   UnderlyingSpace,
   forgetAllMeasures,
-  isPOSITION,
-  isSIZE,
+  isCONTINUOUS,
   spaceMeasure,
 } from "../underlyingSpace";
 import * as Monotonic from "../../util/monotonic";
@@ -106,47 +106,39 @@ export function distributeSpaceFold(
 
   const namedKeys = keys.filter((k): k is string => k !== undefined);
   const spacing = opts.glue ? 0 : opts.spacing;
-  const allSize = targetSpaces.every(isSIZE);
-  const allPosition = targetSpaces.every((s) => isPOSITION(s) && s.domain);
-  const sumWidths = (): number =>
-    targetSpaces
-      .map((s) => Interval.width((s as any).domain))
-      .reduce((a, b) => a + b, 0);
+  // Every child is a continuous extent: its pixel extent at σ is `width.run(σ)`
+  // (a former POSITION `[a,b]` has `width.run(1) = b-a`, so this subsumes the
+  // old separate POSITION-sum branch).
+  const allCont = targetSpaces.every(isCONTINUOUS);
+  const widths = allCont
+    ? targetSpaces.map((s) => (s as CONTINUOUS_TYPE).width)
+    : [];
 
   if (opts.glue) {
-    // STACK semantics: collapse children into a single POSITION at this level
-    // using their intrinsic extent at scale = 1.
-    if (allPosition)
-      return POSITION(Interval.interval(0, sumWidths()), measure);
-    if (allSize) {
-      const total = targetSpaces
-        .map((s) => (s as any).domain.run(1) as number)
-        .reduce((a, b) => a + b, 0);
+    // STACK semantics: collapse children into a single anchored POSITION
+    // [0, Σ extent@σ=1].
+    if (allCont) {
+      const total = widths.reduce((a, w) => a + w.run(1), 0);
       return POSITION(Interval.interval(0, total), measure);
     }
     if (namedKeys.length > 0) return ORDINAL(namedKeys);
     return UNDEFINED;
   }
 
-  const childDomains = allSize
-    ? targetSpaces.map((s) => (s as any).domain as Monotonic.Monotonic)
-    : [];
-  const dataDriven =
-    allSize && childDomains.some((d) => !Monotonic.isConstant(d));
+  const dataDriven = allCont && widths.some((w) => !Monotonic.isConstant(w));
   const composeSize = (): Monotonic.Monotonic =>
     opts.mode === "center"
       ? Monotonic.unknown(
           (scaleFactor: number) =>
-            childDomains[0].run(scaleFactor) / 2 +
+            widths[0].run(scaleFactor) / 2 +
             spacing * (n - 1) +
-            childDomains[childDomains.length - 1].run(scaleFactor) / 2
+            widths[widths.length - 1].run(scaleFactor) / 2
         )
-      : Monotonic.adds(Monotonic.add(...childDomains), spacing * (n - 1));
+      : Monotonic.adds(Monotonic.add(...widths), spacing * (n - 1));
 
   if (dataDriven) return SIZE(composeSize(), measure);
   if (namedKeys.length > 0) return ORDINAL(namedKeys);
-  if (allSize) return SIZE(composeSize(), measure);
-  if (allPosition) return POSITION(Interval.interval(0, sumWidths()), measure);
+  if (allCont) return SIZE(composeSize(), measure);
   return UNDEFINED;
 }
 
