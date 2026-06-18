@@ -93,14 +93,12 @@ export const Spread = createNodeOperator(
     )) as GoFishNode;
     node.constrain((ref) => {
       const refs = names.map((n) => ref[n] ?? { name: n });
-      // Data-positioned guard: on a posScale cross axis whose children already
-      // hold their own data positions (not baseline magnitudes), a non-`middle`
-      // align is a no-op. The layer fills in `fromSize` (from pre-fold child
-      // spaces) at resolve time.
-      const alignC = Constraint.align({ [alignAxis]: alignment }, refs);
-      alignC.guardDataPositioned = true;
+      // The cross-axis align: it shares the frame (unions the children's domain)
+      // and, for free children (bars), commits a baseline. A self-positioned
+      // child (a scatter facet) is left alone by `align` automatically — it reads
+      // the child's abstract placement (see `emitAlignTargets`), so no guard flag.
       return [
-        alignC,
+        Constraint.align({ [alignAxis]: alignment }, refs),
         Constraint.distribute(
           {
             dir: stackAxis,

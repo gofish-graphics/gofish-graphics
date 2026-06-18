@@ -44,10 +44,83 @@ export type UnderlyingSpaceKind = "continuous" | "ordinal" | "undefined";
  * width `w` is `linear(w, 0)`; a former POSITION `[a,b]` is
  * `width = linear(b-a, 0), origin = a`.
  */
+/**
+ * The abstract PLACEMENT of an extent — the missing "baseline" half of the
+ * σ-affine box solve, lifted to the underlying-space pass (the `width` Monotonic
+ * is already the abstract SIZE half). A determinacy lattice over "has this
+ * extent committed a position, and where?":
+ *
+ *   - `free` (⊥) — sized but not yet placed; a parent can still anchor it (old
+ *     SIZE / `origin: "free"`).
+ *   - `determined(at)` — committed at data coordinate `at` (old POSITION; `at`
+ *     is the domain min, which may be 0). NOTE `at` is a DATA coordinate, not a
+ *     pixel — the pixel baseline is assigned top-down at layout (#39 ledger).
+ *   - `conflict` (⊤) — no single position is possible (old DIFFERENCE; also the
+ *     eventual home for disagreeing aligns).
+ *
+ * "space as abstract interpretation" (#586 follow-up): `placement` is the
+ * LAYOUT fact (is this extent positioned, and where), the abstract baseline half
+ * of the σ-affine solve. It is now authoritative — the old `origin` field is
+ * retired; an `Origin`-shaped value survives only as a builder argument
+ * ({@link CONTINUOUS}) and via {@link originOf} for legacy reads. See the spec.
+ */
+export type Placement =
+  | { tag: "free" }
+  | { tag: "determined"; at: number }
+  | { tag: "conflict" };
+
+/** The DATA-space fact: the `[min,max]` data interval of an anchored axis
+ *  (drives posScale / nicing / measure-throw / an absolute axis), `"delta"` for
+ *  a difference axis (delta ticks over `[0, width.run(1)]`, no absolute zero),
+ *  or `undefined` for a baseline magnitude (no data axis at all). Independent of
+ *  `placement` — kept separate so an axis-rendering choice (delta vs absolute)
+ *  never keys on the layout determinacy. */
+export type DataDomain = Interval | "delta" | undefined;
+
+/** The convenient builder form of (placement, dataDomain): a numeric data
+ *  coordinate (anchored), `"free"` (magnitude), or `"impossible"` (difference).
+ *  Constructors take this; the stored fields are `placement` + `dataDomain`. */
+export type Origin = number | "free" | "impossible";
+
+/** Derive the abstract {@link Placement} from the builder {@link Origin}. */
+export const placementOf = (origin: Origin): Placement =>
+  origin === "free"
+    ? { tag: "free" }
+    : origin === "impossible"
+      ? { tag: "conflict" }
+      : { tag: "determined", at: origin };
+
+/** Derive the {@link DataDomain} from the builder {@link Origin} + width:
+ *  numeric → `[origin, origin + width.run(1)]`; `"impossible"` → `"delta"`;
+ *  `"free"` → `undefined`. */
+export const dataDomainOf = (
+  origin: Origin,
+  width: Monotonic.Monotonic
+): DataDomain =>
+  typeof origin === "number"
+    ? interval(origin, origin + width.run(1))
+    : origin === "impossible"
+      ? "delta"
+      : undefined;
+
+/** Recover the builder {@link Origin} from a stored CONTINUOUS space (for the
+ *  few legacy callers that still want the scalar form). */
+export const originOf = (space: CONTINUOUS_TYPE): Origin =>
+  space.placement.tag === "free"
+    ? "free"
+    : space.placement.tag === "conflict"
+      ? "impossible"
+      : space.placement.at;
+
 export type CONTINUOUS_TYPE = {
   kind: "continuous";
+  /** Abstract SIZE: the σ-affine extent `slope·σ + intercept`. */
   width: Monotonic.Monotonic;
-  origin: number | "free" | "impossible";
+  /** Abstract POSITION/baseline (layout): is this placed, and at what data
+   *  coordinate. See {@link Placement}. */
+  placement: Placement;
+  /** Data-space extent for scales/axes/nicing/measures. See {@link DataDomain}. */
+  dataDomain: DataDomain;
   spacing?: number;
   ordinalGroupId?: string;
   /** The measure (unit) of this axis. Spaces unify per measure — see
@@ -79,13 +152,14 @@ export type UnderlyingSpace = CONTINUOUS_TYPE | ORDINAL_TYPE | UNDEFINED_TYPE;
 
 export const CONTINUOUS = (
   width: Monotonic.Monotonic,
-  origin: number | "free" | "impossible",
+  origin: Origin,
   measure?: Measure,
   coordinateTransform?: CoordinateTransform
 ): CONTINUOUS_TYPE => ({
   kind: "continuous",
   width,
-  origin,
+  placement: placementOf(origin),
+  dataDomain: dataDomainOf(origin, width),
   measure,
   coordinateTransform,
 });
@@ -93,36 +167,37 @@ export const isCONTINUOUS = (
   space: UnderlyingSpace
 ): space is CONTINUOUS_TYPE => space.kind === "continuous";
 
-/** The `[min, max]` data interval of an ANCHORED CONTINUOUS space (numeric
- *  origin), or undefined for a baseline magnitude (`"free"`) or unanchored
- *  (`"impossible"`) extent. `max = origin + width.run(1)` — the extent at σ = 1. */
+/** The `[min, max]` data interval of an ANCHORED CONTINUOUS space, or undefined
+ *  for a baseline magnitude or a difference. This is exactly the `dataDomain`
+ *  when it is an interval. */
 export const continuousInterval = (
   space: UnderlyingSpace
 ): Interval | undefined =>
-  isCONTINUOUS(space) && typeof space.origin === "number"
-    ? interval(space.origin, space.origin + space.width.run(1))
+  isCONTINUOUS(space) &&
+  space.dataDomain !== undefined &&
+  space.dataDomain !== "delta"
+    ? space.dataDomain
     : undefined;
 
-/** The extent interval of a CONTINUOUS space, treating a non-numeric origin
- *  (`"free"` / `"impossible"`) as anchored at 0 — `[origin, origin + width.run(1)]`.
- *  The fold variant of {@link continuousInterval}: where the latter reports
- *  "no anchor" as `undefined`, this collapses it to `[0, extent]` so an extent
- *  can be unioned regardless of anchoring (overlay / alignment). */
-export const continuousExtentInterval = (space: CONTINUOUS_TYPE): Interval => {
-  const o = typeof space.origin === "number" ? space.origin : 0;
-  return interval(o, o + space.width.run(1));
-};
+/** The extent interval of a CONTINUOUS space, treating a non-anchored extent as
+ *  starting at 0 — `[min, min + width.run(1)]`. The fold variant of
+ *  {@link continuousInterval}: where the latter reports "no anchor" as
+ *  `undefined`, this collapses it to `[0, extent]` so an extent can be unioned
+ *  regardless of anchoring (overlay / alignment). */
+export const continuousExtentInterval = (space: CONTINUOUS_TYPE): Interval =>
+  continuousInterval(space) ?? interval(0, space.width.run(1));
 
-/** A baseline magnitude — a sized-but-unplaced extent (the old `SIZE`): local
- *  baseline at 0, no committed position. Distinct from a data-positioned
- *  anchored extent ({@link isPOSITION}, even at data-min 0) and an unanchored
- *  one ({@link isDIFFERENCE}). */
+/** A baseline magnitude — a sized-but-unplaced extent (the old `SIZE`): no
+ *  committed position. Distinct from a data-positioned anchored extent
+ *  ({@link isPOSITION}, even at data-min 0) and a difference
+ *  ({@link isDIFFERENCE}). Keys on the LAYOUT fact (`placement`). */
 export const isBaselineMagnitude = (
   space: UnderlyingSpace
-): space is CONTINUOUS_TYPE => isCONTINUOUS(space) && space.origin === "free";
+): space is CONTINUOUS_TYPE =>
+  isCONTINUOUS(space) && space.placement.tag === "free";
 
-/** ANCHORED continuous space (old POSITION) — a numeric data origin; builds a
- *  posScale and an absolute axis. */
+/** ANCHORED continuous space (old POSITION) — has a data interval; builds a
+ *  posScale and an absolute axis. Keys on the DATA fact (`dataDomain`). */
 export const POSITION = (
   domain: Interval,
   measure?: Measure,
@@ -135,15 +210,17 @@ export const POSITION = (
     coordinateTransform
   );
 export const isPOSITION = (space: UnderlyingSpace): space is CONTINUOUS_TYPE =>
-  isCONTINUOUS(space) && typeof space.origin === "number";
+  continuousInterval(space) !== undefined;
 
-/** UNANCHORED continuous space (old DIFFERENCE) — origin-less, delta axis. */
+/** UNANCHORED continuous space (old DIFFERENCE) — delta axis. Keys on the DATA
+ *  fact (`dataDomain === "delta"`), NOT on placement, so a future `conflict`
+ *  placement that still has a real data domain doesn't render delta ticks. */
 export const DIFFERENCE = (width: number, measure?: Measure): UnderlyingSpace =>
   CONTINUOUS(Monotonic.linear(width, 0), "impossible", measure);
 export const isDIFFERENCE = (
   space: UnderlyingSpace
 ): space is CONTINUOUS_TYPE =>
-  isCONTINUOUS(space) && space.origin === "impossible";
+  isCONTINUOUS(space) && space.dataDomain === "delta";
 
 /** A sized-but-unpositioned extent (the old `SIZE`): a baseline magnitude. */
 export const SIZE = (
@@ -151,11 +228,11 @@ export const SIZE = (
   measure?: Measure
 ): UnderlyingSpace => CONTINUOUS(domain, "free", measure);
 
-/** Has a baseline (a place it hangs from): a baseline magnitude (`"free"`) or an
- *  anchored coordinate (numeric origin), but NOT an unanchored difference. The
- *  gate for "can be a self-scaling region / needs a concrete canvas". */
+/** Has a baseline (a place it hangs from): a baseline magnitude or an anchored
+ *  coordinate, but NOT a difference (`placement.tag === "conflict"`). The gate
+ *  for "can be a self-scaling region / needs a concrete canvas". */
 export const hasBaseline = (space: UnderlyingSpace): space is CONTINUOUS_TYPE =>
-  isCONTINUOUS(space) && space.origin !== "impossible";
+  isCONTINUOUS(space) && space.placement.tag !== "conflict";
 
 export const ORDINAL = (
   domain?: string[],

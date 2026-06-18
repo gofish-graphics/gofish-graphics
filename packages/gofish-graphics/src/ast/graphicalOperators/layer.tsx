@@ -636,33 +636,6 @@ export const layer = createNodeOperatorSequential(
             }
           }
 
-          // Fill in each spread-guarded align's per-axis `fromSize` from the
-          // PRE-fold child spaces (a fold has already erased the
-          // baseline-magnitude-vs-positioned distinction by here). Consumed by
-          // `applyAlign`'s data-positioned guard so a posScale cross axis whose
-          // children carry their own data positions isn't pulled to the scale's
-          // `posScale(0)` fallback. Gated on a guarded align existing so the
-          // common case skips the O(n) `buildNameIndex` build entirely.
-          if (
-            (constraints ?? []).some(
-              (c) => c.type === "align" && c.guardDataPositioned
-            )
-          ) {
-            const alignNameIdx = buildNameIndex(_childNodes);
-            for (const c of constraints ?? []) {
-              if (c.type !== "align" || !c.guardDataPositioned) continue;
-              const idxs = c.children
-                .map((r) => alignNameIdx.get(r.name))
-                .filter((i): i is number => i !== undefined);
-              const allBaselineOn = (axis: 0 | 1): boolean =>
-                idxs.length > 0 &&
-                idxs.every((i) =>
-                  isBaselineMagnitude(effectiveChildren[i][axis])
-                );
-              c.fromSize = [allBaselineOn(0), allBaselineOn(1)];
-            }
-          }
-
           // Stash the absorbed anchored extent and report UNDEFINED upward for
           // any dim with an explicit pixel size — self-scaling region; see
           // selfScaledSpaces above. (last write wins — may run more than once.)

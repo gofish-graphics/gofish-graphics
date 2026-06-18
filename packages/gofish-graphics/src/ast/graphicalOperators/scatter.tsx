@@ -126,16 +126,11 @@ export const Scatter = createNodeOperator(
         if (span.x !== undefined || span.y !== undefined)
           cs.push(Constraint.span(span, [refs[i]]));
       });
-      if (!hasX) {
-        const a = Constraint.align({ x: alignment }, refs);
-        a.guardDataPositioned = true;
-        cs.push(a);
-      }
-      if (!hasY) {
-        const a = Constraint.align({ y: alignment }, refs);
-        a.guardDataPositioned = true;
-        cs.push(a);
-      }
+      // A cross-axis align over the (data-positioned) points: it shares the
+      // frame; `align` leaves the points where their own scale puts them by
+      // reading their abstract placement (no guard flag needed).
+      if (!hasX) cs.push(Constraint.align({ x: alignment }, refs));
+      if (!hasY) cs.push(Constraint.align({ y: alignment }, refs));
       return cs;
     });
     if (name !== undefined) node._name = name;
