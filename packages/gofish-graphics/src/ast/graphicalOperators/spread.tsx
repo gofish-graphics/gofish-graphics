@@ -48,6 +48,7 @@ export const Spread = createNodeOperator(
       reverse = false,
       glue = false,
       axes,
+      __axisFields: axisFieldMeta,
       ...fancyDims
     }: {
       name?: string;
@@ -64,6 +65,10 @@ export const Spread = createNodeOperator(
       /** Override axis rendering for this node. true/false applies to both
        * dims; object form controls x/y independently. */
       axes?: boolean | { x?: AxisOptions; y?: AxisOptions };
+      /** Resolved grouping field per axis, injected by createOperator (the `by`
+       *  field, e.g. `{ x: "lake" }`). Stamped onto the ORDINAL space the stack
+       *  distribute builds so a category axis names itself off its own space. */
+      __axisFields?: { x?: string; y?: string };
     } & FancyDims<MaybeValue<number>>,
     children: GoFishAST[] | Collection<GoFishAST>
   ) => {
@@ -88,14 +93,12 @@ export const Spread = createNodeOperator(
     )) as GoFishNode;
     node.constrain((ref) => {
       const refs = names.map((n) => ref[n] ?? { name: n });
-      // Carry the bespoke spread's data-positioned alignment guard: on a
-      // posScale cross axis whose children already hold their own data
-      // positions (not SIZE-derived), a non-`middle` align is a no-op. The
-      // layer fills in `fromSize` (from pre-fold child spaces) at resolve time.
-      const alignC = Constraint.align({ [alignAxis]: alignment }, refs);
-      alignC.guardDataPositioned = true;
+      // The cross-axis align: it shares the frame (unions the children's domain)
+      // and, for free children (bars), commits a baseline. A self-positioned
+      // child (a scatter facet) is left alone by `align` automatically — it reads
+      // the child's abstract placement (see `emitAlignTargets`), so no guard flag.
       return [
-        alignC,
+        Constraint.align({ [alignAxis]: alignment }, refs),
         Constraint.distribute(
           {
             dir: stackAxis,
@@ -103,6 +106,9 @@ export const Spread = createNodeOperator(
             mode,
             glue,
             order: reverse ? "reverse" : "forward",
+            // The grouping field for this (stack) axis → the ORDINAL space's
+            // measure, so a spread-by-category axis titles itself off its space.
+            measure: axisFieldMeta?.[stackAxis],
           },
           refs
         ),

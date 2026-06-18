@@ -157,11 +157,20 @@ const [underlyingSpaceX, underlyingSpaceY] = child.resolveUnderlyingSpace();
 
 This is one of the most important passes. It determines the **underlying space** type for each dimension, which affects how scales are computed and how axes are rendered.
 
-**Underlying Space Types** (defined in `src/ast/underlyingSpace.ts`):
+**Underlying Space Kinds** (defined in `src/ast/underlyingSpace.ts`). Since the
+#586 collapse there are only three _kinds_ — `continuous`, `ordinal`,
+`undefined` — and the old POSITION / DIFFERENCE / SIZE trichotomy is now three
+**`origin` states** of the single `continuous` kind (read via the
+`isPOSITION` / `isDIFFERENCE` / `isBaselineMagnitude` predicates):
 
-- **`POSITION`**: Continuous position scale (e.g., `x: value(5)`, `y: value(10)`)
-- **`DIFFERENCE`**: Difference scale for stacked/grouped charts
-- **`SIZE`**: Size-only encoding (no position)
+- **`CONTINUOUS`**: one data-driven extent, a `width` Monotonic in σ plus an
+  `origin`:
+  - `origin: number` — **POSITION**: anchored at a data coordinate (e.g.
+    `x: value(5)`); builds a position scale, niced, absolute axis.
+  - `origin: "free"` — **SIZE**: a baseline magnitude, sized but unplaced (e.g.
+    `h: "value"` with no min); no position scale.
+  - `origin: "impossible"` — **DIFFERENCE**: unanchorable, only differences are
+    meaningful (stacked/centered); delta axis over `[0, width]`.
 - **`ORDINAL`**: Discrete categorical scale (e.g., `spread("category")`)
 - **`UNDEFINED`**: No data-driven encoding
 
@@ -222,7 +231,12 @@ two-tier structure, origin pins, negative-space gutters, and the
 continuous/difference/ordinal kinds).
 
 **Axis-title elaboration** follows the axis block (after the nice-space capture)
-and runs _before_ the legend. `elaborateAxisTitles` wraps the chart in one more
+and runs _before_ the legend. The title _text_ for each dim is read off the
+**resolved space's `measure`** (`resolveAxisTitles` over `spaceMeasure(rootSpace)`)
+— a continuous axis names itself by its unit, an ordinal axis by its grouping
+field — falling back to the syntactic `axisFields` hint (mark/operator field
+names) only when the space carries no measure. `elaborateAxisTitles` then wraps
+the chart in one more
 `Layer` carrying up to two title `Text` nodes — the x-title horizontal below the
 plot, the y-title rotated to read bottom-to-top in the left gutter — each
 centered on the axis line it describes via a `ref()` stand-in (`elaborateAxes`

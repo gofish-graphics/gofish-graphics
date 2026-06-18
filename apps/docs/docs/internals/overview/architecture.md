@@ -39,15 +39,17 @@ A node implements only the passes it participates in.
 
 **1 · Domain inference.** Before anything can be sized, the engine works out the data
 ranges in play — the _domains_. GoFish distinguishes a node's
-[underlying space](/internals/core/underlying-space) (is this dimension a _position_,
-a _size_, ordinal, undefined?) and infers position and size domains separately. This
+[underlying space](/internals/core/underlying-space) (is this dimension
+continuous, ordinal, or undefined? — and if continuous, is it a _position_, a
+_size_, or a _difference_, which since #586 are the three `origin` states of one
+continuous kind) and infers position and size domains separately. This
 pass leans on the [monotonic algebra](/internals/core/monotonic) to track, symbolically,
 how each subtree depends on the data — and to prune subtrees that don't depend on it
 at all.
 
 **2 · Layout.** With domains known, each node computes its size. Layout dispatches on
-the underlying-space kind: a `SIZE` dimension resolves through the monotonic machinery,
-a `POSITION` dimension through position scales. Bounding boxes
+the continuous space's `origin` state: a `SIZE` (free) dimension resolves through the
+monotonic machinery, a `POSITION` (anchored) dimension through position scales. Bounding boxes
 ([the bbox model](/internals/core/bbox)) are the common currency.
 
 **3 · Placement & render.** Final absolute positions are assigned, and each node emits
@@ -60,7 +62,10 @@ before applying its coordinate transform.
 render-time fixtures. Before layout, elaboration passes rewrite each of them into
 ordinary marks and constraints — `Layer`-wrapped `Rect`/`Text` nodes seated by
 `align`/`distribute`/`position` — so chrome flows through the same three passes
-as the data marks. The orchestrator (`gofish.tsx`) then sizes the SVG off the
+as the data marks. Each axis names itself off its own resolved underlying
+space's **measure** (a continuous axis by its unit, an ordinal axis by its
+grouping field), so an axis title is derived from the data model, not a
+syntactic hint. The orchestrator (`gofish.tsx`) then sizes the SVG off the
 laid-out tree's **measured extent on all four sides** — the legend's overhang
 past the content, the axis/title gutters past the origin, and any content a
 constraint seated beyond the canvas (a marginal histogram's bands above and to

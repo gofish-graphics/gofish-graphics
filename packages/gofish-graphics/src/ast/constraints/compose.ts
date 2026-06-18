@@ -42,7 +42,7 @@ import { Size } from "../dims";
 import {
   UNDEFINED,
   UnderlyingSpace,
-  isSIZE,
+  isBaselineMagnitude,
   isUNDEFINED,
 } from "../underlyingSpace";
 import { unionChildSpaces } from "../graphicalOperators/alignment";
@@ -138,6 +138,7 @@ export function composeConstraintSpaces(
     idx: number[];
     mode: "edge" | "center";
     glue: boolean;
+    measure?: string;
   };
   const segments: Seg[] = [];
   for (const d of distributes) {
@@ -152,6 +153,7 @@ export function composeConstraintSpaces(
       idx,
       mode: d.mode,
       glue: d.glue,
+      measure: d.measure,
     });
   }
 
@@ -204,7 +206,7 @@ export function composeConstraintSpaces(
       const fold = distributeSpaceFold(
         s.idx.map((i) => childSpaces[i][axis]),
         s.idx.map(keyOf),
-        { spacing: s.spacing, mode: s.mode, glue: s.glue }
+        { spacing: s.spacing, mode: s.mode, glue: s.glue, measure: s.measure }
       );
       if (!isUNDEFINED(fold)) fragments.push(axisSize(fold, axis));
     }
@@ -231,7 +233,11 @@ export function composeConstraintSpaces(
     // pads the off-axis with UNDEFINED, so `spaces[axis]` only ever carries this
     // axis's contribution.)
     spaces[axis] = composed;
-    if (isSIZE(composed)) sizeDomain[axis] = composed.domain;
+    // Only a baseline magnitude ("free", from a distribute) is a budget the
+    // layer σ-solves against via `width.inverse`. An anchored POSITION (from an
+    // align fold) is driven by its posScale, not a σ-budget, so it must NOT
+    // contribute a sizeDomain (else the layer derives a spurious scale factor).
+    if (isBaselineMagnitude(composed)) sizeDomain[axis] = composed.width;
   }
 
   return {

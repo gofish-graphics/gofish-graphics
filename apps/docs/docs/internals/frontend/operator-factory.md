@@ -128,7 +128,15 @@ Walking `createOperator.ts:391-415`:
    over all of `d` and produces one value.
 4. **Strip factory keys** — `by` and `debug` never reach the low-level
    layout; remove them from opts.
-5. **Combine** — call the low-level `layout` with the encoded opts and the
+5. **Inject the grouping measure** — `by` is stripped, but a grouping operator
+   needs its field to name the ORDINAL axis it builds. So the resolved per-axis
+   grouping field (`cfg.axisFields?.(opts)`, e.g. `{ x: "lake" }`) is passed
+   through to the low-level layout in opts (as `__axisFields`), where the node
+   builder stamps it onto the ORDINAL space's `measure` — the discrete analogue
+   of a continuous channel's field becoming its space's measure. (`axisFields`
+   is also the source the chart-builder uses as a fallback hint for axis titles
+   when a space carries no measure — see [layout passes](/internals/layout/passes).)
+6. **Combine** — call the low-level `layout` with the encoded opts and the
    array of child nodes.
 
 ### Combinator form (`spread({ dir }, [m1, m2, m3])`)

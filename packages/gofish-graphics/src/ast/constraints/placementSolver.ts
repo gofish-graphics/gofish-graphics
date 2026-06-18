@@ -358,14 +358,6 @@ export function solvePlacementConstraints(
     if (constraint.type === "align") {
       const emit = (axis: Axis, spec: AlignAxisSpec | undefined) => {
         if (spec === undefined) return;
-        if (
-          constraint.guardDataPositioned &&
-          constraint.fromSize?.[axisIndex(axis)] === false &&
-          posScales?.[axisIndex(axis)] !== undefined &&
-          !Array.isArray(spec) &&
-          spec !== "middle"
-        )
-          return;
         const children = constraint.children.filter((child) =>
           targets.has(child.name)
         );

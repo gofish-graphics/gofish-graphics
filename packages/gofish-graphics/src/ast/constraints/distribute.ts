@@ -5,14 +5,15 @@
 import { Axis, ConstraintRef } from "./shared";
 import { getMeasure, getValue, isValue, type MaybeValue } from "../data";
 import {
+  CONTINUOUS_TYPE,
   ORDINAL,
   POSITION,
   SIZE,
   UNDEFINED,
   UnderlyingSpace,
   forgetAllMeasures,
+  isBaselineMagnitude,
   isPOSITION,
-  isSIZE,
   spaceMeasure,
 } from "../underlyingSpace";
 import * as Monotonic from "../../util/monotonic";
@@ -27,6 +28,9 @@ export interface DistributeOptions {
    *  layer) instead of slicing a budget. Forces `spacing` to 0. Mirrors
    *  spread's `glue`. */
   glue?: boolean;
+  /** The measure for an ORDINAL fold — the grouping field (spread's `by`) — so a
+   *  category axis names itself off its own space, like a continuous axis does. */
+  measure?: string;
 }
 
 export interface DistributeConstraint {
@@ -37,6 +41,7 @@ export interface DistributeConstraint {
   order: "forward" | "reverse";
   glue: boolean;
   children: ConstraintRef[];
+  measure?: string;
 }
 
 export const createDistributeConstraint = (
@@ -52,6 +57,7 @@ export const createDistributeConstraint = (
   order: options.order ?? "forward",
   glue: options.glue ?? false,
   children,
+  measure: options.measure,
 });
 
 /**
@@ -89,11 +95,19 @@ export function distributeSpaceFold(
     glue?: boolean;
     /** Explicit size on the spread/layer's stack axis; overrides children. */
     size?: MaybeValue<number>;
+    /** The measure for an ORDINAL result — the grouping field (spread's `by`),
+     *  so a category axis names itself off its own space, just as a continuous
+     *  axis's measure is its field. (Distinct from `childMeasure` below, which
+     *  is the continuous measure composed from the children for a SIZE/POSITION
+     *  result.) */
+    measure?: string;
   }
 ): UnderlyingSpace {
   const n = targetSpaces.length;
   if (n === 0) return UNDEFINED;
-  const measure = forgetAllMeasures(targetSpaces.map((s) => spaceMeasure(s)));
+  const childMeasure = forgetAllMeasures(
+    targetSpaces.map((s) => spaceMeasure(s))
+  );
 
   // Explicit size on the stack axis dominates the children-derived claim.
   if (opts.size !== undefined && isValue(opts.size)) {
@@ -105,30 +119,29 @@ export function distributeSpaceFold(
 
   const namedKeys = keys.filter((k): k is string => k !== undefined);
   const spacing = opts.glue ? 0 : opts.spacing;
-  const allSize = targetSpaces.every(isSIZE);
-  const allPosition = targetSpaces.every((s) => isPOSITION(s) && s.domain);
+  // A "free" baseline magnitude (old SIZE) composes its Monotonic + spacing; an
+  // anchored data-positioned child (old POSITION) sums its data widths WITHOUT
+  // spacing. They are kept distinct — collapsing both into the magnitude path
+  // wrongly injected spacing into already-positioned extents.
+  const allSize = targetSpaces.every(isBaselineMagnitude);
+  const allPosition = targetSpaces.every(isPOSITION);
+  const widthAt1 = (s: UnderlyingSpace): number =>
+    (s as CONTINUOUS_TYPE).width.run(1);
   const sumWidths = (): number =>
-    targetSpaces
-      .map((s) => Interval.width((s as any).domain))
-      .reduce((a, b) => a + b, 0);
+    targetSpaces.map(widthAt1).reduce((a, b) => a + b, 0);
 
   if (opts.glue) {
-    // STACK semantics: collapse children into a single POSITION at this level
-    // using their intrinsic extent at scale = 1.
-    if (allPosition)
-      return POSITION(Interval.interval(0, sumWidths()), measure);
-    if (allSize) {
-      const total = targetSpaces
-        .map((s) => (s as any).domain.run(1) as number)
-        .reduce((a, b) => a + b, 0);
-      return POSITION(Interval.interval(0, total), measure);
+    // STACK semantics: collapse children into a single anchored POSITION
+    // [0, Σ extent@σ=1] (same total whether they were magnitudes or positioned).
+    if (allSize || allPosition) {
+      return POSITION(Interval.interval(0, sumWidths()), childMeasure);
     }
-    if (namedKeys.length > 0) return ORDINAL(namedKeys);
+    if (namedKeys.length > 0) return ORDINAL(namedKeys, opts.measure);
     return UNDEFINED;
   }
 
   const childDomains = allSize
-    ? targetSpaces.map((s) => (s as any).domain as Monotonic.Monotonic)
+    ? targetSpaces.map((s) => (s as CONTINUOUS_TYPE).width)
     : [];
   const dataDriven =
     allSize && childDomains.some((d) => !Monotonic.isConstant(d));
@@ -142,10 +155,11 @@ export function distributeSpaceFold(
         )
       : Monotonic.adds(Monotonic.add(...childDomains), spacing * (n - 1));
 
-  if (dataDriven) return SIZE(composeSize(), measure);
-  if (namedKeys.length > 0) return ORDINAL(namedKeys);
-  if (allSize) return SIZE(composeSize(), measure);
-  if (allPosition) return POSITION(Interval.interval(0, sumWidths()), measure);
+  if (dataDriven) return SIZE(composeSize(), childMeasure);
+  if (namedKeys.length > 0) return ORDINAL(namedKeys, opts.measure);
+  if (allSize) return SIZE(composeSize(), childMeasure);
+  if (allPosition)
+    return POSITION(Interval.interval(0, sumWidths()), childMeasure);
   return UNDEFINED;
 }
 

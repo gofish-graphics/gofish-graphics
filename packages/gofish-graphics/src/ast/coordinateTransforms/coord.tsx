@@ -27,6 +27,7 @@ import {
   isPOSITION,
   isUNDEFINED,
   forgetAllMeasures,
+  continuousInterval,
 } from "../underlyingSpace";
 import { createNodeOperator } from "../withGoFish";
 import { computeTransformedBoundingBox } from "./coordUtils";
@@ -75,8 +76,8 @@ export const coord = createNodeOperator(
           _childNodes: GoFishAST[]
         ) => {
           let xSpace = UNDEFINED;
-          const xChildrenPositionSpaces = children.filter(
-            (child) => child[0].kind === "position"
+          const xChildrenPositionSpaces = children.filter((child) =>
+            isPOSITION(child[0])
           );
           const xChildrenOrdinalSpaces = children.filter(
             (child) => child[0].kind === "ordinal"
@@ -89,7 +90,9 @@ export const coord = createNodeOperator(
             const xPos = xChildrenPositionSpaces
               .map((child) => child[0])
               .filter(isPOSITION);
-            const domain = IntervalLib.unionAll(...xPos.map((s) => s.domain));
+            const domain = IntervalLib.unionAll(
+              ...xPos.map((s) => continuousInterval(s)!)
+            );
             // A coord transform maps these data positions into its own fixed
             // coordinate space (e.g. angle/radius). Cross-unit unions are the
             // transform's business, not the marginal-style corruption the guard
@@ -109,8 +112,8 @@ export const coord = createNodeOperator(
           }
 
           let ySpace = UNDEFINED;
-          const yChildrenPositionSpaces = children.filter(
-            (child) => child[1].kind === "position"
+          const yChildrenPositionSpaces = children.filter((child) =>
+            isPOSITION(child[1])
           );
           const yChildrenOrdinalSpaces = children.filter(
             (child) => child[1].kind === "ordinal"
@@ -123,7 +126,9 @@ export const coord = createNodeOperator(
             const yPos = yChildrenPositionSpaces
               .map((child) => child[1])
               .filter(isPOSITION);
-            const domain = IntervalLib.unionAll(...yPos.map((s) => s.domain));
+            const domain = IntervalLib.unionAll(
+              ...yPos.map((s) => continuousInterval(s)!)
+            );
             // See the x branch: coord maps into its own coordinate space, so
             // forget on cross-unit conflict rather than throwing.
             const yMeasure = forgetAllMeasures(yPos.map((s) => s.measure));
@@ -385,11 +390,12 @@ export const coord = createNodeOperator(
                 />
               );
 
-              if (isPOSITION(xSpace) && xSpace.domain) {
+              const xIv = continuousInterval(xSpace);
+              if (isPOSITION(xSpace) && xIv) {
                 // Continuous theta axis: regular count ticks around the ring.
                 // Use a niced max so ticks evenly divide the circle — no small leftover gap.
-                const xMin = xSpace.domain.min!;
-                const xMax = xSpace.domain.max!;
+                const xMin = xIv.min;
+                const xMax = xIv.max;
                 const [, nicedMax] = d3Nice(xMin, xMax, 8);
                 const tickVals = d3Ticks(xMin, nicedMax, 8).filter(
                   (t) => t < nicedMax
@@ -479,9 +485,10 @@ export const coord = createNodeOperator(
             }
 
             // Continuous radial axis at theta=0.
-            if (axesY && isPOSITION(ySpace) && ySpace.domain) {
-              const yMin = ySpace.domain.min!;
-              const yMax = ySpace.domain.max!;
+            const yIv = continuousInterval(ySpace);
+            if (axesY && isPOSITION(ySpace) && yIv) {
+              const yMin = yIv.min;
+              const yMax = yIv.max;
               const dataToScreenR = (v: number) =>
                 yMax === yMin ? 0 : ((v - yMin) / (yMax - yMin)) * rContent;
 
