@@ -10,6 +10,7 @@ import {
   UNDEFINED,
   isCONTINUOUS,
   isORDINAL,
+  isUNDEFINED,
   mergeMeasures,
   mergeAllMeasures,
   forgetAllMeasures,
@@ -60,7 +61,9 @@ export function unionChildSpaces(
     return ORDINAL(Array.from(keys));
   }
 
-  const conts = children.map((c) => c[axis]).filter(isCONTINUOUS);
+  const axisSpaces = children.map((c) => c[axis]);
+  const nonUndefined = axisSpaces.filter((s) => !isUNDEFINED(s));
+  const conts = axisSpaces.filter(isCONTINUOUS);
   if (conts.length === 0) return UNDEFINED;
 
   // Pure magnitude overlay — every child is a baseline magnitude ("free":
@@ -68,7 +71,17 @@ export function unionChildSpaces(
   // σ-solve via `inverse` (preserving piecewise/intercept extents that an
   // interval-at-σ=1 collapse would bake away). Composing different fields'
   // magnitudes is legitimate, so measures FORGET on conflict.
-  if (conts.every((s) => s.placement.tag === "free")) {
+  //
+  // A non-UNDEFINED, non-CONTINUOUS sibling (e.g. an empty `ORDINAL([])` from an
+  // unresolved `ref()`) is NOT a magnitude and VETOES this path — exactly the
+  // old `sized.every(isSIZE)` gate over non-undefined children. Without the veto
+  // the overlay would self-scale (free magnitude) where it used to stay
+  // unanchored (DIFFERENCE), so a sized child overlaid with an unresolved ref
+  // would change geometry. UNDEFINED siblings (fixed-pixel) still never veto.
+  if (
+    nonUndefined.length === conts.length &&
+    conts.every((s) => s.placement.tag === "free")
+  ) {
     return CONTINUOUS(
       Monotonic.max(...conts.map((s) => s.width)),
       "free",
