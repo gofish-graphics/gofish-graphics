@@ -9,7 +9,9 @@ import {
   POSITION,
   SIZE,
   UNDEFINED,
+  ORDINAL,
   isPOSITION,
+  isDIFFERENCE,
   isBaselineMagnitude,
   type UnderlyingSpace,
 } from "../ast/underlyingSpace";
@@ -87,6 +89,28 @@ console.log("# space: the three origin states are distinct");
   ok(
     "a data axis anchored at 0 is NOT a baseline magnitude",
     !isBaselineMagnitude(atZero)
+  );
+}
+
+console.log("# space: an empty-ORDINAL sibling vetoes SIZE self-scaling");
+{
+  // A SIZE (sized bar) overlaid with an empty ORDINAL([]) — the latter is what
+  // an unresolved `ref()` contributes. The empty ORDINAL is NOT a magnitude, so
+  // the overlay is NOT a pure-magnitude self-scaling region: it must stay
+  // unanchored (DIFFERENCE, no baseline → not self-scaled), exactly as before
+  // the 3-kind collapse. Filtering to CONTINUOUS-only would silently drop the
+  // ORDINAL and wrongly self-scale.
+  const sized = SIZE(M.linear(40, 0));
+  const composed = unionChildSpaces([onY(sized), onY(ORDINAL([]))], 1);
+  ok(
+    "SIZE + empty-ORDINAL overlay is a DIFFERENCE (unanchored), not a free magnitude",
+    isDIFFERENCE(composed) && !isBaselineMagnitude(composed)
+  );
+  // Sanity: SIZE alone (or with an UNDEFINED sibling) DOES stay a free magnitude.
+  const magOnly = unionChildSpaces([onY(sized), onY(UNDEFINED)], 1);
+  ok(
+    "SIZE + UNDEFINED overlay stays a free baseline magnitude",
+    isBaselineMagnitude(magOnly)
   );
 }
 
