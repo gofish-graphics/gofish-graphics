@@ -110,7 +110,7 @@ export const Spread = createNodeOperator(
             order: reverse ? "reverse" : "forward",
             // The grouping field for this (stack) axis → the ORDINAL space's
             // measure, so a spread-by-category axis titles itself off its space.
-            field: axisFieldMeta?.[stackAxis],
+            measure: axisFieldMeta?.[stackAxis],
           },
           refs
         ),

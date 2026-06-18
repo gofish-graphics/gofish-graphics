@@ -138,7 +138,7 @@ export function composeConstraintSpaces(
     idx: number[];
     mode: "edge" | "center";
     glue: boolean;
-    field?: string;
+    measure?: string;
   };
   const segments: Seg[] = [];
   for (const d of distributes) {
@@ -153,7 +153,7 @@ export function composeConstraintSpaces(
       idx,
       mode: d.mode,
       glue: d.glue,
-      field: d.field,
+      measure: d.measure,
     });
   }
 
@@ -206,7 +206,7 @@ export function composeConstraintSpaces(
       const fold = distributeSpaceFold(
         s.idx.map((i) => childSpaces[i][axis]),
         s.idx.map(keyOf),
-        { spacing: s.spacing, mode: s.mode, glue: s.glue, field: s.field }
+        { spacing: s.spacing, mode: s.mode, glue: s.glue, measure: s.measure }
       );
       if (!isUNDEFINED(fold)) fragments.push(axisSize(fold, axis));
     }
