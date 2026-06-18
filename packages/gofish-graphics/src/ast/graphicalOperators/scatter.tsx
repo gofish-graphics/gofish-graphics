@@ -126,8 +126,16 @@ export const Scatter = createNodeOperator(
         if (span.x !== undefined || span.y !== undefined)
           cs.push(Constraint.span(span, [refs[i]]));
       });
-      if (!hasX) cs.push(Constraint.align({ x: alignment }, refs));
-      if (!hasY) cs.push(Constraint.align({ y: alignment }, refs));
+      if (!hasX) {
+        const a = Constraint.align({ x: alignment }, refs);
+        a.guardDataPositioned = true;
+        cs.push(a);
+      }
+      if (!hasY) {
+        const a = Constraint.align({ y: alignment }, refs);
+        a.guardDataPositioned = true;
+        cs.push(a);
+      }
       return cs;
     });
     if (name !== undefined) node._name = name;

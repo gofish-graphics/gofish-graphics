@@ -541,7 +541,11 @@ export const layer = createNodeOperatorSequential(
             scale: number
           ): UnderlyingSpace =>
             isBaselineMagnitude(space) && scale !== 1
-              ? CONTINUOUS(Monotonic.smul(scale, space.width), 0, space.measure)
+              ? CONTINUOUS(
+                  Monotonic.smul(scale, space.width),
+                  "free",
+                  space.measure
+                )
               : space;
 
           // Nest space fold: only INSIDE_OUT edges (`dir: 'in'`) derive a
@@ -629,6 +633,33 @@ export const layer = createNodeOperatorSequential(
             for (const axis of [0, 1] as const) {
               const s = shape.spaces[axis];
               if (s !== undefined) resolved[axis] = s;
+            }
+          }
+
+          // Fill in each spread-guarded align's per-axis `fromSize` from the
+          // PRE-fold child spaces (a fold has already erased the
+          // baseline-magnitude-vs-positioned distinction by here). Consumed by
+          // `applyAlign`'s data-positioned guard so a posScale cross axis whose
+          // children carry their own data positions isn't pulled to the scale's
+          // `posScale(0)` fallback. Gated on a guarded align existing so the
+          // common case skips the O(n) `buildNameIndex` build entirely.
+          if (
+            (constraints ?? []).some(
+              (c) => c.type === "align" && c.guardDataPositioned
+            )
+          ) {
+            const alignNameIdx = buildNameIndex(_childNodes);
+            for (const c of constraints ?? []) {
+              if (c.type !== "align" || !c.guardDataPositioned) continue;
+              const idxs = c.children
+                .map((r) => alignNameIdx.get(r.name))
+                .filter((i): i is number => i !== undefined);
+              const allBaselineOn = (axis: 0 | 1): boolean =>
+                idxs.length > 0 &&
+                idxs.every((i) =>
+                  isBaselineMagnitude(effectiveChildren[i][axis])
+                );
+              c.fromSize = [allBaselineOn(0), allBaselineOn(1)];
             }
           }
 
