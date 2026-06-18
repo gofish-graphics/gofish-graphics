@@ -41,10 +41,13 @@ export const SpacedSizeAxis: StoryObj<Args> = {
   args: { w: 520, h: 220 },
   render: (args: Args) => {
     const container = initializeContainer();
-    Chart(tasks)
+    // `axes` is a chart-level option (`Chart(data, { axes })`); passing it to
+    // `.render()` is silently dropped — its signature omits `axes`, and
+    // `resolveForRender` reads the chart-level option instead.
+    Chart(tasks, { axes: true })
       .flow(spread({ by: "task", dir: "x", spacing: 30 }))
       .mark(rect({ w: "hours", h: 80, fill: "task" }))
-      .render(container, { w: args.w, h: args.h, axes: true });
+      .render(container, { w: args.w, h: args.h });
     return container;
   },
 };
