@@ -669,7 +669,10 @@ export function createOperator<Datum, Options extends Record<string, any>>(
         const resolvedMarks = await Promise.resolve(marks);
         const nodes = await Promise.all(
           resolvedMarks.map(async (mark, i) => {
-            const currentKey = key != undefined ? `${key}-${i}` : i;
+            // Local key (not parent-prefixed) — matches the operator form: a
+            // nested grouping's keys are scoped to its own subtree, so ordinal
+            // axis labels read locally and per-layer uniqueness suffices.
+            const currentKey = i;
             const result =
               typeof mark === "function"
                 ? mark(d, currentKey, layerContext)
