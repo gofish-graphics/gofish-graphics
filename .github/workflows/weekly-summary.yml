@@ -21,20 +21,40 @@ jobs:
         with:
           fetch-depth: 0 # Full history for git log
 
-      - name: Get date range
+      - name: Get summary window
         id: dates
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          echo "week_ago=$(date -d '7 days ago' +%Y-%m-%d)" >> $GITHUB_OUTPUT
-          echo "today=$(date +%Y-%m-%d)" >> $GITHUB_OUTPUT
+          # Lower-bound the window at the moment the *previous successful* summary
+          # ran, to the second — not midnight of that day. The old day-granularity
+          # bound, being relative to actual run time (which jitters week to week),
+          # could drop PRs merged on the run day after the previous summary fired:
+          # e.g. four 2026-06-11 PRs merged after that day's 12:08 run landed in no
+          # summary. Anchoring to the last successful run makes consecutive windows
+          # contiguous regardless of when the cron actually fires. A run that fails
+          # to post now fails loudly (is not "success"), so the window will not
+          # advance past an unposted week.
+          SINCE=$(gh run list --workflow weekly-summary.yml --status success \
+            --limit 20 --json startedAt,databaseId \
+            --jq "[.[] | select(.databaseId != ${{ github.run_id }})] | .[0].startedAt // empty")
+          if [ -z "$SINCE" ]; then
+            # First run, or no prior success on record: fall back to a 7-day window.
+            SINCE=$(date -u -d '7 days ago' +%Y-%m-%dT%H:%M:%SZ)
+          fi
+          # GitHub's search wants an explicit UTC offset, not the "Z" shorthand.
+          echo "since=${SINCE/Z/+00:00}" >> $GITHUB_OUTPUT
+          echo "since_label=$(date -u -d "$SINCE" +'%Y-%m-%d %H:%M UTC')" >> $GITHUB_OUTPUT
+          echo "today=$(date -u +%Y-%m-%d)" >> $GITHUB_OUTPUT
 
-      - name: Get merged PRs from last week
+      - name: Get merged PRs since the last summary
         id: prs
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           PRS=$(gh pr list \
             --state merged \
-            --search "merged:>=${{ steps.dates.outputs.week_ago }}" \
+            --search "merged:>=${{ steps.dates.outputs.since }}" \
             --json number,title,body,author,mergedAt,url \
             --jq '.[] | "### PR #\(.number): \(.title)\n- **Author:** \(.author.login)\n- **Merged:** \(.mergedAt[:10])\n- **URL:** \(.url)\n- **Description:** \(.body // "No description" | split("\n")[0:3] | join(" ") | .[0:300])\n"')
           if [ -z "$PRS" ]; then
@@ -81,7 +101,7 @@ jobs:
           # boundaries, staying under 2900 to leave headroom, and hard-wrap any
           # single line that is itself too long.
           jq -n \
-            --arg header "🐟 GoFish Weekly Update (${{ steps.dates.outputs.week_ago }} → ${{ steps.dates.outputs.today }})" \
+            --arg header "🐟 GoFish Weekly Update (${{ steps.dates.outputs.since_label }} → ${{ steps.dates.outputs.today }})" \
             --rawfile summary summary.txt \
             --argjson max 2900 \
             '
