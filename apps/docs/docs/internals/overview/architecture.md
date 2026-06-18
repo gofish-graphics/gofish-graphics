@@ -39,15 +39,17 @@ A node implements only the passes it participates in.
 
 **1 · Domain inference.** Before anything can be sized, the engine works out the data
 ranges in play — the _domains_. GoFish distinguishes a node's
-[underlying space](/internals/core/underlying-space) (is this dimension a _position_,
-a _size_, ordinal, undefined?) and infers position and size domains separately. This
+[underlying space](/internals/core/underlying-space) (is this dimension
+continuous, ordinal, or undefined? — and if continuous, is it a _position_, a
+_size_, or a _difference_, which since #586 are the three `origin` states of one
+continuous kind) and infers position and size domains separately. This
 pass leans on the [monotonic algebra](/internals/core/monotonic) to track, symbolically,
 how each subtree depends on the data — and to prune subtrees that don't depend on it
 at all.
 
 **2 · Layout.** With domains known, each node computes its size. Layout dispatches on
-the underlying-space kind: a `SIZE` dimension resolves through the monotonic machinery,
-a `POSITION` dimension through position scales. Bounding boxes
+the continuous space's `origin` state: a `SIZE` (free) dimension resolves through the
+monotonic machinery, a `POSITION` (anchored) dimension through position scales. Bounding boxes
 ([the bbox model](/internals/core/bbox)) are the common currency.
 
 **3 · Placement & render.** Final absolute positions are assigned, and each node emits

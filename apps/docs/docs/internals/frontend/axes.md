@@ -74,9 +74,16 @@ bespoke pipeline hand-coded falls out of ordinary layout:
 ## The three kinds
 
 `elaborateAxis` is a pure function (returns `{ nodes, constraints }`, no mutation),
-one branch per underlying-space kind — the seam a future public API would override:
+one branch per axis flavor — the seam a future public API would override. Since
+the #586 collapse POSITION and DIFFERENCE are no longer distinct space _kinds_
+but two `origin` states of the single `continuous` kind, so the branches
+dispatch on the `isPOSITION` / `isDIFFERENCE` / `isORDINAL` predicates rather
+than a `kind` tag, and the data interval is read uniformly via
+`continuousInterval(space)` (`[origin, origin + width.run(1)]`) instead of a
+per-kind `.domain` / `.width` field:
 
-- **POSITION (continuous)** — `d3.nice` + `d3.ticks` over the domain; an axis line
+- **POSITION (continuous, numeric origin)** — `d3.nice` + `d3.ticks` over the
+  interval; an axis line
   (a 1px `rect` auto-spanning the domain via `datum` endpoints), and a
   `spread([text, tickMark])` per tick pinned with
   `Constraint.position({ [axis]: datum(v) })`. The gutter is negative space;
@@ -92,7 +99,8 @@ one branch per underlying-space kind — the seam a future public API would over
   `align(end)` sets the ticks flush against the line (their inner edge _is_
   the tick mark, so the label text ends up offset by the tick + gap inside
   each tick's spread).
-- **DIFFERENCE** — bare tick marks at the tick values, plus plain-text labels
+- **DIFFERENCE (continuous, `origin: "impossible"`)** — bare tick marks at the
+  tick values over `[0, width.run(1)]`, plus plain-text labels
   showing the _delta_ between adjacent ticks, pinned at their midpoints
   (`position({ [axis]: datum(midpoint) })`). The delta labels have no tick of
   their own to provide an offset, so they `distribute` off the line (at the
