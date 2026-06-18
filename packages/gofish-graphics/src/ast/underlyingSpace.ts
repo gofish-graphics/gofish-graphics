@@ -134,6 +134,12 @@ export type ORDINAL_TYPE = {
   spacing?: number;
   ordinalGroupId?: string;
   domain?: string[]; // Top-level category keys for axis labels
+  /** The measure (the grouping field, e.g. "lake") this ordinal axis encodes —
+   *  the discrete analogue of a CONTINUOUS space's {@link CONTINUOUS_TYPE.measure}.
+   *  Read by axis-title inference so every axis names itself off its own resolved
+   *  space (continuous → measure unit, ordinal → grouping field), not a surface
+   *  field-name heuristic. Undefined = "no claim". */
+  measure?: Measure;
 };
 
 export type UNDEFINED_TYPE = {
@@ -228,9 +234,13 @@ export const SIZE = (
 export const hasBaseline = (space: UnderlyingSpace): space is CONTINUOUS_TYPE =>
   isCONTINUOUS(space) && space.placement.tag !== "conflict";
 
-export const ORDINAL = (domain?: string[]): UnderlyingSpace => ({
+export const ORDINAL = (
+  domain?: string[],
+  measure?: Measure
+): UnderlyingSpace => ({
   kind: "ordinal",
   domain,
+  measure,
 });
 export const isORDINAL = (space: UnderlyingSpace): space is ORDINAL_TYPE =>
   space.kind === "ordinal";
@@ -239,11 +249,14 @@ export const UNDEFINED: UnderlyingSpace = { kind: "undefined" };
 export const isUNDEFINED = (space: UnderlyingSpace): space is UNDEFINED_TYPE =>
   space.kind === "undefined";
 
-/** Read the measure of any space, or undefined for the measureless kinds. */
+/** Read the measure of any space, or undefined for the measureless kind
+ *  (UNDEFINED). Both CONTINUOUS (unit) and ORDINAL (grouping field) carry one. */
 export const spaceMeasure = (
   space: UnderlyingSpace | undefined
 ): Measure | undefined =>
-  space && isCONTINUOUS(space) ? space.measure : undefined;
+  space && (isCONTINUOUS(space) || isORDINAL(space))
+    ? space.measure
+    : undefined;
 
 /**
  * Unify two measures as TYPES (the Stage-1 guard). Undefined is permissive —

@@ -154,9 +154,18 @@ type CONTINUOUS_TYPE = {
   dataDomain: DataDomain; // the data-space extent (scales / axes / nicing / measures)
   measure?: Measure;
 };
-type ORDINAL_TYPE   = { kind: "ordinal";   domain?: string[]; ... };
+type ORDINAL_TYPE   = { kind: "ordinal";   domain?: string[]; measure?: Measure; ... };
 type UNDEFINED_TYPE = { kind: "undefined"; ... };
 ```
+
+`ORDINAL` carries a `measure` too (the grouping field, e.g. `"lake"`) — the
+discrete analogue of `CONTINUOUS`'s measure. It's set from the grouping operator
+(`spread`'s `by`) when the ordinal space is built (`distributeSpaceFold` →
+`ORDINAL(keys, measure)`) and preserved through `unionChildSpaces`. So
+`spaceMeasure(space)` reads a measure off **both** continuous and ordinal kinds
+(only `UNDEFINED` is measureless), which is what lets an axis name itself off its
+own resolved space — a continuous axis by its unit, an ordinal axis by its
+grouping field (see [the layout passes](/internals/layout/passes)).
 
 The guide a space supports keys on **`dataDomain`** (data-space), never on
 placement:

@@ -18,6 +18,7 @@ import type { Size } from "./dims";
 import {
   hasBaseline,
   isBaselineMagnitude,
+  spaceMeasure,
   type UnderlyingSpace,
 } from "./underlyingSpace";
 import { shadowCheckScaleRoot } from "./solver/shadow";
@@ -240,7 +241,16 @@ export async function layout(
   // see the legend column. Title Texts resolve UNDEFINED spaces on both dims, so
   // the wrapper preserves the content's underlying spaces and the nice spaces
   // captured above remain valid. The caller owns the "any title?" guard.
-  const { xTitle, yTitle } = resolveAxisTitles(axes, axisFields);
+  // Each axis names itself off its OWN resolved space: a continuous axis by its
+  // measure (unit), an ordinal axis by its grouping-field measure. This is the
+  // post-resolution source of truth — the builder's syntactic `axisFields`
+  // (mark/operator field names) is only a fallback for a space that carries no
+  // measure (e.g. a magnitude whose measures forgot on conflict).
+  const measureFields = {
+    x: spaceMeasure(niceUnderlyingSpaceX) ?? axisFields?.x,
+    y: spaceMeasure(niceUnderlyingSpaceY) ?? axisFields?.y,
+  };
+  const { xTitle, yTitle } = resolveAxisTitles(axes, measureFields);
   if (xTitle !== undefined || yTitle !== undefined) {
     child = await elaborateAxisTitles(child, {
       xTitle,
