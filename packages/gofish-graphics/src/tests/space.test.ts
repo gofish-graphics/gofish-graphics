@@ -8,11 +8,15 @@
 import {
   POSITION,
   SIZE,
+  DIFFERENCE,
   UNDEFINED,
   ORDINAL,
   isPOSITION,
   isDIFFERENCE,
   isBaselineMagnitude,
+  placementOf,
+  originOf,
+  type CONTINUOUS_TYPE,
   type UnderlyingSpace,
 } from "../ast/underlyingSpace";
 import { unionChildSpaces } from "../ast/graphicalOperators/alignment";
@@ -76,7 +80,7 @@ console.log("# space: baseline magnitude vs data axis anchored at 0");
   ok(
     "...and the forgotten composition is itself a baseline magnitude",
     composed !== undefined && isBaselineMagnitude(composed),
-    composed && `origin=${JSON.stringify((composed as any).origin)}`
+    composed && `placement=${JSON.stringify((composed as any).placement)}`
   );
 }
 
@@ -90,6 +94,53 @@ console.log("# space: the three origin states are distinct");
     "a data axis anchored at 0 is NOT a baseline magnitude",
     !isBaselineMagnitude(atZero)
   );
+}
+
+console.log(
+  "# space: the abstract placement lattice is total over origin (Phase A)"
+);
+{
+  // placementOf maps each of the three origin states.
+  ok(
+    'origin "free" → placement free',
+    placementOf("free").tag === "free"
+  );
+  ok(
+    'origin "impossible" → placement conflict',
+    placementOf("impossible").tag === "conflict"
+  );
+  const det = placementOf(1955);
+  ok(
+    "origin <number> → placement determined at that DATA coordinate",
+    det.tag === "determined" && det.at === 1955
+  );
+
+  // Constructors carry placement + dataDomain; originOf round-trips placement.
+  const cases: [string, CONTINUOUS_TYPE, string, unknown][] = [
+    ["SIZE", SIZE(M.linear(10, 0)) as CONTINUOUS_TYPE, "free", undefined],
+    [
+      "POSITION([5,9])",
+      POSITION(interval(5, 9)) as CONTINUOUS_TYPE,
+      "determined",
+      interval(5, 9),
+    ],
+    ["DIFFERENCE(7)", DIFFERENCE(7) as CONTINUOUS_TYPE, "conflict", "delta"],
+  ];
+  for (const [label, sp, expectedTag, expectedDomain] of cases) {
+    ok(
+      `${label} carries placement.tag === "${expectedTag}"`,
+      sp.placement.tag === expectedTag
+    );
+    ok(
+      `${label} carries the expected dataDomain`,
+      JSON.stringify(sp.dataDomain) === JSON.stringify(expectedDomain)
+    );
+    ok(
+      `${label}: placementOf(originOf(sp)) round-trips placement`,
+      JSON.stringify(placementOf(originOf(sp))) ===
+        JSON.stringify(sp.placement)
+    );
+  }
 }
 
 console.log("# space: an empty-ORDINAL sibling vetoes SIZE self-scaling");

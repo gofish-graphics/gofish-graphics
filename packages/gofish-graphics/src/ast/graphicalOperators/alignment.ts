@@ -80,7 +80,7 @@ export function unionChildSpaces(
   // would change geometry. UNDEFINED siblings (fixed-pixel) still never veto.
   if (
     nonUndefined.length === conts.length &&
-    conts.every((s) => s.origin === "free")
+    conts.every((s) => s.placement.tag === "free")
   ) {
     return CONTINUOUS(
       Monotonic.max(...conts.map((s) => s.width)),
@@ -99,7 +99,7 @@ export function unionChildSpaces(
   let measure: Measure | undefined;
   for (const s of conts) {
     intervals.push(continuousExtentInterval(s));
-    if (typeof s.origin === "number") hasAnchored = true;
+    if (s.placement.tag === "determined") hasAnchored = true;
     measure = mergeMeasures(measure, s.measure, "overlay union");
   }
   const union = Interval.unionAll(...intervals);
@@ -124,16 +124,16 @@ export function resolveAlignmentSpace(
   // conflict — that's how a histogram's count axis carries a "count" tag
   // forward; mixed/positioned children unify measures as TYPES (throw on a real
   // clash).
-  const allBaseline = conts.every((s) => s.origin === "free");
+  const allBaseline = conts.every((s) => s.placement.tag === "free");
   const measure = allBaseline
     ? forgetAllMeasures(conts.map(spaceMeasure))
     : mergeAllMeasures(conts.map(spaceMeasure), "alignment");
 
   // `middle` DROPS the anchor (centering scrambles baselines); an already
-  // unanchored ("impossible") child can't be re-anchored by alignment (it is
+  // unanchored ("conflict") child can't be re-anchored by alignment (it is
   // absorbing). Either way the result is unanchored.
   const drop =
-    alignment === "middle" || conts.some((s) => s.origin === "impossible");
+    alignment === "middle" || conts.some((s) => s.placement.tag === "conflict");
 
   const union = Interval.unionAll(...conts.map(continuousExtentInterval));
 

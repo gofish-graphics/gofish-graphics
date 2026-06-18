@@ -38,7 +38,9 @@ import {
   isPOSITION,
   isUNDEFINED,
   continuousInterval,
+  placementOf,
   CONTINUOUS_TYPE,
+  type Placement,
   UnderlyingSpace,
 } from "./underlyingSpace";
 import { toJSON, interval } from "../util/interval";
@@ -97,6 +99,11 @@ export type Placeable = {
    *  align anchor reads this so it survives retiring the translate writes; `ref`
    *  stand-ins omit it (they keep a computed `transform`). */
   projectedTranslate?: (dir: Direction) => number | undefined;
+  /** This target's abstract {@link Placement} on `dir` (free / determined(at) /
+   *  conflict), or `undefined` for a non-continuous axis. `align` reads it to
+   *  leave self-positioned children alone. Omitted by `ref` stand-ins (→
+   *  `undefined`, so they get the fallback baseline like any chrome). */
+  placementOn?: (dir: Direction) => Placement | undefined;
   place: (axis: FancyDirection, value: number, anchor?: Anchor) => void;
   /** Write an axis extent from owned bbox facets (the size-setting primitive
    *  #39 — `span` and an authoritative `position` pin go through it). Optional
@@ -555,7 +562,10 @@ export class GoFishNode {
         if (isPOSITION(space)) {
           const iv = continuousInterval(space)!;
           const [niceMin, niceMax] = nice(iv.min, iv.max, 10);
-          (space as CONTINUOUS_TYPE).origin = niceMin;
+          // Nicing changes the DATA domain (and the width derived from it) and
+          // re-pins the placement at the niced min — all in lockstep.
+          (space as CONTINUOUS_TYPE).dataDomain = interval(niceMin, niceMax);
+          (space as CONTINUOUS_TYPE).placement = placementOf(niceMin);
           (space as CONTINUOUS_TYPE).width = Monotonic.linear(
             niceMax - niceMin,
             0
@@ -705,6 +715,17 @@ export class GoFishNode {
    *  working once stage 3-C retires the direct translate writes. */
   public projectedTranslate(dir: Direction): number | undefined {
     return this._projectTranslate(dir);
+  }
+
+  /** This node's abstract {@link Placement} on `dir` (the layout half of its
+   *  underlying space) — `free` (awaiting a position), `determined(at)` (already
+   *  committed to a data coordinate), or `conflict`. `undefined` for a
+   *  non-continuous / unresolved axis (chrome). `align` reads it to leave
+   *  self-positioned children (a scatter facet) where their own scale puts them
+   *  — the principled replacement for the data-positioned guard. */
+  public placementOn(dir: Direction): Placement | undefined {
+    const sp = this._underlyingSpace?.[dir];
+    return sp !== undefined && isCONTINUOUS(sp) ? sp.placement : undefined;
   }
 
   private get _displayTransform(): Transform | undefined {
@@ -1212,9 +1233,9 @@ export const debugUnderlyingSpaceTree = (
   ): string => {
     const fmt = (s: UnderlyingSpace): string => {
       if (isCONTINUOUS(s)) {
-        return typeof s.origin === "number"
+        return s.placement.tag === "determined"
           ? `position(${toJSON(continuousInterval(s)!)})`
-          : s.origin === "free"
+          : s.placement.tag === "free"
             ? `size(${s.width.run(1)})`
             : `difference(${s.width.run(1)})`;
       } else if (isORDINAL(s)) {
