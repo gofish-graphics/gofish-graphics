@@ -29,6 +29,9 @@ export interface DistributeOptions {
    *  layer) instead of slicing a budget. Forces `spacing` to 0. Mirrors
    *  spread's `glue`. */
   glue?: boolean;
+  /** The grouping field (spread's `by`), carried onto an ORDINAL space fold as
+   *  its measure so a category axis names itself off its own space. */
+  field?: string;
 }
 
 export interface DistributeConstraint {
@@ -39,6 +42,7 @@ export interface DistributeConstraint {
   order: "forward" | "reverse";
   glue: boolean;
   children: ConstraintRef[];
+  field?: string;
 }
 
 export const createDistributeConstraint = (
@@ -54,6 +58,7 @@ export const createDistributeConstraint = (
   order: options.order ?? "forward",
   glue: options.glue ?? false,
   children,
+  field: options.field,
 });
 
 /**
@@ -91,6 +96,9 @@ export function distributeSpaceFold(
     glue?: boolean;
     /** Explicit size on the spread/layer's stack axis; overrides children. */
     size?: MaybeValue<number>;
+    /** The grouping field (spread's `by`), carried onto an ORDINAL result as its
+     *  measure so the axis can name itself off its own space. */
+    field?: string;
   }
 ): UnderlyingSpace {
   const n = targetSpaces.length;
@@ -124,7 +132,7 @@ export function distributeSpaceFold(
     if (allSize || allPosition) {
       return POSITION(Interval.interval(0, sumWidths()), measure);
     }
-    if (namedKeys.length > 0) return ORDINAL(namedKeys);
+    if (namedKeys.length > 0) return ORDINAL(namedKeys, opts.field);
     return UNDEFINED;
   }
 
@@ -144,7 +152,7 @@ export function distributeSpaceFold(
       : Monotonic.adds(Monotonic.add(...childDomains), spacing * (n - 1));
 
   if (dataDriven) return SIZE(composeSize(), measure);
-  if (namedKeys.length > 0) return ORDINAL(namedKeys);
+  if (namedKeys.length > 0) return ORDINAL(namedKeys, opts.field);
   if (allSize) return SIZE(composeSize(), measure);
   if (allPosition) return POSITION(Interval.interval(0, sumWidths()), measure);
   return UNDEFINED;

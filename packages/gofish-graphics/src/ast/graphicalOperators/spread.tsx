@@ -48,6 +48,7 @@ export const Spread = createNodeOperator(
       reverse = false,
       glue = false,
       axes,
+      __axisFields: axisFieldMeta,
       ...fancyDims
     }: {
       name?: string;
@@ -64,6 +65,10 @@ export const Spread = createNodeOperator(
       /** Override axis rendering for this node. true/false applies to both
        * dims; object form controls x/y independently. */
       axes?: boolean | { x?: AxisOptions; y?: AxisOptions };
+      /** Resolved grouping field per axis, injected by createOperator (the `by`
+       *  field, e.g. `{ x: "lake" }`). Stamped onto the ORDINAL space the stack
+       *  distribute builds so a category axis names itself off its own space. */
+      __axisFields?: { x?: string; y?: string };
     } & FancyDims<MaybeValue<number>>,
     children: GoFishAST[] | Collection<GoFishAST>
   ) => {
@@ -103,6 +108,9 @@ export const Spread = createNodeOperator(
             mode,
             glue,
             order: reverse ? "reverse" : "forward",
+            // The grouping field for this (stack) axis → the ORDINAL space's
+            // measure, so a spread-by-category axis titles itself off its space.
+            field: axisFieldMeta?.[stackAxis],
           },
           refs
         ),

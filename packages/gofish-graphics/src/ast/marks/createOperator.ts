@@ -762,6 +762,18 @@ export function createOperator<Datum, Options extends Record<string, any>>(
         );
         const nodes = nodesPerLeaf.flat();
         const lowOpts = buildLayoutOpts(cfg.channels, opts, d, entries, keys);
+        // Carry the grouping field (e.g. spread's `by`) into the node operator
+        // so it can stamp the ORDINAL space it builds with a measure — the
+        // discrete axis names itself off its own space, mirroring how a
+        // continuous channel's field becomes its space's measure. `by` itself is
+        // a stripped factory key, so route the resolved field via __axisFields.
+        const opFields = cfg.axisFields?.(opts);
+        if (
+          opFields &&
+          (opFields.x !== undefined || opFields.y !== undefined)
+        ) {
+          (lowOpts as any).__axisFields = opFields;
+        }
         return (await layout(lowOpts, nodes)) as unknown as GoFishNode;
       }) as Mark<Datum[]>;
     };
