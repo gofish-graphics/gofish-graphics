@@ -482,32 +482,14 @@ export class ChartBuilder<TInput, TOutput = TInput> {
     );
   }
 
-  // Auto-infer axis titles from field encodings on the mark and operators.
-  // Mark fields take priority (they encode measured values, e.g. h: "count");
-  // operator fields fill remaining gaps (grouping/layout, e.g. spread by "lake").
-  private inferAxisFields(): { x?: string; y?: string } {
-    const axisFields: { x?: string; y?: string } = {};
-    const markMeta = (this.finalMark as any)?.__axisFields as
-      | { x?: string; y?: string }
-      | undefined;
-    if (markMeta?.x) axisFields.x ??= markMeta.x;
-    if (markMeta?.y) axisFields.y ??= markMeta.y;
-    for (const op of this.operators) {
-      const meta = (op as any).__axisFields as
-        | { x?: string; y?: string }
-        | undefined;
-      if (meta?.x) axisFields.x ??= meta.x;
-      if (meta?.y) axisFields.y ??= meta.y;
-    }
-    return axisFields;
-  }
-
   // The chart-level options every terminal threads through to the node:
-  // resolved axes/color config plus the inferred axis fields.
+  // resolved axes/color config. Axis titles are inferred downstream from each
+  // resolved space's `measure` (see `gofish`) — both continuous (channel field)
+  // and ordinal (grouping field) spaces carry one — so no field-name hint is
+  // threaded from the builder anymore.
   private async resolveForRender<T extends Record<string, unknown>>(
     options: T
   ): Promise<{ node: GoFishNode; options: T & Record<string, unknown> }> {
-    const axisFields = this.inferAxisFields();
     const node = await this.resolve();
     return {
       node,
@@ -515,7 +497,6 @@ export class ChartBuilder<TInput, TOutput = TInput> {
         ...options,
         axes: this.options?.axes,
         colorConfig: this.options?.color,
-        axisFields,
       },
     };
   }

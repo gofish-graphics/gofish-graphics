@@ -29,6 +29,7 @@ import {
   forgetAllMeasures,
   continuousInterval,
 } from "../underlyingSpace";
+import type { Measure } from "../data";
 import { createNodeOperator } from "../withGoFish";
 import { computeTransformedBoundingBox } from "./coordUtils";
 import { empty, union } from "../../util/bbox";
@@ -100,15 +101,19 @@ export const coord = createNodeOperator(
             const xMeasure = forgetAllMeasures(xPos.map((s) => s.measure));
             xSpace = POSITION(domain, xMeasure, coordTransform);
           } else if (xChildrenOrdinalSpaces.length > 0) {
-            // Collect and merge domains from all child ordinal spaces
+            // Collect and merge domains from all child ordinal spaces, carrying
+            // the grouping measure (FORGET on a clash) so a polar category axis
+            // names itself off its space, like the Cartesian ordinal union.
             const allKeys = new Set<string>();
+            const xMeasures: (Measure | undefined)[] = [];
             xChildrenOrdinalSpaces.forEach((child) => {
               const ordinalSpace = child[0];
               if (isORDINAL(ordinalSpace) && ordinalSpace.domain) {
                 ordinalSpace.domain.forEach((key) => allKeys.add(key));
+                xMeasures.push(ordinalSpace.measure);
               }
             });
-            xSpace = ORDINAL(Array.from(allKeys));
+            xSpace = ORDINAL(Array.from(allKeys), forgetAllMeasures(xMeasures));
           }
 
           let ySpace = UNDEFINED;
@@ -134,15 +139,18 @@ export const coord = createNodeOperator(
             const yMeasure = forgetAllMeasures(yPos.map((s) => s.measure));
             ySpace = POSITION(domain, yMeasure, coordTransform);
           } else if (yChildrenOrdinalSpaces.length > 0) {
-            // Collect and merge domains from all child ordinal spaces
+            // Collect and merge domains from all child ordinal spaces, carrying
+            // the grouping measure (see the x branch).
             const allKeys = new Set<string>();
+            const yMeasures: (Measure | undefined)[] = [];
             yChildrenOrdinalSpaces.forEach((child) => {
               const ordinalSpace = child[1];
               if (isORDINAL(ordinalSpace) && ordinalSpace.domain) {
                 ordinalSpace.domain.forEach((key) => allKeys.add(key));
+                yMeasures.push(ordinalSpace.measure);
               }
             });
-            ySpace = ORDINAL(Array.from(allKeys));
+            ySpace = ORDINAL(Array.from(allKeys), forgetAllMeasures(yMeasures));
           }
 
           const result: Size<UnderlyingSpace> = [xSpace, ySpace];

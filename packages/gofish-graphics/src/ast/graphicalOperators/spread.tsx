@@ -48,7 +48,7 @@ export const Spread = createNodeOperator(
       reverse = false,
       glue = false,
       axes,
-      __axisFields: axisFieldMeta,
+      axisMeasures,
       ...fancyDims
     }: {
       name?: string;
@@ -68,7 +68,7 @@ export const Spread = createNodeOperator(
       /** Resolved grouping field per axis, injected by createOperator (the `by`
        *  field, e.g. `{ x: "lake" }`). Stamped onto the ORDINAL space the stack
        *  distribute builds so a category axis names itself off its own space. */
-      __axisFields?: { x?: string; y?: string };
+      axisMeasures?: { x?: string; y?: string };
     } & FancyDims<MaybeValue<number>>,
     children: GoFishAST[] | Collection<GoFishAST>
   ) => {
@@ -108,7 +108,7 @@ export const Spread = createNodeOperator(
             order: reverse ? "reverse" : "forward",
             // The grouping field for this (stack) axis → the ORDINAL space's
             // measure, so a spread-by-category axis titles itself off its space.
-            measure: axisFieldMeta?.[stackAxis],
+            measure: axisMeasures?.[stackAxis],
           },
           refs
         ),
