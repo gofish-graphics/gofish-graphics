@@ -495,9 +495,10 @@ export type OperatorConfig<Datum, Options> = {
   split: (opts: Options, d: Datum[]) => SplitResult<Datum>;
   channels?: ChannelAnnotations<Options>;
   /**
-   * Optional hook returning the axis-field encoding ChartBuilder uses to
-   * auto-infer axis titles. e.g. `spread({by: "lake", dir: "x"})` should report
-   * `{x: "lake"}` so an x-axis title `lake` is inferred.
+   * Optional hook returning the per-axis grouping field this operator encodes.
+   * Injected into the node operator as `axisMeasures` so it can stamp the
+   * ORDINAL space's `measure` — e.g. `spread({by: "lake", dir: "x"})` reports
+   * `{x: "lake"}`, the x-axis names itself "lake" off its own resolved space.
    */
   axisFields?: (opts: Options) => { x?: string; y?: string } | undefined;
   /**
