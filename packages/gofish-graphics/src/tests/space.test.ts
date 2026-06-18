@@ -13,6 +13,7 @@ import {
   isPOSITION,
   isBaselineMagnitude,
   placementOf,
+  originOf,
   type CONTINUOUS_TYPE,
   type UnderlyingSpace,
 } from "../ast/underlyingSpace";
@@ -112,24 +113,30 @@ console.log(
     det.tag === "determined" && det.at === 1955
   );
 
-  // Constructors carry the derived placement, and it stays === placementOf(origin).
-  const cases: [string, CONTINUOUS_TYPE, string][] = [
-    ["SIZE", SIZE(M.linear(10, 0)) as CONTINUOUS_TYPE, "free"],
+  // Constructors carry placement + dataDomain; originOf round-trips placement.
+  const cases: [string, CONTINUOUS_TYPE, string, unknown][] = [
+    ["SIZE", SIZE(M.linear(10, 0)) as CONTINUOUS_TYPE, "free", undefined],
     [
       "POSITION([5,9])",
       POSITION(interval(5, 9)) as CONTINUOUS_TYPE,
       "determined",
+      interval(5, 9),
     ],
-    ["DIFFERENCE(7)", DIFFERENCE(7) as CONTINUOUS_TYPE, "conflict"],
+    ["DIFFERENCE(7)", DIFFERENCE(7) as CONTINUOUS_TYPE, "conflict", "delta"],
   ];
-  for (const [label, sp, expectedTag] of cases) {
+  for (const [label, sp, expectedTag, expectedDomain] of cases) {
     ok(
       `${label} carries placement.tag === "${expectedTag}"`,
       sp.placement.tag === expectedTag
     );
     ok(
-      `${label}: placement === placementOf(origin)`,
-      JSON.stringify(sp.placement) === JSON.stringify(placementOf(sp.origin))
+      `${label} carries the expected dataDomain`,
+      JSON.stringify(sp.dataDomain) === JSON.stringify(expectedDomain)
+    );
+    ok(
+      `${label}: placementOf(originOf(sp)) round-trips placement`,
+      JSON.stringify(placementOf(originOf(sp))) ===
+        JSON.stringify(sp.placement)
     );
   }
 }

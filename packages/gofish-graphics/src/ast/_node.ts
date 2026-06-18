@@ -556,9 +556,9 @@ export class GoFishNode {
         if (isPOSITION(space)) {
           const iv = continuousInterval(space)!;
           const [niceMin, niceMax] = nice(iv.min, iv.max, 10);
-          (space as CONTINUOUS_TYPE).origin = niceMin;
-          // Keep placement in sync with the niced origin (Phase A invariant:
-          // placement === placementOf(origin)).
+          // Nicing changes the DATA domain (and the width derived from it) and
+          // re-pins the placement at the niced min — all in lockstep.
+          (space as CONTINUOUS_TYPE).dataDomain = interval(niceMin, niceMax);
           (space as CONTINUOUS_TYPE).placement = placementOf(niceMin);
           (space as CONTINUOUS_TYPE).width = Monotonic.linear(
             niceMax - niceMin,
@@ -1216,9 +1216,9 @@ export const debugUnderlyingSpaceTree = (
   ): string => {
     const fmt = (s: UnderlyingSpace): string => {
       if (isCONTINUOUS(s)) {
-        return typeof s.origin === "number"
+        return s.placement.tag === "determined"
           ? `position(${toJSON(continuousInterval(s)!)})`
-          : s.origin === "free"
+          : s.placement.tag === "free"
             ? `size(${s.width.run(1)})`
             : `difference(${s.width.run(1)})`;
       } else if (isORDINAL(s)) {
