@@ -14,6 +14,7 @@ import {
   type RenderSession,
 } from "./_node";
 import { computePosScale } from "./domain";
+import { bake } from "./coordinateTransforms/bake";
 import type { Size } from "./dims";
 import { isSIZE, type UnderlyingSpace } from "./underlyingSpace";
 import { shadowCheckScaleRoot } from "./solver/shadow";
@@ -816,8 +817,18 @@ export const render = (
       <g
         transform={`scale(1, -1) translate(${leftReserve}, ${-(height + topReserve)})`}
       >
-        <Show when={transform} keyed fallback={child.INTERNAL_render()}>
-          <g transform={transform ?? ""}>{child.INTERNAL_render()}</g>
+        <Show
+          when={transform}
+          keyed
+          fallback={bake(child).map((d) =>
+            d.node.INTERNAL_render(undefined, d.transform)
+          )}
+        >
+          <g transform={transform ?? ""}>
+            {bake(child).map((d) =>
+              d.node.INTERNAL_render(undefined, d.transform)
+            )}
+          </g>
         </Show>
       </g>
     </svg>
