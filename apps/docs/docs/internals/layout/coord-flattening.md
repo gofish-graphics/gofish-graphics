@@ -7,6 +7,7 @@ status: draft
 covers:
   - packages/gofish-graphics/src/ast/coordinateTransforms/coord.tsx
   - packages/gofish-graphics/src/ast/coordinateTransforms/bake.ts
+  - packages/gofish-graphics/src/ast/paintOrder.ts
 ---
 
 # Flattening the Scenegraph
@@ -81,6 +82,42 @@ Two design notes from the source worth knowing:
 - **`coord` runs the recursion at render time.** `coord` keeps its children for the
   layout pass, then calls `flattenLayout` inside `render` to produce the flat list it
   actually draws, applying the coordinate transform to each flattened leaf.
+
+## The root bake — flattening the _whole_ tree
+
+`flattenLayout` is the **coord-local** flattener: `coord` calls it on its own
+subtree. There is also a **root** flattener, `bake`, in the same file, which is what
+render now consumes for the _entire_ chart (replacing the old nested `<g transform>`
+recursion). `bake` flattens the whole scenegraph into one ordered list of
+`DisplayObject`s — each a `{ node, transform }` draw entry at an absolute transform —
+which the render entry maps over directly.
+
+`bake` differs from `flattenLayout` in two ways:
+
+- **Boundaries.** A node whose render is _not_ reducible to "translate its independent
+  children" is a **bake boundary**: it emits a single `DisplayObject` and renders its
+  own subtree internally. These are the space-remappers (`coord`), the compositors
+  (`over` / `atop` / `in` / `out` / `xor` / `mask`), and the cross-child self-drawers
+  (`connect` / `arrow` / `enclose` / `box`), plus any label-bearing node. So `coord`
+  stays a boundary — `bake` never recurses _through_ a coordinate transform (which
+  would compose a single global translate across a space remap); `coord` keeps doing
+  its own coord-local `flattenLayout` inside. The bake is **boundary-recursive**. (The
+  boundary set is a string set today; replacing it with a node-declared flag is tracked
+  in [#75](https://github.com/gofish-graphics/gofish-graphics/issues/75).)
+- **Draw order.** Paint order used to live in `layer` (a `(zOrder, index)` sort, or a
+  `zAbove` / `zBelow` topological sort). Flattening through `layer` would drop that, so
+  `bake` resolves draw order **globally** over the flattened list via the shared
+  `topoSortByZOrder` in `paintOrder.ts` — the same algorithm `layer` used, lifted out
+  and now applied once over the whole list. `layer` is consequently a _transparent_
+  positioning operator to the bake. This per-layer → global lift has two known latent
+  divergences (a `zOrder()` on a transparent intermediate layer is not yet propagated;
+  cross-layer `ref`-name collisions widen the cycle surface), tracked in
+  [#607](https://github.com/gofish-graphics/gofish-graphics/issues/607).
+
+This root bake is the first step toward a serializable [display
+list](/internals/design/display-list-plan) (the render IR): once each draw entry is a
+self-contained primitive rather than a `{ node, transform }` back-reference, the flat
+list _is_ the display list.
 
 ## Current limitations
 

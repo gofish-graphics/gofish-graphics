@@ -1,3 +1,7 @@
+// <gofish-wiki> AUTO-GENERATED — see covers: in the essay; run `pnpm --filter docs sync-backlinks`
+// @wiki Flattening the Scenegraph — /internals/layout/coord-flattening
+// </gofish-wiki>
+
 import { GoFishNode } from "./_node";
 import type { GoFishAST } from "./_ast";
 import { isToken } from "./createName";

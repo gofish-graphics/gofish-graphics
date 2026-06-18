@@ -162,7 +162,10 @@ type BakeItem = {
 /** Order the flattened paint list. The unconstrained majority is a stable
  *  `(z, order)` sort; when `zAbove`/`zBelow` constraints are present the shared
  *  {@link topoSortByZOrder} resolves them — the same resolution `layer` runs,
- *  now over the whole flattened list rather than per-layer. */
+ *  now over the whole flattened list rather than per-layer. This per-layer →
+ *  global lift has two known latent divergences (a `zOrder()` on a transparent
+ *  intermediate layer is not propagated; cross-layer ref-name collisions widen
+ *  the cycle surface) — tracked in #607; no current chart exercises either. */
 const orderByZ = (
   items: BakeItem[],
   constraints: ZOrderConstraint[]
