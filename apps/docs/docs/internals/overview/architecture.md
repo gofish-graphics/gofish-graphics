@@ -62,7 +62,10 @@ before applying its coordinate transform.
 render-time fixtures. Before layout, elaboration passes rewrite each of them into
 ordinary marks and constraints — `Layer`-wrapped `Rect`/`Text` nodes seated by
 `align`/`distribute`/`position` — so chrome flows through the same three passes
-as the data marks. The orchestrator (`gofish.tsx`) then sizes the SVG off the
+as the data marks. Each axis names itself off its own resolved underlying
+space's **measure** (a continuous axis by its unit, an ordinal axis by its
+grouping field), so an axis title is derived from the data model, not a
+syntactic hint. The orchestrator (`gofish.tsx`) then sizes the SVG off the
 laid-out tree's **measured extent on all four sides** — the legend's overhang
 past the content, the axis/title gutters past the origin, and any content a
 constraint seated beyond the canvas (a marginal histogram's bands above and to

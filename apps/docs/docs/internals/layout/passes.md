@@ -231,7 +231,12 @@ two-tier structure, origin pins, negative-space gutters, and the
 continuous/difference/ordinal kinds).
 
 **Axis-title elaboration** follows the axis block (after the nice-space capture)
-and runs _before_ the legend. `elaborateAxisTitles` wraps the chart in one more
+and runs _before_ the legend. The title _text_ for each dim is read off the
+**resolved space's `measure`** (`resolveAxisTitles` over `spaceMeasure(rootSpace)`)
+— a continuous axis names itself by its unit, an ordinal axis by its grouping
+field — falling back to the syntactic `axisFields` hint (mark/operator field
+names) only when the space carries no measure. `elaborateAxisTitles` then wraps
+the chart in one more
 `Layer` carrying up to two title `Text` nodes — the x-title horizontal below the
 plot, the y-title rotated to read bottom-to-top in the left gutter — each
 centered on the axis line it describes via a `ref()` stand-in (`elaborateAxes`
