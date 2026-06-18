@@ -40,6 +40,7 @@ import {
   continuousInterval,
   placementOf,
   CONTINUOUS_TYPE,
+  type Placement,
   UnderlyingSpace,
 } from "./underlyingSpace";
 import { toJSON, interval } from "../util/interval";
@@ -98,11 +99,11 @@ export type Placeable = {
    *  align anchor reads this so it survives retiring the translate writes; `ref`
    *  stand-ins omit it (they keep a computed `transform`). */
   projectedTranslate?: (dir: Direction) => number | undefined;
-  /** Whether this target's subtree already commits a data position on `dir`
-   *  (abstract placement `determined`/`conflict`). `align` reads it to leave
-   *  self-positioned children alone. Omitted by `ref` stand-ins (→ "no", they
-   *  get the fallback baseline like any chrome). */
-  isDataPositioned?: (dir: Direction) => boolean;
+  /** This target's abstract {@link Placement} on `dir` (free / determined(at) /
+   *  conflict), or `undefined` for a non-continuous axis. `align` reads it to
+   *  leave self-positioned children alone. Omitted by `ref` stand-ins (→
+   *  `undefined`, so they get the fallback baseline like any chrome). */
+  placementOn?: (dir: Direction) => Placement | undefined;
   place: (axis: FancyDirection, value: number, anchor?: Anchor) => void;
   /** Write an axis extent from owned bbox facets (the size-setting primitive
    *  #39 — `span` and an authoritative `position` pin go through it). Optional
@@ -716,15 +717,15 @@ export class GoFishNode {
     return this._projectTranslate(dir);
   }
 
-  /** Abstract placement on this axis: does this node's own subtree already
-   *  COMMIT a data position (placement `determined`/`conflict`), or is it a
-   *  free baseline magnitude awaiting one? Read by `align` so it leaves
-   *  self-positioned children (a scatter facet) alone instead of pinning them to
-   *  a fallback baseline — the principled replacement for the data-positioned
-   *  guard. `undefined`/non-continuous (chrome) reads as "not committed". */
-  public isDataPositioned(dir: Direction): boolean {
+  /** This node's abstract {@link Placement} on `dir` (the layout half of its
+   *  underlying space) — `free` (awaiting a position), `determined(at)` (already
+   *  committed to a data coordinate), or `conflict`. `undefined` for a
+   *  non-continuous / unresolved axis (chrome). `align` reads it to leave
+   *  self-positioned children (a scatter facet) where their own scale puts them
+   *  — the principled replacement for the data-positioned guard. */
+  public placementOn(dir: Direction): Placement | undefined {
     const sp = this._underlyingSpace?.[dir];
-    return sp !== undefined && isCONTINUOUS(sp) && sp.placement.tag !== "free";
+    return sp !== undefined && isCONTINUOUS(sp) ? sp.placement : undefined;
   }
 
   private get _displayTransform(): Transform | undefined {

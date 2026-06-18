@@ -177,17 +177,19 @@ export function emitAlignTargets(
   for (let i = 0; i < targets.length; i++) {
     if (isPlacedOn(targets[i], idx)) continue;
     // Leave a self-positioned child alone: if its subtree already commits a data
-    // position (abstract placement determined/conflict) on a posScale axis, it
-    // places itself via the shared scale — pinning it to the `posScale(0)`
-    // fallback would fling a non-zero-origin axis off-canvas (faceted scatter
-    // panels over [1955,2010]). `middle` still centers (box-relative, no scale
-    // origin). This is the principled replacement for the data-positioned guard:
-    // the per-child placement IS the signal, so it needs no `guardDataPositioned`
-    // scoping (chrome reads as not-committed and still gets the baseline).
+    // position (placement `determined`/`conflict`) on a posScale axis, it places
+    // itself via the shared scale — pinning it to the `posScale(0)` fallback
+    // would fling a non-zero-origin axis off-canvas (faceted scatter panels over
+    // [1955,2010]). `middle` still centers (box-relative, no scale origin). This
+    // is the principled replacement for the data-positioned guard: the per-child
+    // placement IS the signal, so it needs no `guardDataPositioned` scoping
+    // (chrome reads as `undefined` / `free` and still gets the baseline).
+    const placement = targets[i].placementOn?.(idx);
     if (
       anchors[i] !== "middle" &&
       env.posScale !== undefined &&
-      targets[i].isDataPositioned?.(idx)
+      placement !== undefined &&
+      placement.tag !== "free"
     )
       continue;
     out.push({ target: targets[i], anchor: anchors[i], value: baseline });
