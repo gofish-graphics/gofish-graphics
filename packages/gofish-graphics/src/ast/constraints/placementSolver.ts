@@ -363,23 +363,49 @@ export function solvePlacementConstraints(
         );
         if (children.length === 0) return;
         const anchors = normalizedAnchors(spec, children.length);
-        for (let i = 1; i < children.length; i++) {
+
+        // Preserve legacy align's continuous-placement guard: a self-positioned
+        // child on a posScale axis already chose its data coordinate, so
+        // non-middle align must not pin or relate it to the fallback baseline.
+        // This is what keeps faceted scatter panels on their y-scale origin
+        // while still allowing chrome/free children to align to the shared
+        // baseline.
+        const aligned = children
+          .map((child, index) => ({ child, anchor: anchors[index] }))
+          .filter(({ child, anchor }) => {
+            const target = targets.get(child.name);
+            const placement =
+              typeof target?.placementOn === "function"
+                ? target.placementOn(axisIndex(axis))
+                : undefined;
+            return !(
+              anchor !== "middle" &&
+              posScales?.[axisIndex(axis)] !== undefined &&
+              placement !== undefined &&
+              placement.tag !== "free"
+            );
+          });
+        if (aligned.length === 0) return;
+
+        for (let i = 1; i < aligned.length; i++) {
           if (
-            initiallyPlaced.has(`${axisIndex(axis)}:${children[0].name}`) &&
-            initiallyPlaced.has(`${axisIndex(axis)}:${children[i].name}`)
+            initiallyPlaced.has(
+              `${axisIndex(axis)}:${aligned[0].child.name}`
+            ) &&
+            initiallyPlaced.has(`${axisIndex(axis)}:${aligned[i].child.name}`)
           )
             continue;
           problems.relate(
             axis,
-            children[0].name,
-            anchors[0],
-            children[i].name,
-            anchors[i],
+            aligned[0].child.name,
+            aligned[0].anchor,
+            aligned[i].child.name,
+            aligned[i].anchor,
             0,
             owner
           );
         }
-        const firstAnchor = anchors[0];
+        const firstAnchor = aligned[0].anchor;
         const fallback =
           firstAnchor === "middle"
             ? Number.isFinite(sizes[axisIndex(axis)])
@@ -392,11 +418,11 @@ export function solvePlacementConstraints(
                 : 0;
         problems.weakPin(
           axis,
-          children[0].name,
+          aligned[0].child.name,
           firstAnchor,
           fallback,
           1,
-          children.length,
+          aligned.length,
           firstAnchor === "middle"
             ? 0
             : firstAnchor === "start"
@@ -404,8 +430,8 @@ export function solvePlacementConstraints(
               : firstAnchor === "end"
                 ? 2
                 : 3,
-          `align:${axis}:${firstAnchor}:${children
-            .map((child) => child.name)
+          `align:${axis}:${firstAnchor}:${aligned
+            .map(({ child }) => child.name)
             .join(",")}`,
           owner
         );

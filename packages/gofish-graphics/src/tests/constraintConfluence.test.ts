@@ -295,6 +295,23 @@ console.log("# constraint confluence: self-placement and override");
     "authoritative position replaces pre-existing self-placement",
     solve([position("A", 100, true)], ["A"], selfPlace).A.center === 100
   );
+
+  const targets = new Map<string, Placeable>([
+    ["A", makePlaceable()],
+    ["B", makePlaceable()],
+  ]);
+  targets.get("A")!.placementOn = () => ({ tag: "determined", at: 0 });
+  solvePlacementConstraints(
+    [{ type: "align", x: "baseline", children: [A, B] }],
+    targets,
+    [300, 200],
+    [(value) => value * 10 - 200, undefined]
+  );
+  ok(
+    "posScale align leaves determined continuous placement alone",
+    targets.get("A")!.dims[0].min === undefined &&
+      targets.get("B")!.dims[0].min === -200
+  );
 }
 
 console.log("# constraint confluence: contradictions are diagnosed");
