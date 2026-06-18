@@ -38,6 +38,7 @@ import {
   isPOSITION,
   isUNDEFINED,
   continuousInterval,
+  placementOf,
   CONTINUOUS_TYPE,
   UnderlyingSpace,
 } from "./underlyingSpace";
@@ -556,6 +557,9 @@ export class GoFishNode {
           const iv = continuousInterval(space)!;
           const [niceMin, niceMax] = nice(iv.min, iv.max, 10);
           (space as CONTINUOUS_TYPE).origin = niceMin;
+          // Keep placement in sync with the niced origin (Phase A invariant:
+          // placement === placementOf(origin)).
+          (space as CONTINUOUS_TYPE).placement = placementOf(niceMin);
           (space as CONTINUOUS_TYPE).width = Monotonic.linear(
             niceMax - niceMin,
             0

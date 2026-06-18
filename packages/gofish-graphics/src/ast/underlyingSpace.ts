@@ -44,10 +44,48 @@ export type UnderlyingSpaceKind = "continuous" | "ordinal" | "undefined";
  * width `w` is `linear(w, 0)`; a former POSITION `[a,b]` is
  * `width = linear(b-a, 0), origin = a`.
  */
+/**
+ * The abstract PLACEMENT of an extent — the missing "baseline" half of the
+ * σ-affine box solve, lifted to the underlying-space pass (the `width` Monotonic
+ * is already the abstract SIZE half). A determinacy lattice over "has this
+ * extent committed a position, and where?":
+ *
+ *   - `free` (⊥) — sized but not yet placed; a parent can still anchor it (old
+ *     SIZE / `origin: "free"`).
+ *   - `determined(at)` — committed at data coordinate `at` (old POSITION; `at`
+ *     is the domain min, which may be 0). NOTE `at` is a DATA coordinate, not a
+ *     pixel — the pixel baseline is assigned top-down at layout (#39 ledger).
+ *   - `conflict` (⊤) — no single position is possible (old DIFFERENCE; also the
+ *     eventual home for disagreeing aligns).
+ *
+ * Phase A (#586 follow-up, "space as abstract interpretation"): this is DERIVED
+ * from `origin` and consumed nowhere yet — it just proves the lattice mapping is
+ * total. Later phases make it authoritative and split the data-domain out of
+ * `origin`, at which point the data-positioned alignment guard collapses into
+ * "read the placement determinacy". See the design spec.
+ */
+export type Placement =
+  | { tag: "free" }
+  | { tag: "determined"; at: number }
+  | { tag: "conflict" };
+
+/** Derive the abstract {@link Placement} from the legacy `origin` field. Total
+ *  over the three origin states (Phase A). */
+export const placementOf = (
+  origin: number | "free" | "impossible"
+): Placement =>
+  origin === "free"
+    ? { tag: "free" }
+    : origin === "impossible"
+      ? { tag: "conflict" }
+      : { tag: "determined", at: origin };
+
 export type CONTINUOUS_TYPE = {
   kind: "continuous";
   width: Monotonic.Monotonic;
   origin: number | "free" | "impossible";
+  /** Abstract placement, derived from `origin` (Phase A — see {@link Placement}). */
+  placement: Placement;
   spacing?: number;
   ordinalGroupId?: string;
   /** The measure (unit) of this axis. Spaces unify per measure — see
@@ -80,6 +118,7 @@ export const CONTINUOUS = (
   kind: "continuous",
   width,
   origin,
+  placement: placementOf(origin),
   measure,
   coordinateTransform,
 });
