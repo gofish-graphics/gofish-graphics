@@ -94,7 +94,7 @@ def story_python_tutor():
                         ).name(heap_name),
                     ],
                     dir="x",
-                    alignment="start",
+                    alignment="end",
                     spacing=100,
                 ),
                 *stack_arrows,

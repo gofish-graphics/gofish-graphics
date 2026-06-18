@@ -7,18 +7,8 @@ import _ from "lodash";
 
 const meta: Meta = {
   title: "Low Level Syntax/Icicle Chart",
-  argTypes: {
-    w: {
-      control: { type: "number", min: 100, max: 1000, step: 10 },
-    },
-    h: {
-      control: { type: "number", min: 100, max: 1000, step: 10 },
-    },
-  },
 };
 export default meta;
-
-type Args = { w: number; h: number };
 
 const classColor = {
   First: color6[0],
@@ -27,9 +17,8 @@ const classColor = {
   Crew: color6[3],
 };
 
-export const Simplified: StoryObj<Args> = {
-  args: { w: 500, h: 300 },
-  render: (args: Args) => {
+export const Simplified: StoryObj = {
+  render: () => {
     const container = initializeContainer();
 
     stackX({ alignment: "middle" }, [
@@ -52,16 +41,13 @@ export const Simplified: StoryObj<Args> = {
           .value()
       ),
     ]).render(container, {
-      w: args.w,
-      h: args.h,
       axes: true,
     });
     return container;
   },
 };
 
-export const Default: StoryObj<Args> = {
-  args: { w: 500, h: 300 },
+export const Default: StoryObj = {
   tags: ["gallery"],
   parameters: {
     gallery: {
@@ -70,7 +56,7 @@ export const Default: StoryObj<Args> = {
         "Titanic passengers broken down by class and then survival as an icicle diagram, with nested rectangles in successive columns sized to encode each group's count.",
     },
   },
-  render: (args: Args) => {
+  render: () => {
     const container = initializeContainer();
 
     stackX({ alignment: "middle" }, [
@@ -135,8 +121,6 @@ export const Default: StoryObj<Args> = {
           .value()
       ),
     ]).render(container, {
-      w: args.w,
-      h: args.h,
       axes: true,
     });
     return container;

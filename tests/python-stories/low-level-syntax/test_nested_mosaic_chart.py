@@ -54,5 +54,5 @@ def story_default():
             spacing=4,
             alignment="start",
         ),
-        {"w": 500, "h": 300, "axes": True},
+        {"axes": True},
     )

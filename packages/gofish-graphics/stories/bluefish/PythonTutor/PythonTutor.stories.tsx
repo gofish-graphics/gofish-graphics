@@ -16,9 +16,7 @@ const meta: Meta = {
 };
 export default meta;
 
-type Args = { w: number; h: number };
-
-export const PythonTutor: StoryObj<Args> = {
+export const PythonTutor: StoryObj = {
   tags: ["gallery"],
   parameters: {
     gallery: {
@@ -27,7 +25,7 @@ export const PythonTutor: StoryObj<Args> = {
         "A Python Tutor style runtime memory diagram showing a global frame of variables whose pointers fan out with arrows into a heap of linked tuples.",
     },
   },
-  render: (args: Args) => {
+  render: () => {
     const container = initializeContainer();
     const data = {
       stack: [
@@ -105,7 +103,7 @@ export const PythonTutor: StoryObj<Args> = {
     );
 
     Layer([
-      Spread({ dir: "x", alignment: "start", spacing: 100 }, [
+      Spread({ dir: "x", alignment: "end", spacing: 100 }, [
         globalFrame({ stack: data.stack }).name(globalFrameName),
         heap({
           heap: data.heap,

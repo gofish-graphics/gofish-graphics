@@ -38,7 +38,7 @@ def story_simplified():
             dir="x",
             alignment="middle",
         ),
-        {"w": 500, "h": 300, "axes": True},
+        {"axes": True},
     )
 
 
@@ -107,5 +107,5 @@ def story_default():
             dir="x",
             alignment="middle",
         ),
-        {"w": 500, "h": 300, "axes": True},
+        {"axes": True},
     )

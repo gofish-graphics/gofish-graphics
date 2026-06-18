@@ -51,7 +51,7 @@ def story_default():
                 paint(
                     [
                         image(href=BOTTLE_PNG, h=datum(100)),
-                        rect(h="amount", fill="#00ff00"),
+                        rect(h="amount", w=175, fill="#00ff00"),
                     ],
                     blendMode="color",
                 ).name("bottle"),
@@ -67,5 +67,5 @@ def story_default():
                 Constraint.align([label, line], x="end"),
             ])
         ),
-        {"w": 1000, "h": 400, "axes": False},
+        {"axes": False},
     )

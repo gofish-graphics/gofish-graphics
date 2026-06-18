@@ -13,21 +13,10 @@ const data = [
 
 const meta: Meta = {
   title: "Piccl/Bottle",
-  argTypes: {
-    w: {
-      control: { type: "number", min: 100, max: 1000, step: 10 },
-    },
-    h: {
-      control: { type: "number", min: 100, max: 1000, step: 10 },
-    },
-  },
 };
 export default meta;
 
-type Args = { w: number; h: number };
-
-export const Default: StoryObj<Args> = {
-  args: { w: 1000, h: 400 },
+export const Default: StoryObj = {
   tags: ["gallery"],
   parameters: {
     gallery: {
@@ -35,7 +24,7 @@ export const Default: StoryObj<Args> = {
       description: "A row of wine bottles filled with green liquid to heights that encode percentage values, an isotype-style bar chart with labeled fill lines.",
     },
   },
-  render: (args: Args) => {
+  render: () => {
     const container = initializeContainer();
 
     Chart(data, {axes: false})
@@ -44,7 +33,7 @@ export const Default: StoryObj<Args> = {
         [
           paint({blendMode: "color"}, [
           image({ href: bottlePng, h: v(100) }),
-          rect({h: "amount", fill: "#00ff00"}),
+          rect({h: "amount", w: 175, fill: "#00ff00"}),
         ]).name("bottle"),
         rect({h: 1, fill: "#666", w: 175, y: "amount"}).name("line"),
         text({fontSize: 35, fill: "#666", text: (d) => `${d.amount}%`}).name("label")
@@ -53,10 +42,7 @@ export const Default: StoryObj<Args> = {
         Constraint.distribute({ dir: "y", spacing: 0 }, [line, label]),
         Constraint.align({ x: "end" }, [label, line]),
       ]))
-      .render(container, {
-        w: args.w,
-        h: args.h
-      });
+      .render(container, {});
 
     return container;
   },

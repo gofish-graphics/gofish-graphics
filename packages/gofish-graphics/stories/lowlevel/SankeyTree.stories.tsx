@@ -8,18 +8,8 @@ import _ from "lodash";
 
 const meta: Meta = {
   title: "Low Level Syntax/Sankey Tree",
-  argTypes: {
-    w: {
-      control: { type: "number", min: 100, max: 1000, step: 10 },
-    },
-    h: {
-      control: { type: "number", min: 100, max: 1000, step: 10 },
-    },
-  },
 };
 export default meta;
-
-type Args = { w: number; h: number };
 
 const classColor = {
   First: color6[0],
@@ -28,8 +18,7 @@ const classColor = {
   Crew: color6[3],
 };
 
-export const Default: StoryObj<Args> = {
-  args: { w: 500, h: 400 },
+export const Default: StoryObj = {
   tags: ["gallery"],
   parameters: {
     gallery: {
@@ -38,7 +27,7 @@ export const Default: StoryObj<Args> = {
         "A branching flow diagram where the width of each tapering band encodes the magnitude of a quantity as it splits across successive tiers.",
     },
   },
-  render: (args: Args) => {
+  render: () => {
     const container = initializeContainer();
     const layerSpacing = 64;
     const internalSpacing = 2;
@@ -157,8 +146,6 @@ export const Default: StoryObj<Args> = {
         ]),
       ]),
     ]).render(container, {
-      w: args.w,
-      h: args.h,
       axes: true,
     });
     return container;

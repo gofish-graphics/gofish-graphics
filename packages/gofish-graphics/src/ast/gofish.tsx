@@ -338,8 +338,23 @@ export async function layout(
   shadowCheckScaleRoot(niceUnderlyingSpaceY, canvasH, rootScaleFactors[1], 1);
 
   child.layout([layoutW, layoutH], rootScaleFactors, posScales);
-  child.place("x", x ?? transform?.x ?? 0, "baseline");
-  child.place("y", y ?? transform?.y ?? 0, "baseline");
+  // Root placement anchor. A GIVEN dimension keeps the baseline-anchored canvas
+  // box [0, given]; content seated outside it (axis labels below 0, ticks above
+  // `given`) is reserved as the per-side overhangs below. A SHRINK-TO-FIT
+  // dimension makes the canvas box the content's full [min, max] extent, so pin
+  // its `min` edge to 0 — content then fills [0, size] and every overhang
+  // formula computes 0 for that axis. Leaving `min` off origin is the #574
+  // double-count: the overhangs re-reserve it as a phantom band (a negative
+  // `min` bloats the canvas via `-min`; a positive one gaps the near side and
+  // overhangs the far side, e.g. the pulley diagram). The pin uses `pinAnchor`,
+  // not the write-once `place()`, so it lands even when the root self-placed (a
+  // diagram with its own root transform) — `place()` short-circuits a placed axis.
+  const placeRoot = (axis: "x" | "y", value: number, shrinkToFit: boolean) =>
+    shrinkToFit
+      ? child.pinAnchor(axis, value, "min")
+      : child.place(axis, value, "baseline");
+  placeRoot("x", x ?? transform?.x ?? 0, w === undefined);
+  placeRoot("y", y ?? transform?.y ?? 0, h === undefined);
 
   // Final extent: a user-given dimension is authoritative; otherwise prefer the
   // content's laid-out intrinsic size (shrink-to-fit), falling back to the
