@@ -98,6 +98,11 @@ export type Placeable = {
    *  align anchor reads this so it survives retiring the translate writes; `ref`
    *  stand-ins omit it (they keep a computed `transform`). */
   projectedTranslate?: (dir: Direction) => number | undefined;
+  /** Whether this target's subtree already commits a data position on `dir`
+   *  (abstract placement `determined`/`conflict`). `align` reads it to leave
+   *  self-positioned children alone. Omitted by `ref` stand-ins (→ "no", they
+   *  get the fallback baseline like any chrome). */
+  isDataPositioned?: (dir: Direction) => boolean;
   place: (axis: FancyDirection, value: number, anchor?: Anchor) => void;
   /** Write an axis extent from owned bbox facets (the size-setting primitive
    *  #39 — `span` and an authoritative `position` pin go through it). Optional
@@ -709,6 +714,17 @@ export class GoFishNode {
    *  working once stage 3-C retires the direct translate writes. */
   public projectedTranslate(dir: Direction): number | undefined {
     return this._projectTranslate(dir);
+  }
+
+  /** Abstract placement on this axis: does this node's own subtree already
+   *  COMMIT a data position (placement `determined`/`conflict`), or is it a
+   *  free baseline magnitude awaiting one? Read by `align` so it leaves
+   *  self-positioned children (a scatter facet) alone instead of pinning them to
+   *  a fallback baseline — the principled replacement for the data-positioned
+   *  guard. `undefined`/non-continuous (chrome) reads as "not committed". */
+  public isDataPositioned(dir: Direction): boolean {
+    const sp = this._underlyingSpace?.[dir];
+    return sp !== undefined && isCONTINUOUS(sp) && sp.placement.tag !== "free";
   }
 
   private get _displayTransform(): Transform | undefined {
