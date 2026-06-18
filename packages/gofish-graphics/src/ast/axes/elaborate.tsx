@@ -574,7 +574,8 @@ export async function elaborateAxes(node: GoFishNode): Promise<{
 // The CHART-level title pass. Unlike the per-owner axis pass above (which wraps
 // every node that owns an axis, anywhere in the tree), titles are a single pass
 // at the root: at most one title per dim, resolved by the orchestrator from the
-// `axes` options + the inferred `axisFields`. A title is placed RELATIVE TO the
+// `axes` options + the root space's `measure` (the outermost grouping). A title
+// is placed RELATIVE TO the
 // elaborated axis shape it describes — the axis line for that dim, which may
 // span less than the whole plot (a difference axis spans the data width; a
 // facet-owned axis spans its facet). `elaborateAxes` hands us those axis-line

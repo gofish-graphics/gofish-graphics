@@ -163,11 +163,11 @@ export function createModifier<Args extends any[]>(
 }
 
 /**
- * Copy `from`'s `__serialize` tag (and `__axisFields`) onto `to`, letting the
- * modifier merge its own fields into the cloned tag. The merge callback (and
- * any side effect it carries, e.g. the warn on a function label accessor) runs
- * only when a base tag exists — matching the pre-factory behavior where an
- * untagged mark produced no warning and no tag.
+ * Copy `from`'s `__serialize` tag onto `to`, letting the modifier merge its own
+ * fields into the cloned tag. The merge callback (and any side effect it
+ * carries, e.g. the warn on a function label accessor) runs only when a base tag
+ * exists — matching the pre-factory behavior where an untagged mark produced no
+ * warning and no tag.
  */
 function propagateSerialize(
   from: object,
@@ -179,9 +179,6 @@ function propagateSerialize(
     const nextTag: any = { ...tag };
     merge(nextTag);
     (to as any).__serialize = nextTag;
-  }
-  if ((from as any).__axisFields) {
-    (to as any).__axisFields = (from as any).__axisFields;
   }
 }
 
@@ -498,9 +495,10 @@ export type OperatorConfig<Datum, Options> = {
   split: (opts: Options, d: Datum[]) => SplitResult<Datum>;
   channels?: ChannelAnnotations<Options>;
   /**
-   * Optional hook returning the axis-field encoding ChartBuilder uses to
-   * auto-infer axis titles. e.g. `spread({by: "lake", dir: "x"})` should report
-   * `{x: "lake"}` so an x-axis title `lake` is inferred.
+   * Optional hook returning the per-axis grouping field this operator encodes.
+   * Injected into the node operator as `axisMeasures` so it can stamp the
+   * ORDINAL space's `measure` — e.g. `spread({by: "lake", dir: "x"})` reports
+   * `{x: "lake"}`, the x-axis names itself "lake" off its own resolved space.
    */
   axisFields?: (opts: Options) => { x?: string; y?: string } | undefined;
   /**
@@ -671,7 +669,10 @@ export function createOperator<Datum, Options extends Record<string, any>>(
         const resolvedMarks = await Promise.resolve(marks);
         const nodes = await Promise.all(
           resolvedMarks.map(async (mark, i) => {
-            const currentKey = key != undefined ? `${key}-${i}` : i;
+            // Local key (not parent-prefixed) — matches the operator form: a
+            // nested grouping's keys are scoped to its own subtree, so ordinal
+            // axis labels read locally and per-layer uniqueness suffices.
+            const currentKey = i;
             const result =
               typeof mark === "function"
                 ? mark(d, currentKey, layerContext)
@@ -748,7 +749,13 @@ export function createOperator<Datum, Options extends Record<string, any>>(
         // their single node in a singleton array.
         const nodesPerLeaf = await Promise.all(
           [...entries.entries()].map(async ([i, leaf]) => {
-            const currentKey = key != undefined ? `${key}-${i}` : i;
+            // Local group key — NOT parent-prefixed. A nested grouping's keys
+            // (e.g. species under a lake) are scoped to their own subtree, so
+            // the ordinal axis labels read `Bass` not `Lake A-Bass`, and each
+            // grouping level's axis names itself by its own keys. Uniqueness is
+            // per-layer (each operator's children), which the constraint refs
+            // (`ensureChildNames`) and ordinal domains rely on — never global.
+            const currentKey = i;
             const leafNodes = await applyMark(
               mark,
               leaf as Datum | Datum[],
@@ -763,27 +770,24 @@ export function createOperator<Datum, Options extends Record<string, any>>(
         const nodes = nodesPerLeaf.flat();
         const lowOpts = buildLayoutOpts(cfg.channels, opts, d, entries, keys);
         // Carry the grouping field (e.g. spread's `by`) into the node operator
-        // so it can stamp the ORDINAL space it builds with a measure — the
+        // so it can stamp the ORDINAL space it builds with a `measure` — the
         // discrete axis names itself off its own space, mirroring how a
-        // continuous channel's field becomes its space's measure. `by` itself is
-        // a stripped factory key, so route the resolved field via __axisFields.
-        const opFields = cfg.axisFields?.(opts);
+        // continuous channel's field becomes its space's measure. `by` is a
+        // stripped factory key, so route the resolved per-axis grouping field
+        // (the `axisFields` config) to the node operator as `axisMeasures`.
+        const groupMeasures = cfg.axisFields?.(opts);
         if (
-          opFields &&
-          (opFields.x !== undefined || opFields.y !== undefined)
+          groupMeasures &&
+          (groupMeasures.x !== undefined || groupMeasures.y !== undefined)
         ) {
-          (lowOpts as any).__axisFields = opFields;
+          (lowOpts as any).axisMeasures = groupMeasures;
         }
         return (await layout(lowOpts, nodes)) as unknown as GoFishNode;
       }) as Mark<Datum[]>;
     };
-    // Tag the operator with axis fields so ChartBuilder can auto-infer
-    // axis titles. Applies to operator-form only (combinator form returns a
-    // mark that's already typed via createMark's axis-field tagging).
-    const fields = cfg.axisFields?.(opts);
-    if (fields && (fields.x !== undefined || fields.y !== undefined)) {
-      (operator as any).__axisFields = fields;
-    }
+    // Axis titles now derive from each node's resolved space `measure` (set via
+    // `axisMeasures` above), not a syntactic operator field-name tag — so no
+    // `__axisFields` tag is emitted here anymore.
     // Tag the operator with IR-serialization metadata so the frontend-IR
     // emitter can reconstruct it as `{ type, ...opts }` on the wire.
     if (cfg.serialize) {

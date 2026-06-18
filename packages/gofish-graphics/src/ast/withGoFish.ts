@@ -661,16 +661,6 @@ export function createMark(
     };
     withMarkKind(baseMark, kind);
 
-    // Infer axis field names from string-valued size/pos channels
-    const axisFields: { x?: string; y?: string } = {};
-    if (typeof markOpts.w === "string") axisFields.x = markOpts.w;
-    else if (typeof markOpts.x === "string") axisFields.x = markOpts.x;
-    if (typeof markOpts.h === "string") axisFields.y = markOpts.h;
-    else if (typeof markOpts.y === "string") axisFields.y = markOpts.y;
-    if (axisFields.x || axisFields.y) {
-      (baseMark as any).__axisFields = axisFields;
-    }
-
     // Tag with IR-serialization metadata for the frontend-IR emitter.
     if (serializeConfig) {
       const payload = serializeConfig.shape

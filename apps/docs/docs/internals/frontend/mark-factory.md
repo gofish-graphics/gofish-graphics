@@ -156,8 +156,10 @@ which is one application of the shared **modifier factory** in
 `createOperator.ts`: a `createModifier({ name, apply, tag? })` config plus
 `attachModifiers(base, configs)`. `apply` mutates each produced node (once per
 node — every slice for an expand mark like `cut`); `tag` stamps metadata on the
-wrapped mark function once (propagating the `__serialize`/`__axisFields` tags
-and stashing the layer name). `attachModifiers` wires the set onto the base and
+wrapped mark function once (propagating the `__serialize` tag and stashing the
+layer name — a mark no longer carries an axis-field tag, since axis titles now
+derive from each node's resolved space `measure`).
+`attachModifiers` wires the set onto the base and
 adds a top-level `.render()`, re-decorating each method's result with the same
 set so chains stay extensible and the mark-kind tag rides along. `.name()`
 defers its layer registration via a `__layerRegistration` tag collected in a

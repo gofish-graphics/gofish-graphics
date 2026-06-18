@@ -180,6 +180,12 @@ const reportConflict = (type: string, dir: 0 | 1, c: BBoxConflict): void => {
   );
 };
 
+/** Axis-claim signature for a dimension owned by a continuous axis or an
+ *  explicit `axes:` override — opaque because (unlike an ordinal's keys) it
+ *  carries no grouping identity to nest against, so it blocks descendant
+ *  auto-claims on that dim. Ordinal owners record `"o:<keys>"` instead. */
+const AXIS_CLAIM_OPAQUE = "continuous";
+
 export class GoFishNode {
   public readonly uid: string;
   private static uidCounter = 0;
@@ -453,10 +459,18 @@ export class GoFishNode {
 
   /**
    * Top-down walk that marks which nodes should render axes.
-   * `claimed` tracks dimensions already claimed by an ancestor.
+   *
+   * `claimed` maps each dimension an ancestor already owns to a SIGNATURE of
+   * what claimed it: an ordinal axis records `"o:<keys>"`, a continuous axis (or
+   * an explicit override) records {@link AXIS_CLAIM_OPAQUE}. The signature lets
+   * ordinal axes NEST — a node claims its own ordinal axis even under an ancestor
+   * ordinal, as long as it's a DIFFERENT grouping (a finer level), so a
+   * grouped/faceted chart renders one ordinal axis per grouping level (per
+   * facet). Continuous axes stay single-owner (root-most wins): a descendant
+   * continuous axis on an already-claimed dim defers to the chart-level scale.
    */
   public resolveAxes(
-    claimed: Set<0 | 1> = new Set(),
+    claimed: Map<0 | 1, string> = new Map(),
     enabled: Set<0 | 1> = new Set([0, 1])
   ): void {
     // Note: a `layer` is treated like any other node below — it claims the
@@ -492,7 +506,10 @@ export class GoFishNode {
       if (polarAxisX !== undefined) (this as any)._polarAxisX = polarAxisX;
       if (polarAxisY !== undefined) (this as any)._polarAxisY = polarAxisY;
 
-      const allClaimed = new Set<0 | 1>([0, 1]);
+      const allClaimed = new Map<0 | 1, string>([
+        [0, AXIS_CLAIM_OPAQUE],
+        [1, AXIS_CLAIM_OPAQUE],
+      ]);
       this.children.forEach((c) => {
         if (c instanceof GoFishNode) c.resolveAxes(allClaimed, enabled);
       });
@@ -512,7 +529,7 @@ export class GoFishNode {
       return;
     }
 
-    const next = new Set(claimed);
+    const next = new Map(claimed);
     const space = this._underlyingSpace;
     for (const dim of [0, 1] as (0 | 1)[]) {
       const override =
@@ -520,21 +537,32 @@ export class GoFishNode {
       if (override !== undefined) {
         if (dim === 0) this.axis.x = override === false ? false : true;
         else this.axis.y = override === false ? false : true;
-        next.add(dim); // claim regardless — false blocks children too
-      } else if (
-        enabled.has(dim) &&
-        !claimed.has(dim) &&
-        space &&
-        !isUNDEFINED(space[dim]) &&
+        next.set(dim, AXIS_CLAIM_OPAQUE); // claim regardless — false blocks children too
+      } else if (enabled.has(dim) && space && !isUNDEFINED(space[dim])) {
         // A baseline magnitude ("free") owns no guide yet — only an anchored
         // (POSITION), unanchored (DIFFERENCE), or ORDINAL axis does.
-        (isPOSITION(space[dim]) ||
-          isDIFFERENCE(space[dim]) ||
-          isORDINAL(space[dim]))
-      ) {
-        if (dim === 0) this.axis.x = true;
-        else this.axis.y = true;
-        next.add(dim);
+        const s = space[dim];
+        const prior = claimed.get(dim);
+        let sig: string | undefined;
+        if (isORDINAL(s)) {
+          // Ordinal axes nest: claim unless this exact grouping is already
+          // claimed by an ancestor (same keys → a duplicate of the same axis) or
+          // a continuous/override owner holds the dim (opaque).
+          const mySig = "o:" + JSON.stringify(s.domain ?? []);
+          if (
+            prior === undefined ||
+            (prior.startsWith("o:") && prior !== mySig)
+          )
+            sig = mySig;
+        } else if (isPOSITION(s) || isDIFFERENCE(s)) {
+          // Continuous: single-owner — only the root-most unclaimed dim claims.
+          if (prior === undefined) sig = AXIS_CLAIM_OPAQUE;
+        }
+        if (sig !== undefined) {
+          if (dim === 0) this.axis.x = true;
+          else this.axis.y = true;
+          next.set(dim, sig);
+        }
       }
     }
     this.children.forEach((c) => {
@@ -992,7 +1020,6 @@ export class GoFishNode {
       debug = false,
       defs,
       axes = false,
-      axisFields,
       colorConfig,
       padding,
     }: {
@@ -1004,7 +1031,6 @@ export class GoFishNode {
       debug?: boolean;
       defs?: JSX.Element[];
       axes?: AxesOptions;
-      axisFields?: { x?: string; y?: string };
       colorConfig?: ColorConfig;
       padding?: number;
     }
@@ -1020,7 +1046,6 @@ export class GoFishNode {
         debug,
         defs,
         axes,
-        axisFields,
         colorConfig,
         padding,
       },

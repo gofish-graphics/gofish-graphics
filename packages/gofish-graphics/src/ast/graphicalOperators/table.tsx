@@ -21,6 +21,7 @@ export const Table = createNodeOperator(
       spacing = 0,
       colKeys,
       rowKeys,
+      axisMeasures,
     }: {
       name?: string;
       key?: string;
@@ -28,6 +29,9 @@ export const Table = createNodeOperator(
       spacing?: number | [number, number];
       colKeys?: string[];
       rowKeys?: string[];
+      /** Resolved grouping fields per axis, injected by createOperator (table's
+       *  `by.x`/`by.y`) → the col/row ORDINAL measures. */
+      axisMeasures?: { x?: string; y?: string };
     },
     children: GoFishAST[]
   ) => {
@@ -49,7 +53,14 @@ export const Table = createNodeOperator(
     const node = (await layer(children)) as GoFishNode;
     node.constrain((ref) => [
       Constraint.grid(
-        { numCols, spacing, colKeys, rowKeys },
+        {
+          numCols,
+          spacing,
+          colKeys,
+          rowKeys,
+          colMeasure: axisMeasures?.x,
+          rowMeasure: axisMeasures?.y,
+        },
         cellNames.map((n) => ref[n] ?? { name: n })
       ),
     ]);
