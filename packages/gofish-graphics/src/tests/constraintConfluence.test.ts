@@ -312,6 +312,52 @@ console.log("# constraint confluence: self-placement and override");
     targets.get("A")!.dims[0].min === undefined &&
       targets.get("B")!.dims[0].min === -200
   );
+
+  const sourceTargets = new Map<string, Placeable>([
+    ["A", makePlaceable()],
+    ["B", makePlaceable()],
+  ]);
+  sourceTargets.get("A")!.pinAnchor!("x", 40, "min");
+  solvePlacementConstraints(
+    [{ type: "align", x: "baseline", children: [A, B] }],
+    sourceTargets,
+    [300, 200],
+    [(value) => value * 10 - 200, undefined]
+  );
+  ok(
+    "placed align source anchors free sibling instead of fallback",
+    sourceTargets.get("A")!.dims[0].min === 40 &&
+      sourceTargets.get("B")!.dims[0].min === 40
+  );
+
+  const pinAStart: PositionConstraint = {
+    type: "position",
+    x: 40,
+    anchor: "baseline",
+    override: false,
+    children: [A],
+  };
+  const baselineAlign: AlignConstraint = {
+    type: "align",
+    x: "baseline",
+    children: [A, B],
+  };
+  const sameSolve = solvePlacementConstraints;
+  const sameSolveTargets = new Map<string, Placeable>([
+    ["A", makePlaceable()],
+    ["B", makePlaceable()],
+  ]);
+  sameSolve(
+    [baselineAlign, pinAStart],
+    sameSolveTargets,
+    [300, 200],
+    [(value) => value * 10 - 200, undefined]
+  );
+  ok(
+    "same-solve position pin is align source",
+    sameSolveTargets.get("A")!.dims[0].min === 40 &&
+      sameSolveTargets.get("B")!.dims[0].min === 40
+  );
 }
 
 console.log("# constraint confluence: contradictions are diagnosed");

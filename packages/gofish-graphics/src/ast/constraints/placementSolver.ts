@@ -307,6 +307,7 @@ export function solvePlacementConstraints(
 
   const authoritative = new Set<string>();
   const initiallyPlaced = new Set<string>();
+  const positionPinned = new Set<string>();
   for (const [name, target] of targets) {
     for (const axis of [0, 1] as const) {
       if (target.dims[axis].min !== undefined)
@@ -318,6 +319,18 @@ export function solvePlacementConstraints(
     for (const child of constraint.children) {
       if (constraint.x !== undefined) authoritative.add(`0:${child.name}`);
       if (constraint.y !== undefined) authoritative.add(`1:${child.name}`);
+    }
+  }
+  for (const constraint of constraints) {
+    if (constraint.type !== "position") continue;
+    for (const axis of ["x", "y"] as const) {
+      const coordinate = constraint[axis];
+      if (coordinate === undefined) continue;
+      const value = resolveCoordinate(coordinate, posScales?.[axisIndex(axis)]);
+      if (value === undefined) continue;
+      for (const child of constraint.children) {
+        positionPinned.add(`${axisIndex(axis)}:${child.name}`);
+      }
     }
   }
 
@@ -364,37 +377,62 @@ export function solvePlacementConstraints(
         if (children.length === 0) return;
         const anchors = normalizedAnchors(spec, children.length);
 
-        // Preserve legacy align's continuous-placement guard: a self-positioned
-        // child on a posScale axis already chose its data coordinate, so
-        // non-middle align must not pin or relate it to the fallback baseline.
-        // This is what keeps faceted scatter panels on their y-scale origin
-        // while still allowing chrome/free children to align to the shared
-        // baseline.
-        const aligned = children
-          .map((child, index) => ({ child, anchor: anchors[index] }))
-          .filter(({ child, anchor }) => {
-            const target = targets.get(child.name);
-            const placement =
-              typeof target?.placementOn === "function"
-                ? target.placementOn(axisIndex(axis))
-                : undefined;
-            return !(
-              anchor !== "middle" &&
-              posScales?.[axisIndex(axis)] !== undefined &&
-              placement !== undefined &&
-              placement.tag !== "free"
-            );
-          });
-        if (aligned.length === 0) return;
+        const entries = children.map((child, index) => ({
+          child,
+          anchor: anchors[index],
+        }));
+        const idx = axisIndex(axis);
 
-        for (let i = 1; i < aligned.length; i++) {
+        // Preserve legacy align's two-phase semantics:
+        // 1. the first already-placed target can define the shared baseline;
+        // 2. already-placed or data-positioned targets are not themselves moved.
+        //
+        // Keeping these separate matters for chart+legend layers: the chart may
+        // be the baseline source while the legend is the only target align
+        // writes. Faceted scatter panels, where every panel is already
+        // data-positioned, still contribute no write targets.
+        const source = entries.find(
+          ({ child }) =>
+            initiallyPlaced.has(`${idx}:${child.name}`) ||
+            positionPinned.has(`${idx}:${child.name}`)
+        );
+        const movable = entries.filter(({ child, anchor }) => {
           if (
-            initiallyPlaced.has(
-              `${axisIndex(axis)}:${aligned[0].child.name}`
-            ) &&
-            initiallyPlaced.has(`${axisIndex(axis)}:${aligned[i].child.name}`)
+            initiallyPlaced.has(`${idx}:${child.name}`) ||
+            positionPinned.has(`${idx}:${child.name}`)
           )
-            continue;
+            return false;
+          const target = targets.get(child.name);
+          const placement =
+            typeof target?.placementOn === "function"
+              ? target.placementOn(idx)
+              : undefined;
+          return !(
+            anchor !== "middle" &&
+            posScales?.[idx] !== undefined &&
+            placement !== undefined &&
+            placement.tag !== "free"
+          );
+        });
+        if (movable.length === 0) return;
+
+        if (source) {
+          for (const target of movable) {
+            problems.relate(
+              axis,
+              source.child.name,
+              source.anchor,
+              target.child.name,
+              target.anchor,
+              0,
+              owner
+            );
+          }
+          return;
+        }
+
+        const aligned = movable;
+        for (let i = 1; i < aligned.length; i++) {
           problems.relate(
             axis,
             aligned[0].child.name,
@@ -408,13 +446,13 @@ export function solvePlacementConstraints(
         const firstAnchor = aligned[0].anchor;
         const fallback =
           firstAnchor === "middle"
-            ? Number.isFinite(sizes[axisIndex(axis)])
-              ? sizes[axisIndex(axis)] / 2
+            ? Number.isFinite(sizes[idx])
+              ? sizes[idx] / 2
               : 0
-            : posScales?.[axisIndex(axis)]
-              ? posScales[axisIndex(axis)]!(0)
-              : firstAnchor === "end" && Number.isFinite(sizes[axisIndex(axis)])
-                ? sizes[axisIndex(axis)]
+            : posScales?.[idx]
+              ? posScales[idx]!(0)
+              : firstAnchor === "end" && Number.isFinite(sizes[idx])
+                ? sizes[idx]
                 : 0;
         problems.weakPin(
           axis,
