@@ -5,7 +5,7 @@
 import * as Monotonic from "../../util/monotonic";
 import { GoFishNode } from "../_node";
 import { shadowCheckScaleRoot } from "../solver/shadow";
-import { isToken } from "../createName";
+import { topoSortByZOrder } from "../paintOrder";
 import { Size, elaborateDims, FancyDims, displayTranslate } from "../dims";
 import {
   POSITION,
@@ -363,93 +363,6 @@ function flattenForZOrder(children: GoFishAST[]): PaintItem[] {
       }
     }
   }
-}
-
-function topoSortByZOrder(
-  items: PaintItem[],
-  constraints: ZOrderConstraint[]
-): PaintItem[] {
-  const n = items.length;
-
-  // name → indices. Descent through nested layers can theoretically produce
-  // duplicates if names collide; we apply the constraint to all matches.
-  const nameToIndices = new Map<string, number[]>();
-  for (let i = 0; i < n; i++) {
-    const node = items[i].node;
-    if (node instanceof GoFishNode && node._name !== undefined) {
-      const raw = node._name;
-      const name = isToken(raw) ? raw.__tag : raw;
-      const arr = nameToIndices.get(name);
-      if (arr) arr.push(i);
-      else nameToIndices.set(name, [i]);
-    }
-  }
-
-  const adj: Set<number>[] = Array.from({ length: n }, () => new Set());
-  const inDegree: number[] = new Array(n).fill(0);
-  const addEdge = (from: number, to: number) => {
-    if (from === to) return;
-    if (!adj[from].has(to)) {
-      adj[from].add(to);
-      inDegree[to]++;
-    }
-  };
-
-  for (const c of constraints) {
-    const aName = c.children[0].name;
-    const bName = c.children[1].name;
-    const aIdx = nameToIndices.get(aName) ?? [];
-    const bIdx = nameToIndices.get(bName) ?? [];
-    for (const ai of aIdx) {
-      for (const bi of bIdx) {
-        // zAbove(a, b): a paints LATER (over b) → edge b → a
-        // zBelow(a, b): a paints EARLIER (under b) → edge a → b
-        if (c.type === "zAbove") addEdge(bi, ai);
-        else addEdge(ai, bi);
-      }
-    }
-  }
-
-  // Stable topo sort: among eligible nodes, pick by (defaultZ, defaultOrder).
-  const cmp = (i: number, j: number): number =>
-    items[i].defaultZ - items[j].defaultZ ||
-    items[i].defaultOrder - items[j].defaultOrder;
-
-  const eligible: number[] = [];
-  for (let i = 0; i < n; i++) {
-    if (inDegree[i] === 0) eligible.push(i);
-  }
-
-  const result: PaintItem[] = [];
-  const emitted = new Array<boolean>(n).fill(false);
-  while (eligible.length > 0) {
-    eligible.sort(cmp);
-    const i = eligible.shift()!;
-    result.push(items[i]);
-    emitted[i] = true;
-    for (const j of adj[i]) {
-      inDegree[j]--;
-      if (inDegree[j] === 0) eligible.push(j);
-    }
-  }
-
-  if (result.length < n) {
-    const remaining = [];
-    for (let i = 0; i < n; i++) {
-      if (!emitted[i]) {
-        const node = items[i].node;
-        const raw = node instanceof GoFishNode ? node._name : undefined;
-        const name =
-          raw === undefined ? "(unnamed)" : isToken(raw) ? raw.__tag : raw;
-        remaining.push(name);
-      }
-    }
-    throw new Error(
-      `z-order constraints form a cycle; could not order: ${remaining.join(", ")}`
-    );
-  }
-
-  return result;
 }
 
 export const layer = createNodeOperatorSequential(
@@ -1068,7 +981,11 @@ export const layer = createNodeOperatorSequential(
           }
 
           const flat = flattenForZOrder(node.children);
-          const sorted = topoSortByZOrder(flat, zConstraints);
+          const sorted = topoSortByZOrder(flat, zConstraints, {
+            node: (it) => it.node,
+            z: (it) => it.defaultZ,
+            order: (it) => it.defaultOrder,
+          });
           return (
             <g transform={wrapTransform}>
               {sorted.map((item) => {

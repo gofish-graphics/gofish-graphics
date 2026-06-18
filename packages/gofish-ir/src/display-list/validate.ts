@@ -68,13 +68,13 @@ function checkBase(
     errors.push({ path: `${path}.id`, message: "id must be a string" });
 }
 
-/** Required numeric fields per kind. `path`/`text`/`image` carry their own. */
-const NUMERIC_FIELDS: Record<string, string[]> = {
-  rect: ["x", "y", "w", "h"],
-  ellipse: ["cx", "cy", "rx", "ry"],
-  path: [],
-  text: ["x", "y"],
-  image: ["x", "y", "w", "h"],
+/** Required fields per kind: `num` checked with `isNum`, `str` with `isStr`. */
+const REQUIRED_FIELDS: Record<string, { num?: string[]; str?: string[] }> = {
+  rect: { num: ["x", "y", "w", "h"] },
+  ellipse: { num: ["cx", "cy", "rx", "ry"] },
+  path: { str: ["d"] },
+  text: { num: ["x", "y"], str: ["text"] },
+  image: { num: ["x", "y", "w", "h"], str: ["href"] },
 };
 
 function checkItem(
@@ -97,16 +97,15 @@ function checkItem(
     });
     return;
   }
-  for (const f of NUMERIC_FIELDS[kind]) {
+  const required = REQUIRED_FIELDS[kind];
+  for (const f of required.num ?? []) {
     if (!isNum(item[f]))
       errors.push({ path: `${path}.${f}`, message: `${f} must be a number` });
   }
-  if (kind === "path" && !isStr(item.d))
-    errors.push({ path: `${path}.d`, message: "d must be a string" });
-  if (kind === "text" && !isStr(item.text))
-    errors.push({ path: `${path}.text`, message: "text must be a string" });
-  if (kind === "image" && !isStr(item.href))
-    errors.push({ path: `${path}.href`, message: "href must be a string" });
+  for (const f of required.str ?? []) {
+    if (!isStr(item[f]))
+      errors.push({ path: `${path}.${f}`, message: `${f} must be a string` });
+  }
   checkBase(item, path, errors);
 }
 

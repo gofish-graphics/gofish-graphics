@@ -803,6 +803,10 @@ export const render = (
   // a large band's full extent plus `EDGE_GAP`. The right gutter bears no root
   // <g> translate, so it needn't be pixel-snapped — a fractional width is
   // harmless (legend overhangs are fractional text widths).
+  // Bake the scenegraph into a flat, ordered DisplayObject[] and render each at
+  // its absolute transform. A thunk so only the mounted `<Show>` branch runs it.
+  const renderBaked = () =>
+    bake(child).map((d) => d.node.INTERNAL_render(undefined, d.transform));
   const result = (
     <svg
       width={
@@ -817,18 +821,8 @@ export const render = (
       <g
         transform={`scale(1, -1) translate(${leftReserve}, ${-(height + topReserve)})`}
       >
-        <Show
-          when={transform}
-          keyed
-          fallback={bake(child).map((d) =>
-            d.node.INTERNAL_render(undefined, d.transform)
-          )}
-        >
-          <g transform={transform ?? ""}>
-            {bake(child).map((d) =>
-              d.node.INTERNAL_render(undefined, d.transform)
-            )}
-          </g>
+        <Show when={transform} keyed fallback={renderBaked()}>
+          <g transform={transform ?? ""}>{renderBaked()}</g>
         </Show>
       </g>
     </svg>

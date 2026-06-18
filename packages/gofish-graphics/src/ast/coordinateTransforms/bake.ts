@@ -6,11 +6,11 @@ import type { GoFishAST } from "../_ast";
 import type { DisplayObject } from "../_displayObject";
 import type { Transform } from "../dims";
 import { GoFishNode } from "../_node";
-import { isToken } from "../createName";
 import {
   isZOrderConstraint,
   type ZOrderConstraint,
 } from "../constraints/zorder";
+import { topoSortByZOrder } from "../paintOrder";
 
 /** The node's parent-frame translate as the bake should compose it, via the
  *  polymorphic `projectedTranslate`: a `GoFishNode` reports the LEDGER projection
@@ -119,6 +119,12 @@ export const flattenLayout = (
 // TODO: like `flattenLayout`, a baked entry still references its source node as the
 // renderer; the end-state (#75) is self-contained primitives (`DisplayItem`).
 
+// TODO(#75 follow-up): "is this a bake boundary?" is currently a centralized
+// string set — a new self-drawing operator not listed here silently mis-renders
+// (its draw is dropped, its children hoisted). The right altitude is a flag the
+// operator factory sets on the node (like `_isComponent` / `_zOrder`), read once
+// via a polymorphic `node.isBakeBoundary()`; that would also subsume the `_label`
+// reach in `isTransparent` and `flattenLayout`'s inline `connect`/`box` cases.
 const BAKE_BOUNDARY_TYPES = new Set([
   "coord",
   "over",
@@ -153,16 +159,10 @@ type BakeItem = {
   z: number;
 };
 
-const nameOf = (node: GoFishAST): string | undefined => {
-  if (!(node instanceof GoFishNode) || node._name === undefined)
-    return undefined;
-  return isToken(node._name) ? node._name.__tag : node._name;
-};
-
-/** Topologically order the flattened list against `zAbove`/`zBelow` constraints,
- *  breaking ties (and ordering the unconstrained majority) by `(z, order)`. Mirrors
- *  the resolution `layer` used to do per-layer, now applied once over the whole
- *  flattened paint list. */
+/** Order the flattened paint list. The unconstrained majority is a stable
+ *  `(z, order)` sort; when `zAbove`/`zBelow` constraints are present the shared
+ *  {@link topoSortByZOrder} resolves them — the same resolution `layer` runs,
+ *  now over the whole flattened list rather than per-layer. */
 const orderByZ = (
   items: BakeItem[],
   constraints: ZOrderConstraint[]
@@ -170,57 +170,11 @@ const orderByZ = (
   if (constraints.length === 0) {
     return [...items].sort((a, b) => a.z - b.z || a.order - b.order);
   }
-
-  const n = items.length;
-  const nameToIndices = new Map<string, number[]>();
-  items.forEach((it, i) => {
-    const name = nameOf(it.node);
-    if (name === undefined) return;
-    const arr = nameToIndices.get(name);
-    if (arr) arr.push(i);
-    else nameToIndices.set(name, [i]);
+  return topoSortByZOrder(items, constraints, {
+    node: (it) => it.node,
+    z: (it) => it.z,
+    order: (it) => it.order,
   });
-
-  const adj: Set<number>[] = Array.from({ length: n }, () => new Set());
-  const inDegree = new Array<number>(n).fill(0);
-  const addEdge = (from: number, to: number) => {
-    if (from === to || adj[from].has(to)) return;
-    adj[from].add(to);
-    inDegree[to]++;
-  };
-  for (const c of constraints) {
-    const aIdx = nameToIndices.get(c.children[0].name) ?? [];
-    const bIdx = nameToIndices.get(c.children[1].name) ?? [];
-    for (const ai of aIdx) {
-      for (const bi of bIdx) {
-        // zAbove(a, b): a paints LATER (over b) → edge b → a.
-        // zBelow(a, b): a paints EARLIER (under b) → edge a → b.
-        if (c.type === "zAbove") addEdge(bi, ai);
-        else addEdge(ai, bi);
-      }
-    }
-  }
-
-  const cmp = (i: number, j: number): number =>
-    items[i].z - items[j].z || items[i].order - items[j].order;
-  const eligible: number[] = [];
-  for (let i = 0; i < n; i++) if (inDegree[i] === 0) eligible.push(i);
-
-  const result: BakeItem[] = [];
-  while (eligible.length > 0) {
-    eligible.sort(cmp);
-    const i = eligible.shift()!;
-    result.push(items[i]);
-    for (const j of adj[i]) {
-      if (--inDegree[j] === 0) eligible.push(j);
-    }
-  }
-  // Any nodes left in a cycle: append in stable order so nothing is dropped.
-  if (result.length < n) {
-    const seen = new Set(result.map((it) => it.order));
-    for (const it of items) if (!seen.has(it.order)) result.push(it);
-  }
-  return result;
 };
 
 export const bake = (root: GoFishAST): DisplayObject[] => {
