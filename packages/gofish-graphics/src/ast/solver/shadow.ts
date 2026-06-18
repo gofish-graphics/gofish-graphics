@@ -146,11 +146,12 @@ function anchorCoord(
  * this directly tests that aligned origins coincide — the intercept thesis).
  *
  * Only validate targets align actually placed: a target pre-placed on the axis
- * is left untouched (it may define or differ from the baseline), and the
- * data-positioned guard can make align a no-op (it returns without placing, so
- * the not-pre-placed targets stay unplaced). Both are detected via `prePlaced`
- * (captured before `applyAlign`) + a post-check that the rest are now placed;
- * heterogeneous per-child anchor arrays are skipped (no single shared line).
+ * is left untouched (it may define or differ from the baseline), and align
+ * leaves a self-positioned child unplaced (it skips a target whose own
+ * `placement` is already determined, so it stays unplaced). Both are detected
+ * via `prePlaced` (captured before `applyAlign`) + a post-check that the rest
+ * are now placed; heterogeneous per-child anchor arrays are skipped (no single
+ * shared line).
  */
 export function shadowCheckAlign(
   constraint: AlignLike,
@@ -160,8 +161,8 @@ export function shadowCheckAlign(
 ): void {
   if (!enabled() || constraint.type !== "align") return;
   // Across all 189 stories this covers 2751 aligns with zero divergences; 959
-  // are single-target (nothing to compare), 49 hit the data-positioned guard
-  // no-op, 2 use heterogeneous per-child anchor arrays — all deferred here.
+  // are single-target (nothing to compare), 49 leave a self-positioned child
+  // unplaced, 2 use heterogeneous per-child anchor arrays — all deferred here.
   for (const axis of ["x", "y"] as const) {
     const spec = constraint[axis];
     if (spec === undefined || Array.isArray(spec)) continue; // uniform anchor only
@@ -172,7 +173,7 @@ export function shadowCheckAlign(
     targets.forEach((t, i) => {
       if (prePlaced[i][idx]) return; // pre-placed: align leaves it untouched
       if (!isPlacedOn(t, idx)) {
-        guardOrPartial = true; // align didn't place it → data-positioned guard no-op
+        guardOrPartial = true; // align skipped it (self-positioned) or partial
         return;
       }
       placedByAlign.push(t);

@@ -78,7 +78,7 @@ console.log("# space: baseline magnitude vs data axis anchored at 0");
   ok(
     "...and the forgotten composition is itself a baseline magnitude",
     composed !== undefined && isBaselineMagnitude(composed),
-    composed && `origin=${JSON.stringify((composed as any).origin)}`
+    composed && `placement=${JSON.stringify((composed as any).placement)}`
   );
 }
 
