@@ -363,23 +363,85 @@ function solveAxis(
   return { positions, conflicts };
 }
 
+class PlacementOwnershipPlan {
+  private readonly authoritative = new Set<string>();
+  private readonly initiallyPlaced = new Set<string>();
+  private readonly positionPinned = new Set<string>();
+  private readonly spanPinned = new Set<string>();
+
+  constructor(
+    targets: Map<string, Placeable>,
+    constraints: PlacementConstraint[],
+    posScales: ConstraintPosScales | undefined
+  ) {
+    for (const [name, target] of targets) {
+      for (const axis of AXIS_INDICES) {
+        if (target.dims[axis].min !== undefined)
+          this.initiallyPlaced.add(placementKey(axis, name));
+      }
+    }
+
+    for (const constraint of constraints) {
+      if (constraint.type !== "position") continue;
+      this.notePositionConstraint(constraint, posScales);
+    }
+  }
+
+  noteSpanExtent(extent: SpanExtent): void {
+    this.spanPinned.add(placementKey(axisIndex(extent.axis), extent.name));
+  }
+
+  isInitiallyPlaced(axis: Axis, name: string): boolean {
+    return this.initiallyPlaced.has(placementKey(axisIndex(axis), name));
+  }
+
+  isPinned(axis: Axis, name: string): boolean {
+    const key = placementKey(axisIndex(axis), name);
+    return (
+      this.initiallyPlaced.has(key) ||
+      this.positionPinned.has(key) ||
+      this.spanPinned.has(key)
+    );
+  }
+
+  shouldPinSelfPlacement(axis: 0 | 1, name: string): boolean {
+    const key = placementKey(axis, name);
+    return this.initiallyPlaced.has(key) && !this.authoritative.has(key);
+  }
+
+  private notePositionConstraint(
+    constraint: PositionConstraint,
+    posScales: ConstraintPosScales | undefined
+  ): void {
+    for (const child of constraint.children) {
+      if (constraint.override) {
+        if (constraint.x !== undefined)
+          this.authoritative.add(placementKey(0, child.name));
+        if (constraint.y !== undefined)
+          this.authoritative.add(placementKey(1, child.name));
+      }
+    }
+
+    for (const axis of POSITION_AXES) {
+      const coordinate = constraint[axis];
+      if (coordinate === undefined) continue;
+      const idx = axisIndex(axis);
+      const value = resolveCoordinate(coordinate, posScales?.[idx]);
+      if (value === undefined) continue;
+      for (const child of constraint.children) {
+        this.positionPinned.add(placementKey(idx, child.name));
+      }
+    }
+  }
+}
+
 export function lowerPlacementConstraints(
   constraints: PlacementConstraint[],
   targets: Map<string, Placeable>,
   sizes: [number, number],
   posScales?: ConstraintPosScales
 ): LoweredPlacement {
-  const authoritative = new Set<string>();
-  const initiallyPlaced = new Set<string>();
-  const positionPinned = new Set<string>();
-  const spanPinned = new Set<string>();
-
-  for (const [name, target] of targets) {
-    for (const axis of AXIS_INDICES) {
-      if (target.dims[axis].min !== undefined)
-        initiallyPlaced.add(placementKey(axis, name));
-    }
-  }
+  const ownership = new PlacementOwnershipPlan(targets, constraints, posScales);
 
   const spanPlacements = constraints.flatMap((constraint, constraintIndex) =>
     constraint.type === "span"
@@ -397,51 +459,21 @@ export function lowerPlacementConstraints(
   for (const extent of spanExtents) {
     const key = placementKey(axisIndex(extent.axis), extent.name);
     spanExtentByKey.set(key, extent);
-    spanPinned.add(key);
+    ownership.noteSpanExtent(extent);
   }
 
   const builder = new PlacementProgramBuilder(targets, spanExtentByKey);
   for (const extent of spanExtents) builder.span(extent);
-  const isInitiallyPlaced = (axis: Axis, name: string) =>
-    initiallyPlaced.has(placementKey(axisIndex(axis), name));
-  const isPinned = (axis: Axis, name: string) => {
-    const key = placementKey(axisIndex(axis), name);
-    return (
-      initiallyPlaced.has(key) || positionPinned.has(key) || spanPinned.has(key)
-    );
-  };
   const resolveAxisCoordinate = (axis: Axis, coordinate: MaybeValue<number>) =>
     resolveCoordinate(coordinate, posScales?.[axisIndex(axis)]);
-
-  for (const constraint of constraints) {
-    if (constraint.type !== "position" || !constraint.override) continue;
-    for (const child of constraint.children) {
-      if (constraint.x !== undefined)
-        authoritative.add(placementKey(0, child.name));
-      if (constraint.y !== undefined)
-        authoritative.add(placementKey(1, child.name));
-    }
-  }
-  for (const constraint of constraints) {
-    if (constraint.type !== "position") continue;
-    for (const axis of POSITION_AXES) {
-      const coordinate = constraint[axis];
-      if (coordinate === undefined) continue;
-      const idx = axisIndex(axis);
-      const value = resolveCoordinate(coordinate, posScales?.[idx]);
-      if (value === undefined) continue;
-      for (const child of constraint.children) {
-        positionPinned.add(placementKey(idx, child.name));
-      }
-    }
-  }
+  const isInitiallyPlaced = ownership.isInitiallyPlaced.bind(ownership);
+  const isPinned = ownership.isPinned.bind(ownership);
 
   // A node that self-placed during its own layout is a hard boundary condition,
   // except where an authoritative position constraint explicitly owns the axis.
   for (const [name] of targets) {
     for (const axis of AXIS_INDICES) {
-      const key = placementKey(axis, name);
-      if (!initiallyPlaced.has(key) || authoritative.has(key)) continue;
+      if (!ownership.shouldPinSelfPlacement(axis, name)) continue;
       const min = targets.get(name)!.dims[axis].min;
       if (min !== undefined)
         builder.pin(axisName(axis), name, "start", min, "self-placement");

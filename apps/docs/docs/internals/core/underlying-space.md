@@ -372,6 +372,9 @@ Constraint-specific placement lowerers live with their constraints: `align.ts`,
 `distribute.ts`, `position.ts`, `span.ts`, `nest.ts`, and `grid.ts` own their
 policy choices, while the solver owns anchor-offset resolution, graph solving,
 and writing solved positions back to placeables.
+Before lowering, `PlacementOwnershipPlan` records pre-existing placements,
+authoritative position overrides, and axes claimed by position/span facts so
+legacy read-vs-write policy is explicit data rather than scattered set checks.
 Span first contributes an axis extent fact (`min`, `max`, and therefore
 `size`), and known-size children contribute their intrinsic size. With sizes
 known, every anchor facet reduces to `min + offset`: `start`, `middle`, `end`,
