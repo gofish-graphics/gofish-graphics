@@ -365,14 +365,17 @@ effective scale only to non-target children whose own space is POSITION.
 After sizing, the layer emits placement constraints into a per-axis weighted
 relation problem (`constraints/placementSolver.ts`). The raw fact datatype for
 this pass lives in `constraints/placementFacts.ts`: anchor expressions, strong
-pins, weak pins, relations, and spans. Span first contributes an
-axis extent fact (`min`, `max`, and therefore `size`), and known-size children
-contribute their intrinsic size. With sizes known, every anchor facet reduces to
-`min + offset`: `start`, `middle`, `end`, and `baseline` are just different
-offsets. `position`, `align`, `distribute`, `nest`, and `grid` then emit pins or
-weighted relations over target `min` values; the solver propagates connected
-components and commits spanned axes with `setExtent` and ordinary solved axes
-with a `min` placement. The placement-coordinate compiler preserves the
+pins, weak pins, relations, and spans. Named constraints first lower to an
+inspectable `PlacementProgram` (`axes: [PlacementFact[], PlacementFact[]]`);
+solving consumes that program rather than mutating solver state during lowering.
+Span first contributes an axis extent fact (`min`, `max`, and therefore
+`size`), and known-size children contribute their intrinsic size. With sizes
+known, every anchor facet reduces to `min + offset`: `start`, `middle`, `end`,
+and `baseline` are just different offsets. `position`, `align`, `distribute`,
+`nest`, and `grid` then emit pins or weighted relations over target `min`
+values; the solver propagates connected components and commits spanned axes with
+`setExtent` and ordinary solved axes with a `min` placement. The
+placement-coordinate compiler preserves the
 literal/datum distinction until raw facts are emitted: literals are pixels,
 while datum coordinates elaborate through the already-solved data→pixel scale
 plus any post-scale offset. This keeps the unified constraint semantics without

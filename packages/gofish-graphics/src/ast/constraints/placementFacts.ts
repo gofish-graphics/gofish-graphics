@@ -57,6 +57,14 @@ export type PlacementFact =
   | PlacementRelation
   | PlacementSpan;
 
+export type PlacementProgram = {
+  axes: [PlacementFact[], PlacementFact[]];
+};
+
+export const emptyPlacementProgram = (): PlacementProgram => ({
+  axes: [[], []],
+});
+
 export const anchorExpr = (
   node: NodeId,
   axis: Axis,

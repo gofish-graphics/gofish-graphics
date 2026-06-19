@@ -12,6 +12,7 @@ import type { GridConstraint } from "../ast/constraints/grid";
 import type { NestConstraint } from "../ast/constraints/nest";
 import {
   compilePlacementCoordinate,
+  lowerPlacementConstraints,
   solvePlacementConstraints,
 } from "../ast/constraints/placementSolver";
 import {
@@ -780,6 +781,104 @@ console.log("# constraint confluence: raw placement fact datatype");
       relation.to.anchor === "start" &&
       relation.from.node === "A" &&
       span.name === "C"
+  );
+}
+
+console.log("# constraint confluence: placement constraint lowering");
+{
+  const targets = (...names: string[]) =>
+    new Map(names.map((name) => [name, makePlaceable()] as const));
+
+  const loweredPosition = lowerPlacementConstraints(
+    [position("A", 20)],
+    targets("A"),
+    [300, 200]
+  );
+  const positionFact = loweredPosition.program.axes[0][0];
+  ok(
+    "position lowers to an explicit pin fact",
+    positionFact?.type === "pin" &&
+      positionFact.owner === "position[0]" &&
+      positionFact.expr.node === "A" &&
+      positionFact.expr.anchor === "start" &&
+      positionFact.value === 15
+  );
+
+  const loweredAlign = lowerPlacementConstraints(
+    [{ type: "align", x: "middle", children: [A, B] }],
+    targets("A", "B"),
+    [300, 200]
+  );
+  ok(
+    "align lowers to relation plus weak anchor facts",
+    loweredAlign.program.axes[0].some(
+      (fact) =>
+        fact.type === "relation" &&
+        fact.owner === "align[0]" &&
+        fact.from.node === "A" &&
+        fact.to.node === "B" &&
+        fact.offset === 0
+    ) &&
+      loweredAlign.program.axes[0].some(
+        (fact) => fact.type === "weak-pin" && fact.owner === "align[0]"
+      )
+  );
+
+  const loweredDistribute = lowerPlacementConstraints(
+    [distribute(["A", "B", "C"])],
+    targets("A", "B", "C"),
+    [300, 200]
+  );
+  ok(
+    "distribute lowers to chain relations plus weak anchor facts",
+    loweredDistribute.program.axes[0].filter(
+      (fact) => fact.type === "relation" && fact.owner === "distribute[0]"
+    ).length === 2 &&
+      loweredDistribute.program.axes[0].some(
+        (fact) =>
+          fact.type === "relation" &&
+          fact.from.node === "A" &&
+          fact.to.node === "B" &&
+          fact.offset === 15
+      ) &&
+      loweredDistribute.program.axes[0].some(
+        (fact) => fact.type === "weak-pin" && fact.owner === "distribute[0]"
+      )
+  );
+
+  const loweredNest = lowerPlacementConstraints(
+    [{ type: "nest", x: 5, children: [A, B] }],
+    targets("A", "B"),
+    [300, 200]
+  );
+  ok(
+    "nest lowers to an explicit center relation fact",
+    loweredNest.program.axes[0].some(
+      (fact) =>
+        fact.type === "relation" &&
+        fact.owner === "nest[0]" &&
+        fact.from.node === "A" &&
+        fact.to.node === "B" &&
+        fact.offset === 0
+    )
+  );
+
+  const loweredSpan = lowerPlacementConstraints(
+    [span("C", 10, 30)],
+    targets("C"),
+    [300, 200]
+  );
+  const spanFact = loweredSpan.program.axes[0][0];
+  const spanExtent = loweredSpan.spanExtents[0];
+  ok(
+    "span lowering emits a span fact and matching extent metadata",
+    spanFact?.type === "span" &&
+      spanFact.name === "C" &&
+      spanFact.min === 10 &&
+      spanFact.max === 30 &&
+      spanExtent?.type === "span" &&
+      spanExtent.name === spanFact.name &&
+      spanExtent.size === 20
   );
 }
 

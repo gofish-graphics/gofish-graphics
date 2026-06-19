@@ -16,11 +16,14 @@ import { BBox, type BBoxFacet } from "./bbox";
 import type {
   AnchorExpr,
   NodeId,
+  PlacementFact,
   PlacementPin,
+  PlacementProgram,
   PlacementRelation,
   PlacementSpan,
   PlacementWeakPin,
 } from "./placementFacts";
+import { emptyPlacementProgram } from "./placementFacts";
 
 type PlacementConstraint =
   | AlignConstraint
@@ -29,13 +32,6 @@ type PlacementConstraint =
   | SpanConstraint
   | NestConstraint
   | GridConstraint;
-
-interface AxisProblem {
-  relations: PlacementRelation[];
-  pins: PlacementPin[];
-  weakPins: PlacementWeakPin[];
-  participants: Set<NodeId>;
-}
 
 const minExpr = (node: NodeId, axis: Axis): AnchorExpr => ({
   node,
@@ -62,6 +58,11 @@ interface SpanGroup {
 
 interface SpanExtent extends PlacementSpan {
   size: number;
+}
+
+export interface LoweredPlacement {
+  program: PlacementProgram;
+  spanExtents: SpanExtent[];
 }
 
 export interface PlacementConflict {
@@ -276,19 +277,16 @@ function isDataPositionedAlignTarget(
   return placement !== undefined && placement.tag !== "free";
 }
 
-class PlacementProblems {
-  readonly axes: [AxisProblem, AxisProblem] = [
-    { relations: [], pins: [], weakPins: [], participants: new Set() },
-    { relations: [], pins: [], weakPins: [], participants: new Set() },
-  ];
+class PlacementProgramBuilder {
+  readonly program = emptyPlacementProgram();
 
   constructor(
     private readonly targets: Map<string, Placeable>,
     private readonly spanExtents: Map<string, SpanExtent>
   ) {}
 
-  private problem(axis: Axis): AxisProblem {
-    return this.axes[axisIndex(axis)];
+  private facts(axis: Axis): PlacementFact[] {
+    return this.program.axes[axisIndex(axis)];
   }
 
   private target(name: string): Placeable | undefined {
@@ -315,9 +313,7 @@ class PlacementProblems {
       this.spannedSize(axis, name)
     );
     if (offset === undefined) return;
-    const problem = this.problem(axis);
-    problem.participants.add(name);
-    problem.pins.push({
+    this.facts(axis).push({
       type: "pin",
       expr: minExpr(name, axis),
       value: value - offset,
@@ -345,9 +341,7 @@ class PlacementProblems {
       this.spannedSize(axis, name)
     );
     if (offset === undefined) return;
-    const problem = this.problem(axis);
-    problem.participants.add(name);
-    problem.weakPins.push({
+    this.facts(axis).push({
       type: "weak-pin",
       expr: minExpr(name, axis),
       value: value - offset,
@@ -381,10 +375,7 @@ class PlacementProblems {
       this.spannedSize(axis, to)
     );
     if (fromOffset === undefined || toOffset === undefined) return;
-    const problem = this.problem(axis);
-    problem.participants.add(from);
-    problem.participants.add(to);
-    problem.relations.push({
+    this.facts(axis).push({
       type: "relation",
       from: minExpr(from, axis),
       to: minExpr(to, axis),
@@ -394,14 +385,34 @@ class PlacementProblems {
   }
 
   span(extent: SpanExtent): void {
-    this.pin(extent.axis, extent.name, "start", extent.min, extent.owner);
+    this.facts(extent.axis).push(extent);
   }
 }
 
 function solveAxis(
   axis: Axis,
-  problem: AxisProblem
+  facts: PlacementFact[]
 ): { positions: Map<NodeId, number>; conflicts: PlacementConflict[] } {
+  const relations = facts.filter(
+    (fact): fact is PlacementRelation => fact.type === "relation"
+  );
+  const pins = facts.filter(
+    (fact): fact is PlacementPin | PlacementSpan =>
+      fact.type === "pin" || fact.type === "span"
+  );
+  const weakPins = facts.filter(
+    (fact): fact is PlacementWeakPin => fact.type === "weak-pin"
+  );
+  const participants = new Set<NodeId>();
+  for (const fact of facts) {
+    if (fact.type === "pin" || fact.type === "weak-pin")
+      participants.add(fact.expr.node);
+    else if (fact.type === "relation") {
+      participants.add(fact.from.node);
+      participants.add(fact.to.node);
+    } else participants.add(fact.name);
+  }
+
   const adjacency = new Map<
     NodeId,
     { node: NodeId; delta: number; owner: string }[]
@@ -411,7 +422,7 @@ function solveAxis(
     list.push({ node: to, delta, owner });
     adjacency.set(from, list);
   };
-  for (const relation of problem.relations) {
+  for (const relation of relations) {
     addEdge(
       relation.from.node,
       relation.to.node,
@@ -431,7 +442,7 @@ function solveAxis(
   const components: NodeId[][] = [];
   const conflicts: PlacementConflict[] = [];
 
-  for (const start of [...problem.participants].sort()) {
+  for (const start of [...participants].sort()) {
     if (relative.has(start)) continue;
     const component = components.length;
     const nodes: NodeId[] = [];
@@ -463,11 +474,16 @@ function solveAxis(
   }
 
   const offsets = new Map<number, { value: number; owner: string }>();
-  const applyPin = (pin: PlacementPin | PlacementWeakPin) => {
-    const component = componentOf.get(pin.expr.node);
-    const rel = relative.get(pin.expr.node);
+  const pinNode = (pin: PlacementPin | PlacementWeakPin | PlacementSpan) =>
+    pin.type === "span" ? pin.name : pin.expr.node;
+  const pinValue = (pin: PlacementPin | PlacementWeakPin | PlacementSpan) =>
+    pin.type === "span" ? pin.min : pin.value;
+  const applyPin = (pin: PlacementPin | PlacementWeakPin | PlacementSpan) => {
+    const node = pinNode(pin);
+    const component = componentOf.get(node);
+    const rel = relative.get(node);
     if (component === undefined || rel === undefined) return;
-    const assertedOffset = pin.value - rel;
+    const assertedOffset = pinValue(pin) - rel;
     const prior = offsets.get(component);
     if (prior === undefined) {
       offsets.set(component, { value: assertedOffset, owner: pin.owner });
@@ -476,16 +492,16 @@ function solveAxis(
         axis,
         owner: pin.owner,
         priorOwner: prior.owner,
-        asserted: pin.value,
+        asserted: pinValue(pin),
         implied: rel + prior.value,
       });
     }
   };
-  for (const pin of problem.pins) applyPin(pin);
+  for (const pin of pins) applyPin(pin);
 
   for (let component = 0; component < components.length; component++) {
     if (offsets.has(component)) continue;
-    const weak = problem.weakPins
+    const weak = weakPins
       .filter((pin) => componentOf.get(pin.expr.node) === component)
       .sort(compareRank)[0];
     if (weak) applyPin(weak);
@@ -506,12 +522,12 @@ function solveAxis(
   return { positions, conflicts };
 }
 
-export function solvePlacementConstraints(
+export function lowerPlacementConstraints(
   constraints: PlacementConstraint[],
   targets: Map<string, Placeable>,
   sizes: [number, number],
   posScales?: ConstraintPosScales
-): PlacementConflict[] {
+): LoweredPlacement {
   const authoritative = new Set<string>();
   const initiallyPlaced = new Set<string>();
   const positionPinned = new Set<string>();
@@ -542,8 +558,8 @@ export function solvePlacementConstraints(
     spanPinned.add(key);
   }
 
-  const problems = new PlacementProblems(targets, spanExtentByKey);
-  for (const extent of spanExtents) problems.span(extent);
+  const builder = new PlacementProgramBuilder(targets, spanExtentByKey);
+  for (const extent of spanExtents) builder.span(extent);
 
   for (const constraint of constraints) {
     if (constraint.type !== "position" || !constraint.override) continue;
@@ -576,7 +592,7 @@ export function solvePlacementConstraints(
       if (!initiallyPlaced.has(key) || authoritative.has(key)) continue;
       const min = targets.get(name)!.dims[axis].min;
       if (min !== undefined)
-        problems.pin(axisName(axis), name, "start", min, "self-placement");
+        builder.pin(axisName(axis), name, "start", min, "self-placement");
     }
   }
 
@@ -600,7 +616,7 @@ export function solvePlacementConstraints(
             placementKey(axisIndex(axis), child.name)
           );
           if (alreadyPlaced && !constraint.override) continue;
-          problems.pin(axis, child.name, constraint.anchor, value, owner);
+          builder.pin(axis, child.name, constraint.anchor, value, owner);
         }
       };
       emit("x", constraint.x);
@@ -645,7 +661,7 @@ export function solvePlacementConstraints(
 
         if (source) {
           for (const target of movable) {
-            problems.relate(
+            builder.relate(
               axis,
               source.child.name,
               source.anchor,
@@ -660,7 +676,7 @@ export function solvePlacementConstraints(
 
         const aligned = movable;
         for (let i = 1; i < aligned.length; i++) {
-          problems.relate(
+          builder.relate(
             axis,
             aligned[0].child.name,
             aligned[0].anchor,
@@ -671,7 +687,7 @@ export function solvePlacementConstraints(
           );
         }
         const firstAnchor = aligned[0].anchor;
-        problems.weakPin(
+        builder.weakPin(
           axis,
           aligned[0].child.name,
           firstAnchor,
@@ -708,7 +724,7 @@ export function solvePlacementConstraints(
         )
           continue;
         if (constraint.mode === "center") {
-          problems.relate(
+          builder.relate(
             constraint.dir,
             ordered[i - 1].name,
             "middle",
@@ -718,7 +734,7 @@ export function solvePlacementConstraints(
             owner
           );
         } else {
-          problems.relate(
+          builder.relate(
             constraint.dir,
             ordered[i - 1].name,
             "end",
@@ -729,7 +745,7 @@ export function solvePlacementConstraints(
           );
         }
       }
-      problems.weakPin(
+      builder.weakPin(
         constraint.dir,
         ordered[0].name,
         constraint.mode === "center" ? "middle" : "start",
@@ -748,7 +764,7 @@ export function solvePlacementConstraints(
     if (constraint.type === "nest") {
       const [outer, inner] = constraint.children;
       if (constraint.x !== undefined)
-        problems.relate(
+        builder.relate(
           "x",
           outer.name,
           "middle",
@@ -758,7 +774,7 @@ export function solvePlacementConstraints(
           owner
         );
       if (constraint.y !== undefined)
-        problems.relate(
+        builder.relate(
           "y",
           outer.name,
           "middle",
@@ -778,14 +794,14 @@ export function solvePlacementConstraints(
     constraint.children.forEach((child, index) => {
       const column = index % constraint.numCols;
       const row = Math.floor(index / constraint.numCols);
-      problems.pin(
+      builder.pin(
         "x",
         child.name,
         "middle",
         column * (cellWidth + constraint.xSpacing) + cellWidth / 2,
         owner
       );
-      problems.pin(
+      builder.pin(
         "y",
         child.name,
         "middle",
@@ -795,9 +811,32 @@ export function solvePlacementConstraints(
     });
   });
 
+  return { program: builder.program, spanExtents };
+}
+
+export function solvePlacementConstraints(
+  constraints: PlacementConstraint[],
+  targets: Map<string, Placeable>,
+  sizes: [number, number],
+  posScales?: ConstraintPosScales
+): PlacementConflict[] {
+  const lowered = lowerPlacementConstraints(
+    constraints,
+    targets,
+    sizes,
+    posScales
+  );
+  const spanExtentByKey = new Map<string, SpanExtent>();
+  for (const extent of lowered.spanExtents) {
+    spanExtentByKey.set(
+      placementKey(axisIndex(extent.axis), extent.name),
+      extent
+    );
+  }
+
   const results = [
-    solveAxis("x", problems.axes[0]),
-    solveAxis("y", problems.axes[1]),
+    solveAxis("x", lowered.program.axes[0]),
+    solveAxis("y", lowered.program.axes[1]),
   ] as const;
   const conflicts = results.flatMap((result) => result.conflicts);
   if (conflicts.length > 0) {
