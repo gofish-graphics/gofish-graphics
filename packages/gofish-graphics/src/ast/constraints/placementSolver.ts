@@ -74,7 +74,7 @@ const AXIS_INDICES = [0, 1] as const;
 const POSITION_AXES = ["x", "y"] as const;
 
 const axisName = (axis: 0 | 1): Axis => (axis === 0 ? "x" : "y");
-const placementKey = (axis: 0 | 1, name: string): string => `${axis}:${name}`;
+const placementKey = (axis: Axis, name: string): string => `${axis}:${name}`;
 
 const BOX_ANCHOR: Record<AlignAnchor, Anchor> = {
   start: "min",
@@ -152,7 +152,7 @@ class PlacementProgramBuilder implements PlacementFactEmitter {
   }
 
   private spannedSize(axis: Axis, name: string): number | undefined {
-    return this.spanExtents.get(placementKey(axisIndex(axis), name))?.size;
+    return this.spanExtents.get(placementKey(axis, name))?.size;
   }
 
   pin(request: PlacementPinRequest): void {
@@ -317,7 +317,7 @@ function solveAxis(
       applyPin(pin.name, pin.value, pin.owner);
       continue;
     }
-    const span = spanExtents.get(placementKey(axisIndex(pin.axis), pin.name));
+    const span = spanExtents.get(placementKey(pin.axis, pin.name));
     if (span) applyPin(pin.name, pin.value - span.size, pin.owner);
   }
 
@@ -354,7 +354,7 @@ class PlacementOwnershipPlan {
     for (const [name, target] of targets) {
       for (const axis of AXIS_INDICES) {
         if (target.dims[axis].min !== undefined)
-          this.initiallyPlaced.add(placementKey(axis, name));
+          this.initiallyPlaced.add(placementKey(axisName(axis), name));
       }
     }
 
@@ -365,15 +365,15 @@ class PlacementOwnershipPlan {
   }
 
   noteSpanExtent(extent: SpanExtent): void {
-    this.spanPinned.add(placementKey(axisIndex(extent.axis), extent.name));
+    this.spanPinned.add(placementKey(extent.axis, extent.name));
   }
 
   isInitiallyPlaced(axis: Axis, name: string): boolean {
-    return this.initiallyPlaced.has(placementKey(axisIndex(axis), name));
+    return this.initiallyPlaced.has(placementKey(axis, name));
   }
 
   isPinned(axis: Axis, name: string): boolean {
-    const key = placementKey(axisIndex(axis), name);
+    const key = placementKey(axis, name);
     return (
       this.initiallyPlaced.has(key) ||
       this.positionPinned.has(key) ||
@@ -382,7 +382,7 @@ class PlacementOwnershipPlan {
   }
 
   shouldPinSelfPlacement(axis: 0 | 1, name: string): boolean {
-    const key = placementKey(axis, name);
+    const key = placementKey(axisName(axis), name);
     return this.initiallyPlaced.has(key) && !this.authoritative.has(key);
   }
 
@@ -393,9 +393,9 @@ class PlacementOwnershipPlan {
     for (const child of constraint.children) {
       if (constraint.override) {
         if (constraint.x !== undefined)
-          this.authoritative.add(placementKey(0, child.name));
+          this.authoritative.add(placementKey("x", child.name));
         if (constraint.y !== undefined)
-          this.authoritative.add(placementKey(1, child.name));
+          this.authoritative.add(placementKey("y", child.name));
       }
     }
 
@@ -406,7 +406,7 @@ class PlacementOwnershipPlan {
       const value = resolveCoordinate(coordinate, posScales?.[idx]);
       if (value === undefined) continue;
       for (const child of constraint.children) {
-        this.positionPinned.add(placementKey(idx, child.name));
+        this.positionPinned.add(placementKey(axis, child.name));
       }
     }
   }
@@ -434,7 +434,7 @@ export function lowerPlacementConstraints(
   const spanExtents = collectSpanExtents(spanEdgePins);
   const spanExtentByKey = new Map<string, SpanExtent>();
   for (const extent of spanExtents) {
-    const key = placementKey(axisIndex(extent.axis), extent.name);
+    const key = placementKey(extent.axis, extent.name);
     spanExtentByKey.set(key, extent);
     ownership.noteSpanExtent(extent);
   }
@@ -521,10 +521,7 @@ export function solvePlacementConstraints(
   );
   const spanExtentByKey = new Map<string, SpanExtent>();
   for (const extent of lowered.spanExtents) {
-    spanExtentByKey.set(
-      placementKey(axisIndex(extent.axis), extent.name),
-      extent
-    );
+    spanExtentByKey.set(placementKey(extent.axis, extent.name), extent);
   }
 
   const results = [
@@ -547,7 +544,7 @@ export function solvePlacementConstraints(
     for (const [name, min] of result.positions) {
       const target = targets.get(name);
       if (!target) continue;
-      const span = spanExtentByKey.get(placementKey(axis, name));
+      const span = spanExtentByKey.get(placementKey(axisLabel, name));
       if (span && target.setExtent) {
         target.setExtent(axisLabel, { min, max: min + span.size }, span.owner);
       } else if (target.pinAnchor) target.pinAnchor(axis, min, "min");
