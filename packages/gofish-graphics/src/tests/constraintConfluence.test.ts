@@ -21,6 +21,7 @@ import {
 import {
   buildDistributeSliceMap,
   buildPositionTargetDims,
+  buildPositionScalePlan,
   childLayoutSizeProposal,
   childPosScalesFor,
   selectGridConstraint,
@@ -557,6 +558,32 @@ console.log("# constraint confluence: child posScale forwarding");
   const effectiveX = (v: number) => v * 10;
   const effectiveY = (v: number) => v * 20;
   const positionSpace = POSITION(interval(0, 10));
+
+  const noOwnedAxisPlan = buildPositionScalePlan(
+    [false, false],
+    [positionSpace, positionSpace],
+    [100, 200],
+    [undefined, undefined]
+  );
+  ok(
+    "position scale plan does not synthesize local scales without owned axes",
+    noOwnedAxisPlan.effectivePosScales[0] === undefined &&
+      noOwnedAxisPlan.effectivePosScales[1] === undefined
+  );
+
+  const ownedAxisPlan = buildPositionScalePlan(
+    [true, false],
+    [positionSpace, positionSpace],
+    [100, 200],
+    [baseX, undefined]
+  );
+  ok(
+    "position scale plan preserves base scales and falls back locally when owned",
+    ownedAxisPlan.ownsAxis[0] === true &&
+      ownedAxisPlan.ownsAxis[1] === false &&
+      ownedAxisPlan.effectivePosScales[0] === baseX &&
+      ownedAxisPlan.effectivePosScales[1]?.(5) === 100
+  );
 
   const unowned = childPosScalesFor(
     [UNDEFINED, UNDEFINED],

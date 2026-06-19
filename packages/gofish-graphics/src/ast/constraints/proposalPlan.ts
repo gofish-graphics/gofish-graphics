@@ -4,6 +4,7 @@
 
 import { type Size } from "../dims";
 import { isValue } from "../data";
+import { posScaleFromSpace } from "../domain";
 import { isPOSITION, type UnderlyingSpace } from "../underlyingSpace";
 import { allocateSlices } from "./folds";
 import type { ConstraintSpec } from ".";
@@ -126,6 +127,37 @@ export function buildPositionTargetDims(
   return new Map(
     [...collected.entries()].sort(([a], [b]) => a.localeCompare(b))
   );
+}
+
+export type PositionScalePlan = {
+  ownsAxis: [boolean, boolean];
+  effectivePosScales: ConstraintPosScales;
+};
+
+/** Decide the scales used by this layer's datum-valued position constraints.
+ *
+ * If the layer owns no datum-position axis, the effective scales are just the
+ * inherited/self-scaled base. Once it owns any axis, each axis gets the base
+ * scale when one exists, otherwise a local scale from the layer's resolved
+ * POSITION space and pixel size. This mirrors the runtime rule that
+ * `applyConstraints` consumes a layer-local scale while child forwarding is
+ * handled separately by `childPosScalesFor`. */
+export function buildPositionScalePlan(
+  ownsAxis: [boolean, boolean],
+  layerSpace: Size<UnderlyingSpace> | undefined,
+  layerSize: Size,
+  basePosScales: ConstraintPosScales
+): PositionScalePlan {
+  const ownsPositionAxis = ownsAxis[0] || ownsAxis[1];
+  return {
+    ownsAxis,
+    effectivePosScales: ownsPositionAxis
+      ? [
+          basePosScales[0] ?? posScaleFromSpace(layerSpace?.[0], layerSize[0]),
+          basePosScales[1] ?? posScaleFromSpace(layerSpace?.[1], layerSize[1]),
+        ]
+      : [basePosScales[0], basePosScales[1]],
+  };
 }
 
 /** Decide which data→pixel scales a child receives from an enclosing layer.

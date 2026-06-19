@@ -344,10 +344,12 @@ constraint is a proposal conflict rather than a declaration-order choice.
 The same proposal plan marks datum-valued `position` targets
 (`buildPositionTargetDims`) so the layer does not also forward the consumed
 data→pixel scale to that child axis; literal pixel pins are not marked because
-they do not consume a data scale. Child scale forwarding itself is the same
-plan (`childPosScalesFor`): unowned axes forward inherited/base scales, while
-owned axes forward the layer's effective scale only to non-target children whose
-own space is POSITION.
+they do not consume a data scale. `buildPositionScalePlan` chooses the effective
+scale the placement solver consumes: inherited/self-scaled base first, otherwise
+a local scale from the layer POSITION space when the layer owns a datum-position
+axis. Child scale forwarding itself is the same plan (`childPosScalesFor`):
+unowned axes forward inherited/base scales, while owned axes forward the layer's
+effective scale only to non-target children whose own space is POSITION.
 
 After sizing, the layer emits placement constraints into a per-axis weighted
 relation problem (`constraints/placementSolver.ts`). Span first contributes an

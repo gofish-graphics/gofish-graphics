@@ -50,6 +50,7 @@ import {
 import {
   buildDistributeSliceMap,
   buildPositionTargetDims,
+  buildPositionScalePlan,
   childLayoutSizeProposal,
   childPosScalesFor,
   selectGridConstraint,
@@ -529,7 +530,6 @@ export const layer = createNodeOperatorSequential(
             constraintDomains.x !== undefined,
             constraintDomains.y !== undefined,
           ];
-          const ownsPositionAxis = ownsAxis[0] || ownsAxis[1];
 
           // Scale for resolving this layer's datum `position` constraints: an
           // inherited posScale, else a local one mapping the layer's own
@@ -540,12 +540,13 @@ export const layer = createNodeOperatorSequential(
           const space = node._underlyingSpace;
           // `basePosScales` (the inherited scales with any self-scaled dim
           // overridden — see selfScaledSpaces above) is the floor here.
-          const effectivePosScales: ConstraintPosScales = ownsPositionAxis
-            ? [
-                basePosScales[0] ?? posScaleFromSpace(space?.[0], size[0]),
-                basePosScales[1] ?? posScaleFromSpace(space?.[1], size[1]),
-              ]
-            : [basePosScales[0], basePosScales[1]];
+          const positionScalePlan = buildPositionScalePlan(
+            ownsAxis,
+            space,
+            size,
+            basePosScales
+          );
+          const effectivePosScales = positionScalePlan.effectivePosScales;
 
           const childPlaceables: ReturnType<
             (typeof children)[number]["layout"]
