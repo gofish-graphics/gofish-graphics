@@ -91,6 +91,10 @@ export interface PlacementConflict {
   implied: number;
 }
 
+export type PlacementCoordinate =
+  | { kind: "pixel"; value: number }
+  | { kind: "datum"; value: number; offset: number };
+
 const TOLERANCE = 1e-6;
 const AXIS_INDICES = [0, 1] as const;
 const POSITION_AXES = ["x", "y"] as const;
@@ -132,13 +136,35 @@ function anchorOffset(
   return anchor === "middle" ? Math.abs(size) / 2 : Math.abs(size);
 }
 
+export function compilePlacementCoordinate(
+  coordinate: MaybeValue<number>
+): PlacementCoordinate {
+  return isValue(coordinate)
+    ? {
+        kind: "datum",
+        value: getValue(coordinate)!,
+        offset: getValueOffset(coordinate),
+      }
+    : { kind: "pixel", value: coordinate };
+}
+
+export function resolvePlacementCoordinate(
+  coordinate: PlacementCoordinate,
+  scale: ((value: number) => number) | undefined
+): number | undefined {
+  if (coordinate.kind === "pixel") return coordinate.value;
+  if (scale === undefined) return undefined;
+  return scale(coordinate.value) + coordinate.offset;
+}
+
 function resolveCoordinate(
   coordinate: MaybeValue<number>,
   scale: ((value: number) => number) | undefined
 ): number | undefined {
-  if (!isValue(coordinate)) return coordinate;
-  if (scale === undefined) return undefined;
-  return scale(getValue(coordinate)!) + getValueOffset(coordinate);
+  return resolvePlacementCoordinate(
+    compilePlacementCoordinate(coordinate),
+    scale
+  );
 }
 
 function emitSpanPlacements(

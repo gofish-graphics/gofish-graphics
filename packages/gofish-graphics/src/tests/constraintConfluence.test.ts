@@ -10,7 +10,11 @@ import type { AlignConstraint } from "../ast/constraints/align";
 import type { DistributeConstraint } from "../ast/constraints/distribute";
 import type { GridConstraint } from "../ast/constraints/grid";
 import type { NestConstraint } from "../ast/constraints/nest";
-import { solvePlacementConstraints } from "../ast/constraints/placementSolver";
+import {
+  compilePlacementCoordinate,
+  resolvePlacementCoordinate,
+  solvePlacementConstraints,
+} from "../ast/constraints/placementSolver";
 import type { PositionConstraint } from "../ast/constraints/position";
 import type { SpanConstraint } from "../ast/constraints/span";
 import type { ZAboveConstraint } from "../ast/constraints/zorder";
@@ -727,6 +731,24 @@ console.log("# constraint confluence: child posScale forwarding");
   ok(
     "owned non-POSITION child receives no posScales",
     ownedUndefined[0] === undefined && ownedUndefined[1] === undefined
+  );
+}
+
+console.log("# constraint confluence: raw placement coordinates");
+{
+  const literal = compilePlacementCoordinate(5);
+  const datumCoord = compilePlacementCoordinate(value(5).offset(3));
+
+  ok(
+    "literal placement coordinate is already pixels",
+    literal.kind === "pixel" &&
+      resolvePlacementCoordinate(literal, undefined) === 5
+  );
+  ok(
+    "datum placement coordinate remains scale-relative until solved",
+    datumCoord.kind === "datum" &&
+      resolvePlacementCoordinate(datumCoord, undefined) === undefined &&
+      resolvePlacementCoordinate(datumCoord, (v) => v * 10) === 53
   );
 }
 

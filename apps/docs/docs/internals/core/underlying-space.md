@@ -369,9 +369,12 @@ contribute their intrinsic size. With sizes known, every anchor facet reduces to
 offsets. `position`, `align`, `distribute`, `nest`, and `grid` then emit pins or
 weighted relations over target `min` values; the solver propagates connected
 components and commits spanned axes with `setExtent` and ordinary solved axes
-with a `min` placement. This keeps the unified constraint semantics without a
-generic dense linear solver: strong facts win, relation cycles are checked for
-contradiction, and weak fallbacks are ranked by policy rather than source order.
+with a `min` placement. The raw placement coordinate seam already preserves the
+literal/datum distinction: literals are pixels, while datum coordinates resolve
+only through the layer's data→pixel scale plus any post-scale offset. This keeps
+the unified constraint semantics without a generic dense linear solver: strong
+facts win, relation cycles are checked for contradiction, and weak fallbacks are
+ranked by policy rather than source order.
 The legacy per-constraint apply helpers have been retired from the constraint
 path; spread, scatter, table, axes, and hand-written constraints all lower to
 the same solver entrypoint. Span edge claims are still pre-validated with the
