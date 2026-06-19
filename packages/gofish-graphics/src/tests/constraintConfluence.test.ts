@@ -14,6 +14,13 @@ import {
   compilePlacementCoordinate,
   solvePlacementConstraints,
 } from "../ast/constraints/placementSolver";
+import {
+  anchorExpr,
+  pinFact,
+  relationFact,
+  spanFact,
+  weakPinFact,
+} from "../ast/constraints/placementFacts";
 import type { PositionConstraint } from "../ast/constraints/position";
 import type { SpanConstraint } from "../ast/constraints/span";
 import type { ZAboveConstraint } from "../ast/constraints/zorder";
@@ -743,6 +750,36 @@ console.log("# constraint confluence: raw placement coordinates");
     "datum placement coordinate elaborates through posScale before raw facts",
     compilePlacementCoordinate(value(5).offset(3), undefined) === undefined &&
       compilePlacementCoordinate(value(5).offset(3), (v) => v * 10) === 53
+  );
+}
+
+console.log("# constraint confluence: raw placement fact datatype");
+{
+  const a = anchorExpr("A", "x", "middle");
+  const b = anchorExpr("B", "x", "start");
+  const pin = pinFact(a, 42, "test-pin");
+  const weak = weakPinFact(b, 0, [1, 2, 3, "weak"], "test-weak");
+  const relation = relationFact(a, b, 7, "test-relation");
+  const span = spanFact("C", "y", 10, 30, "test-span");
+
+  ok(
+    "placement facts are numeric raw algebra terms",
+    pin.type === "pin" &&
+      typeof pin.value === "number" &&
+      weak.type === "weak-pin" &&
+      typeof weak.value === "number" &&
+      relation.type === "relation" &&
+      typeof relation.offset === "number" &&
+      span.type === "span" &&
+      typeof span.min === "number" &&
+      typeof span.max === "number"
+  );
+  ok(
+    "placement facts retain anchor identity separately from numeric values",
+    relation.from.anchor === "middle" &&
+      relation.to.anchor === "start" &&
+      relation.from.node === "A" &&
+      span.name === "C"
   );
 }
 

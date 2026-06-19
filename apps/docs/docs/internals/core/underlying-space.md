@@ -16,6 +16,7 @@ covers:
   - packages/gofish-graphics/src/ast/constraints/distribute.ts
   - packages/gofish-graphics/src/ast/constraints/align.ts
   - packages/gofish-graphics/src/ast/constraints/placementSolver.ts
+  - packages/gofish-graphics/src/ast/constraints/placementFacts.ts
   - packages/gofish-graphics/src/ast/constraints/nest.ts
   - packages/gofish-graphics/src/ast/constraints/nestPlan.ts
   - packages/gofish-graphics/src/ast/constraints/grid.ts
@@ -362,7 +363,9 @@ unowned axes forward inherited/base scales, while owned axes forward the layer's
 effective scale only to non-target children whose own space is POSITION.
 
 After sizing, the layer emits placement constraints into a per-axis weighted
-relation problem (`constraints/placementSolver.ts`). Span first contributes an
+relation problem (`constraints/placementSolver.ts`). The raw fact datatype for
+this pass lives in `constraints/placementFacts.ts`: anchor expressions, strong
+pins, weak pins, relations, and spans. Span first contributes an
 axis extent fact (`min`, `max`, and therefore `size`), and known-size children
 contribute their intrinsic size. With sizes known, every anchor facet reduces to
 `min + offset`: `start`, `middle`, `end`, and `baseline` are just different
