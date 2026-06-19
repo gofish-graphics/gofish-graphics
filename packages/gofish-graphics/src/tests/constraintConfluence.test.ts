@@ -762,7 +762,17 @@ console.log("# constraint confluence: raw placement fact datatype");
   const a = anchorExpr("A", "x", "middle");
   const b = anchorExpr("B", "x", "start");
   const pin = pinFact(a, 42, "test-pin");
-  const weak = weakPinFact(b, 0, [1, 2, 3, "weak"], "test-weak");
+  const weak = weakPinFact(
+    b,
+    0,
+    {
+      source: "align",
+      participantCount: 2,
+      anchor: "start",
+      signature: "weak",
+    },
+    "test-weak"
+  );
   const relation = relationFact(a, b, 7, "test-relation");
   const edge = edgePinFact("C", "y", "max", 30, "test-edge");
 
@@ -772,6 +782,7 @@ console.log("# constraint confluence: raw placement fact datatype");
       typeof pin.value === "number" &&
       weak.type === "weak-pin" &&
       typeof weak.value === "number" &&
+      weak.priority.source === "align" &&
       relation.type === "relation" &&
       typeof relation.offset === "number" &&
       edge.type === "edge-pin" &&

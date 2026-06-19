@@ -393,7 +393,8 @@ while datum coordinates elaborate through the already-solved data→pixel scale
 plus any post-scale offset. This keeps the unified constraint semantics without
 a generic dense linear solver: strong facts win, relation cycles are checked for
 contradiction, and weak fallbacks are
-ranked by policy rather than source order.
+ordered by named priority fields (`source`, participant count, anchor, and a
+stable signature) rather than source order.
 The legacy per-constraint apply helpers have been retired from the constraint
 path; spread, scatter, table, axes, and hand-written constraints all lower to
 the same solver entrypoint. Span edge claims are still pre-validated with the

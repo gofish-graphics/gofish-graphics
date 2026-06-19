@@ -28,8 +28,23 @@ export type PlacementRelationRequest = {
   owner: string;
 };
 
-/** Stable policy order for weak pins. Strong facts do not consult ranks. */
-export type WeakRank = [number, number, number, string];
+export type WeakPinSource = "align" | "distribute";
+
+/** Stable policy order for weak pins. Strong facts do not consult priority. */
+export type WeakPinPriority = {
+  source: WeakPinSource;
+  participantCount: number;
+  anchor: AlignAnchor;
+  signature: string;
+};
+
+export type PlacementWeakPinRequest = {
+  axis: Axis;
+  target: PlacementAnchorRef;
+  value: number;
+  priority: WeakPinPriority;
+  owner: string;
+};
 
 export type PlacementPin = {
   type: "pin";
@@ -42,7 +57,7 @@ export type PlacementWeakPin = {
   type: "weak-pin";
   expr: AnchorExpr;
   value: number;
-  rank: WeakRank;
+  priority: WeakPinPriority;
   owner: string;
 };
 
@@ -84,17 +99,7 @@ export interface PlacementFactEmitter {
     value: number,
     owner: string
   ): void;
-  weakPin(
-    axis: Axis,
-    name: NodeId,
-    anchor: AlignAnchor,
-    value: number,
-    kindRank: number,
-    arityRank: number,
-    anchorRank: number,
-    signature: string,
-    owner: string
-  ): void;
+  weakPin(request: PlacementWeakPinRequest): void;
   relate(request: PlacementRelationRequest): void;
 }
 
@@ -117,9 +122,9 @@ export const pinFact = (
 export const weakPinFact = (
   expr: AnchorExpr,
   value: number,
-  rank: WeakRank,
+  priority: WeakPinPriority,
   owner: string
-): PlacementWeakPin => ({ type: "weak-pin", expr, value, rank, owner });
+): PlacementWeakPin => ({ type: "weak-pin", expr, value, priority, owner });
 
 export const relationFact = (
   from: AnchorExpr,

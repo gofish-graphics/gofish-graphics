@@ -73,13 +73,6 @@ function normalizedAnchors(spec: AlignAxisSpec, count: number): AlignAnchor[] {
   return spec;
 }
 
-function alignAnchorRank(anchor: AlignAnchor): number {
-  if (anchor === "middle") return 0;
-  if (anchor === "start") return 1;
-  if (anchor === "end") return 2;
-  return 3;
-}
-
 function alignFallback(
   anchor: AlignAnchor,
   axis: 0 | 1,
@@ -180,19 +173,20 @@ export function lowerAlignPlacement(
       });
     }
     const firstAnchor = aligned[0].anchor;
-    emitter.weakPin(
+    emitter.weakPin({
       axis,
-      aligned[0].child.name,
-      firstAnchor,
-      alignFallback(firstAnchor, idx, sizes, posScales),
-      1,
-      aligned.length,
-      alignAnchorRank(firstAnchor),
-      `align:${axis}:${firstAnchor}:${aligned
-        .map(({ child }) => child.name)
-        .join(",")}`,
-      owner
-    );
+      target: { name: aligned[0].child.name, anchor: firstAnchor },
+      value: alignFallback(firstAnchor, idx, sizes, posScales),
+      priority: {
+        source: "align",
+        participantCount: aligned.length,
+        anchor: firstAnchor,
+        signature: `align:${axis}:${firstAnchor}:${aligned
+          .map(({ child }) => child.name)
+          .join(",")}`,
+      },
+      owner,
+    });
   };
   emit("x", constraint.x);
   emit("y", constraint.y);

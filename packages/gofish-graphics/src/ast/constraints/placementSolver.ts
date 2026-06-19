@@ -23,6 +23,7 @@ import type {
   PlacementFactEmitter,
   PlacementFact,
   PlacementEdgePin,
+  PlacementWeakPinRequest,
   PlacementPin,
   PlacementProgram,
   PlacementRelation,
@@ -118,12 +119,27 @@ function resolveCoordinate(
   return compilePlacementCoordinate(coordinate, scale);
 }
 
-function compareRank(a: PlacementWeakPin, b: PlacementWeakPin): number {
+function weakPinSourceRank(pin: PlacementWeakPin): number {
+  return pin.priority.source === "align" ? 1 : 2;
+}
+
+function weakPinAnchorRank(pin: PlacementWeakPin): number {
+  const anchor = pin.priority.anchor;
+  if (anchor === "middle") return 0;
+  if (anchor === "start") return 1;
+  if (anchor === "end") return 2;
+  return 3;
+}
+
+function compareWeakPinPriority(
+  a: PlacementWeakPin,
+  b: PlacementWeakPin
+): number {
   return (
-    a.rank[0] - b.rank[0] ||
-    a.rank[1] - b.rank[1] ||
-    a.rank[2] - b.rank[2] ||
-    a.rank[3].localeCompare(b.rank[3])
+    weakPinSourceRank(a) - weakPinSourceRank(b) ||
+    a.priority.participantCount - b.priority.participantCount ||
+    weakPinAnchorRank(a) - weakPinAnchorRank(b) ||
+    a.priority.signature.localeCompare(b.priority.signature)
   );
 }
 
@@ -180,32 +196,22 @@ class PlacementProgramBuilder implements PlacementFactEmitter {
     );
   }
 
-  weakPin(
-    axis: Axis,
-    name: string,
-    anchor: AlignAnchor,
-    value: number,
-    kindRank: number,
-    arityRank: number,
-    anchorRank: number,
-    signature: string,
-    owner: string
-  ): void {
-    const target = this.target(name);
+  weakPin(request: PlacementWeakPinRequest): void {
+    const target = this.target(request.target.name);
     if (!target) return;
     const offset = anchorOffset(
       target,
-      axis,
-      anchor,
-      this.spannedSize(axis, name)
+      request.axis,
+      request.target.anchor,
+      this.spannedSize(request.axis, request.target.name)
     );
     if (offset === undefined) return;
-    this.facts(axis).push(
+    this.facts(request.axis).push(
       weakPinFact(
-        anchorExpr(name, axis, "start"),
-        value - offset,
-        [kindRank, arityRank, anchorRank, signature],
-        owner
+        anchorExpr(request.target.name, request.axis, "start"),
+        request.value - offset,
+        request.priority,
+        request.owner
       )
     );
   }
@@ -358,7 +364,7 @@ function solveAxis(
     if (offsets.has(component)) continue;
     const weak = weakPins
       .filter((pin) => componentOf.get(pin.expr.node) === component)
-      .sort(compareRank)[0];
+      .sort(compareWeakPinPriority)[0];
     if (weak) applyPin(weak.expr.node, weak.value, weak.owner);
     else {
       const first = [...components[component]].sort()[0];
