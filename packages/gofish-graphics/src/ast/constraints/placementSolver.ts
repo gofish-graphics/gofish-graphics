@@ -59,6 +59,14 @@ interface SpanExtent extends PlacementSpan {
   size: number;
 }
 
+interface PlacementRelationRequest {
+  axis: Axis;
+  from: { name: string; anchor: AlignAnchor };
+  to: { name: string; anchor: AlignAnchor };
+  gap: number;
+  owner: string;
+}
+
 export interface LoweredPlacement {
   program: PlacementProgram;
   spanExtents: SpanExtent[];
@@ -345,37 +353,29 @@ class PlacementProgramBuilder {
     );
   }
 
-  relate(
-    axis: Axis,
-    from: string,
-    fromAnchor: AlignAnchor,
-    to: string,
-    toAnchor: AlignAnchor,
-    gap: number,
-    owner: string
-  ): void {
-    const fromTarget = this.target(from);
-    const toTarget = this.target(to);
+  relate(request: PlacementRelationRequest): void {
+    const fromTarget = this.target(request.from.name);
+    const toTarget = this.target(request.to.name);
     if (!fromTarget || !toTarget) return;
     const fromOffset = anchorOffset(
       fromTarget,
-      axis,
-      fromAnchor,
-      this.spannedSize(axis, from)
+      request.axis,
+      request.from.anchor,
+      this.spannedSize(request.axis, request.from.name)
     );
     const toOffset = anchorOffset(
       toTarget,
-      axis,
-      toAnchor,
-      this.spannedSize(axis, to)
+      request.axis,
+      request.to.anchor,
+      this.spannedSize(request.axis, request.to.name)
     );
     if (fromOffset === undefined || toOffset === undefined) return;
-    this.facts(axis).push(
+    this.facts(request.axis).push(
       relationFact(
-        anchorExpr(from, axis, "start"),
-        anchorExpr(to, axis, "start"),
-        fromOffset + gap - toOffset,
-        owner
+        anchorExpr(request.from.name, request.axis, "start"),
+        anchorExpr(request.to.name, request.axis, "start"),
+        fromOffset + request.gap - toOffset,
+        request.owner
       )
     );
   }
@@ -657,30 +657,26 @@ export function lowerPlacementConstraints(
 
         if (source) {
           for (const target of movable) {
-            builder.relate(
+            builder.relate({
               axis,
-              source.child.name,
-              source.anchor,
-              target.child.name,
-              target.anchor,
-              0,
-              owner
-            );
+              from: { name: source.child.name, anchor: source.anchor },
+              to: { name: target.child.name, anchor: target.anchor },
+              gap: 0,
+              owner,
+            });
           }
           return;
         }
 
         const aligned = movable;
         for (let i = 1; i < aligned.length; i++) {
-          builder.relate(
+          builder.relate({
             axis,
-            aligned[0].child.name,
-            aligned[0].anchor,
-            aligned[i].child.name,
-            aligned[i].anchor,
-            0,
-            owner
-          );
+            from: { name: aligned[0].child.name, anchor: aligned[0].anchor },
+            to: { name: aligned[i].child.name, anchor: aligned[i].anchor },
+            gap: 0,
+            owner,
+          });
         }
         const firstAnchor = aligned[0].anchor;
         builder.weakPin(
@@ -720,25 +716,21 @@ export function lowerPlacementConstraints(
         )
           continue;
         if (constraint.mode === "center") {
-          builder.relate(
-            constraint.dir,
-            ordered[i - 1].name,
-            "middle",
-            ordered[i].name,
-            "middle",
-            constraint.spacing,
-            owner
-          );
+          builder.relate({
+            axis: constraint.dir,
+            from: { name: ordered[i - 1].name, anchor: "middle" },
+            to: { name: ordered[i].name, anchor: "middle" },
+            gap: constraint.spacing,
+            owner,
+          });
         } else {
-          builder.relate(
-            constraint.dir,
-            ordered[i - 1].name,
-            "end",
-            ordered[i].name,
-            "start",
-            constraint.spacing,
-            owner
-          );
+          builder.relate({
+            axis: constraint.dir,
+            from: { name: ordered[i - 1].name, anchor: "end" },
+            to: { name: ordered[i].name, anchor: "start" },
+            gap: constraint.spacing,
+            owner,
+          });
         }
       }
       builder.weakPin(
@@ -760,25 +752,21 @@ export function lowerPlacementConstraints(
     if (constraint.type === "nest") {
       const [outer, inner] = constraint.children;
       if (constraint.x !== undefined)
-        builder.relate(
-          "x",
-          outer.name,
-          "middle",
-          inner.name,
-          "middle",
-          0,
-          owner
-        );
+        builder.relate({
+          axis: "x",
+          from: { name: outer.name, anchor: "middle" },
+          to: { name: inner.name, anchor: "middle" },
+          gap: 0,
+          owner,
+        });
       if (constraint.y !== undefined)
-        builder.relate(
-          "y",
-          outer.name,
-          "middle",
-          inner.name,
-          "middle",
-          0,
-          owner
-        );
+        builder.relate({
+          axis: "y",
+          from: { name: outer.name, anchor: "middle" },
+          to: { name: inner.name, anchor: "middle" },
+          gap: 0,
+          owner,
+        });
       return;
     }
 
