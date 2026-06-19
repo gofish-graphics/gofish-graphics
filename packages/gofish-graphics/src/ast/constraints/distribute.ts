@@ -50,8 +50,8 @@ export const createDistributeConstraint = (
 ): DistributeConstraint => ({
   type: "distribute",
   dir: options.dir,
-  // Glue pins spacing ≡ 0 — both for the space fold and for `applyDistribute`'s
-  // post-layout placement (which reads this `spacing`), so glued children touch.
+  // Glue pins spacing ≡ 0 for both the space fold and placement-solver
+  // relations, so glued children touch.
   spacing: options.glue ? 0 : (options.spacing ?? 8),
   mode: options.mode ?? "edge",
   order: options.order ?? "forward",
@@ -162,11 +162,3 @@ export function distributeSpaceFold(
     return POSITION(Interval.interval(0, sumWidths()), childMeasure);
   return UNDEFINED;
 }
-
-export {
-  applyDistribute,
-  emitDistribute,
-  type DistributeInconsistencyReporter,
-  type DistributePlacement,
-  type DistributeWalkOptions,
-} from "./distributePlacement";

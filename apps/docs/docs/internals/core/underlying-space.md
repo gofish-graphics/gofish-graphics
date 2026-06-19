@@ -13,7 +13,6 @@ covers:
   - packages/gofish-graphics/src/ast/constraints/folds.ts
   - packages/gofish-graphics/src/ast/constraints/compose.ts
   - packages/gofish-graphics/src/ast/constraints/distribute.ts
-  - packages/gofish-graphics/src/ast/constraints/distributePlacement.ts
   - packages/gofish-graphics/src/ast/constraints/align.ts
   - packages/gofish-graphics/src/ast/constraints/placementSolver.ts
   - packages/gofish-graphics/src/ast/constraints/nest.ts
@@ -335,26 +334,27 @@ components and commits spanned axes with `setExtent` and ordinary solved axes
 with a `min` placement. This keeps the unified constraint semantics without a
 generic dense linear solver: strong facts win, relation cycles are checked for
 contradiction, and weak fallbacks are ranked by policy rather than source order.
-The extracted `constraints/distributePlacement.ts` remains the pure emit/apply
-form of the legacy distribute walk used by the spread path and by constraint
-lowering. Span edge claims are still pre-validated with the bbox helper so
-duplicate edge claims collapse and contradictory spans report a span-specific
-conflict, but they participate in the same relation solve as placement. An
-incompatible same-solve `span` + `position` on the same target/axis reports an
-over-determined placement instead of letting one silently yield to the other.
+The legacy per-constraint apply helpers have been retired from the constraint
+path; spread, scatter, table, axes, and hand-written constraints all lower to
+the same solver entrypoint. Span edge claims are still pre-validated with the
+bbox helper so duplicate edge claims collapse and contradictory spans report a
+span-specific conflict, but they participate in the same relation solve as
+placement. An incompatible same-solve `span` + `position` on the same
+target/axis reports an over-determined placement instead of letting one silently
+yield to the other.
 
 Placement-time alignment dispatches on the same resolution. When an `align`
 finds **no pre-placed sibling**, its fallback baseline is computed from what the
-axis carries (`alignFallbackBaseline`, `constraints/align.ts`): a
-posScale-carrying anchored axis falls back to the scale origin `posScale(0)` —
-bars hang from the zero line — while a pixel-pure axis falls back to the
-layer-box edge for the anchor, so axis titles and chrome pin to the plot box.
-`middle` is the box center either way (no scale origin to seat against). The
-fallback is a property of the axis's space, not of which API assembled the layer
-(#552). One consequence worth knowing: a coordinate transform's children are
-pixel-pure by construction (posScales don't cross a nonlinear transform —
-children get scale _factors_ instead), so an `end`-aligned spread inside `coord`
-seats flush at the box edge rather than at a scale origin.
+axis carries (in `constraints/placementSolver.ts`): a posScale-carrying
+anchored axis falls back to the scale origin `posScale(0)` — bars hang from the
+zero line — while a pixel-pure axis falls back to the layer-box edge for the
+anchor, so axis titles and chrome pin to the plot box. `middle` is the box
+center either way (no scale origin to seat against). The fallback is a property
+of the axis's space, not of which API assembled the layer (#552). One
+consequence worth knowing: a coordinate transform's children are pixel-pure by
+construction (posScales don't cross a nonlinear transform — children get scale
+_factors_ instead), so an `end`-aligned spread inside `coord` seats flush at the
+box edge rather than at a scale origin.
 
 That fallback is right for a child that needs a baseline (a bar's height — a
 `free` placement). It is **wrong** for a child that already commits its own

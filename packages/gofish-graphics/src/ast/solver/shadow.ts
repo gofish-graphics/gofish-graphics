@@ -52,9 +52,9 @@ interface DistributeLike {
  * Check the edge-distribute CONTIGUITY invariant the engine enforces on its
  * output: consecutive targets satisfy `child[i+1].min == child[i].max + spacing`.
  * This is anchor-agnostic — which child anchored the walk only sets the absolute
- * offset, not the spacing relation — which matters because the shadow runs AFTER
- * `applyDistribute`, by which point every target is placed (so the pre-placement
- * anchor distinction is gone).
+ * offset, not the spacing relation — which matters because the shadow runs after
+ * the placement solver, by which point every target is placed (so the
+ * pre-placement anchor distinction is gone).
  *
  * The solver expresses it as an origin chain: seed the first target at its real
  * position (boundary condition), then predict each subsequent child's `min` via
@@ -149,9 +149,9 @@ function anchorCoord(
  * is left untouched (it may define or differ from the baseline), and align
  * leaves a self-positioned child unplaced (it skips a target whose own
  * `placement` is already determined, so it stays unplaced). Both are detected
- * via `prePlaced` (captured before `applyAlign`) + a post-check that the rest
- * are now placed; heterogeneous per-child anchor arrays are skipped (no single
- * shared line).
+ * via `prePlaced` (captured before the placement solver) + a post-check that the
+ * rest are now placed; heterogeneous per-child anchor arrays are skipped (no
+ * single shared line).
  */
 export function shadowCheckAlign(
   constraint: AlignLike,

@@ -192,7 +192,7 @@ In this picture each constraint kind is a pair:
 | facet                        | direction             | role                                                                                                 |
 | ---------------------------- | --------------------- | ---------------------------------------------------------------------------------------------------- |
 | **space fold** (typing rule) | bottom-up, pre-layout | compose child claims into the layer's claim; merge measures (throw or forget per the existing rules) |
-| **placement rule**           | post-child-layout     | today's `applyAlign` / `applyDistribute` / `applyPosition` on `Placeable.place()`                    |
+| **placement rule**           | post-child-layout     | emit pins/relations into `placementSolver.ts`, then commit atomically to each target                 |
 
 and the Layer's layout becomes a fixed pipeline: resolve size → solve σ per
 axis from the folded claim → propose per-child sizes (claim at σ, else fill
@@ -259,18 +259,16 @@ Two findings sharpen the theory:
   move. In other words: the placement halves were already equivalent; the
   entire semantic content of "spread beyond align + distribute" lives in
   `resolveUnderlyingSpace`.
-- **The align-fallback divergence, now unified (#552).** Spread's
-  `alignChildren` and `applyAlign` once used different no-sibling fallbacks —
-  spread seated the cross-axis baseline at `posScale(0)`, the constraint on the
-  layer box (`{start: 0, middle: size/2, end: size}`) — coinciding at `"start"`
-  but diverging at `"end"`/`"middle"`. They now share one fallback that
-  dispatches on the axis's underlying-space kind, not the call site: a
-  posScale-carrying (POSITION) axis falls back to the scale origin `posScale(0)`,
-  a pixel-pure axis to the layer-box edge. Both callsites resolve the same
-  `alignSpaceFold` space and posScale, so spread/constraint pairs are now exact
-  at every anchor. The only remaining per-callsite difference is the
-  `readPlaced` reader for an already-placed sibling (the constraint reads real
-  extents/origin; spread pins baseline-reads to 0), which is out of scope.
+- **The align-fallback divergence, now unified (#552).** Spread's legacy align
+  walk and the constraint path once used different no-sibling fallbacks — spread
+  seated the cross-axis baseline at `posScale(0)`, the constraint on the layer
+  box (`{start: 0, middle: size/2, end: size}`) — coinciding at `"start"` but
+  diverging at `"end"`/`"middle"`. The placement solver now owns the fallback
+  and dispatches on the axis's underlying-space kind, not the call site: a
+  posScale-carrying (POSITION) axis falls back to the scale origin
+  `posScale(0)`, a pixel-pure axis to the layer-box edge. Spread and
+  hand-written constraints both lower to that solver path, so the pairs are now
+  exact at every anchor.
 
 ## Operator-by-operator reduction
 
@@ -459,12 +457,11 @@ suggest it will not be needed.
 
 ## Suggested staging (refactor-first)
 
-1. ✅ **Consolidate the two align implementations** — done: `alignTargets`
-   (`constraints/align.ts`) is the single walk. The end/middle fallback
-   divergence was then unified (#552): a single space-kind-dispatched
-   `alignFallbackBaseline` (posScale → scale origin, pixel-pure → box edge)
-   replaced the two policies, so the only remaining per-callsite difference is
-   the `readPlaced` reader for an already-placed sibling.
+1. ✅ **Consolidate the two align implementations** — done: spread and
+   hand-written constraints now lower to the same placement solver. The
+   end/middle fallback divergence was unified (#552): a single
+   space-kind-dispatched fallback (posScale → scale origin, pixel-pure → box
+   edge) replaced the old call-site policies.
 2. ✅ **Constraint space folds + Layer budget solve** — done:
    `distributeSpaceFold` (full spread dispatch incl. glue/explicit-size),
    `alignSpaceFold`, `allocateSlices`, per-axis composition in the layer with

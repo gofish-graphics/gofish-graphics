@@ -126,7 +126,8 @@ function gutterConstraints(
   crossFloor?: number
 ): any[] {
   // A degenerate domain can yield zero ticks; emit no gutter rather than
-  // dereferencing ticks[0]/ticks[last] (which would crash applyDistribute).
+  // dereferencing ticks[0]/ticks[last] (which would create invalid placement
+  // constraints).
   if (ticks.length === 0) return [];
   const d = crossName(dim);
   // "inner" = the edge facing the content (cross-end of the gutter pieces).
