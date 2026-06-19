@@ -131,7 +131,7 @@ function resolveCoordinate(
   return compilePlacementCoordinate(coordinate, scale);
 }
 
-class PlacementProgramBuilder implements PlacementFactEmitter {
+class PlacementProgramLowerer implements PlacementFactEmitter {
   readonly program = emptyPlacementProgram();
 
   constructor(
@@ -445,8 +445,8 @@ export function lowerPlacementConstraints(
     ownership.noteSpanExtent(extent);
   }
 
-  const builder = new PlacementProgramBuilder(targets, spanExtentByKey);
-  for (const claim of spanEdgePins) builder.addFact(claim.fact);
+  const lowerer = new PlacementProgramLowerer(targets, spanExtentByKey);
+  for (const claim of spanEdgePins) lowerer.addFact(claim.fact);
   const resolveAxisCoordinate = (axis: Axis, coordinate: MaybeValue<number>) =>
     resolveCoordinate(coordinate, posScales?.[axisIndex(axis)]);
   const isInitiallyPlaced = ownership.isInitiallyPlaced.bind(ownership);
@@ -459,7 +459,7 @@ export function lowerPlacementConstraints(
       if (!ownership.shouldPinSelfPlacement(axis, name)) continue;
       const min = targets.get(name)!.dims[axis].min;
       if (min !== undefined)
-        builder.pin({
+        lowerer.pin({
           axis: axisName(axis),
           target: { name, anchor: "start" },
           value: min,
@@ -475,7 +475,7 @@ export function lowerPlacementConstraints(
 
     if (constraint.type === "position") {
       lowerPositionPlacement(constraint, owner, {
-        emitter: builder,
+        emitter: lowerer,
         targets,
         isInitiallyPlaced,
         resolveCoordinate: resolveAxisCoordinate,
@@ -485,7 +485,7 @@ export function lowerPlacementConstraints(
 
     if (constraint.type === "align") {
       lowerAlignPlacement(constraint, owner, {
-        emitter: builder,
+        emitter: lowerer,
         targets,
         posScales,
         isPinned,
@@ -495,7 +495,7 @@ export function lowerPlacementConstraints(
 
     if (constraint.type === "distribute") {
       lowerDistributePlacement(constraint, owner, {
-        emitter: builder,
+        emitter: lowerer,
         targets,
         isInitiallyPlaced,
       });
@@ -503,14 +503,14 @@ export function lowerPlacementConstraints(
     }
 
     if (constraint.type === "nest") {
-      lowerNestPlacement(constraint, owner, builder);
+      lowerNestPlacement(constraint, owner, lowerer);
       return;
     }
 
-    lowerGridPlacement(constraint, owner, sizes, builder);
+    lowerGridPlacement(constraint, owner, sizes, lowerer);
   });
 
-  return { program: builder.program, spanExtents };
+  return { program: lowerer.program, spanExtents };
 }
 
 export function solvePlacementConstraints(
