@@ -14,6 +14,7 @@ import type { PositionConstraint } from "../ast/constraints/position";
 import type { SpanConstraint } from "../ast/constraints/span";
 import type { Anchor, Dimensions, FancyDirection } from "../ast/dims";
 import { elaborateDirection, localAnchorPoint } from "../ast/dims";
+import { buildNestPlan } from "../ast/constraints/nestPlan";
 
 type Constraint =
   | AlignConstraint
@@ -171,6 +172,39 @@ const span = (name: string, min: number, max: number): SpanConstraint => ({
   children: [child(name)],
 });
 
+const namedNode = (name: string, width?: number) =>
+  ({
+    _name: name,
+    key: name,
+    args: { dims: [{ size: width }, { size: 10 }] },
+    children: [],
+  });
+
+function nestPlanSignature(constraints: NestConstraint[]): string {
+  const children = [
+    namedNode("A"),
+    namedNode("B", 20),
+    namedNode("C"),
+    namedNode("D"),
+  ];
+  const plan = buildNestPlan(children, constraints);
+  if (plan === undefined) return "none";
+  return JSON.stringify({
+    order: plan.order,
+    derived: [...plan.byDerived.entries()]
+      .map(([derivedIdx, edges]) => [
+        derivedIdx,
+        edges.map((edge) => ({
+          sourceIdx: edge.sourceIdx,
+          dir: edge.dir,
+          padX: edge.padX,
+          padY: edge.padY,
+        })),
+      ])
+      .sort(([a], [b]) => Number(a) - Number(b)),
+  });
+}
+
 console.log("# constraint confluence: explicit pin + distribute");
 {
   const pinA = position("A", 100);
@@ -313,6 +347,33 @@ console.log("# constraint confluence: nest and grid placement");
   ok(
     "grid centers cells in their tracks",
     first.A.center === 72.5 && first.B.center === 227.5
+  );
+}
+
+console.log("# constraint confluence: nest size dependency planning");
+{
+  const nestAB: NestConstraint = {
+    type: "nest",
+    x: 5,
+    children: [A, B],
+  };
+  const nestAC: NestConstraint = {
+    type: "nest",
+    x: 8,
+    children: [A, C],
+  };
+  const nestDA: NestConstraint = {
+    type: "nest",
+    x: 2,
+    children: [child("D"), A],
+  };
+
+  const expected = nestPlanSignature([nestAB, nestAC, nestDA]);
+  ok(
+    "shared-outer nest dependency plan is declaration-order independent",
+    nestPlanSignature([nestAC, nestAB, nestDA]) === expected &&
+      nestPlanSignature([nestDA, nestAB, nestAC]) === expected &&
+      nestPlanSignature([nestDA, nestAC, nestAB]) === expected
   );
 }
 

@@ -16,6 +16,7 @@ covers:
   - packages/gofish-graphics/src/ast/constraints/align.ts
   - packages/gofish-graphics/src/ast/constraints/placementSolver.ts
   - packages/gofish-graphics/src/ast/constraints/nest.ts
+  - packages/gofish-graphics/src/ast/constraints/nestPlan.ts
   - packages/gofish-graphics/src/ast/constraints/grid.ts
   - packages/gofish-graphics/src/ast/constraints/span.ts
   - packages/gofish-graphics/src/ast/constraints/bbox.ts
@@ -262,11 +263,13 @@ composes its targets' spaces into the layer's claim on that axis:
 - `Constraint.align` contributes the alignment fold (`alignSpaceFold` →
   `resolveAlignmentSpace`) on its axis.
 - `Constraint.nest` contributes the nesting fold (`nestedSpace`,
-  `constraints/nest.ts`). It is the first _size-setting_ constraint: on each
-  constrained axis `outer = inner + 2·padding`, with padding always known, so
-  the unknown is _which_ side is derived. The layer's nest pre-pass dispatches
-  on which side carries the size (an own `args.dims`, a composite that
-  shrink-wraps, or an inside-out-derived outer): inner sized and outer not →
+  `constraints/nest.ts`) and a deterministic dependency plan
+  (`constraints/nestPlan.ts`). It is the first _size-setting_ constraint: on
+  each constrained axis `outer = inner + 2·padding`, with padding always known,
+  so the unknown is _which_ side is derived. The nest plan dispatches on which
+  side carries the size (an own `args.dims`, a composite that shrink-wraps, or
+  any inside-out-derived outer from the same-axis nest graph): inner sized and
+  outer not →
   **inside-out** (`outer = inner + 2·padding`); outer sized, or neither (the
   layer sizes outer) → **outside-in** (`inner = outer − 2·padding` — CSS
   padding). Only the **inside-out** direction folds a space here: outer's request
