@@ -14,7 +14,6 @@ import type { SpanConstraint } from "./span";
 import type { Axis, AlignAnchor, ConstraintPosScales } from "./shared";
 import { BBox, type BBoxFacet } from "./bbox";
 import type {
-  AnchorExpr,
   NodeId,
   PlacementFact,
   PlacementPin,
@@ -23,7 +22,13 @@ import type {
   PlacementSpan,
   PlacementWeakPin,
 } from "./placementFacts";
-import { emptyPlacementProgram } from "./placementFacts";
+import {
+  anchorExpr,
+  emptyPlacementProgram,
+  pinFact,
+  relationFact,
+  weakPinFact,
+} from "./placementFacts";
 
 type PlacementConstraint =
   | AlignConstraint
@@ -32,12 +37,6 @@ type PlacementConstraint =
   | SpanConstraint
   | NestConstraint
   | GridConstraint;
-
-const minExpr = (node: NodeId, axis: Axis): AnchorExpr => ({
-  node,
-  axis,
-  anchor: "start",
-});
 
 /** One emitted span extent: the target owns both edges on one axis. */
 interface SpanPlacement {
@@ -311,12 +310,9 @@ class PlacementProgramBuilder {
       this.spannedSize(axis, name)
     );
     if (offset === undefined) return;
-    this.facts(axis).push({
-      type: "pin",
-      expr: minExpr(name, axis),
-      value: value - offset,
-      owner,
-    });
+    this.facts(axis).push(
+      pinFact(anchorExpr(name, axis, "start"), value - offset, owner)
+    );
   }
 
   weakPin(
@@ -339,13 +335,14 @@ class PlacementProgramBuilder {
       this.spannedSize(axis, name)
     );
     if (offset === undefined) return;
-    this.facts(axis).push({
-      type: "weak-pin",
-      expr: minExpr(name, axis),
-      value: value - offset,
-      owner,
-      rank: [kindRank, arityRank, anchorRank, signature],
-    });
+    this.facts(axis).push(
+      weakPinFact(
+        anchorExpr(name, axis, "start"),
+        value - offset,
+        [kindRank, arityRank, anchorRank, signature],
+        owner
+      )
+    );
   }
 
   relate(
@@ -373,13 +370,14 @@ class PlacementProgramBuilder {
       this.spannedSize(axis, to)
     );
     if (fromOffset === undefined || toOffset === undefined) return;
-    this.facts(axis).push({
-      type: "relation",
-      from: minExpr(from, axis),
-      to: minExpr(to, axis),
-      offset: fromOffset + gap - toOffset,
-      owner,
-    });
+    this.facts(axis).push(
+      relationFact(
+        anchorExpr(from, axis, "start"),
+        anchorExpr(to, axis, "start"),
+        fromOffset + gap - toOffset,
+        owner
+      )
+    );
   }
 
   span(extent: SpanExtent): void {
