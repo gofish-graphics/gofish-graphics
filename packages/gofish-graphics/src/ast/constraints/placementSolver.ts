@@ -12,6 +12,7 @@ import { type Axis, type ConstraintPosScales } from "./shared";
 import type {
   NodeId,
   PlacementFact,
+  PlacementParticipant,
   PlacementRelation,
 } from "./placementFacts";
 
@@ -37,6 +38,7 @@ type PlacementPinClaim = {
 type AxisProblem = {
   relations: PlacementRelation[];
   pins: PlacementPinClaim[];
+  participantFacts: PlacementParticipant[];
   participants: Set<NodeId>;
 };
 
@@ -72,6 +74,7 @@ function classifyAxisFacts(
 ): AxisProblem {
   const relations: PlacementRelation[] = [];
   const pins: PlacementPinClaim[] = [];
+  const participantFacts: PlacementParticipant[] = [];
   const participants = new Set<NodeId>();
 
   for (const fact of facts) {
@@ -88,8 +91,13 @@ function classifyAxisFacts(
       continue;
     }
 
+    if (fact.type === "participant") {
+      participants.add(fact.name);
+      participantFacts.push(fact);
+      continue;
+    }
+
     participants.add(fact.name);
-    if (fact.type !== "edge-pin") continue;
 
     if (fact.edge === "min") {
       pins.push({ node: fact.name, value: fact.value, owner: fact.owner });
@@ -106,7 +114,7 @@ function classifyAxisFacts(
     }
   }
 
-  return { relations, pins, participants };
+  return { relations, pins, participantFacts, participants };
 }
 
 function buildRelationGraph(
@@ -211,8 +219,28 @@ function solveAxis(
   };
   for (const pin of problem.pins) applyPin(pin.node, pin.value, pin.owner);
 
+  const distributeOriginFor = (component: number): NodeId | undefined => {
+    const outgoing = new Set<NodeId>();
+    const incoming = new Set<NodeId>();
+    for (const relation of problem.relations) {
+      if (!relation.owner.startsWith("distribute[")) continue;
+      if (componentOf.get(relation.from.node) !== component) continue;
+      outgoing.add(relation.from.node);
+      incoming.add(relation.to.node);
+    }
+    return [...outgoing].filter((node) => !incoming.has(node)).sort()[0];
+  };
+
   for (let component = 0; component < components.length; component++) {
     if (offsets.has(component)) continue;
+    const origin = distributeOriginFor(component);
+    if (origin !== undefined) {
+      offsets.set(component, {
+        value: -(relative.get(origin) ?? 0),
+        owner: "sequence-origin",
+      });
+      continue;
+    }
     const min = Math.min(
       ...components[component].map((node) => relative.get(node) ?? 0)
     );

@@ -200,6 +200,14 @@ const distribute = (names: string[]): DistributeConstraint => ({
   children: names.map(child),
 });
 
+const distributeWithSpacing = (
+  names: string[],
+  spacing: number
+): DistributeConstraint => ({
+  ...distribute(names),
+  spacing,
+});
+
 const span = (name: string, min: number, max: number): SpanConstraint => ({
   type: "span",
   x: [min, max],
@@ -313,6 +321,18 @@ console.log("# constraint confluence: normalized floating components");
       A: { min: 0, center: 5, max: 10 },
       B: { min: 0, center: 5, max: 10 },
       C: { min: 0, center: 5, max: 10 },
+    }
+  );
+
+  const negativeSpread = distributeWithSpacing(["A", "B", "C"], -15);
+  expectConfluent(
+    "negative distribute preserves sequence origin",
+    solve([negativeSpread], ["A", "B", "C"]),
+    solve([distributeWithSpacing(["A", "B", "C"], -15)], ["A", "B", "C"]),
+    {
+      A: { min: 0, center: 5, max: 10 },
+      B: { min: -5, center: 0, max: 5 },
+      C: { min: -10, center: -5, max: 0 },
     }
   );
 }

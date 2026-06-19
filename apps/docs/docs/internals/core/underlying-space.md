@@ -403,9 +403,11 @@ while datum coordinates elaborate through the already-solved data→pixel scale
 plus any post-scale offset. This keeps the unified constraint semantics without
 a generic dense linear solver: strong facts win, relation cycles are checked for
 contradiction, and components without an absolute pin are normalized so the
-minimum solved coordinate in that component is `0`. If a graphic needs a
-floating component to appear at a particular absolute coordinate, that placement
-must be explicit.
+minimum solved coordinate in that component is `0`. Ordered `distribute`
+components are the exception: their directed chain source is a deterministic
+sequence origin, so negative spacing remains authored overlap instead of being
+erased by min-normalization. If a graphic needs a floating component to appear
+at a particular absolute coordinate, that placement must be explicit.
 The legacy per-constraint apply helpers have been retired from the constraint
 path; spread, scatter, table, axes, and hand-written constraints all lower to
 the same solver entrypoint. Span edge claims are still pre-validated with the
