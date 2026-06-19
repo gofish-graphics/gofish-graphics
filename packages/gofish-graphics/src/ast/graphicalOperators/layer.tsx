@@ -46,9 +46,10 @@ import {
 } from "../constraints/compose";
 import {
   buildDistributeSliceMap,
+  buildPositionTargetDims,
   selectGridConstraint,
 } from "../constraints/proposalPlan";
-import { isValue, type Measure } from "../data";
+import { type Measure } from "../data";
 import { unionChildSpaces } from "./alignment";
 
 // ── Z-order resolution ────────────────────────────────────────────────────
@@ -581,18 +582,7 @@ export const layer = createNodeOperatorSequential(
           // per child: a child pinned on one axis may still need the scale on
           // the other (an axis line position-seated on its cross axis resolves
           // its own-axis datum endpoints through the scale).
-          const positionTargetDims = new Map<string, Set<0 | 1>>();
-          for (const c of node.constraints) {
-            if (c.type === "position") {
-              for (const r of c.children) {
-                if (!r) continue;
-                const dims = positionTargetDims.get(r.name) ?? new Set();
-                if (c.x !== undefined && isValue(c.x)) dims.add(0);
-                if (c.y !== undefined && isValue(c.y)) dims.add(1);
-                positionTargetDims.set(r.name, dims);
-              }
-            }
-          }
+          const positionTargetDims = buildPositionTargetDims(node.constraints);
 
           // Per-child posScales on the axes this layer owns. The blanket
           // suppression of a layer-owned axis is too coarse for elaborated axes:

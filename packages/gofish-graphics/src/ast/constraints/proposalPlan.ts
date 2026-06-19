@@ -3,6 +3,7 @@
 // </gofish-wiki>
 
 import { type Size } from "../dims";
+import { isValue } from "../data";
 import { allocateSlices } from "./folds";
 import type { ConstraintSpec } from ".";
 import type { GridConstraint } from "./grid";
@@ -74,4 +75,27 @@ export function selectGridConstraint(
     selected = constraint;
   }
   return selected;
+}
+
+/** Per-child axes whose placement is owned by datum-valued position
+ * constraints. Those children must not also receive the same posScale from the
+ * enclosing layer: the constraint consumes the scale to place them. Literal
+ * pixel positions are deliberately excluded because they do not consume a data
+ * scale, so the child may still need that scale for its own geometry. */
+export function buildPositionTargetDims(
+  constraints: readonly ConstraintSpec[]
+): Map<string, Set<0 | 1>> {
+  const collected = new Map<string, Set<0 | 1>>();
+  for (const constraint of constraints) {
+    if (constraint.type !== "position") continue;
+    for (const ref of constraint.children) {
+      const dims = collected.get(ref.name) ?? new Set<0 | 1>();
+      if (constraint.x !== undefined && isValue(constraint.x)) dims.add(0);
+      if (constraint.y !== undefined && isValue(constraint.y)) dims.add(1);
+      if (dims.size > 0) collected.set(ref.name, dims);
+    }
+  }
+  return new Map(
+    [...collected.entries()].sort(([a], [b]) => a.localeCompare(b))
+  );
 }

@@ -17,8 +17,10 @@ import { elaborateDirection, localAnchorPoint } from "../ast/dims";
 import { buildNestPlan } from "../ast/constraints/nestPlan";
 import {
   buildDistributeSliceMap,
+  buildPositionTargetDims,
   selectGridConstraint,
 } from "../ast/constraints/proposalPlan";
+import { value } from "../ast/data";
 
 type Constraint =
   | AlignConstraint
@@ -453,6 +455,45 @@ console.log("# constraint confluence: grid proposal ownership");
   ok(
     "duplicate grid proposal ownership throws in either order",
     throws([grid2, grid1]) && throws([grid1, grid2])
+  );
+}
+
+console.log("# constraint confluence: position scale ownership planning");
+{
+  const datumX: PositionConstraint = {
+    type: "position",
+    x: value(10),
+    anchor: "baseline",
+    override: false,
+    children: [A],
+  };
+  const literalY: PositionConstraint = {
+    type: "position",
+    y: 20,
+    anchor: "baseline",
+    override: false,
+    children: [A],
+  };
+  const datumY: PositionConstraint = {
+    type: "position",
+    y: value(30),
+    anchor: "baseline",
+    override: false,
+    children: [B],
+  };
+
+  const first = buildPositionTargetDims([datumX, literalY, datumY]);
+  const second = buildPositionTargetDims([datumY, literalY, datumX]);
+  ok(
+    "datum position targets consume only their datum axes",
+    first.get("A")?.has(0) === true &&
+      first.get("A")?.has(1) !== true &&
+      first.get("B")?.has(1) === true
+  );
+  ok(
+    "position scale ownership plan is declaration-order independent",
+    JSON.stringify([...first.entries()].map(([k, v]) => [k, [...v].sort()])) ===
+      JSON.stringify([...second.entries()].map(([k, v]) => [k, [...v].sort()]))
   );
 }
 
