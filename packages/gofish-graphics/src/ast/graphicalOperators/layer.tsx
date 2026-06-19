@@ -39,7 +39,10 @@ import {
   type ZOrderConstraint,
 } from "../constraints";
 import { childNameKey } from "../constraints/shared";
-import { buildNestPlan } from "../constraints/nestPlan";
+import {
+  applyNestLayoutProposal,
+  buildNestPlan,
+} from "../constraints/nestPlan";
 import {
   composeConstraintSpaces,
   type ComposeBudget,
@@ -47,6 +50,7 @@ import {
 import {
   buildDistributeSliceMap,
   buildPositionTargetDims,
+  childPosScalesFor,
   selectGridConstraint,
 } from "../constraints/proposalPlan";
 import { type Measure } from "../data";
@@ -584,30 +588,6 @@ export const layer = createNodeOperatorSequential(
           // its own-axis datum endpoints through the scale).
           const positionTargetDims = buildPositionTargetDims(node.constraints);
 
-          // Per-child posScales on the axes this layer owns. The blanket
-          // suppression of a layer-owned axis is too coarse for elaborated axes:
-          // the wrapped *content* (a scatter, or a sized magnitude) genuinely
-          // needs the shared scale, while the *ticks* (position-constraint
-          // targets) must not get it. So on an owned axis, forward
-          // `effectivePosScales` only to a non-target child whose own space on
-          // that axis is anchored (CONTINUOUS with an origin); otherwise suppress.
-          const childScalesFor = (
-            i: number,
-            targetDims: Set<0 | 1> | undefined
-          ): ConstraintPosScales => {
-            const sp = (children[i] as GoFishNode)._underlyingSpace;
-            const pick = (dim: 0 | 1) => {
-              // Non-owned axis: forward the inherited scale, or the local one
-              // for a self-scaled (stashed) dim (basePosScales folds that in).
-              if (!ownsAxis[dim]) return basePosScales[dim];
-              if (targetDims?.has(dim)) return undefined; // placed by the constraint
-              return sp && isPOSITION(sp[dim])
-                ? effectivePosScales[dim]
-                : undefined;
-            };
-            return [pick(0), pick(1)];
-          };
-
           for (const i of layoutOrder) {
             const child = children[i];
             const childName = childNameKey(node.children[i]);
@@ -622,30 +602,21 @@ export const layer = createNodeOperatorSequential(
             // derived). Clamp ≥ 0; non-derived axes keep the normal proposal
             // (`childSizeFor`), so nest composes with — and wins on its
             // derived axes over — any budget slice.
-            let layoutSize: Size = childSizeFor(childName);
-            const nestEdges = nestPlan?.byDerived.get(i);
-            if (nestEdges !== undefined) {
-              const next: Size = [layoutSize[0], layoutSize[1]];
-              for (const e of nestEdges) {
-                const sourceDims = childPlaceables[e.sourceIdx].dims;
-                const sign = e.dir === "in" ? 1 : -1;
-                if (e.padX !== undefined)
-                  next[0] = Math.max(
-                    0,
-                    (sourceDims[0].size ?? 0) + sign * 2 * e.padX
-                  );
-                if (e.padY !== undefined)
-                  next[1] = Math.max(
-                    0,
-                    (sourceDims[1].size ?? 0) + sign * 2 * e.padY
-                  );
-              }
-              layoutSize = next;
-            }
+            const layoutSize = applyNestLayoutProposal(
+              childSizeFor(childName),
+              nestPlan?.byDerived.get(i),
+              childPlaceables
+            );
             const childPlaceable = child.layout(
               layoutSize,
               childScaleFactors,
-              childScalesFor(i, targetDims)
+              childPosScalesFor(
+                (children[i] as GoFishNode)._underlyingSpace,
+                targetDims,
+                ownsAxis,
+                basePosScales,
+                effectivePosScales
+              )
             );
             if (!childName || !constrainedNames.has(childName)) {
               childPlaceable.place("x", 0, "baseline");

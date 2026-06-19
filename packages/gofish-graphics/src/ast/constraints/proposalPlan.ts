@@ -4,9 +4,11 @@
 
 import { type Size } from "../dims";
 import { isValue } from "../data";
+import { isPOSITION, type UnderlyingSpace } from "../underlyingSpace";
 import { allocateSlices } from "./folds";
 import type { ConstraintSpec } from ".";
 import type { GridConstraint } from "./grid";
+import type { ConstraintPosScales } from "./shared";
 
 export type SliceSegment = {
   dAxis: 0 | 1;
@@ -98,4 +100,28 @@ export function buildPositionTargetDims(
   return new Map(
     [...collected.entries()].sort(([a], [b]) => a.localeCompare(b))
   );
+}
+
+/** Decide which data→pixel scales a child receives from an enclosing layer.
+ *
+ * On axes the layer does not own, forward the inherited/local base scale. On
+ * axes the layer owns, forward only to children whose own space is POSITION and
+ * whose placement is not already owned by a datum-valued position constraint.
+ * This keeps constrained ticks from seeing the scale that placed them while
+ * still giving content marks the scale they need for their own geometry. */
+export function childPosScalesFor(
+  childSpace: Size<UnderlyingSpace> | undefined,
+  targetDims: Set<0 | 1> | undefined,
+  ownsAxis: readonly [boolean, boolean],
+  basePosScales: ConstraintPosScales,
+  effectivePosScales: ConstraintPosScales
+): ConstraintPosScales {
+  const pick = (dim: 0 | 1) => {
+    if (!ownsAxis[dim]) return basePosScales[dim];
+    if (targetDims?.has(dim)) return undefined;
+    return childSpace && isPOSITION(childSpace[dim])
+      ? effectivePosScales[dim]
+      : undefined;
+  };
+  return [pick(0), pick(1)];
 }

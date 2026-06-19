@@ -3,6 +3,7 @@
 // </gofish-wiki>
 
 import type { ConstraintSpec } from ".";
+import type { Dimensions, Size } from "../dims";
 import { isNestConstraint, type NestConstraint } from "./nest";
 
 type NamedChild = {
@@ -74,6 +75,36 @@ export type NestPlan = {
   /** Child layout order with source before derived (topological); cycles throw. */
   order: number[];
 };
+
+type NestLayoutSource = {
+  dims: Dimensions;
+};
+
+/** Apply a planned nest size proposal after the source children have concrete
+ *  layout dimensions. The plan still decides dependency direction/order; this
+ *  helper is deliberately just the layout-time arithmetic:
+ *
+ *    inside-out: outer = inner + 2·padding
+ *    outside-in: inner = outer − 2·padding
+ *
+ *  Non-derived axes keep the caller's normal proposal. */
+export function applyNestLayoutProposal(
+  baseSize: Size,
+  edges: readonly NestEdge[] | undefined,
+  sources: readonly NestLayoutSource[]
+): Size {
+  if (edges === undefined) return baseSize;
+  const next: Size = [baseSize[0], baseSize[1]];
+  for (const e of edges) {
+    const sourceDims = sources[e.sourceIdx].dims;
+    const sign = e.dir === "in" ? 1 : -1;
+    if (e.padX !== undefined)
+      next[0] = Math.max(0, (sourceDims[0].size ?? 0) + sign * 2 * e.padX);
+    if (e.padY !== undefined)
+      next[1] = Math.max(0, (sourceDims[1].size ?? 0) + sign * 2 * e.padY);
+  }
+  return next;
+}
 
 /** Classify each nest by which side carries the size, resolve a single
  *  resolution direction per nest, validate single-ownership and

@@ -14,13 +14,19 @@ import type { PositionConstraint } from "../ast/constraints/position";
 import type { SpanConstraint } from "../ast/constraints/span";
 import type { Anchor, Dimensions, FancyDirection } from "../ast/dims";
 import { elaborateDirection, localAnchorPoint } from "../ast/dims";
-import { buildNestPlan } from "../ast/constraints/nestPlan";
+import {
+  applyNestLayoutProposal,
+  buildNestPlan,
+} from "../ast/constraints/nestPlan";
 import {
   buildDistributeSliceMap,
   buildPositionTargetDims,
+  childPosScalesFor,
   selectGridConstraint,
 } from "../ast/constraints/proposalPlan";
 import { value } from "../ast/data";
+import { POSITION, UNDEFINED } from "../ast/underlyingSpace";
+import { interval } from "../util/interval";
 
 type Constraint =
   | AlignConstraint
@@ -381,6 +387,30 @@ console.log("# constraint confluence: nest size dependency planning");
       nestPlanSignature([nestDA, nestAB, nestAC]) === expected &&
       nestPlanSignature([nestDA, nestAC, nestAB]) === expected
   );
+
+  const concreteSources = [
+    makePlaceable(100, 80),
+    makePlaceable(40, 30),
+  ] as const;
+  const insideOut = applyNestLayoutProposal(
+    [200, 200],
+    [{ derivedIdx: 0, sourceIdx: 1, dir: "in", padX: 5, padY: 7 }],
+    concreteSources
+  );
+  ok(
+    "inside-out nest proposal derives concrete outer size from source",
+    insideOut[0] === 50 && insideOut[1] === 44
+  );
+
+  const outsideIn = applyNestLayoutProposal(
+    [200, 200],
+    [{ derivedIdx: 1, sourceIdx: 0, dir: "out", padX: 12, padY: 50 }],
+    concreteSources
+  );
+  ok(
+    "outside-in nest proposal derives concrete inner size from source",
+    outsideIn[0] === 76 && outsideIn[1] === 0
+  );
 }
 
 console.log("# constraint confluence: distribute size proposals");
@@ -494,6 +524,63 @@ console.log("# constraint confluence: position scale ownership planning");
     "position scale ownership plan is declaration-order independent",
     JSON.stringify([...first.entries()].map(([k, v]) => [k, [...v].sort()])) ===
       JSON.stringify([...second.entries()].map(([k, v]) => [k, [...v].sort()]))
+  );
+}
+
+console.log("# constraint confluence: child posScale forwarding");
+{
+  const baseX = (v: number) => v + 1;
+  const baseY = (v: number) => v + 2;
+  const effectiveX = (v: number) => v * 10;
+  const effectiveY = (v: number) => v * 20;
+  const positionSpace = POSITION(interval(0, 10));
+
+  const unowned = childPosScalesFor(
+    [UNDEFINED, UNDEFINED],
+    undefined,
+    [false, false],
+    [baseX, baseY],
+    [effectiveX, effectiveY]
+  );
+  ok(
+    "unowned axes forward base posScales",
+    unowned[0] === baseX && unowned[1] === baseY
+  );
+
+  const ownedPosition = childPosScalesFor(
+    [positionSpace, positionSpace],
+    undefined,
+    [true, true],
+    [baseX, baseY],
+    [effectiveX, effectiveY]
+  );
+  ok(
+    "owned POSITION child receives effective posScales",
+    ownedPosition[0] === effectiveX && ownedPosition[1] === effectiveY
+  );
+
+  const ownedTarget = childPosScalesFor(
+    [positionSpace, positionSpace],
+    new Set<0 | 1>([0]),
+    [true, true],
+    [baseX, baseY],
+    [effectiveX, effectiveY]
+  );
+  ok(
+    "datum-position target suppresses only the owned target axis",
+    ownedTarget[0] === undefined && ownedTarget[1] === effectiveY
+  );
+
+  const ownedUndefined = childPosScalesFor(
+    [UNDEFINED, UNDEFINED],
+    undefined,
+    [true, true],
+    [baseX, baseY],
+    [effectiveX, effectiveY]
+  );
+  ok(
+    "owned non-POSITION child receives no posScales",
+    ownedUndefined[0] === undefined && ownedUndefined[1] === undefined
   );
 }
 
