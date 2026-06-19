@@ -4,7 +4,8 @@
 
 import type { ConstraintSpec } from ".";
 import type { Dimensions, Size } from "../dims";
-import { isNestConstraint, type NestConstraint } from "./nest";
+import { isNestConstraint, nestedSpace, type NestConstraint } from "./nest";
+import type { UnderlyingSpace } from "../underlyingSpace";
 
 type NamedChild = {
   _name?: string | { __tag: string };
@@ -104,6 +105,41 @@ export function applyNestLayoutProposal(
       next[1] = Math.max(0, (sourceDims[1].size ?? 0) + sign * 2 * e.padY);
   }
   return next;
+}
+
+/** Apply the nest space-resolution fold to child spaces.
+ *
+ * Only INSIDE_OUT edges (`dir: "in"`) derive a space: `outer = inner +
+ * 2·padding` when the inner axis is a SIZE/baseline magnitude. OUTSIDE_IN is
+ * purely a layout-time size proposal, so it deliberately derives no space here.
+ * The returned child-space array is a copy; the input is never mutated. */
+export function applyNestSpacePlan(
+  childSpaces: readonly Size<UnderlyingSpace>[],
+  nestPlan: NestPlan | undefined
+): Size<UnderlyingSpace>[] {
+  if (nestPlan === undefined) return [...childSpaces];
+  const effectiveChildren = childSpaces.map(
+    (s) => [s[0], s[1]] as Size<UnderlyingSpace>
+  );
+  for (const i of nestPlan.order) {
+    for (const e of nestPlan.byDerived.get(i) ?? []) {
+      if (e.dir !== "in") continue;
+      const sourceSpaces = effectiveChildren[e.sourceIdx];
+      if (e.padX !== undefined)
+        effectiveChildren[i][0] = nestedSpace(
+          effectiveChildren[i][0],
+          sourceSpaces[0],
+          e.padX
+        );
+      if (e.padY !== undefined)
+        effectiveChildren[i][1] = nestedSpace(
+          effectiveChildren[i][1],
+          sourceSpaces[1],
+          e.padY
+        );
+    }
+  }
+  return effectiveChildren;
 }
 
 /** Classify each nest by which side carries the size, resolve a single

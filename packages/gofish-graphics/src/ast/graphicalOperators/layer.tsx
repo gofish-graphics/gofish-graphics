@@ -26,7 +26,6 @@ import { GoFishAST } from "../_ast";
 import {
   applyConstraints,
   collectPositionDomains,
-  nestedSpace,
   gridSpaces,
   gridCellSize,
   isZOrderConstraint,
@@ -36,6 +35,7 @@ import {
 import { childNameKey } from "../constraints/shared";
 import {
   applyNestLayoutProposal,
+  applyNestSpacePlan,
   buildNestPlan,
 } from "../constraints/nestPlan";
 import {
@@ -308,30 +308,7 @@ export const layer = createNodeOperatorSequential(
           // outer − 2p` is purely a layout-time proposal. When inner isn't SIZE,
           // `nestedSpace` leaves outer as-is and the proposal handles sizing.
           const nestPlan = buildNestPlan(_childNodes, constraints ?? []);
-          let effectiveChildren = children;
-          if (nestPlan !== undefined) {
-            effectiveChildren = children.map(
-              (s) => [s[0], s[1]] as Size<UnderlyingSpace>
-            );
-            for (const i of nestPlan.order) {
-              for (const e of nestPlan.byDerived.get(i) ?? []) {
-                if (e.dir !== "in") continue;
-                const sourceSpaces = effectiveChildren[e.sourceIdx];
-                if (e.padX !== undefined)
-                  effectiveChildren[i][0] = nestedSpace(
-                    effectiveChildren[i][0],
-                    sourceSpaces[0],
-                    e.padX
-                  );
-                if (e.padY !== undefined)
-                  effectiveChildren[i][1] = nestedSpace(
-                    effectiveChildren[i][1],
-                    sourceSpaces[1],
-                    e.padY
-                  );
-              }
-            }
-          }
+          const effectiveChildren = applyNestSpacePlan(children, nestPlan);
 
           // `position` constraints contribute a POSITION-domain fragment per
           // axis: the union of their data values is this layer's domain on that

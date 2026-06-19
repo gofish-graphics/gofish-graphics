@@ -18,6 +18,7 @@ import type { Anchor, Dimensions, FancyDirection } from "../ast/dims";
 import { elaborateDirection, localAnchorPoint } from "../ast/dims";
 import {
   applyNestLayoutProposal,
+  applyNestSpacePlan,
   buildNestPlan,
 } from "../ast/constraints/nestPlan";
 import {
@@ -416,6 +417,33 @@ console.log("# constraint confluence: nest size dependency planning");
   ok(
     "outside-in nest proposal derives concrete inner size from source",
     outsideIn[0] === 76 && outsideIn[1] === 0
+  );
+
+  const childSpaces = [
+    [UNDEFINED, UNDEFINED],
+    [SIZE(Monotonic.linear(10, 0)), SIZE(Monotonic.linear(4, 0))],
+  ] as const;
+  const folded = applyNestSpacePlan(childSpaces, {
+    order: [1, 0],
+    byDerived: new Map([
+      [
+        0,
+        [{ derivedIdx: 0, sourceIdx: 1, dir: "in", padX: 3, padY: 2 }],
+      ],
+    ]),
+  });
+  ok(
+    "inside-out nest space fold derives padded SIZE space",
+    folded[0][0].kind === "continuous" &&
+      folded[0][0].width.run(1) === 16 &&
+      folded[0][1].kind === "continuous" &&
+      folded[0][1].width.run(1) === 8
+  );
+  ok(
+    "nest space fold copies child spaces instead of mutating input",
+    folded !== childSpaces &&
+      folded[0] !== childSpaces[0] &&
+      childSpaces[0][0] === UNDEFINED
   );
 }
 

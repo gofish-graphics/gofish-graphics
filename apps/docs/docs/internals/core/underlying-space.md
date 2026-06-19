@@ -340,8 +340,10 @@ Nest sizing is split into a dependency plan and concrete layout arithmetic:
 `buildNestPlan` decides, per constrained pair, whether the source size flows
 inside-out (`outer = inner + 2·padding`) or outside-in
 (`inner = outer − 2·padding`) and orders children so the source has been laid
-out first; once the source has concrete dimensions, `applyNestLayoutProposal`
-does only that arithmetic on the derived axes.
+out first. The bottom-up space pass applies only the inside-out portion via
+`applyNestSpacePlan`; once the source has concrete dimensions,
+`applyNestLayoutProposal` does the corresponding layout-time arithmetic on the
+derived axes.
 Grid is also selected through the proposal plan (`selectGridConstraint`):
 because a grid owns both track partitions for a layer, more than one grid
 constraint is a proposal conflict rather than a declaration-order choice.
