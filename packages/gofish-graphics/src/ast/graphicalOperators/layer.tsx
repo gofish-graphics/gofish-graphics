@@ -31,7 +31,6 @@ import {
   collectPositionDomains,
   nestedSpace,
   getPositioningConstraintRefs,
-  isGridConstraint,
   gridSpaces,
   gridCellSize,
   isZOrderConstraint,
@@ -45,7 +44,10 @@ import {
   composeConstraintSpaces,
   type ComposeBudget,
 } from "../constraints/compose";
-import { buildDistributeSliceMap } from "../constraints/proposalPlan";
+import {
+  buildDistributeSliceMap,
+  selectGridConstraint,
+} from "../constraints/proposalPlan";
 import { isValue, type Measure } from "../data";
 import { unionChildSpaces } from "./alignment";
 
@@ -273,7 +275,7 @@ export const layer = createNodeOperatorSequential(
           // A grid constraint makes this layer a grid: its axes are categorical
           // (ORDINAL over columns / rows) and the cells fill flex tracks (sized
           // in `layout`). It's exclusive — no union/nest/position fold applies.
-          const gridC = (constraints ?? []).find(isGridConstraint);
+          const gridC = selectGridConstraint(constraints ?? []);
           if (gridC !== undefined) return gridSpaces(gridC, _childNodes);
 
           // Apply layer's own transform.scale to any baseline magnitude
@@ -408,7 +410,7 @@ export const layer = createNodeOperatorSequential(
           // Grid budget: a grid layer is exclusively cells (table elaboration),
           // and every cell fills its flex track — so all children get the equal
           // track size (box-division); the placement solver then centers them.
-          const gridC = node.constraints.find(isGridConstraint);
+          const gridC = selectGridConstraint(node.constraints);
           const gridCell = gridC ? gridCellSize(gridC, size) : undefined;
 
           // Build the LOCAL scale for each self-scaled (stashed) dim against our

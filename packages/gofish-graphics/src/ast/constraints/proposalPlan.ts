@@ -4,6 +4,8 @@
 
 import { type Size } from "../dims";
 import { allocateSlices } from "./folds";
+import type { ConstraintSpec } from ".";
+import type { GridConstraint } from "./grid";
 
 export type SliceSegment = {
   dAxis: 0 | 1;
@@ -52,4 +54,24 @@ export function buildDistributeSliceMap(
   }
 
   return out;
+}
+
+/** A grid owns the whole two-axis proposal scope for its layer. Multiple grids
+ * would otherwise be source-order-sensitive because space resolution and
+ * proposal sizing can only choose one track partition while placement would see
+ * all pins. */
+export function selectGridConstraint(
+  constraints: readonly ConstraintSpec[]
+): GridConstraint | undefined {
+  let selected: GridConstraint | undefined;
+  for (const constraint of constraints) {
+    if (constraint.type !== "grid") continue;
+    if (selected !== undefined) {
+      throw new Error(
+        "Constraint.grid proposal conflict: a layer may have at most one grid constraint"
+      );
+    }
+    selected = constraint;
+  }
+  return selected;
 }

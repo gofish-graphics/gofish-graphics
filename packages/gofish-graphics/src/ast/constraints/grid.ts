@@ -20,9 +20,11 @@
 // Σ-over-max-of-cells (content-sized tracks, variable flex) is a later
 // generalization; v1 is equal tracks with the cells filling them.
 //
-// The grid is interpreted by the Layer: `gridSpaces` gives the ORDINAL axes
-// (categorical columns/rows, for axis rendering), the Layer's budget sizes each
-// cell to `cellExtent`, and `placementSolver.ts` centers each cell in its track.
+// The grid is interpreted by the Layer after `selectGridConstraint` has
+// established that there is at most one grid owner for the layer: `gridSpaces`
+// gives the ORDINAL axes (categorical columns/rows, for axis rendering), the
+// Layer's budget sizes each cell to `cellExtent`, and `placementSolver.ts`
+// centers each cell in its track.
 
 import { GoFishNode } from "../_node";
 import type { GoFishAST } from "../_ast";

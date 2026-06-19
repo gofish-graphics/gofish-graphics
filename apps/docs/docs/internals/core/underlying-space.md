@@ -329,6 +329,9 @@ spread pipeline, auto-fit included (issue #475). Composition beyond one
 distribute (+ one align) per axis falls back to `unionChildSpaces`; the general
 algebra is sketched in
 [[constraints-as-core]].
+Grid is also selected through the proposal plan (`selectGridConstraint`):
+because a grid owns both track partitions for a layer, more than one grid
+constraint is a proposal conflict rather than a declaration-order choice.
 
 After sizing, the layer emits placement constraints into a per-axis weighted
 relation problem (`constraints/placementSolver.ts`). Span first contributes an

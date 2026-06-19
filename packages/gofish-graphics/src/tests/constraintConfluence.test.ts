@@ -15,7 +15,10 @@ import type { SpanConstraint } from "../ast/constraints/span";
 import type { Anchor, Dimensions, FancyDirection } from "../ast/dims";
 import { elaborateDirection, localAnchorPoint } from "../ast/dims";
 import { buildNestPlan } from "../ast/constraints/nestPlan";
-import { buildDistributeSliceMap } from "../ast/constraints/proposalPlan";
+import {
+  buildDistributeSliceMap,
+  selectGridConstraint,
+} from "../ast/constraints/proposalPlan";
 
 type Constraint =
   | AlignConstraint
@@ -411,6 +414,45 @@ console.log("# constraint confluence: distribute size proposals");
   ok(
     "overlapping distribute proposal ownership throws in either order",
     throws([overlapAB, overlapBC]) && throws([overlapBC, overlapAB])
+  );
+}
+
+console.log("# constraint confluence: grid proposal ownership");
+{
+  const grid2: GridConstraint = {
+    type: "grid",
+    numCols: 2,
+    xSpacing: 10,
+    ySpacing: 0,
+    children: [A, B],
+  };
+  const grid1: GridConstraint = {
+    type: "grid",
+    numCols: 1,
+    xSpacing: 0,
+    ySpacing: 5,
+    children: [A, B],
+  };
+
+  ok(
+    "single grid proposal owner is selected",
+    selectGridConstraint([grid2]) === grid2
+  );
+
+  const throws = (constraints: GridConstraint[]): boolean => {
+    try {
+      selectGridConstraint(constraints);
+      return false;
+    } catch (error) {
+      return (
+        error instanceof Error &&
+        error.message.includes("Constraint.grid proposal conflict")
+      );
+    }
+  };
+  ok(
+    "duplicate grid proposal ownership throws in either order",
+    throws([grid2, grid1]) && throws([grid1, grid2])
   );
 }
 
