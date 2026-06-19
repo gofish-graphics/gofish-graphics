@@ -544,20 +544,17 @@ console.log("# constraint confluence: distribute size proposals");
 
   const overlapAB = { dAxis: 0 as const, spacing: 10, order: ["A", "B"] };
   const overlapBC = { dAxis: 0 as const, spacing: 20, order: ["B", "C"] };
-  const throws = (segments: [typeof overlapAB, typeof overlapBC]): boolean => {
-    try {
-      buildDistributeSliceMap(segments, [210, 105]);
-      return false;
-    } catch (error) {
-      return (
-        error instanceof Error &&
-        error.message.includes("Constraint.distribute proposal conflict")
-      );
-    }
-  };
+  const overlappingForward = buildDistributeSliceMap(
+    [overlapAB, overlapBC],
+    [210, 105]
+  );
+  const overlappingReverse = buildDistributeSliceMap(
+    [overlapBC, overlapAB],
+    [210, 105]
+  );
   ok(
-    "overlapping distribute proposal ownership throws in either order",
-    throws([overlapAB, overlapBC]) && throws([overlapBC, overlapAB])
+    "overlapping distribute proposals are skipped in either order",
+    overlappingForward === undefined && overlappingReverse === undefined
   );
 
   const layerSize: [number, number] = [300, 200];

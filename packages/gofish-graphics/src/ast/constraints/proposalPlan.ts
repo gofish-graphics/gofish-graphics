@@ -88,10 +88,11 @@ export function buildLayerConstraintLayoutPlan(
 /** Build per-child size proposals from distribute budget segments.
  *
  * This is the top-down adjoint of the distribute SIZE fold: once a layer has a
- * concrete pixel budget, each distribute segment slices that axis among its
- * covered children. A child may be covered by at most one distribute segment per
- * axis. Otherwise the proposal would be declaration-order-sensitive because the
- * layer can hand only one size per child axis. */
+ * concrete pixel budget, each unambiguous distribute segment slices that axis
+ * among its covered children. Overlapping segments on the same axis are a
+ * placement-relation graph rather than a spread-like flex slice; skip their
+ * size proposals so fixed-size relational diagrams can still solve placement
+ * without declaration-order-sensitive proposal ownership. */
 export function buildDistributeSliceMap(
   segments: SliceSegment[],
   size: Size
@@ -99,33 +100,31 @@ export function buildDistributeSliceMap(
   if (segments.length === 0) return undefined;
 
   const out = new Map<string, Size>();
-  const ownerOf = new Map<string, string>();
+  const seen = new Set<string>();
+  const ambiguousAxes = new Set<0 | 1>();
+  for (const segment of segments) {
+    for (const name of segment.order) {
+      const key = `${segment.dAxis}:${name}`;
+      if (seen.has(key)) ambiguousAxes.add(segment.dAxis);
+      seen.add(key);
+    }
+  }
 
-  for (const [segmentIndex, segment] of segments.entries()) {
-    const owner = `distribute[${segmentIndex}]`;
+  for (const segment of segments) {
+    if (ambiguousAxes.has(segment.dAxis)) continue;
     const slices = allocateSlices(
       size[segment.dAxis],
       segment.spacing,
       segment.order.length
     );
     segment.order.forEach((name, i) => {
-      const key = `${segment.dAxis}:${name}`;
-      const prior = ownerOf.get(key);
-      if (prior !== undefined) {
-        throw new Error(
-          `Constraint.distribute proposal conflict on ${
-            segment.dAxis === 0 ? "x" : "y"
-          }: child "${name}" is covered by both ${prior} and ${owner}`
-        );
-      }
-      ownerOf.set(key, owner);
       const cur = out.get(name) ?? ([size[0], size[1]] as Size);
       cur[segment.dAxis] = slices[i];
       out.set(name, cur);
     });
   }
 
-  return out;
+  return out.size === 0 ? undefined : out;
 }
 
 /** Choose the concrete size proposed to one child in a layer.
