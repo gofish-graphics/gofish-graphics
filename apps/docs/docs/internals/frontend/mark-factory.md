@@ -148,11 +148,10 @@ methods:
   name without parsing the `__serialize` tag.
 - `mark.label(accessor, options?)` — calls `node.label(...)` on every produced
   node, deferring label placement to the layout phase.
-- `mark.position({ x?, y? })` — rebuilds the mark with those options merged into
-  the original mark options before channel inference. For a mark like `rect`,
-  whose `x`/`y` props are `"pos"` channels, this is equivalent to authoring the
-  position directly in `rect({ x, y, ... })` while keeping the modifier surface
-  consistent with operators.
+- `mark.position({ x?, y? })` — wraps the produced node in a structural position
+  node. This is deliberately not equivalent to merging `x`/`y` into the mark's
+  own options: a mark or operator may already give `x`/`y` domain-specific
+  channel meanings.
 
 These methods wrap or rebuild the base mark rather than mutating it, so naming,
 labeling, or positioning one mark never affects another.
@@ -172,11 +171,9 @@ follows parent-iteration order, not async-completion order. The same factory
 backs `makeConstrainableMark` (which adds `.constrain()`) and the combinator
 marks — one wiring, not three copies.
 
-`.position()` is option-level rather than node-level: `createMark` registers an
-internal option rebuilder, and `attachModifiers` exposes it as a modifier. When
-`.position()` is chained after `.name()` or `.label()`, the rebuilder first
-recreates the mark with the merged position options, then reapplies the earlier
-modifier so metadata and layer registration are preserved.
+`.position()` is structural: `attachModifiers` maps the base mark to a new mark
+whose produced node is wrapped by the position node. This keeps the modifier
+independent from the wrapped mark's channel grammar.
 
 ## Adding a new mark
 

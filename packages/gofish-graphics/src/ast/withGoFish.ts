@@ -27,7 +27,6 @@ import {
   inferEntrySize,
 } from "./channels";
 import {
-  attachOptionRebuilder,
   withMarkKind,
   nameableMark,
   type PositionModifierOptions,
@@ -695,11 +694,5 @@ function buildCreatedMark(
     };
   }
 
-  attachOptionRebuilder(baseMark, (patch) =>
-    buildCreatedMark(shapeFn, channels, serializeConfig, kind, {
-      ...markOpts,
-      ...patch,
-    })
-  );
   return nameableMark(baseMark);
 }

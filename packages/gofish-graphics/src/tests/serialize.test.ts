@@ -64,6 +64,19 @@ function validateDoc(doc: unknown, label: string, strict = true) {
 async function main() {
   console.log("\n# Frontend-IR emitter — toJSON()");
 
+  check(
+    "position modifier exists on createOperator output",
+    typeof scatter({ x: "hp" }).position === "function"
+  );
+  check(
+    "position modifier exists on createMark output",
+    typeof rect({ h: "value" }).position === "function"
+  );
+  check(
+    "position modifier preserves transform modifiers",
+    typeof rect({ h: "value" }).position({ x: 10 }).cut === "function"
+  );
+
   // -------------------------------------------------------------------------
   // Simple chart: data → spread → rect mark.
   // -------------------------------------------------------------------------
@@ -180,45 +193,6 @@ async function main() {
     check("scatter operator", ops[0].type === "scatter");
     check("scatter carries x", (ops[0] as any).x === "hp");
     check("scatter carries y", (ops[0] as any).y === "mpg");
-  }
-
-  // -------------------------------------------------------------------------
-  // Scatter position modifier elaborates into scatter opts, not a wrapper op.
-  // -------------------------------------------------------------------------
-  {
-    const chart = Chart([
-      { group: "A", value: 1 },
-      { group: "B", value: 2 },
-    ])
-      .flow(scatter({ by: "group", x: "group" }).position({ y: 50 }))
-      .mark(circle({ r: 3, fill: "steelblue" }));
-    const doc = await chart.toJSON();
-    validateDoc(doc, "scatter position modifier chart");
-    const ops = (doc.root as Frontend.ChartIR).operators!;
-    check("position modifier keeps one operator", ops.length === 1);
-    check("position modifier keeps scatter", ops[0].type === "scatter");
-    check("position modifier carries x", (ops[0] as any).x === "group");
-    check("position modifier carries y", (ops[0] as any).y === 50);
-  }
-
-  // -------------------------------------------------------------------------
-  // Mark position modifier elaborates into mark opts and composes with name().
-  // -------------------------------------------------------------------------
-  {
-    const chart = Chart([{ value: 2 }]).mark(
-      rect({ h: "value" }).name("bar").position({ x: 10, y: 20 })
-    );
-    const doc = await chart.toJSON();
-    validateDoc(doc, "mark position modifier chart");
-    const mark = (doc.root as Frontend.ChartIR).mark as any;
-    check("mark position modifier keeps rect", mark.type === "rect");
-    check("mark position modifier preserves name", mark.name === "bar");
-    check("mark position modifier carries x", mark.x === 10);
-    check("mark position modifier carries y", mark.y === 20);
-    check(
-      "mark position modifier preserves transform modifiers",
-      typeof rect({ h: "value" }).position({ x: 10 }).cut === "function"
-    );
   }
 
   // -------------------------------------------------------------------------

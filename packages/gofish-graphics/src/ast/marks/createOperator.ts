@@ -44,6 +44,10 @@ import type { Measure } from "../data";
 import type { MaybeValue, Value } from "../data";
 import type { LabelAccessor, LabelOptions } from "../labels/labelPlacement";
 import type { NameableMark } from "../withGoFish";
+import {
+  positionNode,
+  type PositionNodeOptions,
+} from "../graphicalOperators/positionNode";
 
 // Re-exports for callers that previously got these from createOperator.
 export type { LayerContext } from "./chartBuilder";
@@ -163,21 +167,7 @@ export function createModifier<Args extends any[]>(
   return cfg;
 }
 
-export type PositionModifierOptions = { x?: unknown; y?: unknown };
-
-type OptionRebuilder = (patch: Record<string, unknown>) => Mark<any>;
-
-function getOptionRebuilder(mark: object): OptionRebuilder | undefined {
-  return (mark as { __rebuildWithOpts?: OptionRebuilder }).__rebuildWithOpts;
-}
-
-function setOptionRebuilder(mark: object, rebuild: OptionRebuilder): void {
-  Object.defineProperty(mark, "__rebuildWithOpts", {
-    value: rebuild,
-    writable: true,
-    configurable: true,
-  });
-}
+export type PositionModifierOptions = PositionNodeOptions;
 
 /**
  * Copy `from`'s `__serialize` tag (and `__axisFields`) onto `to`, letting the
@@ -232,15 +222,25 @@ function modifierMethod(
     // wrapped mark, then let the modifier stamp its own metadata.
     withMarkKind(wrapped, getMarkKind(base));
     cfg.tag?.(wrapped, base, ...args);
-    const rebuild = getOptionRebuilder(base);
-    if (rebuild) {
-      setOptionRebuilder(wrapped, (patch) => {
-        const rebuilt = rebuild(patch) as any;
-        return rebuilt[cfg.name](...args);
-      });
-    }
     return redecorate(wrapped);
   };
+}
+
+export function positionMark<T>(
+  base: Mark<T>,
+  opts: PositionModifierOptions
+): Mark<T> {
+  const wrapped: Mark<T> = async (
+    d: T,
+    key?: string | number,
+    layerContext?: LayerContext
+  ) => {
+    const raw = await (base as any)(d, key, layerContext);
+    const node = await resolveMarkResult(raw, layerContext);
+    return positionNode(opts, [node]);
+  };
+  withMarkKind(wrapped, getMarkKind(base));
+  return nameableMark(wrapped) as Mark<T>;
 }
 
 /**
@@ -260,14 +260,11 @@ export function attachModifiers<T>(
       configurable: true,
     });
   }
-  const rebuild = getOptionRebuilder(base);
-  if (rebuild) {
-    Object.defineProperty(base, "position", {
-      value: (opts: PositionModifierOptions) => rebuild(opts),
-      writable: true,
-      configurable: true,
-    });
-  }
+  Object.defineProperty(base, "position", {
+    value: (opts: PositionModifierOptions) => positionMark(base, opts),
+    writable: true,
+    configurable: true,
+  });
   Object.defineProperty(base, "render", {
     value: async (
       container: Parameters<GoFishNode["render"]>[0],
@@ -381,14 +378,6 @@ export function nameableMark<T>(base: Mark<T>): NameableMark<T> {
     nameModifier,
     labelModifier,
   ]) as NameableMark<T>;
-}
-
-export function attachOptionRebuilder<T>(
-  mark: Mark<T>,
-  rebuild: OptionRebuilder
-): Mark<T> {
-  setOptionRebuilder(mark, rebuild);
-  return mark;
 }
 
 /**
@@ -580,14 +569,27 @@ export type PositionableOperator<T, U> = Operator<T, U> & {
 
 function attachPositionOption<T extends object>(
   target: T,
-  rebuild: (patch: PositionModifierOptions) => T
+  position: (opts: PositionModifierOptions) => T
 ): T {
   Object.defineProperty(target, "position", {
-    value: (opts: PositionModifierOptions) => rebuild(opts),
+    value: (opts: PositionModifierOptions) => position(opts),
     writable: true,
     configurable: true,
   });
   return target;
+}
+
+function positionOperator<T, U>(
+  operator: Operator<T, U>,
+  opts: PositionModifierOptions
+): PositionableOperator<T, U> {
+  const positioned: Operator<T, U> = async (mark) => {
+    const arranged = await operator(mark);
+    return positionMark(arranged, opts) as Mark<T>;
+  };
+  return attachPositionOption(positioned, (next) =>
+    positionOperator(positioned, next)
+  ) as PositionableOperator<T, U>;
 }
 
 /**
@@ -772,9 +774,6 @@ export function createOperator<Datum, Options extends Record<string, any>>(
         (node as any).datum = d;
         return node;
       };
-      attachOptionRebuilder(base, (patch) =>
-        dual({ ...opts, ...patch } as Options, marks)
-      );
       const combinator = nameableMark(base);
       // Tag combinator-form mark with IR-serialization metadata, mirroring
       // the operator-form tagging below. The `__combinator: true` flag tells
@@ -791,9 +790,7 @@ export function createOperator<Datum, Options extends Record<string, any>>(
           children: marks,
         };
       }
-      return attachPositionOption(combinator, (patch) =>
-        dual({ ...opts, ...patch } as Options, marks)
-      );
+      return combinator;
     }
     // Operator (traversal) form: split d, apply mark per leaf, layout.
     const operator: Operator<Datum[], Datum[]> = async (mark) => {
@@ -880,8 +877,8 @@ export function createOperator<Datum, Options extends Record<string, any>>(
         opts: payload,
       };
     }
-    return attachPositionOption(operator, (patch) =>
-      dual({ ...opts, ...patch } as Options)
+    return attachPositionOption(operator, (positionOpts) =>
+      positionOperator(operator, positionOpts)
     ) as PositionableOperator<Datum[], Datum[]>;
   }
   return dual as DualModeOperator<Datum, Options>;
