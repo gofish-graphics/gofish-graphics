@@ -27,7 +27,6 @@ import {
   applyConstraints,
   collectPositionDomains,
   nestedSpace,
-  getPositioningConstraintRefs,
   gridSpaces,
   gridCellSize,
   isZOrderConstraint,
@@ -46,7 +45,7 @@ import {
 import {
   buildDistributeSliceMap,
   buildChildScalePlan,
-  buildPositionTargetDims,
+  buildLayerConstraintLayoutPlan,
   buildPositionScalePlan,
   childLayoutSizeProposal,
   childPosScalesFor,
@@ -504,38 +503,17 @@ export const layer = createNodeOperatorSequential(
             (typeof children)[number]["layout"]
           >[] = new Array(children.length);
 
-          // Collect *positioning* constraint refs only — children skipped
-          // here forgo phase-1 baseline placement so a constraint can place
-          // them. Z-order constraints don't position; including them here
-          // would erroneously rob their referents of baseline placement.
-          const constrainedNames =
-            node.constraints.length > 0
-              ? getPositioningConstraintRefs(node.constraints)
-              : new Set<string>();
+          const layoutPlan = buildLayerConstraintLayoutPlan(
+            node.children,
+            node.constraints
+          );
 
-          // Nest layout order: source before derived, so the derived node
-          // can be proposed `source.dims ± 2·padding` on its constrained axes
-          // (see buildNestPlan / the nest fold in resolveUnderlyingSpace).
-          const nestPlan = buildNestPlan(node.children, node.constraints);
-          const layoutOrder = nestPlan?.order ?? children.map((_, i) => i);
-
-          // Per-AXIS targets of *datum*-pinned `position` constraints (e.g. axis
-          // ticks pinned via `Constraint.position({ y: datum(v) })`). A datum pin
-          // consumes the scale, so the target must not also receive it; a literal
-          // *pixel* pin (`Constraint.position({ y: 0 })`) does not consume the
-          // scale, so it's deliberately NOT tracked here — content pinned at its
-          // raw pixel origin still needs its posScale. Tracked per axis, not
-          // per child: a child pinned on one axis may still need the scale on
-          // the other (an axis line position-seated on its cross axis resolves
-          // its own-axis datum endpoints through the scale).
-          const positionTargetDims = buildPositionTargetDims(node.constraints);
-
-          for (const i of layoutOrder) {
+          for (const i of layoutPlan.layoutOrder) {
             const child = children[i];
             const childName = childNameKey(node.children[i]);
             const targetDims =
               childName !== undefined
-                ? positionTargetDims.get(childName)
+                ? layoutPlan.positionTargetDims.get(childName)
                 : undefined;
             // Nest proposal: override the DERIVED node's size from its
             // SOURCE on each derived axis — `outer = inner + 2p` for 'in',
@@ -546,7 +524,7 @@ export const layer = createNodeOperatorSequential(
             // over — any budget slice.
             const layoutSize = applyNestLayoutProposal(
               childLayoutSizeProposal(childName, size, gridCell, sliceByName),
-              nestPlan?.byDerived.get(i),
+              layoutPlan.nestPlan?.byDerived.get(i),
               childPlaceables
             );
             const childPlaceable = child.layout(
@@ -560,7 +538,7 @@ export const layer = createNodeOperatorSequential(
                 effectivePosScales
               )
             );
-            if (!childName || !constrainedNames.has(childName)) {
+            if (!childName || !layoutPlan.constrainedNames.has(childName)) {
               childPlaceable.place("x", 0, "baseline");
               childPlaceable.place("y", 0, "baseline");
             }

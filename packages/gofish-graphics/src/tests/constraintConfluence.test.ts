@@ -13,6 +13,7 @@ import type { NestConstraint } from "../ast/constraints/nest";
 import { solvePlacementConstraints } from "../ast/constraints/placementSolver";
 import type { PositionConstraint } from "../ast/constraints/position";
 import type { SpanConstraint } from "../ast/constraints/span";
+import type { ZAboveConstraint } from "../ast/constraints/zorder";
 import type { Anchor, Dimensions, FancyDirection } from "../ast/dims";
 import { elaborateDirection, localAnchorPoint } from "../ast/dims";
 import {
@@ -22,6 +23,7 @@ import {
 import {
   buildChildScalePlan,
   buildDistributeSliceMap,
+  buildLayerConstraintLayoutPlan,
   buildPositionTargetDims,
   buildPositionScalePlan,
   childLayoutSizeProposal,
@@ -414,6 +416,48 @@ console.log("# constraint confluence: nest size dependency planning");
   ok(
     "outside-in nest proposal derives concrete inner size from source",
     outsideIn[0] === 76 && outsideIn[1] === 0
+  );
+}
+
+console.log("# constraint confluence: layer constraint layout planning");
+{
+  const childNodes = [namedNode("A", 20), namedNode("B"), namedNode("C")];
+  const nestBA: NestConstraint = {
+    type: "nest",
+    x: 5,
+    children: [B, A],
+  };
+  const datumC: PositionConstraint = {
+    type: "position",
+    y: value(30),
+    anchor: "baseline",
+    override: false,
+    children: [C],
+  };
+  const zOnly: ZAboveConstraint = {
+    type: "zAbove",
+    children: [B, C],
+  };
+
+  const plan = buildLayerConstraintLayoutPlan(childNodes, [
+    zOnly,
+    datumC,
+    nestBA,
+  ]);
+  ok(
+    "layout plan excludes z-order refs and skips only nest inner",
+    plan.constrainedNames.has("A") &&
+      plan.constrainedNames.has("C") &&
+      !plan.constrainedNames.has("B")
+  );
+  ok(
+    "layout plan orders nest source before derived child",
+    plan.layoutOrder.indexOf(0) < plan.layoutOrder.indexOf(1)
+  );
+  ok(
+    "layout plan tracks datum-position target axes",
+    plan.positionTargetDims.get("C")?.has(1) === true &&
+      plan.positionTargetDims.get("C")?.has(0) !== true
   );
 }
 

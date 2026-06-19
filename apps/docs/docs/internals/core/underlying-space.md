@@ -332,6 +332,10 @@ algebra is sketched in
 `childLayoutSizeProposal` is the final per-child proposal priority before nest:
 grid cell size, else distribute slice for that named child, else the full layer
 box.
+`buildLayerConstraintLayoutPlan` packages the per-layer execution plan — which
+children skip baseline placement, nest source-before-derived order, and
+datum-position target axes — so the layer executes deterministic artifacts
+rather than recomputing them inline.
 Nest sizing is split into a dependency plan and concrete layout arithmetic:
 `buildNestPlan` decides, per constrained pair, whether the source size flows
 inside-out (`outer = inner + 2·padding`) or outside-in

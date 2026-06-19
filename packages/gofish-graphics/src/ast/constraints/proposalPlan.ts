@@ -16,12 +16,74 @@ import type { ConstraintSpec } from ".";
 import type { GridConstraint } from "./grid";
 import type { ConstraintPosScales } from "./shared";
 import type * as Monotonic from "../../util/monotonic";
+import { buildNestPlan, type NestPlan, type NestPlanChild } from "./nestPlan";
+import { isNestConstraint } from "./nest";
+import { isZOrderConstraint } from "./zorder";
 
 export type SliceSegment = {
   dAxis: 0 | 1;
   spacing: number;
   order: string[];
 };
+
+/**
+ * The set of names whose position or extent is owned by geometric constraints
+ * (`align` / `distribute` / `position` / `span` / `nest` / `grid`). Used by
+ * `layer.tsx` to decide which children skip phase-1 baseline placement. z-order
+ * constraints don't position, so they are excluded.
+ *
+ * `nest` is special: only the inner child (`children[1]`) skips baseline
+ * placement. The outer child (`children[0]`) is baseline-placed first; the
+ * placement solver reads that position to center the inner child inside it. */
+export function getPositioningConstraintRefs(
+  constraints: readonly ConstraintSpec[]
+): Set<string> {
+  const names = new Set<string>();
+  for (const c of constraints) {
+    if (isZOrderConstraint(c)) continue;
+    if (isNestConstraint(c)) {
+      names.add(c.children[1].name);
+      continue;
+    }
+    // grid: every cell is placed by the placement solver, so all skip phase-1
+    // baseline.
+    for (const ref of c.children) if (ref) names.add(ref.name);
+  }
+  return names;
+}
+
+export type LayerConstraintLayoutPlan = {
+  /** Children skipped by phase-1 baseline placement because a positioning
+   *  constraint owns their placement/extent. */
+  constrainedNames: Set<string>;
+  /** Nest dependency/order plan, if any nest derives size. */
+  nestPlan: NestPlan | undefined;
+  /** Child layout order, source-before-derived for nest dependencies. */
+  layoutOrder: number[];
+  /** Per-child datum-position target axes; those axes consume a posScale. */
+  positionTargetDims: Map<string, Set<0 | 1>>;
+};
+
+/** Build the declaration-order-independent child layout plan for a constrained
+ *  layer. This packages the pure planning artifacts that the layer executes:
+ *  phase-1 placement skipping, nest source-before-derived order, and
+ *  datum-position scale consumption. */
+export function buildLayerConstraintLayoutPlan(
+  childNodes: NestPlanChild[],
+  constraints: readonly ConstraintSpec[]
+): LayerConstraintLayoutPlan {
+  const nestPlan = buildNestPlan([...childNodes], [...constraints]);
+  return {
+    constrainedNames:
+      constraints.length > 0
+        ? getPositioningConstraintRefs(constraints)
+        : new Set<string>(),
+    nestPlan,
+    layoutOrder:
+      nestPlan?.order ?? Array.from({ length: childNodes.length }, (_, i) => i),
+    positionTargetDims: buildPositionTargetDims(constraints),
+  };
+}
 
 /** Build per-child size proposals from distribute budget segments.
  *

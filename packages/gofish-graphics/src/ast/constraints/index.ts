@@ -12,7 +12,7 @@ import {
   createZBelowConstraint,
   isZOrderConstraint,
 } from "./zorder";
-import { createNestConstraint, isNestConstraint } from "./nest";
+import { createNestConstraint } from "./nest";
 import { createGridConstraint, isGridConstraint } from "./grid";
 import {
   createSpanConstraint,
@@ -50,6 +50,7 @@ export { isZOrderConstraint } from "./zorder";
 export { isNestConstraint, nestedSpace } from "./nest";
 export { isGridConstraint, gridSpaces, gridCellSize } from "./grid";
 export { isSpanConstraint } from "./span";
+export { getPositioningConstraintRefs } from "./proposalPlan";
 export { BBox } from "./bbox";
 
 export type ConstraintSpec =
@@ -135,35 +136,6 @@ export function collectConstraintRefs(
       collect(child.children);
     }
   }
-}
-
-/**
- * The set of names whose position or extent is owned by geometric constraints
- * (`align` / `distribute` / `position` / `span` / `nest` / `grid`). Used by
- * `layer.tsx` to compute `constrainedNames`, which controls phase-1
- * baseline-placement skipping. z-order constraints don't position, so they must
- * be excluded.
- *
- * `nest` is special: only the inner child (`children[1]`) skips baseline
- * placement. The outer child (`children[0]`) is left in the set so phase-1
- * places it at baseline; the placement solver reads that position to center
- * inner inside it.
- */
-export function getPositioningConstraintRefs(
-  constraints: ConstraintSpec[]
-): Set<string> {
-  const names = new Set<string>();
-  for (const c of constraints) {
-    if (isZOrderConstraint(c)) continue;
-    if (isNestConstraint(c)) {
-      names.add(c.children[1].name);
-      continue;
-    }
-    // grid: every cell is placed by the placement solver, so all skip phase-1
-    // baseline.
-    for (const ref of c.children) if (ref) names.add(ref.name);
-  }
-  return names;
 }
 
 /**
