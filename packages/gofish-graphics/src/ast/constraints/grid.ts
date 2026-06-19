@@ -114,8 +114,18 @@ export function lowerGridPlacement(
   emitter: PlacementFactEmitter
 ): void {
   for (const { child, center } of gridCellPlacements(c, size)) {
-    emitter.pin("x", child.name, "middle", center[0], owner);
-    emitter.pin("y", child.name, "middle", center[1], owner);
+    emitter.pin({
+      axis: "x",
+      target: { name: child.name, anchor: "middle" },
+      value: center[0],
+      owner,
+    });
+    emitter.pin({
+      axis: "y",
+      target: { name: child.name, anchor: "middle" },
+      value: center[1],
+      owner,
+    });
   }
 }
 

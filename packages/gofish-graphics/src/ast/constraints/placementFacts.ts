@@ -34,6 +34,13 @@ export type PlacementParticipantRequest = {
   owner: string;
 };
 
+export type PlacementPinRequest = {
+  axis: Axis;
+  target: PlacementAnchorRef;
+  value: number;
+  owner: string;
+};
+
 export type PlacementPin = {
   type: "pin";
   expr: AnchorExpr;
@@ -79,13 +86,7 @@ export type PlacementProgram = {
 };
 
 export interface PlacementFactEmitter {
-  pin(
-    axis: Axis,
-    name: NodeId,
-    anchor: AlignAnchor,
-    value: number,
-    owner: string
-  ): void;
+  pin(request: PlacementPinRequest): void;
   include(request: PlacementParticipantRequest): void;
   relate(request: PlacementRelationRequest): void;
 }

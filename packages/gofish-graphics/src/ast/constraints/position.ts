@@ -85,7 +85,12 @@ export function lowerPositionPlacement(
       const target = targets.get(child.name);
       if (!target) continue;
       if (isInitiallyPlaced(axis, child.name) && !constraint.override) continue;
-      emitter.pin(axis, child.name, constraint.anchor, value, owner);
+      emitter.pin({
+        axis,
+        target: { name: child.name, anchor: constraint.anchor },
+        value,
+        owner,
+      });
     }
   };
   emit("x", constraint.x);

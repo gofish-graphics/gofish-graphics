@@ -29,6 +29,7 @@ import type {
   PlacementFact,
   PlacementEdgePin,
   PlacementParticipantRequest,
+  PlacementPinRequest,
   PlacementPin,
   PlacementProgram,
   PlacementRelation,
@@ -154,24 +155,22 @@ class PlacementProgramBuilder implements PlacementFactEmitter {
     return this.spanExtents.get(placementKey(axisIndex(axis), name))?.size;
   }
 
-  pin(
-    axis: Axis,
-    name: string,
-    anchor: AlignAnchor,
-    value: number,
-    owner: string
-  ): void {
-    const target = this.target(name);
+  pin(request: PlacementPinRequest): void {
+    const target = this.target(request.target.name);
     if (!target) return;
     const offset = anchorOffset(
       target,
-      axis,
-      anchor,
-      this.spannedSize(axis, name)
+      request.axis,
+      request.target.anchor,
+      this.spannedSize(request.axis, request.target.name)
     );
     if (offset === undefined) return;
-    this.facts(axis).push(
-      pinFact(anchorExpr(name, axis, "start"), value - offset, owner)
+    this.facts(request.axis).push(
+      pinFact(
+        anchorExpr(request.target.name, request.axis, "start"),
+        request.value - offset,
+        request.owner
+      )
     );
   }
 
@@ -454,7 +453,12 @@ export function lowerPlacementConstraints(
       if (!ownership.shouldPinSelfPlacement(axis, name)) continue;
       const min = targets.get(name)!.dims[axis].min;
       if (min !== undefined)
-        builder.pin(axisName(axis), name, "start", min, "self-placement");
+        builder.pin({
+          axis: axisName(axis),
+          target: { name, anchor: "start" },
+          value: min,
+          owner: "self-placement",
+        });
     }
   }
 
