@@ -53,6 +53,14 @@ the single-axis hand-drawn story does — is what keeps _two_ continuous axes on
 one grid: a shifted content would land at `gutter + scale(v)` while the other
 axis's datum-pinned ticks sit at `scale(v)`.
 
+When both dimensions have position-like axes, each axis line is seated from the
+other dimension's datum floor plus a fixed outward standoff. This is deliberately
+different from seating at the content bbox: a niced scatter domain may extend
+past the lowest/highest datum, and the axis should frame the plot-space corner
+rather than the visible data extent. The standoff also keeps marks exactly on
+the domain floor (for example, a histogram bin at `y = 0`) from straddling the
+axis line.
+
 The wrapper inherits the wrapped node's `key` and `_name`, so faceting and
 external refs keep resolving to it. After the rewrite, the whole tree's underlying
 space is recomputed (the cache is cleared) and re-niced; then normal layout runs.
