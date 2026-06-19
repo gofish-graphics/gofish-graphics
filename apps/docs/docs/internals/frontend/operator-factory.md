@@ -60,6 +60,13 @@ multiplicity.
 arg shape: a second positional argument means combinator form; no second
 arg means operator form.
 
+Both forms also get the standard option-level `.position({ x?, y? })` modifier.
+It rebuilds the operator with the supplied `x`/`y` options merged in before
+channel inference and before the low-level layout runs. That matters for
+operators like `scatter`: `scatter({ by: "lake", x: "lake" }).position({ y: 50 })`
+lowers exactly like `scatter({ by: "lake", x: "lake", y: 50 })`, so coordinate
+transforms see the same node boundary and the same placement facts.
+
 ## 2. The split → fmap → combine shape
 
 Pick any layout operator and you'll find the same three steps — a fan-out
@@ -215,6 +222,11 @@ so consumers can pass a field name there.
 If your operator needs to feed extra data (like `colKeys`/`rowKeys`) into
 the layout opts, return the wrapped `{entries, keys}` form from `split`
 instead of a bare Map — see `table.tsx:228` for an example.
+
+Operators created with `createOperator` automatically support
+`.position({ x?, y? })`. You do not implement this per operator; the factory
+rebuilds the operator with the merged position options and then reruns the same
+split/channel/combine pipeline.
 
 ## 7. The relationship with `createMark`
 

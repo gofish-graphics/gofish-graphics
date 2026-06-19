@@ -202,6 +202,26 @@ async function main() {
   }
 
   // -------------------------------------------------------------------------
+  // Mark position modifier elaborates into mark opts and composes with name().
+  // -------------------------------------------------------------------------
+  {
+    const chart = Chart([{ value: 2 }]).mark(
+      rect({ h: "value" }).name("bar").position({ x: 10, y: 20 })
+    );
+    const doc = await chart.toJSON();
+    validateDoc(doc, "mark position modifier chart");
+    const mark = (doc.root as Frontend.ChartIR).mark as any;
+    check("mark position modifier keeps rect", mark.type === "rect");
+    check("mark position modifier preserves name", mark.name === "bar");
+    check("mark position modifier carries x", mark.x === 10);
+    check("mark position modifier carries y", mark.y === 20);
+    check(
+      "mark position modifier preserves transform modifiers",
+      typeof rect({ h: "value" }).position({ x: 10 }).cut === "function"
+    );
+  }
+
+  // -------------------------------------------------------------------------
   // Log operator with a label.
   // -------------------------------------------------------------------------
   {

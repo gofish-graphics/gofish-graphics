@@ -134,10 +134,10 @@ Walking `withGoFish.ts:431-477`:
 5. **Tag the node** with `name = key` and `datum = d` so downstream
    coordinators (`ref` / `selectAll`, label placement) can find it back.
 
-## `.name()` and `.label()`
+## `.name()`, `.label()`, and `.position()`
 
-`createMark` returns a `NameableMark`, which is the base mark plus two
-chainable methods:
+`createMark` returns a `NameableMark`, which is the base mark plus chainable
+methods:
 
 - `mark.name("layerName")` — registers each produced node into the chart's
   layer context so `selectAll("layerName")` can pull the array of refs (or
@@ -148,9 +148,14 @@ chainable methods:
   name without parsing the `__serialize` tag.
 - `mark.label(accessor, options?)` — calls `node.label(...)` on every produced
   node, deferring label placement to the layout phase.
+- `mark.position({ x?, y? })` — rebuilds the mark with those options merged into
+  the original mark options before channel inference. For a mark like `rect`,
+  whose `x`/`y` props are `"pos"` channels, this is equivalent to authoring the
+  position directly in `rect({ x, y, ... })` while keeping the modifier surface
+  consistent with operators.
 
-Both wrap the base mark in a new closure rather than mutating it, so naming
-or labeling one mark never affects another.
+These methods wrap or rebuild the base mark rather than mutating it, so naming,
+labeling, or positioning one mark never affects another.
 
 These methods are not hand-rolled here. `createMark` calls `nameableMark`,
 which is one application of the shared **modifier factory** in
@@ -166,6 +171,12 @@ single post-resolve DFS walk (`collectLayerRegistrations`), so registry order
 follows parent-iteration order, not async-completion order. The same factory
 backs `makeConstrainableMark` (which adds `.constrain()`) and the combinator
 marks — one wiring, not three copies.
+
+`.position()` is option-level rather than node-level: `createMark` registers an
+internal option rebuilder, and `attachModifiers` exposes it as a modifier. When
+`.position()` is chained after `.name()` or `.label()`, the rebuilder first
+recreates the mark with the merged position options, then reapplies the earlier
+modifier so metadata and layer registration are preserved.
 
 ## Adding a new mark
 

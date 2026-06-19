@@ -163,6 +163,22 @@ export function createModifier<Args extends any[]>(
   return cfg;
 }
 
+export type PositionModifierOptions = { x?: unknown; y?: unknown };
+
+type OptionRebuilder = (patch: Record<string, unknown>) => Mark<any>;
+
+function getOptionRebuilder(mark: object): OptionRebuilder | undefined {
+  return (mark as { __rebuildWithOpts?: OptionRebuilder }).__rebuildWithOpts;
+}
+
+function setOptionRebuilder(mark: object, rebuild: OptionRebuilder): void {
+  Object.defineProperty(mark, "__rebuildWithOpts", {
+    value: rebuild,
+    writable: true,
+    configurable: true,
+  });
+}
+
 /**
  * Copy `from`'s `__serialize` tag (and `__axisFields`) onto `to`, letting the
  * modifier merge its own fields into the cloned tag. The merge callback (and
@@ -216,6 +232,13 @@ function modifierMethod(
     // wrapped mark, then let the modifier stamp its own metadata.
     withMarkKind(wrapped, getMarkKind(base));
     cfg.tag?.(wrapped, base, ...args);
+    const rebuild = getOptionRebuilder(base);
+    if (rebuild) {
+      setOptionRebuilder(wrapped, (patch) => {
+        const rebuilt = rebuild(patch) as any;
+        return rebuilt[cfg.name](...args);
+      });
+    }
     return redecorate(wrapped);
   };
 }
@@ -233,6 +256,14 @@ export function attachModifiers<T>(
   for (const cfg of configs) {
     Object.defineProperty(base, cfg.name, {
       value: modifierMethod(base, cfg, redecorate),
+      writable: true,
+      configurable: true,
+    });
+  }
+  const rebuild = getOptionRebuilder(base);
+  if (rebuild) {
+    Object.defineProperty(base, "position", {
+      value: (opts: PositionModifierOptions) => rebuild(opts),
       writable: true,
       configurable: true,
     });
@@ -352,6 +383,14 @@ export function nameableMark<T>(base: Mark<T>): NameableMark<T> {
   ]) as NameableMark<T>;
 }
 
+export function attachOptionRebuilder<T>(
+  mark: Mark<T>,
+  rebuild: OptionRebuilder
+): Mark<T> {
+  setOptionRebuilder(mark, rebuild);
+  return mark;
+}
+
 /**
  * A "transform" modifier maps a mark to a new mark (e.g. `.cut`), rather than
  * mutating produced nodes. The transform result already carries its own
@@ -378,7 +417,7 @@ export function attachTransformModifiers<M extends object>(
       configurable: true,
     });
   }
-  for (const methodName of ["name", "label"] as const) {
+  for (const methodName of ["name", "label", "position"] as const) {
     const original = m[methodName];
     if (typeof original === "function") {
       Object.defineProperty(m, methodName, {
@@ -528,12 +567,28 @@ export type OperatorConfig<Datum, Options> = {
 };
 
 export type DualModeOperator<Datum, Options> = {
-  (opts: Options): Operator<Datum[], Datum[]>;
+  (opts: Options): PositionableOperator<Datum[], Datum[]>;
   (
     opts: Options,
     marks: (Mark<Datum> | GoFishRef)[] | Promise<(Mark<Datum> | GoFishRef)[]>
   ): NameableMark<Datum>;
 };
+
+export type PositionableOperator<T, U> = Operator<T, U> & {
+  position(opts: PositionModifierOptions): PositionableOperator<T, U>;
+};
+
+function attachPositionOption<T extends object>(
+  target: T,
+  rebuild: (patch: PositionModifierOptions) => T
+): T {
+  Object.defineProperty(target, "position", {
+    value: (opts: PositionModifierOptions) => rebuild(opts),
+    writable: true,
+    configurable: true,
+  });
+  return target;
+}
 
 /**
  * Run a single channel inference over a data slice. `measure` is the channel's
@@ -675,7 +730,7 @@ export function createOperator<Datum, Options extends Record<string, any>>(
   layout: LayoutFn<Options>,
   cfg: OperatorConfig<Datum, Options>
 ): DualModeOperator<Datum, Options> {
-  function dual(opts: Options): Operator<Datum[], Datum[]>;
+  function dual(opts: Options): PositionableOperator<Datum[], Datum[]>;
   function dual(
     opts: Options,
     marks: (Mark<Datum> | GoFishRef)[] | Promise<(Mark<Datum> | GoFishRef)[]>
@@ -683,7 +738,7 @@ export function createOperator<Datum, Options extends Record<string, any>>(
   function dual(
     opts: Options,
     marks?: (Mark<Datum> | GoFishRef)[] | Promise<(Mark<Datum> | GoFishRef)[]>
-  ): Operator<Datum[], Datum[]> | NameableMark<Datum> {
+  ): PositionableOperator<Datum[], Datum[]> | NameableMark<Datum> {
     if (marks !== undefined) {
       // Combinator form: apply each mark to the same data d, then layout.
       const base: Mark<Datum> = async (
@@ -717,6 +772,9 @@ export function createOperator<Datum, Options extends Record<string, any>>(
         (node as any).datum = d;
         return node;
       };
+      attachOptionRebuilder(base, (patch) =>
+        dual({ ...opts, ...patch } as Options, marks)
+      );
       const combinator = nameableMark(base);
       // Tag combinator-form mark with IR-serialization metadata, mirroring
       // the operator-form tagging below. The `__combinator: true` flag tells
@@ -733,7 +791,9 @@ export function createOperator<Datum, Options extends Record<string, any>>(
           children: marks,
         };
       }
-      return combinator;
+      return attachPositionOption(combinator, (patch) =>
+        dual({ ...opts, ...patch } as Options, marks)
+      );
     }
     // Operator (traversal) form: split d, apply mark per leaf, layout.
     const operator: Operator<Datum[], Datum[]> = async (mark) => {
@@ -820,7 +880,9 @@ export function createOperator<Datum, Options extends Record<string, any>>(
         opts: payload,
       };
     }
-    return operator;
+    return attachPositionOption(operator, (patch) =>
+      dual({ ...opts, ...patch } as Options)
+    ) as PositionableOperator<Datum[], Datum[]>;
   }
   return dual as DualModeOperator<Datum, Options>;
 }

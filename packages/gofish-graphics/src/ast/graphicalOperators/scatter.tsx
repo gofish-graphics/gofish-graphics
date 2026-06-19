@@ -6,7 +6,6 @@ import { createNodeOperator } from "../withGoFish";
 import { GoFishAST } from "../_ast";
 import { Collection } from "lodash";
 import { SplitBy, splitKeyFn } from "../datumProjection";
-import type { Operator } from "../types";
 import { Alignment } from "./alignment";
 import { createOperator } from "../marks/createOperator";
 import { layer } from "./layer";
@@ -171,20 +170,7 @@ export type ScatterOptions = {
   h?: MaybeValue<number>;
 };
 
-export type ScatterPositionOptions = Pick<ScatterOptions, "x" | "y">;
-
-export type ScatterOperator = Operator<any[], any[]> & {
-  /**
-   * Add absolute x/y placement to scatter without wrapping it in another node.
-   *
-   * This is intentionally an elaboration helper: it merges into Scatter's own
-   * placement options, so coordinate transforms see the same node boundary as
-   * `scatter({ x, y })`.
-   */
-  position(opts: ScatterPositionOptions): ScatterOperator;
-};
-
-const baseScatter = createOperator<any, ScatterOptions>(Scatter as any, {
+export const scatter = createOperator<any, ScatterOptions>(Scatter as any, {
   // When no `by` is given, pass each item through as-is. Items may already be
   // arrays or scalars; downstream marks/channels handle either form.
   split: ({ by }, d) =>
@@ -209,18 +195,3 @@ const baseScatter = createOperator<any, ScatterOptions>(Scatter as any, {
   },
   serialize: { type: "scatter" },
 });
-
-export const scatter = ((opts: ScatterOptions, marks?: any) => {
-  const built =
-    marks === undefined
-      ? (baseScatter as any)(opts)
-      : (baseScatter as any)(opts, marks);
-
-  built.position = (positionOpts: ScatterPositionOptions) =>
-    scatter({ ...opts, ...positionOpts }, marks);
-
-  return built;
-}) as {
-  (opts: ScatterOptions): ScatterOperator;
-  (opts: ScatterOptions, marks: any): any;
-};
