@@ -86,14 +86,12 @@ const axisIndex = (axis: Axis): 0 | 1 => (axis === "x" ? 0 : 1);
 const axisName = (axis: 0 | 1): Axis => (axis === 0 ? "x" : "y");
 const placementKey = (axis: 0 | 1, name: string): string => `${axis}:${name}`;
 
-const boxAnchor = (anchor: AlignAnchor): Anchor =>
-  anchor === "start"
-    ? "min"
-    : anchor === "middle"
-      ? "center"
-      : anchor === "end"
-        ? "max"
-        : "baseline";
+const BOX_ANCHOR: Record<AlignAnchor, Anchor> = {
+  start: "min",
+  middle: "center",
+  end: "max",
+  baseline: "baseline",
+};
 
 function anchorOffset(
   target: Placeable,
@@ -108,7 +106,7 @@ function anchorOffset(
       : Math.abs(spannedSize);
   }
 
-  const local = target.localAnchor?.(axis, boxAnchor(anchor));
+  const local = target.localAnchor?.(axis, BOX_ANCHOR[anchor]);
   const localMin = target.localAnchor?.(axis, "min");
   if (local !== undefined && localMin !== undefined) return local - localMin;
 
