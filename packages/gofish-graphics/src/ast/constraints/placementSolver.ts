@@ -27,10 +27,8 @@ import type {
   NodeId,
   PlacementFactEmitter,
   PlacementFact,
-  PlacementEdgePin,
   PlacementParticipantRequest,
   PlacementPinRequest,
-  PlacementPin,
   PlacementProgram,
   PlacementRelation,
   PlacementRelationRequest,
@@ -63,6 +61,18 @@ export interface PlacementConflict {
   asserted: number;
   implied: number;
 }
+
+type PlacementPinClaim = {
+  node: NodeId;
+  value: number;
+  owner: string;
+};
+
+type AxisProblem = {
+  relations: PlacementRelation[];
+  pins: PlacementPinClaim[];
+  participants: Set<NodeId>;
+};
 
 /** A raw placement-system coordinate after datum values have been elaborated
  *  through the layer's data→pixel scale. Undefined means a datum coordinate had
@@ -217,28 +227,55 @@ class PlacementProgramLowerer implements PlacementFactEmitter {
   }
 }
 
+function classifyAxisFacts(
+  facts: PlacementFact[],
+  spanExtents: Map<string, SpanExtent>
+): AxisProblem {
+  const relations: PlacementRelation[] = [];
+  const pins: PlacementPinClaim[] = [];
+  const participants = new Set<NodeId>();
+
+  for (const fact of facts) {
+    if (fact.type === "pin") {
+      participants.add(fact.expr.node);
+      pins.push({ node: fact.expr.node, value: fact.value, owner: fact.owner });
+      continue;
+    }
+
+    if (fact.type === "relation") {
+      participants.add(fact.from.node);
+      participants.add(fact.to.node);
+      relations.push(fact);
+      continue;
+    }
+
+    participants.add(fact.name);
+    if (fact.type !== "edge-pin") continue;
+
+    if (fact.edge === "min") {
+      pins.push({ node: fact.name, value: fact.value, owner: fact.owner });
+      continue;
+    }
+
+    const span = spanExtents.get(placementKey(fact.axis, fact.name));
+    if (span) {
+      pins.push({
+        node: fact.name,
+        value: fact.value - span.size,
+        owner: fact.owner,
+      });
+    }
+  }
+
+  return { relations, pins, participants };
+}
+
 function solveAxis(
   axis: Axis,
   facts: PlacementFact[],
   spanExtents: Map<string, SpanExtent>
 ): { positions: Map<NodeId, number>; conflicts: PlacementConflict[] } {
-  const relations = facts.filter(
-    (fact): fact is PlacementRelation => fact.type === "relation"
-  );
-  const pins = facts.filter(
-    (fact): fact is PlacementPin => fact.type === "pin"
-  );
-  const edgePins = facts.filter(
-    (fact): fact is PlacementEdgePin => fact.type === "edge-pin"
-  );
-  const participants = new Set<NodeId>();
-  for (const fact of facts) {
-    if (fact.type === "pin") participants.add(fact.expr.node);
-    else if (fact.type === "relation") {
-      participants.add(fact.from.node);
-      participants.add(fact.to.node);
-    } else participants.add(fact.name);
-  }
+  const problem = classifyAxisFacts(facts, spanExtents);
 
   const adjacency = new Map<
     NodeId,
@@ -249,7 +286,7 @@ function solveAxis(
     list.push({ node: to, delta, owner });
     adjacency.set(from, list);
   };
-  for (const relation of relations) {
+  for (const relation of problem.relations) {
     addEdge(
       relation.from.node,
       relation.to.node,
@@ -269,7 +306,7 @@ function solveAxis(
   const components: NodeId[][] = [];
   const conflicts: PlacementConflict[] = [];
 
-  for (const start of [...participants].sort()) {
+  for (const start of [...problem.participants].sort()) {
     if (relative.has(start)) continue;
     const component = components.length;
     const nodes: NodeId[] = [];
@@ -319,15 +356,7 @@ function solveAxis(
       });
     }
   };
-  for (const pin of pins) applyPin(pin.expr.node, pin.value, pin.owner);
-  for (const pin of edgePins) {
-    if (pin.edge === "min") {
-      applyPin(pin.name, pin.value, pin.owner);
-      continue;
-    }
-    const span = spanExtents.get(placementKey(pin.axis, pin.name));
-    if (span) applyPin(pin.name, pin.value - span.size, pin.owner);
-  }
+  for (const pin of problem.pins) applyPin(pin.node, pin.value, pin.owner);
 
   for (let component = 0; component < components.length; component++) {
     if (offsets.has(component)) continue;
