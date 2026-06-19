@@ -329,6 +329,10 @@ spread pipeline, auto-fit included (issue #475). Composition beyond one
 distribute (+ one align) per axis falls back to `unionChildSpaces`; the general
 algebra is sketched in
 [[constraints-as-core]].
+`resolveLayerBaseSpaces` is the default bottom-up axis resolver before composed
+constraint overrides: union child spaces, apply `transform.scale` to free
+magnitudes, and merge datum-valued position/span domains with constraint
+measures taking precedence.
 `childLayoutSizeProposal` is the final per-child proposal priority before nest:
 grid cell size, else distribute slice for that named child, else the full layer
 box.

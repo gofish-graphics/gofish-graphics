@@ -21,6 +21,7 @@ import {
   applyNestSpacePlan,
   buildNestPlan,
 } from "../ast/constraints/nestPlan";
+import { resolveLayerBaseSpaces } from "../ast/constraints/compose";
 import {
   buildChildScalePlan,
   buildDistributeSliceMap,
@@ -444,6 +445,27 @@ console.log("# constraint confluence: nest size dependency planning");
     folded !== childSpaces &&
       folded[0] !== childSpaces[0] &&
       childSpaces[0][0] === UNDEFINED
+  );
+
+  const resolved = resolveLayerBaseSpaces(
+    [[SIZE(Monotonic.linear(10, 0)), POSITION(interval(5, 15), "child")]],
+    [3, 1],
+    { y: interval(0, 20), yMeasure: "pin" }
+  );
+  ok(
+    "base space resolution scales free magnitudes with transform.scale",
+    resolved[0].kind === "continuous" &&
+      resolved[0].dataDomain === undefined &&
+      resolved[0].width.run(1) === 30
+  );
+  ok(
+    "base space resolution merges datum domains and prefers constraint measure",
+    resolved[1].kind === "continuous" &&
+      resolved[1].dataDomain !== undefined &&
+      resolved[1].dataDomain !== "delta" &&
+      resolved[1].dataDomain.min === 0 &&
+      resolved[1].dataDomain.max === 20 &&
+      resolved[1].measure === "pin"
   );
 }
 

@@ -2,22 +2,11 @@
 // @wiki Underlying Space — /internals/core/underlying-space
 // </gofish-wiki>
 
-import * as Monotonic from "../../util/monotonic";
 import { GoFishNode } from "../_node";
 import { shadowCheckScaleRoot } from "../solver/shadow";
 import { isToken } from "../createName";
 import { Size, elaborateDims, FancyDims, displayTranslate } from "../dims";
-import {
-  CONTINUOUS,
-  POSITION,
-  UNDEFINED,
-  UnderlyingSpace,
-  continuousInterval,
-  hasBaseline,
-  isBaselineMagnitude,
-  spaceMeasure,
-} from "../underlyingSpace";
-import * as Interval from "../../util/interval";
+import { UNDEFINED, UnderlyingSpace, hasBaseline } from "../underlyingSpace";
 import { computeSize, foldFinite } from "../../util";
 import { CoordinateTransform } from "../coordinateTransforms/coord";
 import { coord } from "../coordinateTransforms/coord";
@@ -40,6 +29,7 @@ import {
 } from "../constraints/nestPlan";
 import {
   composeConstraintSpaces,
+  resolveLayerBaseSpaces,
   type ComposeBudget,
 } from "../constraints/compose";
 import {
@@ -51,8 +41,6 @@ import {
   childPosScalesFor,
   selectGridConstraint,
 } from "../constraints/proposalPlan";
-import { type Measure } from "../data";
-import { unionChildSpaces } from "./alignment";
 
 // ── Z-order resolution ────────────────────────────────────────────────────
 //
@@ -281,23 +269,6 @@ export const layer = createNodeOperatorSequential(
           const gridC = selectGridConstraint(constraints ?? []);
           if (gridC !== undefined) return gridSpaces(gridC, _childNodes);
 
-          // Apply layer's own transform.scale to any baseline magnitude
-          // (origin 0) produced by unionChildSpaces (the symbolic-Monotonic
-          // overlay path).
-          const scaleX = options.transform?.scale?.x ?? 1;
-          const scaleY = options.transform?.scale?.y ?? 1;
-          const applyScale = (
-            space: UnderlyingSpace,
-            scale: number
-          ): UnderlyingSpace =>
-            isBaselineMagnitude(space) && scale !== 1
-              ? CONTINUOUS(
-                  Monotonic.smul(scale, space.width),
-                  "free",
-                  space.measure
-                )
-              : space;
-
           // Nest space fold: only INSIDE_OUT edges (`dir: 'in'`) derive a
           // space — `outer = inner + 2·padding` when inner is SIZE — so a
           // nested pair participates in the union below, hence in a parent's
@@ -316,32 +287,14 @@ export const layer = createNodeOperatorSequential(
           // is what lets the layer build a position scale at layout time so
           // `Constraint.position` can map data values to pixels.
           const posDomains = collectPositionDomains(constraints ?? []);
-          const resolveAxis = (
-            axis: 0 | 1,
-            scale: number,
-            iv: Interval.Interval | undefined,
-            ivMeasure: Measure | undefined
-          ): UnderlyingSpace => {
-            const base = applyScale(
-              unionChildSpaces(effectiveChildren, axis),
-              scale
-            );
-            if (iv === undefined) return base;
-            const baseIv = continuousInterval(base);
-            const merged = baseIv ? Interval.unionAll(baseIv, iv) : iv;
-            // The position/span constraints' OWN measure is the authoritative
-            // unit for this axis's data domain (they define it); it wins, falling
-            // back to the children's POSITION measure when the constraints are
-            // untagged (literal-pixel coords). We do NOT strict-unify the two: a
-            // self-scaling child (e.g. a pie glyph) can leak its inner unit into
-            // `base`, and that is not a competing claim about the scatter axis.
-            // Same-layer conflicts ARE caught — inside collectPositionDomains.
-            return POSITION(merged, ivMeasure ?? spaceMeasure(base));
-          };
-          const resolved: [UnderlyingSpace, UnderlyingSpace] = [
-            resolveAxis(0, scaleX, posDomains.x, posDomains.xMeasure),
-            resolveAxis(1, scaleY, posDomains.y, posDomains.yMeasure),
-          ];
+          const resolved = resolveLayerBaseSpaces(
+            effectiveChildren,
+            [
+              options.transform?.scale?.x ?? 1,
+              options.transform?.scale?.y ?? 1,
+            ],
+            posDomains
+          );
 
           // A simple spread expressed as align + distribute. When the
           // constraints match that operator image (see composeConstraintSpaces),

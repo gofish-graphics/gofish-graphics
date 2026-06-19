@@ -36,21 +36,46 @@
 // pin) is not yet modeled; the distribute claim wins on a shared axis for now.
 
 import * as Monotonic from "../../util/monotonic";
-import { GoFishNode } from "../_node";
-import { GoFishAST } from "../_ast";
+import type { GoFishAST } from "../_ast";
 import { Size } from "../dims";
 import {
+  CONTINUOUS,
+  POSITION,
   UNDEFINED,
   UnderlyingSpace,
+  continuousInterval,
   isBaselineMagnitude,
   isUNDEFINED,
+  spaceMeasure,
 } from "../underlyingSpace";
 import { unionChildSpaces } from "../graphicalOperators/alignment";
 import { type ConstraintSpec } from ".";
+import * as Interval from "../../util/interval";
+import type { Measure } from "../data";
 import { distributeSpaceFold, type DistributeConstraint } from "./distribute";
 import { alignSpaceFold, type AlignConstraint } from "./align";
 import type { SpanConstraint } from "./span";
-import { axisIndex, buildNameIndex, type AlignAnchor } from "./shared";
+type AlignAnchor = "start" | "middle" | "end" | "baseline";
+
+const axisIndex = (axis: "x" | "y"): 0 | 1 => (axis === "x" ? 0 : 1);
+
+const childNameKey = (node: GoFishAST): string | undefined => {
+  if (typeof node !== "object" || node === null || !("_name" in node)) {
+    return undefined;
+  }
+  const name = node._name;
+  if (name === undefined) return undefined;
+  return typeof name === "string" ? name : name.__tag;
+};
+
+const buildNameIndex = (childNodes: GoFishAST[]): Map<string, number> => {
+  const m = new Map<string, number>();
+  for (let i = 0; i < childNodes.length; i++) {
+    const name = childNameKey(childNodes[i]);
+    if (name !== undefined && !m.has(name)) m.set(name, i);
+  }
+  return m;
+};
 
 /** One distribute's slice of the layout budget: equal shares of the axis size
  *  among its covered children (consumed by `layer.tsx`'s `layout`). */
@@ -78,6 +103,73 @@ export type ComposedSpaces = {
   spaces: [UnderlyingSpace | undefined, UnderlyingSpace | undefined];
   budget: ComposeBudget;
 };
+
+export type PositionDomains = {
+  x?: Interval.Interval;
+  y?: Interval.Interval;
+  xMeasure?: Measure;
+  yMeasure?: Measure;
+};
+
+/** Apply a layer transform scale to baseline magnitudes produced by the default
+ * child-space union. Anchored POSITION and DIFFERENCE axes keep their own data
+ * domains; only free extents scale symbolically. */
+export function scaleBaselineMagnitude(
+  space: UnderlyingSpace,
+  scale: number
+): UnderlyingSpace {
+  return isBaselineMagnitude(space) && scale !== 1
+    ? CONTINUOUS(Monotonic.smul(scale, space.width), "free", space.measure)
+    : space;
+}
+
+/** Resolve a layer's default per-axis space before composed constraint-space
+ * overrides: union child spaces, apply transform.scale to free magnitudes, and
+ * merge datum position/span domains into POSITION space. */
+export function resolveLayerAxisSpace(
+  childSpaces: Size<UnderlyingSpace>[],
+  axis: 0 | 1,
+  scale: number,
+  positionDomain: Interval.Interval | undefined,
+  positionMeasure: Measure | undefined
+): UnderlyingSpace {
+  const base = scaleBaselineMagnitude(
+    unionChildSpaces(childSpaces, axis),
+    scale
+  );
+  if (positionDomain === undefined) return base;
+  const baseIv = continuousInterval(base);
+  const merged = baseIv
+    ? Interval.unionAll(baseIv, positionDomain)
+    : positionDomain;
+  // The position/span constraints' OWN measure is the authoritative unit for
+  // this axis's data domain (they define it); it wins, falling back to the
+  // children's POSITION measure when the constraints are untagged.
+  return POSITION(merged, positionMeasure ?? spaceMeasure(base));
+}
+
+export function resolveLayerBaseSpaces(
+  childSpaces: Size<UnderlyingSpace>[],
+  transformScale: Size,
+  positionDomains: PositionDomains
+): Size<UnderlyingSpace> {
+  return [
+    resolveLayerAxisSpace(
+      childSpaces,
+      0,
+      transformScale[0],
+      positionDomains.x,
+      positionDomains.xMeasure
+    ),
+    resolveLayerAxisSpace(
+      childSpaces,
+      1,
+      transformScale[1],
+      positionDomains.y,
+      positionDomains.yMeasure
+    ),
+  ];
+}
 
 /** Build a per-axis Size carrying `space` on `axis` and UNDEFINED elsewhere, so
  *  a single space can be fed to `unionChildSpaces` as a pseudo-child. */
@@ -122,10 +214,12 @@ export function composeConstraintSpaces(
   if (distributes.length === 0 && spans.length === 0) return undefined;
 
   const indexByName = buildNameIndex(childNodes);
-  const keyOf = (i: number): string | undefined =>
-    childNodes[i] instanceof GoFishNode
-      ? (childNodes[i] as GoFishNode).key
+  const keyOf = (i: number): string | undefined => {
+    const node = childNodes[i];
+    return typeof node === "object" && node !== null && "key" in node
+      ? (node.key as string | undefined)
       : undefined;
+  };
   const idxOf = (refs: { name: string }[]): number[] | undefined => {
     const out = refs.map((r) => indexByName.get(r.name));
     return out.every((i): i is number => i !== undefined) ? out : undefined;
