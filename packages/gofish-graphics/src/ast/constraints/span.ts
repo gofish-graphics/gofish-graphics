@@ -7,6 +7,9 @@ import { getValue, isValue, MaybeValue } from "../data";
 import { computeAesthetic } from "../../util";
 import { Axis, ConstraintPosScales, ConstraintRef, axisIndex } from "./shared";
 import * as Interval from "../../util/interval";
+import { applySpanPlacements, type SpanPlacement } from "./spanPlacementSolver";
+
+export { applySpanPlacements, type SpanPlacement } from "./spanPlacementSolver";
 
 /**
  * A **size-setting** constraint (#39/#546): pin BOTH edges of each target on an
@@ -63,14 +66,6 @@ export function spanDatumInterval(
   return Interval.interval(Math.min(...vals), Math.max(...vals));
 }
 
-/** One emitted span equation: the target OWNS both edges (`min`, `max`) on
- *  `axis` — two facets, rank 2, so the size falls out. */
-export interface SpanPlacement {
-  target: Placeable;
-  axis: Axis;
-  owned: { min: number; max: number };
-}
-
 /**
  * EMIT a `span` as facet-equation sets (#39 facet-equation-emitter form) WITHOUT
  * applying them: resolve each axis's `[min, max]` to pixels (datum → posScale,
@@ -80,7 +75,8 @@ export interface SpanPlacement {
 export function emitSpan(
   constraint: SpanConstraint,
   targets: Placeable[],
-  posScales: ConstraintPosScales | undefined
+  posScales: ConstraintPosScales | undefined,
+  owner = "span"
 ): SpanPlacement[] {
   const out: SpanPlacement[] = [];
   const emitAxis = (
@@ -97,7 +93,7 @@ export function emitSpan(
     const max = toPx(span[1]);
     if (min === undefined || max === undefined) return;
     for (const target of targets)
-      out.push({ target, axis, owned: { min, max } });
+      out.push({ target, axis, owned: { min, max }, owner });
   };
   emitAxis("x", constraint.x);
   emitAxis("y", constraint.y);
@@ -115,6 +111,5 @@ export function applySpan(
   targets: Placeable[],
   posScales: ConstraintPosScales | undefined
 ): void {
-  for (const p of emitSpan(constraint, targets, posScales))
-    p.target.setExtent!(p.axis, p.owned, "span");
+  applySpanPlacements(emitSpan(constraint, targets, posScales));
 }

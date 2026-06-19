@@ -16,6 +16,7 @@ covers:
   - packages/gofish-graphics/src/ast/constraints/distributePlacement.ts
   - packages/gofish-graphics/src/ast/constraints/align.ts
   - packages/gofish-graphics/src/ast/constraints/placementSolver.ts
+  - packages/gofish-graphics/src/ast/constraints/spanPlacementSolver.ts
   - packages/gofish-graphics/src/ast/constraints/nest.ts
   - packages/gofish-graphics/src/ast/constraints/grid.ts
   - packages/gofish-graphics/src/ast/constraints/span.ts
@@ -339,6 +340,10 @@ solve: strong pins win, relation cycles are checked for contradiction, and weak
 fallbacks are ranked by policy rather than source order. The extracted
 `constraints/distributePlacement.ts` remains the pure emit/apply form of the
 legacy distribute walk used by the spread path and by constraint lowering.
+Size-setting span claims are batched separately in
+`constraints/spanPlacementSolver.ts` before this placement solve, so duplicate
+edge claims collapse and contradictory spans report a conflict without letting
+declaration order reset the target axis.
 
 Placement-time alignment dispatches on the same resolution. When an `align`
 finds **no pre-placed sibling**, its fallback baseline is computed from what the

@@ -15,8 +15,9 @@ import {
 import { createNestConstraint, isNestConstraint } from "./nest";
 import { createGridConstraint, isGridConstraint } from "./grid";
 import {
-  applySpan,
+  applySpanPlacements,
   createSpanConstraint,
+  emitSpan,
   isSpanConstraint,
   spanDatumInterval,
 } from "./span";
@@ -26,7 +27,7 @@ import type { PositionConstraint, PositionOptions } from "./position";
 import type { ZAboveConstraint, ZBelowConstraint } from "./zorder";
 import type { NestConstraint, NestOptions } from "./nest";
 import type { GridConstraint, GridOptions } from "./grid";
-import type { SpanConstraint, SpanOptions } from "./span";
+import type { SpanConstraint, SpanOptions, SpanPlacement } from "./span";
 import { type ConstraintPosScales, type ConstraintRef } from "./shared";
 import { solvePlacementConstraints } from "./placementSolver";
 
@@ -265,16 +266,21 @@ export function applyConstraints(
   sizes: [number, number],
   posScales?: ConstraintPosScales
 ): void {
-  // Phase 1 boundary: spans determine box sizes, so apply all of them before the
-  // known-size relational placement solve. Their own order is immaterial unless
-  // they over-determine the same box, which the bbox ledger diagnoses.
-  for (const constraint of constraints) {
-    if (!isSpanConstraint(constraint)) continue;
+  // Phase 2 boundary: spans determine box sizes, so batch all span facet claims
+  // before the known-size relational placement solve. This makes size-setting
+  // constraints order-independent too: consistent duplicate claims collapse,
+  // contradictory claims diagnose before any target axis is reset.
+  const spanPlacements: SpanPlacement[] = [];
+  constraints.forEach((constraint, constraintIndex) => {
+    if (!isSpanConstraint(constraint)) return;
     const targets = constraint.children
       .map((ref) => nameToPlaceable.get(ref.name))
       .filter((p): p is Placeable => p !== undefined);
-    applySpan(constraint, targets, posScales);
-  }
+    spanPlacements.push(
+      ...emitSpan(constraint, targets, posScales, `span[${constraintIndex}]`)
+    );
+  });
+  applySpanPlacements(spanPlacements);
 
   const placement = constraints.filter(
     (

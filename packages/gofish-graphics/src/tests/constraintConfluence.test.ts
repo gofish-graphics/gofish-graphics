@@ -11,6 +11,9 @@ import type { GridConstraint } from "../ast/constraints/grid";
 import type { NestConstraint } from "../ast/constraints/nest";
 import { solvePlacementConstraints } from "../ast/constraints/placementSolver";
 import type { PositionConstraint } from "../ast/constraints/position";
+import { applySpanPlacements } from "../ast/constraints/spanPlacementSolver";
+import type { SpanPlacement } from "../ast/constraints/spanPlacementSolver";
+import type { SpanConstraint } from "../ast/constraints/span";
 import type { Anchor, Dimensions, FancyDirection } from "../ast/dims";
 import { elaborateDirection, localAnchorPoint } from "../ast/dims";
 
@@ -68,6 +71,20 @@ function makePlaceable(
       pin(axis, value, anchor);
     },
     pinAnchor: pin,
+    setExtent(axis, owned): void {
+      const idx = elaborateDirection(axis);
+      const dim = dims[idx];
+      if (owned.min !== undefined && owned.max !== undefined) {
+        dim.min = owned.min;
+        dim.size = owned.max - owned.min;
+        dim.center = localAnchorPoint("center", dim.min, dim.size);
+        dim.max = localAnchorPoint("max", dim.min, dim.size);
+        return;
+      }
+      if (owned.min !== undefined) pin(axis, owned.min, "min");
+      if (owned.center !== undefined) pin(axis, owned.center, "center");
+      if (owned.max !== undefined) pin(axis, owned.max, "max");
+    },
   };
 }
 
@@ -135,6 +152,12 @@ const distribute = (names: string[]): DistributeConstraint => ({
   order: "forward",
   glue: false,
   children: names.map(child),
+});
+
+const span = (name: string, min: number, max: number): SpanConstraint => ({
+  type: "span",
+  x: [min, max],
+  children: [child(name)],
 });
 
 console.log("# constraint confluence: explicit pin + distribute");
@@ -282,6 +305,56 @@ console.log("# constraint confluence: nest and grid placement");
   );
 }
 
+console.log("# constraint confluence: span size-setting");
+{
+  const spanA = span("A", 10, 30);
+  const duplicateSpanA = span("A", 10, 30);
+  const alignCenters: AlignConstraint = {
+    type: "align",
+    x: "middle",
+    children: [A, B],
+  };
+  const apply = (spans: SpanConstraint[], placements: Constraint[]): Geometry => {
+    const targets = new Map<string, Placeable>([
+      ["A", makePlaceable()],
+      ["B", makePlaceable()],
+    ]);
+    applySpanPlacements(
+      spans.flatMap((constraint, i): SpanPlacement[] =>
+        constraint.children.flatMap((ref) => {
+          const target = targets.get(ref.name);
+          if (!target || constraint.x === undefined) return [];
+          return [
+            {
+              target,
+              axis: "x",
+              owned: { min: constraint.x[0] as number, max: constraint.x[1] as number },
+              owner: `span[${i}]`,
+            },
+          ];
+        })
+      )
+    );
+    solvePlacementConstraints(placements, targets, [300, 200]);
+    return Object.fromEntries(
+      [...targets].map(([name, target]) => {
+        const { min, center, max } = target.dims[0];
+        return [name, { min, center, max }];
+      })
+    );
+  };
+
+  expectConfluent(
+    "duplicate span/align",
+    apply([spanA, duplicateSpanA], [alignCenters]),
+    apply([duplicateSpanA, spanA], [alignCenters]),
+    {
+      A: { min: 10, center: 20, max: 30 },
+      B: { min: 15, center: 20, max: 25 },
+    }
+  );
+}
+
 console.log("# constraint confluence: self-placement and override");
 {
   const selfPlace = (targets: Map<string, Placeable>) =>
@@ -378,6 +451,44 @@ console.log("# constraint confluence: contradictions are diagnosed");
   ok(
     "conflicting pins throw in either declaration order",
     throws([p100, p200]) && throws([p200, p100])
+  );
+
+  const spanA10_30 = span("A", 10, 30);
+  const spanA10_40 = span("A", 10, 40);
+  const spanThrows = (constraints: SpanConstraint[]): boolean => {
+    try {
+      const targets = new Map<string, Placeable>([["A", makePlaceable()]]);
+      applySpanPlacements(
+        constraints.flatMap((constraint, i): SpanPlacement[] =>
+          constraint.children.flatMap((ref) => {
+            const target = targets.get(ref.name);
+            if (!target || constraint.x === undefined) return [];
+            return [
+              {
+                target,
+                axis: "x",
+                owned: {
+                  min: constraint.x[0] as number,
+                  max: constraint.x[1] as number,
+                },
+                owner: `span[${i}]`,
+              },
+            ];
+          })
+        )
+      );
+      return false;
+    } catch (error) {
+      return (
+        error instanceof Error &&
+        error.message.includes("Constraint span conflict")
+      );
+    }
+  };
+  ok(
+    "conflicting spans throw in either declaration order",
+    spanThrows([spanA10_30, spanA10_40]) &&
+      spanThrows([spanA10_40, spanA10_30])
   );
 }
 
