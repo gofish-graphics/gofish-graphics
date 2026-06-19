@@ -365,13 +365,14 @@ effective scale only to non-target children whose own space is POSITION.
 After sizing, the layer emits placement constraints into a per-axis weighted
 relation problem (`constraints/placementSolver.ts`). The raw fact datatype for
 this pass lives in `constraints/placementFacts.ts`: anchor expressions, strong
-pins, weak pins, relations, and spans. Named constraints first lower to an
-inspectable `PlacementProgram` (`axes: [PlacementFact[], PlacementFact[]]`);
-solving consumes that program rather than mutating solver state during lowering.
-Constraint-specific placement lowerers live with their constraints: `align.ts`,
-`distribute.ts`, `position.ts`, `span.ts`, `nest.ts`, and `grid.ts` own their
-policy choices, while the solver owns anchor-offset resolution, graph solving,
-and writing solved positions back to placeables.
+pins, relations, edge pins, and participant facts. Named constraints first lower
+to an inspectable `PlacementProgram`
+(`axes: [PlacementFact[], PlacementFact[]]`); solving consumes that program
+rather than mutating solver state during lowering. Constraint-specific placement
+lowerers live with their constraints: `align.ts`, `distribute.ts`,
+`position.ts`, `span.ts`, `nest.ts`, and `grid.ts` own their policy choices,
+while the solver owns anchor-offset resolution, graph solving, and writing
+solved positions back to placeables.
 Before lowering, `PlacementOwnershipPlan` records pre-existing placements,
 authoritative position overrides, and axes claimed by position/span facts so
 legacy read-vs-write policy is explicit data rather than scattered set checks.
@@ -392,9 +393,10 @@ literal/datum distinction until raw facts are emitted: literals are pixels,
 while datum coordinates elaborate through the already-solved data→pixel scale
 plus any post-scale offset. This keeps the unified constraint semantics without
 a generic dense linear solver: strong facts win, relation cycles are checked for
-contradiction, and weak fallbacks are
-ordered by named priority fields (`source`, participant count, anchor, and a
-stable signature) rather than source order.
+contradiction, and components without an absolute pin are normalized so the
+minimum solved coordinate in that component is `0`. If a graphic needs a
+floating component to appear at a particular absolute coordinate, that placement
+must be explicit.
 The legacy per-constraint apply helpers have been retired from the constraint
 path; spread, scatter, table, axes, and hand-written constraints all lower to
 the same solver entrypoint. Span edge claims are still pre-validated with the
@@ -404,29 +406,22 @@ relation solve as placement. An incompatible same-solve `span` + `position` on t
 target/axis reports an over-determined placement instead of letting one silently
 yield to the other.
 
-Placement-time alignment dispatches on the same resolution. When an `align`
-finds **no pre-placed sibling**, its fallback baseline is computed from what the
-axis carries (in `constraints/placementSolver.ts`): a posScale-carrying
-anchored axis falls back to the scale origin `posScale(0)` — bars hang from the
-zero line — while a pixel-pure axis falls back to the layer-box edge for the
-anchor, so axis titles and chrome pin to the plot box. `middle` is the box
-center either way (no scale origin to seat against). The fallback is a property
-of the axis's space, not of which API assembled the layer (#552). One
-consequence worth knowing: a coordinate transform's children are pixel-pure by
-construction (posScales don't cross a nonlinear transform — children get scale
-_factors_ instead), so an `end`-aligned spread inside `coord` seats flush at the
-box edge rather than at a scale origin.
+Placement-time alignment dispatches on the same resolution. `align` emits
+relations between child anchors; it no longer chooses an absolute fallback
+baseline for an otherwise-floating system. If no explicit `position`, `span`,
+self-placement, or other strong pin fixes a connected component, the solver
+normalizes that component so its minimum solved coordinate is `0`. A user who
+needs the aligned system to appear at a particular place must say so explicitly
+with a placement constraint.
 
-That fallback is right for a child that needs a baseline (a bar's height — a
-`free` placement). It is **wrong** for a child that already commits its own
-position — a faceted scatter panel over `[1955, 2010]`, whose `placement` is
-`determined`. Pinning it to `posScale(0)` (data-zero, far below 1955) would
-fling it off-canvas; it should keep where its own scale puts it. So
-the placement solver reads `Placeable.placementOn(dir)`: **a target whose
-subtree already commits a data position (`placement` `determined`/`conflict`)
-on a posScale axis, with a non-`middle` anchor, is left alone** — `align`
-shares the frame (it still unions the children's `dataDomain`) but supplies no
-baseline. When alignment does write an anchor relation, it asks
+That normalization is also what keeps data-positioned children safe. A faceted
+scatter panel over `[1955, 2010]`, whose `placement` is `determined`, should not
+be pulled to `posScale(0)` (data-zero, far below 1955). So the placement solver
+reads `Placeable.placementOn(dir)`: **a target whose subtree already commits a
+data position (`placement` `determined`/`conflict`) on a posScale axis, with a
+non-`middle` anchor, is left alone** — `align` shares the frame (it still unions
+the children's `dataDomain`) but supplies no baseline. When alignment does write
+an anchor relation, it asks
 `Placeable.localAnchor(axis, anchor)` for the anchor's coordinate in the
 target's local box. `GoFishNode.localAnchor()` derives that from the node's
 intrinsic dimensions (including baseline/min/center/max), so relation solving

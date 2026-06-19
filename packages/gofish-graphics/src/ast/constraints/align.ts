@@ -73,19 +73,6 @@ function normalizedAnchors(spec: AlignAxisSpec, count: number): AlignAnchor[] {
   return spec;
 }
 
-function alignFallback(
-  anchor: AlignAnchor,
-  axis: 0 | 1,
-  sizes: [number, number],
-  posScales: ConstraintPosScales | undefined
-): number {
-  if (anchor === "middle")
-    return Number.isFinite(sizes[axis]) ? sizes[axis] / 2 : 0;
-  if (posScales?.[axis]) return posScales[axis]!(0);
-  if (anchor === "end" && Number.isFinite(sizes[axis])) return sizes[axis];
-  return 0;
-}
-
 function isDataPositionedAlignTarget(
   target: Placeable | undefined,
   anchor: AlignAnchor,
@@ -106,14 +93,12 @@ export function lowerAlignPlacement(
   {
     emitter,
     targets,
-    sizes,
     posScales,
     axisIndex,
     isPinned,
   }: {
     emitter: PlacementFactEmitter;
     targets: Map<string, Placeable>;
-    sizes: [number, number];
     posScales: ConstraintPosScales | undefined;
     axisIndex: (axis: Axis) => 0 | 1;
     isPinned: (axis: Axis, name: string) => boolean;
@@ -172,19 +157,9 @@ export function lowerAlignPlacement(
         owner,
       });
     }
-    const firstAnchor = aligned[0].anchor;
-    emitter.weakPin({
+    emitter.include({
       axis,
-      target: { name: aligned[0].child.name, anchor: firstAnchor },
-      value: alignFallback(firstAnchor, idx, sizes, posScales),
-      priority: {
-        source: "align",
-        participantCount: aligned.length,
-        anchor: firstAnchor,
-        signature: `align:${axis}:${firstAnchor}:${aligned
-          .map(({ child }) => child.name)
-          .join(",")}`,
-      },
+      name: aligned[0].child.name,
       owner,
     });
   };

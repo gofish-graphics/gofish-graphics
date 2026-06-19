@@ -18,9 +18,9 @@ import {
 import {
   anchorExpr,
   edgePinFact,
+  participantFact,
   pinFact,
   relationFact,
-  weakPinFact,
 } from "../ast/constraints/placementFacts";
 import type { PositionConstraint } from "../ast/constraints/position";
 import {
@@ -292,7 +292,7 @@ console.log("# constraint confluence: connected distribute chains");
   );
 }
 
-console.log("# constraint confluence: deterministic weak anchors");
+console.log("# constraint confluence: normalized floating components");
 {
   const centerValueOnBox: AlignConstraint = {
     type: "align",
@@ -310,9 +310,9 @@ console.log("# constraint confluence: deterministic weak anchors");
     solve([centerValueOnBox, startLabelOnBox], ["A", "B", "C"]),
     solve([startLabelOnBox, centerValueOnBox], ["A", "B", "C"]),
     {
-      A: { min: 145, center: 150, max: 155 },
-      B: { min: 145, center: 150, max: 155 },
-      C: { min: 145, center: 150, max: 155 },
+      A: { min: 0, center: 5, max: 10 },
+      B: { min: 0, center: 5, max: 10 },
+      C: { min: 0, center: 5, max: 10 },
     }
   );
 }
@@ -762,17 +762,7 @@ console.log("# constraint confluence: raw placement fact datatype");
   const a = anchorExpr("A", "x", "middle");
   const b = anchorExpr("B", "x", "start");
   const pin = pinFact(a, 42, "test-pin");
-  const weak = weakPinFact(
-    b,
-    0,
-    {
-      source: "align",
-      participantCount: 2,
-      anchor: "start",
-      signature: "weak",
-    },
-    "test-weak"
-  );
+  const participant = participantFact("B", "x", "test-participant");
   const relation = relationFact(a, b, 7, "test-relation");
   const edge = edgePinFact("C", "y", "max", 30, "test-edge");
 
@@ -780,9 +770,8 @@ console.log("# constraint confluence: raw placement fact datatype");
     "placement facts are numeric raw algebra terms",
     pin.type === "pin" &&
       typeof pin.value === "number" &&
-      weak.type === "weak-pin" &&
-      typeof weak.value === "number" &&
-      weak.priority.source === "align" &&
+      participant.type === "participant" &&
+      participant.name === "B" &&
       relation.type === "relation" &&
       typeof relation.offset === "number" &&
       edge.type === "edge-pin" &&
@@ -793,6 +782,7 @@ console.log("# constraint confluence: raw placement fact datatype");
     relation.from.anchor === "middle" &&
       relation.to.anchor === "start" &&
       relation.from.node === "A" &&
+      participant.axis === "x" &&
       edge.name === "C" &&
       edge.edge === "max"
   );
@@ -824,7 +814,7 @@ console.log("# constraint confluence: placement constraint lowering");
     [300, 200]
   );
   ok(
-    "align lowers to relation plus weak anchor facts",
+    "align lowers to relation plus participant facts",
     loweredAlign.program.axes[0].some(
       (fact) =>
         fact.type === "relation" &&
@@ -834,7 +824,7 @@ console.log("# constraint confluence: placement constraint lowering");
         fact.offset === 0
     ) &&
       loweredAlign.program.axes[0].some(
-        (fact) => fact.type === "weak-pin" && fact.owner === "align[0]"
+        (fact) => fact.type === "participant" && fact.owner === "align[0]"
       )
   );
 
@@ -844,7 +834,7 @@ console.log("# constraint confluence: placement constraint lowering");
     [300, 200]
   );
   ok(
-    "distribute lowers to chain relations plus weak anchor facts",
+    "distribute lowers to chain relations plus participant facts",
     loweredDistribute.program.axes[0].filter(
       (fact) => fact.type === "relation" && fact.owner === "distribute[0]"
     ).length === 2 &&
@@ -856,7 +846,8 @@ console.log("# constraint confluence: placement constraint lowering");
           fact.offset === 15
       ) &&
       loweredDistribute.program.axes[0].some(
-        (fact) => fact.type === "weak-pin" && fact.owner === "distribute[0]"
+        (fact) =>
+          fact.type === "participant" && fact.owner === "distribute[0]"
       )
   );
 
@@ -1106,9 +1097,9 @@ console.log("# constraint confluence: self-placement and override");
     [(value) => value * 10 - 200, undefined]
   );
   ok(
-    "posScale align leaves determined continuous placement alone",
+    "posScale align leaves determined continuous placement alone and normalizes free sibling",
     targets.get("A")!.dims[0].min === undefined &&
-      targets.get("B")!.dims[0].min === -200
+      targets.get("B")!.dims[0].min === 0
   );
 
   const sourceTargets = new Map<string, Placeable>([

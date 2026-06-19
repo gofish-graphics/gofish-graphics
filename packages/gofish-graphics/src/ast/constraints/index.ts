@@ -228,8 +228,7 @@ export function collectPositionDomains(constraints: ConstraintSpec[]): {
  *
  * @param constraints - The constraint specs to compose
  * @param nameToPlaceable - Map from child name to its Placeable
- * @param sizes - The layer's box size `[w, h]`, used to derive an unanchored
- *   `align`'s fallback baseline (layer-box edge) per axis
+ * @param sizes - The layer's box size `[w, h]`, used by grid placement
  * @param posScales - Per-axis data→pixel scales for `position` constraints
  */
 export function applyConstraints(

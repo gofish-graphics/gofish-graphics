@@ -28,21 +28,9 @@ export type PlacementRelationRequest = {
   owner: string;
 };
 
-export type WeakPinSource = "align" | "distribute";
-
-/** Stable policy order for weak pins. Strong facts do not consult priority. */
-export type WeakPinPriority = {
-  source: WeakPinSource;
-  participantCount: number;
-  anchor: AlignAnchor;
-  signature: string;
-};
-
-export type PlacementWeakPinRequest = {
+export type PlacementParticipantRequest = {
   axis: Axis;
-  target: PlacementAnchorRef;
-  value: number;
-  priority: WeakPinPriority;
+  name: NodeId;
   owner: string;
 };
 
@@ -53,11 +41,10 @@ export type PlacementPin = {
   owner: string;
 };
 
-export type PlacementWeakPin = {
-  type: "weak-pin";
-  expr: AnchorExpr;
-  value: number;
-  priority: WeakPinPriority;
+export type PlacementParticipant = {
+  type: "participant";
+  name: NodeId;
+  axis: Axis;
   owner: string;
 };
 
@@ -83,9 +70,9 @@ export type PlacementEdgePin = {
 
 export type PlacementFact =
   | PlacementPin
-  | PlacementWeakPin
   | PlacementRelation
-  | PlacementEdgePin;
+  | PlacementEdgePin
+  | PlacementParticipant;
 
 export type PlacementProgram = {
   axes: [PlacementFact[], PlacementFact[]];
@@ -99,7 +86,7 @@ export interface PlacementFactEmitter {
     value: number,
     owner: string
   ): void;
-  weakPin(request: PlacementWeakPinRequest): void;
+  include(request: PlacementParticipantRequest): void;
   relate(request: PlacementRelationRequest): void;
 }
 
@@ -119,13 +106,6 @@ export const pinFact = (
   owner: string
 ): PlacementPin => ({ type: "pin", expr, value, owner });
 
-export const weakPinFact = (
-  expr: AnchorExpr,
-  value: number,
-  priority: WeakPinPriority,
-  owner: string
-): PlacementWeakPin => ({ type: "weak-pin", expr, value, priority, owner });
-
 export const relationFact = (
   from: AnchorExpr,
   to: AnchorExpr,
@@ -140,3 +120,9 @@ export const edgePinFact = (
   value: number,
   owner: string
 ): PlacementEdgePin => ({ type: "edge-pin", name, axis, edge, value, owner });
+
+export const participantFact = (
+  name: NodeId,
+  axis: Axis,
+  owner: string
+): PlacementParticipant => ({ type: "participant", name, axis, owner });

@@ -75,11 +75,10 @@ export function distributePlacementAnchors(
 ): {
   from: AlignAnchor;
   to: AlignAnchor;
-  weak: AlignAnchor;
 } {
   return mode === "center"
-    ? { from: "middle", to: "middle", weak: "middle" }
-    : { from: "end", to: "start", weak: "start" };
+    ? { from: "middle", to: "middle" }
+    : { from: "end", to: "start" };
 }
 
 export function lowerDistributePlacement(
@@ -118,18 +117,9 @@ export function lowerDistributePlacement(
       owner,
     });
   }
-  emitter.weakPin({
+  emitter.include({
     axis: constraint.dir,
-    target: { name: ordered[0].name, anchor: anchors.weak },
-    value: 0,
-    priority: {
-      source: "distribute",
-      participantCount: ordered.length,
-      anchor: anchors.weak,
-      signature: `distribute:${constraint.dir}:${constraint.mode}:${ordered
-        .map((child) => child.name)
-        .join(",")}`,
-    },
+    name: ordered[0].name,
     owner,
   });
 }

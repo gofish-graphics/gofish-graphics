@@ -23,19 +23,18 @@ import type {
   PlacementFactEmitter,
   PlacementFact,
   PlacementEdgePin,
-  PlacementWeakPinRequest,
+  PlacementParticipantRequest,
   PlacementPin,
   PlacementProgram,
   PlacementRelation,
   PlacementRelationRequest,
-  PlacementWeakPin,
 } from "./placementFacts";
 import {
   anchorExpr,
   emptyPlacementProgram,
   pinFact,
+  participantFact,
   relationFact,
-  weakPinFact,
 } from "./placementFacts";
 
 type PlacementConstraint =
@@ -119,30 +118,6 @@ function resolveCoordinate(
   return compilePlacementCoordinate(coordinate, scale);
 }
 
-function weakPinSourceRank(pin: PlacementWeakPin): number {
-  return pin.priority.source === "align" ? 1 : 2;
-}
-
-function weakPinAnchorRank(pin: PlacementWeakPin): number {
-  const anchor = pin.priority.anchor;
-  if (anchor === "middle") return 0;
-  if (anchor === "start") return 1;
-  if (anchor === "end") return 2;
-  return 3;
-}
-
-function compareWeakPinPriority(
-  a: PlacementWeakPin,
-  b: PlacementWeakPin
-): number {
-  return (
-    weakPinSourceRank(a) - weakPinSourceRank(b) ||
-    a.priority.participantCount - b.priority.participantCount ||
-    weakPinAnchorRank(a) - weakPinAnchorRank(b) ||
-    a.priority.signature.localeCompare(b.priority.signature)
-  );
-}
-
 class PlacementProgramBuilder implements PlacementFactEmitter {
   readonly program = emptyPlacementProgram();
 
@@ -156,7 +131,7 @@ class PlacementProgramBuilder implements PlacementFactEmitter {
   }
 
   addFact(fact: PlacementFact): void {
-    if (fact.type === "pin" || fact.type === "weak-pin") {
+    if (fact.type === "pin") {
       this.facts(fact.expr.axis).push(fact);
       return;
     }
@@ -196,23 +171,10 @@ class PlacementProgramBuilder implements PlacementFactEmitter {
     );
   }
 
-  weakPin(request: PlacementWeakPinRequest): void {
-    const target = this.target(request.target.name);
-    if (!target) return;
-    const offset = anchorOffset(
-      target,
-      request.axis,
-      request.target.anchor,
-      this.spannedSize(request.axis, request.target.name)
-    );
-    if (offset === undefined) return;
+  include(request: PlacementParticipantRequest): void {
+    if (!this.target(request.name)) return;
     this.facts(request.axis).push(
-      weakPinFact(
-        anchorExpr(request.target.name, request.axis, "start"),
-        request.value - offset,
-        request.priority,
-        request.owner
-      )
+      participantFact(request.name, request.axis, request.owner)
     );
   }
 
@@ -258,13 +220,9 @@ function solveAxis(
   const edgePins = facts.filter(
     (fact): fact is PlacementEdgePin => fact.type === "edge-pin"
   );
-  const weakPins = facts.filter(
-    (fact): fact is PlacementWeakPin => fact.type === "weak-pin"
-  );
   const participants = new Set<NodeId>();
   for (const fact of facts) {
-    if (fact.type === "pin" || fact.type === "weak-pin")
-      participants.add(fact.expr.node);
+    if (fact.type === "pin") participants.add(fact.expr.node);
     else if (fact.type === "relation") {
       participants.add(fact.from.node);
       participants.add(fact.to.node);
@@ -362,17 +320,13 @@ function solveAxis(
 
   for (let component = 0; component < components.length; component++) {
     if (offsets.has(component)) continue;
-    const weak = weakPins
-      .filter((pin) => componentOf.get(pin.expr.node) === component)
-      .sort(compareWeakPinPriority)[0];
-    if (weak) applyPin(weak.expr.node, weak.value, weak.owner);
-    else {
-      const first = [...components[component]].sort()[0];
-      offsets.set(component, {
-        value: -(relative.get(first) ?? 0),
-        owner: "default-origin",
-      });
-    }
+    const min = Math.min(
+      ...components[component].map((node) => relative.get(node) ?? 0)
+    );
+    offsets.set(component, {
+      value: -min,
+      owner: "normalized-origin",
+    });
   }
 
   const positions = new Map<NodeId, number>();
@@ -519,7 +473,6 @@ export function lowerPlacementConstraints(
       lowerAlignPlacement(constraint, owner, {
         emitter: builder,
         targets,
-        sizes,
         posScales,
         axisIndex,
         isPinned,
