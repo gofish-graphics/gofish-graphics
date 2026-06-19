@@ -12,7 +12,6 @@ import type { GridConstraint } from "../ast/constraints/grid";
 import type { NestConstraint } from "../ast/constraints/nest";
 import {
   compilePlacementCoordinate,
-  resolvePlacementCoordinate,
   solvePlacementConstraints,
 } from "../ast/constraints/placementSolver";
 import type { PositionConstraint } from "../ast/constraints/position";
@@ -736,19 +735,14 @@ console.log("# constraint confluence: child posScale forwarding");
 
 console.log("# constraint confluence: raw placement coordinates");
 {
-  const literal = compilePlacementCoordinate(5);
-  const datumCoord = compilePlacementCoordinate(value(5).offset(3));
-
   ok(
-    "literal placement coordinate is already pixels",
-    literal.kind === "pixel" &&
-      resolvePlacementCoordinate(literal, undefined) === 5
+    "literal placement coordinate compiles directly to pixels",
+    compilePlacementCoordinate(5, undefined) === 5
   );
   ok(
-    "datum placement coordinate remains scale-relative until solved",
-    datumCoord.kind === "datum" &&
-      resolvePlacementCoordinate(datumCoord, undefined) === undefined &&
-      resolvePlacementCoordinate(datumCoord, (v) => v * 10) === 53
+    "datum placement coordinate elaborates through posScale before raw facts",
+    compilePlacementCoordinate(value(5).offset(3), undefined) === undefined &&
+      compilePlacementCoordinate(value(5).offset(3), (v) => v * 10) === 53
   );
 }
 

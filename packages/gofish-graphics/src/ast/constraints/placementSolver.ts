@@ -91,9 +91,10 @@ export interface PlacementConflict {
   implied: number;
 }
 
-export type PlacementCoordinate =
-  | { kind: "pixel"; value: number }
-  | { kind: "datum"; value: number; offset: number };
+/** A raw placement-system coordinate after datum values have been elaborated
+ *  through the layer's data→pixel scale. Undefined means a datum coordinate had
+ *  no scale in this scope, so the fact cannot be emitted. */
+export type PlacementCoordinate = number | undefined;
 
 const TOLERANCE = 1e-6;
 const AXIS_INDICES = [0, 1] as const;
@@ -137,34 +138,19 @@ function anchorOffset(
 }
 
 export function compilePlacementCoordinate(
-  coordinate: MaybeValue<number>
-): PlacementCoordinate {
-  return isValue(coordinate)
-    ? {
-        kind: "datum",
-        value: getValue(coordinate)!,
-        offset: getValueOffset(coordinate),
-      }
-    : { kind: "pixel", value: coordinate };
-}
-
-export function resolvePlacementCoordinate(
-  coordinate: PlacementCoordinate,
+  coordinate: MaybeValue<number>,
   scale: ((value: number) => number) | undefined
-): number | undefined {
-  if (coordinate.kind === "pixel") return coordinate.value;
+): PlacementCoordinate {
+  if (!isValue(coordinate)) return coordinate;
   if (scale === undefined) return undefined;
-  return scale(coordinate.value) + coordinate.offset;
+  return scale(getValue(coordinate)!) + getValueOffset(coordinate);
 }
 
 function resolveCoordinate(
   coordinate: MaybeValue<number>,
   scale: ((value: number) => number) | undefined
 ): number | undefined {
-  return resolvePlacementCoordinate(
-    compilePlacementCoordinate(coordinate),
-    scale
-  );
+  return compilePlacementCoordinate(coordinate, scale);
 }
 
 function emitSpanPlacements(
