@@ -251,10 +251,18 @@ export function mapOperator(
   op: OperatorSpec,
   bridge?: DeriveBridge
 ): Operator<any, any> | null {
-  const { type, ...opts } = op as Record<string, any>;
+  const { type, translate, ...opts } = op as Record<string, any>;
   const factory = OPERATOR_MAP[type as string];
   if (!factory) return null;
-  return factory(opts, bridge);
+  const operator = factory(opts, bridge);
+  if (
+    operator &&
+    translate &&
+    typeof (operator as any).translate === "function"
+  ) {
+    return (operator as any).translate(translate);
+  }
+  return operator;
 }
 
 /**
@@ -424,7 +432,7 @@ export function mapMark(
     return mark;
   }
 
-  const { type, name: layerName, ...rest } = spec;
+  const { type, name: layerName, translate, ...rest } = spec as any;
   // Label has two shapes:
   //   - Object `{accessor, ...opts}` — pull out and call the chained
   //     `.label(accessor, opts)` method (adds an external label layer).
@@ -462,6 +470,9 @@ export function mapMark(
   }
   if (spec.__scope) {
     mark = wrapWithScope(mark);
+  }
+  if (translate && typeof (mark as any).translate === "function") {
+    mark = (mark as any).translate(translate);
   }
   const nameVal = resolveNameField(layerName, resolveToken);
   if (nameVal != null && typeof (mark as any).name === "function") {

@@ -348,12 +348,13 @@ in the design improvements:
 The Python wrapper emits a few sentinels that are not part of the
 public schema — they extend it for the round-trip across anywidget:
 
-| Sentinel            | Meaning                                                               |
-| ------------------- | --------------------------------------------------------------------- |
-| `{__gofish_lambda}` | A Python callable; the JS deserializer wires it to an async accessor. |
-| `{__gofish_token}`  | A hygienic-name token; resolved via a per-render token map.           |
-| `__scope: true`     | The `@mark` decorator's scope-wrap signal.                            |
-| `__datum` / `__key` | `bind_data()` pre-binding for Treemap-style invocation.               |
+| Sentinel            | Meaning                                                                                                                               |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `{__gofish_lambda}` | A Python callable; the JS deserializer wires it to an async accessor.                                                                 |
+| `{__gofish_token}`  | A hygienic-name token; resolved via a per-render token map.                                                                           |
+| `__scope: true`     | The `@mark` decorator's scope-wrap signal.                                                                                            |
+| `__datum` / `__key` | `bind_data()` pre-binding for Treemap-style invocation.                                                                               |
+| `translate`         | Structural `.translate({x?, y?})` metadata on Python-emitted operators or marks; the JS deserializer reapplies it as a runtime chain. |
 
 Python's `datum(x)` emits the canonical `{type: "datum", datum: x}` shape
 directly — no bridge sentinel needed.

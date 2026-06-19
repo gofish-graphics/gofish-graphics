@@ -12,10 +12,32 @@ class Operator:
     def __init__(self, op_type: str, **kwargs):
         self.op_type = op_type
         self.kwargs = kwargs
+        self._translate: Optional[dict] = None
+
+    def translate(
+        self,
+        *,
+        x: Optional[float] = None,
+        y: Optional[float] = None,
+    ) -> "Operator":
+        """Translate the operator's arranged output by literal pixels.
+
+        Mirrors JS ``scatter({...}).translate({ y: 50 })``. This is structural:
+        it offsets the arranged result without merging ``x`` / ``y`` into the
+        operator's own channel grammar.
+        """
+        new_op = type(self)(self.op_type, **self.kwargs)
+        new_op._translate = {
+            k: v for k, v in {"x": x, "y": y}.items() if v is not None
+        }
+        return new_op
 
     def to_dict(self) -> dict:
         """Convert operator to dictionary for JSON IR."""
-        return {"type": self.op_type, **self.kwargs}
+        d = {"type": self.op_type, **self.kwargs}
+        if self._translate:
+            d["translate"] = self._translate
+        return d
 
 
 class DeriveOperator(Operator):
@@ -32,12 +54,32 @@ class DeriveOperator(Operator):
         # provenance so a histogram's edges unify on the source field's axis.
         self.provenance = provenance
 
+    def translate(
+        self,
+        *,
+        x: Optional[float] = None,
+        y: Optional[float] = None,
+    ) -> "DeriveOperator":
+        """Translate a derived operator while preserving its lambda handle."""
+        new_op = DeriveOperator(self.fn, self.provenance)
+        new_op.lambda_id = self.lambda_id
+        new_op._translate = {
+            k: v for k, v in {"x": x, "y": y}.items() if v is not None
+        }
+        return new_op
+
     def to_dict(self) -> dict:
         """Convert to dict - return lambda ID (+ measure provenance, if any)."""
         out = {"type": "derive", "lambdaId": self.lambda_id}
         if self.provenance:
             out["provenance"] = self.provenance
+        if self._translate:
+            out["translate"] = self._translate
         return out
+
+
+def _collect_derive_operators(ops: List[Operator]) -> List[DeriveOperator]:
+    return [op for op in ops if isinstance(op, DeriveOperator)]
 
 
 class _MarkFn:
@@ -184,6 +226,7 @@ class Mark:
         # Default z-order hint (sorted within siblings inside `layer`'s
         # render). Mirrors JS `node._zOrder` (`.zOrder(n)`).
         self._z_order: Optional[float] = None
+        self._translate: Optional[dict] = None
 
     def _copy_meta(self, target: "Mark") -> "Mark":
         target._name = self._name
@@ -194,6 +237,7 @@ class Mark:
         target._datum_set = self._datum_set
         target._key = self._key
         target._z_order = self._z_order
+        target._translate = self._translate
         return target
 
     def bind_data(self, datum: Any, key: Optional[str] = None) -> "Mark":
@@ -253,6 +297,22 @@ class Mark:
         )
         self._copy_meta(new_mark)
         new_mark._z_order = value
+        return new_mark
+
+    def translate(
+        self,
+        *,
+        x: Optional[float] = None,
+        y: Optional[float] = None,
+    ) -> "Mark":
+        """Translate this mark by literal pixels without consuming channels."""
+        new_mark = type(self)(
+            self.mark_type, _children=self._children, **self.kwargs
+        )
+        self._copy_meta(new_mark)
+        new_mark._translate = {
+            k: v for k, v in {"x": x, "y": y}.items() if v is not None
+        }
         return new_mark
 
     def cut(
@@ -365,6 +425,8 @@ class Mark:
         # `.zOrder(n)` — applied post-construction on the JS side.
         if self._z_order is not None:
             d["zOrder"] = self._z_order
+        if self._translate:
+            d["translate"] = self._translate
         return d
 
     def to_ir(self) -> dict:
@@ -1116,8 +1178,7 @@ class ChartBuilder:
         # Collect derive functions for RPC execution in the widget
         derive_functions = {
             op.lambda_id: op.fn
-            for op in self.operators
-            if isinstance(op, DeriveOperator)
+            for op in _collect_derive_operators(self.operators)
         }
 
         # Create and return widget. Axes flow through the chart options
@@ -2494,9 +2555,8 @@ class LayerBuilder:
         derive_functions: dict = {}
         for i, child in enumerate(self.children):
             arrow_dict[str(i)] = _serialize_child_data(child)
-            for op in child.operators:
-                if isinstance(op, DeriveOperator):
-                    derive_functions[op.lambda_id] = op.fn
+            for op in _collect_derive_operators(child.operators):
+                derive_functions[op.lambda_id] = op.fn
 
         arrow_data = json.dumps(arrow_dict)
         spec = self.to_ir()

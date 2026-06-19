@@ -356,7 +356,11 @@ function mapOperator(
   op: OperatorSpec,
   deriveServerUrl?: string
 ): Operator<any, any> | null {
-  const { type, ...opts } = op;
+  const { type, translate, ...opts } = op;
+  const applyTranslate = <T>(operator: T): T =>
+    translate && typeof (operator as any).translate === "function"
+      ? ((operator as any).translate(translate) as T)
+      : operator;
 
   switch (type) {
     case "derive": {
@@ -369,47 +373,49 @@ function mapOperator(
       // columns in the IR; the array symbol can't cross the RPC, so re-apply it
       // to the returned rows (mirrors serialize/registry.ts and the JS bin).
       const provenance = opts.provenance as MeasureProvenance | undefined;
-      return derive(async (d: any) => {
-        const rows = Array.isArray(d) ? d : d == null ? [] : [d];
-        if (rows.length === 0) return Array.isArray(d) ? d : (d ?? null);
+      return applyTranslate(
+        derive(async (d: any) => {
+          const rows = Array.isArray(d) ? d : d == null ? [] : [d];
+          if (rows.length === 0) return Array.isArray(d) ? d : (d ?? null);
 
-        const resp = await fetch(`${deriveServerUrl}/derive/${lambdaId}`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(rows),
-        });
+          const resp = await fetch(`${deriveServerUrl}/derive/${lambdaId}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(rows),
+          });
 
-        if (!resp.ok) {
-          throw new Error(
-            `Derive server error: ${resp.status} ${await resp.text()}`
-          );
-        }
+          if (!resp.ok) {
+            throw new Error(
+              `Derive server error: ${resp.status} ${await resp.text()}`
+            );
+          }
 
-        const result = await resp.json();
-        const tagged =
-          provenance !== undefined
-            ? setMeasureProvenance(result, provenance)
-            : result;
-        return Array.isArray(d) ? tagged : (tagged[0] ?? null);
-      });
+          const result = await resp.json();
+          const tagged =
+            provenance !== undefined
+              ? setMeasureProvenance(result, provenance)
+              : result;
+          return Array.isArray(d) ? tagged : (tagged[0] ?? null);
+        })
+      );
     }
     // Modern v3 operators all take a single options object with `by`,
     // `dir`, etc. as keyword args. The previous `field`-positional shape
     // was stale and silently miscalled most ops.
     case "spread":
-      return spread(opts as any);
+      return applyTranslate(spread(opts as any));
     case "stack":
-      return stack(opts as any);
+      return applyTranslate(stack(opts as any));
     case "group":
-      return group(opts as any);
+      return applyTranslate(group(opts as any));
     case "scatter":
-      return scatter(opts as any);
+      return applyTranslate(scatter(opts as any));
     case "table":
-      return table(opts as any);
+      return applyTranslate(table(opts as any));
     case "treemap":
-      return treemap(opts as any);
+      return applyTranslate(treemap(opts as any));
     case "log":
-      return logOp(opts.label);
+      return applyTranslate(logOp(opts.label));
     default:
       console.warn(`Unknown operator type: ${type}`);
       return null;
@@ -640,7 +646,7 @@ function mapMark(
     return mark;
   }
 
-  const { type, name: layerName, label, ...opts } = spec;
+  const { type, name: layerName, label, translate, ...opts } = spec;
   const factory = MARK_MAP[type];
   if (!factory) throw new Error(`Unknown mark type: ${type}`);
 
@@ -668,6 +674,9 @@ function mapMark(
   }
   if (spec.__scope) {
     mark = wrapWithScope(mark);
+  }
+  if (translate && typeof (mark as any).translate === "function") {
+    mark = (mark as any).translate(translate);
   }
   const nameVal = resolveNameField(layerName, resolveToken);
   if (nameVal != null && typeof (mark as any).name === "function") {
