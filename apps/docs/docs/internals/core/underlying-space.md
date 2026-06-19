@@ -554,16 +554,17 @@ them via the `scaleFactors` parameter and apply them in `computeSize`.
 
 `spread`/`stack` no longer have their own `layout` — they **elaborate to
 `layer + align + distribute`** (`spread.tsx`), so the dispatch above lives
-entirely in `layer.layout`. A `layer` whose constraints fold to a SIZE claim
-inverts that fold against its allotted size (`fold.inverse(size[axis])`) to
-derive a local scale factor for its constrained children (warning before
-falling back when the fold isn't invertible at that budget); a `layer` that is
-a `sharedScale` scope runs the per-axis solve in the pseudocode above. Either
-way it writes into a **fresh `childScaleFactors` array** and hands that to
-descendants — **no node ever mutates the inherited `scaleFactors`**. That is
-the claim-hoisting form of `sharedScale` (#549): a scale solves at the lowest
-node where its measure stops being shared, and the result flows to descendants
-only, never leaking to siblings.
+entirely in `layer.layout`. `buildChildScalePlan` is the shared layout-time
+planner: explicit self-scaled axes first derive local posScales/scale factors, a
+layer whose constraints fold to a SIZE claim then inverts that fold against its
+allotted size (`fold.inverse(size[axis])`) to derive a local scale factor for
+its constrained children (returning failures so `layer` can warn before falling
+back), and a `sharedScale` scope finally runs the per-axis solve in the
+pseudocode above. The result is a **fresh `childScaleFactors` array** handed to
+descendants — **no node ever mutates the inherited `scaleFactors`**. That is the
+claim-hoisting form of `sharedScale` (#549): a scale solves at the lowest node
+where its measure stops being shared, and the result flows to descendants only,
+never leaking to siblings.
 
 This dispatch is the practical embodiment of the underlying-space-kind
 distinction. It also happens to make the rendering pipeline more readable:

@@ -15,13 +15,10 @@ import {
   continuousInterval,
   hasBaseline,
   isBaselineMagnitude,
-  isCONTINUOUS,
-  isPOSITION,
   spaceMeasure,
 } from "../underlyingSpace";
 import * as Interval from "../../util/interval";
 import { computeSize, foldFinite } from "../../util";
-import { posScaleFromSpace } from "../domain";
 import { CoordinateTransform } from "../coordinateTransforms/coord";
 import { coord } from "../coordinateTransforms/coord";
 import { createNodeOperatorSequential } from "../withGoFish";
@@ -34,7 +31,6 @@ import {
   gridSpaces,
   gridCellSize,
   isZOrderConstraint,
-  type ConstraintPosScales,
   type ConstraintSpec,
   type ZOrderConstraint,
 } from "../constraints";
@@ -49,6 +45,7 @@ import {
 } from "../constraints/compose";
 import {
   buildDistributeSliceMap,
+  buildChildScalePlan,
   buildPositionTargetDims,
   buildPositionScalePlan,
   childLayoutSizeProposal,
@@ -434,81 +431,36 @@ export const layer = createNodeOperatorSequential(
           // applies regardless of `ownsPositionAxis`. `childScaleFactors` is a
           // fresh array — never mutate the parent's `scaleFactors` (unlike
           // spread, which mutates intentionally for sibling sharing).
-          const basePosScales: ConstraintPosScales = [
-            posScales[0],
-            posScales[1],
-          ];
-          const childScaleFactors: Size<number | undefined> = [
-            scaleFactors?.[0],
-            scaleFactors?.[1],
-          ];
-          for (const dim of [0, 1] as const) {
-            const stashed = selfScaledSpaces[dim];
-            if (stashed === undefined || !Number.isFinite(size[dim])) continue;
-            // Build the LOCAL scale against our own box: an anchored POSITION
-            // gives a posScale (its data-positioned children read it); a "free"
-            // magnitude gives a scale factor (its sized children read it). A
-            // stashed space is exactly one of the two.
-            if (isPOSITION(stashed)) {
-              basePosScales[dim] =
-                posScaleFromSpace(stashed, size[dim]) ?? posScales[dim];
-            }
-            if (isBaselineMagnitude(stashed)) {
-              childScaleFactors[dim] =
-                stashed.width.inverse(size[dim]) ?? scaleFactors?.[dim];
-            }
+          const childScalePlan = buildChildScalePlan(
+            selfScaledSpaces,
+            node._underlyingSpace,
+            size,
+            scaleFactors,
+            posScales,
+            constraintBudget,
+            shared
+          );
+          const { basePosScales, childScaleFactors } = childScalePlan;
+          for (const failure of childScalePlan.budgetFailures) {
+            // A non-invertible fold-produced Monotonic would otherwise silently
+            // vanish the content (spread's `?? 0`); name the axis and budget so
+            // the failure is visible, then keep the inherited factor.
+            console.warn(
+              `layer: could not invert distribute SIZE claim on ${
+                failure.axis === 0 ? "x" : "y"
+              } axis for budget ${failure.budget}px; keeping inherited scale factor.`,
+              constraintBudget
+            );
           }
-
-          // Layer budget solve. For each axis whose composed claim is SIZE
-          // (the max-plus longest path), invert it against this layer's resolved
-          // size to derive the child scale factor (the same Monotonic.inverse
-          // recipe as the selfScaled path, but driven by the *allotted* size,
-          // not only an explicit w/h, and passing `upperBoundGuess` like spread
-          // does). Idempotent with the root's own inversion of the same SIZE.
-          if (constraintBudget) {
-            for (const axis of [0, 1] as const) {
-              const dom = constraintBudget.sizeDomain[axis];
-              if (dom === undefined || !Number.isFinite(size[axis])) continue;
-              const sf = dom.inverse(size[axis], {
-                upperBoundGuess: size[axis],
-              });
-              if (sf !== undefined) childScaleFactors[axis] = sf;
-              else
-                // A non-invertible fold-produced Monotonic would otherwise
-                // silently vanish the content (spread's `?? 0`); name the axis
-                // and budget so the failure is visible, then keep the inherited
-                // factor.
-                console.warn(
-                  `layer: could not invert distribute SIZE claim on ${
-                    axis === 0 ? "x" : "y"
-                  } axis for budget ${size[axis]}px; keeping inherited scale factor.`,
-                  constraintBudget
-                );
-            }
-          }
-
-          // `sharedScale` scale scope (claim hoisting, #549): on an axis this
-          // layer is a scope for (set by `spread`'s `sharedScale`; default
-          // [false,false] → no-op for every plain layer/table), solve σ locally
-          // from its composed claim against its own box and hand it to
-          // descendants via the FRESH array — one rule for every continuous
-          // extent: σ = width.inverse(box) (a former POSITION/DIFFERENCE width
-          // is linear(extent, 0), so this is the old size/width divide).
-          for (const axis of [0, 1] as const) {
-            if (!shared[axis] || !Number.isFinite(size[axis])) continue;
-            const sp = selfScaledSpaces[axis] ?? node._underlyingSpace?.[axis];
-            if (sp === undefined) continue;
-            let sf: number | undefined;
-            if (isCONTINUOUS(sp)) {
-              sf =
-                sp.width.inverse(size[axis], {
-                  upperBoundGuess: size[axis],
-                }) ?? 0;
-            }
-            if (sf !== undefined) childScaleFactors[axis] = sf;
+          for (const check of childScalePlan.sharedScaleChecks) {
             // Solver shadow (#39): assert the frame equation content(σ)=allocated
             // closes for this σ-scope. No-op unless GOFISH_SOLVER_CHECK is set.
-            shadowCheckScaleRoot(sp, size[axis], sf, axis);
+            shadowCheckScaleRoot(
+              check.space,
+              size[check.axis],
+              check.sigma,
+              check.axis
+            );
           }
 
           // Per-child proposed size for distribute-covered children: each

@@ -5,6 +5,7 @@
  */
 
 import type { Placeable } from "../ast/_node";
+import * as Monotonic from "../util/monotonic";
 import type { AlignConstraint } from "../ast/constraints/align";
 import type { DistributeConstraint } from "../ast/constraints/distribute";
 import type { GridConstraint } from "../ast/constraints/grid";
@@ -19,6 +20,7 @@ import {
   buildNestPlan,
 } from "../ast/constraints/nestPlan";
 import {
+  buildChildScalePlan,
   buildDistributeSliceMap,
   buildPositionTargetDims,
   buildPositionScalePlan,
@@ -27,7 +29,7 @@ import {
   selectGridConstraint,
 } from "../ast/constraints/proposalPlan";
 import { value } from "../ast/data";
-import { POSITION, UNDEFINED } from "../ast/underlyingSpace";
+import { POSITION, SIZE, UNDEFINED } from "../ast/underlyingSpace";
 import { interval } from "../util/interval";
 
 type Constraint =
@@ -631,6 +633,70 @@ console.log("# constraint confluence: child posScale forwarding");
   ok(
     "owned non-POSITION child receives no posScales",
     ownedUndefined[0] === undefined && ownedUndefined[1] === undefined
+  );
+}
+
+console.log("# constraint confluence: child scale factor planning");
+{
+  const inheritedX = (v: number) => v + 1;
+  const inheritedY = (v: number) => v + 2;
+  const positionSpace = POSITION(interval(0, 10));
+  const sizeSpace = SIZE(Monotonic.linear(20, 0));
+
+  const selfScaled = buildChildScalePlan(
+    [positionSpace, sizeSpace],
+    [UNDEFINED, UNDEFINED],
+    [100, 80],
+    [2, 3],
+    [inheritedX, inheritedY],
+    undefined,
+    [false, false]
+  );
+  ok(
+    "self-scaled POSITION axis builds local posScale",
+    selfScaled.basePosScales[0]?.(5) === 50 &&
+      selfScaled.basePosScales[1] === inheritedY
+  );
+  ok(
+    "self-scaled SIZE axis builds local child scale factor",
+    selfScaled.childScaleFactors[0] === 2 && selfScaled.childScaleFactors[1] === 4
+  );
+
+  const budget = buildChildScalePlan(
+    [undefined, undefined],
+    [UNDEFINED, UNDEFINED],
+    [100, 80],
+    [2, 3],
+    [inheritedX, inheritedY],
+    { sizeDomain: [Monotonic.linear(10, 0), Monotonic.linear(0, 10)] },
+    [false, false]
+  );
+  ok(
+    "constraint SIZE budget overrides inherited child scale factor when invertible",
+    budget.childScaleFactors[0] === 10 && budget.childScaleFactors[1] === 3
+  );
+  ok(
+    "non-invertible constraint SIZE budget is reported and keeps inherited scale",
+    budget.budgetFailures.length === 1 &&
+      budget.budgetFailures[0].axis === 1 &&
+      budget.budgetFailures[0].budget === 80
+  );
+
+  const shared = buildChildScalePlan(
+    [undefined, undefined],
+    [SIZE(Monotonic.linear(25, 0)), UNDEFINED],
+    [100, 80],
+    [2, 3],
+    [inheritedX, inheritedY],
+    { sizeDomain: [Monotonic.linear(10, 0), undefined] },
+    [true, false]
+  );
+  ok(
+    "shared scale scope overrides budget scale factor and emits shadow check",
+    shared.childScaleFactors[0] === 4 &&
+      shared.sharedScaleChecks.length === 1 &&
+      shared.sharedScaleChecks[0].axis === 0 &&
+      shared.sharedScaleChecks[0].sigma === 4
   );
 }
 

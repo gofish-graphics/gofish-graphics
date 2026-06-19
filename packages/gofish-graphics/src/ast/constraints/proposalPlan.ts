@@ -5,11 +5,17 @@
 import { type Size } from "../dims";
 import { isValue } from "../data";
 import { posScaleFromSpace } from "../domain";
-import { isPOSITION, type UnderlyingSpace } from "../underlyingSpace";
+import {
+  isBaselineMagnitude,
+  isCONTINUOUS,
+  isPOSITION,
+  type UnderlyingSpace,
+} from "../underlyingSpace";
 import { allocateSlices } from "./folds";
 import type { ConstraintSpec } from ".";
 import type { GridConstraint } from "./grid";
 import type { ConstraintPosScales } from "./shared";
+import type * as Monotonic from "../../util/monotonic";
 
 export type SliceSegment = {
   dAxis: 0 | 1;
@@ -84,6 +90,101 @@ export function childLayoutSizeProposal(
     return layerSize;
   }
   return sliceByName.get(childName)!;
+}
+
+type ScaleBudget = {
+  sizeDomain: [
+    Monotonic.Monotonic | undefined,
+    Monotonic.Monotonic | undefined,
+  ];
+};
+
+export type ChildScalePlan = {
+  basePosScales: ConstraintPosScales;
+  childScaleFactors: Size<number | undefined>;
+  budgetFailures: { axis: 0 | 1; budget: number }[];
+  sharedScaleChecks: {
+    axis: 0 | 1;
+    space: UnderlyingSpace;
+    sigma: number | undefined;
+  }[];
+};
+
+/** Build the scales a layer hands to child layout.
+ *
+ * The plan is ordered to match runtime ownership:
+ *   1. inherited scales are copied into fresh child arrays;
+ *   2. explicit self-scaled axes override with a local position scale or σ;
+ *   3. composed constraint SIZE budgets override child σ on their axes;
+ *   4. shared-scale scopes solve σ from the layer's own/scoped space.
+ *
+ * Diagnostics stay with the caller: budget failures are reported so `layer`
+ * can warn with context, and shared-scale checks are returned for the solver
+ * shadow hook. */
+export function buildChildScalePlan(
+  selfScaledSpaces: Size<UnderlyingSpace | undefined>,
+  layerSpace: Size<UnderlyingSpace> | undefined,
+  layerSize: Size,
+  inheritedScaleFactors: Size<number | undefined> | undefined,
+  inheritedPosScales: ConstraintPosScales,
+  constraintBudget: ScaleBudget | undefined,
+  shared: Size<boolean>
+): ChildScalePlan {
+  const basePosScales: ConstraintPosScales = [
+    inheritedPosScales[0],
+    inheritedPosScales[1],
+  ];
+  const childScaleFactors: Size<number | undefined> = [
+    inheritedScaleFactors?.[0],
+    inheritedScaleFactors?.[1],
+  ];
+  const budgetFailures: ChildScalePlan["budgetFailures"] = [];
+  const sharedScaleChecks: ChildScalePlan["sharedScaleChecks"] = [];
+
+  for (const axis of [0, 1] as const) {
+    const stashed = selfScaledSpaces[axis];
+    if (stashed === undefined || !Number.isFinite(layerSize[axis])) continue;
+    if (isPOSITION(stashed)) {
+      basePosScales[axis] =
+        posScaleFromSpace(stashed, layerSize[axis]) ?? inheritedPosScales[axis];
+    }
+    if (isBaselineMagnitude(stashed)) {
+      childScaleFactors[axis] =
+        stashed.width.inverse(layerSize[axis]) ?? inheritedScaleFactors?.[axis];
+    }
+  }
+
+  if (constraintBudget !== undefined) {
+    for (const axis of [0, 1] as const) {
+      const dom = constraintBudget.sizeDomain[axis];
+      if (dom === undefined || !Number.isFinite(layerSize[axis])) continue;
+      const sf = dom.inverse(layerSize[axis], {
+        upperBoundGuess: layerSize[axis],
+      });
+      if (sf !== undefined) childScaleFactors[axis] = sf;
+      else budgetFailures.push({ axis, budget: layerSize[axis] });
+    }
+  }
+
+  for (const axis of [0, 1] as const) {
+    if (!shared[axis] || !Number.isFinite(layerSize[axis])) continue;
+    const sp = selfScaledSpaces[axis] ?? layerSpace?.[axis];
+    if (sp === undefined) continue;
+    const sf = isCONTINUOUS(sp)
+      ? (sp.width.inverse(layerSize[axis], {
+          upperBoundGuess: layerSize[axis],
+        }) ?? 0)
+      : undefined;
+    if (sf !== undefined) childScaleFactors[axis] = sf;
+    sharedScaleChecks.push({ axis, space: sp, sigma: sf });
+  }
+
+  return {
+    basePosScales,
+    childScaleFactors,
+    budgetFailures,
+    sharedScaleChecks,
+  };
 }
 
 /** A grid owns the whole two-axis proposal scope for its layer. Multiple grids
