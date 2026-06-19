@@ -11,8 +11,6 @@ import type { GridConstraint } from "../ast/constraints/grid";
 import type { NestConstraint } from "../ast/constraints/nest";
 import { solvePlacementConstraints } from "../ast/constraints/placementSolver";
 import type { PositionConstraint } from "../ast/constraints/position";
-import { applySpanPlacements } from "../ast/constraints/spanPlacementSolver";
-import type { SpanPlacement } from "../ast/constraints/spanPlacementSolver";
 import type { SpanConstraint } from "../ast/constraints/span";
 import type { Anchor, Dimensions, FancyDirection } from "../ast/dims";
 import { elaborateDirection, localAnchorPoint } from "../ast/dims";
@@ -21,6 +19,7 @@ type Constraint =
   | AlignConstraint
   | DistributeConstraint
   | PositionConstraint
+  | SpanConstraint
   | NestConstraint
   | GridConstraint;
 type Geometry = Record<string, { min?: number; center?: number; max?: number }>;
@@ -314,28 +313,12 @@ console.log("# constraint confluence: span size-setting");
     x: "middle",
     children: [A, B],
   };
-  const apply = (spans: SpanConstraint[], placements: Constraint[]): Geometry => {
+  const apply = (constraints: Constraint[]): Geometry => {
     const targets = new Map<string, Placeable>([
       ["A", makePlaceable()],
       ["B", makePlaceable()],
     ]);
-    applySpanPlacements(
-      spans.flatMap((constraint, i): SpanPlacement[] =>
-        constraint.children.flatMap((ref) => {
-          const target = targets.get(ref.name);
-          if (!target || constraint.x === undefined) return [];
-          return [
-            {
-              target,
-              axis: "x",
-              owned: { min: constraint.x[0] as number, max: constraint.x[1] as number },
-              owner: `span[${i}]`,
-            },
-          ];
-        })
-      )
-    );
-    solvePlacementConstraints(placements, targets, [300, 200]);
+    solvePlacementConstraints(constraints, targets, [300, 200]);
     return Object.fromEntries(
       [...targets].map(([name, target]) => {
         const { min, center, max } = target.dims[0];
@@ -346,8 +329,8 @@ console.log("# constraint confluence: span size-setting");
 
   expectConfluent(
     "duplicate span/align",
-    apply([spanA, duplicateSpanA], [alignCenters]),
-    apply([duplicateSpanA, spanA], [alignCenters]),
+    apply([spanA, duplicateSpanA, alignCenters]),
+    apply([alignCenters, duplicateSpanA, spanA]),
     {
       A: { min: 10, center: 20, max: 30 },
       B: { min: 15, center: 20, max: 25 },
@@ -457,25 +440,10 @@ console.log("# constraint confluence: contradictions are diagnosed");
   const spanA10_40 = span("A", 10, 40);
   const spanThrows = (constraints: SpanConstraint[]): boolean => {
     try {
-      const targets = new Map<string, Placeable>([["A", makePlaceable()]]);
-      applySpanPlacements(
-        constraints.flatMap((constraint, i): SpanPlacement[] =>
-          constraint.children.flatMap((ref) => {
-            const target = targets.get(ref.name);
-            if (!target || constraint.x === undefined) return [];
-            return [
-              {
-                target,
-                axis: "x",
-                owned: {
-                  min: constraint.x[0] as number,
-                  max: constraint.x[1] as number,
-                },
-                owner: `span[${i}]`,
-              },
-            ];
-          })
-        )
+      solvePlacementConstraints(
+        constraints,
+        new Map<string, Placeable>([["A", makePlaceable()]]),
+        [300, 200]
       );
       return false;
     } catch (error) {

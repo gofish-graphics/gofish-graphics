@@ -7,9 +7,9 @@ import { getValue, isValue, MaybeValue } from "../data";
 import { computeAesthetic } from "../../util";
 import { Axis, ConstraintPosScales, ConstraintRef, axisIndex } from "./shared";
 import * as Interval from "../../util/interval";
-import { applySpanPlacements, type SpanPlacement } from "./spanPlacementSolver";
+import { applySpanPlacements, type SpanPlacement } from "./placementSolver";
 
-export { applySpanPlacements, type SpanPlacement } from "./spanPlacementSolver";
+export { applySpanPlacements, type SpanPlacement } from "./placementSolver";
 
 /**
  * A **size-setting** constraint (#39/#546): pin BOTH edges of each target on an

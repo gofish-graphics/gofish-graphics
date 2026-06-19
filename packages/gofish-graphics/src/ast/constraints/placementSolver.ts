@@ -10,12 +10,15 @@ import type { DistributeConstraint } from "./distribute";
 import type { GridConstraint } from "./grid";
 import type { NestConstraint } from "./nest";
 import type { PositionConstraint } from "./position";
+import type { SpanConstraint } from "./span";
 import type { Axis, AlignAnchor, ConstraintPosScales } from "./shared";
+import { BBox, type BBoxFacet } from "./bbox";
 
 type PlacementConstraint =
   | AlignConstraint
   | DistributeConstraint
   | PositionConstraint
+  | SpanConstraint
   | NestConstraint
   | GridConstraint;
 
@@ -52,6 +55,22 @@ interface AxisProblem {
   pins: Pin[];
   weakPins: WeakPin[];
   participants: Set<NodeId>;
+}
+
+/** One emitted span equation: the target owns both edges on one axis. */
+export interface SpanPlacement {
+  target: Placeable;
+  axis: Axis;
+  owned: { min: number; max: number };
+  owner: string;
+}
+
+interface SpanGroup {
+  target: Placeable;
+  axis: Axis;
+  bbox: BBox;
+  owned: Partial<Record<BBoxFacet, number>>;
+  owner: string;
 }
 
 export interface PlacementConflict {
@@ -102,6 +121,81 @@ function resolveCoordinate(
   if (!isValue(coordinate)) return coordinate;
   if (scale === undefined) return undefined;
   return scale(getValue(coordinate)!) + getValueOffset(coordinate);
+}
+
+function emitSpanPlacements(
+  constraint: SpanConstraint,
+  targets: Map<string, Placeable>,
+  posScales: ConstraintPosScales | undefined,
+  owner: string
+): SpanPlacement[] {
+  const out: SpanPlacement[] = [];
+  const emitAxis = (
+    axis: Axis,
+    span: [MaybeValue<number>, MaybeValue<number>] | undefined
+  ) => {
+    if (span === undefined) return;
+    const min = resolveCoordinate(span[0], posScales?.[axisIndex(axis)]);
+    const max = resolveCoordinate(span[1], posScales?.[axisIndex(axis)]);
+    if (min === undefined || max === undefined) return;
+    for (const child of constraint.children) {
+      const target = targets.get(child.name);
+      if (target) out.push({ target, axis, owned: { min, max }, owner });
+    }
+  };
+  emitAxis("x", constraint.x);
+  emitAxis("y", constraint.y);
+  return out;
+}
+
+/**
+ * Commit span equations as the size-setting half of the placement solve. All
+ * facet claims are collected before any target axis is reset, so duplicate
+ * consistent spans collapse and conflicting spans diagnose independent of
+ * declaration order.
+ */
+export function applySpanPlacements(placements: SpanPlacement[]): void {
+  const byTarget = new Map<Placeable, [SpanGroup?, SpanGroup?]>();
+  const groups: SpanGroup[] = [];
+  for (const placement of placements) {
+    const idx = axisIndex(placement.axis);
+    let axes = byTarget.get(placement.target);
+    if (!axes) {
+      axes = [undefined, undefined];
+      byTarget.set(placement.target, axes);
+    }
+    let group = axes[idx];
+    if (!group) {
+      group = {
+        target: placement.target,
+        axis: placement.axis,
+        bbox: new BBox(),
+        owned: {},
+        owner: placement.owner,
+      };
+      axes[idx] = group;
+      groups.push(group);
+    }
+
+    for (const [facet, value] of Object.entries(placement.owned) as [
+      BBoxFacet,
+      number,
+    ][]) {
+      const conflict = group.bbox.add(facet, value, placement.owner);
+      if (conflict) {
+        throw new Error(
+          `Constraint span conflict on ${placement.axis}: ${conflict.owner} ` +
+            `asserts ${conflict.facet}=${conflict.asserted}, but ` +
+            `${conflict.priorOwner} implies ${conflict.implied}`
+        );
+      }
+      group.owned[facet] = value;
+    }
+  }
+
+  for (const group of groups) {
+    group.target.setExtent!(group.axis, group.owned, group.owner);
+  }
 }
 
 function normalizedAnchors(spec: AlignAxisSpec, count: number): AlignAnchor[] {
@@ -345,6 +439,19 @@ export function solvePlacementConstraints(
   sizes: [number, number],
   posScales?: ConstraintPosScales
 ): PlacementConflict[] {
+  applySpanPlacements(
+    constraints.flatMap((constraint, constraintIndex) =>
+      constraint.type === "span"
+        ? emitSpanPlacements(
+            constraint,
+            targets,
+            posScales,
+            `span[${constraintIndex}]`
+          )
+        : []
+    )
+  );
+
   const problems = new PlacementProblems(targets);
 
   const authoritative = new Set<string>();
@@ -392,6 +499,8 @@ export function solvePlacementConstraints(
 
   constraints.forEach((constraint, constraintIndex) => {
     const owner = `${constraint.type}[${constraintIndex}]`;
+
+    if (constraint.type === "span") return;
 
     if (constraint.type === "position") {
       const emit = (axis: Axis, coordinate: MaybeValue<number> | undefined) => {
