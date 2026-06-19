@@ -57,7 +57,7 @@ interface AxisProblem {
   participants: Set<NodeId>;
 }
 
-/** One emitted span equation: the target owns both edges on one axis. */
+/** One emitted span extent: the target owns both edges on one axis. */
 interface SpanPlacement {
   name: string;
   target: Placeable;
@@ -71,7 +71,6 @@ interface SpanGroup {
   target: Placeable;
   axis: Axis;
   bbox: BBox;
-  owned: Partial<Record<BBoxFacet, number>>;
   owner: string;
 }
 
@@ -191,7 +190,6 @@ function collectSpanExtents(placements: SpanPlacement[]): SpanExtent[] {
         target: placement.target,
         axis: placement.axis,
         bbox: new BBox(),
-        owned: {},
         owner: placement.owner,
       };
       axes[idx] = group;
@@ -210,7 +208,6 @@ function collectSpanExtents(placements: SpanPlacement[]): SpanExtent[] {
             `${conflict.priorOwner} implies ${conflict.implied}`
         );
       }
-      group.owned[facet] = value;
     }
   }
 
@@ -507,7 +504,7 @@ export function solvePlacementConstraints(
   const authoritative = new Set<string>();
   const initiallyPlaced = new Set<string>();
   const positionPinned = new Set<string>();
-  const spanPinned = new Map<string, { owner: string; value: number }>();
+  const spanPinned = new Set<string>();
 
   for (const [name, target] of targets) {
     for (const axis of AXIS_INDICES) {
@@ -531,10 +528,7 @@ export function solvePlacementConstraints(
   for (const extent of spanExtents) {
     const key = placementKey(axisIndex(extent.axis), extent.name);
     spanExtentByKey.set(key, extent);
-    spanPinned.set(key, {
-      owner: extent.owner,
-      value: extent.min,
-    });
+    spanPinned.add(key);
   }
 
   const problems = new PlacementProblems(targets, spanExtentByKey);
