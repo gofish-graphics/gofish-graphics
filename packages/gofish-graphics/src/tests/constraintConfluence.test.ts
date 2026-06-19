@@ -21,6 +21,7 @@ import {
 import {
   buildDistributeSliceMap,
   buildPositionTargetDims,
+  childLayoutSizeProposal,
   childPosScalesFor,
   selectGridConstraint,
 } from "../ast/constraints/proposalPlan";
@@ -446,6 +447,28 @@ console.log("# constraint confluence: distribute size proposals");
   ok(
     "overlapping distribute proposal ownership throws in either order",
     throws([overlapAB, overlapBC]) && throws([overlapBC, overlapAB])
+  );
+
+  const layerSize: [number, number] = [300, 200];
+  const gridCell: [number, number] = [90, 40];
+  const sliceByName = new Map<string, [number, number]>([
+    ["A", [100, 200]],
+  ]);
+  ok(
+    "grid proposal overrides distribute slice",
+    childLayoutSizeProposal("A", layerSize, gridCell, sliceByName) === gridCell
+  );
+  ok(
+    "named distribute child receives sliced proposal",
+    childLayoutSizeProposal("A", layerSize, undefined, sliceByName) ===
+      sliceByName.get("A")
+  );
+  ok(
+    "unnamed or unsliced child receives full layer proposal",
+    childLayoutSizeProposal(undefined, layerSize, undefined, sliceByName) ===
+      layerSize &&
+      childLayoutSizeProposal("B", layerSize, undefined, sliceByName) ===
+        layerSize
   );
 }
 

@@ -329,6 +329,9 @@ spread pipeline, auto-fit included (issue #475). Composition beyond one
 distribute (+ one align) per axis falls back to `unionChildSpaces`; the general
 algebra is sketched in
 [[constraints-as-core]].
+`childLayoutSizeProposal` is the final per-child proposal priority before nest:
+grid cell size, else distribute slice for that named child, else the full layer
+box.
 Nest sizing is split into a dependency plan and concrete layout arithmetic:
 `buildNestPlan` decides, per constrained pair, whether the source size flows
 inside-out (`outer = inner + 2·padding`) or outside-in

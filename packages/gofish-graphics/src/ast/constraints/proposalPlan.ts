@@ -59,6 +59,32 @@ export function buildDistributeSliceMap(
   return out;
 }
 
+/** Choose the concrete size proposed to one child in a layer.
+ *
+ * Priority is explicit and single-owner:
+ *   1. grid: owns the whole layer proposal, so every child gets the cell size;
+ *   2. distribute: owns only the named child axes it sliced;
+ *   3. default layer box: unconstrained/fill proposal is the full layer size.
+ *
+ * Nest proposals apply after this, because they derive a child from an already
+ * laid-out source and therefore override only the derived axes. */
+export function childLayoutSizeProposal(
+  childName: string | undefined,
+  layerSize: Size,
+  gridCell: Size | undefined,
+  sliceByName: Map<string, Size> | undefined
+): Size {
+  if (gridCell !== undefined) return gridCell;
+  if (
+    sliceByName === undefined ||
+    childName === undefined ||
+    !sliceByName.has(childName)
+  ) {
+    return layerSize;
+  }
+  return sliceByName.get(childName)!;
+}
+
 /** A grid owns the whole two-axis proposal scope for its layer. Multiple grids
  * would otherwise be source-order-sensitive because space resolution and
  * proposal sizing can only choose one track partition while placement would see

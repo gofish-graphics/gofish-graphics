@@ -50,6 +50,7 @@ import {
 import {
   buildDistributeSliceMap,
   buildPositionTargetDims,
+  childLayoutSizeProposal,
   childPosScalesFor,
   selectGridConstraint,
 } from "../constraints/proposalPlan";
@@ -518,18 +519,6 @@ export const layer = createNodeOperatorSequential(
           const sliceByName = constraintBudget
             ? buildDistributeSliceMap(constraintBudget.segments, size)
             : undefined;
-          const childSizeFor = (childName: string | undefined): Size => {
-            // Grid is exclusive: every child is a cell, so all get the track size.
-            if (gridCell !== undefined) return gridCell;
-            if (
-              sliceByName === undefined ||
-              childName === undefined ||
-              !sliceByName.has(childName)
-            ) {
-              return size;
-            }
-            return sliceByName.get(childName)!;
-          };
 
           // `position` constraints with a datum coordinate contribute a data
           // domain on their axis (see collectPositionDomains); the union is what
@@ -599,11 +588,11 @@ export const layer = createNodeOperatorSequential(
             // SOURCE on each derived axis — `outer = inner + 2p` for 'in',
             // `inner = outer − 2p` for 'out'. The source is already laid out
             // (ahead of us in layoutOrder, since the plan orders source before
-            // derived). Clamp ≥ 0; non-derived axes keep the normal proposal
-            // (`childSizeFor`), so nest composes with — and wins on its
-            // derived axes over — any budget slice.
+            // derived). Clamp ≥ 0; non-derived axes keep the normal child
+            // proposal, so nest composes with — and wins on its derived axes
+            // over — any budget slice.
             const layoutSize = applyNestLayoutProposal(
-              childSizeFor(childName),
+              childLayoutSizeProposal(childName, size, gridCell, sliceByName),
               nestPlan?.byDerived.get(i),
               childPlaceables
             );
