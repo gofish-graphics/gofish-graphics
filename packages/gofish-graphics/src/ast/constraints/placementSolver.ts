@@ -59,8 +59,12 @@ export interface PlacementConflict {
 }
 
 const TOLERANCE = 1e-6;
+const AXIS_INDICES = [0, 1] as const;
+const POSITION_AXES = ["x", "y"] as const;
+
 const axisIndex = (axis: Axis): 0 | 1 => (axis === "x" ? 0 : 1);
 const axisName = (axis: 0 | 1): Axis => (axis === 0 ? "x" : "y");
+const placementKey = (axis: 0 | 1, name: string): string => `${axis}:${name}`;
 
 const boxAnchor = (anchor: AlignAnchor): Anchor =>
   anchor === "start"
@@ -113,6 +117,40 @@ function compareRank(a: WeakPin, b: WeakPin): number {
     a.rank[2] - b.rank[2] ||
     a.rank[3].localeCompare(b.rank[3])
   );
+}
+
+function alignAnchorRank(anchor: AlignAnchor): number {
+  if (anchor === "middle") return 0;
+  if (anchor === "start") return 1;
+  if (anchor === "end") return 2;
+  return 3;
+}
+
+function alignFallback(
+  anchor: AlignAnchor,
+  axis: 0 | 1,
+  sizes: [number, number],
+  posScales: ConstraintPosScales | undefined
+): number {
+  if (anchor === "middle")
+    return Number.isFinite(sizes[axis]) ? sizes[axis] / 2 : 0;
+  if (posScales?.[axis]) return posScales[axis]!(0);
+  if (anchor === "end" && Number.isFinite(sizes[axis])) return sizes[axis];
+  return 0;
+}
+
+function isDataPositionedAlignTarget(
+  target: Placeable | undefined,
+  anchor: AlignAnchor,
+  axis: 0 | 1,
+  posScales: ConstraintPosScales | undefined
+): boolean {
+  if (anchor === "middle" || posScales?.[axis] === undefined) return false;
+  const placement =
+    typeof target?.placementOn === "function"
+      ? target.placementOn(axis)
+      : undefined;
+  return placement !== undefined && placement.tag !== "free";
 }
 
 class PlacementProblems {
@@ -309,27 +347,30 @@ export function solvePlacementConstraints(
   const initiallyPlaced = new Set<string>();
   const positionPinned = new Set<string>();
   for (const [name, target] of targets) {
-    for (const axis of [0, 1] as const) {
+    for (const axis of AXIS_INDICES) {
       if (target.dims[axis].min !== undefined)
-        initiallyPlaced.add(`${axis}:${name}`);
+        initiallyPlaced.add(placementKey(axis, name));
     }
   }
   for (const constraint of constraints) {
     if (constraint.type !== "position" || !constraint.override) continue;
     for (const child of constraint.children) {
-      if (constraint.x !== undefined) authoritative.add(`0:${child.name}`);
-      if (constraint.y !== undefined) authoritative.add(`1:${child.name}`);
+      if (constraint.x !== undefined)
+        authoritative.add(placementKey(0, child.name));
+      if (constraint.y !== undefined)
+        authoritative.add(placementKey(1, child.name));
     }
   }
   for (const constraint of constraints) {
     if (constraint.type !== "position") continue;
-    for (const axis of ["x", "y"] as const) {
+    for (const axis of POSITION_AXES) {
       const coordinate = constraint[axis];
       if (coordinate === undefined) continue;
-      const value = resolveCoordinate(coordinate, posScales?.[axisIndex(axis)]);
+      const idx = axisIndex(axis);
+      const value = resolveCoordinate(coordinate, posScales?.[idx]);
       if (value === undefined) continue;
       for (const child of constraint.children) {
-        positionPinned.add(`${axisIndex(axis)}:${child.name}`);
+        positionPinned.add(placementKey(idx, child.name));
       }
     }
   }
@@ -337,9 +378,10 @@ export function solvePlacementConstraints(
   // A node that self-placed during its own layout is a hard boundary condition,
   // except where an authoritative position constraint explicitly owns the axis.
   for (const [name, target] of targets) {
-    for (const axis of [0, 1] as const) {
+    for (const axis of AXIS_INDICES) {
       const min = target.dims[axis].min;
-      if (min === undefined || authoritative.has(`${axis}:${name}`)) continue;
+      if (min === undefined || authoritative.has(placementKey(axis, name)))
+        continue;
       problems.pin(axisName(axis), name, "start", min, "self-placement");
     }
   }
@@ -382,6 +424,9 @@ export function solvePlacementConstraints(
           anchor: anchors[index],
         }));
         const idx = axisIndex(axis);
+        const isPinned = (name: string) =>
+          initiallyPlaced.has(placementKey(idx, name)) ||
+          positionPinned.has(placementKey(idx, name));
 
         // Preserve legacy align's two-phase semantics:
         // 1. the first already-placed target can define the shared baseline;
@@ -391,28 +436,11 @@ export function solvePlacementConstraints(
         // be the baseline source while the legend is the only target align
         // writes. Faceted scatter panels, where every panel is already
         // data-positioned, still contribute no write targets.
-        const source = entries.find(
-          ({ child }) =>
-            initiallyPlaced.has(`${idx}:${child.name}`) ||
-            positionPinned.has(`${idx}:${child.name}`)
-        );
+        const source = entries.find(({ child }) => isPinned(child.name));
         const movable = entries.filter(({ child, anchor }) => {
-          if (
-            initiallyPlaced.has(`${idx}:${child.name}`) ||
-            positionPinned.has(`${idx}:${child.name}`)
-          )
-            return false;
+          if (isPinned(child.name)) return false;
           const target = targets.get(child.name);
-          const placement =
-            typeof target?.placementOn === "function"
-              ? target.placementOn(idx)
-              : undefined;
-          return !(
-            anchor !== "middle" &&
-            posScales?.[idx] !== undefined &&
-            placement !== undefined &&
-            placement.tag !== "free"
-          );
+          return !isDataPositionedAlignTarget(target, anchor, idx, posScales);
         });
         if (movable.length === 0) return;
 
@@ -444,30 +472,14 @@ export function solvePlacementConstraints(
           );
         }
         const firstAnchor = aligned[0].anchor;
-        const fallback =
-          firstAnchor === "middle"
-            ? Number.isFinite(sizes[idx])
-              ? sizes[idx] / 2
-              : 0
-            : posScales?.[idx]
-              ? posScales[idx]!(0)
-              : firstAnchor === "end" && Number.isFinite(sizes[idx])
-                ? sizes[idx]
-                : 0;
         problems.weakPin(
           axis,
           aligned[0].child.name,
           firstAnchor,
-          fallback,
+          alignFallback(firstAnchor, idx, sizes, posScales),
           1,
           aligned.length,
-          firstAnchor === "middle"
-            ? 0
-            : firstAnchor === "start"
-              ? 1
-              : firstAnchor === "end"
-                ? 2
-                : 3,
+          alignAnchorRank(firstAnchor),
           `align:${axis}:${firstAnchor}:${aligned
             .map(({ child }) => child.name)
             .join(",")}`,
@@ -490,11 +502,10 @@ export function solvePlacementConstraints(
         // A chain edge whose endpoints both arrived pre-positioned was a
         // consistency check/no-op in the legacy walk (not an owning relation).
         // Preserve that boundary: confluence governs the unknown positions.
+        const idx = axisIndex(constraint.dir);
         if (
-          initiallyPlaced.has(
-            `${axisIndex(constraint.dir)}:${ordered[i - 1].name}`
-          ) &&
-          initiallyPlaced.has(`${axisIndex(constraint.dir)}:${ordered[i].name}`)
+          initiallyPlaced.has(placementKey(idx, ordered[i - 1].name)) &&
+          initiallyPlaced.has(placementKey(idx, ordered[i].name))
         )
           continue;
         if (constraint.mode === "center") {
