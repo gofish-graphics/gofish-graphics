@@ -336,6 +336,28 @@ console.log("# constraint confluence: span size-setting");
       B: { min: 15, center: 20, max: 25 },
     }
   );
+
+  const distributeAB = distribute(["A", "B"]);
+  expectConfluent(
+    "span/distribute",
+    apply([spanA, distributeAB]),
+    apply([distributeAB, spanA]),
+    {
+      A: { min: 10, center: 20, max: 30 },
+      B: { min: 35, center: 40, max: 45 },
+    }
+  );
+
+  const centerA = position("A", 20);
+  expectConfluent(
+    "compatible span/position",
+    apply([spanA, centerA]),
+    apply([centerA, spanA]),
+    {
+      A: { min: 10, center: 20, max: 30 },
+      B: { min: undefined, center: undefined, max: undefined },
+    }
+  );
 }
 
 console.log("# constraint confluence: self-placement and override");
@@ -457,6 +479,29 @@ console.log("# constraint confluence: contradictions are diagnosed");
     "conflicting spans throw in either declaration order",
     spanThrows([spanA10_30, spanA10_40]) &&
       spanThrows([spanA10_40, spanA10_30])
+  );
+
+  const spanPositionThrows = (
+    constraints: (SpanConstraint | PositionConstraint)[]
+  ): boolean => {
+    try {
+      solvePlacementConstraints(
+        constraints,
+        new Map<string, Placeable>([["A", makePlaceable()]]),
+        [300, 200]
+      );
+      return false;
+    } catch (error) {
+      return (
+        error instanceof Error &&
+        error.message.includes("Constraint placement conflict")
+      );
+    }
+  };
+  ok(
+    "conflicting span/position throws in either declaration order",
+    spanPositionThrows([spanA10_30, position("A", 25)]) &&
+      spanPositionThrows([position("A", 25), spanA10_30])
   );
 }
 

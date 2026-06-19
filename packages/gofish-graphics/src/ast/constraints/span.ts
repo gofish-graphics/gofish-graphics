@@ -2,14 +2,9 @@
 // @wiki Underlying Space — /internals/core/underlying-space
 // </gofish-wiki>
 
-import type { Placeable } from "../_node";
 import { getValue, isValue, MaybeValue } from "../data";
-import { computeAesthetic } from "../../util";
-import { Axis, ConstraintPosScales, ConstraintRef, axisIndex } from "./shared";
+import { ConstraintRef } from "./shared";
 import * as Interval from "../../util/interval";
-import { applySpanPlacements, type SpanPlacement } from "./placementSolver";
-
-export { applySpanPlacements, type SpanPlacement } from "./placementSolver";
 
 /**
  * A **size-setting** constraint (#39/#546): pin BOTH edges of each target on an
@@ -64,52 +59,4 @@ export function spanDatumInterval(
   const vals = span.filter(isValue).map((v) => getValue(v)!);
   if (vals.length === 0) return undefined;
   return Interval.interval(Math.min(...vals), Math.max(...vals));
-}
-
-/**
- * EMIT a `span` as facet-equation sets (#39 facet-equation-emitter form) WITHOUT
- * applying them: resolve each axis's `[min, max]` to pixels (datum → posScale,
- * literal as-is) and pair both owned edges with each target. A datum endpoint on
- * a scale-less axis is a no-op (skipped). Pure — only resolves coordinates.
- */
-export function emitSpan(
-  constraint: SpanConstraint,
-  targets: Placeable[],
-  posScales: ConstraintPosScales | undefined,
-  owner = "span"
-): SpanPlacement[] {
-  const out: SpanPlacement[] = [];
-  const emitAxis = (
-    axis: Axis,
-    span: [MaybeValue<number>, MaybeValue<number>] | undefined
-  ) => {
-    if (span === undefined) return;
-    const scale = posScales?.[axisIndex(axis)];
-    const toPx = (coord: MaybeValue<number>): number | undefined => {
-      if (isValue(coord) && scale === undefined) return undefined; // datum, no scale
-      return computeAesthetic(coord, scale!, undefined)!;
-    };
-    const min = toPx(span[0]);
-    const max = toPx(span[1]);
-    if (min === undefined || max === undefined) return;
-    for (const target of targets)
-      out.push({ target, axis, owned: { min, max }, owner });
-  };
-  emitAxis("x", constraint.x);
-  emitAxis("y", constraint.y);
-  return out;
-}
-
-/**
- * Commit the emitted span equations: hand each target's owned edges to
- * `setExtent` — the bbox-backed primitive that solves the extent (two edges ⇒
- * rank 2 ⇒ size) and records the node's geometry. The emit/commit seam is where a
- * per-scope solver slots in (consume {@link emitSpan} instead of solving here).
- */
-export function applySpan(
-  constraint: SpanConstraint,
-  targets: Placeable[],
-  posScales: ConstraintPosScales | undefined
-): void {
-  applySpanPlacements(emitSpan(constraint, targets, posScales));
 }

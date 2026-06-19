@@ -342,6 +342,9 @@ legacy distribute walk used by the spread path and by constraint lowering.
 Size-setting span claims are batched in the same placement solver before
 relation solving, so duplicate edge claims collapse and contradictory spans
 report a conflict without letting declaration order reset the target axis.
+They are still same-solve constraints, not pre-existing self-placement: an
+incompatible `span` + `position` on the same target/axis reports an
+over-determined placement instead of letting one silently yield to the other.
 
 Placement-time alignment dispatches on the same resolution. When an `align`
 finds **no pre-placed sibling**, its fallback baseline is computed from what the

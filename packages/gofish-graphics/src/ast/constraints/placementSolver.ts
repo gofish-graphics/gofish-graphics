@@ -58,7 +58,8 @@ interface AxisProblem {
 }
 
 /** One emitted span equation: the target owns both edges on one axis. */
-export interface SpanPlacement {
+interface SpanPlacement {
+  name: string;
   target: Placeable;
   axis: Axis;
   owned: { min: number; max: number };
@@ -140,7 +141,14 @@ function emitSpanPlacements(
     if (min === undefined || max === undefined) return;
     for (const child of constraint.children) {
       const target = targets.get(child.name);
-      if (target) out.push({ target, axis, owned: { min, max }, owner });
+      if (target)
+        out.push({
+          name: child.name,
+          target,
+          axis,
+          owned: { min, max },
+          owner,
+        });
     }
   };
   emitAxis("x", constraint.x);
@@ -154,7 +162,7 @@ function emitSpanPlacements(
  * consistent spans collapse and conflicting spans diagnose independent of
  * declaration order.
  */
-export function applySpanPlacements(placements: SpanPlacement[]): void {
+function applySpanPlacements(placements: SpanPlacement[]): void {
   const byTarget = new Map<Placeable, [SpanGroup?, SpanGroup?]>();
   const groups: SpanGroup[] = [];
   for (const placement of placements) {
@@ -439,30 +447,41 @@ export function solvePlacementConstraints(
   sizes: [number, number],
   posScales?: ConstraintPosScales
 ): PlacementConflict[] {
-  applySpanPlacements(
-    constraints.flatMap((constraint, constraintIndex) =>
-      constraint.type === "span"
-        ? emitSpanPlacements(
-            constraint,
-            targets,
-            posScales,
-            `span[${constraintIndex}]`
-          )
-        : []
-    )
-  );
-
-  const problems = new PlacementProblems(targets);
-
   const authoritative = new Set<string>();
   const initiallyPlaced = new Set<string>();
   const positionPinned = new Set<string>();
+  const spanPinned = new Map<string, { owner: string; value: number }>();
+
   for (const [name, target] of targets) {
     for (const axis of AXIS_INDICES) {
       if (target.dims[axis].min !== undefined)
         initiallyPlaced.add(placementKey(axis, name));
     }
   }
+
+  const spanPlacements = constraints.flatMap((constraint, constraintIndex) =>
+    constraint.type === "span"
+      ? emitSpanPlacements(
+          constraint,
+          targets,
+          posScales,
+          `span[${constraintIndex}]`
+        )
+      : []
+  );
+  applySpanPlacements(spanPlacements);
+  for (const placement of spanPlacements) {
+    const axis = axisIndex(placement.axis);
+    const min = placement.target.dims[axis].min;
+    if (min !== undefined)
+      spanPinned.set(placementKey(axis, placement.name), {
+        owner: placement.owner,
+        value: min,
+      });
+  }
+
+  const problems = new PlacementProblems(targets);
+
   for (const constraint of constraints) {
     if (constraint.type !== "position" || !constraint.override) continue;
     for (const child of constraint.children) {
@@ -488,13 +507,28 @@ export function solvePlacementConstraints(
 
   // A node that self-placed during its own layout is a hard boundary condition,
   // except where an authoritative position constraint explicitly owns the axis.
-  for (const [name, target] of targets) {
+  for (const [name] of targets) {
     for (const axis of AXIS_INDICES) {
-      const min = target.dims[axis].min;
-      if (min === undefined || authoritative.has(placementKey(axis, name)))
-        continue;
-      problems.pin(axisName(axis), name, "start", min, "self-placement");
+      const key = placementKey(axis, name);
+      if (!initiallyPlaced.has(key) || authoritative.has(key)) continue;
+      const min = targets.get(name)!.dims[axis].min;
+      if (min !== undefined)
+        problems.pin(axisName(axis), name, "start", min, "self-placement");
     }
+  }
+
+  // Spans are same-solve strong pins, not pre-existing self-placement. Keeping
+  // them distinct lets a same-solve position pin conflict with a span instead
+  // of silently yielding to it.
+  for (const [key, pin] of spanPinned) {
+    const [axisRaw, name] = key.split(":");
+    problems.pin(
+      axisName(Number(axisRaw) as 0 | 1),
+      name,
+      "start",
+      pin.value,
+      pin.owner
+    );
   }
 
   constraints.forEach((constraint, constraintIndex) => {
@@ -513,7 +547,9 @@ export function solvePlacementConstraints(
         for (const child of constraint.children) {
           const target = targets.get(child.name);
           if (!target) continue;
-          const alreadyPlaced = target.dims[axisIndex(axis)].min !== undefined;
+          const alreadyPlaced = initiallyPlaced.has(
+            placementKey(axisIndex(axis), child.name)
+          );
           if (alreadyPlaced && !constraint.override) continue;
           problems.pin(axis, child.name, constraint.anchor, value, owner);
         }
@@ -539,7 +575,8 @@ export function solvePlacementConstraints(
         const idx = axisIndex(axis);
         const isPinned = (name: string) =>
           initiallyPlaced.has(placementKey(idx, name)) ||
-          positionPinned.has(placementKey(idx, name));
+          positionPinned.has(placementKey(idx, name)) ||
+          spanPinned.has(placementKey(idx, name));
 
         // Preserve legacy align's two-phase semantics:
         // 1. the first already-placed target can define the shared baseline;
