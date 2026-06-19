@@ -2,9 +2,16 @@
 // @wiki Underlying Space — /internals/core/underlying-space
 // </gofish-wiki>
 
-import { AlignAnchor, ConstraintRef } from "./shared";
+import type { Placeable } from "../_node";
+import type {
+  AlignAnchor,
+  Axis,
+  ConstraintPosScales,
+  ConstraintRef,
+} from "./shared";
 import type { UnderlyingSpace } from "../underlyingSpace";
 import { resolveAlignmentSpace } from "../graphicalOperators/alignment";
+import type { PlacementFactEmitter } from "./placementFacts";
 
 /**
  * PROTOTYPE (issue #475): the align constraint's *space-resolution*
@@ -55,3 +62,138 @@ export const createAlignConstraint = (
   }
   return { type: "align", x, y, children };
 };
+
+function normalizedAnchors(spec: AlignAxisSpec, count: number): AlignAnchor[] {
+  if (!Array.isArray(spec)) return new Array<AlignAnchor>(count).fill(spec);
+  if (spec.length !== count) {
+    throw new Error(
+      `Constraint.align: anchor array length ${spec.length} must match number of children ${count}`
+    );
+  }
+  return spec;
+}
+
+function alignAnchorRank(anchor: AlignAnchor): number {
+  if (anchor === "middle") return 0;
+  if (anchor === "start") return 1;
+  if (anchor === "end") return 2;
+  return 3;
+}
+
+function alignFallback(
+  anchor: AlignAnchor,
+  axis: 0 | 1,
+  sizes: [number, number],
+  posScales: ConstraintPosScales | undefined
+): number {
+  if (anchor === "middle")
+    return Number.isFinite(sizes[axis]) ? sizes[axis] / 2 : 0;
+  if (posScales?.[axis]) return posScales[axis]!(0);
+  if (anchor === "end" && Number.isFinite(sizes[axis])) return sizes[axis];
+  return 0;
+}
+
+function isDataPositionedAlignTarget(
+  target: Placeable | undefined,
+  anchor: AlignAnchor,
+  axis: 0 | 1,
+  posScales: ConstraintPosScales | undefined
+): boolean {
+  if (anchor === "middle" || posScales?.[axis] === undefined) return false;
+  const placement =
+    typeof target?.placementOn === "function"
+      ? target.placementOn(axis)
+      : undefined;
+  return placement !== undefined && placement.tag !== "free";
+}
+
+export function lowerAlignPlacement(
+  constraint: AlignConstraint,
+  owner: string,
+  {
+    emitter,
+    targets,
+    sizes,
+    posScales,
+    axisIndex,
+    isPinned,
+  }: {
+    emitter: PlacementFactEmitter;
+    targets: Map<string, Placeable>;
+    sizes: [number, number];
+    posScales: ConstraintPosScales | undefined;
+    axisIndex: (axis: Axis) => 0 | 1;
+    isPinned: (axis: Axis, name: string) => boolean;
+  }
+): void {
+  const emit = (axis: Axis, spec: AlignAxisSpec | undefined) => {
+    if (spec === undefined) return;
+    const children = constraint.children.filter((child) =>
+      targets.has(child.name)
+    );
+    if (children.length === 0) return;
+    const anchors = normalizedAnchors(spec, children.length);
+
+    const entries = children.map((child, index) => ({
+      child,
+      anchor: anchors[index],
+    }));
+    const idx = axisIndex(axis);
+
+    // Preserve legacy align's two-phase semantics:
+    // 1. the first already-placed target can define the shared baseline;
+    // 2. already-placed or data-positioned targets are not themselves moved.
+    //
+    // Keeping these separate matters for chart+legend layers: the chart may
+    // be the baseline source while the legend is the only target align
+    // writes. Faceted scatter panels, where every panel is already
+    // data-positioned, still contribute no write targets.
+    const source = entries.find(({ child }) => isPinned(axis, child.name));
+    const movable = entries.filter(({ child, anchor }) => {
+      if (isPinned(axis, child.name)) return false;
+      const target = targets.get(child.name);
+      return !isDataPositionedAlignTarget(target, anchor, idx, posScales);
+    });
+    if (movable.length === 0) return;
+
+    if (source) {
+      for (const target of movable) {
+        emitter.relate({
+          axis,
+          from: { name: source.child.name, anchor: source.anchor },
+          to: { name: target.child.name, anchor: target.anchor },
+          gap: 0,
+          owner,
+        });
+      }
+      return;
+    }
+
+    const aligned = movable;
+    for (let i = 1; i < aligned.length; i++) {
+      emitter.relate({
+        axis,
+        from: { name: aligned[0].child.name, anchor: aligned[0].anchor },
+        to: { name: aligned[i].child.name, anchor: aligned[i].anchor },
+        gap: 0,
+        owner,
+      });
+    }
+    const firstAnchor = aligned[0].anchor;
+    emitter.weakPin(
+      axis,
+      aligned[0].child.name,
+      firstAnchor,
+      alignFallback(firstAnchor, idx, sizes, posScales),
+      1,
+      aligned.length,
+      alignAnchorRank(firstAnchor),
+      `align:${axis}:${firstAnchor}:${aligned
+        .map(({ child }) => child.name)
+        .join(",")}`,
+      owner
+    );
+  };
+  emit("x", constraint.x);
+  emit("y", constraint.y);
+}

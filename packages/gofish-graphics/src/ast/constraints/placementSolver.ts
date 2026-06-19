@@ -5,20 +5,27 @@
 import type { Placeable } from "../_node";
 import { getValue, getValueOffset, isValue, type MaybeValue } from "../data";
 import type { Anchor } from "../dims";
-import type { AlignConstraint, AlignAxisSpec } from "./align";
+import type { AlignConstraint } from "./align";
+import { lowerAlignPlacement } from "./align";
 import type { DistributeConstraint } from "./distribute";
+import { lowerDistributePlacement } from "./distribute";
 import type { GridConstraint } from "./grid";
+import { lowerGridPlacement } from "./grid";
 import type { NestConstraint } from "./nest";
+import { lowerNestPlacement } from "./nest";
 import type { PositionConstraint } from "./position";
+import { lowerPositionPlacement } from "./position";
 import type { SpanConstraint } from "./span";
 import type { Axis, AlignAnchor, ConstraintPosScales } from "./shared";
 import { BBox, type BBoxFacet } from "./bbox";
 import type {
   NodeId,
+  PlacementFactEmitter,
   PlacementFact,
   PlacementPin,
   PlacementProgram,
   PlacementRelation,
+  PlacementRelationRequest,
   PlacementSpan,
   PlacementWeakPin,
 } from "./placementFacts";
@@ -57,14 +64,6 @@ interface SpanGroup {
 
 interface SpanExtent extends PlacementSpan {
   size: number;
-}
-
-interface PlacementRelationRequest {
-  axis: Axis;
-  from: { name: string; anchor: AlignAnchor };
-  to: { name: string; anchor: AlignAnchor };
-  gap: number;
-  owner: string;
 }
 
 export interface LoweredPlacement {
@@ -229,16 +228,6 @@ function collectSpanExtents(placements: SpanPlacement[]): SpanExtent[] {
   });
 }
 
-function normalizedAnchors(spec: AlignAxisSpec, count: number): AlignAnchor[] {
-  if (!Array.isArray(spec)) return new Array<AlignAnchor>(count).fill(spec);
-  if (spec.length !== count) {
-    throw new Error(
-      `Constraint.align: anchor array length ${spec.length} must match number of children ${count}`
-    );
-  }
-  return spec;
-}
-
 function compareRank(a: PlacementWeakPin, b: PlacementWeakPin): number {
   return (
     a.rank[0] - b.rank[0] ||
@@ -248,41 +237,7 @@ function compareRank(a: PlacementWeakPin, b: PlacementWeakPin): number {
   );
 }
 
-function alignAnchorRank(anchor: AlignAnchor): number {
-  if (anchor === "middle") return 0;
-  if (anchor === "start") return 1;
-  if (anchor === "end") return 2;
-  return 3;
-}
-
-function alignFallback(
-  anchor: AlignAnchor,
-  axis: 0 | 1,
-  sizes: [number, number],
-  posScales: ConstraintPosScales | undefined
-): number {
-  if (anchor === "middle")
-    return Number.isFinite(sizes[axis]) ? sizes[axis] / 2 : 0;
-  if (posScales?.[axis]) return posScales[axis]!(0);
-  if (anchor === "end" && Number.isFinite(sizes[axis])) return sizes[axis];
-  return 0;
-}
-
-function isDataPositionedAlignTarget(
-  target: Placeable | undefined,
-  anchor: AlignAnchor,
-  axis: 0 | 1,
-  posScales: ConstraintPosScales | undefined
-): boolean {
-  if (anchor === "middle" || posScales?.[axis] === undefined) return false;
-  const placement =
-    typeof target?.placementOn === "function"
-      ? target.placementOn(axis)
-      : undefined;
-  return placement !== undefined && placement.tag !== "free";
-}
-
-class PlacementProgramBuilder {
+class PlacementProgramBuilder implements PlacementFactEmitter {
   readonly program = emptyPlacementProgram();
 
   constructor(
@@ -556,6 +511,16 @@ export function lowerPlacementConstraints(
 
   const builder = new PlacementProgramBuilder(targets, spanExtentByKey);
   for (const extent of spanExtents) builder.span(extent);
+  const isInitiallyPlaced = (axis: Axis, name: string) =>
+    initiallyPlaced.has(placementKey(axisIndex(axis), name));
+  const isPinned = (axis: Axis, name: string) => {
+    const key = placementKey(axisIndex(axis), name);
+    return (
+      initiallyPlaced.has(key) || positionPinned.has(key) || spanPinned.has(key)
+    );
+  };
+  const resolveAxisCoordinate = (axis: Axis, coordinate: MaybeValue<number>) =>
+    resolveCoordinate(coordinate, posScales?.[axisIndex(axis)]);
 
   for (const constraint of constraints) {
     if (constraint.type !== "position" || !constraint.override) continue;
@@ -598,201 +563,42 @@ export function lowerPlacementConstraints(
     if (constraint.type === "span") return;
 
     if (constraint.type === "position") {
-      const emit = (axis: Axis, coordinate: MaybeValue<number> | undefined) => {
-        if (coordinate === undefined) return;
-        const value = resolveCoordinate(
-          coordinate,
-          posScales?.[axisIndex(axis)]
-        );
-        if (value === undefined) return;
-        for (const child of constraint.children) {
-          const target = targets.get(child.name);
-          if (!target) continue;
-          const alreadyPlaced = initiallyPlaced.has(
-            placementKey(axisIndex(axis), child.name)
-          );
-          if (alreadyPlaced && !constraint.override) continue;
-          builder.pin(axis, child.name, constraint.anchor, value, owner);
-        }
-      };
-      emit("x", constraint.x);
-      emit("y", constraint.y);
+      lowerPositionPlacement(constraint, owner, {
+        emitter: builder,
+        targets,
+        isInitiallyPlaced,
+        resolveCoordinate: resolveAxisCoordinate,
+      });
       return;
     }
 
     if (constraint.type === "align") {
-      const emit = (axis: Axis, spec: AlignAxisSpec | undefined) => {
-        if (spec === undefined) return;
-        const children = constraint.children.filter((child) =>
-          targets.has(child.name)
-        );
-        if (children.length === 0) return;
-        const anchors = normalizedAnchors(spec, children.length);
-
-        const entries = children.map((child, index) => ({
-          child,
-          anchor: anchors[index],
-        }));
-        const idx = axisIndex(axis);
-        const isPinned = (name: string) =>
-          initiallyPlaced.has(placementKey(idx, name)) ||
-          positionPinned.has(placementKey(idx, name)) ||
-          spanPinned.has(placementKey(idx, name));
-
-        // Preserve legacy align's two-phase semantics:
-        // 1. the first already-placed target can define the shared baseline;
-        // 2. already-placed or data-positioned targets are not themselves moved.
-        //
-        // Keeping these separate matters for chart+legend layers: the chart may
-        // be the baseline source while the legend is the only target align
-        // writes. Faceted scatter panels, where every panel is already
-        // data-positioned, still contribute no write targets.
-        const source = entries.find(({ child }) => isPinned(child.name));
-        const movable = entries.filter(({ child, anchor }) => {
-          if (isPinned(child.name)) return false;
-          const target = targets.get(child.name);
-          return !isDataPositionedAlignTarget(target, anchor, idx, posScales);
-        });
-        if (movable.length === 0) return;
-
-        if (source) {
-          for (const target of movable) {
-            builder.relate({
-              axis,
-              from: { name: source.child.name, anchor: source.anchor },
-              to: { name: target.child.name, anchor: target.anchor },
-              gap: 0,
-              owner,
-            });
-          }
-          return;
-        }
-
-        const aligned = movable;
-        for (let i = 1; i < aligned.length; i++) {
-          builder.relate({
-            axis,
-            from: { name: aligned[0].child.name, anchor: aligned[0].anchor },
-            to: { name: aligned[i].child.name, anchor: aligned[i].anchor },
-            gap: 0,
-            owner,
-          });
-        }
-        const firstAnchor = aligned[0].anchor;
-        builder.weakPin(
-          axis,
-          aligned[0].child.name,
-          firstAnchor,
-          alignFallback(firstAnchor, idx, sizes, posScales),
-          1,
-          aligned.length,
-          alignAnchorRank(firstAnchor),
-          `align:${axis}:${firstAnchor}:${aligned
-            .map(({ child }) => child.name)
-            .join(",")}`,
-          owner
-        );
-      };
-      emit("x", constraint.x);
-      emit("y", constraint.y);
+      lowerAlignPlacement(constraint, owner, {
+        emitter: builder,
+        targets,
+        sizes,
+        posScales,
+        axisIndex,
+        isPinned,
+      });
       return;
     }
 
     if (constraint.type === "distribute") {
-      const children = constraint.children.filter((child) =>
-        targets.has(child.name)
-      );
-      const ordered =
-        constraint.order === "reverse" ? [...children].reverse() : children;
-      if (ordered.length === 0) return;
-      for (let i = 1; i < ordered.length; i++) {
-        // A chain edge whose endpoints both arrived pre-positioned was a
-        // consistency check/no-op in the legacy walk (not an owning relation).
-        // Preserve that boundary: confluence governs the unknown positions.
-        const idx = axisIndex(constraint.dir);
-        if (
-          initiallyPlaced.has(placementKey(idx, ordered[i - 1].name)) &&
-          initiallyPlaced.has(placementKey(idx, ordered[i].name))
-        )
-          continue;
-        if (constraint.mode === "center") {
-          builder.relate({
-            axis: constraint.dir,
-            from: { name: ordered[i - 1].name, anchor: "middle" },
-            to: { name: ordered[i].name, anchor: "middle" },
-            gap: constraint.spacing,
-            owner,
-          });
-        } else {
-          builder.relate({
-            axis: constraint.dir,
-            from: { name: ordered[i - 1].name, anchor: "end" },
-            to: { name: ordered[i].name, anchor: "start" },
-            gap: constraint.spacing,
-            owner,
-          });
-        }
-      }
-      builder.weakPin(
-        constraint.dir,
-        ordered[0].name,
-        constraint.mode === "center" ? "middle" : "start",
-        0,
-        2,
-        ordered.length,
-        constraint.mode === "center" ? 0 : 1,
-        `distribute:${constraint.dir}:${constraint.mode}:${ordered
-          .map((child) => child.name)
-          .join(",")}`,
-        owner
-      );
+      lowerDistributePlacement(constraint, owner, {
+        emitter: builder,
+        targets,
+        isInitiallyPlaced,
+      });
       return;
     }
 
     if (constraint.type === "nest") {
-      const [outer, inner] = constraint.children;
-      if (constraint.x !== undefined)
-        builder.relate({
-          axis: "x",
-          from: { name: outer.name, anchor: "middle" },
-          to: { name: inner.name, anchor: "middle" },
-          gap: 0,
-          owner,
-        });
-      if (constraint.y !== undefined)
-        builder.relate({
-          axis: "y",
-          from: { name: outer.name, anchor: "middle" },
-          to: { name: inner.name, anchor: "middle" },
-          gap: 0,
-          owner,
-        });
+      lowerNestPlacement(constraint, owner, builder);
       return;
     }
 
-    const rows = Math.ceil(constraint.children.length / constraint.numCols);
-    const cellWidth =
-      (sizes[0] - constraint.xSpacing * (constraint.numCols - 1)) /
-      constraint.numCols;
-    const cellHeight = (sizes[1] - constraint.ySpacing * (rows - 1)) / rows;
-    constraint.children.forEach((child, index) => {
-      const column = index % constraint.numCols;
-      const row = Math.floor(index / constraint.numCols);
-      builder.pin(
-        "x",
-        child.name,
-        "middle",
-        column * (cellWidth + constraint.xSpacing) + cellWidth / 2,
-        owner
-      );
-      builder.pin(
-        "y",
-        child.name,
-        "middle",
-        row * (cellHeight + constraint.ySpacing) + cellHeight / 2,
-        owner
-      );
-    });
+    lowerGridPlacement(constraint, owner, sizes, builder);
   });
 
   return { program: builder.program, spanExtents };

@@ -9,6 +9,7 @@ import {
 } from "../underlyingSpace";
 import * as Monotonic from "../../util/monotonic";
 import type { ConstraintRef } from "./shared";
+import type { PlacementFactEmitter } from "./placementFacts";
 
 /**
  * Nesting relation between two named children of a layer.
@@ -68,6 +69,30 @@ export const createNestConstraint = (
 export const isNestConstraint = (
   c: { type: string } | undefined
 ): c is NestConstraint => c !== undefined && c.type === "nest";
+
+export function lowerNestPlacement(
+  constraint: NestConstraint,
+  owner: string,
+  emitter: PlacementFactEmitter
+): void {
+  const [outer, inner] = constraint.children;
+  if (constraint.x !== undefined)
+    emitter.relate({
+      axis: "x",
+      from: { name: outer.name, anchor: "middle" },
+      to: { name: inner.name, anchor: "middle" },
+      gap: 0,
+      owner,
+    });
+  if (constraint.y !== undefined)
+    emitter.relate({
+      axis: "y",
+      from: { name: outer.name, anchor: "middle" },
+      to: { name: inner.name, anchor: "middle" },
+      gap: 0,
+      owner,
+    });
+}
 
 /**
  * The nest constraint's *space-resolution* contribution on one axis for the

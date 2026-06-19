@@ -3,7 +3,8 @@
 // @wiki The Mark Factory — /internals/frontend/mark-factory
 // </gofish-wiki>
 
-import { sumBy, meanBy } from "lodash";
+import meanBy from "lodash/meanBy";
+import sumBy from "lodash/sumBy";
 import {
   MaybeValue,
   Value,

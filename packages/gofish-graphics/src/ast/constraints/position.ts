@@ -1,5 +1,6 @@
-import { MaybeValue } from "../data";
-import { AlignAnchor, ConstraintRef } from "./shared";
+import type { MaybeValue } from "../data";
+import type { PlacementFactEmitter } from "./placementFacts";
+import type { AlignAnchor, Axis, ConstraintRef } from "./shared";
 
 /**
  * Options for a `position` constraint. Mirrors how you position a shape (or use
@@ -57,3 +58,36 @@ export const createPositionConstraint = (
     children,
   };
 };
+
+export function lowerPositionPlacement(
+  constraint: PositionConstraint,
+  owner: string,
+  {
+    emitter,
+    targets,
+    isInitiallyPlaced,
+    resolveCoordinate,
+  }: {
+    emitter: PlacementFactEmitter;
+    targets: Map<string, unknown>;
+    isInitiallyPlaced: (axis: Axis, name: string) => boolean;
+    resolveCoordinate: (
+      axis: Axis,
+      coordinate: MaybeValue<number>
+    ) => number | undefined;
+  }
+): void {
+  const emit = (axis: Axis, coordinate: MaybeValue<number> | undefined) => {
+    if (coordinate === undefined) return;
+    const value = resolveCoordinate(axis, coordinate);
+    if (value === undefined) return;
+    for (const child of constraint.children) {
+      const target = targets.get(child.name);
+      if (!target) continue;
+      if (isInitiallyPlaced(axis, child.name) && !constraint.override) continue;
+      emitter.pin(axis, child.name, constraint.anchor, value, owner);
+    }
+  };
+  emit("x", constraint.x);
+  emit("y", constraint.y);
+}

@@ -14,6 +14,9 @@ rest of the wiki treats only the latest of them — the `chart(...).flow(...)
 .mark(...)` fluent builder — as _the_ frontend. This essay is the place where
 the other two are still spoken about, and where the history of how the API
 landed where it did is recorded.
+The module also re-exports a few lodash data helpers (`groupBy`, `sumBy`,
+`orderBy`, `meanBy`) for convenience; those are implemented with per-helper
+entrypoint imports so the public surface is stable in native ESM runtimes.
 
 A naming note before anything else: internally, these surfaces were "v1",
 "v2", and "v3", and a lot of code still uses those names. The wiki has

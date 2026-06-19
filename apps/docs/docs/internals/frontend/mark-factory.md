@@ -96,7 +96,8 @@ needs one.
 
 `inferSize` and `inferPos` are two instantiations of one numeric-inference
 factory, `inferNumeric(agg)` — they differ only in the aggregation (`sumBy`
-vs `meanBy`). Both take an optional third argument, a resolved `Measure`: a
+vs `meanBy`, imported through lodash's per-helper entrypoints so this path is
+safe under native ESM). Both take an optional third argument, a resolved `Measure`: a
 string/`field()` accessor's produced value is tagged with its unit-of-measure
 so the underlying-space layer can unify scales per measure (see
 [Underlying Space](/internals/core/underlying-space)). When the caller doesn't

@@ -15,7 +15,7 @@
 //
 // `pluck` is the un-collapsed sibling — the full set of distinct values — for
 // when you genuinely want "every possible value" rather than a scalar key.
-import { toPath } from "lodash";
+import toPath from "lodash/toPath";
 
 /** Canonical key for value-equality of (possibly object-valued) field values. */
 function eqKey(v: unknown): string {

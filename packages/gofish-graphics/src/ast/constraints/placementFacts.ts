@@ -15,6 +15,19 @@ export type AnchorExpr = {
   anchor: AlignAnchor;
 };
 
+export type PlacementAnchorRef = {
+  name: NodeId;
+  anchor: AlignAnchor;
+};
+
+export type PlacementRelationRequest = {
+  axis: Axis;
+  from: PlacementAnchorRef;
+  to: PlacementAnchorRef;
+  gap: number;
+  owner: string;
+};
+
 /** Stable policy order for weak pins. Strong facts do not consult ranks. */
 export type WeakRank = [number, number, number, string];
 
@@ -60,6 +73,28 @@ export type PlacementFact =
 export type PlacementProgram = {
   axes: [PlacementFact[], PlacementFact[]];
 };
+
+export interface PlacementFactEmitter {
+  pin(
+    axis: Axis,
+    name: NodeId,
+    anchor: AlignAnchor,
+    value: number,
+    owner: string
+  ): void;
+  weakPin(
+    axis: Axis,
+    name: NodeId,
+    anchor: AlignAnchor,
+    value: number,
+    kindRank: number,
+    arityRank: number,
+    anchorRank: number,
+    signature: string,
+    owner: string
+  ): void;
+  relate(request: PlacementRelationRequest): void;
+}
 
 export const emptyPlacementProgram = (): PlacementProgram => ({
   axes: [[], []],

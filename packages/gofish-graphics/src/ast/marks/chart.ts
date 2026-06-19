@@ -1,4 +1,5 @@
 import { sumBy, v, Connect } from "../../lib";
+import chunk from "lodash/chunk";
 import { GoFishNode } from "../_node";
 import type { Value } from "../data";
 import { GoFishRef } from "../_ref";
@@ -70,7 +71,7 @@ export const repeat = <T, K extends keyof T>(
   return Array.from({ length: d[field] as unknown as number }, () => d);
 };
 
-export { chunk } from "lodash";
+export { chunk };
 
 export const normalize = <T, K extends keyof T>(
   data: T[],

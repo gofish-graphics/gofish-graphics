@@ -2,8 +2,9 @@
 // @wiki Underlying Space — /internals/core/underlying-space
 // </gofish-wiki>
 
-import { Axis, ConstraintRef } from "./shared";
+import type { Axis, AlignAnchor, ConstraintRef } from "./shared";
 import { getMeasure, getValue, isValue, type MaybeValue } from "../data";
+import type { PlacementFactEmitter } from "./placementFacts";
 import {
   CONTINUOUS_TYPE,
   ORDINAL,
@@ -59,6 +60,79 @@ export const createDistributeConstraint = (
   children,
   measure: options.measure,
 });
+
+export function distributeChildrenInPlacementOrder(
+  constraint: DistributeConstraint,
+  children: readonly ConstraintRef[] = constraint.children
+): ConstraintRef[] {
+  return constraint.order === "reverse"
+    ? [...children].reverse()
+    : [...children];
+}
+
+export function distributePlacementAnchors(
+  mode: DistributeConstraint["mode"]
+): {
+  from: AlignAnchor;
+  to: AlignAnchor;
+  weak: AlignAnchor;
+  weakAnchorRank: number;
+} {
+  return mode === "center"
+    ? { from: "middle", to: "middle", weak: "middle", weakAnchorRank: 0 }
+    : { from: "end", to: "start", weak: "start", weakAnchorRank: 1 };
+}
+
+export function lowerDistributePlacement(
+  constraint: DistributeConstraint,
+  owner: string,
+  {
+    emitter,
+    targets,
+    isInitiallyPlaced,
+  }: {
+    emitter: PlacementFactEmitter;
+    targets: Pick<Map<string, unknown>, "has">;
+    isInitiallyPlaced: (axis: Axis, name: string) => boolean;
+  }
+): void {
+  const children = constraint.children.filter((child) =>
+    targets.has(child.name)
+  );
+  const ordered = distributeChildrenInPlacementOrder(constraint, children);
+  if (ordered.length === 0) return;
+  const anchors = distributePlacementAnchors(constraint.mode);
+  for (let i = 1; i < ordered.length; i++) {
+    // A chain edge whose endpoints both arrived pre-positioned was a
+    // consistency check/no-op in the legacy walk (not an owning relation).
+    // Preserve that boundary: confluence governs the unknown positions.
+    if (
+      isInitiallyPlaced(constraint.dir, ordered[i - 1].name) &&
+      isInitiallyPlaced(constraint.dir, ordered[i].name)
+    )
+      continue;
+    emitter.relate({
+      axis: constraint.dir,
+      from: { name: ordered[i - 1].name, anchor: anchors.from },
+      to: { name: ordered[i].name, anchor: anchors.to },
+      gap: constraint.spacing,
+      owner,
+    });
+  }
+  emitter.weakPin(
+    constraint.dir,
+    ordered[0].name,
+    anchors.weak,
+    0,
+    2,
+    ordered.length,
+    anchors.weakAnchorRank,
+    `distribute:${constraint.dir}:${constraint.mode}:${ordered
+      .map((child) => child.name)
+      .join(",")}`,
+    owner
+  );
+}
 
 /**
  * The distribute constraint's *space-resolution* contribution — the bottom-up

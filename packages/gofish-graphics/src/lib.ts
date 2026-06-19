@@ -3,6 +3,11 @@
 // </gofish-wiki>
 
 // Main library exports
+import groupBy from "lodash/groupBy";
+import meanBy from "lodash/meanBy";
+import orderBy from "lodash/orderBy";
+import sumBy from "lodash/sumBy";
+
 export * from "./color";
 export * from "./path";
 export * from "./util";
@@ -57,7 +62,7 @@ export { createMark } from "./ast/withGoFish";
 // Data
 export { For } from "./ast/iterators/for";
 // export { groupBy } from "./ast/iterators/groupBy";
-export { groupBy, sumBy, orderBy, meanBy } from "lodash";
+export { groupBy, sumBy, orderBy, meanBy };
 export { bin } from "./ast/transforms";
 
 // Shapes

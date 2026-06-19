@@ -368,6 +368,10 @@ this pass lives in `constraints/placementFacts.ts`: anchor expressions, strong
 pins, weak pins, relations, and spans. Named constraints first lower to an
 inspectable `PlacementProgram` (`axes: [PlacementFact[], PlacementFact[]]`);
 solving consumes that program rather than mutating solver state during lowering.
+Constraint-specific placement lowerers live with their constraints: `align.ts`,
+`distribute.ts`, `position.ts`, `nest.ts`, and `grid.ts` own their policy
+choices, while the solver owns anchor-offset resolution, graph solving, and
+writing solved positions back to placeables.
 Span first contributes an axis extent fact (`min`, `max`, and therefore
 `size`), and known-size children contribute their intrinsic size. With sizes
 known, every anchor facet reduces to `min + offset`: `start`, `middle`, `end`,
@@ -738,6 +742,9 @@ composing them into a new extent forgets.**
 
 **Where measures come from** is itself a small type system with three sources,
 checked (not silently prioritized) in `resolveMeasure` (`channels.ts`):
+the channel aggregators use lodash's per-helper entrypoints for native ESM
+compatibility, but their semantics are still `sumBy` for size and `meanBy` for
+position.
 
 1. **Explicit annotation** — `field(name, measure)` / `datum(v, measure)`
    (`data.ts`). A real type claim about the channel's unit.

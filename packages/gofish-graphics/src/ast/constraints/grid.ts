@@ -31,6 +31,7 @@ import type { GoFishAST } from "../_ast";
 import { type ConstraintRef } from "./shared";
 import { sliceExtent } from "./folds";
 import { ORDINAL, UNDEFINED, type UnderlyingSpace } from "../underlyingSpace";
+import type { PlacementFactEmitter } from "./placementFacts";
 
 export interface GridOptions {
   numCols: number;
@@ -82,6 +83,41 @@ export const gridCellSize = (
   sliceExtent(size[0], c.xSpacing, c.numCols),
   sliceExtent(size[1], c.ySpacing, numRowsOf(c)),
 ];
+
+export type GridCellPlacement = {
+  child: ConstraintRef;
+  center: [number, number];
+};
+
+export function gridCellPlacements(
+  c: GridConstraint,
+  size: readonly [number, number]
+): GridCellPlacement[] {
+  const [cellWidth, cellHeight] = gridCellSize(c, size);
+  return c.children.map((child, index) => {
+    const column = index % c.numCols;
+    const row = Math.floor(index / c.numCols);
+    return {
+      child,
+      center: [
+        column * (cellWidth + c.xSpacing) + cellWidth / 2,
+        row * (cellHeight + c.ySpacing) + cellHeight / 2,
+      ],
+    };
+  });
+}
+
+export function lowerGridPlacement(
+  c: GridConstraint,
+  owner: string,
+  size: readonly [number, number],
+  emitter: PlacementFactEmitter
+): void {
+  for (const { child, center } of gridCellPlacements(c, size)) {
+    emitter.pin("x", child.name, "middle", center[0], owner);
+    emitter.pin("y", child.name, "middle", center[1], owner);
+  }
+}
 
 /**
  * A grid's axes are categorical: ORDINAL over the columns (x) and rows (y).
