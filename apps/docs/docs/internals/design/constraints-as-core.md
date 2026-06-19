@@ -364,13 +364,16 @@ second write and spread warns; Bluefish throws with ownership info. Recommend:
 keep write-once ownership, upgrade the silent no-op to a structured error at
 the Layer, and reject cycles as z-order already does (Kahn's algorithm).
 
-**5. Order of application.** Resolved for known-size placement: align,
-distribute, position, nest-centering, and grid constraints compose into one
-per-axis relation graph and are solved independently of declaration order.
-Strong pins and self-placement anchor components; otherwise a deterministic
-weak-origin policy removes the remaining translation degree of freedom.
-Size-setting dependencies (`span`, nest proposals, grid track sizing) still run
-before this pass and are the remaining generalization.
+**5. Order of application.** Resolved for known-size placement and span extents:
+align, distribute, position, span, nest-centering, and grid constraints compose
+into one per-axis relation graph and are solved independently of declaration
+order. Span contributes an extent fact (`min`, `max`, hence `size`) before the
+graph is emitted, so non-start anchors on spanned nodes reduce to the same
+`min + offset` relations as known-size nodes. Strong pins and self-placement
+anchor components; otherwise a deterministic weak-origin policy removes the
+remaining translation degree of freedom. Proposal-dependent sizing (nest
+proposals, grid track sizing, and the broader size-claim algebra) still runs
+before this pass and is the remaining generalization.
 
 ## Complexity and what the "solver" actually is
 
@@ -396,8 +399,9 @@ stacks of data-sized rects) inverts in O(1) with **zero** numeric search;
 bracketed bisection hard-capped at ~70 closure evaluations for `unknown`
 claims (`util.ts:9-54`; produced by center mode, `max` over different
 intercepts, mixed compositions); (3) a per-axis equality-graph solve for
-known-size placement, with atomic commit and contradiction diagnostics. So:
-Bluefish-class local propagation for positions, plus an
+placement once each anchor's size offset is known (including span extents),
+with atomic commit and contradiction diagnostics. So: Bluefish-class local
+propagation for positions, plus an
 analytic one-unknown size solve Bluefish lacked. The known superlinear
 lurkers, both pre-existing and shared with operators today: nested
 _non-linear_ folds make an ancestor's inversion cost O(subtree closure size · 70) (mitigated by the linear fast path; could memoize `run` per σ), and
@@ -407,10 +411,10 @@ layer in the worst case (memoizable). Neither is quadratic in spec size.
 **Brittleness and linear-cost robustness fixes.** Today's constraint path is
 brittle in five identifiable ways, none of which needs a cleverer solver:
 
-1. _Declaration-order sensitivity_ — resolved for known-size placement by the
-   per-axis relation graph. The remaining order boundary is size-setting:
-   `span` and proposal-dependent sizing run before placement and are not yet one
-   general relation system.
+1. _Declaration-order sensitivity_ — resolved for known-size placement and span
+   extents by the per-axis relation graph. The remaining order boundary is
+   proposal-dependent sizing: nest/grid proposal sizing still runs before
+   placement rather than as one general relation system.
 2. _Silent conflict swallowing_ — `place()` no-ops on the second write. Fix:
    record an owner per (node, axis) — O(1) per write — and report both
    writers, exactly Bluefish's `bboxOwners`.

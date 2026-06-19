@@ -171,12 +171,13 @@ export function composeConstraintSpaces(
     }
   }
 
-  // A span COVERS its children on the axis it sizes (it sets their extent
-  // directly via `applySpan`, and their datum range already feeds the POSITION
-  // domain through `collectPositionDomains`). It contributes no fold here, but
-  // its children must be marked covered so the per-axis loop below does not also
-  // fold their raw extent in as an overlay sibling (double-counting) when a
-  // distribute/align shares the same axis.
+  // A span COVERS its children on the axis it sizes. Its datum range already
+  // feeds the POSITION domain through `collectPositionDomains`, and the
+  // placement solver later turns the resolved pixel endpoints into the target's
+  // extent. It contributes no fold here, but its children must be marked covered
+  // so the per-axis loop below does not also fold their raw extent in as an
+  // overlay sibling (double-counting) when a distribute/align shares the same
+  // axis.
   const spanCover: [Set<number>, Set<number>] = [new Set(), new Set()];
   for (const s of spans) {
     const idx = idxOf(s.children);

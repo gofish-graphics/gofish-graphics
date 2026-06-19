@@ -143,6 +143,18 @@ const position = (
   children: [child(name)],
 });
 
+const positionedAnchor = (
+  name: string,
+  x: number,
+  anchor: PositionConstraint["anchor"]
+): PositionConstraint => ({
+  type: "position",
+  x,
+  anchor,
+  override: false,
+  children: [child(name)],
+});
+
 const distribute = (names: string[]): DistributeConstraint => ({
   type: "distribute",
   dir: "x",
@@ -384,6 +396,17 @@ console.log("# constraint confluence: span size-setting");
       B: { min: undefined, center: undefined, max: undefined },
     }
   );
+
+  const endA = positionedAnchor("A", 30, "max");
+  expectConfluent(
+    "compatible span/end-position",
+    apply([spanA, endA]),
+    apply([endA, spanA]),
+    {
+      A: { min: 10, center: 20, max: 30 },
+      B: { min: undefined, center: undefined, max: undefined },
+    }
+  );
 }
 
 console.log("# constraint confluence: self-placement and override");
@@ -528,6 +551,13 @@ console.log("# constraint confluence: contradictions are diagnosed");
     "conflicting span/position throws in either declaration order",
     spanPositionThrows([spanA10_30, position("A", 25)]) &&
       spanPositionThrows([position("A", 25), spanA10_30])
+  );
+
+  const endA35 = positionedAnchor("A", 35, "max");
+  ok(
+    "conflicting span/end-position throws in either declaration order",
+    spanPositionThrows([spanA10_30, endA35]) &&
+      spanPositionThrows([endA35, spanA10_30])
   );
 }
 
