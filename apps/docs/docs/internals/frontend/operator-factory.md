@@ -162,15 +162,18 @@ channels: {
 }
 ```
 
-| spec                            | what it does                                                        |
-| ------------------------------- | ------------------------------------------------------------------- |
-| `"size"` / `"pos"` / `"color"`  | aggregate over all of `d`, produce one value (single number/string) |
-| `{ type: "size", entry: true }` | run once per split entry, collect into array (one value per child)  |
-| user passed an array            | already final form — pass through unchanged                         |
+| spec                                           | what it does                                                                         |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------ |
+| `"size"` / `"pos"` / `"color"`                 | aggregate over all of `d`, produce one value (single number/string)                  |
+| `{ type: "size", entry: true }`                | run once per split entry, collect into array (one value per child)                   |
+| `{ type: "pos", entry: true, discrete: true }` | for nonnumeric categorical fields, emit evenly spaced discrete placement coordinates |
+| user passed an array                           | already final form — pass through unchanged                                          |
 
 `scatter` uses `entry: true` for `x`/`y`/`xMin`/`xMax`/`yMin`/`yMax` so a
 field name like `x: "miles"` becomes a per-group mean position
-(`src/ast/graphicalOperators/scatter.tsx:336`).
+(`src/ast/graphicalOperators/scatter.tsx:336`). Its point channels also set
+`discrete: true`, so a grouped nonnumeric field such as `x: "lake"` becomes a
+slot coordinate instead of an invalid numeric mean.
 
 ## 6. Adding a new operator: a worked example
 

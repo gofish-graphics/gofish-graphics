@@ -1,4 +1,4 @@
-import type { MaybeValue } from "../data";
+import type { MaybeValue, PositionValue } from "../data";
 import type { PlacementFactEmitter } from "./placementFacts";
 import type { AlignAnchor, Axis, ConstraintRef } from "./shared";
 
@@ -12,8 +12,8 @@ import type { AlignAnchor, Axis, ConstraintRef } from "./shared";
  * required.
  */
 export interface PositionOptions {
-  x?: MaybeValue<number>;
-  y?: MaybeValue<number>;
+  x?: PositionValue;
+  y?: PositionValue;
   /** Which anchor of the target lands on the coordinate. Defaults to "middle"
    *  (the target's center sits on the value), matching how `scatter`/`position`
    *  place marks at their center. `"baseline"` pins the target's origin. */
@@ -33,8 +33,8 @@ export interface PositionOptions {
 
 export interface PositionConstraint {
   type: "position";
-  x?: MaybeValue<number>;
-  y?: MaybeValue<number>;
+  x?: PositionValue;
+  y?: PositionValue;
   anchor: AlignAnchor;
   override: boolean;
   children: ConstraintRef[];
@@ -73,11 +73,11 @@ export function lowerPositionPlacement(
     isInitiallyPlaced: (axis: Axis, name: string) => boolean;
     resolveCoordinate: (
       axis: Axis,
-      coordinate: MaybeValue<number>
+      coordinate: PositionValue
     ) => number | undefined;
   }
 ): void {
-  const emit = (axis: Axis, coordinate: MaybeValue<number> | undefined) => {
+  const emit = (axis: Axis, coordinate: PositionValue | undefined) => {
     if (coordinate === undefined) return;
     const value = resolveCoordinate(axis, coordinate);
     if (value === undefined) return;

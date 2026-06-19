@@ -76,16 +76,15 @@ export const Polar: StoryObj<Args> = {
   },
   render: (args: Args) => {
     const container = initializeContainer();
-    const lakes = [...new Set(seafood.map((d) => d.lake))];
-    const lakeCenters = lakes.map((_, i) => (i * 2 * Math.PI) / lakes.length);
 
     layer({ coord: clock() }, [
       Chart(seafood)
         .flow(
           scatter({
             by: "lake",
-            x: lakeCenters,
-            y: 50,
+            x: "lake",
+            w: 2 * Math.PI,
+            position: { y: 50, anchor: "baseline" },
             axes: { x: false, y: true },
           }),
           derive((d) => orderBy(d, "count", "asc")),

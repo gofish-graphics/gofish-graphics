@@ -26,7 +26,9 @@ export type ChannelType = "size" | "pos" | "color" | "raw";
  * an aggregate, used by expand-kind marks (e.g. `cut`) where each datum maps
  * to one output node and the channel value differs per node.
  */
-export type ChannelSpec = ChannelType | { type: ChannelType; entry?: boolean };
+export type ChannelSpec =
+  | ChannelType
+  | { type: ChannelType; entry?: boolean; discrete?: boolean };
 
 export type ChannelAnnotations<T> = {
   [K in keyof T]?: ChannelSpec;

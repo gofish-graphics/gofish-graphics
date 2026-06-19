@@ -254,9 +254,10 @@ composes its targets' spaces into the layer's claim on that axis:
 - `Constraint.position` contributes a _fragment_: the layer folds the _datum_
   coordinates into a POSITION domain on the constrained axis
   (`collectPositionDomains`), unioned with the children's spaces.
-  (Literal-pixel coordinates are not data and don't contribute.) That domain
-  is what the layer later turns into a data→pixel scale to resolve those
-  constraints.
+  (Literal-pixel coordinates are not data and don't contribute; neither do
+  discrete scatter slots, which resolve directly from the already-known layer
+  size.) That domain is what the layer later turns into a data→pixel scale to
+  resolve those constraints.
 - `Constraint.distribute` contributes the stack fold (`distributeSpaceFold`,
   `constraints/distribute.ts`): data-driven continuous targets compose to
   `SIZE(Monotonic.add(...) + spacing·(n−1))` (a `free` magnitude); with
@@ -309,7 +310,10 @@ composes its targets' spaces into the layer's claim on that axis:
   `(local box, translate)` split by stamping `[0, size]` into the local box and
   deriving the absolute `min` through the placement ledger. `scatter` uses both:
   plain `x`/`y` → `Constraint.position`, range `xMin`/`xMax`/`yMin`/`yMax` →
-  `Constraint.span` (the operator no longer has a bespoke layout).
+  `Constraint.span` (the operator no longer has a bespoke layout). A categorical
+  scatter channel such as `x: "lake"` lowers to discrete placement coordinates
+  `i / count · axisSize`; those are placement coordinates, not datum values, so
+  they become numeric placement facts without affecting the layer's data domain.
 
 The layer composes these per axis — children not covered by a constraint
 max-union in as overlay siblings. On an axis a constraint **does** cover, that

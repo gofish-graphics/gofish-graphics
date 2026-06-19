@@ -230,7 +230,10 @@ GoFish's twist is that a mark also produces a node in a layout AST rather
 than a render directly, and the channel set is smaller (`size`, `pos`,
 `color`) — Encodable's vega-lite-flavored channel taxonomy is richer.
 [The Operator Factory](/internals/frontend/operator-factory) extends the same pattern
-to layout operators (split + per-partition application).
+to layout operators (split + per-partition application). Operator channels add
+one layout-only wrinkle: entry-position channels may opt into categorical
+`discrete` placement, which produces layout slots rather than datum-scaled
+positions.
 
 ## Pointers
 

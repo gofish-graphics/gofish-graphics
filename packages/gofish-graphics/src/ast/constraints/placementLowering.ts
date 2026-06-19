@@ -3,7 +3,14 @@
 // </gofish-wiki>
 
 import type { Placeable } from "../_node";
-import { getValue, getValueOffset, isValue, type MaybeValue } from "../data";
+import {
+  getValue,
+  getValueOffset,
+  isDiscretePosition,
+  isValue,
+  type MaybeValue,
+  type PositionValue,
+} from "../data";
 import type { AlignConstraint } from "./align";
 import { lowerAlignPlacement } from "./align";
 import type { DistributeConstraint } from "./distribute";
@@ -45,19 +52,25 @@ const axisName = (axis: 0 | 1): Axis => (axis === 0 ? "x" : "y");
 const placementKey = (axis: Axis, name: string): string => `${axis}:${name}`;
 
 export function compilePlacementCoordinate(
-  coordinate: MaybeValue<number>,
-  scale: ((value: number) => number) | undefined
+  coordinate: PositionValue,
+  scale: ((value: number) => number) | undefined,
+  axisSize?: number
 ): PlacementCoordinate {
+  if (isDiscretePosition(coordinate)) {
+    if (!Number.isFinite(axisSize) || coordinate.count <= 0) return undefined;
+    return (coordinate.index / coordinate.count) * axisSize!;
+  }
   if (!isValue(coordinate)) return coordinate;
   if (scale === undefined) return undefined;
   return scale(getValue(coordinate)!) + getValueOffset(coordinate);
 }
 
 function resolveCoordinate(
-  coordinate: MaybeValue<number>,
-  scale: ((value: number) => number) | undefined
+  coordinate: PositionValue,
+  scale: ((value: number) => number) | undefined,
+  axisSize?: number
 ): number | undefined {
-  return compilePlacementCoordinate(coordinate, scale);
+  return compilePlacementCoordinate(coordinate, scale, axisSize);
 }
 
 class PlacementOwnershipPlan {
@@ -65,12 +78,15 @@ class PlacementOwnershipPlan {
   private readonly initiallyPlaced = new Set<string>();
   private readonly positionPinned = new Set<string>();
   private readonly spanPinned = new Set<string>();
+  private readonly sizes: [number, number];
 
   constructor(
     targets: Map<string, Placeable>,
     constraints: PlacementConstraint[],
-    posScales: ConstraintPosScales | undefined
+    posScales: ConstraintPosScales | undefined,
+    sizes: [number, number]
   ) {
+    this.sizes = sizes;
     for (const [name, target] of targets) {
       for (const axis of AXIS_INDICES) {
         if (target.dims[axis].min !== undefined)
@@ -123,7 +139,11 @@ class PlacementOwnershipPlan {
       const coordinate = constraint[axis];
       if (coordinate === undefined) continue;
       const idx = axisIndex(axis);
-      const value = resolveCoordinate(coordinate, posScales?.[idx]);
+      const value = resolveCoordinate(
+        coordinate,
+        posScales?.[idx],
+        this.sizes[idx]
+      );
       if (value === undefined) continue;
       for (const child of constraint.children) {
         this.positionPinned.add(placementKey(axis, child.name));
@@ -138,7 +158,12 @@ export function lowerPlacementConstraints(
   sizes: [number, number],
   posScales?: ConstraintPosScales
 ): LoweredPlacement {
-  const ownership = new PlacementOwnershipPlan(targets, constraints, posScales);
+  const ownership = new PlacementOwnershipPlan(
+    targets,
+    constraints,
+    posScales,
+    sizes
+  );
 
   const spanEdgePins = constraints.flatMap((constraint, constraintIndex) =>
     constraint.type === "span"
@@ -167,8 +192,10 @@ export function lowerPlacementConstraints(
     (axis, name) => spanExtentByKey.get(placementKey(axis, name))?.size
   );
   for (const claim of spanEdgePins) lowerer.addFact(claim.fact);
-  const resolveAxisCoordinate = (axis: Axis, coordinate: MaybeValue<number>) =>
-    resolveCoordinate(coordinate, posScales?.[axisIndex(axis)]);
+  const resolveAxisCoordinate = (axis: Axis, coordinate: PositionValue) => {
+    const idx = axisIndex(axis);
+    return resolveCoordinate(coordinate, posScales?.[idx], sizes[idx]);
+  };
   const isInitiallyPlaced = ownership.isInitiallyPlaced.bind(ownership);
   const isPinned = ownership.isPinned.bind(ownership);
 

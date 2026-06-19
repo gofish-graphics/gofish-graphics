@@ -1,7 +1,13 @@
 import type { GoFishAST } from "../_ast";
 import { GoFishNode, type Placeable } from "../_node";
 import { isToken, type Token } from "../createName";
-import { getMeasure, getValue, isValue, type Measure } from "../data";
+import {
+  getMeasure,
+  getValue,
+  isValue,
+  type MaybeValue,
+  type Measure,
+} from "../data";
 import { mergeMeasures } from "../underlyingSpace";
 import * as Interval from "../../util/interval";
 import { createAlignConstraint } from "./align";
@@ -170,7 +176,7 @@ export function collectPositionDomains(constraints: ConstraintSpec[]): {
     coord: PositionConstraint["x"]
   ): Interval.Interval | undefined => {
     if (!isValue(coord)) return acc;
-    const n = getValue(coord);
+    const n = getValue(coord as MaybeValue<number>);
     const iv = Interval.interval(n, n);
     return acc ? Interval.unionAll(acc, iv) : iv;
   };

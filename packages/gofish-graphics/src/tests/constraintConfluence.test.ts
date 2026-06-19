@@ -46,7 +46,7 @@ import {
   childPosScalesFor,
   selectGridConstraint,
 } from "../ast/constraints/proposalPlan";
-import { value } from "../ast/data";
+import { discretePosition, value } from "../ast/data";
 import { POSITION, SIZE, UNDEFINED } from "../ast/underlyingSpace";
 import { interval } from "../util/interval";
 
@@ -752,6 +752,10 @@ console.log("# constraint confluence: raw placement coordinates");
     compilePlacementCoordinate(value(5).offset(3), undefined) === undefined &&
       compilePlacementCoordinate(value(5).offset(3), (v) => v * 10) === 53
   );
+  ok(
+    "discrete placement coordinate resolves from containing axis size",
+    compilePlacementCoordinate(discretePosition(2, 6), undefined, 300) === 100
+  );
 }
 
 console.log("# constraint confluence: raw placement fact datatype");
@@ -803,6 +807,29 @@ console.log("# constraint confluence: placement constraint lowering");
       positionFact.expr.node === "A" &&
       positionFact.expr.anchor === "start" &&
       positionFact.value === 15
+  );
+
+  const loweredDiscretePosition = lowerPlacementConstraints(
+    [
+      {
+        type: "position",
+        x: discretePosition(2, 6),
+        anchor: "middle",
+        override: true,
+        children: [A],
+      },
+    ],
+    targets("A"),
+    [300, 200]
+  );
+  const discretePositionFact = loweredDiscretePosition.program.axes[0][0];
+  ok(
+    "discrete position lowers to a numeric pin fact",
+    discretePositionFact?.type === "pin" &&
+      discretePositionFact.owner === "position[0]" &&
+      discretePositionFact.expr.node === "A" &&
+      discretePositionFact.expr.anchor === "start" &&
+      discretePositionFact.value === 95
   );
 
   const loweredAlign = lowerPlacementConstraints(

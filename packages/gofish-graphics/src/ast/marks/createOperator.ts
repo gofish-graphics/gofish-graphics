@@ -39,6 +39,7 @@ import {
   stashLayerName,
 } from "./chartBuilder";
 import { inferSize, inferPos, inferColor, resolveMeasure } from "../channels";
+import { discretePosition } from "../data";
 import type { Measure } from "../data";
 import type { MaybeValue, Value } from "../data";
 import type { LabelAccessor, LabelOptions } from "../labels/labelPlacement";
@@ -422,7 +423,9 @@ export type ChannelType = "size" | "pos" | "color";
  * operator (traversal) form; in the combinator form they act as the aggregate
  * form for whatever data the combinator was called with.
  */
-export type ChannelSpec = ChannelType | { type: ChannelType; entry?: boolean };
+export type ChannelSpec =
+  | ChannelType
+  | { type: ChannelType; entry?: boolean; discrete?: boolean };
 
 export type ChannelAnnotations<Options> = Partial<
   Record<keyof Options, ChannelSpec>
@@ -551,6 +554,19 @@ function runChannel(
   return val;
 }
 
+function isNonNumericEntryField(
+  accessor: unknown,
+  data: Record<string, unknown>[]
+): accessor is string {
+  if (typeof accessor !== "string") return false;
+  return data.some((row) => {
+    const value = row?.[accessor];
+    return (
+      value !== undefined && value !== null && !Number.isFinite(Number(value))
+    );
+  });
+}
+
 /**
  * Apply channel annotations: runs inferSize/inferPos/inferColor on the
  * specified opts keys, returning a new opts object.
@@ -582,6 +598,7 @@ function applyChannels<Options extends Record<string, any>>(
     if (Array.isArray(val)) continue;
     const type: ChannelType = typeof spec === "string" ? spec : spec.type;
     const perEntry = typeof spec === "object" && spec.entry === true;
+    const discrete = typeof spec === "object" && spec.discrete === true;
     // The measure is loop-invariant across split entries (it depends only on
     // the accessor and `wholeData`'s provenance, not on which items a given
     // entry holds), so resolve it once per channel. Only size/pos consume it;
@@ -591,6 +608,16 @@ function applyChannels<Options extends Record<string, any>>(
         ? resolveMeasure(wholeData, val)
         : undefined;
     if (perEntry && entries !== undefined) {
+      if (
+        type === "pos" &&
+        discrete &&
+        isNonNumericEntryField(val, wholeData)
+      ) {
+        out[key] = [...entries.keys()].map((_, i) =>
+          discretePosition(i, entries.size)
+        );
+        continue;
+      }
       // Value aggregation uses each entry's items; the measure comes from
       // `wholeData` (the binned array still carries the symbol — each per-entry
       // slice does not).

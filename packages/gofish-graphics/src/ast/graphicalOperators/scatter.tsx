@@ -1,16 +1,18 @@
 import { GoFishNode } from "../_node";
 import type { AxisOptions } from "../gofish";
-import { MaybeValue } from "../data";
+import { MaybeValue, type PositionValue } from "../data";
 import { FancyDims } from "../dims";
 import { createNodeOperator } from "../withGoFish";
 import { GoFishAST } from "../_ast";
 import { Collection } from "lodash";
 import { SplitBy, splitKeyFn } from "../datumProjection";
 import { Alignment } from "./alignment";
+import type { AlignAnchor } from "../constraints/shared";
 import { createOperator } from "../marks/createOperator";
 import { layer } from "./layer";
 import { Constraint, type ConstraintSpec } from "../constraints";
 import { ensureChildNames } from "../constraints/shared";
+import { position as PositionNode } from "./position";
 
 const unwrapLodashArray = function <T>(value: T[] | Collection<T>): T[] {
   if (typeof value === "object" && value !== null && "value" in value) {
@@ -22,8 +24,8 @@ const unwrapLodashArray = function <T>(value: T[] | Collection<T>): T[] {
 export type ScatterProps = {
   name?: string;
   key?: string;
-  x?: MaybeValue<number>[];
-  y?: MaybeValue<number>[];
+  x?: PositionValue[];
+  y?: PositionValue[];
   /** Range form: position each child so it spans [xMin[i], xMax[i]] in data space. */
   xMin?: MaybeValue<number>[];
   xMax?: MaybeValue<number>[];
@@ -31,6 +33,11 @@ export type ScatterProps = {
   yMax?: MaybeValue<number>[];
   alignment?: Alignment;
   axes?: boolean | { x?: AxisOptions; y?: AxisOptions };
+  position?: {
+    x?: MaybeValue<number>;
+    y?: MaybeValue<number>;
+    anchor?: AlignAnchor;
+  };
 } & FancyDims<MaybeValue<number>>;
 
 export const Scatter = createNodeOperator(
@@ -49,6 +56,7 @@ export const Scatter = createNodeOperator(
       yMax,
       alignment = "baseline",
       axes,
+      position,
       ...fancyDims
     } = options;
     children = unwrapLodashArray(children);
@@ -106,8 +114,8 @@ export const Scatter = createNodeOperator(
       const cs: ConstraintSpec[] = [];
       childList.forEach((_, i) => {
         const pos: {
-          x?: MaybeValue<number>;
-          y?: MaybeValue<number>;
+          x?: PositionValue;
+          y?: PositionValue;
           override: boolean;
         } = { override: true };
         if (x?.[i] !== undefined) pos.x = x[i];
@@ -142,6 +150,9 @@ export const Scatter = createNodeOperator(
           ? { x: axes, y: axes }
           : { x: toShow(axes.x), y: toShow(axes.y) };
     }
+    if (position !== undefined) {
+      return await PositionNode(position, [node]);
+    }
     return node;
   }
 );
@@ -157,8 +168,8 @@ export const Scatter = createNodeOperator(
  */
 export type ScatterOptions = {
   by?: SplitBy;
-  x?: string | number | MaybeValue<number>[];
-  y?: string | number | MaybeValue<number>[];
+  x?: string | number | PositionValue[];
+  y?: string | number | PositionValue[];
   xMin?: string | MaybeValue<number>[];
   xMax?: string | MaybeValue<number>[];
   yMin?: string | MaybeValue<number>[];
@@ -166,6 +177,13 @@ export type ScatterOptions = {
   alignment?: "start" | "middle" | "end" | "baseline";
   debug?: boolean;
   axes?: boolean | { x?: AxisOptions; y?: AxisOptions };
+  w?: MaybeValue<number>;
+  h?: MaybeValue<number>;
+  position?: {
+    x?: MaybeValue<number>;
+    y?: MaybeValue<number>;
+    anchor?: AlignAnchor;
+  };
 };
 
 export const scatter = createOperator<any, ScatterOptions>(Scatter as any, {
@@ -174,8 +192,8 @@ export const scatter = createOperator<any, ScatterOptions>(Scatter as any, {
   split: ({ by }, d) =>
     by ? Map.groupBy(d, splitKeyFn(by)) : new Map(d.map((r, i) => [i, r])),
   channels: {
-    x: { type: "pos", entry: true },
-    y: { type: "pos", entry: true },
+    x: { type: "pos", entry: true, discrete: true },
+    y: { type: "pos", entry: true, discrete: true },
     xMin: { type: "pos", entry: true },
     xMax: { type: "pos", entry: true },
     yMin: { type: "pos", entry: true },
