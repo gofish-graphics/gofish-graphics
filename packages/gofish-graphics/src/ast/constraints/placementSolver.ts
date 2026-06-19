@@ -17,7 +17,12 @@ import type { PositionConstraint } from "./position";
 import { lowerPositionPlacement } from "./position";
 import type { SpanConstraint, SpanExtent } from "./span";
 import { collectSpanExtents, lowerSpanEdgePins } from "./span";
-import type { Axis, AlignAnchor, ConstraintPosScales } from "./shared";
+import {
+  axisIndex,
+  type Axis,
+  type AlignAnchor,
+  type ConstraintPosScales,
+} from "./shared";
 import type {
   NodeId,
   PlacementFactEmitter,
@@ -67,7 +72,6 @@ const TOLERANCE = 1e-6;
 const AXIS_INDICES = [0, 1] as const;
 const POSITION_AXES = ["x", "y"] as const;
 
-const axisIndex = (axis: Axis): 0 | 1 => (axis === "x" ? 0 : 1);
 const axisName = (axis: 0 | 1): Axis => (axis === 0 ? "x" : "y");
 const placementKey = (axis: 0 | 1, name: string): string => `${axis}:${name}`;
 
@@ -474,7 +478,6 @@ export function lowerPlacementConstraints(
         emitter: builder,
         targets,
         posScales,
-        axisIndex,
         isPinned,
       });
       return;

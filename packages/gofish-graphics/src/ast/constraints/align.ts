@@ -9,6 +9,7 @@ import type {
   ConstraintPosScales,
   ConstraintRef,
 } from "./shared";
+import { axisIndex } from "./shared";
 import type { UnderlyingSpace } from "../underlyingSpace";
 import { resolveAlignmentSpace } from "../graphicalOperators/alignment";
 import type { PlacementFactEmitter } from "./placementFacts";
@@ -94,13 +95,11 @@ export function lowerAlignPlacement(
     emitter,
     targets,
     posScales,
-    axisIndex,
     isPinned,
   }: {
     emitter: PlacementFactEmitter;
     targets: Map<string, Placeable>;
     posScales: ConstraintPosScales | undefined;
-    axisIndex: (axis: Axis) => 0 | 1;
     isPinned: (axis: Axis, name: string) => boolean;
   }
 ): void {
