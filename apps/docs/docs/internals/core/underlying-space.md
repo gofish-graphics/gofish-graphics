@@ -13,7 +13,9 @@ covers:
   - packages/gofish-graphics/src/ast/constraints/folds.ts
   - packages/gofish-graphics/src/ast/constraints/compose.ts
   - packages/gofish-graphics/src/ast/constraints/distribute.ts
+  - packages/gofish-graphics/src/ast/constraints/distributePlacement.ts
   - packages/gofish-graphics/src/ast/constraints/align.ts
+  - packages/gofish-graphics/src/ast/constraints/placementSolver.ts
   - packages/gofish-graphics/src/ast/constraints/nest.ts
   - packages/gofish-graphics/src/ast/constraints/grid.ts
   - packages/gofish-graphics/src/ast/constraints/span.ts
@@ -327,6 +329,17 @@ the same expressive ceiling as the spread pipeline, auto-fit included
 back to `unionChildSpaces`; the general algebra is sketched in
 [[constraints-as-core]].
 
+After sizing, the layer emits placement constraints into a per-axis relation
+problem (`constraints/placementSolver.ts`). `position`, `align`, `distribute`,
+`nest`, and `grid` become pins, relations, or ranked weak pins over target box
+anchors; the solver then chooses one translation per connected component and
+commits the resulting `min` placements back to the nodes. This replaces the
+older declaration-order walk for known-size placement with a stable, confluent
+solve: strong pins win, relation cycles are checked for contradiction, and weak
+fallbacks are ranked by policy rather than source order. The extracted
+`constraints/distributePlacement.ts` remains the pure emit/apply form of the
+legacy distribute walk used by the spread path and by constraint lowering.
+
 Placement-time alignment dispatches on the same resolution. When an `align`
 finds **no pre-placed sibling**, its fallback baseline is computed from what the
 axis carries (`alignFallbackBaseline`, `constraints/align.ts`): a
@@ -345,11 +358,16 @@ That fallback is right for a child that needs a baseline (a bar's height — a
 position — a faceted scatter panel over `[1955, 2010]`, whose `placement` is
 `determined`. Pinning it to `posScale(0)` (data-zero, far below 1955) would
 fling it off-canvas; it should keep where its own scale puts it. So
-`emitAlignTargets` reads the child's `placement` directly: **a target whose
+the placement solver reads `Placeable.placementOn(dir)`: **a target whose
 subtree already commits a data position (`placement` `determined`/`conflict`)
 on a posScale axis, with a non-`middle` anchor, is left alone** — `align`
 shares the frame (it still unions the children's `dataDomain`) but supplies no
-baseline. This is `GoFishNode.isDataPositioned(dir)`, exposed on `Placeable`.
+baseline. When alignment does write an anchor relation, it asks
+`Placeable.localAnchor(axis, anchor)` for the anchor's coordinate in the
+target's local box. `GoFishNode.localAnchor()` derives that from the node's
+intrinsic dimensions (including baseline/min/center/max), so relation solving
+can handle asymmetric boxes such as text and negative bars without relying on
+the display transform.
 
 Because placement is first-class, this is the _whole_ mechanism — no flag, no
 scoping. (Historically the same effect needed a `guardDataPositioned` flag on

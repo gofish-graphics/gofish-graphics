@@ -58,6 +58,13 @@ a full rebuild. The [`coord` operator](/internals/layout/coord-flattening) is th
 notable special case: it flattens its subtree into a flat, absolutely-positioned list
 before applying its coordinate transform.
 
+The placement pass treats every real node as a `Placeable`: it can expose its
+dimensions, accept final placement pins, report whether an axis is already
+data-positioned, and answer where a local anchor (`min`, `center`, `max`, or
+`baseline`) sits inside its own box. That `localAnchor` method is what lets the
+constraint solver express alignment and distribution as equations over sibling
+boxes rather than as order-sensitive imperative writes.
+
 **Chrome is just more tree.** Axes, legends, and axis titles are not privileged
 render-time fixtures. Before layout, elaboration passes rewrite each of them into
 ordinary marks and constraints — `Layer`-wrapped `Rect`/`Text` nodes seated by

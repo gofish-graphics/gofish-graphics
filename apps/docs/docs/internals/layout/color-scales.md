@@ -88,6 +88,11 @@ gradient(stops); // constructor
 
 Fill values that are pre-computed hex strings (e.g. from `derive`) pass through the color map directly — if the value is not found in the map, the value itself is used as the color.
 
+`_node.ts` is also the shared home for node-level layout protocols such as
+`Placeable.localAnchor()`. That anchor API is unrelated to color scale
+resolution; it is consumed later by placement solving, after the color pass has
+already recorded the subtree's color encodings in the render session.
+
 ---
 
 ## Files

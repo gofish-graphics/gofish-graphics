@@ -443,6 +443,14 @@ at a target coordinate. _Which_ anchor depends on whether the axis is sized:
   the authoritative override — it rebuilds the axis ledger so the pin lands regardless
   — and for an unplaced root it matches what `place(…, "min")` would have done.
 
+Constraint placement works in anchor coordinates, not just node origins. The
+`Placeable` protocol in `_node.ts` exposes `localAnchor(axis, anchor)` so the
+placement solver can turn `start`/`middle`/`end`/`baseline` relations into
+equations over a node's absolute `min`. `GoFishNode.localAnchor()` reads the
+node's intrinsic dimensions in its own local frame, which keeps baseline and
+asymmetric-box alignment independent from whatever display transform is later
+projected for rendering.
+
 ### Pass 11: Ordinal Scale Building
 
 **Location**: `src/ast/gofish.tsx:216-223`
