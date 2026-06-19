@@ -183,6 +183,25 @@ async function main() {
   }
 
   // -------------------------------------------------------------------------
+  // Scatter position modifier elaborates into scatter opts, not a wrapper op.
+  // -------------------------------------------------------------------------
+  {
+    const chart = Chart([
+      { group: "A", value: 1 },
+      { group: "B", value: 2 },
+    ])
+      .flow(scatter({ by: "group", x: "group" }).position({ y: 50 }))
+      .mark(circle({ r: 3, fill: "steelblue" }));
+    const doc = await chart.toJSON();
+    validateDoc(doc, "scatter position modifier chart");
+    const ops = (doc.root as Frontend.ChartIR).operators!;
+    check("position modifier keeps one operator", ops.length === 1);
+    check("position modifier keeps scatter", ops[0].type === "scatter");
+    check("position modifier carries x", (ops[0] as any).x === "group");
+    check("position modifier carries y", (ops[0] as any).y === 50);
+  }
+
+  // -------------------------------------------------------------------------
   // Log operator with a label.
   // -------------------------------------------------------------------------
   {
