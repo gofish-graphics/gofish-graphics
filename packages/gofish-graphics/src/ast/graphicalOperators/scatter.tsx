@@ -7,12 +7,10 @@ import { GoFishAST } from "../_ast";
 import { Collection } from "lodash";
 import { SplitBy, splitKeyFn } from "../datumProjection";
 import { Alignment } from "./alignment";
-import type { AlignAnchor } from "../constraints/shared";
 import { createOperator } from "../marks/createOperator";
 import { layer } from "./layer";
 import { Constraint, type ConstraintSpec } from "../constraints";
 import { ensureChildNames } from "../constraints/shared";
-import { position as PositionNode } from "./position";
 
 const unwrapLodashArray = function <T>(value: T[] | Collection<T>): T[] {
   if (typeof value === "object" && value !== null && "value" in value) {
@@ -33,11 +31,6 @@ export type ScatterProps = {
   yMax?: MaybeValue<number>[];
   alignment?: Alignment;
   axes?: boolean | { x?: AxisOptions; y?: AxisOptions };
-  position?: {
-    x?: MaybeValue<number>;
-    y?: MaybeValue<number>;
-    anchor?: AlignAnchor;
-  };
 } & FancyDims<MaybeValue<number>>;
 
 export const Scatter = createNodeOperator(
@@ -56,7 +49,6 @@ export const Scatter = createNodeOperator(
       yMax,
       alignment = "baseline",
       axes,
-      position,
       ...fancyDims
     } = options;
     children = unwrapLodashArray(children);
@@ -150,9 +142,6 @@ export const Scatter = createNodeOperator(
           ? { x: axes, y: axes }
           : { x: toShow(axes.x), y: toShow(axes.y) };
     }
-    if (position !== undefined) {
-      return await PositionNode(position, [node]);
-    }
     return node;
   }
 );
@@ -179,11 +168,6 @@ export type ScatterOptions = {
   axes?: boolean | { x?: AxisOptions; y?: AxisOptions };
   w?: MaybeValue<number>;
   h?: MaybeValue<number>;
-  position?: {
-    x?: MaybeValue<number>;
-    y?: MaybeValue<number>;
-    anchor?: AlignAnchor;
-  };
 };
 
 export const scatter = createOperator<any, ScatterOptions>(Scatter as any, {

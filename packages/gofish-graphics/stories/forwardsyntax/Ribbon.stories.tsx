@@ -83,8 +83,8 @@ export const Polar: StoryObj<Args> = {
           scatter({
             by: "lake",
             x: "lake",
+            y: 50,
             w: 2 * Math.PI,
-            position: { y: 50, anchor: "baseline" },
             axes: { x: false, y: true },
           }),
           derive((d) => orderBy(d, "count", "asc")),

@@ -6,17 +6,11 @@ import { POSITION, UNDEFINED, UnderlyingSpace } from "../underlyingSpace";
 import { interval } from "../../util/interval";
 import { createNodeOperator } from "../withGoFish";
 import { GoFishAST } from "../_ast";
-import type { AlignAnchor } from "../constraints/shared";
 
 export const position = createNodeOperator(
   (
     childrenOrOptions:
-      | {
-          key?: string;
-          x?: MaybeValue<number>;
-          y?: MaybeValue<number>;
-          anchor?: AlignAnchor;
-        }
+      | { key?: string; x?: MaybeValue<number>; y?: MaybeValue<number> }
       | GoFishAST[],
     maybeChildren?: GoFishAST[]
   ) => {
@@ -70,22 +64,9 @@ export const position = createNodeOperator(
           const xPos = computeAesthetic(options.x, posScales[0]!, 0)!;
           const yPos = computeAesthetic(options.y, posScales[1]!, 0)!;
 
-          const anchorOffset = (
-            axis: 0 | 1,
-            anchor: AlignAnchor | undefined
-          ) => {
-            const dim = childPlaceable.dims[axis];
-            if (anchor === "start" || anchor === "baseline")
-              return dim.min ?? 0;
-            if (anchor === "end") return dim.max ?? dim.size ?? 0;
-            return dim.center ?? (dim.min ?? 0) + (dim.size ?? 0) / 2;
-          };
-
-          // Position is center-relative by default. `anchor` lets callers pin
-          // the wrapped node's origin/start instead, which is the useful form
-          // for "position(scatter(...))" radial offsets.
-          const offsetX = xPos - anchorOffset(0, options.anchor);
-          const offsetY = yPos - anchorOffset(1, options.anchor);
+          // Position is relative to the child's center point (SwiftUI-like behavior)
+          const offsetX = xPos - childWidth / 2;
+          const offsetY = yPos - childHeight / 2;
 
           // Update child position
           childPlaceable.place("x", offsetX);
