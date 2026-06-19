@@ -75,6 +75,14 @@ const POSITION_AXES = ["x", "y"] as const;
 
 const axisName = (axis: 0 | 1): Axis => (axis === 0 ? "x" : "y");
 const placementKey = (axis: Axis, name: string): string => `${axis}:${name}`;
+const spanExtentKey = (extent: SpanExtent): string =>
+  placementKey(extent.axis, extent.name);
+
+function indexSpanExtents(extents: SpanExtent[]): Map<string, SpanExtent> {
+  const byKey = new Map<string, SpanExtent>();
+  for (const extent of extents) byKey.set(spanExtentKey(extent), extent);
+  return byKey;
+}
 
 const BOX_ANCHOR: Record<AlignAnchor, Anchor> = {
   start: "min",
@@ -432,10 +440,8 @@ export function lowerPlacementConstraints(
       : []
   );
   const spanExtents = collectSpanExtents(spanEdgePins);
-  const spanExtentByKey = new Map<string, SpanExtent>();
+  const spanExtentByKey = indexSpanExtents(spanExtents);
   for (const extent of spanExtents) {
-    const key = placementKey(extent.axis, extent.name);
-    spanExtentByKey.set(key, extent);
     ownership.noteSpanExtent(extent);
   }
 
@@ -519,10 +525,7 @@ export function solvePlacementConstraints(
     sizes,
     posScales
   );
-  const spanExtentByKey = new Map<string, SpanExtent>();
-  for (const extent of lowered.spanExtents) {
-    spanExtentByKey.set(placementKey(extent.axis, extent.name), extent);
-  }
+  const spanExtentByKey = indexSpanExtents(lowered.spanExtents);
 
   const results = [
     solveAxis("x", lowered.program.axes[0], spanExtentByKey),
