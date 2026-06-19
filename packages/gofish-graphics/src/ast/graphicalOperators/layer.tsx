@@ -39,13 +39,13 @@ import {
   type ConstraintSpec,
   type ZOrderConstraint,
 } from "../constraints";
-import { allocateSlices } from "../constraints/folds";
 import { childNameKey } from "../constraints/shared";
 import { buildNestPlan } from "../constraints/nestPlan";
 import {
   composeConstraintSpaces,
   type ComposeBudget,
 } from "../constraints/compose";
+import { buildDistributeSliceMap } from "../constraints/proposalPlan";
 import { isValue, type Measure } from "../data";
 import { unionChildSpaces } from "./alignment";
 
@@ -503,28 +503,13 @@ export const layer = createNodeOperatorSequential(
           }
 
           // Per-child proposed size for distribute-covered children: each
-          // distribute segment slices its axis size equally (`allocateSlices`)
-          // among its covered children; a child covered on both axes (a table
-          // cell) draws an x-slice and a y-slice. Uncovered axes get the full
-          // size. A child carrying its own explicit size ignores this (its size
-          // wins), matching spread; a claim-less child consumes the slice.
-          const sliceByName: Map<string, Size> | undefined = constraintBudget
-            ? (() => {
-                const m = new Map<string, Size>();
-                for (const seg of constraintBudget.segments) {
-                  const slices = allocateSlices(
-                    size[seg.dAxis],
-                    seg.spacing,
-                    seg.order.length
-                  );
-                  seg.order.forEach((name, i) => {
-                    const cur = m.get(name) ?? ([size[0], size[1]] as Size);
-                    cur[seg.dAxis] = slices[i];
-                    m.set(name, cur);
-                  });
-                }
-                return m;
-              })()
+          // distribute segment slices its axis size equally among its covered
+          // children; a child covered on both axes (a table cell) draws an
+          // x-slice and a y-slice. Uncovered axes get the full size. A child
+          // carrying its own explicit size ignores this (its size wins),
+          // matching spread; a claim-less child consumes the slice.
+          const sliceByName = constraintBudget
+            ? buildDistributeSliceMap(constraintBudget.segments, size)
             : undefined;
           const childSizeFor = (childName: string | undefined): Size => {
             // Grid is exclusive: every child is a cell, so all get the track size.

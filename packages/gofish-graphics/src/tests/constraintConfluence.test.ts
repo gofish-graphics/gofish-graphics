@@ -15,6 +15,7 @@ import type { SpanConstraint } from "../ast/constraints/span";
 import type { Anchor, Dimensions, FancyDirection } from "../ast/dims";
 import { elaborateDirection, localAnchorPoint } from "../ast/dims";
 import { buildNestPlan } from "../ast/constraints/nestPlan";
+import { buildDistributeSliceMap } from "../ast/constraints/proposalPlan";
 
 type Constraint =
   | AlignConstraint
@@ -374,6 +375,42 @@ console.log("# constraint confluence: nest size dependency planning");
     nestPlanSignature([nestAC, nestAB, nestDA]) === expected &&
       nestPlanSignature([nestDA, nestAB, nestAC]) === expected &&
       nestPlanSignature([nestDA, nestAC, nestAB]) === expected
+  );
+}
+
+console.log("# constraint confluence: distribute size proposals");
+{
+  const slices = buildDistributeSliceMap(
+    [
+      { dAxis: 0, spacing: 10, order: ["A", "B"] },
+      { dAxis: 1, spacing: 5, order: ["A", "C"] },
+    ],
+    [210, 105]
+  );
+  ok(
+    "distribute proposal slices compose across independent axes",
+    slices?.get("A")?.[0] === 100 &&
+      slices.get("B")?.[0] === 100 &&
+      slices.get("A")?.[1] === 50 &&
+      slices.get("C")?.[1] === 50
+  );
+
+  const overlapAB = { dAxis: 0 as const, spacing: 10, order: ["A", "B"] };
+  const overlapBC = { dAxis: 0 as const, spacing: 20, order: ["B", "C"] };
+  const throws = (segments: [typeof overlapAB, typeof overlapBC]): boolean => {
+    try {
+      buildDistributeSliceMap(segments, [210, 105]);
+      return false;
+    } catch (error) {
+      return (
+        error instanceof Error &&
+        error.message.includes("Constraint.distribute proposal conflict")
+      );
+    }
+  };
+  ok(
+    "overlapping distribute proposal ownership throws in either order",
+    throws([overlapAB, overlapBC]) && throws([overlapBC, overlapAB])
   );
 }
 

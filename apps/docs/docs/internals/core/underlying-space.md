@@ -11,6 +11,7 @@ covers:
   - packages/gofish-graphics/src/ast/channels.ts
   - packages/gofish-graphics/src/ast/data.ts
   - packages/gofish-graphics/src/ast/constraints/folds.ts
+  - packages/gofish-graphics/src/ast/constraints/proposalPlan.ts
   - packages/gofish-graphics/src/ast/constraints/compose.ts
   - packages/gofish-graphics/src/ast/constraints/distribute.ts
   - packages/gofish-graphics/src/ast/constraints/align.ts
@@ -319,11 +320,14 @@ reports (`constraints/compose.ts`). At layout time the layer then **solves the
 budget**:
 a fold-produced SIZE claim is inverted against the layer's allotted size to
 derive a local scale factor, and distribute-covered fill children are
-proposed slices from the shared allocator (`allocateSlices`,
-`constraints/folds.ts`). This is what makes constraint-assembled layers reach
-the same expressive ceiling as the spread pipeline, auto-fit included
-(issue #475). Composition beyond one distribute (+ one align) per axis falls
-back to `unionChildSpaces`; the general algebra is sketched in
+proposed slices from the shared proposal plan (`buildDistributeSliceMap`,
+`constraints/proposalPlan.ts`, using `allocateSlices` from
+`constraints/folds.ts`). Duplicate proposal ownership on the same child axis is
+a conflict rather than declaration-order-sensitive last-writer-wins. This is
+what makes constraint-assembled layers reach the same expressive ceiling as the
+spread pipeline, auto-fit included (issue #475). Composition beyond one
+distribute (+ one align) per axis falls back to `unionChildSpaces`; the general
+algebra is sketched in
 [[constraints-as-core]].
 
 After sizing, the layer emits placement constraints into a per-axis weighted
