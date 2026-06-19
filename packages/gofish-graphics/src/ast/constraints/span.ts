@@ -30,8 +30,9 @@ export interface SpanConstraint {
   children: ConstraintRef[];
 }
 
-/** One emitted span edge claim. A full span is two claims: `min` and `max`. */
-export interface SpanEdgePin extends PlacementEdgePin {
+/** One lowered span edge plus the resolved target needed to derive extent metadata. */
+export interface SpanEdgeClaim {
+  fact: PlacementEdgePin;
   target: Placeable;
 }
 
@@ -95,8 +96,8 @@ export function lowerSpanEdgePins(
     axis: Axis,
     coordinate: MaybeValue<number>
   ) => number | undefined
-): SpanEdgePin[] {
-  const out: SpanEdgePin[] = [];
+): SpanEdgeClaim[] {
+  const out: SpanEdgeClaim[] = [];
   const emitAxis = (
     axis: Axis,
     span: [MaybeValue<number>, MaybeValue<number>] | undefined
@@ -109,8 +110,14 @@ export function lowerSpanEdgePins(
       const target = targets.get(child.name);
       if (!target) continue;
       out.push(
-        { ...edgePinFact(child.name, axis, "min", min, owner), target },
-        { ...edgePinFact(child.name, axis, "max", max, owner), target }
+        {
+          fact: edgePinFact(child.name, axis, "min", min, owner),
+          target,
+        },
+        {
+          fact: edgePinFact(child.name, axis, "max", max, owner),
+          target,
+        }
       );
     }
   };
@@ -119,11 +126,12 @@ export function lowerSpanEdgePins(
   return out;
 }
 
-export function collectSpanExtents(placements: SpanEdgePin[]): SpanExtent[] {
+export function collectSpanExtents(placements: SpanEdgeClaim[]): SpanExtent[] {
   const byTarget = new Map<Placeable, [SpanGroup?, SpanGroup?]>();
   const groups: SpanGroup[] = [];
   for (const placement of placements) {
-    const idx = placement.axis === "x" ? 0 : 1;
+    const { fact } = placement;
+    const idx = fact.axis === "x" ? 0 : 1;
     let axes = byTarget.get(placement.target);
     if (!axes) {
       axes = [undefined, undefined];
@@ -132,24 +140,24 @@ export function collectSpanExtents(placements: SpanEdgePin[]): SpanExtent[] {
     let group = axes[idx];
     if (!group) {
       group = {
-        name: placement.name,
+        name: fact.name,
         target: placement.target,
-        axis: placement.axis,
+        axis: fact.axis,
         bbox: new BBox(),
-        owner: placement.owner,
+        owner: fact.owner,
       };
       axes[idx] = group;
       groups.push(group);
     }
 
     const conflict = group.bbox.add(
-      placement.edge as BBoxFacet,
-      placement.value,
-      placement.owner
+      fact.edge as BBoxFacet,
+      fact.value,
+      fact.owner
     );
     if (conflict) {
       throw new Error(
-        `Constraint span conflict on ${placement.axis}: ${conflict.owner} ` +
+        `Constraint span conflict on ${fact.axis}: ${conflict.owner} ` +
           `asserts ${conflict.facet}=${conflict.asserted}, but ` +
           `${conflict.priorOwner} implies ${conflict.implied}`
       );

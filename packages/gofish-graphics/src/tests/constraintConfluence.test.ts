@@ -903,10 +903,12 @@ console.log("# constraint confluence: placement constraint lowering");
   ok(
     "span's constraint-local lowerer decomposes a span into min/max edge claims",
     spanEdgeFacts.length === 2 &&
-      spanEdgeFacts[0].type === "edge-pin" &&
-      spanEdgeFacts[0].edge === "min" &&
-      spanEdgeFacts[1].type === "edge-pin" &&
-      spanEdgeFacts[1].edge === "max"
+      spanEdgeFacts[0].fact.type === "edge-pin" &&
+      spanEdgeFacts[0].fact.edge === "min" &&
+      !("target" in spanEdgeFacts[0].fact) &&
+      spanEdgeFacts[1].fact.type === "edge-pin" &&
+      spanEdgeFacts[1].fact.edge === "max" &&
+      !("target" in spanEdgeFacts[1].fact)
   );
 }
 

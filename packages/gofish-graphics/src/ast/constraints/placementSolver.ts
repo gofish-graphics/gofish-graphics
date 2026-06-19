@@ -34,7 +34,6 @@ import {
   emptyPlacementProgram,
   pinFact,
   relationFact,
-  edgePinFact,
   weakPinFact,
 } from "./placementFacts";
 
@@ -140,6 +139,18 @@ class PlacementProgramBuilder implements PlacementFactEmitter {
     return this.program.axes[axisIndex(axis)];
   }
 
+  addFact(fact: PlacementFact): void {
+    if (fact.type === "pin" || fact.type === "weak-pin") {
+      this.facts(fact.expr.axis).push(fact);
+      return;
+    }
+    if (fact.type === "relation") {
+      this.facts(fact.from.axis).push(fact);
+      return;
+    }
+    this.facts(fact.axis).push(fact);
+  }
+
   private target(name: string): Placeable | undefined {
     return this.targets.get(name);
   }
@@ -223,13 +234,6 @@ class PlacementProgramBuilder implements PlacementFactEmitter {
         fromOffset + request.gap - toOffset,
         request.owner
       )
-    );
-  }
-
-  addSpanExtent(extent: SpanExtent): void {
-    this.facts(extent.axis).push(
-      edgePinFact(extent.name, extent.axis, "min", extent.min, extent.owner),
-      edgePinFact(extent.name, extent.axis, "max", extent.max, extent.owner)
     );
   }
 }
@@ -473,7 +477,7 @@ export function lowerPlacementConstraints(
   }
 
   const builder = new PlacementProgramBuilder(targets, spanExtentByKey);
-  for (const extent of spanExtents) builder.addSpanExtent(extent);
+  for (const claim of spanEdgePins) builder.addFact(claim.fact);
   const resolveAxisCoordinate = (axis: Axis, coordinate: MaybeValue<number>) =>
     resolveCoordinate(coordinate, posScales?.[axisIndex(axis)]);
   const isInitiallyPlaced = ownership.isInitiallyPlaced.bind(ownership);
