@@ -2,7 +2,6 @@
 // @wiki Underlying Space — /internals/core/underlying-space
 // </gofish-wiki>
 
-import type { Placeable } from "../_node";
 import {
   CONTINUOUS,
   UnderlyingSpace,
@@ -30,8 +29,8 @@ import type { ConstraintRef } from "./shared";
  * layer's space resolution for the inside-out direction so a nested pair
  * participates in auto-fit), a *layout proposal* (the layer lays the source out
  * first, then proposes `source ± 2·padding` to the derived node — see
- * `layer.tsx`'s nest pre-pass), and the *placement walk* below
- * (`applyNest`, identical for both directions).
+ * `layer.tsx`'s nest pre-pass), and a placement relation emitted by
+ * `placementSolver.ts` (identical for both directions).
  *
  * A missing axis (`{x: 4}` only) leaves the other axis unconstrained: `inner`
  * keeps its natural position there and `outer` keeps the layer's allotted size.
@@ -104,29 +103,4 @@ export function nestedSpace(
     );
   }
   return outerSpace;
-}
-
-/**
- * Position the inner child centered inside outer on each constrained axis.
- * `layer.tsx` has already resolved the pair so `outer = inner + 2·padding` holds
- * on the same axes (whichever side was derived), so centering inner yields
- * `inner.min = outer.min + padding` naturally — identical for both directions.
- *
- * Both targets are expected to already have positions on the constrained axes:
- * outer was placed at baseline by phase-1 (it is deliberately NOT skipped — see
- * `getPositioningConstraintRefs`), and inner is placed here.
- */
-export function applyNest(
-  constraint: NestConstraint,
-  outer: Placeable,
-  inner: Placeable
-): void {
-  if (constraint.x !== undefined) {
-    const outerCenter = outer.dims[0].center;
-    if (outerCenter !== undefined) inner.place("x", outerCenter, "center");
-  }
-  if (constraint.y !== undefined) {
-    const outerCenter = outer.dims[1].center;
-    if (outerCenter !== undefined) inner.place("y", outerCenter, "center");
-  }
 }

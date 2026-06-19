@@ -138,15 +138,16 @@ export function collectConstraintRefs(
 }
 
 /**
- * The set of names referenced by *positioning* constraints (`align` /
- * `distribute` / `nest`). Used by `layer.tsx` to compute `constrainedNames`,
- * which controls phase-1 baseline-placement skipping. z-order constraints don't
- * position, so they must be excluded.
+ * The set of names whose position or extent is owned by geometric constraints
+ * (`align` / `distribute` / `position` / `span` / `nest` / `grid`). Used by
+ * `layer.tsx` to compute `constrainedNames`, which controls phase-1
+ * baseline-placement skipping. z-order constraints don't position, so they must
+ * be excluded.
  *
  * `nest` is special: only the inner child (`children[1]`) skips baseline
  * placement. The outer child (`children[0]`) is left in the set so phase-1
- * places it at baseline — `applyNest` reads outer's placed position to
- * center inner inside it.
+ * places it at baseline; the placement solver reads that position to center
+ * inner inside it.
  */
 export function getPositioningConstraintRefs(
   constraints: ConstraintSpec[]
@@ -158,7 +159,8 @@ export function getPositioningConstraintRefs(
       names.add(c.children[1].name);
       continue;
     }
-    // grid: every cell is placed by `applyGrid`, so all skip phase-1 baseline.
+    // grid: every cell is placed by the placement solver, so all skip phase-1
+    // baseline.
     for (const ref of c.children) if (ref) names.add(ref.name);
   }
   return names;
@@ -248,9 +250,9 @@ export function collectPositionDomains(constraints: ConstraintSpec[]): {
 
 /**
  * Apply a layer's constraints as one relational placement problem. `span`
- * remains a size-setting pre-pass; all remaining geometric constraints are
- * collected and solved together, so declaration order cannot choose anchors.
- * z-order constraints are resolved separately at render time.
+ * contributes extent facts to the same solve, so declaration order cannot choose
+ * whether size or position wins. z-order constraints are resolved separately at
+ * render time.
  *
  * @param constraints - The constraint specs to compose
  * @param nameToPlaceable - Map from child name to its Placeable

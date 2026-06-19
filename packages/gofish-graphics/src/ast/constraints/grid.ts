@@ -22,9 +22,9 @@
 //
 // The grid is interpreted by the Layer: `gridSpaces` gives the ORDINAL axes
 // (categorical columns/rows, for axis rendering), the Layer's budget sizes each
-// cell to `cellExtent`, and `applyGrid` centers each cell in its track.
+// cell to `cellExtent`, and `placementSolver.ts` centers each cell in its track.
 
-import { GoFishNode, type Placeable } from "../_node";
+import { GoFishNode } from "../_node";
 import type { GoFishAST } from "../_ast";
 import { type ConstraintRef } from "./shared";
 import { sliceExtent } from "./folds";
@@ -109,24 +109,4 @@ export function gridSpaces(
     colKeys.length > 0 ? ORDINAL(colKeys) : UNDEFINED,
     rowKeys.length > 0 ? ORDINAL(rowKeys) : UNDEFINED,
   ];
-}
-
-/**
- * Place each cell centered in its (column, row) track. Cells are already sized
- * to the track by the Layer's budget (`gridCellSize`); here we only position.
- */
-export function applyGrid(
-  c: GridConstraint,
-  nameToPlaceable: Map<string, Placeable>,
-  sizes: [number, number]
-): void {
-  const [cellW, cellH] = gridCellSize(c, sizes);
-  c.children.forEach((ref, i) => {
-    const cell = nameToPlaceable.get(ref.name);
-    if (cell === undefined) return;
-    const col = i % c.numCols;
-    const row = Math.floor(i / c.numCols);
-    cell.place(0, col * (cellW + c.xSpacing) + cellW / 2, "center");
-    cell.place(1, row * (cellH + c.ySpacing) + cellH / 2, "center");
-  });
 }

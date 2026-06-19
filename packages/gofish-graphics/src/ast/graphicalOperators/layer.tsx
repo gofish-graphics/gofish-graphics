@@ -104,7 +104,7 @@ type NestPlan = {
  *  over-determination, and topologically sort the layout order (source before
  *  derived). Returns undefined when the layer has no size-deriving nest
  *  (the common path, and CENTER_ONLY-only nests, stay on the untouched
- *  proposal path — their centering is handled by `applyNest`). */
+ *  proposal path — their centering is handled by the placement solver). */
 function buildNestPlan(
   childNodes: GoFishAST[],
   constraints: ConstraintSpec[]
@@ -198,7 +198,8 @@ function buildNestPlan(
       const innerSized = sized(innerIdx, axis);
 
       if (innerSized && outerSized) {
-        // BOTH sized → CENTER_ONLY: no derivation, just center (applyNest).
+        // BOTH sized → CENTER_ONLY: no derivation, just center in the placement
+        // solver.
         // Verify consistency only when both are literal px — a data-driven or
         // composite side may legitimately resolve to anything.
         const inner = ownSize(innerIdx, axis);
@@ -227,7 +228,7 @@ function buildNestPlan(
     }
 
     // All constrained axes were CENTER_ONLY → no size derivation (centering
-    // still happens via applyNest).
+    // still happens in the placement solver).
     if (derivedAxes.length === 0) continue;
 
     if (hasIn && hasOut) {
@@ -662,7 +663,7 @@ export const layer = createNodeOperatorSequential(
 
           // Grid budget: a grid layer is exclusively cells (table elaboration),
           // and every cell fills its flex track — so all children get the equal
-          // track size (box-division); `applyGrid` then centers them.
+          // track size (box-division); the placement solver then centers them.
           const gridC = node.constraints.find(isGridConstraint);
           const gridCell = gridC ? gridCellSize(gridC, size) : undefined;
 
