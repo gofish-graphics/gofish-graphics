@@ -348,6 +348,32 @@ console.log("# constraint confluence: span size-setting");
     }
   );
 
+  const spanB = span("B", 20, 50);
+  expectConfluent(
+    "span/distribute solves predecessor",
+    apply([spanB, distributeAB]),
+    apply([distributeAB, spanB]),
+    {
+      A: { min: 5, center: 10, max: 15 },
+      B: { min: 20, center: 35, max: 50 },
+    }
+  );
+
+  const alignCentersOnB: AlignConstraint = {
+    type: "align",
+    x: "middle",
+    children: [B, A],
+  };
+  expectConfluent(
+    "span/align solves sibling from spanned source",
+    apply([spanB, alignCentersOnB]),
+    apply([alignCentersOnB, spanB]),
+    {
+      A: { min: 30, center: 35, max: 40 },
+      B: { min: 20, center: 35, max: 50 },
+    }
+  );
+
   const centerA = position("A", 20);
   expectConfluent(
     "compatible span/position",

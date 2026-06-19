@@ -301,14 +301,9 @@ composes its targets' spaces into the layer's claim on that axis:
   on x plus an `align` on y, and it is that align fold (SIZE→POSITION) that makes
   the count axis. The solved `(min, size)` is bridged into GoFish's
   `(local box, translate)` split by stamping `[0, size]` into the local box and
-  the absolute `min` into the translate. The bbox is currently a per-constraint
-  solver used by `span` (and stamped into the existing dimension model), not yet
-  the node's authoritative dimension ledger — that full adoption (the linsys
-  _as_ `Placeable`'s dims, plus aspect ratio) is the larger remainder of #39
-  ([[size-claims]]); until then a target may not be both spanned and pinned on
-  the same axis. `scatter` uses both: plain `x`/`y` → `Constraint.position`,
-  range `xMin`/`xMax`/`yMin`/`yMax` → `Constraint.span` (the operator no longer
-  has a bespoke layout).
+  deriving the absolute `min` through the placement ledger. `scatter` uses both:
+  plain `x`/`y` → `Constraint.position`, range `xMin`/`xMax`/`yMin`/`yMax` →
+  `Constraint.span` (the operator no longer has a bespoke layout).
 
 The layer composes these per axis — children not covered by a constraint
 max-union in as overlay siblings. On an axis a constraint **does** cover, that
@@ -329,21 +324,23 @@ the same expressive ceiling as the spread pipeline, auto-fit included
 back to `unionChildSpaces`; the general algebra is sketched in
 [[constraints-as-core]].
 
-After sizing, the layer emits placement constraints into a per-axis relation
-problem (`constraints/placementSolver.ts`). `position`, `align`, `distribute`,
-`nest`, and `grid` become pins, relations, or ranked weak pins over target box
-anchors; the solver then chooses one translation per connected component and
-commits the resulting `min` placements back to the nodes. This replaces the
-older declaration-order walk for known-size placement with a stable, confluent
-solve: strong pins win, relation cycles are checked for contradiction, and weak
-fallbacks are ranked by policy rather than source order. The extracted
-`constraints/distributePlacement.ts` remains the pure emit/apply form of the
-legacy distribute walk used by the spread path and by constraint lowering.
-Size-setting span claims are batched in the same placement solver before
-relation solving, so duplicate edge claims collapse and contradictory spans
-report a conflict without letting declaration order reset the target axis.
-They are still same-solve constraints, not pre-existing self-placement: an
-incompatible `span` + `position` on the same target/axis reports an
+After sizing, the layer emits placement constraints into a per-axis weighted
+relation problem (`constraints/placementSolver.ts`). Span first contributes an
+axis extent fact (`min`, `max`, and therefore `size`), and known-size children
+contribute their intrinsic size. With sizes known, every anchor facet reduces to
+`min + offset`: `start`, `middle`, `end`, and `baseline` are just different
+offsets. `position`, `align`, `distribute`, `nest`, and `grid` then emit pins or
+weighted relations over target `min` values; the solver propagates connected
+components and commits spanned axes with `setExtent` and ordinary solved axes
+with a `min` placement. This keeps the unified constraint semantics without a
+generic dense linear solver: strong facts win, relation cycles are checked for
+contradiction, and weak fallbacks are ranked by policy rather than source order.
+The extracted `constraints/distributePlacement.ts` remains the pure emit/apply
+form of the legacy distribute walk used by the spread path and by constraint
+lowering. Span edge claims are still pre-validated with the bbox helper so
+duplicate edge claims collapse and contradictory spans report a span-specific
+conflict, but they participate in the same relation solve as placement. An
+incompatible same-solve `span` + `position` on the same target/axis reports an
 over-determined placement instead of letting one silently yield to the other.
 
 Placement-time alignment dispatches on the same resolution. When an `align`

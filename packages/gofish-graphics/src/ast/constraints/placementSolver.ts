@@ -67,10 +67,20 @@ interface SpanPlacement {
 }
 
 interface SpanGroup {
+  name: string;
   target: Placeable;
   axis: Axis;
   bbox: BBox;
   owned: Partial<Record<BBoxFacet, number>>;
+  owner: string;
+}
+
+interface SpanExtent {
+  name: string;
+  axis: Axis;
+  min: number;
+  max: number;
+  size: number;
   owner: string;
 }
 
@@ -102,8 +112,16 @@ const boxAnchor = (anchor: AlignAnchor): Anchor =>
 function anchorOffset(
   target: Placeable,
   axis: Axis,
-  anchor: AlignAnchor
+  anchor: AlignAnchor,
+  spannedSize: number | undefined
 ): number | undefined {
+  if (spannedSize !== undefined) {
+    if (anchor === "start" || anchor === "baseline") return 0;
+    return anchor === "middle"
+      ? Math.abs(spannedSize) / 2
+      : Math.abs(spannedSize);
+  }
+
   const local = target.localAnchor?.(axis, boxAnchor(anchor));
   const localMin = target.localAnchor?.(axis, "min");
   if (local !== undefined && localMin !== undefined) return local - localMin;
@@ -156,13 +174,7 @@ function emitSpanPlacements(
   return out;
 }
 
-/**
- * Commit span equations as the size-setting half of the placement solve. All
- * facet claims are collected before any target axis is reset, so duplicate
- * consistent spans collapse and conflicting spans diagnose independent of
- * declaration order.
- */
-function applySpanPlacements(placements: SpanPlacement[]): void {
+function collectSpanExtents(placements: SpanPlacement[]): SpanExtent[] {
   const byTarget = new Map<Placeable, [SpanGroup?, SpanGroup?]>();
   const groups: SpanGroup[] = [];
   for (const placement of placements) {
@@ -175,6 +187,7 @@ function applySpanPlacements(placements: SpanPlacement[]): void {
     let group = axes[idx];
     if (!group) {
       group = {
+        name: placement.name,
         target: placement.target,
         axis: placement.axis,
         bbox: new BBox(),
@@ -201,9 +214,22 @@ function applySpanPlacements(placements: SpanPlacement[]): void {
     }
   }
 
-  for (const group of groups) {
-    group.target.setExtent!(group.axis, group.owned, group.owner);
-  }
+  return groups.flatMap((group) => {
+    const min = group.bbox.read("min");
+    const max = group.bbox.read("max");
+    if (min === undefined || max === undefined) return [];
+    const size = max - min;
+    return [
+      {
+        name: group.name,
+        axis: group.axis,
+        min,
+        max,
+        size,
+        owner: group.owner,
+      },
+    ];
+  });
 }
 
 function normalizedAnchors(spec: AlignAxisSpec, count: number): AlignAnchor[] {
@@ -265,7 +291,10 @@ class PlacementProblems {
     { relations: [], pins: [], weakPins: [], participants: new Set() },
   ];
 
-  constructor(private readonly targets: Map<string, Placeable>) {}
+  constructor(
+    private readonly targets: Map<string, Placeable>,
+    private readonly spanExtents: Map<string, SpanExtent>
+  ) {}
 
   private problem(axis: Axis): AxisProblem {
     return this.axes[axisIndex(axis)];
@@ -273,6 +302,10 @@ class PlacementProblems {
 
   private target(name: string): Placeable | undefined {
     return this.targets.get(name);
+  }
+
+  private spannedSize(axis: Axis, name: string): number | undefined {
+    return this.spanExtents.get(placementKey(axisIndex(axis), name))?.size;
   }
 
   pin(
@@ -284,7 +317,12 @@ class PlacementProblems {
   ): void {
     const target = this.target(name);
     if (!target) return;
-    const offset = anchorOffset(target, axis, anchor);
+    const offset = anchorOffset(
+      target,
+      axis,
+      anchor,
+      this.spannedSize(axis, name)
+    );
     if (offset === undefined) return;
     const problem = this.problem(axis);
     problem.participants.add(name);
@@ -304,7 +342,12 @@ class PlacementProblems {
   ): void {
     const target = this.target(name);
     if (!target) return;
-    const offset = anchorOffset(target, axis, anchor);
+    const offset = anchorOffset(
+      target,
+      axis,
+      anchor,
+      this.spannedSize(axis, name)
+    );
     if (offset === undefined) return;
     const problem = this.problem(axis);
     problem.participants.add(name);
@@ -328,8 +371,18 @@ class PlacementProblems {
     const fromTarget = this.target(from);
     const toTarget = this.target(to);
     if (!fromTarget || !toTarget) return;
-    const fromOffset = anchorOffset(fromTarget, axis, fromAnchor);
-    const toOffset = anchorOffset(toTarget, axis, toAnchor);
+    const fromOffset = anchorOffset(
+      fromTarget,
+      axis,
+      fromAnchor,
+      this.spannedSize(axis, from)
+    );
+    const toOffset = anchorOffset(
+      toTarget,
+      axis,
+      toAnchor,
+      this.spannedSize(axis, to)
+    );
     if (fromOffset === undefined || toOffset === undefined) return;
     const problem = this.problem(axis);
     problem.participants.add(from);
@@ -340,6 +393,10 @@ class PlacementProblems {
       delta: fromOffset + gap - toOffset,
       owner,
     });
+  }
+
+  span(extent: SpanExtent): void {
+    this.pin(extent.axis, extent.name, "start", extent.min, extent.owner);
   }
 }
 
@@ -469,18 +526,19 @@ export function solvePlacementConstraints(
         )
       : []
   );
-  applySpanPlacements(spanPlacements);
-  for (const placement of spanPlacements) {
-    const axis = axisIndex(placement.axis);
-    const min = placement.target.dims[axis].min;
-    if (min !== undefined)
-      spanPinned.set(placementKey(axis, placement.name), {
-        owner: placement.owner,
-        value: min,
-      });
+  const spanExtents = collectSpanExtents(spanPlacements);
+  const spanExtentByKey = new Map<string, SpanExtent>();
+  for (const extent of spanExtents) {
+    const key = placementKey(axisIndex(extent.axis), extent.name);
+    spanExtentByKey.set(key, extent);
+    spanPinned.set(key, {
+      owner: extent.owner,
+      value: extent.min,
+    });
   }
 
-  const problems = new PlacementProblems(targets);
+  const problems = new PlacementProblems(targets, spanExtentByKey);
+  for (const extent of spanExtents) problems.span(extent);
 
   for (const constraint of constraints) {
     if (constraint.type !== "position" || !constraint.override) continue;
@@ -515,20 +573,6 @@ export function solvePlacementConstraints(
       if (min !== undefined)
         problems.pin(axisName(axis), name, "start", min, "self-placement");
     }
-  }
-
-  // Spans are same-solve strong pins, not pre-existing self-placement. Keeping
-  // them distinct lets a same-solve position pin conflict with a span instead
-  // of silently yielding to it.
-  for (const [key, pin] of spanPinned) {
-    const [axisRaw, name] = key.split(":");
-    problems.pin(
-      axisName(Number(axisRaw) as 0 | 1),
-      name,
-      "start",
-      pin.value,
-      pin.owner
-    );
   }
 
   constraints.forEach((constraint, constraintIndex) => {
@@ -762,10 +806,14 @@ export function solvePlacementConstraints(
 
   results.forEach((result, axisIndexValue) => {
     const axis = axisIndexValue as 0 | 1;
+    const axisLabel = axisName(axis);
     for (const [name, min] of result.positions) {
       const target = targets.get(name);
       if (!target) continue;
-      if (target.pinAnchor) target.pinAnchor(axis, min, "min");
+      const span = spanExtentByKey.get(placementKey(axis, name));
+      if (span && target.setExtent) {
+        target.setExtent(axisLabel, { min, max: min + span.size }, span.owner);
+      } else if (target.pinAnchor) target.pinAnchor(axis, min, "min");
       else target.place(axis, min, "min");
     }
   });
