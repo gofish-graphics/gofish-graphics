@@ -4,7 +4,6 @@
 
 import type { Placeable } from "../_node";
 import { getValue, getValueOffset, isValue, type MaybeValue } from "../data";
-import type { Anchor } from "../dims";
 import type { AlignConstraint } from "./align";
 import { lowerAlignPlacement } from "./align";
 import type { DistributeConstraint } from "./distribute";
@@ -13,32 +12,17 @@ import type { GridConstraint } from "./grid";
 import { lowerGridPlacement } from "./grid";
 import type { NestConstraint } from "./nest";
 import { lowerNestPlacement } from "./nest";
+import { PlacementProgramLowerer } from "./placementProgramLowerer";
 import type { PositionConstraint } from "./position";
 import { lowerPositionPlacement } from "./position";
 import type { SpanConstraint, SpanExtent } from "./span";
 import { collectSpanExtents, lowerSpanEdgePins } from "./span";
-import {
-  axisIndex,
-  type Axis,
-  type AlignAnchor,
-  type ConstraintPosScales,
-} from "./shared";
+import { axisIndex, type Axis, type ConstraintPosScales } from "./shared";
 import type {
   NodeId,
-  PlacementFactEmitter,
   PlacementFact,
-  PlacementParticipantRequest,
-  PlacementPinRequest,
   PlacementProgram,
   PlacementRelation,
-  PlacementRelationRequest,
-} from "./placementFacts";
-import {
-  anchorExpr,
-  emptyPlacementProgram,
-  pinFact,
-  participantFact,
-  relationFact,
 } from "./placementFacts";
 
 type PlacementConstraint =
@@ -107,37 +91,6 @@ function indexSpanExtents(extents: SpanExtent[]): Map<string, SpanExtent> {
   return byKey;
 }
 
-const BOX_ANCHOR: Record<AlignAnchor, Anchor> = {
-  start: "min",
-  middle: "center",
-  end: "max",
-  baseline: "baseline",
-};
-
-function anchorOffset(
-  target: Placeable,
-  axis: Axis,
-  anchor: AlignAnchor,
-  spannedSize: number | undefined
-): number | undefined {
-  if (spannedSize !== undefined) {
-    if (anchor === "start" || anchor === "baseline") return 0;
-    return anchor === "middle"
-      ? Math.abs(spannedSize) / 2
-      : Math.abs(spannedSize);
-  }
-
-  const local = target.localAnchor?.(axis, BOX_ANCHOR[anchor]);
-  const localMin = target.localAnchor?.(axis, "min");
-  if (local !== undefined && localMin !== undefined) return local - localMin;
-
-  const size = target.dims[axisIndex(axis)].size;
-  if (anchor === "baseline") return undefined;
-  if (anchor === "start") return 0;
-  if (size === undefined) return undefined;
-  return anchor === "middle" ? Math.abs(size) / 2 : Math.abs(size);
-}
-
 export function compilePlacementCoordinate(
   coordinate: MaybeValue<number>,
   scale: ((value: number) => number) | undefined
@@ -152,92 +105,6 @@ function resolveCoordinate(
   scale: ((value: number) => number) | undefined
 ): number | undefined {
   return compilePlacementCoordinate(coordinate, scale);
-}
-
-class PlacementProgramLowerer implements PlacementFactEmitter {
-  readonly program = emptyPlacementProgram();
-
-  constructor(
-    private readonly targets: Map<string, Placeable>,
-    private readonly spanExtents: Map<string, SpanExtent>
-  ) {}
-
-  private facts(axis: Axis): PlacementFact[] {
-    return this.program.axes[axisIndex(axis)];
-  }
-
-  addFact(fact: PlacementFact): void {
-    if (fact.type === "pin") {
-      this.facts(fact.expr.axis).push(fact);
-      return;
-    }
-    if (fact.type === "relation") {
-      this.facts(fact.from.axis).push(fact);
-      return;
-    }
-    this.facts(fact.axis).push(fact);
-  }
-
-  private target(name: string): Placeable | undefined {
-    return this.targets.get(name);
-  }
-
-  private spannedSize(axis: Axis, name: string): number | undefined {
-    return this.spanExtents.get(placementKey(axis, name))?.size;
-  }
-
-  pin(request: PlacementPinRequest): void {
-    const target = this.target(request.target.name);
-    if (!target) return;
-    const offset = anchorOffset(
-      target,
-      request.axis,
-      request.target.anchor,
-      this.spannedSize(request.axis, request.target.name)
-    );
-    if (offset === undefined) return;
-    this.facts(request.axis).push(
-      pinFact(
-        anchorExpr(request.target.name, request.axis, "start"),
-        request.value - offset,
-        request.owner
-      )
-    );
-  }
-
-  include(request: PlacementParticipantRequest): void {
-    if (!this.target(request.name)) return;
-    this.facts(request.axis).push(
-      participantFact(request.name, request.axis, request.owner)
-    );
-  }
-
-  relate(request: PlacementRelationRequest): void {
-    const fromTarget = this.target(request.from.name);
-    const toTarget = this.target(request.to.name);
-    if (!fromTarget || !toTarget) return;
-    const fromOffset = anchorOffset(
-      fromTarget,
-      request.axis,
-      request.from.anchor,
-      this.spannedSize(request.axis, request.from.name)
-    );
-    const toOffset = anchorOffset(
-      toTarget,
-      request.axis,
-      request.to.anchor,
-      this.spannedSize(request.axis, request.to.name)
-    );
-    if (fromOffset === undefined || toOffset === undefined) return;
-    this.facts(request.axis).push(
-      relationFact(
-        anchorExpr(request.from.name, request.axis, "start"),
-        anchorExpr(request.to.name, request.axis, "start"),
-        fromOffset + request.gap - toOffset,
-        request.owner
-      )
-    );
-  }
 }
 
 function classifyAxisFacts(
@@ -501,7 +368,10 @@ export function lowerPlacementConstraints(
     ownership.noteSpanExtent(extent);
   }
 
-  const lowerer = new PlacementProgramLowerer(targets, spanExtentByKey);
+  const lowerer = new PlacementProgramLowerer(
+    targets,
+    (axis, name) => spanExtentByKey.get(placementKey(axis, name))?.size
+  );
   for (const claim of spanEdgePins) lowerer.addFact(claim.fact);
   const resolveAxisCoordinate = (axis: Axis, coordinate: MaybeValue<number>) =>
     resolveCoordinate(coordinate, posScales?.[axisIndex(axis)]);
