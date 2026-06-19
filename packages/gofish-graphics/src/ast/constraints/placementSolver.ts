@@ -74,6 +74,19 @@ type AxisProblem = {
   participants: Set<NodeId>;
 };
 
+type RelationEdge = {
+  node: NodeId;
+  delta: number;
+  owner: string;
+};
+
+type RelationComponents = {
+  relative: Map<NodeId, number>;
+  componentOf: Map<NodeId, number>;
+  components: NodeId[][];
+  conflicts: PlacementConflict[];
+};
+
 /** A raw placement-system coordinate after datum values have been elaborated
  *  through the layer's data→pixel scale. Undefined means a datum coordinate had
  *  no scale in this scope, so the fact cannot be emitted. */
@@ -270,23 +283,17 @@ function classifyAxisFacts(
   return { relations, pins, participants };
 }
 
-function solveAxis(
-  axis: Axis,
-  facts: PlacementFact[],
-  spanExtents: Map<string, SpanExtent>
-): { positions: Map<NodeId, number>; conflicts: PlacementConflict[] } {
-  const problem = classifyAxisFacts(facts, spanExtents);
-
-  const adjacency = new Map<
-    NodeId,
-    { node: NodeId; delta: number; owner: string }[]
-  >();
+function buildRelationGraph(
+  relations: PlacementRelation[]
+): Map<NodeId, RelationEdge[]> {
+  const adjacency = new Map<NodeId, RelationEdge[]>();
   const addEdge = (from: NodeId, to: NodeId, delta: number, owner: string) => {
     const list = adjacency.get(from) ?? [];
     list.push({ node: to, delta, owner });
     adjacency.set(from, list);
   };
-  for (const relation of problem.relations) {
+
+  for (const relation of relations) {
     addEdge(
       relation.from.node,
       relation.to.node,
@@ -301,6 +308,14 @@ function solveAxis(
     );
   }
 
+  return adjacency;
+}
+
+function solveRelationComponents(
+  axis: Axis,
+  problem: AxisProblem
+): RelationComponents {
+  const adjacency = buildRelationGraph(problem.relations);
   const relative = new Map<NodeId, number>();
   const componentOf = new Map<NodeId, number>();
   const components: NodeId[][] = [];
@@ -336,6 +351,18 @@ function solveAxis(
     }
     components.push(nodes);
   }
+
+  return { relative, componentOf, components, conflicts };
+}
+
+function solveAxis(
+  axis: Axis,
+  facts: PlacementFact[],
+  spanExtents: Map<string, SpanExtent>
+): { positions: Map<NodeId, number>; conflicts: PlacementConflict[] } {
+  const problem = classifyAxisFacts(facts, spanExtents);
+  const { relative, componentOf, components, conflicts } =
+    solveRelationComponents(axis, problem);
 
   const offsets = new Map<number, { value: number; owner: string }>();
   const applyPin = (node: NodeId, value: number, owner: string) => {
