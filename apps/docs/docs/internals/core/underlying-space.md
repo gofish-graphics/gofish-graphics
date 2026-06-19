@@ -16,6 +16,7 @@ covers:
   - packages/gofish-graphics/src/ast/constraints/distribute.ts
   - packages/gofish-graphics/src/ast/constraints/align.ts
   - packages/gofish-graphics/src/ast/constraints/placementSolver.ts
+  - packages/gofish-graphics/src/ast/constraints/placementLowering.ts
   - packages/gofish-graphics/src/ast/constraints/placementProgramLowerer.ts
   - packages/gofish-graphics/src/ast/constraints/placementFacts.ts
   - packages/gofish-graphics/src/ast/constraints/nest.ts
@@ -372,10 +373,11 @@ to an inspectable `PlacementProgram`
 rather than mutating solver state during lowering. Constraint-specific placement
 lowerers live with their constraints: `align.ts`, `distribute.ts`,
 `position.ts`, `span.ts`, `nest.ts`, and `grid.ts` own their policy choices,
-while `placementProgramLowerer.ts` resolves anchor offsets and emits raw
-program facts. The solver then owns graph solving and writing solved positions
-back to placeables.
-Before lowering, `PlacementOwnershipPlan` records pre-existing placements,
+while `placementLowering.ts` orchestrates those lowerers and
+`placementProgramLowerer.ts` resolves anchor offsets and emits raw program
+facts. The solver then owns graph solving and writing solved positions back to
+placeables.
+During lowering, `PlacementOwnershipPlan` records pre-existing placements,
 authoritative position overrides, and axes claimed by position/span facts so
 legacy read-vs-write policy is explicit data rather than scattered set checks.
 Span lowers to two explicit edge claims per target axis: an `edge-pin` for
