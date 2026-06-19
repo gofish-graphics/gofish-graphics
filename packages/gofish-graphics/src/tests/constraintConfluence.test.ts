@@ -17,13 +17,16 @@ import {
 } from "../ast/constraints/placementSolver";
 import {
   anchorExpr,
+  edgePinFact,
   pinFact,
   relationFact,
-  spanFact,
   weakPinFact,
 } from "../ast/constraints/placementFacts";
 import type { PositionConstraint } from "../ast/constraints/position";
-import type { SpanConstraint } from "../ast/constraints/span";
+import {
+  lowerSpanEdgePins,
+  type SpanConstraint,
+} from "../ast/constraints/span";
 import type { ZAboveConstraint } from "../ast/constraints/zorder";
 import type { Anchor, Dimensions, FancyDirection } from "../ast/dims";
 import { elaborateDirection, localAnchorPoint } from "../ast/dims";
@@ -761,7 +764,7 @@ console.log("# constraint confluence: raw placement fact datatype");
   const pin = pinFact(a, 42, "test-pin");
   const weak = weakPinFact(b, 0, [1, 2, 3, "weak"], "test-weak");
   const relation = relationFact(a, b, 7, "test-relation");
-  const span = spanFact("C", "y", 10, 30, "test-span");
+  const edge = edgePinFact("C", "y", "max", 30, "test-edge");
 
   ok(
     "placement facts are numeric raw algebra terms",
@@ -771,16 +774,16 @@ console.log("# constraint confluence: raw placement fact datatype");
       typeof weak.value === "number" &&
       relation.type === "relation" &&
       typeof relation.offset === "number" &&
-      span.type === "span" &&
-      typeof span.min === "number" &&
-      typeof span.max === "number"
+      edge.type === "edge-pin" &&
+      typeof edge.value === "number"
   );
   ok(
     "placement facts retain anchor identity separately from numeric values",
     relation.from.anchor === "middle" &&
       relation.to.anchor === "start" &&
       relation.from.node === "A" &&
-      span.name === "C"
+      edge.name === "C" &&
+      edge.edge === "max"
   );
 }
 
@@ -868,17 +871,42 @@ console.log("# constraint confluence: placement constraint lowering");
     targets("C"),
     [300, 200]
   );
-  const spanFact = loweredSpan.program.axes[0][0];
+  const spanFacts = loweredSpan.program.axes[0];
   const spanExtent = loweredSpan.spanExtents[0];
   ok(
-    "span lowering emits a span fact and matching extent metadata",
-    spanFact?.type === "span" &&
-      spanFact.name === "C" &&
-      spanFact.min === 10 &&
-      spanFact.max === 30 &&
-      spanExtent?.type === "span" &&
-      spanExtent.name === spanFact.name &&
+    "span lowering emits explicit edge facts and matching extent metadata",
+    spanFacts.some(
+      (fact) =>
+        fact.type === "edge-pin" &&
+        fact.name === "C" &&
+        fact.edge === "min" &&
+        fact.value === 10
+    ) &&
+      spanFacts.some(
+        (fact) =>
+          fact.type === "edge-pin" &&
+          fact.name === "C" &&
+          fact.edge === "max" &&
+          fact.value === 30
+      ) &&
+      spanExtent?.type === "span-extent" &&
+      spanExtent.name === "C" &&
       spanExtent.size === 20
+  );
+
+  const spanEdgeFacts = lowerSpanEdgePins(
+    span("C", 10, 30),
+    targets("C"),
+    "span[0]",
+    (_axis, coordinate) => coordinate as number
+  );
+  ok(
+    "span's constraint-local lowerer decomposes a span into min/max edge claims",
+    spanEdgeFacts.length === 2 &&
+      spanEdgeFacts[0].type === "edge-pin" &&
+      spanEdgeFacts[0].edge === "min" &&
+      spanEdgeFacts[1].type === "edge-pin" &&
+      spanEdgeFacts[1].edge === "max"
   );
 }
 

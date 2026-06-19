@@ -55,12 +55,14 @@ export type PlacementRelation = {
   owner: string;
 };
 
-export type PlacementSpan = {
-  type: "span";
+export type PlacementEdge = "min" | "max";
+
+export type PlacementEdgePin = {
+  type: "edge-pin";
   name: NodeId;
   axis: Axis;
-  min: number;
-  max: number;
+  edge: PlacementEdge;
+  value: number;
   owner: string;
 };
 
@@ -68,7 +70,7 @@ export type PlacementFact =
   | PlacementPin
   | PlacementWeakPin
   | PlacementRelation
-  | PlacementSpan;
+  | PlacementEdgePin;
 
 export type PlacementProgram = {
   axes: [PlacementFact[], PlacementFact[]];
@@ -126,10 +128,10 @@ export const relationFact = (
   owner: string
 ): PlacementRelation => ({ type: "relation", from, to, offset, owner });
 
-export const spanFact = (
+export const edgePinFact = (
   name: NodeId,
   axis: Axis,
-  min: number,
-  max: number,
+  edge: PlacementEdge,
+  value: number,
   owner: string
-): PlacementSpan => ({ type: "span", name, axis, min, max, owner });
+): PlacementEdgePin => ({ type: "edge-pin", name, axis, edge, value, owner });

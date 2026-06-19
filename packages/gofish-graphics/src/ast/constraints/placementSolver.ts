@@ -16,17 +16,17 @@ import { lowerNestPlacement } from "./nest";
 import type { PositionConstraint } from "./position";
 import { lowerPositionPlacement } from "./position";
 import type { SpanConstraint, SpanExtent } from "./span";
-import { collectSpanExtents, lowerSpanPlacements } from "./span";
+import { collectSpanExtents, lowerSpanEdgePins } from "./span";
 import type { Axis, AlignAnchor, ConstraintPosScales } from "./shared";
 import type {
   NodeId,
   PlacementFactEmitter,
   PlacementFact,
+  PlacementEdgePin,
   PlacementPin,
   PlacementProgram,
   PlacementRelation,
   PlacementRelationRequest,
-  PlacementSpan,
   PlacementWeakPin,
 } from "./placementFacts";
 import {
@@ -34,6 +34,7 @@ import {
   emptyPlacementProgram,
   pinFact,
   relationFact,
+  edgePinFact,
   weakPinFact,
 } from "./placementFacts";
 
@@ -225,21 +226,27 @@ class PlacementProgramBuilder implements PlacementFactEmitter {
     );
   }
 
-  span(extent: SpanExtent): void {
-    this.facts(extent.axis).push(extent);
+  addSpanExtent(extent: SpanExtent): void {
+    this.facts(extent.axis).push(
+      edgePinFact(extent.name, extent.axis, "min", extent.min, extent.owner),
+      edgePinFact(extent.name, extent.axis, "max", extent.max, extent.owner)
+    );
   }
 }
 
 function solveAxis(
   axis: Axis,
-  facts: PlacementFact[]
+  facts: PlacementFact[],
+  spanExtents: Map<string, SpanExtent>
 ): { positions: Map<NodeId, number>; conflicts: PlacementConflict[] } {
   const relations = facts.filter(
     (fact): fact is PlacementRelation => fact.type === "relation"
   );
   const pins = facts.filter(
-    (fact): fact is PlacementPin | PlacementSpan =>
-      fact.type === "pin" || fact.type === "span"
+    (fact): fact is PlacementPin => fact.type === "pin"
+  );
+  const edgePins = facts.filter(
+    (fact): fact is PlacementEdgePin => fact.type === "edge-pin"
   );
   const weakPins = facts.filter(
     (fact): fact is PlacementWeakPin => fact.type === "weak-pin"
@@ -315,37 +322,40 @@ function solveAxis(
   }
 
   const offsets = new Map<number, { value: number; owner: string }>();
-  const pinNode = (pin: PlacementPin | PlacementWeakPin | PlacementSpan) =>
-    pin.type === "span" ? pin.name : pin.expr.node;
-  const pinValue = (pin: PlacementPin | PlacementWeakPin | PlacementSpan) =>
-    pin.type === "span" ? pin.min : pin.value;
-  const applyPin = (pin: PlacementPin | PlacementWeakPin | PlacementSpan) => {
-    const node = pinNode(pin);
+  const applyPin = (node: NodeId, value: number, owner: string) => {
     const component = componentOf.get(node);
     const rel = relative.get(node);
     if (component === undefined || rel === undefined) return;
-    const assertedOffset = pinValue(pin) - rel;
+    const assertedOffset = value - rel;
     const prior = offsets.get(component);
     if (prior === undefined) {
-      offsets.set(component, { value: assertedOffset, owner: pin.owner });
+      offsets.set(component, { value: assertedOffset, owner });
     } else if (Math.abs(prior.value - assertedOffset) > TOLERANCE) {
       conflicts.push({
         axis,
-        owner: pin.owner,
+        owner,
         priorOwner: prior.owner,
-        asserted: pinValue(pin),
+        asserted: value,
         implied: rel + prior.value,
       });
     }
   };
-  for (const pin of pins) applyPin(pin);
+  for (const pin of pins) applyPin(pin.expr.node, pin.value, pin.owner);
+  for (const pin of edgePins) {
+    if (pin.edge === "min") {
+      applyPin(pin.name, pin.value, pin.owner);
+      continue;
+    }
+    const span = spanExtents.get(placementKey(axisIndex(pin.axis), pin.name));
+    if (span) applyPin(pin.name, pin.value - span.size, pin.owner);
+  }
 
   for (let component = 0; component < components.length; component++) {
     if (offsets.has(component)) continue;
     const weak = weakPins
       .filter((pin) => componentOf.get(pin.expr.node) === component)
       .sort(compareRank)[0];
-    if (weak) applyPin(weak);
+    if (weak) applyPin(weak.expr.node, weak.value, weak.owner);
     else {
       const first = [...components[component]].sort()[0];
       offsets.set(component, {
@@ -443,9 +453,9 @@ export function lowerPlacementConstraints(
 ): LoweredPlacement {
   const ownership = new PlacementOwnershipPlan(targets, constraints, posScales);
 
-  const spanPlacements = constraints.flatMap((constraint, constraintIndex) =>
+  const spanEdgePins = constraints.flatMap((constraint, constraintIndex) =>
     constraint.type === "span"
-      ? lowerSpanPlacements(
+      ? lowerSpanEdgePins(
           constraint,
           targets,
           `span[${constraintIndex}]`,
@@ -454,7 +464,7 @@ export function lowerPlacementConstraints(
         )
       : []
   );
-  const spanExtents = collectSpanExtents(spanPlacements);
+  const spanExtents = collectSpanExtents(spanEdgePins);
   const spanExtentByKey = new Map<string, SpanExtent>();
   for (const extent of spanExtents) {
     const key = placementKey(axisIndex(extent.axis), extent.name);
@@ -463,7 +473,7 @@ export function lowerPlacementConstraints(
   }
 
   const builder = new PlacementProgramBuilder(targets, spanExtentByKey);
-  for (const extent of spanExtents) builder.span(extent);
+  for (const extent of spanExtents) builder.addSpanExtent(extent);
   const resolveAxisCoordinate = (axis: Axis, coordinate: MaybeValue<number>) =>
     resolveCoordinate(coordinate, posScales?.[axisIndex(axis)]);
   const isInitiallyPlaced = ownership.isInitiallyPlaced.bind(ownership);
@@ -548,8 +558,8 @@ export function solvePlacementConstraints(
   }
 
   const results = [
-    solveAxis("x", lowered.program.axes[0]),
-    solveAxis("y", lowered.program.axes[1]),
+    solveAxis("x", lowered.program.axes[0], spanExtentByKey),
+    solveAxis("y", lowered.program.axes[1], spanExtentByKey),
   ] as const;
   const conflicts = results.flatMap((result) => result.conflicts);
   if (conflicts.length > 0) {

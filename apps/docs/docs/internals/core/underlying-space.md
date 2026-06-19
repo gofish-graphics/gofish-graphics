@@ -375,14 +375,17 @@ and writing solved positions back to placeables.
 Before lowering, `PlacementOwnershipPlan` records pre-existing placements,
 authoritative position overrides, and axes claimed by position/span facts so
 legacy read-vs-write policy is explicit data rather than scattered set checks.
-Span first contributes an axis extent fact (`min`, `max`, and therefore
-`size`), and known-size children contribute their intrinsic size. With sizes
-known, every anchor facet reduces to `min + offset`: `start`, `middle`, `end`,
-and `baseline` are just different offsets. `position`, `align`, `distribute`,
-`nest`, and `grid` then emit pins or weighted relations over target `min`
-values; the solver propagates connected components and commits spanned axes with
-`setExtent` and ordinary solved axes with a `min` placement. The
-placement-coordinate compiler preserves the
+Span lowers to two explicit edge claims per target axis: an `edge-pin` for
+`min` and an `edge-pin` for `max`. Those edge claims are folded into
+`SpanExtent` metadata (`size = max - min`) for writeback. During solving,
+`edge-pin(min)` is a strong pin on the target's solved `min`; `edge-pin(max)`
+pins that same `min` through the derived span size (`max - size`). Known-size
+children contribute their intrinsic size. With sizes known, every anchor facet reduces to
+`min + offset`: `start`, `middle`, `end`, and `baseline` are just different
+offsets. `position`, `align`, `distribute`, `nest`, and `grid` then emit pins or
+weighted relations over target `min` values; the solver propagates connected
+components and commits spanned axes with `setExtent` and ordinary solved axes
+with a `min` placement. The placement-coordinate compiler preserves the
 literal/datum distinction until raw facts are emitted: literals are pixels,
 while datum coordinates elaborate through the already-solved data→pixel scale
 plus any post-scale offset. This keeps the unified constraint semantics without
@@ -393,8 +396,8 @@ The legacy per-constraint apply helpers have been retired from the constraint
 path; spread, scatter, table, axes, and hand-written constraints all lower to
 the same solver entrypoint. Span edge claims are still pre-validated with the
 bbox helper so duplicate edge claims collapse and contradictory spans report a
-span-specific conflict, but they participate in the same relation solve as
-placement. An incompatible same-solve `span` + `position` on the same
+span-specific conflict, but the resulting edge pins participate in the same
+relation solve as placement. An incompatible same-solve `span` + `position` on the same
 target/axis reports an over-determined placement instead of letting one silently
 yield to the other.
 

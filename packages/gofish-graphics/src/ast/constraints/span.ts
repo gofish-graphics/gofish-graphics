@@ -7,7 +7,7 @@ import { getValue, isValue, MaybeValue } from "../data";
 import { ConstraintRef, Axis } from "./shared";
 import { BBox, type BBoxFacet } from "./bbox";
 import * as Interval from "../../util/interval";
-import type { PlacementSpan } from "./placementFacts";
+import { edgePinFact, type PlacementEdgePin } from "./placementFacts";
 
 /**
  * A **size-setting** constraint (#39/#546): pin BOTH edges of each target on an
@@ -30,13 +30,9 @@ export interface SpanConstraint {
   children: ConstraintRef[];
 }
 
-/** One emitted span placement: the target owns both edges on one axis. */
-interface SpanPlacement {
-  name: string;
+/** One emitted span edge claim. A full span is two claims: `min` and `max`. */
+export interface SpanEdgePin extends PlacementEdgePin {
   target: Placeable;
-  axis: Axis;
-  owned: { min: number; max: number };
-  owner: string;
 }
 
 interface SpanGroup {
@@ -47,7 +43,13 @@ interface SpanGroup {
   owner: string;
 }
 
-export interface SpanExtent extends PlacementSpan {
+export interface SpanExtent {
+  type: "span-extent";
+  name: string;
+  axis: Axis;
+  min: number;
+  max: number;
+  owner: string;
   size: number;
 }
 
@@ -85,7 +87,7 @@ export function spanDatumInterval(
   return Interval.interval(Math.min(...vals), Math.max(...vals));
 }
 
-export function lowerSpanPlacements(
+export function lowerSpanEdgePins(
   constraint: SpanConstraint,
   targets: Map<string, Placeable>,
   owner: string,
@@ -93,8 +95,8 @@ export function lowerSpanPlacements(
     axis: Axis,
     coordinate: MaybeValue<number>
   ) => number | undefined
-): SpanPlacement[] {
-  const out: SpanPlacement[] = [];
+): SpanEdgePin[] {
+  const out: SpanEdgePin[] = [];
   const emitAxis = (
     axis: Axis,
     span: [MaybeValue<number>, MaybeValue<number>] | undefined
@@ -105,14 +107,11 @@ export function lowerSpanPlacements(
     if (min === undefined || max === undefined) return;
     for (const child of constraint.children) {
       const target = targets.get(child.name);
-      if (target)
-        out.push({
-          name: child.name,
-          target,
-          axis,
-          owned: { min, max },
-          owner,
-        });
+      if (!target) continue;
+      out.push(
+        { ...edgePinFact(child.name, axis, "min", min, owner), target },
+        { ...edgePinFact(child.name, axis, "max", max, owner), target }
+      );
     }
   };
   emitAxis("x", constraint.x);
@@ -120,7 +119,7 @@ export function lowerSpanPlacements(
   return out;
 }
 
-export function collectSpanExtents(placements: SpanPlacement[]): SpanExtent[] {
+export function collectSpanExtents(placements: SpanEdgePin[]): SpanExtent[] {
   const byTarget = new Map<Placeable, [SpanGroup?, SpanGroup?]>();
   const groups: SpanGroup[] = [];
   for (const placement of placements) {
@@ -143,18 +142,17 @@ export function collectSpanExtents(placements: SpanPlacement[]): SpanExtent[] {
       groups.push(group);
     }
 
-    for (const [facet, value] of Object.entries(placement.owned) as [
-      BBoxFacet,
-      number,
-    ][]) {
-      const conflict = group.bbox.add(facet, value, placement.owner);
-      if (conflict) {
-        throw new Error(
-          `Constraint span conflict on ${placement.axis}: ${conflict.owner} ` +
-            `asserts ${conflict.facet}=${conflict.asserted}, but ` +
-            `${conflict.priorOwner} implies ${conflict.implied}`
-        );
-      }
+    const conflict = group.bbox.add(
+      placement.edge as BBoxFacet,
+      placement.value,
+      placement.owner
+    );
+    if (conflict) {
+      throw new Error(
+        `Constraint span conflict on ${placement.axis}: ${conflict.owner} ` +
+          `asserts ${conflict.facet}=${conflict.asserted}, but ` +
+          `${conflict.priorOwner} implies ${conflict.implied}`
+      );
     }
   }
 
@@ -165,7 +163,7 @@ export function collectSpanExtents(placements: SpanPlacement[]): SpanExtent[] {
     const size = max - min;
     return [
       {
-        type: "span",
+        type: "span-extent",
         name: group.name,
         axis: group.axis,
         min,
