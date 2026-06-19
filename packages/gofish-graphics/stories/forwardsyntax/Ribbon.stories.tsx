@@ -85,7 +85,7 @@ export const Polar: StoryObj<Args> = {
             x: "lake",
             w: 2 * Math.PI,
             axes: { x: false, y: true },
-          }).position({ y: 50 }),
+          }).translate({ y: 50 }),
           derive((d) => orderBy(d, "count", "asc")),
           stack({ by: "species", dir: "y", label: false })
         )

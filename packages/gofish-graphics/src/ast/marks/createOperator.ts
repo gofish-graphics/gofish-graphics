@@ -167,7 +167,7 @@ export function createModifier<Args extends any[]>(
   return cfg;
 }
 
-export type PositionModifierOptions = PositionNodeOptions;
+export type TranslateModifierOptions = PositionNodeOptions;
 
 /**
  * Copy `from`'s `__serialize` tag (and `__axisFields`) onto `to`, letting the
@@ -226,9 +226,9 @@ function modifierMethod(
   };
 }
 
-export function positionMark<T>(
+export function translateMark<T>(
   base: Mark<T>,
-  opts: PositionModifierOptions
+  opts: TranslateModifierOptions
 ): Mark<T> {
   const wrapped: Mark<T> = async (
     d: T,
@@ -260,8 +260,8 @@ export function attachModifiers<T>(
       configurable: true,
     });
   }
-  Object.defineProperty(base, "position", {
-    value: (opts: PositionModifierOptions) => positionMark(base, opts),
+  Object.defineProperty(base, "translate", {
+    value: (opts: TranslateModifierOptions) => translateMark(base, opts),
     writable: true,
     configurable: true,
   });
@@ -406,7 +406,7 @@ export function attachTransformModifiers<M extends object>(
       configurable: true,
     });
   }
-  for (const methodName of ["name", "label", "position"] as const) {
+  for (const methodName of ["name", "label", "translate"] as const) {
     const original = m[methodName];
     if (typeof original === "function") {
       Object.defineProperty(m, methodName, {
@@ -556,40 +556,40 @@ export type OperatorConfig<Datum, Options> = {
 };
 
 export type DualModeOperator<Datum, Options> = {
-  (opts: Options): PositionableOperator<Datum[], Datum[]>;
+  (opts: Options): TranslatableOperator<Datum[], Datum[]>;
   (
     opts: Options,
     marks: (Mark<Datum> | GoFishRef)[] | Promise<(Mark<Datum> | GoFishRef)[]>
   ): NameableMark<Datum>;
 };
 
-export type PositionableOperator<T, U> = Operator<T, U> & {
-  position(opts: PositionModifierOptions): PositionableOperator<T, U>;
+export type TranslatableOperator<T, U> = Operator<T, U> & {
+  translate(opts: TranslateModifierOptions): TranslatableOperator<T, U>;
 };
 
-function attachPositionOption<T extends object>(
+function attachTranslateOption<T extends object>(
   target: T,
-  position: (opts: PositionModifierOptions) => T
+  translate: (opts: TranslateModifierOptions) => T
 ): T {
-  Object.defineProperty(target, "position", {
-    value: (opts: PositionModifierOptions) => position(opts),
+  Object.defineProperty(target, "translate", {
+    value: (opts: TranslateModifierOptions) => translate(opts),
     writable: true,
     configurable: true,
   });
   return target;
 }
 
-function positionOperator<T, U>(
+function translateOperator<T, U>(
   operator: Operator<T, U>,
-  opts: PositionModifierOptions
-): PositionableOperator<T, U> {
-  const positioned: Operator<T, U> = async (mark) => {
+  opts: TranslateModifierOptions
+): TranslatableOperator<T, U> {
+  const translated: Operator<T, U> = async (mark) => {
     const arranged = await operator(mark);
-    return positionMark(arranged, opts) as Mark<T>;
+    return translateMark(arranged, opts) as Mark<T>;
   };
-  return attachPositionOption(positioned, (next) =>
-    positionOperator(positioned, next)
-  ) as PositionableOperator<T, U>;
+  return attachTranslateOption(translated, (next) =>
+    translateOperator(translated, next)
+  ) as TranslatableOperator<T, U>;
 }
 
 /**
@@ -732,7 +732,7 @@ export function createOperator<Datum, Options extends Record<string, any>>(
   layout: LayoutFn<Options>,
   cfg: OperatorConfig<Datum, Options>
 ): DualModeOperator<Datum, Options> {
-  function dual(opts: Options): PositionableOperator<Datum[], Datum[]>;
+  function dual(opts: Options): TranslatableOperator<Datum[], Datum[]>;
   function dual(
     opts: Options,
     marks: (Mark<Datum> | GoFishRef)[] | Promise<(Mark<Datum> | GoFishRef)[]>
@@ -740,7 +740,7 @@ export function createOperator<Datum, Options extends Record<string, any>>(
   function dual(
     opts: Options,
     marks?: (Mark<Datum> | GoFishRef)[] | Promise<(Mark<Datum> | GoFishRef)[]>
-  ): PositionableOperator<Datum[], Datum[]> | NameableMark<Datum> {
+  ): TranslatableOperator<Datum[], Datum[]> | NameableMark<Datum> {
     if (marks !== undefined) {
       // Combinator form: apply each mark to the same data d, then layout.
       const base: Mark<Datum> = async (
@@ -877,9 +877,9 @@ export function createOperator<Datum, Options extends Record<string, any>>(
         opts: payload,
       };
     }
-    return attachPositionOption(operator, (positionOpts) =>
-      positionOperator(operator, positionOpts)
-    ) as PositionableOperator<Datum[], Datum[]>;
+    return attachTranslateOption(operator, (translateOpts) =>
+      translateOperator(operator, translateOpts)
+    ) as TranslatableOperator<Datum[], Datum[]>;
   }
   return dual as DualModeOperator<Datum, Options>;
 }

@@ -58,21 +58,36 @@ export const positionNode = (
         const child = children[0];
         const childPlaceable = child.layout(size, scaleFactors, posScales);
 
-        // Place child at origin first to get its dimensions.
-        childPlaceable.place("x", 0);
-        childPlaceable.place("y", 0);
+        if (childPlaceable.dims[0].min === undefined) {
+          childPlaceable.place("x", 0, "baseline");
+        }
+        if (childPlaceable.dims[1].min === undefined) {
+          childPlaceable.place("y", 0, "baseline");
+        }
 
-        const offsetX = computeAesthetic(options.x, posScales[0]!, 0) ?? 0;
-        const offsetY = computeAesthetic(options.y, posScales[1]!, 0) ?? 0;
+        const offsetX =
+          options.x === undefined
+            ? undefined
+            : (computeAesthetic(options.x, posScales[0]!, 0) ?? 0);
+        const offsetY =
+          options.y === undefined
+            ? undefined
+            : (computeAesthetic(options.y, posScales[1]!, 0) ?? 0);
 
         return {
           intrinsicDims: [
             {
-              min: childPlaceable.dims[0].min! + offsetX,
+              min:
+                childPlaceable.dims[0].min === undefined
+                  ? undefined
+                  : childPlaceable.dims[0].min + (offsetX ?? 0),
               size: childPlaceable.dims[0].size,
             },
             {
-              min: childPlaceable.dims[1].min! + offsetY,
+              min:
+                childPlaceable.dims[1].min === undefined
+                  ? undefined
+                  : childPlaceable.dims[1].min + (offsetY ?? 0),
               size: childPlaceable.dims[1].size,
             },
           ],

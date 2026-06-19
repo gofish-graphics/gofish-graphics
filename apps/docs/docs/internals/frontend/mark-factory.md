@@ -134,7 +134,7 @@ Walking `withGoFish.ts:431-477`:
 5. **Tag the node** with `name = key` and `datum = d` so downstream
    coordinators (`ref` / `selectAll`, label placement) can find it back.
 
-## `.name()`, `.label()`, and `.position()`
+## `.name()`, `.label()`, and `.translate()`
 
 `createMark` returns a `NameableMark`, which is the base mark plus chainable
 methods:
@@ -148,10 +148,10 @@ methods:
   name without parsing the `__serialize` tag.
 - `mark.label(accessor, options?)` — calls `node.label(...)` on every produced
   node, deferring label placement to the layout phase.
-- `mark.position({ x?, y? })` — wraps the produced node in a structural position
-  node. This is deliberately not equivalent to merging `x`/`y` into the mark's
-  own options: a mark or operator may already give `x`/`y` domain-specific
-  channel meanings.
+- `mark.translate({ x?, y? })` — wraps the produced node in a structural
+  translation node. This is deliberately not equivalent to merging `x`/`y` into
+  the mark's own options: a mark or operator may already give `x`/`y`
+  domain-specific channel meanings.
 
 These methods wrap or rebuild the base mark rather than mutating it, so naming,
 labeling, or positioning one mark never affects another.
@@ -171,8 +171,8 @@ follows parent-iteration order, not async-completion order. The same factory
 backs `makeConstrainableMark` (which adds `.constrain()`) and the combinator
 marks — one wiring, not three copies.
 
-`.position()` is structural: `attachModifiers` maps the base mark to a new mark
-whose produced node is wrapped by the position node. This keeps the modifier
+`.translate()` is structural: `attachModifiers` maps the base mark to a new mark
+whose produced node is wrapped by a translation node. This keeps the modifier
 independent from the wrapped mark's channel grammar.
 
 ## Adding a new mark

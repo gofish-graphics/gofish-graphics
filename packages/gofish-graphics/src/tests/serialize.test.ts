@@ -65,16 +65,16 @@ async function main() {
   console.log("\n# Frontend-IR emitter — toJSON()");
 
   check(
-    "position modifier exists on createOperator output",
-    typeof scatter({ x: "hp" }).position === "function"
+    "translate modifier exists on createOperator output",
+    typeof scatter({ x: "hp" }).translate === "function"
   );
   check(
-    "position modifier exists on createMark output",
-    typeof rect({ h: "value" }).position === "function"
+    "translate modifier exists on createMark output",
+    typeof rect({ h: "value" }).translate === "function"
   );
   check(
-    "position modifier preserves transform modifiers",
-    typeof rect({ h: "value" }).position({ x: 10 }).cut === "function"
+    "translate modifier preserves transform modifiers",
+    typeof rect({ h: "value" }).translate({ x: 10 }).cut === "function"
   );
 
   // -------------------------------------------------------------------------

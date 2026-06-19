@@ -29,7 +29,7 @@ import {
 import {
   withMarkKind,
   nameableMark,
-  type PositionModifierOptions,
+  type TranslateModifierOptions,
   type MarkKind,
 } from "./marks/createOperator";
 import { isValue } from "./data";
@@ -485,7 +485,7 @@ export function createNodeOperatorSequential<T extends Record<string, any>, R>(
 export type NameableMark<T> = Mark<T> & {
   name(layerName: string | Token): NameableMark<T>;
   label(accessor: LabelAccessor, options?: LabelOptions): NameableMark<T>;
-  position(opts: PositionModifierOptions): NameableMark<T>;
+  translate(opts: TranslateModifierOptions): NameableMark<T>;
   render(
     container: Parameters<GoFishNode["render"]>[0],
     options: Parameters<GoFishNode["render"]>[1]
