@@ -2,9 +2,12 @@
 // @wiki Underlying Space — /internals/core/underlying-space
 // </gofish-wiki>
 
+import type { Placeable } from "../_node";
 import { getValue, isValue, MaybeValue } from "../data";
-import { ConstraintRef } from "./shared";
+import { ConstraintRef, Axis } from "./shared";
+import { BBox, type BBoxFacet } from "./bbox";
 import * as Interval from "../../util/interval";
+import type { PlacementSpan } from "./placementFacts";
 
 /**
  * A **size-setting** constraint (#39/#546): pin BOTH edges of each target on an
@@ -25,6 +28,27 @@ export interface SpanConstraint {
   x?: [MaybeValue<number>, MaybeValue<number>];
   y?: [MaybeValue<number>, MaybeValue<number>];
   children: ConstraintRef[];
+}
+
+/** One emitted span placement: the target owns both edges on one axis. */
+interface SpanPlacement {
+  name: string;
+  target: Placeable;
+  axis: Axis;
+  owned: { min: number; max: number };
+  owner: string;
+}
+
+interface SpanGroup {
+  name: string;
+  target: Placeable;
+  axis: Axis;
+  bbox: BBox;
+  owner: string;
+}
+
+export interface SpanExtent extends PlacementSpan {
+  size: number;
 }
 
 export interface SpanOptions {
@@ -59,4 +83,96 @@ export function spanDatumInterval(
   const vals = span.filter(isValue).map((v) => getValue(v)!);
   if (vals.length === 0) return undefined;
   return Interval.interval(Math.min(...vals), Math.max(...vals));
+}
+
+export function lowerSpanPlacements(
+  constraint: SpanConstraint,
+  targets: Map<string, Placeable>,
+  owner: string,
+  resolveCoordinate: (
+    axis: Axis,
+    coordinate: MaybeValue<number>
+  ) => number | undefined
+): SpanPlacement[] {
+  const out: SpanPlacement[] = [];
+  const emitAxis = (
+    axis: Axis,
+    span: [MaybeValue<number>, MaybeValue<number>] | undefined
+  ) => {
+    if (span === undefined) return;
+    const min = resolveCoordinate(axis, span[0]);
+    const max = resolveCoordinate(axis, span[1]);
+    if (min === undefined || max === undefined) return;
+    for (const child of constraint.children) {
+      const target = targets.get(child.name);
+      if (target)
+        out.push({
+          name: child.name,
+          target,
+          axis,
+          owned: { min, max },
+          owner,
+        });
+    }
+  };
+  emitAxis("x", constraint.x);
+  emitAxis("y", constraint.y);
+  return out;
+}
+
+export function collectSpanExtents(placements: SpanPlacement[]): SpanExtent[] {
+  const byTarget = new Map<Placeable, [SpanGroup?, SpanGroup?]>();
+  const groups: SpanGroup[] = [];
+  for (const placement of placements) {
+    const idx = placement.axis === "x" ? 0 : 1;
+    let axes = byTarget.get(placement.target);
+    if (!axes) {
+      axes = [undefined, undefined];
+      byTarget.set(placement.target, axes);
+    }
+    let group = axes[idx];
+    if (!group) {
+      group = {
+        name: placement.name,
+        target: placement.target,
+        axis: placement.axis,
+        bbox: new BBox(),
+        owner: placement.owner,
+      };
+      axes[idx] = group;
+      groups.push(group);
+    }
+
+    for (const [facet, value] of Object.entries(placement.owned) as [
+      BBoxFacet,
+      number,
+    ][]) {
+      const conflict = group.bbox.add(facet, value, placement.owner);
+      if (conflict) {
+        throw new Error(
+          `Constraint span conflict on ${placement.axis}: ${conflict.owner} ` +
+            `asserts ${conflict.facet}=${conflict.asserted}, but ` +
+            `${conflict.priorOwner} implies ${conflict.implied}`
+        );
+      }
+    }
+  }
+
+  return groups.flatMap((group) => {
+    const min = group.bbox.read("min");
+    const max = group.bbox.read("max");
+    if (min === undefined || max === undefined) return [];
+    const size = max - min;
+    return [
+      {
+        type: "span",
+        name: group.name,
+        axis: group.axis,
+        min,
+        max,
+        size,
+        owner: group.owner,
+      },
+    ];
+  });
 }

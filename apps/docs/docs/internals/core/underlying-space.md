@@ -369,9 +369,9 @@ pins, weak pins, relations, and spans. Named constraints first lower to an
 inspectable `PlacementProgram` (`axes: [PlacementFact[], PlacementFact[]]`);
 solving consumes that program rather than mutating solver state during lowering.
 Constraint-specific placement lowerers live with their constraints: `align.ts`,
-`distribute.ts`, `position.ts`, `nest.ts`, and `grid.ts` own their policy
-choices, while the solver owns anchor-offset resolution, graph solving, and
-writing solved positions back to placeables.
+`distribute.ts`, `position.ts`, `span.ts`, `nest.ts`, and `grid.ts` own their
+policy choices, while the solver owns anchor-offset resolution, graph solving,
+and writing solved positions back to placeables.
 Span first contributes an axis extent fact (`min`, `max`, and therefore
 `size`), and known-size children contribute their intrinsic size. With sizes
 known, every anchor facet reduces to `min + offset`: `start`, `middle`, `end`,
