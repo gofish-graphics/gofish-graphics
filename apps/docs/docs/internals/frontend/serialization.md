@@ -123,6 +123,11 @@ The root types mirror the v3 fluent builder shapes:
 `arrow`, `connect`, `treemap`, and the Porter-Duff family), refs, or the
 two self-discriminating wrapper marks `offset` and `cut` (below).
 
+Operators and marks may also carry `translate: {x?, y?}`. This is canonical
+frontend IR, not a Python-only bridge sentinel: it records the structural
+`.translate({x?, y?})` modifier and the JS deserializer reapplies it as a
+runtime chain.
+
 `offset` — `{ type: "offset", x?, y?, children: [<node>] }` — wraps a single
 child and shifts it by `(x, y)` render-pixels without moving the bounds it
 advertises to its parent; it maps to the public `offset` operator.
@@ -348,13 +353,12 @@ in the design improvements:
 The Python wrapper emits a few sentinels that are not part of the
 public schema — they extend it for the round-trip across anywidget:
 
-| Sentinel            | Meaning                                                                                                                               |
-| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| `{__gofish_lambda}` | A Python callable; the JS deserializer wires it to an async accessor.                                                                 |
-| `{__gofish_token}`  | A hygienic-name token; resolved via a per-render token map.                                                                           |
-| `__scope: true`     | The `@mark` decorator's scope-wrap signal.                                                                                            |
-| `__datum` / `__key` | `bind_data()` pre-binding for Treemap-style invocation.                                                                               |
-| `translate`         | Structural `.translate({x?, y?})` metadata on Python-emitted operators or marks; the JS deserializer reapplies it as a runtime chain. |
+| Sentinel            | Meaning                                                               |
+| ------------------- | --------------------------------------------------------------------- |
+| `{__gofish_lambda}` | A Python callable; the JS deserializer wires it to an async accessor. |
+| `{__gofish_token}`  | A hygienic-name token; resolved via a per-render token map.           |
+| `__scope: true`     | The `@mark` decorator's scope-wrap signal.                            |
+| `__datum` / `__key` | `bind_data()` pre-binding for Treemap-style invocation.               |
 
 Python's `datum(x)` emits the canonical `{type: "datum", datum: x}` shape
 directly — no bridge sentinel needed.

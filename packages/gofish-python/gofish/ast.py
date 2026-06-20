@@ -1342,6 +1342,12 @@ class _RefProxy(Mark):
     def __getitem__(self, idx):
         return _RefProxy(self._sel() + [idx])
 
+    def translate(self, x: Optional[float] = None, y: Optional[float] = None) -> "_RefProxy":
+        translated = _RefProxy(self._sel(), multiplicity=self.multiplicity)
+        self._copy_meta(translated)
+        translated._translate = {k: v for k, v in {"x": x, "y": y}.items() if v is not None}
+        return translated
+
     def to_dict(self) -> dict:
         # `selectAll(...)` is a plural chart-data selector — it has no
         # inline-layout meaning. Chart-data serialization is handled by
@@ -1361,8 +1367,12 @@ class _RefProxy(Mark):
         # `ref(stringName)` path expects — preserves byte-parity for
         # existing flat-name callsites (e.g. the Planets stories).
         if len(serialized) == 1 and isinstance(serialized[0], str):
-            return {"type": "ref", "selection": serialized[0]}
-        return {"type": "ref", "selection": serialized}
+            d = {"type": "ref", "selection": serialized[0]}
+        else:
+            d = {"type": "ref", "selection": serialized}
+        if self._translate:
+            d["translate"] = self._translate
+        return d
 
 
 def ref(target: Union[str, Token]) -> _RefProxy:
@@ -2310,6 +2320,8 @@ class CutMark(Mark):
             )
         if self._z_order is not None:
             d["zOrder"] = self._z_order
+        if self._translate:
+            d["translate"] = self._translate
         return d
 
 
@@ -2370,6 +2382,8 @@ class OffsetMark(Mark):
             )
         if self._z_order is not None:
             d["zOrder"] = self._z_order
+        if self._translate:
+            d["translate"] = self._translate
         return d
 
 

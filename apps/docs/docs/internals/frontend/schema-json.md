@@ -219,7 +219,7 @@ for the API.
     },
     "OperatorIR": {
       "type": "object",
-      "description": "A pipeline operator. Field coverage is open at the schema level (`additionalProperties` is permitted) — see validate.ts and schema.ts for per-type field shapes. `spread`, `stack`, and `scatter` accept an `axes` property of shape `AxesOptions`.",
+      "description": "A pipeline operator. Field coverage is open at the schema level (`additionalProperties` is permitted) — see validate.ts and schema.ts for per-type field shapes. `spread`, `stack`, and `scatter` accept an `axes` property of shape `AxesOptions`; operators may carry structural `translate` metadata.",
       "required": ["type"],
       "properties": {
         "type": {
@@ -235,6 +235,27 @@ for the API.
         },
         "axes": {
           "$ref": "#/$defs/AxesOptions"
+        },
+        "translate": {
+          "$ref": "#/$defs/Translate"
+        },
+        "w": {
+          "$ref": "#/$defs/ChannelValue"
+        },
+        "h": {
+          "$ref": "#/$defs/ChannelValue"
+        }
+      }
+    },
+    "Translate": {
+      "description": "Structural pixel translation reapplied by the runtime deserializer.",
+      "type": "object",
+      "properties": {
+        "x": {
+          "type": "number"
+        },
+        "y": {
+          "type": "number"
         }
       }
     },
@@ -320,6 +341,9 @@ for the API.
             "$ref": "#/$defs/MarkIR"
           }
         },
+        "translate": {
+          "$ref": "#/$defs/Translate"
+        },
         "origin": {
           "$ref": "#/$defs/Origin"
         },
@@ -353,6 +377,9 @@ for the API.
         },
         "zOrder": {
           "type": "number"
+        },
+        "translate": {
+          "$ref": "#/$defs/Translate"
         },
         "origin": {
           "$ref": "#/$defs/Origin"
@@ -444,6 +471,9 @@ for the API.
         },
         "zOrder": {
           "type": "number"
+        },
+        "translate": {
+          "$ref": "#/$defs/Translate"
         }
       }
     },
@@ -496,6 +526,9 @@ for the API.
         },
         "zOrder": {
           "type": "number"
+        },
+        "translate": {
+          "$ref": "#/$defs/Translate"
         }
       }
     },
@@ -534,6 +567,9 @@ for the API.
         },
         "zOrder": {
           "type": "number"
+        },
+        "translate": {
+          "$ref": "#/$defs/Translate"
         }
       }
     },

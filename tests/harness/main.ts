@@ -491,6 +491,11 @@ function mapMark(
   deriveServerUrl: string | undefined,
   resolveToken: TokenResolver
 ): Mark<any> {
+  const applyTranslate = <T>(mark: T): T =>
+    spec.translate && typeof (mark as any).translate === "function"
+      ? ((mark as any).translate(spec.translate) as T)
+      : mark;
+
   // Mark-as-function: Python registered a `(data) -> ChartBuilder` lambda
   // in the derive-server registry. The JS Mark fetches a chart IR per
   // invocation and rebuilds a ChartBuilder JS-side; `resolveMarkResult`
@@ -537,9 +542,11 @@ function mapMark(
   // (for `ref(token).foo[2].bar` proxy navigation), or contain token
   // sentinels that need resolving.
   if (spec.type === "ref" && !spec.__combinator) {
-    return ref(
-      resolveRefSelection(spec.selection, resolveToken)
-    ) as unknown as Mark<any>;
+    return applyTranslate(
+      ref(
+        resolveRefSelection(spec.selection, resolveToken)
+      ) as unknown as Mark<any>
+    );
   }
 
   // `offset` node: shift a single child by (x, y) render-pixels. Maps to the
@@ -550,9 +557,11 @@ function mapMark(
       deriveServerUrl,
       resolveToken
     );
-    return offsetOp({ x: spec.x, y: spec.y }, [
-      childMark as any,
-    ]) as unknown as Mark<any>;
+    return applyTranslate(
+      offsetOp({ x: spec.x, y: spec.y }, [
+        childMark as any,
+      ]) as unknown as Mark<any>
+    );
   }
 
   // `cut` mark in a chart `.mark(...)` position → the v3 expand-mark form
@@ -567,6 +576,7 @@ function mapMark(
       size: unwrapMarkOpts(spec.size, deriveServerUrl),
       inset: spec.inset,
     });
+    mark = applyTranslate(mark);
     const nameVal = resolveNameField(spec.name, resolveToken);
     if (nameVal != null && typeof (mark as any).name === "function") {
       mark = (mark as any).name(nameVal);
@@ -633,6 +643,7 @@ function mapMark(
     if (spec.__scope) {
       mark = wrapWithScope(mark);
     }
+    mark = applyTranslate(mark);
     const nameVal = resolveNameField(spec.name, resolveToken);
     if (nameVal != null && typeof (mark as any).name === "function") {
       mark = (mark as any).name(nameVal);
@@ -646,7 +657,7 @@ function mapMark(
     return mark;
   }
 
-  const { type, name: layerName, label, translate, ...opts } = spec;
+  const { type, name: layerName, label, ...opts } = spec;
   const factory = MARK_MAP[type];
   if (!factory) throw new Error(`Unknown mark type: ${type}`);
 
@@ -675,9 +686,7 @@ function mapMark(
   if (spec.__scope) {
     mark = wrapWithScope(mark);
   }
-  if (translate && typeof (mark as any).translate === "function") {
-    mark = (mark as any).translate(translate);
-  }
+  mark = applyTranslate(mark);
   const nameVal = resolveNameField(layerName, resolveToken);
   if (nameVal != null && typeof (mark as any).name === "function") {
     mark = (mark as any).name(nameVal);

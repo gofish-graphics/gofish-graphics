@@ -269,7 +269,7 @@ function walkOperator(node: unknown, path: string, ctx: Context): void {
   // Per-type field validation. Each operator has a known set of optional
   // and required fields; in strict mode, unknown fields are rejected.
   const knownFields: Record<string, string[]> = {
-    derive: ["type", "lambdaId", "provenance", "origin", "meta"],
+    derive: ["type", "lambdaId", "provenance", "translate", "origin", "meta"],
     spread: [
       "type",
       "by",
@@ -281,6 +281,7 @@ function walkOperator(node: unknown, path: string, ctx: Context): void {
       "reverse",
       "glue",
       "axes",
+      "translate",
       "origin",
       "meta",
     ],
@@ -293,10 +294,11 @@ function walkOperator(node: unknown, path: string, ctx: Context): void {
       "mode",
       "reverse",
       "axes",
+      "translate",
       "origin",
       "meta",
     ],
-    group: ["type", "by", "origin", "meta"],
+    group: ["type", "by", "translate", "origin", "meta"],
     scatter: [
       "type",
       "by",
@@ -308,12 +310,16 @@ function walkOperator(node: unknown, path: string, ctx: Context): void {
       "yMax",
       "alignment",
       "axes",
+      "w",
+      "h",
+      "translate",
       "origin",
       "meta",
     ],
-    table: ["type", "by", "spacing", "numCols", "origin", "meta"],
-    log: ["type", "label", "origin", "meta"],
+    table: ["type", "by", "spacing", "numCols", "translate", "origin", "meta"],
+    log: ["type", "label", "translate", "origin", "meta"],
   };
+  optionalField(node, "translate", path, ctx, walkTranslate);
   switch (node.type) {
     case "derive":
       optionalField(node, "lambdaId", path, ctx, expectString);
@@ -350,9 +356,10 @@ function walkOperator(node: unknown, path: string, ctx: Context): void {
       break;
     case "scatter":
       optionalField(node, "by", path, ctx, expectString);
-      for (const k of ["x", "y", "xMin", "xMax", "yMin", "yMax"]) {
+      for (const k of ["x", "y", "xMin", "xMax", "yMin", "yMax", "w", "h"]) {
         optionalField(node, k, path, ctx, walkChannelValue);
       }
+      optionalField(node, "alignment", path, ctx, expectString);
       optionalField(node, "axes", path, ctx, walkAxesOptions);
       break;
     case "table":
@@ -388,6 +395,21 @@ function walkOperator(node: unknown, path: string, ctx: Context): void {
   if (ctx.strict) {
     rejectUnknown(node, knownFields[node.type] ?? ["type"], path, ctx);
   }
+}
+
+function walkTranslate(node: unknown, path: string, ctx: Context): void {
+  if (!isObject(node)) {
+    ctx.errors.push({
+      path,
+      message: `translate must be an object with optional x/y numbers, got ${typeNameOf(
+        node
+      )}`,
+    });
+    return;
+  }
+  optionalField(node, "x", path, ctx, expectNumber);
+  optionalField(node, "y", path, ctx, expectNumber);
+  if (ctx.strict) rejectUnknown(node, ["x", "y"], path, ctx);
 }
 
 /**
@@ -569,10 +591,20 @@ function walkRefMark(
   optionalField(node, "name", path, ctx, expectNameOrToken);
   optionalField(node, "label", path, ctx, walkLabel);
   optionalField(node, "zOrder", path, ctx, expectNumber);
+  optionalField(node, "translate", path, ctx, walkTranslate);
   if (ctx.strict) {
     rejectUnknown(
       node,
-      ["type", "selection", "name", "label", "zOrder", "origin", "meta"],
+      [
+        "type",
+        "selection",
+        "name",
+        "label",
+        "zOrder",
+        "translate",
+        "origin",
+        "meta",
+      ],
       path,
       ctx
     );
@@ -587,6 +619,7 @@ function walkOffsetMark(
   walkBaseFields(node, path, ctx);
   optionalField(node, "x", path, ctx, expectNumber);
   optionalField(node, "y", path, ctx, expectNumber);
+  optionalField(node, "translate", path, ctx, walkTranslate);
   expectField(node, "children", path, ctx, (v, p) => {
     if (!Array.isArray(v)) {
       ctx.errors.push({ path: p, message: "children must be an array" });
@@ -603,7 +636,7 @@ function walkOffsetMark(
   if (ctx.strict) {
     rejectUnknown(
       node,
-      ["type", "x", "y", "children", "origin", "meta"],
+      ["type", "x", "y", "children", "translate", "origin", "meta"],
       path,
       ctx
     );
@@ -664,6 +697,7 @@ function walkCutMark(
   optionalField(node, "inset", path, ctx, expectNumber);
   optionalField(node, "name", path, ctx, expectNameOrToken);
   optionalField(node, "zOrder", path, ctx, expectNumber);
+  optionalField(node, "translate", path, ctx, walkTranslate);
   if (ctx.strict) {
     rejectUnknown(
       node,
@@ -675,6 +709,7 @@ function walkCutMark(
         "inset",
         "name",
         "zOrder",
+        "translate",
         "origin",
         "meta",
       ],
@@ -708,6 +743,7 @@ function walkCombinatorMark(
     walkArray(v, p, ctx, walkConstraint)
   );
   optionalField(node, "zOrder", path, ctx, expectNumber);
+  optionalField(node, "translate", path, ctx, walkTranslate);
   if (ctx.strict) {
     rejectUnknown(
       node,
@@ -720,6 +756,7 @@ function walkCombinatorMark(
         "label",
         "constraints",
         "zOrder",
+        "translate",
         "origin",
         "meta",
       ],
@@ -741,6 +778,7 @@ function walkLeafMark(
     walkArray(v, p, ctx, walkConstraint)
   );
   optionalField(node, "zOrder", path, ctx, expectNumber);
+  optionalField(node, "translate", path, ctx, walkTranslate);
   // Channel-valued props are unrestricted in v0 (mirrors widget IR).
   // Strict mode does NOT reject unknown fields on leaf marks, because the
   // entire point of a leaf is to carry channel-valued props with arbitrary

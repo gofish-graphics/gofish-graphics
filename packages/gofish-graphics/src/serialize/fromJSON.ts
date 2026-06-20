@@ -309,6 +309,10 @@ export function mapMark(
   resolveToken: TokenResolver
 ): Mark<any> {
   const spec = markSpec as any;
+  const applyTranslate = <T>(mark: T): T =>
+    spec.translate && typeof (mark as any).translate === "function"
+      ? ((mark as any).translate(spec.translate) as T)
+      : mark;
 
   // Mark-as-function: Python registered a `(data) -> ChartBuilder` lambda.
   // The JS Mark fetches a chart IR per invocation (via the bridge) and
@@ -343,9 +347,11 @@ export function mapMark(
 
   // Leaf-form `ref(name)` — not a combinator, not a mark factory.
   if (spec.type === "ref" && !spec.__combinator) {
-    return ref(
-      resolveRefSelection(spec.selection, resolveToken)
-    ) as unknown as Mark<any>;
+    return applyTranslate(
+      ref(
+        resolveRefSelection(spec.selection, resolveToken)
+      ) as unknown as Mark<any>
+    );
   }
 
   // `offset` node: shift a single child by (x, y) render-pixels. Maps to the
@@ -353,9 +359,11 @@ export function mapMark(
   if (spec.type === "offset") {
     const childSpecs = (spec.children ?? []) as MarkSpec[];
     const [childMark] = mapMarkChildren(childSpecs, bridge, resolveToken);
-    return offsetOp({ x: spec.x, y: spec.y }, [
-      childMark as any,
-    ]) as unknown as Mark<any>;
+    return applyTranslate(
+      offsetOp({ x: spec.x, y: spec.y }, [
+        childMark as any,
+      ]) as unknown as Mark<any>
+    );
   }
 
   // `cut` mark in a chart `.mark(...)` position → the v3 expand-mark form
@@ -371,6 +379,7 @@ export function mapMark(
       size: unwrapMarkOpts(spec.size, bridge),
       inset: spec.inset,
     });
+    mark = applyTranslate(mark);
     const nameVal = resolveNameField(spec.name, resolveToken);
     if (nameVal != null && typeof (mark as any).name === "function") {
       mark = (mark as any).name(nameVal);
@@ -419,6 +428,7 @@ export function mapMark(
     if (spec.__scope) {
       mark = wrapWithScope(mark);
     }
+    mark = applyTranslate(mark);
     const nameVal = resolveNameField(spec.name, resolveToken);
     if (nameVal != null && typeof (mark as any).name === "function") {
       mark = (mark as any).name(nameVal);
@@ -432,7 +442,7 @@ export function mapMark(
     return mark;
   }
 
-  const { type, name: layerName, translate, ...rest } = spec as any;
+  const { type, name: layerName, ...rest } = spec as any;
   // Label has two shapes:
   //   - Object `{accessor, ...opts}` — pull out and call the chained
   //     `.label(accessor, opts)` method (adds an external label layer).
@@ -471,9 +481,7 @@ export function mapMark(
   if (spec.__scope) {
     mark = wrapWithScope(mark);
   }
-  if (translate && typeof (mark as any).translate === "function") {
-    mark = (mark as any).translate(translate);
-  }
+  mark = applyTranslate(mark);
   const nameVal = resolveNameField(layerName, resolveToken);
   if (nameVal != null && typeof (mark as any).name === "function") {
     mark = (mark as any).name(nameVal);
