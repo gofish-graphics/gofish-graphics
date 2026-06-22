@@ -69,7 +69,7 @@ export const Stacked: StoryObj<Args> = {
         )
         .mark(blank({ h: "count", fill: "species" }).name("bars")),
       Chart(selectAll("bars"))
-        .flow(group({ by: "datum.species" }))
+        .flow(group({ by: "species" }))
         .mark(area({ opacity: 0.8 })),
     ]).render(container, {
       w: args.w,
@@ -97,7 +97,7 @@ export const Layered: StoryObj<Args> = {
         .flow(spread({ by: "x",  dir: "x", spacing: 50 }), group({ by: "c" }))
         .mark(blank({ h: "y", fill: "c" }).name("points")),
       Chart(selectAll("points"))
-        .flow(group({ by: "datum.c" }))
+        .flow(group({ by: "c" }))
         .mark(area({ opacity: 0.7 })),
     ]).render(container, {
       w: 500,

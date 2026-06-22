@@ -270,6 +270,7 @@ function walkOperator(node: unknown, path: string, ctx: Context): void {
   // and required fields; in strict mode, unknown fields are rejected.
   const knownFields: Record<string, string[]> = {
     derive: ["type", "lambdaId", "provenance", "translate", "origin", "meta"],
+    resolve: ["type", "cols", "from", "key", "translate", "origin", "meta"],
     spread: [
       "type",
       "by",
@@ -324,6 +325,18 @@ function walkOperator(node: unknown, path: string, ctx: Context): void {
     case "derive":
       optionalField(node, "lambdaId", path, ctx, expectString);
       optionalField(node, "provenance", path, ctx, expectStringRecord);
+      break;
+    case "resolve":
+      expectField(node, "cols", path, ctx, (v, p) => {
+        if (!Array.isArray(v) || !v.every((x) => typeof x === "string")) {
+          ctx.errors.push({
+            path: p,
+            message: "resolve.cols must be an array of strings",
+          });
+        }
+      });
+      optionalField(node, "from", path, ctx, expectString);
+      optionalField(node, "key", path, ctx, expectString);
       break;
     case "spread":
     case "stack":

@@ -16,6 +16,7 @@
 // `pluck` is the un-collapsed sibling — the full set of distinct values — for
 // when you genuinely want "every possible value" rather than a scalar key.
 import toPath from "lodash/toPath";
+import { GoFishRef } from "./_ref";
 
 /** Canonical key for value-equality of (possibly object-valued) field values. */
 function eqKey(v: unknown): string {
@@ -38,6 +39,13 @@ function projectValues(obj: unknown, segments: string[]): unknown[] {
 
   const walk = (current: unknown, i: number): void => {
     if (current == null) return; // a missing hop contributes no value
+    if (current instanceof GoFishRef) {
+      // A ref stands in for the bag of rows it points at: descend into its
+      // `.datum` at the SAME segment, so `by: "lake"` projects through a
+      // `selectAll(...)` ref exactly as a bare row would — no `datum.` prefix.
+      walk(current.datum, i);
+      return;
+    }
     if (Array.isArray(current)) {
       // Project the rest of the walk over every element of the bag.
       for (const el of current) walk(el, i);
@@ -56,8 +64,10 @@ function projectValues(obj: unknown, segments: string[]): unknown[] {
 
 /** Resolve `path` against `obj` with projection + homogeneity collapse.
  *  Scalar iff the projection is single-valued, else `undefined`. Used by the
- *  `by` option of group/spread/scatter so `by: "datum.lake"` works whenever
- *  the rows agree on `lake`, and falls through to `undefined` when they don't. */
+ *  `by` option of group/spread/scatter so `by: "lake"` works whenever the rows
+ *  agree on `lake`, and falls through to `undefined` when they don't. A
+ *  `selectAll(...)` ref descends into its `.datum` bag automatically, so the
+ *  same bare field path works on refs (no `datum.` prefix). */
 export function projectPath(obj: unknown, path: string): unknown {
   const segments = toPath(path);
   const values = projectValues(obj, segments);

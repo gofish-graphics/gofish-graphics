@@ -225,6 +225,7 @@ for the API.
         "type": {
           "enum": [
             "derive",
+            "resolve",
             "spread",
             "stack",
             "group",
@@ -244,6 +245,18 @@ for the API.
         },
         "h": {
           "$ref": "#/$defs/ChannelValue"
+        },
+        "cols": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "from": {
+          "type": "string"
+        },
+        "key": {
+          "type": "string"
         }
       }
     },

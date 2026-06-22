@@ -15,7 +15,7 @@ def story_default():
     )
     overlay = (
         chart(selectAll("points"))
-        .flow(group(by="datum.species"))
+        .flow(group(by="species"))
         .mark(area(opacity=0.8, mixBlendMode="normal"))
     )
     return (

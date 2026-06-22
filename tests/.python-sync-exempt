@@ -43,6 +43,10 @@ packages/gofish-graphics/stories/DocsContextRegression.stories.tsx
 
 # Forward syntax stories needing unsupported features
 packages/gofish-graphics/stories/forwardsyntax/Bar/BarWithLabels.stories.tsx
+# LabeledChart uses a JS-side function-mark that composes resolved node refs
+# with fresh text — the refs can't cross the Python derive RPC, so it can't be
+# expressed with a Python mark-fn. (Ribbon/Layered and NodeLink ARE ported.)
+packages/gofish-graphics/stories/forwardsyntax/LabeledChart.stories.tsx
 packages/gofish-graphics/stories/forwardsyntax/Bar/BarTemplate.stories.tsx
 
 # Forward syntax stories needing mark-as-function or nested chart

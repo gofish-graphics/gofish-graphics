@@ -895,6 +895,24 @@ class ConstrainableMark(Mark):
         return new_mark
 
 
+# Sentinel chart-data for an empty `chart()` scope used inside `.layer(...)`:
+# "inherit the previous tier's marks". `_wire_layer_tier` binds it by naming the
+# previous tier's mark and pointing this tier's data at `selectAll(thatName)`.
+_PREVIOUS_LAYER_MARKS = object()
+
+
+def _wire_layer_tier(producer, consumer, auto_idx):
+    """Wire a `.layer()` step. If `consumer` is an empty `chart()` scope, name
+    `producer`'s mark (auto unless already named) and bind the consumer's data to
+    `selectAll(thatName)`. Returns the (possibly updated) producer and consumer.
+    """
+    if not consumer._uses_previous_marks():
+        return producer, consumer
+    producer, name = producer._ensure_named_mark(f"__gofish_layer_{auto_idx}")
+    consumer = consumer._with_data(selectAll(name))
+    return producer, consumer
+
+
 class ChartBuilder:
     """Builder class for creating GoFish charts."""
 
@@ -994,6 +1012,50 @@ class ChartBuilder:
         new_builder._mark = self._mark
         new_builder._connect = mark
         return new_builder
+
+    def layer(self, child: "ChartBuilder") -> "LayerBuilder":
+        """Stack another tier over this one. ``child`` is its own ``chart(...)``
+        pipeline; an empty ``chart()`` scope (no data) inherits *this* tier's
+        marks (so ``.layer(chart().flow(group(by=...)).mark(area()))`` connects
+        what you just drew), while ``chart(table)`` drives the tier from another
+        dataset (resolve back into the chart with
+        ``resolve(..., from_=selectAll(...))``). Returns a ``LayerBuilder`` so
+        tiers keep chaining: ``.layer(a).layer(b)``. Mirrors the JS ``.layer()``.
+        """
+        producer, consumer = _wire_layer_tier(self, child, 0)
+        return LayerBuilder([producer, consumer])
+
+    def _uses_previous_marks(self) -> bool:
+        """True for an empty ``chart()`` scope (data defers to the prev tier)."""
+        return self.data is _PREVIOUS_LAYER_MARKS
+
+    def _with_data(self, data: Any) -> "ChartBuilder":
+        """Copy of this builder with its data replaced (used by `.layer()` to
+        bind an empty scope to ``selectAll(previousTierMarkName)``)."""
+        nb = ChartBuilder(
+            data, self.options, self.operators, z_order=self._z_order
+        )
+        nb._mark = self._mark
+        nb._connect = self._connect
+        nb._name = self._name
+        return nb
+
+    def _ensure_named_mark(self, auto_name: str):
+        """Ensure this tier's mark carries a name so a later tier can
+        ``selectAll`` its nodes. An existing ``.name(...)`` wins; otherwise
+        ``auto_name`` is applied. Returns ``(builder, name)``."""
+        if self._mark is None:
+            raise ValueError(
+                ".layer(chart()): the previous tier has no .mark() to inherit — "
+                "add a mark to the previous tier, or give the layer's chart() "
+                "its own data."
+            )
+        existing = getattr(self._mark, "_name", None)
+        if existing is not None:
+            name = existing.tag if isinstance(existing, Token) else existing
+            return self, name
+        named = self._mark.name(auto_name)
+        return self.mark(named), auto_name
 
     def name(self, name_or_token: Union[str, "Token"]) -> "ChartBuilder":
         """Tag this chart with a name so a `Layer([...]).constrain(...)` callback
@@ -1586,6 +1648,42 @@ def group(*, by: str, **options: Any) -> Operator:
     return Operator("group", **options)
 
 
+def resolve(cols: List[str], *, from_: Any, key: Optional[str] = None) -> Operator:
+    """Resolve reference columns into the drawn nodes they name.
+
+    For each row, the values in ``cols`` are matched against the keyed nodes of
+    ``from_`` (a ``selectAll(layerName)``) and replaced in place with the
+    matching node ref — a many-to-one dereference (no fan-out, grain preserved).
+    Backs node-link edges and label anchoring; pair with ``.layer(chart(table))``
+    and ``line(from_=..., to=...)``.
+
+    Args:
+        cols: Column names holding references to resolve in place.
+        from_: ``selectAll(layerName)`` (or a layer-name string) whose nodes the
+            columns are matched against.
+        key: Optional match field; defaults to the field those nodes were grouped
+            by (e.g. ``scatter(by="id")`` ⇒ match on ``id``).
+
+    Returns:
+        Operator object — IR ``{type: "resolve", cols, from, key?}``.
+    """
+    if isinstance(from_, _RefProxy):
+        selection = from_._sel()
+        if len(selection) != 1 or not isinstance(selection[0], str):
+            raise ValueError('resolve(from_=...) must be selectAll("layerName")')
+        from_name = selection[0]
+    elif isinstance(from_, str):
+        from_name = from_
+    else:
+        raise TypeError(
+            'resolve(from_=...) expects selectAll(name) or a layer-name string'
+        )
+    op_kwargs: Dict[str, Any] = {"cols": list(cols), "from": from_name}
+    if key is not None:
+        op_kwargs["key"] = key
+    return Operator("resolve", **op_kwargs)
+
+
 def scatter(
     *,
     by: Optional[str] = None,
@@ -1999,14 +2097,24 @@ def line(
     strokeWidth: Optional[int] = None,
     opacity: Optional[float] = None,
     interpolation: Optional[str] = None,
+    from_: Optional[str] = None,
+    to: Optional[str] = None,
 ) -> Mark:
-    """Line mark."""
+    """Line mark.
+
+    Two forms: bag form (over a ``selectAll(...)`` ref array — one polyline) and
+    pairwise form ``line(from_=..., to=...)`` over rows whose ``from``/``to``
+    columns hold refs (one segment per row, after :func:`resolve` — node-link
+    edges).
+    """
     kwargs: Dict[str, Any] = {}
     for k, value in [
         ("stroke", stroke),
         ("strokeWidth", strokeWidth),
         ("opacity", opacity),
         ("interpolation", interpolation),
+        ("from", from_),
+        ("to", to),
     ]:
         if value is not None:
             kwargs[k] = value
@@ -2020,8 +2128,14 @@ def area(
     mixBlendMode: Optional[str] = None,
     dir: Optional[str] = None,
     interpolation: Optional[str] = None,
+    from_: Optional[str] = None,
+    to: Optional[str] = None,
 ) -> Mark:
-    """Area mark."""
+    """Area mark.
+
+    Like :func:`line`, has a bag form and a pairwise form
+    ``area(from_=..., to=...)`` (one band per row, after :func:`resolve`).
+    """
     kwargs: Dict[str, Any] = {}
     for k, value in [
         ("stroke", stroke),
@@ -2030,6 +2144,8 @@ def area(
         ("mixBlendMode", mixBlendMode),
         ("dir", dir),
         ("interpolation", interpolation),
+        ("from", from_),
+        ("to", to),
     ]:
         if value is not None:
             kwargs[k] = value
@@ -2405,7 +2521,9 @@ def offset(
 
 
 def chart(
-    data: Any, options: Optional[dict] = None, **kwargs: Any
+    data: Any = _PREVIOUS_LAYER_MARKS,
+    options: Optional[dict] = None,
+    **kwargs: Any,
 ) -> ChartBuilder:
     """
     Create a new chart builder.
@@ -2459,6 +2577,14 @@ class LayerBuilder:
         self.children = children
         self.options = options or {}
         self._constraints: Optional[List[Any]] = None
+
+    def layer(self, child: ChartBuilder) -> "LayerBuilder":
+        """Stack another tier; an empty ``chart()`` scope inherits the marks of
+        the immediately preceding tier (see ``ChartBuilder.layer``)."""
+        producer, consumer = _wire_layer_tier(
+            self.children[-1], child, len(self.children) - 1
+        )
+        return LayerBuilder([*self.children[:-1], producer, consumer], self.options)
 
     def constrain(self, callback: Callable[..., List[Any]]) -> "LayerBuilder":
         """Apply constraints relating the named children of this layer.

@@ -267,7 +267,7 @@ export const RibbonHighlight: StoryObj<Args> = {
         )
         .mark(rect({ h: "count", fill: "species" }).name("bars")),
       Chart(selectAll("bars"))
-        .flow(group({ by: "datum.species" }))
+        .flow(group({ by: "species" }))
         .mark(area({ opacity: 0.6 })),
     ]).render(container, { w: args.w, h: args.h, axes: true });
 

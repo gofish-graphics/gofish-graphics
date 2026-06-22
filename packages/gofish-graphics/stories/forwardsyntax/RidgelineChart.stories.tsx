@@ -40,7 +40,7 @@ export const Default: StoryObj<Args> = {
         )
         .mark(blank({ h: "count", fill: "species" }).name("points")),
       Chart(selectAll("points"))
-        .flow(group({ by: "datum.species" }))
+        .flow(group({ by: "species" }))
         .mark(area({ opacity: 0.8, mixBlendMode: "normal" })),
     ]).render(container, {
       w: args.w,

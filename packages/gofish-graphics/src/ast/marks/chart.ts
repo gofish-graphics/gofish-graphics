@@ -39,9 +39,15 @@ export type { Mark, Operator };
 export { generatedRect as rect };
 export type { LayerContext };
 
-import { ChartBuilder, chart } from "./chartBuilder";
+import {
+  ChartBuilder,
+  LayerBuilder,
+  chart,
+  resolveRefData,
+} from "./chartBuilder";
 import type { ChartOptions } from "./chartBuilder";
-export { ChartBuilder, chart };
+import { projectPath } from "../datumProjection";
+export { ChartBuilder, LayerBuilder, chart };
 export type { ChartOptions };
 
 /* Data Transformation Operators */
@@ -102,6 +108,77 @@ export function log<T>(label?: string): Operator<T, T> {
   (op as any).__serialize = {
     type: "log",
     opts: label !== undefined ? { label } : {},
+  };
+  return op;
+}
+
+/**
+ * Resolve reference columns into the drawn nodes they name. For each row,
+ * each listed column's value is matched against the keyed nodes of `from`
+ * (a `selectAll(...)` of a prior layer) and replaced *in place* with the
+ * matching ref — a many-to-one dereference (no fan-out, grain preserved).
+ * The match key defaults to the field the `from` nodes were grouped by
+ * (`scatter({ by: "id" })` ⇒ match on `id`); pass `key` to override, e.g.
+ * when the producer used a function `by` (no field name to infer).
+ *
+ * Drives node-link / labeling: `.layer(edges).flow(resolve(["source",
+ * "target"], { from: selectAll("nodes") })).mark(line({ from, to }))`.
+ */
+export function resolve(
+  cols: string[],
+  opts: { from: GoFishRef; key?: string }
+): Operator<any[], any[]> {
+  const op: Operator<any[], any[]> = async (mark: Mark<any[]>) => {
+    return (async (
+      rows: any[],
+      key?: string | number,
+      layerContext?: LayerContext
+    ) => {
+      const resolved = resolveRefData(opts.from, layerContext ?? {});
+      const refs = Array.isArray(resolved) ? resolved : [resolved];
+      const matchField = (r: GoFishRef): string => {
+        const field = opts.key ?? (r.targetNode as any)?.__splitBy;
+        if (typeof field !== "string") {
+          throw new Error(
+            `resolve: cannot infer the match key for from=${JSON.stringify(
+              opts.from.selection
+            )} — its nodes were not grouped by a named field (a function \`by\`?). ` +
+              `Pass an explicit { key: "<field>" }.`
+          );
+        }
+        return field;
+      };
+      const byKey = new Map<unknown, GoFishRef>();
+      for (const r of refs) byKey.set(projectPath(r.datum, matchField(r)), r);
+
+      const out = rows.map((row) => {
+        const next: Record<string, any> = { ...row };
+        for (const c of cols) {
+          const matched = byKey.get(row[c]);
+          if (matched === undefined) {
+            throw new Error(
+              `resolve: no node in ${JSON.stringify(
+                opts.from.selection
+              )} matches ${JSON.stringify(row[c])} for column "${c}".`
+            );
+          }
+          next[c] = matched;
+        }
+        return next;
+      });
+      return mark(out, key, layerContext);
+    }) as Mark<any[]>;
+  };
+  (op as any).__serialize = {
+    type: "resolve",
+    opts: {
+      cols,
+      // `from` is a selectAll(layerName); serialize the layer name it selects.
+      ...(typeof opts.from.selection === "string"
+        ? { from: opts.from.selection }
+        : {}),
+      ...(opts.key !== undefined ? { key: opts.key } : {}),
+    },
   };
   return op;
 }
@@ -179,13 +256,27 @@ export function selectAll(
   };
 }
 
-// line() mark connects data points using center-to-center mode
+// line() mark connects data points using center-to-center mode.
+// Two forms:
+//  - bag form: `line()` over a `GoFishRef[]` (e.g. `selectAll(...)`) — one
+//    polyline through all the refs.
+//  - pairwise form: `line({ from, to })` over rows whose `from`/`to` columns
+//    hold refs (after `resolve(...)`) — one segment per row (node-link edges).
 export function line(options?: {
   stroke?: string;
   strokeWidth?: number;
   opacity?: number;
   interpolation?: "linear" | "bezier";
-}): Mark<GoFishRef[]> {
+  from?: string;
+  to?: string;
+}): Mark<any> {
+  if (options?.from !== undefined && options?.to !== undefined) {
+    return pairwiseConnect("line", options, {
+      mode: "center",
+      strokeWidth: options.strokeWidth ?? 1,
+      interpolation: options.interpolation ?? "linear",
+    });
+  }
   const mark: Mark<GoFishRef[]> = async (
     d: GoFishRef[],
     _key?: string | number,
@@ -208,6 +299,67 @@ export function line(options?: {
   return mark;
 }
 
+// Shared pairwise (per-row) connector: each row carries two ref-valued columns
+// (`from`/`to`, populated by `resolve(...)`); emit one Connect per row and
+// stack them in a Layer. Backs the `{ from, to }` form of `line`/`area`.
+function pairwiseConnect(
+  irType: "line" | "area",
+  options: {
+    stroke?: string;
+    strokeWidth?: number;
+    opacity?: number;
+    interpolation?: "linear" | "bezier";
+    mixBlendMode?: "normal" | "multiply";
+    dir?: "x" | "y";
+    from?: string;
+    to?: string;
+  },
+  connectOpts: {
+    mode: "center" | "edge";
+    strokeWidth: number;
+    interpolation: "linear" | "bezier";
+  }
+): Mark<any> {
+  const from = options.from as string;
+  const to = options.to as string;
+  const mark: Mark<any[]> = async (
+    rows: any[],
+    _key?: string | number,
+    _layerContext?: LayerContext
+  ) => {
+    const segments = await Promise.all(
+      rows.map(async (row) => {
+        const a = row[from];
+        const b = row[to];
+        if (!(a instanceof GoFishRef) || !(b instanceof GoFishRef)) {
+          throw new Error(
+            `${irType}({ from: "${from}", to: "${to}" }): columns "${from}"/"${to}" ` +
+              `must hold node refs — run resolve(["${from}", "${to}"], ` +
+              `{ from: selectAll(...) }) in the flow first.`
+          );
+        }
+        const node = await Connect(
+          {
+            direction: options.dir ?? 0,
+            mode: connectOpts.mode,
+            stroke: options.stroke,
+            strokeWidth: connectOpts.strokeWidth,
+            opacity: options.opacity,
+            interpolation: connectOpts.interpolation,
+            mixBlendMode: options.mixBlendMode,
+          },
+          [a, b]
+        );
+        (node as any).datum = row;
+        return node;
+      })
+    );
+    return Layer({}, segments);
+  };
+  (mark as any).__serialize = { type: irType, opts: options };
+  return mark;
+}
+
 // area() mark connects data points using edge-to-edge mode
 export function area(options?: {
   stroke?: string;
@@ -216,7 +368,16 @@ export function area(options?: {
   mixBlendMode?: "normal" | "multiply";
   dir?: "x" | "y";
   interpolation?: "linear" | "bezier";
-}): Mark<GoFishRef[]> {
+  from?: string;
+  to?: string;
+}): Mark<any> {
+  if (options?.from !== undefined && options?.to !== undefined) {
+    return pairwiseConnect("area", options, {
+      mode: "edge",
+      strokeWidth: options.strokeWidth ?? 0,
+      interpolation: options.interpolation ?? "bezier",
+    });
+  }
   const mark: Mark<GoFishRef[]> = async (
     d: GoFishRef[],
     _key?: string | number,

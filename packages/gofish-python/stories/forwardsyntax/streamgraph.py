@@ -15,5 +15,5 @@ def default(w=400, h=400):
         )
         .mark(blank(h="count", fill="species").name("bars"))
     )
-    overlay = chart(selectAll("bars")).flow(group(by="datum.species")).mark(area(opacity=0.8))
+    overlay = chart(selectAll("bars")).flow(group(by="species")).mark(area(opacity=0.8))
     return Layer([bars, overlay])

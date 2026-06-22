@@ -46,12 +46,12 @@ export const Default: StoryObj<Args> = {
         .flow(spread({ by: "lake",  dir: "x" }))
         .mark(rect({ h: "count" }).name("bars")),
       // `selectAll("bars")` yields one ref per lake; each ref's datum is that
-      // lake's array of species records (an aggregate). `by: "datum.lake"`
+      // lake's array of species records (an aggregate). `by: "lake"`
       // resolves because every row in a lake agrees on `lake` (homogeneity
       // collapse), giving one frame per lake; sum the aggregate's rows for the
       // per-lake total label.
       Chart(selectAll("bars"))
-        .flow(group({ by: "datum.lake" }))
+        .flow(group({ by: "lake" }))
         .mark(((d: any[]) => {
           return spread({ dir: "y", alignment: "middle", spacing: 10 },
             [
@@ -70,7 +70,7 @@ export const Default: StoryObj<Args> = {
   },
 };
 
-// Demonstrates `pluck` — the un-collapsed sibling of the `by: "datum.field"`
+// Demonstrates `pluck` — the un-collapsed sibling of the `by: "field"`
 // homogeneity collapse. Within a lake the `species` field is multi-valued, so
 // `datum.species` would NOT resolve (the "ill-posed" undefined). `pluck` is how
 // you ask for *every* distinct value: here, the count of species in each lake.
@@ -84,7 +84,7 @@ export const SpeciesCountPerLake: StoryObj<Args> = {
         .flow(spread({ by: "lake", dir: "x" }))
         .mark(rect({ h: "count" }).name("bars")),
       Chart(selectAll("bars"))
-        .flow(group({ by: "datum.lake" }))
+        .flow(group({ by: "lake" }))
         .mark(((d: any[]) => {
           // `pluck(ref, "species")` → the distinct species in this lake's bag.
           const species = pluck(d[0], "species") as string[];

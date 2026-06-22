@@ -148,6 +148,7 @@ export type DataIR =
 
 export type OperatorIR =
   | DeriveOperator
+  | ResolveOperator
   | SpreadOperator
   | StackOperator
   | GroupOperator
@@ -169,6 +170,24 @@ export interface DeriveOperator extends BaseIRNode, TranslatableIR {
    *  can't ride the data rows across the derive RPC; the deserializer re-applies
    *  it via `setMeasureProvenance`. */
   provenance?: Record<string, string>;
+}
+
+/**
+ * `resolve(cols, { from, key? })` — dereference reference columns into the
+ * drawn nodes they name. Each listed column's value is matched against the
+ * keyed nodes of `from` (a layer selected by name) and replaced in place with
+ * the matching node ref (many-to-one, grain preserved). Backs node-link edges
+ * and label anchoring. The match key defaults to the field `from`'s nodes were
+ * grouped by; `key` overrides it.
+ */
+export interface ResolveOperator extends BaseIRNode, TranslatableIR {
+  type: "resolve";
+  /** Local columns holding references to resolve in place. */
+  cols: string[];
+  /** Layer name whose nodes the columns are resolved against (a `selectAll`). */
+  from?: string;
+  /** Explicit match field; defaults to the producing operator's `by`. */
+  key?: string;
 }
 
 export interface SpreadOperator extends BaseIRNode, TranslatableIR {
@@ -510,6 +529,7 @@ export function isLeafMarkIR(mark: MarkIR): mark is LeafMarkIR {
 /** The set of operator type discriminators recognized in v0. */
 export const OPERATOR_TYPES = [
   "derive",
+  "resolve",
   "spread",
   "stack",
   "group",

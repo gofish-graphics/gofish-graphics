@@ -27,17 +27,27 @@ gf.Layer([
 ## Signature
 
 ```ts
-line({ stroke?, strokeWidth = 1, opacity?, interpolation = "linear" })
+line({ stroke?, strokeWidth = 1, opacity?, interpolation = "linear", from?, to? })
 ```
 
 ## Parameters
 
-| Option          | Type                   | Description        |
-| --------------- | ---------------------- | ------------------ |
-| `stroke`        | `string`               | Line color         |
-| `strokeWidth`   | `number`               | Line thickness     |
-| `opacity`       | `number`               | Opacity (0–1)      |
-| `interpolation` | `"linear" \| "bezier"` | Line interpolation |
+| Option          | Type                   | Description                                               |
+| --------------- | ---------------------- | --------------------------------------------------------- |
+| `stroke`        | `string`               | Line color                                                |
+| `strokeWidth`   | `number`               | Line thickness                                            |
+| `opacity`       | `number`               | Opacity (0–1)                                             |
+| `interpolation` | `"linear" \| "bezier"` | Line interpolation                                        |
+| `from`, `to`    | `string`               | Pairwise form: column names holding the two endpoint refs |
+
+## Two forms
+
+- **Bag form** — `line()` over a `GoFishRef[]` (e.g. [`selectAll()`](/js/api/selection/ref)):
+  one polyline through all the refs (the example above).
+- **Pairwise form** — `line({ from, to })` over rows whose `from`/`to` columns
+  hold refs: one segment per row. Use after [`resolve`](/js/api/operators/resolve)
+  has turned an edge table's endpoint ids into node refs — this is how node-link
+  edges are drawn. See [`.layer()`](/js/api/core/layer) for the full recipe.
 
 ## Sugar: `.connect()`
 

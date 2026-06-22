@@ -33,7 +33,7 @@ def basic(w=400, h=400):
     )
     overlay = (
         chart(selectAll("bars"))
-        .flow(group(by="datum.species"))
+        .flow(group(by="species"))
         .mark(area(opacity=0.8))
     )
     return Layer([bars, overlay])
@@ -57,7 +57,7 @@ def polar(w=400, h=400):
     )
     overlay = (
         chart(selectAll("bars"))
-        .flow(group(by="datum.species"))
+        .flow(group(by="species"))
         .mark(area(opacity=0.8))
     )
     return Layer({"coord": clock()}, [bars, overlay])

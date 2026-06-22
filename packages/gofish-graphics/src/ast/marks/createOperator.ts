@@ -841,6 +841,18 @@ export function createOperator<Datum, Options extends Record<string, any>>(
             );
             const keyStr = currentKey?.toString() ?? "";
             for (const node of leafNodes) node.setKey(keyStr);
+            // Record the (string) field this operator grouped by, so a later
+            // `resolve(..., { from })` can match against it without the user
+            // restating the key. The innermost grouping wins (`??=`); a function
+            // `by` has no field name to record, so resolve errors there unless
+            // given an explicit `key`.
+            if (typeof (opts as any).by === "string") {
+              for (const node of leafNodes) {
+                if ((node as any).__splitBy === undefined) {
+                  (node as any).__splitBy = (opts as any).by;
+                }
+              }
+            }
             return leafNodes;
           })
         );

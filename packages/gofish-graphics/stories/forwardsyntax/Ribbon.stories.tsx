@@ -52,13 +52,44 @@ export const Basic: StoryObj<Args> = {
         )
         .mark(rect({ h: "count", fill: "species" }).name("bars")),
       Chart(selectAll("bars"))
-        .flow(group({ by: "datum.species" }))
+        .flow(group({ by: "species" }))
         .mark(area({ opacity: 0.8 })),
     ]).render(container, {
       w: args.w,
       h: args.h,
       axes: true,
     });
+
+    return container;
+  },
+};
+
+// Same ribbon as `Basic`, expressed with the `.layer()` chaining API instead
+// of the manual `layer([...])` + `selectAll("bars")` form. The previous tier's
+// marks flow into `.layer()` implicitly (no `.name`), and `group({ by })`
+// reads the bare field off the refs (no `datum.` prefix). Should render
+// identically to `Basic`.
+export const Layered: StoryObj<Args> = {
+  args: { w: 400, h: 400 },
+  render: (args: Args) => {
+    const container = initializeContainer();
+
+    Chart(seafood, { axes: true })
+      .flow(
+        spread({ by: "lake", dir: "x", spacing: 64 }),
+        derive((d) => orderBy(d, "count", "asc")),
+        stack({ by: "species", dir: "y" })
+      )
+      .mark(rect({ h: "count", fill: "species" }))
+      .layer(
+        Chart() // empty scope = the previous tier's marks
+          .flow(group({ by: "species" }))
+          .mark(area({ opacity: 0.8 }))
+      )
+      .render(container, {
+        w: args.w,
+        h: args.h,
+      });
 
     return container;
   },
@@ -91,7 +122,7 @@ export const Polar: StoryObj<Args> = {
         )
         .mark(rect({ w: 0.1, h: "count", fill: "species" }).name("bars")),
       Chart(selectAll("bars"))
-        .flow(group({ by: "datum.species" }))
+        .flow(group({ by: "species" }))
         .mark(area({ opacity: 0.8 })),
     ]).render(container, {
       w: args.w,

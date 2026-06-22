@@ -133,6 +133,7 @@ export const FRONTEND_IR_JSON_SCHEMA = {
         type: {
           enum: [
             "derive",
+            "resolve",
             "spread",
             "stack",
             "group",
@@ -145,6 +146,9 @@ export const FRONTEND_IR_JSON_SCHEMA = {
         translate: { $ref: "#/$defs/Translate" },
         w: { $ref: "#/$defs/ChannelValue" },
         h: { $ref: "#/$defs/ChannelValue" },
+        cols: { type: "array", items: { type: "string" } },
+        from: { type: "string" },
+        key: { type: "string" },
       },
     },
     Translate: {

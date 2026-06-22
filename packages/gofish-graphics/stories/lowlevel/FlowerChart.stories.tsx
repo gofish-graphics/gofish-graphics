@@ -65,7 +65,7 @@ export const Default: StoryObj<Args> = {
       // lake (its datum is that lake's species rows); stack a polar petal fan
       // on top of the stem.
       Chart(selectAll("stems"))
-        .flow(group({ by: "datum.lake" }))
+        .flow(group({ by: "lake" }))
         .mark(((d: any[]) =>
           spread({ dir: "y", alignment: "middle", spacing: -FLOWER_RADIUS }, [
             d[0],

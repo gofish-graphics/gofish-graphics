@@ -70,7 +70,7 @@ export { ref } from "./ast/shapes/ref";
 
 // Datum projection — `pluck(ref, "species")` returns the full set of distinct
 // values for a field across a selected node's rows ("every possible value"),
-// the un-collapsed sibling of the `by: "datum.field"` homogeneity collapse.
+// the un-collapsed sibling of the `by: "field"` homogeneity collapse.
 // (`projectPath`/`splitKeyFn` stay module-internal — operators import them from
 // ./ast/datumProjection directly.)
 export { pluck } from "./ast/datumProjection";
@@ -140,6 +140,7 @@ export { image } from "./ast/shapes/image";
 export {
   chart as Chart,
   derive,
+  resolve,
   rect,
   circle,
   selectAll,
