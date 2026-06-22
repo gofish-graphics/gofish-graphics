@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { circle, rect, text, Layer, Constraint, polar } from "gofish-graphics";
-import { tree, contain, distribute } from "../src";
+import { tree, nest, distribute } from "../src";
 
 const meta: Meta = {
   title: "GoTree / Node-Link",
@@ -149,13 +149,13 @@ export const LabeledFileTree: StoryObj<Args> = {
 };
 
 // Containment example: each tree node is a plain colored rect; parent rects
-// grow via `contain` to wrap their entire subtree. Showcases Constraint.contain
+// grow via `nest` to wrap their entire subtree. Showcases Constraint.nest
 // via the gofish-gotree DSL — the same tree datum gets a totally different
 // visualization just by swapping the `parentChild` combiner.
 //
 // The mark factory branches on `d.height` so leaves get a fixed pixel size
 // (intrinsic, doesn't grow) and internal nodes get an unsized rect (grows
-// when contain passes an override size = inner.intrinsicDims + 2*padding).
+// when nest passes an override size = inner.intrinsicDims + 2*padding).
 // Depth-based fill — outer is lightest, leaves are darkest — visualizes the
 // nesting hierarchy.
 const greens = ["#3c7c3c", "#7fb37f", "#a8d9a8", "#c8e6c8"];
@@ -187,7 +187,7 @@ export const NestedBoxes: StoryObj<Args> = {
       {
         node: nestedNode,
         link: "none",
-        parentChild: contain({ x: 12, y: 12 }),
+        parentChild: nest({ x: 12, y: 12 }),
         sibling: distribute({ dir: "x", spacing: 10, alignment: "middle" }),
       },
       balancedTree
@@ -199,7 +199,7 @@ export const NestedBoxes: StoryObj<Args> = {
 // Labeled nested-boxes — shows a custom `parentChild` combiner instead of a
 // helper. The user's `node` factory produces a labeled-header (rect + text);
 // the custom combiner stacks [header, childGroup] vertically inside an
-// auto-generated wrapping rect, with `contain` sizing the wrapper around the
+// auto-generated wrapping rect, with `nest` sizing the wrapper around the
 // stack. Demonstrates that `parentChild` accepts any function with the
 // `(children) => GoFishAST` shape — helpers are conveniences, not the API.
 const labeledHeader = (d: any) =>
@@ -224,9 +224,9 @@ const labeledHeader = (d: any) =>
 
 // Custom parentChild combiner. distribute on y places [childGroup, header]
 // at low/high y respectively → header ends up at high y / top of screen
-// (y-up). Then contain wraps the resulting stack inside an auto outer rect.
+// (y-up). Then nest wraps the resulting stack inside an auto outer rect.
 const labeledContainCombiner = ([header, childGroup]: any[]) =>
-  contain({ x: 10, y: 10 })([
+  nest({ x: 10, y: 10 })([
     rect({
       fill: "#fafbfd",
       stroke: "#9bb1c4",
@@ -287,7 +287,7 @@ export const LabeledNestedBoxes: StoryObj<Args> = {
 //
 // 1. `parentChild` and `sibling` both use `distribute` (constraint-based,
 //    one axis each) instead of `spread` (operator, couples x and y) or
-//    `contain` (inside-out, 2D). The point: under polar, the x (theta) and
+//    `nest` (inside-out, 2D). The point: under polar, the x (theta) and
 //    y (radial) axes have totally different meanings and want to be
 //    controlled independently. `distribute({dir: "y"})` for parentChild
 //    handles radial placement; `distribute({dir: "x"})` for sibling
@@ -415,24 +415,24 @@ export const IciclePlot: StoryObj<Args> = {
 };
 
 // Nested Pietree — true polar version of the cartesian NestedBoxes. Uses
-// `contain` (inside-out) just like NestedBoxes — parent's wedge ENCLOSES
+// `nest` (inside-out) just like NestedBoxes — parent's wedge ENCLOSES
 // children's wedges with visible padding on all sides, rather than the
 // adjacent radial bands of the sunburst. So in this layout the leaves are
 // at the smallest radii (innermost) and root spans the full disc.
 //
 // Leaf width is the deepest level's theta share (here π/2 for 4 leaves);
-// internals have no fixed dims so contain grows them to inner.intrinsicDims
+// internals have no fixed dims so nest grows them to inner.intrinsicDims
 // + 2 * padding. White stroke gives visible separation between nested
 // wedges.
 // Cartesian-x must fit inside polar's [0, 2π] domain — overflow wraps and
 // produces visual artifacts. For the balanced 2x2 tree the budget is:
 //   4·leafW + 4·sibSpacing + 6·xPad = 2π
 // (4 leaves; 4 sibling gaps total — 3 inside each subtree row plus 1
-// inter-subtree gap; 2 contain levels × 2 sides per level = 4 inner contain
-// edges plus the root contain's 2 outer edges = 6).
+// inter-subtree gap; 2 nest levels × 2 sides per level = 4 inner nest
+// edges plus the root nest's 2 outer edges = 6).
 //
 // The library doesn't auto-fit yet — Constraint.distribute and
-// Constraint.contain don't participate in the spread operator's
+// Constraint.nest don't participate in the spread operator's
 // sharedScale/Monotonic-inversion fitting path. Sizes are hand-computed.
 // Tracked in https://github.com/gofish-graphics/gofish-graphics/issues/475
 const NPT_LEAF_W = Math.PI / 2 - 0.27; // ≈ 1.30 rad
@@ -469,7 +469,7 @@ export const NestedPietree: StoryObj<Args> = {
       {
         node: nestedPieNode,
         link: "none",
-        parentChild: contain({ x: NPT_X_PAD, y: 32 }),
+        parentChild: nest({ x: NPT_X_PAD, y: 32 }),
         sibling: distribute({
           dir: "x",
           spacing: NPT_SIB,

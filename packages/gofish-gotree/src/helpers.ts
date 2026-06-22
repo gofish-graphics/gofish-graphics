@@ -89,39 +89,40 @@ export const distribute =
     });
   };
 
-export type ContainOptions = { x?: number; y?: number };
+export type NestOptions = { x?: number; y?: number };
 
-const OUTER_NAME = "__contain-outer";
-const INNER_NAME = "__contain-inner";
+const OUTER_NAME = "__nest-outer";
+const INNER_NAME = "__nest-inner";
 
 /**
- * Contain helper: wraps `[outer, inner]` in a Layer with
- * `Constraint.contain({x?, y?}, [outer, inner])`. Outer sizes to inner's
- * intrinsic dims + 2*padding on each constrained axis; inner is centered
+ * Nest helper: wraps `[outer, inner]` in a Layer with
+ * `Constraint.nest({x?, y?}, [outer, inner])`. When the inner carries the
+ * size and the outer does not (the tree-nesting case), outer sizes to inner's
+ * intrinsic dims + 2*padding on each constrained axis and inner is centered
  * inside outer on the same axes.
  *
- * Naming: the contain constraint references its children by name, so we wrap
- * each in a thin Layer named `__contain-outer` / `__contain-inner`. We can't
+ * Naming: the nest constraint references its children by name, so we wrap
+ * each in a thin Layer named `__nest-outer` / `__nest-inner`. We can't
  * just call `.name()` on the user's nodeMark because createMark's NameableMark
  * loses chainability after the first `.name()` (the result is a plain Mark
  * whose `.name` is the built-in function property). Wrapping in a fresh Layer
  * sidesteps that — `Layer(...).name(...)` chains correctly through the
  * createNodeOperatorSequential PromiseWithRender. The wrapper Layer has no
- * fixed size, so contain's size-override propagates through to the user's
+ * fixed size, so nest's size-override propagates through to the user's
  * mark inside.
  */
-export const contain =
-  (opts: ContainOptions): Combiner =>
+export const nest =
+  (opts: NestOptions): Combiner =>
   (children: any[]) => {
     if (children.length !== 2) {
       throw new Error(
-        `gofish-gotree contain(): expected exactly 2 children [outer, inner], got ${children.length}`
+        `gofish-gotree nest(): expected exactly 2 children [outer, inner], got ${children.length}`
       );
     }
     const [outer, inner] = children;
     const namedOuter = Layer([outer]).name(OUTER_NAME);
     const namedInner = Layer([inner]).name(INNER_NAME);
     return Layer([namedOuter, namedInner]).constrain((c: any) => [
-      Constraint.contain(opts, [c[OUTER_NAME], c[INNER_NAME]]),
+      Constraint.nest(opts, [c[OUTER_NAME], c[INNER_NAME]]),
     ]);
   };

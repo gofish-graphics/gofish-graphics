@@ -7,7 +7,7 @@ export type Alignment = "start" | "middle" | "end" | "baseline";
  * A `Combiner` is a function that takes an array of GoFish AST children and
  * returns a composed AST. The `parentChild` slot receives `[parent, group]`;
  * `sibling` receives the full children list. Users can pass any function with
- * this shape — the `spread()` and `contain()` helpers (re-exported from
+ * this shape — the `spread()` and `nest()` helpers (re-exported from
  * `gofish-gotree`) are ergonomic conveniences but not the only option.
  */
 export type Combiner = (children: any[]) => any;

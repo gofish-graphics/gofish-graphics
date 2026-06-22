@@ -5,7 +5,7 @@ GoFish. It ships as a separate workspace package — install and import it along
 `gofish-graphics`:
 
 ```ts
-import { tree, spread, contain } from "gofish-gotree";
+import { tree, spread, nest } from "gofish-gotree";
 import { gofish, circle } from "gofish-graphics";
 ```
 
@@ -50,7 +50,7 @@ Same data, different `parentChild` combiner — produces a Russian-doll of neste
 rectangles where each parent box wraps its children.
 
 ```ts
-import { tree, spread, contain } from "gofish-gotree";
+import { tree, spread, nest } from "gofish-gotree";
 import { Layer, Constraint, rect, text } from "gofish-graphics";
 
 const labeledNode = (d) =>
@@ -65,7 +65,7 @@ tree(
   {
     node: labeledNode,
     link: "none",
-    parentChild: contain({ x: 10, y: 10 }),
+    parentChild: nest({ x: 10, y: 10 }),
     sibling: spread({ dir: "y", spacing: 8, alignment: "middle" }),
   },
   data
@@ -89,9 +89,9 @@ type GoTreeSpec = {
 type Combiner = (children: any[]) => any;
 ```
 
-The spec slots take **callable values** — you write `spread(...)` or `contain(...)`
+The spec slots take **callable values** — you write `spread(...)` or `nest(...)`
 directly, the way you write `circle(...)` for `node`. The package exports two
-ergonomic helpers (`spread` and `contain`); you can also pass any function with the
+ergonomic helpers (`spread` and `nest`); you can also pass any function with the
 combiner shape.
 
 ### `node` — the node-mark factory
@@ -138,20 +138,20 @@ parentChild: spread({ dir: "y", spacing: 48, alignment: "middle" }),
 sibling: spread({ dir: "x", spacing: 24, alignment: "start" }),
 ```
 
-#### `contain({ x?, y? })`
+#### `nest({ x?, y? })`
 
 Returns a combiner that wraps `[outer, inner]` in a Layer with
-`Constraint.contain({x?, y?}, [outer, inner])`. The outer is sized to inner's
+`Constraint.nest({x?, y?}, [outer, inner])`. The outer is sized to inner's
 intrinsic dims plus `2 * padding` symmetrically per constrained axis; inner is
 centered inside outer. Missing axis (e.g. `{x: 8}` only) leaves the other axis
 unconstrained.
 
 ```ts
-parentChild: contain({ x: 10, y: 10 }),   // box-in-box
+parentChild: nest({ x: 10, y: 10 }),   // box-in-box
 ```
 
-Internally, `contain` injects two reserved names (`__contain-outer` /
-`__contain-inner`) on the children it wraps — it does not consult or modify any
+Internally, `nest` injects two reserved names (`__nest-outer` /
+`__nest-inner`) on the children it wraps — it does not consult or modify any
 name a user has placed on the node mark.
 
 #### Custom combiners
@@ -218,7 +218,7 @@ past the disc edge.
 
 The library does not yet auto-fit content to 2π — the spread operator's
 `sharedScale` / Monotonic-inversion path does fit, but `Constraint.distribute`
-and `Constraint.contain` (which the `distribute` and `contain` helpers
+and `Constraint.nest` (which the `distribute` and `nest` helpers
 build on) don't yet participate in that path. So sizes are hand-budgeted.
 
 For a balanced N-ary tree of depth D under polar, the content width is:
@@ -226,11 +226,11 @@ For a balanced N-ary tree of depth D under polar, the content width is:
 ```
 contentWidth = (number of leaves) · leafW
              + (sum of sibling gaps at every level) · sibSpacing
-             + 2 · (number of contain levels) · xPad
+             + 2 · (number of nest levels) · xPad
 ```
 
 Worked example — the `NestedPietree` story uses a balanced 2×2 tree
-(4 leaves, 2 contain levels):
+(4 leaves, 2 nest levels):
 
 ```ts
 const LEAF_W = Math.PI / 2 - 0.27; // ≈ 1.30 rad
@@ -243,8 +243,8 @@ const X_PAD = 0.13;
 ```
 
 (The `4·SIB` is the 3 leaf-row gaps plus the 1 inter-subtree gap; the
-`6·X_PAD` is 2 contain levels × 2 sides per level = 4 inner contain edges
-plus the root contain's 2 outer edges.)
+`6·X_PAD` is 2 nest levels × 2 sides per level = 4 inner nest edges
+plus the root nest's 2 outer edges.)
 
 If you change the tree's depth or arity, recompute. Unbalanced trees need
 to sum gaps level-by-level. Stay a hair under 2π (~0.02 rad slack) so
@@ -255,31 +255,31 @@ floating-point doesn't tip you over.
 The grammar's structure is preserved from the paper; names align with GoFish
 conventions and switch from JSON descriptors to callable helpers.
 
-| Paper                             | GoTree-in-GoFish                                      |
-| --------------------------------- | ----------------------------------------------------- |
-| `Element.Node: "rectangle"`       | `node: (d) => rect({...})`                            |
-| `Element.Link: "straight"`        | `link: { interpolation: "linear" }`                   |
-| `Element.Color: "depth"`          | inside `node`: `fill: byDepth(d.depth)`               |
-| `Element.Width/Height`            | inside `node`: `w` / `h` on the mark                  |
-| `Element.LinkWidth`               | `link.strokeWidth`                                    |
-| `Element.Label`                   | inside `node`: include a `text` mark                  |
-| `Layout.Mode`                     | `mode`                                                |
-| `Layout.X.Root: juxtapose`        | `parentChild: spread({ dir: "x" })`                   |
-| `Layout.X.Subtree: flatten`       | `sibling: spread({ dir: "x" })`                       |
-| `Layout.X.Root: include`/`within` | `parentChild: contain({ x: padding })`                |
-| `Padding` / `Margin`              | `spacing` (on spread), `x` / `y` padding (on contain) |
-| `Alignment: top / left`           | `alignment: "start"`                                  |
-| `Alignment: center`               | `alignment: "middle"`                                 |
-| `Alignment: bottom / right`       | `alignment: "end"`                                    |
-| `SortingCriteria`                 | `sortBy: (d) => ...`                                  |
-| `SubtreeWidth`/`Height`           | inside `node`: `value(d.value, "key")`                |
-| `CoordinateSystem.Category`       | `coord: linear()` or `coord: polar()`                 |
+| Paper                             | GoTree-in-GoFish                                   |
+| --------------------------------- | -------------------------------------------------- |
+| `Element.Node: "rectangle"`       | `node: (d) => rect({...})`                         |
+| `Element.Link: "straight"`        | `link: { interpolation: "linear" }`                |
+| `Element.Color: "depth"`          | inside `node`: `fill: byDepth(d.depth)`            |
+| `Element.Width/Height`            | inside `node`: `w` / `h` on the mark               |
+| `Element.LinkWidth`               | `link.strokeWidth`                                 |
+| `Element.Label`                   | inside `node`: include a `text` mark               |
+| `Layout.Mode`                     | `mode`                                             |
+| `Layout.X.Root: juxtapose`        | `parentChild: spread({ dir: "x" })`                |
+| `Layout.X.Subtree: flatten`       | `sibling: spread({ dir: "x" })`                    |
+| `Layout.X.Root: include`/`within` | `parentChild: nest({ x: padding })`                |
+| `Padding` / `Margin`              | `spacing` (on spread), `x` / `y` padding (on nest) |
+| `Alignment: top / left`           | `alignment: "start"`                               |
+| `Alignment: center`               | `alignment: "middle"`                              |
+| `Alignment: bottom / right`       | `alignment: "end"`                                 |
+| `SortingCriteria`                 | `sortBy: (d) => ...`                               |
+| `SubtreeWidth`/`Height`           | inside `node`: `value(d.value, "key")`             |
+| `CoordinateSystem.Category`       | `coord: linear()` or `coord: polar()`              |
 
 ## Milestone status
 
 - **M1** — node-link with `spread` combiner; linear links.
-- **M2** (this milestone) — `Constraint.contain` primitive in `gofish-graphics`;
-  `contain` combiner in `gofish-gotree`; nested-box trees.
+- **M2** (this milestone) — `Constraint.nest` primitive in `gofish-graphics`;
+  `nest` combiner in `gofish-gotree`; nested-box trees.
 - **M3** — polar coord wrap; sunburst and radial node-link.
 - **M4** — `orthogonal`/`bezier`/`arc` links; sort.
 - **M5** — `bottomUp` mode for dendrograms via intrinsic-dim wiring.
