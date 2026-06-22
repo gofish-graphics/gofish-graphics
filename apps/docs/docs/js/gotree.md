@@ -209,6 +209,47 @@ node). When the _shape itself_ needs to sweep through the transform —
 filled wedges, ribbons, polar bars — reach for `Value`-typed dims +
 `sharedScale: true` instead (the pattern in `polarBar` / `polarRibbon`).
 
+### The 2π budget — content must fit polar's theta domain
+
+Under `coord: polar()`, the inner cartesian content's total x-extent must
+be ≤ 2π radians. Overflows wrap around the disc (theta = 2π + ε is rendered
+at theta = ε), producing self-intersecting wedges and slivers protruding
+past the disc edge.
+
+The library does not yet auto-fit content to 2π — the spread operator's
+`sharedScale` / Monotonic-inversion path does fit, but `Constraint.distribute`
+and `Constraint.contain` (which the `distribute` and `contain` helpers
+build on) don't yet participate in that path. So sizes are hand-budgeted.
+
+For a balanced N-ary tree of depth D under polar, the content width is:
+
+```
+contentWidth = (number of leaves) · leafW
+             + (sum of sibling gaps at every level) · sibSpacing
+             + 2 · (number of contain levels) · xPad
+```
+
+Worked example — the `NestedPietree` story uses a balanced 2×2 tree
+(4 leaves, 2 contain levels):
+
+```ts
+const LEAF_W = Math.PI / 2 - 0.27; // ≈ 1.30 rad
+const SIB = 0.08;
+const X_PAD = 0.13;
+
+// Budget: 4·LEAF_W + 4·SIB + 6·X_PAD
+//       = 4 · 1.30 + 4 · 0.08 + 6 · 0.13
+//       = 6.30  ≈ 2π  ✓
+```
+
+(The `4·SIB` is the 3 leaf-row gaps plus the 1 inter-subtree gap; the
+`6·X_PAD` is 2 contain levels × 2 sides per level = 4 inner contain edges
+plus the root contain's 2 outer edges.)
+
+If you change the tree's depth or arity, recompute. Unbalanced trees need
+to sum gaps level-by-level. Stay a hair under 2π (~0.02 rad slack) so
+floating-point doesn't tip you over.
+
 ## Translation from the GoTree paper
 
 The grammar's structure is preserved from the paper; names align with GoFish

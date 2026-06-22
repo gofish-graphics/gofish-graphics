@@ -424,12 +424,26 @@ export const IciclePlot: StoryObj<Args> = {
 // internals have no fixed dims so contain grows them to inner.intrinsicDims
 // + 2 * padding. White stroke gives visible separation between nested
 // wedges.
+// Cartesian-x must fit inside polar's [0, 2π] domain — overflow wraps and
+// produces visual artifacts. For the balanced 2x2 tree the budget is:
+//   4·leafW + 4·sibSpacing + 6·xPad = 2π
+// (4 leaves; 4 sibling gaps total — 3 inside each subtree row plus 1
+// inter-subtree gap; 2 contain levels × 2 sides per level = 4 inner contain
+// edges plus the root contain's 2 outer edges = 6).
+//
+// The library doesn't auto-fit yet — Constraint.distribute and
+// Constraint.contain don't participate in the spread operator's
+// sharedScale/Monotonic-inversion fitting path. Sizes are hand-computed.
+// Tracked in https://github.com/gofish-graphics/gofish-graphics/issues/475
+const NPT_LEAF_W = Math.PI / 2 - 0.27; // ≈ 1.30 rad
+const NPT_SIB = 0.08;
+const NPT_X_PAD = 0.13;
+// Budget check: 4 * 1.30 + 4 * 0.08 + 6 * 0.13 ≈ 6.30 ≈ 2π ✓
+
 const nestedPieNode = (d: any) =>
   d.height === 0
     ? rect({
-        // Leave a theta gap between sibling leaves so the inner-most ring
-        // has visible angular padding too.
-        w: Math.PI / 2 - 0.25,
+        w: NPT_LEAF_W,
         h: 36,
         emX: true,
         emY: true,
@@ -455,13 +469,12 @@ export const NestedPietree: StoryObj<Args> = {
       {
         node: nestedPieNode,
         link: "none",
-        // Larger padding gives a clearer nested-ring visual. x is theta
-        // (radians) — keep generous so each outer wedge is visibly thick
-        // around its inner children. y is in r-units.
-        parentChild: contain({ x: 0.3, y: 32 }),
-        // Visible theta gap between sibling wedges, additive with the
-        // leaf-width gap baked into nestedPieNode above.
-        sibling: distribute({ dir: "x", spacing: 0.18, alignment: "middle" }),
+        parentChild: contain({ x: NPT_X_PAD, y: 32 }),
+        sibling: distribute({
+          dir: "x",
+          spacing: NPT_SIB,
+          alignment: "middle",
+        }),
         coord: polar(),
       },
       polarBalancedTree
