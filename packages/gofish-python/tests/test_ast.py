@@ -3,7 +3,7 @@
 import pytest
 from gofish import (
     chart,
-    Layer,
+    layer,
     LayerBuilder,
     spread,
     stack,
@@ -326,9 +326,9 @@ class TestClockCoord:
         assert ir["options"]["coord"] == {"type": "clock"}
 
     def test_clock_in_layer_options_ir(self):
-        """Test clock() in Layer options IR."""
+        """Test clock() in layer options IR."""
         child = chart([{"x": 1}]).mark(rect(h="x"))
-        ir = Layer({"coord": clock()}, [child]).to_ir()
+        ir = layer({"coord": clock()}, [child]).to_ir()
         assert ir["options"]["coord"] == {"type": "clock"}
 
 
@@ -336,20 +336,20 @@ class TestLayerBuilder:
     """Test LayerBuilder and Layer() factory."""
 
     def test_layer_children_only(self):
-        """Test Layer([...]) with children only."""
+        """Test layer([...]) with children only."""
         data = [{"x": 1}]
         c1 = chart(data).mark(rect(h="x").name("bars"))
         c2 = chart(ref("bars")).mark(line())
-        lb = Layer([c1, c2])
+        lb = layer([c1, c2])
         assert isinstance(lb, LayerBuilder)
         assert lb.options == {}
         assert len(lb.children) == 2
 
     def test_layer_with_options(self):
-        """Test Layer(options, [...]) with options dict."""
+        """Test layer(options, [...]) with options dict."""
         data = [{"x": 1}]
         c1 = chart(data).mark(rect(h="x"))
-        lb = Layer({"coord": "clock"}, [c1])
+        lb = layer({"coord": "clock"}, [c1])
         assert isinstance(lb, LayerBuilder)
         assert lb.options == {"coord": "clock"}
         assert len(lb.children) == 1
@@ -359,7 +359,7 @@ class TestLayerBuilder:
         data = [{"x": 1}]
         c1 = chart(data).mark(rect(h="x").name("bars"))
         c2 = chart(ref("bars")).mark(line())
-        ir = Layer([c1, c2]).to_ir()
+        ir = layer([c1, c2]).to_ir()
         assert ir["type"] == "layer"
         assert len(ir["charts"]) == 2
         assert ir["options"] == {}
@@ -369,7 +369,7 @@ class TestLayerBuilder:
         data = [{"x": 1}]
         c1 = chart(data).flow(spread(by="x", dir="x")).mark(rect(h="x").name("bars"))
         c2 = chart(ref("bars")).mark(line())
-        ir = Layer([c1, c2]).to_ir()
+        ir = layer([c1, c2]).to_ir()
 
         chart0 = ir["charts"][0]
         assert chart0["mark"]["type"] == "rect"
@@ -382,10 +382,10 @@ class TestLayerBuilder:
         assert chart1["data"] == {"type": "select", "layer": "bars", "mode": "one"}
 
     def test_layer_to_ir_with_options(self):
-        """Test Layer options appear in IR."""
+        """Test layer options appear in IR."""
         data = [{"x": 1}]
         c1 = chart(data).mark(rect(h="x"))
-        ir = Layer({"coord": "clock"}, [c1]).to_ir()
+        ir = layer({"coord": "clock"}, [c1]).to_ir()
         assert ir["options"] == {"coord": "clock"}
 
     def test_layer_collect_derive_functions(self):
@@ -395,7 +395,7 @@ class TestLayerBuilder:
         fn2 = lambda d: d
         c1 = chart(data).flow(derive(fn1)).mark(rect(h="x").name("bars"))
         c2 = chart(ref("bars")).flow(derive(fn2)).mark(line())
-        lb = Layer([c1, c2])
+        lb = layer([c1, c2])
 
         # Collect derive functions manually (mirrors what render() does)
         derive_functions = {}

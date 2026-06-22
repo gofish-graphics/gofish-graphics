@@ -5,7 +5,7 @@ A polar coordinate system oriented like a clock face. 0° is at 12 o'clock (top)
 ::: gofish
 
 ```js
-gf.Chart(seafood, { coord: gf.clock() })
+gf.chart(seafood, { coord: gf.clock() })
   .flow(gf.stack({ by: "species", dir: "x" }))
   .mark(gf.rect({ w: "count", fill: "species" }))
   .render(root, {

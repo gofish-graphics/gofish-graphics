@@ -11,7 +11,7 @@ const locations = Object.entries(lakeLocations).map(([lake, { x, y }]) => ({
   y,
 }));
 
-gf.Layer([
+gf.layer([
   gf
     .Chart(locations)
     .flow(gf.scatter({ by: "lake", x: "x", y: "y" }))

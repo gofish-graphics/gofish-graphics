@@ -3,7 +3,7 @@
 import math
 
 from gofish import (
-    Layer,
+    layer,
     area,
     chart,
     clock,
@@ -36,7 +36,7 @@ def basic(w=400, h=400):
         .flow(group(by="species"))
         .mark(area(opacity=0.8))
     )
-    return Layer([bars, overlay])
+    return layer([bars, overlay])
 
 
 def polar(w=400, h=400):
@@ -60,4 +60,4 @@ def polar(w=400, h=400):
         .flow(group(by="species"))
         .mark(area(opacity=0.8))
     )
-    return Layer({"coord": clock()}, [bars, overlay])
+    return layer({"coord": clock()}, [bars, overlay])

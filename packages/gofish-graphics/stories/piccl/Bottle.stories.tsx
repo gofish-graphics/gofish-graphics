@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
-import { Chart, spread, rect, image, text, blank, Constraint, layer, paint, v } from "../../src/lib";
+import { chart, spread, rect, image, text, blank, Constraint, layer, paint, v } from "../../src/lib";
 import bottlePng from "../assets/wilsonblanco.png";
 
 const data = [
@@ -27,7 +27,7 @@ export const Default: StoryObj = {
   render: () => {
     const container = initializeContainer();
 
-    Chart(data, {axes: false})
+    chart(data, {axes: false})
       .flow(spread({ by: "category", dir: "x", spacing: 20, axes: {x: false} }))
       .mark(layer(
         [

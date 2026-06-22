@@ -323,7 +323,7 @@ export class ChartBuilder<TInput, TOutput = TInput> {
       throw new Error(
         ".connect() was already called on this chart; only one connector is " +
           "supported. For additional overlays, use " +
-          "layer([Chart(...).mark(m.name('pts')), Chart(selectAll('pts')).mark(...)])."
+          "layer([chart(...).mark(m.name('pts')), chart(selectAll('pts')).mark(...)])."
       );
     }
     return new ChartBuilder(

@@ -38,7 +38,7 @@ refs directly and read placed geometry off them, so feed them `selectAll`:
 ::: gofish
 
 ```js
-gf.Layer([
+gf.layer([
   gf
     .Chart(drivingShifts)
     .flow(gf.scatter({ by: "year", x: "miles", y: "gas" }))
@@ -71,7 +71,7 @@ const locations = Object.entries(lakeLocations).map(([lake, { x, y }]) => ({
   y,
 }));
 
-gf.Layer([
+gf.layer([
   gf
     .Chart(locations)
     .flow(gf.scatter({ by: "lake", x: "x", y: "y" }))
@@ -95,7 +95,7 @@ Because the selected stream is now refs (not raw records), you re-encode by the
 ::: gofish
 
 ```js
-gf.Layer([
+gf.layer([
   gf
     .Chart(seafood)
     .flow(

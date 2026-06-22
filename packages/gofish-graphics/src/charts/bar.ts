@@ -1,5 +1,5 @@
 import {
-  Chart,
+  chart,
   rect,
   spread,
   stack,
@@ -85,7 +85,7 @@ export const barChart = <T extends Record<string, any>>(
   const chartOptions: ChartOptions = { axes: options.axes };
 
   if (orientation === "y") {
-    const builder = Chart(data, chartOptions)
+    const builder = chart(data, chartOptions)
       .flow(spread({ by: options.x, dir: "x" }))
       .mark(
         markFn({
@@ -98,7 +98,7 @@ export const barChart = <T extends Record<string, any>>(
 
   // Horizontal bar chart (orientation: "x"): spread along y-axis using y field, width from x field
   if (orientation === "x") {
-    const builder = Chart(data, chartOptions)
+    const builder = chart(data, chartOptions)
       .flow(spread({ by: options.y, dir: "y" }))
       .mark(
         markFn({

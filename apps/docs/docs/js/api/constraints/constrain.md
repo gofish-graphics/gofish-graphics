@@ -20,7 +20,7 @@ Layer([
 ::: gofish
 
 ```js
-gf.Layer([
+gf.layer([
   gf.rect({ w: 200, h: 150, fill: gf.color.blue[1] }).name("bg"),
   gf.rect({ w: 60, h: 30, fill: gf.color.blue[4] }).name("label"),
   gf.rect({ w: 60, h: 30, fill: gf.color.red[4] }).name("badge"),
@@ -69,7 +69,7 @@ negative `spacing`.
 ::: gofish
 
 ```js
-gf.Layer([
+gf.layer([
   gf.rect({ w: 80, h: 40, fill: gf.color.blue[3] }).name("a"),
   gf.rect({ w: 120, h: 40, fill: gf.color.red[3] }).name("b"),
   gf.rect({ w: 60, h: 40, fill: gf.color.green[3] }).name("c"),
@@ -118,7 +118,7 @@ does.
 ::: gofish
 
 ```js
-gf.Layer([
+gf.layer([
   gf.rect({ w: 80, h: 40, fill: gf.color.blue[3] }).name("a"),
   gf.rect({ w: 80, h: 60, fill: gf.color.red[3] }).name("b"),
   gf.rect({ w: 80, h: 30, fill: gf.color.green[3] }).name("c"),
@@ -226,7 +226,7 @@ Layer([
 ::: gofish
 
 ```js
-gf.Layer([
+gf.layer([
   gf.rect({ fill: gf.color.blue[1], stroke: gf.color.blue[3] }).name("outer"),
   gf.rect({ w: 60, h: 40, fill: gf.color.red[4] }).name("inner"),
 ])

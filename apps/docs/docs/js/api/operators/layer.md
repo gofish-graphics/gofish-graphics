@@ -5,7 +5,7 @@ Overlays multiple children in the same coordinate space without any layout offse
 ::: gofish
 
 ```js
-gf.Layer([
+gf.layer([
   gf.rect({ w: 100, h: 80, fill: gf.color.blue[3] }),
   gf.ellipse({ w: 60, h: 60, fill: gf.color.red[3] }),
 ]).render(root, { w: 200, h: 150 });

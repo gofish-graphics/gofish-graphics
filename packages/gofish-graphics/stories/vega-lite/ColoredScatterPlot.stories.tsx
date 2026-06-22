@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
-import { Chart, layer, scatter, circle } from "../../src/lib";
+import { chart, layer, scatter, circle } from "../../src/lib";
 import data from "vega-datasets";
 const meta: Meta = {
   title: "Vega-Lite/Colored Scatter Plot",
@@ -46,7 +46,7 @@ export const Default: StoryObj<Args> = {
 
     layer(
       speciesList.map((species) => () =>
-        Chart(bySpecies(species))
+        chart(bySpecies(species))
           .flow(
             scatter({ by: "id", 
               x: "Flipper Length (mm)",

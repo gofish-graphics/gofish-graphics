@@ -19,7 +19,7 @@ const locations = Object.entries(lakeLocations).map(([lake, { x, y }]) => ({
   y,
 }));
 
-gf.Chart(locations, { axes: true })
+gf.chart(locations, { axes: true })
   .flow(gf.scatter({ by: "lake", x: "x", y: "y" }))
   .mark(gf.circle())
   .connect(gf.line({ stroke: "steelblue", strokeWidth: 2 }))

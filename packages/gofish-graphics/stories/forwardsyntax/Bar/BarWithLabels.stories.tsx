@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../../helper";
 import { seafood } from "../../../src/data/catch";
 import {
-  Chart,
+  chart,
   spread,
   rect,
   layer,
@@ -42,7 +42,7 @@ export const Default: StoryObj<Args> = {
     const container = initializeContainer();
 
     layer([
-      Chart(seafood)
+      chart(seafood)
         .flow(spread({ by: "lake",  dir: "x" }))
         .mark(rect({ h: "count" }).name("bars")),
       // `selectAll("bars")` yields one ref per lake; each ref's datum is that
@@ -50,7 +50,7 @@ export const Default: StoryObj<Args> = {
       // resolves because every row in a lake agrees on `lake` (homogeneity
       // collapse), giving one frame per lake; sum the aggregate's rows for the
       // per-lake total label.
-      Chart(selectAll("bars"))
+      chart(selectAll("bars"))
         .flow(group({ by: "lake" }))
         .mark(((d: any[]) => {
           return spread({ dir: "y", alignment: "middle", spacing: 10 },
@@ -80,10 +80,10 @@ export const SpeciesCountPerLake: StoryObj<Args> = {
     const container = initializeContainer();
 
     layer([
-      Chart(seafood)
+      chart(seafood)
         .flow(spread({ by: "lake", dir: "x" }))
         .mark(rect({ h: "count" }).name("bars")),
-      Chart(selectAll("bars"))
+      chart(selectAll("bars"))
         .flow(group({ by: "lake" }))
         .mark(((d: any[]) => {
           // `pluck(ref, "species")` → the distinct species in this lake's bag.

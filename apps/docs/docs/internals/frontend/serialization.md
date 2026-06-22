@@ -55,16 +55,16 @@ releases.
 JavaScript:
 
 ```ts
-import { Chart, spread, rect, Serialize } from "gofish-graphics";
+import { chart, spread, rect, Serialize } from "gofish-graphics";
 import { Frontend } from "gofish-ir";
 
-const chart = Chart(data)
+const c = chart(data)
   .flow(spread({ by: "lake", dir: "x" }))
   .mark(rect({ h: "count" }));
 
 // Three call shapes, all returning Promise<FrontendIRDocument>:
-const doc = await chart.toJSON(); // method on ChartBuilder
-const doc2 = await Serialize.toJSON(chart); // standalone function
+const doc = await c.toJSON(); // method on ChartBuilder
+const doc2 = await Serialize.toJSON(c); // standalone function
 const doc3 = await Serialize.toJSONLayer(opts, [a, b]); // for Layer combinators
 const doc4 = await Serialize.toJSONRawMark(mark, opts); // for bare marks
 ```

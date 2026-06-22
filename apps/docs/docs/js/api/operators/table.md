@@ -21,7 +21,7 @@ const data = days.flatMap((day) =>
   hours.map((hour) => ({ day, hour, value: (Math.random() * 100) | 0 }))
 );
 
-gf.Chart(data, {
+gf.chart(data, {
   color: gf.gradient(["#ffffcc", "#fd8d3c", "#bd0026"]),
   axes: true,
 })

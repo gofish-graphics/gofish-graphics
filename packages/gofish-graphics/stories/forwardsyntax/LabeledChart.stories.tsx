@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
 import {
-  Chart,
+  chart,
   scatter,
   circle,
   text,
@@ -43,11 +43,11 @@ export const Basic: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    Chart(nodes)
+    chart(nodes)
       .flow(scatter({ by: "id", x: "grp", y: "grp" }))
       .mark(circle({ r: 16, fill: "#59a14f" }).name("nodes"))
       .layer(
-        Chart(labels)
+        chart(labels)
           .flow(resolve(["ref"], { from: selectAll("nodes") }))
           .mark((rows: any[]) =>
             layer(

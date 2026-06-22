@@ -3,7 +3,7 @@
 import math
 
 from gofish import (
-    Layer,
+    layer,
     chart,
     clock,
     spread,
@@ -146,6 +146,6 @@ def story_ribbon_highlight():
     )
     overlay = chart(selectAll("bars")).flow(group(by="species")).mark(area(opacity=0.6))
     return (
-        Layer([bars, overlay]),
+        layer([bars, overlay]),
         {"w": 400, "h": 400, "axes": True},
     )

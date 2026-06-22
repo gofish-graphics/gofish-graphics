@@ -5,7 +5,7 @@ Draws a circle for each data item. A convenience wrapper around `rect` with equa
 ::: gofish
 
 ```js
-gf.Chart([{ size: 40 }])
+gf.chart([{ size: 40 }])
   .mark(gf.circle({ r: 40, fill: "coral" }))
   .render(root, { w: 150, h: 150 });
 ```

@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../../helper";
-import { Chart, spread, rect, derive } from "../../../src/lib";
+import { chart, spread, rect, derive } from "../../../src/lib";
 import { groupBy, sumBy } from "lodash";
 import data from "vega-datasets";
 
@@ -34,7 +34,7 @@ export const Default: StoryObj<Args> = {
       (d) => d.year === 2000
     );
 
-    Chart(year2000, {axes: true})
+    chart(year2000, {axes: true})
       .flow(spread({ by: "age",  dir: "y", reverse: true }))
       .mark(rect({ w: "people" }))
       .render(container, { w: args.w, h: args.h});

@@ -138,7 +138,7 @@ export { image } from "./ast/shapes/image";
 
 /* Chart Syntax */
 export {
-  chart as Chart,
+  chart,
   derive,
   resolve,
   rect,

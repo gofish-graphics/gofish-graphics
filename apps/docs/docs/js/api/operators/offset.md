@@ -13,7 +13,7 @@ clip region.
 ::: gofish
 
 ```js
-gf.Layer([
+gf.layer([
   gf.rect({ w: 100, h: 80, fill: gf.color.gray[2] }),
   gf.Offset({ x: 20, y: 15 }, [
     gf.rect({ w: 100, h: 80, fill: gf.color.blue[4], opacity: 0.6 }),

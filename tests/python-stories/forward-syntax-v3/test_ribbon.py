@@ -3,7 +3,7 @@
 import math
 
 from gofish import (
-    Layer,
+    layer,
     area,
     chart,
     clock,
@@ -34,14 +34,14 @@ def story_basic():
         .mark(area(opacity=0.8))
     )
     return (
-        Layer([bars, overlay]),
+        layer([bars, overlay]),
         {"w": 400, "h": 400, "axes": True},
     )
 
 
 def story_layered():
     # Same ribbon as story_basic, via the `.layer(chart(...))` API instead of the
-    # manual Layer([...]) + selectAll form. An empty chart() scope inherits the
+    # manual layer([...]) + selectAll form. An empty chart() scope inherits the
     # previous tier's marks.
     return (
         chart(SEAFOOD, axes=True)
@@ -81,6 +81,6 @@ def story_polar():
         .mark(area(opacity=0.8))
     )
     return (
-        Layer({"coord": clock()}, [bars, overlay]),
+        layer({"coord": clock()}, [bars, overlay]),
         {"w": 400, "h": 400, "axes": True},
     )

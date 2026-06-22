@@ -19,7 +19,7 @@ by [`group`](/js/api/operators/group):
 ::: gofish
 
 ```js
-gf.Chart(seafood, { axes: true })
+gf.chart(seafood, { axes: true })
   .flow(
     gf.spread({ by: "lake", dir: "x", spacing: 64 }),
     gf.stack({ by: "species", dir: "y" })
@@ -58,7 +58,7 @@ const edges = [
   { source: "c", target: "d" },
 ];
 
-gf.Chart(nodes)
+gf.chart(nodes)
   .flow(gf.scatter({ by: "id", x: "grp", y: "id" }))
   .mark(gf.circle({ r: 14, fill: "#4e79a7" }).name("nodes"))
   .layer(

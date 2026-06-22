@@ -107,7 +107,7 @@ const data = [
   { category: "C", group: "Y", value: 15 },
 ];
 
-gf.Chart(data)
+gf.chart(data)
   .flow(
     gf.spread({ by: "category", dir: "x" }),
     gf.stack({ by: "group", dir: "y" })
@@ -129,7 +129,7 @@ A simple bar chart with one bar per category:
 ::: gofish
 
 ```js
-gf.Chart(seafood)
+gf.chart(seafood)
   .flow(gf.spread({ by: "lake", dir: "x" }))
   .mark(gf.rect({ h: "count" }))
   .render(root, { w: 400, h: 300, axes: true });
@@ -144,7 +144,7 @@ To group bars side-by-side instead of stacking, use `spread` for both levels (sa
 ::: gofish
 
 ```js
-gf.Chart(seafood)
+gf.chart(seafood)
   .flow(
     gf.spread({ by: "lake", dir: "x" }),
     gf.spread({ by: "species", dir: "x", spacing: 0 })
@@ -162,7 +162,7 @@ To stack bars, use `spread` then `stack` (perpendicular directions):
 ::: gofish
 
 ```js
-gf.Chart(seafood)
+gf.chart(seafood)
   .flow(
     gf.spread({ by: "lake", dir: "x" }),
     gf.stack({ by: "species", dir: "y" })

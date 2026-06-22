@@ -70,7 +70,7 @@ axes: { x: { title: false }, y: true }         // suppress the inferred x title
 ```
 
 `axes` is most naturally a `chart()`/`Chart()` option (e.g.
-`gf.Chart(data, { axes: true })`); it is also accepted directly on `.render()`, as
+`gf.chart(data, { axes: true })`); it is also accepted directly on `.render()`, as
 the examples below show.
 
 ### Axes with inferred titles
@@ -81,7 +81,7 @@ field that dimension encodes — `lake` on x, `count` on y here.
 ::: gofish
 
 ```js
-gf.Chart(seafood)
+gf.chart(seafood)
   .flow(gf.spread({ by: "lake", dir: "x" }))
   .mark(gf.rect({ h: "count" }))
   .render(root, { w: 400, h: 250, axes: true });
@@ -94,7 +94,7 @@ gf.Chart(seafood)
 ::: gofish
 
 ```js
-gf.Chart(seafood)
+gf.chart(seafood)
   .flow(gf.spread({ by: "lake", dir: "x" }))
   .mark(gf.rect({ h: "count" }))
   .render(root, { w: 400, h: 250, axes: { x: true } });
@@ -107,7 +107,7 @@ gf.Chart(seafood)
 ::: gofish
 
 ```js
-gf.Chart(seafood)
+gf.chart(seafood)
   .flow(gf.spread({ by: "lake", dir: "x" }))
   .mark(gf.rect({ h: "count" }))
   .render(root, {
@@ -124,7 +124,7 @@ gf.Chart(seafood)
 ::: gofish
 
 ```js
-gf.Chart(seafood)
+gf.chart(seafood)
   .flow(gf.spread({ by: "lake", dir: "x" }))
   .mark(gf.rect({ h: "count" }))
   .render(root, {

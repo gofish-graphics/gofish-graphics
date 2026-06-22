@@ -27,7 +27,7 @@ const lakeTotals = Object.entries(_.groupBy(seafood, "lake")).map(
   })
 );
 
-gf.Layer([
+gf.layer([
   // Step 1: name the mark
   gf
     .Chart(lakeTotals)
@@ -70,7 +70,7 @@ When you pass `ref(name)` as chart data it must resolve to **exactly one** node:
   reference refuses to silently pick one.
 
 ```ts
-gf.Layer([
+gf.layer([
   gf
     .Chart(data)
     .flow(/* ... */)
@@ -138,7 +138,7 @@ may arrive later; for now use a named layer + `selectAll` as data.)
 of refs and read placed geometry off them, so feed them `selectAll`:
 
 ```ts
-gf.Chart(gf.selectAll("points")).mark(gf.line({ stroke: "black" }));
+gf.chart(gf.selectAll("points")).mark(gf.line({ stroke: "black" }));
 ```
 
 When the connector traces a chart's _own_ marks, the builder method
@@ -151,7 +151,7 @@ After `selectAll`, the stream items are refs, not raw records. Operators' `by`
 option is path-aware (lodash `_.get`), so re-encode by the **datum path**:
 
 ```ts
-gf.Chart(gf.selectAll("bars"))
+gf.chart(gf.selectAll("bars"))
   .flow(gf.group({ by: "datum.species" })) // not "species"
   .mark(gf.area({ opacity: 0.8 }));
 ```

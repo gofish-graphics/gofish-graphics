@@ -29,7 +29,7 @@ const edges = [
   { source: "c", target: "d" },
 ];
 
-gf.Chart(nodes)
+gf.chart(nodes)
   .flow(gf.scatter({ by: "id", x: "grp", y: "id" }))
   .mark(gf.circle({ r: 14, fill: "#4e79a7" }).name("nodes"))
   .layer(

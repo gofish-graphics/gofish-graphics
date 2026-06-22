@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../../helper";
-import { Chart, spread, stack, rect, derive, log, palette } from "../../../src/lib";
+import { chart, spread, stack, rect, derive, log, palette } from "../../../src/lib";
 import { groupBy, sumBy } from "lodash";
 import data from "vega-datasets";
 
@@ -31,7 +31,7 @@ export const Default: StoryObj<Args> = {
   render: (args: Args, context: any) => {
     const container = initializeContainer();
 
-    Chart(context.loaded.population.filter((row) => row.year === 2000) as any[], { axes: true,
+    chart(context.loaded.population.filter((row) => row.year === 2000) as any[], { axes: true,
       color: palette({ Female: "#675193", Male: "#ca8861" }),
     })
       .flow(

@@ -18,7 +18,7 @@ import { Frontend } from "gofish-ir";
 import * as GoFish from "../../dist/index.js";
 
 const {
-  Chart,
+  chart,
   spread,
   stack,
   scatter,
@@ -86,10 +86,10 @@ async function main() {
       { lake: "A", species: "bass", count: 8 },
       { lake: "B", species: "trout", count: 5 },
     ];
-    const chart = Chart(seafood)
+    const c = chart(seafood)
       .flow(spread({ by: "lake", dir: "x" }))
       .mark(rect({ h: "count", fill: "species" }));
-    const doc = await chart.toJSON();
+    const doc = await c.toJSON();
     validateDoc(doc, "simple bar chart");
     check(
       "bar chart root is chart",
@@ -115,13 +115,13 @@ async function main() {
       { x: "A", s: "a", v: 1 },
       { x: "A", s: "b", v: 2 },
     ];
-    const chart = Chart(data)
+    const c = chart(data)
       .flow(
         spread({ by: "x", dir: "x" }),
         stack({ by: "s", dir: "y" })
       )
       .mark(rect({ h: "v", fill: "s" }));
-    const doc = await chart.toJSON();
+    const doc = await c.toJSON();
     validateDoc(doc, "spread+stack chart");
     const ops = (doc.root as Frontend.ChartIR).operators!;
     check("two operators", ops.length === 2);
@@ -137,12 +137,12 @@ async function main() {
   // Derive operator emits opaque.
   // -------------------------------------------------------------------------
   {
-    const chart = Chart([{ x: 1 }, { x: 2 }])
+    const c = chart([{ x: 1 }, { x: 2 }])
       .flow(
         derive((rows: any[]) => rows.map((r) => ({ ...r, y: r.x * 2 })))
       )
       .mark(circle({ r: 3 }));
-    const doc = await chart.toJSON();
+    const doc = await c.toJSON();
     validateDoc(doc, "derive chart");
     const ops = (doc.root as Frontend.ChartIR).operators!;
     check("derive operator emits as type: derive", ops[0].type === "derive");
@@ -156,14 +156,14 @@ async function main() {
   // Layer combinator-form mark.
   // -------------------------------------------------------------------------
   {
-    const chart = Chart([{ a: 1, b: 2 }])
+    const c = chart([{ a: 1, b: 2 }])
       .mark(
         layer([
           rect({ w: 10, h: 20, fill: "steelblue" }),
           text({ text: "label", fontSize: 12 }),
         ])
       );
-    const doc = await chart.toJSON();
+    const doc = await c.toJSON();
     validateDoc(doc, "layer combinator chart");
     const mark = (doc.root as Frontend.ChartIR).mark;
     check("mark is layer combinator", mark.type === "layer");
@@ -181,13 +181,13 @@ async function main() {
   // Scatter operator with explicit x/y channels.
   // -------------------------------------------------------------------------
   {
-    const chart = Chart([
+    const c = chart([
       { mpg: 22, hp: 110 },
       { mpg: 19, hp: 150 },
     ])
       .flow(scatter({ x: "hp", y: "mpg" }))
       .mark(circle({ r: 3, fill: "steelblue" }));
-    const doc = await chart.toJSON();
+    const doc = await c.toJSON();
     validateDoc(doc, "scatter chart");
     const ops = (doc.root as Frontend.ChartIR).operators!;
     check("scatter operator", ops[0].type === "scatter");
@@ -199,10 +199,10 @@ async function main() {
   // Log operator with a label.
   // -------------------------------------------------------------------------
   {
-    const chart = Chart([{ a: 1 }])
+    const c = chart([{ a: 1 }])
       .flow(log("debug-label"))
       .mark(rect({}));
-    const doc = await chart.toJSON();
+    const doc = await c.toJSON();
     validateDoc(doc, "log chart");
     const ops = (doc.root as Frontend.ChartIR).operators!;
     check("log operator", ops[0].type === "log");
@@ -213,8 +213,8 @@ async function main() {
   // Chart options propagate.
   // -------------------------------------------------------------------------
   {
-    const chart = Chart([{ a: 1 }], { axes: true } as any).mark(rect({}));
-    const doc = await chart.toJSON();
+    const c = chart([{ a: 1 }], { axes: true } as any).mark(rect({}));
+    const doc = await c.toJSON();
     validateDoc(doc, "chart with options");
     check(
       "options.axes propagated",
@@ -226,7 +226,7 @@ async function main() {
   // Per-operator `axes` override propagates and validates strict.
   // -------------------------------------------------------------------------
   {
-    const chart = Chart([
+    const c = chart([
       { lake: "A", count: 1 },
       { lake: "B", count: 2 },
     ])
@@ -234,7 +234,7 @@ async function main() {
         spread({ by: "lake", dir: "x", axes: { x: false, y: true } } as any)
       )
       .mark(rect({ h: "count" }));
-    const doc = await chart.toJSON();
+    const doc = await c.toJSON();
     validateDoc(doc, "spread with axes override");
     const ops = (doc.root as Frontend.ChartIR).operators!;
     check("spread carries axes object", typeof (ops[0] as any).axes === "object");
@@ -249,8 +249,8 @@ async function main() {
   // No-operator chart (mark only).
   // -------------------------------------------------------------------------
   {
-    const chart = Chart([{ a: 1 }]).mark(rect({ w: 5, h: 10 }));
-    const doc = await chart.toJSON();
+    const c = chart([{ a: 1 }]).mark(rect({ w: 5, h: 10 }));
+    const doc = await c.toJSON();
     validateDoc(doc, "no-operator chart");
     const ops = (doc.root as Frontend.ChartIR).operators;
     check(
@@ -263,8 +263,8 @@ async function main() {
   // v(value) wrapper survives — appears in the channel slot as-is.
   // -------------------------------------------------------------------------
   {
-    const chart = Chart([{ a: 1 }]).mark(rect({ fill: v("crimson") }));
-    const doc = await chart.toJSON();
+    const c = chart([{ a: 1 }]).mark(rect({ fill: v("crimson") }));
+    const doc = await c.toJSON();
     validateDoc(doc, "v()-wrapped channel", false /* permissive */);
     const mark = (doc.root as Frontend.ChartIR).mark as Frontend.LeafMarkIR;
     const fill = (mark as any).fill;
@@ -283,9 +283,9 @@ async function main() {
   // string. The chart renders identically; the IR carries the field tag.
   {
     const data = [{ count: 5 }, { count: 10 }];
-    const chart = Chart(data)
+    const c = chart(data)
       .mark(rect({ h: field("count"), fill: literal("steelblue") }));
-    const doc = await chart.toJSON();
+    const doc = await c.toJSON();
     validateDoc(doc, "field/literal explicit chart", false);
     const mark = (doc.root as Frontend.ChartIR).mark as any;
     check(
@@ -303,10 +303,10 @@ async function main() {
   // datum() is an alias for v() — same runtime tag, same wire shape.
   {
     const data = [{ a: 1 }];
-    const viaDatum = await Chart(data)
+    const viaDatum = await chart(data)
       .mark(rect({ fill: datum("crimson") }))
       .toJSON();
-    const viaV = await Chart(data).mark(rect({ fill: v("crimson") })).toJSON();
+    const viaV = await chart(data).mark(rect({ fill: v("crimson") })).toJSON();
     const fillDatum = (viaDatum.root as any).mark.fill;
     const fillV = (viaV.root as any).mark.fill;
     check(
@@ -324,8 +324,8 @@ async function main() {
   // (not the number 0.5).
   {
     const data = [{ count: 5 }];
-    const chart = Chart(data).mark(text({ text: literal("count") }));
-    const doc = await chart.toJSON();
+    const c = chart(data).mark(text({ text: literal("count") }));
+    const doc = await c.toJSON();
     const txt = (doc.root as any).mark.text;
     check(
       "literal('count') is not interpreted as a field",
@@ -341,8 +341,8 @@ async function main() {
   // .name("bars") on a leaf mark — the prior bug was that the chain
   // returned a new mark without __serialize, throwing in toJSON.
   {
-    const chart = Chart([{ a: 1 }]).mark(rect({ h: 10 }).name("bars"));
-    const doc = await chart.toJSON();
+    const c = chart([{ a: 1 }]).mark(rect({ h: 10 }).name("bars"));
+    const doc = await c.toJSON();
     validateDoc(doc, "chart with .name()");
     const mark = (doc.root as Frontend.ChartIR).mark as any;
     check(".name('bars') survives toJSON", mark.name === "bars");
@@ -351,10 +351,10 @@ async function main() {
 
   // .name(...) on a combinator-form mark.
   {
-    const chart = Chart([{ a: 1 }]).mark(
+    const c = chart([{ a: 1 }]).mark(
       layer([rect({ w: 5 }), rect({ w: 10 })]).name("layered-rects")
     );
-    const doc = await chart.toJSON();
+    const doc = await c.toJSON();
     validateDoc(doc, "combinator with .name()");
     const mark = (doc.root as Frontend.ChartIR).mark as any;
     check(
@@ -367,10 +367,10 @@ async function main() {
 
   // Chained .label("accessor", {options})
   {
-    const chart = Chart([{ a: 1, count: 5 }]).mark(
+    const c = chart([{ a: 1, count: 5 }]).mark(
       rect({ h: "count" }).label("count", { position: "outset", fontSize: 10 })
     );
-    const doc = await chart.toJSON();
+    const doc = await c.toJSON();
     validateDoc(doc, "chart with chained .label()");
     const mark = (doc.root as Frontend.ChartIR).mark as any;
     check(".label() preserved as object", typeof mark.label === "object");
@@ -383,7 +383,7 @@ async function main() {
 
   // Round-trip after .name() — fromJSON should recreate the named mark.
   {
-    const built = Chart([{ a: 1 }]).mark(
+    const built = chart([{ a: 1 }]).mark(
       rect({ fill: "red" }).name("named")
     );
     const doc = await built.toJSON();
@@ -398,10 +398,10 @@ async function main() {
   // had no entry to deserialize it, so fromJSON threw "Unknown combinator
   // mark type". The fix is two lines in registry.ts; this test pins it.
   {
-    const chart = Chart([{ a: 1 }]).mark(
+    const c = chart([{ a: 1 }]).mark(
       stack({ dir: "y" }, [rect({ h: 10 }), rect({ h: 20 })])
     );
-    const doc = await chart.toJSON();
+    const doc = await c.toJSON();
     validateDoc(doc, "combinator-form stack");
     const mark = (doc.root as Frontend.ChartIR).mark as any;
     check("combinator stack emits", mark.type === "stack");
@@ -423,11 +423,11 @@ async function main() {
   // Unnamed mark + .connect(line()): connect present, deep-equals {type:"line"},
   // validates strict.
   {
-    const chart = Chart(connectData)
+    const c = chart(connectData)
       .flow(scatter({ by: "g", x: "a", y: "b" }))
       .mark(circle({ r: 4 }))
       .connect(line());
-    const doc = await chart.toJSON();
+    const doc = await c.toJSON();
     validateDoc(doc, "connect() unnamed mark");
     const root = doc.root as Frontend.ChartIR;
     check(
@@ -438,11 +438,11 @@ async function main() {
 
   // Named mark + .connect(line()): mark.name preserved AND connect present.
   {
-    const chart = Chart(connectData)
+    const c = chart(connectData)
       .flow(scatter({ by: "g", x: "a", y: "b" }))
       .mark(circle({ r: 4 }).name("pts"))
       .connect(line());
-    const doc = await chart.toJSON();
+    const doc = await c.toJSON();
     validateDoc(doc, "connect() named mark");
     const root = doc.root as Frontend.ChartIR;
     check("named connect: mark.name === 'pts'", (root.mark as any).name === "pts");
@@ -451,7 +451,7 @@ async function main() {
 
   // fromJSON → toJSON round trip preserves connect.
   {
-    const built = Chart(connectData)
+    const built = chart(connectData)
       .flow(scatter({ by: "g", x: "a", y: "b" }))
       .mark(circle({ r: 4 }))
       .connect(line());
@@ -475,7 +475,7 @@ async function main() {
     let threw = false;
     let message = "";
     try {
-      Chart(connectData)
+      chart(connectData)
         .flow(scatter({ by: "g", x: "a", y: "b" }))
         .mark(circle({ r: 4 }))
         .connect(line())

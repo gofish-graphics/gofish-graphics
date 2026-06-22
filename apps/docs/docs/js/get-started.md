@@ -38,7 +38,7 @@ const alphabet = [
   { letter: "I", frequency: 52 },
 ];
 
-gf.Chart(alphabet)
+gf.chart(alphabet)
   .flow(gf.spread({ by: "letter", dir: "x" }))
   .mark(gf.rect({ h: "frequency" }))
   .render(root, {

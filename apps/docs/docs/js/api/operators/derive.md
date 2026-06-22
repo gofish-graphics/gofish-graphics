@@ -5,7 +5,7 @@ Transforms data before it reaches the next operator or mark. The function receiv
 ::: gofish
 
 ```js
-gf.Chart(seafood, { axes: true })
+gf.chart(seafood, { axes: true })
   .flow(
     gf.derive((d) => d.filter((row) => row.species === "Salmon")),
     gf.spread({ by: "lake", dir: "x" })

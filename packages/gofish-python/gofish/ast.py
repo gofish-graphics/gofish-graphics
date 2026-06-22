@@ -988,7 +988,7 @@ class ChartBuilder:
         """
         Overlay a connector mark under this chart's mark nodes.
 
-        Sugar for the ``Layer([...])`` + ``selectAll(name)`` pattern. Only
+        Sugar for the ``layer([...])`` + ``selectAll(name)`` pattern. Only
         one connector per chart is supported; the JS side elaborates it at
         resolve time.
 
@@ -1001,7 +1001,7 @@ class ChartBuilder:
         if self._connect is not None:
             raise ValueError(
                 ".connect() was already called on this chart; only one "
-                "connector is supported. Use Layer([...]) with "
+                "connector is supported. Use layer([...]) with "
                 "selectAll(name) for additional overlays."
             )
         if not isinstance(mark, Mark):
@@ -1058,7 +1058,7 @@ class ChartBuilder:
         return self.mark(named), auto_name
 
     def name(self, name_or_token: Union[str, "Token"]) -> "ChartBuilder":
-        """Tag this chart with a name so a `Layer([...]).constrain(...)` callback
+        """Tag this chart with a name so a `layer([...]).constrain(...)` callback
         can reference it (mirrors JS `chart.resolve().name(...)`).
 
         Args:
@@ -1334,30 +1334,39 @@ def spread(
 
 
 def layer(
-    children: List["Mark"],
+    children_or_options: Union[List[Any], dict],
+    children: Optional[List[Any]] = None,
     **options: Any,
-) -> ConstrainableMark:
+):
+    """Layer marks or charts — a single dual-form `layer` (like spread/stack).
+
+    Two element kinds, dispatched by child type:
+
+    - **Chart tiers** — ``layer([chart(...), chart(...)])`` stacks each chart and
+      emits ``{type: "layer", charts: [...]}`` (returns a ``LayerBuilder``). An
+      options dict may lead: ``layer({"coord": clock()}, [chart1, chart2])``.
+    - **Marks** — ``layer([rect(...).name("a"), ...])`` wraps child marks in a
+      layer node (returns a ``ConstrainableMark`` that renders directly), with
+      ``.constrain(...)`` for cross-mark constraints::
+
+          layer([
+              rect(w=80, h=40).name("a"),
+              rect(w=120, h=60).name("b"),
+          ]).constrain(lambda a, b: [Constraint.align([a, b], x="end")])
+
+    Mirrors the JS ``layer([...])`` combinator, which is likewise universal over
+    charts and marks.
     """
-    Low-level combinator-form layer mark.
-
-    Wraps a list of child marks in a layer node. Children typically carry
-    `.name(...)` tags so they can be referenced from a `.constrain(...)`
-    callback:
-
-        layer([
-            rect(w=80, h=40, fill="#e63946").name("a"),
-            rect(w=120, h=60, fill="#457b9d").name("b"),
-            rect(w=60, h=30, fill="#2a9d8f").name("c"),
-        ]).constrain(lambda a, b, c: [
-            Constraint.align([a, b, c], x="end"),
-            Constraint.distribute([a, b, c], dir="y", spacing=10),
-        ]).render(w=300, h=300)
-
-    Mirrors JS `layer([marks]).constrain(...).render(...)` from
-    packages/gofish-graphics/src/ast/marks/chart.ts:367 — a ConstrainableMark
-    that renders directly (no Chart wrapper).
-    """
-    return ConstrainableMark("layer", _children=list(children), **options)
+    if isinstance(children_or_options, dict):
+        opts = {**children_or_options, **options}
+        kids = children or []
+    else:
+        opts = options
+        kids = children_or_options
+    # Chart tiers → LayerBuilder; marks → combinator mark.
+    if kids and all(isinstance(c, ChartBuilder) for c in kids):
+        return LayerBuilder(list(kids), opts or None)
+    return ConstrainableMark("layer", _children=list(kids), **opts)
 
 
 # Attribute names reserved on `_RefProxy` so they pass through normal
@@ -2611,7 +2620,7 @@ class LayerBuilder:
             key = _name_key(child)
             if key is None:
                 raise ValueError(
-                    "every child of Layer(...) used with .constrain() must be "
+                    "every child of layer(...) used with .constrain() must be "
                     "named via .name(...) so the callback can reference it"
                 )
             if key in refs:
@@ -2730,25 +2739,3 @@ class LayerBuilder:
         return self.render()._repr_mimebundle_(include=include, exclude=exclude)
 
 
-def Layer(
-    children_or_options: Union[List[ChartBuilder], dict],
-    children: Optional[List[ChartBuilder]] = None,
-) -> LayerBuilder:
-    """
-    Compose multiple ChartBuilder instances as a layered chart.
-
-    Two calling conventions:
-        Layer([chart1, chart2])
-        Layer({"coord": clock()}, [chart1, chart2])
-
-    Args:
-        children_or_options: List of ChartBuilders, or options dict
-        children: List of ChartBuilders (when first arg is options dict)
-
-    Returns:
-        LayerBuilder instance
-    """
-    if isinstance(children_or_options, list):
-        return LayerBuilder(children_or_options)
-    else:
-        return LayerBuilder(children or [], children_or_options)
