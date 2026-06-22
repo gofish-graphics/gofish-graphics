@@ -47,7 +47,7 @@ Returns a new `ChartBuilder` — `connect` is immutable.
 `.connect()` is exactly the manual two-layer form. This:
 
 ```ts
-Chart(data, { axes: true })
+chart(data, { axes: true })
   .flow(scatter({ by: "lake", x: "x", y: "y" }))
   .mark(circle())
   .connect(line());
@@ -57,10 +57,10 @@ desugars to:
 
 ```ts
 layer([
-  Chart(data)
+  chart(data)
     .flow(scatter({ by: "lake", x: "x", y: "y" }))
     .mark(circle().name("pts")),
-  Chart(selectAll("pts")).mark(line()).zOrder(-1),
+  chart(selectAll("pts")).mark(line()).zOrder(-1),
 ]);
 ```
 

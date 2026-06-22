@@ -34,7 +34,7 @@ gf.chart(nodes)
   .mark(gf.circle({ r: 14, fill: "#4e79a7" }).name("nodes"))
   .layer(
     gf
-      .Chart(edges)
+      .chart(edges)
       .flow(gf.resolve(["source", "target"], { from: gf.selectAll("nodes") }))
       .mark(gf.line({ from: "source", to: "target", stroke: "#888" }))
   )

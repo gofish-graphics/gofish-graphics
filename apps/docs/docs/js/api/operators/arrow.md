@@ -13,7 +13,7 @@ annotations.
 ```js
 gf.layer([
   gf
-    .Layer([
+    .layer([
       gf.rect({ w: 70, h: 40, fill: gf.color.blue[2] }).name("a"),
       gf.rect({ w: 70, h: 40, fill: gf.color.red[2] }).name("b"),
     ])

@@ -16,19 +16,19 @@ covers:
 
 ```ts
 // Palette — discrete colors, cycles by index or maps by key
-Chart(data, { color: palette("tableau10") });
-Chart(data, { color: palette(["#e41a1c", "#377eb8", "#4daf4a"]) });
-Chart(data, { color: palette({ Salmon: "#e15759" }) }); // unmapped → "#ccc"
+chart(data, { color: palette("tableau10") });
+chart(data, { color: palette(["#e41a1c", "#377eb8", "#4daf4a"]) });
+chart(data, { color: palette({ Salmon: "#e15759" }) }); // unmapped → "#ccc"
 
 // Gradient — continuous, interpolates via chroma-js in lab space
-Chart(data, { color: gradient("blues") });
-Chart(data, { color: gradient(["#f7fbff", "#6b0808"]) });
+chart(data, { color: gradient("blues") });
+chart(data, { color: gradient(["#f7fbff", "#6b0808"]) });
 ```
 
 Combined with marks:
 
 ```ts
-Chart(seafood, { color: palette("tableau10") })
+chart(seafood, { color: palette("tableau10") })
   .flow(spread("lake", { dir: "x" }), stack("species", { dir: "x" }))
   .mark(rect({ h: "count", fill: "species" }));
 ```
@@ -117,4 +117,4 @@ already recorded the subtree's color encodings in the render session.
 - **Make HSL values data-driven in `fill`** — currently only hex/rgb literals pass through; HSL strings should also be recognized and passed through without scale lookup
 - **Nested/hierarchical schemes** per discrete group
 - **Multiple color scales** per layered chart
-- **`x`/`y` scale params** on `Chart()` — `type: "log" | "band"`, explicit `domain: [min, max]` for cross-chart comparisons (currently always linear, always inferred)
+- **`x`/`y` scale params** on `chart()` — `type: "log" | "band"`, explicit `domain: [min, max]` for cross-chart comparisons (currently always linear, always inferred)

@@ -102,7 +102,7 @@ Render options:
 
 ::: tip
 **Axes are a `chart()` option in Python, not a render option** (mirroring the JS
-`Chart(data, { axes: true })`). Pass `axes=...` to `chart(...)`:
+`chart(data, { axes: true })`). Pass `axes=...` to `chart(...)`:
 
 ```python
 chart(data, axes=True)                      # both axes, titles inferred

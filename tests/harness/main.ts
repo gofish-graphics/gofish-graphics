@@ -10,7 +10,7 @@
  */
 
 import {
-  Chart,
+  chart,
   Layer,
   selectAll,
   spread,
@@ -21,6 +21,7 @@ import {
   table,
   log as logOp,
   derive,
+  resolve,
   rect,
   circle,
   line,
@@ -408,6 +409,13 @@ function mapOperator(
       return applyTranslate(stack(opts as any));
     case "group":
       return applyTranslate(group(opts as any));
+    case "resolve":
+      return applyTranslate(
+        resolve(opts.cols as string[], {
+          from: selectAll(opts.from as string),
+          key: opts.key as string | undefined,
+        })
+      );
     case "scatter":
       return applyTranslate(scatter(opts as any));
     case "table":
@@ -784,7 +792,7 @@ function buildChartFromSpec(
     }
   }
 
-  let builder = Chart(chartData, chartOpts)
+  let builder = chart(chartData, chartOpts)
     .flow(...operators)
     .mark(mark);
   if (chartSpec.zOrder !== undefined && chartSpec.zOrder !== null) {

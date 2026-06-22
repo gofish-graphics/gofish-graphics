@@ -461,7 +461,7 @@ together.
 ```ts
 gf.layer({ axes: true }, [
   gf
-    .Chart(seafood)
+    .chart(seafood)
     .flow(
       gf.spread({ by: "lake", dir: "x" }),
       gf.derive((d) => _.orderBy(d, "count", "desc")),
@@ -469,7 +469,7 @@ gf.layer({ axes: true }, [
     )
     .mark(gf.rect({ h: "count", fill: "species" }).name("bars")),
   gf
-    .Chart(gf.selectAll("bars"))
+    .chart(gf.selectAll("bars"))
     .flow(gf.group({ by: "datum.species" }))
     .mark(gf.area({ opacity: 0.8 })),
 ]).render(root, {
@@ -502,7 +502,7 @@ the `spread` operator.
 ```ts
 gf.layer({ axes: true }, [
   gf
-    .Chart(seafood)
+    .chart(seafood)
     .flow(
       gf.spread({ by: "lake", dir: "x", spacing: 64 }),
       gf.derive((d) => _.orderBy(d, "count", "desc")),
@@ -510,7 +510,7 @@ gf.layer({ axes: true }, [
     )
     .mark(gf.rect({ h: "count", fill: "species" }).name("bars")),
   gf
-    .Chart(gf.selectAll("bars"))
+    .chart(gf.selectAll("bars"))
     .flow(gf.group({ by: "datum.species" }))
     .mark(gf.area({ opacity: 0.8 })),
 ]).render(root, {
@@ -560,7 +560,7 @@ so that it looks better in polar space.
 ```ts
 gf.layer({ coord: gf.clock(), axes: true }, [
   gf
-    .Chart(seafood)
+    .chart(seafood)
     .flow(
       gf.spread({
         by: "lake",
@@ -575,7 +575,7 @@ gf.layer({ coord: gf.clock(), axes: true }, [
     )
     .mark(gf.rect({ h: "count", fill: "species" }).name("bars")),
   gf
-    .Chart(gf.selectAll("bars"))
+    .chart(gf.selectAll("bars"))
     .flow(gf.group({ by: "datum.species" }))
     .mark(gf.area({ opacity: 0.8 })),
 ]).render(root, {

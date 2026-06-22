@@ -8,9 +8,9 @@ any other mark, but draws nothing. It is the positioning **guide** that
 :::
 
 ```python
-from gofish import Layer, chart, spread, blank, selectAll, area
+from gofish import layer, chart, spread, blank, selectAll, area
 
-Layer([
+layer([
     chart(lake_totals)
         .flow(spread(by="lake", dir="x", spacing=64))
         .mark(blank(h="count").name("points")),

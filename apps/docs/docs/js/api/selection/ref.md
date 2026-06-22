@@ -5,7 +5,7 @@
 - **Inline in a layout** — `arrow(ref("a"), ref("b"))`, `ref(token).row[2]` — it
   resolves at layout time against the name tree, hygienically scoped (see
   [scoping](#hygienic-scoping)). This is the [`ref`](/js/api/marks/ref) mark.
-- **As chart data** — `Chart(ref("maxBar")).mark(text(...))` — it resolves at
+- **As chart data** — `chart(ref("maxBar")).mark(text(...))` — it resolves at
   build time against the named-layer registry and stands in for the one node
   registered under that name.
 
@@ -30,13 +30,13 @@ const lakeTotals = Object.entries(_.groupBy(seafood, "lake")).map(
 gf.layer([
   // Step 1: name the mark
   gf
-    .Chart(lakeTotals)
+    .chart(lakeTotals)
     .flow(gf.spread({ by: "lake", dir: "x" }))
     .mark(gf.rect({ h: "count" }).name("bars")),
 
   // Step 2: selectAll those nodes as data for a connector
   gf
-    .Chart(gf.selectAll("bars"))
+    .chart(gf.selectAll("bars"))
     .mark(gf.line({ stroke: "coral", strokeWidth: 2 })),
 ]).render(root, { w: 400, h: 250, axes: true });
 ```
@@ -72,7 +72,7 @@ When you pass `ref(name)` as chart data it must resolve to **exactly one** node:
 ```ts
 gf.layer([
   gf
-    .Chart(data)
+    .chart(data)
     .flow(/* ... */)
     .mark(gf.rect({ h: "total" }).name("kpi")),
   gf.text({ text: "peak" }).name("label"),

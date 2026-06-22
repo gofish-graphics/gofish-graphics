@@ -77,7 +77,7 @@ chartBuilder.zOrder(value: number): ChartBuilder
 Children with the same z-order keep their original array order. The default z-order is `0`.
 
 ```ts
-Layer([
+layer([
   chart(data)
     .flow(scatter({ by: "x", y: "y" }))
     .mark(line())

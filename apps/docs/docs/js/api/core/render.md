@@ -51,8 +51,8 @@ dropped into a bigger graphic without sharing — or polluting — the surroundi
 axes with its own units.
 
 This is what makes composed layouts like a marginal histogram work. The count
-histograms are sized to a fixed pixel band (`Chart(data, { h: 80 })` /
-`Chart(data, { w: 80 })`) and laid out alongside a center scatter; because each
+histograms are sized to a fixed pixel band (`chart(data, { h: 80 })` /
+`chart(data, { w: 80 })`) and laid out alongside a center scatter; because each
 histogram absorbs its own count scale, only the scatter's data units drive the
 shared x/y axes.
 
@@ -69,7 +69,7 @@ axes: { x: { title: "Year" }, y: true }        // custom x title, inferred y tit
 axes: { x: { title: false }, y: true }         // suppress the inferred x title
 ```
 
-`axes` is most naturally a `chart()`/`Chart()` option (e.g.
+`axes` is most naturally a `chart()`/`chart()` option (e.g.
 `gf.chart(data, { axes: true })`); it is also accepted directly on `.render()`, as
 the examples below show.
 

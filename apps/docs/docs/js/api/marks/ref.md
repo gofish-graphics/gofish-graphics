@@ -6,7 +6,7 @@ References another node so later marks can reuse its position or bounding box �
 
 - **Inline in a layout** (this page): `arrow(ref("a"), ref("b"))`,
   `ref(token).row[2]` — resolved at layout time against the name tree.
-- **As chart data**: `Chart(ref("maxBar")).mark(text(...))` — resolved at build
+- **As chart data**: `chart(ref("maxBar")).mark(text(...))` — resolved at build
   time against the named-layer registry, where it must match **exactly one**
   node (use [`selectAll`](/js/api/selection/ref) for many). See
   [ref / selectAll](/js/api/selection/ref) for the chart-data role and node-unit

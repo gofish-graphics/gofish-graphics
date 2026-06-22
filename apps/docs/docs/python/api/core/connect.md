@@ -45,7 +45,7 @@ chart(data, axes=True).flow(
 desugars to:
 
 ```python
-Layer([
+layer([
     chart(data).flow(scatter(by="lake", x="x", y="y")).mark(circle().name("pts")),
     chart(selectAll("pts")).mark(line()).zOrder(-1),
 ])
@@ -64,7 +64,7 @@ keeps the IR small and never leaks an extra layer into your code.
   leaked, or serialized.
 - **Paint order** — the connector renders **under** the marks (the elaboration
   applies `zOrder(-1)` to the connector layer). This is fixed; reach for the
-  manual `Layer([...])` form if you need a different paint order.
+  manual `layer([...])` form if you need a different paint order.
 - **Connector type** — any ref-consuming mark works:
   [`line()`](/python/api/marks/line), [`area()`](/python/api/marks/area).
 
@@ -73,5 +73,5 @@ keeps the IR small and never leaks an extra layer into your code.
 - **One call max.** A second `.connect()` raises `ValueError`.
 - **String names only.** A non-string mark name raises `TypeError`.
 - **Cross-chart connection** — to connect _another_ chart's marks, use the
-  explicit `Layer([...])` + [`selectAll`](/python/api/selection/ref) form.
+  explicit `layer([...])` + [`selectAll`](/python/api/selection/ref) form.
   `.connect()` only threads a chart through its own marks.

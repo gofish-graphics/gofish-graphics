@@ -486,7 +486,7 @@ display positions, but otherwise pass the kind through.
 ## Worked example: stacked bar chart
 
 ```js
-Chart(seafood)
+chart(seafood)
   .flow(spread({ by: "lake", dir: "x" }), stack({ by: "species", dir: "y" }))
   .mark(rect({ h: "count", fill: "species" }));
 ```
@@ -669,7 +669,7 @@ building.
 
 The motivating case is a marginal histogram, seaborn-jointplot style: a
 center scatter in data units, with a count histogram pinned along each edge.
-The histograms are sized to a fixed pixel band (`Chart(data, { h: 80 })`),
+The histograms are sized to a fixed pixel band (`chart(data, { h: 80 })`),
 and their count axis must not union into the scatter's shared x/y domains —
 counts and beak-length millimeters are foreign units. The explicit pixel
 size is exactly the signal that this region carries its own scale.

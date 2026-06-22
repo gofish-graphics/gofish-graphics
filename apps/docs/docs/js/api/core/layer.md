@@ -1,9 +1,9 @@
 # layer
 
 Stack another tier over the current one. `.layer(child)` takes a whole
-`Chart(...)` pipeline as its argument: an **empty `Chart()` scope** (no data)
+`chart(...)` pipeline as its argument: an **empty `chart()` scope** (no data)
 inherits the previous tier's marks — so you can connect, group, or annotate what
-you just drew without naming it — while `Chart(table)` drives the tier from
+you just drew without naming it — while `chart(table)` drives the tier from
 another dataset. `.layer(...)` returns a `LayerBuilder`, so tiers keep chaining
 (`.layer(a).layer(b)`); at render time they stack into one figure.
 
@@ -13,7 +13,7 @@ tier a full `.flow().mark()` pipeline.
 
 ## Ribbon — empty scope inherits the previous marks
 
-`Chart()` with no data re-enters with the bars you just drew, grouped into bands
+`chart()` with no data re-enters with the bars you just drew, grouped into bands
 by [`group`](/js/api/operators/group):
 
 ::: gofish
@@ -27,7 +27,7 @@ gf.chart(seafood, { axes: true })
   .mark(gf.rect({ h: "count", fill: "species" }))
   .layer(
     gf
-      .Chart() // empty scope = the previous tier's marks
+      .chart() // empty scope = the previous tier's marks
       .flow(gf.group({ by: "species" }))
       .mark(gf.area({ opacity: 0.8 }))
   )
@@ -38,7 +38,7 @@ gf.chart(seafood, { axes: true })
 
 ## Node-link — a tier with its own data
 
-Pass `Chart(table)` to drive the tier from a different dataset, then
+Pass `chart(table)` to drive the tier from a different dataset, then
 [`resolve`](/js/api/operators/resolve) its reference columns back into the drawn
 nodes and connect them with [`line({ from, to })`](/js/api/marks/line):
 
@@ -63,7 +63,7 @@ gf.chart(nodes)
   .mark(gf.circle({ r: 14, fill: "#4e79a7" }).name("nodes"))
   .layer(
     gf
-      .Chart(edges)
+      .chart(edges)
       .flow(gf.resolve(["source", "target"], { from: gf.selectAll("nodes") }))
       .mark(gf.line({ from: "source", to: "target", stroke: "#888" }))
   )
@@ -82,19 +82,19 @@ gf.chart(nodes)
 
 | Parameter | Type           | Description                                                                                                                                                                                                   |
 | --------- | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `child`   | `ChartBuilder` | The next tier's `Chart(...)` pipeline. An empty `Chart()` scope inherits the previous tier's marks; `Chart(table)` drives it from another dataset (resolve back with [`resolve`](/js/api/operators/resolve)). |
+| `child`   | `ChartBuilder` | The next tier's `chart(...)` pipeline. An empty `chart()` scope inherits the previous tier's marks; `chart(table)` drives it from another dataset (resolve back with [`resolve`](/js/api/operators/resolve)). |
 
 Returns a `LayerBuilder` — chain `.layer(...)` again for more tiers, then `.render()`.
 
 ## Semantics
 
-- **Empty scope** — an empty `Chart()` tier resolves to exactly the nodes the
+- **Empty scope** — an empty `chart()` tier resolves to exactly the nodes the
   previous tier's mark produced, one per flow leaf. Under the hood `.layer()`
   names the previous tier's mark and binds the empty tier to
   `selectAll(thatName)` — the same wiring you'd write by hand, done for you.
 - **Shared registry** — tiers resolve in order sharing one `layerContext`, so a
   later tier's `selectAll("name")` finds an earlier tier's `.name("name")`.
-- **Chart options** — axes and color from the root `Chart(data, { ... })` apply
+- **Chart-level options** — axes and color from the root `chart(data, { ... })` apply
   to the whole stack.
 - **Paint order** — tiers paint in chain order (later tiers on top), like a
   manual [`layer([...])`](/js/api/operators/layer).
@@ -105,7 +105,7 @@ Returns a `LayerBuilder` — chain `.layer(...)` again for more tiers, then `.re
 ## `.layer(child)` vs. the `layer([...])` operator
 
 This page documents the **v3 builder method** `ChartBuilder.layer(child)`, which
-stacks a `Chart(...)` tier over the current one and auto-wires an empty `Chart()`
+stacks a `chart(...)` tier over the current one and auto-wires an empty `chart()`
 scope to the previous tier's marks. It's sugar over the lower-level
 [`layer([...])` operator](/js/api/operators/layer) (which composes an explicit
 array of already-built charts) — `.layer()` does the naming + `selectAll` wiring

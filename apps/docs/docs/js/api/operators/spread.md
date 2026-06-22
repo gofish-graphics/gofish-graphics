@@ -108,7 +108,7 @@ use [`pluck`](/js/api/selection/ref#pluck) — the un-collapsed counterpart of
 So a ribbon chart reads:
 
 ```ts
-Chart(selectAll("bars")) // stream of refs
+chart(selectAll("bars")) // stream of refs
   .flow(group({ by: "datum.species" })) // by → ref stream → datum path
   .mark(area({ opacity: 0.8 })); // channel → raw record, no prefix
 ```

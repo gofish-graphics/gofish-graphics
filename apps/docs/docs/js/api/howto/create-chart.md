@@ -1,11 +1,11 @@
 # How to create a chart
 
-GoFish uses a builder pattern to create charts. You chain four methods together: `Chart`, `flow`, `mark`, and `render`.
+GoFish uses a builder pattern to create charts. You chain four methods together: `chart`, `flow`, `mark`, and `render`.
 
 ## Basic pattern
 
 ```ts
-Chart(data)
+chart(data)
   .flow(operators...)
   .mark(visualMark)
   .render(container, options)
@@ -15,14 +15,14 @@ Each method has a specific role:
 
 | Method         | Purpose                                   |
 | -------------- | ----------------------------------------- |
-| `Chart(data)`  | Creates a builder with your dataset       |
+| `chart(data)`  | Creates a builder with your dataset       |
 | `.flow(...)`   | Applies layout operators to position data |
 | `.mark(...)`   | Sets the visual representation            |
 | `.render(...)` | Renders the chart to a DOM element        |
 
-## Step 1: Chart
+## Step 1: chart
 
-`Chart(data)` creates a ChartBuilder with your dataset. The data can be any array of objects:
+`chart(data)` creates a ChartBuilder with your dataset. The data can be any array of objects:
 
 ```ts
 const data = [
@@ -31,13 +31,13 @@ const data = [
   { category: "C", value: 20 },
 ];
 
-Chart(data);
+chart(data);
 ```
 
 You can also pass options for coordinate transforms (like polar coordinates for pie charts):
 
 ```ts
-Chart(data, { coord: clock() });
+chart(data, { coord: clock() });
 ```
 
 ## Step 2: flow
