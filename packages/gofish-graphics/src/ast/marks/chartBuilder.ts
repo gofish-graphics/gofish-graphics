@@ -394,16 +394,16 @@ export class ChartBuilder<TInput, TOutput = TInput> {
   }
 
   /** The render-time metadata `LayerBuilder` threads from the root tier:
-   *  resolved axes/color config plus inferred axis titles. */
+   *  the resolved axes/color config. (Axis titles come from the resolved space
+   *  measure at render time, like the manual `layer([...])` form — a layer does
+   *  not thread inferred `axisFields`.) */
   renderMeta(): {
     axes?: AxesOptions;
     colorConfig?: ColorConfig;
-    axisFields: { x?: string; y?: string };
   } {
     return {
       axes: this.options?.axes,
       colorConfig: this.options?.color,
-      axisFields: this.inferAxisFields(),
     };
   }
 
@@ -723,13 +723,17 @@ export class LayerBuilder {
   ): Promise<{ node: GoFishNode; options: T & Record<string, unknown> }> {
     const node = await this.resolve();
     const meta = this.tiers[0].renderMeta();
+    // Match the manual `layer([...])` form (and the Python parity harness):
+    // a layer-of-charts renders axes from its root chart's options but does NOT
+    // thread `axisFields` — ordinal axis titles come from the resolved space
+    // measure, not an inferred field. Passing axisFields here made `.layer()`
+    // surface an x-title the manual form omits, diverging JS from Python.
     return {
       node,
       options: {
         ...options,
         axes: (options as any).axes ?? meta.axes,
         colorConfig: meta.colorConfig,
-        axisFields: meta.axisFields,
       },
     };
   }
