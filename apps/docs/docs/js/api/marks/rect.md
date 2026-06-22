@@ -2,10 +2,10 @@
 
 Draws a rectangle for each data item.
 
-::: starfish
+::: gofish
 
 ```js
-gf.Chart([{ value: 80 }])
+gf.chart([{ value: 80 }])
   .mark(gf.rect({ w: 120, h: "value", fill: "steelblue", rx: 4 }))
   .render(root, { w: 200, h: 150 });
 ```
@@ -43,6 +43,6 @@ rect({ w?, h?, fill?, stroke?, strokeWidth = 0, rx?, ry?, label? })
 // Color encodes "category" field
 .mark(rect({ h: "value", fill: "category" }))
 
-// Named for use with select()
+// Named for use with selectAll()
 .mark(rect({ h: "value" }).name("bars"))
 ```

@@ -1,25 +1,15 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
-import {
-  Layer,
-  Constraint,
-  StackY,
-  rect,
-  text,
-} from "../../src/lib";
+import { layer, Constraint, StackY, rect, text } from "../../src/lib";
 
-// A tree visualization built purely from Constraint.contain.
-// Each subtree is a Layer of [outerRect, innerStack] with a contain constraint
-// that sizes outerRect to innerStack's intrinsic dims + padding. Layer's pre-
-// pass topo-sorts so the innermost subtree is laid out first; sizes propagate
-// outward through the constraint chain.
+// A tree visualization built purely from Constraint.nest.
+// Each subtree is a Layer of [outerRect, innerStack] with a nest constraint
+// that sizes outerRect to innerStack's intrinsic dims + padding. Layer's
+// pre-pass topo-sorts so the innermost subtree is laid out first; sizes
+// propagate outward through the chained nest constraints.
 
 const meta: Meta = {
   title: "Low Level Syntax/Nested Boxes Tree",
-  argTypes: {
-    w: { control: { type: "number", min: 100, max: 1200, step: 20 } },
-    h: { control: { type: "number", min: 100, max: 1000, step: 20 } },
-  },
 };
 export default meta;
 
@@ -60,15 +50,17 @@ const depthFill = ["#e3edf7", "#dbe6f3", "#cfdcec", "#c2d2e6"];
 const leafFill = "#fff3e0";
 
 // Each node renders as a rounded rect labeled with its name. Internal nodes
-// also wrap their children in a containing rect via Constraint.contain.
+// also wrap their children in a containing rect via Constraint.nest.
 function buildSubtree(node: TreeNode, depth: number): any {
   // The labeled "header" block: a small rect with the node's name centered.
-  const header = Layer({ w: 96, h: 22 }, [
+  const header = layer({ w: 96, h: 22 }, [
     rect({
       w: 96,
       h: 22,
       rx: 4,
-      fill: node.children?.length ? depthFill[Math.min(depth, depthFill.length - 1)] : leafFill,
+      fill: node.children?.length
+        ? depthFill[Math.min(depth, depthFill.length - 1)]
+        : leafFill,
       stroke: "#5a7da6",
       strokeWidth: 1,
     }).name("box"),
@@ -85,13 +77,13 @@ function buildSubtree(node: TreeNode, depth: number): any {
   if (!node.children?.length) return header;
 
   // Stack [header, ...childSubtrees] vertically — header on top, children below.
-  const inner = StackY(
-    { spacing: 8, alignment: "middle" },
-    [header, ...node.children.map((c) => buildSubtree(c, depth + 1))]
-  );
+  const inner = StackY({ spacing: 8, alignment: "middle" }, [
+    header,
+    ...node.children.map((c) => buildSubtree(c, depth + 1)),
+  ]);
 
-  // Wrap inner stack in a containing rect.
-  return Layer([
+  // Wrap the inner stack in a containing rect.
+  return layer([
     rect({
       rx: 6,
       fill: "#fafbfd",
@@ -100,15 +92,22 @@ function buildSubtree(node: TreeNode, depth: number): any {
     }).name("outer"),
     inner.name("inner"),
   ]).constrain(({ outer, inner }) => [
-    Constraint.contain({ x: 10, y: 10 }, [outer, inner]),
+    Constraint.nest({ x: 10, y: 10 }, [outer, inner]),
   ]);
 }
 
 export const NestedBoxesTree: StoryObj<Args> = {
-  args: { w: 720, h: 560 },
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "Nested Boxes Tree",
+      description:
+        "A file-tree diagram built purely from the nest constraint — each subtree is a box sized to wrap its children plus padding, sizes propagating outward.",
+    },
+  },
   render: (args: Args) => {
     const container = initializeContainer();
-    buildSubtree(sample, 0).render(container, { w: args.w, h: args.h });
+    buildSubtree(sample, 0).render(container, {});
     return container;
   },
 };

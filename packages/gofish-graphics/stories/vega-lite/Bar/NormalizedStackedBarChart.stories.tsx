@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../../helper";
-import { Chart, spread, stack, rect, derive, log, palette } from "../../../src/lib";
+import { chart, spread, stack, rect, derive, log, palette } from "../../../src/lib";
 import { groupBy, sumBy } from "lodash";
 import data from "vega-datasets";
 
@@ -21,10 +21,17 @@ type Args = { w: number; h: number };
 export const Default: StoryObj<Args> = {
   args: { w: 500, h: 300 },
   loaders: [async () => ({ population: await data["population.json"]() })],
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "Normalized Stacked Bar Chart",
+      description: "A normalized stacked bar chart showing the male and female proportion of the US population within each age group, with every bar scaled to a full height of one.",
+    },
+  },
   render: (args: Args, context: any) => {
     const container = initializeContainer();
 
-    Chart(context.loaded.population.filter((row) => row.year === 2000) as any[], {
+    chart(context.loaded.population.filter((row) => row.year === 2000) as any[], { axes: true,
       color: palette({ Female: "#675193", Male: "#ca8861" }),
     })
       .flow(
@@ -41,7 +48,7 @@ export const Default: StoryObj<Args> = {
         stack({ by: "sex",  dir: "y" })
       )
       .mark(rect({ h: "proportion", fill: "sex" }))
-      .render(container, { w: args.w, h: args.h, axes: true });
+      .render(container, { w: args.w, h: args.h });
 
     return container;
   },

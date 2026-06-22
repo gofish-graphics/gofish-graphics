@@ -1,32 +1,31 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
 import { caltrain, caltrainStopOrder } from "../../src/data/caltrain";
-import { frame, spreadY, For, rect, ellipse, connectY, ref, v } from "../../src/lib";
+import { layer, spreadY, For, rect, ellipse, connectY, ref, v } from "../../src/lib";
 import { groupBy, orderBy } from "lodash";
 import _ from "lodash";
 
 const meta: Meta = {
   title: "Low Level Syntax/Stringline Chart",
-  argTypes: {
-    w: {
-      control: { type: "number", min: 100, max: 1000, step: 10 },
-    },
-    h: {
-      control: { type: "number", min: 100, max: 1000, step: 10 },
-    },
-  },
 };
 export default meta;
 
 type Args = { w: number; h: number };
 
 export const Default: StoryObj<Args> = {
-  args: { w: 500, h: 400 },
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "Stringline Chart",
+      description:
+        "A Marey train schedule plotting Caltrain stations against time, with each colored diagonal line tracing a single northbound or southbound run.",
+    },
+  },
   render: (args: Args) => {
     const container = initializeContainer();
     const caltrainProcessed = caltrain.filter((d) => d.Type !== "Bullet");
 
-    frame({}, [
+    layer({}, [
       spreadY(
         {
           reverse: true,
@@ -43,7 +42,7 @@ export const Default: StoryObj<Args> = {
             "Station"
           ),
           (d, key) =>
-            frame({ key }, [
+            layer({ key }, [
               rect({ w: 0, h: 0 }),
               For(d, (d) =>
                 ellipse({ x: d.Time / 3, w: 4, h: 4, fill: v(d.Direction) }).name(
@@ -60,8 +59,6 @@ export const Default: StoryObj<Args> = {
         )
       ),
     ]).render(container, {
-      w: args.w,
-      h: args.h,
       axes: true,
     });
     return container;

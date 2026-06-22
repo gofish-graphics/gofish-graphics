@@ -37,7 +37,7 @@ def _planet_row():
 
 
 def story_planets_only():
-    return _planet_row(), {"w": 800, "h": 200}
+    return _planet_row(), {}
 
 
 def story_planets_with_label_above():
@@ -51,7 +51,7 @@ def story_planets_with_label_above():
                 alignment="middle",
             ),
         ]),
-        {"w": 800, "h": 200},
+        {},
     )
 
 
@@ -66,7 +66,7 @@ def story_planets_with_label_below():
                 alignment="middle",
             ),
         ]),
-        {"w": 800, "h": 200},
+        {},
     )
 
 
@@ -81,7 +81,7 @@ def story_planets_with_label_above_no_spacing():
                 alignment="middle",
             ),
         ]),
-        {"w": 800, "h": 200},
+        {},
     )
 
 
@@ -96,7 +96,7 @@ def story_planets_with_label_below_no_spacing():
                 alignment="middle",
             ),
         ]),
-        {"w": 800, "h": 200},
+        {},
     )
 
 
@@ -112,5 +112,5 @@ def story_planets_with_arrow():
             ),
             arrow([ref("label"), ref("Mercury")]),
         ]),
-        {"w": 800, "h": 200},
+        {},
     )

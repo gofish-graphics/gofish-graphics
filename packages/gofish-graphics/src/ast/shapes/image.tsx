@@ -2,8 +2,20 @@ import * as Monotonic from "../../util/monotonic";
 import { computeAesthetic } from "../../util";
 import { interval } from "../../util/interval";
 import { GoFishNode } from "../_node";
-import { getValue, inferEmbedded, isAesthetic, isValue } from "../data";
-import { Dimensions, elaborateDims, FancyDims, Transform } from "../dims";
+import {
+  getMeasure,
+  getValue,
+  inferEmbedded,
+  isAesthetic,
+  isValue,
+} from "../data";
+import {
+  Dimensions,
+  displayTranslate,
+  elaborateDims,
+  FancyDims,
+  Transform,
+} from "../dims";
 import {
   DIFFERENCE,
   ORDINAL,
@@ -12,6 +24,7 @@ import {
   UNDEFINED,
 } from "../underlyingSpace";
 import { createMark } from "../withGoFish";
+import { attachCut } from "../graphicalOperators/cut";
 
 type ImageDimensions = {
   width: number;
@@ -251,15 +264,24 @@ export const Image = ({
           if (isValue(pos)) {
             const min = getValue(pos) ?? 0;
             if (isValue(dims[axis].size)) {
-              return DIFFERENCE(getValue(dims[axis].size)!);
+              return DIFFERENCE(
+                getValue(dims[axis].size)!,
+                getMeasure(dims[axis].size)
+              );
             }
-            return POSITION(interval(min, min));
+            return POSITION(interval(min, min), getMeasure(pos));
           }
           if (isAesthetic(pos) && isValue(dims[axis].size)) {
-            return DIFFERENCE(getValue(dims[axis].size)!);
+            return DIFFERENCE(
+              getValue(dims[axis].size)!,
+              getMeasure(dims[axis].size)
+            );
           }
           if (!isValue(pos) && isValue(dims[axis].size)) {
-            return SIZE(Monotonic.linear(getValue(dims[axis].size)!, 0));
+            return SIZE(
+              Monotonic.linear(getValue(dims[axis].size)!, 0),
+              getMeasure(dims[axis].size)
+            );
           }
           // No data position, no data size — image's intrinsic dimensions
           // are resolved at layout time via resolveRenderedDimensions.
@@ -302,15 +324,11 @@ export const Image = ({
             {
               min: 0,
               size: resolvedDimensions.width,
-              center: resolvedDimensions.width / 2,
-              max: resolvedDimensions.width,
               embedded: dims[0].embedded,
             },
             {
               min: 0,
               size: resolvedDimensions.height,
-              center: resolvedDimensions.height / 2,
-              max: resolvedDimensions.height,
               embedded: dims[1].embedded,
             },
           ],
@@ -326,10 +344,9 @@ export const Image = ({
         intrinsicDims?: Dimensions;
         transform?: Transform;
       }) => {
-        const x =
-          (transform?.translate?.[0] ?? 0) + (intrinsicDims?.[0]?.min ?? 0);
-        const y =
-          (transform?.translate?.[1] ?? 0) + (intrinsicDims?.[1]?.min ?? 0);
+        const [tx, ty] = displayTranslate(transform);
+        const x = tx + (intrinsicDims?.[0]?.min ?? 0);
+        const y = ty + (intrinsicDims?.[1]?.min ?? 0);
         const width = intrinsicDims?.[0]?.size ?? 0;
         const height = intrinsicDims?.[1]?.size ?? 0;
 
@@ -341,7 +358,7 @@ export const Image = ({
             width={Math.abs(width)}
             height={Math.abs(height)}
             href={href}
-            preserveAspectRatio={preserveAspectRatio}
+            preserveAspectRatio={preserveAspectRatio as any}
             filter={filter}
             opacity={opacity}
           />
@@ -352,7 +369,7 @@ export const Image = ({
   );
 };
 
-const rawImage = createMark(Image, {});
+const rawImage = createMark(Image, {}, "image");
 
 /** Wrap an image mark so it awaits intrinsic dimension loading before producing
  *  a node. Recursively wraps .name/.label so chained calls stay awaiting. */
@@ -373,7 +390,8 @@ const withDimsAwait = (mark: any, href: unknown): any => {
     writable: true,
     configurable: true,
   });
-  return wrapped;
+  // Method-form cut: `image({...}).cut({...})` is sugar for `cut(image, opts)`.
+  return attachCut(wrapped);
 };
 
 export const image: typeof rawImage = ((opts: any) =>

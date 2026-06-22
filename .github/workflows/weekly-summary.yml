@@ -21,20 +21,44 @@ jobs:
         with:
           fetch-depth: 0 # Full history for git log
 
-      - name: Get date range
+      - name: Get summary window
         id: dates
         run: |
-          echo "week_ago=$(date -d '7 days ago' +%Y-%m-%d)" >> $GITHUB_OUTPUT
-          echo "today=$(date +%Y-%m-%d)" >> $GITHUB_OUTPUT
+          # Summarize the most recent Thursday→Thursday week that has fully
+          # elapsed, with both boundaries quantized to the cron anchor (Thu
+          # 08:00 UTC) rather than to when this run actually fired. GitHub's
+          # scheduled runs jitter (08:00 cron has fired anywhere from 10:58 to
+          # 12:08), so a fire-time-relative window was imprecise and could drop
+          # PRs merged on the run day after the previous summary went out. Fixed
+          # boundaries make the windows deterministic and exactly contiguous: a
+          # PR merged at any instant falls in exactly one week's window.
+          ANCHOR_DOW=4 # Thursday (date +%u: Mon=1 … Sun=7)
+          ANCHOR_HOUR=08
+          # Most recent anchor weekday's date (today if today is that weekday).
+          BACK=$(( ( $(date -u +%u) - ANCHOR_DOW + 7 ) % 7 ))
+          UPPER_TS="$(date -u -d "${BACK} days ago" +%Y-%m-%d)T${ANCHOR_HOUR}:00:00Z"
+          # If that anchor instant is still in the future (run fired before
+          # 08:00 on the anchor day), step back a full week.
+          if [ "$(date -u -d "$UPPER_TS" +%s)" -gt "$(date -u +%s)" ]; then
+            UPPER_TS="$(date -u -d "$UPPER_TS - 7 days" +%Y-%m-%dT%H:%M:%SZ)"
+          fi
+          LOWER_TS="$(date -u -d "$UPPER_TS - 7 days" +%Y-%m-%dT%H:%M:%SZ)"
+          # GitHub's search wants an explicit UTC offset, not the "Z" shorthand.
+          echo "lower=${LOWER_TS/Z/+00:00}" >> $GITHUB_OUTPUT
+          echo "upper=${UPPER_TS/Z/+00:00}" >> $GITHUB_OUTPUT
+          echo "lower_label=$(date -u -d "$LOWER_TS" +%Y-%m-%d)" >> $GITHUB_OUTPUT
+          echo "upper_label=$(date -u -d "$UPPER_TS" +%Y-%m-%d)" >> $GITHUB_OUTPUT
 
-      - name: Get merged PRs from last week
+      - name: Get merged PRs for the window
         id: prs
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          # Half-open interval [lower, upper): a PR merged exactly on a boundary
+          # belongs to one window only, never both.
           PRS=$(gh pr list \
             --state merged \
-            --search "merged:>=${{ steps.dates.outputs.week_ago }}" \
+            --search "merged:>=${{ steps.dates.outputs.lower }} merged:<${{ steps.dates.outputs.upper }}" \
             --json number,title,body,author,mergedAt,url \
             --jq '.[] | "### PR #\(.number): \(.title)\n- **Author:** \(.author.login)\n- **Merged:** \(.mergedAt[:10])\n- **URL:** \(.url)\n- **Description:** \(.body // "No description" | split("\n")[0:3] | join(" ") | .[0:300])\n"')
           if [ -z "$PRS" ]; then
@@ -70,43 +94,56 @@ jobs:
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.GOFISH_SLACK_CHANNEL_WEBHOOK_URL }}
         run: |
-          SUMMARY=$(cat summary.txt)
-
           if [ -z "$SLACK_WEBHOOK_URL" ]; then
             echo "⚠️  SLACK_WEBHOOK_URL secret not set. Skipping Slack post."
             exit 0
           fi
 
-          # Build Slack payload with proper escaping
+          # A Slack "section" block's text field is capped at 3000 chars, so a long
+          # summary (a big PR week) must be split across multiple section blocks or
+          # Slack rejects the whole payload with "invalid_blocks". Chunk at line
+          # boundaries, staying under 2900 to leave headroom, and hard-wrap any
+          # single line that is itself too long.
           jq -n \
-            --arg header "🐟 GoFish Weekly Update (${{ steps.dates.outputs.week_ago }} → ${{ steps.dates.outputs.today }})" \
-            --arg summary "$SUMMARY" \
-            '{
-              "blocks": [
-                {
-                  "type": "header",
-                  "text": {
-                    "type": "plain_text",
-                    "text": $header,
-                    "emoji": true
-                  }
-                },
-                {
-                  "type": "divider"
-                },
-                {
-                  "type": "section",
-                  "text": {
-                    "type": "mrkdwn",
-                    "text": $summary
-                  }
-                }
-              ]
-            }' > payload.json
+            --arg header "🐟 GoFish Weekly Update (${{ steps.dates.outputs.lower_label }} → ${{ steps.dates.outputs.upper_label }})" \
+            --rawfile summary summary.txt \
+            --argjson max 2900 \
+            '
+              def chunk($limit):
+                reduce (./"\n")[] as $line ({chunks: [], cur: ""};
+                  (if ($line | length) == 0 then [""]
+                   else ($line | [while(length > 0; .[$limit:]) | .[:$limit]]) end) as $parts
+                  | reduce $parts[] as $p (.;
+                      if (.cur | length) == 0 then .cur = $p
+                      elif ((.cur | length) + 1 + ($p | length)) <= $limit
+                        then .cur = .cur + "\n" + $p
+                      else .chunks += [.cur] | .cur = $p
+                      end))
+                | .chunks + (if (.cur | length) > 0 then [.cur] else [] end);
+              {
+                blocks: (
+                  [ {type: "header", text: {type: "plain_text", text: $header, emoji: true}},
+                    {type: "divider"} ]
+                  + ($summary | chunk($max) | map({type: "section", text: {type: "mrkdwn", text: .}}))
+                )
+              }' > payload.json
 
-          curl -X POST "$SLACK_WEBHOOK_URL" \
+          # Slack incoming webhooks return HTTP 200 with body "ok" on success, and an
+          # HTTP 4xx with an error body (e.g. "invalid_blocks") on rejection. curl does
+          # not fail on an error *body*, so check the status/body explicitly — otherwise
+          # a rejected post leaves the job green and the failure goes unnoticed.
+          HTTP_CODE=$(curl -sS -X POST "$SLACK_WEBHOOK_URL" \
             -H "Content-Type: application/json" \
-            -d @payload.json
+            --data @payload.json \
+            -w "%{http_code}" -o slack_response.txt)
+          RESPONSE=$(cat slack_response.txt)
+          echo "Slack responded HTTP $HTTP_CODE: $RESPONSE"
+
+          if [ "$HTTP_CODE" != "200" ] || [ "$RESPONSE" != "ok" ]; then
+            echo "::error::Slack rejected the weekly summary (HTTP $HTTP_CODE): $RESPONSE"
+            exit 1
+          fi
+          echo "✅ Weekly summary posted to Slack."
 
       - name: Dry run notice
         if: ${{ inputs.dry_run == 'true' }}

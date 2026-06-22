@@ -3,10 +3,19 @@
 // </gofish-wiki>
 
 import { Show } from "solid-js";
+import { ticks as d3Ticks, nice as d3Nice } from "d3-array";
+import type { JSX } from "solid-js";
 import { path, pathToSVGPath, transformPath } from "../../path";
 import { GoFishAST } from "../_ast";
 import { GoFishNode } from "../_node";
-import { elaborateDims, FancyDims, Interval, Size } from "../dims";
+import {
+  elaborateDims,
+  FancyDims,
+  Interval,
+  Size,
+  translateString,
+} from "../dims";
+import { flattenLayout } from "./bake";
 import * as IntervalLib from "../../util/interval";
 import { black } from "../../color";
 import {
@@ -16,10 +25,14 @@ import {
   ORDINAL,
   isORDINAL,
   isPOSITION,
+  isUNDEFINED,
+  forgetAllMeasures,
+  continuousInterval,
 } from "../underlyingSpace";
 import { createNodeOperator } from "../withGoFish";
 import { computeTransformedBoundingBox } from "./coordUtils";
 import { empty, union } from "../../util/bbox";
+import type { AxesOptions } from "../gofish";
 
 export type CoordinateTransform = {
   type: string;
@@ -28,70 +41,6 @@ export type CoordinateTransform = {
   domain: [Interval, Interval];
 };
 
-/* TODO: implement this. I don't actually need it until I have more complex examples tho */
-const flattenLayout = (
-  node: GoFishAST,
-  transform: [number, number] = [0, 0],
-  scale: [number, number] = [1, 1]
-): GoFishAST[] => {
-  // recursive function
-  // as we go down the tree we accumulate transforms
-  // we apply the cumulative transform to all nodes we hit and remove their children
-  //   this includes operators and marks
-  // for now we return GoFishNodes, but we could return DisplayObjects
-  // DisplayObjects are probably more principled b/c of how rendering them works... idk yet
-
-  /* TODO: `connect` is a hack to get the operator to render in coordinate spaces
-       A more principled way to do this would be to have "connect" produce a child path mark.  
-  */
-  if (
-    !("children" in node) ||
-    !node.children ||
-    node.children.length === 0 ||
-    node.type === "connect" ||
-    node.type === "box"
-  ) {
-    node.transform = {
-      translate: [
-        (node.transform?.translate?.[0] ?? 0) + transform[0]!,
-        (node.transform?.translate?.[1] ?? 0) + transform[1]!,
-      ],
-      scale: [
-        (node.transform?.scale?.[0] ?? 1) * (scale[0] ?? 1),
-        (node.transform?.scale?.[1] ?? 1) * (scale[1] ?? 1),
-      ],
-    };
-    return [node];
-  }
-
-  const newTransform: [number, number] = [
-    transform[0]! + (node.transform?.translate?.[0] ?? 0),
-    transform[1]! + (node.transform?.translate?.[1] ?? 0),
-  ];
-
-  const newScale: [number, number] = [
-    (node.transform?.scale?.[0] ?? 1) * (scale[0] ?? 1),
-    (node.transform?.scale?.[1] ?? 1) * (scale[1] ?? 1),
-  ];
-
-  return node.children.flatMap((child) =>
-    flattenLayout(child, newTransform, newScale)
-  );
-};
-
-/* takes in a GoFishNode and converts it to some set of DisplayObjects
-- layout: during layout, they flatten their child hierarchy completely, so it's easy to transform them (and
-  also because coord doesn't care about graphical operators, only positions)
-- rendering: then, during rendering, each mark applies its coordinate transform context. its behavior is
-  influenced by its mark embedding "mode"
-- DisplayObjects don't have children (inspired by tldraw a bit). also makes stuff like z-indexing
-  easier later...
-- TODO: we can actually mix DisplayObjects with GoFishNodes and Refs, which wil require some
-  additional thought...
-
-  For now we'll just assume that it's a GoFishNode tho... maybe it's a GoFishNode that contains DisplayObjects
-  inside it?
-*/
 export const coord = createNodeOperator(
   (
     {
@@ -99,16 +48,23 @@ export const coord = createNodeOperator(
       name,
       transform: coordTransform,
       grid = false,
+      axes,
+      padding = 30,
       ...fancyDims
     }: {
       key?: string;
       name?: string;
       transform: CoordinateTransform;
       grid?: boolean;
+      axes?: AxesOptions;
+      padding?: number;
     } & FancyDims,
     children: GoFishAST[]
   ) => {
     const dims = elaborateDims(fancyDims);
+    const spaceRef: { current: Size<UnderlyingSpace> | null } = {
+      current: null,
+    };
 
     return new GoFishNode(
       {
@@ -120,8 +76,8 @@ export const coord = createNodeOperator(
           _childNodes: GoFishAST[]
         ) => {
           let xSpace = UNDEFINED;
-          const xChildrenPositionSpaces = children.filter(
-            (child) => child[0].kind === "position"
+          const xChildrenPositionSpaces = children.filter((child) =>
+            isPOSITION(child[0])
           );
           const xChildrenOrdinalSpaces = children.filter(
             (child) => child[0].kind === "ordinal"
@@ -131,16 +87,18 @@ export const coord = createNodeOperator(
             xChildrenPositionSpaces.length > 0 &&
             xChildrenOrdinalSpaces.length === 0
           ) {
+            const xPos = xChildrenPositionSpaces
+              .map((child) => child[0])
+              .filter(isPOSITION);
             const domain = IntervalLib.unionAll(
-              ...xChildrenPositionSpaces
-                .map((child) => child[0])
-                .filter(isPOSITION)
-                .map((space) => space.domain)
+              ...xPos.map((s) => continuousInterval(s)!)
             );
-            xSpace = {
-              ...POSITION(domain),
-              coordinateTransform: coordTransform,
-            };
+            // A coord transform maps these data positions into its own fixed
+            // coordinate space (e.g. angle/radius). Cross-unit unions are the
+            // transform's business, not the marginal-style corruption the guard
+            // targets, so forget on conflict rather than throwing.
+            const xMeasure = forgetAllMeasures(xPos.map((s) => s.measure));
+            xSpace = POSITION(domain, xMeasure, coordTransform);
           } else if (xChildrenOrdinalSpaces.length > 0) {
             // Collect and merge domains from all child ordinal spaces
             const allKeys = new Set<string>();
@@ -154,8 +112,8 @@ export const coord = createNodeOperator(
           }
 
           let ySpace = UNDEFINED;
-          const yChildrenPositionSpaces = children.filter(
-            (child) => child[1].kind === "position"
+          const yChildrenPositionSpaces = children.filter((child) =>
+            isPOSITION(child[1])
           );
           const yChildrenOrdinalSpaces = children.filter(
             (child) => child[1].kind === "ordinal"
@@ -165,16 +123,16 @@ export const coord = createNodeOperator(
             yChildrenPositionSpaces.length > 0 &&
             yChildrenOrdinalSpaces.length === 0
           ) {
+            const yPos = yChildrenPositionSpaces
+              .map((child) => child[1])
+              .filter(isPOSITION);
             const domain = IntervalLib.unionAll(
-              ...yChildrenPositionSpaces
-                .map((child) => child[1])
-                .filter(isPOSITION)
-                .map((space) => space.domain)
+              ...yPos.map((s) => continuousInterval(s)!)
             );
-            ySpace = {
-              ...POSITION(domain),
-              coordinateTransform: coordTransform,
-            };
+            // See the x branch: coord maps into its own coordinate space, so
+            // forget on cross-unit conflict rather than throwing.
+            const yMeasure = forgetAllMeasures(yPos.map((s) => s.measure));
+            ySpace = POSITION(domain, yMeasure, coordTransform);
           } else if (yChildrenOrdinalSpaces.length > 0) {
             // Collect and merge domains from all child ordinal spaces
             const allKeys = new Set<string>();
@@ -187,12 +145,15 @@ export const coord = createNodeOperator(
             ySpace = ORDINAL(Array.from(allKeys));
           }
 
-          return [xSpace, ySpace];
+          const result: Size<UnderlyingSpace> = [xSpace, ySpace];
+          spaceRef.current = result;
+          return result;
         },
         layout: (shared, size, scaleFactors, children, posScales) => {
           /* TODO: need correct scale factors */
           // TODO: only works for polar2 right now
-          size = [2 * Math.PI, Math.min(size[0], size[1]) / 2 - 30];
+          const [origW, origH] = size;
+          size = [2 * Math.PI, Math.min(origW, origH) / 2 - padding];
           const childPlaceables = children.map((child) =>
             child.layout(size, [1, 1], [undefined, undefined])
           );
@@ -258,37 +219,70 @@ export const coord = createNodeOperator(
             maxY: screenBboxMaxY,
           } = screenBbox;
 
-          // Return intrinsicDims in screen space, normalized to start at (0, 0) for parent layouts
-          const intrinsicDims = {
-            x: 0,
-            y: 0,
-            w: screenBboxMaxX - screenBboxMinX,
-            h: screenBboxMaxY - screenBboxMinY,
-          };
+          // When axes are enabled and no placed min was allocated, the circle
+          // must be centered in the full allocated space so labels aren't
+          // clipped at the edges. Otherwise (a placed min exists, or there are
+          // no axes — e.g. pie glyphs in scatter) use the tighter content-bbox
+          // sizing so the glyph doesn't claim excess space.
+          const hasAxes = !!axes;
+          const useAllocated = dims[0].min === undefined && hasAxes;
+          const intrinsicW = useAllocated
+            ? origW
+            : screenBboxMaxX - screenBboxMinX;
+          const intrinsicH = useAllocated
+            ? origH
+            : screenBboxMaxY - screenBboxMinY;
 
-          // Translate to offset the negative values and position correctly
+          const half = Math.min(origW, origH) / 2;
           const translateX =
             dims[0].min !== undefined
               ? coordTransform.transform([dims[0].min, dims[1].min ?? 0])[0] -
                 screenBboxMinX
-              : -screenBboxMinX;
+              : hasAxes
+                ? half
+                : -screenBboxMinX;
           const translateY =
             dims[1].min !== undefined
               ? coordTransform.transform([dims[0].min ?? 0, dims[1].min])[1] -
                 screenBboxMinY
-              : -screenBboxMinY;
+              : hasAxes
+                ? half
+                : -screenBboxMinY;
 
+          // coord's box is simply `[0, size]` on each axis — the region the
+          // parent allocates (`finalW`/`finalH` read `size`) — with `max`/`center`
+          // reported so consumers like the legend's `distribute` (reads the placed
+          // `max`) and a `scatter` glyph (placed by its `center`) get real values.
+          const intrinsicDims = {
+            x: 0,
+            y: 0,
+            w: intrinsicW,
+            h: intrinsicH,
+            x2: intrinsicW,
+            y2: intrinsicH,
+            cx: intrinsicW / 2,
+            cy: intrinsicH / 2,
+          };
+
+          // coord does NOT self-place. `translateX/Y` is a CONTENT OFFSET — where
+          // to draw the coord origin within the box — not placement: the polar
+          // content is drawn centered on the origin (spanning negative screen
+          // coords), so it must be shifted to sit inside `[0, size]`. Carrying it
+          // as `transform.translate` (as before) collided with the parent placing
+          // the node: a `scatter` positioning a polar glyph had to OVERRIDE that
+          // self-placed translate, the one case no other node creates. So emit it
+          // as `renderData.contentOffset`, applied in render, and leave
+          // `transform.translate` unplaced — the parent places coord like any node.
           return {
             intrinsicDims,
-            transform: {
-              translate: [translateX, translateY],
-            },
+            transform: { translate: [undefined, undefined] },
             renderData: {
               coordinateSpaceBbox: coordSpaceBbox,
+              contentOffset: [translateX, translateY] as [number, number],
             },
           };
         },
-        render: ({ transform }) => {
+        render: ({ transform, renderData }, _children, node) => {
           const gridLines = () => {
             /* take an evenly space net of lines covering the space, map them through the space, and
           render the paths */
@@ -359,18 +353,216 @@ export const coord = createNodeOperator(
             );
           };
 
-          const flattenedChildren = children.flatMap((child) =>
+          const displayObjects = children.flatMap((child) =>
             flattenLayout(child)
           );
 
+          const polarAxisJSX = (): JSX.Element | null => {
+            if (!axes || !spaceRef.current) return null;
+            // Start from the chart-level axes option, then let per-operator
+            // axis: true/false overrides (collected in resolveAxes) take precedence.
+            let axesX = typeof axes === "boolean" ? axes : (axes?.x ?? true);
+            let axesY = typeof axes === "boolean" ? axes : (axes?.y ?? true);
+            if ((node as any)._polarAxisX !== undefined)
+              axesX = (node as any)._polarAxisX;
+            if ((node as any)._polarAxisY !== undefined)
+              axesY = (node as any)._polarAxisY;
+            const [xSpace, ySpace] = spaceRef.current;
+            const rContent =
+              (renderData as any)?.coordinateSpaceBbox?.rMax ??
+              coordTransform.domain[1].max ??
+              100;
+            const RING_GAP = 20;
+            const rOuter = rContent + RING_GAP;
+            const elements: JSX.Element[] = [];
+
+            // Theta axis: outer ring + tick marks + labels.
+            if (axesX && !isUNDEFINED(xSpace)) {
+              // Outer ring
+              elements.push(
+                <circle
+                  cx={0}
+                  cy={0}
+                  r={rOuter}
+                  fill="none"
+                  stroke="gray"
+                  stroke-width="1"
+                />
+              );
+
+              const xIv = continuousInterval(xSpace);
+              if (isPOSITION(xSpace) && xIv) {
+                // Continuous theta axis: regular count ticks around the ring.
+                // Use a niced max so ticks evenly divide the circle — no small leftover gap.
+                const xMin = xIv.min;
+                const xMax = xIv.max;
+                const [, nicedMax] = d3Nice(xMin, xMax, 8);
+                const tickVals = d3Ticks(xMin, nicedMax, 8).filter(
+                  (t) => t < nicedMax
+                );
+                for (const t of tickVals) {
+                  const theta = (t / (nicedMax - xMin)) * 2 * Math.PI;
+                  const [ix, iy] = coordTransform.transform([theta, rOuter]);
+                  const [ox, oy] = coordTransform.transform([
+                    theta,
+                    rOuter + 6,
+                  ]);
+                  elements.push(
+                    <line
+                      x1={ix}
+                      y1={iy}
+                      x2={ox}
+                      y2={oy}
+                      stroke="gray"
+                      stroke-width="1"
+                    />
+                  );
+                  const [lx, ly] = coordTransform.transform([
+                    theta,
+                    rOuter + 16,
+                  ]);
+                  const anchor = lx < -5 ? "end" : lx > 5 ? "start" : "middle";
+                  elements.push(
+                    <text
+                      transform="scale(1,-1)"
+                      x={lx}
+                      y={-ly}
+                      text-anchor={anchor}
+                      dominant-baseline="middle"
+                      font-size="10px"
+                      fill="gray"
+                    >
+                      {t}
+                    </text>
+                  );
+                }
+              } else if (isORDINAL(xSpace) && xSpace.domain) {
+                // Ordinal theta axis: evenly-spaced sector labels by index
+                const keys = xSpace.domain;
+                const n = keys.length;
+                const sectorWidth = (2 * Math.PI) / n;
+                for (let i = 0; i < n; i++) {
+                  const thetaStart = i * sectorWidth;
+                  const thetaCenter = thetaStart + sectorWidth / 2;
+                  const [ix, iy] = coordTransform.transform([
+                    thetaStart,
+                    rOuter,
+                  ]);
+                  const [ox, oy] = coordTransform.transform([
+                    thetaStart,
+                    rOuter + 6,
+                  ]);
+                  elements.push(
+                    <line
+                      x1={ix}
+                      y1={iy}
+                      x2={ox}
+                      y2={oy}
+                      stroke="gray"
+                      stroke-width="1"
+                    />
+                  );
+                  const [lx, ly] = coordTransform.transform([
+                    thetaCenter,
+                    rOuter + 16,
+                  ]);
+                  const anchor = lx < -5 ? "end" : lx > 5 ? "start" : "middle";
+                  elements.push(
+                    <text
+                      transform="scale(1,-1)"
+                      x={lx}
+                      y={-ly}
+                      text-anchor={anchor}
+                      dominant-baseline="middle"
+                      font-size="10px"
+                      fill="gray"
+                    >
+                      {keys[i]}
+                    </text>
+                  );
+                }
+              }
+            }
+
+            // Continuous radial axis at theta=0.
+            const yIv = continuousInterval(ySpace);
+            if (axesY && isPOSITION(ySpace) && yIv) {
+              const yMin = yIv.min;
+              const yMax = yIv.max;
+              const dataToScreenR = (v: number) =>
+                yMax === yMin ? 0 : ((v - yMin) / (yMax - yMin)) * rContent;
+
+              // Horizontal offset so the axis sits slightly left of center
+              const H_GAP = 6;
+              const tickVals = d3Ticks(yMin, yMax, 5);
+              // Line runs from center (r=0) to the outer ring (rContent), past the tallest chunk
+              const [x0, y0] = coordTransform.transform([
+                0,
+                dataToScreenR(yMin),
+              ]);
+              const [x1, y1] = coordTransform.transform([0, rContent]);
+              elements.push(
+                <line
+                  x1={x0 - H_GAP}
+                  y1={y0}
+                  x2={x1 - H_GAP}
+                  y2={y1}
+                  stroke="gray"
+                  stroke-width="1"
+                />
+              );
+              for (const t of tickVals) {
+                const [tx, ty] = coordTransform.transform([
+                  0,
+                  dataToScreenR(t),
+                ]);
+                elements.push(
+                  <line
+                    x1={tx - H_GAP - 4}
+                    y1={ty}
+                    x2={tx - H_GAP + 4}
+                    y2={ty}
+                    stroke="gray"
+                    stroke-width="1"
+                  />
+                );
+                elements.push(
+                  <text
+                    transform="scale(1,-1)"
+                    x={tx - H_GAP - 6}
+                    y={-ty}
+                    text-anchor="end"
+                    dominant-baseline="middle"
+                    font-size="10px"
+                    fill="gray"
+                  >
+                    {t}
+                  </text>
+                );
+              }
+            }
+
+            return elements.length > 0 ? <g>{elements}</g> : null;
+          };
+
+          // Parent placement (`transform`) then coord's content offset (where the
+          // coord origin sits inside the box — coord's own render concern, NOT
+          // placement). The two compose to the single translate coord used to
+          // self-place with, so it's pixel-equivalent — but now `transform` is the
+          // parent's placement and the offset is separate, so coord no longer
+          // collides with being placed.
+          const [offsetX, offsetY] = (renderData?.contentOffset as
+            | [number, number]
+            | undefined) ?? [0, 0];
           return (
             <g
-              transform={`translate(${transform?.translate?.[0] ?? 0}, ${transform?.translate?.[1] ?? 0})`}
+              transform={`${translateString(transform)} translate(${offsetX}, ${offsetY})`}
             >
-              {flattenedChildren.map((child) =>
-                child.INTERNAL_render(coordTransform)
+              {displayObjects.map((d) =>
+                d.node.INTERNAL_render(coordTransform, d.transform)
               )}
               <Show when={grid}>{gridLines()}</Show>
+              {polarAxisJSX()}
             </g>
           );
         },

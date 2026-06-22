@@ -1,0 +1,41 @@
+<div class="codegrid">
+  <div class="printout">
+    <span
+      class="tape"
+      style="left: 42%; top: -11px; --tape-angle: -5deg"
+    ></span>
+    <pre
+      class="hero-lang-js"
+    ><span class="tok-kw">import</span> { Chart, layer, selectAll } <span class="tok-kw">from</span> <span class="tok-str">"gofish-graphics"</span>;
+
+<span class="tok-kw">layer</span>([
+<span class="cblk" id="cblk-bars" data-label="bars">  <span class="tok-kw">Chart</span>(seafood)
+    .<span class="tok-kw">flow</span>(
+      <span class="tok-kw">spread</span>({ <span class="tok-field">by</span>: <span class="tok-str">"lake"</span>, <span class="tok-field">dir</span>: <span class="tok-str">"x"</span>, <span class="tok-field">spacing</span>: <span class="tok-num">64</span> }),
+      <span class="tok-kw">derive</span>((d) => <span class="tok-kw">orderBy</span>(d, <span class="tok-str">"count"</span>, <span class="tok-str">"asc"</span>)),
+      <span class="tok-kw">stack</span>({ <span class="tok-field">by</span>: <span class="tok-str">"species"</span>, <span class="tok-field">dir</span>: <span class="tok-str">"y"</span> })
+    )
+    .<span class="tok-kw">mark</span>(<span class="tok-kw">rect</span>({ <span class="tok-field">h</span>: <span class="tok-str">"count"</span>, <span class="tok-field">fill</span>: <span class="tok-str">"species"</span> }).<span class="tok-kw">name</span>(<span class="tok-str">"bars"</span>)),</span>
+<span class="cblk" id="cblk-ribbons" data-label="ribbons">  <span class="tok-kw">Chart</span>(<span class="tok-kw">selectAll</span>(<span class="tok-str">"bars"</span>))
+    .<span class="tok-kw">flow</span>(<span class="tok-kw">group</span>({ <span class="tok-field">by</span>: <span class="tok-str">"datum.species"</span> }))
+    .<span class="tok-kw">mark</span>(<span class="tok-kw">area</span>({ <span class="tok-field">opacity</span>: <span class="tok-num">0.8</span> })),</span>
+]).<span class="tok-kw">render</span>(el, { <span class="tok-field">w</span>: <span class="tok-num">400</span>, <span class="tok-field">h</span>: <span class="tok-num">400</span>, <span class="tok-field">axes</span>: <span class="tok-kw">true</span> });</pre>
+    <pre
+      class="hero-lang-python"
+    ><span class="tok-kw">from</span> gofish <span class="tok-kw">import</span> chart, Layer, selectAll
+
+<span class="tok-kw">Layer</span>([
+<span class="cblk" data-label="bars">    <span class="tok-kw">chart</span>(seafood)
+    .<span class="tok-kw">flow</span>(
+        <span class="tok-kw">spread</span>(<span class="tok-field">by</span>=<span class="tok-str">"lake"</span>, <span class="tok-field">dir</span>=<span class="tok-str">"x"</span>, <span class="tok-field">spacing</span>=<span class="tok-num">64</span>),
+        <span class="tok-kw">derive</span>(<span class="tok-kw">lambda</span> d: <span class="tok-kw">sorted</span>(d, <span class="tok-field">key</span>=<span class="tok-kw">lambda</span> r: r[<span class="tok-str">"count"</span>])),
+        <span class="tok-kw">stack</span>(<span class="tok-field">by</span>=<span class="tok-str">"species"</span>, <span class="tok-field">dir</span>=<span class="tok-str">"y"</span>),
+    )
+    .<span class="tok-kw">mark</span>(<span class="tok-kw">rect</span>(<span class="tok-field">h</span>=<span class="tok-str">"count"</span>, <span class="tok-field">fill</span>=<span class="tok-str">"species"</span>).<span class="tok-kw">name</span>(<span class="tok-str">"bars"</span>)),</span>
+<span class="cblk" data-label="ribbons">    <span class="tok-kw">chart</span>(<span class="tok-kw">selectAll</span>(<span class="tok-str">"bars"</span>))
+    .<span class="tok-kw">flow</span>(<span class="tok-kw">group</span>(<span class="tok-field">by</span>=<span class="tok-str">"datum.species"</span>))
+    .<span class="tok-kw">mark</span>(<span class="tok-kw">area</span>(<span class="tok-field">opacity</span>=<span class="tok-num">0.8</span>)),</span>
+]).<span class="tok-kw">render</span>(<span class="tok-field">w</span>=<span class="tok-num">400</span>, <span class="tok-field">h</span>=<span class="tok-num">400</span>, <span class="tok-field">axes</span>=<span class="tok-kw">True</span>)</pre>
+    <div class="code-brackets" aria-hidden="true"></div>
+  </div>
+</div>

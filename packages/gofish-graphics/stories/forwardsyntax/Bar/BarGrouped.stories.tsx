@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../../helper";
 import { seafood } from "../../../src/data/catch";
-import { Chart, spread, rect, stack } from "../../../src/lib";
+import { chart, spread, rect, stack } from "../../../src/lib";
 
 const meta: Meta = {
   title: "Forward Syntax V3/Bar/Grouped",
@@ -20,10 +20,18 @@ type Args = { w: number; h: number };
 
 export const Default: StoryObj<Args> = {
   args: { w: 400, h: 400 },
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "Grouped Bar Chart",
+      description:
+        "Fish catch counts per lake, with bars grouped side by side by species.",
+    },
+  },
   render: (args: Args) => {
     const container = initializeContainer();
 
-    Chart(seafood)
+    chart(seafood, { axes: true })
       .flow(
         spread({ by: "lake",  dir: "x" }), //
         stack({ by: "species",  dir: "x" })
@@ -32,7 +40,6 @@ export const Default: StoryObj<Args> = {
       .render(container, {
         w: args.w,
         h: args.h,
-        axes: true,
       });
 
     return container;

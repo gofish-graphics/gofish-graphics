@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/html";
-import { Chart, spread, stack, rect } from "../src/lib";
+import { chart, spread, stack, rect } from "../src/lib";
 import { seafood } from "../src/data/catch";
-import * as publicApi from "../dist/index.js";
+import * as publicApi from "../src/lib";
 
 const meta: Meta = {
   title: "Regressions/Docs Context Parity",
@@ -15,7 +15,7 @@ export default meta;
 type Args = { w: number; h: number };
 
 const DOCS_GROUPED_BAR_CODE = `
-Chart(seafood)
+chart(seafood, { axes: true })
   .flow(
     spread({ by: "lake",  dir: "x" }),
     stack({ by: "species",  dir: "x", label: false })
@@ -24,12 +24,11 @@ Chart(seafood)
   .render(root, {
     w,
     h,
-    axes: true,
   });
 `;
 
 type ChartApi = {
-  Chart: typeof Chart;
+  chart: typeof chart;
   spread: typeof spread;
   stack: typeof stack;
   rect: typeof rect;
@@ -49,7 +48,7 @@ const runDocsLikeSnippet = (
     "root",
     "w",
     "h",
-    "Chart",
+    "chart",
     "spread",
     "stack",
     "rect",
@@ -59,14 +58,14 @@ const runDocsLikeSnippet = (
     root: HTMLElement,
     w: number,
     h: number,
-    chartFn: typeof Chart,
+    chartFn: typeof chart,
     spreadFn: typeof spread,
     stackFn: typeof stack,
     rectFn: typeof rect,
     seafoodData: typeof seafood
   ) => void;
 
-  fn(root, w, h, api.Chart, api.spread, api.stack, api.rect, seafood);
+  fn(root, w, h, api.chart, api.spread, api.stack, api.rect, seafood);
   return root;
 };
 
@@ -75,7 +74,7 @@ const runDirectStorybookVersion = (container: HTMLElement, w: number, h: number)
   root.style.margin = "8px";
   container.appendChild(root);
 
-  Chart(seafood)
+  chart(seafood, { axes: true })
     .flow(
       spread({ by: "lake",  dir: "x" }),
       stack({ by: "species",  dir: "x" })
@@ -84,7 +83,6 @@ const runDirectStorybookVersion = (container: HTMLElement, w: number, h: number)
     .render(root, {
       w,
       h,
-      axes: true,
     });
 
   return root;
@@ -123,7 +121,11 @@ const renderPanel = (title: string, mount: HTMLElement) => {
 
 export const GroupedBarDocsParity: StoryObj<Args> = {
   args: { w: 400, h: 300 },
-  render: (args: Args) => {
+  // Async render: the runner awaits it (same contract as lowlevel/Treemap),
+  // so the DONE signal — and therefore DOM snapshots — can't land while the
+  // panels are still "Loading" / the status still reads "Running parity
+  // checks...". A floating promise here raced the capture's settle window.
+  render: async (args: Args) => {
     const host = document.createElement("div");
     host.style.padding = "20px";
 
@@ -140,14 +142,14 @@ export const GroupedBarDocsParity: StoryObj<Args> = {
     runDirectStorybookVersion(directMount, args.w, args.h);
     runDocsLikeSnippet(
       docsLikeSourceMount,
-      { Chart, spread, stack, rect },
+      { chart, spread, stack, rect },
       args.w,
       args.h
     );
     runDocsLikeSnippet(
       docsLikePublicMount,
       {
-        Chart: publicApi.Chart as typeof Chart,
+        chart: publicApi.chart as typeof chart,
         spread: publicApi.spread as typeof spread,
         stack: publicApi.stack as typeof stack,
         rect: publicApi.rect as typeof rect,
@@ -197,24 +199,25 @@ export const GroupedBarDocsParity: StoryObj<Args> = {
         observer.observe(mount, { childList: true, subtree: true });
       });
 
-    void Promise.all([
+    await Promise.all([
       waitForRects(directMount),
       waitForRects(docsLikeSourceMount),
       waitForRects(docsLikePublicMount),
-    ]).then(() => {
-      // One extra frame so SolidJS finishes any post-mount effects that
-      // would update `fill` attributes (e.g. color-scale resolution).
-      requestAnimationFrame(() => {
-        const a = inspectHealth(directMount);
-        const b = inspectHealth(docsLikeSourceMount);
-        const c = inspectHealth(docsLikePublicMount);
+    ]);
+    // One extra frame so SolidJS finishes any post-mount effects that
+    // would update `fill` attributes (e.g. color-scale resolution).
+    await new Promise<void>((resolve) =>
+      requestAnimationFrame(() => resolve())
+    );
 
-        status.textContent =
-          `source: healthy=${a.isHealthy}, loading=${a.hasLoading}, uniqueFills=${a.uniqueFillCount}\n` +
-          `docs+source: healthy=${b.isHealthy}, loading=${b.hasLoading}, uniqueFills=${b.uniqueFillCount}\n` +
-          `docs+public: healthy=${c.isHealthy}, loading=${c.hasLoading}, uniqueFills=${c.uniqueFillCount}`;
-      });
-    });
+    const a = inspectHealth(directMount);
+    const b = inspectHealth(docsLikeSourceMount);
+    const c = inspectHealth(docsLikePublicMount);
+
+    status.textContent =
+      `source: healthy=${a.isHealthy}, loading=${a.hasLoading}, uniqueFills=${a.uniqueFillCount}\n` +
+      `docs+source: healthy=${b.isHealthy}, loading=${b.hasLoading}, uniqueFills=${b.uniqueFillCount}\n` +
+      `docs+public: healthy=${c.isHealthy}, loading=${c.hasLoading}, uniqueFills=${c.uniqueFillCount}`;
 
     return host;
   },

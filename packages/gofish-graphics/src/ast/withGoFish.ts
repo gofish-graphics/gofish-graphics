@@ -24,7 +24,14 @@ import {
   inferPos,
   inferColor,
   inferRaw,
+  inferEntrySize,
 } from "./channels";
+import {
+  withMarkKind,
+  nameableMark,
+  type TranslateModifierOptions,
+  type MarkKind,
+} from "./marks/createOperator";
 import { isValue } from "./data";
 import { Mark } from "./types";
 import type { ConstraintSpec, ConstraintRef } from "./constraints";
@@ -35,8 +42,8 @@ import type { Token } from "./createName";
  * Options for rendering a GoFish node
  */
 export interface RenderOptions {
-  w: number;
-  h: number;
+  w?: number;
+  h?: number;
   x?: number;
   y?: number;
   transform?: { x?: number; y?: number };
@@ -84,6 +91,14 @@ export interface PromiseWithRender<T> extends Promise<T> {
     container: HTMLElement,
     options: RenderOptions
   ): HTMLElement | Promise<HTMLElement>;
+  toSVG(options?: Parameters<GoFishNode["toSVG"]>[0]): Promise<string>;
+  toSVGElement(
+    options?: Parameters<GoFishNode["toSVGElement"]>[0]
+  ): Promise<SVGSVGElement>;
+  save(
+    filename: string,
+    options?: Parameters<GoFishNode["save"]>[1]
+  ): Promise<void>;
   name(name: string | Token): PromiseWithRender<T>;
   label(accessor: LabelAccessor, options?: LabelOptions): PromiseWithRender<T>;
   setKey(key: string): PromiseWithRender<T>;
@@ -127,6 +142,41 @@ export function addRenderMethod<T>(promise: Promise<T>): PromiseWithRender<T> {
       }
       throw new Error(
         "Cannot call render on this result. Only GoFishNode instances have a render method."
+      );
+    });
+  };
+
+  // SVG-export terminals, mirroring `.render()` above.
+  (promise as any).toSVG = function (
+    options?: Parameters<GoFishNode["toSVG"]>[0]
+  ): Promise<string> {
+    return promise.then((result) => {
+      if (hasRenderMethod(result)) return result.toSVG(options);
+      throw new Error(
+        "Cannot call toSVG on this result. Only GoFishNode instances support export."
+      );
+    });
+  };
+
+  (promise as any).toSVGElement = function (
+    options?: Parameters<GoFishNode["toSVGElement"]>[0]
+  ): Promise<SVGSVGElement> {
+    return promise.then((result) => {
+      if (hasRenderMethod(result)) return result.toSVGElement(options);
+      throw new Error(
+        "Cannot call toSVGElement on this result. Only GoFishNode instances support export."
+      );
+    });
+  };
+
+  (promise as any).save = function (
+    filename: string,
+    options?: Parameters<GoFishNode["save"]>[1]
+  ): Promise<void> {
+    return promise.then((result) => {
+      if (hasRenderMethod(result)) return result.save(filename, options);
+      throw new Error(
+        "Cannot call save on this result. Only GoFishNode instances support export."
       );
     });
   };
@@ -274,6 +324,7 @@ export async function reifyChildrenSequentially(
     | GoFishAST
     | (() => GoFishAST | Promise<GoFishAST>)
     | ChartBuilder<any, any>
+    | Mark<any>
   )[],
   layerContext?: LayerContext
 ): Promise<GoFishAST[]> {
@@ -434,76 +485,20 @@ export function createNodeOperatorSequential<T extends Record<string, any>, R>(
 export type NameableMark<T> = Mark<T> & {
   name(layerName: string | Token): NameableMark<T>;
   label(accessor: LabelAccessor, options?: LabelOptions): NameableMark<T>;
+  translate(opts: TranslateModifierOptions): NameableMark<T>;
   render(
     container: Parameters<GoFishNode["render"]>[0],
     options: Parameters<GoFishNode["render"]>[1]
   ): Promise<ReturnType<GoFishNode["render"]>>;
+  toSVG(options?: Parameters<GoFishNode["toSVG"]>[0]): Promise<string>;
+  toSVGElement(
+    options?: Parameters<GoFishNode["toSVGElement"]>[0]
+  ): Promise<SVGSVGElement>;
+  save(
+    filename: string,
+    options?: Parameters<GoFishNode["save"]>[1]
+  ): Promise<void>;
 };
-
-/**
- * Attach .name / .label / .render chainable methods to a bare Mark, producing
- * a NameableMark. Each chained call returns a new mark that, when invoked,
- * applies the chained mutation (name/label) to the node produced by baseMark.
- */
-function attachNameableMethods<T>(baseMark: Mark<T>): NameableMark<T> {
-  const nameMethod = (layerName: string | Token): Mark<T> => {
-    return async (input, keyParam, layerContext) => {
-      const node = await baseMark(input, keyParam, layerContext);
-      (node as GoFishNode).name(layerName);
-      // layerContext is keyed by string name (v3 chart-layer selection);
-      // tokens are hygienic handles and do not participate in that registry.
-      // Tag here; the actual push into `layerContext[layerName]` happens in
-      // ChartBuilder.resolve's post-resolve tree walk (chartBuilder.ts:
-      // collectLayerRegistrations) so the order matches parent-iteration
-      // order rather than which leg's async chain happened to finish first.
-      if (layerContext && typeof layerName === "string" && layerName) {
-        (node as { __layerRegistration?: string }).__layerRegistration =
-          layerName;
-      }
-      return node;
-    };
-  };
-  const nameMethodWithFields = (layerName: string | Token): Mark<T> => {
-    const fn = nameMethod(layerName);
-    if ((baseMark as any).__axisFields) {
-      (fn as any).__axisFields = (baseMark as any).__axisFields;
-    }
-    return fn;
-  };
-  const labelMethod = (
-    accessor: LabelAccessor,
-    options?: LabelOptions
-  ): Mark<T> => {
-    return async (input, keyParam, layerContext) => {
-      const node = await baseMark(input, keyParam, layerContext);
-      (node as GoFishNode).label(accessor, options);
-      return node;
-    };
-  };
-  const renderMethod = async (
-    container: Parameters<GoFishNode["render"]>[0],
-    options: Parameters<GoFishNode["render"]>[1]
-  ) => {
-    const node = (await baseMark(undefined as any)) as GoFishNode;
-    return node.render(container, options);
-  };
-  Object.defineProperty(baseMark, "name", {
-    value: nameMethodWithFields,
-    writable: true,
-    configurable: true,
-  });
-  Object.defineProperty(baseMark, "label", {
-    value: labelMethod,
-    writable: true,
-    configurable: true,
-  });
-  Object.defineProperty(baseMark, "render", {
-    value: renderMethod,
-    writable: true,
-    configurable: true,
-  });
-  return baseMark as NameableMark<T>;
-}
 
 /**
  * Creates a high-level mark from a low-level shape function plus optional
@@ -524,96 +519,180 @@ function attachNameableMethods<T>(baseMark: Mark<T>): NameableMark<T> {
  * to an outer ancestor.
  *
  * The returned mark supports `.name("layerName" | token)` so that when used
- * in a chart, each produced node is registered for `select("layerName")`.
+ * in a chart, each produced node is registered for `ref("layerName")` /
+ * `selectAll("layerName")`.
  */
+/**
+ * Mark-factory IR serialization config — passed as the optional third
+ * argument to `createMark`. A string is shorthand for `{ type: <string> }`.
+ *
+ * The factory tags each produced mark with `__serialize: { type, opts }`
+ * so the frontend-IR emitter (gofish-graphics/serialize/toJSON) can
+ * reconstruct the mark on the wire.
+ */
+export type MarkSerializeConfig<P = any> =
+  | string
+  | {
+      /** IR discriminator (lowercase to match the wire format), e.g. "rect". */
+      type: string;
+      /**
+       * Optional shape function. Default: copy `markOpts` verbatim. Use to
+       * strip non-serializable fields or rename keys.
+       */
+      shape?: (opts: P) => Record<string, unknown>;
+    };
+
 export function createMark<P extends Record<string, any>>(
   shapeFn: (props: P) => GoFishNode | PromiseLike<GoFishNode>
+): (props: P) => NameableMark<P>;
+export function createMark<P extends Record<string, any>>(
+  shapeFn: (props: P) => GoFishNode | PromiseLike<GoFishNode>,
+  channels: undefined,
+  serialize: MarkSerializeConfig<P>
 ): (props: P) => NameableMark<P>;
 export function createMark<
   ShapeProps extends Record<string, any>,
   C extends ChannelAnnotations<ShapeProps>,
 >(
-  shapeFn: (opts: ShapeProps) => GoFishNode | PromiseLike<GoFishNode>,
-  channels: C
+  shapeFn: (
+    opts: ShapeProps,
+    data?: any[]
+  ) =>
+    | GoFishNode
+    | GoFishNode[]
+    | PromiseLike<GoFishNode>
+    | PromiseLike<GoFishNode[]>,
+  channels: C,
+  serialize?: MarkSerializeConfig,
+  cfg?: { kind?: MarkKind }
 ): <T extends Record<string, any>>(
   opts: DeriveMarkProps<ShapeProps, C, T>
 ) => NameableMark<T | T[] | { item: T | T[]; key: number | string }>;
 export function createMark(
   shapeFn: any,
-  channels: Record<string, any> = {}
+  channels: Record<string, any> = {},
+  serialize?: MarkSerializeConfig,
+  cfg?: { kind?: MarkKind }
 ): any {
-  return (markOpts: Record<string, any>) => {
-    const baseMark: Mark<any> = async (
-      input,
-      keyParam?: string | number,
-      _layerContext?: LayerContext
-    ) => {
-      // Unwrap input: handles T, T[], or { item, key } patterns
-      let d: any, key: number | string | undefined;
-      if (typeof input === "object" && input !== null && "item" in input) {
-        d = (input as any).item;
-        key = (input as any).key;
-      } else {
-        d = input;
-        key = keyParam;
-      }
+  const kind: MarkKind = cfg?.kind ?? "per-item";
+  const serializeConfig: { type: string; shape?: (o: any) => any } | undefined =
+    typeof serialize === "string" ? { type: serialize } : serialize;
+  return (markOpts: Record<string, any>) =>
+    buildCreatedMark(shapeFn, channels, serializeConfig, kind, markOpts);
+}
 
-      if (markOpts.debug) {
-        console.log("mark", key, d);
-      }
-
-      const data = Array.isArray(d) ? d : [d];
-
-      // Build shape props by encoding each channel. Unannotated props (which
-      // is everything when channels is omitted/empty) pass through.
-      const shapeProps: Record<string, any> = {};
-      for (const propName of Object.keys(markOpts)) {
-        if (propName === "debug") continue;
-        const channelType = channels[propName];
-        const markValue = markOpts[propName];
-
-        if (isValue(markValue)) {
-          // Already a Value wrapper (e.g. v(...)) — pass through directly
-          shapeProps[propName] = markValue;
-        } else if (channelType === "size") {
-          shapeProps[propName] = inferSize(markValue, data);
-        } else if (channelType === "pos") {
-          shapeProps[propName] = inferPos(markValue, data);
-        } else if (channelType === "color") {
-          shapeProps[propName] = inferColor(markValue, data);
-        } else if (channelType === "raw") {
-          // `inferRaw` is async so that callable accessors may return a
-          // Promise — used by the Python wrapper to bridge `text(text=
-          // lambda d: ...)` through the derive-server RPC.
-          shapeProps[propName] = await inferRaw(markValue, data);
-        } else {
-          shapeProps[propName] = markValue;
-        }
-      }
-
-      const result = shapeFn(shapeProps);
-      const node: GoFishNode =
-        result instanceof GoFishNode ? result : await result;
-      node.name(key?.toString() ?? "");
-      (node as any).datum = d;
-      node.scope();
-      // Mark as a component for string-name search bounding. Distinct from
-      // _isScope so future operators that scope (for token reasons) don't
-      // silently break ref("name") lookups across them.
-      node._isComponent = true;
-      return node;
-    };
-
-    // Infer axis field names from string-valued size/pos channels
-    const axisFields: { x?: string; y?: string } = {};
-    if (typeof markOpts.w === "string") axisFields.x = markOpts.w;
-    else if (typeof markOpts.x === "string") axisFields.x = markOpts.x;
-    if (typeof markOpts.h === "string") axisFields.y = markOpts.h;
-    else if (typeof markOpts.y === "string") axisFields.y = markOpts.y;
-    if (axisFields.x || axisFields.y) {
-      (baseMark as any).__axisFields = axisFields;
+function buildCreatedMark(
+  shapeFn: any,
+  channels: Record<string, any>,
+  serializeConfig: { type: string; shape?: (o: any) => any } | undefined,
+  kind: MarkKind,
+  markOpts: Record<string, any>
+): any {
+  const baseMark: Mark<any> = async (
+    input,
+    keyParam?: string | number,
+    _layerContext?: LayerContext
+  ) => {
+    // Unwrap input: handles T, T[], or { item, key } patterns
+    let d: any, key: number | string | undefined;
+    if (typeof input === "object" && input !== null && "item" in input) {
+      d = (input as any).item;
+      key = (input as any).key;
+    } else {
+      d = input;
+      key = keyParam;
     }
 
-    return attachNameableMethods(baseMark);
+    if (markOpts.debug) {
+      console.log("mark", key, d);
+    }
+
+    const data = Array.isArray(d) ? d : [d];
+
+    // Build shape props by encoding each channel. The plain string spec
+    // ("size"/"pos"/"color"/"raw") aggregates over `data` and produces a
+    // single value. The object form `{type, entry: true}` produces a
+    // per-row array — used by expand-kind marks. Unannotated props (which
+    // is everything when channels is omitted/empty) pass through.
+    const shapeProps: Record<string, any> = {};
+    for (const propName of Object.keys(markOpts)) {
+      if (propName === "debug") continue;
+      const channelSpec = channels[propName];
+      const markValue = markOpts[propName];
+
+      const channelType =
+        typeof channelSpec === "string" ? channelSpec : channelSpec?.type;
+      const isEntry =
+        typeof channelSpec === "object" && channelSpec?.entry === true;
+
+      if (isValue(markValue)) {
+        // Already a Value wrapper (e.g. v(...)) — pass through directly
+        shapeProps[propName] = markValue;
+      } else if (isEntry && channelType === "size") {
+        shapeProps[propName] = inferEntrySize(markValue, data);
+      } else if (channelType === "size") {
+        shapeProps[propName] = inferSize(markValue, data);
+      } else if (channelType === "pos") {
+        shapeProps[propName] = inferPos(markValue, data);
+      } else if (channelType === "color") {
+        shapeProps[propName] = inferColor(markValue, data);
+      } else if (channelType === "raw") {
+        // `inferRaw` is async so that callable accessors may return a
+        // Promise — used by the Python wrapper to bridge `text(text=
+        // lambda d: ...)` through the derive-server RPC.
+        shapeProps[propName] = await inferRaw(markValue, data);
+      } else {
+        shapeProps[propName] = markValue;
+      }
+    }
+
+    // For expand-kind marks, hand the data array to shapeFn so it can
+    // build N output nodes 1:1 with input rows. shapeFn may be async.
+    const result = await shapeFn(
+      shapeProps,
+      kind === "expand" ? data : undefined
+    );
+    if (Array.isArray(result)) {
+      // Expand path: stamp each slice with its own datum.
+      for (let i = 0; i < result.length; i++) {
+        const node = result[i];
+        node.name(key?.toString() ?? "");
+        (node as any).datum = data[i] ?? d;
+      }
+      return result as unknown as GoFishNode;
+    }
+    const node = result as GoFishNode;
+    node.name(key?.toString() ?? "");
+    (node as any).datum = d;
+    node.scope();
+    // Mark as a component for string-name search bounding. Distinct from
+    // _isScope so future operators that scope (for token reasons) don't
+    // silently break ref("name") lookups across them.
+    node._isComponent = true;
+    return node;
   };
+  withMarkKind(baseMark, kind);
+
+  // Infer axis field names from string-valued size/pos channels
+  const axisFields: { x?: string; y?: string } = {};
+  if (typeof markOpts.w === "string") axisFields.x = markOpts.w;
+  else if (typeof markOpts.x === "string") axisFields.x = markOpts.x;
+  if (typeof markOpts.h === "string") axisFields.y = markOpts.h;
+  else if (typeof markOpts.y === "string") axisFields.y = markOpts.y;
+  if (axisFields.x || axisFields.y) {
+    (baseMark as any).__axisFields = axisFields;
+  }
+
+  // Tag with IR-serialization metadata for the frontend-IR emitter.
+  if (serializeConfig) {
+    const payload = serializeConfig.shape
+      ? serializeConfig.shape(markOpts)
+      : markOpts;
+    (baseMark as any).__serialize = {
+      type: serializeConfig.type,
+      opts: payload,
+    };
+  }
+
+  return nameableMark(baseMark);
 }

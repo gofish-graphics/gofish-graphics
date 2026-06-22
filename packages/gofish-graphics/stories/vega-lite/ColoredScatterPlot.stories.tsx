@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
-import { Chart, layer, scatter, circle } from "../../src/lib";
+import { chart, layer, scatter, circle } from "../../src/lib";
 import data from "vega-datasets";
 const meta: Meta = {
   title: "Vega-Lite/Colored Scatter Plot",
@@ -19,6 +19,13 @@ type Args = { w: number; h: number };
 export const Default: StoryObj<Args> = {
   args: { w: 300, h: 300 },
   loaders: [async () => ({ penguins: await data["penguins.json"]() })],
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "Colored Scatter Plot",
+      description: "A scatter plot of penguin flipper length against body mass, with points colored by species to reveal three distinct clusters.",
+    },
+  },
   render: (args: Args, context: any) => {
     const container = initializeContainer();
     const penguinsRaw = context.loaded.penguins as any[];
@@ -39,7 +46,7 @@ export const Default: StoryObj<Args> = {
 
     layer(
       speciesList.map((species) => () =>
-        Chart(bySpecies(species))
+        chart(bySpecies(species))
           .flow(
             scatter({ by: "id", 
               x: "Flipper Length (mm)",

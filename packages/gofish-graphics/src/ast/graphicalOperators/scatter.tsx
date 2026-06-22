@@ -1,13 +1,16 @@
-import { GoFishNode, Placeable } from "../_node";
-import { getValue, isValue, MaybeValue } from "../data";
-import { Dimensions, elaborateDims, FancyDims, Size } from "../dims";
+import { GoFishNode } from "../_node";
+import type { AxisOptions } from "../gofish";
+import { MaybeValue, type PositionValue } from "../data";
+import { FancyDims } from "../dims";
 import { createNodeOperator } from "../withGoFish";
 import { GoFishAST } from "../_ast";
 import { Collection } from "lodash";
-import { POSITION, UNDEFINED, UnderlyingSpace } from "../underlyingSpace";
-import * as Interval from "../../util/interval";
-import { Alignment, alignChildren, resolveAlignmentSpace } from "./alignment";
+import { SplitBy, splitKeyFn } from "../datumProjection";
+import { Alignment } from "./alignment";
 import { createOperator } from "../marks/createOperator";
+import { layer } from "./layer";
+import { Constraint, type ConstraintSpec } from "../constraints";
+import { ensureChildNames } from "../constraints/shared";
 
 const unwrapLodashArray = function <T>(value: T[] | Collection<T>): T[] {
   if (typeof value === "object" && value !== null && "value" in value) {
@@ -19,64 +22,22 @@ const unwrapLodashArray = function <T>(value: T[] | Collection<T>): T[] {
 export type ScatterProps = {
   name?: string;
   key?: string;
-  x?: MaybeValue<number>[];
-  y?: MaybeValue<number>[];
+  x?: PositionValue[];
+  y?: PositionValue[];
   /** Range form: position each child so it spans [xMin[i], xMax[i]] in data space. */
   xMin?: MaybeValue<number>[];
   xMax?: MaybeValue<number>[];
   yMin?: MaybeValue<number>[];
   yMax?: MaybeValue<number>[];
   alignment?: Alignment;
+  axes?: boolean | { x?: AxisOptions; y?: AxisOptions };
 } & FancyDims<MaybeValue<number>>;
 
-function getCurrentAnchor(
-  child: Placeable,
-  axis: 0 | 1,
-  anchor: "min" | "center" | "max" | "baseline"
-) {
-  const dims = child.dims[axis];
-  const min = dims.min ?? 0;
-  const size = dims.size ?? 0;
-  const max = dims.max ?? min + size;
-  const center = dims.center ?? min + size / 2;
-
-  switch (anchor) {
-    case "min":
-      return min;
-    case "center":
-      return center;
-    case "max":
-      return max;
-    case "baseline":
-      return 0;
-  }
-}
-
-function setAxisTranslation(
-  child: Placeable,
-  axis: 0 | 1,
-  target: number,
-  anchor: "min" | "center" | "max" | "baseline"
-) {
-  const node = child as GoFishNode;
-  const delta = target - getCurrentAnchor(child, axis, anchor);
-  node.transform!.translate![axis] =
-    (node.transform!.translate![axis] ?? 0) + delta;
-}
-
-function resolvePositionSpace(
-  values: MaybeValue<number>[] | undefined
-): UnderlyingSpace {
-  if (!values || values.length === 0) return UNDEFINED;
-  if (!values.every((value) => isValue(value))) return UNDEFINED;
-  const rawValues = values.map((value) => getValue(value)!);
-  return POSITION(
-    Interval.interval(Math.min(...rawValues), Math.max(...rawValues))
-  );
-}
-
 export const Scatter = createNodeOperator(
-  (options: ScatterProps, children: GoFishAST[] | Collection<GoFishAST>) => {
+  async (
+    options: ScatterProps,
+    children: GoFishAST[] | Collection<GoFishAST>
+  ) => {
     const {
       name,
       key,
@@ -87,10 +48,10 @@ export const Scatter = createNodeOperator(
       yMin,
       yMax,
       alignment = "baseline",
+      axes,
       ...fancyDims
     } = options;
     children = unwrapLodashArray(children);
-    const dims = elaborateDims(fancyDims);
 
     const hasX = x !== undefined || (xMin !== undefined && xMax !== undefined);
     const hasY = y !== undefined || (yMin !== undefined && yMax !== undefined);
@@ -113,184 +74,75 @@ export const Scatter = createNodeOperator(
     if (xMax !== undefined && xMax.length !== children.length) {
       throw new Error("Scatter operator xMax array must match children length");
     }
+    if (yMin !== undefined && yMin.length !== children.length) {
+      throw new Error("Scatter operator yMin array must match children length");
+    }
+    if (yMax !== undefined && yMax.length !== children.length) {
+      throw new Error("Scatter operator yMax array must match children length");
+    }
 
-    // Track whether the align axis came from SIZE (so alignChildren knows to run)
-    let xFromSize = false;
-    let yFromSize = false;
+    // Elaborate to a layer carrying per-child placement constraints (#546),
+    // sharing the constraint path instead of a bespoke layout (as spread
+    // delegates to distribute/align):
+    //   - plain x / y      → Constraint.position (centers the child on its datum;
+    //                        `override` repositions a child that self-placed in
+    //                        its own layout, e.g. a Frame / coord glyph).
+    //   - range xMin/xMax  → Constraint.span: two edges DETERMINE the size via
+    //                        the linsys bbox (#39) — the size-setting the bespoke
+    //                        layout used to do by hand on intrinsicDims.
+    //   - an axis with neither → a plain cross-axis align (data-positioned
+    //                        children are already placed by their span/position
+    //                        constraints, so the align walk skips them).
+    // The layer derives the data→pixel posScale from the position/span datum
+    // coords (collectPositionDomains).
+    const childList = children as GoFishAST[];
+    const names = ensureChildNames(childList, "scatter");
+    const node = (await layer(
+      { key, ...fancyDims } as any,
+      childList
+    )) as GoFishNode;
+    node.constrain((ref) => {
+      const refs = names.map((n) => ref[n] ?? { name: n });
+      const cs: ConstraintSpec[] = [];
+      childList.forEach((_, i) => {
+        const pos: {
+          x?: PositionValue;
+          y?: PositionValue;
+          override: boolean;
+        } = { override: true };
+        if (x?.[i] !== undefined) pos.x = x[i];
+        if (y?.[i] !== undefined) pos.y = y[i];
+        if (pos.x !== undefined || pos.y !== undefined)
+          cs.push(Constraint.position(pos, [refs[i]]));
 
-    return new GoFishNode(
-      {
-        type: "scatter",
-        key,
-        name,
-        args: { key, name, x, y, xMin, xMax, yMin, yMax, alignment, dims },
-        shared: [false, false],
-        resolveUnderlyingSpace: (
-          childSpaces: Size<UnderlyingSpace>[],
-          _childNodes: GoFishAST[]
-        ) => {
-          let xSpace: UnderlyingSpace;
-          if (x !== undefined) {
-            xSpace = resolvePositionSpace(x);
-          } else if (xMin !== undefined && xMax !== undefined) {
-            xSpace = POSITION(
-              Interval.interval(
-                Math.min(...xMin.map((v) => getValue(v)!)),
-                Math.max(...xMax.map((v) => getValue(v)!))
-              )
-            );
-          } else {
-            const result = resolveAlignmentSpace(
-              childSpaces.map((child) => child[0]),
-              alignment
-            );
-            xSpace = result.space;
-            xFromSize = result.fromSize;
-          }
-
-          let ySpace: UnderlyingSpace;
-          if (y !== undefined) {
-            ySpace = resolvePositionSpace(y);
-          } else if (yMin !== undefined && yMax !== undefined) {
-            ySpace = POSITION(
-              Interval.interval(
-                Math.min(...yMin.map((v) => getValue(v)!)),
-                Math.max(...yMax.map((v) => getValue(v)!))
-              )
-            );
-          } else {
-            const result = resolveAlignmentSpace(
-              childSpaces.map((child) => child[1]),
-              alignment
-            );
-            ySpace = result.space;
-            yFromSize = result.fromSize;
-          }
-
-          return [xSpace, ySpace];
-        },
-        layout: (_shared, size, scaleFactors, childNodes, posScales) => {
-          const childPlaceables = childNodes.map((child) =>
-            child.layout(size, scaleFactors, posScales)
-          );
-
-          childPlaceables.forEach((child) => {
-            child.place("x", 0);
-            child.place("y", 0);
-          });
-
-          childPlaceables.forEach((child, index) => {
-            const xPos = x?.[index];
-            const yPos = y?.[index];
-
-            if (xMin !== undefined && xMax !== undefined) {
-              // Range mode: stretch child to span [xMin, xMax] in data space
-              const node = child as GoFishNode;
-              const xMinPx = posScales[0]!(getValue(xMin[index])!);
-              const xMaxPx = posScales[0]!(getValue(xMax[index])!);
-              const width = xMaxPx - xMinPx;
-              node.transform!.translate![0] = xMinPx;
-              node.intrinsicDims![0] = {
-                ...(node.intrinsicDims![0] ?? {}),
-                min: 0,
-                size: width,
-                center: width / 2,
-                max: width,
-              } as Dimensions[0];
-            } else if (xPos !== undefined) {
-              const resolvedX = isValue(xPos)
-                ? posScales[0]!(getValue(xPos)!)
-                : xPos;
-              setAxisTranslation(child, 0, resolvedX, "center");
-            }
-
-            if (yMin !== undefined && yMax !== undefined) {
-              // Range mode: stretch child to span [yMin, yMax] in data space
-              const node = child as GoFishNode;
-              const yMinPx = posScales[1]!(getValue(yMin[index])!);
-              const yMaxPx = posScales[1]!(getValue(yMax[index])!);
-              const height = yMaxPx - yMinPx;
-              node.transform!.translate![1] = yMinPx;
-              node.intrinsicDims![1] = {
-                ...(node.intrinsicDims![1] ?? {}),
-                min: 0,
-                size: height,
-                center: height / 2,
-                max: height,
-              } as Dimensions[1];
-            } else if (yPos !== undefined) {
-              const resolvedY = isValue(yPos)
-                ? posScales[1]!(getValue(yPos)!)
-                : yPos;
-              setAxisTranslation(child, 1, resolvedY, "center");
-            }
-          });
-
-          // Align children on axes scatter doesn't position (spread-style semantics)
-          ([0, 1] as const).forEach((axis) => {
-            const positions = axis === 0 ? x : y;
-            const isRangeAxis =
-              axis === 0
-                ? xMin !== undefined && xMax !== undefined
-                : yMin !== undefined && yMax !== undefined;
-            if (positions !== undefined || isRangeAxis) return;
-
-            const fromSize = axis === 0 ? xFromSize : yFromSize;
-            alignChildren(
-              childPlaceables,
-              axis,
-              alignment,
-              size[axis],
-              posScales?.[axis],
-              fromSize
-            );
-          });
-
-          const minX = Math.min(
-            ...childPlaceables.map((child) => child.dims[0].min!)
-          );
-          const maxX = Math.max(
-            ...childPlaceables.map((child) => child.dims[0].max!)
-          );
-          const minY = Math.min(
-            ...childPlaceables.map((child) => child.dims[1].min!)
-          );
-          const maxY = Math.max(
-            ...childPlaceables.map((child) => child.dims[1].max!)
-          );
-
-          return {
-            intrinsicDims: [
-              {
-                min: minX,
-                size: maxX - minX,
-                center: minX + (maxX - minX) / 2,
-                max: maxX,
-              },
-              {
-                min: minY,
-                size: maxY - minY,
-                center: minY + (maxY - minY) / 2,
-                max: maxY,
-              },
-            ],
-            transform: {
-              translate: [hasX ? 0 : undefined, hasY ? 0 : undefined],
-            },
-          };
-        },
-        render: ({ transform }, children) => {
-          return (
-            <g
-              transform={`translate(${transform?.translate?.[0] ?? 0}, ${transform?.translate?.[1] ?? 0})`}
-            >
-              {children}
-            </g>
-          );
-        },
-      },
-      children
-    );
+        const span: {
+          x?: [MaybeValue<number>, MaybeValue<number>];
+          y?: [MaybeValue<number>, MaybeValue<number>];
+        } = {};
+        if (xMin?.[i] !== undefined && xMax?.[i] !== undefined)
+          span.x = [xMin[i], xMax[i]];
+        if (yMin?.[i] !== undefined && yMax?.[i] !== undefined)
+          span.y = [yMin[i], yMax[i]];
+        if (span.x !== undefined || span.y !== undefined)
+          cs.push(Constraint.span(span, [refs[i]]));
+      });
+      // A cross-axis align over the (data-positioned) points: it shares the
+      // frame; `align` leaves the points where their own scale puts them by
+      // reading their abstract placement (no guard flag needed).
+      if (!hasX) cs.push(Constraint.align({ x: alignment }, refs));
+      if (!hasY) cs.push(Constraint.align({ y: alignment }, refs));
+      return cs;
+    });
+    if (name !== undefined) node._name = name;
+    if (axes !== undefined) {
+      const toShow = (opt: AxisOptions | undefined): boolean | undefined =>
+        opt === undefined ? undefined : opt === false ? false : true;
+      node._axisOverride =
+        typeof axes === "boolean"
+          ? { x: axes, y: axes }
+          : { x: toShow(axes.x), y: toShow(axes.y) };
+    }
+    return node;
   }
 );
 
@@ -304,25 +156,28 @@ export const Scatter = createNodeOperator(
  * `by` is a groupBy field — omit for per-item scatter.
  */
 export type ScatterOptions = {
-  by?: string;
-  x?: string | number | MaybeValue<number>[];
-  y?: string | number | MaybeValue<number>[];
+  by?: SplitBy;
+  x?: string | number | PositionValue[];
+  y?: string | number | PositionValue[];
   xMin?: string | MaybeValue<number>[];
   xMax?: string | MaybeValue<number>[];
   yMin?: string | MaybeValue<number>[];
   yMax?: string | MaybeValue<number>[];
   alignment?: "start" | "middle" | "end" | "baseline";
   debug?: boolean;
+  axes?: boolean | { x?: AxisOptions; y?: AxisOptions };
+  w?: MaybeValue<number>;
+  h?: MaybeValue<number>;
 };
 
-export const scatter = createOperator<any, ScatterOptions>(Scatter, {
+export const scatter = createOperator<any, ScatterOptions>(Scatter as any, {
   // When no `by` is given, pass each item through as-is. Items may already be
   // arrays or scalars; downstream marks/channels handle either form.
   split: ({ by }, d) =>
-    by ? Map.groupBy(d, (r: any) => r[by]) : new Map(d.map((r, i) => [i, r])),
+    by ? Map.groupBy(d, splitKeyFn(by)) : new Map(d.map((r, i) => [i, r])),
   channels: {
-    x: { type: "pos", entry: true },
-    y: { type: "pos", entry: true },
+    x: { type: "pos", entry: true, discrete: true },
+    y: { type: "pos", entry: true, discrete: true },
     xMin: { type: "pos", entry: true },
     xMax: { type: "pos", entry: true },
     yMin: { type: "pos", entry: true },
@@ -338,4 +193,5 @@ export const scatter = createOperator<any, ScatterOptions>(Scatter, {
     else if (typeof yMax === "string") fields.y = yMax;
     return fields;
   },
+  serialize: { type: "scatter" },
 });

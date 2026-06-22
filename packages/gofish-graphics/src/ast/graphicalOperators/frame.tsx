@@ -4,6 +4,7 @@ import { coord } from "../coordinateTransforms/coord";
 import { layer } from "./layer";
 import { createNodeOperator } from "../withGoFish";
 import { GoFishAST } from "../_ast";
+import type { AxesOptions } from "../gofish";
 export const Frame = createNodeOperator(
   (
     options: {
@@ -13,6 +14,8 @@ export const Frame = createNodeOperator(
       y?: number;
       transform?: { scale?: { x?: number; y?: number } };
       box?: boolean;
+      axes?: AxesOptions;
+      padding?: number;
     } & FancyDims,
     children: GoFishAST[]
   ) => {
@@ -23,6 +26,8 @@ export const Frame = createNodeOperator(
           x: options.x,
           y: options.y,
           transform: options.coord,
+          axes: options.axes,
+          padding: options.padding,
         },
         children
       );
@@ -31,4 +36,3 @@ export const Frame = createNodeOperator(
     }
   }
 );
-

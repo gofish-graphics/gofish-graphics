@@ -154,7 +154,7 @@ const dots = data(drivingShifts).flow(scatter(...)).mark(circle(...))
 
 // hmm... no?
 const line = data(dots).flow(connect(..."x"...)).mark()
-const line = data().flow(connect(..."x"...)).mark(select(dots))
+const line = data().flow(connect(..."x"...)).mark(ref(dots))
 
 // ??? join???
 const spanAnnots = data(timeSpanAnnotations).mark(label({text, }))
@@ -231,7 +231,7 @@ layer([
     .mark(rect({ w: 16, h: "count", fill: "species" }))
     .as("bars"),
   // an array of data with key and mark ref
-  data(select("bars"))
+  data(selectAll("bars"))
     // array is now grouped by species with one mark produced for each one
     .flow(derive(groupBy("species")))
     // species array is passed as children(?) to connect
@@ -240,7 +240,7 @@ layer([
 ```
 
 This last shape — `layer([...])` of `chart(...).flow(...).mark(...)`, where
-later layers `select` earlier ones — is the one that felt right, and the rest
+later layers `selectAll` earlier ones — is the one that felt right, and the rest
 of the examples below are written against it.
 
 ## Worked examples
@@ -282,7 +282,7 @@ layer([
     .flow(scatter({ x: "lakeLocX" }))
     .mark(blank())
     .as("points"),
-  chart(select("points")).mark(line()),
+  chart(selectAll("points")).mark(line()),
 ]);
 ```
 
@@ -314,7 +314,7 @@ layer([
     .flow(scatter({ x: "lakeLocX" }))
     .mark(blank({ h: "count" }))
     .as("points"),
-  chart(select("points")).mark(connect()),
+  chart(selectAll("points")).mark(connect()),
 ]);
 ```
 
@@ -352,7 +352,7 @@ layer([
     .flow(scatter({ x: "lakeLocX" }), stack("species", { dir: "y" }))
     .mark(blank({ h: "count" }))
     .as("points"),
-  chart(select("points")).mark(group("species"), connect()),
+  chart(selectAll("points")).mark(group("species"), connect()),
 ]);
 ```
 
@@ -386,7 +386,7 @@ layer([
     )
     .mark(blank({ h: "count" }))
     .as("points"),
-  chart(select("points")).mark(group("species"), connect()),
+  chart(selectAll("points")).mark(group("species"), connect()),
 ]);
 ```
 
@@ -430,7 +430,7 @@ layer([
     .mark(rect({ w: 16, h: "count", fill: "species" }))
     .as("bars"),
   // an array of data with key and mark ref
-  chart(select("bars")) // pair up data values?
+  chart(selectAll("bars")) // pair up data values?
     // array is now grouped by species with one mark produced for each one
     .flow(group("species"))
     // species array is passed as children(?) to connect
@@ -451,7 +451,7 @@ plot({ coord: clock() }).mark([
     .mark(rect({ w: 16, h: "count", fill: "species" }))
     .as("bars"),
   // an array of data with key and mark ref
-  plot(select("bars"))
+  plot(selectAll("bars"))
     // array is now grouped by species with one mark produced for each one
     .flow(group("species"))
     // species array is passed as children(?) to connect
@@ -468,7 +468,7 @@ const area = createMark((data, { x, y }) =>
       .flow(scatter({ x }))
       .mark(blank({ h: y }))
       .as("points"),
-    chart(select("points")).mark(connect()),
+    chart(selectAll("points")).mark(connect()),
   ])
 );
 
@@ -486,7 +486,7 @@ const area = createMark((data, { x, y }) =>
       .flow(scatter({ x }))
       .mark(blank({ h: y }))
       .as("points"),
-    chart(select("points")).mark(connect()),
+    chart(selectAll("points")).mark(connect()),
   ])
 );
 
@@ -517,7 +517,7 @@ layer([
     .flow(scatter({ x: "lakeLocX" }))
     .mark(circle())
     .as("points"),
-  chart(select("points")).mark(line(/* { z: -1 } */)).zIndex(-1),
+  chart(selectAll("points")).mark(line(/* { z: -1 } */)).zIndex(-1),
 ]);
 ```
 
@@ -539,7 +539,7 @@ layer([
     )
     .mark(circle({ fill: (d) => d.Color }))
     .as("points"),
-  chart(select("points"), group("Color"))
+  chart(selectAll("points"), group("Color"))
     .mark(line(/* { z: -1 } */))
     .zIndex(-1),
 ]);
@@ -551,7 +551,7 @@ layer([
 const boxAndWhisker = createMark((data, { q0, q25, q50, q75, q100, fill }) => [
   segment({ y: q0, stroke: "gray + 1px" }).as("min"),
   segment({ y: q100, stroke: "gray + 1px" }).as("max"),
-  connect({ from: select("min"), to: select("max") }),
+  connect({ from: ref("min"), to: ref("max") }),
   segment({ "y-min": q1, "y-max": q3, fill }),
   segment({ y: q50, stroke: "white + 1px" }),
 ]);
@@ -586,7 +586,7 @@ const violin = createMark((data, { x, fill }) => {
       .flow(scatter({ y: "y", alignment: "middle" }))
       .mark(blank({ w: "x", fill }))
       .as("points"),
-    chart(select("points")).mark(connect()),
+    chart(selectAll("points")).mark(connect()),
   ]);
 });
 

@@ -13,22 +13,19 @@ import { binding, isPointer, pointer, tuple } from "./types";
 
 const meta: Meta = {
   title: "Bluefish/Python Tutor/Python Tutor",
-  argTypes: {
-    w: {
-      control: { type: "number", min: 400, max: 2000, step: 20 },
-    },
-    h: {
-      control: { type: "number", min: 200, max: 1200, step: 20 },
-    },
-  },
 };
 export default meta;
 
-type Args = { w: number; h: number };
-
-export const PythonTutor: StoryObj<Args> = {
-  args: { w: 1250, h: 600 },
-  render: (args: Args) => {
+export const PythonTutor: StoryObj = {
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "Python Tutor Memory Diagram",
+      description:
+        "A Python Tutor style runtime memory diagram showing a global frame of variables whose pointers fan out with arrows into a heap of linked tuples.",
+    },
+  },
+  render: () => {
     const container = initializeContainer();
     const data = {
       stack: [
@@ -106,7 +103,7 @@ export const PythonTutor: StoryObj<Args> = {
     );
 
     Layer([
-      Spread({ dir: "x", alignment: "start", spacing: 100 }, [
+      Spread({ dir: "x", alignment: "end", spacing: 100 }, [
         globalFrame({ stack: data.stack }).name(globalFrameName),
         heap({
           heap: data.heap,
@@ -115,7 +112,7 @@ export const PythonTutor: StoryObj<Args> = {
       ]),
       ...stackArrows,
       ...heapArrows,
-    ]).render(container, { w: args.w, h: args.h });
+    ]).render(container, {});
 
     return container;
   },

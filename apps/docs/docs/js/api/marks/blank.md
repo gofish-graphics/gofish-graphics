@@ -2,7 +2,7 @@
 
 Creates invisible positioning guides. Use blank when you need to define positions for other marks (like `line` or `area`) without rendering visible shapes.
 
-::: starfish
+::: gofish
 
 ```js
 const locations = Object.entries(lakeLocations).map(([lake, { x, y }]) => ({
@@ -11,13 +11,13 @@ const locations = Object.entries(lakeLocations).map(([lake, { x, y }]) => ({
   y,
 }));
 
-gf.Layer([
+gf.layer([
   gf
-    .Chart(locations)
+    .chart(locations)
     .flow(gf.scatter({ by: "lake", x: "x", y: "y" }))
     .mark(gf.blank().name("points")),
   gf
-    .Chart(gf.select("points"))
+    .chart(gf.selectAll("points"))
     .mark(gf.line({ stroke: "steelblue", strokeWidth: 2 })),
 ]).render(root, { w: 400, h: 250, axes: true });
 ```

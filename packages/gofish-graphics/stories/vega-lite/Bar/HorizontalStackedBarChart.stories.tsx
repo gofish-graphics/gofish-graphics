@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../../helper";
-import { Chart, spread, stack, rect, derive, palette } from "../../../src/lib";
+import { chart, spread, stack, rect, derive, palette } from "../../../src/lib";
 import { groupBy, sumBy } from "lodash";
 import data from "vega-datasets";
 
@@ -21,13 +21,20 @@ type Args = { w: number; h: number };
 export const Default: StoryObj<Args> = {
   args: { w: 500, h: 400 },
   loaders: [async () => ({ barley: await data["barley.json"]() })],
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "Horizontal Stacked Bar Chart",
+      description: "A horizontal stacked bar chart of barley yield by variety, with each bar segmented and colored by the six experimental field sites.",
+    },
+  },
   render: (args: Args, context: any) => {
     const container = initializeContainer();
 
-    Chart(context.loaded.barley as any[], { color: palette("tableau10") })
+    chart(context.loaded.barley as any[], { color: palette("tableau10"), axes: true })
       .flow(spread({ by: "variety",  dir: "y" }), stack({ by: "site",  dir: "x" }))
       .mark(rect({ w: "yield", fill: "site" }))
-      .render(container, { w: args.w, h: args.h, axes: true });
+      .render(container, { w: args.w, h: args.h });
 
     return container;
   },

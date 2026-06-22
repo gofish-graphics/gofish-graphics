@@ -74,7 +74,7 @@ stroke: "2pt red";
 ```ts
 layer([
   ...,
-  chart(select("bars").when((d) => d < 10)).mark(label("count", {align: {x: "middle", y: "middle"}}))
+  chart(selectAll("bars").when((d) => d < 10)).mark(label("count", {align: {x: "middle", y: "middle"}}))
 ]
 )
 ```

@@ -10,16 +10,18 @@
  */
 
 import {
-  Chart,
+  chart,
   Layer,
-  select,
+  selectAll,
   spread,
   stack,
   scatter,
   group,
+  treemap,
   table,
   log as logOp,
   derive,
+  resolve,
   rect,
   circle,
   line,
@@ -33,25 +35,44 @@ import {
   palette,
   gradient,
   clock,
-  v,
+  polar,
+  wavy,
   layer,
   Constraint,
   ref,
   arrow,
   connect,
+  // Region-compositing combinators. PR #404's Stage-2 rename (#196/#202)
+  // renamed the public Porter-Duff exports to Figma-inspired names:
+  //   inside → intersect, xor → exclude, out → subtract, atop → paint.
+  // `over` stays internal-for-IR (re-exported from lib.ts only for this
+  // harness — use `layer` in user code). The COMBINATOR_FACTORIES map below
+  // is still keyed by the OLD wire-type strings ("inside"/"xor"/...), which
+  // the IR serializer never renamed — see the matching comments in
+  // packages/gofish-graphics/src/serialize/registry.ts and chart.ts.
   over,
-  inside,
-  xor,
-  out,
-  atop,
+  intersect,
+  exclude,
+  subtract,
+  paint,
   mask,
+  // `cut` (pure slice primitive → array of slice-node promises) and `cutMark`
+  // (v3 expand-mark form). A `cut` IR node used as a chart `.mark(...)` →
+  // `cutMark`; used as a combinator child → expanded into slices via `cut`.
+  // `offset` is the public node operator a `{type:"offset"}` IR node maps to.
+  cut as cutSlices,
+  cutMark,
+  offset as offsetOp,
   createName,
   Treemap,
+  setMeasureProvenance,
   type ChartBuilder,
+  type MeasureProvenance,
   type Operator,
   type Mark,
   type Token,
 } from "gofish-graphics";
+import { Frontend } from "gofish-ir";
 
 // Combinator-form factory map. Each entry takes (opts, marks) and returns
 // a Mark. JS storybook uses these directly via the dual-mode operator
@@ -61,26 +82,39 @@ const COMBINATOR_FACTORIES: Record<
   (opts: Record<string, any>, marks: Mark<any>[]) => Mark<any>
 > = {
   spread: (opts, marks) => spread(opts, marks) as unknown as Mark<any>,
+  // stack/scatter/group/table are dual-mode operators (createOperator) whose
+  // `(opts, marks)` overload yields a combinator-form Mark — Python emits the
+  // matching `__combinator: true` IR (e.g. the v1 `stackX`/`stackY` ports).
+  stack: (opts, marks) => stack(opts, marks) as unknown as Mark<any>,
+  scatter: (opts, marks) => scatter(opts, marks) as unknown as Mark<any>,
+  group: (opts, marks) => group(opts, marks) as unknown as Mark<any>,
+  table: (opts, marks) => table(opts, marks) as unknown as Mark<any>,
   layer: (opts, marks) => layer(opts, marks) as unknown as Mark<any>,
   arrow: (opts, marks) => arrow(opts, marks) as unknown as Mark<any>,
   connect: (opts, marks) => connect(opts, marks) as unknown as Mark<any>,
   treemap: (opts, marks) => Treemap(opts, marks) as unknown as Mark<any>,
-  over: (opts, marks) => over(opts, marks) as unknown as Mark<any>,
-  inside: (opts, marks) => inside(opts, marks) as unknown as Mark<any>,
-  xor: (opts, marks) => xor(opts, marks) as unknown as Mark<any>,
-  out: (opts, marks) => out(opts, marks) as unknown as Mark<any>,
-  atop: (opts, marks) => atop(opts, marks) as unknown as Mark<any>,
-  mask: (opts, marks) => mask(opts, marks) as unknown as Mark<any>,
+  // Keys are the IR wire types (UNCHANGED — the serializer never renamed
+  // them); values are the renamed (#196/#202) combinator factories. Mirrors
+  // packages/gofish-graphics/src/serialize/registry.ts's COMBINATOR_FACTORIES.
+  // Porter-Duff combinators have a stricter `[Mark, Mark]` tuple signature
+  // than a runtime deserializer can satisfy; cast the function at the dispatch
+  // boundary, mirroring registry.ts's COMBINATOR_FACTORIES.
+  over: (opts, marks) => (over as any)(opts, marks) as unknown as Mark<any>,
+  inside: (opts, marks) =>
+    (intersect as any)(opts, marks) as unknown as Mark<any>,
+  xor: (opts, marks) => (exclude as any)(opts, marks) as unknown as Mark<any>,
+  out: (opts, marks) => (subtract as any)(opts, marks) as unknown as Mark<any>,
+  atop: (opts, marks) => (paint as any)(opts, marks) as unknown as Mark<any>,
+  mask: (opts, marks) => (mask as any)(opts, marks) as unknown as Mark<any>,
 };
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-interface SelectDataSpec {
-  type: "select";
-  layer: string;
-}
+// Derived from the canonical frontend-IR schema rather than re-declared, so the
+// harness can't drift from the `{ type: "select" }` arm of `Frontend.DataIR`.
+type SelectDataSpec = Extract<Frontend.DataIR, { type: "select" }>;
 
 interface ChartHarnessSpec {
   data: Record<string, any>[] | SelectDataSpec | null;
@@ -88,6 +122,10 @@ interface ChartHarnessSpec {
   mark: MarkSpec;
   options: Record<string, any>;
   zOrder?: number | null;
+  connect?: MarkSpec | null;
+  // Name tagged via `Layer([chart.name(...), ...])` so a layer-level
+  // `.constrain(...)` callback can reference the resolved child node.
+  name?: string | TokenSentinel | null;
 }
 
 interface SingleChartHarnessSpec extends ChartHarnessSpec {
@@ -99,6 +137,11 @@ interface LayerHarnessSpec {
   type: "layer";
   charts: ChartHarnessSpec[];
   options: Record<string, any>;
+  // Constraints relating the named children of a `Layer([...]).constrain(...)`.
+  constraints?: ConstraintSpec[];
+  // True for a v3 `chart(...).layer(...)` builder chain: reconstruct through
+  // the real LayerBuilder so JS owns the builder's render logic.
+  builder?: boolean;
   deriveServerUrl?: string;
 }
 
@@ -121,7 +164,7 @@ interface OperatorSpec {
 }
 
 interface ConstraintSpec {
-  type: "align" | "distribute" | "zAbove" | "zBelow";
+  type: "align" | "distribute" | "position" | "zAbove" | "zBelow";
   // Positioning constraints carry `options`; z-order constraints don't.
   options?: Record<string, any>;
   refs: string[];
@@ -183,18 +226,16 @@ function makeLambdaAccessor(
 }
 
 /**
- * Walk an arbitrary value and resolve Python-emitted sentinels:
- * - `{__gofish_v: field}` → `v(field)` call (literal-value wrapper).
+ * Walk an arbitrary value and resolve Python-emitted lambda sentinels.
  * - `{__gofish_lambda: id}` → an `async (d) => fetch /derive/<id>` arrow.
  *
- * Python uses sentinels because dict-only IR has no way to author a
- * function call; the harness rebuilds them before handing props to JS.
+ * Python's `datum(x)` emits the canonical `{type: "datum", datum: x}`
+ * shape directly, so no unwrap is needed for per-row values.
  */
 function unwrapMarkOpts(value: any, deriveServerUrl: string | undefined): any {
   if (value === null || typeof value !== "object") return value;
   if (Array.isArray(value))
     return value.map((v) => unwrapMarkOpts(v, deriveServerUrl));
-  if ("__gofish_v" in value) return v(value.__gofish_v);
   if (typeof value.__gofish_lambda === "string") {
     return makeLambdaAccessor(value.__gofish_lambda, deriveServerUrl);
   }
@@ -319,7 +360,11 @@ function mapOperator(
   op: OperatorSpec,
   deriveServerUrl?: string
 ): Operator<any, any> | null {
-  const { type, ...opts } = op;
+  const { type, translate, ...opts } = op;
+  const applyTranslate = <T>(operator: T): T =>
+    translate && typeof (operator as any).translate === "function"
+      ? ((operator as any).translate(translate) as T)
+      : operator;
 
   switch (type) {
     case "derive": {
@@ -328,41 +373,60 @@ function mapOperator(
       if (!deriveServerUrl)
         throw new Error("derive operator requires deriveServerUrl");
 
-      return derive(async (d: any) => {
-        const rows = Array.isArray(d) ? d : d == null ? [] : [d];
-        if (rows.length === 0) return Array.isArray(d) ? d : (d ?? null);
+      // A transform (e.g. `bin`) declares measure provenance for its output
+      // columns in the IR; the array symbol can't cross the RPC, so re-apply it
+      // to the returned rows (mirrors serialize/registry.ts and the JS bin).
+      const provenance = opts.provenance as MeasureProvenance | undefined;
+      return applyTranslate(
+        derive(async (d: any) => {
+          const rows = Array.isArray(d) ? d : d == null ? [] : [d];
+          if (rows.length === 0) return Array.isArray(d) ? d : (d ?? null);
 
-        const resp = await fetch(`${deriveServerUrl}/derive/${lambdaId}`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(rows),
-        });
+          const resp = await fetch(`${deriveServerUrl}/derive/${lambdaId}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(rows),
+          });
 
-        if (!resp.ok) {
-          throw new Error(
-            `Derive server error: ${resp.status} ${await resp.text()}`
-          );
-        }
+          if (!resp.ok) {
+            throw new Error(
+              `Derive server error: ${resp.status} ${await resp.text()}`
+            );
+          }
 
-        const result = await resp.json();
-        return Array.isArray(d) ? result : (result[0] ?? null);
-      });
+          const result = await resp.json();
+          const tagged =
+            provenance !== undefined
+              ? setMeasureProvenance(result, provenance)
+              : result;
+          return Array.isArray(d) ? tagged : (tagged[0] ?? null);
+        })
+      );
     }
     // Modern v3 operators all take a single options object with `by`,
     // `dir`, etc. as keyword args. The previous `field`-positional shape
     // was stale and silently miscalled most ops.
     case "spread":
-      return spread(opts as any);
+      return applyTranslate(spread(opts as any));
     case "stack":
-      return stack(opts as any);
+      return applyTranslate(stack(opts as any));
     case "group":
-      return group(opts as any);
+      return applyTranslate(group(opts as any));
+    case "resolve":
+      return applyTranslate(
+        resolve(opts.cols as string[], {
+          from: selectAll(opts.from as string),
+          key: opts.key as string | undefined,
+        })
+      );
     case "scatter":
-      return scatter(opts as any);
+      return applyTranslate(scatter(opts as any));
     case "table":
-      return table(opts as any);
+      return applyTranslate(table(opts as any));
+    case "treemap":
+      return applyTranslate(treemap(opts as any));
     case "log":
-      return logOp(opts.label);
+      return applyTranslate(logOp(opts.label));
     default:
       console.warn(`Unknown operator type: ${type}`);
       return null;
@@ -404,11 +468,45 @@ function resolveRefSelection(selection: any, resolveToken: TokenResolver): any {
   return selection;
 }
 
+/**
+ * Map combinator-child specs to runtime children, expanding any `cut` child
+ * into its N slice nodes in place. Mirrors the deserializer's
+ * `mapMarkChildren` (packages/gofish-graphics/src/serialize/fromJSON.ts): the
+ * pure `cut(source, opts)` returns a `Promise<GoFishNode>[]` that combinators
+ * accept directly, so cut's extent resolution stays in ONE place (JS).
+ */
+function mapMarkChildren(
+  specs: MarkSpec[],
+  deriveServerUrl: string | undefined,
+  resolveToken: TokenResolver
+): any[] {
+  const out: any[] = [];
+  for (const child of specs as any[]) {
+    if (child && child.type === "cut") {
+      const sourceMark = mapMark(child.source, deriveServerUrl, resolveToken);
+      const slices = cutSlices(sourceMark as any, {
+        dir: child.dir,
+        size: unwrapMarkOpts(child.size, deriveServerUrl),
+        inset: child.inset,
+      });
+      out.push(...slices);
+    } else {
+      out.push(mapMark(child as MarkSpec, deriveServerUrl, resolveToken));
+    }
+  }
+  return out;
+}
+
 function mapMark(
   spec: MarkSpec,
   deriveServerUrl: string | undefined,
   resolveToken: TokenResolver
 ): Mark<any> {
+  const applyTranslate = <T>(mark: T): T =>
+    spec.translate && typeof (mark as any).translate === "function"
+      ? ((mark as any).translate(spec.translate) as T)
+      : mark;
+
   // Mark-as-function: Python registered a `(data) -> ChartBuilder` lambda
   // in the derive-server registry. The JS Mark fetches a chart IR per
   // invocation and rebuilds a ChartBuilder JS-side; `resolveMarkResult`
@@ -455,9 +553,52 @@ function mapMark(
   // (for `ref(token).foo[2].bar` proxy navigation), or contain token
   // sentinels that need resolving.
   if (spec.type === "ref" && !spec.__combinator) {
-    return ref(
-      resolveRefSelection(spec.selection, resolveToken)
-    ) as unknown as Mark<any>;
+    return applyTranslate(
+      ref(
+        resolveRefSelection(spec.selection, resolveToken)
+      ) as unknown as Mark<any>
+    );
+  }
+
+  // `offset` node: shift a single child by (x, y) render-pixels. Maps to the
+  // public `offset` operator, which accepts a Mark child and resolves it.
+  if (spec.type === "offset") {
+    const [childMark] = mapMarkChildren(
+      spec.children ?? [],
+      deriveServerUrl,
+      resolveToken
+    );
+    return applyTranslate(
+      offsetOp({ x: spec.x, y: spec.y }, [
+        childMark as any,
+      ]) as unknown as Mark<any>
+    );
+  }
+
+  // `cut` mark in a chart `.mark(...)` position → the v3 expand-mark form
+  // (`cutMark`). The field-name-string `size` sugar resolves per-row here. (A
+  // `cut` used as a combinator CHILD is expanded into its N slice nodes in
+  // place by `mapMarkChildren` — extent resolution lives in ONE place, JS.)
+  if (spec.type === "cut") {
+    const sourceMark = mapMark(spec.source, deriveServerUrl, resolveToken);
+    let mark = cutMark({
+      source: sourceMark as any,
+      dir: spec.dir,
+      size: unwrapMarkOpts(spec.size, deriveServerUrl),
+      inset: spec.inset,
+    });
+    mark = applyTranslate(mark);
+    const nameVal = resolveNameField(spec.name, resolveToken);
+    if (nameVal != null && typeof (mark as any).name === "function") {
+      mark = (mark as any).name(nameVal);
+    }
+    if (
+      typeof spec.zOrder === "number" &&
+      typeof (mark as any).zOrder === "function"
+    ) {
+      mark = (mark as any).zOrder(spec.zOrder);
+    }
+    return mark;
   }
 
   // Combinator-form marks: a layout operator (`spread`, `layer`, or
@@ -467,10 +608,17 @@ function mapMark(
   // rebuild it by calling the JS operator's `(opts, marks)` overload,
   // then chain `.constrain(...)` if present.
   if (spec.__combinator) {
-    const childMarks = (spec.children ?? []).map((c) =>
-      mapMark(c, deriveServerUrl, resolveToken)
+    const childMarks = mapMarkChildren(
+      spec.children ?? [],
+      deriveServerUrl,
+      resolveToken
     );
-    const opts = unwrapMarkOpts(spec.options ?? {}, deriveServerUrl);
+    // Resolve color/coord configs too — e.g. a `layer({coord: polar()})`
+    // carries its coord transform in the combinator options (BalloonChart,
+    // FlowerChart), not chart options.
+    const opts = resolveOptions(
+      unwrapMarkOpts(spec.options ?? {}, deriveServerUrl)
+    );
     const factory = COMBINATOR_FACTORIES[spec.type];
     if (!factory) {
       throw new Error(`Unknown combinator mark type: ${spec.type}`);
@@ -506,6 +654,7 @@ function mapMark(
     if (spec.__scope) {
       mark = wrapWithScope(mark);
     }
+    mark = applyTranslate(mark);
     const nameVal = resolveNameField(spec.name, resolveToken);
     if (nameVal != null && typeof (mark as any).name === "function") {
       mark = (mark as any).name(nameVal);
@@ -548,6 +697,7 @@ function mapMark(
   if (spec.__scope) {
     mark = wrapWithScope(mark);
   }
+  mark = applyTranslate(mark);
   const nameVal = resolveNameField(layerName, resolveToken);
   if (nameVal != null && typeof (mark as any).name === "function") {
     mark = (mark as any).name(nameVal);
@@ -599,6 +749,10 @@ function resolveOptions(
   ) {
     if (resolved.coord.type === "clock") {
       resolved.coord = clock();
+    } else if (resolved.coord.type === "polar") {
+      resolved.coord = polar();
+    } else if (resolved.coord.type === "wavy") {
+      resolved.coord = wavy();
     }
   }
   return resolved;
@@ -610,7 +764,8 @@ function resolveOptions(
 
 /**
  * Build a single ChartBuilder from a chart spec, resolving select-data
- * references via `select(layerName)` like the widget bundle does.
+ * references via `ref(layerName)` / `selectAll(layerName)` like the widget
+ * bundle does.
  */
 function buildChartFromSpec(
   chartSpec: ChartHarnessSpec,
@@ -625,21 +780,31 @@ function buildChartFromSpec(
   const mark = mapMark(chartSpec.mark, deriveServerUrl, resolveToken);
   const chartOpts = resolveOptions(chartSpec.options || {});
 
+  // Unwrap the canonical DataIR shapes. The wire formats are:
+  //   - { type: "inline", rows: [...] } → use the rows directly
+  //   - { type: "select", layer: name, mode } → resolve against the layer
+  //     registry: mode "all" → selectAll(layer), otherwise → ref(layer)
+  //   - null / array (legacy) → treat as bare rows
   let chartData: any = chartSpec.data;
-  if (
-    chartData &&
-    typeof chartData === "object" &&
-    !Array.isArray(chartData) &&
-    (chartData as SelectDataSpec).type === "select"
-  ) {
-    chartData = select((chartData as SelectDataSpec).layer);
+  if (chartData && typeof chartData === "object" && !Array.isArray(chartData)) {
+    if ((chartData as SelectDataSpec).type === "select") {
+      const sel = chartData as SelectDataSpec;
+      chartData = sel.mode === "all" ? selectAll(sel.layer) : ref(sel.layer);
+    } else if ((chartData as any).type === "inline") {
+      chartData = (chartData as any).rows;
+    }
   }
 
-  let builder = Chart(chartData, chartOpts)
+  let builder = chart(chartData, chartOpts)
     .flow(...operators)
     .mark(mark);
   if (chartSpec.zOrder !== undefined && chartSpec.zOrder !== null) {
     builder = builder.zOrder(chartSpec.zOrder);
+  }
+  if (chartSpec.connect) {
+    builder = builder.connect(
+      mapMark(chartSpec.connect, deriveServerUrl, resolveToken) as any
+    );
   }
   return builder;
 }
@@ -691,21 +856,73 @@ function renderChart(spec: HarnessSpec) {
           buildChartFromSpec(c, spec.deriveServerUrl, resolveToken)
         );
 
-        const layerNode =
-          Object.keys(layerOpts).length > 0
-            ? Layer(layerOpts as any, childCharts)
-            : Layer(childCharts);
+        if (spec.constraints && spec.constraints.length > 0) {
+          // Constrained layer-of-charts. Mirror the JS storybook spelling:
+          // resolve each chart to a node, `.name(...)` it, then wrap the
+          // resolved nodes in the combinator-form `layer([...]).constrain(...)`.
+          const constraints = spec.constraints;
+          const resolvedNodes: any[] = [];
+          for (let i = 0; i < childCharts.length; i++) {
+            const node: any = await (childCharts[i] as any).resolve();
+            const nm = resolveNameField(spec.charts[i].name, resolveToken);
+            if (nm != null) node.name(nm);
+            resolvedNodes.push(node);
+          }
+          let layerMark: any =
+            Object.keys(layerOpts).length > 0
+              ? layer(layerOpts as any, resolvedNodes)
+              : layer(resolvedNodes);
+          layerMark = layerMark.constrain((refs: Record<string, any>) =>
+            constraints.map((c) => {
+              if (c.type === "zAbove" || c.type === "zBelow") {
+                return (Constraint as any)[c.type](
+                  ...c.refs.map((name) => refs[name])
+                );
+              }
+              return (Constraint as any)[c.type](
+                c.options,
+                c.refs.map((name) => refs[name])
+              );
+            })
+          );
+          await layerMark.render(container, {
+            w,
+            h,
+            axes: axes ?? false,
+            debug: debug ?? false,
+          } as any);
+        } else if (spec.builder) {
+          // v3 `chart(...).layer(...)` chain: reconstruct through the real
+          // LayerBuilder so JS owns the builder's render logic (inferred axis
+          // titles, etc.) instead of re-deriving it here. The child charts are
+          // already wired (producer mark named, consumer reads selectAll), so
+          // chaining `.layer()` just stacks them.
+          const layerBuilder = childCharts
+            .slice(1)
+            .reduce((acc: any, c) => acc.layer(c), childCharts[0] as any);
+          await layerBuilder.render(container, {
+            w,
+            h,
+            axes: axes ?? false,
+            debug: debug ?? false,
+          } as any);
+        } else {
+          const layerNode =
+            Object.keys(layerOpts).length > 0
+              ? Layer(layerOpts as any, childCharts)
+              : Layer(childCharts);
 
-        await layerNode.render(container, {
-          w,
-          h,
-          axes: axes ?? false,
-          debug: debug ?? false,
-        } as any);
+          await layerNode.render(container, {
+            w,
+            h,
+            axes: axes ?? false,
+            debug: debug ?? false,
+          } as any);
+        }
       } else {
-        // Single-chart path. Pull render options out; rest are chart-level.
+        // Single-chart path. Only w/h/debug are render options; rest are chart-level.
         const allOpts = spec.options || {};
-        const { w, h, axes, debug, ...chartOptsRaw } = allOpts;
+        const { w, h, debug, ...chartOptsRaw } = allOpts;
         const node = buildChartFromSpec(
           {
             data: spec.data,
@@ -713,6 +930,7 @@ function renderChart(spec: HarnessSpec) {
             mark: spec.mark,
             options: chartOptsRaw,
             zOrder: spec.zOrder ?? null,
+            connect: spec.connect ?? null,
           },
           spec.deriveServerUrl,
           resolveToken
@@ -721,7 +939,6 @@ function renderChart(spec: HarnessSpec) {
         await node.render(container, {
           w,
           h,
-          axes: axes ?? false,
           debug: debug ?? false,
         } as any);
       }

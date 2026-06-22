@@ -1,7 +1,8 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
 import { catchLocationsArray } from "../../src/data/catch";
-import { Chart, layer, select, line, blank } from "../../src/lib";
+import { drivingShifts } from "../../src/data/drivingShifts";
+import { chart, line, blank } from "../../src/lib";
 import { scatter } from "../../src/lib";
 
 const meta: Meta = {
@@ -24,16 +25,40 @@ export const Default: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    layer([
-      Chart(catchLocationsArray)
-        .flow(scatter({ by: "lake",  x: "x", y: "y" }))
-        .mark(blank().name("points")),
-      Chart(select("points")).mark(line()),
-    ]).render(container, {
-      w: args.w,
-      h: args.h,
-      axes: true,
-    });
+    chart(catchLocationsArray, { axes: true })
+      .flow(scatter({ by: "lake", x: "x", y: "y" }))
+      .mark(blank())
+      .connect(line())
+      .render(container, {
+        w: args.w,
+        h: args.h,
+      });
+
+    return container;
+  },
+};
+
+export const GasPrices: StoryObj<Args> = {
+  args: { w: 500, h: 400 },
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "Line Chart",
+      description:
+        "A line chart tracing the average US price of gasoline year by year from 1956 to 2010, with the line ascending in chronological order to show how prices rose and fell over time.",
+    },
+  },
+  render: (args: Args) => {
+    const container = initializeContainer();
+
+    chart(drivingShifts, { axes: true })
+      .flow(scatter({ by: "year", x: "year", y: "gas" }))
+      .mark(blank())
+      .connect(line({ stroke: "steelblue", strokeWidth: 2 }))
+      .render(container, {
+        w: args.w,
+        h: args.h,
+      });
 
     return container;
   },

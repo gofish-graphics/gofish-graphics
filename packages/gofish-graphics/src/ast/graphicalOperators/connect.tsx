@@ -2,10 +2,17 @@ import { For } from "solid-js";
 import { Path, PathSegment, pathToSVGPath, transformPath } from "../../path";
 import { GoFishAST } from "../_ast";
 import { GoFishNode } from "../_node";
-import { Dimensions, elaborateDirection, FancyDirection, Size } from "../dims";
+import { resolveColorChannel } from "../../color";
+import {
+  Dimensions,
+  elaborateDirection,
+  FancyDirection,
+  Size,
+  translateString,
+} from "../dims";
 import { pairs } from "../../util";
 import { linear } from "../coordinateTransforms/linear";
-import { getValue, isValue, MaybeValue } from "../data";
+import { MaybeValue } from "../data";
 import { Domain } from "../domain";
 import { UNDEFINED, UnderlyingSpace } from "../underlyingSpace";
 import { createNodeOperator } from "../withGoFish";
@@ -182,14 +189,10 @@ export const connect = createNodeOperator(
                 {
                   min: hasPaths ? aMinX : 0,
                   size: w,
-                  center: hasPaths ? aMinX + w / 2 : 0,
-                  max: hasPaths ? aMaxX : 0,
                 },
                 {
                   min: hasPaths ? aMinY : 0,
                   size: h,
-                  center: hasPaths ? aMinY + h / 2 : 0,
-                  max: hasPaths ? aMaxY : 0,
                 },
               ],
               transform: { translate: [0, 0] },
@@ -425,6 +428,57 @@ export const connect = createNodeOperator(
             }
           }
 
+          // Merge consecutive segments that meet at a zero-extent joint into a
+          // single region/polyline (#520). Each pair was emitted as its own path,
+          // but adjacent segments share an edge at exact coordinates, so rendering
+          // them as separate <path>s lets antialiasing open hairline ~0.5px seams
+          // off the pixel grid. One path per run is gap-proof by construction.
+          //
+          // The joint between paths[i] and paths[i+1] is child i+1; it "has no
+          // extent" when that child collapses to a point on the connection
+          // (direction) axis (area points are zero-width; bar-like children with
+          // real width genuinely don't share an edge and must stay separate).
+          const EPS = 1e-6;
+          const jointMerges = (i: number): boolean => {
+            // center mode connects exact center points — always contiguous
+            if (mode === "center") return true;
+            // the joint between paths[i] and paths[i+1] is child i+1
+            const b = childPlaceables[i + 1].dims;
+            return Math.abs((b[dir].max ?? 0) - (b[dir].min ?? 0)) < EPS;
+          };
+
+          const flushRun = (run: Path[]): Path => {
+            if (run.length === 1) return run[0];
+            if (mode === "center") {
+              // Single-segment lines → one continuous polyline.
+              return run.flat();
+            }
+            // Each edge-mode segment is a quad
+            // [leadingEdge, endCap, trailingEdge, startCap]. Trace every leading
+            // edge forward, cap the last segment, trace every trailing edge back
+            // (reverse order; interior caps are zero-length so segments chain
+            // exactly), then cap the first — one closed region.
+            return [
+              ...run.map((p) => p[0]),
+              run[run.length - 1][1],
+              ...run
+                .slice()
+                .reverse()
+                .map((p) => p[2]),
+              run[0][3],
+            ];
+          };
+
+          const mergedPaths: Path[] = [];
+          let run: Path[] = [];
+          for (let i = 0; i < paths.length; i++) {
+            run.push(paths[i]);
+            if (i === paths.length - 1 || !jointMerges(i)) {
+              mergedPaths.push(flushRun(run));
+              run = [];
+            }
+          }
+
           // If no paths were created, use zero dimensions
           const bboxW = bboxPairs.length > 0 ? bboxMaxX - bboxMinX : 0;
           const bboxH = bboxPairs.length > 0 ? bboxMaxY - bboxMinY : 0;
@@ -434,18 +488,14 @@ export const connect = createNodeOperator(
               {
                 min: bboxPairs.length > 0 ? bboxMinX : 0,
                 size: bboxW,
-                center: bboxPairs.length > 0 ? bboxMinX + bboxW / 2 : 0,
-                max: bboxPairs.length > 0 ? bboxMaxX : 0,
               },
               {
                 min: bboxPairs.length > 0 ? bboxMinY : 0,
                 size: bboxH,
-                center: bboxPairs.length > 0 ? bboxMinY + bboxH / 2 : 0,
-                max: bboxPairs.length > 0 ? bboxMaxY : 0,
               },
             ],
             transform: { translate: [0, 0] },
-            renderData: { paths, defaultColor },
+            renderData: { paths: mergedPaths, defaultColor },
           };
         },
         render: (
@@ -454,17 +504,16 @@ export const connect = createNodeOperator(
           node
         ) => {
           const scaleContext = node.getRenderSession().scaleContext;
-          fill = fill ?? renderData.defaultColor;
-          fill = isValue(fill)
-            ? scaleContext?.unit?.color
-              ? scaleContext.unit.color.get(getValue(fill))
-              : getValue(fill)
-            : fill;
+          const rawFill: MaybeValue<string> | undefined =
+            fill ?? renderData.defaultColor;
+          const unitScale = scaleContext?.unit;
+          const resolvedFill: string | undefined = resolveColorChannel(
+            rawFill as MaybeValue<string>,
+            unitScale
+          );
 
           return (
-            <g
-              transform={`translate(${transform?.translate?.[0] ?? 0}, ${transform?.translate?.[1]! ?? 0})`}
-            >
+            <g transform={translateString(transform)}>
               <For each={renderData.paths}>
                 {(path) => {
                   const transformedPath = coordinateTransform
@@ -482,8 +531,12 @@ export const connect = createNodeOperator(
                           (mode === "center" ? "normal" : "multiply"),
                       }}
                       d={d}
-                      fill={fill ?? "none"}
-                      stroke={stroke ?? fill ?? "black"}
+                      // center mode is a stroked polyline, not a filled region —
+                      // a merged multi-point path would otherwise enclose area (#520)
+                      fill={
+                        mode === "center" ? "none" : (resolvedFill ?? "none")
+                      }
+                      stroke={stroke ?? resolvedFill ?? "black"}
                       stroke-width={strokeWidth ?? 0}
                       opacity={opacity ?? 1}
                     />

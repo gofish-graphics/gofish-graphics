@@ -2,10 +2,10 @@
 
 Transforms Cartesian coordinates into a polar coordinate system. The x-axis maps to angle (theta) and the y-axis maps to radius.
 
-::: starfish
+::: gofish
 
 ```js
-gf.Chart(seafood, { coord: gf.polar() })
+gf.chart(seafood, { coord: gf.polar() })
   .flow(gf.stack({ by: "species", dir: "x" }))
   .mark(gf.rect({ w: "count", fill: "species" }))
   .render(root, {

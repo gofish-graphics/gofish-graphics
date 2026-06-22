@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../../helper";
-import { Chart, spread, stack, rect, derive, log, palette } from "../../../src/lib";
+import { chart, spread, stack, rect, derive, log, palette } from "../../../src/lib";
 import { groupBy } from "lodash";
 import data from "vega-datasets";
 import _ from "lodash";
@@ -37,6 +37,13 @@ type Args = { w: number; h: number };
 export const Default: StoryObj<Args> = {
   args: { w: 600, h: 300 },
   loaders: [async () => ({ weather: await data["seattle-weather.csv"]() })],
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "Seattle Weather Stacked Bar Chart",
+      description: "A vertical stacked bar chart of the count of Seattle weather days per month, with each bar segmented and colored by weather type.",
+    },
+  },
   render: (args: Args, context: any) => {
     const container = initializeContainer();
 
@@ -45,7 +52,7 @@ export const Default: StoryObj<Args> = {
     // GoFish equivalent: use derive() to extract month from date, then group and count.
 
     // TODO: need a better way of aggregating by count or whatever.
-    Chart(context.loaded.weather as any[], {
+    chart(context.loaded.weather as any[], { axes: true,
       color: palette({ sun: "#e7ba52", fog: "#dfdfdf", drizzle: "#79a1d5", rain: "#1f77b4", snow: "#9467bd" }),
     })
       .flow(
@@ -76,7 +83,7 @@ export const Default: StoryObj<Args> = {
         derive((d) => ({ count: d.length, weather: d[0].weather }))
       )
       .mark(rect({ h: "count", fill: "weather" }))
-      .render(container, { w: args.w, h: args.h, axes: true });
+      .render(container, { w: args.w, h: args.h });
 
     return container;
   },

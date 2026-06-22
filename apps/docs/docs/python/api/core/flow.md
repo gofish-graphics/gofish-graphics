@@ -4,16 +4,16 @@ Applies a pipeline of **operators** to the chart's data. Operators partition,
 position, and transform the data before the [mark](/python/api/core/mark) draws
 it.
 
-::: starfish example:stacked-bar-chart hidden
+::: gofish example:stacked-bar-chart hidden
 :::
 
 ```python
 from gofish import chart, spread, stack, rect
 
-chart(seafood).flow(
+chart(seafood, axes=True).flow(
     spread(by="lake", dir="x"),
     stack(by="species", dir="y", label=False),
-).mark(rect(h="count", fill="species")).render(w=500, h=300, axes=True)
+).mark(rect(h="count", fill="species")).render(w=500, h=300)
 ```
 
 ## Signature

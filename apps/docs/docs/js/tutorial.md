@@ -4,7 +4,7 @@ Welcome to GoFish! In this tutorial we'll start with a rectangle and gradually
 turn it into a polar ribbon chart. Along the way, we'll encounter the pieces that make up a GoFish
 chart: shapes, graphical operators, scales, and coordinate transforms.
 
-::: starfish example:polar-ribbon-chart hidden
+::: gofish example:polar-ribbon-chart hidden
 
 To start, duplicate this tab to follow along in the live editor!
 
@@ -21,7 +21,7 @@ rect({ x: 0, y: 0, w: 32, h: 300, fill: gf.color.green[5] }).render(root, {
 });
 ``` -->
 
-::: starfish-live {template=vanilla-ts rtl lightTheme=aquaBlue darkTheme=atomDark previewHeight=400 coderHeight=500}
+::: gofish-live {template=vanilla-ts rtl lightTheme=aquaBlue darkTheme=atomDark previewHeight=400 coderHeight=500}
 
 ```ts index.ts
 import * as gf from "gofish-graphics";
@@ -30,7 +30,7 @@ import * as _ from "lodash";
 
 const root = document.getElementById("app");
 
-gf.Chart(seafood)
+gf.chart(seafood)
   .mark(gf.rect({ fill: gf.color.green[5] }))
   .render(root, { w: 500, h: 300 });
 ```
@@ -258,23 +258,27 @@ const root = document.getElementById("app");
 
 Next, we render a rectangle into it!
 
-:::starfish
+:::gofish
 
 ```ts
-gf.Chart(seafood)
+gf.chart(seafood)
   .mark(gf.rect({ fill: gf.color.green[5] }))
   .render(root, { w: 500, h: 300 });
 ```
 
 :::
 
-`gf.Chart()` creates a chart from data. We pass an array with a single object containing the rectangle's
+`gf.chart()` creates a chart from data. We pass an array with a single object containing the rectangle's
 position and size. Then we use `.mark()` to specify that we want to render `rect` shapes. The `fill` parameter specifies the color.
 We are using a green from GoFish's default color palette for this chart. Try changing `green` to `blue`
 or changing `5` to a higher or lower number.
 
 Finally, we call `.render` to render the chart to the DOM, specifying a width and height for the
-entire graphic.
+entire graphic. Both `w` and `h` are optional, and an omitted dimension is computed during layout
+per axis. An axis that scales data into pixels — a positional axis (scatter), or a data-driven size
+like bar heights — falls back to a default size. An axis with nothing to scale — a category axis, or
+fixed-size marks — keeps the marks at their natural size and shrinks to fit them. So a bar chart with
+no width gets default-width bars and a chart only as wide as it needs to be.
 
 ## Bar Chart
 
@@ -283,10 +287,10 @@ that. To turn our stack of rectangles into a bar chart, we'll need to take a few
 bar for
 each lake in the dataset:
 
-:::starfish
+:::gofish
 
 ```ts
-gf.Chart(seafood)
+gf.chart(seafood)
   .flow(gf.spread({ by: "lake", dir: "x" }))
   .mark(gf.rect({ w: 32, h: 300, fill: gf.color.green[5] }))
   .render(root, { w: 500, h: 300 });
@@ -308,10 +312,10 @@ six rectangles (one for each lake).
 To turn this into a bar chart, we'll change the `h` encoding of the `rect` shape to a data-driven
 quantity.
 
-:::starfish
+:::gofish
 
 ```ts
-gf.Chart(seafood)
+gf.chart(seafood)
   .flow(gf.spread({ by: "lake", dir: "x" }))
   .mark(gf.rect({ w: 32, h: "count", fill: gf.color.green[5] }))
   .render(root, { w: 500, h: 300 });
@@ -325,10 +329,10 @@ We remove the `w` field from our spec to have GoFish infer it for us. GoFish use
 of the chart we gave to `render` (as well as information from the graphical operators) to determine the
 width of each rectangle.
 
-:::starfish
+:::gofish
 
 ```ts
-gf.Chart(seafood)
+gf.chart(seafood)
   .flow(gf.spread({ by: "lake", dir: "x" }))
   .mark(gf.rect({ h: "count", fill: gf.color.green[5] }))
   .render(root, { w: 500, h: 300 });
@@ -339,15 +343,15 @@ gf.Chart(seafood)
 ## Axes
 
 Great! Now let's talk about how to add axes to your chart. GoFish can automatically infer axes from
-your spec as long as you put `axes: true` in the `render` method like so:
+your spec as long as you pass `axes: true` in the `chart()` options like so:
 
-:::starfish
+:::gofish
 
 ```ts
-gf.Chart(seafood)
+gf.chart(seafood, { axes: true })
   .flow(gf.spread({ by: "lake", dir: "x" }))
   .mark(gf.rect({ h: "count", fill: gf.color.green[5] }))
-  .render(root, { w: 500, h: 300, axes: true });
+  .render(root, { w: 500, h: 300 });
 ```
 
 :::
@@ -355,7 +359,7 @@ gf.Chart(seafood)
 <!-- Awesome. Now we have a y-axis. But what about the x-axis? Since the x-axis is a discrete quantity
 not tied to an argument like `h`, we'll need to pass a `key` field to the objects we want to label:
 
-:::starfish
+:::gofish
 
 ```ts
 StackX(
@@ -363,7 +367,7 @@ StackX(
   For(_.groupBy(seafood, "lake"), (lake, key) =>
     rect({ key, w: 32, h: v(_.sumBy(lake, "count")), fill: gf.color.green[5] })
   )
-).render(root, { w: 500, h: 300, axes: true });
+).render(root, { w: 500, h: 300 });
 ```
 
 ::: -->
@@ -379,16 +383,16 @@ Now we have a sense of the number of fish in each lake. It seems like Lake B has
 we broke this down by species? We can use a stacked bar chart for that. A stacked bar chart is kinda
 like a normal bar chart, except instead of a line of rectangles, it's a line of _stacked_ rectangles.
 
-:::starfish
+:::gofish
 
 ```ts
-gf.Chart(seafood)
+gf.chart(seafood, { axes: true })
   .flow(
     gf.spread({ by: "lake", dir: "x" }), //
     gf.stack({ by: "species", dir: "y", label: false })
   )
   .mark(gf.rect({ h: "count", fill: gf.color.green[5] }))
-  .render(root, { w: 500, h: 300, axes: true });
+  .render(root, { w: 500, h: 300 });
 ```
 
 :::
@@ -399,22 +403,22 @@ similar to `spread`, but doesn't put any spacing between the shapes it lays out.
 Now we have a rectangle for each species in each lake. But we can't tell the fish apart! Let's add a
 color encoding so that each rectangle's color corresponds to the species of fish.
 
-:::starfish
+:::gofish
 
 ```ts
-gf.Chart(seafood)
+gf.chart(seafood, { axes: true })
   .flow(
     gf.spread({ by: "lake", dir: "x" }), //
     gf.stack({ by: "species", dir: "y", label: false })
   )
   .mark(gf.rect({ h: "count", fill: "species" }))
-  .render(root, { w: 500, h: 300, axes: true });
+  .render(root, { w: 500, h: 300 });
 ```
 
 :::
 
 Much better! Notice that we also have a color legend telling us what each color represents. This was
-created automatically because have set `axes: true` on the `render` method.
+created automatically because we passed `axes: true` in the `chart()` options.
 
 <!-- ### The `stack` operator
 
@@ -429,17 +433,17 @@ Now we have a sense of the break down by lake, but these lakes are connected by 
 to track how the proportion of fish changes between each lake. Let's first try ordering the bars by
 their counts:
 
-:::starfish
+:::gofish
 
 ```ts
-gf.Chart(seafood)
+gf.chart(seafood, { axes: true })
   .flow(
     gf.spread({ by: "lake", dir: "x" }),
     gf.derive((d) => _.orderBy(d, "count")),
     gf.stack({ by: "species", dir: "y", label: false })
   )
   .mark(gf.rect({ h: "count", fill: "species" }))
-  .render(root, { w: 500, h: 300, axes: true });
+  .render(root, { w: 500, h: 300 });
 ```
 
 :::
@@ -452,12 +456,12 @@ together.
 
 ### Layering and Selection
 
-:::starfish
+:::gofish
 
 ```ts
-gf.Layer([
+gf.layer({ axes: true }, [
   gf
-    .Chart(seafood)
+    .chart(seafood)
     .flow(
       gf.spread({ by: "lake", dir: "x" }),
       gf.derive((d) => _.orderBy(d, "count", "desc")),
@@ -465,13 +469,12 @@ gf.Layer([
     )
     .mark(gf.rect({ h: "count", fill: "species" }).name("bars")),
   gf
-    .Chart(gf.select("bars"))
-    .flow(gf.group({ by: "species" }))
+    .chart(gf.selectAll("bars"))
+    .flow(gf.group({ by: "datum.species" }))
     .mark(gf.area({ opacity: 0.8 })),
 ]).render(root, {
   w: 500,
   h: 300,
-  axes: true,
 });
 ```
 
@@ -481,23 +484,25 @@ Great! This is already a ribbon chart but it's a little funky. We'll fix the fun
 but first let's understand what's going on.
 
 To add some ribbons, we first created a `Layer` so we can add the ribbons as a second layer. Then
-we name the marks in the first layer using `.name("bars")` and `select` those marks in the second
-layer. We group them by species using `gf.group({ by: "species" })`, and finally draw an `area` mark for each group.
+we name the marks in the first layer using `.name("bars")` and `selectAll` those marks in the second
+layer. `selectAll("bars")` hands us one [`ref`](/js/api/marks/ref) per bar; we group them by species
+using `gf.group({ by: "datum.species" })` — note the `datum.` path, since the selected stream is refs,
+not raw records — and finally draw an `area` mark for each group.
 
 <!-- First, we've added a `layer` operator that lets us layer on multiple elements in the same space.
 We create the bars with the first `chart` and use `.name("bars")` on the mark to give them a name so we can refer
-to them later. Then we use `gf.select("bars")` in a second chart to reference those bars. Finally,
-we use `gf.group({ by: "species" })` to group by species and `gf.area()` to connect the bars horizontally. -->
+to them later. Then we use `gf.selectAll("bars")` in a second chart to reference those bars. Finally,
+we use `gf.group({ by: "datum.species" })` to group by species and `gf.area()` to connect the bars horizontally. -->
 
 To make this look more like a traditional ribbon chart, all we have to do is change the spacing of
 the `spread` operator.
 
-:::starfish
+:::gofish
 
 ```ts
-gf.Layer([
+gf.layer({ axes: true }, [
   gf
-    .Chart(seafood)
+    .chart(seafood)
     .flow(
       gf.spread({ by: "lake", dir: "x", spacing: 64 }),
       gf.derive((d) => _.orderBy(d, "count", "desc")),
@@ -505,19 +510,18 @@ gf.Layer([
     )
     .mark(gf.rect({ h: "count", fill: "species" }).name("bars")),
   gf
-    .Chart(gf.select("bars"))
-    .flow(gf.group({ by: "species" }))
+    .chart(gf.selectAll("bars"))
+    .flow(gf.group({ by: "datum.species" }))
     .mark(gf.area({ opacity: 0.8 })),
 ]).render(root, {
   w: 500,
   h: 300,
-  axes: true,
 });
 ```
 
 :::
 
-<!-- :::starfish
+<!-- :::gofish
 
 ```ts
 Frame([
@@ -540,7 +544,7 @@ Frame([
       For(items, (d) => ref(`${d.lake}-${d.species}`))
     )
   ),
-]).render(root, { w: 500, h: 300, axes: true });
+]).render(root, { w: 500, h: 300 });
 ```
 
 ::: -->
@@ -551,12 +555,12 @@ Finally it's time to make our polar ribbon chart! To do so, we'll add a `clock` 
 to the `Layer` and adjust the parameters to `spread`
 so that it looks better in polar space.
 
-:::starfish
+:::gofish
 
 ```ts
-gf.Layer({ coord: gf.clock() }, [
+gf.layer({ coord: gf.clock(), axes: true }, [
   gf
-    .Chart(seafood)
+    .chart(seafood)
     .flow(
       gf.spread({
         by: "lake",
@@ -571,14 +575,13 @@ gf.Layer({ coord: gf.clock() }, [
     )
     .mark(gf.rect({ h: "count", fill: "species" }).name("bars")),
   gf
-    .Chart(gf.select("bars"))
-    .flow(gf.group({ by: "species" }))
+    .chart(gf.selectAll("bars"))
+    .flow(gf.group({ by: "datum.species" }))
     .mark(gf.area({ opacity: 0.8 })),
 ]).render(root, {
   w: 500,
   h: 300,
   transform: { x: 200, y: 200 },
-  axes: true,
 });
 ```
 

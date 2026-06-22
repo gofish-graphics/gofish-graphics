@@ -199,14 +199,16 @@
 /* Language-aware home hero + toggle. Keyed off <html data-docs-lang>, set
    before first paint by the inline script in config.mts. These rules are
    global on purpose — running them through a component's scoped-CSS transform
-   mangles the nested :not() selector. JavaScript is the default. */
-html[data-docs-lang="python"] .hero-lang-js,
-html:not([data-docs-lang="python"]) .hero-lang-python {
+   mangles the nested :not() selector. The :not([data-docs-lang="js"]) default
+   direction encodes Python as the default — keep in sync with DEFAULT_LANG in
+   docsLang.ts. */
+html[data-docs-lang="js"] .hero-lang-python,
+html:not([data-docs-lang="js"]) .hero-lang-js {
   display: none;
 }
 
-html:not([data-docs-lang="python"]) .lang-toggle__btn[data-lang="js"],
-html[data-docs-lang="python"] .lang-toggle__btn[data-lang="python"] {
+html:not([data-docs-lang="js"]) .lang-toggle__btn[data-lang="python"],
+html[data-docs-lang="js"] .lang-toggle__btn[data-lang="js"] {
   color: #fff;
   background: var(--vp-c-brand-1);
 }
@@ -223,12 +225,21 @@ html[data-docs-lang="python"] .lang-toggle__btn[data-lang="python"] {
    the flex-growing search pushes GitHub · Internals to the right.
    NOTE: the selectors below target VitePress's internal nav class names —
    re-test the nav layout after any `vitepress` upgrade. */
+/* Nav menu (Examples · API Reference) sits between search and the
+   GitHub/Internals cluster. (This was `display: none` while `nav` was empty.) */
 .VPNavBar .content-body > .VPNavBarMenu {
-  display: none;
+  margin-right: 8px;
 }
 /* Match the toggle->search gap to the 24px logo->toggle gap. */
 .VPNavBar .content-body > .VPNavBarSearch {
   padding-left: 24px;
+}
+/* On mobile the row is tight — the Internals icon was getting pushed off the
+   right edge. Drop the toggle->search gap so the cluster fits. */
+@media (max-width: 768px) {
+  .VPNavBar .content-body > .VPNavBarSearch {
+    padding-left: 0;
+  }
 }
 .VPNavBar .content-body > .lang-toggle {
   order: -1;
@@ -241,6 +252,33 @@ html[data-docs-lang="python"] .lang-toggle__btn[data-lang="python"] {
 }
 .VPNavBar .content-body > .VPNavBarExtra {
   order: 3;
+}
+
+/* Persistent language toggle for the landing page. On narrow screens the
+   non-sticky navbar (and its toggle) scrolls away, and VitePress pins a fixed
+   "Return to top" bar (.VPLocalNav.empty.fixed, z-index 20, 48px tall) in its
+   place. This copy — rendered in the layout-top slot, so it sits above that bar
+   — docks into the bar's empty right side so the switcher stays reachable.
+   Hidden by default; shown only on the landing page, below 960px (where the bar
+   is visible), and only while the bar itself is up (:has(.VPLocalNav.fixed)). */
+.lang-toggle--localnav {
+  display: none;
+  position: fixed;
+  top: 8px;
+  right: 16px;
+  z-index: var(--vp-z-index-layout-top);
+}
+@media (max-width: 959px) {
+  html.landing-page body:has(.VPLocalNav.fixed) .lang-toggle--localnav {
+    display: inline-flex;
+  }
+}
+/* Icon-only in the slim bar, matching the compact mobile navbar toggle. */
+.lang-toggle--localnav .lang-toggle__btn {
+  padding: 5px 8px;
+}
+.lang-toggle--localnav .lang-toggle__btn span {
+  display: none;
 }
 
 /* Suppress the overscroll rubber-band. Bouncing the page or the sidebar past its
@@ -275,7 +313,7 @@ html {
 /* 
 Observable Plot code block css
 */
-a.starfish-codepen {
+a.gofish-codepen {
   font-size: 12px;
   position: absolute;
   left: 100%;
@@ -285,18 +323,18 @@ a.starfish-codepen {
   text-decoration: none;
 }
 
-a.starfish-codepen::after {
+a.gofish-codepen::after {
   content: " ↗︎";
   opacity: 0.5;
 }
 
-a.starfish-codepen:hover {
+a.gofish-codepen:hover {
   color: var(--vp-c-brand);
   text-decoration: none;
 }
 
 @media (max-width: 820px) {
-  a.starfish-codepen {
+  a.gofish-codepen {
     display: none;
   }
 }

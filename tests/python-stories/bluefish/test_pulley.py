@@ -278,5 +278,5 @@ def story_pulley():
                 Constraint.z_above(ropeS, C),  # s over C
             ]
         ),
-        {"w": 360, "h": 440},
+        {},
     )

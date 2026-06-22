@@ -60,12 +60,19 @@ multiplicity.
 arg shape: a second positional argument means combinator form; no second
 arg means operator form.
 
+Both forms also get the standard structural `.translate({ x?, y? })` modifier.
+It wraps the operator's produced node instead of merging `x`/`y` into the
+operator's own options. That distinction matters for operators like `scatter`:
+`scatter({ by: "lake", x: "lake" }).translate({ y: 50 })` keeps `x: "lake"` as
+scatter's discrete placement encoding, while `y: 50` belongs to the outer
+translation wrapper.
+
 ## 2. The split → fmap → combine shape
 
 Pick any layout operator and you'll find the same three steps — a fan-out
 into N pieces, followed by a fan-in back to a single node:
 
-::: starfish example:internal-operator-factory-pipeline hidden
+::: gofish example:internal-operator-factory-pipeline hidden
 :::
 
 1. **Split.** Partition the data into pieces. For `spread`, this is
@@ -120,7 +127,14 @@ Walking `createOperator.ts:391-415`:
 2. **fmap** — for each `(key, subdata)` entry, call the user's mark with
    that subdata and a parent-prefixed key (`${key}-${i}`). The result is
    resolved to a `GoFishNode`. `node.setKey(...)` makes downstream
-   coordinators able to look it back up.
+   coordinators able to look it back up. When `by` is a string, each produced
+   leaf is also stamped with `__splitBy` recording that field — the innermost
+   grouping wins (a `??=`-style guard means an already-stamped node keeps its
+   value). This is what lets a later `resolve(cols, { from })` infer its match
+   key for free: it reads `__splitBy` off the resolved node to learn which
+   field that node was grouped by (`scatter({ by: "id" })` ⇒ join on `id`),
+   so the user need not restate the key. A function `by` has no field name to
+   record, so `resolve` errors there unless given an explicit `key`.
 3. **Apply channels** — `applyChannels` runs `inferSize` / `inferPos` /
    `inferColor` on annotated opts. For an entry-flagged channel
    (`{type, entry: true}`), the inference runs once per split entry,
@@ -128,7 +142,15 @@ Walking `createOperator.ts:391-415`:
    over all of `d` and produces one value.
 4. **Strip factory keys** — `by` and `debug` never reach the low-level
    layout; remove them from opts.
-5. **Combine** — call the low-level `layout` with the encoded opts and the
+5. **Inject the grouping measure** — `by` is stripped, but a grouping operator
+   needs its field to name the ORDINAL axis it builds. So the resolved per-axis
+   grouping field (`cfg.axisFields?.(opts)`, e.g. `{ x: "lake" }`) is passed
+   through to the low-level layout in opts (as `__axisFields`), where the node
+   builder stamps it onto the ORDINAL space's `measure` — the discrete analogue
+   of a continuous channel's field becoming its space's measure. (`axisFields`
+   is also the source the chart-builder uses as a fallback hint for axis titles
+   when a space carries no measure — see [layout passes](/internals/layout/passes).)
+6. **Combine** — call the low-level `layout` with the encoded opts and the
    array of child nodes.
 
 ### Combinator form (`spread({ dir }, [m1, m2, m3])`)
@@ -154,15 +176,18 @@ channels: {
 }
 ```
 
-| spec                            | what it does                                                        |
-| ------------------------------- | ------------------------------------------------------------------- |
-| `"size"` / `"pos"` / `"color"`  | aggregate over all of `d`, produce one value (single number/string) |
-| `{ type: "size", entry: true }` | run once per split entry, collect into array (one value per child)  |
-| user passed an array            | already final form — pass through unchanged                         |
+| spec                                           | what it does                                                                         |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------ |
+| `"size"` / `"pos"` / `"color"`                 | aggregate over all of `d`, produce one value (single number/string)                  |
+| `{ type: "size", entry: true }`                | run once per split entry, collect into array (one value per child)                   |
+| `{ type: "pos", entry: true, discrete: true }` | for nonnumeric categorical fields, emit evenly spaced discrete placement coordinates |
+| user passed an array                           | already final form — pass through unchanged                                          |
 
 `scatter` uses `entry: true` for `x`/`y`/`xMin`/`xMax`/`yMin`/`yMax` so a
 field name like `x: "miles"` becomes a per-group mean position
-(`src/ast/graphicalOperators/scatter.tsx:336`).
+(`src/ast/graphicalOperators/scatter.tsx:336`). Its point channels also set
+`discrete: true`, so a grouped nonnumeric field such as `x: "lake"` becomes a
+slot coordinate instead of an invalid numeric mean.
 
 ## 6. Adding a new operator: a worked example
 
@@ -205,6 +230,11 @@ If your operator needs to feed extra data (like `colKeys`/`rowKeys`) into
 the layout opts, return the wrapped `{entries, keys}` form from `split`
 instead of a bare Map — see `table.tsx:228` for an example.
 
+Operators created with `createOperator` automatically support
+`.translate({ x?, y? })`. You do not implement this per operator; the factory
+composes the ordinary split/channel/combine pipeline with a structural
+translation wrapper around the produced node.
+
 ## 7. The relationship with `createMark`
 
 The two factories are siblings:
@@ -215,7 +245,33 @@ The two factories are siblings:
 | `createOperator` | a layout (`Spread`, `Scatter`, …)   | a dual-mode operator (one node from many) |
 
 Both use channel annotations to encode opts; both produce mark types
-supporting `.name(...)` and `.label(...)` chaining.
+supporting `.name(...)` and `.label(...)` chaining. That chaining is wired by
+the **modifier factory** that also lives in this file — `createModifier` +
+`attachModifiers` — a single config-driven system shared by `nameableMark`
+(combinator marks), `createMark` (leaf marks), and `makeConstrainableMark`
+(layer / Porter-Duff marks, which add `.constrain()`). `.name(...)` also
+stashes the passed name on the returned mark function via `stashLayerName`
+(defined in `chartBuilder.ts`, called by the `name` modifier's `tag` hook), so
+[`ChartBuilder.connect()`](/js/api/core/connect) can detect a user-chained name
+without parsing the `__serialize` tag.
+
+A second flavor, `attachTransformModifiers`, handles methods that map a mark to
+a _different_ mark rather than mutating its nodes — e.g. `image(...).cut(opts)`
+maps the image to an expand-kind `cut` mark (which slices the source into N
+nodes 1:1 with data, built on the pure `cut(source, opts)` array primitive).
+Because the transform replaces the mark before any node exists, it wraps the
+existing `.name()`/`.label()` methods to re-apply itself, keeping `.cut`
+available across a naming/labeling chain.
+
+Expand marks consume a whole group at once, so the operator (traversal) form
+hands them a single leaf containing all rows regardless of its own `split`
+config. An expand mark therefore turns each group's rows into an _array_ of
+nodes, whereas a `by`-grouped operator needs exactly one child node per group —
+so an expand mark can't hang directly under a `by`-operator, and that case
+throws. The fix is to interpose a layout operator between the grouping and the
+expand mark (`.flow(spread({ by }), stack({ dir }))`): the inner operator
+consumes the expand mark and collapses each group's slices into one node, which
+the outer `by`-operator then arranges.
 
 Naming-wise: `createOperator` is the frontend factory; the low-level helper
 that produces `Spread`, `Scatter`, etc. is `createNodeOperator`
@@ -255,5 +311,8 @@ to `createOperator`; Encodable doesn't address layout multiplicity.
     extracted to keep the chartBuilder ↔ createOperator import graph
     acyclic).
 - The companion mark factory: [The Mark Factory](/internals/frontend/mark-factory).
+- The `serialize` config field tags the produced operator with
+  `__serialize` metadata the frontend-IR emitter reads — see
+  [Frontend IR (Serialization)](/internals/frontend/serialization).
 - Encodable: paper [arxiv:2009.00722](https://arxiv.org/abs/2009.00722),
   source [github.com/kristw/encodable](https://github.com/kristw/encodable).

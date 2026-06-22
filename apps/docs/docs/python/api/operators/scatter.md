@@ -3,7 +3,7 @@
 Positions groups by `x` and `y` data fields rather than packing them along an
 axis. The basis for scatter plots and any chart with continuous positioning.
 
-::: starfish example:scatter-plot hidden
+::: gofish example:scatter-plot hidden
 :::
 
 ```python
@@ -18,9 +18,9 @@ catch_locations = [
     {"lake": "Lake F", "x": 85.99, "y": 172.78},
 ]
 
-chart(catch_locations).flow(scatter(by="lake", x="x", y="y")).mark(
+chart(catch_locations, axes=True).flow(scatter(by="lake", x="x", y="y")).mark(
     circle(r=5)
-).render(w=500, h=300, axes=True)
+).render(w=500, h=300)
 ```
 
 ## Signature
@@ -31,12 +31,12 @@ scatter(*, by=None, **options) -> Operator
 
 ## Parameters
 
-| Parameter                      | Type  | Description                                                                            |
-| ------------------------------ | ----- | -------------------------------------------------------------------------------------- |
-| `by`                           | `str` | Field to group by — groups are placed at their **mean** x/y. Omit to position per row. |
-| `x`, `y`                       | `str` | Field-name accessors for position. At least one is required.                           |
-| `xMin`, `xMax`, `yMin`, `yMax` | `str` | Range accessors — a group spans `[min, max]` in data space.                            |
-| `alignment`                    | `str` | `"start"`, `"middle"`, `"end"`, or `"baseline"`.                                       |
+| Parameter                      | Type                | Description                                                                                                                                                                                                                                        |
+| ------------------------------ | ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `by`                           | `str` \| `Callable` | Field, dotted path, or callable to group by — groups are placed at their **mean** x/y. Omit to position per row. Path-aware (use `"datum.field"` after a selection); see [`spread` → path-aware `by`](/python/api/operators/spread#path-aware-by). |
+| `x`, `y`                       | `str`               | Field-name accessors for position. At least one is required.                                                                                                                                                                                       |
+| `xMin`, `xMax`, `yMin`, `yMax` | `str`               | Range accessors — a group spans `[min, max]` in data space.                                                                                                                                                                                        |
+| `alignment`                    | `str`               | `"start"`, `"middle"`, `"end"`, or `"baseline"`.                                                                                                                                                                                                   |
 
 Returns an `Operator` for use inside [`.flow()`](/python/api/core/flow).
 

@@ -1,7 +1,7 @@
 import { GoFishNode } from "../_node";
 import { GoFishAST } from "../_ast";
 import { CoordinateTransform } from "../coordinateTransforms/coord";
-import { Dimensions, Size, Transform } from "../dims";
+import { Dimensions, displayTranslate, Size, Transform } from "../dims";
 import { UNDEFINED, UnderlyingSpace } from "../underlyingSpace";
 import { createMark } from "../withGoFish";
 
@@ -50,14 +50,10 @@ export const Polygon = ({
           {
             min: minX,
             size: maxX - minX,
-            center: (minX + maxX) / 2,
-            max: maxX,
           },
           {
             min: minY,
             size: maxY - minY,
-            center: (minY + maxY) / 2,
-            max: maxY,
           },
         ],
         // translate is set by the parent's constraint placement.
@@ -70,8 +66,7 @@ export const Polygon = ({
         transform?: Transform;
         coordinateTransform?: CoordinateTransform;
       }) => {
-        const tx = transform?.translate?.[0] ?? 0;
-        const ty = transform?.translate?.[1] ?? 0;
+        const [tx, ty] = displayTranslate(transform);
         // GoFish is y-up; emit under scale(1, -1) like rect.tsx.
         const pts = points.map(([x, y]) => `${x + tx},${-(y + ty)}`).join(" ");
         return (
@@ -89,4 +84,4 @@ export const Polygon = ({
   );
 };
 
-export const polygon = createMark(Polygon);
+export const polygon = createMark(Polygon, undefined, "polygon");

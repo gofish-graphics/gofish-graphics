@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
-import { Chart, spread, rect, image, text, Constraint, layer, atop, v } from "../../src/lib";
+import { chart, spread, rect, image, text, blank, Constraint, layer, paint, v } from "../../src/lib";
 import bottlePng from "../assets/wilsonblanco.png";
 
 const data = [
@@ -13,44 +13,36 @@ const data = [
 
 const meta: Meta = {
   title: "Piccl/Bottle",
-  argTypes: {
-    w: {
-      control: { type: "number", min: 100, max: 1000, step: 10 },
-    },
-    h: {
-      control: { type: "number", min: 100, max: 1000, step: 10 },
-    },
-  },
 };
 export default meta;
 
-type Args = { w: number; h: number };
-
-export const Default: StoryObj<Args> = {
-  args: { w: 1000, h: 400 },
-  render: (args: Args) => {
+export const Default: StoryObj = {
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "Bottle Fill Chart",
+      description: "A row of wine bottles filled with green liquid to heights that encode percentage values, an isotype-style bar chart with labeled fill lines.",
+    },
+  },
+  render: () => {
     const container = initializeContainer();
 
-    Chart(data)
-      .flow(spread({ by: "category", dir: "x", spacing: 20 }))
+    chart(data, {axes: false})
+      .flow(spread({ by: "category", dir: "x", spacing: 20, axes: {x: false} }))
       .mark(layer(
         [
-          atop({blendMode: "color"}, [
+          paint({blendMode: "color"}, [
           image({ href: bottlePng, h: v(100) }),
-          rect({h: "amount", fill: "#00ff00"}),
+          rect({h: "amount", w: 175, fill: "#00ff00"}),
         ]).name("bottle"),
         rect({h: 1, fill: "#666", w: 175, y: "amount"}).name("line"),
-        text({fontSize: 35, fill: "#666", text: (d) => `${d.amount}%`}).name("label"),
+        text({fontSize: 35, fill: "#666", text: (d) => `${d.amount}%`}).name("label")
       ]).constrain(({line, label, bottle}) => [
         Constraint.align({ x: "start" }, [bottle, line]),
         Constraint.distribute({ dir: "y", spacing: 0 }, [line, label]),
         Constraint.align({ x: "end" }, [label, line]),
       ]))
-      .render(container, {
-        w: args.w,
-        h: args.h,
-        axes: { x: false, y: true},
-      });
+      .render(container, {});
 
     return container;
   },

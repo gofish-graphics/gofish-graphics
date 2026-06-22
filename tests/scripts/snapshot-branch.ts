@@ -25,7 +25,7 @@ const GITATTRIBUTES_CONTENT =
   "screenshots/**/*.png filter=lfs diff=lfs merge=lfs -text\n";
 
 // ---------------------------------------------------------------------------
-// Internal helpers
+// Shared git helpers (also used by capture-diff.ts)
 // ---------------------------------------------------------------------------
 
 interface GitOptions {
@@ -34,7 +34,7 @@ interface GitOptions {
   ignoreError?: boolean;
 }
 
-function git(cmd: string, opts: GitOptions = {}): string {
+export function git(cmd: string, opts: GitOptions = {}): string {
   const { cwd = ROOT, input, ignoreError = false } = opts;
   try {
     return execSync(cmd, {
@@ -49,7 +49,7 @@ function git(cmd: string, opts: GitOptions = {}): string {
   }
 }
 
-function removeWorktree(wtPath: string): void {
+export function removeWorktree(wtPath: string): void {
   try {
     git(`git worktree remove --force "${wtPath}"`);
   } catch {
@@ -255,9 +255,11 @@ export function commitAndPushSnapshots(
     // committed to the data-only snapshot branch.
     git("git add -A dom screenshots", { cwd: wtPath });
 
-    // Check if there's anything to commit.
-    const status = git("git status --porcelain", { cwd: wtPath });
-    if (!status) {
+    // Check if there's anything staged. Use --cached so untracked files
+    // like .husky/ (created by pnpm install) don't fool us into running
+    // `git commit` with an empty index.
+    const staged = git("git diff --cached --name-only", { cwd: wtPath });
+    if (!staged) {
       console.log("No changes to snapshot baselines.");
       return;
     }

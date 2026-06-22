@@ -41,7 +41,7 @@ _and_ carries a label, _and_ is joined to another mark by a connector.
 
 Bluefish's answer is to relax the component into a **relation**: a relation does not
 own its children outright, and a child can be **shared** between relations through
-scoped references. GoFish inherits this. Named marks, `ref`, and `select()` let one
+scoped references. GoFish inherits this. Named marks, `ref`, and `selectAll` let one
 mark be referenced and related from elsewhere in the specification — see
 [Name Resolution & Scoping](/internals/core/names-and-scoping). A mark can be in a
 stack _and_ be the endpoint of a connector, without the tree having to choose a
@@ -58,7 +58,7 @@ size themselves and report back; the parent then places them in its own coordina
 space. No node reasons about more than its immediate neighborhood, and the whole
 thing runs in **time linear in the size of the tree**.
 
-::: starfish example:internal-local-propagation hidden
+::: gofish example:internal-local-propagation hidden
 :::
 
 The alternative is a **global constraint solver** — Cassowary-style linear

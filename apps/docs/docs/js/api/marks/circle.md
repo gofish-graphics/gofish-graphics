@@ -2,10 +2,10 @@
 
 Draws a circle for each data item. A convenience wrapper around `rect` with equal width/height and full border radius.
 
-::: starfish
+::: gofish
 
 ```js
-gf.Chart([{ size: 40 }])
+gf.chart([{ size: 40 }])
   .mark(gf.circle({ r: 40, fill: "coral" }))
   .render(root, { w: 150, h: 150 });
 ```
@@ -37,6 +37,6 @@ circle({ r?, fill?, stroke?, strokeWidth?, debug? })
 // Circle with stroke
 .mark(circle({ r: 15, fill: "white", stroke: "black", strokeWidth: 2 }))
 
-// Named for use with select()
+// Named for use with selectAll()
 .mark(circle({ r: 8 }).name("points"))
 ```

@@ -1,19 +1,44 @@
+// <gofish-wiki> AUTO-GENERATED — see covers: in the essay; run `pnpm --filter docs sync-backlinks`
+// @wiki Underlying Space — /internals/core/underlying-space
+// </gofish-wiki>
+
 import type { Placeable } from "../_node";
-import {
-  Alignment,
+import type {
+  AlignAnchor,
   Axis,
+  ConstraintPosScales,
   ConstraintRef,
-  axisIndex,
-  isPlacedOn,
 } from "./shared";
+import { axisIndex } from "./shared";
+import type { UnderlyingSpace } from "../underlyingSpace";
+import { resolveAlignmentSpace } from "../graphicalOperators/alignment";
+import type { PlacementFactEmitter } from "./placementFacts";
 
 /**
- * Anchor spec for one axis of an `align` constraint. A single `Alignment`
+ * PROTOTYPE (issue #475): the align constraint's *space-resolution*
+ * contribution — the cross-axis half of the spread reduction. Defers entirely
+ * to spread's own `resolveAlignmentSpace`, so the fold is the same one spread
+ * uses (anchored for start/end/baseline; `middle` drops the anchor → unanchored;
+ * union otherwise). `AlignAnchor` and spread's `Alignment` share the same string
+ * vocabulary, so the anchor passes through unchanged.
+ *
+ * Only the uniform-anchor form is handled (a single string, not a per-child
+ * array): a heterogeneous anchor array has no single spread equivalent.
+ */
+export function alignSpaceFold(
+  targetSpaces: UnderlyingSpace[],
+  anchor: AlignAnchor
+): UnderlyingSpace {
+  return resolveAlignmentSpace(targetSpaces, anchor);
+}
+
+/**
+ * Anchor spec for one axis of an `align` constraint. A single anchor
  * is shared by every child (the common case). An array gives each child its
  * own anchor positionally — `align({x: ["middle", "start"]}, [A, B])` aligns
  * A's center with B's start. The array length must equal `children.length`.
  */
-export type AlignAxisSpec = Alignment | Alignment[];
+export type AlignAxisSpec = AlignAnchor | AlignAnchor[];
 
 export interface AlignConstraint {
   type: "align";
@@ -39,98 +64,104 @@ export const createAlignConstraint = (
   return { type: "align", x, y, children };
 };
 
-export interface AlignFallbackBaseline {
-  start?: number;
-  middle?: number;
-  end?: number;
+function normalizedAnchors(spec: AlignAxisSpec, count: number): AlignAnchor[] {
+  if (!Array.isArray(spec)) return new Array<AlignAnchor>(count).fill(spec);
+  if (spec.length !== count) {
+    throw new Error(
+      `Constraint.align: anchor array length ${spec.length} must match number of children ${count}`
+    );
+  }
+  return spec;
 }
 
-/** Read the coordinate of `target` along axis `idx` at anchor `a`. */
-const anchorValue = (target: Placeable, idx: 0 | 1, a: Alignment): number =>
-  a === "start"
-    ? target.dims[idx].min!
-    : a === "middle"
-      ? target.dims[idx].center!
-      : target.dims[idx].max!;
-
-/** Place `target` on `axis` so its anchor `a` lands at `value`. */
-const placeAtAnchor = (
-  target: Placeable,
-  axis: Axis,
-  value: number,
-  a: Alignment
-): void => {
-  if (a === "start") target.place(axis, value);
-  else if (a === "middle") target.place(axis, value, "center");
-  else target.place(axis, value, "max");
-};
-
-const fallbackFor = (
-  fallback: AlignFallbackBaseline | undefined,
-  a: Alignment
-): number =>
-  (a === "start"
-    ? fallback?.start
-    : a === "middle"
-      ? fallback?.middle
-      : fallback?.end) ?? 0;
-
-function applyAlignAxis(
-  axis: Axis,
-  spec: AlignAxisSpec,
-  targets: Placeable[],
-  fallback?: AlignFallbackBaseline
-): void {
-  const idx = axisIndex(axis);
-
-  // Normalize to a per-child anchor array.
-  let anchors: Alignment[];
-  if (Array.isArray(spec)) {
-    if (spec.length !== targets.length) {
-      throw new Error(
-        `Constraint.align: anchor array length ${spec.length} must match number of children ${targets.length}`
-      );
-    }
-    anchors = spec;
-  } else {
-    anchors = new Array<Alignment>(targets.length).fill(spec);
-  }
-
-  // Baseline = the coordinate the alignment is enforcing. Taken from the
-  // first already-placed child, read at *that child's* anchor. With a
-  // shared anchor the per-child anchor lookup collapses to the legacy
-  // behavior (read .min/.center/.max consistently).
-  let baseline: number | undefined;
-  for (let i = 0; i < targets.length; i++) {
-    if (isPlacedOn(targets[i], idx)) {
-      baseline = anchorValue(targets[i], idx, anchors[i]);
-      break;
-    }
-  }
-  if (baseline === undefined) {
-    // No placed siblings: fall back to the layer's box baseline. With a
-    // shared anchor that's the historic behavior; with per-child anchors
-    // we anchor the *first* child to the fallback and let the others land
-    // relative to it on the next pass (still pinned via this same value
-    // since the same baseline is reused below).
-    baseline = fallbackFor(fallback, anchors[0]);
-  }
-
-  for (let i = 0; i < targets.length; i++) {
-    if (isPlacedOn(targets[i], idx)) continue;
-    placeAtAnchor(targets[i], axis, baseline, anchors[i]);
-  }
+function isDataPositionedAlignTarget(
+  target: Placeable | undefined,
+  anchor: AlignAnchor,
+  axis: 0 | 1,
+  posScales: ConstraintPosScales | undefined
+): boolean {
+  if (anchor === "middle" || posScales?.[axis] === undefined) return false;
+  const placement =
+    typeof target?.placementOn === "function"
+      ? target.placementOn(axis)
+      : undefined;
+  return placement !== undefined && placement.tag !== "free";
 }
 
-export function applyAlign(
+export function lowerAlignPlacement(
   constraint: AlignConstraint,
-  targets: Placeable[],
-  fallback?: { x?: AlignFallbackBaseline; y?: AlignFallbackBaseline }
+  owner: string,
+  {
+    emitter,
+    targets,
+    posScales,
+    isPinned,
+  }: {
+    emitter: PlacementFactEmitter;
+    targets: Map<string, Placeable>;
+    posScales: ConstraintPosScales | undefined;
+    isPinned: (axis: Axis, name: string) => boolean;
+  }
 ): void {
-  if (constraint.x !== undefined) {
-    applyAlignAxis("x", constraint.x, targets, fallback?.x);
-  }
-  if (constraint.y !== undefined) {
-    applyAlignAxis("y", constraint.y, targets, fallback?.y);
-  }
+  const emit = (axis: Axis, spec: AlignAxisSpec | undefined) => {
+    if (spec === undefined) return;
+    const children = constraint.children.filter((child) =>
+      targets.has(child.name)
+    );
+    if (children.length === 0) return;
+    const anchors = normalizedAnchors(spec, children.length);
+
+    const entries = children.map((child, index) => ({
+      child,
+      anchor: anchors[index],
+    }));
+    const idx = axisIndex(axis);
+
+    // Preserve legacy align's two-phase semantics:
+    // 1. the first already-placed target can define the shared baseline;
+    // 2. already-placed or data-positioned targets are not themselves moved.
+    //
+    // Keeping these separate matters for chart+legend layers: the chart may
+    // be the baseline source while the legend is the only target align
+    // writes. Faceted scatter panels, where every panel is already
+    // data-positioned, still contribute no write targets.
+    const source = entries.find(({ child }) => isPinned(axis, child.name));
+    const movable = entries.filter(({ child, anchor }) => {
+      if (isPinned(axis, child.name)) return false;
+      const target = targets.get(child.name);
+      return !isDataPositionedAlignTarget(target, anchor, idx, posScales);
+    });
+    if (movable.length === 0) return;
+
+    if (source) {
+      for (const target of movable) {
+        emitter.relate({
+          axis,
+          from: { name: source.child.name, anchor: source.anchor },
+          to: { name: target.child.name, anchor: target.anchor },
+          gap: 0,
+          owner,
+        });
+      }
+      return;
+    }
+
+    const aligned = movable;
+    for (let i = 1; i < aligned.length; i++) {
+      emitter.relate({
+        axis,
+        from: { name: aligned[0].child.name, anchor: aligned[0].anchor },
+        to: { name: aligned[i].child.name, anchor: aligned[i].anchor },
+        gap: 0,
+        owner,
+      });
+    }
+    emitter.include({
+      axis,
+      name: aligned[0].child.name,
+      owner,
+    });
+  };
+  emit("x", constraint.x);
+  emit("y", constraint.y);
 }

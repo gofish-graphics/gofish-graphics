@@ -4,14 +4,6 @@ import { For, stack, spread, ellipse, layer, text, ref, arrow } from "../../src/
 
 const meta: Meta = {
   title: "Bluefish/Planets",
-  argTypes: {
-    w: {
-      control: { type: "number", min: 100, max: 1000, step: 10 },
-    },
-    h: {
-      control: { type: "number", min: 100, max: 1000, step: 10 },
-    },
-  },
 };
 export default meta;
 
@@ -25,7 +17,14 @@ const planets = [
 ];
 
 export const PlanetsOnly: StoryObj<Args> = {
-  args: { w: 800, h: 200 },
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "Inner Planets to Scale",
+      description:
+        "The four inner planets rendered as colored circles sized by their relative radii and spread in a row.",
+    },
+  },
   render: (args: Args) => {
     const container = initializeContainer();
 
@@ -39,17 +38,13 @@ export const PlanetsOnly: StoryObj<Args> = {
           strokeWidth: 3,
         })
       )
-    ).render(container, {
-      w: args.w,
-      h: args.h,
-    });
+    ).render(container, {});
 
     return container;
   },
 };
 
 export const PlanetsWithLabelAbove: StoryObj<Args> = {
-  args: { w: 800, h: 200 },
   render: (args: Args) => {
     const container = initializeContainer();
 
@@ -69,17 +64,13 @@ export const PlanetsWithLabelAbove: StoryObj<Args> = {
         ref("Mercury"),
         text({ text: "Mercury" }),
       ]),
-    ]).render(container, {
-      w: args.w,
-      h: args.h,
-    });
+    ]).render(container, {});
 
     return container;
   },
 };
 
 export const PlanetsWithLabelBelow: StoryObj<Args> = {
-  args: { w: 800, h: 200 },
   render: (args: Args) => {
     const container = initializeContainer();
 
@@ -99,17 +90,13 @@ export const PlanetsWithLabelBelow: StoryObj<Args> = {
         text({ text: "Mercury" }),
         ref("Mercury"),
       ]),
-    ]).render(container, {
-      w: args.w,
-      h: args.h,
-    });
+    ]).render(container, {});
 
     return container;
   },
 };
 
 export const PlanetsWithLabelAboveNoSpacing: StoryObj<Args> = {
-  args: { w: 800, h: 200 },
   render: (args: Args) => {
     const container = initializeContainer();
 
@@ -129,17 +116,13 @@ export const PlanetsWithLabelAboveNoSpacing: StoryObj<Args> = {
         ref("Mercury"),
         text({ text: "Mercury", debugBoundingBox: true }),
       ]),
-    ]).render(container, {
-      w: args.w,
-      h: args.h,
-    });
+    ]).render(container, {});
 
     return container;
   },
 };
 
 export const PlanetsWithLabelBelowNoSpacing: StoryObj<Args> = {
-  args: { w: 800, h: 200 },
   render: (args: Args) => {
     const container = initializeContainer();
 
@@ -159,17 +142,21 @@ export const PlanetsWithLabelBelowNoSpacing: StoryObj<Args> = {
         text({ text: "Mercury", debugBoundingBox: true }),
         ref("Mercury"),
       ]),
-    ]).render(container, {
-      w: args.w,
-      h: args.h,
-    });
+    ]).render(container, {});
 
     return container;
   },
 };
 
 export const PlanetsWithArrow: StoryObj<Args> = {
-  args: { w: 800, h: 200 },
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "Annotated Planets",
+      description:
+        "The inner planets drawn as scaled circles with a labeled callout arrow pointing to one of them.",
+    },
+  },
   render: (args: Args) => {
     const container = initializeContainer();
 
@@ -190,10 +177,7 @@ export const PlanetsWithArrow: StoryObj<Args> = {
         ref("Mercury"),
       ]),
       arrow({}, [ref("label"), ref("Mercury")]),
-    ]).render(container, {
-      w: args.w,
-      h: args.h,
-    });
+    ]).render(container, {});
 
     return container;
   },

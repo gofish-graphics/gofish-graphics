@@ -119,6 +119,71 @@ function isExportExempt(
 }
 
 // ---------------------------------------------------------------------------
+// Spec-neutral change detection.
+//
+// A modified JS story whose spec-relevant content is unchanged does not
+// require a Python update. Two kinds of difference are spec-neutral:
+//
+//   - **Storybook chrome** — story-level `title`, `tags`, and `parameters`
+//     (e.g. the gallery annotation) are presentation metadata. Python stories
+//     key off the file path and `story_*` function name, not these.
+//   - **API-alias casing** — the v3 fluent surface is lowercase-only
+//     (`chart`, `layer`); the capitalized aliases `Chart` / `Layer` resolve to
+//     the same factories (and `Chart` was removed outright). A pure
+//     `Chart`→`chart` / `Layer`→`layer` rename in a JS story has no Python
+//     counterpart, since Python was always lowercase. Canonicalizing the case
+//     before comparing folds those renames out.
+// ---------------------------------------------------------------------------
+
+function stripStorybookChrome(source: string): string {
+  const out: string[] = [];
+  let depth = 0; // > 0 while inside a `parameters: {...}` block
+  for (const line of source.split("\n")) {
+    if (depth > 0) {
+      depth += (line.match(/\{/g) ?? []).length;
+      depth -= (line.match(/\}/g) ?? []).length;
+      continue;
+    }
+    if (/^\s*tags:\s*\[[^\]]*\],?\s*$/.test(line)) continue;
+    if (/^\s*title:\s*.*$/.test(line)) continue; // `meta.title` (nav path)
+    if (/^\s*parameters:\s*\{/.test(line)) {
+      depth =
+        (line.match(/\{/g) ?? []).length - (line.match(/\}/g) ?? []).length;
+      continue;
+    }
+    out.push(line);
+  }
+  return out.join("\n");
+}
+
+/** Fold the lowercased v3 aliases so a pure casing rename is spec-neutral. */
+function canonicalizeApiCasing(source: string): string {
+  return source.replace(/\bChart\b/g, "chart").replace(/\bLayer\b/g, "layer");
+}
+
+/** True when the file's change between baseRef's merge-base and HEAD touches
+ * only spec-neutral content (Storybook chrome and/or `Chart`/`Layer` casing). */
+function isSpecNeutralChange(jsFile: string, baseRef: string): boolean {
+  try {
+    const mergeBase = execSync(`git merge-base "${baseRef}" HEAD`, {
+      cwd: ROOT_DIR,
+      encoding: "utf-8",
+    }).trim();
+    const baseContent = execSync(`git show ${mergeBase}:"${jsFile}"`, {
+      cwd: ROOT_DIR,
+      encoding: "utf-8",
+      maxBuffer: 16 * 1024 * 1024,
+    });
+    const headContent = readFileSync(join(ROOT_DIR, jsFile), "utf-8");
+    const normalize = (s: string) =>
+      canonicalizeApiCasing(stripStorybookChrome(s));
+    return normalize(baseContent) === normalize(headContent);
+  } catch {
+    return false; // can't prove it — fall through to the strict check
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Walk all JS stories under packages/gofish-graphics/stories/.
 // ---------------------------------------------------------------------------
 
@@ -469,6 +534,17 @@ for (const jsFile of modifiedJs) {
   const pythonModified = allChangedFiles.has(pythonFile);
 
   if (!pythonModified) {
+    if (isSpecNeutralChange(jsFile, baseRef)) {
+      results.push({
+        jsFile,
+        pythonFile,
+        changeType: "modified",
+        status: "ok",
+        message: `Only spec-neutral content changed (Storybook chrome / Chart·Layer casing) — no Python update needed`,
+      });
+      console.log(`  OK (spec-neutral): ${jsFile}`);
+      continue;
+    }
     results.push({
       jsFile,
       pythonFile,

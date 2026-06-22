@@ -1,4 +1,14 @@
-import { getValue, isValue, MaybeValue } from "./ast/data";
+import { getValue, getValueOffset, isValue, MaybeValue } from "./ast/data";
+
+/** Read a dev-gate flag from `globalThis.<name>` or `process.env.<name>` (truthy
+ *  = on). Zero-cost when off; the single reader for the #39 dev gates
+ *  (`GOFISH_SOLVER_CHECK`, `GOFISH_CONFLICT_CHECK`). */
+export const envFlag = (name: string): boolean => {
+  const g = globalThis as Record<string, unknown> & {
+    process?: { env?: Record<string, string | undefined> };
+  };
+  return !!g[name] || !!g.process?.env?.[name];
+};
 
 export const lerp = (a: number, b: number, t: number): number => {
   return a + t * (b - a);
@@ -73,19 +83,40 @@ export const pairs = <T>(xs: T[]): [T, T][] => {
   return result;
 };
 
+/**
+ * Fold child extents into a bbox edge, ignoring non-finite entries. A child
+ * can report an undefined extent on an axis it doesn't constrain (e.g. a
+ * `spread` over POSITION children leaves its y-min unset); dropping those
+ * keeps one `undefined` from poisoning the whole box via `Math.min(undefined)`.
+ * Falls back to 0 when nothing is measurable.
+ */
+export const foldFinite = (
+  vals: (number | undefined)[],
+  f: (...n: number[]) => number
+): number => {
+  const finite = vals.filter(
+    (v): v is number => typeof v === "number" && Number.isFinite(v)
+  );
+  return finite.length ? f(...finite) : 0;
+};
+
 // input is a value, an aesthetic literal, or undefined. behavior differs based on this
 export const computeAesthetic = (
   input: MaybeValue<number> | undefined,
   scale: (x: number) => number,
   provided: number | undefined
 ): number | undefined => {
-  return isValue(input) ? scale(getValue(input)!) : (input ?? provided);
+  // A datum's pixel offset applies AFTER the scale mapping — "this data
+  // position, plus pixels" (`datum(v).offset(px)`).
+  return isValue(input)
+    ? scale(getValue(input)!) + getValueOffset(input)
+    : (input ?? provided);
 };
 
 export const computeSize = (
   input: MaybeValue<number> | undefined,
   scaleFactor: number,
   size: number
-) => {
-  return computeAesthetic(input, (x) => x * scaleFactor, size);
+): number => {
+  return computeAesthetic(input, (x) => x * scaleFactor, size) as number;
 };

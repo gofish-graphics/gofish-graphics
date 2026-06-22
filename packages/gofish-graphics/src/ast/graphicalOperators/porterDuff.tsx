@@ -2,7 +2,7 @@ import type { JSX } from "solid-js";
 import { GoFishAST } from "../_ast";
 import { GoFishNode } from "../_node";
 import type { Placeable } from "../_node";
-import { Size } from "../dims";
+import { Size, translateString } from "../dims";
 import { UnderlyingSpace } from "../underlyingSpace";
 import { createNodeOperator } from "../withGoFish";
 import { unionChildSpaces } from "./alignment";
@@ -49,7 +49,7 @@ const renderComposite = (
         <feBlend
           in="compositeResult"
           in2="graySource"
-          mode={blendMode}
+          mode={blendMode as "multiply" | "screen"}
           result="blendedIntersect"
         />
         <feComposite
@@ -59,7 +59,11 @@ const renderComposite = (
         />
       </>
     ) : operator === "over" || operator === "atop" ? (
-      <feBlend in="compositeResult" in2="graySource" mode={blendMode} />
+      <feBlend
+        in="compositeResult"
+        in2="graySource"
+        mode={blendMode as "multiply" | "screen"}
+      />
     ) : null;
 
   return (
@@ -130,7 +134,14 @@ const createCompositeRelation = (type: string, operator: CompositeOperator) =>
             children: Size<UnderlyingSpace>[],
             _childNodes: GoFishAST[]
           ) => [unionChildSpaces(children, 0), unionChildSpaces(children, 1)],
-          layout: (_shared, size, scaleFactors, layoutChildren, posScales) => {
+          layout: (
+            _shared,
+            size,
+            scaleFactors,
+            layoutChildren,
+            posScales,
+            _node
+          ) => {
             requireTwoChildren(layoutChildren);
 
             const childPlaceables = layoutChildren.map((child) =>
@@ -170,11 +181,7 @@ const createCompositeRelation = (type: string, operator: CompositeOperator) =>
           render: ({ intrinsicDims, transform }, renderedChildren, node) => {
             requireTwoChildren(renderedChildren);
             return (
-              <g
-                transform={`translate(${transform?.translate?.[0] ?? 0}, ${
-                  transform?.translate?.[1] ?? 0
-                })`}
-              >
+              <g transform={translateString(transform)}>
                 {renderComposite(
                   node,
                   renderedChildren,
@@ -191,12 +198,61 @@ const createCompositeRelation = (type: string, operator: CompositeOperator) =>
     }
   );
 
-export const over = createCompositeRelation("over", "over");
-export const inside = createCompositeRelation("in", "in");
-export const xor = createCompositeRelation("xor", "xor");
-export const out = createCompositeRelation("out", "out");
-export const atop = createCompositeRelation("atop", "atop");
+/**
+ * Region-compositing operators, named after Figma's boolean operations
+ * (issues #196 / #202). Each takes **exactly two children** `[A, B]` — the
+ * binary SVG-filter implementations below do not generalize to 3+ children,
+ * so all of them throw via `requireTwoChildren` when given any other arity.
+ * The maintainer's notation in #196 describes the eventual n-ary semantics;
+ * the current arity behavior is binary-only and documented honestly per op.
+ *
+ * `over` is intentionally NOT exported from the public surface: it is
+ * conceptually `layer` (`A ∪ B`, see #196) and is kept internal only so the
+ * IR deserializer (serialize/registry) can still dispatch the `"over"` wire
+ * type. Prefer `layer` in user code.
+ */
 
+/**
+ * Internal-only `A ∪ B` union compositing. Exported for the IR deserializer
+ * (serialize/registry) to dispatch the `"over"` wire type, but intentionally
+ * NOT re-exported from `lib.ts` — use `layer` in user code.
+ */
+export const over = createCompositeRelation("over", "over");
+
+/**
+ * intersect — draw only where both regions overlap: `A ∩ B`.
+ * Binary only (exactly two children); the n-ary form `A ∩ B ∩ ...` is not
+ * yet implemented.
+ */
+export const intersect = createCompositeRelation("in", "in");
+
+/**
+ * exclude — draw the symmetric difference (odd-overlap parity): `A ^ B`.
+ * Binary only (exactly two children). The n-ary parity form `A ^ B ^ ...`
+ * (drawn where an odd number of regions overlap) is not yet implemented.
+ */
+export const exclude = createCompositeRelation("xor", "xor");
+
+/**
+ * subtract — draw A with B removed: `A − B`.
+ * Binary only (exactly two children); the n-ary fold `A − B − C − ...` is
+ * not yet implemented.
+ */
+export const subtract = createCompositeRelation("out", "out");
+
+/**
+ * paint — A is a base surface that B is painted onto, clipped to A:
+ * `A ∪ (B ∩ A)`. The result is sized to A (the first child). Binary only
+ * (exactly two children); the n-ary form `A ∪ (B ∩ A) ∪ (C ∩ A) ∪ ...` is
+ * not yet implemented.
+ */
+export const paint = createCompositeRelation("atop", "atop");
+
+/**
+ * mask — use A's region as a clip and paint B inside it **without drawing A
+ * itself**: `B ∩ A`, reporting A's bounds. Binary only (exactly two
+ * children). Differs from `paint` in that A is a clip region, not a surface.
+ */
 export const mask = createNodeOperator(
   (_: Record<string, never>, children: GoFishAST[]) => {
     requireTwoChildren(children);
@@ -209,7 +265,14 @@ export const mask = createNodeOperator(
           children: Size<UnderlyingSpace>[],
           _childNodes: GoFishAST[]
         ) => [unionChildSpaces(children, 0), unionChildSpaces(children, 1)],
-        layout: (_shared, size, scaleFactors, layoutChildren, posScales) => {
+        layout: (
+          _shared,
+          size,
+          scaleFactors,
+          layoutChildren,
+          posScales,
+          _node
+        ) => {
           requireTwoChildren(layoutChildren);
 
           const childPlaceables = layoutChildren.map((child) =>
@@ -220,7 +283,13 @@ export const mask = createNodeOperator(
             child.place("y", 0, "baseline");
           });
 
-          const { minX, maxX, minY, maxY } = maxChildBounds(childPlaceables);
+          // Mask reports the first child's bounds — visually only the mask
+          // shape (first child) defines the opaque region, so reporting the
+          // union with the destination would over-state the visible bbox.
+          const minX = childPlaceables[0].dims[0].min ?? 0;
+          const maxX = childPlaceables[0].dims[0].max ?? 0;
+          const minY = childPlaceables[0].dims[1].min ?? 0;
+          const maxY = childPlaceables[0].dims[1].max ?? 0;
           return {
             intrinsicDims: [
               {
@@ -248,11 +317,7 @@ export const mask = createNodeOperator(
           const maskId = `${uid}-mask`;
 
           return (
-            <g
-              transform={`translate(${transform?.translate?.[0] ?? 0}, ${
-                transform?.translate?.[1] ?? 0
-              })`}
-            >
+            <g transform={translateString(transform)}>
               <defs>
                 <g id={sourceId}>{renderedChildren[0]}</g>
                 <g id={destinationId}>{renderedChildren[1]}</g>

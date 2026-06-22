@@ -39,6 +39,10 @@ class GoFishChartWidget(anywidget.AnyWidget):
     # {error: str} on failure. Powers .result/.error/.done.
     render_result = traitlets.Dict(allow_none=True, default_value=None).tag(sync=True)
 
+    # Rendered SVG reported by the JS side once the chart mounts:
+    # {value: "<svg…>"}. Powers .svg / .to_svg() / .save(). See #571.
+    svg_result = traitlets.Dict(allow_none=True, default_value=None).tag(sync=True)
+
     # Python-only registry: lambda_id -> callable. Never synced.
     derive_functions = traitlets.Dict().tag(sync=False)
 
@@ -78,6 +82,12 @@ class GoFishChartWidget(anywidget.AnyWidget):
             derive_functions=derive_functions or {},
             **kwargs,
         )
+
+        # SVG export state (#571). The front-end reports its rendered SVG via
+        # the `svg_result` trait; we stash the latest here and flush any saves
+        # that were requested before the render completed.
+        self._svg: Optional[str] = None
+        self._pending_saves: List[Any] = []
 
     @traitlets.observe("derive_request")
     def _on_derive_request(self, change):
@@ -122,6 +132,77 @@ class GoFishChartWidget(anywidget.AnyWidget):
             self.derive_response = {"request_id": request_id, "result_b64": result_b64}
         except Exception as exc:
             self.derive_response = {"request_id": request_id, "error": str(exc)}
+
+    @traitlets.observe("svg_result")
+    def _on_svg_result(self, change):
+        """Stash the SVG reported by JS and flush any deferred saves.
+
+        JS sets ``svg_result = {value: "<svg…>"}`` once the chart mounts.
+        Saves requested before the render finished are queued in
+        ``_pending_saves`` and written here, when the markup is available.
+        """
+        msg = change["new"]
+        if not msg:
+            return
+        svg = msg.get("value")
+        if not isinstance(svg, str):
+            return
+        self._svg = svg
+        if self._pending_saves:
+            pending, self._pending_saves = self._pending_saves, []
+            for path in pending:
+                self._write_svg(path)
+
+    def _write_svg(self, path) -> None:
+        """Write the captured SVG to ``path`` (extension must be ``.svg``)."""
+        suffix = Path(path).suffix.lower()
+        if suffix != ".svg":
+            raise ValueError(
+                f'save(): only ".svg" is supported today (got "{suffix or path}"). '
+                "PNG and HTML export are tracked in #578."
+            )
+        if self._svg is None:
+            raise RuntimeError("No SVG to write")
+        Path(path).write_text(self._svg, encoding="utf-8")
+
+    @property
+    def svg(self) -> Optional[str]:
+        """The rendered SVG markup, or ``None`` if the chart hasn't rendered yet."""
+        return self._svg
+
+    def to_svg(self) -> str:
+        """Return the rendered SVG markup.
+
+        Requires the widget to have rendered in a live front-end first
+        (display it in a cell, then call ``.to_svg()``). Headless, synchronous
+        rendering is tracked in #577.
+        """
+        if self._svg is None:
+            raise RuntimeError(
+                "Widget hasn't rendered yet — display it in a cell first, then "
+                "call .to_svg(). (Headless rendering is tracked in #577.)"
+            )
+        return self._svg
+
+    def save(self, path) -> None:
+        """Save the rendered SVG to ``path`` (format inferred from extension).
+
+        If the chart has already rendered, the file is written immediately;
+        otherwise the write is deferred until the front-end reports its SVG —
+        so ``save()`` works even when called before display, as long as the
+        widget is then shown in the notebook.
+        """
+        # Validate the extension eagerly so a bad path fails fast.
+        suffix = Path(path).suffix.lower()
+        if suffix != ".svg":
+            raise ValueError(
+                f'save(): only ".svg" is supported today (got "{suffix or path}"). '
+                "PNG and HTML export are tracked in #578."
+            )
+        if self._svg is not None:
+            self._write_svg(path)
+        else:
+            self._pending_saves.append(path)
 
     @property
     def result(self) -> bool:

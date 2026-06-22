@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
-import { Chart, spread, rect, stack, derive } from "../../src/lib";
+import { chart, spread, rect, stack, derive } from "../../src/lib";
 import { normalize } from "../../src/lib";
 
 const meta: Meta = {
@@ -20,6 +20,14 @@ type Args = { w: number; h: number };
 
 export const Default: StoryObj<Args> = {
   args: { w: 400, h: 400 },
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "Mosaic Chart",
+      description:
+        "A mosaic plot of car counts by region of origin and cylinder count, where column widths show each region's share and stacked segments show the cylinder distribution within it.",
+    },
+  },
   render: (args: Args) => {
     const container = initializeContainer();
 
@@ -35,7 +43,7 @@ export const Default: StoryObj<Args> = {
       { origin: "USA", cylinders: "8", count: 108 },
     ];
 
-    Chart(data)
+    chart(data, { axes: true })
       .flow(
         spread({ by: "origin",  dir: "x" }),
         derive((d) => normalize(d, "count")),
@@ -47,7 +55,6 @@ export const Default: StoryObj<Args> = {
       .render(container, {
         w: args.w,
         h: args.h,
-        axes: true,
       });
 
     return container;

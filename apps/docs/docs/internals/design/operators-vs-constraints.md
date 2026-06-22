@@ -7,6 +7,17 @@ status: speculative
 
 # Re-unifying Operators and Constraints
 
+> **Status update.** Option 1 below (operators-on-top-of-constraints, one
+> machinery) **has landed** for the spread/stack family: constraints carry
+> space folds (`distributeSpaceFold`/`alignSpaceFold`), the layer solves
+> budgets against folded claims, and `spread`/`stack` delegate their space
+> resolution, slicing, align walk, and distribute walk to that shared
+> machinery — verified geometry-identical across all stories. The feasibility
+> analysis and the remaining program (scatter/position, size-setting
+> constraints, sharedScale-as-claim-hoisting) live in [[constraints-as-core]].
+> The sections below predate that work and are kept for the motivating
+> history; the `scatter`/`connect` questions at the bottom are still open.
+
 Open design question: should the layout operators (`spread`, `stack`, `layer`,
 `connect`, ...) and the constraint primitives (`Constraint.align`,
 `Constraint.distribute`, `Constraint.zAbove` / `zBelow`) sit on the same axis,
@@ -55,6 +66,21 @@ inside `layer` and `Porter-Duff`'s underlying-space resolution
 `.constrain((c) => …)`. They consume different inputs (`Size<UnderlyingSpace>`
 vs `Placeable`) but the _idea_ is the same: take a list, pick an anchor,
 move the rest into alignment.
+
+**`scatter` / `position` vs `Constraint.position`.** `Constraint.position`
+(`constraints/position.ts`) places a child at an `x`/`y` coordinate that is
+either a literal pixel or a `datum` — the same literal-or-datum convention the
+`scatter` and `position` operators use, mapping a datum to a pixel via
+`posScales[axis](getValue(v))`. Crucially, the constraint participates in
+**underlying-space resolution**: a `Layer` folds the _datum_ coordinates of its
+`position` constraints into a POSITION domain on that axis
+(`collectPositionDomains` → `unionChildSpaces`), then builds the scale over its
+own pixel size at layout time. So a `position` constraint carries a _fragment_
+of the space-resolution pass, not just a placement — which is the missing piece
+for expressing a data-positioned operator (`scatter`) as a union of
+constraints. (The `Layer` deliberately does **not** forward that scale to its
+non-data children, so SIZE content laid out alongside data-positioned marks is
+left to its own alignment.)
 
 ## What a re-unification could look like
 

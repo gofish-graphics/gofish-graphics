@@ -6,12 +6,12 @@ constraint — most commonly inside a [nested-tier](/internals/design/principles
 layout where the inner tier places the shapes and the outer tier draws the
 connections.
 
-::: starfish
+::: gofish
 
 ```js
-gf.Layer([
+gf.layer([
   gf
-    .Layer([
+    .layer([
       gf.rect({ w: 60, h: 40, fill: gf.color.blue[2] }).name("a"),
       gf.rect({ w: 60, h: 40, fill: gf.color.red[2] }).name("b"),
     ])
@@ -150,6 +150,16 @@ Connect({ source: "middle" }, [ref("A"), ref("B"), ref("C")]);
 
 ## Notes
 
+- This is the **low-level layout operator**, distinct from the v3 builder method
+  [`ChartBuilder.connect()`](/js/api/core/connect). The builder `.connect(line())`
+  is sugar that threads a ref-consuming _mark_ through a chart's own marks; this
+  operator connects explicitly-listed `ref(...)` children inside a layout.
+- The high-level [`line`](/js/api/marks/line) and [`area`](/js/api/marks/area)
+  marks are thin wrappers over `connect`: they take the array of refs from
+  [`selectAll(...)`](/js/api/selection/ref) and connect them. To re-partition
+  a selection before connecting (e.g. one area per species), run it through a
+  path-aware operator first — `group({ by: "datum.species" })`; see
+  [`spread` → path-aware `by`](/js/api/operators/spread#path-aware-by).
 - `ref(name)` resolves names declared via `.name(...)`. With
   `createName()` tokens, the name is global; with plain strings, it is
   layer-scoped.
@@ -158,4 +168,4 @@ Connect({ source: "middle" }, [ref("A"), ref("B"), ref("C")]);
 - Pair the operator with z-order constraints
   ([`Constraint.zAbove` / `zBelow`](/js/api/constraints/constrain#constraint-zabove-constraint-zbelow))
   when a connector needs to sit _between_ two elements in paint order — see
-  the [pulley story](/js/examples/pulley) for the canonical use case.
+  the [pulley diagram](/js/examples/pulley-diagram) for the canonical use case.

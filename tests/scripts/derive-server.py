@@ -165,8 +165,9 @@ class DeriveHandler(BaseHTTPRequestHandler):
                 ChartBuilder,
                 DeriveOperator,
                 LayerBuilder,
-                LayerSelector,
                 Mark,
+                Token,
+                _RefProxy,
                 _collect_mark_lambdas,
                 _MarkFn,
             )
@@ -174,21 +175,28 @@ class DeriveHandler(BaseHTTPRequestHandler):
             def serialize_chart(child: ChartBuilder) -> tuple:
                 """Return (child_payload, derive_ids) for one chart builder.
 
-                child_payload: {operators, mark, options, data, zOrder}
-                  data is records list, or {"type": "select", layer: name}
-                  for select-data children.
+                child_payload: {operators, mark, options, data, zOrder, connect}
+                  data is the canonical Frontend.DataIR shape:
+                    - {"type": "inline", "rows": [...]} for inline rows
+                    - {"type": "select", "layer": name, "mode": ...} for ref/selectAll data
+                  See packages/gofish-ir/src/frontend/schema.ts.
                 """
                 child_ir = child.to_ir()
-                if isinstance(child.data, LayerSelector):
+                if isinstance(child.data, _RefProxy):
                     child_data = child_ir["data"]
                 else:
                     raw = child.data
                     if hasattr(raw, "to_dict"):
-                        child_data = raw.to_dict("records")
+                        rows = raw.to_dict("records")
                     elif hasattr(raw, "to_dicts"):
-                        child_data = raw.to_dicts()
+                        rows = raw.to_dicts()
                     else:
-                        child_data = raw
+                        rows = raw
+                    # Wrap inline rows in the canonical DataIR shape.
+                    if isinstance(rows, list):
+                        child_data = {"type": "inline", "rows": rows}
+                    else:
+                        child_data = rows
 
                 child_derive_ids = []
                 for op in child.operators:
@@ -201,6 +209,10 @@ class DeriveHandler(BaseHTTPRequestHandler):
                 # POSTs `[row]` to `/derive/<lambda_id>` per invocation.
                 if child._mark is not None and not isinstance(child._mark, _MarkFn):
                     for lambda_id, rows_fn in _collect_mark_lambdas(child._mark):
+                        child_derive_ids.append(lambda_id)
+                        _registry[lambda_id] = rows_fn
+                if child._connect is not None:
+                    for lambda_id, rows_fn in _collect_mark_lambdas(child._connect):
                         child_derive_ids.append(lambda_id)
                         _registry[lambda_id] = rows_fn
 
@@ -223,13 +235,22 @@ class DeriveHandler(BaseHTTPRequestHandler):
 
                     _registry[mark_fn.lambda_id] = _mark_fn_wrapped
 
+                # A chart layered with `.name(...)` carries its name so a
+                # `Layer([...]).constrain(...)` callback can reference it.
+                child_name = getattr(child, "_name", None)
+                if isinstance(child_name, Token):
+                    child_name = child_name.to_dict()
+
                 return (
                     {
+                        "type": "chart",
                         "operators": child_ir["operators"],
                         "mark": child_ir["mark"],
                         "options": child_ir.get("options", {}),
                         "data": child_data,
                         "zOrder": child_ir.get("zOrder"),
+                        "connect": child_ir.get("connect"),
+                        "name": child_name,
                     },
                     child_derive_ids,
                 )
@@ -258,12 +279,24 @@ class DeriveHandler(BaseHTTPRequestHandler):
                     child_payloads.append(payload)
                     derive_ids.extend(child_derive_ids)
 
-                self._json_response(200, {
+                layer_payload = {
                     "_kind": "layer",
                     "charts": child_payloads,
                     "options": {**(builder.options or {}), **options},
                     "deriveIds": derive_ids,
-                })
+                    # Only the fluent `chart(...).layer(...)` chain is the v3
+                    # builder (JS reconstructs it through its own LayerBuilder).
+                    # The array form `layer([c1, c2])` is the low-level
+                    # combinator, mirroring JS `layer([...])`.
+                    "builder": getattr(builder, "_builder_chain", False),
+                }
+                # `.constrain(...)` constraints relating the named children.
+                layer_constraints = getattr(builder, "_constraints", None)
+                if layer_constraints is not None:
+                    layer_payload["constraints"] = [
+                        c.to_dict() for c in layer_constraints
+                    ]
+                self._json_response(200, layer_payload)
                 return
 
             chart_payload, derive_ids = serialize_chart(builder)

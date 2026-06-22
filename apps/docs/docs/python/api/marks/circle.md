@@ -3,15 +3,15 @@
 Draws a circle for each data item. The mark for scatter plots, bubble charts,
 and dot-based glyphs.
 
-::: starfish example:scatter-plot hidden
+::: gofish example:scatter-plot hidden
 :::
 
 ```python
 from gofish import chart, scatter, circle
 
-chart(catch_locations).flow(scatter(by="lake", x="x", y="y")).mark(
+chart(catch_locations, axes=True).flow(scatter(by="lake", x="x", y="y")).mark(
     circle(r=5)
-).render(w=500, h=300, axes=True)
+).render(w=500, h=300)
 ```
 
 ## Signature

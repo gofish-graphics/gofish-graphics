@@ -31,11 +31,13 @@ export const aesthetic = (value: any): AestheticDomain => ({
 });
 
 export const canUnifyDomains = (domains: Domain[]) => {
+  const first = domains[0];
+  if (first === undefined || first.type !== "continuous") return false;
   return domains.every(
     (domain) =>
       domain !== undefined &&
       domain.type === "continuous" &&
-      domain.measure === domains[0].measure
+      domain.measure === first.measure
   );
 };
 
@@ -62,3 +64,35 @@ export const computePosScale = (
   return (pos: number) =>
     reverse ? size - (pos - min) * scale : (pos - min) * scale;
 };
+
+/**
+ * Local position scale from a node's resolved POSITION space on one axis:
+ * the space's domain mapped affinely onto `[0, size]`, or undefined when the
+ * axis isn't POSITION (or has no domain). The shared fallback recipe for a
+ * layout node that wasn't handed a scale by its parent (layer, scatter).
+ */
+export const posScaleFromSpace = (
+  // Structurally typed to avoid a domain.ts → underlyingSpace.ts import cycle;
+  // only an ANCHORED CONTINUOUS space — one whose `dataDomain` is a real
+  // `[min,max]` interval — produces a scale. A baseline magnitude (`dataDomain`
+  // undefined) and a difference (`dataDomain === "delta"`) do not.
+  space:
+    | {
+        kind: string;
+        dataDomain?: { min: number; max: number } | "delta";
+      }
+    | undefined,
+  size: number
+): ((pos: number) => number) | undefined =>
+  space &&
+  space.kind === "continuous" &&
+  space.dataDomain !== undefined &&
+  space.dataDomain !== "delta"
+    ? computePosScale(
+        continuous({
+          value: [space.dataDomain.min, space.dataDomain.max],
+          measure: "unit",
+        }),
+        size
+      )
+    : undefined;

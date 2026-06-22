@@ -94,6 +94,21 @@ If your prop should be a position offset (mean rather than sum), see the
 own; `createMark` could grow a `"pos"` channel the same way if a future shape
 needs one.
 
+`inferSize` and `inferPos` are two instantiations of one numeric-inference
+factory, `inferNumeric(agg)` — they differ only in the aggregation (`sumBy`
+vs `meanBy`, imported through lodash's per-helper entrypoints so this path is
+safe under native ESM). Both take an optional third argument, a resolved `Measure`: a
+string/`field()` accessor's produced value is tagged with its unit-of-measure
+so the underlying-space layer can unify scales per measure (see
+[Underlying Space](/internals/core/underlying-space)). When the caller doesn't
+pass one (e.g. `createMark`'s size channel), the inferer resolves it locally
+via `resolveMeasure(data, accessor)` — explicit `field(name, measure)`
+annotation, else transform provenance riding the data array (`bin()` tags its
+output), else the field name as a weak default; a contradictory
+annotation-vs-provenance pair throws at the channel. `createOperator` hoists
+`resolveMeasure` to once per channel and passes the result down, since the
+accessor and provenance are loop-invariant across split entries.
+
 A prop that does not appear in the annotations map (e.g. `Rect.cornerRadius`)
 is passed through to `shapeFn` exactly as the user wrote it.
 
@@ -117,20 +132,48 @@ Walking `withGoFish.ts:431-477`:
 4. **Call the low-level shape.** The encoded shape props go into `shapeFn`,
    producing the `GoFishNode`.
 5. **Tag the node** with `name = key` and `datum = d` so downstream
-   coordinators (`select(...)`, label placement) can find it back.
+   coordinators (`ref` / `selectAll`, label placement) can find it back.
 
-## `.name()` and `.label()`
+## `.name()`, `.label()`, and `.translate()`
 
-`createMark` returns a `NameableMark`, which is the base mark plus two
-chainable methods:
+`createMark` returns a `NameableMark`, which is the base mark plus chainable
+methods:
 
 - `mark.name("layerName")` — registers each produced node into the chart's
-  layer context so `select("layerName")` can pull the array of refs.
+  layer context so `selectAll("layerName")` can pull the array of refs (or
+  `ref("layerName")` the single node, when the layer holds exactly one). It also
+  stashes the passed name on the returned mark function via `stashLayerName`
+  (defined in `chartBuilder.ts`, called by every `.name()` implementation), so
+  [`ChartBuilder.connect()`](/js/api/core/connect) can detect a user-chained
+  name without parsing the `__serialize` tag.
 - `mark.label(accessor, options?)` — calls `node.label(...)` on every produced
   node, deferring label placement to the layout phase.
+- `mark.translate({ x?, y? })` — wraps the produced node in a structural
+  translation node. This is deliberately not equivalent to merging `x`/`y` into
+  the mark's own options: a mark or operator may already give `x`/`y`
+  domain-specific channel meanings.
 
-Both wrap the base mark in a new closure rather than mutating it, so naming
-or labeling one mark never affects another.
+These methods wrap or rebuild the base mark rather than mutating it, so naming,
+labeling, or positioning one mark never affects another.
+
+These methods are not hand-rolled here. `createMark` calls `nameableMark`,
+which is one application of the shared **modifier factory** in
+`createOperator.ts`: a `createModifier({ name, apply, tag? })` config plus
+`attachModifiers(base, configs)`. `apply` mutates each produced node (once per
+node — every slice for an expand mark like `cut`); `tag` stamps metadata on the
+wrapped mark function once (propagating the `__serialize`/`__axisFields` tags
+and stashing the layer name). `attachModifiers` wires the set onto the base and
+adds a top-level `.render()`, re-decorating each method's result with the same
+set so chains stay extensible and the mark-kind tag rides along. `.name()`
+defers its layer registration via a `__layerRegistration` tag collected in a
+single post-resolve DFS walk (`collectLayerRegistrations`), so registry order
+follows parent-iteration order, not async-completion order. The same factory
+backs `makeConstrainableMark` (which adds `.constrain()`) and the combinator
+marks — one wiring, not three copies.
+
+`.translate()` is structural: `attachModifiers` maps the base mark to a new mark
+whose produced node is wrapped by a translation node. This keeps the modifier
+independent from the wrapped mark's channel grammar.
 
 ## Adding a new mark
 
@@ -161,9 +204,10 @@ channel — say `rotation: number` — passes through verbatim.
 Today's channels are `"size"` and `"color"`. To add (say) `"angle"`:
 
 1. Add `"angle"` to the `ChannelType` union in `channels.ts`.
-2. Write `inferAngle(accessor, data)` next to `inferSize` — same shape, just
-   the aggregation rule that makes sense for angles (probably a literal-or-mean
-   like `inferPos`).
+2. If a numeric aggregation fits, instantiate the existing factory —
+   `export const inferAngle = inferNumeric(meanBy)` (or whatever aggregation
+   makes sense) — and measure tagging comes along for free. Otherwise write
+   `inferAngle(accessor, data, measure?)` next to it with the same signature.
 3. Extend `DeriveMarkProps`'s conditional with the input type for `"angle"`.
 4. Extend the `if (channelType === "size") ... else if (channelType === "color")`
    chain in `withGoFish.ts` to handle it.
@@ -194,7 +238,10 @@ GoFish's twist is that a mark also produces a node in a layout AST rather
 than a render directly, and the channel set is smaller (`size`, `pos`,
 `color`) — Encodable's vega-lite-flavored channel taxonomy is richer.
 [The Operator Factory](/internals/frontend/operator-factory) extends the same pattern
-to layout operators (split + per-partition application).
+to layout operators (split + per-partition application). Operator channels add
+one layout-only wrinkle: entry-position channels may opt into categorical
+`discrete` placement, which produces layout slots rather than datum-scaled
+positions.
 
 ## Pointers
 
@@ -205,5 +252,8 @@ to layout operators (split + per-partition application).
   in `src/ast/shapes/`.
 - The companion factory for layout operators:
   [The Operator Factory](/internals/frontend/operator-factory).
+- The factory's optional `serialize` config (third argument) tags the
+  produced mark with `__serialize` metadata that the frontend-IR emitter
+  reads — see [Frontend IR (Serialization)](/internals/frontend/serialization).
 - Encodable: paper [arxiv:2009.00722](https://arxiv.org/abs/2009.00722),
   source [github.com/kristw/encodable](https://github.com/kristw/encodable).

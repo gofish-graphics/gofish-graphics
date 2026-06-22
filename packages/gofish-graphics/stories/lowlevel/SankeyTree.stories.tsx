@@ -1,25 +1,15 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
 import { titanic } from "../../src/data/titanic";
-import { frame, spreadX, spreadY, stackY, rect, For, connectX, ref } from "../../src/lib";
+import { layer, spreadX, spreadY, stackY, rect, For, connectX, ref } from "../../src/lib";
 import { color6, gray, neutral } from "../../src/color";
 import { groupBy } from "lodash";
 import _ from "lodash";
 
 const meta: Meta = {
   title: "Low Level Syntax/Sankey Tree",
-  argTypes: {
-    w: {
-      control: { type: "number", min: 100, max: 1000, step: 10 },
-    },
-    h: {
-      control: { type: "number", min: 100, max: 1000, step: 10 },
-    },
-  },
 };
 export default meta;
-
-type Args = { w: number; h: number };
 
 const classColor = {
   First: color6[0],
@@ -28,13 +18,20 @@ const classColor = {
   Crew: color6[3],
 };
 
-export const Default: StoryObj<Args> = {
-  args: { w: 500, h: 400 },
-  render: (args: Args) => {
+export const Default: StoryObj = {
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "Sankey Tree",
+      description:
+        "A branching flow diagram where the width of each tapering band encodes the magnitude of a quantity as it splits across successive tiers.",
+    },
+  },
+  render: () => {
     const container = initializeContainer();
     const layerSpacing = 64;
     const internalSpacing = 2;
-    frame([
+    layer([
       spreadX({ spacing: layerSpacing, alignment: "middle" }, [
         stackY(
           { spacing: 0, alignment: "middle" },
@@ -149,8 +146,6 @@ export const Default: StoryObj<Args> = {
         ]),
       ]),
     ]).render(container, {
-      w: args.w,
-      h: args.h,
       axes: true,
     });
     return container;

@@ -34,7 +34,7 @@ const segments = [
 
 **Wrong: Using spread** — each segment gets its own independent region:
 
-::: starfish
+::: gofish
 
 ```js
 const segments = [
@@ -43,7 +43,7 @@ const segments = [
   { category: "C", value: 20 },
 ];
 
-gf.Chart(segments)
+gf.chart(segments)
   .flow(gf.spread({ by: "category", dir: "y", spacing: 1 }))
   .mark(gf.rect({ h: "value", fill: "category" }))
   .render(root, { w: 100, h: 200, axes: true });
@@ -55,7 +55,7 @@ This is **not** a stacked bar. The three rectangles are placed in separate slots
 
 **Correct: Using stack** — segments share a continuous scale:
 
-::: starfish
+::: gofish
 
 ```js
 const segments = [
@@ -64,7 +64,7 @@ const segments = [
   { category: "C", value: 20 },
 ];
 
-gf.Chart(segments)
+gf.chart(segments)
   .flow(gf.stack({ by: "category", dir: "y" }))
   .mark(gf.rect({ h: "value", fill: "category" }))
   .render(root, { w: 100, h: 200, axes: true });

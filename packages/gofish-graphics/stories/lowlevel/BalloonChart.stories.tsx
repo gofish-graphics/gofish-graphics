@@ -1,21 +1,13 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
 import { seafood, catchLocations } from "../../src/data/catch";
-import { frame, ellipse, rect, wavy } from "../../src/lib";
+import { layer, ellipse, rect, wavy } from "../../src/lib";
 import { color, color6 } from "../../src/color";
 import { mix } from "spectral.js";
 import _ from "lodash";
 
 const meta: Meta = {
   title: "Low Level Syntax/Balloon Chart",
-  argTypes: {
-    w: {
-      control: { type: "number", min: 100, max: 1000, step: 10 },
-    },
-    h: {
-      control: { type: "number", min: 100, max: 1000, step: 10 },
-    },
-  },
 };
 export default meta;
 
@@ -35,7 +27,14 @@ const scatterData = _(seafood)
   .value();
 
 export const Default: StoryObj<Args> = {
-  args: { w: 400, h: 400 },
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "Balloon Chart",
+      description:
+        "A whimsical scatterplot of fishing-catch locations where each lake's value floats as a colored balloon on a wavy string.",
+    },
+  },
   render: (args: Args) => {
     const container = initializeContainer();
 
@@ -49,7 +48,7 @@ export const Default: StoryObj<Args> = {
     };
 
     const Balloon = (options) =>
-      frame(
+      layer(
         {
           x: options?.x - 15 * (options?.scale ?? 1),
           y: options?.y + 27 * (options?.scale ?? 1),
@@ -94,10 +93,10 @@ export const Default: StoryObj<Args> = {
         ]
       );
 
-    frame(
+    layer(
       { coord: wavy(), x: 0, y: 0 },
       scatterData.map((data, i) =>
-        frame({ x: data.x }, [
+        layer({ x: data.x }, [
           rect({
             x: 0,
             y: 0,
@@ -123,8 +122,6 @@ export const Default: StoryObj<Args> = {
         ])
       )
     ).render(container, {
-      w: args.w,
-      h: args.h,
       axes: true,
     });
 

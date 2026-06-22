@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../../helper";
 import { seafood } from "../../../src/data/catch";
-import { Chart, rect } from "../../../src/lib";
+import { chart, rect } from "../../../src/lib";
 
 const meta: Meta = {
   title: "Forward Syntax V3/Bar/Stacked Fluent",
@@ -23,11 +23,11 @@ export const Default: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    Chart(seafood)
+    chart(seafood, { axes: true })
       .facet({ by: "lake", dir: "x" })
       .stack({ by: "species", dir: "y" })
       .mark(rect({ h: "count", fill: "species" }))
-      .render(container, { w: args.w, h: args.h, axes: true });
+      .render(container, { w: args.w, h: args.h });
 
     return container;
   },

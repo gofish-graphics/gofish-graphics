@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
 import { catchLocationsArray, seafood, catchLocations } from "../../src/data/catch";
 import { drivingShifts } from "../../src/data/drivingShifts";
-import { Chart, layer, select, line, rect, stack } from "../../src/lib";
+import { chart, line, rect, stack } from "../../src/lib";
 import { circle, scatter } from "../../src/lib";
 import { clock } from "../../src/ast/coordinateTransforms/clock";
 import _ from "lodash";
@@ -27,13 +27,12 @@ export const Basic: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    Chart(catchLocationsArray)
+    chart(catchLocationsArray, { axes: true })
       .flow(scatter({ by: "lake",  x: "x", y: "y" }))
       .mark(circle({ r: 5 }))
       .render(container, {
         w: args.w,
         h: args.h,
-        axes: true,
       });
 
     return container;
@@ -42,21 +41,25 @@ export const Basic: StoryObj<Args> = {
 
 export const Connected: StoryObj<Args> = {
   args: { w: 400, h: 400 },
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "Connected Scatter Plot",
+      description:
+        "A connected scatter plot tracing gas price against miles driven over successive years, with a line threading the points in chronological order to reveal the path through time.",
+    },
+  },
   render: (args: Args) => {
     const container = initializeContainer();
 
-    layer([
-      Chart(drivingShifts)
-        .flow(scatter({ by: "year",  x: "miles", y: "gas" }))
-        .mark(circle({ r: 4, fill: "white", stroke: "black", strokeWidth: 2 }).name("points")),
-      Chart(select("points"))
-        .mark(line({ stroke: "black", strokeWidth: 2 }))
-        .zOrder(-1),
-    ]).render(container, {
-      w: args.w,
-      h: args.h,
-      axes: true,
-    });
+    chart(drivingShifts, { axes: true })
+      .flow(scatter({ by: "year", x: "miles", y: "gas" }))
+      .mark(circle({ r: 4, fill: "white", stroke: "black", strokeWidth: 2 }))
+      .connect(line({ stroke: "black", strokeWidth: 2 }))
+      .render(container, {
+        w: args.w,
+        h: args.h,
+      });
 
     return container;
   },
@@ -64,6 +67,14 @@ export const Connected: StoryObj<Args> = {
 
 export const WithPieGlyphs: StoryObj<Args> = {
   args: { w: 400, h: 400 },
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "Scatter Plot with Pie Glyphs",
+      description:
+        "A scatter plot placing each lake at its geographic location and drawing a miniature pie chart of its species composition as the point glyph.",
+    },
+  },
   render: (args: Args) => {
     const container = initializeContainer();
 
@@ -80,17 +91,16 @@ export const WithPieGlyphs: StoryObj<Args> = {
       }))
       .value();
 
-    Chart(scatterData)
+    chart(scatterData, { axes: true })
       .flow(scatter({ by: "lake",  x: "x", y: "y" }))
       .mark((data) =>
-        Chart(data[0].collection, { coord: clock() })
+        chart(data[0].collection, { coord: clock() })
           .flow(stack({ by: "species",  dir: "x", /* h: "count" */ h: 20 }))
           .mark(rect({ w: "count", fill: "species" }))
       )
       .render(container, {
         w: args.w,
         h: args.h,
-        axes: true,
       });
 
     return container;

@@ -32,6 +32,14 @@ type Movie = {
 export const Default: StoryObj<Args> = {
   args: { w: 700, h: 420, paddingInner: 2 },
   loaders: [async () => ({ movies: await data["movies.json"]() })],
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "Circle Treemap",
+      description:
+        "Movie counts by major genre shown as a bubble chart of nested circles sized by each genre's frequency.",
+    },
+  },
   render: async (args: Args, context: any) => {
     const container = initializeContainer();
     const moviesRaw = context.loaded.movies as Movie[];

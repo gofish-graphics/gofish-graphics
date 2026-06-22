@@ -39,7 +39,7 @@ const runGofish = async (): Promise<LayoutData> => {
     };
 
     const layoutResult = await layout(
-      { w, h, x, y, transform, debug, defs, axes },
+      { w, h, x, y, transform, debug, defs, axes, axisFields },
       child,
       contexts
     );
@@ -67,7 +67,7 @@ Three per-run session contexts are initialized:
 
 - **`scopeContext`**: Manages variable scoping and data bindings (type: `Map`)
 - **`scaleContext`**: Stores computed color scales and scale mappings (type: `{ unit: { color: Map<any, string> } }`)
-- **`keyContext`**: Maps string keys to nodes for axis labeling and legends (type: `{ [key: string]: GoFishNode }`)
+- **`keyContext`**: Maps string keys to nodes for axis labeling (type: `{ [key: string]: GoFishNode }`)
 
 These are attached to the render session and propagated to the node tree, rather than stored as module-global mutable state. This establishes clean state for the rendering process and ensures no interference between multiple chart renders.
 
@@ -114,7 +114,9 @@ child.resolveKeys();
 Assigns unique keys to nodes. These keys are critical for:
 
 - **Axis labeling**: Ordinal axes use keys to position category labels
-- **Legend generation**: Keys identify which nodes to include in legends
+
+(Legends do not use keys — they are elaborated from the resolved color map; see
+[Legends](/internals/frontend/legends).)
 
 **Example**: In a bar chart using `spread("category", { dir: "x" })`, each bar gets a key like `"category-value"`, which is later used to position the x-axis labels.
 
@@ -155,15 +157,33 @@ const [underlyingSpaceX, underlyingSpaceY] = child.resolveUnderlyingSpace();
 
 This is one of the most important passes. It determines the **underlying space** type for each dimension, which affects how scales are computed and how axes are rendered.
 
-**Underlying Space Types** (defined in `src/ast/underlyingSpace.ts`):
+**Underlying Space Kinds** (defined in `src/ast/underlyingSpace.ts`). Since the
+#586 collapse there are only three _kinds_ — `continuous`, `ordinal`,
+`undefined` — and the old POSITION / DIFFERENCE / SIZE trichotomy is now three
+**`origin` states** of the single `continuous` kind (read via the
+`isPOSITION` / `isDIFFERENCE` / `isBaselineMagnitude` predicates):
 
-- **`POSITION`**: Continuous position scale (e.g., `x: value(5)`, `y: value(10)`)
-- **`DIFFERENCE`**: Difference scale for stacked/grouped charts
-- **`SIZE`**: Size-only encoding (no position)
+- **`CONTINUOUS`**: one data-driven extent, a `width` Monotonic in σ plus an
+  `origin`:
+  - `origin: number` — **POSITION**: anchored at a data coordinate (e.g.
+    `x: value(5)`); builds a position scale, niced, absolute axis.
+  - `origin: "free"` — **SIZE**: a baseline magnitude, sized but unplaced (e.g.
+    `h: "value"` with no min); no position scale.
+  - `origin: "impossible"` — **DIFFERENCE**: unanchorable, only differences are
+    meaningful (stacked/centered); delta axis over `[0, width]`.
 - **`ORDINAL`**: Discrete categorical scale (e.g., `spread("category")`)
 - **`UNDEFINED`**: No data-driven encoding
 
 See [Underlying Space](/internals/core/underlying-space) for the full treatment of this intermediate representation.
+
+**Constraints participate too.** `resolveUnderlyingSpace` passes a node's
+positioning constraints to its resolver (a fourth `constraints` argument). A
+`layer` folds the _datum_ coordinates of its `Constraint.position` constraints
+into a `POSITION` domain on that axis (`collectPositionDomains`), unioned with
+the children's spaces — so a `position` constraint contributes a fragment of
+this pass, which is what lets the layer build a data→pixel scale to resolve
+those constraints at layout time. See
+[Operators vs Constraints](/internals/design/operators-vs-constraints).
 
 **Example for Bar Chart Rectangles**:
 
@@ -191,7 +211,62 @@ if (!isValue(dims[0].min) && !isValue(dims[0].size)) {
 }
 ```
 
-### Pass 7: Position Scale Computation
+### Pass 7: Axis Elaboration
+
+**Location**: `src/ast/gofish.tsx` (`layout()`), `src/ast/axes/elaborate.tsx`
+
+If the chart-level `axes` option enables a dimension, `resolveAxes` walks the
+tree top-down flagging which node _owns_ an axis on each dimension,
+`resolveNiceDomains` rounds POSITION domains to tick-friendly bounds, and then
+`elaborateAxes` **rewrites the tree**: each axis-owning node is wrapped in
+`Layer` tiers containing ordinary `rect`/`text`/`spread` axis shapes wired with
+`align`/`distribute`/`position` constraints. Axes are not a privileged node
+type and there is no axis-specific code later in the pipeline — after this
+pass they are just nodes. Because the rewrite inserts new nodes and moves
+keys onto wrappers, the affected resolution passes (color, names, labels,
+underlying space, nice domains) rerun on the new tree.
+
+See [Axes](/internals/frontend/axes) for the full elaboration story (the
+two-tier structure, origin pins, negative-space gutters, and the
+continuous/difference/ordinal kinds).
+
+**Axis-title elaboration** follows the axis block (after the nice-space capture)
+and runs _before_ the legend. The title _text_ for each dim is read off the
+**resolved space's `measure`** (`resolveAxisTitles` over `spaceMeasure(rootSpace)`)
+— a continuous axis names itself by its unit, an ordinal axis by its grouping
+field — falling back to the syntactic `axisFields` hint (mark/operator field
+names) only when the space carries no measure. `elaborateAxisTitles` then wraps
+the chart in one more
+`Layer` carrying up to two title `Text` nodes — the x-title horizontal below the
+plot, the y-title rotated to read bottom-to-top in the left gutter — each
+centered on the axis line it describes via a `ref()` stand-in (`elaborateAxes`
+hands back those axis-line nodes as `titleAnchors`; an ordinal or absent axis
+has no line, so the title falls back to centering on the plot node). Two extra
+references thread through here:
+
+- `plotNode` — the original root content, captured _before_ `elaborateAxes`, so
+  it survives every wrapping pass and stands in as the fallback title anchor.
+- `contentNode` — the node captured _just before_ the title wrap (and so before
+  the legend wrap too). It is what `finalW`/`finalH` read off below, so a long
+  title or a tall legend can never inflate the inferred canvas; their extents
+  past the content are reserved separately as measured gutters instead.
+
+The ordering is deliberate: titles must be seated before the legend, because the
+legend distributes off the titled content's bbox — and conversely the title's
+centering must never see the legend column (it would drag the title off-center).
+This is the same elaborate-into-ordinary-nodes treatment axes and legends get;
+the former bespoke render-time title path is gone. See
+[Axes](/internals/frontend/axes) for the title recipe and the
+sibling-facet anchor limitation.
+
+**Legend elaboration** follows the title block in the same `layout()`, gated on a
+non-empty color map (not on the `axes` option). `elaborateLegend` wraps the chart
+root in a `Layer` holding the content plus a swatch column of `rect`/`text` rows,
+seated to the right with `align`/`distribute` constraints — the same elaborate-
+into-ordinary-nodes treatment axes get. See
+[Legends](/internals/frontend/legends).
+
+### Pass 8: Position Scale Computation
 
 **Location**: `src/ast/gofish.tsx:183-202`
 
@@ -220,7 +295,7 @@ const posScales = [
 
 For `POSITION` spaces, this creates linear scales that map from data values to pixel coordinates. These scales are used during layout to position elements.
 
-### Pass 8: Layout Calculation
+### Pass 9: Layout Calculation
 
 **Location**: `src/ast/gofish.tsx:208`
 
@@ -237,6 +312,46 @@ This is where the actual positioning and sizing happens. Each node's `layout` fu
 - Position scales: `posScales` (for `POSITION` spaces)
 
 It applies layout algorithms (stacking, positioning, etc.), calculates intrinsic dimensions for each node, and handles nested layouts and complex arrangements.
+
+**Inferring an omitted `w`/`h`.** The chart-level `w` and `h` are optional. An
+omitted dimension is resolved per axis from that axis's root underlying space:
+
+- A **POSITION** or **data-driven SIZE** axis (a scatter axis, or bar heights
+  `= value`) has data to scale into pixels, so it falls back to a concrete canvas
+  (`DEFAULT_CANVAS_SIZE = 400`).
+- An **ORDINAL** or **UNDEFINED** axis (a bar chart's category axis, or a bare
+  fixed-size shape) has nothing to scale, so it lays out _unsized_: marks keep
+  their default sizes (a mark treats a non-finite size as "use my default" via its
+  `Number.isFinite` guards) and the operator shrinks to fit.
+
+`layout()` therefore distinguishes the concrete `canvasW`/`canvasH` (used to build
+the position scales and root scale factors) from the `layoutW`/`layoutH` it hands
+to `child.layout` (where a shrink-to-fit axis is left unsized). After layout it
+reads the chart's _final_ extent back off the root via `child.dims[i].size`, so an
+unsized axis still yields a concrete SVG size (e.g. a no-width bar chart gets
+default-width bars and a width of `n·barWidth + spacing`). A user-supplied
+dimension is always authoritative. This computed extent — not the raw option — is
+what the render pass uses to size the SVG. The legend is now part of the laid-out
+tree (it is elaborated into the node tree during layout, see Pass 7), so it is
+included in this computed extent when `w`/`h` are omitted. (When a dimension is
+shrink-to-fit, Pass 10 pins the content's `min` edge to `0` so it fills `[0, size]`
+exactly; the per-side overhangs below then measure `0` on that axis — there is no
+gutter to reserve because the canvas already _is_ the content extent.) When a
+dimension _is_ given, `layout()` additionally measures how far the laid-out tree
+extends past the authoritative extent on each of the four sides — including content a constraint
+seated _beyond_ the canvas, e.g. a marginal histogram's bands above and to the
+right of a scatter — and the render pass reserves exactly that, replacing the
+former fixed `LEGEND_MARGIN` constant. The right side is split into two measured
+overhangs: a `rightOverhang` for a legend swatch column (gated on whether a legend
+was added) and a `rightContentOverhang` for any non-legend content displaced past
+the right edge — see Render Pass 2 below for why the split is necessary. See
+[Legends](/internals/frontend/legends).
+
+> Literal pixel sizes are invisible to the underlying-space tree (a fixed-size
+> shape resolves to `UNDEFINED`, not `SIZE`), which is why the unsized path relies
+> on the marks' default-size guards and the bbox readback rather than reading an
+> intrinsic size from the space. Tracking constant sizes in the space system is a
+> separate change.
 
 **Example: Rect Layout Function**
 
@@ -287,19 +402,56 @@ For a bar chart rectangle, the layout function:
 
 The `intrinsicDims` represent the element's size in its local coordinate system (with min typically at 0), while `transform.translate` positions it in the parent's coordinate system.
 
-### Pass 9: Placement
+### Pass 10: Placement
 
-**Location**: `src/ast/gofish.tsx:209`
+**Location**: `src/ast/gofish.tsx`
 
 ```typescript
-child.place({ x: x ?? transform?.x ?? 0, y: y ?? transform?.y ?? 0 });
+const placeRoot = (axis, value, shrinkToFit) =>
+  shrinkToFit
+    ? child.pinAnchor(axis, value, "min")
+    : child.place(axis, value, "baseline");
+placeRoot("x", x ?? transform?.x ?? 0, w === undefined);
+placeRoot("y", y ?? transform?.y ?? 0, h === undefined);
 ```
 
-**Implementation**: `src/ast/_node.ts:284-309`
+**Implementation**: `src/ast/_node.ts`
 
-Applies final positioning offsets. This is typically used for positioning the entire chart within its container.
+Pins the whole chart into the container by landing one anchor of the root's bbox
+at a target coordinate. _Which_ anchor depends on whether the axis is sized:
 
-### Pass 10: Ordinal Scale Building
+- **Given dimension** → pin the **baseline** (local `0`) to `0`. The canvas box is
+  the baseline-anchored `[0, given]`, and any content seated outside it (axis labels
+  below `0`, ticks above `given`) is reserved as the per-side overhangs in the render
+  pass.
+- **Shrink-to-fit dimension** (`w`/`h` omitted, so `finalH = size`) → pin the **`min`
+  edge** to `0`. The canvas box _is_ the content's full `[min, max]` extent, so the
+  content fills `[0, size]` exactly and the overhang formulas (`-min`, `max - finalH`)
+  compute `0` for that axis with no special-casing.
+
+  Leaving `min` off origin in this case is the
+  [#574](https://github.com/gofish-graphics/gofish-graphics/issues/574) double-count:
+  a _negative_ `min` (content below/left of baseline) makes `bottomOverhang = -min`
+  re-reserve a phantom band ~equal to the offset, so the canvas comes out ~2× the
+  content; a _positive_ `min` (a self-placed diagram seated at, say, `(20, 20)`) both
+  gaps the near side and overhangs the far side. Pinning `min` to 0 collapses both,
+  and it keeps the overhang reservation purely a _given-dimension_ concern.
+
+  The min-pin uses **`pinAnchor`**, not the write-once `place()`: a chart whose root
+  carries its own transform (a hand-built diagram like the pulley) has already
+  self-placed that axis, and `place()` short-circuits on a placed axis. `pinAnchor` is
+  the authoritative override — it rebuilds the axis ledger so the pin lands regardless
+  — and for an unplaced root it matches what `place(…, "min")` would have done.
+
+Constraint placement works in anchor coordinates, not just node origins. The
+`Placeable` protocol in `_node.ts` exposes `localAnchor(axis, anchor)` so the
+placement solver can turn `start`/`middle`/`end`/`baseline` relations into
+equations over a node's absolute `min`. `GoFishNode.localAnchor()` reads the
+node's intrinsic dimensions in its own local frame, which keeps baseline and
+asymmetric-box alignment independent from whatever display transform is later
+projected for rendering.
+
+### Pass 11: Ordinal Scale Building
 
 **Location**: `src/ast/gofish.tsx:216-223`
 
@@ -337,21 +489,21 @@ The render function is called from `gofish()` after layout data is available:
 ```tsx
 return render(
   {
-    width: w,
-    height: h,
+    width: data.width,
+    height: data.height,
+    svgPadding,
     defs,
-    axes,
-    scaleContext: data.scaleContext,
-    keyContext: data.keyContext,
-    sizeDomains: data.sizeDomains,
-    underlyingSpaceX: data.underlyingSpaceX,
-    underlyingSpaceY: data.underlyingSpaceY,
-    posScales: data.posScales,
-    ordinalScales: data.ordinalScales,
+    rightOverhang: data.rightOverhang,
+    leftOverhang: data.leftOverhang,
+    bottomOverhang: data.bottomOverhang,
   },
   data.child
 );
 ```
+
+`render()` no longer takes `axes`/`axisFields` or the scale/space context — all
+the chrome is in the laid-out tree by now, so render only needs the computed
+extent and the measured per-side overhangs to size the SVG.
 
 ### Render Pass 1: Context Restoration
 
@@ -364,37 +516,86 @@ keyContext = keyContextParam;
 
 The global contexts are restored so that render functions can access them.
 
-### Render Pass 2: Axis Tick Calculation
+### Render Pass 2: Chrome Reservation
 
-**Location**: `src/ast/gofish.tsx:381-405`
+**Location**: `src/ast/gofish.tsx` (`render()`)
 
-If `axes: true`, tick marks are computed for continuous axes using D3's `nice()` and `ticks()` functions.
+`render()` draws **no chart chrome of its own** — no axis lines, tick marks, tick
+labels, ordinal category labels, _or titles_, and no legend swatches. All of it
+was elaborated into ordinary nodes during layout (see Pass 7: Axis Elaboration,
+the title block that follows it, and the legend block) and renders as part of the
+node tree like any other shape. The former bespoke render-time path (hand-written
+`<text>` title elements behind fixed `Y_TITLE_MARGIN` / `X_TITLE_MARGIN` gutters)
+has been deleted, so `render()` has zero chart-chrome special cases left.
+
+What `render()` _does_ do is size the SVG around the measured extent of that
+chrome, on all four sides. `layout()` hands it five gutter measurements:
+`leftOverhang`, `bottomOverhang`, and `topOverhang` (negative-space gutters and
+top overflow off the outermost wrapper: tick/label rows, the seated y-title and
+x-title, and any content a constraint seated above the canvas), plus the two
+right-side overhangs — `rightOverhang` (the legend swatch column) and
+`rightContentOverhang` (non-legend content displaced past the right edge). The
+render pass reserves exactly enough on each side:
+
+```typescript
+const EDGE_GAP = 8; // breathing room between gutter content and the SVG edge
+const reserve = (o: number) =>
+  o > 0 ? Math.ceil(Math.max(pad, o + EDGE_GAP)) : pad;
+const leftReserve = reserve(leftOverhang);
+const bottomReserve = reserve(bottomOverhang);
+const topReserve = reserve(topOverhang);
+// right side: legend column + non-legend displaced content
+// width = leftReserve + width + rightOverhang + reserve(rightContentOverhang)
+```
+
+The `o > 0` guard keeps a chart with `padding: 0` and no chrome at zero reserve
+(don't invent `EDGE_GAP` px on an empty gutter). Because a gutter that fits
+within the existing `pad` is absorbed by it, an untitled chart with a small
+gutter stays byte-identical to the pre-chrome output. The measured-overhang
+policy also fixes a latent bug: the old fixed 40px margins silently _clipped_ any
+gutter wider than themselves (long y tick labels, **or content a constraint
+seated past the canvas — marginal histogram bands, wide diagram nodes**), whereas
+`reserve()` grows to fit whatever the laid-out content actually needs.
+
+**Why the right side is special.** Left, bottom, and top each have a single kind
+of overhang (chrome or displaced content) and run through `reserve()` uniformly.
+The right side carries _two_ kinds that must be reserved _differently_: a legend
+column historically reserves `legendOverhang + pad`, while displaced content
+(like a marginal band) should run through `reserve()` like the other gutters. The
+two cannot be unified by magnitude — a single-row legend overhangs by roughly the
+same few pixels as a wide rightmost x-tick label, yet the legend must be _added_
+to the width while the tick spill must be _absorbed_ into `pad`. Only the
+color-scale flag (`legendAdded`) can tell them apart, so the legend keeps its own
+gated `rightOverhang` term; everything else flows through `rightContentOverhang`
+and `reserve()`. This is the one place a chart-chrome flag still influences
+sizing — kept deliberately, because the distinction is semantic, not geometric.
 
 ### Render Pass 3: SVG Container Creation
 
-**Location**: `src/ast/gofish.tsx:407-417`
+**Location**: `src/ast/gofish.tsx` (`render()`)
 
 ```typescript
 <svg
-  width={width + PADDING * 6 + (axes ? 100 : 0)}
-  height={height + PADDING * 6 + (axes ? 100 : 0)}
+  width={leftReserve + width + rightOverhang + pad}
+  height={pad + height + bottomReserve}
   xmlns="http://www.w3.org/2000/svg"
 >
 ```
 
-The SVG container is created with padding and extra space for axes.
+The SVG container is sized to the content (`width`/`height`, read off the
+pre-chrome content node in layout) plus the measured reserves on each side.
 
 ### Render Pass 4: Coordinate Transform
 
-**Location**: `src/ast/gofish.tsx:416-421`
+**Location**: `src/ast/gofish.tsx` (`render()`)
 
 ```typescript
-<g
-  transform={`scale(1, -1) translate(${PADDING * 4}, ${-height - PADDING * 4})`}
->
+<g transform={`scale(1, -1) translate(${leftReserve}, ${-(height + pad)})`}>
 ```
 
-The coordinate system is flipped (Y-axis inverted) to match mathematical conventions, and the chart is positioned with padding.
+The coordinate system is flipped (Y-axis inverted) to match mathematical
+conventions, and the chart is shifted right by `leftReserve` (the left gutter)
+and down by the top `pad`.
 
 ### Render Pass 5: Node Tree Rendering
 
@@ -503,109 +704,24 @@ if (space.type === "linear") {
 }
 ```
 
-### Render Pass 7: Axis Rendering
+### Render Pass 7: Axis Rendering (removed)
 
-**Location**: `src/ast/gofish.tsx:422-832`
+The bespoke axis-rendering pass that used to live here (hand-written SVG for
+continuous/ordinal axes, ~400 lines of `gofish.tsx`) was **deleted**. Axes are
+now elaborated into ordinary GoFish nodes during layout (see Pass 7: Axis
+Elaboration and [Axes](/internals/frontend/axes)), so they render through the
+normal node-tree pass above with no special casing. Axis **titles** were the
+last artifact still drawn here; they too are now elaborated during layout
+(see Render Pass 2), so nothing axis-related is drawn directly at render time.
 
-If `axes: true`, axes are rendered based on the underlying space types:
+### Render Pass 8: Legend Rendering (removed)
 
-#### Continuous Y-Axis (POSITION)
-
-**Location**: `src/ast/gofish.tsx:434-479`
-
-For `POSITION` spaces, a continuous axis is rendered with tick marks and labels:
-
-```typescript
-<Show when={isPOSITION(underlyingSpaceY)}>
-  {(() => {
-    const [yMin, yMax] = nice(
-      underlyingSpaceY.domain!.min,
-      underlyingSpaceY.domain!.max,
-      10
-    );
-    const yTicks = ticks(yMin, yMax, 10);
-    return (
-      <g>
-        <line ... /> {/* Axis line */}
-        <For each={yTicks}>
-          {(tick) => (
-            <>
-              <text ...>{tick}</text> {/* Tick label */}
-              <line ... /> {/* Tick mark */}
-            </>
-          )}
-        </For>
-      </g>
-    );
-  })()}
-</Show>
-```
-
-#### Ordinal X-Axis
-
-**Location**: `src/ast/gofish.tsx:683-741`
-
-For `ORDINAL` spaces, category labels are positioned using the ordinal scale:
-
-```typescript
-<Show when={isORDINAL(underlyingSpaceX) && ordinalScales[0] && keyContext}>
-  {(() => {
-    const scale = ordinalScales[0]!;
-    const domain = isORDINAL(underlyingSpaceX) ? underlyingSpaceX.domain : undefined;
-    const labelKeys = domain && domain.length > 0 ? domain : [];
-    return (
-      <g>
-        <For each={labelKeys}>
-          {(key) => {
-            const xPos = scale(key);
-            return (
-              <text
-                transform="scale(1, -1)"
-                x={xPos}
-                y={-minY + 5}
-                text-anchor="middle"
-              >
-                {key}
-              </text>
-            );
-          }}
-        </For>
-      </g>
-    );
-  })()}
-</Show>
-```
-
-**Example**: In a bar chart with `spread("category", { dir: "x" })`:
-
-1. Each bar has a key like `"category-A"`, `"category-B"`, etc.
-2. The `ORDINAL` underlying space has `domain: ["category-A", "category-B", ...]`
-3. The ordinal scale maps each key to its x-position
-4. Labels are rendered at those positions
-
-### Render Pass 8: Legend Rendering
-
-**Location**: `src/ast/gofish.tsx:801-830`
-
-Color legends are rendered from the `scaleContext.unit.color` map:
-
-```typescript
-<For
-  each={Array.from(
-    (scaleContext?.unit && "color" in scaleContext.unit
-      ? scaleContext.unit.color
-      : new Map()
-  ).entries()
-)}
->
-  {([key, value], i) => (
-    <g transform={`translate(${width + PADDING * 3}, ${height - i() * 20})`}>
-      <rect x={-20} y={-5} width={10} height={10} fill={value} />
-      <text ...>{key}</text>
-    </g>
-  )}
-</For>
-```
+The bespoke legend-rendering pass that used to live here (a `<For>` over
+`scaleContext.unit.color` hand-placing swatches behind a fixed `LEGEND_MARGIN`)
+was **deleted**. Color legends are now elaborated into ordinary GoFish nodes
+during layout (see Pass 7: Axis Elaboration, which the legend pass follows, and
+[Legends](/internals/frontend/legends)), so they render through the normal
+node-tree pass above with no special casing.
 
 ## Complete Example: Bar Chart Rendering
 
@@ -643,11 +759,14 @@ This creates:
 4. **Underlying Space Resolution**:
    - X-axis: `ORDINAL` (from `spread`)
    - Y-axis: `SIZE` (height is data-driven, no position)
-5. **Layout Calculation**:
+5. **Axis Elaboration** (if `axes` enabled): the chart is wrapped in layers
+   carrying the y tick marks/labels (constraint-pinned at their data values)
+   and the per-category x labels (`ref`-bound to the bars)
+6. **Layout Calculation**:
    - X-positions computed by `spread` operator (ordinal spacing)
    - Y-positions set to 0 (bars start at baseline)
    - Heights computed from data values using size scale factors
-6. **Ordinal Scale Building**: Maps category keys to x-positions
+7. **Ordinal Scale Building**: Maps category keys to x-positions
 
 ### Step 3: Render Pass
 
@@ -663,9 +782,9 @@ This creates:
    return <rect x={baseX} y={-baseY - height} width={width} height={height} ... />;
    ```
 
-2. **Axis Rendering**:
-   - X-axis: Ordinal axis with category labels positioned using ordinal scale
-   - Y-axis: Continuous axis (if `axes: true`) showing value scale
+2. **Axes**: already part of the node tree (elaborated during layout), so
+   the category labels, the y tick marks, and the axis titles all render in
+   step 1 with everything else — nothing axis-related is drawn separately
 
 ## Debug Support
 

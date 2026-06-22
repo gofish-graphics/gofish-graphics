@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
 import { seafood } from "../../src/data/catch";
-import { Chart, spread, stack, rect, derive, palette, gradient, assignGradientColor, layer, select } from "../../src/lib";
+import { chart, spread, stack, rect, derive, palette, gradient, assignGradientColor, layer, selectAll } from "../../src/lib";
 import { area, group } from "../../src/lib";
 import { orderBy } from "lodash";
 import { clock } from "../../src/ast/coordinateTransforms/clock";
@@ -34,13 +34,20 @@ const scores = [
 export const PaletteNamedScheme: StoryObj<Args> = {
   name: "Palette / Named Scheme",
   args: defaultArgs,
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "Categorical Color Palette",
+      description: "Fish catch totals per species as a bar chart colored by a categorical tableau10 palette.",
+    },
+  },
   render: (args: Args) => {
     const container = initializeContainer();
 
-    Chart(seafood, { color: palette("tableau10") })
+    chart(seafood, { color: palette("tableau10"), axes: true })
       .flow(spread({ by: "species",  dir: "x" }))
       .mark(rect({ h: "count", fill: "species" }))
-      .render(container, { w: args.w, h: args.h, axes: true });
+      .render(container, { w: args.w, h: args.h });
 
     return container;
   },
@@ -53,10 +60,10 @@ export const PaletteStringArray: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    Chart(seafood, { color: palette(["#e41a1c", "#377eb8", "#4daf4a", "#984ea3", "#ff7f00"]) })
+    chart(seafood, { color: palette(["#e41a1c", "#377eb8", "#4daf4a", "#984ea3", "#ff7f00"]), axes: true })
       .flow(spread({ by: "species",  dir: "x" }))
       .mark(rect({ h: "count", fill: "species" }))
-      .render(container, { w: args.w, h: args.h, axes: true });
+      .render(container, { w: args.w, h: args.h });
 
     return container;
   },
@@ -66,13 +73,20 @@ export const PaletteStringArray: StoryObj<Args> = {
 export const GradientNamedScheme: StoryObj<Args> = {
   name: "Gradient / Named Scheme",
   args: defaultArgs,
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "Sequential Color Gradient",
+      description: "Ascending values as a bar chart whose fill interpolates along a sequential blues gradient.",
+    },
+  },
   render: (args: Args) => {
     const container = initializeContainer();
 
-    Chart(scores, { color: gradient("blues") })
+    chart(scores, { color: gradient("blues"), axes: true })
       .flow(spread({ by: "label",  dir: "x" }))
       .mark(rect({ h: "value", fill: "value" }))
-      .render(container, { w: args.w, h: args.h, axes: true });
+      .render(container, { w: args.w, h: args.h });
 
     return container;
   },
@@ -85,10 +99,10 @@ export const GradientStringArray: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    Chart(scores, { color: gradient(["#f7fbff", "#42c663", "#6b0808"]) })
+    chart(scores, { color: gradient(["#f7fbff", "#42c663", "#6b0808"]), axes: true })
       .flow(spread({ by: "label",  dir: "x" }))
       .mark(rect({ h: "value", fill: "value" }))
-      .render(container, { w: args.w, h: args.h, axes: true });
+      .render(container, { w: args.w, h: args.h });
 
     return container;
   },
@@ -115,7 +129,7 @@ export const PairedPalettes: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    Chart(pairedBars)
+    chart(pairedBars, { axes: true })
       .flow(
         derive((d) => {
           const values = d.map((item) => item.value);
@@ -131,7 +145,7 @@ export const PairedPalettes: StoryObj<Args> = {
         stack({ by: "type",  dir: "x" })
       )
       .mark(rect({ h: "value", fill: "color" }))
-      .render(container, { w: args.w, h: args.h, axes: true });
+      .render(container, { w: args.w, h: args.h });
 
     return container;
   },
@@ -146,11 +160,12 @@ export const NestedDerive: StoryObj<Args> = {
 
     const lakeOrder = ["Lake A", "Lake B", "Lake C", "Lake D", "Lake E", "Lake F"];
 
-    Chart(seafood, {
+    chart(seafood, {
       color: palette({
         "salmon-highlight": "#e15759",
         "first-half": "#4e79a7",
       }),
+      axes: true,
     })
       .flow(
         derive((d) =>
@@ -172,7 +187,7 @@ export const NestedDerive: StoryObj<Args> = {
         stack({ by: "species",  dir: "x" })
       )
       .mark(rect({ h: "count", fill: "highlight" }))
-      .render(container, { w: args.w, h: args.h, axes: true });
+      .render(container, { w: args.w, h: args.h });
 
     return container;
   },
@@ -185,7 +200,7 @@ export const SelectiveDerive: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    Chart(seafood, { color: palette({ highlighted: "#e15759" }) })
+    chart(seafood, { color: palette({ highlighted: "#e15759" }), axes: true })
       .flow(
         derive((d) =>
           d.map((item) => ({
@@ -197,7 +212,7 @@ export const SelectiveDerive: StoryObj<Args> = {
         stack({ by: "species",  dir: "x" })
       )
       .mark(rect({ h: "count", fill: "highlight" }))
-      .render(container, { w: args.w, h: args.h, axes: true });
+      .render(container, { w: args.w, h: args.h });
 
     return container;
   },
@@ -207,16 +222,23 @@ export const SelectiveDerive: StoryObj<Args> = {
 export const SelectiveGroup: StoryObj<Args> = {
   name: "Selective / Highlight Group",
   args: defaultArgs,
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "Selective Highlight",
+      description: "Stacked catch bars by lake with only the Salmon segments colored and every other species muted to gray.",
+    },
+  },
   render: (args: Args) => {
     const container = initializeContainer();
 
-    Chart(seafood, { color: palette({ Salmon: "#e15759" }) })
+    chart(seafood, { color: palette({ Salmon: "#e15759" }), axes: true })
       .flow(
         spread({ by: "lake",  dir: "x" }),
         stack({ by: "species",  dir: "x" })
       )
       .mark(rect({ h: "count", fill: "species" }))
-      .render(container, { w: args.w, h: args.h, axes: true });
+      .render(container, { w: args.w, h: args.h });
 
     return container;
   },
@@ -226,18 +248,25 @@ export const SelectiveGroup: StoryObj<Args> = {
 export const RibbonHighlight: StoryObj<Args> = {
   name: "Ribbon / Two Highlighted",
   args: defaultArgs,
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "Highlighted Ribbon Chart",
+      description: "Species catch flows across lakes as stacked ribbons, with Salmon and Trout picked out in color against gray.",
+    },
+  },
   render: (args: Args) => {
     const container = initializeContainer();
 
     layer([
-      Chart(seafood, { color: palette({ Salmon: "#e15759", Trout: "#4e79a7" }) })
+      chart(seafood, { color: palette({ Salmon: "#e15759", Trout: "#4e79a7" }) })
         .flow(
           spread({ by: "lake",  dir: "x", spacing: 64 }),
           derive((d) => orderBy(d, "count", "asc")),
           stack({ by: "species",  dir: "y" })
         )
         .mark(rect({ h: "count", fill: "species" }).name("bars")),
-      Chart(select("bars"))
+      chart(selectAll("bars"))
         .flow(group({ by: "species" }))
         .mark(area({ opacity: 0.6 })),
     ]).render(container, { w: args.w, h: args.h, axes: true });
@@ -262,16 +291,23 @@ const roseData = Array.from({ length: NUM_RINGS * NUM_SECTORS }, (_, i) => {
 export const RoseGradient: StoryObj<Args> = {
   name: "Rose / Concentric Gradient",
   args: defaultArgs,
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "Nightingale Rose Diagram",
+      description: "A polar rose chart of values across twelve sectors and six concentric rings shaded by a blues gradient.",
+    },
+  },
   render: (args: Args) => {
     const container = initializeContainer();
 
-    Chart(roseData, { color: gradient("blues"), coord: clock() })
+    chart(roseData, { color: gradient("blues"), coord: clock(), axes: true })
       .flow(
-        spread({ by: "sector", dir: "x", spacing: 0 }),
-        stack({ by: "ring", dir: "y" }),
+        spread({ by: "sector", dir: "x", spacing: 0, axes: false }),
+        stack({ by: "ring", dir: "y", axes: true }),
       )
       .mark(rect({ w: (Math.PI * 2) / NUM_SECTORS, emX: true, h: "value", fill: "ring" }))
-      .render(container, { w: args.w, h: args.h, axes: true });
+      .render(container, { w: args.w, h: args.h });
 
     return container;
   },

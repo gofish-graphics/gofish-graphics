@@ -1,5 +1,5 @@
 import { mix } from "spectral.js";
-import { black, white } from "../../color";
+import { black, resolveColorChannel, white } from "../../color";
 import {
   path,
   Path,
@@ -22,6 +22,7 @@ import {
 } from "../data";
 import {
   Dimensions,
+  displayDims as displayDimsOf,
   elaborateDims,
   FancyDims,
   FancySize,
@@ -43,8 +44,8 @@ export const Petal = ({
   ...fancyDims
 }: {
   name?: string;
-  fill?: string;
-  stroke?: string;
+  fill?: MaybeValue<string>;
+  stroke?: MaybeValue<string>;
   strokeWidth?: number;
 } & FancyDims<MaybeValue<number>>) => {
   const dims = elaborateDims(fancyDims).map(inferEmbedded);
@@ -52,6 +53,9 @@ export const Petal = ({
     {
       name,
       type: "petal",
+      // Seed the unit color scale. Prefer whichever channel is data-driven, so
+      // `fill: "species"` registers its category (like rect/ellipse do).
+      color: isValue(fill) ? fill : stroke,
       // inferDomains: () => {
       //   return [
       //     isValue(dims[0].size)
@@ -85,11 +89,11 @@ export const Petal = ({
           const d = dims[axis];
           if (isValue(d.min)) {
             const min = getValue(d.min) ?? 0;
-            return POSITION(interval(min, min));
+            return POSITION(interval(min, min), getMeasure(d.min));
           }
           if (isValue(d.size)) {
             // data-driven size only — literals handled at layout time.
-            return SIZE(sizeDomain(axis));
+            return SIZE(sizeDomain(axis), getMeasure(d.size));
           }
           return UNDEFINED;
         };
@@ -109,14 +113,10 @@ export const Petal = ({
             {
               min: 0,
               size: w,
-              center: w / 2,
-              max: w,
             },
             {
               min: 0,
               size: h,
-              center: h / 2,
-              max: h,
             },
           ],
           transform: {
@@ -125,15 +125,19 @@ export const Petal = ({
           },
         };
       },
-      render: ({
-        intrinsicDims,
-        transform,
-        coordinateTransform,
-      }: {
-        intrinsicDims?: Dimensions;
-        transform?: Transform;
-        coordinateTransform?: CoordinateTransform;
-      }) => {
+      render: (
+        {
+          intrinsicDims,
+          transform,
+          coordinateTransform,
+        }: {
+          intrinsicDims?: Dimensions;
+          transform?: Transform;
+          coordinateTransform?: CoordinateTransform;
+        },
+        _children,
+        node: GoFishNode
+      ) => {
         if (coordinateTransform === undefined) {
           return <></>;
         }
@@ -151,28 +155,18 @@ export const Petal = ({
         const isYEmbedded = dims[1].embedded;
 
         // combine intrinsicDims with transform
-        const displayDims = [
-          {
-            min:
-              (transform?.translate?.[0] ?? 0) + (intrinsicDims?.[0]?.min ?? 0),
-            size: intrinsicDims?.[0]?.size ?? 0,
-            center:
-              (transform?.translate?.[0] ?? 0) +
-              (intrinsicDims?.[0]?.center ?? 0),
-            max:
-              (transform?.translate?.[0] ?? 0) + (intrinsicDims?.[0]?.max ?? 0),
-          },
-          {
-            min:
-              (transform?.translate?.[1] ?? 0) + (intrinsicDims?.[1]?.min ?? 0),
-            size: intrinsicDims?.[1]?.size ?? 0,
-            center:
-              (transform?.translate?.[1] ?? 0) +
-              (intrinsicDims?.[1]?.center ?? 0),
-            max:
-              (transform?.translate?.[1] ?? 0) + (intrinsicDims?.[1]?.max ?? 0),
-          },
-        ];
+        // center/max derived from min+size (shared helper)
+        const displayDims = displayDimsOf(intrinsicDims, transform);
+
+        // Resolve data-bound fill/stroke through the unit color scale, the same
+        // way `rect` and `ellipse` do (e.g. `fill: "species"` → a categorical
+        // color), then apply any post-scale color ops (`.lighten`/`.darken`).
+        // A literal color string passes through unchanged.
+        const scaleContext = node.getRenderSession().scaleContext;
+        const unitScale = scaleContext?.unit;
+        const resolvedFill = resolveColorChannel(fill, unitScale);
+        const resolvedStroke =
+          resolveColorChannel(stroke, unitScale) ?? resolvedFill;
 
         // Both dimensions are aesthetic - render as transformed point
         if (!isXEmbedded && !isYEmbedded) {
@@ -190,8 +184,8 @@ export const Petal = ({
               y={transformedY - height / 2}
               width={width}
               height={height}
-              fill={fill}
-              stroke={stroke ?? fill ?? "black"}
+              fill={resolvedFill}
+              stroke={resolvedStroke ?? "black"}
               stroke-width={strokeWidth ?? 0}
             />
           );
@@ -271,7 +265,7 @@ export const Petal = ({
             <path
               transform={`rotate(${((displayDims[0].center ?? 0) / Math.PI) * 180})`}
               d={svgPath}
-              fill={fill}
+              fill={resolvedFill}
             />
           );
         }
@@ -293,8 +287,8 @@ export const Petal = ({
         return (
           <path
             d={pathToSVGPath(transformed)}
-            fill={fill}
-            stroke={stroke ?? fill ?? "black"}
+            fill={resolvedFill}
+            stroke={resolvedStroke ?? "black"}
             stroke-width={strokeWidth ?? 0}
           />
         );
@@ -304,7 +298,13 @@ export const Petal = ({
   );
 };
 
-export const petal = createMark(Petal, {
-  w: "size",
-  h: "size",
-});
+export const petal = createMark(
+  Petal,
+  {
+    w: "size",
+    h: "size",
+    fill: "color",
+    stroke: "color",
+  },
+  "petal"
+);

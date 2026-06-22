@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
-import { Chart, scatter, circle, log } from "../../src/lib";
+import { chart, scatter, circle, log } from "../../src/lib";
 import data from "vega-datasets";
 
 // Mirrors: https://vega.github.io/vega-lite/examples/point_2d.html
@@ -22,17 +22,24 @@ type Args = { w: number; h: number };
 export const Default: StoryObj<Args> = {
   args: { w: 300, h: 300 },
   loaders: [async () => ({ cars: await data["cars.json"]() })],
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "Scatter Plot",
+      description: "A scatter plot of car horsepower against fuel efficiency in miles per gallon, revealing the downward trend between the two.",
+    },
+  },
   render: (args: Args, context: any) => {
     const container = initializeContainer();
     const cars = (context.loaded.cars as any[]).filter(d => d.Horsepower !== null && d.Miles_per_Gallon !== null);
 
-    Chart(cars)
+    chart(cars, { axes: true })
       .flow(log("cars before scatter"), scatter({ by: "Name",  x: "Horsepower", y: "Miles_per_Gallon", debug: true }))
       .mark(circle({ r: 4, fill: "rgba(31, 119, 180, 0.4)", // semi‑transparent blue
         stroke: "#1f77b4",
         strokeWidth: 1,}))
 
-      .render(container, { w: args.w, h: args.h, axes: true } as any);
+      .render(container, { w: args.w, h: args.h });
 
     return container;
   },

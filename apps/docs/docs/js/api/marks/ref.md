@@ -2,6 +2,16 @@
 
 References another node so later marks can reuse its position or bounding box — the basis for overlays, connectors, and arrows.
 
+`ref` is the single reference noun, usable in two positions:
+
+- **Inline in a layout** (this page): `arrow(ref("a"), ref("b"))`,
+  `ref(token).row[2]` — resolved at layout time against the name tree.
+- **As chart data**: `chart(ref("maxBar")).mark(text(...))` — resolved at build
+  time against the named-layer registry, where it must match **exactly one**
+  node (use [`selectAll`](/js/api/selection/ref) for many). See
+  [ref / selectAll](/js/api/selection/ref) for the chart-data role and node-unit
+  selection.
+
 See also [How to name and scope](/js/api/howto/naming-and-scoping) for when to use strings vs. tokens vs. paths.
 
 ## Signature
@@ -85,6 +95,35 @@ Layer([bar, ref(bar)]);
 | Parameter         | Type                                                                                      | Description                                                                             |
 | ----------------- | ----------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
 | `nodeOrSelection` | `string \| Token \| (Token \| string \| number)[] \| GoFishNode \| { __ref: GoFishNode }` | What to reference. See forms above — string (local), Token (global), path, or the node. |
+
+## `ref.datum` {#datum}
+
+A ref exposes the datum bound to the node it points at via the public `.datum`
+getter:
+
+```ts
+const bars = selectAll("bars"); // GoFishRef[]
+bars[0].datum; // the raw row-bag behind the first bar
+```
+
+`ref.datum` is the **raw bag of rows** that flowed into the referenced node — an
+**array** of records. A fully-split leaf (one datum per node) is a **1-row
+array**; an aggregate — for example a bar produced by `rect({ h: "count" })` over
+a partition, whose height auto-sums several rows — holds all the rows of its
+partition.
+
+Because it is the raw, un-collapsed bag, you can aggregate over it directly:
+
+```ts
+import { sumBy } from "lodash";
+sumBy(bars[0].datum, "count"); // total count across the bar's rows
+```
+
+Operators read this same bag when you re-encode a selection by a datum path,
+e.g. `group({ by: "datum.species" })`, but with **homogeneity collapse** applied:
+the path resolves to a scalar only if every row in the bag agrees on the field —
+see [path-aware `by`](/js/api/operators/spread#path-aware-by). To get _every_
+distinct value at a path instead, use [`pluck`](/js/api/selection/ref#pluck).
 
 ## Notes
 

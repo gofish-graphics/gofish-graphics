@@ -3,14 +3,15 @@
 import pytest
 from gofish import (
     chart,
-    Layer,
+    layer,
     LayerBuilder,
     spread,
     stack,
     derive,
     log,
     clock,
-    select,
+    ref,
+    selectAll,
     palette,
     gradient,
     normalize,
@@ -24,7 +25,7 @@ from gofish import (
     text,
     image,
 )
-from gofish.ast import LayerSelector
+from gofish.ast import _RefProxy
 
 
 class TestOperators:
@@ -39,6 +40,21 @@ class TestOperators:
         """Test stack operator requires dir."""
         with pytest.raises(ValueError, match="requires 'dir' option"):
             stack(by="field")
+
+    def test_stack_combinator_form(self):
+        """Test stack([marks], dir=...) returns a combinator-form Mark."""
+        m = stack([rect(h="a"), rect(h="b")], dir="y")
+        d = m.to_dict()
+        assert d["type"] == "stack"
+        assert d["__combinator"] is True
+        assert d["options"] == {"dir": "y"}
+        assert len(d["children"]) == 2
+        assert d["children"][0]["type"] == "rect"
+
+    def test_stack_combinator_rejects_by(self):
+        """Test combinator-form stack rejects the operator-only `by` kwarg."""
+        with pytest.raises(ValueError, match="does not accept"):
+            stack([rect(h="a")], by="field", dir="y")
 
     def test_derive_operator(self):
         """Test derive operator."""
@@ -98,20 +114,38 @@ class TestMarkName:
         assert "name" not in d
 
 
-class TestSelect:
-    """Test select() and LayerSelector."""
+class TestRefData:
+    """Test `ref(...)` / `selectAll(...)` used as chart data."""
 
-    def test_select_returns_layer_selector(self):
-        """Test select() returns a LayerSelector."""
-        s = select("bars")
-        assert isinstance(s, LayerSelector)
-        assert s.layer_name == "bars"
+    def test_select_all_returns_ref_proxy(self):
+        """Test selectAll() returns a _RefProxy carrying multiplicity='all'."""
+        s = selectAll("bars")
+        assert isinstance(s, _RefProxy)
+        assert s.multiplicity == "all"
+        assert s._sel() == ["bars"]
 
-    def test_chart_with_select_ir(self):
-        """Test chart(select(...)) serializes data as select spec."""
-        c = chart(select("bars")).mark(line())
+    def test_ref_singular_multiplicity(self):
+        """Test ref() yields a _RefProxy with no (singular) multiplicity."""
+        r = ref("bars")
+        assert isinstance(r, _RefProxy)
+        assert r.multiplicity is None
+
+    def test_chart_with_ref_data_ir(self):
+        """Test chart(ref(...)) serializes data as select spec, mode 'one'."""
+        c = chart(ref("bars")).mark(line())
         ir = c.to_ir()
-        assert ir["data"] == {"type": "select", "layer": "bars"}
+        assert ir["data"] == {"type": "select", "layer": "bars", "mode": "one"}
+
+    def test_chart_with_select_all_data_ir(self):
+        """Test chart(selectAll(...)) serializes with mode 'all'."""
+        c = chart(selectAll("bars")).mark(line())
+        ir = c.to_ir()
+        assert ir["data"] == {"type": "select", "layer": "bars", "mode": "all"}
+
+    def test_select_all_inline_raises(self):
+        """selectAll() cannot be used inline in a layout."""
+        with pytest.raises(ValueError, match="cannot be used inline"):
+            selectAll("bars").to_dict()
 
     def test_chart_with_regular_data_ir(self):
         """Test regular chart has null data in IR."""
@@ -258,11 +292,11 @@ class TestNewMarks:
 
     def test_image_mark(self):
         """Test image mark creation."""
-        m = image(w=100, h=100, src="url")
+        m = image(w=100, h=100, href="url")
         d = m.to_dict()
         assert d["type"] == "image"
         assert d["w"] == 100
-        assert d["src"] == "url"
+        assert d["href"] == "url"
 
     def test_marks_support_name(self):
         """Test all marks support .name()."""
@@ -292,9 +326,9 @@ class TestClockCoord:
         assert ir["options"]["coord"] == {"type": "clock"}
 
     def test_clock_in_layer_options_ir(self):
-        """Test clock() in Layer options IR."""
+        """Test clock() in layer options IR."""
         child = chart([{"x": 1}]).mark(rect(h="x"))
-        ir = Layer({"coord": clock()}, [child]).to_ir()
+        ir = layer({"coord": clock()}, [child]).to_ir()
         assert ir["options"]["coord"] == {"type": "clock"}
 
 
@@ -302,20 +336,20 @@ class TestLayerBuilder:
     """Test LayerBuilder and Layer() factory."""
 
     def test_layer_children_only(self):
-        """Test Layer([...]) with children only."""
+        """Test layer([...]) with children only."""
         data = [{"x": 1}]
         c1 = chart(data).mark(rect(h="x").name("bars"))
-        c2 = chart(select("bars")).mark(line())
-        lb = Layer([c1, c2])
+        c2 = chart(ref("bars")).mark(line())
+        lb = layer([c1, c2])
         assert isinstance(lb, LayerBuilder)
         assert lb.options == {}
         assert len(lb.children) == 2
 
     def test_layer_with_options(self):
-        """Test Layer(options, [...]) with options dict."""
+        """Test layer(options, [...]) with options dict."""
         data = [{"x": 1}]
         c1 = chart(data).mark(rect(h="x"))
-        lb = Layer({"coord": "clock"}, [c1])
+        lb = layer({"coord": "clock"}, [c1])
         assert isinstance(lb, LayerBuilder)
         assert lb.options == {"coord": "clock"}
         assert len(lb.children) == 1
@@ -324,8 +358,8 @@ class TestLayerBuilder:
         """Test LayerBuilder.to_ir() produces correct structure."""
         data = [{"x": 1}]
         c1 = chart(data).mark(rect(h="x").name("bars"))
-        c2 = chart(select("bars")).mark(line())
-        ir = Layer([c1, c2]).to_ir()
+        c2 = chart(ref("bars")).mark(line())
+        ir = layer([c1, c2]).to_ir()
         assert ir["type"] == "layer"
         assert len(ir["charts"]) == 2
         assert ir["options"] == {}
@@ -334,8 +368,8 @@ class TestLayerBuilder:
         """Test child chart specs are correctly embedded in layer IR."""
         data = [{"x": 1}]
         c1 = chart(data).flow(spread(by="x", dir="x")).mark(rect(h="x").name("bars"))
-        c2 = chart(select("bars")).mark(line())
-        ir = Layer([c1, c2]).to_ir()
+        c2 = chart(ref("bars")).mark(line())
+        ir = layer([c1, c2]).to_ir()
 
         chart0 = ir["charts"][0]
         assert chart0["mark"]["type"] == "rect"
@@ -345,13 +379,13 @@ class TestLayerBuilder:
 
         chart1 = ir["charts"][1]
         assert chart1["mark"]["type"] == "line"
-        assert chart1["data"] == {"type": "select", "layer": "bars"}
+        assert chart1["data"] == {"type": "select", "layer": "bars", "mode": "one"}
 
     def test_layer_to_ir_with_options(self):
-        """Test Layer options appear in IR."""
+        """Test layer options appear in IR."""
         data = [{"x": 1}]
         c1 = chart(data).mark(rect(h="x"))
-        ir = Layer({"coord": "clock"}, [c1]).to_ir()
+        ir = layer({"coord": "clock"}, [c1]).to_ir()
         assert ir["options"] == {"coord": "clock"}
 
     def test_layer_collect_derive_functions(self):
@@ -360,8 +394,8 @@ class TestLayerBuilder:
         fn1 = lambda d: d
         fn2 = lambda d: d
         c1 = chart(data).flow(derive(fn1)).mark(rect(h="x").name("bars"))
-        c2 = chart(select("bars")).flow(derive(fn2)).mark(line())
-        lb = Layer([c1, c2])
+        c2 = chart(ref("bars")).flow(derive(fn2)).mark(line())
+        lb = layer([c1, c2])
 
         # Collect derive functions manually (mirrors what render() does)
         derive_functions = {}
@@ -417,9 +451,9 @@ class TestChartBuilder:
         assert ir["mark"]["h"] == "value"
         assert ir["mark"]["fill"] == "grp"
 
-    def test_to_ir_select_with_line(self):
-        """Test select() chart with line mark."""
-        c = chart(select("bars")).mark(line())
+    def test_to_ir_ref_with_line(self):
+        """Test ref(...)-as-data chart with line mark."""
+        c = chart(ref("bars")).mark(line())
         ir = c.to_ir()
-        assert ir["data"] == {"type": "select", "layer": "bars"}
+        assert ir["data"] == {"type": "select", "layer": "bars", "mode": "one"}
         assert ir["mark"]["type"] == "line"

@@ -1,7 +1,7 @@
 """Equivalent of piccl/Bottle.stories.tsx — Piccl/Bottle.
 
 The JS storybook composes the per-category "filled bottle" via
-`layer([atop([image, fill_rect]).name("bottle"), line, label])` plus three
+`layer([paint([image, fill_rect]).name("bottle"), line, label])` plus three
 constraints that pin the bottle, the line, and the percent label together.
 
 The percent label is authored as `text({text: (d) => `${d.amount}%`})` — a
@@ -16,14 +16,14 @@ import os
 
 from gofish import (
     Constraint,
-    atop,
     chart,
+    datum,
     image,
     layer,
+    paint,
     rect,
     spread,
     text,
-    v,
 )
 
 _REPO_ROOT = os.path.abspath(
@@ -45,13 +45,13 @@ DATA = [
 def story_default():
     return (
         chart(DATA)
-        .flow(spread(by="category", dir="x", spacing=20))
+        .flow(spread(by="category", dir="x", spacing=20, axes={"x": False}))
         .mark(
             layer([
-                atop(
+                paint(
                     [
-                        image(href=BOTTLE_PNG, h=v(100)),
-                        rect(h="amount", fill="#00ff00"),
+                        image(href=BOTTLE_PNG, h=datum(100)),
+                        rect(h="amount", w=175, fill="#00ff00"),
                     ],
                     blendMode="color",
                 ).name("bottle"),
@@ -67,5 +67,5 @@ def story_default():
                 Constraint.align([label, line], x="end"),
             ])
         ),
-        {"w": 1000, "h": 400, "axes": {"x": False, "y": True}},
+        {"axes": False},
     )

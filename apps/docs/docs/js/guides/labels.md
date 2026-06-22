@@ -6,13 +6,13 @@ Add text labels to marks using the `.label()` method. Labels automatically posit
 
 Call `.label(field)` on any mark to display a data field as text.
 
-::: starfish
+::: gofish
 
 ```js
-gf.Chart(seafood)
+gf.chart(seafood, { axes: true })
   .flow(gf.spread({ by: "lake", dir: "x" }))
   .mark(gf.rect({ h: "count" }).label("count"))
-  .render(root, { w: 400, h: 250, axes: true });
+  .render(root, { w: 400, h: 250 });
 ```
 
 :::
@@ -21,10 +21,10 @@ gf.Chart(seafood)
 
 Labels use a `side-edge-align` position system.
 
-::: starfish
+::: gofish
 
 ```js
-gf.Chart(seafood)
+gf.chart(seafood, { axes: true })
   .flow(
     gf.spread({ by: "lake", dir: "x" }),
     gf.stack({ by: "species", dir: "y" })
@@ -34,7 +34,7 @@ gf.Chart(seafood)
       .rect({ h: "count", fill: "species" })
       .label("count", { position: "center", fontSize: 10 })
   )
-  .render(root, { w: 400, h: 250, axes: true });
+  .render(root, { w: 400, h: 250 });
 ```
 
 :::
@@ -79,7 +79,7 @@ Special values:
 
 Labels inside shapes (`center`, `inset-*`) automatically pick white or black text based on the fill color's luminance. Labels outside shapes use a darkened version of the fill color. You can override this with the `color` option.
 
-::: starfish
+::: gofish
 
 ```js
 const heatData = ["Mon", "Tue", "Wed", "Thu", "Fri"].flatMap((day, di) =>
@@ -92,14 +92,14 @@ const heatData = ["Mon", "Tue", "Wed", "Thu", "Fri"].flatMap((day, di) =>
   }))
 );
 
-gf.Chart(heatData, { color: gf.gradient(["#e0f3ff", "#08519c"]) })
+gf.chart(heatData, { color: gf.gradient(["#e0f3ff", "#08519c"]), axes: true })
   .flow(gf.table("hour", "day", { spacing: 4 }))
   .mark(
     gf
       .rect({ fill: "value" })
       .label("value", { position: "center", fontSize: 11 })
   )
-  .render(root, { w: 350, h: 250, axes: true });
+  .render(root, { w: 350, h: 250 });
 ```
 
 :::
@@ -108,17 +108,17 @@ gf.Chart(heatData, { color: gf.gradient(["#e0f3ff", "#08519c"]) })
 
 Use the `rotate` option for angled labels. Positive values rotate clockwise.
 
-::: starfish
+::: gofish
 
 ```js
-gf.Chart(seafood)
+gf.chart(seafood, { axes: true })
   .flow(gf.spread({ by: "lake", dir: "x" }))
   .mark(
     gf
       .rect({ h: "count" })
       .label("lake", { position: "outset", rotate: 45, fontSize: 10 })
   )
-  .render(root, { w: 400, h: 280, axes: true });
+  .render(root, { w: 400, h: 280 });
 ```
 
 :::

@@ -4,10 +4,10 @@ Draws a closed polygon from explicit local-coordinate points. Useful for
 non-rectangular glyphs (trapezoids, arrows, custom shapes) that can't be
 expressed by the standard shape primitives.
 
-::: starfish
+::: gofish
 
 ```js
-gf.Chart([{}])
+gf.chart([{}])
   .mark(
     gf.polygon({
       points: [
@@ -38,7 +38,7 @@ polygon({ points, fill?, stroke?, strokeWidth?, name? })
 | `fill`        | `string`             | `"black"` | Fill color                                                                 |
 | `stroke`      | `string`             | `fill`    | Stroke color (defaults to `fill`)                                          |
 | `strokeWidth` | `number`             | `0`       | Stroke width                                                               |
-| `name`        | `string`             | —         | Name for use with `select()` / `.constrain()`                              |
+| `name`        | `string`             | —         | Name for use with `ref` / `selectAll` / `.constrain()`                     |
 
 ## Coordinates
 

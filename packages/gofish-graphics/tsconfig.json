@@ -14,8 +14,15 @@
     "declaration": true,
     "declarationMap": true,
     "outDir": "dist",
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    "resolveJsonModule": true
   },
   "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist", "src/**/*.test.ts", "src/**/*.spec.ts"]
+  "exclude": [
+    "node_modules",
+    "dist",
+    "src/tests/**",
+    "src/**/*.test.ts",
+    "src/**/*.spec.ts"
+  ]
 }

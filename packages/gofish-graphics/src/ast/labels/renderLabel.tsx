@@ -2,7 +2,9 @@ import type { JSX } from "solid-js";
 import chroma from "chroma-js";
 import { luv } from "culori";
 import type { GoFishNode } from "../_node";
-import { getValue } from "../data";
+import { displayTranslate, type Transform } from "../dims";
+import { getValue, type MaybeValue } from "../data";
+import { resolveColorChannel } from "../../color";
 import {
   type LabelPosition,
   type ShapeInfo,
@@ -13,23 +15,26 @@ import {
 } from "./labelPlacement";
 
 /**
- * Resolve the fill color of a node to a CSS color string.
- * Checks scaleContext for category-key colors first, falls back to literal values.
+ * Resolve the fill color of a node to a CSS color string — the SAME resolution
+ * the shape's own fill uses (`resolveColorChannel`), so a label contrasts
+ * against the color actually drawn: a categorical swatch, a continuous gradient
+ * `scaleFn(value)`, or a literal color. Falls back to a literal string value.
  */
 function resolveNodeFill(node: GoFishNode): string | null {
   if (node.color == null) return null;
 
-  const colorValue = getValue(node.color);
-  if (colorValue == null) return null;
-
   try {
     const scaleContext = node.getRenderSession().scaleContext;
-    const resolved = (scaleContext as any)?.unit?.color?.get(colorValue);
-    if (resolved) return resolved as string;
+    const resolved = resolveColorChannel(
+      node.color as MaybeValue<string>,
+      scaleContext?.unit
+    );
+    if (typeof resolved === "string") return resolved;
   } catch {
     // no session yet
   }
 
+  const colorValue = getValue(node.color);
   return typeof colorValue === "string" ? colorValue : null;
 }
 
@@ -65,7 +70,10 @@ function autoLabelColor(node: GoFishNode, position: LabelPosition): string {
   }
 }
 
-export function renderLabelJSX(node: GoFishNode): JSX.Element | null {
+export function renderLabelJSX(
+  node: GoFishNode,
+  transformOverride?: Transform
+): JSX.Element | null {
   if (!node._label || !node.intrinsicDims) return null;
   const datum = node.datum;
   if (datum === undefined) return null;
@@ -88,15 +96,19 @@ export function renderLabelJSX(node: GoFishNode): JSX.Element | null {
       chartBounds: { width: w, height: h },
       availableSpace: { top: 20, right: 20, bottom: 20, left: 20 },
     },
-    { position: node._label.position ?? "auto", offset: node._label.offset }
+    {
+      position: node._label.position ?? "outset",
+      offset: node._label.offset,
+    }
   );
 
   const offset = calculateLabelOffset(position, [w, h], {
     offset: node._label.offset,
   });
 
-  const cx = (node.transform?.translate?.[0] ?? 0) + w / 2;
-  const cy = (node.transform?.translate?.[1] ?? 0) + h / 2;
+  const [tx, ty] = displayTranslate(transformOverride ?? node.transform);
+  const cx = tx + w / 2;
+  const cy = ty + h / 2;
 
   const labelColor = node._label.color ?? autoLabelColor(node, position);
   const textAnchor = getLabelTextAnchor(position);

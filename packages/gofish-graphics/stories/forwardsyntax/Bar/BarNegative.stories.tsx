@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../../helper";
-import { Chart, spread, rect } from "../../../src/lib";
+import { chart, spread, rect } from "../../../src/lib";
 
 const meta: Meta = {
   title: "Forward Syntax V3/Bar/Negative",
@@ -19,6 +19,14 @@ type Args = { w: number; h: number };
 
 export const Default: StoryObj<Args> = {
   args: { w: 400, h: 400 },
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "Bar Chart with Negative Values",
+      description:
+        "A bar chart whose values span positive and negative, with bars extending above and below the zero baseline.",
+    },
+  },
   render: (args: Args) => {
     const container = initializeContainer();
 
@@ -30,13 +38,12 @@ export const Default: StoryObj<Args> = {
       { category: "E", value: 20 },
     ];
 
-    Chart(testData)
+    chart(testData, { axes: true })
       .flow(spread({ by: "category",  dir: "x" }))
       .mark(rect({ h: "value" }))
       .render(container, {
         w: args.w,
         h: args.h,
-        axes: true,
       });
 
     return container;

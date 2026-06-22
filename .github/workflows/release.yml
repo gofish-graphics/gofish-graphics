@@ -1,6 +1,19 @@
 name: Release
 
-# Unified publish workflow.
+# Unified publish workflow. Publishes the npm packages `gofish-graphics`
+# and `gofish-ir`, plus the Python package `gofish-graphics` (PyPI), all in
+# lockstep — they always carry the same version, npm tag, and (for `release`
+# mode) git tag. `gofish-ir` publishes first so the `workspace:*` dependency
+# declared by `gofish-graphics` resolves to a concrete already-published
+# version on the registry.
+#
+# The Python package ships the same version: PyPI has no dist-tags, so the
+# nightly maps to a PEP 440 dev release (`X.Y.Z.devYYYYMMDD`), which pip
+# ignores unless `--pre` is passed. PyPI auth uses trusted publishing (OIDC)
+# — configure a publisher for project `gofish-graphics` pointing at
+# owner/repo `gofish-graphics/gofish-graphics`, workflow `release.yml`, with
+# the environment field left blank.
+#
 #   - Scheduled (4am UTC daily): publishes a nightly-tagged prerelease if
 #     there are commits from the last 24h.
 #   - workflow_dispatch: lets you pick a release mode:
@@ -83,28 +96,40 @@ jobs:
         if: steps.plan.outputs.skip == 'false'
         run: pnpm install --frozen-lockfile
 
+      # Both packages release in lockstep: same version number, same npm
+      # tag, same git tag. gofish-graphics declares `gofish-ir: workspace:*`,
+      # so `pnpm publish` rewrites that to the gofish-ir version that ships
+      # in the same workflow run — provided gofish-ir publishes first.
       - name: Compute version
         if: steps.plan.outputs.skip == 'false'
         id: version
-        working-directory: packages/gofish-graphics
         run: |
           MODE="${{ steps.plan.outputs.mode }}"
+          # gofish-graphics's package.json is the canonical version source;
+          # gofish-ir is kept in lockstep by being bumped to the same value.
           if [ "$MODE" = "nightly" ]; then
-            BASE=$(node -p "require('./package.json').version")
+            BASE=$(node -p "require('./packages/gofish-graphics/package.json').version")
             DATE=$(date +'%Y%m%d')
             NEW="${BASE}-nightly.${DATE}"
-            npm version --no-git-tag-version "$NEW"
+            ( cd packages/gofish-graphics && npm version --no-git-tag-version "$NEW" )
+            ( cd packages/gofish-ir && npm version --no-git-tag-version "$NEW" )
             echo "version=$NEW" >> "$GITHUB_OUTPUT"
             echo "npm_tag=nightly" >> "$GITHUB_OUTPUT"
             echo "git_tag=" >> "$GITHUB_OUTPUT"
           else
-            RAW=$(npm version --no-git-tag-version "$MODE")
-            V="${RAW#v}"
+            ( cd packages/gofish-graphics && npm version --no-git-tag-version "$MODE" >/dev/null )
+            V=$(node -p "require('./packages/gofish-graphics/package.json').version")
+            ( cd packages/gofish-ir && npm version --no-git-tag-version "$V" )
             echo "version=$V" >> "$GITHUB_OUTPUT"
             echo "npm_tag=latest" >> "$GITHUB_OUTPUT"
             echo "git_tag=v$V" >> "$GITHUB_OUTPUT"
           fi
-          echo "Publishing version: $(node -p "require('./package.json').version")"
+          echo "Publishing gofish-graphics version: $(node -p "require('./packages/gofish-graphics/package.json').version")"
+          echo "Publishing gofish-ir version:       $(node -p "require('./packages/gofish-ir/package.json').version")"
+
+      - name: Build gofish-ir
+        if: steps.plan.outputs.skip == 'false'
+        run: pnpm --filter gofish-ir build
 
       - name: Build gofish-graphics
         if: steps.plan.outputs.skip == 'false'
@@ -114,24 +139,109 @@ jobs:
         if: steps.plan.outputs.skip == 'false'
         run: pnpm exec tsc --project packages/gofish-graphics/tsconfig.build.json || true
 
-      - name: Publish to npm
+      # gofish-ir publishes first so the workspace:* dependency in
+      # gofish-graphics resolves to a real published version on the registry
+      # at the moment gofish-graphics publishes. `pnpm publish` rewrites
+      # workspace:* into the concrete semver during pack; `npm publish`
+      # would publish the literal "workspace:*" string, which is invalid.
+      # `--no-git-checks` is needed because we just bumped package.json
+      # versions (dirty tree); the bump-and-push happens later in the
+      # release branch of this job.
+      - name: Publish gofish-ir to npm
+        if: steps.plan.outputs.skip == 'false'
+        working-directory: packages/gofish-ir
+        run: pnpm publish --tag "${{ steps.version.outputs.npm_tag }}" --access public --no-git-checks
+
+      - name: Publish gofish-graphics to npm
         if: steps.plan.outputs.skip == 'false'
         working-directory: packages/gofish-graphics
-        run: npm publish --tag "${{ steps.version.outputs.npm_tag }}" --access public
+        run: pnpm publish --tag "${{ steps.version.outputs.npm_tag }}" --access public --no-git-checks
+
+      # --- Python package (gofish-graphics on PyPI) ---
+      # Published in lockstep with the npm packages. PyPI has no dist-tags, so
+      # nightly builds ship as PEP 440 dev releases (`X.Y.Z.devYYYYMMDD`), which
+      # `pip install` ignores unless `--pre` is passed — the PyPI analogue of the
+      # npm `nightly` tag. Release modes publish the final `X.Y.Z`. Auth is via
+      # PyPI trusted publishing (OIDC), reusing this job's `id-token: write`; no
+      # token secret is needed. The wheel bundles the widget ESM, which is built
+      # from the gofish-graphics/gofish-ir dist produced earlier in this job.
+      - name: Setup Python
+        if: steps.plan.outputs.skip == 'false'
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Compute Python version
+        if: steps.plan.outputs.skip == 'false'
+        id: pyversion
+        run: |
+          MODE="${{ steps.plan.outputs.mode }}"
+          if [ "$MODE" = "nightly" ]; then
+            # Dev release of the NEXT patch version, dated. It must target the
+            # next version, not the current one: a PEP 440 dev release sorts
+            # BEFORE the final release of the same X.Y.Z, so `0.1.0.devN` loses
+            # to a published `0.1.0` and `pip install --pre` would never pick
+            # it. Bumping the patch makes `0.1.1.devN` sort after `0.1.0`, so
+            # `--pre` resolves to the latest nightly, while any future final
+            # release still wins over its own dev builds.
+            BASE=$(node -p "require('./packages/gofish-graphics/package.json').version" | sed 's/-nightly.*//')
+            NEXT=$(echo "$BASE" | awk -F. '{printf "%d.%d.%d", $1, $2, $3 + 1}')
+            DATE=$(date +'%Y%m%d')
+            PY_VERSION="${NEXT}.dev${DATE}"
+          else
+            # Lockstep with the npm release version computed above (e.g. 0.2.0).
+            PY_VERSION="${{ steps.version.outputs.version }}"
+          fi
+          sed -i -E "s/^version = \".*\"/version = \"${PY_VERSION}\"/" packages/gofish-python/pyproject.toml
+          sed -i -E "s/^__version__ = \".*\"/__version__ = \"${PY_VERSION}\"/" packages/gofish-python/gofish/__init__.py
+          echo "py_version=$PY_VERSION" >> "$GITHUB_OUTPUT"
+          echo "Publishing gofish-graphics (PyPI) version: $PY_VERSION"
+
+      - name: Build widget bundle
+        if: steps.plan.outputs.skip == 'false'
+        run: pnpm --filter gofish-python build:widget
+
+      - name: Build Python distribution
+        if: steps.plan.outputs.skip == 'false'
+        run: |
+          python -m pip install --upgrade build
+          python -m build --outdir packages/gofish-python/dist packages/gofish-python
+
+      - name: Publish gofish-graphics to PyPI
+        if: steps.plan.outputs.skip == 'false'
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: packages/gofish-python/dist
+          skip-existing: true
 
       - name: Commit, tag, and push (release only)
         if: steps.plan.outputs.skip == 'false' && steps.plan.outputs.mode != 'nightly'
         env:
           VERSION: ${{ steps.version.outputs.version }}
           TAG: ${{ steps.version.outputs.git_tag }}
+          # Admin-owned PAT (contents: write). This bump is a direct push to
+          # main, which the branch ruleset's required status checks reject for
+          # github-actions[bot] (not a bypass actor). Pushing as an admin user
+          # satisfies the ruleset's admin bypass. Referenced only here, so
+          # nightly runs (which never push to main) don't need the secret.
+          RELEASE_TOKEN: ${{ secrets.RELEASE_TOKEN }}
         run: |
+          if [ -z "${RELEASE_TOKEN}" ]; then
+            echo "::error::RELEASE_TOKEN secret is not set. A tagged release pushes a"
+            echo "::error::version-bump commit to main, which needs an admin-owned PAT"
+            echo "::error::(contents: write) to satisfy branch protection. Set the secret"
+            echo "::error::before running a non-nightly release."
+            exit 1
+          fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add packages/gofish-graphics/package.json
+          git add packages/gofish-graphics/package.json packages/gofish-ir/package.json \
+                  packages/gofish-python/pyproject.toml packages/gofish-python/gofish/__init__.py
           git commit -m "chore(release): v${VERSION}"
           git tag "${TAG}"
-          git push origin HEAD:main
-          git push origin "${TAG}"
+          REMOTE="https://x-access-token:${RELEASE_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          git push "${REMOTE}" HEAD:main
+          git push "${REMOTE}" "${TAG}"
 
       - name: Create GitHub release (release only)
         if: steps.plan.outputs.skip == 'false' && steps.plan.outputs.mode != 'nightly'

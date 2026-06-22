@@ -2,10 +2,10 @@
 
 A polar coordinate system oriented like a clock face. 0° is at 12 o'clock (top) and angles increase clockwise. Ideal for pie charts, donut charts, and radial visualizations.
 
-::: starfish
+::: gofish
 
 ```js
-gf.Chart(seafood, { coord: gf.clock() })
+gf.chart(seafood, { coord: gf.clock() })
   .flow(gf.stack({ by: "species", dir: "x" }))
   .mark(gf.rect({ w: "count", fill: "species" }))
   .render(root, {

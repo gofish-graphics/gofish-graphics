@@ -2,8 +2,8 @@ import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
 import { seafood } from "../../src/data/catch";
 import { streamgraphData } from "../../src/data/streamgraphData";
-import { Chart, spread, blank, stack, layer, select } from "../../src/lib";
-import { area, group, log } from "../../src/lib";
+import { chart, spread, blank, stack, layer, selectAll } from "../../src/lib";
+import { area, group } from "../../src/lib";
 
 const meta: Meta = {
   title: "Forward Syntax V3/Area",
@@ -22,20 +22,28 @@ type Args = { w: number; h: number };
 
 export const Basic: StoryObj<Args> = {
   args: { w: 500, h: 300 },
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "Area Chart",
+      description: "Fish catch counts across six lakes drawn as a single smoothed filled area.",
+    },
+  },
   render: (args: Args) => {
     const container = initializeContainer();
 
-    layer([
-      Chart(seafood)
-        .flow(spread({ by: "lake",  dir: "x", spacing: 64 }))
-        .mark(blank({ h: "count" }).name("points")),
-      Chart(select("points")).flow(log("points")).mark(area({ opacity: 0.8 })
-    ),
-    ]).render(container, {
-      w: args.w,
-      h: args.h,
-      axes: true,
-    });
+    // An area chart has no intrinsic width, so it fills the container: the
+    // six lakes are spread to span `args.w` (five gaps between them) instead of
+    // a fixed pixel spacing, which would leave the canvas partly empty.
+    const lakes = 6;
+    chart(seafood, { axes: true })
+      .flow(spread({ by: "lake", dir: "x", spacing: args.w / (lakes - 1) }))
+      .mark(blank({ h: "count" }))
+      .connect(area({ opacity: 0.8 }))
+      .render(container, {
+        w: args.w,
+        h: args.h,
+      });
 
     return container;
   },
@@ -43,17 +51,24 @@ export const Basic: StoryObj<Args> = {
 
 export const Stacked: StoryObj<Args> = {
   args: { w: 400, h: 400 },
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "Stacked Area Chart",
+      description: "Fish catch counts by lake split into stacked bands by species, each a colored filled area.",
+    },
+  },
   render: (args: Args) => {
     const container = initializeContainer();
 
     layer([
-      Chart(seafood)
+      chart(seafood)
         .flow(
           spread({ by: "lake",  dir: "x", spacing: 64 }),
           stack({ by: "species",  dir: "y" })
         )
         .mark(blank({ h: "count", fill: "species" }).name("bars")),
-      Chart(select("bars"))
+      chart(selectAll("bars"))
         .flow(group({ by: "species" }))
         .mark(area({ opacity: 0.8 })),
     ]).render(container, {
@@ -68,13 +83,20 @@ export const Stacked: StoryObj<Args> = {
 
 export const Layered: StoryObj<Args> = {
   args: { w: 500, h: 300 },
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "Layered Area Chart",
+      description: "Five overlapping series drawn as translucent filled areas so their changing magnitudes can be compared across a shared x-axis.",
+    },
+  },
   render: (args: Args) => {
     const container = initializeContainer();
     layer([
-      Chart(streamgraphData)
-        .flow(group({ by: "c" }), spread({ by: "x",  dir: "x", spacing: 50 }))
+      chart(streamgraphData)
+        .flow(spread({ by: "x",  dir: "x", spacing: 50 }), group({ by: "c" }))
         .mark(blank({ h: "y", fill: "c" }).name("points")),
-      Chart(select("points"))
+      chart(selectAll("points"))
         .flow(group({ by: "c" }))
         .mark(area({ opacity: 0.7 })),
     ]).render(container, {

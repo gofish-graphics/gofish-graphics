@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../../helper";
 import { seafood } from "../../../src/data/catch";
-import { Chart, spread, rect } from "../../../src/lib";
+import { chart, spread, rect } from "../../../src/lib";
 
 const meta: Meta = {
   title: "Forward Syntax V3/Bar/Horizontal",
@@ -20,16 +20,23 @@ type Args = { w: number; h: number };
 
 export const Default: StoryObj<Args> = {
   args: { w: 400, h: 400 },
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "Horizontal Bar Chart",
+      description:
+        "Total fish catch counts across six lakes shown as horizontal bars.",
+    },
+  },
   render: (args: Args) => {
     const container = initializeContainer();
 
-    Chart(seafood)
+    chart(seafood, { axes: true })
       .flow(spread({ by: "lake",  dir: "y" }))
       .mark(rect({ w: "count" }))
       .render(container, {
         w: args.w,
         h: args.h,
-        axes: true,
       });
 
     return container;

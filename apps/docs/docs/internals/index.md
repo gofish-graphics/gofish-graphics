@@ -22,7 +22,7 @@ tricks, the Python bridge, and the design philosophy behind it all.
   for the authoring conventions — frontmatter, sidebar sections, the `covers:` ↔
   code back-links, diagrams, and code samples.
 
-The wiki is broken into seven sections:
+The wiki is broken into eight sections:
 
 - **Overview** — orientation: this page, the architecture map, the design
   philosophy, a glossary, and the case for the project at all.
@@ -33,6 +33,10 @@ The wiki is broken into seven sections:
 - **Layout & Rendering** — the three-pass engine itself: the layout pass,
   scale resolution (positional, monotonic, color), coordinate transforms,
   and the actual draw to SVG.
+- **JSON Formats** — the portable JSON representations of charts: the
+  Frontend IR design, how to use the serialization API, and the full
+  JSON Schema. Subsequent compiler stages (Core, Rendered) will add
+  their own pages here.
 - **Python** — the Python wrapper and its bridge to the JavaScript engine.
 - **Design Evolution** — retrospective: how the surface arrived at its current
   shape, paths considered and rejected, comparisons with prior surfaces.

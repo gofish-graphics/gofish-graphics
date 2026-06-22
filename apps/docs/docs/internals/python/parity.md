@@ -7,7 +7,7 @@ status: draft
 
 # Parity Testing
 
-Because Python and JavaScript serialize to the same [IR](/internals/python/ir), a chart
+Because Python and JavaScript serialize to the same [Frontend IR](/internals/frontend/serialization), a chart
 built in either language should render pixel-identically. Parity testing enforces that.
 This essay will document the workflow and its CI wiring.
 

@@ -21,6 +21,8 @@ import {
   type StackOptions,
 } from "../graphicalOperators/spread";
 import type { Operator } from "../types";
+import { toJSON } from "../../serialize/toJSON";
+import type { Frontend } from "gofish-ir";
 
 declare module "./chartBuilder" {
   interface ChartBuilder<TInput, TOutput> {
@@ -28,6 +30,8 @@ declare module "./chartBuilder" {
     facet(opts: SpreadOptions): ChartBuilder<TInput, TInput>;
     /** Convenience: `.flow(stack(opts))`. */
     stack(opts: StackOptions): ChartBuilder<TInput, TInput>;
+    /** Emit a frontend-IR document. See `gofish-ir`. */
+    toJSON(): Promise<Frontend.FrontendIRDocument>;
   }
 }
 
@@ -37,4 +41,8 @@ ChartBuilder.prototype.facet = function (opts: SpreadOptions) {
 
 ChartBuilder.prototype.stack = function (opts: StackOptions) {
   return this.flow(stack(opts) as unknown as Operator<any, any>);
+};
+
+ChartBuilder.prototype.toJSON = function () {
+  return toJSON(this as unknown as ChartBuilder<any>);
 };

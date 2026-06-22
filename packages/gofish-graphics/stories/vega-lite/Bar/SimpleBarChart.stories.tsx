@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../../helper";
-import { Chart, spread, rect } from "../../../src/lib";
+import { chart, spread, rect } from "../../../src/lib";
 
 // Mirrors: https://vega.github.io/vega-lite/examples/bar.html
 
@@ -31,14 +31,21 @@ type Args = { h: number };
 
 export const Default: StoryObj<Args> = {
   args: { h: 300 },
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "Simple Bar Chart",
+      description: "A simple vertical bar chart with one bar per category, each bar's height encoding its value.",
+    },
+  },
   render: (args: Args) => {
     const container = initializeContainer();
 
-    Chart(values)
+    chart(values, { axes: true })
       .flow(spread({ by: "a",  dir: "x" }))
       .mark(rect({ h: "b" }))
       // Intentionally omit width to cover the rect default-width fallback path.
-      .render(container, { h: args.h, axes: true } as any);
+      .render(container, { h: args.h });
 
     return container;
   },

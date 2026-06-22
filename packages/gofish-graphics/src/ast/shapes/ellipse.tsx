@@ -1,5 +1,6 @@
+import { computeAesthetic } from "../../util";
 import * as Monotonic from "../../util/monotonic";
-import { color6_old } from "../../color";
+import { color6_old, resolveColorChannel } from "../../color";
 import {
   path,
   Path,
@@ -22,6 +23,7 @@ import {
 } from "../data";
 import {
   Dimensions,
+  displayDims as displayDimsOf,
   elaborateDims,
   FancyDims,
   FancySize,
@@ -96,11 +98,11 @@ export const Ellipse = ({
           if (isValue(d.min)) {
             // position; treat it like a position space w/ a single element
             const min = getValue(d.min) ?? 0;
-            return POSITION(interval(min, min));
+            return POSITION(interval(min, min), getMeasure(d.min));
           }
           if (isValue(d.size)) {
             // data-driven size only — literals are handled at layout time.
-            return SIZE(axisDomain);
+            return SIZE(axisDomain, getMeasure(d.size));
           }
           return UNDEFINED;
         };
@@ -130,26 +132,18 @@ export const Ellipse = ({
           }
         }
 
-        const x = isValue(dims[0].min)
-          ? posScales[0]!(getValue(dims[0].min)!)
-          : (dims[0].min ?? undefined);
-        const y = isValue(dims[1].min)
-          ? posScales[1]!(getValue(dims[1].min)!)
-          : (dims[1].min ?? undefined);
+        const x = computeAesthetic(dims[0].min, posScales[0]!, undefined);
+        const y = computeAesthetic(dims[1].min, posScales[1]!, undefined);
 
         return {
           intrinsicDims: [
             {
               min: 0,
               size: w,
-              center: w / 2,
-              max: w,
             },
             {
               min: 0,
               size: h,
-              center: h / 2,
-              max: h,
             },
           ],
           transform: {
@@ -178,48 +172,15 @@ export const Ellipse = ({
         const isYEmbedded = dims[1].embedded;
 
         // combine intrinsicDims with transform
-        const displayDims = [
-          {
-            min:
-              (transform?.translate?.[0] ?? 0) + (intrinsicDims?.[0]?.min ?? 0),
-            size: intrinsicDims?.[0]?.size ?? 0,
-            center:
-              (transform?.translate?.[0] ?? 0) +
-              (intrinsicDims?.[0]?.center ?? 0),
-            max:
-              (transform?.translate?.[0] ?? 0) + (intrinsicDims?.[0]?.max ?? 0),
-          },
-          {
-            min:
-              (transform?.translate?.[1] ?? 0) + (intrinsicDims?.[1]?.min ?? 0),
-            size: intrinsicDims?.[1]?.size ?? 0,
-            center:
-              (transform?.translate?.[1] ?? 0) +
-              (intrinsicDims?.[1]?.center ?? 0),
-            max:
-              (transform?.translate?.[1] ?? 0) + (intrinsicDims?.[1]?.max ?? 0),
-          },
-        ];
+        // center/max derived from min+size (shared helper)
+        const displayDims = displayDimsOf(intrinsicDims, transform);
 
         const scaleContext = node.getRenderSession().scaleContext;
-        const unit = scaleContext?.unit;
-        const unitColorScale = unit && "color" in unit ? unit.color : undefined;
+        const unitScale = scaleContext?.unit;
         const originalFill = fill;
-        fill = isValue(fill)
-          ? unitColorScale
-            ? (unitColorScale.get(getValue(fill)) ?? getValue(fill))
-            : getValue(fill)
-          : fill;
-
-        stroke = isValue(stroke)
-          ? unitColorScale
-            ? (unitColorScale.get(getValue(stroke)) ?? getValue(stroke))
-            : getValue(stroke)
-          : stroke;
-
-        const resolvedFill = fill as string | undefined;
+        const resolvedFill = resolveColorChannel(fill, unitScale);
         const resolvedStroke =
-          (stroke as string | undefined) ?? resolvedFill ?? "black";
+          resolveColorChannel(stroke, unitScale) ?? resolvedFill ?? "black";
 
         const labelText =
           label && originalFill && isValue(originalFill)
@@ -451,8 +412,12 @@ export const Ellipse = ({
   );
 };
 
-export const ellipse = createMark(Ellipse, {
-  w: "size",
-  h: "size",
-  fill: "color",
-});
+export const ellipse = createMark(
+  Ellipse,
+  {
+    w: "size",
+    h: "size",
+    fill: "color",
+  },
+  "ellipse"
+);

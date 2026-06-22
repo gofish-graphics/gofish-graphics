@@ -1,6 +1,7 @@
 # render
 
-Renders the chart into a DOM element.
+Renders the chart into a DOM element. To get the SVG out as a string or file
+instead, see [export](/js/api/core/export).
 
 ## Signature
 
@@ -13,41 +14,74 @@ Renders the chart into a DOM element.
 | Parameter      | Type          | Description                                                       |
 | -------------- | ------------- | ----------------------------------------------------------------- |
 | `container`    | `HTMLElement` | The DOM element to render into                                    |
-| `options.w`    | `number`      | Width in pixels                                                   |
-| `options.h`    | `number`      | Height in pixels                                                  |
+| `options.w`    | `number?`     | Width in pixels. Optional — see [Inferred size](#inferred-size).  |
+| `options.h`    | `number?`     | Height in pixels. Optional — see [Inferred size](#inferred-size). |
 | `options.axes` | `AxesOptions` | Auto-generate axes, labels, and legends. See [Axes](#axes) below. |
+
+## Inferred size
+
+`w` and `h` are optional. When you omit one, GoFish computes that dimension during
+layout, per axis, from what the axis encodes:
+
+- An axis that **scales data into pixels** — a positional axis (e.g. a scatter's
+  `x`/`y`), or a data-driven size like bar heights (`rect({ h: "value" })`) — has
+  no intrinsic pixel extent, so it falls back to a default canvas size of **400px**.
+- An axis with **nothing to scale** — a category axis, or fixed-size marks — keeps
+  its marks at their natural size and **shrinks to fit** them.
+
+So a bar chart rendered with no `w` gets default-width bars and a graphic only as
+wide as it needs to be, while bar heights still scale to the 400px default if `h`
+is also omitted. A bare fixed-size shape (or a `layer` of them) shrinks to its own
+bounding box. A supplied `w`/`h` is always used as-is.
+
+```ts
+// Width inferred (default-width bars, shrink-to-fit); height = 300.
+chart(data)
+  .flow(spread({ by: "category", dir: "x" }))
+  .mark(rect({ h: "value" }))
+  .render(container, { h: 300 });
+```
+
+### Explicit size makes a self-contained scale region
+
+When you give a (sub)chart an explicit `w`/`h` on a dimension, its scale on that
+dimension resolves against that pixel box rather than against any larger layout it
+is composed into. The axis becomes self-contained: a chart sized this way can be
+dropped into a bigger graphic without sharing — or polluting — the surrounding
+axes with its own units.
+
+This is what makes composed layouts like a marginal histogram work. The count
+histograms are sized to a fixed pixel band (`chart(data, { h: 80 })` /
+`chart(data, { w: 80 })`) and laid out alongside a center scatter; because each
+histogram absorbs its own count scale, only the scatter's data units drive the
+shared x/y axes.
 
 ## Axes
 
-The `axes` option controls per-axis visibility and titles:
+The `axes` option controls per-axis visibility and titles. It accepts a boolean, a
+per-dimension object, or per-dimension title control:
 
 ```ts
-type AxesOptions = boolean | { x?: AxisOptions; y?: AxisOptions };
-type AxisOptions = boolean | { title?: string | false };
+axes: true                                     // both axes, titles inferred
+axes: false                                    // no axes (the default)
+axes: { x: true, y: false }                    // x only
+axes: { x: { title: "Year" }, y: true }        // custom x title, inferred y title
+axes: { x: { title: false }, y: true }         // suppress the inferred x title
 ```
 
-**`AxesOptions` (top level)**
+`axes` is most naturally a `chart()`/`chart()` option (e.g.
+`gf.chart(data, { axes: true })`); it is also accepted directly on `.render()`, as
+the examples below show.
 
-- `true` — both axes visible with inferred titles
-- `false` — both axes hidden
-- `{ x: AxisOptions }` — configure x-axis; y absent means y hidden
-- `{ x: AxisOptions, y: AxisOptions }` — configure both axes
+### Axes with inferred titles
 
-**`AxisOptions` (per axis)**
+When `axes: true` (or `{ title }` is omitted), each axis title is inferred from the
+field that dimension encodes — `lake` on x, `count` on y here.
 
-- `true` — axis visible, title inferred from the field encoding (e.g. `rect({ h: "count" })` infers `"count"`)
-- `false` — axis hidden, title irrelevant
-- `{ title: "Custom" }` — axis visible with title "Custom"
-- `{ title: false }` — axis visible, title suppressed
-
-## Examples
-
-### Inferred titles from encodings
-
-::: starfish
+::: gofish
 
 ```js
-gf.Chart(seafood)
+gf.chart(seafood)
   .flow(gf.spread({ by: "lake", dir: "x" }))
   .mark(gf.rect({ h: "count" }))
   .render(root, { w: 400, h: 250, axes: true });
@@ -57,10 +91,10 @@ gf.Chart(seafood)
 
 ### Only x-axis visible
 
-::: starfish
+::: gofish
 
 ```js
-gf.Chart(seafood)
+gf.chart(seafood)
   .flow(gf.spread({ by: "lake", dir: "x" }))
   .mark(gf.rect({ h: "count" }))
   .render(root, { w: 400, h: 250, axes: { x: true } });
@@ -70,10 +104,10 @@ gf.Chart(seafood)
 
 ### Custom x-axis title, inferred y-axis title
 
-::: starfish
+::: gofish
 
 ```js
-gf.Chart(seafood)
+gf.chart(seafood)
   .flow(gf.spread({ by: "lake", dir: "x" }))
   .mark(gf.rect({ h: "count" }))
   .render(root, {
@@ -87,10 +121,10 @@ gf.Chart(seafood)
 
 ### Suppress the inferred title on the x-axis
 
-::: starfish
+::: gofish
 
 ```js
-gf.Chart(seafood)
+gf.chart(seafood)
   .flow(gf.spread({ by: "lake", dir: "x" }))
   .mark(gf.rect({ h: "count" }))
   .render(root, {

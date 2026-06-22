@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../../helper";
-import { Chart, bin, derive, rect, scatter } from "../../../src/lib";
+import { chart, bin, derive, rect, scatter } from "../../../src/lib";
 import data from "vega-datasets";
 
 // Mirrors: https://vega.github.io/vega-lite/examples/histogram.html
@@ -20,16 +20,23 @@ type Args = { w: number; h: number };
 export const Default: StoryObj<Args> = {
   args: { w: 500, h: 300 },
   loaders: [async () => ({ movies: await data["movies.json"]() })],
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "Histogram",
+      description: "A histogram of movie IMDB ratings, with films binned into rating intervals and each bar's height showing the count of films per bin.",
+    },
+  },
   render: (args: Args, context: any) => {
     const container = initializeContainer();
 
-    Chart(context.loaded.movies as any[])
+    chart(context.loaded.movies as any[], { axes: true })
       .flow(
         derive(bin("IMDB Rating")),
         scatter({ xMin: "start", xMax: "end" })
       )
       .mark(rect({ h: "count" }))
-      .render(container, { w: args.w, h: args.h, axes: true });
+      .render(container, { w: args.w, h: args.h });
 
     return container;
   },

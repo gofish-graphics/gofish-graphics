@@ -17,10 +17,10 @@ Layer([
   .render(container, { w: 300, h: 200 });
 ```
 
-::: starfish
+::: gofish
 
 ```js
-gf.Layer([
+gf.layer([
   gf.rect({ w: 200, h: 150, fill: gf.color.blue[1] }).name("bg"),
   gf.rect({ w: 60, h: 30, fill: gf.color.blue[4] }).name("label"),
   gf.rect({ w: 60, h: 30, fill: gf.color.red[4] }).name("badge"),
@@ -42,14 +42,14 @@ Aligns a set of children to a shared edge or center on one or both axes. At leas
 Constraint.align({ x?, y? }, [ref1, ref2, ...])
 ```
 
-| Option | Type                       | Default | Description                                                    |
-| ------ | -------------------------- | ------- | -------------------------------------------------------------- |
-| `x`    | `Alignment \| Alignment[]` | —       | Edge/center to align on the x axis (omit to leave x untouched) |
-| `y`    | `Alignment \| Alignment[]` | —       | Edge/center to align on the y axis (omit to leave y untouched) |
+| Option | Type                           | Default | Description                                                           |
+| ------ | ------------------------------ | ------- | --------------------------------------------------------------------- |
+| `x`    | `AlignAnchor \| AlignAnchor[]` | —       | Edge/center/origin to align on the x axis (omit to leave x untouched) |
+| `y`    | `AlignAnchor \| AlignAnchor[]` | —       | Edge/center/origin to align on the y axis (omit to leave y untouched) |
 
-`Alignment` is `"start" \| "middle" \| "end"`. Pass a single value to share one anchor across every child (the common case); pass an array to assign one anchor _per child_ positionally — the array length must equal the number of children.
+`AlignAnchor` is `"start" \| "middle" \| "end" \| "baseline"`. The first three anchor a child by its bounding-box edge or center. `"baseline"` anchors a child by its **origin** (its local 0 point) instead of its box. With no placed sibling the fallback is the **axis origin**: the scale's zero (`posScale(0)`) on a scaled axis, the layer's origin on a pixel-pure one. On a pixel-pure axis, `align({ y: "baseline" })` thus means "stay where you were laid out" — regardless of how far its box overhangs the origin (a bar dipping below zero, axis labels hanging under a chart). For an unconditional origin pin regardless of axis, use `Constraint.position({ x: 0, y: 0, anchor: "baseline" })`. Pass a single value to share one anchor across every child (the common case); pass an array to assign one anchor _per child_ positionally — the array length must equal the number of children.
 
-The first already-placed child in the list acts as the anchor on each specified axis (read at _that child's_ anchor). Unplaced children are moved to match it (placed at _their own_ anchor). If no child is placed yet, the layer's own edge is used as the baseline (`start` = 0, `middle` = midpoint, `end` = full extent). When both `x` and `y` are given, x is resolved before y.
+The first already-placed child in the list acts as the anchor on each specified axis (read at _that child's_ anchor). Unplaced children are moved to match it (placed at _their own_ anchor). If no child is placed yet, the fallback depends on the axis's underlying space: a scaled axis uses the scale origin `posScale(0)`, a pixel-pure axis uses the layer's own edge (`start` = 0, `middle` = midpoint, `end` = full extent, `baseline` = layer origin). When both `x` and `y` are given, x is resolved before y.
 
 ### Per-child anchors
 
@@ -66,10 +66,10 @@ This is the per-child generalization of the single-anchor form. It expresses
 "edges share" relations directly, instead of through a `distribute` with a
 negative `spacing`.
 
-::: starfish
+::: gofish
 
 ```js
-gf.Layer([
+gf.layer([
   gf.rect({ w: 80, h: 40, fill: gf.color.blue[3] }).name("a"),
   gf.rect({ w: 120, h: 40, fill: gf.color.red[3] }).name("b"),
   gf.rect({ w: 60, h: 40, fill: gf.color.green[3] }).name("c"),
@@ -91,19 +91,34 @@ Stacks a set of children end-to-end along an axis, with optional spacing.
 Constraint.distribute({ dir, spacing, mode, order }, [ref1, ref2, ...])
 ```
 
-| Option    | Type                     | Default     | Description                                                  |
-| --------- | ------------------------ | ----------- | ------------------------------------------------------------ |
-| `dir`     | `"x" \| "y"`             | —           | Axis to distribute along                                     |
-| `spacing` | `number`                 | `8`         | Gap between each element                                     |
-| `mode`    | `"edge" \| "center"`     | `"edge"`    | Whether spacing is measured edge-to-edge or center-to-center |
-| `order`   | `"forward" \| "reverse"` | `"forward"` | Order to place elements                                      |
+| Option    | Type                     | Default     | Description                                                                                  |
+| --------- | ------------------------ | ----------- | -------------------------------------------------------------------------------------------- |
+| `dir`     | `"x" \| "y"`             | —           | Axis to distribute along                                                                     |
+| `spacing` | `number`                 | `8`         | Gap between each element (forced to `0` when `glue` is set)                                  |
+| `mode`    | `"edge" \| "center"`     | `"edge"`    | Whether spacing is measured edge-to-edge or center-to-center                                 |
+| `order`   | `"forward" \| "reverse"` | `"forward"` | Order to place elements                                                                      |
+| `glue`    | `boolean`                | `false`     | Stack semantics: children touch, and their data-driven extents commit to one positional axis |
 
 The first already-placed child acts as an anchor. Unplaced children after it are distributed forward (increasing position); unplaced children before it are distributed backward so they stack flush against the anchor's leading edge.
 
-::: starfish
+### Space resolution and auto-fit
+
+`distribute` (and `align`) don't just position children after layout — they
+participate in **underlying-space resolution**, exactly like the operators
+built on them. A `distribute` over data-sized children composes their size
+claims (sum + spacing) into the layer's claim on that axis; when the layer is
+then given a size (an explicit `w`/`h`, or an allotted budget from its parent
+or a coordinate transform), it solves for the scale factor that makes the
+children fit, and proposes equal budget slices to children
+with no size claim of their own. With `glue: true` the composed extents commit
+to an anchored positional axis instead — that's a stacked bar chart. In other
+words: a constraint-assembled layer auto-fits the same way a `Spread`/`Stack`
+does.
+
+::: gofish
 
 ```js
-gf.Layer([
+gf.layer([
   gf.rect({ w: 80, h: 40, fill: gf.color.blue[3] }).name("a"),
   gf.rect({ w: 80, h: 60, fill: gf.color.red[3] }).name("b"),
   gf.rect({ w: 80, h: 30, fill: gf.color.green[3] }).name("c"),
@@ -113,6 +128,112 @@ gf.Layer([
     gf.Constraint.distribute({ dir: "y", spacing: 8 }, [a, b, c]),
   ])
   .render(root, { w: 300, h: 200 });
+```
+
+:::
+
+## Constraint.position
+
+Places a child at an `x` and/or `y` coordinate — the data-driven counterpart to
+`align`/`distribute`, which only relate children to each other. It mirrors how
+you position a shape: each coordinate is either a **literal** pixel value or a
+**`datum`** (`datum(n)`). A literal is placed as-is; a datum is mapped through a
+scale the `Layer` infers from the datum coordinates of its `position`
+constraints (their union is the layer's domain on that axis, mapped onto the
+layer's pixel size). This is how a hand-drawn continuous axis places each tick
+at its value rather than assuming uniform spacing.
+
+```ts
+Constraint.position({ x?, y?, anchor? }, [ref]);
+```
+
+| Option   | Type              | Default    | Description                                         |
+| -------- | ----------------- | ---------- | --------------------------------------------------- |
+| `x`      | `number \| Value` | —          | x coordinate — literal pixel or `datum(n)` (scaled) |
+| `y`      | `number \| Value` | —          | y coordinate — literal pixel or `datum(n)` (scaled) |
+| `anchor` | `Alignment`       | `"middle"` | Which anchor of the ref lands on the coordinate     |
+
+At least one of `x` / `y` is required. Only `datum` coordinates feed the layer's
+inferred scale; literal pixels are placed directly and don't define the domain.
+
+A datum coordinate can carry a **pixel offset** applied after the scale
+mapping — "this data position, plus pixels":
+
+```ts
+// Seat a line 6px outside the y = 0 grid position, wherever 0 lands.
+Constraint.position({ y: datum(0).offset(-6), anchor: "end" }, [line]);
+```
+
+The offset shifts the resolved position without affecting the inferred domain
+(`datum(0).offset(-6)` still contributes `0` to the scale). It works anywhere a
+`Value` is accepted — shape coordinates too, not just constraints. In Python
+the same thing is written with plain arithmetic: `datum(0) - 6`.
+
+```ts
+// A continuous y-axis: each tick centered at its data value. Passing `datum(v)`
+// maps it through the y-scale the Layer derives from these constraints (domain
+// [0, 300] → plot height). A bare number would be a raw pixel instead.
+Layer([
+  rect({ w: 1, h: 300 }).name("axis"),
+  ...tickValues.map((v, i) => tick(v).name(`t${i}`)),
+]).constrain((g) => [
+  Constraint.align({ y: "start" }, [g.axis]),
+  ...tickValues.map((v, i) =>
+    Constraint.position({ y: datum(v) }, [g[`t${i}`]])
+  ),
+]);
+```
+
+## Constraint.nest
+
+Sizes one child to wrap (or be wrapped by) another with a fixed padding — the
+first **size-setting** constraint. Given `[outer, inner]`, the relation
+`outer = inner + 2·padding` holds on each constrained axis, and `inner` is
+centered inside `outer` there.
+
+```ts
+Constraint.nest({ x?, y? }, [outer, inner]);
+```
+
+| Option | Type     | Default | Description                                                         |
+| ------ | -------- | ------- | ------------------------------------------------------------------- |
+| `x`    | `number` | —       | Per-axis padding (px) on the x axis (omit to leave x unconstrained) |
+| `y`    | `number` | —       | Per-axis padding (px) on the y axis (omit to leave y unconstrained) |
+
+At least one of `x` / `y` must be specified; `[outer, inner]` must be exactly two
+refs. Padding is always known — the unknown per axis is _which_ side is derived,
+resolved from which side carries the size:
+
+- **Inside-out** (`outer = inner + 2·padding`): the inner is sized and the outer
+  is not — a box that shrink-wraps its content. Because the derived outer size
+  enters the layer's size request, a nested pair inside an auto-fit context
+  (a `Spread` of nested pairs) participates in the scale solve.
+- **Outside-in** (`inner = outer − 2·padding`): the outer carries the size and
+  the inner is claim-less — exactly CSS `padding`.
+- **Center only**: when neither side is sized, the layer fills the outer, then
+  resolves outside-in over that filled box.
+
+```ts
+// inner 60×40, padding 10 → outer 80×60; inner centered (inner.min = 10).
+Layer([
+  rect({ fill: "#dbe6f3" }).name("outer"),
+  rect({ w: 60, h: 40, fill: "#e63946" }).name("inner"),
+]).constrain(({ outer, inner }) => [
+  Constraint.nest({ x: 10, y: 10 }, [outer, inner]),
+]);
+```
+
+::: gofish
+
+```js
+gf.layer([
+  gf.rect({ fill: gf.color.blue[1], stroke: gf.color.blue[3] }).name("outer"),
+  gf.rect({ w: 60, h: 40, fill: gf.color.red[4] }).name("inner"),
+])
+  .constrain(({ outer, inner }) => [
+    gf.Constraint.nest({ x: 10, y: 10 }, [outer, inner]),
+  ])
+  .render(root, { w: 200, h: 160 });
 ```
 
 :::
@@ -181,7 +302,10 @@ override it for the pairs they name.
 
 ## Spread equivalences
 
-Constraints are a lower-level primitive that `Spread` is built on. These pairs are equivalent:
+Constraints are the primitive `Spread` and `Stack` are built on — literally:
+the operators delegate their space resolution, budget slicing, and placement
+walks to the same machinery the constraint path uses. These pairs are
+equivalent, **including** scale solving and auto-fit, not just placement:
 
 | Spread                                                       | Constraint equivalent                                           |
 | ------------------------------------------------------------ | --------------------------------------------------------------- |
@@ -189,6 +313,14 @@ Constraints are a lower-level primitive that `Spread` is built on. These pairs a
 | `Spread({ dir: "x", alignment: "end", spacing: 10 }, items)` | `align({ y: "end" })` + `distribute({ dir: "x", spacing: 10 })` |
 | `Spread({ dir: "x", spacing: 60, mode: "center" }, items)`   | `distribute({ dir: "x", spacing: 60, mode: "center" })`         |
 | `Spread({ dir: "y", reverse: true }, items)`                 | `distribute({ dir: "y", order: "reverse" })`                    |
+| `Stack({ dir: "y" }, items)`                                 | `distribute({ dir: "y", glue: true })`                          |
+
+When **no child is pre-placed**, the cross-axis alignment fallback depends on
+the **axis**, not the API — `Spread` and the `align` constraint resolve the
+same fallback, so the pairs above are exact. A scaled (POSITION) axis falls
+back to the scale origin `posScale(0)` (so SIZE-derived bars hang from the zero
+line); a pixel-pure axis falls back to the layer-box edge (`start` → 0,
+`middle` → midpoint, `end` → full extent).
 
 ## Partial placement
 

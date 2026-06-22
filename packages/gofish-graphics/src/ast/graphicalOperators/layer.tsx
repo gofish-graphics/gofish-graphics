@@ -1,32 +1,46 @@
-import * as Monotonic from "../../util/monotonic";
+// <gofish-wiki> AUTO-GENERATED — see covers: in the essay; run `pnpm --filter docs sync-backlinks`
+// @wiki Underlying Space — /internals/core/underlying-space
+// </gofish-wiki>
+
 import { GoFishNode } from "../_node";
+import { shadowCheckScaleRoot } from "../solver/shadow";
 import { isToken } from "../createName";
-import { Size, elaborateDims, FancyDims } from "../dims";
-import { SIZE, UnderlyingSpace, isSIZE } from "../underlyingSpace";
-import * as Interval from "../../util/interval";
-import { computeSize } from "../../util";
+import { Size, elaborateDims, FancyDims, displayTranslate } from "../dims";
+import { UNDEFINED, UnderlyingSpace, hasBaseline } from "../underlyingSpace";
+import { computeSize, foldFinite } from "../../util";
 import { CoordinateTransform } from "../coordinateTransforms/coord";
 import { coord } from "../coordinateTransforms/coord";
 import { createNodeOperatorSequential } from "../withGoFish";
 import { GoFishAST } from "../_ast";
 import {
   applyConstraints,
-  getPositioningConstraintRefs,
-  isContainConstraint,
+  collectPositionDomains,
+  gridSpaces,
+  gridCellSize,
   isZOrderConstraint,
+  type ConstraintSpec,
   type ZOrderConstraint,
 } from "../constraints";
-import { unionChildSpaces } from "./alignment";
-
-/** Normalize a node's _name (string or Token) to the string used as a key in
- * the Layer's nameToPlaceable and constraint refs. Tokens contribute their
- * `__tag`. */
-const childNameKey = (node: GoFishAST): string | undefined => {
-  if (!("_name" in node)) return undefined;
-  const n = (node as GoFishNode)._name;
-  if (n === undefined) return undefined;
-  return isToken(n) ? n.__tag : n;
-};
+import { childNameKey } from "../constraints/shared";
+import {
+  applyNestLayoutProposal,
+  applyNestSpacePlan,
+  buildNestPlan,
+} from "../constraints/nestPlan";
+import {
+  composeConstraintSpaces,
+  resolveLayerBaseSpaces,
+  type ComposeBudget,
+} from "../constraints/compose";
+import {
+  buildDistributeSliceMap,
+  buildChildScalePlan,
+  buildLayerConstraintLayoutPlan,
+  buildPositionScalePlan,
+  childLayoutSizeProposal,
+  childPosScalesFor,
+  selectGridConstraint,
+} from "../constraints/proposalPlan";
 
 // ── Z-order resolution ────────────────────────────────────────────────────
 //
@@ -71,9 +85,14 @@ function flattenForZOrder(children: GoFishAST[]): PaintItem[] {
       // Plain (non-component) nested layers are transparent for paint
       // ordering — their children are hoisted into this paint context.
       if (!child._isComponent && child.type === "layer") {
-        const cTx = accTx + (child.transform?.translate?.[0] ?? 0);
-        const cTy = accTy + (child.transform?.translate?.[1] ?? 0);
-        walk(child.children, cTx, cTy);
+        // Stage 3 (#39): read the LEDGER projection, not the raw
+        // `transform.translate` — a placed nested layer has its written translate
+        // cleared on solved axes, so `displayTranslate(child.transform)` would
+        // hoist its children at [0,0]. `projectedTranslate` derives the real
+        // offset (the same retirement bake.ts/`_ref` already use).
+        const childTx = child.projectedTranslate(0) ?? 0;
+        const childTy = child.projectedTranslate(1) ?? 0;
+        walk(child.children, accTx + childTx, accTy + childTy);
       } else {
         out.push({
           node: child,
@@ -211,6 +230,28 @@ export const layer = createNodeOperatorSequential(
 
     const dims = elaborateDims(options);
 
+    // SELF-SCALING REGIONS. When this layer is given an explicit pixel size on
+    // a dim, it becomes a self-contained scaling region on that dim: its scales
+    // resolve against its own box at layout time, exactly like the root resolves
+    // against the canvas ("a chart embeds the way it renders"). So in
+    // `resolveUnderlyingSpace` the real POSITION/SIZE space is stashed here and
+    // UNDEFINED is reported upward — a parent layer's union then ignores this
+    // axis rather than polluting a shared domain with foreign units (e.g. a
+    // marginal histogram's count axis vs. the center's data units). `layout`
+    // reads the stash back to build the LOCAL scale. The reported space is
+    // UNDEFINED for now; issue #508's proposed CONSTANT kind is the eventual
+    // home for "known fixed pixel extent". Indexed [x, y]; last write wins if
+    // resolveUnderlyingSpace runs more than once.
+    const selfScaledSpaces: [
+      UnderlyingSpace | undefined,
+      UnderlyingSpace | undefined,
+    ] = [undefined, undefined];
+
+    // Distribute budget descriptor from the recognized spread shape, stashed by
+    // `resolveUnderlyingSpace` and consumed by `layout` to invert the composed
+    // SIZE against the allotted size and propose per-child slices.
+    let constraintBudget: ComposeBudget | undefined;
+
     return new GoFishNode(
       {
         type: options.box === true ? "box" : "layer",
@@ -218,23 +259,79 @@ export const layer = createNodeOperatorSequential(
         shared: [false, false],
         resolveUnderlyingSpace: (
           children: Size<UnderlyingSpace>[],
-          _childNodes: GoFishAST[]
+          _childNodes: GoFishAST[],
+          _shared: Size<boolean>,
+          constraints
         ) => {
-          // Apply layer's own transform.scale to any SIZE spaces produced
-          // by unionChildSpaces (the SIZE-preserving overlay path).
-          const scaleX = options.transform?.scale?.x ?? 1;
-          const scaleY = options.transform?.scale?.y ?? 1;
-          const applyScale = (
-            space: UnderlyingSpace,
-            scale: number
-          ): UnderlyingSpace =>
-            isSIZE(space) && scale !== 1
-              ? SIZE(Monotonic.smul(scale, space.domain))
-              : space;
-          return [
-            applyScale(unionChildSpaces(children, 0), scaleX),
-            applyScale(unionChildSpaces(children, 1), scaleY),
-          ];
+          // A grid constraint makes this layer a grid: its axes are categorical
+          // (ORDINAL over columns / rows) and the cells fill flex tracks (sized
+          // in `layout`). It's exclusive — no union/nest/position fold applies.
+          const gridC = selectGridConstraint(constraints ?? []);
+          if (gridC !== undefined) return gridSpaces(gridC, _childNodes);
+
+          // Nest space fold: only INSIDE_OUT edges (`dir: 'in'`) derive a
+          // space — `outer = inner + 2·padding` when inner is SIZE — so a
+          // nested pair participates in the union below, hence in a parent's
+          // auto-fit solve. Computed in dependency (source-first) order so
+          // chained nests compose (A⊇B⊇C: C feeds B feeds A). OUTSIDE_IN
+          // edges derive NOTHING here: the outer is a normal child whose own
+          // claim (or fill/undefined) flows through the union, and `inner =
+          // outer − 2p` is purely a layout-time proposal. When inner isn't SIZE,
+          // `nestedSpace` leaves outer as-is and the proposal handles sizing.
+          const nestPlan = buildNestPlan(_childNodes, constraints ?? []);
+          const effectiveChildren = applyNestSpacePlan(children, nestPlan);
+
+          // `position` constraints contribute a POSITION-domain fragment per
+          // axis: the union of their data values is this layer's domain on that
+          // axis, merged with any POSITION domain bubbled up from children. This
+          // is what lets the layer build a position scale at layout time so
+          // `Constraint.position` can map data values to pixels.
+          const posDomains = collectPositionDomains(constraints ?? []);
+          const resolved = resolveLayerBaseSpaces(
+            effectiveChildren,
+            [
+              options.transform?.scale?.x ?? 1,
+              options.transform?.scale?.y ?? 1,
+            ],
+            posDomains
+          );
+
+          // A simple spread expressed as align + distribute. When the
+          // constraints match that operator image (see composeConstraintSpaces),
+          // override the constrained axes with spread's own space folds (SIZE
+          // sum + spacing on the distribute axis, the alignment fold on the
+          // cross axis). Applied BEFORE the self-scaling stash below so an
+          // explicit-size layer builds its LOCAL scale from the folded space,
+          // exactly like spread.
+          const shape = composeConstraintSpaces(
+            constraints ?? [],
+            _childNodes,
+            effectiveChildren
+          );
+          constraintBudget = shape?.budget;
+          if (shape) {
+            for (const axis of [0, 1] as const) {
+              const s = shape.spaces[axis];
+              if (s !== undefined) resolved[axis] = s;
+            }
+          }
+
+          // Stash the absorbed anchored extent and report UNDEFINED upward for
+          // any dim with an explicit pixel size — self-scaling region; see
+          // selfScaledSpaces above. (last write wins — may run more than once.)
+          selfScaledSpaces[0] = undefined;
+          selfScaledSpaces[1] = undefined;
+          for (const axis of [0, 1] as const) {
+            if (dims[axis].size === undefined) continue;
+            const sp = resolved[axis];
+            // Stash anything with a baseline (an anchored POSITION or a "free"
+            // magnitude); a difference / ORDINAL is left untouched (no stash).
+            if (hasBaseline(sp)) {
+              selfScaledSpaces[axis] = sp;
+              resolved[axis] = UNDEFINED;
+            }
+          }
+          return resolved;
         },
         layout: (shared, size, scaleFactors, children, posScales, node) => {
           // Compute size using dims (w and h) before passing to children
@@ -243,110 +340,135 @@ export const layer = createNodeOperatorSequential(
             computeSize(dims[1].size, scaleFactors?.[1]!, size[1]) ?? size[1],
           ];
 
+          // Grid budget: a grid layer is exclusively cells (table elaboration),
+          // and every cell fills its flex track — so all children get the equal
+          // track size (box-division); the placement solver then centers them.
+          const gridC = selectGridConstraint(node.constraints);
+          const gridCell = gridC ? gridCellSize(gridC, size) : undefined;
+
+          // Build the LOCAL scale for each self-scaled (stashed) dim against our
+          // own pixel box — see selfScaledSpaces above. The recipe (cf. the
+          // gofish.tsx root): POSITION → a posScale mapping the stashed domain
+          // onto [0, size]; SIZE → a scale factor inverting the Monotonic against
+          // size. A POSITION stash touches only `basePosScales`; a SIZE stash
+          // only `childScaleFactors`. When the size can't be resolved (NaN) we
+          // leave the inherited value, degrading to the inherited path rather
+          // than emitting NaN scales.
+          //
+          // `basePosScales` is reused below as the floor for `effectivePosScales`
+          // and the per-child forwarding (`childScalesFor`), so the override
+          // applies regardless of `ownsPositionAxis`. `childScaleFactors` is a
+          // fresh array — never mutate the parent's `scaleFactors` (unlike
+          // spread, which mutates intentionally for sibling sharing).
+          const childScalePlan = buildChildScalePlan(
+            selfScaledSpaces,
+            node._underlyingSpace,
+            size,
+            scaleFactors,
+            posScales,
+            constraintBudget,
+            shared
+          );
+          const { basePosScales, childScaleFactors } = childScalePlan;
+          for (const failure of childScalePlan.budgetFailures) {
+            // A non-invertible fold-produced Monotonic would otherwise silently
+            // vanish the content (spread's `?? 0`); name the axis and budget so
+            // the failure is visible, then keep the inherited factor.
+            console.warn(
+              `layer: could not invert distribute SIZE claim on ${
+                failure.axis === 0 ? "x" : "y"
+              } axis for budget ${failure.budget}px; keeping inherited scale factor.`,
+              constraintBudget
+            );
+          }
+          for (const check of childScalePlan.sharedScaleChecks) {
+            // Solver shadow (#39): assert the frame equation content(σ)=allocated
+            // closes for this σ-scope. No-op unless GOFISH_SOLVER_CHECK is set.
+            shadowCheckScaleRoot(
+              check.space,
+              size[check.axis],
+              check.sigma,
+              check.axis
+            );
+          }
+
+          // Per-child proposed size for distribute-covered children: each
+          // distribute segment slices its axis size equally among its covered
+          // children; a child covered on both axes (a table cell) draws an
+          // x-slice and a y-slice. Uncovered axes get the full size. A child
+          // carrying its own explicit size ignores this (its size wins),
+          // matching spread; a claim-less child consumes the slice.
+          const sliceByName = constraintBudget
+            ? buildDistributeSliceMap(constraintBudget.segments, size)
+            : undefined;
+
+          // `position` constraints with a datum coordinate contribute a data
+          // domain on their axis (see collectPositionDomains); the union is what
+          // those constraints resolve against. `ownsAxis` is consumed again by
+          // the per-child posScale forwarding below (`childScalesFor`).
+          const constraintDomains = collectPositionDomains(node.constraints);
+          const ownsAxis: [boolean, boolean] = [
+            constraintDomains.x !== undefined,
+            constraintDomains.y !== undefined,
+          ];
+
+          // Scale for resolving this layer's datum `position` constraints: an
+          // inherited posScale, else a local one mapping the layer's own
+          // POSITION domain onto its pixel size (the shared fallback recipe,
+          // `posScaleFromSpace` — scatter uses the same one). Only built when
+          // the layer actually owns such an axis — it is used solely by
+          // applyConstraints below, not passed to children.
+          const space = node._underlyingSpace;
+          // `basePosScales` (the inherited scales with any self-scaled dim
+          // overridden — see selfScaledSpaces above) is the floor here.
+          const positionScalePlan = buildPositionScalePlan(
+            ownsAxis,
+            space,
+            size,
+            basePosScales
+          );
+          const effectivePosScales = positionScalePlan.effectivePosScales;
+
           const childPlaceables: ReturnType<
             (typeof children)[number]["layout"]
           >[] = new Array(children.length);
 
-          // Collect *positioning* constraint refs only — children skipped
-          // here forgo phase-1 baseline placement so a constraint can place
-          // them. Z-order constraints don't position; including them here
-          // would erroneously rob their referents of baseline placement.
-          const constrainedNames =
-            node.constraints.length > 0
-              ? getPositioningConstraintRefs(node.constraints)
-              : new Set<string>();
+          const layoutPlan = buildLayerConstraintLayoutPlan(
+            node.children,
+            node.constraints
+          );
 
-          // ── Contain pre-pass ────────────────────────────────────────────
-          // `Constraint.contain` drives outer's size from inner's intrinsic
-          // dims, so inner must be laid out first. Build the outer→inner map
-          // from the layer's contain constraints, topologically sort children
-          // (inner first), then dispatch layout per-child:
-          //   - standard child: layout at the layer's size
-          //   - inner-of-contain: layout at the layer's size; record dims
-          //   - outer-of-contain: layout at `inner.intrinsicDims + 2*padding`
-          //                       on each constrained axis (other axis is
-          //                       left at the layer's size)
-          //
-          // Phase-2 (`applyContain`) places inner at outer's center on each
-          // constrained axis — with outer sized to `inner + 2*padding`,
-          // centering yields `inner.min = outer.min + padding` naturally.
-          const containConstraints =
-            node.constraints.filter(isContainConstraint);
-
-          const childIndexByName = new Map<string, number>();
-          if (containConstraints.length > 0) {
-            for (let i = 0; i < node.children.length; i++) {
-              const name = childNameKey(node.children[i]);
-              if (name !== undefined) childIndexByName.set(name, i);
-            }
-          }
-
-          // outerIdx → { innerIdx, padX, padY }
-          const outerToInner = new Map<
-            number,
-            { innerIdx: number; padX?: number; padY?: number }
-          >();
-          for (const c of containConstraints) {
-            const outerIdx = childIndexByName.get(c.children[0].name);
-            const innerIdx = childIndexByName.get(c.children[1].name);
-            if (outerIdx === undefined || innerIdx === undefined) continue;
-            outerToInner.set(outerIdx, {
-              innerIdx,
-              padX: c.x,
-              padY: c.y,
-            });
-          }
-
-          // Topo-sort children by contain dependency (outer depends on inner).
-          // Cycles (A contains B contains A) raise an explicit error.
-          const layoutOrder: number[] = [];
-          if (outerToInner.size > 0) {
-            const visiting = new Set<number>();
-            const visited = new Set<number>();
-            const visit = (i: number, stack: number[]): void => {
-              if (visited.has(i)) return;
-              if (visiting.has(i)) {
-                throw new Error(
-                  `Layer: Constraint.contain cycle detected through child indices ${[
-                    ...stack,
-                    i,
-                  ].join(" → ")}`
-                );
-              }
-              visiting.add(i);
-              const dep = outerToInner.get(i);
-              if (dep !== undefined) visit(dep.innerIdx, [...stack, i]);
-              visiting.delete(i);
-              visited.add(i);
-              layoutOrder.push(i);
-            };
-            for (let i = 0; i < children.length; i++) visit(i, []);
-          } else {
-            for (let i = 0; i < children.length; i++) layoutOrder.push(i);
-          }
-
-          for (const i of layoutOrder) {
+          for (const i of layoutPlan.layoutOrder) {
             const child = children[i];
-            let layoutSize: Size = size;
-            const containInfo = outerToInner.get(i);
-            if (containInfo !== undefined) {
-              const innerDims = childPlaceables[containInfo.innerIdx].dims;
-              layoutSize = [
-                containInfo.padX !== undefined
-                  ? (innerDims[0].size ?? 0) + 2 * containInfo.padX
-                  : size[0],
-                containInfo.padY !== undefined
-                  ? (innerDims[1].size ?? 0) + 2 * containInfo.padY
-                  : size[1],
-              ];
-            }
+            const childName = childNameKey(node.children[i]);
+            const targetDims =
+              childName !== undefined
+                ? layoutPlan.positionTargetDims.get(childName)
+                : undefined;
+            // Nest proposal: override the DERIVED node's size from its
+            // SOURCE on each derived axis — `outer = inner + 2p` for 'in',
+            // `inner = outer − 2p` for 'out'. The source is already laid out
+            // (ahead of us in layoutOrder, since the plan orders source before
+            // derived). Clamp ≥ 0; non-derived axes keep the normal child
+            // proposal, so nest composes with — and wins on its derived axes
+            // over — any budget slice.
+            const layoutSize = applyNestLayoutProposal(
+              childLayoutSizeProposal(childName, size, gridCell, sliceByName),
+              layoutPlan.nestPlan?.byDerived.get(i),
+              childPlaceables
+            );
             const childPlaceable = child.layout(
               layoutSize,
-              scaleFactors,
-              posScales
+              childScaleFactors,
+              childPosScalesFor(
+                (children[i] as GoFishNode)._underlyingSpace,
+                targetDims,
+                ownsAxis,
+                basePosScales,
+                effectivePosScales
+              )
             );
-            const childName = childNameKey(node.children[i]);
-            if (!childName || !constrainedNames.has(childName)) {
+            if (!childName || !layoutPlan.constrainedNames.has(childName)) {
               childPlaceable.place("x", 0, "baseline");
               childPlaceable.place("y", 0, "baseline");
             }
@@ -367,12 +489,15 @@ export const layer = createNodeOperatorSequential(
               }
             }
 
-            // Apply constraints in declaration order. When a constraint has no
-            // pre-placed target, fall back to this layer's own box baselines.
-            applyConstraints(node.constraints, nameToPlaceable, {
-              x: { start: 0, middle: size[0] / 2, end: size[0] },
-              y: { start: 0, middle: size[1] / 2, end: size[1] },
-            });
+            // Compose and solve placement constraints as one per-axis relational
+            // problem. Declaration order does not choose an anchor; unanchored
+            // components receive a deterministic weak origin.
+            applyConstraints(
+              node.constraints,
+              nameToPlaceable,
+              size,
+              effectivePosScales
+            );
 
             // Place any child the constraints left unplaced at the layer's
             // baseline origin — consistent with the phase-1 baseline placement
@@ -392,26 +517,23 @@ export const layer = createNodeOperatorSequential(
             }
           }
 
-          // Calculate the bounding box of all children
-          const minX = Math.min(
-            ...childPlaceables.map(
-              (childPlaceable) => childPlaceable.dims[0].min!
-            )
+          // Calculate the bounding box of all children (NaN-safe; see
+          // foldFinite for why undefined extents are skipped).
+          const minX = foldFinite(
+            childPlaceables.map((cp) => cp.dims[0].min),
+            Math.min
           );
-          const maxX = Math.max(
-            ...childPlaceables.map(
-              (childPlaceable) => childPlaceable.dims[0].max!
-            )
+          const maxX = foldFinite(
+            childPlaceables.map((cp) => cp.dims[0].max),
+            Math.max
           );
-          const minY = Math.min(
-            ...childPlaceables.map(
-              (childPlaceable) => childPlaceable.dims[1].min!
-            )
+          const minY = foldFinite(
+            childPlaceables.map((cp) => cp.dims[1].min),
+            Math.min
           );
-          const maxY = Math.max(
-            ...childPlaceables.map(
-              (childPlaceable) => childPlaceable.dims[1].max!
-            )
+          const maxY = foldFinite(
+            childPlaceables.map((cp) => cp.dims[1].max),
+            Math.max
           );
 
           const scaleX = options.transform?.scale?.x ?? 1;
@@ -421,19 +543,14 @@ export const layer = createNodeOperatorSequential(
             dims[1].min !== undefined ? dims[1].min - minY : undefined;
 
           return {
+            // Store only the local box `(min, size)`; the `dims` getter derives
+            // center/max from it via `localAnchorPoint` (`size = max − min ≥ 0`,
+            // both ends from the same child fold). Writing them here was dead —
+            // every consumer reads `.dims`, and layer's own render ignores
+            // `intrinsicDims` entirely (#39 stage 3).
             intrinsicDims: [
-              {
-                min: minX,
-                size: maxX - minX,
-                center: minX + (maxX - minX) / 2,
-                max: maxX,
-              },
-              {
-                min: minY,
-                size: maxY - minY,
-                center: minY + (maxY - minY) / 2,
-                max: maxY,
-              },
+              { min: minX, size: maxX - minX },
+              { min: minY, size: maxY - minY },
             ],
             transform: {
               translate: [
@@ -447,9 +564,8 @@ export const layer = createNodeOperatorSequential(
         render: ({ transform, coordinateTransform }, children, node) => {
           const scaleX = options.transform?.scale?.x ?? 1;
           const scaleY = options.transform?.scale?.y ?? 1;
-          const wrapTransform = `translate(${transform?.translate?.[0] ?? 0}, ${
-            transform?.translate?.[1] ?? 0
-          }) scale(${scaleX}, ${scaleY})`;
+          const [wrapTx, wrapTy] = displayTranslate(transform);
+          const wrapTransform = `translate(${wrapTx}, ${wrapTy}) scale(${scaleX}, ${scaleY})`;
 
           // Z-order resolution: when this layer carries any zAbove/zBelow
           // constraints, flatten the (non-component) subtree and emit in

@@ -1,8 +1,71 @@
+// <gofish-wiki> AUTO-GENERATED — see covers: in the essay; run `pnpm --filter docs sync-backlinks`
+// @wiki Color Scale Resolution — /internals/layout/color-scales
+// </gofish-wiki>
+
 import { lerp, rybHsl2rgb } from "rybitten";
 import { ColorCoords, cubes } from "rybitten/cubes";
 import { mix, palette } from "spectral.js";
+import {
+  type ColorOp,
+  getValue,
+  getValueColorOps,
+  isValue,
+  type MaybeValue,
+} from "./ast/data";
+import type { Scale } from "./ast/gofish";
 export const rgbToString = (rgb: ColorCoords) =>
   `rgb(${rgb.map((x) => Math.round(x * 255)).join(", ")})`;
+
+/**
+ * Apply a datum value's post-scale color transforms (`.lighten` / `.darken`)
+ * to an already-resolved color. `lighten(t)` mixes `t` toward white, `darken(t)`
+ * mixes `t` toward black — the same spectral-mix the original flower chart used
+ * by hand (`mix(c, white, 0.5)`), now expressed as a reusable color op. The
+ * color analog of a datum's pixel `offset`; see {@link ColorOp} and
+ * `getValueColorOps` in ast/data.ts.
+ */
+export const applyColorOps = (color: string, ops: ColorOp[]): string => {
+  let out = color;
+  for (const { op, amount } of ops) {
+    out = mix(out, op === "lighten" ? "#ffffff" : "#000000", amount);
+  }
+  return out;
+};
+
+/**
+ * Resolve a mark's color channel: a data-bound value maps through the unit
+ * color scale — `scaleFn(value)` for a continuous (gradient) scale on a numeric
+ * datum, otherwise a categorical Map lookup (falling back to the raw value if
+ * unscaled) — then its post-scale color ops (`.lighten`/`.darken`) are applied;
+ * a literal color passes through unchanged. Shared by the `rect`, `ellipse`,
+ * `text`, and `connect` render paths so a new color-channel mark gets
+ * scale-lookup + color ops for free.
+ *
+ * `unitScale` is the (type-only imported) unit `Scale`; only the color members
+ * carry `color`/`scaleFn`, so we narrow structurally.
+ */
+export const resolveColorChannel = (
+  value: MaybeValue<string> | undefined,
+  unitScale: Scale | undefined
+): string | undefined => {
+  if (!isValue(value)) return value as string | undefined;
+  const raw = getValue(value);
+  let scaled: unknown;
+  if (unitScale && "scaleFn" in unitScale && typeof raw === "number") {
+    scaled = unitScale.scaleFn(raw);
+  } else if (unitScale && "color" in unitScale) {
+    scaled = unitScale.color.get(raw) ?? raw;
+  } else {
+    scaled = raw;
+  }
+  // Color ops mix against the resolved color; only apply when the scale
+  // produced an actual color string (a scale miss on a non-string datum, e.g.
+  // a numeric value, passes through unchanged rather than feeding `mix` a
+  // non-color and throwing).
+  return typeof scaled === "string"
+    ? applyColorOps(scaled, getValueColorOps(value))
+    : (scaled as string | undefined);
+};
 
 export const createColorRange = (hue: number) =>
   Array.from({ length: 10 }, (_, i) => (i + 2) * (1 / (10 + 2)))
@@ -114,7 +177,13 @@ export const color6_old = [
   mix(appleColorGenerator((2 / 12) * 360), white, 0.2),
 ];
 
-export const color10Order = ["blue", "yellow", "fuschia", "lime", "purple"];
+export const color10Order = [
+  "blue",
+  "yellow",
+  "fuschia",
+  "lime",
+  "purple",
+] as const;
 
 export const color6_20250320 = [
   color[color10Order[0]][5],

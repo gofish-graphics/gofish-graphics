@@ -16,10 +16,10 @@ All children are placed at position `(0, 0)` relative to the layer. The layer's 
 
 Here's a simple "badge" glyph with a rounded rectangle and a dot:
 
-::: starfish
+::: gofish
 
 ```js
-gf.Layer([
+gf.layer([
   gf.rect({ cx: 0, cy: 0, w: 50, h: 30, rx: 8, fill: "steelblue" }),
   gf.ellipse({ cx: -15, cy: 0, w: 10, h: 10, fill: "white" }),
 ]).render(root, { w: 100, h: 100 });
@@ -43,11 +43,11 @@ const Badge = ({ w = 50, h = 30, fill = "steelblue" }) =>
 
 Now you can create badges of different sizes and colors:
 
-::: starfish
+::: gofish
 
 ```js
 const Badge = ({ w = 50, h = 30, fill = "steelblue" }) =>
-  gf.Layer([
+  gf.layer([
     gf.rect({ cx: 0, cy: 0, w, h, rx: 8, fill }),
     gf.ellipse({ cx: -w / 2 + 10, cy: 0, w: 10, h: 10, fill: "white" }),
   ]);
@@ -65,11 +65,11 @@ gf.Spread({ dir: "x", spacing: 20 }, [
 
 Pass a function to `.mark()` that returns your glyph. The function receives the data for each item:
 
-::: starfish
+::: gofish
 
 ```js
 const Pin = ({ fill = "tomato" }) =>
-  gf.Layer([
+  gf.layer([
     gf.ellipse({ cx: 0, cy: -8, w: 16, h: 16, fill }),
     gf.ellipse({ cx: 0, cy: -10, w: 6, h: 6, fill: "white" }),
     gf.rect({ cx: 0, cy: 0, w: 3, h: 10, fill }),
@@ -81,7 +81,7 @@ const locations = [
   { id: "C", x: 280, y: 120, color: "seagreen" },
 ];
 
-gf.Chart(locations)
+gf.chart(locations)
   .flow(gf.scatter({ by: "id", x: "x", y: "y" }))
   .mark((d) => Pin({ fill: d[0].color }))
   .render(root, { w: 350, h: 200 });
@@ -95,7 +95,7 @@ The mark function receives grouped data (an array), so `d[0]` accesses the first
 
 You can combine any shapes: rectangles, ellipses, text, and more. Here's a labeled data point glyph:
 
-::: starfish
+::: gofish
 
 ```js
 const DataPoint = ({ value, fill = "steelblue" }) =>
@@ -110,7 +110,7 @@ const points = [
   { id: 3, x: 250, y: 80, value: 63 },
 ];
 
-gf.Chart(points)
+gf.chart(points)
   .flow(gf.scatter({ by: "id", x: "x", y: "y" }))
   .mark((d) => DataPoint({ value: d[0].value }))
   .render(root, { w: 350, h: 200 });

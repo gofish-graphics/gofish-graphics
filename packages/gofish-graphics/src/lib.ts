@@ -3,6 +3,11 @@
 // </gofish-wiki>
 
 // Main library exports
+import groupBy from "lodash/groupBy";
+import meanBy from "lodash/meanBy";
+import orderBy from "lodash/orderBy";
+import sumBy from "lodash/sumBy";
+
 export * from "./color";
 export * from "./path";
 export * from "./util";
@@ -10,6 +15,17 @@ export * from "./util";
 // Data utilities
 export { value } from "./ast/data";
 export { value as v } from "./ast/data";
+// `field` / `datum` / `literal` — explicit channel-value constructors
+// matching the Vega-Lite encoding trichotomy. `datum` is an alias for
+// `value`/`v` (data-driven, scaled); `field(name)` is an explicit field
+// accessor; `literal(x)` is an explicit constant.
+export { datum, field, literal } from "./ast/data";
+export type { FieldAccessor, LiteralValue } from "./ast/data";
+// Measure-provenance tagging: how a data transform (e.g. `bin`) declares that
+// its output columns are in a source field's units. The deserializer re-applies
+// it to RPC-returned rows (the array symbol can't cross the bridge).
+export { setMeasureProvenance } from "./ast/data";
+export type { MeasureProvenance } from "./ast/data";
 export { For as map } from "./ast/iterators/for";
 
 // Coordinate Transforms
@@ -27,6 +43,16 @@ export { wavy } from "./ast/coordinateTransforms/wavy";
 export { gofish as GoFish } from "./ast/gofish";
 export { GoFishSolid } from "./ast/GoFishSolid";
 
+// SVG export
+export {
+  serializeSVG,
+  gofishToSVG,
+  gofishToSVGElement,
+  saveSVGString,
+  gofishSave,
+} from "./ast/gofish";
+export type { GoFishRenderOptions, GoFishExportOptions } from "./ast/gofish";
+
 // Name / scope primitives
 export { createName } from "./ast/createName";
 export type { Token } from "./ast/createName";
@@ -36,11 +62,18 @@ export { createMark } from "./ast/withGoFish";
 // Data
 export { For } from "./ast/iterators/for";
 // export { groupBy } from "./ast/iterators/groupBy";
-export { groupBy, sumBy, orderBy, meanBy } from "lodash";
+export { groupBy, sumBy, orderBy, meanBy };
 export { bin } from "./ast/transforms";
 
 // Shapes
 export { ref } from "./ast/shapes/ref";
+
+// Datum projection — `pluck(ref, "species")` returns the full set of distinct
+// values for a field across a selected node's rows ("every possible value"),
+// the un-collapsed sibling of the `by: "field"` homogeneity collapse.
+// (`projectPath`/`splitKeyFn` stay module-internal — operators import them from
+// ./ast/datumProjection directly.)
+export { pluck } from "./ast/datumProjection";
 
 // Constraints
 export { Constraint } from "./ast/constraints";
@@ -50,6 +83,8 @@ export type {
   AlignConstraint,
   DistributeConstraint,
   DistributeOptions,
+  PositionConstraint,
+  PositionOptions,
   Axis,
   Alignment,
 } from "./ast/constraints";
@@ -64,7 +99,7 @@ export { spreadX, spreadX as SpreadX } from "./ast/graphicalOperators/spreadX";
 export { spreadY, spreadY as SpreadY } from "./ast/graphicalOperators/spreadY";
 export { layer as Layer } from "./ast/graphicalOperators/layer";
 export { connect, connect as Connect } from "./ast/graphicalOperators/connect";
-export { treemap, treemap as Treemap } from "./ast/graphicalOperators/treemap";
+export { treemap, Treemap } from "./ast/graphicalOperators/treemap";
 export {
   connectX,
   connectX as ConnectX,
@@ -82,12 +117,15 @@ export {
 } from "./ast/graphicalOperators/position";
 export { arrow, arrow as Arrow } from "./ast/graphicalOperators/arrow";
 export { Table, table } from "./ast/graphicalOperators/table";
+export { cut, cut as Cut, cutMark } from "./ast/graphicalOperators/cut";
+export { offset, offset as Offset } from "./ast/graphicalOperators/offset";
+// Region-compositing node operators (Figma-inspired names, #196/#202). `over`
+// is intentionally not exported — it is conceptually `layer` (#196).
 export {
-  over as Over,
-  inside as In,
-  xor as Xor,
-  out as Out,
-  atop as Atop,
+  intersect as Intersect,
+  exclude as Exclude,
+  subtract as Subtract,
+  paint as Paint,
   mask as Mask,
 } from "./ast/graphicalOperators/porterDuff";
 
@@ -100,11 +138,12 @@ export { image } from "./ast/shapes/image";
 
 /* Chart Syntax */
 export {
-  chart as Chart,
+  chart,
   derive,
+  resolve,
   rect,
   circle,
-  select,
+  selectAll,
   line,
   blank,
   area,
@@ -112,12 +151,16 @@ export {
   repeat,
   log,
   layer,
-  atop,
-  over,
-  inside,
-  xor,
-  out,
+  paint,
+  intersect,
+  exclude,
+  subtract,
   mask,
+  // `over` is NOT public API — use `layer` (#196). It is re-exported only so
+  // the IR test harness can key its `"over"` wire-type combinator factory off
+  // the package's public entry instead of deep-importing internals. The
+  // deserializer's registry.ts maps the "over" wire type to this same factory.
+  over,
 } from "./ast/marks/chart";
 export type { ConstrainableMark } from "./ast/marks/chart";
 export type {
@@ -128,6 +171,10 @@ export type {
 } from "./ast/marks/chart";
 // Side-effect import: attaches .facet() / .stack() to ChartBuilder.
 import "./ast/marks/builderMixins";
+
+// Frontend-IR deserializer — re-exported as a namespace so the symbol set
+// stays scoped (`Serialize.mapMark`, etc.).
+export * as Serialize from "./serialize";
 export { palette, gradient, assignGradientColor } from "./ast/colorSchemes";
 export type {
   ColorConfig,

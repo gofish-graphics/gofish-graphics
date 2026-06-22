@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
-import { Chart, table, rect, gradient } from "../../src/lib";
+import { chart, table, rect, gradient } from "../../src/lib";
 
 const meta: Meta = {
   title: "Forward Syntax V3/Heatmap",
@@ -40,18 +40,25 @@ const heatmapData = days.flatMap((day, di) =>
 
 export const Default: StoryObj<Args> = {
   args: { w: 600, h: 400 },
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "Activity Heatmap",
+      description: "A day-by-hour grid of activity values where each cell is shaded along a yellow-to-red intensity gradient.",
+    },
+  },
   render: (args: Args) => {
     const container = initializeContainer();
 
-    Chart(heatmapData, {
+    chart(heatmapData, {
       color: gradient(["#ffffcc", "#fd8d3c", "#bd0026"]),
+      axes: true,
     })
       .flow(table({ by: { x: "hour", y: "day" },  spacing: 4 }))
       .mark(rect({ fill: "value" }))
       .render(container, {
         w: args.w,
         h: args.h,
-        axes: true,
       });
 
     return container;

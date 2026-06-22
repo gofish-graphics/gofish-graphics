@@ -19,6 +19,7 @@ import {
 } from "fs";
 import { join, dirname, relative } from "path";
 import { normalizeDom } from "./normalize-dom.js";
+import { mapJsToPython } from "./path-mapping.js";
 
 // ---------------------------------------------------------------------------
 // Config
@@ -96,6 +97,30 @@ function discoverPythonStories(): PythonStory[] {
   return stories;
 }
 
+/**
+ * Python files (relative to TESTS_DIR) whose JS source story is **file-level
+ * exempt** in `.python-sync-exempt`. A Python port may still exist and be
+ * committed (e.g. the ViolinPlot scipy port, whose KDE intentionally diverges
+ * from the JS `fast-kde` baseline), but an exempt story is excluded from the
+ * byte-parity gate — so we skip capturing it rather than emit a snapshot that
+ * `compare-python` would (correctly) flag as a mismatch.
+ */
+function loadExemptPythonFiles(): Set<string> {
+  const exemptFile = join(TESTS_DIR, ".python-sync-exempt");
+  const exempt = new Set<string>();
+  if (!existsSync(exemptFile)) return exempt;
+  for (const raw of readFileSync(exemptFile, "utf-8").split("\n")) {
+    const line = raw.trim();
+    if (!line || line.startsWith("#")) continue;
+    // Per-export exemptions (`file.tsx::Export`) don't exempt the whole file.
+    if (line.includes("::")) continue;
+    // mapJsToPython returns a path under `tests/`; story.file is relative to
+    // TESTS_DIR, so strip the leading `tests/` segment to match.
+    exempt.add(mapJsToPython(line).replace(/^tests\//, ""));
+  }
+  return exempt;
+}
+
 // ---------------------------------------------------------------------------
 // Extract IR from Python story (by calling Python)
 // ---------------------------------------------------------------------------
@@ -106,6 +131,10 @@ type ChartIR = {
   options: any;
   data: any;
   zOrder?: number | null;
+  connect?: any;
+  // Set when a chart is layered via `Layer([chart.name(...), ...])` so a
+  // `.constrain(...)` callback can reference it by name.
+  name?: string | any | null;
 };
 
 type IRResult =
@@ -118,6 +147,8 @@ type IRResult =
       charts: ChartIR[];
       options: any;
       deriveIds: string[];
+      constraints?: any[];
+      builder?: boolean;
     }
   | {
       kind: "raw-mark";
@@ -171,6 +202,8 @@ async function loadStory(story: PythonStory): Promise<IRResult> {
       charts: json.charts,
       options: json.options ?? {},
       deriveIds: json.deriveIds ?? [],
+      constraints: json.constraints,
+      builder: json.builder,
     };
   }
   if (json && json._kind === "raw-mark") {
@@ -288,6 +321,8 @@ async function captureStory(
       type: "layer",
       charts: ir.charts,
       options: ir.options,
+      constraints: ir.constraints,
+      builder: ir.builder,
       deriveServerUrl,
     };
   } else if (ir.kind === "raw-mark") {
@@ -303,6 +338,7 @@ async function captureStory(
       operators: ir.operators,
       mark: ir.mark,
       options: ir.options,
+      connect: ir.connect ?? null,
       deriveServerUrl,
     };
   }
@@ -316,12 +352,26 @@ async function captureStory(
     window.__renderChart__(s);
   }, spec);
 
-  // Wait for render completion. Short timeout — a render that takes more
-  // than a few seconds in CI is almost always silently broken (e.g. a
-  // missing derive lambda leaving the chart at zero size).
-  await page.waitForFunction(() => window.__GOFISH_RENDER_COMPLETE__ === true, {
-    timeout: 8_000,
-  });
+  // Wait for render completion. Most charts resolve quickly; heavy unit-dot
+  // treemaps can paint thousands of marks while the render promise is still
+  // settling, so fall back to waiting for visible SVG output.
+  try {
+    await page.waitForFunction(
+      () => window.__GOFISH_RENDER_COMPLETE__ === true,
+      { timeout: 8_000 }
+    );
+  } catch {
+    await page.waitForFunction(
+      () => {
+        const root = document.getElementById("gofish-harness-root");
+        return (
+          (root?.querySelectorAll("ellipse, circle, rect, path, line")
+            ?.length ?? 0) > 0
+        );
+      },
+      { timeout: 40_000 }
+    );
+  }
 
   // Check for errors
   const error = await page.evaluate(() => window.__GOFISH_RENDER_ERROR__);
@@ -358,18 +408,33 @@ async function captureStory(
 async function main() {
   console.log("=== Capturing Python DOM snapshots ===\n");
 
-  const stories = discoverPythonStories();
+  // Optional substring filter (like `capture-one` on the JS side):
+  //   pnpm capture-python "marginal"
+  // matches against the story id (e.g. seaborn/marginal-histogram--default).
+  const filter = process.argv[2]?.toLowerCase();
+
+  let stories = discoverPythonStories();
+  if (filter) {
+    stories = stories.filter((s) => s.path.toLowerCase().includes(filter));
+    console.log(`Filter "${filter}" matched ${stories.length} story(ies)\n`);
+  }
   if (stories.length === 0) {
     console.log("No Python stories found. Skipping.");
     return;
   }
   console.log(`Found ${stories.length} Python stories\n`);
 
+  const exemptPythonFiles = loadExemptPythonFiles();
+
   // Start servers
   const deriveProc = startDeriveServer();
   const harnessProc = startHarnessServer();
 
   let browser: Browser | undefined;
+
+  // Uncaught in-page errors for the story currently being captured; cleared
+  // per story, checked after captureStory (see the pageerror listener).
+  const pageErrors: string[] = [];
 
   // Hoisted to function scope so the outer `finally` (and the
   // `flushCaptureResults` helper it relies on) can persist whatever
@@ -419,11 +484,40 @@ async function main() {
       viewport: { width: 1280, height: 720 },
     });
     const page = await context.newPage();
+    // Surface in-page failures in the capture log AND fail the story — an
+    // uncaught exception thrown from an async render microtask escapes the
+    // harness's try/catch (so __GOFISH_RENDER_ERROR__ never gets set), and
+    // the story would otherwise "capture OK" with a Loading/blank DOM.
+    page.on("pageerror", (err) => {
+      console.log(`    [pageerror] ${err.message}`);
+      pageErrors.push(err.message);
+    });
+    page.on("console", (msg) => {
+      if (msg.type() === "error" || msg.type() === "warning") {
+        console.log(`    [console.${msg.type()}] ${msg.text()}`);
+      }
+    });
 
     for (const story of stories) {
       process.stdout.write(
         `  ${story.module}::${story.function} → ${story.path} ... `
       );
+
+      // Skip stories whose JS source is file-level parity-exempt — the port
+      // is intentionally not byte-identical (e.g. ViolinPlot's scipy KDE).
+      if (exemptPythonFiles.has(story.file)) {
+        console.log("SKIP (JS story is parity-exempt)");
+        skipped++;
+        const reason = "JS story is parity-exempt (.python-sync-exempt)";
+        skips.push({ story: `${story.module}::${story.function}`, reason });
+        skippedRecords.push({
+          id: story.path,
+          story: `${story.module}::${story.function}`,
+          reason,
+        });
+        flushCaptureResults();
+        continue;
+      }
 
       const ir = await loadStory(story);
       if (ir.kind === "layer-unsupported") {
@@ -461,12 +555,16 @@ async function main() {
       }
 
       try {
+        pageErrors.length = 0;
         const { dom, screenshot } = await captureStory(
           page,
           `http://localhost:${HARNESS_PORT}`,
           story,
           ir
         );
+        if (pageErrors.length > 0) {
+          throw new Error(`uncaught page error: ${pageErrors.join(" | ")}`);
+        }
         const normalized = normalizeDom(dom);
 
         const domPath = join(TMP_DIR, `${story.path}.html`);

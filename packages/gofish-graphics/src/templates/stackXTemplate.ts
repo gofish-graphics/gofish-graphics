@@ -15,7 +15,7 @@ export const stackXTemplate = (
     mode?: "edge" | "center";
     reverse?: boolean;
   } & FancyDims & { groupBy?: { field: string; sort?: string[] } },
-  children: (d: any, i?: string | number) => GoFishAST
+  children: (d: any, i?: string | number) => any
 ) =>
   stackX(
     options,

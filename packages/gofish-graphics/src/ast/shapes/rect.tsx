@@ -2,7 +2,7 @@
 // @wiki Overview — /internals/layout/passes
 // </gofish-wiki>
 
-import { color6, color6_old } from "../../color";
+import { color6, color6_old, resolveColorChannel } from "../../color";
 import { path, Path, pathToSVGPath, segment, transformPath } from "../../path";
 import { GoFishNode } from "../_node";
 import { GoFishAST } from "../_ast";
@@ -20,6 +20,7 @@ import {
 } from "../data";
 import {
   Dimensions,
+  displayDims as displayDimsOf,
   elaborateDims,
   FancyDims,
   FancySize,
@@ -36,9 +37,11 @@ import {
   SIZE,
   UNDEFINED,
   UnderlyingSpace,
+  forgetOnConflict,
 } from "../underlyingSpace";
 import { interval } from "../../util/interval";
 import { createMark } from "../withGoFish";
+import { attachCut } from "../graphicalOperators/cut";
 
 const computeIntrinsicSize = (
   input: MaybeValue<number> | undefined
@@ -130,7 +133,10 @@ export const Rect = ({
         ): UnderlyingSpace => {
           const d = dims[axis];
           if (isValue(d.min) && isValue(d.max)) {
-            return POSITION(interval(getValue(d.min)!, getValue(d.max)!));
+            return POSITION(
+              interval(getValue(d.min)!, getValue(d.max)!),
+              forgetOnConflict(getMeasure(d.min), getMeasure(d.max))
+            );
           }
           if (!isValue(d.min) && !isValue(d.size)) {
             // Nothing data-driven on this axis. Literal pixel sizes are
@@ -139,16 +145,16 @@ export const Rect = ({
             return UNDEFINED;
           }
           if (isAesthetic(d.min) && isValue(d.size)) {
-            return DIFFERENCE(getValue(d.size)!);
+            return DIFFERENCE(getValue(d.size)!, getMeasure(d.size));
           }
           if (!isValue(d.min) && isValue(d.size)) {
             // No data position; data-driven size → SIZE with Monotonic.
-            return SIZE(axisDomain);
+            return SIZE(axisDomain, getMeasure(d.size));
           }
           // has position (data-driven), maybe with literal/no size → POSITION.
           const min = isValue(d.min) ? getValue(d.min)! : 0;
           const size = isValue(d.size) ? getValue(d.size)! : 0;
-          return POSITION(interval(min, min + size));
+          return POSITION(interval(min, min + size), getMeasure(d.min));
         };
 
         return [resolveAxis(0, wDomain), resolveAxis(1, hDomain)];
@@ -166,16 +172,20 @@ export const Rect = ({
             posScales?.[0]!,
             undefined
           );
-          w = (xMax ?? 0) - (x ?? 0);
+          // posScales[0]! above guarantees a defined scale, so
+          // computeAesthetic returns a number here.
+          w = xMax! - x!;
         } else if (isValue(dims[0].min) && isValue(dims[0].size)) {
           // If posScales for x exists, scale min and min+size, then subtract
           const min = x;
           const max = computeAesthetic(
             value(getValue(dims[0].min)! + getValue(dims[0].size)!),
-            posScales[0],
+            posScales[0]!,
             undefined
           );
-          w = max - min;
+          // Same invariant as the min/max branch: posScales[0]! above
+          // guarantees a defined scale.
+          w = max! - min!;
         } else if (isValue(dims[0].size) && posScales?.[0]) {
           // If we have size but no min, and posScales exists, use position scale
           // Treat min as 0 (baseline) and compute width from position scale
@@ -200,16 +210,20 @@ export const Rect = ({
             posScales?.[1]!,
             undefined
           );
-          h = (yMax ?? 0) - (y ?? 0);
+          // posScales[1]! above guarantees a defined scale, so
+          // computeAesthetic returns a number here.
+          h = yMax! - y!;
         } else if (isValue(dims[1].min) && isValue(dims[1].size)) {
           // If posScales for y exists, scale min and min+size, then subtract
           const min = y;
           const max = computeAesthetic(
             value(getValue(dims[1].min)! + getValue(dims[1].size)!),
-            posScales[1],
+            posScales[1]!,
             undefined
           );
-          h = max - min;
+          // Same invariant as the min/max branch: posScales[1]! above
+          // guarantees a defined scale.
+          h = max! - min!;
         } else if (isValue(dims[1].size) && posScales?.[1]) {
           // If we have size but no min, and posScales exists, use position scale
           // Treat min as 0 (baseline) and compute height from position scale
@@ -241,28 +255,30 @@ export const Rect = ({
           }
         }
 
-        const result = {
-          intrinsicDims: [
-            {
-              min: w >= 0 ? 0 : w,
-              size: w,
-              center: w / 2,
-              max: w >= 0 ? w : 0,
-              embedded: dims[0].embedded,
-            },
-            {
-              min: h >= 0 ? 0 : h,
-              size: h,
-              center: h / 2,
-              max: h >= 0 ? h : 0,
-              embedded: dims[1].embedded,
-            },
-          ],
+        return {
+          intrinsicDims: {
+            dims: [
+              {
+                // Store the box canonically: true min + unsigned extent. A
+                // negative bar grows downward, so its min is the negative
+                // endpoint and its size is the magnitude. Every derivation site
+                // (`localAnchorPoint`, `displayDims`, the `dims` getters) then
+                // reads a non-negative `size` and never needs `Math.abs`.
+                min: Math.min(0, w),
+                size: Math.abs(w),
+                embedded: dims[0].embedded,
+              },
+              {
+                min: Math.min(0, h),
+                size: Math.abs(h),
+                embedded: dims[1].embedded,
+              },
+            ],
+          },
           transform: {
             translate: [x, y],
           },
         };
-        return result;
       },
       render: (
         {
@@ -284,49 +300,15 @@ export const Rect = ({
         const isXEmbedded = intrinsicDims![0].embedded;
         const isYEmbedded = intrinsicDims![1].embedded;
 
-        // combine intrinsicDims with transform
-        const displayDims = [
-          {
-            min:
-              (transform?.translate?.[0] ?? 0) + (intrinsicDims?.[0]?.min ?? 0),
-            size: intrinsicDims?.[0]?.size ?? 0,
-            center:
-              (transform?.translate?.[0] ?? 0) +
-              (intrinsicDims?.[0]?.center ?? 0),
-            max:
-              (transform?.translate?.[0] ?? 0) + (intrinsicDims?.[0]?.max ?? 0),
-          },
-          {
-            min:
-              (transform?.translate?.[1] ?? 0) + (intrinsicDims?.[1]?.min ?? 0),
-            size: intrinsicDims?.[1]?.size ?? 0,
-            center:
-              (transform?.translate?.[1] ?? 0) +
-              (intrinsicDims?.[1]?.center ?? 0),
-            max:
-              (transform?.translate?.[1] ?? 0) + (intrinsicDims?.[1]?.max ?? 0),
-          },
-        ];
+        // combine intrinsicDims with transform (center/max derived from min+size)
+        const displayDims = displayDimsOf(intrinsicDims, transform);
 
         const scaleContext = node.getRenderSession().scaleContext;
-        const unit = scaleContext?.unit;
-        const unitColorScale = unit && "color" in unit ? unit.color : undefined;
+        const unitScale = scaleContext?.unit;
         const originalFill = fill;
-        fill = isValue(fill)
-          ? unitColorScale
-            ? (unitColorScale.get(getValue(fill)) ?? getValue(fill))
-            : getValue(fill)
-          : fill;
-
-        stroke = isValue(stroke)
-          ? unitColorScale
-            ? (unitColorScale.get(getValue(stroke)) ?? getValue(stroke))
-            : getValue(stroke)
-          : stroke;
-
-        const resolvedFill = fill as string | undefined;
+        const resolvedFill = resolveColorChannel(fill, unitScale);
         const resolvedStroke =
-          (stroke as string | undefined) ?? resolvedFill ?? "black";
+          resolveColorChannel(stroke, unitScale) ?? resolvedFill ?? "black";
 
         const labelText =
           label && originalFill && isValue(originalFill)
@@ -336,8 +318,8 @@ export const Rect = ({
         // Both dimensions are aesthetic - render as transformed point
         if (!isXEmbedded && !isYEmbedded) {
           const center: [number, number] = [
-            (displayDims[0].min ?? 0) + (displayDims[0].size ?? 0) / 2,
-            (displayDims[1].min ?? 0) + (displayDims[1].size ?? 0) / 2,
+            displayDims[0].center ?? 0,
+            displayDims[1].center ?? 0,
           ];
           const [transformedX, transformedY] = space.transform(center);
           const width = displayDims[0].size ?? 0;
@@ -383,30 +365,24 @@ export const Rect = ({
           const thickness = displayDims[aestheticAxis].size ?? 0;
 
           // Calculate midpoint of aesthetic axis
-          const aestheticMid =
-            (displayDims[aestheticAxis].min ?? 0) +
-            (displayDims[aestheticAxis].size ?? 0) / 2;
+          const aestheticMid = displayDims[aestheticAxis].center ?? 0;
 
           // For linear spaces, we can render a simple line
           if (space.type === "linear") {
-            const baseX = isXEmbedded
+            // `max - min` is the unsigned extent (size), so width/height are
+            // already non-negative and x/y are the box's true min corner.
+            const x = isXEmbedded
               ? (displayDims[0].min ?? 0)
               : aestheticMid - thickness / 2;
-            const baseY = isXEmbedded
+            const y = isXEmbedded
               ? aestheticMid - thickness / 2
               : (displayDims[1].min ?? 0);
-            const rawWidth = isXEmbedded
+            const width = isXEmbedded
               ? (displayDims[0].max ?? 0) - (displayDims[0].min ?? 0)
               : thickness;
-            const rawHeight = isXEmbedded
+            const height = isXEmbedded
               ? thickness
               : (displayDims[1].max ?? 0) - (displayDims[1].min ?? 0);
-
-            // Handle negative dimensions by using absolute values and adjusting positions
-            const width = Math.abs(rawWidth);
-            const height = Math.abs(rawHeight);
-            const x = rawWidth < 0 ? baseX + rawWidth : baseX;
-            const y = rawHeight < 0 ? baseY + rawHeight : baseY;
 
             const center: [number, number] = [x + width / 2, y + height / 2];
             const [transformedX, transformedY] = space.transform(center);
@@ -481,16 +457,12 @@ export const Rect = ({
 
         // If we're in a linear space, render as a rect element
         if (space.type === "linear") {
-          const baseX = displayDims[0].min ?? 0;
-          const baseY = displayDims[1].min ?? 0;
-          const rawWidth = (displayDims[0].max ?? 0) - baseX;
-          const rawHeight = (displayDims[1].max ?? 0) - baseY;
-
-          // Handle negative dimensions by using absolute values and adjusting positions
-          const width = Math.abs(rawWidth);
-          const height = Math.abs(rawHeight);
-          const x = rawWidth < 0 ? baseX + rawWidth : baseX;
-          const y = rawHeight < 0 ? baseY + rawHeight : baseY;
+          // `max - min` is the unsigned extent, so the min corner and size are
+          // already correct without sign adjustment.
+          const x = displayDims[0].min ?? 0;
+          const y = displayDims[1].min ?? 0;
+          const width = (displayDims[0].max ?? 0) - x;
+          const height = (displayDims[1].max ?? 0) - y;
 
           const center: [number, number] = [x + width / 2, y + height / 2];
           const [transformedX, transformedY] = space.transform(center);
@@ -557,17 +529,24 @@ export const Rect = ({
   );
 };
 
-export const rect = createMark(Rect, {
-  w: "size",
-  h: "size",
-  x: "pos",
-  y: "pos",
-  l: "pos",
-  r: "pos",
-  t: "pos",
-  b: "pos",
-  cx: "pos",
-  cy: "pos",
-  fill: "color",
-  stroke: "color",
-});
+const baseRect = createMark(
+  Rect,
+  {
+    w: "size",
+    h: "size",
+    x: "pos",
+    y: "pos",
+    l: "pos",
+    r: "pos",
+    t: "pos",
+    b: "pos",
+    cx: "pos",
+    cy: "pos",
+    fill: "color",
+    stroke: "color",
+  },
+  "rect"
+);
+
+export const rect: typeof baseRect = ((opts: any) =>
+  attachCut(baseRect(opts))) as typeof baseRect;
