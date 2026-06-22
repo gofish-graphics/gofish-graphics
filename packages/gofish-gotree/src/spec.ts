@@ -12,6 +12,18 @@ export type Alignment = "start" | "middle" | "end" | "baseline";
  */
 export type Combiner = (children: any[]) => any;
 
+/**
+ * A depth-indexed combiner: picks a `Combiner` based on the depth of the subtree
+ * being assembled. Used to express layouts that alternate their template by level
+ * (H-tree, HV-drawing, slice-and-dice treemaps). Build one with `alternate(...)`
+ * or `perDepth(...)`. It's a branded object (not a bare `(depth) => Combiner`)
+ * so it stays distinguishable from a plain `Combiner` — both are unary functions.
+ */
+export type DepthCombiner = { atDepth: (depth: number) => Combiner };
+
+/** Either a plain combiner (applied at every depth) or a depth-indexed one. */
+export type CombinerSpec = Combiner | DepthCombiner;
+
 export type HierarchyDatum = {
   data: any;
   depth: number;
@@ -37,10 +49,10 @@ export type LinkSpec =
 export type GoTreeSpec = {
   node?: NodeFactory;
   link?: LinkSpec;
-  /** Combiner for parent ↔ children-group. Called with `[parentMark, childGroup]`. */
-  parentChild?: Combiner;
-  /** Combiner for the sibling group. Called with the full children list. */
-  sibling?: Combiner;
+  /** Combiner for parent ↔ children-group. Called with `[parentMark, childGroup]`. May be depth-indexed. */
+  parentChild?: CombinerSpec;
+  /** Combiner for the sibling group. Called with the full children list. May be depth-indexed. */
+  sibling?: CombinerSpec;
   mode?: "topDown" | "bottomUp";
   sortBy?: (d: HierarchyDatum) => number;
   coord?: unknown;

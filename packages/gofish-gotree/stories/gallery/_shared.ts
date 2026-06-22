@@ -2,9 +2,9 @@
 // example from https://github.com/BIT-VIS/gotree (gallery/<Name>/dsl.json) onto
 // a GoFish `combine({ x, y })` spec. Relation → combine kind:
 //   include → nest, juxtapose/flatten → distribute, within/align → align.
-import { tree, combine } from "../../src";
+import { tree, combine, alternate, perDepth } from "../../src";
 
-export { tree, combine };
+export { tree, combine, alternate, perDepth };
 export type { CombineAxis } from "../../src";
 
 // A moderate sample tree (3 levels, uneven) with leaf `value`s so value-driven

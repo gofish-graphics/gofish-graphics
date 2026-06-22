@@ -1,5 +1,22 @@
 import { spread as gfSpread, Layer, Constraint } from "gofish-graphics";
-import type { Combiner, Alignment } from "./spec";
+import type { Combiner, DepthCombiner, Alignment } from "./spec";
+
+/**
+ * `perDepth` builds a depth-indexed combiner: `fn(depth)` returns the `Combiner`
+ * to use for the subtree at that depth. Use it (in a `parentChild`/`sibling`
+ * slot) for layouts that vary their template by level.
+ *
+ * `alternate([a, b, ...])` is the common parity case — it cycles through the
+ * combiners by `depth % length` (e.g. swap the spread axis every level for an
+ * H-tree, or slice vs. dice every level for a treemap).
+ */
+export const perDepth = (fn: (depth: number) => Combiner): DepthCombiner => ({
+  atDepth: fn,
+});
+
+export const alternate = (combiners: Combiner[]): DepthCombiner => ({
+  atDepth: (depth: number) => combiners[depth % combiners.length],
+});
 
 export type SpreadOptions = {
   dir: "x" | "y";

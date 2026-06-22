@@ -1,27 +1,25 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { rect } from "gofish-graphics";
-import { combine, byDepth, mount } from "./_shared";
+import { combine, alternate, byDepth, mount } from "./_shared";
 
 // GoTree gallery port — NestedPieTree (CARTESIAN nested-rectangle form).
 //
 // The original gallery entry is a POLAR nested-pie (DiceLayout/SliceLayout under
 // a polar coordinate system); that radial version is covered separately by the
 // `NestedPietree` story in Tree.stories.tsx. This port targets the cartesian
-// DiceLayout (dsl2.json) — a nested-rectangle treemap where every parent
-// rectangle CONTAINS its children on both axes.
+// nested-rectangle treemap where every parent rectangle CONTAINS its children on
+// both axes.
 //
-// dsl (DiceLayout): mode top-down, cartesian.
-//   X.Root  = include (pad 0.04)   X.Subtree = align
-//   Y.Root  = include (pad 0.04)   Y.Subtree = flatten (margin 0.15)
-// Root relations drive parentChild, Subtree relations drive sibling:
-//   parentChild = combine({ x: nest, y: nest })  → parent box wraps its subtree
-//                 on BOTH axes (include → nest).
-//   sibling     = combine({ x: align, y: distribute })  → siblings stack on y
-//                 (flatten → distribute) and share an x-center (align → align
-//                 middle).
-// nest on both axes ⇒ internal/parent rects are UNSIZED on both axes (they grow
-// to wrap their subtree); leaves carry the size, driven by the datum value
-// (DiceLayout: SubtreeHeight = value). Color by depth.
+// The gallery example actually ALTERNATES two templates by depth: DiceLayout
+// (dsl2.json) and SliceLayout (dsl1.json) swap the subdivision axis every level.
+//   DiceLayout (dice): X.Subtree = align, Y.Subtree = flatten → siblings stack
+//                      vertically (distribute y, align x).
+//   SliceLayout (slice): X.Subtree = flatten, Y.Subtree = align → siblings stack
+//                      horizontally (distribute x, align y).
+// Both share Root = include (pad) on both axes, so parentChild nests on both axes
+// at every level (parent box wraps its subtree). Expressing sibling as
+// `alternate([dice, slice])` makes the subdivision direction swap slice↔dice at
+// each depth — the cartesian analogue of the radial slice/dice nesting.
 const meta: Meta = { title: "GoTree / Gallery / NestedPieTree" };
 export default meta;
 
@@ -37,22 +35,32 @@ const node = (d: any) =>
       })
     : rect({ fill: byDepth()(d), stroke: "#08306b", strokeWidth: 1 });
 
+const P = 6; // nest padding (Root include pad)
+const G = 8; // sibling distribute spacing (Subtree flatten margin)
+
+// dice: siblings stack vertically (distribute y), sharing an x-center.
+const dice = combine({
+  x: { kind: "align", alignment: "middle" },
+  y: { kind: "distribute", spacing: G },
+});
+// slice: siblings stack horizontally (distribute x), sharing a y-center.
+const slice = combine({
+  x: { kind: "distribute", spacing: G },
+  y: { kind: "align", alignment: "middle" },
+});
+
 export const NestedPieTree: StoryObj = {
   render: () =>
     mount({
       node,
       link: "none",
-      // include → nest on both axes: the parent rectangle wraps its subtree
-      // group horizontally and vertically with a small padding.
+      // include → nest on both axes at every level: the parent rectangle wraps
+      // its subtree group horizontally and vertically with a small padding.
       parentChild: combine({
-        x: { kind: "nest", pad: 6 },
-        y: { kind: "nest", pad: 6 },
+        x: { kind: "nest", pad: P },
+        y: { kind: "nest", pad: P },
       }),
-      // align → align(middle) on x; flatten → distribute on y (siblings
-      // stacked vertically, sharing an x-center).
-      sibling: combine({
-        x: { kind: "align", alignment: "middle" },
-        y: { kind: "distribute", spacing: 8 },
-      }),
+      // Alternate the subdivision axis by depth: slice ↔ dice every level.
+      sibling: alternate([slice, dice]),
     }),
 };

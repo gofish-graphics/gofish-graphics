@@ -9,31 +9,31 @@ stories under `stories/gallery/` (match = self-rated 1–5 vs the reference PNG)
 
 ## Cartesian (ported)
 
-| Example             | parentChild              | sibling                  | node      | link            | match | notes                                            |
-| ------------------- | ------------------------ | ------------------------ | --------- | --------------- | :---: | ------------------------------------------------ |
-| BeamTree            | (nest, nest)             | (distribute, align)      | rectangle | -               |  4/5  | neg y-pad overhang; full ver alternates by depth |
-| CascadedTreemap     | (nest, nest)             | (distribute, align)      | rectangle | -               |  4/5  | full ver alternates slice/dice by depth          |
-| ElasticHierarchy    | (nest, nest)             | (distribute, align)      | rectangle | -               |  4/5  |                                                  |
-| GardenLayout        | (align, distribute)      | (distribute, align)      | circle    | orthogonal      |  4/5  | orthogonal links→linear                          |
-| HTreeLayout         | (align, align)           | (distribute, align)      | circle    | straight        |  2/5  | H-fractal needs per-depth alternating combiner   |
-| HVDrawing           | (align, distribute)      | (align, distribute)      | circle    | straight        |  2/5  | needs per-depth alternating combiner             |
-| IndentedTree        | (align, distribute)      | (align, distribute)      | rectangle | -               |  4/5  | vertical outline orientation                     |
-| Jewelry             | (nest, align)            | (distribute, align)      | circle    | straight        |  3/5  | circle can't grow bbox on 1 nest axis→rect       |
-| NestedPieTree       | (nest, nest)             | (align, distribute)      | rectangle | -               |  4/5  | cartesian dice form                              |
-| NodeLinkTree        | (align, distribute)      | (distribute, align)      | circle    | straight        |  5/5  |                                                  |
-| OrthogonalTree      | (distribute, distribute) | (distribute, distribute) | circle    | curveStepBefore |  4/5  | step links→linear                                |
-| ReadableTreeLayout  | (align, distribute)      | (distribute, align)      | circle    | orthogonal      |  4/5  | orthogonal links→linear                          |
-| StairTree           | (distribute, nest)       | (distribute, distribute) | rectangle | -               |  4/5  | exemplar/template                                |
-| Treemap             | (nest, nest)             | (align, distribute)      | rectangle | -               |  4/5  |                                                  |
-| TreemapOval         | (nest, nest)             | (distribute, align)      | ellipse   | -               |  4/5  | full ver alternates slice/dice by depth          |
-| WeaveTree           | (distribute, align)      | (distribute, distribute) | circle    | curve           |  3/5  | curve links→linear                               |
-| arc-tree            | (distribute, align)      | (distribute, align)      | circle    | arccurve        |  3/5  | arc links→linear                                 |
-| barcodetree         | (distribute, nest)       | (distribute, align)      | rectangle | -               |  5/5  |                                                  |
-| cartesian-deep-tree | (nest, distribute)       | (distribute, align)      | circle    | curve           |  4/5  | curve links→linear                               |
-| cheops              | (nest, distribute)       | (distribute, align)      | triangle  | -               |  3/5  | needs triangle mark                              |
-| dendrogram          | (nest, distribute)       | (distribute, align)      | hidden    | curveStepAfter  |  4/5  | step/orthogonal links→linear; hidden nodes       |
-| iptp                | (distribute, distribute) | (distribute, align)      | rectangle | -               |  4/5  |                                                  |
-| treemap-slice       | (nest, nest)             | (distribute, align)      | rectangle | hidden          |  4/5  |                                                  |
+| Example             | parentChild              | sibling                    | node      | link            | match | notes                                                                 |
+| ------------------- | ------------------------ | -------------------------- | --------- | --------------- | :---: | --------------------------------------------------------------------- |
+| BeamTree            | (nest, nest)             | alternate(spreadX/spreadY) | rectangle | -               |  4/5  | nested beams via alternate(); asymmetric overhang pad not expressible |
+| CascadedTreemap     | (nest, nest)             | alternate(dice/slice)      | rectangle | -               |  5/5  | alternating slice/dice via alternate()                                |
+| ElasticHierarchy    | (nest, nest)             | (distribute, align)        | rectangle | -               |  4/5  |                                                                       |
+| GardenLayout        | (align, distribute)      | (distribute, align)        | circle    | orthogonal      |  4/5  | orthogonal links→linear                                               |
+| HTreeLayout         | (align, align)           | alternate(spreadX/spreadY) | circle    | straight        |  5/5  | H-fractal via alternate()                                             |
+| HVDrawing           | alternate(H/V)           | alternate(H/V)             | circle    | straight        |  4/5  | per-depth axis swap via alternate()                                   |
+| IndentedTree        | (align, distribute)      | (align, distribute)        | rectangle | -               |  4/5  | vertical outline orientation                                          |
+| Jewelry             | (nest, align)            | (distribute, align)        | circle    | straight        |  3/5  | circle can't grow bbox on 1 nest axis→rect                            |
+| NestedPieTree       | (nest, nest)             | alternate(slice/dice)      | rectangle | -               |  5/5  | cartesian alternating slice/dice via alternate()                      |
+| NodeLinkTree        | (align, distribute)      | (distribute, align)        | circle    | straight        |  5/5  |                                                                       |
+| OrthogonalTree      | (distribute, distribute) | (distribute, distribute)   | circle    | curveStepBefore |  4/5  | step links→linear                                                     |
+| ReadableTreeLayout  | (align, distribute)      | (distribute, align)        | circle    | orthogonal      |  4/5  | orthogonal links→linear                                               |
+| StairTree           | (distribute, nest)       | (distribute, distribute)   | rectangle | -               |  4/5  | exemplar/template                                                     |
+| Treemap             | (nest, nest)             | alternate(dice/slice)      | rectangle | -               |  5/5  | alternating slice/dice via alternate()                                |
+| TreemapOval         | (nest, nest)             | alternate(slice/dice)      | ellipse   | -               |  5/5  | alternating slice/dice via alternate()                                |
+| WeaveTree           | (distribute, align)      | (distribute, distribute)   | circle    | curve           |  3/5  | curve links→linear                                                    |
+| arc-tree            | (distribute, align)      | (distribute, align)        | circle    | arccurve        |  3/5  | arc links→linear                                                      |
+| barcodetree         | (distribute, nest)       | (distribute, align)        | rectangle | -               |  5/5  |                                                                       |
+| cartesian-deep-tree | (nest, distribute)       | (distribute, align)        | circle    | curve           |  4/5  | curve links→linear                                                    |
+| cheops              | (nest, distribute)       | (distribute, align)        | triangle  | -               |  3/5  | needs triangle mark                                                   |
+| dendrogram          | (nest, distribute)       | (distribute, align)        | hidden    | curveStepAfter  |  4/5  | step/orthogonal links→linear; hidden nodes                            |
+| iptp                | (distribute, distribute) | (distribute, align)        | rectangle | -               |  4/5  |                                                                       |
+| treemap-slice       | (nest, nest)             | (distribute, align)        | rectangle | hidden          |  4/5  |                                                                       |
 
 ## Polar (spec only — not yet ported)
 
@@ -69,7 +69,7 @@ stories under `stories/gallery/` (match = self-rated 1–5 vs the reference PNG)
 
 These GoTree techniques can't be expressed with the current gofish-gotree API; ports note them inline as `// TODO`:
 
-1. **Per-depth alternating combiners.** `tree()` applies one `parentChild`/`sibling` at every depth, but several GoTree layouts alternate templates by depth parity: H-tree/HVDrawing (swap spread axis per level), and the recursive slice-and-dice treemaps (BeamTree, CascadedTreemap, TreemapOval). Needs a depth-aware combiner (e.g. `combine` accepting a `(depth) =>` form).
+1. ~~**Per-depth alternating combiners.**~~ **DONE.** `parentChild`/`sibling` now accept a depth-indexed combiner via `alternate([...])` / `perDepth(d => ...)` (resolved at each node's depth in `renderSubtree`). This unlocked the H-tree/HVDrawing axis-swap and the recursive slice-and-dice treemaps (Treemap, CascadedTreemap, TreemapOval, NestedPieTree, BeamTree). Remaining nuance: asymmetric per-side nest padding (BeamTree's overhang) still isn't expressible.
 2. **Non-linear links.** Only `linear` (and `bezier`) render today. Needed: `orthogonal` (GardenLayout, ReadableTreeLayout, OrthogonalTree step links), `curve` (WeaveTree, cartesian-deep-tree), `arc`/`arccurve` (arc-tree), `curveStep*` brackets (dendrogram).
 3. **More node shapes.** No `triangle` mark (cheops). Also `hidden` nodes are faked with a transparent zero-size rect.
 4. **Single-axis nest with point nodes.** `nest` grows a bbox; a `circle` can't grow on only one axis, so Jewelry/arc-style strings fall back to rounded rects.

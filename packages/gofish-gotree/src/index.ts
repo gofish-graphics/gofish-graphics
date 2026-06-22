@@ -1,5 +1,12 @@
 export { tree } from "./tree";
-export { spread, nest, distribute, combine } from "./helpers";
+export {
+  spread,
+  nest,
+  distribute,
+  combine,
+  perDepth,
+  alternate,
+} from "./helpers";
 export type {
   SpreadOptions,
   NestOptions,
@@ -14,6 +21,8 @@ export type {
   LinkOptions,
   HierarchyDatum,
   Combiner,
+  DepthCombiner,
+  CombinerSpec,
   Alignment,
   TreeData,
 } from "./spec";

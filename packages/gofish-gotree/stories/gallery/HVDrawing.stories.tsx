@@ -1,40 +1,39 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { circle } from "gofish-graphics";
-import { combine, byDepth, mount } from "./_shared";
+import { combine, alternate, byDepth, mount } from "./_shared";
 
-// GoTree gallery port — HVDrawing (HV / horizontal-vertical alternating tree).
-// dsl (dsl2.json): node=circle, link=straight, color=depth, mode=bottom-up.
-//   X: Subtree align/left, Root within/left   → x = align (alignment "left" → "start")
-//   Y: Subtree flatten,    Root juxtapose/-0.08 → y = distribute
-// Mapping rules: within/align → align ; juxtapose/flatten → distribute ;
-//   Alignment "left" → align "start". So:
-//   parentChild = combine({ x: align "start", y: distribute (Root juxtapose, margin -0.08) })
-//   sibling     = combine({ x: align "start", y: distribute (Subtree flatten) })
-// Both axes are decoupled: x just left-aligns every node, y carries the spread
-// (parent stacked above its subtree, siblings stacked below). Produces the
-// compact, left-aligned HV layout. order:"reverse" puts the parent at HIGH y
-// (top of screen, y-up) so the tree reads top-down.
+// GoTree gallery port — HVDrawing (horizontal/vertical alternating tree).
+// The original alternates two templates by depth (gallery dsl1 ⇄ dsl2, axes swapped):
+//   dsl1: X juxtapose/flatten, Y within/align  → spread on X, align on Y  ("H")
+//   dsl2: X within/align, Y juxtapose/flatten  → spread on Y, align on X  ("V")
+// Expressed with `alternate([H, V])` so every level swaps the spread axis —
+// THIS is what makes the HV drawing (a single fixed template collapses to a line).
 const meta: Meta = { title: "GoTree / Gallery / HVDrawing" };
 export default meta;
 
-// circle nodes, colored by depth (dark root → light leaves).
 const node = (d: any) =>
-  circle({ r: 9, fill: byDepth()(d), stroke: "#08306b", strokeWidth: 1 });
+  circle({ r: 7, fill: byDepth()(d), stroke: "#08306b", strokeWidth: 1 });
+
+const S = 34;
+// H: parent left of subtree, children in a row (spread x, centered y).
+const H = combine({
+  x: { kind: "distribute", spacing: S },
+  y: { kind: "align", alignment: "middle" },
+});
+// V: parent above subtree, children in a column (spread y, centered x).
+const V = combine({
+  x: { kind: "align", alignment: "middle" },
+  y: { kind: "distribute", spacing: S, order: "reverse" },
+});
 
 export const HVDrawing: StoryObj = {
   render: () =>
     mount({
       node,
-      // straight links → linear interpolation.
-      link: { interpolation: "linear", stroke: "#90a4ae", strokeWidth: 2 },
+      link: { interpolation: "linear", stroke: "#90a4ae", strokeWidth: 1.5 },
       mode: "bottomUp",
-      parentChild: combine({
-        x: { kind: "align", alignment: "start" },
-        y: { kind: "distribute", spacing: 8, order: "reverse" },
-      }),
-      sibling: combine({
-        x: { kind: "align", alignment: "start" },
-        y: { kind: "distribute", spacing: 8, order: "reverse" },
-      }),
+      // Both relations alternate in sync (resolved at the same node depth).
+      parentChild: alternate([H, V]),
+      sibling: alternate([H, V]),
     }),
 };

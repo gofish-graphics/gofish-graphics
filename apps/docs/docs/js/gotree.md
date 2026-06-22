@@ -78,8 +78,8 @@ tree(
 type GoTreeSpec = {
   node?: (d: HierarchyDatum) => Mark;
   link?: "none" | LinkOptions | ((s, t) => LinkOptions);
-  parentChild?: Combiner;
-  sibling?: Combiner;
+  parentChild?: CombinerSpec;
+  sibling?: CombinerSpec;
   mode?: "topDown" | "bottomUp";
   sortBy?: (d: HierarchyDatum) => number;
   coord?: CoordTransform;
@@ -87,6 +87,8 @@ type GoTreeSpec = {
 
 /** A function that takes children and returns a composed GoFish AST. */
 type Combiner = (children: any[]) => any;
+/** A plain combiner, or a depth-indexed one (see `alternate` / `perDepth`). */
+type CombinerSpec = Combiner | { atDepth: (depth: number) => Combiner };
 ```
 
 The spec slots take **callable values** — you write `spread(...)` or `nest(...)`
@@ -180,6 +182,55 @@ The whole gotree layout space is the product of these choices: `{align,
 distribute, nest}²` for `parentChild` × `{align, distribute}²` for `sibling`.
 The **GoTree → Constraint Matrix** story enumerates all 36; node-link, indented,
 icicle, and nested-box trees are each one point in it.
+
+#### `alternate([...])` / `perDepth(fn)` — depth-varying layout
+
+Some layouts change their template by **depth**: an H-tree swaps the spread axis
+every level, and a slice-and-dice treemap alternates slicing vertically vs.
+horizontally. A single combiner can't express that, so a `parentChild`/`sibling`
+slot also accepts a **depth-indexed** combiner:
+
+- `alternate([a, b, …])` — cycles the combiners by `depth % length`.
+- `perDepth(depth => combiner)` — the general form.
+
+`tree()` resolves it at each node's depth, so a level's `parentChild` and its
+children's `sibling` grouping stay in sync.
+
+```ts
+// Slice-and-dice treemap: parent always wraps its subtree (nest×nest),
+// while siblings alternate dicing (side-by-side) and slicing (stacked).
+const dice = combine({ x: "distribute", y: "align" });
+const slice = combine({ x: "align", y: "distribute" });
+
+tree(
+  {
+    node: (d) =>
+      rect({
+        /* leaf sized by d.data.value */
+      }),
+    parentChild: combine({ x: "nest", y: "nest" }),
+    sibling: alternate([dice, slice]),
+  },
+  data
+);
+```
+
+```ts
+// H-tree: parent centered, children spread on the alternating axis.
+const H = combine({ x: "distribute", y: "align" });
+const V = combine({ x: "align", y: "distribute" });
+tree(
+  {
+    node,
+    parentChild: combine({ x: "align", y: "align" }),
+    sibling: alternate([H, V]),
+  },
+  data
+);
+```
+
+A plain combiner is still accepted everywhere a depth-indexed one is — depth
+selection is opt-in.
 
 #### Custom combiners
 

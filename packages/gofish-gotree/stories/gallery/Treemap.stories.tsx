@@ -1,45 +1,52 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { rect } from "gofish-graphics";
-import { combine, byDepth, mount } from "./_shared";
+import { combine, alternate, byDepth, mount } from "./_shared";
 
-// GoTree gallery port — Treemap (gallery/Treemap/dsl2.json).
-// dsl: AxisIndependent, bottom-up.
-//   X: Root include (pad 0.16) / Subtree align       → pc nest x, sib align x
-//   Y: Root include (pad 0.03) / Subtree flatten 0.19 → pc nest y, sib distribute y
-//   parentChild = combine({ x: nest, y: nest })   — parent CONTAINS its subtree
-//   sibling     = combine({ x: align, y: distribute }) — siblings stack into vertical slices
-// A treemap: every parent rectangle wraps its children (nest on both axes);
-// siblings subdivide the parent — aligned to a common width on x, stacked on y
-// → horizontal slices. Leaf area is value-driven (h ∝ d.data.value).
+// GoTree gallery port — Treemap (gallery/Treemap/dsl1.json ⇄ dsl2.json).
+// The original alternates two templates by depth (axes swapped):
+//   dsl1: X flatten / Y align   → siblings stack side-by-side on X  (DICE)
+//   dsl2: X align  / Y flatten  → siblings stack on Y               (SLICE)
+// parentChild is CONSTANT nest×nest (every parent box wraps its subtree on both
+// axes); only the SIBLING subdivision alternates slice↔dice every level via
+// `alternate([dice, slice])`. That swap is the essence of a squarified-looking
+// treemap — it avoids the tall-thin-column look of a single fixed template.
 // Node = rectangle, link = none, color = depth (blue ramp, dark root → light leaf).
 const meta: Meta = { title: "GoTree / Gallery / Treemap" };
 export default meta;
 
-// Internal/parent nodes nest on BOTH axes, so they must be UNSIZED on both x
-// and y — the rect grows to wrap its subtree. Leaves are sized by data: width
-// fixed (siblings align to a shared x extent) and height proportional to value
-// so the treemap is area-proportional.
+// Internal/parent nodes nest on BOTH axes, so they must be UNSIZED on both x and
+// y — the rect grows to wrap its subtree. Leaves are sized by data so areas read
+// proportionally (height ∝ d.data.value).
 const node = (d: any) =>
   d.height === 0
     ? rect({ w: 92, h: 14 * d.data.value, fill: byDepth()(d) })
     : rect({ fill: byDepth()(d), stroke: "#08306b", strokeWidth: 1 });
+
+const P = 9; // parent→subtree pad (small, constant)
+const G = 9; // sibling spacing
+
+// DICE: siblings side-by-side on x, centered on y.
+const dice = combine({
+  x: { kind: "distribute", spacing: G },
+  y: { kind: "align", alignment: "middle" },
+});
+// SLICE: siblings stacked on y, centered on x.
+const slice = combine({
+  x: { kind: "align", alignment: "middle" },
+  y: { kind: "distribute", spacing: G },
+});
 
 export const Treemap: StoryObj = {
   render: () =>
     mount({
       node,
       link: "none",
-      // Root relation: parent box wraps its subtree on both axes.
-      // x pad larger (0.16 rel) than y pad (0.03 rel) per the dsl.
+      // Parent box wraps its subtree on both axes at every depth (constant).
       parentChild: combine({
-        x: { kind: "nest", pad: 9 },
-        y: { kind: "nest", pad: 2 },
+        x: { kind: "nest", pad: P },
+        y: { kind: "nest", pad: P },
       }),
-      // Subtree relation: siblings align to a common width (x) and stack
-      // vertically (y) with a flatten margin (0.19 rel).
-      sibling: combine({
-        x: { kind: "align", alignment: "middle" },
-        y: { kind: "distribute", spacing: 9 },
-      }),
+      // Siblings subdivide the parent, swapping dice↔slice every level.
+      sibling: alternate([dice, slice]),
     }),
 };

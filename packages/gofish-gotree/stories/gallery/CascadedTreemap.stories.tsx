@@ -1,33 +1,46 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { rect } from "gofish-graphics";
-import { combine, byDepth, mount } from "./_shared";
+import { combine, alternate, byDepth, mount } from "./_shared";
 
 // GoTree gallery port — CascadedTreemap.
-// dsl (SliceLayout): mode top-down, node=rectangle, link=none, color=depth.
-//   X.Root include (pad 0.02) / X.Subtree flatten (margin 0.19)
-//   Y.Root include (pad 0.04) / Y.Subtree align
-//   SubtreeWidth=value, SubtreeHeight=adaptive.
-// Mapped (include→nest, flatten→distribute, align→align):
-//   parentChild = combine({ x: nest, y: nest })   — children inset within parent
-//   sibling     = combine({ x: distribute, y: align(middle) })
-// A cascaded treemap: every parent rect wraps its children with a small
-// asymmetric pad, so each level adds a nested inset border (the "cascade").
-// nest on BOTH axes ⇒ internal nodes are UNSIZED on both axes (the parent box
-// grows to enclose its subtree); only LEAVES carry intrinsic size — width ∝
-// datum value (SubtreeWidth=value), height fixed (SubtreeHeight=adaptive).
+// The original cascades two alternating templates by depth (gallery dsl1 ⇄ dsl2,
+// axes swapped), mode top-down:
+//   dsl1 (DiceLayout): X align, Y flatten   → align x, distribute y  ("slice")
+//   dsl2 (SliceLayout): X flatten, Y align  → distribute x, align y  ("dice")
+// Expressed with `alternate([dice, slice])` so subdivision swaps slice↔dice
+// every level — THIS is the cascade: each depth subdivides on the opposite axis.
+//
+// parentChild = nest on BOTH axes (constant per depth) ⇒ internal nodes are
+// UNSIZED on both axes (the parent box grows to enclose its subtree). A small
+// nest pad adds a nested inset border at every level (the visible "cascade").
+// Only LEAVES carry intrinsic size, driven by the datum value.
 const meta: Meta = { title: "GoTree / Gallery / CascadedTreemap" };
 export default meta;
 
 const node = (d: any) =>
   d.height === 0
     ? rect({
-        w: 22 + d.data.value * 10,
-        h: 300,
+        w: 18 + d.data.value * 10,
+        h: 18 + d.data.value * 10,
         fill: byDepth()(d),
         stroke: "#08306b",
         strokeWidth: 1,
       })
     : rect({ fill: byDepth()(d), stroke: "#08306b", strokeWidth: 1 });
+
+const P = 6; // small nest pad → visible cascade inset border per level
+const G = 8; // sibling spacing
+
+// dice: siblings spread on X, share a vertical center.
+const dice = combine({
+  x: { kind: "distribute", spacing: G },
+  y: { kind: "align", alignment: "middle" },
+});
+// slice: siblings spread on Y, share a horizontal center.
+const slice = combine({
+  x: { kind: "align", alignment: "middle" },
+  y: { kind: "distribute", spacing: G },
+});
 
 export const CascadedTreemap: StoryObj = {
   render: () =>
@@ -35,16 +48,11 @@ export const CascadedTreemap: StoryObj = {
       node,
       link: "none",
       // nest on both axes → parent rect encloses its subtree with a small pad.
-      // Asymmetric pad (smaller x, larger y) makes the nested insets visible.
       parentChild: combine({
-        x: { kind: "nest", pad: 5 },
-        y: { kind: "nest", pad: 12 },
+        x: { kind: "nest", pad: P },
+        y: { kind: "nest", pad: P },
       }),
-      // siblings spread horizontally (distribute x) sharing a vertical center
-      // (align y middle).
-      sibling: combine({
-        x: { kind: "distribute", spacing: 8 },
-        y: { kind: "align", alignment: "middle" },
-      }),
+      // siblings alternate subdivision axis per depth (the cascade).
+      sibling: alternate([dice, slice]),
     }),
 };

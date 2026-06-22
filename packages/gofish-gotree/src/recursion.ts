@@ -1,7 +1,12 @@
 import type { HierarchyNode } from "d3-hierarchy";
-import type { Combiner, GoTreeSpec } from "./spec";
+import type { Combiner, CombinerSpec, GoTreeSpec } from "./spec";
 import { distribute } from "./helpers";
 import { nodePath, toDatum } from "./data";
+
+// Resolve a CombinerSpec to a concrete Combiner for this depth. A plain combiner
+// is a function; a depth-indexed one is a branded { atDepth } object.
+const resolve = (c: CombinerSpec, depth: number): Combiner =>
+  typeof c === "function" ? c : c.atDepth(depth);
 
 // Default combiners use `distribute` constraints (one axis each) rather
 // than the coupled `spread` operator, mirroring the in-example convention.
@@ -33,9 +38,14 @@ export function renderSubtree(node: HierarchyNode<any>, spec: GoTreeSpec): any {
   if (!node.children?.length) return nodeMark;
 
   const kids = node.children.map((c) => renderSubtree(c, spec));
-  const sibling = spec.sibling ?? DEFAULT_SIBLING;
+  // Resolve both combiners at this node's depth, so a level's parentChild and
+  // its children's sibling grouping alternate in sync (see `alternate`/`perDepth`).
+  const sibling = resolve(spec.sibling ?? DEFAULT_SIBLING, node.depth);
   const childGroup = sibling(kids);
 
-  const parentChild = spec.parentChild ?? DEFAULT_PARENT_CHILD;
+  const parentChild = resolve(
+    spec.parentChild ?? DEFAULT_PARENT_CHILD,
+    node.depth
+  );
   return parentChild([nodeMark, childGroup]);
 }
