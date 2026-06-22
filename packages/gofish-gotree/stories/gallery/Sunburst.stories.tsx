@@ -1,6 +1,8 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { rect, polar } from "gofish-graphics";
-import { combine, byDepth, mount } from "./_shared";
+import { tree, combine } from "../../src";
+import { byDepth } from "../data";
+import { initializeContainer } from "../helper";
 
 // GoTree gallery port — sunburst (concentric filled wedges).
 // dsl: Element{Node:circle, Color:depth, Link:curve} ; CoordinateSystem polar
@@ -56,14 +58,6 @@ import { combine, byDepth, mount } from "./_shared";
 //    arc wedges — we render rect wedges, matching the visual reference.
 const meta: Meta = {
   title: "GoTree / Gallery / sunburst",
-  tags: ["gallery"],
-  parameters: {
-    gallery: {
-      title: "GoTree: Sunburst",
-      description:
-        "A sunburst diagram drawing the hierarchy as nested arc wedges radiating from the root.",
-    },
-  },
 };
 export default meta;
 
@@ -111,8 +105,17 @@ const node = (d: any) =>
       });
 
 export const Sunburst: StoryObj = {
-  render: () =>
-    mount(
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "GoTree: Sunburst",
+      description:
+        "A sunburst diagram drawing the hierarchy as nested arc wedges radiating from the root.",
+    },
+  },
+  render: () => {
+    const container = initializeContainer({ w: 540, h: 540 });
+    tree(
       {
         node,
         link: "none",
@@ -130,7 +133,8 @@ export const Sunburst: StoryObj = {
         }),
         coord: polar(),
       },
-      { w: 540, h: 540 },
       deepBalancedTree
-    ),
+    ).render(container, { w: 540, h: 540 });
+    return container;
+  },
 };

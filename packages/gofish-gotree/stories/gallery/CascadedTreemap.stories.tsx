@@ -1,6 +1,8 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { rect } from "gofish-graphics";
-import { combine, alternate, byDepth, mount } from "./_shared";
+import { tree, combine, alternate } from "../../src";
+import { byDepth, sampleTree } from "../data";
+import { initializeContainer } from "../helper";
 
 // GoTree gallery port — CascadedTreemap.
 // The original cascades two alternating templates by depth (gallery dsl1 ⇄ dsl2,
@@ -16,14 +18,6 @@ import { combine, alternate, byDepth, mount } from "./_shared";
 // Only LEAVES carry intrinsic size, driven by the datum value.
 const meta: Meta = {
   title: "GoTree / Gallery / CascadedTreemap",
-  tags: ["gallery"],
-  parameters: {
-    gallery: {
-      title: "GoTree: Cascaded Treemap",
-      description:
-        "A cascaded treemap that alternates slice and dice subdivision at each level to nest child rectangles inside their parents.",
-    },
-  },
 };
 export default meta;
 
@@ -53,16 +47,30 @@ const slice = combine({
 });
 
 export const CascadedTreemap: StoryObj = {
-  render: () =>
-    mount({
-      node,
-      link: "none",
-      // nest on both axes → parent rect encloses its subtree with a small pad.
-      parentChild: combine({
-        x: { kind: "nest", pad: P },
-        y: { kind: "nest", pad: P },
-      }),
-      // siblings alternate subdivision axis per depth (the cascade).
-      sibling: alternate([dice, slice]),
-    }),
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "GoTree: Cascaded Treemap",
+      description:
+        "A cascaded treemap that alternates slice and dice subdivision at each level to nest child rectangles inside their parents.",
+    },
+  },
+  render: () => {
+    const container = initializeContainer({ w: 640, h: 420 });
+    tree(
+      {
+        node,
+        link: "none",
+        // nest on both axes → parent rect encloses its subtree with a small pad.
+        parentChild: combine({
+          x: { kind: "nest", pad: P },
+          y: { kind: "nest", pad: P },
+        }),
+        // siblings alternate subdivision axis per depth (the cascade).
+        sibling: alternate([dice, slice]),
+      },
+      sampleTree
+    ).render(container, { w: 640, h: 420 });
+    return container;
+  },
 };

@@ -1,6 +1,8 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { rect, polar } from "gofish-graphics";
-import { combine, byDepth, mount } from "./_shared";
+import { tree, combine } from "../../src";
+import { byDepth } from "../data";
+import { initializeContainer } from "../helper";
 
 // GoTree gallery port — SectorTree2 (concentric filled sector/wedge rings).
 // dsl: Element{Node:rectangle, Color:depth, Link:curve, Thickness:static 2} ;
@@ -60,14 +62,6 @@ import { combine, byDepth, mount } from "./_shared";
 //    overflows 2π and wedges wrap. GoTree allocates angle automatically.
 const meta: Meta = {
   title: "GoTree / Gallery / SectorTree2",
-  tags: ["gallery"],
-  parameters: {
-    gallery: {
-      title: "GoTree: Sector Tree",
-      description:
-        "A polar sector tree nesting child wedges within parent arcs across radial levels.",
-    },
-  },
 };
 export default meta;
 
@@ -116,8 +110,17 @@ const node = (d: any) =>
       });
 
 export const SectorTree2: StoryObj = {
-  render: () =>
-    mount(
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "GoTree: Sector Tree",
+      description:
+        "A polar sector tree nesting child wedges within parent arcs across radial levels.",
+    },
+  },
+  render: () => {
+    const container = initializeContainer({ w: 540, h: 540 });
+    tree(
       {
         node,
         link: "none",
@@ -135,7 +138,8 @@ export const SectorTree2: StoryObj = {
         }),
         coord: polar(),
       },
-      { w: 540, h: 540 },
       deepBalancedTree
-    ),
+    ).render(container, { w: 540, h: 540 });
+    return container;
+  },
 };

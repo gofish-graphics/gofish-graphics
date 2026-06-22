@@ -1,6 +1,8 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { circle } from "gofish-graphics";
-import { combine, byDepth, mount } from "./_shared";
+import { tree, combine } from "../../src";
+import { byDepth } from "../data";
+import { initializeContainer } from "../helper";
 
 // GoTree gallery port — NodeLinkTree (classic top-down node-link diagram).
 // dsl: node=circle, link=straight, color=depth, mode=bottom-up.
@@ -14,14 +16,6 @@ import { combine, byDepth, mount } from "./_shared";
 //                           y: align start (siblings share a baseline/row) })
 const meta: Meta = {
   title: "GoTree / Gallery / NodeLinkTree",
-  tags: ["gallery"],
-  parameters: {
-    gallery: {
-      title: "GoTree: Node-Link Tree",
-      description:
-        "A classic top-down node-link tree diagram with depth-colored circular nodes connected to their children.",
-    },
-  },
 };
 export default meta;
 
@@ -60,8 +54,17 @@ const node = (d: any) =>
   });
 
 export const NodeLinkTree: StoryObj = {
-  render: () =>
-    mount(
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "GoTree: Node-Link Tree",
+      description:
+        "A classic top-down node-link tree diagram with depth-colored circular nodes connected to their children.",
+    },
+  },
+  render: () => {
+    const container = initializeContainer({ w: 900, h: 560 });
+    tree(
       {
         node,
         // straight links → linear interpolation.
@@ -77,7 +80,8 @@ export const NodeLinkTree: StoryObj = {
           y: { kind: "align", alignment: "end" },
         }),
       },
-      { w: 900, h: 560 },
       nodeLinkData
-    ),
+    ).render(container, { w: 900, h: 560 });
+    return container;
+  },
 };

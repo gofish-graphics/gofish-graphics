@@ -1,6 +1,8 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { circle, polar } from "gofish-graphics";
-import { combine, byDepth, mount } from "./_shared";
+import { tree, combine } from "../../src";
+import { byDepth, sampleTree } from "../data";
+import { initializeContainer } from "../helper";
 
 // GoTree gallery port — MultilevelSilhouetteTree (polar node-link variant).
 //
@@ -35,6 +37,13 @@ import { combine, byDepth, mount } from "./_shared";
 
 const meta: Meta = {
   title: "GoTree / Gallery / MultilevelSilhouetteTree",
+};
+export default meta;
+
+const node = (d: any) =>
+  circle({ r: 7, fill: byDepth()(d), stroke: "#1f3a5f", strokeWidth: 1 });
+
+export const MultilevelSilhouetteTree: StoryObj = {
   tags: ["gallery"],
   parameters: {
     gallery: {
@@ -43,15 +52,9 @@ const meta: Meta = {
         "A multilevel radial node-link tree read outward from the center as a silhouette.",
     },
   },
-};
-export default meta;
-
-const node = (d: any) =>
-  circle({ r: 7, fill: byDepth()(d), stroke: "#1f3a5f", strokeWidth: 1 });
-
-export const MultilevelSilhouetteTree: StoryObj = {
-  render: () =>
-    mount(
+  render: () => {
+    const container = initializeContainer({ w: 480, h: 480 });
+    tree(
       {
         node,
         link: { interpolation: "linear", stroke: "#90a4ae", strokeWidth: 1.5 },
@@ -79,6 +82,8 @@ export const MultilevelSilhouetteTree: StoryObj = {
         }),
         coord: polar(),
       },
-      { w: 480, h: 480 }
-    ),
+      sampleTree
+    ).render(container, { w: 480, h: 480 });
+    return container;
+  },
 };

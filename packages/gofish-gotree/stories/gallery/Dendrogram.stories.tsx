@@ -1,6 +1,8 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { rect } from "gofish-graphics";
-import { combine, byDepth, mount } from "./_shared";
+import { tree, combine } from "../../src";
+import { byDepth } from "../data";
+import { initializeContainer } from "../helper";
 
 // GoTree gallery port — dendrogram.
 // dsl: node=hidden, link=curveStepAfter (orthogonal brackets), color=depth,
@@ -29,14 +31,6 @@ import { combine, byDepth, mount } from "./_shared";
 //       has a node to position the links against.
 const meta: Meta = {
   title: "GoTree / Gallery / dendrogram",
-  tags: ["gallery"],
-  parameters: {
-    gallery: {
-      title: "GoTree: Dendrogram",
-      description:
-        "A dendrogram with hidden internal nodes and bracket-style links, as used for clustering trees.",
-    },
-  },
 };
 export default meta;
 
@@ -81,8 +75,17 @@ const node = (d: any) =>
     : rect({ h: 1, fill: "transparent", strokeWidth: 0 });
 
 export const Dendrogram: StoryObj = {
-  render: () =>
-    mount(
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "GoTree: Dendrogram",
+      description:
+        "A dendrogram with hidden internal nodes and bracket-style links, as used for clustering trees.",
+    },
+  },
+  render: () => {
+    const container = initializeContainer({ w: 900, h: 520 });
+    tree(
       {
         node,
         // curveStepAfter unsupported → linear (straight edges). color=depth:
@@ -103,7 +106,8 @@ export const Dendrogram: StoryObj = {
           y: { kind: "align", alignment: "start" },
         }),
       },
-      { w: 900, h: 520 },
       dendroData
-    ),
+    ).render(container, { w: 900, h: 520 });
+    return container;
+  },
 };

@@ -1,6 +1,8 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { rect } from "gofish-graphics";
-import { combine, byDepth, mount } from "./_shared";
+import { tree, combine } from "../../src";
+import { byDepth, sampleTree } from "../data";
+import { initializeContainer } from "../helper";
 
 // GoTree gallery port — treemap-slice (slice-and-dice treemap).
 // dsl: X.Root include (pad ~0.02) / X.Subtree flatten (margin 0.26);
@@ -42,8 +44,17 @@ const node = (d: any) =>
     : rect({ fill: byDepth(slices)(d), stroke: "white", strokeWidth: 4 });
 
 export const TreemapSlice: StoryObj = {
-  render: () =>
-    mount(
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "GoTree: Slice Treemap",
+      description:
+        "A slice-and-dice treemap subdividing each parent rectangle into value-proportional child slices.",
+    },
+  },
+  render: () => {
+    const container = initializeContainer({ w: 900, h: 360 });
+    tree(
       {
         node,
         link: "none",
@@ -56,19 +67,13 @@ export const TreemapSlice: StoryObj = {
           y: { kind: "align", alignment: "middle" },
         }),
       },
-      { w: 900, h: 360 }
-    ),
+      sampleTree
+    ).render(container, { w: 900, h: 360 });
+    return container;
+  },
 };
 
 const meta: Meta = {
   title: "GoTree / Gallery / treemap-slice",
-  tags: ["gallery"],
-  parameters: {
-    gallery: {
-      title: "GoTree: Slice Treemap",
-      description:
-        "A slice-and-dice treemap subdividing each parent rectangle into value-proportional child slices.",
-    },
-  },
 };
 export default meta;

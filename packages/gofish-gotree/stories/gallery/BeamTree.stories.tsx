@@ -1,6 +1,8 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { rect } from "gofish-graphics";
-import { combine, alternate, byDepth, mount } from "./_shared";
+import { tree, combine, alternate } from "../../src";
+import { byDepth, sampleTree } from "../data";
+import { initializeContainer } from "../helper";
 
 // GoTree gallery port — BeamTree (alternating nested beams).
 // The original gallery alternates two templates by depth (dsl1 ⇄ dsl2, axes
@@ -15,14 +17,6 @@ import { combine, alternate, byDepth, mount } from "./_shared";
 // internal nodes are unsized so their boxes wrap the children plus padding.
 const meta: Meta = {
   title: "GoTree / Gallery / BeamTree",
-  tags: ["gallery"],
-  parameters: {
-    gallery: {
-      title: "GoTree: Beam Tree",
-      description:
-        "A nested beam treemap where each subtree is contained within its parent's bar, alternating horizontal and vertical splits by depth.",
-    },
-  },
 };
 export default meta;
 
@@ -66,11 +60,25 @@ const sibling = alternate([spreadX, spreadY]);
 // pad for clean nested beams instead.
 // TODO: asymmetric per-side nest padding isn't expressible via `combine`.
 export const BeamTree: StoryObj = {
-  render: () =>
-    mount({
-      node,
-      link: "none",
-      parentChild,
-      sibling,
-    }),
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "GoTree: Beam Tree",
+      description:
+        "A nested beam treemap where each subtree is contained within its parent's bar, alternating horizontal and vertical splits by depth.",
+    },
+  },
+  render: () => {
+    const container = initializeContainer({ w: 640, h: 420 });
+    tree(
+      {
+        node,
+        link: "none",
+        parentChild,
+        sibling,
+      },
+      sampleTree
+    ).render(container, { w: 640, h: 420 });
+    return container;
+  },
 };

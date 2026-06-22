@@ -1,6 +1,8 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { circle, polar } from "gofish-graphics";
-import { combine, perDepth, byDepth, mount } from "./_shared";
+import { tree, combine, perDepth } from "../../src";
+import { byDepth } from "../data";
+import { initializeContainer } from "../helper";
 
 // GoTree gallery port — radial-deep (deep radial sunburst-family tree).
 // dsl: Node=circle, Color=depth, Link=curve, CoordinateSystem=polar.
@@ -52,8 +54,17 @@ const node = (d: any) =>
   circle({ r: 5, fill: byDepth()(d), stroke: "#1f3a5f", strokeWidth: 1 });
 
 export const RadialDeep: StoryObj = {
-  render: () =>
-    mount(
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "GoTree: Radial Deep Tree",
+      description:
+        "A deep radial node-link tree fanning many hierarchy levels outward from the center.",
+    },
+  },
+  render: () => {
+    const container = initializeContainer({ w: 520, h: 520 });
+    tree(
       {
         node,
         // NOTE: dsl asks for curve links; curve interpolation unimplemented →
@@ -86,19 +97,13 @@ export const RadialDeep: StoryObj = {
         ),
         coord: polar(),
       },
-      { w: 520, h: 520 },
       deepTree
-    ),
+    ).render(container, { w: 520, h: 520 });
+    return container;
+  },
 };
 
-export default {
+const meta: Meta = {
   title: "GoTree / Gallery / radial-deep",
-  tags: ["gallery"],
-  parameters: {
-    gallery: {
-      title: "GoTree: Radial Deep Tree",
-      description:
-        "A deep radial node-link tree fanning many hierarchy levels outward from the center.",
-    },
-  },
-} as Meta;
+};
+export default meta;

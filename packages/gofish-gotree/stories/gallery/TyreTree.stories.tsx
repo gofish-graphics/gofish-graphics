@@ -1,6 +1,8 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { rect, polar } from "gofish-graphics";
-import { combine, byDepth, mount } from "./_shared";
+import { tree, combine } from "../../src";
+import { byDepth } from "../data";
+import { initializeContainer } from "../helper";
 
 // A *balanced* binary tree (depth 3 → 8 leaves, 4 levels). Balance matters: with
 // align-r the radial bands only line up into clean concentric rings when every
@@ -87,14 +89,6 @@ const sampleTree = (() => {
 //    link element either); polar links only support linear interpolation anyway.
 const meta: Meta = {
   title: "GoTree / Gallery / TyreTree",
-  tags: ["gallery"],
-  parameters: {
-    gallery: {
-      title: "GoTree: Tyre Tree",
-      description:
-        "A tyre tree of concentric wedge rings, each ring a level of the hierarchy around a central hub.",
-    },
-  },
 };
 export default meta;
 
@@ -123,8 +117,17 @@ const node = (d: any) =>
   });
 
 export const TyreTree: StoryObj = {
-  render: () =>
-    mount(
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "GoTree: Tyre Tree",
+      description:
+        "A tyre tree of concentric wedge rings, each ring a level of the hierarchy around a central hub.",
+    },
+  },
+  render: () => {
+    const container = initializeContainer({ w: 560, h: 560 });
+    tree(
       {
         node,
         link: "none",
@@ -149,7 +152,8 @@ export const TyreTree: StoryObj = {
         }),
         coord: polar(),
       },
-      { w: 560, h: 560 },
       sampleTree
-    ),
+    ).render(container, { w: 560, h: 560 });
+    return container;
+  },
 };

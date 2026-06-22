@@ -1,6 +1,8 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { rect } from "gofish-graphics";
-import { combine, byDepth, mount } from "./_shared";
+import { tree, combine } from "../../src";
+import { byDepth, sampleTree } from "../data";
+import { initializeContainer } from "../helper";
 
 // GoTree gallery port — barcodetree.
 // dsl: mode bottom-up; node=rectangle, link=none, color=depth.
@@ -15,14 +17,6 @@ import { combine, byDepth, mount } from "./_shared";
 // (dark→light gray, matching the dsl ColorRange #070707 → #929598).
 const meta: Meta = {
   title: "GoTree / Gallery / barcodetree",
-  tags: ["gallery"],
-  parameters: {
-    gallery: {
-      title: "GoTree: Barcode Tree",
-      description:
-        "A barcode tree that encodes the hierarchy as thin nested bars stacked along an axis.",
-    },
-  },
 };
 export default meta;
 
@@ -37,17 +31,31 @@ const node = (d: any) =>
     : rect({ w: 12, fill: byDepth(grays)(d) });
 
 export const BarcodeTree: StoryObj = {
-  render: () =>
-    mount({
-      node,
-      link: "none",
-      parentChild: combine({
-        x: { kind: "distribute", spacing: 4 },
-        y: { kind: "nest", pad: 6 },
-      }),
-      sibling: combine({
-        x: { kind: "distribute", spacing: 4 },
-        y: { kind: "align", alignment: "middle" },
-      }),
-    }),
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "GoTree: Barcode Tree",
+      description:
+        "A barcode tree that encodes the hierarchy as thin nested bars stacked along an axis.",
+    },
+  },
+  render: () => {
+    const container = initializeContainer({ w: 640, h: 420 });
+    tree(
+      {
+        node,
+        link: "none",
+        parentChild: combine({
+          x: { kind: "distribute", spacing: 4 },
+          y: { kind: "nest", pad: 6 },
+        }),
+        sibling: combine({
+          x: { kind: "distribute", spacing: 4 },
+          y: { kind: "align", alignment: "middle" },
+        }),
+      },
+      sampleTree
+    ).render(container, { w: 640, h: 420 });
+    return container;
+  },
 };

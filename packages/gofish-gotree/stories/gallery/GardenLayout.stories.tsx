@@ -1,6 +1,8 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { circle } from "gofish-graphics";
-import { combine, byDepth, mount } from "./_shared";
+import { tree, combine } from "../../src";
+import { byDepth, sampleTree } from "../data";
+import { initializeContainer } from "../helper";
 
 // GoTree gallery port — GardenLayout (the "ReadableTreeLayout" subtree).
 // dsl: Mode bottom-up ; node=circle, color=class, link=orthogonal.
@@ -25,23 +27,6 @@ const node = (d: any) =>
   });
 
 export const GardenLayout: StoryObj = {
-  render: () =>
-    mount({
-      node,
-      link: { interpolation: "linear", stroke: "#90a4ae", strokeWidth: 1.5 },
-      parentChild: combine({
-        x: { kind: "align", alignment: "middle" },
-        y: { kind: "distribute", spacing: 48, order: "reverse" },
-      }),
-      sibling: combine({
-        x: { kind: "distribute", spacing: 24 },
-        y: { kind: "align", alignment: "middle" },
-      }),
-    }),
-};
-
-const meta: Meta = {
-  title: "GoTree / Gallery / GardenLayout",
   tags: ["gallery"],
   parameters: {
     gallery: {
@@ -50,5 +35,28 @@ const meta: Meta = {
         "A tidy node-link tree with circular nodes in a garden-like arrangement connected by elbow links.",
     },
   },
+  render: () => {
+    const container = initializeContainer({ w: 640, h: 420 });
+    tree(
+      {
+        node,
+        link: { interpolation: "linear", stroke: "#90a4ae", strokeWidth: 1.5 },
+        parentChild: combine({
+          x: { kind: "align", alignment: "middle" },
+          y: { kind: "distribute", spacing: 48, order: "reverse" },
+        }),
+        sibling: combine({
+          x: { kind: "distribute", spacing: 24 },
+          y: { kind: "align", alignment: "middle" },
+        }),
+      },
+      sampleTree
+    ).render(container, { w: 640, h: 420 });
+    return container;
+  },
+};
+
+const meta: Meta = {
+  title: "GoTree / Gallery / GardenLayout",
 };
 export default meta;

@@ -1,6 +1,8 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { ellipse } from "gofish-graphics";
-import { combine, alternate, byDepth, mount } from "./_shared";
+import { tree, combine, alternate } from "../../src";
+import { byDepth, sampleTree } from "../data";
+import { initializeContainer } from "../helper";
 
 // GoTree gallery port — TreemapOval.
 // The original alternates two templates by depth (gallery dsl1 ⇄ dsl2):
@@ -16,14 +18,6 @@ import { combine, alternate, byDepth, mount } from "./_shared";
 // treemaps.
 const meta: Meta = {
   title: "GoTree / Gallery / TreemapOval",
-  tags: ["gallery"],
-  parameters: {
-    gallery: {
-      title: "GoTree: Oval Treemap",
-      description:
-        "A treemap variant that nests value-sized ellipses, alternating slice and dice subdivision by depth.",
-    },
-  },
 };
 export default meta;
 
@@ -53,16 +47,30 @@ const slice = combine({
 });
 
 export const TreemapOval: StoryObj = {
-  render: () =>
-    mount({
-      node,
-      link: "none",
-      // Both axes nest so each parent oval wraps its subtree's bbox.
-      parentChild: combine({
-        x: { kind: "nest", pad: P },
-        y: { kind: "nest", pad: P },
-      }),
-      // Subdivision alternates slice↔dice every level (depth-indexed).
-      sibling: alternate([slice, dice]),
-    }),
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "GoTree: Oval Treemap",
+      description:
+        "A treemap variant that nests value-sized ellipses, alternating slice and dice subdivision by depth.",
+    },
+  },
+  render: () => {
+    const container = initializeContainer({ w: 640, h: 420 });
+    tree(
+      {
+        node,
+        link: "none",
+        // Both axes nest so each parent oval wraps its subtree's bbox.
+        parentChild: combine({
+          x: { kind: "nest", pad: P },
+          y: { kind: "nest", pad: P },
+        }),
+        // Subdivision alternates slice↔dice every level (depth-indexed).
+        sibling: alternate([slice, dice]),
+      },
+      sampleTree
+    ).render(container, { w: 640, h: 420 });
+    return container;
+  },
 };

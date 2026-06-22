@@ -1,6 +1,8 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { circle } from "gofish-graphics";
-import { combine, alternate, byDepth, mount } from "./_shared";
+import { tree, combine, alternate } from "../../src";
+import { byDepth } from "../data";
+import { initializeContainer } from "../helper";
 
 // GoTree gallery port — HTreeLayout (the recursive H-tree fractal).
 // GoTree builds this (gallery dsl0) by ALTERNATING two templates by depth:
@@ -15,14 +17,6 @@ import { combine, alternate, byDepth, mount } from "./_shared";
 // Mapping rules: within → align(middle); flatten/juxtapose → distribute.
 const meta: Meta = {
   title: "GoTree / Gallery / HTreeLayout",
-  tags: ["gallery"],
-  parameters: {
-    gallery: {
-      title: "GoTree: H-Tree Layout",
-      description:
-        "An H-tree fractal layout that swaps its spread axis at every depth to recursively pack the tree into a square.",
-    },
-  },
 };
 export default meta;
 
@@ -63,8 +57,17 @@ const V = combine({
 });
 
 export const HTreeLayout: StoryObj = {
-  render: () =>
-    mount(
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "GoTree: H-Tree Layout",
+      description:
+        "An H-tree fractal layout that swaps its spread axis at every depth to recursively pack the tree into a square.",
+    },
+  },
+  render: () => {
+    const container = initializeContainer({ w: 720, h: 560 });
+    tree(
       {
         node,
         link: { interpolation: "linear", stroke: "#90a4ae", strokeWidth: 2 },
@@ -76,7 +79,8 @@ export const HTreeLayout: StoryObj = {
         // Sibling spread axis alternates by depth → the recursive H-fractal.
         sibling: alternate([H, V]),
       },
-      { w: 720, h: 560 },
       balancedTree
-    ),
+    ).render(container, { w: 720, h: 560 });
+    return container;
+  },
 };

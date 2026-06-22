@@ -1,6 +1,8 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { rect, polar } from "gofish-graphics";
-import { combine, byDepth, mount } from "./_shared";
+import { tree, combine } from "../../src";
+import { byDepth } from "../data";
+import { initializeContainer } from "../helper";
 
 // GoTree gallery port — HierarchicalSectorChart (sunburst-of-sectors: concentric
 // filled rect wedges, color ramped by depth).
@@ -62,14 +64,6 @@ import { combine, byDepth, mount } from "./_shared";
 
 const meta: Meta = {
   title: "GoTree / Gallery / HierarchicalSectorChart",
-  tags: ["gallery"],
-  parameters: {
-    gallery: {
-      title: "GoTree: Hierarchical Sector Chart",
-      description:
-        "A hierarchical sector chart drawing the tree as concentric polar wedges sized by subtree.",
-    },
-  },
 };
 export default meta;
 
@@ -132,8 +126,17 @@ const node = (d: any) =>
       });
 
 export const HierarchicalSectorChart: StoryObj = {
-  render: () =>
-    mount(
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "GoTree: Hierarchical Sector Chart",
+      description:
+        "A hierarchical sector chart drawing the tree as concentric polar wedges sized by subtree.",
+    },
+  },
+  render: () => {
+    const container = initializeContainer({ w: 560, h: 560 });
+    tree(
       {
         node,
         link: "none",
@@ -153,7 +156,8 @@ export const HierarchicalSectorChart: StoryObj = {
         }),
         coord: polar(),
       },
-      { w: 560, h: 560 },
       sectorTree
-    ),
+    ).render(container, { w: 560, h: 560 });
+    return container;
+  },
 };

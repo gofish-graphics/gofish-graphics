@@ -1,6 +1,8 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { rect, polar } from "gofish-graphics";
-import { combine, byDepth, mount, sampleTree } from "./_shared";
+import { tree, combine } from "../../src";
+import { byDepth, sampleTree } from "../data";
+import { initializeContainer } from "../helper";
 
 // GoTree gallery port — icicleplot (POLAR icicle = concentric wedge bands).
 //
@@ -50,14 +52,6 @@ import { combine, byDepth, mount, sampleTree } from "./_shared";
 //    anyway, so link:"none".
 const meta: Meta = {
   title: "GoTree / Gallery / icicleplot",
-  tags: ["gallery"],
-  parameters: {
-    gallery: {
-      title: "GoTree: Polar Icicle",
-      description:
-        "A polar icicle plot rendering each level as a ring of arc segments sized by subtree.",
-    },
-  },
 };
 export default meta;
 
@@ -85,8 +79,17 @@ const node = (d: any) =>
   });
 
 export const IciclePlot: StoryObj = {
-  render: () =>
-    mount(
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "GoTree: Polar Icicle",
+      description:
+        "A polar icicle plot rendering each level as a ring of arc segments sized by subtree.",
+    },
+  },
+  render: () => {
+    const container = initializeContainer({ w: 560, h: 560 });
+    tree(
       {
         node,
         link: "none",
@@ -105,7 +108,8 @@ export const IciclePlot: StoryObj = {
         }),
         coord: polar(),
       },
-      { w: 560, h: 560 },
       sampleTree
-    ),
+    ).render(container, { w: 560, h: 560 });
+    return container;
+  },
 };

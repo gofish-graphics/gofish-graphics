@@ -1,6 +1,8 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { rect } from "gofish-graphics";
-import { combine, byDepth, mount } from "./_shared";
+import { tree, combine } from "../../src";
+import { byDepth, sampleTree } from "../data";
+import { initializeContainer } from "../helper";
 
 // GoTree gallery port — StairTree.
 // dsl: X.Root juxtapose / X.Subtree flatten ; Y.Root include / Y.Subtree flatten.
@@ -10,14 +12,6 @@ import { combine, byDepth, mount } from "./_shared";
 // axes) — producing the cascading staircase.
 const meta: Meta = {
   title: "GoTree / Gallery / StairTree",
-  tags: ["gallery"],
-  parameters: {
-    gallery: {
-      title: "GoTree: Stair Tree",
-      description:
-        "A staircase tree where each level steps outward, nesting children along one axis while distributing along the other.",
-    },
-  },
 };
 export default meta;
 
@@ -29,17 +23,31 @@ const node = (d: any) =>
     : rect({ w: 34, fill: byDepth()(d), stroke: "#08306b", strokeWidth: 1 });
 
 export const StairTree: StoryObj = {
-  render: () =>
-    mount({
-      node,
-      link: "none",
-      parentChild: combine({
-        x: { kind: "distribute", spacing: 6 },
-        y: { kind: "nest", pad: 6 },
-      }),
-      sibling: combine({
-        x: { kind: "distribute", spacing: 6 },
-        y: { kind: "distribute", spacing: 6 },
-      }),
-    }),
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "GoTree: Stair Tree",
+      description:
+        "A staircase tree where each level steps outward, nesting children along one axis while distributing along the other.",
+    },
+  },
+  render: () => {
+    const container = initializeContainer({ w: 640, h: 420 });
+    tree(
+      {
+        node,
+        link: "none",
+        parentChild: combine({
+          x: { kind: "distribute", spacing: 6 },
+          y: { kind: "nest", pad: 6 },
+        }),
+        sibling: combine({
+          x: { kind: "distribute", spacing: 6 },
+          y: { kind: "distribute", spacing: 6 },
+        }),
+      },
+      sampleTree
+    ).render(container, { w: 640, h: 420 });
+    return container;
+  },
 };

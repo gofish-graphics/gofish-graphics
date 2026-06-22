@@ -1,6 +1,8 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { rect } from "gofish-graphics";
-import { combine, alternate, byDepth, mount } from "./_shared";
+import { tree, combine, alternate } from "../../src";
+import { byDepth, sampleTree } from "../data";
+import { initializeContainer } from "../helper";
 
 // GoTree gallery port — NestedPieTree (CARTESIAN nested-rectangle form).
 //
@@ -22,14 +24,6 @@ import { combine, alternate, byDepth, mount } from "./_shared";
 // each depth — the cartesian analogue of the radial slice/dice nesting.
 const meta: Meta = {
   title: "GoTree / Gallery / NestedPieTree",
-  tags: ["gallery"],
-  parameters: {
-    gallery: {
-      title: "GoTree: Nested Pie Tree",
-      description:
-        "A cartesian nested treemap alternating slice and dice subdivision, the rectangular analogue of a nested pie.",
-    },
-  },
 };
 export default meta;
 
@@ -60,17 +54,31 @@ const slice = combine({
 });
 
 export const NestedPieTree: StoryObj = {
-  render: () =>
-    mount({
-      node,
-      link: "none",
-      // include → nest on both axes at every level: the parent rectangle wraps
-      // its subtree group horizontally and vertically with a small padding.
-      parentChild: combine({
-        x: { kind: "nest", pad: P },
-        y: { kind: "nest", pad: P },
-      }),
-      // Alternate the subdivision axis by depth: slice ↔ dice every level.
-      sibling: alternate([slice, dice]),
-    }),
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "GoTree: Nested Pie Tree",
+      description:
+        "A cartesian nested treemap alternating slice and dice subdivision, the rectangular analogue of a nested pie.",
+    },
+  },
+  render: () => {
+    const container = initializeContainer({ w: 640, h: 420 });
+    tree(
+      {
+        node,
+        link: "none",
+        // include → nest on both axes at every level: the parent rectangle wraps
+        // its subtree group horizontally and vertically with a small padding.
+        parentChild: combine({
+          x: { kind: "nest", pad: P },
+          y: { kind: "nest", pad: P },
+        }),
+        // Alternate the subdivision axis by depth: slice ↔ dice every level.
+        sibling: alternate([slice, dice]),
+      },
+      sampleTree
+    ).render(container, { w: 640, h: 420 });
+    return container;
+  },
 };

@@ -1,6 +1,8 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { circle, polar } from "gofish-graphics";
-import { combine, byDepth, mount } from "./_shared";
+import { tree, combine } from "../../src";
+import { byDepth, sampleTree } from "../data";
+import { initializeContainer } from "../helper";
 
 // GoTree gallery port — SpiralLayout (polar spiral node-link).
 // dsl: AxisIndependent, X[subtree=flatten, root=juxtapose] Y[subtree=flatten,
@@ -34,6 +36,13 @@ import { combine, byDepth, mount } from "./_shared";
 //    constant.
 const meta: Meta = {
   title: "GoTree / Gallery / SpiralLayout",
+};
+export default meta;
+
+const node = (d: any) =>
+  circle({ r: 7, fill: byDepth()(d), stroke: "#1f3a5f", strokeWidth: 1 });
+
+export const SpiralLayout: StoryObj = {
   tags: ["gallery"],
   parameters: {
     gallery: {
@@ -42,15 +51,9 @@ const meta: Meta = {
         "A spiral tree layout distributing nodes along both angular and radial axes to wind the hierarchy outward.",
     },
   },
-};
-export default meta;
-
-const node = (d: any) =>
-  circle({ r: 7, fill: byDepth()(d), stroke: "#1f3a5f", strokeWidth: 1 });
-
-export const SpiralLayout: StoryObj = {
-  render: () =>
-    mount(
+  render: () => {
+    const container = initializeContainer({ w: 520, h: 520 });
+    tree(
       {
         node,
         link: { interpolation: "linear", stroke: "#90a4ae", strokeWidth: 1.5 },
@@ -86,6 +89,8 @@ export const SpiralLayout: StoryObj = {
         }),
         coord: polar(),
       },
-      { w: 520, h: 520 }
-    ),
+      sampleTree
+    ).render(container, { w: 520, h: 520 });
+    return container;
+  },
 };

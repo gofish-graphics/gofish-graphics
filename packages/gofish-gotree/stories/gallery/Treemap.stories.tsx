@@ -1,6 +1,8 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { rect } from "gofish-graphics";
-import { combine, alternate, byDepth, mount } from "./_shared";
+import { tree, combine, alternate } from "../../src";
+import { byDepth, sampleTree } from "../data";
+import { initializeContainer } from "../helper";
 
 // GoTree gallery port — Treemap (gallery/Treemap/dsl1.json ⇄ dsl2.json).
 // The original alternates two templates by depth (axes swapped):
@@ -13,14 +15,6 @@ import { combine, alternate, byDepth, mount } from "./_shared";
 // Node = rectangle, link = none, color = depth (blue ramp, dark root → light leaf).
 const meta: Meta = {
   title: "GoTree / Gallery / Treemap",
-  tags: ["gallery"],
-  parameters: {
-    gallery: {
-      title: "GoTree: Treemap",
-      description:
-        "A space-filling treemap that recursively alternates slice and dice subdivision to size rectangles by value.",
-    },
-  },
 };
 export default meta;
 
@@ -47,16 +41,30 @@ const slice = combine({
 });
 
 export const Treemap: StoryObj = {
-  render: () =>
-    mount({
-      node,
-      link: "none",
-      // Parent box wraps its subtree on both axes at every depth (constant).
-      parentChild: combine({
-        x: { kind: "nest", pad: P },
-        y: { kind: "nest", pad: P },
-      }),
-      // Siblings subdivide the parent, swapping dice↔slice every level.
-      sibling: alternate([dice, slice]),
-    }),
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "GoTree: Treemap",
+      description:
+        "A space-filling treemap that recursively alternates slice and dice subdivision to size rectangles by value.",
+    },
+  },
+  render: () => {
+    const container = initializeContainer({ w: 640, h: 420 });
+    tree(
+      {
+        node,
+        link: "none",
+        // Parent box wraps its subtree on both axes at every depth (constant).
+        parentChild: combine({
+          x: { kind: "nest", pad: P },
+          y: { kind: "nest", pad: P },
+        }),
+        // Siblings subdivide the parent, swapping dice↔slice every level.
+        sibling: alternate([dice, slice]),
+      },
+      sampleTree
+    ).render(container, { w: 640, h: 420 });
+    return container;
+  },
 };

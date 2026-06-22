@@ -1,6 +1,8 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { rect } from "gofish-graphics";
-import { combine, byDepth, mount } from "./_shared";
+import { tree, combine } from "../../src";
+import { byDepth, sampleTree } from "../data";
+import { initializeContainer } from "../helper";
 
 // GoTree gallery port — IndentedTree.
 // dsl: AxisIndependent, bottom-up.
@@ -20,14 +22,6 @@ import { combine, byDepth, mount } from "./_shared";
 // subtree stacks downward.
 const meta: Meta = {
   title: "GoTree / Gallery / IndentedTree",
-  tags: ["gallery"],
-  parameters: {
-    gallery: {
-      title: "GoTree: Indented Tree",
-      description:
-        "An indented outline tree, like a file explorer, with each level nested and stacked vertically.",
-    },
-  },
 };
 export default meta;
 
@@ -48,12 +42,26 @@ const layout = combine({
 });
 
 export const IndentedTree: StoryObj = {
-  render: () =>
-    mount({
-      node,
-      // gotree link = "none" → no connectors in the indented/outline layout.
-      link: "none",
-      parentChild: layout,
-      sibling: layout,
-    }),
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "GoTree: Indented Tree",
+      description:
+        "An indented outline tree, like a file explorer, with each level nested and stacked vertically.",
+    },
+  },
+  render: () => {
+    const container = initializeContainer({ w: 640, h: 420 });
+    tree(
+      {
+        node,
+        // gotree link = "none" → no connectors in the indented/outline layout.
+        link: "none",
+        parentChild: layout,
+        sibling: layout,
+      },
+      sampleTree
+    ).render(container, { w: 640, h: 420 });
+    return container;
+  },
 };

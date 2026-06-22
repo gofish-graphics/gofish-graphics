@@ -1,6 +1,8 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { circle } from "gofish-graphics";
-import { combine, alternate, byDepth, mount } from "./_shared";
+import { tree, combine, alternate } from "../../src";
+import { byDepth, sampleTree } from "../data";
+import { initializeContainer } from "../helper";
 
 // GoTree gallery port — HVDrawing (horizontal/vertical alternating tree).
 // The original alternates two templates by depth (gallery dsl1 ⇄ dsl2, axes swapped):
@@ -10,14 +12,6 @@ import { combine, alternate, byDepth, mount } from "./_shared";
 // THIS is what makes the HV drawing (a single fixed template collapses to a line).
 const meta: Meta = {
   title: "GoTree / Gallery / HVDrawing",
-  tags: ["gallery"],
-  parameters: {
-    gallery: {
-      title: "GoTree: HV Drawing",
-      description:
-        "An HV-drawing that alternates horizontal and vertical placement by depth to draw the tree as a compact staircase.",
-    },
-  },
 };
 export default meta;
 
@@ -37,13 +31,27 @@ const V = combine({
 });
 
 export const HVDrawing: StoryObj = {
-  render: () =>
-    mount({
-      node,
-      link: { interpolation: "linear", stroke: "#90a4ae", strokeWidth: 1.5 },
-      mode: "bottomUp",
-      // Both relations alternate in sync (resolved at the same node depth).
-      parentChild: alternate([H, V]),
-      sibling: alternate([H, V]),
-    }),
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "GoTree: HV Drawing",
+      description:
+        "An HV-drawing that alternates horizontal and vertical placement by depth to draw the tree as a compact staircase.",
+    },
+  },
+  render: () => {
+    const container = initializeContainer({ w: 640, h: 420 });
+    tree(
+      {
+        node,
+        link: { interpolation: "linear", stroke: "#90a4ae", strokeWidth: 1.5 },
+        mode: "bottomUp",
+        // Both relations alternate in sync (resolved at the same node depth).
+        parentChild: alternate([H, V]),
+        sibling: alternate([H, V]),
+      },
+      sampleTree
+    ).render(container, { w: 640, h: 420 });
+    return container;
+  },
 };

@@ -20,9 +20,14 @@ import { data as storyData } from "../docs/.vitepress/data/storyExamples.data.js
 // Solid SSR codegen fails on browser-only constructs (e.g. `use:`).
 const storyModules: Record<string, () => Promise<unknown>> = import.meta.env.SSR
   ? {}
-  : import.meta.glob(
-      "../../../packages/gofish-graphics/stories/**/*.stories.tsx"
-    );
+  : {
+      ...import.meta.glob(
+        "../../../packages/gofish-graphics/stories/**/*.stories.tsx"
+      ),
+      ...import.meta.glob(
+        "../../../packages/gofish-gotree/stories/**/*.stories.tsx"
+      ),
+    };
 
 /** Harness story id — mirrors tests/harness + storyExamples.ts. */
 export function harnessStoryId(title: string, exportName: string): string {

@@ -1,6 +1,8 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { circle } from "gofish-graphics";
-import { combine, byDepth, mount } from "./_shared";
+import { tree, combine } from "../../src";
+import { byDepth } from "../data";
+import { initializeContainer } from "../helper";
 
 // GoTree gallery port — cartesian-deep-tree.
 // dsl: node=circle, color=depth, link=curve, mode=top-down, StaticSize 6.
@@ -43,8 +45,17 @@ const node = (d: any) =>
   circle({ r: 6, fill: byDepth()(d), stroke: "#08306b", strokeWidth: 1 });
 
 export const CartesianDeepTree: StoryObj = {
-  render: () =>
-    mount(
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "GoTree: Cartesian Deep Tree",
+      description:
+        "A deep cartesian node-link tree showing many levels of hierarchy with curved parent-child links.",
+    },
+  },
+  render: () => {
+    const container = initializeContainer({ w: 900, h: 520 });
+    tree(
       {
         node,
         // TODO: needs curve links implemented — falling back to linear.
@@ -58,19 +69,13 @@ export const CartesianDeepTree: StoryObj = {
           y: { kind: "align", alignment: "start" },
         }),
       },
-      { w: 900, h: 520 },
       deepTree
-    ),
+    ).render(container, { w: 900, h: 520 });
+    return container;
+  },
 };
 
-export default {
+const meta: Meta = {
   title: "GoTree / Gallery / cartesian-deep-tree",
-  tags: ["gallery"],
-  parameters: {
-    gallery: {
-      title: "GoTree: Cartesian Deep Tree",
-      description:
-        "A deep cartesian node-link tree showing many levels of hierarchy with curved parent-child links.",
-    },
-  },
-} as Meta;
+};
+export default meta;

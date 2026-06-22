@@ -1,6 +1,8 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { rect } from "gofish-graphics";
-import { combine, byDepth, mount } from "./_shared";
+import { tree, combine } from "../../src";
+import { byDepth, sampleTree } from "../data";
+import { initializeContainer } from "../helper";
 
 // GoTree gallery port — ElasticHierarchy (Treemap template).
 // dsl (mode bottom-up): X.Root include (pad 0.06) / X.Subtree flatten (margin 0.12);
@@ -14,14 +16,6 @@ import { combine, byDepth, mount } from "./_shared";
 // axes (the nest axes) so each box grows to wrap its subtree.
 const meta: Meta = {
   title: "GoTree / Gallery / ElasticHierarchy",
-  tags: ["gallery"],
-  parameters: {
-    gallery: {
-      title: "GoTree: Elastic Hierarchy",
-      description:
-        "A nested-rectangle hierarchy where each parent's box stretches to contain its distributed children.",
-    },
-  },
 };
 export default meta;
 
@@ -40,20 +34,34 @@ const node = (d: any) =>
     : rect({ fill: byDepth()(d), stroke: "#08306b", strokeWidth: 1.5 });
 
 export const ElasticHierarchy: StoryObj = {
-  render: () =>
-    mount({
-      node,
-      link: "none",
-      // include on both axes → nest. Larger y pad makes the parent "header"
-      // band of empty space; small x pad hugs the subtree horizontally.
-      parentChild: combine({
-        x: { kind: "nest", pad: 8 },
-        y: { kind: "nest", pad: 22 },
-      }),
-      // flatten x → distribute (margin → spacing); align y → align middle.
-      sibling: combine({
-        x: { kind: "distribute", spacing: 8 },
-        y: { kind: "align", alignment: "middle" },
-      }),
-    }),
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "GoTree: Elastic Hierarchy",
+      description:
+        "A nested-rectangle hierarchy where each parent's box stretches to contain its distributed children.",
+    },
+  },
+  render: () => {
+    const container = initializeContainer({ w: 640, h: 420 });
+    tree(
+      {
+        node,
+        link: "none",
+        // include on both axes → nest. Larger y pad makes the parent "header"
+        // band of empty space; small x pad hugs the subtree horizontally.
+        parentChild: combine({
+          x: { kind: "nest", pad: 8 },
+          y: { kind: "nest", pad: 22 },
+        }),
+        // flatten x → distribute (margin → spacing); align y → align middle.
+        sibling: combine({
+          x: { kind: "distribute", spacing: 8 },
+          y: { kind: "align", alignment: "middle" },
+        }),
+      },
+      sampleTree
+    ).render(container, { w: 640, h: 420 });
+    return container;
+  },
 };
