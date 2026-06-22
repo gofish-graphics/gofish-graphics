@@ -1,6 +1,12 @@
 export { tree } from "./tree";
-export { spread, nest, distribute } from "./helpers";
-export type { SpreadOptions, NestOptions, DistributeOptions } from "./helpers";
+export { spread, nest, distribute, combine } from "./helpers";
+export type {
+  SpreadOptions,
+  NestOptions,
+  DistributeOptions,
+  CombineOptions,
+  CombineAxis,
+} from "./helpers";
 export type {
   GoTreeSpec,
   NodeFactory,

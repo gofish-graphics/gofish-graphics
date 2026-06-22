@@ -154,6 +154,33 @@ Internally, `nest` injects two reserved names (`__nest-outer` /
 `__nest-inner`) on the children it wraps — it does not consult or modify any
 name a user has placed on the node mark.
 
+#### `combine({ x?, y? })` — the per-axis primitive
+
+`spread` / `distribute` / `nest` are shorthands for common shapes. `combine` is
+the general form: it picks one constraint **per axis** independently, which is
+exactly GoTree's `Layout(x, y)` model. Each axis takes `"align"`,
+`"distribute"`, or `"nest"` (string shorthand) or the object form with knobs:
+
+```ts
+parentChild: combine({
+  x: "nest",                                  // outer grows to wrap inner on x
+  y: { kind: "distribute", spacing: 40 },     // parent/group stacked on y
+}),
+sibling: combine({ x: "distribute", y: "align" }),
+```
+
+- `align` → `Constraint.align` (overlap on that axis; `{ kind, alignment }`).
+- `distribute` → `Constraint.distribute` (lay out along that axis;
+  `{ kind, spacing, order, mode }`).
+- `nest` → `Constraint.nest` (outer wraps inner on that axis; `{ kind, pad }`).
+  Only valid on the 2-child parent ↔ subtree-group relationship — siblings may
+  only `align` or `distribute`.
+
+The whole gotree layout space is the product of these choices: `{align,
+distribute, nest}²` for `parentChild` × `{align, distribute}²` for `sibling`.
+The **GoTree → Constraint Matrix** story enumerates all 36; node-link, indented,
+icicle, and nested-box trees are each one point in it.
+
 #### Custom combiners
 
 Any function with shape `(children: any[]) => any` works. For example, a sibling

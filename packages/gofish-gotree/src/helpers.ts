@@ -89,6 +89,88 @@ export const distribute =
     });
   };
 
+/**
+ * Per-axis combiner spec. Each axis independently picks one constraint kind —
+ * this is GoTree's `Layout(x, y)` model expressed directly over GoFish's
+ * per-axis constraints (`align` / `distribute` / `nest`). `nest` is only valid
+ * on a 2-child relationship (parent ↔ subtree-group); siblings may only use
+ * `align` or `distribute`.
+ *
+ * Shorthand strings use sensible defaults; the object form exposes the knobs.
+ */
+export type CombineAxis =
+  | "align"
+  | "distribute"
+  | "nest"
+  | { kind: "align"; alignment?: Alignment }
+  | {
+      kind: "distribute";
+      spacing?: number;
+      order?: "forward" | "reverse";
+      mode?: "edge" | "center";
+    }
+  | { kind: "nest"; pad?: number };
+
+export type CombineOptions = { x?: CombineAxis; y?: CombineAxis };
+
+const normalizeAxis = (a: CombineAxis | undefined) =>
+  typeof a === "string" ? ({ kind: a } as Extract<CombineAxis, object>) : a;
+
+/**
+ * `combine` is the general per-axis combiner: it names each child and emits one
+ * `Constraint.*` per specified axis. `combine({ x: "nest", y: "distribute" })`
+ * grows the outer to wrap the inner horizontally while stacking the pair
+ * vertically. Every gotree layout (node-link, icicle, nested boxes, indented,
+ * …) is a point in the `{x, y}` constraint space this enumerates.
+ *
+ * `nest` on either axis requires exactly two children and treats them as
+ * `[outer, inner]`; the `spread`/`distribute`/`nest` helpers remain as
+ * ergonomic shorthands for the common single-shape cases.
+ */
+export const combine =
+  (opts: CombineOptions): Combiner =>
+  (children: any[]) => {
+    const named = children.map((c, i) => Layer([c]).name(`__combine-${i}`));
+    const refs = (c: any) => named.map((_, i) => c[`__combine-${i}`]);
+    return Layer(named).constrain((c: any) => {
+      const cs: any[] = [];
+      for (const axis of ["x", "y"] as const) {
+        const spec = normalizeAxis(opts[axis]);
+        if (spec === undefined) continue;
+        if (spec.kind === "align") {
+          cs.push(
+            Constraint.align({ [axis]: spec.alignment ?? "middle" }, refs(c))
+          );
+        } else if (spec.kind === "distribute") {
+          cs.push(
+            Constraint.distribute(
+              {
+                dir: axis,
+                spacing: spec.spacing ?? 0,
+                order: spec.order ?? "forward",
+                mode: spec.mode ?? "edge",
+              },
+              refs(c)
+            )
+          );
+        } else if (spec.kind === "nest") {
+          if (children.length !== 2) {
+            throw new Error(
+              `gofish-gotree combine(): nest on the ${axis} axis requires exactly 2 children [outer, inner], got ${children.length}`
+            );
+          }
+          cs.push(
+            Constraint.nest({ [axis]: spec.pad ?? 0 }, [
+              c["__combine-0"],
+              c["__combine-1"],
+            ])
+          );
+        }
+      }
+      return cs;
+    });
+  };
+
 export type NestOptions = { x?: number; y?: number };
 
 const OUTER_NAME = "__nest-outer";
