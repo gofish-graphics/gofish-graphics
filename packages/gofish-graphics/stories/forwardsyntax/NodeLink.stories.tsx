@@ -11,6 +11,14 @@ import {
 
 const meta: Meta = {
   title: "Forward Syntax V3/NodeLink",
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "Node-link Diagram",
+      description:
+        "A node-link graph whose edges are drawn by resolving each edge row's source and target ids back into the scattered nodes they name, via .layer() and resolve.",
+    },
+  },
   argTypes: {
     w: { control: { type: "number", min: 100, max: 1000, step: 10 } },
     h: { control: { type: "number", min: 100, max: 1000, step: 10 } },

@@ -171,10 +171,11 @@ function walkLayer(
   optionalField(node, "constraints", path, ctx, (v, p) =>
     walkArray(v, p, ctx, walkConstraint)
   );
+  optionalField(node, "builder", path, ctx, expectBoolean);
   if (ctx.strict) {
     rejectUnknown(
       node,
-      ["type", "charts", "options", "constraints", "origin", "meta"],
+      ["type", "charts", "options", "constraints", "builder", "origin", "meta"],
       path,
       ctx
     );

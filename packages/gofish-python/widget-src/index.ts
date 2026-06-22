@@ -302,7 +302,17 @@ function renderLayer(
     debug,
   };
 
-  if (Object.keys(resolvedLayerOptions).length > 0) {
+  if ((spec as any).builder) {
+    // v3 `chart(...).layer(...)` chain: reconstruct through the real
+    // LayerBuilder so JS owns the builder's render logic (inferred axis
+    // titles, etc.) instead of the wrapper re-deriving it. The child charts
+    // are already wired (the producer mark is named, the consumer reads
+    // selectAll), so chaining `.layer()` just stacks them.
+    const layerBuilder = childCharts
+      .slice(1)
+      .reduce((acc: any, c) => acc.layer(c), childCharts[0] as any);
+    layerBuilder.render(container, renderOptions);
+  } else if (Object.keys(resolvedLayerOptions).length > 0) {
     (Layer as any)(resolvedLayerOptions, childCharts).render(
       container,
       renderOptions

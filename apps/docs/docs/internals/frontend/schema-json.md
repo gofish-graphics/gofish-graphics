@@ -188,6 +188,10 @@ for the API.
           },
           "description": "Layer-level constraints (Layer([...]).constrain(...)), resolving refs against the child charts' names."
         },
+        "builder": {
+          "type": "boolean",
+          "description": "True when this came from the v3 chart(...).layer(...) builder chain (not the low-level layer([...]) combinator). The deserializer reconstructs it through the real LayerBuilder so JS owns the builder's render logic (inferred axis titles, etc.)."
+        },
         "origin": {
           "$ref": "#/$defs/Origin"
         },

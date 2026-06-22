@@ -139,6 +139,9 @@ interface LayerHarnessSpec {
   options: Record<string, any>;
   // Constraints relating the named children of a `Layer([...]).constrain(...)`.
   constraints?: ConstraintSpec[];
+  // True for a v3 `chart(...).layer(...)` builder chain: reconstruct through
+  // the real LayerBuilder so JS owns the builder's render logic.
+  builder?: boolean;
   deriveServerUrl?: string;
 }
 
@@ -883,6 +886,21 @@ function renderChart(spec: HarnessSpec) {
             })
           );
           await layerMark.render(container, {
+            w,
+            h,
+            axes: axes ?? false,
+            debug: debug ?? false,
+          } as any);
+        } else if (spec.builder) {
+          // v3 `chart(...).layer(...)` chain: reconstruct through the real
+          // LayerBuilder so JS owns the builder's render logic (inferred axis
+          // titles, etc.) instead of re-deriving it here. The child charts are
+          // already wired (producer mark named, consumer reads selectAll), so
+          // chaining `.layer()` just stacks them.
+          const layerBuilder = childCharts
+            .slice(1)
+            .reduce((acc: any, c) => acc.layer(c), childCharts[0] as any);
+          await layerBuilder.render(container, {
             w,
             h,
             axes: axes ?? false,

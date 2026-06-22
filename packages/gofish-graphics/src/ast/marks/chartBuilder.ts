@@ -393,17 +393,20 @@ export class ChartBuilder<TInput, TOutput = TInput> {
     return { builder: this.mark(named), name: autoName };
   }
 
-  /** The render-time metadata `LayerBuilder` threads from the root tier:
-   *  the resolved axes/color config. (Axis titles come from the resolved space
-   *  measure at render time, like the manual `layer([...])` form — a layer does
-   *  not thread inferred `axisFields`.) */
+  /** The render-time metadata threaded from the root tier: resolved axes/color
+   *  config plus inferred axis titles. `LayerBuilder` uses this so a `.layer()`
+   *  chart titles its axes (e.g. an x "lake" title from the root `spread`); the
+   *  Python parity harness reads the same from the first child chart so both
+   *  languages render the title. */
   renderMeta(): {
     axes?: AxesOptions;
     colorConfig?: ColorConfig;
+    axisFields: { x?: string; y?: string };
   } {
     return {
       axes: this.options?.axes,
       colorConfig: this.options?.color,
+      axisFields: this.inferAxisFields(),
     };
   }
 
@@ -723,17 +726,17 @@ export class LayerBuilder {
   ): Promise<{ node: GoFishNode; options: T & Record<string, unknown> }> {
     const node = await this.resolve();
     const meta = this.tiers[0].renderMeta();
-    // Match the manual `layer([...])` form (and the Python parity harness):
-    // a layer-of-charts renders axes from its root chart's options but does NOT
-    // thread `axisFields` — ordinal axis titles come from the resolved space
-    // measure, not an inferred field. Passing axisFields here made `.layer()`
-    // surface an x-title the manual form omits, diverging JS from Python.
+    // Thread axes/color/axisFields from the root tier so a `.layer()` chart
+    // titles its axes (e.g. an x "lake" title from the root `spread`). The
+    // Python parity harness mirrors this off the first child chart so both
+    // languages render the same titles.
     return {
       node,
       options: {
         ...options,
         axes: (options as any).axes ?? meta.axes,
         colorConfig: meta.colorConfig,
+        axisFields: meta.axisFields,
       },
     };
   }

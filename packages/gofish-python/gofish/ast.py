@@ -1023,7 +1023,7 @@ class ChartBuilder:
         tiers keep chaining: ``.layer(a).layer(b)``. Mirrors the JS ``.layer()``.
         """
         producer, consumer = _wire_layer_tier(self, child, 0)
-        return LayerBuilder([producer, consumer])
+        return LayerBuilder([producer, consumer], builder_chain=True)
 
     def _uses_previous_marks(self) -> bool:
         """True for an empty ``chart()`` scope (data defers to the prev tier)."""
@@ -2582,10 +2582,17 @@ class LayerBuilder:
         self,
         children: List[ChartBuilder],
         options: Optional[dict] = None,
+        builder_chain: bool = False,
     ):
         self.children = children
         self.options = options or {}
         self._constraints: Optional[List[Any]] = None
+        # True only for the fluent ``chart(...).layer(...)`` chain (v3 builder
+        # semantics — JS reconstructs it through its own LayerBuilder, inferred
+        # axis titles and all). The array form ``layer([chart1, chart2])`` is
+        # the low-level combinator (mirrors JS ``layer([...])``), so it stays
+        # False and renders without those inferred titles.
+        self._builder_chain = builder_chain
 
     def layer(self, child: ChartBuilder) -> "LayerBuilder":
         """Stack another tier; an empty ``chart()`` scope inherits the marks of
@@ -2593,7 +2600,11 @@ class LayerBuilder:
         producer, consumer = _wire_layer_tier(
             self.children[-1], child, len(self.children) - 1
         )
-        return LayerBuilder([*self.children[:-1], producer, consumer], self.options)
+        return LayerBuilder(
+            [*self.children[:-1], producer, consumer],
+            self.options,
+            builder_chain=True,
+        )
 
     def constrain(self, callback: Callable[..., List[Any]]) -> "LayerBuilder":
         """Apply constraints relating the named children of this layer.
@@ -2631,17 +2642,30 @@ class LayerBuilder:
             refs[key] = RefSentinel(key)
 
         constraints = callback(**refs)
-        new_layer = LayerBuilder(self.children, self.options)
+        new_layer = LayerBuilder(
+            self.children, self.options, builder_chain=self._builder_chain
+        )
         new_layer._constraints = list(constraints)
         return new_layer
 
     def to_ir(self) -> dict:
-        """Convert the layer specification to JSON IR."""
+        """Convert the layer specification to JSON IR.
+
+        A fluent ``chart(...).layer(...)`` chain tags the node ``builder: True``
+        so JS reconstructs it through the real v3 ``LayerBuilder`` (which owns
+        the builder's render logic — inferred axis titles, etc.) rather than the
+        low-level ``layer([...])`` combinator. This keeps that logic in one place
+        (JS) instead of re-deriving it in the wrapper. The array form
+        ``layer([chart1, chart2])`` leaves it off and renders as the low-level
+        combinator, mirroring JS ``layer([...])``.
+        """
         result: dict = {
             "type": "layer",
             "charts": [child.to_ir() for child in self.children],
             "options": self.options,
         }
+        if self._builder_chain:
+            result["builder"] = True
         if self._constraints is not None:
             result["constraints"] = [c.to_dict() for c in self._constraints]
         return result

@@ -127,7 +127,14 @@ Walking `createOperator.ts:391-415`:
 2. **fmap** — for each `(key, subdata)` entry, call the user's mark with
    that subdata and a parent-prefixed key (`${key}-${i}`). The result is
    resolved to a `GoFishNode`. `node.setKey(...)` makes downstream
-   coordinators able to look it back up.
+   coordinators able to look it back up. When `by` is a string, each produced
+   leaf is also stamped with `__splitBy` recording that field — the innermost
+   grouping wins (a `??=`-style guard means an already-stamped node keeps its
+   value). This is what lets a later `resolve(cols, { from })` infer its match
+   key for free: it reads `__splitBy` off the resolved node to learn which
+   field that node was grouped by (`scatter({ by: "id" })` ⇒ join on `id`),
+   so the user need not restate the key. A function `by` has no field name to
+   record, so `resolve` errors there unless given an explicit `key`.
 3. **Apply channels** — `applyChannels` runs `inferSize` / `inferPos` /
    `inferColor` on annotated opts. For an entry-flagged channel
    (`{type, entry: true}`), the inference runs once per split entry,

@@ -110,6 +110,11 @@ export interface LayerIR extends BaseIRNode {
   /** Layer-level constraints (from `Layer([...]).constrain(...)`), resolving
    *  refs against the child charts' `name`s. */
   constraints?: ConstraintIR[];
+  /** True when this came from the v3 `chart(...).layer(...)` builder chain
+   *  (rather than the low-level `layer([...])` combinator). The deserializer
+   *  reconstructs it through the real `LayerBuilder` so JS — not the wrapper —
+   *  owns the builder's render logic (inferred axis titles, etc.). */
+  builder?: boolean;
 }
 
 /** A bare mark, used when no chart-level wrapping is needed. */
