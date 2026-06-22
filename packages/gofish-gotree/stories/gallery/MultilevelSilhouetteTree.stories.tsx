@@ -33,7 +33,17 @@ import { combine, byDepth, mount } from "./_shared";
 //    PolarAxis θ/r swap from the dsl are not expressible. polarTransposed()
 //    only swaps θ/r wholesale.
 
-const meta: Meta = { title: "GoTree / Gallery / MultilevelSilhouetteTree" };
+const meta: Meta = {
+  title: "GoTree / Gallery / MultilevelSilhouetteTree",
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "GoTree: Multilevel Silhouette Tree",
+      description:
+        "A multilevel radial node-link tree read outward from the center as a silhouette.",
+    },
+  },
+};
 export default meta;
 
 const node = (d: any) =>

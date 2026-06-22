@@ -60,5 +60,15 @@ export const TreemapSlice: StoryObj = {
     ),
 };
 
-const meta: Meta = { title: "GoTree / Gallery / treemap-slice" };
+const meta: Meta = {
+  title: "GoTree / Gallery / treemap-slice",
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "GoTree: Slice Treemap",
+      description:
+        "A slice-and-dice treemap subdividing each parent rectangle into value-proportional child slices.",
+    },
+  },
+};
 export default meta;

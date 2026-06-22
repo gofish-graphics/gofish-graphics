@@ -37,5 +37,15 @@ export const ReadableTreeLayout: StoryObj = {
     }),
 };
 
-const meta: Meta = { title: "GoTree / Gallery / ReadableTreeLayout" };
+const meta: Meta = {
+  title: "GoTree / Gallery / ReadableTreeLayout",
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "GoTree: Readable Tree Layout",
+      description:
+        "A readable tree layout that distributes siblings for even spacing and routes parent-child links cleanly.",
+    },
+  },
+};
 export default meta;

@@ -11,7 +11,17 @@ import { combine, alternate, byDepth, mount } from "./_shared";
 // `alternate([dice, slice])`. That swap is the essence of a squarified-looking
 // treemap — it avoids the tall-thin-column look of a single fixed template.
 // Node = rectangle, link = none, color = depth (blue ramp, dark root → light leaf).
-const meta: Meta = { title: "GoTree / Gallery / Treemap" };
+const meta: Meta = {
+  title: "GoTree / Gallery / Treemap",
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "GoTree: Treemap",
+      description:
+        "A space-filling treemap that recursively alternates slice and dice subdivision to size rectangles by value.",
+    },
+  },
+};
 export default meta;
 
 // Internal/parent nodes nest on BOTH axes, so they must be UNSIZED on both x and

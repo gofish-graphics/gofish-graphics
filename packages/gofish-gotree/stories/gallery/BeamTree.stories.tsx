@@ -13,7 +13,17 @@ import { combine, alternate, byDepth, mount } from "./_shared";
 // at every depth: the root lays children out in a row, those children stack
 // their children in a column, and so on. Leaves carry the size (∝ value);
 // internal nodes are unsized so their boxes wrap the children plus padding.
-const meta: Meta = { title: "GoTree / Gallery / BeamTree" };
+const meta: Meta = {
+  title: "GoTree / Gallery / BeamTree",
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "GoTree: Beam Tree",
+      description:
+        "A nested beam treemap where each subtree is contained within its parent's bar, alternating horizontal and vertical splits by depth.",
+    },
+  },
+};
 export default meta;
 
 // rectangle nodes, colored by depth (dark root → light leaves). Leaves are

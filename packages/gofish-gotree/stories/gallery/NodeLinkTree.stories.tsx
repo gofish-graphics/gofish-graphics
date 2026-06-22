@@ -12,7 +12,17 @@ import { combine, byDepth, mount } from "./_shared";
 //                 order:"reverse" on y puts the root at the TOP (y-up).
 //   sibling     = combine({ x: distribute (siblings laid out flat side-by-side),
 //                           y: align start (siblings share a baseline/row) })
-const meta: Meta = { title: "GoTree / Gallery / NodeLinkTree" };
+const meta: Meta = {
+  title: "GoTree / Gallery / NodeLinkTree",
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "GoTree: Node-Link Tree",
+      description:
+        "A classic top-down node-link tree diagram with depth-colored circular nodes connected to their children.",
+    },
+  },
+};
 export default meta;
 
 // A uniform-depth tree (root → many depth-1 nodes → leaves), matching the

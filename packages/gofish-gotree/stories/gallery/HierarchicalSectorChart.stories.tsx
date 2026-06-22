@@ -60,7 +60,17 @@ import { combine, byDepth, mount } from "./_shared";
 //    a hand-sampled per-depth ramp passed to byDepth(); polar()/the color scale
 //    take no interpolated-range option here, so the ramp stops are explicit.
 
-const meta: Meta = { title: "GoTree / Gallery / HierarchicalSectorChart" };
+const meta: Meta = {
+  title: "GoTree / Gallery / HierarchicalSectorChart",
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "GoTree: Hierarchical Sector Chart",
+      description:
+        "A hierarchical sector chart drawing the tree as concentric polar wedges sized by subtree.",
+    },
+  },
+};
 export default meta;
 
 // Orange→yellow depth ramp (dsl ColorRange ["#DE4006","#EFD648"]), sampled at

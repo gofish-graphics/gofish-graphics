@@ -13,7 +13,17 @@ import { combine, byDepth, mount } from "./_shared";
 // TODO: needs step/orthogonal links implemented — GoTree's Link is
 //   `curveStepBefore` (right-angle elbow connectors), which the link renderer
 //   does not yet support, so links fall back to {interpolation:"linear"}.
-const meta: Meta = { title: "GoTree / Gallery / OrthogonalTree" };
+const meta: Meta = {
+  title: "GoTree / Gallery / OrthogonalTree",
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "GoTree: Orthogonal Tree",
+      description:
+        "A node-link tree drawn with orthogonal right-angle link routing between parents and children.",
+    },
+  },
+};
 export default meta;
 
 const node = (d: any) =>

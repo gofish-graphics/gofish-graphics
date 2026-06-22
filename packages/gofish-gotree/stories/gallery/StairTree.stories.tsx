@@ -8,7 +8,17 @@ import { combine, byDepth, mount } from "./_shared";
 // Each parent sits left of its subtree (distribute x) and its box wraps the
 // subtree vertically (nest y); siblings step diagonally (distribute on both
 // axes) — producing the cascading staircase.
-const meta: Meta = { title: "GoTree / Gallery / StairTree" };
+const meta: Meta = {
+  title: "GoTree / Gallery / StairTree",
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "GoTree: Stair Tree",
+      description:
+        "A staircase tree where each level steps outward, nesting children along one axis while distributing along the other.",
+    },
+  },
+};
 export default meta;
 
 // rectangle nodes, colored by depth. Internal nodes are left UNSIZED on y (the

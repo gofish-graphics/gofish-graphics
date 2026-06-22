@@ -58,7 +58,17 @@ import { combine, byDepth, mount } from "./_shared";
 //    leaf-count. It tiles here only because leaf widths are hand-set to
 //    leafTheta and summed by nest; an unbalanced tree or a wrong leafTheta
 //    overflows 2π and wedges wrap. GoTree allocates angle automatically.
-const meta: Meta = { title: "GoTree / Gallery / SectorTree2" };
+const meta: Meta = {
+  title: "GoTree / Gallery / SectorTree2",
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "GoTree: Sector Tree",
+      description:
+        "A polar sector tree nesting child wedges within parent arcs across radial levels.",
+    },
+  },
+};
 export default meta;
 
 // Balanced binary tree, 4 levels deep → 16 leaves, so wedge widths divide the

@@ -91,4 +91,14 @@ export const RadialDeep: StoryObj = {
     ),
 };
 
-export default { title: "GoTree / Gallery / radial-deep" } as Meta;
+export default {
+  title: "GoTree / Gallery / radial-deep",
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "GoTree: Radial Deep Tree",
+      description:
+        "A deep radial node-link tree fanning many hierarchy levels outward from the center.",
+    },
+  },
+} as Meta;

@@ -48,7 +48,17 @@ import { combine, byDepth, mount, sampleTree } from "./_shared";
 //    leaf count is computed so each ring sums to exactly 2π.
 //  - Links="curve" is unsupported under polar; filled wedges want no links
 //    anyway, so link:"none".
-const meta: Meta = { title: "GoTree / Gallery / icicleplot" };
+const meta: Meta = {
+  title: "GoTree / Gallery / icicleplot",
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "GoTree: Polar Icicle",
+      description:
+        "A polar icicle plot rendering each level as a ring of arc segments sized by subtree.",
+    },
+  },
+};
 export default meta;
 
 // Sequential blue ramp matching the dsl ColorRange (#2171b5 dark → #deebf7 light),

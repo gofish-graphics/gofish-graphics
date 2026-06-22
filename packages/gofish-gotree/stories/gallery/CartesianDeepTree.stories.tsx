@@ -63,4 +63,14 @@ export const CartesianDeepTree: StoryObj = {
     ),
 };
 
-export default { title: "GoTree / Gallery / cartesian-deep-tree" } as Meta;
+export default {
+  title: "GoTree / Gallery / cartesian-deep-tree",
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "GoTree: Cartesian Deep Tree",
+      description:
+        "A deep cartesian node-link tree showing many levels of hierarchy with curved parent-child links.",
+    },
+  },
+} as Meta;

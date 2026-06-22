@@ -13,7 +13,17 @@ import { combine, alternate, byDepth, mount } from "./_shared";
 // H-fractal needs. parentChild stays a constant (parent centered on both axes);
 // only the sibling spread axis alternates H ⇄ V.
 // Mapping rules: within → align(middle); flatten/juxtapose → distribute.
-const meta: Meta = { title: "GoTree / Gallery / HTreeLayout" };
+const meta: Meta = {
+  title: "GoTree / Gallery / HTreeLayout",
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "GoTree: H-Tree Layout",
+      description:
+        "An H-tree fractal layout that swaps its spread axis at every depth to recursively pack the tree into a square.",
+    },
+  },
+};
 export default meta;
 
 // Circle nodes, colored by depth (dark root → light leaves), static size 14

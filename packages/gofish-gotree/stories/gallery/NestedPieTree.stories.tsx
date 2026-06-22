@@ -20,7 +20,17 @@ import { combine, alternate, byDepth, mount } from "./_shared";
 // at every level (parent box wraps its subtree). Expressing sibling as
 // `alternate([dice, slice])` makes the subdivision direction swap slice↔dice at
 // each depth — the cartesian analogue of the radial slice/dice nesting.
-const meta: Meta = { title: "GoTree / Gallery / NestedPieTree" };
+const meta: Meta = {
+  title: "GoTree / Gallery / NestedPieTree",
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "GoTree: Nested Pie Tree",
+      description:
+        "A cartesian nested treemap alternating slice and dice subdivision, the rectangular analogue of a nested pie.",
+    },
+  },
+};
 export default meta;
 
 // rectangle nodes, colored by depth. Leaves are sized by their datum value

@@ -85,7 +85,17 @@ const sampleTree = (() => {
 //    polar() cannot, so we use a balanced tree (see sampleTree above).
 //  - Link is "none": a filled-wedge inclusion tree draws no links (the dsl has no
 //    link element either); polar links only support linear interpolation anyway.
-const meta: Meta = { title: "GoTree / Gallery / TyreTree" };
+const meta: Meta = {
+  title: "GoTree / Gallery / TyreTree",
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "GoTree: Tyre Tree",
+      description:
+        "A tyre tree of concentric wedge rings, each ring a level of the hierarchy around a central hub.",
+    },
+  },
+};
 export default meta;
 
 // Sequential blue ramp, dark at the root (outer rim) → light at the leaves

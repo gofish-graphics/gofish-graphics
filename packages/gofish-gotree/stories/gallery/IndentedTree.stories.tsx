@@ -18,7 +18,17 @@ import { combine, byDepth, mount } from "./_shared";
 // the widest bar, leaves the narrowest) plus Color = depth. distribute uses
 // order:"reverse" so y-up places the parent/first-child at the TOP and the
 // subtree stacks downward.
-const meta: Meta = { title: "GoTree / Gallery / IndentedTree" };
+const meta: Meta = {
+  title: "GoTree / Gallery / IndentedTree",
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "GoTree: Indented Tree",
+      description:
+        "An indented outline tree, like a file explorer, with each level nested and stacked vertically.",
+    },
+  },
+};
 export default meta;
 
 // sampleTree's deepest path is root → B → B2 → B2b, so maxDepth = 3.

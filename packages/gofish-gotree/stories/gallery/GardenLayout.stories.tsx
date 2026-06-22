@@ -40,5 +40,15 @@ export const GardenLayout: StoryObj = {
     }),
 };
 
-const meta: Meta = { title: "GoTree / Gallery / GardenLayout" };
+const meta: Meta = {
+  title: "GoTree / Gallery / GardenLayout",
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "GoTree: Garden Layout",
+      description:
+        "A tidy node-link tree with circular nodes in a garden-like arrangement connected by elbow links.",
+    },
+  },
+};
 export default meta;

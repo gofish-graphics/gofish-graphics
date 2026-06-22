@@ -13,7 +13,17 @@ import { combine, byDepth, mount } from "./_shared";
 // fixed-narrow-width but UNSIZED on y — the parent bar grows vertically to wrap
 // its subtree (include). Siblings flatten along x and align on y. Color = depth
 // (dark→light gray, matching the dsl ColorRange #070707 → #929598).
-const meta: Meta = { title: "GoTree / Gallery / barcodetree" };
+const meta: Meta = {
+  title: "GoTree / Gallery / barcodetree",
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "GoTree: Barcode Tree",
+      description:
+        "A barcode tree that encodes the hierarchy as thin nested bars stacked along an axis.",
+    },
+  },
+};
 export default meta;
 
 const grays = ["#070707", "#3b3e41", "#6c6f72", "#929598", "#b6b9bc"];

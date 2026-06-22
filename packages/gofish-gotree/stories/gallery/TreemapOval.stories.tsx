@@ -14,7 +14,17 @@ import { combine, alternate, byDepth, mount } from "./_shared";
 // sized by their datum value. Because nest sizes a bounding BOX, an ellipse
 // wrapping children overflows visually at its corners — expected for oval
 // treemaps.
-const meta: Meta = { title: "GoTree / Gallery / TreemapOval" };
+const meta: Meta = {
+  title: "GoTree / Gallery / TreemapOval",
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "GoTree: Oval Treemap",
+      description:
+        "A treemap variant that nests value-sized ellipses, alternating slice and dice subdivision by depth.",
+    },
+  },
+};
 export default meta;
 
 // ellipse nodes, colored by depth. Internal nodes are left UNSIZED on both x

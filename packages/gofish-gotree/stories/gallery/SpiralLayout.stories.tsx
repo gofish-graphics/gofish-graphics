@@ -32,7 +32,17 @@ import { combine, byDepth, mount } from "./_shared";
 //    but the per-step r and θ increments are independent constants rather than
 //    a single Archimedean-spiral parameterization, so the pitch is only roughly
 //    constant.
-const meta: Meta = { title: "GoTree / Gallery / SpiralLayout" };
+const meta: Meta = {
+  title: "GoTree / Gallery / SpiralLayout",
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "GoTree: Spiral Layout",
+      description:
+        "A spiral tree layout distributing nodes along both angular and radial axes to wind the hierarchy outward.",
+    },
+  },
+};
 export default meta;
 
 const node = (d: any) =>

@@ -10,7 +10,17 @@ import { combine, byDepth, mount } from "./_shared";
 //   sibling = (distribute x, align y[top→"end" in y-up]) — siblings flatten
 //     along x and share a top edge.
 // node = rectangle colored by depth, links = none.
-const meta: Meta = { title: "GoTree / Gallery / iptp" };
+const meta: Meta = {
+  title: "GoTree / Gallery / iptp",
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "GoTree: Indented Pixel Tree",
+      description:
+        "An indented pixel-tree plot that lays out the hierarchy as a dense grid of nested rectangles.",
+    },
+  },
+};
 export default meta;
 
 // Uniform tall-bar rectangle nodes, colored by depth (dark root → light leaves).

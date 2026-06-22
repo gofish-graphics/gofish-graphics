@@ -54,7 +54,17 @@ import { combine, byDepth, mount } from "./_shared";
 //    overflows 2π and wedges wrap. GoTree allocates angle automatically.
 //  - Node:circle in the dsl, but the reference (and a real sunburst) is filled
 //    arc wedges — we render rect wedges, matching the visual reference.
-const meta: Meta = { title: "GoTree / Gallery / sunburst" };
+const meta: Meta = {
+  title: "GoTree / Gallery / sunburst",
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "GoTree: Sunburst",
+      description:
+        "A sunburst diagram drawing the hierarchy as nested arc wedges radiating from the root.",
+    },
+  },
+};
 export default meta;
 
 // Balanced binary tree, 4 levels deep → 16 leaves, so wedge widths divide the

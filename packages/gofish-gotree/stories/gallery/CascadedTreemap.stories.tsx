@@ -14,7 +14,17 @@ import { combine, alternate, byDepth, mount } from "./_shared";
 // UNSIZED on both axes (the parent box grows to enclose its subtree). A small
 // nest pad adds a nested inset border at every level (the visible "cascade").
 // Only LEAVES carry intrinsic size, driven by the datum value.
-const meta: Meta = { title: "GoTree / Gallery / CascadedTreemap" };
+const meta: Meta = {
+  title: "GoTree / Gallery / CascadedTreemap",
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "GoTree: Cascaded Treemap",
+      description:
+        "A cascaded treemap that alternates slice and dice subdivision at each level to nest child rectangles inside their parents.",
+    },
+  },
+};
 export default meta;
 
 const node = (d: any) =>

@@ -12,7 +12,17 @@ import { combine, byDepth, mount } from "./_shared";
 // while siblings sit side-by-side in a row (distribute x, aligned middle on y).
 // Leaves are sized by datum (value); internal/parent rects are UNSIZED on both
 // axes (the nest axes) so each box grows to wrap its subtree.
-const meta: Meta = { title: "GoTree / Gallery / ElasticHierarchy" };
+const meta: Meta = {
+  title: "GoTree / Gallery / ElasticHierarchy",
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "GoTree: Elastic Hierarchy",
+      description:
+        "A nested-rectangle hierarchy where each parent's box stretches to contain its distributed children.",
+    },
+  },
+};
 export default meta;
 
 // rectangle nodes, colored by depth. Leaves carry the size (height scaled by

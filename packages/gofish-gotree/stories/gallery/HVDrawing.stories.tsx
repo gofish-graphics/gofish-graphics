@@ -8,7 +8,17 @@ import { combine, alternate, byDepth, mount } from "./_shared";
 //   dsl2: X within/align, Y juxtapose/flatten  → spread on Y, align on X  ("V")
 // Expressed with `alternate([H, V])` so every level swaps the spread axis —
 // THIS is what makes the HV drawing (a single fixed template collapses to a line).
-const meta: Meta = { title: "GoTree / Gallery / HVDrawing" };
+const meta: Meta = {
+  title: "GoTree / Gallery / HVDrawing",
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "GoTree: HV Drawing",
+      description:
+        "An HV-drawing that alternates horizontal and vertical placement by depth to draw the tree as a compact staircase.",
+    },
+  },
+};
 export default meta;
 
 const node = (d: any) =>

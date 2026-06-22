@@ -27,7 +27,17 @@ import { combine, byDepth, mount } from "./_shared";
 //       reference's right-angle brackets.
 // NOTE: node="hidden" → render a zero-area transparent rect so the tree still
 //       has a node to position the links against.
-const meta: Meta = { title: "GoTree / Gallery / dendrogram" };
+const meta: Meta = {
+  title: "GoTree / Gallery / dendrogram",
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "GoTree: Dendrogram",
+      description:
+        "A dendrogram with hidden internal nodes and bracket-style links, as used for clustering trees.",
+    },
+  },
+};
 export default meta;
 
 // A multi-level tree so the bracketing reads clearly.
