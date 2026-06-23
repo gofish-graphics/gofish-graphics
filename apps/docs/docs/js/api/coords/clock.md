@@ -25,7 +25,10 @@ clock();
 
 ## Parameters
 
-None. The clock transform has no configuration options.
+`clock()` is a [`polar()`](/js/api/coords/polar) preset and accepts the same
+options — `innerRadius`, `centralAngle`, `startAngle`, `direction`, `center` — but
+with clock-face defaults (0° at 12 o'clock, clockwise). See
+[polar's Parameters](/js/api/coords/polar#parameters).
 
 ## Usage
 
@@ -53,9 +56,9 @@ chart(data, { coord: clock() })
   .flow(stack({ by: "category", dir: "x" }))
   .mark(rect({ w: "value", fill: "category" }));
 
-// Donut chart (with inner radius)
-chart(data, { coord: clock() })
-  .flow(stack({ by: "category", dir: "x", y: 50, h: 50 }))
+// Donut chart (hollow center via inner radius)
+chart(data, { coord: clock({ innerRadius: 0.6 }) })
+  .flow(stack({ by: "category", dir: "x" }))
   .mark(rect({ w: "value", fill: "category" }));
 
 // Rose chart (radial bar chart)

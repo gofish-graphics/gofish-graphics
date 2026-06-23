@@ -1,17 +1,15 @@
 import { CoordinateTransform } from "./coord";
+import { polar, PolarOptions } from "./polar";
 
-// Clock coordinate system: 0° is at 12 o'clock (pointing up)
-// theta increases clockwise (standard clock direction)
-export const clock = (): CoordinateTransform => {
-  return {
-    type: "clock",
-    transform: ([theta, r]: [number, number]) => [
-      r * Math.cos(-theta + Math.PI / 2),
-      r * Math.sin(-theta + Math.PI / 2),
-    ],
-    domain: [
-      { min: 0, max: 2 * Math.PI, size: 2 * Math.PI },
-      { min: 0, max: 100, size: 100 },
-    ],
-  };
-};
+/**
+ * Clock coordinate system: a `polar()` preset. 0° at 12 o'clock, increasing
+ * clockwise (the standard clock direction) — which are already `polar()`'s
+ * defaults, so `clock()` is `polar()` with a distinct `type` tag. The tag is
+ * kept because coordUtils' bbox sampling special-cases `"clock"`/`"polar"`, and
+ * so user specs read intent. Accepts the same options (e.g. `innerRadius` for a
+ * clock rim).
+ */
+export const clock = (opts: PolarOptions = {}): CoordinateTransform => ({
+  ...polar(opts),
+  type: "clock",
+});

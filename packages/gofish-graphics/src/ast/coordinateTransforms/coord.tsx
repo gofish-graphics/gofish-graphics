@@ -39,6 +39,17 @@ export type CoordinateTransform = {
   transform: (point: [number, number]) => [number, number];
   // inferDomain: ({ width, height }: { width: number; height: number }) => Interval[];
   domain: [Interval, Interval];
+  /**
+   * Axis-name aliases this space contributes to its scope (e.g. polar:
+   * `{ x: "theta", y: "r" }`). Position aliases; size aliases are `<name>Size`.
+   * Propagated by `coord` so marks/operators in scope can use them.
+   */
+  aliases?: { x?: string; y?: string };
+  /**
+   * Donut-hole radius as a fraction [0,1) of the outer radius (polar family).
+   * Default 0 (filled disc). `coord.layout` insets the radial range by this.
+   */
+  innerRadius?: number;
 };
 
 export const coord = createNodeOperator(
@@ -151,9 +162,26 @@ export const coord = createNodeOperator(
         },
         layout: (shared, size, scaleFactors, children, posScales) => {
           /* TODO: need correct scale factors */
-          // TODO: only works for polar2 right now
+          // TODO: only works for polar-family transforms right now
           const [origW, origH] = size;
-          size = [2 * Math.PI, Math.min(origW, origH) / 2 - padding];
+          // Angular budget = the transform's domain[0] size (CentralAngle), not a
+          // hardcoded 2π. Radial budget = outer radius minus the inner-radius inset
+          // (donut hole): children lay out in r ∈ [0, outerR − innerR] and are
+          // shifted out by innerR at transform time (see `effectiveTransform`).
+          const outerR = Math.min(origW, origH) / 2 - padding;
+          const innerR = (coordTransform.innerRadius ?? 0) * outerR;
+          const angularBudget = coordTransform.domain[0].size ?? 2 * Math.PI;
+          size = [angularBudget, outerR - innerR];
+          // The radius shift for the donut hole. At innerR=0 this is exactly
+          // `coordTransform`, so the default disc is unchanged.
+          const effectiveTransform: CoordinateTransform =
+            innerR > 0
+              ? {
+                  ...coordTransform,
+                  transform: ([theta, r]: [number, number]) =>
+                    coordTransform.transform([theta, r + innerR]),
+                }
+              : coordTransform;
           const childPlaceables = children.map((child) =>
             child.layout(size, [1, 1], [undefined, undefined])
           );
@@ -206,7 +234,7 @@ export const coord = createNodeOperator(
               coordMaxX,
               coordMinY,
               coordMaxY,
-              coordTransform
+              effectiveTransform
             );
 
             screenBbox = union(screenBbox, transformedBbox);
@@ -236,15 +264,19 @@ export const coord = createNodeOperator(
           const half = Math.min(origW, origH) / 2;
           const translateX =
             dims[0].min !== undefined
-              ? coordTransform.transform([dims[0].min, dims[1].min ?? 0])[0] -
-                screenBboxMinX
+              ? effectiveTransform.transform([
+                  dims[0].min,
+                  dims[1].min ?? 0,
+                ])[0] - screenBboxMinX
               : hasAxes
                 ? half
                 : -screenBboxMinX;
           const translateY =
             dims[1].min !== undefined
-              ? coordTransform.transform([dims[0].min ?? 0, dims[1].min])[1] -
-                screenBboxMinY
+              ? effectiveTransform.transform([
+                  dims[0].min ?? 0,
+                  dims[1].min,
+                ])[1] - screenBboxMinY
               : hasAxes
                 ? half
                 : -screenBboxMinY;
@@ -279,10 +311,28 @@ export const coord = createNodeOperator(
             renderData: {
               coordinateSpaceBbox: coordSpaceBbox,
               contentOffset: [translateX, translateY] as [number, number],
+              // Absolute donut-hole inset (px). render rebuilds the same radial
+              // shift so display objects, grid and axis all sit past the hole.
+              innerRadius: innerR,
             },
           };
         },
         render: ({ transform, renderData }, _children, node) => {
+          // Rebuild the donut-hole radial shift layout computed (see
+          // renderData.innerRadius) so display objects, grid and axis all sit
+          // past the hole. At innerR=0 this is exactly `coordTransform`.
+          const innerR = (renderData as any)?.innerRadius ?? 0;
+          const effectiveTransform: CoordinateTransform =
+            innerR > 0
+              ? {
+                  ...coordTransform,
+                  transform: ([theta, r]: [number, number]) =>
+                    coordTransform.transform([theta, r + innerR]),
+                }
+              : coordTransform;
+          // Angular budget = the transform's domain[0] size (CentralAngle), so a
+          // sub-2π sweep tiles the axis ticks correctly. Default 2π is unchanged.
+          const angularBudget = coordTransform.domain[0].size ?? 2 * Math.PI;
           const gridLines = () => {
             /* take an evenly space net of lines covering the space, map them through the space, and
           render the paths */
@@ -290,7 +340,7 @@ export const coord = createNodeOperator(
             const lines = [];
             const ticks = [];
 
-            const domain = coordTransform.domain;
+            const domain = effectiveTransform.domain;
 
             for (
               let i = domain[0].min!;
@@ -305,12 +355,12 @@ export const coord = createNodeOperator(
                   ],
                   { subdivision: 100 }
                 ),
-                coordTransform
+                effectiveTransform
               );
               lines.push(
                 <path d={pathToSVGPath(line)} stroke={black} fill="none" />
               );
-              const [x, y] = coordTransform.transform([i, domain[1].max!]);
+              const [x, y] = effectiveTransform.transform([i, domain[1].max!]);
               ticks.push(
                 <text x={x} y={y} /* dy="-1em" */ font-size="8pt" fill={black}>
                   {i.toFixed(0)}
@@ -330,12 +380,12 @@ export const coord = createNodeOperator(
                   ],
                   { subdivision: 100 }
                 ),
-                coordTransform
+                effectiveTransform
               );
               lines.push(
                 <path d={pathToSVGPath(line)} stroke={black} fill="none" />
               );
-              const [x, y] = coordTransform.transform([
+              const [x, y] = effectiveTransform.transform([
                 domain[0].max! + domain[0].size! / 20,
                 i,
               ]);
@@ -370,7 +420,7 @@ export const coord = createNodeOperator(
             const [xSpace, ySpace] = spaceRef.current;
             const rContent =
               (renderData as any)?.coordinateSpaceBbox?.rMax ??
-              coordTransform.domain[1].max ??
+              effectiveTransform.domain[1].max ??
               100;
             const RING_GAP = 20;
             const rOuter = rContent + RING_GAP;
@@ -401,9 +451,12 @@ export const coord = createNodeOperator(
                   (t) => t < nicedMax
                 );
                 for (const t of tickVals) {
-                  const theta = (t / (nicedMax - xMin)) * 2 * Math.PI;
-                  const [ix, iy] = coordTransform.transform([theta, rOuter]);
-                  const [ox, oy] = coordTransform.transform([
+                  const theta = (t / (nicedMax - xMin)) * angularBudget;
+                  const [ix, iy] = effectiveTransform.transform([
+                    theta,
+                    rOuter,
+                  ]);
+                  const [ox, oy] = effectiveTransform.transform([
                     theta,
                     rOuter + 6,
                   ]);
@@ -417,7 +470,7 @@ export const coord = createNodeOperator(
                       stroke-width="1"
                     />
                   );
-                  const [lx, ly] = coordTransform.transform([
+                  const [lx, ly] = effectiveTransform.transform([
                     theta,
                     rOuter + 16,
                   ]);
@@ -440,15 +493,15 @@ export const coord = createNodeOperator(
                 // Ordinal theta axis: evenly-spaced sector labels by index
                 const keys = xSpace.domain;
                 const n = keys.length;
-                const sectorWidth = (2 * Math.PI) / n;
+                const sectorWidth = angularBudget / n;
                 for (let i = 0; i < n; i++) {
                   const thetaStart = i * sectorWidth;
                   const thetaCenter = thetaStart + sectorWidth / 2;
-                  const [ix, iy] = coordTransform.transform([
+                  const [ix, iy] = effectiveTransform.transform([
                     thetaStart,
                     rOuter,
                   ]);
-                  const [ox, oy] = coordTransform.transform([
+                  const [ox, oy] = effectiveTransform.transform([
                     thetaStart,
                     rOuter + 6,
                   ]);
@@ -462,7 +515,7 @@ export const coord = createNodeOperator(
                       stroke-width="1"
                     />
                   );
-                  const [lx, ly] = coordTransform.transform([
+                  const [lx, ly] = effectiveTransform.transform([
                     thetaCenter,
                     rOuter + 16,
                   ]);
@@ -496,11 +549,11 @@ export const coord = createNodeOperator(
               const H_GAP = 6;
               const tickVals = d3Ticks(yMin, yMax, 5);
               // Line runs from center (r=0) to the outer ring (rContent), past the tallest chunk
-              const [x0, y0] = coordTransform.transform([
+              const [x0, y0] = effectiveTransform.transform([
                 0,
                 dataToScreenR(yMin),
               ]);
-              const [x1, y1] = coordTransform.transform([0, rContent]);
+              const [x1, y1] = effectiveTransform.transform([0, rContent]);
               elements.push(
                 <line
                   x1={x0 - H_GAP}
@@ -512,7 +565,7 @@ export const coord = createNodeOperator(
                 />
               );
               for (const t of tickVals) {
-                const [tx, ty] = coordTransform.transform([
+                const [tx, ty] = effectiveTransform.transform([
                   0,
                   dataToScreenR(t),
                 ]);
@@ -559,7 +612,7 @@ export const coord = createNodeOperator(
               transform={`${translateString(transform)} translate(${offsetX}, ${offsetY})`}
             >
               {displayObjects.map((d) =>
-                d.node.INTERNAL_render(coordTransform, d.transform)
+                d.node.INTERNAL_render(effectiveTransform, d.transform)
               )}
               <Show when={grid}>{gridLines()}</Show>
               {polarAxisJSX()}

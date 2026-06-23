@@ -748,9 +748,10 @@ function resolveOptions(
     "type" in resolved.coord
   ) {
     if (resolved.coord.type === "clock") {
-      resolved.coord = clock();
+      // polar/clock options ride along in the spec; PolarOptions ignores `type`.
+      resolved.coord = clock(resolved.coord);
     } else if (resolved.coord.type === "polar") {
-      resolved.coord = polar();
+      resolved.coord = polar(resolved.coord);
     } else if (resolved.coord.type === "wavy") {
       resolved.coord = wavy();
     }
