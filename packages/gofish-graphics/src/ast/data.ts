@@ -52,6 +52,23 @@ export const setMeasureProvenance = <T>(
   return data;
 };
 
+/**
+ * Copy the measure-provenance map from `source` onto `target` (both arrays), if
+ * `source` carries one. A split leaf is a FRESH sub-array (groupBy/filter/slice)
+ * that doesn't inherit the operator input's symbol, so without this a MARK
+ * channel bound to a transform-output field (e.g. `bin()`'s `start`/`end`/`size`)
+ * sees no provenance and falls back to the literal field name — making a
+ * legitimate overlay against the source-field axis a false measure conflict.
+ * Re-tagging each leaf with its parent's provenance lets `inferSize`/`inferPos`
+ * read the source measure off their own `data` argument, so marks and operators
+ * share one mechanism. See {@link resolveMeasure} and #534.
+ */
+export const copyMeasureProvenance = <T>(target: T, source: unknown): T => {
+  const provenance = getMeasureProvenance(source);
+  if (provenance !== undefined) setMeasureProvenance(target, provenance);
+  return target;
+};
+
 export type Value<T> = T | DatumValue | DatumValueImpl;
 export type MaybeValue<T> = T | Value<T>;
 
