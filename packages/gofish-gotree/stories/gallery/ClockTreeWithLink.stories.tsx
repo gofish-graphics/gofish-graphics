@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/html";
-import { rect, polar } from "gofish-graphics";
+import { rect, polar, datum } from "gofish-graphics";
 import { combine, byDepth, mount } from "./_shared";
 
 // GoTree gallery port — ClockTreeWithLink (a clock-face ring of nodes whose
@@ -45,12 +45,10 @@ import { combine, byDepth, mount } from "./_shared";
 //    links are drawn as straight chords through the hollow center; under the
 //    polar transform a straight parent→child segment bows relative to the
 //    reference's stepped spokes.
-//  - NO angular auto-fit: angle is NOT allocated by subtree leaf-count by the
-//    layout engine. The ring tiles only because every node's θ-width is
-//    hand-set to leafTheta = 2π/N and summed by edge-mode distribute. A wrong
-//    N or unbalanced widths overflows 2π and wedges wrap (the rim under-fills
-//    here for the same reason). GoTree sizes the angular slots automatically
-//    (and by subtree size). (#618)
+//  - Angular AUTO-FIT (#618): each node carries a unit `thetaSize` weight and the
+//    coord fits the summed weights to the budget, so the ring closes for any node
+//    count with no hand-set 2π/N. (Weighting by subtree size instead of a unit
+//    weight is just `thetaSize: datum(d.leafCount)`.)
 //  - No θ/r axis swap (no transposed variant; PolarAxis swap not expressible);
 //    not needed here.
 const meta: Meta = { title: "GoTree / Gallery / ClockTreeWithLink" };
@@ -74,18 +72,15 @@ const clockData = {
   ],
 };
 
-// Count every node so each gets an equal θ slice that tiles the full 2π.
-const countNodes = (t: any): number =>
-  1 + (t.children ?? []).reduce((s: number, c: any) => s + countNodes(c), 0);
-const N = countNodes(clockData);
-const leafTheta = (2 * Math.PI) / N; // each node's angular share
 const bandHeight = 60; // radial thickness of the ring band
 
-// Rectangle node: width in θ-units (emX) sweeps an arc; height in r-units
-// (emY) is the ring thickness. Colored by depth (dark root → light leaves).
+// Rectangle node: thetaSize is a unit angular WEIGHT (every node an equal slot);
+// the coord sums the weights and fits them to the angular budget, so the ring
+// closes exactly with no hand-set 2π/N. emX/emY make θ sweep an arc and r the
+// ring thickness. Colored by depth (dark root → light leaves).
 const node = (d: any) =>
   rect({
-    w: leafTheta,
+    thetaSize: datum(1),
     h: bandHeight,
     emX: true,
     emY: true,

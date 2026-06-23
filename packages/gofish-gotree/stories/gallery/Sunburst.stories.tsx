@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/html";
-import { rect, polar } from "gofish-graphics";
+import { rect, polar, datum } from "gofish-graphics";
 import { tree, combine } from "../../src";
 import { byDepth } from "../data";
 import { initializeContainer } from "../helper";
@@ -50,10 +50,10 @@ import { initializeContainer } from "../helper";
 //  - Link:curve — links are not drawn for a filled-wedge sunburst (link:"none"
 //    is correct here); polar links only support {interpolation:"linear"|"none"},
 //    never curved arcs.
-//  - NO angular auto-fit: angle is NOT allocated by subtree leaf-count by the
-//    layout engine. Here it tiles only because leaf widths are hand-set to
-//    leafTheta and summed by nest; an unbalanced tree or a wrong leafTheta
-//    overflows 2π and wedges wrap. GoTree allocates angle automatically.
+//  - Angular AUTO-FIT (#618): leaves carry a unit `thetaSize` weight; the coord
+//    fits the summed weights to the budget and nest grows each parent to its
+//    children's combined arc — so the disc closes for any tree with no hand-set
+//    leafTheta. (This nest-θ case composes with the coord fit-frame.)
 //  - Node:circle in the dsl, but the reference (and a real sunburst) is filled
 //    arc wedges — we render rect wedges, matching the visual reference.
 const meta: Meta = {
@@ -77,17 +77,16 @@ const deepBalancedTree = (() => {
   return make(4);
 })();
 
-const LEAF_COUNT = 16; // 2^4
-const leafTheta = (2 * Math.PI) / LEAF_COUNT; // each leaf's angular share
 const bandHeight = 42; // radial thickness of one ring
 
-// Wedge node: width in θ-units (emX) sweeps an arc; height in r-units (emY) is
-// the ring thickness. Leaves carry the explicit θ-share; internal nodes leave
-// width to nest (grows to children's combined arc).
+// Wedge node: leaves carry a unit angular WEIGHT (thetaSize) that the coord sums
+// and fits to the budget; internal nodes leave θ unsized so nest grows them to
+// their children's combined arc. emX/emY make θ sweep an arc and r the ring
+// thickness. No hand-set 2π/N — the ring auto-fits.
 const node = (d: any) =>
   d.height === 0
     ? rect({
-        w: leafTheta,
+        thetaSize: datum(1),
         h: bandHeight,
         emX: true,
         emY: true,
