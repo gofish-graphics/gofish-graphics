@@ -47,7 +47,11 @@ export const Default: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    chart(titanicPassengers, { color: palette(["#2b8cbe", "#ff8408"]) })
+    chart(titanicPassengers, {
+      color: palette(["#2b8cbe", "#ff8408"]),
+      // x = pclass (the columns); y is the dot-row index, so suppress it.
+      axes: { x: true, y: false },
+    })
       .flow(spread({ by: "pclass", dir: "x", spacing: 24, alignment: "start" }))
       .mark((d) =>
         chart(d)
@@ -59,7 +63,7 @@ export const Default: StoryObj<Args> = {
           )
           .mark(circle({ r: 4, fill: "survived" }))
       )
-      .render(container, { w: args.w, h: args.h, axes: true });
+      .render(container, { w: args.w, h: args.h });
 
     return container;
   },

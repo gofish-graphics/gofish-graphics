@@ -40,7 +40,7 @@ export const Default: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
     
-     chart(titanicPassengers, { color: palette(["#2b8cbe", "#ff8408"]) })
+     chart(titanicPassengers, { color: palette(["#2b8cbe", "#ff8408"]), axes: true })
         .flow(table({
                 by: {x: "pclass", y: "sex"},
               }))
@@ -53,7 +53,7 @@ export const Default: StoryObj<Args> = {
             )
             .mark(circle({ r: 4, fill: "survived" }))
         )
-      .render(container, { w: args.w, h: args.h, axes: true },);
+      .render(container, { w: args.w, h: args.h });
 
     return container;
   },
