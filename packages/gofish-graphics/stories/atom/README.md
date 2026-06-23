@@ -25,7 +25,9 @@ a feature gap.
 | [`TitanicUnitDots`](./TitanicUnitDots.stories.tsx) | `squarified`, `size_sum_*`, `titanic_spec_packxy_*` | Circle treemap; each passenger a circle, packed and faceted by class, sized by fare. |
 | [`UnitColumnChart`](./UnitColumnChart.stories.tsx) | `unit_column_chart_shared`, `horizontal_unit_column` | One column of unit dots per class; equal dot size makes column height encode class count. |
 | [`UnitHistogram`](./UnitHistogram.stories.tsx) | `unit_small_multiple`, `titanic_spec1`, `editor` | Per-class age histograms whose bars are stacks of unit dots. |
-| [`Mosaic`](./Mosaic.stories.tsx) | `mosaic`, `size_sum_shared` | Survival mosaic: per-class columns, block height ∝ survival count. |
+| [`Mosaic`](./Mosaic.stories.tsx) | `mosaic`, `size_sum_shared` | Survival mosaic (aggregated rects): per-class columns, block height ∝ survival count. |
+| [`UnitMosaic`](./UnitMosaic.stories.tsx) | `mosaic`, `editor` | The headline Atom mosaic (paper Fig. 1b): class × sex rows × survived columns, each count-proportional cell filled one dot per passenger. |
+| [`Violin`](./Violin.stories.tsx) | `violin` | Per-class age violins; each bin is a centered horizontal row of unit dots, tracing a symmetric density silhouette. |
 
 ## The Atom grammar in one paragraph
 
@@ -70,13 +72,18 @@ Behaviors in Atom that have no first-class GoFish counterpart today. The stories
 around them as noted; these are candidates for new operators.
 
 1. **`size: count` — container size from member count.** Atom can size any container by
-   how many records it holds, which is what makes a true mosaic/fluctuation layout work
-   (cell *areas* proportional to a crosstab). GoFish has no count-sizing operator. The
-   [`Mosaic`](./Mosaic.stories.tsx) story aggregates to counts up front and uses
-   `normalize()` to make **height** proportional within a column, but **column width**
-   stays uniform — `spread` lays out equal-width columns (the existing
-   *Forward Syntax V3 / Mosaic Chart* has the same limitation). A 2-D count-proportional
-   *unit* mosaic (dots packed into count-sized cells) is not expressible.
+   how many records it holds, which is what makes a mosaic/fluctuation layout work (cell
+   *areas* proportional to a crosstab). GoFish has no count-sizing operator, so it has to
+   be reconstructed two ways depending on the mark:
+   - *Aggregated rects* — the [`Mosaic`](./Mosaic.stories.tsx) story counts up front and
+     uses `normalize()` for proportional **height**, but **column width** stays uniform
+     (`spread` lays out equal-width columns; the *Forward Syntax V3 / Mosaic Chart* has
+     the same limitation), so it's a 1-D mosaic.
+   - *Unit dots* — the [`UnitMosaic`](./UnitMosaic.stories.tsx) story gets a full 2-D
+     count-proportional mosaic by exploiting fixed-size dots: a cell of `n` dots in `R`
+     rows occupies area ∝ `n` for any `R`, and picking `R ∝ group size` makes the blocks
+     tile flush. It works, but only because the author precomputes the per-block row
+     counts by hand — a native `size: count` would remove that bookkeeping.
 
 2. **Aspect-ratio-driven auto-wrapping.** Atom's `aspect_ratio` (`square`, `maxfill`,
    `fillX`, `fillY`) chooses the grid's row/column counts automatically to hit a target
@@ -107,7 +114,7 @@ settings (see [gap #4](#feature-gaps)).
 | --- | --- |
 | `unit_column_chart_shared.json`, `unit_column_chart_shared_mark.json`, `horizontal_unit_column.json` | ✅ `UnitColumnChart` |
 | `unit_small_multiple.json`, `titanic_spec1.json` | ✅ `UnitHistogram` |
-| `mosaic.json` | ✅ `Mosaic` (height-proportional; width gap #1) |
+| `mosaic.json` | ✅ `UnitMosaic` (full 2-D count-proportional unit mosaic); `Mosaic` is the aggregated-rect 1-D variant |
 | `fluctuation.json` | ✅ `TitanicFacet` (faceted unit grid; count-sizing gap #1) |
 | `squarified.json`, `titanic_spec_packxy_isolated.json`, `titanic_spec_packxy_mixed.json`, `titanic_spec_packxy_hierarchy.json` | ✅ `TitanicUnitDots` (treemap packing) |
 | `size_sum_shared.json`, `size_sum_notShared.json` | ✅ `TitanicUnitDots` (`treemap valueField`); ⚠️ non-treemap sum-sizing is gap #1 |
@@ -115,7 +122,7 @@ settings (see [gap #4](#feature-gaps)).
 | `titanic_spec2.json`, `titanic_spec3.json`, `titanic_spec4.json` | ➖ Permutation of `UnitHistogram` / `TitanicFacet` (`aspect_ratio` / `direction` variants — gap #2) |
 | `maxfill_aspect.json`, `square_aspect.json` | ➖ Aspect-ratio demos — gap #2 |
 | `editor.json` | ➖ Kitchen-sink demo combining `groupby` + `bin` + `passthrough` + `flatten`; shapes covered piecewise by the stories above |
-| `violin.json` | ❌ Not ported — needs density/violin layout (out of scope for the unit family) |
+| `violin.json` | ✅ `Violin` |
 | `enumerate.json`, `unit_column_chart.json` | ❌ Empty/trivial `layouts` (nothing to render) |
 | `default0–5.json` | ❌ Empty/placeholder editor defaults |
 | `Untitled-2.json` | ❌ A Vega-Lite spec, not Atom |
