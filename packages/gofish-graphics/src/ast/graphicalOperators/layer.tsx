@@ -479,6 +479,12 @@ export const layer = createNodeOperatorSequential(
           const scaleX = options.transform?.scale?.x ?? 1;
           const scaleY = options.transform?.scale?.y ?? 1;
           const [wrapTx, wrapTy] = displayTranslate(transform);
+          // A `box` is a coordinate-transform barrier: its children render in
+          // linear box-local space (the box positions itself in the parent
+          // coord, but its content does not warp). Mirror INTERNAL_render's
+          // `this.type !== "box" ? coordinateTransform : undefined`.
+          const childCoord =
+            node.type === "box" ? undefined : coordinateTransform;
 
           const session = node.getRenderSession();
           const outer = session.toPixel!;
@@ -517,7 +523,7 @@ export const layer = createNodeOperatorSequential(
               session.toPixel = composed;
               try {
                 for (const { child } of ordered)
-                  items.push(...child.INTERNAL_lower(coordinateTransform));
+                  items.push(...child.INTERNAL_lower(childCoord));
               } finally {
                 session.toPixel = outer;
               }
@@ -539,7 +545,7 @@ export const layer = createNodeOperatorSequential(
                     : ([cx, cy]) => composed([cx + ax, cy + ay]);
                 items.push(
                   ...withToPixel(map, () =>
-                    item.node.INTERNAL_lower(coordinateTransform)
+                    item.node.INTERNAL_lower(childCoord)
                   )
                 );
               }
