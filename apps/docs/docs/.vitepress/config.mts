@@ -228,9 +228,9 @@ export default defineConfig({
       // owns only the library package's .ts(x) sources and its .stories.tsx files.
       // `generate: "dom"` forces DOM codegen even in the SSR bundle (the stories
       // only execute client-side, so SSR-flavoured codegen is never needed).
-      vueJsx({ exclude: [/packages\/gofish-graphics\/.*\.[jt]sx?$/] }),
+      vueJsx({ exclude: [/packages\/gofish-(graphics|gotree)\/.*\.[jt]sx?$/] }),
       solidPlugin({
-        include: [/packages\/gofish-graphics\/.*\.[jt]sx?$/],
+        include: [/packages\/gofish-(graphics|gotree)\/.*\.[jt]sx?$/],
         solid: { generate: "dom", hydratable: false },
       }),
       // vue-jsx's config() narrows vite's esbuild to `/\.ts$/` (it expects to own
@@ -512,6 +512,10 @@ export default defineConfig({
               ],
             },
           ],
+        },
+        {
+          text: "GoTree",
+          items: [{ text: "tree (separate package)", link: "/js/gotree" }],
         },
       ],
       "/python/": [
