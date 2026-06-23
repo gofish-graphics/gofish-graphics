@@ -26,6 +26,8 @@ import {
   UNDEFINED,
 } from "../underlyingSpace";
 import { createMark } from "../withGoFish";
+import type { DisplayList } from "gofish-ir";
+import { lowerStyle, rectItemFromBox } from "../displayList/lowerHelpers";
 type TextDimensions = {
   width: number;
   height: number;
@@ -299,108 +301,91 @@ export const Text = ({
           renderData: { layout },
         };
       },
-      render: (
-        {
-          intrinsicDims,
-          transform,
-          renderData,
-        }: {
-          intrinsicDims?: Dimensions;
-          transform?: Transform;
-          renderData?: { layout?: TextLayout };
-        },
+      // IR lowering — mirror of `render`. The anchor maps through `toPixel`; the
+      // legacy `… rotate(rotate) scale(1,-1)` under the root flip nets to a
+      // screen-space rotate of `-rotate` about the pixel anchor (the extra flip
+      // negates the angle — see the rendering essay). Unrotated → upright text.
+      lower: (
+        { transform, renderData, toPixel },
         _children,
         node
-      ) => {
+      ): DisplayList.DisplayItem[] => {
         const finalText = isValue(textContent)
           ? getValue(textContent)
           : textContent;
+        const text = finalText == null ? "" : String(finalText);
 
         const [anchorX, anchorY] = displayTranslate(transform);
+        const [px, py] = toPixel([anchorX, anchorY]);
 
         const unitScale = node.getRenderSession().scaleContext?.unit;
         const resolvedFill = resolveColorChannel(fill, unitScale);
         const resolvedStroke = resolveColorChannel(stroke, unitScale);
 
-        const layout =
-          renderData?.layout ??
-          resolveTextLayout(
-            finalText == null ? "" : String(finalText),
-            fontSize,
-            fontFamily,
-            textAnchor,
-            dominantBaseline
-          );
+        const items: DisplayList.DisplayItem[] = [];
 
-        const bboxStroke = "#ff00aa";
-        const bboxStrokeWidth = 1;
-        const bboxDash = "4 3";
-        const showDebugBoundingBox = debugBoundingBox;
+        // Debug bbox (rare): the true rotated footprint, dashed.
+        if (debugBoundingBox) {
+          const layout =
+            (renderData as { layout?: TextLayout })?.layout ??
+            resolveTextLayout(
+              text,
+              fontSize,
+              fontFamily,
+              textAnchor,
+              dominantBaseline
+            );
+          const relRaw = {
+            minX: layout.bbox.minX - layout.anchor.x,
+            minY: layout.bbox.minY - layout.anchor.y,
+            maxX: layout.bbox.maxX - layout.anchor.x,
+            maxY: layout.bbox.maxY - layout.anchor.y,
+          };
+          const relRot = rotate ? rotateRelBBox(relRaw, rotate) : relRaw;
+          if (Number.isFinite(relRot.minX) && Number.isFinite(relRot.minY)) {
+            items.push(
+              rectItemFromBox(
+                anchorX + relRot.minX,
+                anchorX + relRot.maxX,
+                anchorY + relRot.minY,
+                anchorY + relRot.maxY,
+                toPixel,
+                {
+                  role: "overlay",
+                  style: lowerStyle({
+                    fill: "none",
+                    stroke: "#ff00aa",
+                    strokeWidth: 1,
+                    strokeDasharray: "4 3",
+                  }),
+                }
+              )
+            );
+          }
+        }
 
-        // Debug rect shows the TRUE (rotated) footprint, so route the relative
-        // box through the same rotation the layout pass used.
-        const relRaw = {
-          minX: layout.bbox.minX - layout.anchor.x,
-          minY: layout.bbox.minY - layout.anchor.y,
-          maxX: layout.bbox.maxX - layout.anchor.x,
-          maxY: layout.bbox.maxY - layout.anchor.y,
+        const textItem: DisplayList.TextItem = {
+          kind: "text",
+          x: px,
+          y: py,
+          text,
+          fontSize,
+          fontFamily,
+          textAnchor: textAnchor as DisplayList.TextItem["textAnchor"],
+          dominantBaseline:
+            dominantBaseline as DisplayList.TextItem["dominantBaseline"],
+          role: "node",
+          datum: node.datum,
+          style: lowerStyle({
+            fill: resolvedFill,
+            stroke: resolvedStroke,
+            strokeWidth: strokeWidth ?? 0,
+            filter,
+          }),
         };
-        const relRot = rotate ? rotateRelBBox(relRaw, rotate) : relRaw;
-        const minXRel = relRot.minX;
-        const maxXRel = relRot.maxX;
-        const minYRel = relRot.minY;
-        const maxYRel = relRot.maxY;
-
-        const bbox =
-          showDebugBoundingBox &&
-          Number.isFinite(minXRel) &&
-          Number.isFinite(minYRel) ? (
-            <rect
-              transform="scale(1, -1)"
-              x={anchorX + minXRel}
-              y={-(anchorY + maxYRel)}
-              width={maxXRel - minXRel}
-              height={maxYRel - minYRel}
-              fill="none"
-              stroke={bboxStroke}
-              stroke-width={bboxStrokeWidth}
-              stroke-dasharray={bboxDash}
-              pointer-events="none"
-            />
-          ) : null;
-
-        // Unrotated: byte-identical markup to before (capture-diff must not
-        // see unrotated text move). Rotated: scale(1,-1) flips glyph space into
-        // the y-up world orientation, rotate(θ) is then the SAME matrix as
-        // rotateRelBBox (so render and the measured bbox agree), and translate
-        // moves the anchor to the placed position — emitted x/y are 0 because
-        // the translate already carries the placement.
-        const textTransform = rotate
-          ? `translate(${anchorX}, ${anchorY}) rotate(${rotate}) scale(1, -1)`
-          : "scale(1, -1)";
-        const textX = rotate ? 0 : anchorX;
-        const textY = rotate ? 0 : -anchorY;
-
-        return (
-          <>
-            {bbox}
-            <text
-              transform={textTransform}
-              x={textX}
-              y={textY}
-              fill={resolvedFill}
-              stroke={resolvedStroke}
-              stroke-width={strokeWidth ?? 0}
-              filter={filter}
-              font-size={`${fontSize}px`}
-              font-family={fontFamily}
-              text-anchor={textAnchor}
-              dominant-baseline={dominantBaseline}
-            >
-              {finalText}
-            </text>
-          </>
-        );
+        if (rotate) textItem.rotate = -rotate;
+        items.push(textItem);
+        return items;
       },
     },
     []

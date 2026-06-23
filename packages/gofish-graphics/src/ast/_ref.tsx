@@ -25,6 +25,8 @@ import { GoFishAST } from "./_ast";
 import { MaybeValue } from "./data";
 import { ORDINAL, POSITION, UnderlyingSpace } from "./underlyingSpace";
 import type { RenderSession } from "./_node";
+import type { DisplayList } from "gofish-ir";
+type DisplayListItem = DisplayList.DisplayItem;
 import { isToken, Token } from "./createName";
 
 /* TODO: resolveMeasures and layout feel pretty similar... */
@@ -391,8 +393,10 @@ export class GoFishRef {
       localAnchorPoint(anchor, intrinsic?.min ?? 0, intrinsic?.size ?? 0);
   }
 
-  public INTERNAL_render(): JSX.Element {
-    return <></>;
+  /** Refs are placement stand-ins; they draw nothing, so they lower to no
+   *  display-list items. */
+  public INTERNAL_lower(): DisplayListItem[] {
+    return [];
   }
 
   public setRenderSession(session: RenderSession): void {

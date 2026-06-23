@@ -96,9 +96,6 @@ export const positionNode = (
           },
         };
       },
-      render: ({ transform }, children) => {
-        return <g transform={translateString(transform)}>{children}</g>;
-      },
     },
     children
   );

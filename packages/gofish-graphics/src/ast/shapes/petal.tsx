@@ -1,17 +1,8 @@
-import { mix } from "spectral.js";
-import { black, resolveColorChannel, white } from "../../color";
-import {
-  path,
-  Path,
-  pathToSVGPath,
-  segment,
-  subdividePath,
-  transformPath,
-} from "../../path";
+import { resolveColorChannel } from "../../color";
 import { GoFishNode } from "../_node";
 import { GoFishAST } from "../_ast";
-import { CoordinateTransform } from "../coordinateTransforms/coord";
-import { linear } from "../coordinateTransforms/linear";
+import type { DisplayList } from "gofish-ir";
+import { lowerStyle, rectItemFromBox } from "../displayList/lowerHelpers";
 import { getMeasure, getValue, isValue, MaybeValue, Value } from "../data";
 import {
   Dimensions,
@@ -123,173 +114,93 @@ export const Petal = ({
           },
         };
       },
-      render: (
-        {
-          intrinsicDims,
-          transform,
-          coordinateTransform,
-        }: {
-          intrinsicDims?: Dimensions;
-          transform?: Transform;
-          coordinateTransform?: CoordinateTransform;
-        },
+      // IR lowering — mirror of render. Petal is polar-only; `toPixel` is the
+      // coord content map set by coord.lower. The both-aesthetic branch is a
+      // point rect; otherwise the petal path is built from polar-transformed
+      // points and rotated by its angular center (the legacy `rotate(deg)`),
+      // baked into each point before `toPixel`.
+      lower: (
+        { intrinsicDims, transform, coordinateTransform, toPixel },
         _children,
-        node: GoFishNode
-      ) => {
-        if (coordinateTransform === undefined) {
-          return <></>;
+        node
+      ): DisplayList.DisplayItem[] => {
+        if (!coordinateTransform || coordinateTransform.type !== "polar") {
+          return [];
         }
-        if (coordinateTransform?.type !== "polar") {
-          throw new Error(
-            "Petal mark must be used in a polar coordinate transform"
-          );
-        }
-
         const space = coordinateTransform;
-
-        // const isDataX = isValue(dims[0].size);
-        // const isDataY = isValue(dims[1].size);
         const isXEmbedded = dims[0].embedded;
         const isYEmbedded = dims[1].embedded;
-
-        // combine intrinsicDims with transform
-        // center/max derived from min+size (shared helper)
         const displayDims = displayDimsOf(intrinsicDims, transform);
 
-        // Resolve data-bound fill/stroke through the unit color scale, the same
-        // way `rect` and `ellipse` do (e.g. `fill: "species"` → a categorical
-        // color), then apply any post-scale color ops (`.lighten`/`.darken`).
-        // A literal color string passes through unchanged.
-        const scaleContext = node.getRenderSession().scaleContext;
-        const unitScale = scaleContext?.unit;
+        const unitScale = node.getRenderSession().scaleContext?.unit;
         const resolvedFill = resolveColorChannel(fill, unitScale);
         const resolvedStroke =
           resolveColorChannel(stroke, unitScale) ?? resolvedFill;
 
-        // Both dimensions are aesthetic - render as transformed point
+        // Both aesthetic — transformed point rect.
         if (!isXEmbedded && !isYEmbedded) {
-          const center: [number, number] = [
-            (displayDims[0].min ?? 0) + (displayDims[0].size ?? 0) / 2,
-            (displayDims[1].min ?? 0) + (displayDims[1].size ?? 0) / 2,
+          const w = displayDims[0].size ?? 0;
+          const h = displayDims[1].size ?? 0;
+          const [tX, tY] = space.transform([
+            (displayDims[0].min ?? 0) + w / 2,
+            (displayDims[1].min ?? 0) + h / 2,
+          ]);
+          return [
+            rectItemFromBox(
+              tX - w / 2,
+              tX + w / 2,
+              tY - h / 2,
+              tY + h / 2,
+              toPixel,
+              {
+                role: "node",
+                datum: node.datum,
+                style: lowerStyle({
+                  fill: resolvedFill,
+                  stroke: resolvedStroke ?? "black",
+                  strokeWidth: strokeWidth ?? 0,
+                }),
+              }
+            ),
           ];
-          const [transformedX, transformedY] = space.transform(center);
-          const width = displayDims[0].size ?? 0;
-          const height = displayDims[1].size ?? 0;
-
-          return (
-            <rect
-              x={transformedX - width / 2}
-              y={transformedY - height / 2}
-              width={width}
-              height={height}
-              fill={resolvedFill}
-              stroke={resolvedStroke ?? "black"}
-              stroke-width={strokeWidth ?? 0}
-            />
-          );
         }
 
-        // One dimension is data - render as line
-        if (isXEmbedded !== isYEmbedded || (isXEmbedded && isYEmbedded)) {
-          const dataAxis = isXEmbedded ? 0 : 1;
-          const aestheticAxis = isXEmbedded ? 1 : 0;
-          const thickness = displayDims[aestheticAxis].size ?? 0;
+        // Petal shape — same points as render, rotated by the angular center
+        // (radians) and mapped to pixels.
+        const halfRadius = (displayDims[1].size ?? 0) / 2;
+        const s = space.transform([
+          -displayDims[0].size / 2 + Math.PI / 2,
+          halfRadius,
+        ]);
+        const e = space.transform([
+          displayDims[0].size / 2 + Math.PI / 2,
+          halfRadius,
+        ]);
+        const r = displayDims[1].size ?? 0;
+        const m: [number, number] = [halfRadius + r / 2, 0];
+        const c1: [number, number] = [halfRadius + r / 4, s[1]];
+        const c2: [number, number] = [halfRadius + r / 4, e[1]];
 
-          // Calculate midpoint of aesthetic axis
-          const aestheticMid =
-            (displayDims[aestheticAxis].min ?? 0) +
-            (displayDims[aestheticAxis].size ?? 0) / 2;
+        const center = displayDims[0].center ?? 0; // radians
+        const cos = Math.cos(center);
+        const sin = Math.sin(center);
+        const petalToPixel = ([x, y]: [number, number]): [number, number] =>
+          toPixel([x * cos - y * sin, x * sin + y * cos]);
+        const p = (pt: [number, number]) => petalToPixel(pt).join(",");
 
-          // Create path along midline
-          const linePath = path(
-            [
-              [
-                isXEmbedded ? (displayDims[0].min ?? 0) : aestheticMid,
-                isXEmbedded ? aestheticMid : (displayDims[1].min ?? 0),
-              ],
-              [
-                isXEmbedded ? (displayDims[0].max ?? 0) : aestheticMid,
-                isXEmbedded ? aestheticMid : (displayDims[1].max ?? 0),
-              ],
-            ],
-            { subdivision: 1000 }
-          );
+        const d =
+          `M${p([0, 0])} L${p([s[0], s[1]])} Q${p(c1)} ${p(m)} ` +
+          `L${p(m)} Q${p(c2)} ${p([e[0], e[1]])} Z`;
 
-          // Subdivide and transform path
-          const transformed = transformPath(linePath, space);
-
-          const halfRadius = (displayDims[1].size ?? 0) / 2;
-          const s = space.transform([
-            -displayDims[0].size / 2 + Math.PI / 2,
-            halfRadius,
-          ]);
-          const e = space.transform([
-            displayDims[0].size / 2 + Math.PI / 2,
-            halfRadius,
-          ]);
-          const r = displayDims[1].size ?? 0;
-          const m = [halfRadius + r / 2, 0];
-          const c1 = [halfRadius + r / 4, s[1]];
-          const c2 = [halfRadius + r / 4, e[1]];
-          const svgPath =
-            "M0,0L" +
-            s[0] +
-            "," +
-            s[1] +
-            "Q" +
-            c1[0] +
-            "," +
-            c1[1] +
-            " " +
-            m[0] +
-            "," +
-            m[1] +
-            "L" +
-            m[0] +
-            "," +
-            m[1] +
-            "Q" +
-            c2[0] +
-            "," +
-            c2[1] +
-            " " +
-            e[0] +
-            "," +
-            e[1] +
-            "Z";
-
-          // 0.5 removes weird white space at least for some charts
-          return (
-            <path
-              transform={`rotate(${((displayDims[0].center ?? 0) / Math.PI) * 180})`}
-              d={svgPath}
-              fill={resolvedFill}
-            />
-          );
-        }
-
-        // Both dimensions are data - render as area
-
-        const corners = path(
-          [
-            [displayDims[0].min ?? 0, displayDims[1].min ?? 0],
-            [displayDims[0].max ?? 0, displayDims[1].min ?? 0],
-            [displayDims[0].max ?? 0, displayDims[1].max ?? 0],
-            [displayDims[0].min ?? 0, displayDims[1].max ?? 0],
-          ],
-          { closed: true, subdivision: 1000 }
-        );
-
-        const transformed = transformPath(corners, space);
-
-        return (
-          <path
-            d={pathToSVGPath(transformed)}
-            fill={resolvedFill}
-            stroke={resolvedStroke ?? "black"}
-            stroke-width={strokeWidth ?? 0}
-          />
-        );
+        return [
+          {
+            kind: "path",
+            d,
+            role: "node",
+            datum: node.datum,
+            style: lowerStyle({ fill: resolvedFill }),
+          },
+        ];
       },
     },
     []

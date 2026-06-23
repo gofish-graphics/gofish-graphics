@@ -1,7 +1,7 @@
 import { GoFishAST } from "../_ast";
 import { GoFishNode } from "../_node";
-import { displayTranslate } from "../dims";
 import { createNodeOperator } from "../withGoFish";
+import { lowerChildrenOffset } from "../displayList/lowerHelpers";
 
 /**
  * offset: shift a single child by `(x, y)` pixels **at render time only**.
@@ -54,14 +54,10 @@ export const offset = createNodeOperator<{ x?: number; y?: number }, GoFishAST>(
             transform: { translate: [undefined, undefined] },
           };
         },
-        render: ({ transform }, renderedChildren) => {
-          const [ownTx, ownTy] = displayTranslate(transform);
-          const tx = ownTx + dx;
-          const ty = ownTy + dy;
-          return (
-            <g transform={`translate(${tx}, ${ty})`}>{renderedChildren[0]}</g>
-          );
-        },
+        // IR lowering — mirror of render: shift the single child by the
+        // parent translate + the render-time (dx, dy), folded into `toPixel`.
+        lower: ({ transform, coordinateTransform }, _children, node) =>
+          lowerChildrenOffset(node, transform, coordinateTransform, dx, dy),
       },
       children
     );

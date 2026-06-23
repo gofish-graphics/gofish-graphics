@@ -52,11 +52,16 @@ the continuous space's `origin` state: a `SIZE` (free) dimension resolves throug
 monotonic machinery, a `POSITION` (anchored) dimension through position scales. Bounding boxes
 ([the bbox model](/internals/core/bbox)) are the common currency.
 
-**3 · Placement & render.** Final absolute positions are assigned, and each node emits
-SVG. Rendering is reactive — it runs through **SolidJS** — so a chart can update without
-a full rebuild. The [`coord` operator](/internals/layout/coord-flattening) is the
-notable special case: it flattens its subtree into a flat, absolutely-positioned list
-before applying its coordinate transform. A coordinate transform is parameterized
+**3 · Placement & render.** Final absolute positions are assigned, then the tree is
+turned into pixels in two sub-passes: **lower** — walk the baked scenegraph and emit a
+flat [display list](/internals/core/rendering) of positioned primitives in absolute
+pixels — and **paint** — a single backend turns that IR into output (SVG today). No
+shape emits SVG itself; each owns a `lower()` that describes it as a backend-agnostic
+display-list item. The live SVG backend is reactive — it runs through **SolidJS** — so
+a chart can update without a full rebuild. The
+[`coord` operator](/internals/layout/coord-flattening) is the notable special case: it
+flattens its subtree into a flat, absolutely-positioned list before applying its
+coordinate transform. A coordinate transform is parameterized
 (`polar()`/`clock()` take `innerRadius`/`centralAngle`/`startAngle`/…) and may declare
 **axis-name aliases** (`theta`/`r`); a small top-down pass before layout resolves those
 aliases into the canonical `x`/`y`/`w`/`h` facets (see

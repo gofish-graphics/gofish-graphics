@@ -321,11 +321,6 @@ export const Treemap = createNodeOperator(
             },
           };
         },
-        render: ({ transform }, renderedChildren) => {
-          return (
-            <g transform={translateString(transform)}>{renderedChildren}</g>
-          );
-        },
       },
       children
     );

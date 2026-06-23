@@ -298,6 +298,11 @@ value − localAnchorPoint(...)`.
        boundary must bake _during_ layout. Tracked as a separate future track.)
        Groundwork from earlier: render-side `transform.translate` reads go through a
        single `displayTranslate`/`translateString` chokepoint in `dims.ts`.
+       (This records stage 3-D as it landed. The draw path has since moved on:
+       `_render`/`INTERNAL_render` are gone, replaced by per-shape `lower()` /
+       `INTERNAL_lower` emitting a display-list IR — see
+       [Rendering](/internals/core/rendering). The bake still feeds each entry its
+       baked absolute transform; only the method it calls changed.)
      - **3-C (in progress)** — make `transform.translate` a ledger projection and
        retire the writes. _Value reads migrated (both inert, REAL = 0):_ render reads
        a ledger-derived `_displayTransform` getter, and `_ref` accumulation reads

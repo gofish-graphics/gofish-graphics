@@ -616,6 +616,18 @@ export class ChartBuilder<TInput, TOutput = TInput> {
     return node.toSVG(opts);
   }
 
+  /**
+   * Resolve and emit the post-layout display list (render IR) at `options`'s
+   * viewport — the analogue of {@link toJSON} (frontend IR) for the solved,
+   * positioned output. See {@link toDisplayList}.
+   */
+  async toDisplayList(
+    options: Omit<Parameters<GoFishNode["toDisplayList"]>[0], "axes"> = {}
+  ): ReturnType<GoFishNode["toDisplayList"]> {
+    const { node, options: opts } = await this.resolveForRender(options);
+    return node.toDisplayList(opts);
+  }
+
   /** Resolve and render to a detached `<svg>` element. */
   async toSVGElement(
     options: Omit<Parameters<GoFishNode["toSVGElement"]>[0], "axes"> = {}

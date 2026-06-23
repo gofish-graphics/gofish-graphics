@@ -14,6 +14,10 @@
     "./frontend": {
       "import": "./dist/frontend/index.js",
       "types": "./dist/frontend/index.d.ts"
+    },
+    "./display-list": {
+      "import": "./dist/display-list/index.js",
+      "types": "./dist/display-list/index.d.ts"
     }
   },
   "files": [
@@ -33,7 +37,7 @@
   },
   "scripts": {
     "build": "tsc && tsx scripts/emit-jsonschema.ts",
-    "test": "tsx src/tests/schema.test.ts",
+    "test": "tsx src/tests/schema.test.ts && tsx src/tests/displayList.test.ts",
     "prepublishOnly": "pnpm run build"
   },
   "devDependencies": {

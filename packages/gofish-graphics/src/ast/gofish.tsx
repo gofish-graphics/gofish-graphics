@@ -1,4 +1,5 @@
 // <gofish-wiki> AUTO-GENERATED — see covers: in the essay; run `pnpm --filter docs sync-backlinks`
+// @wiki Rendering — /internals/core/rendering
 // @wiki Overview — /internals/layout/passes
 // @wiki Architecture Overview — /internals/overview/architecture
 // </gofish-wiki>
@@ -14,6 +15,10 @@ import {
   type RenderSession,
 } from "./_node";
 import { posScaleFromSpace } from "./domain";
+import { bake } from "./coordinateTransforms/bake";
+import { lowerToDisplayList } from "./displayList/lower";
+import { paintSVG } from "./displayList/paintSVG";
+import type { ToPixel } from "./_node";
 import type { Size } from "./dims";
 import {
   hasBaseline,
@@ -481,7 +486,7 @@ type LayoutData = {
  * measured layout data. The single place the pipeline is driven — shared by
  * the live `gofish()` render path and the `gofishToSVG*` export paths.
  */
-async function runLayout(
+export async function runLayout(
   options: GoFishRenderOptions,
   child: GoFishNode | Promise<GoFishNode>
 ): Promise<LayoutData> {
@@ -802,7 +807,17 @@ export const render = (
   // a large band's full extent plus `EDGE_GAP`. The right gutter bears no root
   // <g> translate, so it needn't be pixel-snapped — a fractional width is
   // harmless (legend overhangs are fractional text widths).
-  const result = (
+  // Two-pass render: lower the baked scenegraph into the display-list IR, then
+  // paint each item. Items are final y-down absolute pixels (the `toPixel` fold
+  // carries the gutter offset + the y-flip), so there is no outer flip `<g>` and
+  // no per-shape transform.
+  const toPixel: ToPixel = ([gx, gy]) => [
+    gx + leftReserve,
+    height + topReserve - gy,
+  ];
+  child.getRenderSession().toPixel = toPixel;
+  const paintBaked = () => lowerToDisplayList(child).map(paintSVG);
+  return (
     <svg
       width={
         leftReserve + width + rightOverhang + reserve(rightContentOverhang)
@@ -813,15 +828,7 @@ export const render = (
       <Show when={defs}>
         <defs>{defs}</defs>
       </Show>
-      <g
-        transform={`scale(1, -1) translate(${leftReserve}, ${-(height + topReserve)})`}
-      >
-        <Show when={transform} keyed fallback={child.INTERNAL_render()}>
-          <g transform={transform ?? ""}>{child.INTERNAL_render()}</g>
-        </Show>
-      </g>
+      {paintBaked()}
     </svg>
   );
-
-  return result;
 };
