@@ -15,6 +15,7 @@ import {
   Dimensions,
   displayTranslate,
   elaborateDims,
+  extractAliasCandidates,
   FancyDims,
   Transform,
 } from "../dims";
@@ -191,7 +192,7 @@ export const Text = ({
   const textAnchor = "start";
   const dominantBaseline = "auto";
 
-  return new GoFishNode(
+  const node = new GoFishNode(
     {
       name,
       key,
@@ -389,6 +390,9 @@ export const Text = ({
     },
     []
   );
+  // Stash alias-keyed dims (theta/r/…) for the resolveAliases pass.
+  node._pendingAliases = extractAliasCandidates(fancyDims);
+  return node;
 };
 
 export const text = createMark(

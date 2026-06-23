@@ -32,8 +32,8 @@ import { initializeContainer } from "../helper";
 //    wedges wrap. GoTree's polar layout allocates angle by subtree leaf-count;
 //    gofish-gotree has no angular auto-fit.
 //  - polar() takes no options: InnerRadius, Direction, CentralAngle, and the
-//    PolarAxis θ/r swap from the dsl are not expressible. polarTransposed()
-//    only swaps θ/r wholesale.
+//    PolarAxis θ/r swap from the dsl are not expressible (no transposed
+//    variant).
 
 const meta: Meta = {
   title: "GoTree / Gallery / MultilevelSilhouetteTree",

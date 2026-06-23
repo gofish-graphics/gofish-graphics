@@ -1799,29 +1799,89 @@ def gradient(stops: Union[str, List[str]]) -> dict:
 # Coordinate transforms
 
 
-def clock() -> dict:
+def _polar_config(
+    transform_type: str,
+    inner_radius: float | None,
+    central_angle: float | None,
+    start_angle: float | None,
+    direction: int | None,
+    center: tuple[float, float] | list[float] | None,
+) -> dict:
+    """Shared builder for the polar-family coord configs. Options ride along in
+    the tag dict; the JS side reconstructs ``polar(opts)``/``clock(opts)`` from
+    them (the function body can't cross the IR bridge). Only set options are
+    emitted, so defaults stay on the JS side. Wire keys are camelCase to match
+    the JS ``PolarOptions``."""
+    cfg: dict = {"type": transform_type}
+    if inner_radius is not None:
+        cfg["innerRadius"] = inner_radius
+    if central_angle is not None:
+        cfg["centralAngle"] = central_angle
+    if start_angle is not None:
+        cfg["startAngle"] = start_angle
+    if direction is not None:
+        cfg["direction"] = direction
+    if center is not None:
+        cfg["center"] = list(center)
+    return cfg
+
+
+def clock(
+    inner_radius: float | None = None,
+    central_angle: float | None = None,
+    start_angle: float | None = None,
+    direction: int | None = None,
+    center: tuple[float, float] | list[float] | None = None,
+) -> dict:
     """
-    Clock coordinate transform — polar coordinates with 0° at 12 o'clock,
-    increasing clockwise. Use as: chart(data, {"coord": clock()}).
+    Clock coordinate transform — a ``polar()`` preset with 0° at 12 o'clock,
+    increasing clockwise (its defaults). Accepts the same options. Use as:
+    ``chart(data, coord=clock())``.
+
+    Args:
+        inner_radius: donut hole as a fraction [0,1) of the outer radius (e.g. a
+            clock rim). Default 0 (filled disc).
+        central_angle: total angular sweep in radians. Default 2π (full circle).
+        start_angle: angle (radians) of θ=0. Default π/2 (12 o'clock).
+        direction: +1 counter-clockwise, -1 clockwise. Default -1.
+        center: screen-space center offset [x, y]. Default [0, 0].
 
     Returns:
         Coord config dict for use in chart options
     """
-    return {"type": "clock"}
+    return _polar_config(
+        "clock", inner_radius, central_angle, start_angle, direction, center
+    )
 
 
-def polar() -> dict:
+def polar(
+    inner_radius: float | None = None,
+    central_angle: float | None = None,
+    start_angle: float | None = None,
+    direction: int | None = None,
+    center: tuple[float, float] | list[float] | None = None,
+) -> dict:
     """
     Polar coordinate transform — angle θ on the x-axis, radius r on the y-axis,
-    with 0 at 12 o'clock. Use as: `layer({"coord": polar()}, [...])`.
+    with 0 at 12 o'clock. Use as: ``chart(data, coord=polar())``.
 
     The actual transform/domain is reconstructed on the JS side from this tag
-    (the function body can't cross the IR bridge), mirroring `clock()`.
+    (the function body can't cross the IR bridge), mirroring ``clock()``.
+
+    Args:
+        inner_radius: donut hole as a fraction [0,1) of the outer radius.
+            Default 0 (filled disc).
+        central_angle: total angular sweep in radians. Default 2π (full circle).
+        start_angle: angle (radians) of θ=0. Default π/2 (12 o'clock).
+        direction: +1 counter-clockwise, -1 clockwise. Default -1 (clockwise).
+        center: screen-space center offset [x, y]. Default [0, 0].
 
     Returns:
         Coord config dict for use in chart/layer options
     """
-    return {"type": "polar"}
+    return _polar_config(
+        "polar", inner_radius, central_angle, start_angle, direction, center
+    )
 
 
 def wavy() -> dict:

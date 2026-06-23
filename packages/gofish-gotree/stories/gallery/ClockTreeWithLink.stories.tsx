@@ -50,8 +50,8 @@ import { combine, byDepth, mount } from "./_shared";
 //    angular slots automatically (and by subtree size).
 //  - Direction / StartAngle / CentralAngle / PolarAxis swap: polar() is a
 //    fixed full-2π disc with no orientation, start-angle, sweep, or θ/r-axis
-//    swap knob. polarTransposed() is currently identical to polar() (the
-//    PolarAxis swap is a no-op), so it would not help here.
+//    swap knob (polar() has no transposed variant), so the PolarAxis swap
+//    is not expressible here.
 const meta: Meta = { title: "GoTree / Gallery / ClockTreeWithLink" };
 export default meta;
 

@@ -33,7 +33,7 @@ import { combine, byDepth, mount } from "./_shared";
 //    level overflows the 2π budget and wedges wrap. Spacing is hand-tuned for
 //    the small sampleTree.
 //  - polar() takes no options: InnerRadius, Direction, CentralAngle, and the
-//    PolarAxis θ/r swap are not expressible (polarTransposed() only swaps θ/r).
+//    PolarAxis θ/r swap are not expressible (no transposed variant).
 const meta: Meta = { title: "GoTree / Gallery / OrthogonalGridEmbedding" };
 export default meta;
 

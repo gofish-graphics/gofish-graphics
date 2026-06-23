@@ -156,6 +156,14 @@ targets are that registered layer (the manual `selectAll(name)` semantics);
 otherwise the produced nodes are tagged directly with a resolve-time Symbol
 marker — no name exists to mint or leak, so the JSON stays the user's spelling.
 
+A chart's **coordinate transform** rides the IR as a small spec the deserializer
+maps back to the JS factory by `type` — e.g. `{ type: "polar", innerRadius,
+centralAngle, startAngle, direction, center }`. `fromJSON.ts` reconstructs it by
+calling `polar(coordSpec)` / `clock(coordSpec)` and passing the whole spec
+through (the factory ignores the `type` key), so a parameterized polar/clock —
+donut hole, partial fan, start angle — round-trips without per-option plumbing.
+The parity render harness (`tests/harness/main.ts`) rebuilds it the same way.
+
 Channel values (`h`, `w`, `fill`, …) accept bare primitives (the
 shorthand path) or one of three explicit tagged objects:
 

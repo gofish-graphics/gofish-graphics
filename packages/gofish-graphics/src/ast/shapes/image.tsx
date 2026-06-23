@@ -13,6 +13,7 @@ import {
   Dimensions,
   displayTranslate,
   elaborateDims,
+  extractAliasCandidates,
   FancyDims,
   Transform,
 } from "../dims";
@@ -244,7 +245,7 @@ export const Image = ({
 } & FancyDims<number>) => {
   const dims = elaborateDims(fancyDims).map(inferEmbedded);
 
-  return new GoFishNode(
+  const node = new GoFishNode(
     {
       name,
       key,
@@ -374,6 +375,9 @@ export const Image = ({
     },
     []
   );
+  // Stash alias-keyed dims (theta/r/…) for the resolveAliases pass.
+  node._pendingAliases = extractAliasCandidates(fancyDims);
+  return node;
 };
 
 const rawImage = createMark(Image, {}, "image");

@@ -37,14 +37,11 @@ import { combine, byDepth, mount } from "./_shared";
 //     full angular span). X.Root juxtapose (→distribute) is kept on the radial
 //     axis; it is the angular axis where the divergence lives.
 //
-// ── NOTES — dsl features GoFish's polar() / polarTransposed() CANNOT express ──
+// ── NOTES — dsl features GoFish's polar() CANNOT express ──
 //    (no options, no hacks; flagged, not faked):
-//  - PolarAxis: x-axis (the θ/r axis swap) is a NO-OP here: polar() and
-//    polarTransposed() are GEOMETRICALLY IDENTICAL in the current codebase —
-//    both compute [r·sinθ, r·cosθ] with x→θ, y→r (see
-//    coordinateTransforms/polar.ts vs polarTransposed.ts). So the PolarAxis
-//    choice changes nothing; I use polar(). When polarTransposed() is given a
-//    real transpose it would become the correct one for PolarAxis:x-axis.
+//  - PolarAxis: x-axis (the θ/r axis swap) is NOT expressible: polar() has no
+//    transposed variant — it always maps x→θ, y→r ([r·sinθ, r·cosθ]). So the
+//    PolarAxis choice can't be honored; I use polar().
 //  - PolarCenter: right and the partial (≈270°) sweep of the reference are not
 //    expressible — polar() always fills the full 2π disc, centered, fixed start
 //    angle. This port renders a FULL concentric-ring disc, not the reference's
