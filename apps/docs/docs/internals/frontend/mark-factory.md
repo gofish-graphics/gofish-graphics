@@ -128,6 +128,16 @@ Walking `withGoFish.ts:431-477`:
    - `"color"` channel → `inferColor(markValue, data)`. If the string matches
      a field in the first datum, wrap it as a `Value` so the color scale
      picks it up; otherwise treat the string as a literal color.
+   - **Coordinate-space axis aliases** (`theta`/`r`/`thetaSize`/`rSize`, the
+     `KNOWN_ALIAS_KEYS`) aren't declared channels, but carry the same value
+     semantics as the canonical dims they resolve to, so `createMark` infers
+     their channel by suffix: a `<name>Size` alias aggregates as a `"size"`
+     channel (`inferSize`), a position alias (`theta`/`r`) as a `"pos"` channel
+     (`inferPos`). This happens here, before the [alias-resolution
+     pass](/internals/layout/passes#pass-5-5-coordinate-space-alias-resolution)
+     moves the resolved value onto the canonical `x/y/w/h` facet — so
+     `rSize: "field"` aggregates exactly like `h: "field"`. The `__axisFields`
+     hint (used to infer axis titles) also falls back to the alias field names.
    - Anything else → pass through.
 4. **Call the low-level shape.** The encoded shape props go into `shapeFn`,
    producing the `GoFishNode`.

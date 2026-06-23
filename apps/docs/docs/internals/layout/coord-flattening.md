@@ -85,8 +85,14 @@ Two design notes from the source worth knowing:
 ## Current limitations
 
 `flattenLayout` is still evolving. The source carries TODOs, and the surrounding
-`coord` layout currently hard-codes assumptions that only hold for the polar case
-(for example, the layout size is rewritten to `[2π, radius]`). The `connect`-as-leaf
+`coord` layout still carries some polar-specific assumptions. The angular extent is no
+longer the bare `2π` literal it once was: `coord.layout` reads the **angular budget**
+from the transform's `domain[0].size` (so `polar({ centralAngle })` gives a partial fan)
+and insets the radial range by the transform's **`innerRadius`** (a donut hole as a
+fraction of the outer radius), building an `effectiveTransform` that shifts `r` by the
+inner radius; the axis/grid renderers read the same budget instead of `2π`. What remains
+polar-shaped is the assumption that axis 0 is angular and axis 1 radial. The
+`connect`-as-leaf
 rule is explicitly called a hack: `connect` is excluded from flattening so it can keep
 rendering in coordinate space, where a cleaner design would have `connect` emit a child
 path mark instead. Treat this page as describing the _intended_ model — expect the

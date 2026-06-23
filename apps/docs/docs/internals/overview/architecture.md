@@ -56,7 +56,11 @@ monotonic machinery, a `POSITION` (anchored) dimension through position scales. 
 SVG. Rendering is reactive — it runs through **SolidJS** — so a chart can update without
 a full rebuild. The [`coord` operator](/internals/layout/coord-flattening) is the
 notable special case: it flattens its subtree into a flat, absolutely-positioned list
-before applying its coordinate transform.
+before applying its coordinate transform. A coordinate transform is parameterized
+(`polar()`/`clock()` take `innerRadius`/`centralAngle`/`startAngle`/…) and may declare
+**axis-name aliases** (`theta`/`r`); a small top-down pass before layout resolves those
+aliases into the canonical `x`/`y`/`w`/`h` facets (see
+[Pass 5.5](/internals/layout/passes#pass-5-5-coordinate-space-alias-resolution)).
 
 The placement pass treats every real node as a `Placeable`: it can expose its
 dimensions, accept final placement pins, report whether an axis is already

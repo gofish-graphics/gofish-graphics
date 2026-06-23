@@ -145,6 +145,26 @@ inferSizeDomains: (shared, children) => {
 
 The `computeIntrinsicSize()` function returns a `Monotonic` function that maps from data values to pixel sizes. This is used later during layout to determine how much space each element needs.
 
+### Pass 5.5: Coordinate-Space Alias Resolution
+
+**Location**: `src/ast/gofish.tsx` (`child.resolveAliases()`), `src/ast/_node.ts`
+(`resolveAliases`)
+
+A coordinate transform may declare **axis-name aliases** for the marks inside it —
+`polar()`/`clock()` expose `{ x: "theta", y: "r" }`, so a mark can be authored with
+`theta`/`r` (positions) and `thetaSize`/`rSize` (extents) instead of `x`/`y`/`w`/`h`.
+`resolveAliases` is a top-down pass (run before underlying space, which reads the
+resolved dims) that walks the tree carrying the **active alias scope**: it rebinds the
+scope at every `coord` node that declares aliases (a nested coord rebinds for its
+subtree), resolves each mark's stashed `_pendingAliases` into the canonical `x/y/w/h`
+facets of its `dims`, and **throws** if an alias is used outside any declaring coord or
+names an alias the enclosing coord doesn't declare (hygiene). Like the later embedding
+pass it mutates the shared `args.dims` element in place so the captured layout/space
+closures observe the resolution. The operator `dir` accepts the angular/radial aliases
+too (`elaborateDirection` maps `theta`→0, `r`→1 generically, since `dir` is baked at
+operator construction before its coord exists). See
+[Authoring Coordinate Transforms](/internals/layout/coordinate-transforms).
+
 ### Pass 6: Underlying Space Resolution
 
 **Location**: `src/ast/gofish.tsx:176`
