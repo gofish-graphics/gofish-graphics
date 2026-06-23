@@ -62,26 +62,6 @@ export const Polygon = ({
         // translate is set by the parent's constraint placement.
         transform: { translate: [undefined, undefined] },
       }),
-      render: ({
-        transform,
-      }: {
-        intrinsicDims?: Dimensions;
-        transform?: Transform;
-        coordinateTransform?: CoordinateTransform;
-      }) => {
-        const [tx, ty] = displayTranslate(transform);
-        // GoFish is y-up; emit under scale(1, -1) like rect.tsx.
-        const pts = points.map(([x, y]) => `${x + tx},${-(y + ty)}`).join(" ");
-        return (
-          <polygon
-            transform="scale(1, -1)"
-            points={pts}
-            fill={fill}
-            stroke={stroke ?? fill ?? "black"}
-            stroke-width={strokeWidth ?? 0}
-          />
-        );
-      },
       // IR lowering — structural mirror of `render`. The legacy
       // `transform="scale(1,-1)"` with each point emitted as `(x+tx, -(y+ty))`
       // folds into `toPixel`: a local point (x,y) is the y-up display point

@@ -393,12 +393,8 @@ export class GoFishRef {
       localAnchorPoint(anchor, intrinsic?.min ?? 0, intrinsic?.size ?? 0);
   }
 
-  public INTERNAL_render(): JSX.Element {
-    return <></>;
-  }
-
   /** Refs are placement stand-ins; they draw nothing, so they lower to no
-   *  display-list items (mirrors {@link INTERNAL_render}). */
+   *  display-list items. */
   public INTERNAL_lower(): DisplayListItem[] {
     return [];
   }

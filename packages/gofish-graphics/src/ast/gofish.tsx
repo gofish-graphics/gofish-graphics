@@ -18,20 +18,6 @@ import { bake } from "./coordinateTransforms/bake";
 import { lowerToDisplayList } from "./displayList/lower";
 import { paintSVG } from "./displayList/paintSVG";
 import type { ToPixel } from "./_node";
-import { envFlag } from "../util";
-
-/**
- * Gate for the two-pass IR render path. Now the DEFAULT — the legacy per-shape
- * render path is retained only until the new outputs are approved in CI, after
- * which it (and this gate) are deleted. Force the legacy path with
- * `GOFISH_LEGACY_RENDER=1` (Node) or {@link setIRRender}(false) (browser/tests);
- * the capture harness uses the latter to render each story both ways. */
-let IR_RENDER_OVERRIDE: boolean | undefined;
-export const setIRRender = (on: boolean | undefined): void => {
-  IR_RENDER_OVERRIDE = on;
-};
-const irRenderEnabled = (): boolean =>
-  IR_RENDER_OVERRIDE ?? !envFlag("GOFISH_LEGACY_RENDER");
 import type { Size } from "./dims";
 import {
   hasBaseline,
@@ -811,39 +797,17 @@ export const render = (
   // a large band's full extent plus `EDGE_GAP`. The right gutter bears no root
   // <g> translate, so it needn't be pixel-snapped — a fractional width is
   // harmless (legend overhangs are fractional text widths).
-  // Bake the scenegraph into a flat, ordered DisplayObject[] and render each at
-  // its absolute transform. A thunk so only the mounted `<Show>` branch runs it.
-  const renderBaked = () =>
-    bake(child).map((d) => d.node.INTERNAL_render(undefined, d.transform));
-
-  // Two-pass IR path (dev flag during migration; becomes the only path once
-  // every primitive lowers). Lower the baked tree into the display list, then
-  // paint each item. Items are final y-down absolute pixels, so there is no
-  // outer flip `<g>` and no per-shape transform.
-  if (irRenderEnabled()) {
-    const toPixel: ToPixel = ([gx, gy]) => [
-      gx + leftReserve,
-      height + topReserve - gy,
-    ];
-    child.getRenderSession().toPixel = toPixel;
-    const paintBaked = () => lowerToDisplayList(child).map(paintSVG);
-    return (
-      <svg
-        width={
-          leftReserve + width + rightOverhang + reserve(rightContentOverhang)
-        }
-        height={topReserve + height + bottomReserve}
-        xmlns="http://www.w3.org/2000/svg"
-      >
-        <Show when={defs}>
-          <defs>{defs}</defs>
-        </Show>
-        {paintBaked()}
-      </svg>
-    );
-  }
-
-  const result = (
+  // Two-pass render: lower the baked scenegraph into the display-list IR, then
+  // paint each item. Items are final y-down absolute pixels (the `toPixel` fold
+  // carries the gutter offset + the y-flip), so there is no outer flip `<g>` and
+  // no per-shape transform.
+  const toPixel: ToPixel = ([gx, gy]) => [
+    gx + leftReserve,
+    height + topReserve - gy,
+  ];
+  child.getRenderSession().toPixel = toPixel;
+  const paintBaked = () => lowerToDisplayList(child).map(paintSVG);
+  return (
     <svg
       width={
         leftReserve + width + rightOverhang + reserve(rightContentOverhang)
@@ -854,15 +818,7 @@ export const render = (
       <Show when={defs}>
         <defs>{defs}</defs>
       </Show>
-      <g
-        transform={`scale(1, -1) translate(${leftReserve}, ${-(height + topReserve)})`}
-      >
-        <Show when={transform} keyed fallback={renderBaked()}>
-          <g transform={transform ?? ""}>{renderBaked()}</g>
-        </Show>
-      </g>
+      {paintBaked()}
     </svg>
   );
-
-  return result;
 };

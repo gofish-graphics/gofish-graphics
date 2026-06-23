@@ -339,33 +339,6 @@ export const Image = ({
           },
         };
       },
-      render: ({
-        intrinsicDims,
-        transform,
-      }: {
-        intrinsicDims?: Dimensions;
-        transform?: Transform;
-      }) => {
-        const [tx, ty] = displayTranslate(transform);
-        const x = tx + (intrinsicDims?.[0]?.min ?? 0);
-        const y = ty + (intrinsicDims?.[1]?.min ?? 0);
-        const width = intrinsicDims?.[0]?.size ?? 0;
-        const height = intrinsicDims?.[1]?.size ?? 0;
-
-        return (
-          <image
-            transform="scale(1, -1)"
-            x={x}
-            y={-y - height}
-            width={Math.abs(width)}
-            height={Math.abs(height)}
-            href={href}
-            preserveAspectRatio={preserveAspectRatio as any}
-            filter={filter}
-            opacity={opacity}
-          />
-        );
-      },
       // IR lowering — structural mirror of `render`. The legacy
       // `transform="scale(1,-1)" y={-y-height}` y-flip folds into `toPixel`: the
       // y-up box has min-x `x` and spans y `[y, y+height]`, so its display

@@ -501,54 +501,6 @@ export const connect = createNodeOperator(
             renderData: { paths: mergedPaths, defaultColor },
           };
         },
-        render: (
-          { intrinsicDims, transform, renderData, coordinateTransform },
-          children,
-          node
-        ) => {
-          const scaleContext = node.getRenderSession().scaleContext;
-          const rawFill: MaybeValue<string> | undefined =
-            fill ?? renderData.defaultColor;
-          const unitScale = scaleContext?.unit;
-          const resolvedFill: string | undefined = resolveColorChannel(
-            rawFill as MaybeValue<string>,
-            unitScale
-          );
-
-          return (
-            <g transform={translateString(transform)}>
-              <For each={renderData.paths}>
-                {(path) => {
-                  const transformedPath = coordinateTransform
-                    ? transformPath(path, coordinateTransform, {
-                        resample: true,
-                      })
-                    : path;
-                  const d = pathToSVGPath(transformedPath);
-                  return (
-                    <path
-                      // filter="url(#crumpled-paper)"
-                      style={{
-                        "mix-blend-mode":
-                          mixBlendMode ??
-                          (mode === "center" ? "normal" : "multiply"),
-                      }}
-                      d={d}
-                      // center mode is a stroked polyline, not a filled region —
-                      // a merged multi-point path would otherwise enclose area (#520)
-                      fill={
-                        mode === "center" ? "none" : (resolvedFill ?? "none")
-                      }
-                      stroke={stroke ?? resolvedFill ?? "black"}
-                      stroke-width={strokeWidth ?? 0}
-                      opacity={opacity ?? 1}
-                    />
-                  );
-                }}
-              </For>
-            </g>
-          );
-        },
         // IR lowering — mirror of `render`. Each connector path is offset by the
         // node's absolute translate (the legacy `<g transform>`), warped by any
         // coordinate transform, then mapped through `toPixel`. Paint order

@@ -45,10 +45,6 @@ export interface CaptureOptions {
   screenshot?: boolean;
   /** Wipe `outDir` before capturing (default: false — callers manage layout). */
   cleanOutDir?: boolean;
-  /** Select the render strategy via the runner's `__setIRRender__` hook:
-   *  `true` = two-pass display-list IR path, `false` = legacy. Undefined leaves
-   *  the lib default. Used by the IR-parity pixel gate. */
-  irRender?: boolean;
 }
 
 export interface CaptureResult {
@@ -106,7 +102,6 @@ export async function captureStories(
     filter,
     screenshot = false,
     cleanOutDir = false,
-    irRender,
   } = opts;
 
   const result: CaptureResult = { captured: [], failed: [], skipped: [] };
@@ -154,13 +149,6 @@ export async function captureStories(
     );
     if (runnerError)
       throw new Error(`Stories runner failed to initialize: ${runnerError}`);
-
-    if (irRender !== undefined) {
-      await page.evaluate(
-        (on) => (window as any).__setIRRender__(on),
-        irRender
-      );
-    }
 
     const allStories = (await page.evaluate(() =>
       window.__listStories__()

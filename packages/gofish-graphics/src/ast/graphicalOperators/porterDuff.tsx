@@ -27,89 +27,6 @@ const maxChildBounds = (children: Placeable[]) => {
   return { minX, maxX, minY, maxY };
 };
 
-const renderComposite = (
-  node: GoFishNode,
-  children: JSX.Element[],
-  intrinsicDims: GoFishNode["intrinsicDims"],
-  operator: CompositeOperator,
-  blendMode: BlendMode
-) => {
-  const uid = `pd-${node.uid}`;
-  const sourceId = `${uid}-source`;
-  const destinationId = `${uid}-destination`;
-  const filterId = `${uid}-filter`;
-
-  const minX = intrinsicDims?.[0]?.min ?? 0;
-  const minY = intrinsicDims?.[1]?.min ?? 0;
-  const width = intrinsicDims?.[0]?.size ?? 0;
-  const height = intrinsicDims?.[1]?.size ?? 0;
-
-  const tail =
-    operator === "in" ? (
-      <>
-        <feBlend
-          in="compositeResult"
-          in2="graySource"
-          mode={blendMode as "multiply" | "screen"}
-          result="blendedIntersect"
-        />
-        <feComposite
-          in="blendedIntersect"
-          in2="compositeResult"
-          operator="in"
-        />
-      </>
-    ) : operator === "over" || operator === "atop" ? (
-      <feBlend
-        in="compositeResult"
-        in2="graySource"
-        mode={blendMode as "multiply" | "screen"}
-      />
-    ) : null;
-
-  return (
-    <>
-      <defs>
-        <g id={sourceId}>{children[0]}</g>
-        <g id={destinationId}>{children[1]}</g>
-        <filter
-          id={filterId}
-          x={minX}
-          y={minY}
-          width={width}
-          height={height}
-          filterUnits="userSpaceOnUse"
-          color-interpolation-filters="sRGB"
-        >
-          <feImage href={`#${sourceId}`} result="sourceImage" />
-          <feColorMatrix
-            in="sourceImage"
-            type="saturate"
-            values="0"
-            result="graySource"
-          />
-          <feImage href={`#${destinationId}`} result="destination" />
-          <feComposite
-            in="destination"
-            in2="graySource"
-            operator={operator}
-            result="compositeResult"
-          />
-          {tail}
-        </filter>
-      </defs>
-      <rect
-        x={minX}
-        y={minY}
-        width={width}
-        height={height}
-        fill="transparent"
-        filter={`url(#${filterId})`}
-      />
-    </>
-  );
-};
-
 const createCompositeRelation = (type: string, operator: CompositeOperator) =>
   createNodeOperator(
     (
@@ -178,20 +95,6 @@ const createCompositeRelation = (type: string, operator: CompositeOperator) =>
               ],
               transform: { translate: [undefined, undefined] },
             };
-          },
-          render: ({ intrinsicDims, transform }, renderedChildren, node) => {
-            requireTwoChildren(renderedChildren);
-            return (
-              <g transform={translateString(transform)}>
-                {renderComposite(
-                  node,
-                  renderedChildren,
-                  intrinsicDims,
-                  operator,
-                  blendMode
-                )}
-              </g>
-            );
           },
           // IR lowering — mirror of `render`. A composite is a bake boundary,
           // so its children are NOT pre-lowered: we re-walk the two subtrees
@@ -366,31 +269,6 @@ export const mask = createNodeOperator(
             ],
             transform: { translate: [undefined, undefined] },
           };
-        },
-        render: ({ transform }, renderedChildren, node) => {
-          requireTwoChildren(renderedChildren);
-
-          const uid = `pd-mask-${node.uid}`;
-          const sourceId = `${uid}-source`;
-          const destinationId = `${uid}-destination`;
-          const maskId = `${uid}-mask`;
-
-          return (
-            <g transform={translateString(transform)}>
-              <defs>
-                <g id={sourceId}>{renderedChildren[0]}</g>
-                <g id={destinationId}>{renderedChildren[1]}</g>
-                <mask
-                  id={maskId}
-                  maskUnits="userSpaceOnUse"
-                  maskContentUnits="userSpaceOnUse"
-                >
-                  <use href={`#${sourceId}`} />
-                </mask>
-              </defs>
-              <use href={`#${destinationId}`} mask={`url(#${maskId})`} />
-            </g>
-          );
         },
         // IR lowering — mirror of `render`. A mask is a bake boundary, so we
         // re-walk both subtrees offset by the node's baked translate (the

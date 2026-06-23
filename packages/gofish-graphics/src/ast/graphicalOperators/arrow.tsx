@@ -121,43 +121,6 @@ export const arrow = createNodeOperator(
             },
           };
         },
-        render: ({ transform, renderData }, childrenElements) => {
-          const data = renderData!;
-          const endAngleDeg = data.ae * (180 / Math.PI);
-          const sw = props.strokeWidth;
-          const headPoints = [
-            [0, -2],
-            [4, 0],
-            [0, 2],
-          ]
-            .map(([x, y]) => [x * sw, y * sw])
-            .map((p) => p.join(","))
-            .join(" ");
-          return (
-            <g transform={translateString(transform)}>
-              <Show when={props.start} fallback={<></>}>
-                <circle
-                  cx={data.sx}
-                  cy={data.sy}
-                  r={(4 / 3) * sw}
-                  fill={props.stroke}
-                />
-              </Show>
-              <path
-                d={`M${data.sx},${data.sy} Q${data.cx},${data.cy} ${data.ex},${data.ey}`}
-                fill="none"
-                stroke={props.stroke}
-                stroke-width={sw}
-              />
-              <polygon
-                points={headPoints}
-                transform={`translate(${data.ex},${data.ey}) rotate(${endAngleDeg})`}
-                fill={props.stroke}
-              />
-              {childrenElements}
-            </g>
-          );
-        },
         // IR lowering — mirror of render. The arrow's parts live under the
         // node's translate (no local flip), so each point is offset by that
         // translate and pushed through `toPixel`. The arrowhead's

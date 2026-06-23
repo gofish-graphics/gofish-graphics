@@ -138,34 +138,6 @@ function computeLabel(
   };
 }
 
-export function renderLabelJSX(
-  node: GoFishNode,
-  transformOverride?: Transform
-): JSX.Element | null {
-  const l = computeLabel(node, transformOverride);
-  if (!l) return null;
-
-  const transform = l.rotate
-    ? `rotate(${-l.rotate},${l.ax},${l.ay}) scale(1,-1)`
-    : "scale(1,-1)";
-
-  return (
-    <text
-      transform={transform}
-      x={l.ax}
-      y={-l.ay}
-      fill={l.labelColor}
-      font-size={`${l.fontSize}px`}
-      font-family={LABEL_FONT_FAMILY}
-      text-anchor={l.textAnchor}
-      dominant-baseline="central"
-      pointer-events="none"
-    >
-      {l.labelText}
-    </text>
-  );
-}
-
 /**
  * Lower a node's label to a display-list `TextItem` (role `overlay`). Mirrors
  * {@link renderLabelJSX}: the anchor is mapped to a final pixel via `toPixel`,

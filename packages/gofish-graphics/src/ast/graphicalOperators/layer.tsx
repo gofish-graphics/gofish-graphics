@@ -418,59 +418,6 @@ export const layer = createNodeOperatorSequential(
             },
           };
         },
-        render: ({ transform, coordinateTransform }, children, node) => {
-          const scaleX = options.transform?.scale?.x ?? 1;
-          const scaleY = options.transform?.scale?.y ?? 1;
-          const [wrapTx, wrapTy] = displayTranslate(transform);
-          const wrapTransform = `translate(${wrapTx}, ${wrapTy}) scale(${scaleX}, ${scaleY})`;
-
-          // Z-order resolution: when this layer carries any zAbove/zBelow
-          // constraints, flatten the (non-component) subtree and emit in
-          // topologically-resolved order. Otherwise, keep the existing
-          // (zOrder, index) sort over already-rendered children.
-          const zConstraints: ZOrderConstraint[] = (
-            node.constraints ?? []
-          ).filter(isZOrderConstraint);
-
-          if (zConstraints.length === 0) {
-            const orderedChildren = children
-              .map((child, index) => ({
-                child,
-                index,
-                zOrder:
-                  node.children[index] instanceof GoFishNode
-                    ? (node.children[index] as GoFishNode).getZOrder()
-                    : 0,
-              }))
-              .sort((a, b) => a.zOrder - b.zOrder || a.index - b.index)
-              .map(({ child }) => child);
-            return <g transform={wrapTransform}>{orderedChildren}</g>;
-          }
-
-          const flat = flattenForZOrder(node.children);
-          const sorted = topoSortByZOrder(flat, zConstraints, {
-            node: (it) => it.node,
-            z: (it) => it.defaultZ,
-            order: (it) => it.defaultOrder,
-          });
-          return (
-            <g transform={wrapTransform}>
-              {sorted.map((item) => {
-                const rendered = item.node.INTERNAL_render(coordinateTransform);
-                if (item.accTranslate[0] === 0 && item.accTranslate[1] === 0) {
-                  return rendered;
-                }
-                return (
-                  <g
-                    transform={`translate(${item.accTranslate[0]}, ${item.accTranslate[1]})`}
-                  >
-                    {rendered}
-                  </g>
-                );
-              })}
-            </g>
-          );
-        },
         // IR lowering — mirror of the box/layer render. The box's translate is
         // composed into a child-local `toPixel` (so children land in the right
         // pixels); a non-identity scale can't be folded into coordinates, so it

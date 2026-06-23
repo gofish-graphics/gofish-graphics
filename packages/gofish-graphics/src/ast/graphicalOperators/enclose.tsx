@@ -58,24 +58,6 @@ export const enclose = createNodeOperator(
             transform: { translate: [undefined, undefined] },
           };
         },
-        render: ({ intrinsicDims, transform, renderData }, children) => {
-          return (
-            <g transform={translateString(transform)}>
-              {children}
-              <rect
-                x={-padding}
-                y={-padding}
-                width={intrinsicDims?.[0]?.size ?? 0}
-                height={intrinsicDims?.[1]?.size ?? 0}
-                rx={rx}
-                ry={ry}
-                fill="none"
-                stroke={gray}
-                stroke-width={1}
-              />
-            </g>
-          );
-        },
         // IR lowering — mirror of render: lower the children under the node's
         // translate (the legacy `<g transform>`), then the enclosure rect on top.
         lower: (
