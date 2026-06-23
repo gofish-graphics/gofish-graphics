@@ -97,8 +97,9 @@ around them as noted; these are candidates for new operators.
    packed **unit** mosaic ([`UnitMosaic`](./UnitMosaic.stories.tsx)) uniform
    square dots, because there the two axes' *sizes* are solved in separate nested
    `stack` scopes (each owns one axis), so there is no single scope to couple —
-   a distinct, still-open problem (SIZE-σ coupling across scopes, related to the
-   bbox work in #39/#80; the candidate homes are in
+   a distinct, still-open problem (SIZE-σ coupling across scopes **plus** a
+   fill-capable mark for per-cell `maxfill` dots, tracked in **#624**; related to
+   the bbox work in #39/#80; the candidate homes are in
    `apps/docs/docs/internals/design/size-claims.md` § "Aspect ratio: three
    candidate homes"). Lacking that, `UnitMosaic` still fixes the dot size and
    hand-picks per-block row counts (`R ∝ group size`, so a cell of `n` dots in

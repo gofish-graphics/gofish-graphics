@@ -13,8 +13,12 @@ import { titanicPassengers } from "../../src/data/titanicPassengers";
  * dot per passenger. Atom builds this with `size: { type: "count" }`, which sizes each
  * container by its member count so the cell *areas* read as the crosstab.
  *
- * GoFish has no `count` sizing operator (see stories/atom/README.md, gap #1), but the
- * unit mosaic is still expressible: with a single shared dot size, a cell holding `n`
+ * This is a WORKAROUND, not a faithful replica (tracked in #624): Atom sizes each
+ * cell's dots per-cell (`size: max, isShared: false`) to fill a count-proportional
+ * rectangle, so dot sizes vary across cells. GoFish has no `count` sizing operator
+ * nor a fill-capable mark (see stories/atom/README.md, gap #1), so this story uses a
+ * single global dot size and fakes the cell areas instead: with a fixed dot size a cell
+ * holding `n`
  * dots in `R` rows occupies `R × ceil(n/R)` grid slots — area ∝ n for *any* R. Choosing
  * `R ∝ (class,sex) group size` makes every sub-block the same height, so the blocks tile
  * into a mosaic whose heights encode class/sex counts and whose column splits encode
