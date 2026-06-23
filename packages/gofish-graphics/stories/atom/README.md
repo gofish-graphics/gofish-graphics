@@ -87,17 +87,22 @@ around them as noted; these are candidates for new operators.
    a verified, variable-width mosaic with no `count` operator. (The existing
    *Forward Syntax V3 / Mosaic Chart* still renders equal-width because it uses `spread`.)
 
-   What is genuinely deferred is the piece the **unit** ([`UnitMosaic`](./UnitMosaic.stories.tsx))
-   version needs: to fill differently-sized count-proportional cells with *uniform square
-   dots*, a data unit must measure the same on both axes — an equal-aspect coupling
-   `σ = min(W/rangeX, H/rangeY)` applied to both axes (**issue #582**; the general
-   `σ_y = k·σ_x` form and its candidate homes are in
-   `apps/docs/docs/internals/design/size-claims.md` § "Aspect ratio: three candidate
-   homes", gated on the bbox work in #39/#80). Lacking that coupling, `UnitMosaic` fixes
-   the dot size and hand-picks per-block row counts (`R ∝ group size`, so a cell of `n`
-   dots in `R` rows has area ∝ `n` for any `R`) to manufacture the same proportional areas
-   bottom-up. With the σ solve + equal-aspect coupling, that bookkeeping disappears and the
-   mosaic falls out of `count`-driven main-axis allocation directly.
+   A related coupling — making *one data unit measure the same on both axes* —
+   now exists as the chart/render option `aspectRatio` (**issue #582**; see
+   [chart › Equal aspect](../../../../apps/docs/docs/js/api/core/chart.md) and the
+   *Forward Syntax V3 / Equal Aspect* sunflower demo). It couples the two axes'
+   **data→pixel position scales** so circles stay circular and maps stay
+   undistorted. That is the POSITION case; it does **not** by itself give the
+   packed **unit** mosaic ([`UnitMosaic`](./UnitMosaic.stories.tsx)) uniform
+   square dots, because there the two axes' *sizes* are solved in separate nested
+   `stack` scopes (each owns one axis), so there is no single scope to couple —
+   a distinct, still-open problem (SIZE-σ coupling across scopes, related to the
+   bbox work in #39/#80; the candidate homes are in
+   `apps/docs/docs/internals/design/size-claims.md` § "Aspect ratio: three
+   candidate homes"). Lacking that, `UnitMosaic` still fixes the dot size and
+   hand-picks per-block row counts (`R ∝ group size`, so a cell of `n` dots in
+   `R` rows has area ∝ `n` for any `R`) to manufacture the proportional areas
+   bottom-up.
 
 2. **Aspect-ratio-driven auto-wrapping.** Atom's `aspect_ratio` (`square`, `maxfill`,
    `fillX`, `fillY`) chooses the grid's row/column counts automatically to hit a target

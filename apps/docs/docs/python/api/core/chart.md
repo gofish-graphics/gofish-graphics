@@ -21,13 +21,14 @@ chart(data, **options) -> ChartBuilder
 
 ## Parameters
 
-| Parameter | Type                        | Description                                                                                           |
-| --------- | --------------------------- | ----------------------------------------------------------------------------------------------------- |
-| `data`    | `list[dict]` \| `DataFrame` | The dataset to visualize, or [`selectAll()` / `ref()`](#cross-chart-references) for a layer reference |
-| `axes`    | keyword                     | Auto-generate axes, labels, and legends. See [Axes](#axes) below.                                     |
-| `coord`   | keyword                     | Coordinate transform, e.g. `coord=clock()`                                                            |
-| `color`   | keyword                     | Color scale applied to all marks — `palette(...)` or `gradient(...)`                                  |
-| `padding` | keyword                     | Extra SVG padding (px) — useful for polar charts and overflowing labels                               |
+| Parameter     | Type                        | Description                                                                                                        |
+| ------------- | --------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `data`        | `list[dict]` \| `DataFrame` | The dataset to visualize, or [`selectAll()` / `ref()`](#cross-chart-references) for a layer reference              |
+| `axes`        | keyword                     | Auto-generate axes, labels, and legends. See [Axes](#axes) below.                                                  |
+| `coord`       | keyword                     | Coordinate transform, e.g. `coord=clock()`                                                                         |
+| `color`       | keyword                     | Color scale applied to all marks — `palette(...)` or `gradient(...)`                                               |
+| `padding`     | keyword                     | Extra SVG padding (px) — useful for polar charts and overflowing labels                                            |
+| `aspectRatio` | keyword                     | Couple the x/y data scales so a data unit measures the same on both axes. See [Equal aspect](#equal-aspect) below. |
 
 Chart-level options are passed as keyword arguments:
 
@@ -70,6 +71,25 @@ Per-operator overrides use the same shape on
 ```python
 chart(data, axes=True).flow(spread(by="species", dir="x", axes={"x": True, "y": False}))
 ```
+
+## Equal aspect
+
+By default each axis resolves its data→pixel scale independently — `x` against
+the width, `y` against the height — so a circle in data space becomes an ellipse.
+`aspectRatio` couples the two scales so **one data unit measures the same on
+both axes**, the way maps, geometric data, and correlation plots need.
+
+```python
+chart(data, aspectRatio="square")        # 1 unit on x = 1 unit on y
+chart(data, aspectRatio="3:2")           # a unit is 3 wide : 2 tall (w:h)
+chart(data, aspectRatio={"w": 3, "h": 2})  # the same, as a dict
+```
+
+The value is always written **w:h**, so there is no ratio direction to remember
+(`"square"`, a `"<w>:<h>"` string, or a `{"w", "h"}` dict). The binding axis
+fills its dimension; the other centers in the leftover space. It applies to axes
+that carry a data-driven scale; an axis with nothing to scale leaves coupling a
+no-op.
 
 ## The builder
 

@@ -11,12 +11,13 @@ instead, see [export](/js/api/core/export).
 
 ## Parameters
 
-| Parameter      | Type          | Description                                                       |
-| -------------- | ------------- | ----------------------------------------------------------------- |
-| `container`    | `HTMLElement` | The DOM element to render into                                    |
-| `options.w`    | `number?`     | Width in pixels. Optional — see [Inferred size](#inferred-size).  |
-| `options.h`    | `number?`     | Height in pixels. Optional — see [Inferred size](#inferred-size). |
-| `options.axes` | `AxesOptions` | Auto-generate axes, labels, and legends. See [Axes](#axes) below. |
+| Parameter             | Type          | Description                                                                                                                                                                   |
+| --------------------- | ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `container`           | `HTMLElement` | The DOM element to render into                                                                                                                                                |
+| `options.w`           | `number?`     | Width in pixels. Optional — see [Inferred size](#inferred-size).                                                                                                              |
+| `options.h`           | `number?`     | Height in pixels. Optional — see [Inferred size](#inferred-size).                                                                                                             |
+| `options.axes`        | `AxesOptions` | Auto-generate axes, labels, and legends. See [Axes](#axes) below.                                                                                                             |
+| `options.aspectRatio` | `AspectRatio` | Couple the x/y data scales so a data unit measures the same on both axes. Overrides a chart-level `aspectRatio`. See [chart › Equal aspect](/js/api/core/chart#equal-aspect). |
 
 ## Inferred size
 

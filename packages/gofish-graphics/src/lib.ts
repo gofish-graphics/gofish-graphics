@@ -77,6 +77,7 @@ export { pluck } from "./ast/datumProjection";
 
 // Constraints
 export { Constraint } from "./ast/constraints";
+export type { AspectRatio } from "./ast/constraints/aspectRatio";
 export type {
   ConstraintRef,
   ConstraintSpec,

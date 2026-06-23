@@ -21,14 +21,15 @@ chart(data, options?)
 
 ## Parameters
 
-| Parameter       | Type                  | Description                                                                                                                                                                  |
-| --------------- | --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `data`          | `T`                   | The dataset to visualize                                                                                                                                                     |
-| `options.w`     | `number`              | Width hint for the chart frame                                                                                                                                               |
-| `options.h`     | `number`              | Height hint for the chart frame                                                                                                                                              |
-| `options.coord` | `CoordinateTransform` | Coordinate transform (e.g. `polar()`)                                                                                                                                        |
-| `options.color` | `ColorConfig`         | Color scale applied to all marks in this chart. Use [`palette()`](/js/api/color/palette) for categorical data or [`gradient()`](/js/api/color/gradient) for continuous data. |
-| `options.axes`  | `AxesOptions`         | Auto-generate axes, labels, and legends. See [Axes](#axes) below.                                                                                                            |
+| Parameter             | Type                  | Description                                                                                                                                                                  |
+| --------------------- | --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `data`                | `T`                   | The dataset to visualize                                                                                                                                                     |
+| `options.w`           | `number`              | Width hint for the chart frame                                                                                                                                               |
+| `options.h`           | `number`              | Height hint for the chart frame                                                                                                                                              |
+| `options.coord`       | `CoordinateTransform` | Coordinate transform (e.g. `polar()`)                                                                                                                                        |
+| `options.color`       | `ColorConfig`         | Color scale applied to all marks in this chart. Use [`palette()`](/js/api/color/palette) for categorical data or [`gradient()`](/js/api/color/gradient) for continuous data. |
+| `options.axes`        | `AxesOptions`         | Auto-generate axes, labels, and legends. See [Axes](#axes) below.                                                                                                            |
+| `options.aspectRatio` | `AspectRatio`         | Couple the x and y data→pixel scales so one data unit measures the same on both axes. See [Equal aspect](#equal-aspect) below.                                               |
 
 Returns a `ChartBuilder<T>` with [`.flow()`](/js/api/core/flow), [`.mark()`](/js/api/core/mark), [`.render()`](/js/api/core/render), [`.zOrder()`](#zorder), and [`.name()`](#name) methods.
 
@@ -56,6 +57,34 @@ Each axis title defaults to the field that dimension encodes (e.g. `count` for
 to show the axis with no title. Manual `axis: true/false` overrides on individual
 operators within the chart are still respected when `axes: true`. See
 [render › Axes](/js/api/core/render#axes) for live examples.
+
+## Equal aspect
+
+By default each axis resolves its data→pixel scale independently — `x` against
+the width, `y` against the height — so equal data steps render unequal and a
+circle in data space becomes an ellipse. `aspectRatio` couples the two scales so
+**one data unit measures the same on both axes**, the way maps, geometric data,
+and correlation plots (where a 45° line must _look_ 45°) need.
+
+```ts
+chart(data, { aspectRatio: "square" }); // 1 unit on x = 1 unit on y
+chart(data, { aspectRatio: "3:2" }); // a unit is 3 wide : 2 tall (w:h)
+chart(data, { aspectRatio: { w: 3, h: 2 } }); // the same, as an object
+```
+
+The value is always written **w:h**, so there is no ratio direction to
+remember. The full type is:
+
+```ts
+type AspectRatio = "square" | `${number}:${number}` | { w: number; h: number };
+```
+
+The binding (more constrained) axis fills its dimension; the other axis is
+centered in the leftover space. `aspectRatio` may also be passed at render time
+(`.render(container, { aspectRatio })`), which takes precedence over the
+chart-level option. It applies to axes that carry a data-driven scale (a
+position scale over a data domain, or a data-driven size) — an axis with nothing
+to scale (a category axis, fixed-size marks) leaves coupling a no-op.
 
 ## Example
 

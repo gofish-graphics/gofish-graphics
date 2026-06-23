@@ -16,12 +16,18 @@ import {
 import { posScaleFromSpace } from "./domain";
 import type { Size } from "./dims";
 import {
+  continuousInterval,
   hasBaseline,
   isBaselineMagnitude,
   spaceMeasure,
   type UnderlyingSpace,
 } from "./underlyingSpace";
 import { shadowCheckScaleRoot } from "./solver/shadow";
+import {
+  type AspectRatio,
+  coupleScaleFactors,
+  parseAspectRatio,
+} from "./constraints/aspectRatio";
 import { elaborateAxes, elaborateAxisTitles } from "./axes/elaborate";
 import { elaborateLegend, legendOverhang } from "./legends/elaborate";
 
@@ -112,6 +118,7 @@ export async function layout(
     debug = false,
     axes = false,
     axisFields,
+    aspectRatio,
   }: {
     w?: number;
     h?: number;
@@ -122,6 +129,7 @@ export async function layout(
     defs?: JSX.Element[];
     axes?: AxesOptions;
     axisFields?: { x?: string; y?: string };
+    aspectRatio?: AspectRatio;
   },
   child: GoFishNode | Promise<GoFishNode>,
   contexts?: {
@@ -341,6 +349,56 @@ export async function layout(
       : undefined,
   ];
 
+  // Equal-aspect coupling (#582): "1 data unit on x = 1 data unit on y" (or a
+  // chosen w:h). Each axis has a pixels-per-data-unit scale — from its POSITION
+  // data domain (`canvas / range`) or its baseline-magnitude σ. Take the
+  // binding (smaller, per `coupleScaleFactors`) one and apply it to both axes:
+  // the binding axis fills its dimension; the other gets slack, centered by
+  // convention. A POSITION axis writes back a recentered posScale; a SIZE axis
+  // writes back its σ (its content stays origin-anchored — SIZE-slack centering
+  // is deferred). No-op + warn if either axis has no data-driven scale.
+  if (aspectRatio !== undefined) {
+    const shape = parseAspectRatio(aspectRatio);
+    const axisInfo = ([0, 1] as const).map((axis) => {
+      const space = axis === 0 ? niceUnderlyingSpaceX : niceUnderlyingSpaceY;
+      const canvas = axis === 0 ? canvasW : canvasH;
+      const ival = continuousInterval(space);
+      if (ival !== undefined && ival.max > ival.min) {
+        const range = ival.max - ival.min;
+        return {
+          kind: "position" as const,
+          unitPx: canvas / range,
+          min: ival.min,
+          range,
+          canvas,
+        };
+      }
+      const sigma = rootScaleFactors[axis];
+      if (sigma !== undefined) return { kind: "size" as const, unitPx: sigma };
+      return undefined;
+    });
+    const [ax, ay] = axisInfo;
+    if (ax === undefined || ay === undefined) {
+      console.warn(
+        "gofish: aspectRatio coupling needs a data-driven (POSITION or SIZE) " +
+          "scale on both axes; one axis has none, so coupling is a no-op."
+      );
+    } else {
+      const coupled = coupleScaleFactors([ax.unitPx, ay.unitPx], shape);
+      for (const axis of [0, 1] as const) {
+        const info = axisInfo[axis]!;
+        const c = coupled[axis]!;
+        if (info.kind === "position") {
+          const offset = (info.canvas - c * info.range) / 2; // center the slack
+          const min = info.min;
+          posScales[axis] = (pos: number) => (pos - min) * c + offset;
+        } else {
+          rootScaleFactors[axis] = c;
+        }
+      }
+    }
+  }
+
   // Solver shadow (#39): the ROOT σ-scope — the SIZE frame equation
   // content(σ)=canvas the whole chart resolves against. No-op unless
   // GOFISH_SOLVER_CHECK is set.
@@ -442,6 +500,9 @@ export type GoFishRenderOptions = {
   axisFields?: { x?: string; y?: string };
   colorConfig?: ColorConfig;
   padding?: number;
+  /** Couple the two axes' σ so a data unit renders w:h ("square" = 1:1).
+   *  Applies to the root σ-scope. See #582. */
+  aspectRatio?: AspectRatio;
 };
 
 /** Extra options for the SVG-export terminals (`toSVG` / `toSVGElement` / `save`). */
@@ -487,6 +548,7 @@ async function runLayout(
     axes = false,
     axisFields,
     colorConfig,
+    aspectRatio,
   } = options;
   // Seed the unit color scale by config kind. A gradient is a continuous
   // color scale (its `scaleFn`/`domain` are finalized in resolveColorScale
@@ -523,7 +585,7 @@ async function runLayout(
     }
 
     return await layout(
-      { w, h, x, y, transform, debug, defs, axes, axisFields },
+      { w, h, x, y, transform, debug, defs, axes, axisFields, aspectRatio },
       child,
       contexts
     );

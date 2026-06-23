@@ -2,6 +2,7 @@ import { GoFishNode } from "../_node";
 import { CoordinateTransform } from "../coordinateTransforms/coord";
 import { type ColorConfig } from "../colorSchemes";
 import type { AxesOptions } from "../gofish";
+import type { AspectRatio } from "../constraints/aspectRatio";
 import { Mark, Operator } from "../types";
 import { Frame } from "../graphicalOperators/frame";
 import { layer as Layer } from "../graphicalOperators/layer";
@@ -70,6 +71,10 @@ export type ChartOptions = {
   axes?: AxesOptions;
   /** Extra padding (px) between the polar circle and the SVG edge. Default 30. */
   padding?: number;
+  /** Equal-aspect coupling (#582): couple the data→pixel scales so one data
+   *  unit renders at this w:h shape ("square" = 1:1; "<w>:<h>"; or {w,h}). The
+   *  binding axis fills; the other centers. A render-level `aspectRatio` wins. */
+  aspectRatio?: AspectRatio;
 };
 
 /**
@@ -402,11 +407,13 @@ export class ChartBuilder<TInput, TOutput = TInput> {
     axes?: AxesOptions;
     colorConfig?: ColorConfig;
     axisFields: { x?: string; y?: string };
+    aspectRatio?: AspectRatio;
   } {
     return {
       axes: this.options?.axes,
       colorConfig: this.options?.color,
       axisFields: this.inferAxisFields(),
+      aspectRatio: this.options?.aspectRatio,
     };
   }
 
@@ -595,6 +602,8 @@ export class ChartBuilder<TInput, TOutput = TInput> {
         axes: this.options?.axes,
         colorConfig: this.options?.color,
         axisFields,
+        // render-level aspectRatio wins; else the chart-level option (#582).
+        aspectRatio: (options as any).aspectRatio ?? this.options?.aspectRatio,
       },
     };
   }
@@ -737,6 +746,7 @@ export class LayerBuilder {
         axes: (options as any).axes ?? meta.axes,
         colorConfig: meta.colorConfig,
         axisFields: meta.axisFields,
+        aspectRatio: (options as any).aspectRatio ?? meta.aspectRatio,
       },
     };
   }

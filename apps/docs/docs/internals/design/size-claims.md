@@ -429,6 +429,17 @@ deferred to the #39/#547 round:
    this are complementary, not competing: one constrains boxes, the other
    constrains scales.
 
+   **Partially shipped (#582)** as the chart/render option `aspectRatio`
+   (`"square"` / `"<w>:<h>"` / `{w,h}`), implemented at the **root scope** in
+   `gofish.tsx`: each axis's pixels-per-data-unit (a POSITION domain's
+   `canvas/range`, or a baseline-magnitude σ) is reconciled with
+   `min(W/rangeX, H/rangeY)·{w,h}`, the binding axis fills, the other centers.
+   This covers the **single-coordinate-space** case — scatter/correlation/maps,
+   circles staying circular. It does **not** yet cover a packed layout whose two
+   axes' _sizes_ are solved in separate nested scopes (the unit mosaic): there is
+   no single scope to couple, which is the genuinely deferred part that waits on
+   the cross-scope SIZE coupling above.
+
 ## Recommendation and staging
 
 1. **This round** — implement `Constraint.nest` as the first size-setting
