@@ -2,11 +2,10 @@
 // @wiki Overview — /internals/layout/passes
 // </gofish-wiki>
 
-import { color6, color6_old, resolveColorChannel } from "../../color";
-import { path, Path, pathToSVGPath, segment, transformPath } from "../../path";
+import { color6, resolveColorChannel } from "../../color";
+import { path, transformPath } from "../../path";
 import { GoFishNode } from "../_node";
 import { GoFishAST } from "../_ast";
-import { CoordinateTransform } from "../coordinateTransforms/coord";
 import { linear } from "../coordinateTransforms/linear";
 import {
   getMeasure,
@@ -22,6 +21,7 @@ import {
   Dimensions,
   displayDims as displayDimsOf,
   elaborateDims,
+  extractAliasCandidates,
   FancyDims,
   FancySize,
   Size,
@@ -42,6 +42,13 @@ import {
 import { interval } from "../../util/interval";
 import { createMark } from "../withGoFish";
 import { attachCut } from "../graphicalOperators/cut";
+import type { DisplayList } from "gofish-ir";
+import {
+  lowerStyle,
+  pathToPixelSVG,
+  rectItemFromBox,
+  valueLabelItems,
+} from "../displayList/lowerHelpers";
 
 const computeIntrinsicSize = (
   input: MaybeValue<number> | undefined
@@ -83,7 +90,7 @@ export const Rect = ({
   aspectRatio?: number;
 } & FancyDims<MaybeValue<number>>) => {
   const dims = elaborateDims(fancyDims).map(inferEmbedded);
-  return new GoFishNode(
+  const node = new GoFishNode(
     {
       name,
       key,
@@ -280,31 +287,21 @@ export const Rect = ({
           },
         };
       },
-      render: (
-        {
-          intrinsicDims,
-          transform,
-          coordinateTransform,
-        }: {
-          intrinsicDims?: Dimensions;
-          transform?: Transform;
-          coordinateTransform?: CoordinateTransform;
-        },
+      // IR lowering — the structural mirror of `render` above. Each branch
+      // computes the SAME geometry, then emits display-list items (coordinates
+      // pushed through `toPixel`) instead of JSX. Mirror the geometry the
+      // legacy render computed.
+      lower: (
+        { intrinsicDims, transform, coordinateTransform, toPixel },
         _children,
-        node: GoFishNode
-      ) => {
+        node
+      ): DisplayList.DisplayItem[] => {
         const space = coordinateTransform ?? linear();
-
-        // const isDataX = isValue(dims[0].size);
-        // const isDataY = isValue(dims[1].size);
         const isXEmbedded = intrinsicDims![0].embedded;
         const isYEmbedded = intrinsicDims![1].embedded;
-
-        // combine intrinsicDims with transform (center/max derived from min+size)
         const displayDims = displayDimsOf(intrinsicDims, transform);
 
-        const scaleContext = node.getRenderSession().scaleContext;
-        const unitScale = scaleContext?.unit;
+        const unitScale = node.getRenderSession().scaleContext?.unit;
         const originalFill = fill;
         const resolvedFill = resolveColorChannel(fill, unitScale);
         const resolvedStroke =
@@ -315,62 +312,55 @@ export const Rect = ({
             ? String(getValue(originalFill) ?? "")
             : undefined;
 
-        // Both dimensions are aesthetic - render as transformed point
+        // The inline value-label (the `label` arg) — white text at the mark's
+        // transformed center.
+        const valueLabel = (cx: number, cy: number) =>
+          valueLabelItems(labelText, cx, cy, toPixel);
+
+        const elementStyle = lowerStyle({
+          fill: resolvedFill,
+          stroke: resolvedStroke,
+          strokeWidth: strokeWidth ?? 0,
+          opacity,
+          filter,
+        });
+        const rectExtra = {
+          rx,
+          ry,
+          style: elementStyle,
+          datum: node.datum,
+          role: "node" as const,
+        };
+
+        // Both dimensions aesthetic — transformed point.
         if (!isXEmbedded && !isYEmbedded) {
           const center: [number, number] = [
             displayDims[0].center ?? 0,
             displayDims[1].center ?? 0,
           ];
-          const [transformedX, transformedY] = space.transform(center);
-          const width = displayDims[0].size ?? 0;
-          const height = displayDims[1].size ?? 0;
-
-          return (
-            <>
-              <rect
-                transform={`scale(1, -1)`}
-                x={transformedX - width / 2}
-                y={-(transformedY - height / 2) - height}
-                rx={rx}
-                ry={ry}
-                width={width}
-                height={height}
-                fill={resolvedFill}
-                stroke={resolvedStroke}
-                stroke-width={strokeWidth ?? 0}
-                filter={filter}
-                opacity={opacity}
-              />
-              {labelText && (
-                <text
-                  transform="scale(1, -1)"
-                  x={transformedX}
-                  y={-transformedY}
-                  fill="white"
-                  font-size="12px"
-                  text-anchor="middle"
-                  dominant-baseline="central"
-                >
-                  {labelText}
-                </text>
-              )}
-            </>
-          );
+          const [tX, tY] = space.transform(center);
+          const w = displayDims[0].size ?? 0;
+          const h = displayDims[1].size ?? 0;
+          return [
+            rectItemFromBox(
+              tX - w / 2,
+              tX + w / 2,
+              tY - h / 2,
+              tY + h / 2,
+              toPixel,
+              rectExtra
+            ),
+            ...valueLabel(tX, tY),
+          ];
         }
 
-        // One dimension is data - render as line
+        // One dimension data — line.
         if (isXEmbedded !== isYEmbedded) {
-          const dataAxis = isXEmbedded ? 0 : 1;
           const aestheticAxis = isXEmbedded ? 1 : 0;
           const thickness = displayDims[aestheticAxis].size ?? 0;
-
-          // Calculate midpoint of aesthetic axis
           const aestheticMid = displayDims[aestheticAxis].center ?? 0;
 
-          // For linear spaces, we can render a simple line
           if (space.type === "linear") {
-            // `max - min` is the unsigned extent (size), so width/height are
-            // already non-negative and x/y are the box's true min corner.
             const x = isXEmbedded
               ? (displayDims[0].min ?? 0)
               : aestheticMid - thickness / 2;
@@ -383,44 +373,15 @@ export const Rect = ({
             const height = isXEmbedded
               ? thickness
               : (displayDims[1].max ?? 0) - (displayDims[1].min ?? 0);
-
             const center: [number, number] = [x + width / 2, y + height / 2];
-            const [transformedX, transformedY] = space.transform(center);
-
-            return (
-              <>
-                <rect
-                  transform={`scale(1, -1)`}
-                  x={x}
-                  y={-y - height}
-                  rx={rx}
-                  ry={ry}
-                  width={width}
-                  height={height}
-                  fill={resolvedFill}
-                  stroke={resolvedStroke}
-                  stroke-width={strokeWidth ?? 0}
-                  filter={filter}
-                  opacity={opacity}
-                />
-                {labelText && (
-                  <text
-                    transform="scale(1, -1)"
-                    x={transformedX}
-                    y={-transformedY}
-                    fill="white"
-                    font-size="12px"
-                    text-anchor="middle"
-                    dominant-baseline="central"
-                  >
-                    {labelText}
-                  </text>
-                )}
-              </>
-            );
+            const [tX, tY] = space.transform(center);
+            return [
+              rectItemFromBox(x, x + width, y, y + height, toPixel, rectExtra),
+              ...valueLabel(tX, tY),
+            ];
           }
 
-          // Create path along midline
+          // Nonlinear — line path along the midline.
           const linePath = path(
             [
               [
@@ -434,70 +395,38 @@ export const Rect = ({
             ],
             {}
           );
-
-          // Transform path
           const transformed = transformPath(linePath, space, {
             resample: true,
           });
-
-          // 0.5 removes weird white space at least for some charts
-          return (
-            <path
-              d={pathToSVGPath(transformed)}
-              stroke={resolvedStroke}
-              stroke-width={thickness + 0.5}
-              fill="none"
-              filter={filter}
-              opacity={opacity}
-            />
-          );
+          return [
+            {
+              kind: "path",
+              d: pathToPixelSVG(transformed, toPixel),
+              datum: node.datum,
+              role: "node",
+              style: lowerStyle({
+                fill: "none",
+                stroke: resolvedStroke,
+                strokeWidth: thickness + 0.5,
+                opacity,
+                filter,
+              }),
+            },
+          ];
         }
 
-        // Both dimensions are data - render as area
-
-        // If we're in a linear space, render as a rect element
+        // Both dimensions data — area.
         if (space.type === "linear") {
-          // `max - min` is the unsigned extent, so the min corner and size are
-          // already correct without sign adjustment.
           const x = displayDims[0].min ?? 0;
           const y = displayDims[1].min ?? 0;
-          const width = (displayDims[0].max ?? 0) - x;
-          const height = (displayDims[1].max ?? 0) - y;
-
-          const center: [number, number] = [x + width / 2, y + height / 2];
-          const [transformedX, transformedY] = space.transform(center);
-
-          return (
-            <>
-              <rect
-                transform={`scale(1, -1)`}
-                x={x}
-                y={-y - height}
-                rx={rx}
-                ry={ry}
-                width={width}
-                height={height}
-                stroke={resolvedStroke}
-                stroke-width={strokeWidth ?? 0}
-                fill={resolvedFill}
-                filter={filter}
-                opacity={opacity}
-              />
-              {labelText && (
-                <text
-                  transform="scale(1, -1)"
-                  x={transformedX}
-                  y={-transformedY}
-                  fill="white"
-                  font-size="12px"
-                  text-anchor="middle"
-                  dominant-baseline="central"
-                >
-                  {labelText}
-                </text>
-              )}
-            </>
-          );
+          const xMax = displayDims[0].max ?? 0;
+          const yMax = displayDims[1].max ?? 0;
+          const center: [number, number] = [(x + xMax) / 2, (y + yMax) / 2];
+          const [tX, tY] = space.transform(center);
+          return [
+            rectItemFromBox(x, xMax, y, yMax, toPixel, rectExtra),
+            ...valueLabel(tX, tY),
+          ];
         }
 
         const corners = path(
@@ -509,24 +438,29 @@ export const Rect = ({
           ],
           { closed: true }
         );
-
-        // Transform path
         const transformed = transformPath(corners, space, { resample: true });
-
-        return (
-          <path
-            d={pathToSVGPath(transformed)}
-            fill={resolvedFill}
-            stroke={resolvedStroke}
-            stroke-width={strokeWidth ?? 0}
-            filter={filter}
-            opacity={opacity}
-          />
-        );
+        return [
+          {
+            kind: "path",
+            d: pathToPixelSVG(transformed, toPixel),
+            datum: node.datum,
+            role: "node",
+            style: lowerStyle({
+              fill: resolvedFill,
+              stroke: resolvedStroke,
+              strokeWidth: strokeWidth ?? 0,
+              opacity,
+              filter,
+            }),
+          },
+        ];
       },
     },
     []
   );
+  // Stash alias-keyed dims (theta/r/…) for the resolveAliases pass.
+  node._pendingAliases = extractAliasCandidates(fancyDims);
+  return node;
 };
 
 const baseRect = createMark(

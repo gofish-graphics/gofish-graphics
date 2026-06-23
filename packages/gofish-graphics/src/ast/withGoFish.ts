@@ -33,6 +33,7 @@ import {
   type MarkKind,
 } from "./marks/createOperator";
 import { isValue } from "./data";
+import { KNOWN_ALIAS_KEYS } from "./dims";
 import { Mark } from "./types";
 import type { ConstraintSpec, ConstraintRef } from "./constraints";
 import type { LabelAccessor, LabelOptions } from "./labels/labelPlacement";
@@ -620,8 +621,16 @@ function buildCreatedMark(
       const channelSpec = channels[propName];
       const markValue = markOpts[propName];
 
-      const channelType =
+      let channelType =
         typeof channelSpec === "string" ? channelSpec : channelSpec?.type;
+      // Coordinate-space axis aliases aren't declared channels, but they carry
+      // the same value semantics as the canonical dims they resolve to: a
+      // `<name>Size` alias is a SIZE channel, a position alias (theta/r) a POS
+      // channel. Infer that here so `rSize: "field"` aggregates like `h: "field"`
+      // before the resolveAliases pass moves the value onto the dims.
+      if (channelType === undefined && KNOWN_ALIAS_KEYS.has(propName)) {
+        channelType = propName.endsWith("Size") ? "size" : "pos";
+      }
       const isEntry =
         typeof channelSpec === "object" && channelSpec?.entry === true;
 
@@ -677,8 +686,13 @@ function buildCreatedMark(
   const axisFields: { x?: string; y?: string } = {};
   if (typeof markOpts.w === "string") axisFields.x = markOpts.w;
   else if (typeof markOpts.x === "string") axisFields.x = markOpts.x;
+  else if (typeof markOpts.thetaSize === "string")
+    axisFields.x = markOpts.thetaSize;
+  else if (typeof markOpts.theta === "string") axisFields.x = markOpts.theta;
   if (typeof markOpts.h === "string") axisFields.y = markOpts.h;
   else if (typeof markOpts.y === "string") axisFields.y = markOpts.y;
+  else if (typeof markOpts.rSize === "string") axisFields.y = markOpts.rSize;
+  else if (typeof markOpts.r === "string") axisFields.y = markOpts.r;
   if (axisFields.x || axisFields.y) {
     (baseMark as any).__axisFields = axisFields;
   }

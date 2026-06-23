@@ -1,17 +1,9 @@
 import { computeAesthetic } from "../../util";
 import * as Monotonic from "../../util/monotonic";
 import { color6_old, resolveColorChannel } from "../../color";
-import {
-  path,
-  Path,
-  pathToSVGPath,
-  segment,
-  subdividePath,
-  transformPath,
-} from "../../path";
+import { path, transformPath } from "../../path";
 import { GoFishNode } from "../_node";
 import { GoFishAST } from "../_ast";
-import { CoordinateTransform } from "../coordinateTransforms/coord";
 import { linear } from "../coordinateTransforms/linear";
 import {
   getMeasure,
@@ -25,6 +17,7 @@ import {
   Dimensions,
   displayDims as displayDimsOf,
   elaborateDims,
+  extractAliasCandidates,
   FancyDims,
   FancySize,
   Size,
@@ -40,6 +33,12 @@ import {
   UnderlyingSpace,
 } from "../underlyingSpace";
 import { createMark } from "../withGoFish";
+import type { DisplayList } from "gofish-ir";
+import {
+  lowerStyle,
+  pathToPixelSVG,
+  valueLabelItems,
+} from "../displayList/lowerHelpers";
 /* TODO: what should default embedding behavior be when all values are aesthetic? */
 export const Ellipse = ({
   name,
@@ -59,7 +58,7 @@ export const Ellipse = ({
   label?: boolean;
 } & FancyDims<MaybeValue<number>>) => {
   const dims = elaborateDims(fancyDims).map(inferEmbedded);
-  return new GoFishNode(
+  const node = new GoFishNode(
     {
       name,
       type: "ellipse",
@@ -151,32 +150,25 @@ export const Ellipse = ({
           },
         };
       },
-      render: (
-        {
-          intrinsicDims,
-          transform,
-          coordinateTransform,
-        }: {
-          intrinsicDims?: Dimensions;
-          transform?: Transform;
-          coordinateTransform?: CoordinateTransform;
-        },
+      // IR lowering — the structural mirror of `render` above. Each branch
+      // computes the SAME geometry, then emits display-list items (coordinates
+      // pushed through `toPixel`) instead of JSX. Mirror the geometry the
+      // legacy render computed.
+      lower: (
+        { intrinsicDims, transform, coordinateTransform, toPixel },
         _children,
         node
-      ) => {
+      ): DisplayList.DisplayItem[] => {
         const space = coordinateTransform ?? linear();
 
-        // const isDataX = isValue(dims[0].size);
-        // const isDataY = isValue(dims[1].size);
+        // Ellipse reads embedding from the closure `dims` (elaborateDims), not
+        // from intrinsicDims (whose entries carry no `embedded` flag here).
         const isXEmbedded = dims[0].embedded;
         const isYEmbedded = dims[1].embedded;
 
-        // combine intrinsicDims with transform
-        // center/max derived from min+size (shared helper)
         const displayDims = displayDimsOf(intrinsicDims, transform);
 
-        const scaleContext = node.getRenderSession().scaleContext;
-        const unitScale = scaleContext?.unit;
+        const unitScale = node.getRenderSession().scaleContext?.unit;
         const originalFill = fill;
         const resolvedFill = resolveColorChannel(fill, unitScale);
         const resolvedStroke =
@@ -187,7 +179,41 @@ export const Ellipse = ({
             ? String(getValue(originalFill) ?? "")
             : undefined;
 
-        // Both dimensions are aesthetic - render as transformed point
+        // The inline value-label (the `label` arg) — white text at the mark's
+        // center. Mirrors the `<text>` each render branch emits. `cx`/`cy` are
+        // the same display-space center coords render passed to the `<text>`;
+        // `toPixel` applies the y-flip the legacy `scale(1, -1)` did.
+        const valueLabel = (cx: number, cy: number) =>
+          valueLabelItems(labelText, cx, cy, toPixel);
+
+        const elementStyle = lowerStyle({
+          fill: resolvedFill,
+          stroke: resolvedStroke,
+          strokeWidth: strokeWidth ?? 0,
+        });
+
+        // Build an EllipseItem from a display-space center; radii are unchanged
+        // by `toPixel` (it is translate + y-flip only).
+        const ellipseItem = (
+          cx: number,
+          cy: number,
+          rx: number,
+          ry: number
+        ): DisplayList.EllipseItem => {
+          const [px, py] = toPixel([cx, cy]);
+          return {
+            kind: "ellipse",
+            cx: px,
+            cy: py,
+            rx,
+            ry,
+            style: elementStyle,
+            datum: node.datum,
+            role: "node",
+          };
+        };
+
+        // Both dimensions aesthetic — transformed point.
         if (!isXEmbedded && !isYEmbedded) {
           const center: [number, number] = [
             (displayDims[0].min ?? 0) + (displayDims[0].size ?? 0) / 2,
@@ -196,47 +222,21 @@ export const Ellipse = ({
           const [transformedX, transformedY] = space.transform(center);
           const width = displayDims[0].size ?? 0;
           const height = displayDims[1].size ?? 0;
-
-          return (
-            <>
-              <ellipse
-                cx={transformedX}
-                cy={transformedY}
-                rx={width / 2}
-                ry={height / 2}
-                fill={resolvedFill}
-                stroke={resolvedStroke}
-                stroke-width={strokeWidth ?? 0}
-              />
-              {labelText && (
-                <text
-                  transform="scale(1, -1)"
-                  x={transformedX}
-                  y={-transformedY}
-                  fill="white"
-                  font-size="12px"
-                  text-anchor="middle"
-                  dominant-baseline="central"
-                >
-                  {labelText}
-                </text>
-              )}
-            </>
-          );
+          return [
+            ellipseItem(transformedX, transformedY, width / 2, height / 2),
+            ...valueLabel(transformedX, transformedY),
+          ];
         }
 
-        // One dimension is data - render as line
+        // One dimension data — line.
         if (isXEmbedded !== isYEmbedded) {
-          const dataAxis = isXEmbedded ? 0 : 1;
           const aestheticAxis = isXEmbedded ? 1 : 0;
           const thickness = displayDims[aestheticAxis].size ?? 0;
-
-          // Calculate midpoint of aesthetic axis
           const aestheticMid =
             (displayDims[aestheticAxis].min ?? 0) +
             (displayDims[aestheticAxis].size ?? 0) / 2;
 
-          // For linear spaces, render as an ellipse spanning the data axis
+          // For linear spaces, render as an ellipse spanning the data axis.
           if (space.type === "linear") {
             const cx = isXEmbedded
               ? ((displayDims[0].min ?? 0) + (displayDims[0].max ?? 0)) / 2
@@ -250,35 +250,10 @@ export const Ellipse = ({
             const ry = isXEmbedded
               ? thickness / 2
               : ((displayDims[1].max ?? 0) - (displayDims[1].min ?? 0)) / 2;
-            return (
-              <>
-                <ellipse
-                  cx={cx}
-                  cy={cy}
-                  rx={rx}
-                  ry={ry}
-                  fill={resolvedFill}
-                  stroke={resolvedStroke}
-                  stroke-width={strokeWidth ?? 0}
-                />
-                {labelText && (
-                  <text
-                    transform="scale(1, -1)"
-                    x={cx}
-                    y={-cy}
-                    fill="white"
-                    font-size="12px"
-                    text-anchor="middle"
-                    dominant-baseline="central"
-                  >
-                    {labelText}
-                  </text>
-                )}
-              </>
-            );
+            return [ellipseItem(cx, cy, rx, ry), ...valueLabel(cx, cy)];
           }
 
-          // Create path along midline
+          // Nonlinear — warped line path along the midline.
           const linePath = path(
             [
               [
@@ -292,44 +267,30 @@ export const Ellipse = ({
             ],
             { subdivision: 1000 }
           );
-
-          // Subdivide and transform path
           const transformed = transformPath(linePath, space);
 
-          // 0.5 removes weird white space at least for some charts
           const mid: [number, number] = [
             ((displayDims[0].min ?? 0) + (displayDims[0].max ?? 0)) / 2,
             ((displayDims[1].min ?? 0) + (displayDims[1].max ?? 0)) / 2,
           ];
           const [labelX, labelY] = space.transform(mid);
-          return (
-            <>
-              <path
-                d={pathToSVGPath(transformed)}
-                stroke={resolvedStroke}
-                stroke-width={thickness + 0.5}
-                fill="none"
-              />
-              {labelText && (
-                <text
-                  transform="scale(1, -1)"
-                  x={labelX}
-                  y={-labelY}
-                  fill="white"
-                  font-size="12px"
-                  text-anchor="middle"
-                  dominant-baseline="central"
-                >
-                  {labelText}
-                </text>
-              )}
-            </>
-          );
+          return [
+            {
+              kind: "path",
+              d: pathToPixelSVG(transformed, toPixel),
+              datum: node.datum,
+              role: "node",
+              style: lowerStyle({
+                fill: "none",
+                stroke: resolvedStroke,
+                strokeWidth: thickness + 0.5,
+              }),
+            },
+            ...valueLabel(labelX, labelY),
+          ];
         }
 
-        // Both dimensions are data - render as area
-
-        // If we're in a linear space, render as an ellipse filling the available space
+        // Both dimensions data — area.
         if (space.type === "linear") {
           const x = displayDims[0].min ?? 0;
           const y = displayDims[1].min ?? 0;
@@ -337,32 +298,10 @@ export const Ellipse = ({
           const height = (displayDims[1].max ?? 0) - y;
           const cx = x + width / 2;
           const cy = y + height / 2;
-          return (
-            <>
-              <ellipse
-                cx={cx}
-                cy={cy}
-                rx={width / 2}
-                ry={height / 2}
-                fill={resolvedFill}
-                stroke={resolvedStroke}
-                stroke-width={strokeWidth ?? 0}
-              />
-              {labelText && (
-                <text
-                  transform="scale(1, -1)"
-                  x={cx}
-                  y={-cy}
-                  fill="white"
-                  font-size="12px"
-                  text-anchor="middle"
-                  dominant-baseline="central"
-                >
-                  {labelText}
-                </text>
-              )}
-            </>
-          );
+          return [
+            ellipseItem(cx, cy, width / 2, height / 2),
+            ...valueLabel(cx, cy),
+          ];
         }
 
         const corners = path(
@@ -374,7 +313,6 @@ export const Ellipse = ({
           ],
           { closed: true, subdivision: 1000 }
         );
-
         const transformed = transformPath(corners, space);
 
         const mid: [number, number] = [
@@ -382,34 +320,27 @@ export const Ellipse = ({
           ((displayDims[1].min ?? 0) + (displayDims[1].max ?? 0)) / 2,
         ];
         const [labelX, labelY] = space.transform(mid);
-
-        return (
-          <>
-            <path
-              d={pathToSVGPath(transformed)}
-              fill={resolvedFill}
-              stroke={resolvedStroke}
-              stroke-width={strokeWidth ?? 0}
-            />
-            {labelText && (
-              <text
-                transform="scale(1, -1)"
-                x={labelX}
-                y={-labelY}
-                fill="white"
-                font-size="12px"
-                text-anchor="middle"
-                dominant-baseline="central"
-              >
-                {labelText}
-              </text>
-            )}
-          </>
-        );
+        return [
+          {
+            kind: "path",
+            d: pathToPixelSVG(transformed, toPixel),
+            datum: node.datum,
+            role: "node",
+            style: lowerStyle({
+              fill: resolvedFill,
+              stroke: resolvedStroke,
+              strokeWidth: strokeWidth ?? 0,
+            }),
+          },
+          ...valueLabel(labelX, labelY),
+        ];
       },
     },
     []
   );
+  // Stash alias-keyed dims (theta/r/…) for the resolveAliases pass.
+  node._pendingAliases = extractAliasCandidates(fancyDims);
+  return node;
 };
 
 export const ellipse = createMark(

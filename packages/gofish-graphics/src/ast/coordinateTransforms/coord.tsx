@@ -2,13 +2,14 @@
 // @wiki Flattening the Scenegraph — /internals/layout/coord-flattening
 // </gofish-wiki>
 
-import { Show } from "solid-js";
 import { ticks as d3Ticks, nice as d3Nice } from "d3-array";
-import type { JSX } from "solid-js";
-import { path, pathToSVGPath, transformPath } from "../../path";
+import { path, transformPath } from "../../path";
 import { GoFishAST } from "../_ast";
-import { GoFishNode } from "../_node";
+import { GoFishNode, type ToPixel } from "../_node";
+import type { DisplayList } from "gofish-ir";
+import { lowerStyle, pathToPixelSVG } from "../displayList/lowerHelpers";
 import {
+  displayTranslate,
   elaborateDims,
   FancyDims,
   Interval,
@@ -39,6 +40,17 @@ export type CoordinateTransform = {
   transform: (point: [number, number]) => [number, number];
   // inferDomain: ({ width, height }: { width: number; height: number }) => Interval[];
   domain: [Interval, Interval];
+  /**
+   * Axis-name aliases this space contributes to its scope (e.g. polar:
+   * `{ x: "theta", y: "r" }`). Position aliases; size aliases are `<name>Size`.
+   * Propagated by `coord` so marks/operators in scope can use them.
+   */
+  aliases?: { x?: string; y?: string };
+  /**
+   * Donut-hole radius as a fraction [0,1) of the outer radius (polar family).
+   * Default 0 (filled disc). `coord.layout` insets the radial range by this.
+   */
+  innerRadius?: number;
 };
 
 export const coord = createNodeOperator(
@@ -66,7 +78,7 @@ export const coord = createNodeOperator(
       current: null,
     };
 
-    return new GoFishNode(
+    const coordNode = new GoFishNode(
       {
         type: "coord",
         key,
@@ -151,9 +163,26 @@ export const coord = createNodeOperator(
         },
         layout: (shared, size, scaleFactors, children, posScales) => {
           /* TODO: need correct scale factors */
-          // TODO: only works for polar2 right now
+          // TODO: only works for polar-family transforms right now
           const [origW, origH] = size;
-          size = [2 * Math.PI, Math.min(origW, origH) / 2 - padding];
+          // Angular budget = the transform's domain[0] size (CentralAngle), not a
+          // hardcoded 2π. Radial budget = outer radius minus the inner-radius inset
+          // (donut hole): children lay out in r ∈ [0, outerR − innerR] and are
+          // shifted out by innerR at transform time (see `effectiveTransform`).
+          const outerR = Math.min(origW, origH) / 2 - padding;
+          const innerR = (coordTransform.innerRadius ?? 0) * outerR;
+          const angularBudget = coordTransform.domain[0].size ?? 2 * Math.PI;
+          size = [angularBudget, outerR - innerR];
+          // The radius shift for the donut hole. At innerR=0 this is exactly
+          // `coordTransform`, so the default disc is unchanged.
+          const effectiveTransform: CoordinateTransform =
+            innerR > 0
+              ? {
+                  ...coordTransform,
+                  transform: ([theta, r]: [number, number]) =>
+                    coordTransform.transform([theta, r + innerR]),
+                }
+              : coordTransform;
           const childPlaceables = children.map((child) =>
             child.layout(size, [1, 1], [undefined, undefined])
           );
@@ -206,7 +235,7 @@ export const coord = createNodeOperator(
               coordMaxX,
               coordMinY,
               coordMaxY,
-              coordTransform
+              effectiveTransform
             );
 
             screenBbox = union(screenBbox, transformedBbox);
@@ -236,15 +265,19 @@ export const coord = createNodeOperator(
           const half = Math.min(origW, origH) / 2;
           const translateX =
             dims[0].min !== undefined
-              ? coordTransform.transform([dims[0].min, dims[1].min ?? 0])[0] -
-                screenBboxMinX
+              ? effectiveTransform.transform([
+                  dims[0].min,
+                  dims[1].min ?? 0,
+                ])[0] - screenBboxMinX
               : hasAxes
                 ? half
                 : -screenBboxMinX;
           const translateY =
             dims[1].min !== undefined
-              ? coordTransform.transform([dims[0].min ?? 0, dims[1].min])[1] -
-                screenBboxMinY
+              ? effectiveTransform.transform([
+                  dims[0].min ?? 0,
+                  dims[1].min,
+                ])[1] - screenBboxMinY
               : hasAxes
                 ? half
                 : -screenBboxMinY;
@@ -279,88 +312,167 @@ export const coord = createNodeOperator(
             renderData: {
               coordinateSpaceBbox: coordSpaceBbox,
               contentOffset: [translateX, translateY] as [number, number],
+              // Absolute donut-hole inset (px). render rebuilds the same radial
+              // shift so display objects, grid and axis all sit past the hole.
+              innerRadius: innerR,
             },
           };
         },
-        render: ({ transform, renderData }, _children, node) => {
-          const gridLines = () => {
-            /* take an evenly space net of lines covering the space, map them through the space, and
-          render the paths */
-            // const domain = space.inferDomain({ width, height });
-            const lines = [];
-            const ticks = [];
+        // IR lowering — mirror of render. Everything lives under the coord's
+        // `translate(transform) translate(contentOffset)` group, so a single
+        // `contentToPixel` folds that offset + the root flip. Content children
+        // warp through `coordTransform` in their own `lower` (rect/ellipse/petal
+        // emit paths); the grid + polar axes port the same overlay primitives.
+        lower: ({ transform, renderData }, _children, node) => {
+          const session = node.getRenderSession();
+          const outer = session.toPixel!;
+          const [coordTx, coordTy] = displayTranslate(transform);
+          const [offsetX, offsetY] = (renderData?.contentOffset as
+            | [number, number]
+            | undefined) ?? [0, 0];
+          const contentToPixel: ToPixel = ([cx, cy]) =>
+            outer([coordTx + offsetX + cx, coordTy + offsetY + cy]);
 
-            const domain = coordTransform.domain;
+          // Donut-hole radial shift (renderData.innerRadius) so content, grid,
+          // and axis all sit past the hole; at innerR=0 this is coordTransform.
+          // Angular budget = the transform's CentralAngle (domain[0].size) so a
+          // sub-2π sweep tiles ticks correctly. Mirrors the render.
+          const innerR =
+            (renderData as { innerRadius?: number })?.innerRadius ?? 0;
+          const effectiveTransform: CoordinateTransform =
+            innerR > 0
+              ? {
+                  ...coordTransform,
+                  transform: ([theta, r]: [number, number]) =>
+                    coordTransform.transform([theta, r + innerR]),
+                }
+              : coordTransform;
+          const angularBudget = coordTransform.domain[0].size ?? 2 * Math.PI;
 
+          // Overlay primitive helpers (all in coord-local y-up coords).
+          const lineItem = (
+            x1: number,
+            y1: number,
+            x2: number,
+            y2: number,
+            stroke: string,
+            sw: number
+          ): DisplayList.PathItem => ({
+            kind: "path",
+            d: `M${contentToPixel([x1, y1]).join(",")} L${contentToPixel([x2, y2]).join(",")}`,
+            role: "overlay",
+            style: lowerStyle({ fill: "none", stroke, strokeWidth: sw }),
+          });
+          // Axis labels: legacy emits `transform="scale(1,-1)" x y=-y`, so the
+          // anchor point is (x, y) in y-up — upright under contentToPixel.
+          const textItem = (
+            x: number,
+            y: number,
+            text: string,
+            anchor: DisplayList.TextItem["textAnchor"],
+            baseline: DisplayList.TextItem["dominantBaseline"],
+            fontSize: number,
+            fill: string
+          ): DisplayList.TextItem => {
+            const [px, py] = contentToPixel([x, y]);
+            return {
+              kind: "text",
+              x: px,
+              y: py,
+              text,
+              textAnchor: anchor,
+              dominantBaseline: baseline,
+              fontSize,
+              role: "overlay",
+              style: lowerStyle({ fill }),
+            };
+          };
+
+          const items: DisplayList.DisplayItem[] = [];
+
+          // Content: warp each flattened child through the coord transform.
+          session.toPixel = contentToPixel;
+          try {
+            for (const child of children) {
+              for (const d of flattenLayout(child)) {
+                items.push(
+                  ...d.node.INTERNAL_lower(effectiveTransform, d.transform)
+                );
+              }
+            }
+          } finally {
+            session.toPixel = outer;
+          }
+
+          // Grid lines (rare; grid defaults off). Lines port faithfully; the
+          // grid tick text uses pt sizing and no flip in the legacy path — a
+          // latent corner reproduced approximately here.
+          if (grid) {
+            const domain = effectiveTransform.domain;
+            const gridPath = (a: [number, number], b: [number, number]) =>
+              pathToPixelSVG(
+                transformPath(
+                  path([a, b], { subdivision: 100 }),
+                  effectiveTransform
+                ),
+                contentToPixel
+              );
             for (
               let i = domain[0].min!;
               i <= domain[0].max!;
               i += domain[0].size! / 10
             ) {
-              const line = transformPath(
-                path(
-                  [
-                    [i, domain[1].min!],
-                    [i, domain[1].max!],
-                  ],
-                  { subdivision: 100 }
-                ),
-                coordTransform
-              );
-              lines.push(
-                <path d={pathToSVGPath(line)} stroke={black} fill="none" />
-              );
-              const [x, y] = coordTransform.transform([i, domain[1].max!]);
-              ticks.push(
-                <text x={x} y={y} /* dy="-1em" */ font-size="8pt" fill={black}>
-                  {i.toFixed(0)}
-                </text>
-              );
+              items.push({
+                kind: "path",
+                d: gridPath([i, domain[1].min!], [i, domain[1].max!]),
+                role: "overlay",
+                style: lowerStyle({ fill: "none", stroke: black }),
+              });
+              const [gx, gy] = effectiveTransform.transform([
+                i,
+                domain[1].max!,
+              ]);
+              const [px, py] = contentToPixel([gx, gy]);
+              items.push({
+                kind: "text",
+                x: px,
+                y: py,
+                text: i.toFixed(0),
+                fontSize: 8 * (96 / 72),
+                role: "overlay",
+                style: lowerStyle({ fill: black }),
+              });
             }
             for (
               let i = domain[1].min!;
               i <= domain[1].max!;
               i += domain[1].size! / 10
             ) {
-              const line = transformPath(
-                path(
-                  [
-                    [domain[0].min!, i],
-                    [domain[0].max!, i],
-                  ],
-                  { subdivision: 100 }
-                ),
-                coordTransform
-              );
-              lines.push(
-                <path d={pathToSVGPath(line)} stroke={black} fill="none" />
-              );
-              const [x, y] = coordTransform.transform([
+              items.push({
+                kind: "path",
+                d: gridPath([domain[0].min!, i], [domain[0].max!, i]),
+                role: "overlay",
+                style: lowerStyle({ fill: "none", stroke: black }),
+              });
+              const [gx, gy] = effectiveTransform.transform([
                 domain[0].max! + domain[0].size! / 20,
                 i,
               ]);
-              ticks.push(
-                <text x={x} y={y} /* dy="-1em" */ font-size="8pt" fill={black}>
-                  {i.toFixed(0)}
-                </text>
-              );
+              const [px, py] = contentToPixel([gx, gy]);
+              items.push({
+                kind: "text",
+                x: px,
+                y: py,
+                text: i.toFixed(0),
+                fontSize: 8 * (96 / 72),
+                role: "overlay",
+                style: lowerStyle({ fill: black }),
+              });
             }
-            return (
-              <g>
-                {lines}
-                {ticks}
-              </g>
-            );
-          };
+          }
 
-          const displayObjects = children.flatMap((child) =>
-            flattenLayout(child)
-          );
-
-          const polarAxisJSX = (): JSX.Element | null => {
-            if (!axes || !spaceRef.current) return null;
-            // Start from the chart-level axes option, then let per-operator
-            // axis: true/false overrides (collected in resolveAxes) take precedence.
+          // Polar axes — port of polarAxisJSX.
+          if (axes && spaceRef.current) {
             let axesX = typeof axes === "boolean" ? axes : (axes?.x ?? true);
             let axesY = typeof axes === "boolean" ? axes : (axes?.y ?? true);
             if ((node as any)._polarAxisX !== undefined)
@@ -370,204 +482,134 @@ export const coord = createNodeOperator(
             const [xSpace, ySpace] = spaceRef.current;
             const rContent =
               (renderData as any)?.coordinateSpaceBbox?.rMax ??
-              coordTransform.domain[1].max ??
+              effectiveTransform.domain[1].max ??
               100;
             const RING_GAP = 20;
             const rOuter = rContent + RING_GAP;
-            const elements: JSX.Element[] = [];
 
-            // Theta axis: outer ring + tick marks + labels.
             if (axesX && !isUNDEFINED(xSpace)) {
-              // Outer ring
-              elements.push(
-                <circle
-                  cx={0}
-                  cy={0}
-                  r={rOuter}
-                  fill="none"
-                  stroke="gray"
-                  stroke-width="1"
-                />
-              );
+              // Outer ring.
+              const [ringCx, ringCy] = contentToPixel([0, 0]);
+              items.push({
+                kind: "ellipse",
+                cx: ringCx,
+                cy: ringCy,
+                rx: rOuter,
+                ry: rOuter,
+                role: "overlay",
+                style: lowerStyle({
+                  fill: "none",
+                  stroke: "gray",
+                  strokeWidth: 1,
+                }),
+              });
 
               const xIv = continuousInterval(xSpace);
+              const tickRing = (theta: number, label: string) => {
+                const [ix, iy] = effectiveTransform.transform([theta, rOuter]);
+                const [ox, oy] = effectiveTransform.transform([
+                  theta,
+                  rOuter + 6,
+                ]);
+                items.push(lineItem(ix, iy, ox, oy, "gray", 1));
+                const [lx, ly] = effectiveTransform.transform([
+                  theta,
+                  rOuter + 16,
+                ]);
+                const anchor = lx < -5 ? "end" : lx > 5 ? "start" : "middle";
+                items.push(
+                  textItem(lx, ly, label, anchor, "middle", 10, "gray")
+                );
+              };
               if (isPOSITION(xSpace) && xIv) {
-                // Continuous theta axis: regular count ticks around the ring.
-                // Use a niced max so ticks evenly divide the circle — no small leftover gap.
                 const xMin = xIv.min;
                 const xMax = xIv.max;
                 const [, nicedMax] = d3Nice(xMin, xMax, 8);
                 const tickVals = d3Ticks(xMin, nicedMax, 8).filter(
                   (t) => t < nicedMax
                 );
-                for (const t of tickVals) {
-                  const theta = (t / (nicedMax - xMin)) * 2 * Math.PI;
-                  const [ix, iy] = coordTransform.transform([theta, rOuter]);
-                  const [ox, oy] = coordTransform.transform([
-                    theta,
-                    rOuter + 6,
-                  ]);
-                  elements.push(
-                    <line
-                      x1={ix}
-                      y1={iy}
-                      x2={ox}
-                      y2={oy}
-                      stroke="gray"
-                      stroke-width="1"
-                    />
-                  );
-                  const [lx, ly] = coordTransform.transform([
-                    theta,
-                    rOuter + 16,
-                  ]);
-                  const anchor = lx < -5 ? "end" : lx > 5 ? "start" : "middle";
-                  elements.push(
-                    <text
-                      transform="scale(1,-1)"
-                      x={lx}
-                      y={-ly}
-                      text-anchor={anchor}
-                      dominant-baseline="middle"
-                      font-size="10px"
-                      fill="gray"
-                    >
-                      {t}
-                    </text>
-                  );
-                }
+                for (const t of tickVals)
+                  tickRing((t / (nicedMax - xMin)) * angularBudget, String(t));
               } else if (isORDINAL(xSpace) && xSpace.domain) {
-                // Ordinal theta axis: evenly-spaced sector labels by index
                 const keys = xSpace.domain;
                 const n = keys.length;
-                const sectorWidth = (2 * Math.PI) / n;
+                const sectorWidth = angularBudget / n;
                 for (let i = 0; i < n; i++) {
                   const thetaStart = i * sectorWidth;
-                  const thetaCenter = thetaStart + sectorWidth / 2;
-                  const [ix, iy] = coordTransform.transform([
+                  const [ix, iy] = effectiveTransform.transform([
                     thetaStart,
                     rOuter,
                   ]);
-                  const [ox, oy] = coordTransform.transform([
+                  const [ox, oy] = effectiveTransform.transform([
                     thetaStart,
                     rOuter + 6,
                   ]);
-                  elements.push(
-                    <line
-                      x1={ix}
-                      y1={iy}
-                      x2={ox}
-                      y2={oy}
-                      stroke="gray"
-                      stroke-width="1"
-                    />
-                  );
-                  const [lx, ly] = coordTransform.transform([
-                    thetaCenter,
+                  items.push(lineItem(ix, iy, ox, oy, "gray", 1));
+                  const [lx, ly] = effectiveTransform.transform([
+                    thetaStart + sectorWidth / 2,
                     rOuter + 16,
                   ]);
                   const anchor = lx < -5 ? "end" : lx > 5 ? "start" : "middle";
-                  elements.push(
-                    <text
-                      transform="scale(1,-1)"
-                      x={lx}
-                      y={-ly}
-                      text-anchor={anchor}
-                      dominant-baseline="middle"
-                      font-size="10px"
-                      fill="gray"
-                    >
-                      {keys[i]}
-                    </text>
+                  items.push(
+                    textItem(
+                      lx,
+                      ly,
+                      String(keys[i]),
+                      anchor,
+                      "middle",
+                      10,
+                      "gray"
+                    )
                   );
                 }
               }
             }
 
-            // Continuous radial axis at theta=0.
             const yIv = continuousInterval(ySpace);
             if (axesY && isPOSITION(ySpace) && yIv) {
               const yMin = yIv.min;
               const yMax = yIv.max;
               const dataToScreenR = (v: number) =>
                 yMax === yMin ? 0 : ((v - yMin) / (yMax - yMin)) * rContent;
-
-              // Horizontal offset so the axis sits slightly left of center
               const H_GAP = 6;
               const tickVals = d3Ticks(yMin, yMax, 5);
-              // Line runs from center (r=0) to the outer ring (rContent), past the tallest chunk
-              const [x0, y0] = coordTransform.transform([
+              const [x0, y0] = effectiveTransform.transform([
                 0,
                 dataToScreenR(yMin),
               ]);
-              const [x1, y1] = coordTransform.transform([0, rContent]);
-              elements.push(
-                <line
-                  x1={x0 - H_GAP}
-                  y1={y0}
-                  x2={x1 - H_GAP}
-                  y2={y1}
-                  stroke="gray"
-                  stroke-width="1"
-                />
-              );
+              const [x1, y1] = effectiveTransform.transform([0, rContent]);
+              items.push(lineItem(x0 - H_GAP, y0, x1 - H_GAP, y1, "gray", 1));
               for (const t of tickVals) {
-                const [tx, ty] = coordTransform.transform([
+                const [tx, ty] = effectiveTransform.transform([
                   0,
                   dataToScreenR(t),
                 ]);
-                elements.push(
-                  <line
-                    x1={tx - H_GAP - 4}
-                    y1={ty}
-                    x2={tx - H_GAP + 4}
-                    y2={ty}
-                    stroke="gray"
-                    stroke-width="1"
-                  />
+                items.push(
+                  lineItem(tx - H_GAP - 4, ty, tx - H_GAP + 4, ty, "gray", 1)
                 );
-                elements.push(
-                  <text
-                    transform="scale(1,-1)"
-                    x={tx - H_GAP - 6}
-                    y={-ty}
-                    text-anchor="end"
-                    dominant-baseline="middle"
-                    font-size="10px"
-                    fill="gray"
-                  >
-                    {t}
-                  </text>
+                items.push(
+                  textItem(
+                    tx - H_GAP - 6,
+                    ty,
+                    String(t),
+                    "end",
+                    "middle",
+                    10,
+                    "gray"
+                  )
                 );
               }
             }
+          }
 
-            return elements.length > 0 ? <g>{elements}</g> : null;
-          };
-
-          // Parent placement (`transform`) then coord's content offset (where the
-          // coord origin sits inside the box — coord's own render concern, NOT
-          // placement). The two compose to the single translate coord used to
-          // self-place with, so it's pixel-equivalent — but now `transform` is the
-          // parent's placement and the offset is separate, so coord no longer
-          // collides with being placed.
-          const [offsetX, offsetY] = (renderData?.contentOffset as
-            | [number, number]
-            | undefined) ?? [0, 0];
-          return (
-            <g
-              transform={`${translateString(transform)} translate(${offsetX}, ${offsetY})`}
-            >
-              {displayObjects.map((d) =>
-                d.node.INTERNAL_render(coordTransform, d.transform)
-              )}
-              <Show when={grid}>{gridLines()}</Show>
-              {polarAxisJSX()}
-            </g>
-          );
+          return items;
         },
       },
       children
     );
+    // Declare this space's axis aliases (e.g. polar `{ x: "theta", y: "r" }`) so
+    // resolveAliases can rebind the alias scope for the coord's subtree.
+    coordNode._aliases = coordTransform.aliases;
+    return coordNode;
   }
 );

@@ -32,9 +32,9 @@ import { combine, byDepth, mount } from "./_shared";
 //    bottom-up so absolute radii depend on subtree depth, and there is no
 //    radial auto-fit — band thickness/pad are hand-picked constants, not
 //    derived from the disc budget.
-//  - PolarAxis "x-axis" (θ/r swap) IS A NO-OP. polar() takes no options and
-//    polarTransposed() == polar() in gofish-graphics, so the dsl's PolarAxis
-//    selector cannot be expressed; θ stays on x, r on y regardless.
+//  - PolarAxis "x-axis" (θ/r swap) is NOT expressible. polar() takes no options
+//    and has no transposed variant, so the dsl's PolarAxis selector cannot be
+//    expressed; θ stays on x, r on y regardless.
 //  - PolarCenter "right", InnerRadius, Direction, CentralAngle: not expressible
 //    (polar() is option-free) — center is fixed at the canvas middle.
 //  - NO ANGULAR AUTO-FIT. θ spacing is a fixed per-level constant; it does not

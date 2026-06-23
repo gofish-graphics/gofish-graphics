@@ -22,13 +22,22 @@ import {
   localAnchorPoint,
   Size,
   Transform,
+  AliasResolution,
+  buildAliasMap,
 } from "./dims";
 import { gofish, gofishToSVGElement, gofishToSVG, gofishSave } from "./gofish";
-import type { AxesOptions, GoFishExportOptions } from "./gofish";
+import type {
+  AxesOptions,
+  GoFishExportOptions,
+  GoFishRenderOptions,
+} from "./gofish";
+import { toDisplayList } from "./displayList/toDisplayList";
+import type { DisplayList } from "gofish-ir";
+import { lowerLabelItems } from "./labels/renderLabel";
 import { GoFishRef } from "./_ref";
 import { GoFishAST } from "./_ast";
 import { CoordinateTransform } from "./coordinateTransforms/coord";
-import { getValue, isValue, MaybeValue } from "./data";
+import { getValue, isValue, MaybeValue, inferEmbedded } from "./data";
 import { color6 } from "../color";
 import * as Monotonic from "../util/monotonic";
 import {
@@ -68,11 +77,13 @@ import {
   type LabelOptions,
   type LabelSpec,
 } from "./labels/labelPlacement";
-import { renderLabelJSX } from "./labels/renderLabel";
 
 export type RenderSession = {
   tokenContext: TokenContext;
   scaleContext: ScaleContext;
+  /** Set by the lower emit driver (`lowerToDisplayList`) for the duration of a
+   *  lowering walk: the y-up→y-down pixel mapping every `lower` body uses. */
+  toPixel?: ToPixel;
 };
 
 export type ScaleFactorFunction = Monotonic.Monotonic;
@@ -140,21 +151,36 @@ export type Layout = (
   node: GoFishNode
 ) => { intrinsicDims: FancyDims; transform: FancyTransform; renderData?: any };
 
-export type Render = (
+/** Map a GoFish y-up display point to a final y-down absolute SVG pixel. The one
+ *  transform a `lower` body needs: it folds in both the per-shape `scale(1,-1)`
+ *  and the root flip the now-deleted legacy render relied on. Set once per emit
+ *  on the render session. */
+export type ToPixel = (p: [number, number]) => [number, number];
+
+/**
+ * Lower a node into a fragment of the display-list IR — each shape/operator owns
+ * its `lower`, and the display list is the union of every node's fragment,
+ * painted by a single backend (no per-shape SVG). `children` are the
+ * already-lowered child items (empty for a boundary, which re-walks its own
+ * subtree); `toPixel` carries the y-flip + viewport offset.
+ */
+export type Lower = (
   {
     intrinsicDims,
     transform,
     renderData,
     coordinateTransform,
+    toPixel,
   }: {
     intrinsicDims?: Dimensions;
     transform?: Transform;
     renderData?: any;
     coordinateTransform?: CoordinateTransform;
+    toPixel: ToPixel;
   },
-  children: JSX.Element[],
+  children: DisplayList.DisplayItem[],
   node: GoFishNode
-) => JSX.Element;
+) => DisplayList.DisplayItem[];
 
 export type ResolveUnderlyingSpace = (
   childSpaces: Size<UnderlyingSpace>[],
@@ -208,7 +234,10 @@ export class GoFishNode {
   private _resolveUnderlyingSpace: ResolveUnderlyingSpace;
   public _underlyingSpace?: Size<UnderlyingSpace> = undefined;
   private _layout: Layout;
-  private _render: Render;
+  /** Per-primitive IR lowering (see {@link Lower}). Optional during the
+   *  render→lower migration; once every factory supplies one, `_render` is
+   *  removed and this becomes the single draw description. */
+  private _lower?: Lower;
   public children: GoFishAST[];
   public intrinsicDims?: Dimensions;
   public transform?: Transform;
@@ -258,6 +287,19 @@ export class GoFishNode {
    * correct polar axis (theta vs radial).
    */
   public axisDir?: 0 | 1;
+  /**
+   * Alias-keyed dim options (e.g. `{ theta: 0.5, rSize: "value" }`) stashed by a
+   * mark factory at construction, before its enclosing coord exists. Resolved
+   * into `args.dims` by {@link resolveAliases} once the coord's declared aliases
+   * are known. See `extractAliasCandidates` (dims.ts).
+   */
+  public _pendingAliases?: Record<string, any>;
+  /**
+   * Position aliases a `coord` node declares for its subtree (the transform's
+   * `aliases`, e.g. `{ x: "theta", y: "r" }`). Read by {@link resolveAliases} to
+   * rebind the active alias scope while walking into this coord.
+   */
+  public _aliases?: { x?: string; y?: string };
   constructor(
     {
       name,
@@ -267,7 +309,7 @@ export class GoFishNode {
       // inferDomains,
       resolveUnderlyingSpace,
       layout,
-      render,
+      lower,
       shared = [false, false],
       color,
     }: {
@@ -278,7 +320,7 @@ export class GoFishNode {
       // inferDomains: (childDomains: Size<Domain>[]) => FancySize<Domain | undefined>;
       resolveUnderlyingSpace: ResolveUnderlyingSpace;
       layout: Layout;
-      render: Render;
+      lower?: Lower;
       shared?: Size<boolean>;
       color?: MaybeValue<string>;
     },
@@ -289,7 +331,7 @@ export class GoFishNode {
     // this.inferDomains = inferDomains;
     this._resolveUnderlyingSpace = resolveUnderlyingSpace;
     this._layout = layout;
-    this._render = render;
+    this._lower = lower;
     this.children = children;
     children.forEach((child) => {
       child.parent = this;
@@ -460,6 +502,57 @@ export class GoFishNode {
    * Top-down walk that marks which nodes should render axes.
    * `claimed` tracks dimensions already claimed by an ancestor.
    */
+  /**
+   * Top-down pass that resolves coordinate-space axis aliases (e.g. polar
+   * `theta`/`r`/`thetaSize`/`rSize`) into the canonical `x/y/w/h` facets of each
+   * mark's `dims`. Mirrors {@link resolveAxes}: it carries the `active` alias
+   * scope downward, rebinding it at every `coord` node that declares aliases
+   * (a nested coord rebinds for its subtree).
+   *
+   * Runs BEFORE `resolveUnderlyingSpace` (which reads the resolved dims). It
+   * mutates `args.dims` in place — reassigning the array element (not its fields,
+   * because `inferEmbedded` returns a fresh object) so the mark's layout/space
+   * closures, which captured the same array reference, observe the resolution and
+   * the freshly-derived `embedded` flag.
+   *
+   * Hygiene: using an alias outside any coord that declares it (no `active` map),
+   * or naming an alias the enclosing coord doesn't declare, is a build-time error.
+   */
+  public resolveAliases(active?: Record<string, AliasResolution>): void {
+    // A coord that declares aliases rebinds the scope for its subtree.
+    let next = active;
+    if (this.type === "coord" && this._aliases) {
+      next = buildAliasMap(this._aliases);
+    }
+
+    const pending = this._pendingAliases;
+    if (pending) {
+      const dims = this.args?.dims as Dimensions | undefined;
+      for (const [key, value] of Object.entries(pending)) {
+        const res = next?.[key];
+        if (res === undefined) {
+          throw new Error(
+            next === undefined
+              ? `Axis alias "${key}" used outside any coordinate space that declares it. Wrap the mark in a coord (e.g. polar()) or use x/y/w/h.`
+              : `Axis alias "${key}" is not declared by the enclosing coordinate space. Declared aliases: ${Object.keys(
+                  next
+                ).join(", ")}.`
+          );
+        }
+        if (dims) {
+          dims[res.axis] = inferEmbedded({
+            ...dims[res.axis],
+            [res.facet]: value,
+          });
+        }
+      }
+    }
+
+    this.children.forEach((c) => {
+      if (c instanceof GoFishNode) c.resolveAliases(next);
+    });
+  }
+
   public resolveAxes(
     claimed: Set<0 | 1> = new Set(),
     enabled: Set<0 | 1> = new Set([0, 1])
@@ -944,36 +1037,49 @@ export class GoFishNode {
     this.intrinsicDims![elaborateDirection(direction)].embedded = true;
   }
 
-  public INTERNAL_render(
+  /**
+   * Lower this node and its subtree into display-list items: call this node's
+   * `_lower`, then append the lowered label. `transformOverride` is the baked
+   * absolute transform from the bake pass.
+   */
+  public INTERNAL_lower(
     coordinateTransform?: CoordinateTransform,
-    // Baked absolute transform supplied by the coord bake pass (a DisplayObject's
-    // transform). When present it overrides this node's own (parent-relative)
-    // transform for THIS node's draw — but not for its children's recursion,
-    // which keep composing their own transforms. See `_displayObject.ts`.
     transformOverride?: Transform
-  ): JSX.Element {
-    const contentChildrenJSX = this.children.map((child) =>
-      child.INTERNAL_render(
-        this.type !== "box" ? coordinateTransform : undefined
-      )
-    );
+  ): DisplayList.DisplayItem[] {
+    // Children are NOT pre-recursed here. A node reaching
+    // INTERNAL_lower is either a leaf (no children) or a bake boundary (coord,
+    // box, connect, arrow, enclose, …) that carries its own absolute transform —
+    // a boundary must re-walk its subtree with that transform composed in (via
+    // `flattenLayout`) so descendants land in absolute coordinates before
+    // `toPixel`. Pre-recursed, parent-relative child items would be mispositioned.
+    if (!this._lower) {
+      throw new Error(
+        `[gofish] node type "${this.type}" has no lower() yet — cannot ` +
+          `emit the display list.`
+      );
+    }
+    const toPixel = this.getRenderSession().toPixel;
+    if (!toPixel) {
+      throw new Error("[gofish] toPixel not set on the render session");
+    }
 
     const transform = transformOverride ?? this._displayTransform;
-    const shapeJSX = this._render(
+    const items = this._lower(
       {
         intrinsicDims: this.intrinsicDims,
         transform,
         renderData: this.renderData,
-        coordinateTransform: coordinateTransform,
+        coordinateTransform,
+        toPixel,
       },
-      contentChildrenJSX,
+      [],
       this
     );
     if (this._label && this.intrinsicDims) {
-      const labelJSX = this._renderLabel(transform);
-      if (labelJSX) return [shapeJSX, labelJSX] as unknown as JSX.Element;
+      const labelItems = lowerLabelItems(this, transform, toPixel);
+      if (labelItems.length) return [...items, ...labelItems];
     }
-    return shapeJSX;
+    return items;
   }
 
   public setRenderSession(session: RenderSession): void {
@@ -1065,6 +1171,15 @@ export class GoFishNode {
   }
 
   /**
+   * Emit the post-layout *render IR* — a flat display list of positioned
+   * primitives in absolute pixels, solved at this viewport. The SVG/Canvas/
+   * WebGPU backends each consume it. See {@link toDisplayList}.
+   */
+  public toDisplayList(options: GoFishRenderOptions = {}) {
+    return toDisplayList(this, options);
+  }
+
+  /**
    * Render and save to `filename`. Format is inferred from the extension
    * (only `.svg` today). In a browser this downloads; in Node it writes the
    * file.
@@ -1106,10 +1221,6 @@ export class GoFishNode {
     for (const child of this.children) {
       if (child instanceof GoFishNode) child.resolveLabels();
     }
-  }
-
-  private _renderLabel(transformOverride?: Transform): JSX.Element | null {
-    return renderLabelJSX(this, transformOverride);
   }
 
   public setKey(key: string): this {

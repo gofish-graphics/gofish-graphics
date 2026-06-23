@@ -75,7 +75,7 @@ const sampleTree = (() => {
 //     · PolarCenter "bottom" — polar() always centers the disc; no off-center pin.
 //     · Direction / StartAngle / CentralAngle — fixed full 2π sweep from a fixed
 //       start angle; no clockwise/CCW or sub-circle arc.
-//     · polarTransposed() == polar() (the PolarAxis θ/r swap is a no-op).
+//     · no θ/r axis swap (no transposed variant; PolarAxis swap not expressible).
 //  - NO angular auto-fit: there is no leaf-count allocation pass, so the angular
 //    budget is hand-set via leafTheta = 2π / totalLeaves. If that sum drifts from
 //    2π the wedges overflow and wrap. Here sampleTree's 8 leaves make each ring

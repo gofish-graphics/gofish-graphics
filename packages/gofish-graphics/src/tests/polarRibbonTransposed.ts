@@ -14,7 +14,7 @@ import { rybHsl2rgb } from "rybitten";
 import { coord } from "../ast/coordinateTransforms/coord";
 import { polar_DEPRECATED } from "../ast/coordinateTransforms/polar_DEPRECATED";
 import { linear } from "../ast/coordinateTransforms/linear";
-import { polarTransposed } from "../ast/coordinateTransforms/polarTransposed";
+import { polar } from "../ast/coordinateTransforms/polar";
 
 const data = [
   { category: "A", group: "x", value: 0.1 },
@@ -62,7 +62,7 @@ coords work like this:
 export const testPolarRibbonTransposed = (size: { width: number; height: number }) =>
   gofish(
     { width: size.width, height: size.height, transform: { x: 400, y: 400 } },
-    coord({ transform: polarTransposed() }, [
+    coord({ transform: polar() }, [
       layer([
         stack(
           { y: 100, dir: 0, spacing: 0, alignment: "start", sharedScale: true },

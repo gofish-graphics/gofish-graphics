@@ -34,7 +34,6 @@ export { linear } from "./ast/coordinateTransforms/linear";
 export { polar } from "./ast/coordinateTransforms/polar";
 export { clock } from "./ast/coordinateTransforms/clock";
 export { polar_DEPRECATED } from "./ast/coordinateTransforms/polar_DEPRECATED";
-export { polarTransposed } from "./ast/coordinateTransforms/polarTransposed";
 export { arcLengthPolar } from "./ast/coordinateTransforms/arcLengthPolar";
 export { bipolar } from "./ast/coordinateTransforms/bipolar";
 export { wavy } from "./ast/coordinateTransforms/wavy";
@@ -52,6 +51,9 @@ export {
   gofishSave,
 } from "./ast/gofish";
 export type { GoFishRenderOptions, GoFishExportOptions } from "./ast/gofish";
+
+// Display-list (render-IR) export
+export { toDisplayList } from "./ast/displayList/toDisplayList";
 
 // Name / scope primitives
 export { createName } from "./ast/createName";

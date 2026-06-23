@@ -38,12 +38,12 @@ import { initializeContainer } from "../helper";
 // angular extent equals the 2π budget: N_leaves * leafTheta = 2π.
 //
 // NOTES — dsl features that gofish's polar() CANNOT express (flagged, not faked;
-// polar()/polarTransposed() take NO options):
+// polar() takes NO options):
 //  - PolarAxis: x-axis — the dsl pins the angular axis to screen-x with the
 //    center on the right (PolarCenter:right), giving the reference its
 //    "solid root half-disc on the left, rings fanning right" look. polar()
 //    has fixed orientation and a fixed center; this re-orientation is NOT
-//    expressible. I tried polarTransposed() too: it maps x→r, y→θ, which
+//    expressible. A θ/r axis swap would map x→r, y→θ, which
 //    inverts our decomposition (nest would grow radius, distribute would
 //    spin angle) and destroys the concentric-ring structure — so polar() is
 //    the closer match and is what's used here. The cost is orientation: we

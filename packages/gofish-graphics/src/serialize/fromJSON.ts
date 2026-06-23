@@ -217,8 +217,11 @@ function resolveColorConfig(colorSpec: Record<string, any>): any {
 }
 
 function resolveCoordConfig(coordSpec: Record<string, any>): any {
-  if (coordSpec.type === "clock") return clock();
-  if (coordSpec.type === "polar") return polar();
+  // polar/clock options (innerRadius, centralAngle, startAngle, direction,
+  // center) ride along in the spec; pass them through (PolarOptions is all
+  // optional and ignores the extra `type` key).
+  if (coordSpec.type === "clock") return clock(coordSpec);
+  if (coordSpec.type === "polar") return polar(coordSpec);
   if (coordSpec.type === "wavy") return wavy();
   return coordSpec;
 }
