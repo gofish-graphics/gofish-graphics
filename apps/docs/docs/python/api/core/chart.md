@@ -47,7 +47,7 @@ is a `chart()` option.
 
 ## Axes
 
-`axes` is a `chart()` option (mirroring the JS `Chart(data, { axes: true })`).
+`axes` is a `chart()` option (mirroring the JS `chart(data, { axes: true })`).
 It accepts a bool, a per-dimension dict, or per-dimension title control:
 
 ```python
@@ -111,7 +111,7 @@ scoping, and connector use — see [`ref` / `selectAll`](/python/api/selection/r
 ## Naming a chart: `.name()`
 
 A **chart-level** `.name()` — distinct from naming a mark — tags the whole
-chart so a sibling `Layer([...]).constrain(...)` callback can reference it by
+chart so a sibling `layer([...]).constrain(...)` callback can reference it by
 that name (mirrors JS `chart.resolve().name(...)`). The constrain lambda's
 parameter names match the charts' `.name()` strings:
 
@@ -119,7 +119,7 @@ parameter names match the charts' `.name()` strings:
 sc = chart(data).flow(scatter(x="x", y="y")).mark(circle(r=3)).name("scatter")
 top = chart(data, h=80).flow(...).mark(rect(h="count")).name("topHist")
 
-Layer([sc, top]).constrain(lambda scatter, topHist: [
+layer([sc, top]).constrain(lambda scatter, topHist: [
     Constraint.align([scatter], x="baseline", y="baseline"),
     Constraint.position([topHist], y=410, anchor="start"),
 ])

@@ -437,9 +437,23 @@ function serveApp(res: ServerResponse): void {
     allDiffs = await res.json();
   }
 
+  function pixelPercent(d) {
+    return d.diffPercent === null ? -Infinity : d.diffPercent;
+  }
+
+  function sortByPixelPercentDesc(diffs) {
+    return [...diffs].sort((a, b) => {
+      const byPixelPercent = pixelPercent(b) - pixelPercent(a);
+      if (byPixelPercent !== 0) return byPixelPercent;
+      return a.path.localeCompare(b.path);
+    });
+  }
+
   function filteredDiffs() {
-    if (filter === 'pending') return allDiffs.filter(d => d.status === 'pending');
-    return allDiffs;
+    const items = filter === 'pending'
+      ? allDiffs.filter(d => d.status === 'pending')
+      : allDiffs;
+    return sortByPixelPercentDesc(items);
   }
 
   function renderSidebar() {
@@ -759,7 +773,8 @@ function serveApp(res: ServerResponse): void {
   async function init() {
     await fetchDiffs();
     renderSidebar();
-    if (allDiffs.length > 0) selectStory(allDiffs[0].path);
+    const first = filteredDiffs()[0];
+    if (first) selectStory(first.path);
   }
 
   init();

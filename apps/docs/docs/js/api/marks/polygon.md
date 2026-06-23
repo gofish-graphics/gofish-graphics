@@ -7,7 +7,7 @@ expressed by the standard shape primitives.
 ::: gofish
 
 ```js
-gf.Chart([{}])
+gf.chart([{}])
   .mark(
     gf.polygon({
       points: [

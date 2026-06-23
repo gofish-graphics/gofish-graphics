@@ -109,6 +109,11 @@ export const FRONTEND_IR_JSON_SCHEMA = {
           description:
             "Layer-level constraints (Layer([...]).constrain(...)), resolving refs against the child charts' names.",
         },
+        builder: {
+          type: "boolean",
+          description:
+            "True when this came from the v3 chart(...).layer(...) builder chain (not the low-level layer([...]) combinator). The deserializer reconstructs it through the real LayerBuilder so JS owns the builder's render logic (inferred axis titles, etc.).",
+        },
         origin: { $ref: "#/$defs/Origin" },
         meta: { $ref: "#/$defs/Meta" },
       },
@@ -127,12 +132,13 @@ export const FRONTEND_IR_JSON_SCHEMA = {
     OperatorIR: {
       type: "object",
       description:
-        "A pipeline operator. Field coverage is open at the schema level (`additionalProperties` is permitted) — see validate.ts and schema.ts for per-type field shapes. `spread`, `stack`, and `scatter` accept an `axes` property of shape `AxesOptions`.",
+        "A pipeline operator. Field coverage is open at the schema level (`additionalProperties` is permitted) — see validate.ts and schema.ts for per-type field shapes. `spread`, `stack`, and `scatter` accept an `axes` property of shape `AxesOptions`; operators may carry structural `translate` metadata.",
       required: ["type"],
       properties: {
         type: {
           enum: [
             "derive",
+            "resolve",
             "spread",
             "stack",
             "group",
@@ -142,6 +148,21 @@ export const FRONTEND_IR_JSON_SCHEMA = {
           ],
         },
         axes: { $ref: "#/$defs/AxesOptions" },
+        translate: { $ref: "#/$defs/Translate" },
+        w: { $ref: "#/$defs/ChannelValue" },
+        h: { $ref: "#/$defs/ChannelValue" },
+        cols: { type: "array", items: { type: "string" } },
+        from: { type: "string" },
+        key: { type: "string" },
+      },
+    },
+    Translate: {
+      description:
+        "Structural pixel translation reapplied by the runtime deserializer.",
+      type: "object",
+      properties: {
+        x: { type: "number" },
+        y: { type: "number" },
       },
     },
     AxesOptions: {
@@ -195,6 +216,7 @@ export const FRONTEND_IR_JSON_SCHEMA = {
           maxItems: 1,
           items: { $ref: "#/$defs/MarkIR" },
         },
+        translate: { $ref: "#/$defs/Translate" },
         origin: { $ref: "#/$defs/Origin" },
         meta: { $ref: "#/$defs/Meta" },
       },
@@ -212,6 +234,7 @@ export const FRONTEND_IR_JSON_SCHEMA = {
         inset: { type: "number" },
         name: { type: "string" },
         zOrder: { type: "number" },
+        translate: { $ref: "#/$defs/Translate" },
         origin: { $ref: "#/$defs/Origin" },
         meta: { $ref: "#/$defs/Meta" },
       },
@@ -278,6 +301,7 @@ export const FRONTEND_IR_JSON_SCHEMA = {
           items: { $ref: "#/$defs/ConstraintIR" },
         },
         zOrder: { type: "number" },
+        translate: { $ref: "#/$defs/Translate" },
       },
     },
     CombinatorMarkIR: {
@@ -313,6 +337,7 @@ export const FRONTEND_IR_JSON_SCHEMA = {
           items: { $ref: "#/$defs/ConstraintIR" },
         },
         zOrder: { type: "number" },
+        translate: { $ref: "#/$defs/Translate" },
       },
     },
     RefMarkIR: {
@@ -332,6 +357,7 @@ export const FRONTEND_IR_JSON_SCHEMA = {
         name: { type: "string" },
         label: { $ref: "#/$defs/LabelIR" },
         zOrder: { type: "number" },
+        translate: { $ref: "#/$defs/Translate" },
       },
     },
     LabelIR: {

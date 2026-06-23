@@ -53,6 +53,14 @@ the single-axis hand-drawn story does — is what keeps _two_ continuous axes on
 one grid: a shifted content would land at `gutter + scale(v)` while the other
 axis's datum-pinned ticks sit at `scale(v)`.
 
+When both dimensions have position-like axes, each axis line is seated from the
+other dimension's datum floor plus a fixed outward standoff. This is deliberately
+different from seating at the content bbox: a niced scatter domain may extend
+past the lowest/highest datum, and the axis should frame the plot-space corner
+rather than the visible data extent. The standoff also keeps marks exactly on
+the domain floor (for example, a histogram bin at `y = 0`) from straddling the
+axis line.
+
 The wrapper inherits the wrapped node's `key` and `_name`, so faceting and
 external refs keep resolving to it. After the rewrite, the whole tree's underlying
 space is recomputed (the cache is cleared) and re-niced; then normal layout runs.
@@ -74,9 +82,16 @@ bespoke pipeline hand-coded falls out of ordinary layout:
 ## The three kinds
 
 `elaborateAxis` is a pure function (returns `{ nodes, constraints }`, no mutation),
-one branch per underlying-space kind — the seam a future public API would override:
+one branch per axis flavor — the seam a future public API would override. Since
+the #586 collapse POSITION and DIFFERENCE are no longer distinct space _kinds_
+but two `origin` states of the single `continuous` kind, so the branches
+dispatch on the `isPOSITION` / `isDIFFERENCE` / `isORDINAL` predicates rather
+than a `kind` tag, and the data interval is read uniformly via
+`continuousInterval(space)` (`[origin, origin + width.run(1)]`) instead of a
+per-kind `.domain` / `.width` field:
 
-- **POSITION (continuous)** — `d3.nice` + `d3.ticks` over the domain; an axis line
+- **POSITION (continuous, numeric origin)** — `d3.nice` + `d3.ticks` over the
+  interval; an axis line
   (a 1px `rect` auto-spanning the domain via `datum` endpoints), and a
   `spread([text, tickMark])` per tick pinned with
   `Constraint.position({ [axis]: datum(v) })`. The gutter is negative space;
@@ -92,7 +107,8 @@ one branch per underlying-space kind — the seam a future public API would over
   `align(end)` sets the ticks flush against the line (their inner edge _is_
   the tick mark, so the label text ends up offset by the tick + gap inside
   each tick's spread).
-- **DIFFERENCE** — bare tick marks at the tick values, plus plain-text labels
+- **DIFFERENCE (continuous, `origin: "impossible"`)** — bare tick marks at the
+  tick values over `[0, width.run(1)]`, plus plain-text labels
   showing the _delta_ between adjacent ticks, pinned at their midpoints
   (`position({ [axis]: datum(midpoint) })`). The delta labels have no tick of
   their own to provide an offset, so they `distribute` off the line (at the

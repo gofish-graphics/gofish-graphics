@@ -9,9 +9,9 @@ chart, selected with [`selectAll()`](/python/api/core/chart#cross-chart-referenc
 :::
 
 ```python
-from gofish import Layer, chart, spread, blank, selectAll, area
+from gofish import layer, chart, spread, blank, selectAll, area
 
-Layer([
+layer([
     chart(lake_totals)
         .flow(spread(by="lake", dir="x", spacing=64))
         .mark(blank(h="count").name("points")),
@@ -44,12 +44,12 @@ Returns a `Mark` for use in [`.mark()`](/python/api/core/mark).
 Areas use the same two-chart recipe as [`line`](/python/api/marks/line#the-line-pattern):
 one chart positions named [`blank`](/python/api/marks/blank) marks, a second
 `selectAll`s them and draws the `area()`. `selectAll(name)` reads a named layer
-from an earlier chart as an array of refs, and `Layer([chartA, chartB])` composes
+from an earlier chart as an array of refs, and `layer([chartA, chartB])` composes
 multiple charts into one figure. To re-partition the selection first (e.g. one
 area per series), run it through `group(by="datum.field")` — see
 [`group`](/python/api/operators/group).
 
-Stack several areas in one `Layer` — with `opacity` or `mixBlendMode` — for
+Stack several areas in one `layer` — with `opacity` or `mixBlendMode` — for
 layered and stacked area charts.
 
 ## Sugar: `.connect()`
@@ -64,7 +64,7 @@ chart(data).flow(
 ```
 
 See [`.connect()`](/python/api/core/connect) for the full semantics; the
-explicit `Layer([...])` + `selectAll` form traces _another_ chart's marks.
+explicit `layer([...])` + `selectAll` form traces _another_ chart's marks.
 
 ## Examples
 

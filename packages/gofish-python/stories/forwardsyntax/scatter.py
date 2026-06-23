@@ -1,7 +1,7 @@
 """Forward Syntax V3/Scatter — mirrors Scatter.stories.tsx
 
 Basic scatter plot only. Connected and WithPieGlyphs variants require
-Layer support (not yet in Python wrapper).
+layer support (not yet in Python wrapper).
 """
 
 from gofish import chart, scatter, circle

@@ -5,7 +5,7 @@ Creates a `ChartBuilder`. This is the entry point for every GoFish chart.
 ::: gofish
 
 ```js
-gf.Chart(seafood, { axes: true })
+gf.chart(seafood, { axes: true })
   .flow(gf.spread({ by: "lake", dir: "x" }))
   .mark(gf.rect({ h: "count" }))
   .render(root, { w: 400, h: 250 });
@@ -77,7 +77,7 @@ chartBuilder.zOrder(value: number): ChartBuilder
 Children with the same z-order keep their original array order. The default z-order is `0`.
 
 ```ts
-Layer([
+layer([
   chart(data)
     .flow(scatter({ by: "x", y: "y" }))
     .mark(line())

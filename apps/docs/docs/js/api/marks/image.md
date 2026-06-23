@@ -6,7 +6,7 @@ glyphs, or any artwork you want to place and size like a native mark.
 ::: gofish
 
 ```js
-gf.Chart([{ label: "badge" }])
+gf.chart([{ label: "badge" }])
   .mark(
     gf.image({
       href: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='96' height='64'%3E%3Crect width='96' height='64' rx='8' fill='%234e79a7'/%3E%3Ccircle cx='48' cy='32' r='18' fill='white'/%3E%3C/svg%3E",

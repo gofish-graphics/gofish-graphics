@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
 import { seafood, catchLocationsArray } from "../../src/data/catch";
-import { Chart, spread, scatter, circle, rect, layer } from "../../src/lib";
+import { chart, spread, scatter, circle, rect, layer } from "../../src/lib";
 
 // Exercises issue #494: when the user omits `w`/`h` on `.render(...)`, the
 // overall size is computed during layout rather than propagating NaN. Each
@@ -43,7 +43,7 @@ export const LayerShrinkToFit: StoryObj = {
 export const DataDrivenHeightDefault: StoryObj = {
   render: () => {
     const container = initializeContainer();
-    Chart(seafood, { axes: true })
+    chart(seafood, { axes: true })
       .flow(spread({ by: "lake", dir: "x" }))
       .mark(rect({ h: "count" }))
       .render(container, {});
@@ -55,7 +55,7 @@ export const DataDrivenHeightDefault: StoryObj = {
 export const PositionScatterDefault: StoryObj = {
   render: () => {
     const container = initializeContainer();
-    Chart(catchLocationsArray, { axes: true })
+    chart(catchLocationsArray, { axes: true })
       .flow(scatter({ by: "lake", x: "x", y: "y" }))
       .mark(circle({ r: 5 }))
       .render(container, {});
@@ -69,7 +69,7 @@ export const PositionScatterDefault: StoryObj = {
 export const LegendTracksComputedExtent: StoryObj = {
   render: () => {
     const container = initializeContainer();
-    Chart(seafood)
+    chart(seafood)
       .flow(spread({ by: "lake", dir: "x" }))
       .mark(rect({ h: "count", fill: "species" }))
       .render(container, {});

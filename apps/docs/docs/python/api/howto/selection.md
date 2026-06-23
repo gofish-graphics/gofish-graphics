@@ -16,7 +16,7 @@ ref and raises if the layer matched zero or more than one node.
 ## Basic pattern
 
 ```python
-Layer([
+layer([
     # Chart 1: create marks and name them
     chart(data)
         .flow(spread(by="category", dir="x"))
@@ -27,13 +27,13 @@ Layer([
 ])
 ```
 
-The `Layer` function renders both charts in the same coordinate space, allowing
+The `layer` function renders both charts in the same coordinate space, allowing
 the second chart to overlay the first.
 
 ::: tip
 For the common case of threading a connector through a chart's **own** marks,
 [`.connect()`](/python/api/core/connect) is shorter sugar for this two-layer
-recipe. Reach for the explicit `Layer([...])` + `selectAll` form when connecting
+recipe. Reach for the explicit `layer([...])` + `selectAll` form when connecting
 a _different_ chart's marks or when you need a custom paint order.
 :::
 
@@ -47,9 +47,9 @@ array of refs directly and read placed geometry off them, so feed them
 :::
 
 ```python
-from gofish import Layer, chart, scatter, circle, line, selectAll
+from gofish import layer, chart, scatter, circle, line, selectAll
 
-Layer([
+layer([
     chart(driving_shifts)
         .flow(scatter(by="year", x="miles", y="gas"))
         .mark(circle(r=4, fill="white", stroke="black", strokeWidth=2).name("points")),
@@ -68,9 +68,9 @@ Sometimes you want a connecting line without visible points. Use
 :::
 
 ```python
-from gofish import Layer, chart, scatter, blank, line, selectAll
+from gofish import layer, chart, scatter, blank, line, selectAll
 
-Layer([
+layer([
     chart(catch_locations)
         .flow(scatter(by="lake", x="x", y="y"))
         .mark(blank().name("points")),
@@ -89,9 +89,9 @@ Because the selected stream is now refs (not raw records), you re-encode by the
 :::
 
 ```python
-from gofish import Layer, chart, spread, stack, derive, group, rect, area, selectAll
+from gofish import layer, chart, spread, stack, derive, group, rect, area, selectAll
 
-Layer([
+layer([
     chart(seafood)
         .flow(
             spread(by="lake", dir="x", spacing=64),
@@ -121,9 +121,9 @@ one ref — handy for diagrammatic annotations. It raises if the layer matched
 more than one node, which catches mistakes early:
 
 ```python
-from gofish import Layer, chart, scatter, blank, text, ref, selectAll
+from gofish import layer, chart, scatter, blank, text, ref, selectAll
 
-Layer([
+layer([
     chart(data).flow(scatter(by="id", x="x", y="y")).mark(blank().name("origin")),
     # ref("origin") returns one ref; errors if "origin" matched 0 or >1 nodes
     chart(ref("origin")).mark(text(text="start")),

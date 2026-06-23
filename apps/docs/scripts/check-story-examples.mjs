@@ -24,7 +24,7 @@ const require = createRequire(import.meta.url);
 const ts = require("typescript");
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const EXPECTED_COUNT = 65;
+const EXPECTED_COUNT = 92;
 
 // The data module is TypeScript and this package is `type: commonjs`, so raw
 // Node won't import it as ESM. Transpile it to a temp `.mjs` *in the same

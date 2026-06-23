@@ -16,7 +16,7 @@ import { DisplayList } from "gofish-ir";
 // @ts-ignore -- dist may not exist at typecheck time; the test script builds first.
 import * as GoFish from "../../dist/index.js";
 
-const { Chart, spread, rect } = GoFish as any;
+const { chart, spread, rect } = GoFish as any;
 
 declare const process: { exit(code: number): never };
 
@@ -44,7 +44,7 @@ async function main() {
   ];
   const W = 16;
   const SPACING = 8;
-  const doc: DisplayList.DisplayListDocument = await Chart(data)
+  const doc: DisplayList.DisplayListDocument = await chart(data)
     .flow(spread({ by: "c", dir: "x", spacing: SPACING }))
     .mark(rect({ h: "v", w: W, fill: "steelblue" }))
     .toDisplayList({ w: 200, h: 120 });

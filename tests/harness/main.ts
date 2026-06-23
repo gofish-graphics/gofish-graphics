@@ -10,7 +10,7 @@
  */
 
 import {
-  Chart,
+  chart,
   Layer,
   selectAll,
   spread,
@@ -21,6 +21,7 @@ import {
   table,
   log as logOp,
   derive,
+  resolve,
   rect,
   circle,
   line,
@@ -138,6 +139,9 @@ interface LayerHarnessSpec {
   options: Record<string, any>;
   // Constraints relating the named children of a `Layer([...]).constrain(...)`.
   constraints?: ConstraintSpec[];
+  // True for a v3 `chart(...).layer(...)` builder chain: reconstruct through
+  // the real LayerBuilder so JS owns the builder's render logic.
+  builder?: boolean;
   deriveServerUrl?: string;
 }
 
@@ -356,7 +360,11 @@ function mapOperator(
   op: OperatorSpec,
   deriveServerUrl?: string
 ): Operator<any, any> | null {
-  const { type, ...opts } = op;
+  const { type, translate, ...opts } = op;
+  const applyTranslate = <T>(operator: T): T =>
+    translate && typeof (operator as any).translate === "function"
+      ? ((operator as any).translate(translate) as T)
+      : operator;
 
   switch (type) {
     case "derive": {
@@ -369,47 +377,56 @@ function mapOperator(
       // columns in the IR; the array symbol can't cross the RPC, so re-apply it
       // to the returned rows (mirrors serialize/registry.ts and the JS bin).
       const provenance = opts.provenance as MeasureProvenance | undefined;
-      return derive(async (d: any) => {
-        const rows = Array.isArray(d) ? d : d == null ? [] : [d];
-        if (rows.length === 0) return Array.isArray(d) ? d : (d ?? null);
+      return applyTranslate(
+        derive(async (d: any) => {
+          const rows = Array.isArray(d) ? d : d == null ? [] : [d];
+          if (rows.length === 0) return Array.isArray(d) ? d : (d ?? null);
 
-        const resp = await fetch(`${deriveServerUrl}/derive/${lambdaId}`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(rows),
-        });
+          const resp = await fetch(`${deriveServerUrl}/derive/${lambdaId}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(rows),
+          });
 
-        if (!resp.ok) {
-          throw new Error(
-            `Derive server error: ${resp.status} ${await resp.text()}`
-          );
-        }
+          if (!resp.ok) {
+            throw new Error(
+              `Derive server error: ${resp.status} ${await resp.text()}`
+            );
+          }
 
-        const result = await resp.json();
-        const tagged =
-          provenance !== undefined
-            ? setMeasureProvenance(result, provenance)
-            : result;
-        return Array.isArray(d) ? tagged : (tagged[0] ?? null);
-      });
+          const result = await resp.json();
+          const tagged =
+            provenance !== undefined
+              ? setMeasureProvenance(result, provenance)
+              : result;
+          return Array.isArray(d) ? tagged : (tagged[0] ?? null);
+        })
+      );
     }
     // Modern v3 operators all take a single options object with `by`,
     // `dir`, etc. as keyword args. The previous `field`-positional shape
     // was stale and silently miscalled most ops.
     case "spread":
-      return spread(opts as any);
+      return applyTranslate(spread(opts as any));
     case "stack":
-      return stack(opts as any);
+      return applyTranslate(stack(opts as any));
     case "group":
-      return group(opts as any);
+      return applyTranslate(group(opts as any));
+    case "resolve":
+      return applyTranslate(
+        resolve(opts.cols as string[], {
+          from: selectAll(opts.from as string),
+          key: opts.key as string | undefined,
+        })
+      );
     case "scatter":
-      return scatter(opts as any);
+      return applyTranslate(scatter(opts as any));
     case "table":
-      return table(opts as any);
+      return applyTranslate(table(opts as any));
     case "treemap":
-      return treemap(opts as any);
+      return applyTranslate(treemap(opts as any));
     case "log":
-      return logOp(opts.label);
+      return applyTranslate(logOp(opts.label));
     default:
       console.warn(`Unknown operator type: ${type}`);
       return null;
@@ -485,6 +502,11 @@ function mapMark(
   deriveServerUrl: string | undefined,
   resolveToken: TokenResolver
 ): Mark<any> {
+  const applyTranslate = <T>(mark: T): T =>
+    spec.translate && typeof (mark as any).translate === "function"
+      ? ((mark as any).translate(spec.translate) as T)
+      : mark;
+
   // Mark-as-function: Python registered a `(data) -> ChartBuilder` lambda
   // in the derive-server registry. The JS Mark fetches a chart IR per
   // invocation and rebuilds a ChartBuilder JS-side; `resolveMarkResult`
@@ -531,9 +553,11 @@ function mapMark(
   // (for `ref(token).foo[2].bar` proxy navigation), or contain token
   // sentinels that need resolving.
   if (spec.type === "ref" && !spec.__combinator) {
-    return ref(
-      resolveRefSelection(spec.selection, resolveToken)
-    ) as unknown as Mark<any>;
+    return applyTranslate(
+      ref(
+        resolveRefSelection(spec.selection, resolveToken)
+      ) as unknown as Mark<any>
+    );
   }
 
   // `offset` node: shift a single child by (x, y) render-pixels. Maps to the
@@ -544,9 +568,11 @@ function mapMark(
       deriveServerUrl,
       resolveToken
     );
-    return offsetOp({ x: spec.x, y: spec.y }, [
-      childMark as any,
-    ]) as unknown as Mark<any>;
+    return applyTranslate(
+      offsetOp({ x: spec.x, y: spec.y }, [
+        childMark as any,
+      ]) as unknown as Mark<any>
+    );
   }
 
   // `cut` mark in a chart `.mark(...)` position → the v3 expand-mark form
@@ -561,6 +587,7 @@ function mapMark(
       size: unwrapMarkOpts(spec.size, deriveServerUrl),
       inset: spec.inset,
     });
+    mark = applyTranslate(mark);
     const nameVal = resolveNameField(spec.name, resolveToken);
     if (nameVal != null && typeof (mark as any).name === "function") {
       mark = (mark as any).name(nameVal);
@@ -627,6 +654,7 @@ function mapMark(
     if (spec.__scope) {
       mark = wrapWithScope(mark);
     }
+    mark = applyTranslate(mark);
     const nameVal = resolveNameField(spec.name, resolveToken);
     if (nameVal != null && typeof (mark as any).name === "function") {
       mark = (mark as any).name(nameVal);
@@ -669,6 +697,7 @@ function mapMark(
   if (spec.__scope) {
     mark = wrapWithScope(mark);
   }
+  mark = applyTranslate(mark);
   const nameVal = resolveNameField(layerName, resolveToken);
   if (nameVal != null && typeof (mark as any).name === "function") {
     mark = (mark as any).name(nameVal);
@@ -766,7 +795,7 @@ function buildChartFromSpec(
     }
   }
 
-  let builder = Chart(chartData, chartOpts)
+  let builder = chart(chartData, chartOpts)
     .flow(...operators)
     .mark(mark);
   if (chartSpec.zOrder !== undefined && chartSpec.zOrder !== null) {
@@ -857,6 +886,21 @@ function renderChart(spec: HarnessSpec) {
             })
           );
           await layerMark.render(container, {
+            w,
+            h,
+            axes: axes ?? false,
+            debug: debug ?? false,
+          } as any);
+        } else if (spec.builder) {
+          // v3 `chart(...).layer(...)` chain: reconstruct through the real
+          // LayerBuilder so JS owns the builder's render logic (inferred axis
+          // titles, etc.) instead of re-deriving it here. The child charts are
+          // already wired (producer mark named, consumer reads selectAll), so
+          // chaining `.layer()` just stacks them.
+          const layerBuilder = childCharts
+            .slice(1)
+            .reduce((acc: any, c) => acc.layer(c), childCharts[0] as any);
+          await layerBuilder.render(container, {
             w,
             h,
             axes: axes ?? false,

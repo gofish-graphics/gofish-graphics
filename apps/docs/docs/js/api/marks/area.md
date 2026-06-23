@@ -12,12 +12,12 @@ const lakeTotals = Object.entries(_.groupBy(seafood, "lake")).map(
   })
 );
 
-gf.Layer([
+gf.layer([
   gf
-    .Chart(lakeTotals)
+    .chart(lakeTotals)
     .flow(gf.spread({ by: "lake", dir: "x", spacing: 64 }))
     .mark(gf.blank({ h: "count" }).name("points")),
-  gf.Chart(gf.selectAll("points")).mark(gf.area({ opacity: 0.6 })),
+  gf.chart(gf.selectAll("points")).mark(gf.area({ opacity: 0.6 })),
 ]).render(root, { w: 400, h: 250, axes: true });
 ```
 
@@ -26,19 +26,25 @@ gf.Layer([
 ## Signature
 
 ```ts
-area({ stroke?, strokeWidth = 0, opacity?, mixBlendMode = "normal", dir = "x", interpolation = "bezier" })
+area({ stroke?, strokeWidth = 0, opacity?, mixBlendMode = "normal", dir = "x", interpolation = "bezier", from?, to? })
 ```
 
 ## Parameters
 
-| Option          | Type                     | Description         |
-| --------------- | ------------------------ | ------------------- |
-| `stroke`        | `string`                 | Stroke color        |
-| `strokeWidth`   | `number`                 | Stroke width        |
-| `opacity`       | `number`                 | Opacity (0–1)       |
-| `mixBlendMode`  | `"normal" \| "multiply"` | Blend mode          |
-| `dir`           | `"x" \| "y"`             | Direction axis      |
-| `interpolation` | `"linear" \| "bezier"`   | Curve interpolation |
+| Option          | Type                     | Description                                               |
+| --------------- | ------------------------ | --------------------------------------------------------- |
+| `stroke`        | `string`                 | Stroke color                                              |
+| `strokeWidth`   | `number`                 | Stroke width                                              |
+| `opacity`       | `number`                 | Opacity (0–1)                                             |
+| `mixBlendMode`  | `"normal" \| "multiply"` | Blend mode                                                |
+| `dir`           | `"x" \| "y"`             | Direction axis                                            |
+| `interpolation` | `"linear" \| "bezier"`   | Curve interpolation                                       |
+| `from`, `to`    | `string`                 | Pairwise form: column names holding the two endpoint refs |
+
+Like [`line`](/js/api/marks/line), `area` has a **bag form** (over a `GoFishRef[]`,
+shown below) and a **pairwise form** `area({ from, to })` over rows whose
+`from`/`to` columns hold refs (one band per row, after
+[`resolve`](/js/api/operators/resolve)).
 
 ## Sugar: `.connect()`
 

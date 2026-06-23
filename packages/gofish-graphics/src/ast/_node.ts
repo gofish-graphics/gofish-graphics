@@ -39,10 +39,15 @@ import { getValue, isValue, MaybeValue } from "./data";
 import { color6 } from "../color";
 import * as Monotonic from "../util/monotonic";
 import {
+  isCONTINUOUS,
   isDIFFERENCE,
   isORDINAL,
   isPOSITION,
   isUNDEFINED,
+  continuousInterval,
+  placementOf,
+  CONTINUOUS_TYPE,
+  type Placement,
   UnderlyingSpace,
 } from "./underlyingSpace";
 import { toJSON, interval } from "../util/interval";
@@ -104,6 +109,15 @@ export type Placeable = {
    *  align anchor reads this so it survives retiring the translate writes; `ref`
    *  stand-ins omit it (they keep a computed `transform`). */
   projectedTranslate?: (dir: Direction) => number | undefined;
+  /** Coordinate of one box anchor in the node's local frame. Placement solving
+   *  uses this to express every anchor as `absoluteMin + constant`, including
+   *  `baseline` for asymmetric boxes such as text and negative bars. */
+  localAnchor?: (axis: FancyDirection, anchor: Anchor) => number | undefined;
+  /** This target's abstract {@link Placement} on `dir` (free / determined(at) /
+   *  conflict), or `undefined` for a non-continuous axis. `align` reads it to
+   *  leave self-positioned children alone. Omitted by `ref` stand-ins (→
+   *  `undefined`, so they get the fallback baseline like any chrome). */
+  placementOn?: (dir: Direction) => Placement | undefined;
   place: (axis: FancyDirection, value: number, anchor?: Anchor) => void;
   /** Write an axis extent from owned bbox facets (the size-setting primitive
    *  #39 — `span` and an authoritative `position` pin go through it). Optional
@@ -565,6 +579,8 @@ export class GoFishNode {
         !claimed.has(dim) &&
         space &&
         !isUNDEFINED(space[dim]) &&
+        // A baseline magnitude ("free") owns no guide yet — only an anchored
+        // (POSITION), unanchored (DIFFERENCE), or ORDINAL axis does.
         (isPOSITION(space[dim]) ||
           isDIFFERENCE(space[dim]) ||
           isORDINAL(space[dim]))
@@ -596,13 +612,17 @@ export class GoFishNode {
     if (this._underlyingSpace) {
       for (const dim of [0, 1] as (0 | 1)[]) {
         const space = this._underlyingSpace[dim];
-        if (isPOSITION(space) && space.domain) {
-          const [niceMin, niceMax] = nice(
-            space.domain.min!,
-            space.domain.max!,
-            10
+        if (isPOSITION(space)) {
+          const iv = continuousInterval(space)!;
+          const [niceMin, niceMax] = nice(iv.min, iv.max, 10);
+          // Nicing changes the DATA domain (and the width derived from it) and
+          // re-pins the placement at the niced min — all in lockstep.
+          (space as CONTINUOUS_TYPE).dataDomain = interval(niceMin, niceMax);
+          (space as CONTINUOUS_TYPE).placement = placementOf(niceMin);
+          (space as CONTINUOUS_TYPE).width = Monotonic.linear(
+            niceMax - niceMin,
+            0
           );
-          (space as any).domain = interval(niceMin, niceMax);
         }
       }
     }
@@ -748,6 +768,29 @@ export class GoFishNode {
    *  working once stage 3-C retires the direct translate writes. */
   public projectedTranslate(dir: Direction): number | undefined {
     return this._projectTranslate(dir);
+  }
+
+  public localAnchor(axis: FancyDirection, anchor: Anchor): number | undefined {
+    const dir = elaborateDirection(axis);
+    const intrinsic = this.intrinsicDims?.[dir];
+    if (intrinsic?.min === undefined) return undefined;
+    if (
+      (anchor === "center" || anchor === "max") &&
+      intrinsic.size === undefined
+    )
+      return undefined;
+    return localAnchorPoint(anchor, intrinsic.min, intrinsic.size ?? 0);
+  }
+
+  /** This node's abstract {@link Placement} on `dir` (the layout half of its
+   *  underlying space) — `free` (awaiting a position), `determined(at)` (already
+   *  committed to a data coordinate), or `conflict`. `undefined` for a
+   *  non-continuous / unresolved axis (chrome). `align` reads it to leave
+   *  self-positioned children (a scatter facet) where their own scale puts them
+   *  — the principled replacement for the data-positioned guard. */
+  public placementOn(dir: Direction): Placement | undefined {
+    const sp = this._underlyingSpace?.[dir];
+    return sp !== undefined && isCONTINUOUS(sp) ? sp.placement : undefined;
   }
 
   private get _displayTransform(): Transform | undefined {
@@ -1309,35 +1352,22 @@ export const debugUnderlyingSpaceTree = (
   const formatUnderlyingSpace = (
     space: UnderlyingSpace | Size<UnderlyingSpace>
   ): string => {
-    if (Array.isArray(space)) {
-      return `[${space
-        .map((s) => {
-          if (isPOSITION(s)) {
-            return `position(${toJSON(s.domain)})`;
-          } else if (isDIFFERENCE(s)) {
-            return `difference(${s.width})`;
-          } else if (isORDINAL(s)) {
-            return `ordinal(${s.domain})`;
-          } else if (isUNDEFINED(s)) {
-            return `undefined`;
-          } else {
-            return s.kind;
-          }
-        })
-        .join(", ")}]`;
-    } else {
-      if (isPOSITION(space)) {
-        return `position(${toJSON(space.domain)})`;
-      } else if (isDIFFERENCE(space)) {
-        return `difference(${space.width})`;
-      } else if (isORDINAL(space)) {
-        return `ordinal(${space.domain})`;
-      } else if (isUNDEFINED(space)) {
+    const fmt = (s: UnderlyingSpace): string => {
+      if (isCONTINUOUS(s)) {
+        return s.placement.tag === "determined"
+          ? `position(${toJSON(continuousInterval(s)!)})`
+          : s.placement.tag === "free"
+            ? `size(${s.width.run(1)})`
+            : `difference(${s.width.run(1)})`;
+      } else if (isORDINAL(s)) {
+        return `ordinal(${s.domain})`;
+      } else if (isUNDEFINED(s)) {
         return `undefined`;
       } else {
-        return space.kind;
+        return "unknown";
       }
-    }
+    };
+    return Array.isArray(space) ? `[${space.map(fmt).join(", ")}]` : fmt(space);
   };
 
   // Get the name for display (handle both GoFishNode and GoFishRef)

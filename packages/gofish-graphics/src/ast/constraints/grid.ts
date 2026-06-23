@@ -20,15 +20,18 @@
 // Σ-over-max-of-cells (content-sized tracks, variable flex) is a later
 // generalization; v1 is equal tracks with the cells filling them.
 //
-// The grid is interpreted by the Layer: `gridSpaces` gives the ORDINAL axes
-// (categorical columns/rows, for axis rendering), the Layer's budget sizes each
-// cell to `cellExtent`, and `applyGrid` centers each cell in its track.
+// The grid is interpreted by the Layer after `selectGridConstraint` has
+// established that there is at most one grid owner for the layer: `gridSpaces`
+// gives the ORDINAL axes (categorical columns/rows, for axis rendering), the
+// Layer's budget sizes each cell to `cellExtent`, and `placementSolver.ts`
+// centers each cell in its track.
 
-import { GoFishNode, type Placeable } from "../_node";
+import { GoFishNode } from "../_node";
 import type { GoFishAST } from "../_ast";
 import { type ConstraintRef } from "./shared";
 import { sliceExtent } from "./folds";
 import { ORDINAL, UNDEFINED, type UnderlyingSpace } from "../underlyingSpace";
+import type { PlacementFactEmitter } from "./placementFacts";
 
 export interface GridOptions {
   numCols: number;
@@ -81,6 +84,51 @@ export const gridCellSize = (
   sliceExtent(size[1], c.ySpacing, numRowsOf(c)),
 ];
 
+export type GridCellPlacement = {
+  child: ConstraintRef;
+  center: [number, number];
+};
+
+export function gridCellPlacements(
+  c: GridConstraint,
+  size: readonly [number, number]
+): GridCellPlacement[] {
+  const [cellWidth, cellHeight] = gridCellSize(c, size);
+  return c.children.map((child, index) => {
+    const column = index % c.numCols;
+    const row = Math.floor(index / c.numCols);
+    return {
+      child,
+      center: [
+        column * (cellWidth + c.xSpacing) + cellWidth / 2,
+        row * (cellHeight + c.ySpacing) + cellHeight / 2,
+      ],
+    };
+  });
+}
+
+export function lowerGridPlacement(
+  c: GridConstraint,
+  owner: string,
+  size: readonly [number, number],
+  emitter: PlacementFactEmitter
+): void {
+  for (const { child, center } of gridCellPlacements(c, size)) {
+    emitter.pin({
+      axis: "x",
+      target: { name: child.name, anchor: "middle" },
+      value: center[0],
+      owner,
+    });
+    emitter.pin({
+      axis: "y",
+      target: { name: child.name, anchor: "middle" },
+      value: center[1],
+      owner,
+    });
+  }
+}
+
 /**
  * A grid's axes are categorical: ORDINAL over the columns (x) and rows (y).
  * Keys come from `colKeys`/`rowKeys`, else the representative cells' keys —
@@ -109,24 +157,4 @@ export function gridSpaces(
     colKeys.length > 0 ? ORDINAL(colKeys) : UNDEFINED,
     rowKeys.length > 0 ? ORDINAL(rowKeys) : UNDEFINED,
   ];
-}
-
-/**
- * Place each cell centered in its (column, row) track. Cells are already sized
- * to the track by the Layer's budget (`gridCellSize`); here we only position.
- */
-export function applyGrid(
-  c: GridConstraint,
-  nameToPlaceable: Map<string, Placeable>,
-  sizes: [number, number]
-): void {
-  const [cellW, cellH] = gridCellSize(c, sizes);
-  c.children.forEach((ref, i) => {
-    const cell = nameToPlaceable.get(ref.name);
-    if (cell === undefined) return;
-    const col = i % c.numCols;
-    const row = Math.floor(i / c.numCols);
-    cell.place(0, col * (cellW + c.xSpacing) + cellW / 2, "center");
-    cell.place(1, row * (cellH + c.ySpacing) + cellH / 2, "center");
-  });
 }

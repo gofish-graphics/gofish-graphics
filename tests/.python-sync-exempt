@@ -43,6 +43,10 @@ packages/gofish-graphics/stories/DocsContextRegression.stories.tsx
 
 # Forward syntax stories needing unsupported features
 packages/gofish-graphics/stories/forwardsyntax/Bar/BarWithLabels.stories.tsx
+# LabeledChart uses a JS-side function-mark that composes resolved node refs
+# with fresh text — the refs can't cross the Python derive RPC, so it can't be
+# expressed with a Python mark-fn. (Ribbon/Layered and NodeLink ARE ported.)
+packages/gofish-graphics/stories/forwardsyntax/LabeledChart.stories.tsx
 packages/gofish-graphics/stories/forwardsyntax/Bar/BarTemplate.stories.tsx
 
 # Forward syntax stories needing mark-as-function or nested chart
@@ -104,3 +108,17 @@ packages/gofish-graphics/stories/lowlevel/Constraints.stories.tsx::SpreadY_Spaci
 packages/gofish-graphics/stories/lowlevel/Constraints.stories.tsx::SpreadX_Spacing_AlignEnd
 packages/gofish-graphics/stories/lowlevel/Constraints.stories.tsx::SpreadX_CenterToCenter
 packages/gofish-graphics/stories/lowlevel/Constraints.stories.tsx::SpreadY_Reversed
+
+# ---------------------------------------------------------------------------
+# gofish-gotree (the GoTree tree-DSL package) — exempt from Python parity.
+#
+# These stories ARE captured by the JS visual-diff harness (tests/harness/
+# stories-runner.ts globs gofish-gotree/stories too), so they are tracked for
+# visual regressions. They are NOT mirrored to Python: gofish-gotree is a
+# JS-only package with no Python wrapper, so there is nothing to byte-match.
+#
+# No per-file entries are needed below: this checker (both delta mode and
+# `--all`) hard-filters JS stories to `packages/gofish-graphics/stories/`
+# (see walkJsStories + the gitDiff filters in check-python-sync.ts), so it
+# never walks the gofish-gotree package. If parity coverage is ever extended
+# to gofish-gotree, list its stories here.

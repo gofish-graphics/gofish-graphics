@@ -28,7 +28,7 @@ ribbon or stream chart. The stream is then [`ref`](/js/api/marks/ref)s, so use
 the **datum path** — `by: "datum.species"`:
 
 ```ts
-Chart(selectAll("bars"))
+chart(selectAll("bars"))
   .flow(group({ by: "datum.species" }))
   .mark(area({ opacity: 0.8 }));
 ```

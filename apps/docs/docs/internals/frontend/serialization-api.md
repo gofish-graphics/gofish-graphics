@@ -26,9 +26,9 @@ macro expansion. You can:
 ## Emit (JavaScript)
 
 ```ts
-import { Chart, spread, rect, Serialize } from "gofish-graphics";
+import { chart, spread, rect, Serialize } from "gofish-graphics";
 
-const builder = Chart(data)
+const builder = chart(data)
   .flow(spread({ by: "lake", dir: "x" }))
   .mark(rect({ h: "count" }).name("bars"));
 

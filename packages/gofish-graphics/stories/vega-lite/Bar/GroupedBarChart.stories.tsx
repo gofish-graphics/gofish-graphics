@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../../helper";
-import { Chart, spread, stack, rect, palette } from "../../../src/lib";
+import { chart, spread, stack, rect, palette } from "../../../src/lib";
 
 // Mirrors: https://vega.github.io/vega-lite/examples/bar_grouped.html
 
@@ -33,7 +33,7 @@ export const Default: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    Chart(values, { color: palette("tableau10"), axes: true })
+    chart(values, { color: palette("tableau10"), axes: true })
       .flow(
         spread({ by: "category",  dir: "x", spacing: 24 }),
         spread({ by: "group",  dir: "x", spacing: 0 })

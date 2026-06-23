@@ -228,9 +228,9 @@ export default defineConfig({
       // owns only the library package's .ts(x) sources and its .stories.tsx files.
       // `generate: "dom"` forces DOM codegen even in the SSR bundle (the stories
       // only execute client-side, so SSR-flavoured codegen is never needed).
-      vueJsx({ exclude: [/packages\/gofish-graphics\/.*\.[jt]sx?$/] }),
+      vueJsx({ exclude: [/packages\/gofish-(graphics|gotree)\/.*\.[jt]sx?$/] }),
       solidPlugin({
-        include: [/packages\/gofish-graphics\/.*\.[jt]sx?$/],
+        include: [/packages\/gofish-(graphics|gotree)\/.*\.[jt]sx?$/],
         solid: { generate: "dom", hydratable: false },
       }),
       // vue-jsx's config() narrows vite's esbuild to `/\.ts$/` (it expects to own
@@ -432,6 +432,7 @@ export default defineConfig({
                 { text: "chart", link: "/js/api/core/chart" },
                 { text: "flow", link: "/js/api/core/flow" },
                 { text: "mark", link: "/js/api/core/mark" },
+                { text: "layer", link: "/js/api/core/layer" },
                 { text: "connect", link: "/js/api/core/connect" },
                 { text: "render", link: "/js/api/core/render" },
                 { text: "export (SVG)", link: "/js/api/core/export" },
@@ -473,6 +474,7 @@ export default defineConfig({
                 { text: "cut", link: "/js/api/operators/cut" },
                 { text: "offset", link: "/js/api/operators/offset" },
                 { text: "derive", link: "/js/api/operators/derive" },
+                { text: "resolve", link: "/js/api/operators/resolve" },
                 { text: "log", link: "/js/api/operators/log" },
               ],
             },
@@ -511,6 +513,10 @@ export default defineConfig({
             },
           ],
         },
+        {
+          text: "GoTree",
+          items: [{ text: "tree (separate package)", link: "/js/gotree" }],
+        },
       ],
       "/python/": [
         {
@@ -547,6 +553,7 @@ export default defineConfig({
                 { text: "chart", link: "/python/api/core/chart" },
                 { text: "flow", link: "/python/api/core/flow" },
                 { text: "mark", link: "/python/api/core/mark" },
+                { text: "layer", link: "/python/api/core/layer" },
                 { text: "connect", link: "/python/api/core/connect" },
                 { text: "render", link: "/python/api/core/render" },
                 { text: "export (SVG)", link: "/python/api/core/export" },
@@ -588,6 +595,7 @@ export default defineConfig({
                 },
                 { text: "cut", link: "/python/api/operators/cut" },
                 { text: "offset", link: "/python/api/operators/offset" },
+                { text: "resolve", link: "/python/api/operators/resolve" },
                 { text: "log", link: "/python/api/operators/log" },
               ],
             },

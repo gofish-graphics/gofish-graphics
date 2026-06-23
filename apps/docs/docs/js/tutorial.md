@@ -30,7 +30,7 @@ import * as _ from "lodash";
 
 const root = document.getElementById("app");
 
-gf.Chart(seafood)
+gf.chart(seafood)
   .mark(gf.rect({ fill: gf.color.green[5] }))
   .render(root, { w: 500, h: 300 });
 ```
@@ -261,14 +261,14 @@ Next, we render a rectangle into it!
 :::gofish
 
 ```ts
-gf.Chart(seafood)
+gf.chart(seafood)
   .mark(gf.rect({ fill: gf.color.green[5] }))
   .render(root, { w: 500, h: 300 });
 ```
 
 :::
 
-`gf.Chart()` creates a chart from data. We pass an array with a single object containing the rectangle's
+`gf.chart()` creates a chart from data. We pass an array with a single object containing the rectangle's
 position and size. Then we use `.mark()` to specify that we want to render `rect` shapes. The `fill` parameter specifies the color.
 We are using a green from GoFish's default color palette for this chart. Try changing `green` to `blue`
 or changing `5` to a higher or lower number.
@@ -290,7 +290,7 @@ each lake in the dataset:
 :::gofish
 
 ```ts
-gf.Chart(seafood)
+gf.chart(seafood)
   .flow(gf.spread({ by: "lake", dir: "x" }))
   .mark(gf.rect({ w: 32, h: 300, fill: gf.color.green[5] }))
   .render(root, { w: 500, h: 300 });
@@ -315,7 +315,7 @@ quantity.
 :::gofish
 
 ```ts
-gf.Chart(seafood)
+gf.chart(seafood)
   .flow(gf.spread({ by: "lake", dir: "x" }))
   .mark(gf.rect({ w: 32, h: "count", fill: gf.color.green[5] }))
   .render(root, { w: 500, h: 300 });
@@ -332,7 +332,7 @@ width of each rectangle.
 :::gofish
 
 ```ts
-gf.Chart(seafood)
+gf.chart(seafood)
   .flow(gf.spread({ by: "lake", dir: "x" }))
   .mark(gf.rect({ h: "count", fill: gf.color.green[5] }))
   .render(root, { w: 500, h: 300 });
@@ -348,7 +348,7 @@ your spec as long as you pass `axes: true` in the `chart()` options like so:
 :::gofish
 
 ```ts
-gf.Chart(seafood, { axes: true })
+gf.chart(seafood, { axes: true })
   .flow(gf.spread({ by: "lake", dir: "x" }))
   .mark(gf.rect({ h: "count", fill: gf.color.green[5] }))
   .render(root, { w: 500, h: 300 });
@@ -386,7 +386,7 @@ like a normal bar chart, except instead of a line of rectangles, it's a line of 
 :::gofish
 
 ```ts
-gf.Chart(seafood, { axes: true })
+gf.chart(seafood, { axes: true })
   .flow(
     gf.spread({ by: "lake", dir: "x" }), //
     gf.stack({ by: "species", dir: "y", label: false })
@@ -406,7 +406,7 @@ color encoding so that each rectangle's color corresponds to the species of fish
 :::gofish
 
 ```ts
-gf.Chart(seafood, { axes: true })
+gf.chart(seafood, { axes: true })
   .flow(
     gf.spread({ by: "lake", dir: "x" }), //
     gf.stack({ by: "species", dir: "y", label: false })
@@ -436,7 +436,7 @@ their counts:
 :::gofish
 
 ```ts
-gf.Chart(seafood, { axes: true })
+gf.chart(seafood, { axes: true })
   .flow(
     gf.spread({ by: "lake", dir: "x" }),
     gf.derive((d) => _.orderBy(d, "count")),
@@ -459,9 +459,9 @@ together.
 :::gofish
 
 ```ts
-gf.Layer({ axes: true }, [
+gf.layer({ axes: true }, [
   gf
-    .Chart(seafood)
+    .chart(seafood)
     .flow(
       gf.spread({ by: "lake", dir: "x" }),
       gf.derive((d) => _.orderBy(d, "count", "desc")),
@@ -469,7 +469,7 @@ gf.Layer({ axes: true }, [
     )
     .mark(gf.rect({ h: "count", fill: "species" }).name("bars")),
   gf
-    .Chart(gf.selectAll("bars"))
+    .chart(gf.selectAll("bars"))
     .flow(gf.group({ by: "datum.species" }))
     .mark(gf.area({ opacity: 0.8 })),
 ]).render(root, {
@@ -500,9 +500,9 @@ the `spread` operator.
 :::gofish
 
 ```ts
-gf.Layer({ axes: true }, [
+gf.layer({ axes: true }, [
   gf
-    .Chart(seafood)
+    .chart(seafood)
     .flow(
       gf.spread({ by: "lake", dir: "x", spacing: 64 }),
       gf.derive((d) => _.orderBy(d, "count", "desc")),
@@ -510,7 +510,7 @@ gf.Layer({ axes: true }, [
     )
     .mark(gf.rect({ h: "count", fill: "species" }).name("bars")),
   gf
-    .Chart(gf.selectAll("bars"))
+    .chart(gf.selectAll("bars"))
     .flow(gf.group({ by: "datum.species" }))
     .mark(gf.area({ opacity: 0.8 })),
 ]).render(root, {
@@ -558,9 +558,9 @@ so that it looks better in polar space.
 :::gofish
 
 ```ts
-gf.Layer({ coord: gf.clock(), axes: true }, [
+gf.layer({ coord: gf.clock(), axes: true }, [
   gf
-    .Chart(seafood)
+    .chart(seafood)
     .flow(
       gf.spread({
         by: "lake",
@@ -575,7 +575,7 @@ gf.Layer({ coord: gf.clock(), axes: true }, [
     )
     .mark(gf.rect({ h: "count", fill: "species" }).name("bars")),
   gf
-    .Chart(gf.selectAll("bars"))
+    .chart(gf.selectAll("bars"))
     .flow(gf.group({ by: "datum.species" }))
     .mark(gf.area({ opacity: 0.8 })),
 ]).render(root, {

@@ -8,7 +8,7 @@ https://seaborn.pydata.org/generated/seaborn.jointplot.html
 
 from gofish import (
     Constraint,
-    Layer,
+    layer,
     bin,
     chart,
     circle,
@@ -67,7 +67,7 @@ def story_default():
     )
 
     return (
-        Layer([sc, top_hist, right_hist]).constrain(
+        layer([sc, top_hist, right_hist]).constrain(
             lambda scatter, topHist, rightHist: [
                 Constraint.position([scatter], x=0, y=0, anchor="baseline"),
                 Constraint.align([scatter, topHist], x="baseline"),

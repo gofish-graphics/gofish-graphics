@@ -32,7 +32,7 @@ Returns a `GoFishChartWidget`.
 
 ::: tip Axes are a chart option
 `axes` (and `padding`) are passed to [`chart`](/python/api/core/chart), not
-`render` — mirroring the JS `Chart(data, { axes: true })`. See
+`render` — mirroring the JS `chart(data, { axes: true })`. See
 [chart](/python/api/core/chart) for the full `axes` shape.
 :::
 

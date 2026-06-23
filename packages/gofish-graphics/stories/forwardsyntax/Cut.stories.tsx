@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
 import {
-  Chart,
+  chart,
   layer,
   rect,
   image,
@@ -52,7 +52,7 @@ export const ImageCut: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    Chart(bottleData)
+    chart(bottleData)
       .flow(spread({ dir: "y", spacing: 4, reverse: true }))
       .mark(
         image({ href: bottlePng, w: 193, h: 600 }).cut({
@@ -91,7 +91,7 @@ export const ImageCutWithLabels: StoryObj<Args> = {
     type Datum = { category: string; amount: number };
 
     layer<Datum>([
-      Chart(bottleData)
+      chart(bottleData)
         .flow(spread({ dir: "y", spacing: 20, reverse: true }))
         .mark(
           image({ href: bottlePng, w: 193, h: 600 })
@@ -99,7 +99,7 @@ export const ImageCutWithLabels: StoryObj<Args> = {
             .name("part")
         ),
 
-      Chart(selectAll<Datum>("part")).mark(((data: any[]) =>
+      chart(selectAll<Datum>("part")).mark(((data: any[]) =>
         layer(
           data.map((d) =>
             layer([
@@ -160,7 +160,7 @@ export const GroupedCut: StoryObj<Args> = {
       { vintage: "2021", category: "Other", amount: 15 },
     ];
 
-    Chart(data)
+    chart(data)
       .flow(
         spread({ by: "vintage", dir: "x", spacing: 40 }),
         spread({ dir: "y", spacing: 14, reverse: true })
@@ -185,7 +185,7 @@ export const RectEqualSlices: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    Chart(abcdData)
+    chart(abcdData)
       .flow(spread({ dir: "x", spacing: 4 }))
       .mark(rect({ w: 400, h: 80, fill: "steelblue" }).cut({ dir: "x" }))
       .render(container, { w: args.w, h: args.h, axes: false });
@@ -210,7 +210,7 @@ export const RectFlushStack: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    Chart(abcdData)
+    chart(abcdData)
       .flow(stack({ dir: "x" }))
       .mark(
         rect({
@@ -235,7 +235,7 @@ export const ImageEqualSlices: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    Chart([{ k: "top" }, { k: "mid" }, { k: "bot" }])
+    chart([{ k: "top" }, { k: "mid" }, { k: "bot" }])
       .flow(spread({ dir: "y", spacing: 14, reverse: true }))
       .mark(image({ href: bottlePng, w: 193, h: 600 }).cut({ dir: "y" }))
       .render(container, { w: args.w, h: args.h, axes: false });
@@ -245,7 +245,7 @@ export const ImageEqualSlices: StoryObj<Args> = {
 };
 
 /** Low-level form: the pure `cut(source, opts)` primitive returns an array of
- *  slice nodes that drops straight into a Spread combinator — no Chart, no
+ *  slice nodes that drops straight into a Spread combinator — no chart, no
  *  async plumbing. With `datum()` weights (relative, normalized to the source
  *  height) this is visually IDENTICAL to ImageCut, which derives the same
  *  weights from the `amount` field. */
@@ -441,7 +441,7 @@ export const ImageHorizontalCut: StoryObj<Args> = {
       { label: "V", weight: 1 },
     ];
 
-    Chart(data)
+    chart(data)
       .flow(spread({ dir: "x", spacing: 12 }))
       .mark(
         image({ href: bottlePng, w: 193, h: 600 }).cut({

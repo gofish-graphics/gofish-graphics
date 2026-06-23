@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
 import { seafood } from "../../src/data/catch";
 import { streamgraphData } from "../../src/data/streamgraphData";
-import { Chart, spread, blank, stack, layer, selectAll } from "../../src/lib";
+import { chart, spread, blank, stack, layer, selectAll } from "../../src/lib";
 import { area, group } from "../../src/lib";
 
 const meta: Meta = {
@@ -36,7 +36,7 @@ export const Basic: StoryObj<Args> = {
     // six lakes are spread to span `args.w` (five gaps between them) instead of
     // a fixed pixel spacing, which would leave the canvas partly empty.
     const lakes = 6;
-    Chart(seafood, { axes: true })
+    chart(seafood, { axes: true })
       .flow(spread({ by: "lake", dir: "x", spacing: args.w / (lakes - 1) }))
       .mark(blank({ h: "count" }))
       .connect(area({ opacity: 0.8 }))
@@ -62,14 +62,14 @@ export const Stacked: StoryObj<Args> = {
     const container = initializeContainer();
 
     layer([
-      Chart(seafood)
+      chart(seafood)
         .flow(
           spread({ by: "lake",  dir: "x", spacing: 64 }),
           stack({ by: "species",  dir: "y" })
         )
         .mark(blank({ h: "count", fill: "species" }).name("bars")),
-      Chart(selectAll("bars"))
-        .flow(group({ by: "datum.species" }))
+      chart(selectAll("bars"))
+        .flow(group({ by: "species" }))
         .mark(area({ opacity: 0.8 })),
     ]).render(container, {
       w: args.w,
@@ -93,11 +93,11 @@ export const Layered: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
     layer([
-      Chart(streamgraphData)
+      chart(streamgraphData)
         .flow(spread({ by: "x",  dir: "x", spacing: 50 }), group({ by: "c" }))
         .mark(blank({ h: "y", fill: "c" }).name("points")),
-      Chart(selectAll("points"))
-        .flow(group({ by: "datum.c" }))
+      chart(selectAll("points"))
+        .flow(group({ by: "c" }))
         .mark(area({ opacity: 0.7 })),
     ]).render(container, {
       w: 500,

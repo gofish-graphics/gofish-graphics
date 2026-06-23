@@ -1,22 +1,26 @@
 import type { GoFishAST } from "../_ast";
 import { GoFishNode, type Placeable } from "../_node";
 import { isToken, type Token } from "../createName";
-import { getMeasure, getValue, isValue, type Measure } from "../data";
+import {
+  getMeasure,
+  getValue,
+  isValue,
+  type MaybeValue,
+  type Measure,
+} from "../data";
 import { mergeMeasures } from "../underlyingSpace";
 import * as Interval from "../../util/interval";
-import { applyAlign, createAlignConstraint } from "./align";
-import { applyDistribute, createDistributeConstraint } from "./distribute";
-import { shadowCheckConstraint, solverCheckEnabled } from "../solver/shadow";
-import { applyPosition, createPositionConstraint } from "./position";
+import { createAlignConstraint } from "./align";
+import { createDistributeConstraint } from "./distribute";
+import { createPositionConstraint } from "./position";
 import {
   createZAboveConstraint,
   createZBelowConstraint,
   isZOrderConstraint,
 } from "./zorder";
-import { applyNest, createNestConstraint, isNestConstraint } from "./nest";
-import { applyGrid, createGridConstraint, isGridConstraint } from "./grid";
+import { createNestConstraint } from "./nest";
+import { createGridConstraint, isGridConstraint } from "./grid";
 import {
-  applySpan,
   createSpanConstraint,
   isSpanConstraint,
   spanDatumInterval,
@@ -28,11 +32,8 @@ import type { ZAboveConstraint, ZBelowConstraint } from "./zorder";
 import type { NestConstraint, NestOptions } from "./nest";
 import type { GridConstraint, GridOptions } from "./grid";
 import type { SpanConstraint, SpanOptions } from "./span";
-import {
-  isPlacedOn,
-  type ConstraintPosScales,
-  type ConstraintRef,
-} from "./shared";
+import { type ConstraintPosScales, type ConstraintRef } from "./shared";
+import { solvePlacementConstraints } from "./placementSolver";
 
 export type {
   Axis,
@@ -55,6 +56,7 @@ export { isZOrderConstraint } from "./zorder";
 export { isNestConstraint, nestedSpace } from "./nest";
 export { isGridConstraint, gridSpaces, gridCellSize } from "./grid";
 export { isSpanConstraint } from "./span";
+export { getPositioningConstraintRefs } from "./proposalPlan";
 export { BBox } from "./bbox";
 
 export type ConstraintSpec =
@@ -143,33 +145,6 @@ export function collectConstraintRefs(
 }
 
 /**
- * The set of names referenced by *positioning* constraints (`align` /
- * `distribute` / `nest`). Used by `layer.tsx` to compute `constrainedNames`,
- * which controls phase-1 baseline-placement skipping. z-order constraints don't
- * position, so they must be excluded.
- *
- * `nest` is special: only the inner child (`children[1]`) skips baseline
- * placement. The outer child (`children[0]`) is left in the set so phase-1
- * places it at baseline — `applyNest` reads outer's placed position to
- * center inner inside it.
- */
-export function getPositioningConstraintRefs(
-  constraints: ConstraintSpec[]
-): Set<string> {
-  const names = new Set<string>();
-  for (const c of constraints) {
-    if (isZOrderConstraint(c)) continue;
-    if (isNestConstraint(c)) {
-      names.add(c.children[1].name);
-      continue;
-    }
-    // grid: every cell is placed by `applyGrid`, so all skip phase-1 baseline.
-    for (const ref of c.children) if (ref) names.add(ref.name);
-  }
-  return names;
-}
-
-/**
  * Fold the *datum* coordinates of any `position` constraints into a per-axis
  * data interval. This is the constraint system's *fragment* of underlying-space
  * resolution: a `Constraint.position({ y: datum(v) })` declares that its target
@@ -201,7 +176,7 @@ export function collectPositionDomains(constraints: ConstraintSpec[]): {
     coord: PositionConstraint["x"]
   ): Interval.Interval | undefined => {
     if (!isValue(coord)) return acc;
-    const n = getValue(coord);
+    const n = getValue(coord as MaybeValue<number>);
     const iv = Interval.interval(n, n);
     return acc ? Interval.unionAll(acc, iv) : iv;
   };
@@ -252,13 +227,14 @@ export function collectPositionDomains(constraints: ConstraintSpec[]): {
 }
 
 /**
- * Apply *positioning* constraints to a set of placeables. z-order constraints
- * are skipped here — they are resolved at render time, not layout time.
+ * Apply a layer's constraints as one relational placement problem. `span`
+ * contributes extent facts to the same solve, so declaration order cannot choose
+ * whether size or position wins. z-order constraints are resolved separately at
+ * render time.
  *
- * @param constraints - The constraint specs to apply in order
+ * @param constraints - The constraint specs to compose
  * @param nameToPlaceable - Map from child name to its Placeable
- * @param sizes - The layer's box size `[w, h]`, used to derive an unanchored
- *   `align`'s fallback baseline (layer-box edge) per axis
+ * @param sizes - The layer's box size `[w, h]`, used by grid placement
  * @param posScales - Per-axis data→pixel scales for `position` constraints
  */
 export function applyConstraints(
@@ -267,45 +243,16 @@ export function applyConstraints(
   sizes: [number, number],
   posScales?: ConstraintPosScales
 ): void {
-  for (const constraint of constraints) {
-    if (isZOrderConstraint(constraint)) continue;
-
-    if (isNestConstraint(constraint)) {
-      const outer = nameToPlaceable.get(constraint.children[0].name);
-      const inner = nameToPlaceable.get(constraint.children[1].name);
-      if (outer && inner) applyNest(constraint, outer, inner);
-      continue;
-    }
-
-    if (isGridConstraint(constraint)) {
-      applyGrid(constraint, nameToPlaceable, sizes);
-      continue;
-    }
-
-    const targets = constraint.children
-      .map((ref) => nameToPlaceable.get(ref.name))
-      .filter((p): p is Placeable => p !== undefined);
-
-    if (targets.length === 0) continue;
-
-    // Solver shadow (#39, disposable observe→assert): snapshot each target's
-    // per-axis placement BEFORE the constraint runs — only when the check is on,
-    // so production pays nothing. The single hook below dispatches/no-ops.
-    const prePlaced = solverCheckEnabled()
-      ? targets.map(
-          (t) => [isPlacedOn(t, 0), isPlacedOn(t, 1)] as [boolean, boolean]
-        )
-      : undefined;
-
-    if (constraint.type === "align") {
-      applyAlign(constraint, targets, sizes, posScales);
-    } else if (constraint.type === "position") {
-      applyPosition(constraint, targets, posScales);
-    } else if (isSpanConstraint(constraint)) {
-      applySpan(constraint, targets, posScales);
-    } else {
-      applyDistribute(constraint, targets);
-    }
-    shadowCheckConstraint(constraint, targets, posScales, prePlaced);
-  }
+  const placement = constraints.filter(
+    (
+      constraint
+    ): constraint is
+      | AlignConstraint
+      | DistributeConstraint
+      | PositionConstraint
+      | SpanConstraint
+      | NestConstraint
+      | GridConstraint => !isZOrderConstraint(constraint)
+  );
+  solvePlacementConstraints(placement, nameToPlaceable, sizes, posScales);
 }

@@ -23,6 +23,8 @@ import {
   blank,
   circle,
   derive,
+  resolve as resolveOp,
+  selectAll,
   intersect,
   layer,
   line,
@@ -178,6 +180,18 @@ export const OPERATOR_MAP: Record<
           ? setMeasureProvenance(result, provenance)
           : result;
       return Array.isArray(d) ? tagged : (tagged[0] ?? null);
+    });
+  },
+  resolve: (opts) => {
+    if (typeof opts.from !== "string") {
+      throw new Error(
+        "resolve operator IR is missing a string `from` (the layer name to " +
+          "resolve against) — the Python/JS emitters always include it."
+      );
+    }
+    return resolveOp(opts.cols as string[], {
+      from: selectAll(opts.from),
+      key: opts.key as string | undefined,
     });
   },
   spread: (opts) => spread(opts as any),

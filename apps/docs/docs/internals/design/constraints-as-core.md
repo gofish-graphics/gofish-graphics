@@ -192,7 +192,7 @@ In this picture each constraint kind is a pair:
 | facet                        | direction             | role                                                                                                 |
 | ---------------------------- | --------------------- | ---------------------------------------------------------------------------------------------------- |
 | **space fold** (typing rule) | bottom-up, pre-layout | compose child claims into the layer's claim; merge measures (throw or forget per the existing rules) |
-| **placement rule**           | post-child-layout     | today's `applyAlign` / `applyDistribute` / `applyPosition` on `Placeable.place()`                    |
+| **placement rule**           | post-child-layout     | emit pins/relations into `placementSolver.ts`, then commit atomically to each target                 |
 
 and the Layer's layout becomes a fixed pipeline: resolve size → solve σ per
 axis from the folded claim → propose per-child sizes (claim at σ, else fill
@@ -259,18 +259,16 @@ Two findings sharpen the theory:
   move. In other words: the placement halves were already equivalent; the
   entire semantic content of "spread beyond align + distribute" lives in
   `resolveUnderlyingSpace`.
-- **The align-fallback divergence, now unified (#552).** Spread's
-  `alignChildren` and `applyAlign` once used different no-sibling fallbacks —
-  spread seated the cross-axis baseline at `posScale(0)`, the constraint on the
-  layer box (`{start: 0, middle: size/2, end: size}`) — coinciding at `"start"`
-  but diverging at `"end"`/`"middle"`. They now share one fallback that
-  dispatches on the axis's underlying-space kind, not the call site: a
-  posScale-carrying (POSITION) axis falls back to the scale origin `posScale(0)`,
-  a pixel-pure axis to the layer-box edge. Both callsites resolve the same
-  `alignSpaceFold` space and posScale, so spread/constraint pairs are now exact
-  at every anchor. The only remaining per-callsite difference is the
-  `readPlaced` reader for an already-placed sibling (the constraint reads real
-  extents/origin; spread pins baseline-reads to 0), which is out of scope.
+- **The align-fallback divergence, now unified (#552).** Spread's legacy align
+  walk and the constraint path once used different no-sibling fallbacks — spread
+  seated the cross-axis baseline at `posScale(0)`, the constraint on the layer
+  box (`{start: 0, middle: size/2, end: size}`) — coinciding at `"start"` but
+  diverging at `"end"`/`"middle"`. The placement solver now owns the fallback
+  and dispatches on the axis's underlying-space kind, not the call site: a
+  posScale-carrying (POSITION) axis falls back to the scale origin
+  `posScale(0)`, a pixel-pure axis to the layer-box edge. Spread and
+  hand-written constraints both lower to that solver path, so the pairs are now
+  exact at every anchor.
 
 ## Operator-by-operator reduction
 
@@ -364,10 +362,16 @@ second write and spread warns; Bluefish throws with ownership info. Recommend:
 keep write-once ownership, upgrade the silent no-op to a structured error at
 the Layer, and reject cycles as z-order already does (Kahn's algorithm).
 
-**5. Order of application.** Constraints apply in declaration order with
-first-placed-anchor semantics. That is expressive (it is how axis elaboration
-chains placements today) but means the compiled form must emit constraints in
-a canonical order. Fine for compilation; document it for hand-written use.
+**5. Order of application.** Resolved for known-size placement and span extents:
+align, distribute, position, span, nest-centering, and grid constraints compose
+into one per-axis relation graph and are solved independently of declaration
+order. Span contributes an extent fact (`min`, `max`, hence `size`) before the
+graph is emitted, so non-start anchors on spanned nodes reduce to the same
+`min + offset` relations as known-size nodes. Strong pins and self-placement
+anchor components; otherwise a deterministic weak-origin policy removes the
+remaining translation degree of freedom. Proposal-dependent sizing (nest
+proposals, grid track sizing, and the broader size-claim algebra) still runs
+before this pass and is the remaining generalization.
 
 ## Complexity and what the "solver" actually is
 
@@ -392,9 +396,10 @@ stacks of data-sized rects) inverts in O(1) with **zero** numeric search;
 (2) a per-axis **one-unknown** inversion — closed-form for linear claims,
 bracketed bisection hard-capped at ~70 closure evaluations for `unknown`
 claims (`util.ts:9-54`; produced by center mode, `max` over different
-intercepts, mixed compositions); (3) single-pass local propagation for
-placement in declaration order with write-once ownership — "the dumb thing,"
-kept deliberately. So: Bluefish-class local propagation for positions, plus an
+intercepts, mixed compositions); (3) a per-axis equality-graph solve for
+placement once each anchor's size offset is known (including span extents),
+with atomic commit and contradiction diagnostics. So: Bluefish-class local
+propagation for positions, plus an
 analytic one-unknown size solve Bluefish lacked. The known superlinear
 lurkers, both pre-existing and shared with operators today: nested
 _non-linear_ folds make an ancestor's inversion cost O(subtree closure size · 70) (mitigated by the linear fast path; could memoize `run` per σ), and
@@ -404,10 +409,10 @@ layer in the worst case (memoizable). Neither is quadratic in spec size.
 **Brittleness and linear-cost robustness fixes.** Today's constraint path is
 brittle in five identifiable ways, none of which needs a cleverer solver:
 
-1. _Declaration-order sensitivity_ — first-placed-anchor semantics plus
-   guessy fallbacks when nothing is placed. Fix: canonical emission order for
-   compiled forms (free) and a topological pre-sort of hand-written
-   constraints by shared targets (O(V+E)).
+1. _Declaration-order sensitivity_ — resolved for known-size placement and span
+   extents by the per-axis relation graph. The remaining order boundary is
+   proposal-dependent sizing: nest/grid proposal sizing still runs before
+   placement rather than as one general relation system.
 2. _Silent conflict swallowing_ — `place()` no-ops on the second write. Fix:
    record an owner per (node, axis) — O(1) per write — and report both
    writers, exactly Bluefish's `bboxOwners`.
@@ -452,12 +457,11 @@ suggest it will not be needed.
 
 ## Suggested staging (refactor-first)
 
-1. ✅ **Consolidate the two align implementations** — done: `alignTargets`
-   (`constraints/align.ts`) is the single walk. The end/middle fallback
-   divergence was then unified (#552): a single space-kind-dispatched
-   `alignFallbackBaseline` (posScale → scale origin, pixel-pure → box edge)
-   replaced the two policies, so the only remaining per-callsite difference is
-   the `readPlaced` reader for an already-placed sibling.
+1. ✅ **Consolidate the two align implementations** — done: spread and
+   hand-written constraints now lower to the same placement solver. The
+   end/middle fallback divergence was unified (#552): a single
+   space-kind-dispatched fallback (posScale → scale origin, pixel-pure → box
+   edge) replaced the old call-site policies.
 2. ✅ **Constraint space folds + Layer budget solve** — done:
    `distributeSpaceFold` (full spread dispatch incl. glue/explicit-size),
    `alignSpaceFold`, `allocateSlices`, per-axis composition in the layer with

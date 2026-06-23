@@ -27,12 +27,12 @@ ref(target: str | Token) -> Ref
 
 ### String — layer-local
 
-`ref("x")` walks up the parent chain to the nearest `Layer` and picks the direct child named `.name("x")`. Strings do **not** cross component boundaries.
+`ref("x")` walks up the parent chain to the nearest `layer` and picks the direct child named `.name("x")`. Strings do **not** cross component boundaries.
 
 ```python
-from gofish import Layer, rect, ref
+from gofish import layer, rect, ref
 
-Layer([
+layer([
     rect(w=80, h=40).name("bg"),
     ref("bg"),  # resolves to the rect above
 ])
@@ -43,11 +43,11 @@ Layer([
 A `Token` (from `createName`) is a unique value. `.name(token)` registers the node in a global token context; `ref(token)` retrieves it.
 
 ```python
-from gofish import Layer, rect, ref, createName
+from gofish import layer, rect, ref, createName
 
 target_name = createName("target")
 
-Layer([
+layer([
     rect(w=80, h=40).name(target_name),
     # ...somewhere in a sibling subtree:
     ref(target_name),

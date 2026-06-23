@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
 import { catchLocationsArray, seafood, catchLocations } from "../../src/data/catch";
 import { drivingShifts } from "../../src/data/drivingShifts";
-import { Chart, line, rect, stack } from "../../src/lib";
+import { chart, line, rect, stack } from "../../src/lib";
 import { circle, scatter } from "../../src/lib";
 import { clock } from "../../src/ast/coordinateTransforms/clock";
 import _ from "lodash";
@@ -27,7 +27,7 @@ export const Basic: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    Chart(catchLocationsArray, { axes: true })
+    chart(catchLocationsArray, { axes: true })
       .flow(scatter({ by: "lake",  x: "x", y: "y" }))
       .mark(circle({ r: 5 }))
       .render(container, {
@@ -52,7 +52,7 @@ export const Connected: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    Chart(drivingShifts, { axes: true })
+    chart(drivingShifts, { axes: true })
       .flow(scatter({ by: "year", x: "miles", y: "gas" }))
       .mark(circle({ r: 4, fill: "white", stroke: "black", strokeWidth: 2 }))
       .connect(line({ stroke: "black", strokeWidth: 2 }))
@@ -91,10 +91,10 @@ export const WithPieGlyphs: StoryObj<Args> = {
       }))
       .value();
 
-    Chart(scatterData, { axes: true })
+    chart(scatterData, { axes: true })
       .flow(scatter({ by: "lake",  x: "x", y: "y" }))
       .mark((data) =>
-        Chart(data[0].collection, { coord: clock() })
+        chart(data[0].collection, { coord: clock() })
           .flow(stack({ by: "species",  dir: "x", /* h: "count" */ h: 20 }))
           .mark(rect({ w: "count", fill: "species" }))
       )

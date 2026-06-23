@@ -21,13 +21,7 @@ import { getValue, isValue, type MaybeValue } from "../data";
 import { computeAesthetic, envFlag } from "../../util";
 import { localAnchorPoint } from "../dims";
 import type { ConstraintSpec, ConstraintPosScales } from "../constraints";
-import {
-  isSIZE,
-  isPOSITION,
-  isDIFFERENCE,
-  type UnderlyingSpace,
-} from "../underlyingSpace";
-import * as Interval from "../../util/interval";
+import { isCONTINUOUS, type UnderlyingSpace } from "../underlyingSpace";
 
 /** Whether the solver shadow assertions run. Off (and zero-cost) in prod, so the
  *  per-constraint pre-state capture the checks need is only built when set. */
@@ -58,9 +52,9 @@ interface DistributeLike {
  * Check the edge-distribute CONTIGUITY invariant the engine enforces on its
  * output: consecutive targets satisfy `child[i+1].min == child[i].max + spacing`.
  * This is anchor-agnostic — which child anchored the walk only sets the absolute
- * offset, not the spacing relation — which matters because the shadow runs AFTER
- * `applyDistribute`, by which point every target is placed (so the pre-placement
- * anchor distinction is gone).
+ * offset, not the spacing relation — which matters because the shadow runs after
+ * the placement solver, by which point every target is placed (so the
+ * pre-placement anchor distinction is gone).
  *
  * The solver expresses it as an origin chain: seed the first target at its real
  * position (boundary condition), then predict each subsequent child's `min` via
@@ -152,11 +146,12 @@ function anchorCoord(
  * this directly tests that aligned origins coincide — the intercept thesis).
  *
  * Only validate targets align actually placed: a target pre-placed on the axis
- * is left untouched (it may define or differ from the baseline), and the
- * data-positioned guard can make align a no-op (it returns without placing, so
- * the not-pre-placed targets stay unplaced). Both are detected via `prePlaced`
- * (captured before `applyAlign`) + a post-check that the rest are now placed;
- * heterogeneous per-child anchor arrays are skipped (no single shared line).
+ * is left untouched (it may define or differ from the baseline), and align
+ * leaves a self-positioned child unplaced (it skips a target whose own
+ * `placement` is already determined, so it stays unplaced). Both are detected
+ * via `prePlaced` (captured before the placement solver) + a post-check that the
+ * rest are now placed; heterogeneous per-child anchor arrays are skipped (no
+ * single shared line).
  */
 export function shadowCheckAlign(
   constraint: AlignLike,
@@ -166,8 +161,8 @@ export function shadowCheckAlign(
 ): void {
   if (!enabled() || constraint.type !== "align") return;
   // Across all 189 stories this covers 2751 aligns with zero divergences; 959
-  // are single-target (nothing to compare), 49 hit the data-positioned guard
-  // no-op, 2 use heterogeneous per-child anchor arrays — all deferred here.
+  // are single-target (nothing to compare), 49 leave a self-positioned child
+  // unplaced, 2 use heterogeneous per-child anchor arrays — all deferred here.
   for (const axis of ["x", "y"] as const) {
     const spec = constraint[axis];
     if (spec === undefined || Array.isArray(spec)) continue; // uniform anchor only
@@ -178,7 +173,7 @@ export function shadowCheckAlign(
     targets.forEach((t, i) => {
       if (prePlaced[i][idx]) return; // pre-placed: align leaves it untouched
       if (!isPlacedOn(t, idx)) {
-        guardOrPartial = true; // align didn't place it → data-positioned guard no-op
+        guardOrPartial = true; // align skipped it (self-positioned) or partial
         return;
       }
       placedByAlign.push(t);
@@ -254,8 +249,8 @@ export function shadowCheckPosition(
 /**
  * Check the σ-SCOPE solve — the heart of the affine model. A `scaleRoot` (a
  * `shared` layer axis) resolves σ from its box by the frame equation
- * `content(σ) = allocated`: the engine solves it backward (`domain.inverse(size)`
- * for SIZE, `size / width` for POSITION/DIFFERENCE; `layer.tsx`). The shadow
+ * `content(σ) = allocated`: the engine solves it backward (`width.inverse(size)`
+ * for every continuous extent; `layer.tsx`). The shadow
  * checks it FORWARD — evaluate the scope's σ-affine content at the engine's
  * solved σ and assert it equals the allocated box. This validates the frame
  * equation actually closes, and notably catches σ-resolution that DEGENERATED
@@ -269,14 +264,11 @@ export function shadowCheckScaleRoot(
   axisIdx: 0 | 1
 ): void {
   if (!enabled() || sigma === undefined || !Number.isFinite(allocated)) return;
-  // Across all 189 stories this closes the frame equation for every σ-scope with
-  // zero divergences: 3 SIZE (the root resolution — most charts are
-  // POSITION-rooted), 174 POSITION + 1 DIFFERENCE (nested `shared` scopes).
+  // Every continuous σ-scope closes the same frame equation: the extent at σ is
+  // `width.run(σ)` (anchored or not — a former POSITION/DIFFERENCE width is just
+  // `linear(extent, 0)`, so `run(σ) = extent·σ`).
   let content: number | undefined;
-  if (isSIZE(sp)) content = sp.domain.run(sigma);
-  else if (isPOSITION(sp) && sp.domain)
-    content = Interval.width(sp.domain) * sigma;
-  else if (isDIFFERENCE(sp)) content = sp.width * sigma;
+  if (isCONTINUOUS(sp)) content = sp.width.run(sigma);
   if (content === undefined) return;
   if (Math.abs(content - allocated) > 1e-6) {
     report(`scaleRoot.frame axis=${axisIdx}`, content, allocated);

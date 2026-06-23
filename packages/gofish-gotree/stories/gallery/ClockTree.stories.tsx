@@ -1,0 +1,132 @@
+import type { Meta, StoryObj } from "@storybook/html";
+import { rect, polar } from "gofish-graphics";
+import { combine, byDepth, mount } from "./_shared";
+
+// GoTree gallery port — ClockTree (nodes arranged around a clock-face ring).
+// dsl: Element{Node:rectangle, RootHeight:rdepth, Color:depth} ; Link none ;
+//   Layout bottom-up X{Subtree:flatten, Root:juxtapose} Y{Subtree:align,
+//   Root:within/bottom} ; CoordinateSystem polar {StartAngle:0.01,
+//   InnerRadius:0.72}.
+//
+// MAPPING. Under polar(): x = θ (radians 0..2π), y = r (radius). Brief mapping:
+//   parentChild = (distribute θ, align r)
+//   sibling     = (distribute θ, align r)
+//   Both relationships distribute on θ and align on r — i.e. EVERY node (parents
+//   and children alike) gets its own angular slot, and they all share one radial
+//   band. Relation → kind: X.flatten/juxtapose → distribute; Y.align/within →
+//   align. The nested distributes-on-θ compose into a single flat angular
+//   sequence (the bottom-up "flatten"): each node tiles one wedge of the disc.
+//
+// EMBEDDED-DIMENSION WEDGE. Each node is a rect whose θ-dimension (width, emX)
+// is measured in radians so it SWEEPS an arc, and whose r-dimension (height,
+// emY) is a radial band. thetaPerNode = 2π / N_total tiles the full circle when
+// summed by the edge-mode θ-distribute (spacing 0). RootHeight:rdepth → height
+// grows with reverse-depth (d.height): the root is the tallest wedge (reaching
+// furthest), leaves the shortest. Color:depth → byDepth() ramp, root darkest.
+//
+// NOTES — polar features in the dsl that gofish's polar() CANNOT express
+// (no options, no hacks; flagged, not faked):
+//  - InnerRadius: 0.72 is NOT achievable. The dsl asks for a THIN OUTER RING
+//    (the disc is hollow from r=0 to r=0.72·R, nodes live in the rim) — a true
+//    clock face. polar() has no inner-radius knob and our disc ALWAYS starts at
+//    r=0, so we render a filled disc of wedges fanning out from the center, not
+//    a hollow rim. This is the single biggest fidelity gap vs. the reference.
+//  - StartAngle: 0.01 — polar() has no start-angle knob; the disc always begins
+//    at the same fixed angle.
+//  - bottom-up Mode / Root within/bottom alignment: the dsl pins the rim to the
+//    OUTER edge and grows RootHeight inward. We can only align r (middle here),
+//    so wedges are centered on the shared band, not edge-anchored to a rim.
+//  - NO angular auto-fit: angle is NOT allocated by the layout engine from the
+//    node count. thetaPerNode is hand-set to 2π / N_total and summed by
+//    edge-distribute. In practice the realized sweep falls SHORT of the full 2π
+//    (the disc is a partial fan, not a closed ring) — the nested distribute
+//    layers don't sum their angular bounding boxes to exactly N·thetaPerNode, so
+//    without an auto-fit pass the wedges under-fill the circle. A different node
+//    count or width would instead overflow and wrap. GoTree allocates angle
+//    automatically; gofish-gotree has no such pass.
+//  - Direction / CentralAngle: no clockwise/CCW swap, no sub-2π sweep — the
+//    budget is always the full 2π disc.
+//  - polarTransposed() is currently identical to polar() (both map x→θ), so the
+//    PolarAxis θ/r swap is a no-op; not used here.
+//  - Link is "none" in the dsl (a clock face has no connecting edges) — correct
+//    here; nothing to draw.
+const meta: Meta = { title: "GoTree / Gallery / ClockTree" };
+export default meta;
+
+// A moderately bushy tree so the rim is densely populated (like the reference,
+// ~30 wedges of varying depth-color). thetaPerNode is derived from the live
+// node count below so the wedges tile the full circle exactly.
+const clockTree = {
+  name: "root",
+  children: [
+    { name: "A", children: [{ name: "A1" }, { name: "A2" }, { name: "A3" }] },
+    {
+      name: "B",
+      children: [
+        { name: "B1" },
+        {
+          name: "B2",
+          children: [{ name: "B2a" }, { name: "B2b" }, { name: "B2c" }],
+        },
+        { name: "B3" },
+      ],
+    },
+    { name: "C", children: [{ name: "C1" }, { name: "C2" }] },
+    {
+      name: "D",
+      children: [
+        { name: "D1" },
+        { name: "D2", children: [{ name: "D2a" }, { name: "D2b" }] },
+        { name: "D3" },
+        { name: "D4" },
+      ],
+    },
+    { name: "E", children: [{ name: "E1" }, { name: "E2" }, { name: "E3" }] },
+  ],
+};
+
+const countNodes = (n: any): number =>
+  1 + (n.children?.reduce((s: number, c: any) => s + countNodes(c), 0) ?? 0);
+
+const N_TOTAL = countNodes(clockTree); // every node gets one angular slot
+const thetaPerNode = (2 * Math.PI) / N_TOTAL; // hand-allocated θ share (no auto-fit)
+const bandUnit = 26; // radial thickness unit; node height = (rdepth+1)*bandUnit
+
+// Wedge node: width in θ-units (emX) sweeps an arc; height in r-units (emY) is
+// the radial band. RootHeight:rdepth → height grows with d.height (subtree
+// height): root tallest, leaves shortest.
+const node = (d: any) =>
+  rect({
+    w: thetaPerNode,
+    h: (d.height + 1) * bandUnit,
+    emX: true,
+    emY: true,
+    fill: byDepth()(d),
+    stroke: "white",
+    strokeWidth: 1.5,
+  });
+
+export const ClockTree: StoryObj = {
+  render: () =>
+    mount(
+      {
+        node,
+        link: "none",
+        parentChild: combine({
+          // θ: parent and its child-group take adjacent angular slots.
+          x: { kind: "distribute", spacing: 0, mode: "edge" },
+          // r: parent and group share the radial band.
+          y: { kind: "align", alignment: "middle" },
+        }),
+        sibling: combine({
+          // θ: siblings tile angularly (edge mode sums θ-widths).
+          x: { kind: "distribute", spacing: 0, mode: "edge" },
+          // r: siblings share the same radial band.
+          y: { kind: "align", alignment: "middle" },
+        }),
+        coord: polar(),
+      },
+      { w: 540, h: 540 },
+      clockTree
+    ),
+};

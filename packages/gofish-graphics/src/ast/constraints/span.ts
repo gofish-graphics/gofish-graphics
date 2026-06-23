@@ -4,9 +4,10 @@
 
 import type { Placeable } from "../_node";
 import { getValue, isValue, MaybeValue } from "../data";
-import { computeAesthetic } from "../../util";
-import { Axis, ConstraintPosScales, ConstraintRef, axisIndex } from "./shared";
+import { ConstraintRef, Axis } from "./shared";
+import { BBox, type BBoxFacet } from "./bbox";
 import * as Interval from "../../util/interval";
+import { edgePinFact, type PlacementEdgePin } from "./placementFacts";
 
 /**
  * A **size-setting** constraint (#39/#546): pin BOTH edges of each target on an
@@ -27,6 +28,30 @@ export interface SpanConstraint {
   x?: [MaybeValue<number>, MaybeValue<number>];
   y?: [MaybeValue<number>, MaybeValue<number>];
   children: ConstraintRef[];
+}
+
+/** One lowered span edge plus the resolved target needed to derive extent metadata. */
+export interface SpanEdgeClaim {
+  fact: PlacementEdgePin;
+  target: Placeable;
+}
+
+interface SpanGroup {
+  name: string;
+  target: Placeable;
+  axis: Axis;
+  bbox: BBox;
+  owner: string;
+}
+
+export interface SpanExtent {
+  type: "span-extent";
+  name: string;
+  axis: Axis;
+  min: number;
+  max: number;
+  owner: string;
+  size: number;
 }
 
 export interface SpanOptions {
@@ -63,58 +88,97 @@ export function spanDatumInterval(
   return Interval.interval(Math.min(...vals), Math.max(...vals));
 }
 
-/** One emitted span equation: the target OWNS both edges (`min`, `max`) on
- *  `axis` — two facets, rank 2, so the size falls out. */
-export interface SpanPlacement {
-  target: Placeable;
-  axis: Axis;
-  owned: { min: number; max: number };
-}
-
-/**
- * EMIT a `span` as facet-equation sets (#39 facet-equation-emitter form) WITHOUT
- * applying them: resolve each axis's `[min, max]` to pixels (datum → posScale,
- * literal as-is) and pair both owned edges with each target. A datum endpoint on
- * a scale-less axis is a no-op (skipped). Pure — only resolves coordinates.
- */
-export function emitSpan(
+export function lowerSpanEdgePins(
   constraint: SpanConstraint,
-  targets: Placeable[],
-  posScales: ConstraintPosScales | undefined
-): SpanPlacement[] {
-  const out: SpanPlacement[] = [];
+  targets: Map<string, Placeable>,
+  owner: string,
+  resolveCoordinate: (
+    axis: Axis,
+    coordinate: MaybeValue<number>
+  ) => number | undefined
+): SpanEdgeClaim[] {
+  const out: SpanEdgeClaim[] = [];
   const emitAxis = (
     axis: Axis,
     span: [MaybeValue<number>, MaybeValue<number>] | undefined
   ) => {
     if (span === undefined) return;
-    const scale = posScales?.[axisIndex(axis)];
-    const toPx = (coord: MaybeValue<number>): number | undefined => {
-      if (isValue(coord) && scale === undefined) return undefined; // datum, no scale
-      return computeAesthetic(coord, scale!, undefined)!;
-    };
-    const min = toPx(span[0]);
-    const max = toPx(span[1]);
+    const min = resolveCoordinate(axis, span[0]);
+    const max = resolveCoordinate(axis, span[1]);
     if (min === undefined || max === undefined) return;
-    for (const target of targets)
-      out.push({ target, axis, owned: { min, max } });
+    for (const child of constraint.children) {
+      const target = targets.get(child.name);
+      if (!target) continue;
+      out.push(
+        {
+          fact: edgePinFact(child.name, axis, "min", min, owner),
+          target,
+        },
+        {
+          fact: edgePinFact(child.name, axis, "max", max, owner),
+          target,
+        }
+      );
+    }
   };
   emitAxis("x", constraint.x);
   emitAxis("y", constraint.y);
   return out;
 }
 
-/**
- * Commit the emitted span equations: hand each target's owned edges to
- * `setExtent` — the bbox-backed primitive that solves the extent (two edges ⇒
- * rank 2 ⇒ size) and records the node's geometry. The emit/commit seam is where a
- * per-scope solver slots in (consume {@link emitSpan} instead of solving here).
- */
-export function applySpan(
-  constraint: SpanConstraint,
-  targets: Placeable[],
-  posScales: ConstraintPosScales | undefined
-): void {
-  for (const p of emitSpan(constraint, targets, posScales))
-    p.target.setExtent!(p.axis, p.owned, "span");
+export function collectSpanExtents(placements: SpanEdgeClaim[]): SpanExtent[] {
+  const byTarget = new Map<Placeable, [SpanGroup?, SpanGroup?]>();
+  const groups: SpanGroup[] = [];
+  for (const placement of placements) {
+    const { fact } = placement;
+    const idx = fact.axis === "x" ? 0 : 1;
+    let axes = byTarget.get(placement.target);
+    if (!axes) {
+      axes = [undefined, undefined];
+      byTarget.set(placement.target, axes);
+    }
+    let group = axes[idx];
+    if (!group) {
+      group = {
+        name: fact.name,
+        target: placement.target,
+        axis: fact.axis,
+        bbox: new BBox(),
+        owner: fact.owner,
+      };
+      axes[idx] = group;
+      groups.push(group);
+    }
+
+    const conflict = group.bbox.add(
+      fact.edge as BBoxFacet,
+      fact.value,
+      fact.owner
+    );
+    if (conflict) {
+      throw new Error(
+        `Constraint span conflict on ${fact.axis}: ${conflict.owner} ` +
+          `asserts ${conflict.facet}=${conflict.asserted}, but ` +
+          `${conflict.priorOwner} implies ${conflict.implied}`
+      );
+    }
+  }
+
+  return groups.flatMap((group) => {
+    const min = group.bbox.read("min");
+    const max = group.bbox.read("max");
+    if (min === undefined || max === undefined) return [];
+    const size = max - min;
+    return [
+      {
+        type: "span-extent",
+        name: group.name,
+        axis: group.axis,
+        min,
+        max,
+        size,
+        owner: group.owner,
+      },
+    ];
+  });
 }

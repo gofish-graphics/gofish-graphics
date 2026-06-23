@@ -4,7 +4,7 @@ import { initializeContainer } from "../helper";
 
 import { table } from "../../src/lib";
 
-import { Chart, Treemap, circle, derive, rect, repeat, spread, palette } from "../../src/lib";
+import { chart, Treemap, circle, derive, rect, repeat, spread, palette } from "../../src/lib";
 import {
   titanicPassengers,
   type TitanicPassenger,
@@ -40,11 +40,11 @@ export const Default: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
     
-     Chart(titanicPassengers, { color: palette(["#2b8cbe", "#ff8408"]) })
+     chart(titanicPassengers, { color: palette(["#2b8cbe", "#ff8408"]) })
         .flow(table({
                 by: {x: "pclass", y: "sex"},
               }))
-      .mark((d) => Chart(d)
+      .mark((d) => chart(d)
             .flow(
               derive((rows) => orderBy(rows, ["survived"], ["desc"])),
               derive((rows) => chunk(rows, Math.ceil(Math.sqrt(rows.length)))),

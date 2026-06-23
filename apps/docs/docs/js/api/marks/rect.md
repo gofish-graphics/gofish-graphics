@@ -5,7 +5,7 @@ Draws a rectangle for each data item.
 ::: gofish
 
 ```js
-gf.Chart([{ value: 80 }])
+gf.chart([{ value: 80 }])
   .mark(gf.rect({ w: 120, h: "value", fill: "steelblue", rx: 4 }))
   .render(root, { w: 200, h: 150 });
 ```

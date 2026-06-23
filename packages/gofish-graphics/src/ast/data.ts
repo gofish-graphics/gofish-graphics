@@ -55,6 +55,35 @@ export const setMeasureProvenance = <T>(
 export type Value<T> = T | DatumValue | DatumValueImpl;
 export type MaybeValue<T> = T | Value<T>;
 
+/**
+ * Placement-only coordinate used for categorical scatter. It is not a datum:
+ * it does not contribute a data domain or pass through a scale. The placement
+ * lowerer resolves it from the containing axis size as `index / count * size`.
+ */
+export type DiscretePosition = {
+  type: "discrete-position";
+  index: number;
+  count: number;
+};
+
+export const discretePosition = (
+  index: number,
+  count: number
+): DiscretePosition => ({
+  type: "discrete-position",
+  index,
+  count,
+});
+
+export const isDiscretePosition = (value: unknown): value is DiscretePosition =>
+  typeof value === "object" &&
+  value !== null &&
+  (value as any).type === "discrete-position" &&
+  typeof (value as any).index === "number" &&
+  typeof (value as any).count === "number";
+
+export type PositionValue = MaybeValue<number> | DiscretePosition;
+
 /** The datum wrapper's WIRE shape — what the Python bridge emits and what the
  *  {@link getValue} / {@link getMeasure} casts read. `offset` is a pixel
  *  offset added AFTER the datum maps through its scale ("a fixed standoff

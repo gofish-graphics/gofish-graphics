@@ -21,7 +21,7 @@ const data = days.flatMap((day) =>
   hours.map((hour) => ({ day, hour, value: (Math.random() * 100) | 0 }))
 );
 
-gf.Chart(data, {
+gf.chart(data, {
   color: gf.gradient(["#ffffcc", "#fd8d3c", "#bd0026"]),
   axes: true,
 })
@@ -50,7 +50,7 @@ table({ by: { x, y }, spacing?, numCols? })
 
 ```ts
 // Heatmap: hour on x, day on y, colored by value
-Chart(data, { color: gradient(["#ffffcc", "#fd8d3c", "#bd0026"]), axes: true })
+chart(data, { color: gradient(["#ffffcc", "#fd8d3c", "#bd0026"]), axes: true })
   .flow(table({ by: { x: "hour", y: "day" }, spacing: 4 }))
   .mark(rect({ fill: "value" }))
   .render(container, { w: 600, h: 400 });

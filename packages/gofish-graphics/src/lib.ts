@@ -3,6 +3,11 @@
 // </gofish-wiki>
 
 // Main library exports
+import groupBy from "lodash/groupBy";
+import meanBy from "lodash/meanBy";
+import orderBy from "lodash/orderBy";
+import sumBy from "lodash/sumBy";
+
 export * from "./color";
 export * from "./path";
 export * from "./util";
@@ -61,7 +66,7 @@ export { createMark } from "./ast/withGoFish";
 // Data
 export { For } from "./ast/iterators/for";
 // export { groupBy } from "./ast/iterators/groupBy";
-export { groupBy, sumBy, orderBy, meanBy } from "lodash";
+export { groupBy, sumBy, orderBy, meanBy };
 export { bin } from "./ast/transforms";
 
 // Shapes
@@ -69,7 +74,7 @@ export { ref } from "./ast/shapes/ref";
 
 // Datum projection — `pluck(ref, "species")` returns the full set of distinct
 // values for a field across a selected node's rows ("every possible value"),
-// the un-collapsed sibling of the `by: "datum.field"` homogeneity collapse.
+// the un-collapsed sibling of the `by: "field"` homogeneity collapse.
 // (`projectPath`/`splitKeyFn` stay module-internal — operators import them from
 // ./ast/datumProjection directly.)
 export { pluck } from "./ast/datumProjection";
@@ -137,8 +142,9 @@ export { image } from "./ast/shapes/image";
 
 /* Chart Syntax */
 export {
-  chart as Chart,
+  chart,
   derive,
+  resolve,
   rect,
   circle,
   selectAll,

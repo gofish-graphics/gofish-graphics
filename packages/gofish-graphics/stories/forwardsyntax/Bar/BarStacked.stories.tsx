@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../../helper";
 import { seafood } from "../../../src/data/catch";
-import { Chart, spread, rect, stack } from "../../../src/lib";
+import { chart, spread, rect, stack } from "../../../src/lib";
 
 const meta: Meta = {
   title: "Forward Syntax V3/Bar/Stacked",
@@ -31,7 +31,7 @@ export const Default: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    Chart(seafood, { axes: true })
+    chart(seafood, { axes: true })
       .flow(
         spread({ by: "lake",  dir: "x" }), //
         stack({ by: "species",  dir: "y" })

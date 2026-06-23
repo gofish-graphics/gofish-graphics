@@ -57,6 +57,16 @@ export interface BaseIRNode {
   meta?: Meta;
 }
 
+export interface TranslateIR {
+  x?: number;
+  y?: number;
+}
+
+interface TranslatableIR {
+  /** Structural pixel translation reapplied by the runtime deserializer. */
+  translate?: TranslateIR;
+}
+
 export interface Origin {
   /** User-supplied name via `.name("bars")` on the v3 fluent builder. */
   name?: string;
@@ -100,6 +110,11 @@ export interface LayerIR extends BaseIRNode {
   /** Layer-level constraints (from `Layer([...]).constrain(...)`), resolving
    *  refs against the child charts' `name`s. */
   constraints?: ConstraintIR[];
+  /** True when this came from the v3 `chart(...).layer(...)` builder chain
+   *  (rather than the low-level `layer([...])` combinator). The deserializer
+   *  reconstructs it through the real `LayerBuilder` so JS — not the wrapper —
+   *  owns the builder's render logic (inferred axis titles, etc.). */
+  builder?: boolean;
 }
 
 /** A bare mark, used when no chart-level wrapping is needed. */
@@ -138,6 +153,7 @@ export type DataIR =
 
 export type OperatorIR =
   | DeriveOperator
+  | ResolveOperator
   | SpreadOperator
   | StackOperator
   | GroupOperator
@@ -150,7 +166,7 @@ export type OperatorIR =
  * serializable; the IR carries a bridge handle (`lambdaId`) when the
  * Python widget is the producer, and is otherwise empty.
  */
-export interface DeriveOperator extends BaseIRNode {
+export interface DeriveOperator extends BaseIRNode, TranslatableIR {
   type: "derive";
   lambdaId?: string;
   /** Measure provenance a transform (e.g. `bin`) declares for its output
@@ -161,7 +177,25 @@ export interface DeriveOperator extends BaseIRNode {
   provenance?: Record<string, string>;
 }
 
-export interface SpreadOperator extends BaseIRNode {
+/**
+ * `resolve(cols, { from, key? })` — dereference reference columns into the
+ * drawn nodes they name. Each listed column's value is matched against the
+ * keyed nodes of `from` (a layer selected by name) and replaced in place with
+ * the matching node ref (many-to-one, grain preserved). Backs node-link edges
+ * and label anchoring. The match key defaults to the field `from`'s nodes were
+ * grouped by; `key` overrides it.
+ */
+export interface ResolveOperator extends BaseIRNode, TranslatableIR {
+  type: "resolve";
+  /** Local columns holding references to resolve in place. */
+  cols: string[];
+  /** Layer name whose nodes the columns are resolved against (a `selectAll`). */
+  from?: string;
+  /** Explicit match field; defaults to the producing operator's `by`. */
+  key?: string;
+}
+
+export interface SpreadOperator extends BaseIRNode, TranslatableIR {
   type: "spread";
   by?: string;
   dir?: "x" | "y";
@@ -176,7 +210,7 @@ export interface SpreadOperator extends BaseIRNode {
   axes?: AxesOptions;
 }
 
-export interface StackOperator extends BaseIRNode {
+export interface StackOperator extends BaseIRNode, TranslatableIR {
   type: "stack";
   by?: string;
   dir?: "x" | "y";
@@ -187,12 +221,12 @@ export interface StackOperator extends BaseIRNode {
   axes?: AxesOptions;
 }
 
-export interface GroupOperator extends BaseIRNode {
+export interface GroupOperator extends BaseIRNode, TranslatableIR {
   type: "group";
   by: string;
 }
 
-export interface ScatterOperator extends BaseIRNode {
+export interface ScatterOperator extends BaseIRNode, TranslatableIR {
   type: "scatter";
   by?: string;
   x?: ChannelValue;
@@ -203,6 +237,8 @@ export interface ScatterOperator extends BaseIRNode {
   yMax?: ChannelValue;
   alignment?: string;
   axes?: AxesOptions;
+  w?: ChannelValue;
+  h?: ChannelValue;
 }
 
 /**
@@ -219,14 +255,14 @@ export interface ScatterOperator extends BaseIRNode {
 export type AxesOptions = boolean | { x?: AxisOptions; y?: AxisOptions };
 export type AxisOptions = boolean | { title?: string | false };
 
-export interface TableOperator extends BaseIRNode {
+export interface TableOperator extends BaseIRNode, TranslatableIR {
   type: "table";
   by: { x: string; y: string };
   spacing?: number | [number, number];
   numCols?: number;
 }
 
-export interface LogOperator extends BaseIRNode {
+export interface LogOperator extends BaseIRNode, TranslatableIR {
   type: "log";
   label?: string;
 }
@@ -285,6 +321,7 @@ export interface LeafMarkIR extends BaseIRNode {
   label?: LabelIR;
   constraints?: ConstraintIR[];
   zOrder?: number;
+  translate?: TranslateIR;
   [key: string]: unknown;
 }
 
@@ -302,6 +339,7 @@ export interface CombinatorMarkIR extends BaseIRNode {
   label?: LabelIR;
   constraints?: ConstraintIR[];
   zOrder?: number;
+  translate?: TranslateIR;
 }
 
 /** A by-name reference to another named mark (`ref("bars")`). */
@@ -311,6 +349,7 @@ export interface RefMarkIR extends BaseIRNode {
   name?: string;
   label?: LabelIR;
   zOrder?: number;
+  translate?: TranslateIR;
 }
 
 /**
@@ -325,6 +364,7 @@ export interface OffsetMarkIR extends BaseIRNode {
   x?: number;
   y?: number;
   children: [MarkIR];
+  translate?: TranslateIR;
 }
 
 /**
@@ -350,6 +390,7 @@ export interface CutMarkIR extends BaseIRNode {
   inset?: number;
   name?: string;
   zOrder?: number;
+  translate?: TranslateIR;
 }
 
 // ---------------------------------------------------------------------------
@@ -493,6 +534,7 @@ export function isLeafMarkIR(mark: MarkIR): mark is LeafMarkIR {
 /** The set of operator type discriminators recognized in v0. */
 export const OPERATOR_TYPES = [
   "derive",
+  "resolve",
   "spread",
   "stack",
   "group",

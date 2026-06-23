@@ -148,6 +148,7 @@ type IRResult =
       options: any;
       deriveIds: string[];
       constraints?: any[];
+      builder?: boolean;
     }
   | {
       kind: "raw-mark";
@@ -202,6 +203,7 @@ async function loadStory(story: PythonStory): Promise<IRResult> {
       options: json.options ?? {},
       deriveIds: json.deriveIds ?? [],
       constraints: json.constraints,
+      builder: json.builder,
     };
   }
   if (json && json._kind === "raw-mark") {
@@ -320,6 +322,7 @@ async function captureStory(
       charts: ir.charts,
       options: ir.options,
       constraints: ir.constraints,
+      builder: ir.builder,
       deriveServerUrl,
     };
   } else if (ir.kind === "raw-mark") {

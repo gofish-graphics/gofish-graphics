@@ -55,16 +55,16 @@ releases.
 JavaScript:
 
 ```ts
-import { Chart, spread, rect, Serialize } from "gofish-graphics";
+import { chart, spread, rect, Serialize } from "gofish-graphics";
 import { Frontend } from "gofish-ir";
 
-const chart = Chart(data)
+const c = chart(data)
   .flow(spread({ by: "lake", dir: "x" }))
   .mark(rect({ h: "count" }));
 
 // Three call shapes, all returning Promise<FrontendIRDocument>:
-const doc = await chart.toJSON(); // method on ChartBuilder
-const doc2 = await Serialize.toJSON(chart); // standalone function
+const doc = await c.toJSON(); // method on ChartBuilder
+const doc2 = await Serialize.toJSON(c); // standalone function
 const doc3 = await Serialize.toJSONLayer(opts, [a, b]); // for Layer combinators
 const doc4 = await Serialize.toJSONRawMark(mark, opts); // for bare marks
 ```
@@ -122,6 +122,11 @@ The root types mirror the v3 fluent builder shapes:
 `__combinator: true` and a `children` array — `layer`, `spread`, `stack`,
 `arrow`, `connect`, `treemap`, and the Porter-Duff family), refs, or the
 two self-discriminating wrapper marks `offset` and `cut` (below).
+
+Operators and marks may also carry `translate: {x?, y?}`. This is canonical
+frontend IR, not a Python-only bridge sentinel: it records the structural
+`.translate({x?, y?})` modifier and the JS deserializer reapplies it as a
+runtime chain.
 
 `offset` — `{ type: "offset", x?, y?, children: [<node>] }` — wraps a single
 child and shifts it by `(x, y)` render-pixels without moving the bounds it
