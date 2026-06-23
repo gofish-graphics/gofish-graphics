@@ -315,7 +315,7 @@ export const getValueColorOps = <T>(value: MaybeValue<T>): ColorOp[] => {
  * the Route-B measure gate on top (a size denominated in a *foreign* measure to
  * the axis stays ink, not a coord extent). Extracted so the pass is the sole
  * author of `embedded` and the rule lives in one place. See
- * `notes/design/embedding-resolution-pass.md` and #534.
+ * `the embedding-resolution design essay (/internals/design/embedding-resolution)` and #534.
  */
 export const baseEmbedded = <T>(interval: Interval<T>): boolean =>
   (isValue(interval.size) || interval.size === undefined) &&

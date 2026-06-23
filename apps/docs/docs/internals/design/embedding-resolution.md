@@ -1,3 +1,10 @@
+---
+title: The Embedding-Resolution Pass
+section: Speculative Notes
+order: 40
+status: landed
+---
+
 # Embedding-resolution pass — concrete design (Track 2)
 
 **Status: DECISIONS MADE + first PR IMPLEMENTED.** The four decisions below were resolved

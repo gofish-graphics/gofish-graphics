@@ -123,6 +123,23 @@ list](/internals/core/rendering) (the render IR): once each draw entry is a
 self-contained primitive rather than a `{ node, transform }` back-reference, the flat
 list _is_ the display list.
 
+## Fitting the subtree to the coordinate budget
+
+`coord.layout` is a **scale scope**, exactly like the root fits content to the
+canvas (gofish.tsx) — here the angular/radial budget plays the canvas role. Its
+`fitAxis(axis, budget)` reads the subtree's resolved space on that axis and
+returns a `(scaleFactor, posScale)` to hand each child: a baseline-magnitude
+(data SIZE) axis scales by `width.inverse(budget)` so the children fill the ring;
+an anchored (data POSITION) axis maps onto `[0, budget]` via a posScale. Only
+DATA-bound channels consume these — a plain number bypasses both (see
+`computeAesthetic`) — so a hand-sized (radian/pixel) mark is unaffected, while a
+mark that says `thetaSize: datum(count)` auto-fits. Because the coord is the
+single σ-scale-root, an intermediate `distribute`/`nest` under it must NOT
+re-root (it propagates the inherited σ — see the scale-root scoping gate in
+`buildChildScalePlan`); this is what makes a flat distribute confluent with any
+nested grouping of the same data-driven children (see
+[Layout & Render Passes](/internals/layout/passes)).
+
 ## Current limitations
 
 `flattenLayout` is still evolving. The source carries TODOs, and the surrounding

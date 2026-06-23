@@ -97,6 +97,16 @@ The display list is the **concatenation of every node's fragment**. A node with 
 `_lower` throws — the migration is complete, so every shipping shape/operator supplies
 one.
 
+A shape's `_lower` switches on the per-axis **`embedded`** flag to decide
+point (0 embedded axes — drawn at pixel size at the transformed center) /
+line (1 — the embedded axis sweeps through the transform into an arc) /
+area (2 — both axes sweep into a wedge). That flag is authored before layout by
+the `resolveEmbedding` pass (wired into the pipeline in `gofish.tsx`; see
+[Layout & Render Passes](/internals/layout/passes) and
+[Underlying Space](/internals/core/underlying-space)): a value-sized dim embeds
+only when its measure matches the axis it sits in, so a foreign-measure size (a
+scatter bubble's area) stays a flat point even under a coord.
+
 ### Boundaries re-walk their own subtree
 
 `INTERNAL_lower` does **not** pre-recurse children the way the old `INTERNAL_render`
