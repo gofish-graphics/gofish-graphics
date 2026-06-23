@@ -1,9 +1,8 @@
-import type { JSX } from "solid-js";
 import type { DisplayList } from "gofish-ir";
 import { GoFishAST } from "../_ast";
 import { GoFishNode } from "../_node";
 import type { Placeable, ToPixel } from "../_node";
-import { Size, displayTranslate, translateString } from "../dims";
+import { Size, displayTranslate } from "../dims";
 import { UnderlyingSpace } from "../underlyingSpace";
 import { createNodeOperator } from "../withGoFish";
 import { unionChildSpaces } from "./alignment";

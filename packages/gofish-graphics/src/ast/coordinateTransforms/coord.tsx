@@ -2,10 +2,8 @@
 // @wiki Flattening the Scenegraph — /internals/layout/coord-flattening
 // </gofish-wiki>
 
-import { Show } from "solid-js";
 import { ticks as d3Ticks, nice as d3Nice } from "d3-array";
-import type { JSX } from "solid-js";
-import { path, pathToSVGPath, transformPath } from "../../path";
+import { path, transformPath } from "../../path";
 import { GoFishAST } from "../_ast";
 import { GoFishNode, type ToPixel } from "../_node";
 import type { DisplayList } from "gofish-ir";

@@ -119,7 +119,7 @@ which the render entry maps over directly.
   compose all the way to the leaves; only the _ordering_ is per-layer.
 
 This root bake is the first step toward a serializable [display
-list](/internals/design/display-list-plan) (the render IR): once each draw entry is a
+list](/internals/core/rendering) (the render IR): once each draw entry is a
 self-contained primitive rather than a `{ node, transform }` back-reference, the flat
 list _is_ the display list.
 

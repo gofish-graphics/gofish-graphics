@@ -9,7 +9,10 @@
  */
 
 import type { DisplayList } from "gofish-ir";
-import type { ToPixel } from "../_node";
+import type { GoFishNode, ToPixel } from "../_node";
+import type { GoFishAST } from "../_ast";
+import type { CoordinateTransform } from "../coordinateTransforms/coord";
+import { displayTranslate, type Transform } from "../dims";
 import { type Path, type Point, pathToSVGPath } from "../../path";
 
 /** Map every point of a path through `toPixel`, then serialize to an SVG `d`.
@@ -80,4 +83,67 @@ export const lowerStyle = (vals: {
     style.strokeDasharray = vals.strokeDasharray;
   if (vals.filter !== undefined) style.filter = vals.filter;
   return style;
+};
+
+/** The inline value-label a `rect`/`ellipse` emits when `label` is set: white,
+ *  12px, centered at the mark's transformed center. Empty when no label. */
+export const valueLabelItems = (
+  labelText: string | undefined,
+  cx: number,
+  cy: number,
+  toPixel: ToPixel
+): DisplayList.TextItem[] => {
+  if (!labelText) return [];
+  const [x, y] = toPixel([cx, cy]);
+  return [
+    {
+      kind: "text",
+      x,
+      y,
+      text: labelText,
+      fontSize: 12,
+      textAnchor: "middle",
+      dominantBaseline: "central",
+      role: "overlay",
+      style: { fill: "white" },
+    },
+  ];
+};
+
+/** Run `run` with the render session's `toPixel` swapped to `next`, restoring it
+ *  afterward — the boundary-lowering primitive (a boundary maps its subtree into
+ *  a shifted/warped pixel frame for the duration of the child walk). */
+export const withToPixel = <T>(
+  node: GoFishNode,
+  next: ToPixel,
+  run: () => T
+): T => {
+  const session = node.getRenderSession();
+  const outer = session.toPixel!;
+  session.toPixel = next;
+  try {
+    return run();
+  } finally {
+    session.toPixel = outer;
+  }
+};
+
+/** Lower a boundary's children under its own translate (the legacy
+ *  `<g transform>`), plus an optional extra `(dx, dy)` shift — the shared body of
+ *  the simple translate-only boundaries (offset, enclose, arrow). */
+export const lowerChildrenOffset = (
+  node: GoFishNode,
+  transform: Transform | undefined,
+  coordinateTransform: CoordinateTransform | undefined,
+  dx = 0,
+  dy = 0
+): DisplayList.DisplayItem[] => {
+  const [tx, ty] = displayTranslate(transform);
+  const outer = node.getRenderSession().toPixel!;
+  const composed: ToPixel = ([cx, cy]) => outer([tx + dx + cx, ty + dy + cy]);
+  return withToPixel(node, composed, () =>
+    (node.children as GoFishAST[]).flatMap((c) =>
+      c.INTERNAL_lower(coordinateTransform)
+    )
+  );
 };

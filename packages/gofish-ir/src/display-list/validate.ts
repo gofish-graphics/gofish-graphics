@@ -138,6 +138,47 @@ function checkItem(
       errors.push({ path: `${path}.${f}`, message: `${f} must be a string` });
   }
 
+  // Optional-field constraints, kept in agreement with the JSON Schema.
+  if (kind === "text") {
+    for (const f of ["fontSize", "rotate"] as const) {
+      if (item[f] !== undefined && !isNum(item[f]))
+        errors.push({ path: `${path}.${f}`, message: `${f} must be a number` });
+    }
+    if (item.fontFamily !== undefined && !isStr(item.fontFamily))
+      errors.push({
+        path: `${path}.fontFamily`,
+        message: "fontFamily must be a string",
+      });
+    if (
+      item.textAnchor !== undefined &&
+      !["start", "middle", "end"].includes(item.textAnchor as string)
+    )
+      errors.push({
+        path: `${path}.textAnchor`,
+        message: "textAnchor must be one of start, middle, end",
+      });
+    if (
+      item.dominantBaseline !== undefined &&
+      !["auto", "central", "middle", "hanging", "mathematical"].includes(
+        item.dominantBaseline as string
+      )
+    )
+      errors.push({
+        path: `${path}.dominantBaseline`,
+        message:
+          "dominantBaseline must be one of auto, central, middle, hanging, mathematical",
+      });
+  } else if (kind === "image") {
+    if (
+      item.preserveAspectRatio !== undefined &&
+      !isStr(item.preserveAspectRatio)
+    )
+      errors.push({
+        path: `${path}.preserveAspectRatio`,
+        message: "preserveAspectRatio must be a string",
+      });
+  }
+
   // Recursive nesting items: validate bbox + the child item arrays.
   if (kind === "group") {
     if (!isObject(item.transform))

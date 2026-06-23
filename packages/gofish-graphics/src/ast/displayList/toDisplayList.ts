@@ -21,7 +21,7 @@
  *
  * Each primitive owns its lowering (`lower` on the factory → `INTERNAL_lower`);
  * this module only drives layout, computes the viewport + `toPixel`, and walks
- * the bake. See /internals/design/display-list-plan.
+ * the bake. See /internals/core/rendering.
  */
 
 import type { DisplayList } from "gofish-ir";

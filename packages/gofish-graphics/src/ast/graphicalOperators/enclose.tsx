@@ -1,8 +1,11 @@
-import * as BubbleSets from "bubblesets-js";
-import { GoFishNode, type ToPixel } from "../_node";
-import { Size, displayTranslate, translateString } from "../dims";
+import { GoFishNode } from "../_node";
+import { Size, displayTranslate } from "../dims";
 import type { DisplayList } from "gofish-ir";
-import { lowerStyle, rectItemFromBox } from "../displayList/lowerHelpers";
+import {
+  lowerChildrenOffset,
+  lowerStyle,
+  rectItemFromBox,
+} from "../displayList/lowerHelpers";
 import { GoFishAST } from "../_ast";
 import { black, gray, tailwindColors } from "../../color";
 import { Domain } from "../domain";
@@ -65,20 +68,13 @@ export const enclose = createNodeOperator(
           _children,
           node
         ): DisplayList.DisplayItem[] => {
+          const childItems = lowerChildrenOffset(
+            node,
+            transform,
+            coordinateTransform
+          );
           const [tx, ty] = displayTranslate(transform);
-          const session = node.getRenderSession();
-          const outer = session.toPixel!;
-          const composed: ToPixel = ([cx, cy]) => outer([tx + cx, ty + cy]);
-
-          session.toPixel = composed;
-          let childItems: DisplayList.DisplayItem[];
-          try {
-            childItems = node.children.flatMap((c) =>
-              c.INTERNAL_lower(coordinateTransform)
-            );
-          } finally {
-            session.toPixel = outer;
-          }
+          const outer = node.getRenderSession().toPixel!;
 
           const w = intrinsicDims?.[0]?.size ?? 0;
           const h = intrinsicDims?.[1]?.size ?? 0;

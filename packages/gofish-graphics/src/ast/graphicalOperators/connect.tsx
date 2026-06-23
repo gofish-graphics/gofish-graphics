@@ -1,5 +1,4 @@
-import { For } from "solid-js";
-import { Path, PathSegment, pathToSVGPath, transformPath } from "../../path";
+import { Path, transformPath } from "../../path";
 import { GoFishAST } from "../_ast";
 import { GoFishNode, type ToPixel } from "../_node";
 import { resolveColorChannel } from "../../color";

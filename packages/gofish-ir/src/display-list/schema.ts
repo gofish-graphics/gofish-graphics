@@ -16,7 +16,7 @@
  * resolved style + datum provenance + a node/overlay role.
  *
  * See the design notes at /internals/design/core-ir and
- * /internals/design/display-list-plan.
+ * /internals/core/rendering.
  */
 
 /** Top-level wrapper for a serialized display list. */

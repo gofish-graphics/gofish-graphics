@@ -1,9 +1,8 @@
-import { Show } from "solid-js";
 import { GoFishAST } from "../_ast";
 import { GoFishNode, type ToPixel } from "../_node";
-import { Size, displayTranslate, translateString } from "../dims";
+import { Size, displayTranslate } from "../dims";
 import type { DisplayList } from "gofish-ir";
-import { lowerStyle } from "../displayList/lowerHelpers";
+import { lowerStyle, withToPixel } from "../displayList/lowerHelpers";
 import { UNDEFINED, UnderlyingSpace } from "../underlyingSpace";
 import { createNodeOperator } from "../withGoFish";
 import { type ArrowOptions, getBoxToBoxArrow } from "perfect-arrows";
@@ -186,13 +185,13 @@ export const arrow = createNodeOperator(
           });
 
           // Children lower under the same translate.
-          session.toPixel = composed;
-          try {
-            for (const c of node.children)
-              items.push(...c.INTERNAL_lower(coordinateTransform));
-          } finally {
-            session.toPixel = outer;
-          }
+          items.push(
+            ...withToPixel(node, composed, () =>
+              node.children.flatMap((c) =>
+                c.INTERNAL_lower(coordinateTransform)
+              )
+            )
+          );
           return items;
         },
       },

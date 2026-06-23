@@ -470,5 +470,5 @@ interface CoreIRDocument {
   `space` tag serializes.
 - [Size Claims](/internals/design/size-claims) — the size-dependent layout that
   makes the display list a per-frame, re-emitted artifact rather than a cacheable one.
-- [Building the Display List IR](/internals/design/display-list-plan) — the
-  implementation roadmap for the display-list tier (it is already half-built).
+- [Rendering](/internals/core/rendering) — the two-pass lower→paint implementation
+  of the display-list tier.

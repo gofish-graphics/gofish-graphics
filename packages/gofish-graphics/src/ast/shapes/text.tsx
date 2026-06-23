@@ -304,7 +304,7 @@ export const Text = ({
       // IR lowering — mirror of `render`. The anchor maps through `toPixel`; the
       // legacy `… rotate(rotate) scale(1,-1)` under the root flip nets to a
       // screen-space rotate of `-rotate` about the pixel anchor (the extra flip
-      // negates the angle — see display-list-plan §3). Unrotated → upright text.
+      // negates the angle — see the rendering essay). Unrotated → upright text.
       lower: (
         { transform, renderData, toPixel },
         _children,

@@ -143,7 +143,7 @@ function computeLabel(
  * {@link renderLabelJSX}: the anchor is mapped to a final pixel via `toPixel`,
  * and the label's `rotate(-rotate) scale(1,-1)` under the root flip becomes a
  * screen-space `rotate(+rotate)` about the pixel anchor (the extra flip negates
- * the angle; see display-list-plan §3).
+ * the angle; see the rendering essay).
  */
 export function lowerLabelItems(
   node: GoFishNode,

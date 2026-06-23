@@ -1037,17 +1037,15 @@ export class GoFishNode {
   }
 
   /**
-   * Lower this node and its subtree into display-list items. Structural mirror
-   * of {@link INTERNAL_render}: recurse children (clearing the coordinate
-   * transform across a `box`, as render does), call this node's `_lower`, then
-   * append the lowered label. `transformOverride` is the baked absolute
-   * transform from the bake pass.
+   * Lower this node and its subtree into display-list items: call this node's
+   * `_lower`, then append the lowered label. `transformOverride` is the baked
+   * absolute transform from the bake pass.
    */
   public INTERNAL_lower(
     coordinateTransform?: CoordinateTransform,
     transformOverride?: Transform
   ): DisplayList.DisplayItem[] {
-    // Unlike INTERNAL_render, children are NOT pre-recursed here. A node reaching
+    // Children are NOT pre-recursed here. A node reaching
     // INTERNAL_lower is either a leaf (no children) or a bake boundary (coord,
     // box, connect, arrow, enclose, …) that carries its own absolute transform —
     // a boundary must re-walk its subtree with that transform composed in (via
@@ -1056,7 +1054,7 @@ export class GoFishNode {
     if (!this._lower) {
       throw new Error(
         `[gofish] node type "${this.type}" has no lower() yet — cannot ` +
-          `emit the display list. (Migration in progress; see display-list-plan.)`
+          `emit the display list.`
       );
     }
     const toPixel = this.getRenderSession().toPixel;

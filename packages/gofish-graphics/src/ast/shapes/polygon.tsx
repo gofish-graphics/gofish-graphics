@@ -1,6 +1,5 @@
 import { GoFishNode } from "../_node";
 import { GoFishAST } from "../_ast";
-import { CoordinateTransform } from "../coordinateTransforms/coord";
 import { Dimensions, displayTranslate, Size, Transform } from "../dims";
 import { UNDEFINED, UnderlyingSpace } from "../underlyingSpace";
 import { createMark } from "../withGoFish";

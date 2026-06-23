@@ -1,17 +1,9 @@
 import { computeAesthetic } from "../../util";
 import * as Monotonic from "../../util/monotonic";
 import { color6_old, resolveColorChannel } from "../../color";
-import {
-  path,
-  Path,
-  pathToSVGPath,
-  segment,
-  subdividePath,
-  transformPath,
-} from "../../path";
+import { path, transformPath } from "../../path";
 import { GoFishNode } from "../_node";
 import { GoFishAST } from "../_ast";
-import { CoordinateTransform } from "../coordinateTransforms/coord";
 import { linear } from "../coordinateTransforms/linear";
 import {
   getMeasure,
@@ -42,7 +34,11 @@ import {
 } from "../underlyingSpace";
 import { createMark } from "../withGoFish";
 import type { DisplayList } from "gofish-ir";
-import { lowerStyle, pathToPixelSVG } from "../displayList/lowerHelpers";
+import {
+  lowerStyle,
+  pathToPixelSVG,
+  valueLabelItems,
+} from "../displayList/lowerHelpers";
 /* TODO: what should default embedding behavior be when all values are aesthetic? */
 export const Ellipse = ({
   name,
@@ -156,8 +152,8 @@ export const Ellipse = ({
       },
       // IR lowering — the structural mirror of `render` above. Each branch
       // computes the SAME geometry, then emits display-list items (coordinates
-      // pushed through `toPixel`) instead of JSX. Keep in lockstep with render
-      // until the render path is deleted.
+      // pushed through `toPixel`) instead of JSX. Mirror the geometry the
+      // legacy render computed.
       lower: (
         { intrinsicDims, transform, coordinateTransform, toPixel },
         _children,
@@ -187,23 +183,8 @@ export const Ellipse = ({
         // center. Mirrors the `<text>` each render branch emits. `cx`/`cy` are
         // the same display-space center coords render passed to the `<text>`;
         // `toPixel` applies the y-flip the legacy `scale(1, -1)` did.
-        const valueLabel = (cx: number, cy: number): DisplayList.TextItem[] => {
-          if (!labelText) return [];
-          const [x, y] = toPixel([cx, cy]);
-          return [
-            {
-              kind: "text",
-              x,
-              y,
-              text: labelText,
-              fontSize: 12,
-              textAnchor: "middle",
-              dominantBaseline: "central",
-              role: "overlay",
-              style: { fill: "white" },
-            },
-          ];
-        };
+        const valueLabel = (cx: number, cy: number) =>
+          valueLabelItems(labelText, cx, cy, toPixel);
 
         const elementStyle = lowerStyle({
           fill: resolvedFill,

@@ -69,11 +69,11 @@ const itemToSVG = (item: DisplayItem): string => {
           : "";
       const ta =
         item.textAnchor !== undefined
-          ? ` text-anchor="${item.textAnchor}"`
+          ? ` text-anchor="${esc(item.textAnchor)}"`
           : "";
       const db =
         item.dominantBaseline !== undefined
-          ? ` dominant-baseline="${item.dominantBaseline}"`
+          ? ` dominant-baseline="${esc(item.dominantBaseline)}"`
           : "";
       const rot =
         item.rotate !== undefined
@@ -99,8 +99,7 @@ const itemToSVG = (item: DisplayItem): string => {
     }
     case "composite":
     case "mask":
-      // Ported verbatim from porterDuff.tsx in the compositor migration step
-      // (display-list-plan task 6). Placeholder until then.
+      // Reconstruct the Porter-Duff filter / mask graph (see compositeToSVG).
       return compositeToSVG(item);
   }
 };

@@ -40,9 +40,8 @@ paints — is the whole architecture of this pass.
 > there was no IR. That path has been **deleted**. `render`/`INTERNAL_render`/
 > `_render`/`_renderLabel` are gone; the extension point each shape implements is now
 > `lower`, and the y-flip lives in a single coordinate map (`toPixel`, below) rather
-> than in nested SVG `<g>` transforms. The display-list roadmap is
-> [Building the Display List IR](/internals/design/display-list-plan); the case for
-> the IR is [A Core IR and a Display List](/internals/design/core-ir).
+> than in nested SVG `<g>` transforms. The case for the IR is
+> [A Core IR and a Display List](/internals/design/core-ir).
 
 ## The coordinate fold: `toPixel`
 
@@ -212,5 +211,4 @@ Two backends (SVG live + SVG string) exist; the IR is the default and _only_ ren
 path. The remaining work is additive — a Canvas backend and a WebGPU backend
 (`displayList.map(paintCanvas)`), and the Semiotic adapter that maps `DisplayItem →`
 scene-node/overlay by `role`. None of those touch the lower pass; they are new
-painters over the same list. The roadmap and its phasing live in
-[Building the Display List IR](/internals/design/display-list-plan).
+painters over the same list.

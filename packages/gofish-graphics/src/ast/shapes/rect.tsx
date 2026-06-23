@@ -2,11 +2,10 @@
 // @wiki Overview — /internals/layout/passes
 // </gofish-wiki>
 
-import { color6, color6_old, resolveColorChannel } from "../../color";
-import { path, Path, pathToSVGPath, segment, transformPath } from "../../path";
+import { color6, resolveColorChannel } from "../../color";
+import { path, transformPath } from "../../path";
 import { GoFishNode } from "../_node";
 import { GoFishAST } from "../_ast";
-import { CoordinateTransform } from "../coordinateTransforms/coord";
 import { linear } from "../coordinateTransforms/linear";
 import {
   getMeasure,
@@ -48,6 +47,7 @@ import {
   lowerStyle,
   pathToPixelSVG,
   rectItemFromBox,
+  valueLabelItems,
 } from "../displayList/lowerHelpers";
 
 const computeIntrinsicSize = (
@@ -289,8 +289,8 @@ export const Rect = ({
       },
       // IR lowering — the structural mirror of `render` above. Each branch
       // computes the SAME geometry, then emits display-list items (coordinates
-      // pushed through `toPixel`) instead of JSX. Keep in lockstep with render
-      // until the render path is deleted.
+      // pushed through `toPixel`) instead of JSX. Mirror the geometry the
+      // legacy render computed.
       lower: (
         { intrinsicDims, transform, coordinateTransform, toPixel },
         _children,
@@ -313,24 +313,9 @@ export const Rect = ({
             : undefined;
 
         // The inline value-label (the `label` arg) — white text at the mark's
-        // transformed center. Mirrors the `<text>` each branch emits.
-        const valueLabel = (cx: number, cy: number): DisplayList.TextItem[] => {
-          if (!labelText) return [];
-          const [x, y] = toPixel([cx, cy]);
-          return [
-            {
-              kind: "text",
-              x,
-              y,
-              text: labelText,
-              fontSize: 12,
-              textAnchor: "middle",
-              dominantBaseline: "central",
-              role: "overlay",
-              style: { fill: "white" },
-            },
-          ];
-        };
+        // transformed center.
+        const valueLabel = (cx: number, cy: number) =>
+          valueLabelItems(labelText, cx, cy, toPixel);
 
         const elementStyle = lowerStyle({
           fill: resolvedFill,

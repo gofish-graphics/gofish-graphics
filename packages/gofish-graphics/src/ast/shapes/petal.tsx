@@ -1,23 +1,8 @@
-import { mix } from "spectral.js";
-import { black, resolveColorChannel, white } from "../../color";
-import {
-  path,
-  Path,
-  pathToSVGPath,
-  segment,
-  subdividePath,
-  transformPath,
-} from "../../path";
-import { GoFishNode, type ToPixel } from "../_node";
+import { resolveColorChannel } from "../../color";
+import { GoFishNode } from "../_node";
 import { GoFishAST } from "../_ast";
 import type { DisplayList } from "gofish-ir";
-import {
-  lowerStyle,
-  pathToPixelSVG,
-  rectItemFromBox,
-} from "../displayList/lowerHelpers";
-import { CoordinateTransform } from "../coordinateTransforms/coord";
-import { linear } from "../coordinateTransforms/linear";
+import { lowerStyle, rectItemFromBox } from "../displayList/lowerHelpers";
 import {
   getMeasure,
   getValue,
