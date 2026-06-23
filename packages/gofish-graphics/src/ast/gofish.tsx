@@ -21,16 +21,17 @@ import type { ToPixel } from "./_node";
 import { envFlag } from "../util";
 
 /**
- * Dev gate for the two-pass IR render path (migration scaffold; removed once it
- * is the only path). On in Node via `GOFISH_IR_RENDER=1`; in a browser (where
- * `process.env` is absent) via {@link setIRRender}, which the capture harness
- * and tests call. */
+ * Gate for the two-pass IR render path. Now the DEFAULT — the legacy per-shape
+ * render path is retained only until the new outputs are approved in CI, after
+ * which it (and this gate) are deleted. Force the legacy path with
+ * `GOFISH_LEGACY_RENDER=1` (Node) or {@link setIRRender}(false) (browser/tests);
+ * the capture harness uses the latter to render each story both ways. */
 let IR_RENDER_OVERRIDE: boolean | undefined;
 export const setIRRender = (on: boolean | undefined): void => {
   IR_RENDER_OVERRIDE = on;
 };
 const irRenderEnabled = (): boolean =>
-  IR_RENDER_OVERRIDE ?? envFlag("GOFISH_IR_RENDER");
+  IR_RENDER_OVERRIDE ?? !envFlag("GOFISH_LEGACY_RENDER");
 import type { Size } from "./dims";
 import {
   hasBaseline,
