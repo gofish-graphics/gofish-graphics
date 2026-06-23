@@ -315,6 +315,30 @@ const posScales = [
 
 For `POSITION` spaces, this creates linear scales that map from data values to pixel coordinates. These scales are used during layout to position elements.
 
+### Pass 8.5: Embedding Resolution
+
+**Location**: `src/ast/gofish.tsx` (`child.resolveEmbedding()`), `src/ast/_node.ts`
+(`resolveEmbedding`)
+
+`resolveEmbedding` is the **sole author** of each dim's `embedded` flag — the
+flag the shape renders switch on for point (0 embedded axes) / line (1) / area
+(2). It runs top-down after underlying space resolves and before layout, and
+mutates the shared `args.dims` element in place (like `resolveAliases`) so the
+captured render closure observes it. Explicit `emX`/`emY` (and `connect`'s
+`embed()`) lock the flag to `true` and are never recomputed.
+
+A dim embeds iff its size is a data value or unsized (`baseEmbedded`, `data.ts`)
+AND — the **Route B** measure gate, only inside a coordinate space — its size's
+measure matches the dim's own _position_ measure (`min`/`center`/`max`). A size
+in a measure _foreign_ to where the mark sits (a scatter bubble's area ≠ its
+position units) stays ink: a flat point at the mapped center, not a swept wedge.
+The discriminator is mark-local because a polar coord forgets its axis measure;
+a positioned mark's own position measure is the axis measure it sits on. This
+consumes the measure provenance #534 carried to mark channels. The revocation is
+coord-scoped, so Cartesian behavior matches the former construction-time
+inference. (Route A — relational, measure-free embedding — is not yet
+implemented; see `notes/design/embedding-resolution-pass.md`.)
+
 ### Pass 9: Layout Calculation
 
 **Location**: `src/ast/gofish.tsx:208`
@@ -657,7 +681,10 @@ Each shape type has its own render function. For rectangles, this is in:
 
 **Location**: `src/ast/shapes/rect.tsx:251-449`
 
-The rect render function handles three cases based on which dimensions are data-driven:
+The rect render function handles three cases based on which dimensions are
+`embedded` (authored by [Pass 8.5](#pass-8-5-embedding-resolution) — a
+data-driven size whose measure matches its position, not merely any data-driven
+size):
 
 #### Case 1: Both Dimensions Aesthetic (Point-like)
 

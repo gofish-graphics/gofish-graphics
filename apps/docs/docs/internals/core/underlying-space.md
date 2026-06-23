@@ -794,6 +794,12 @@ literal field name — which would otherwise turn a legitimate same-unit overlay
 into a false conflict. (Residual, tracked in #534: single-`Datum` leaves and the
 Python derive-RPC bridge still need a wrap-time / RPC-carried tag.)
 
+This same size-vs-position measure comparison drives **embedding** (`baseEmbedded`,
+`data.ts`): inside a coordinate space, a dim's size becomes a swept coord extent
+only when its measure matches the dim's own position measure — a foreign-measure
+size (a bubble's area) stays a flat point. See the embedding-resolution pass under
+[layout passes](/internals/layout/passes#pass-8-5-embedding-resolution).
+
 **Constraint-domain measures.** A `position`/`span` constraint's datum
 coordinate carries the same resolved measure, and `collectPositionDomains`
 folds those per axis with `mergeMeasures` — so a layer's own positioning

@@ -1,11 +1,26 @@
 # Embedding-resolution pass — concrete design (Track 2)
 
-**Status:** design draft for co-design. Implements the converged two-route model from
-`embedding-annotations.md` as an actual pass. #534 (measure provenance → mark channels)
-is the enabler and now lands JS-side, so Route B can finally read a measure locally.
+**Status: DECISIONS MADE + first PR IMPLEMENTED.** The four decisions below were resolved
+(all to the recommended option) and Route B shipped as the `resolveEmbedding` pass
+(`_node.ts`), hooked in `gofish.tsx` before layout. Verified: full test suite green incl.
+`embedding.test.ts` (bubble-in-polar oracle), and `capture-diff` over all 249 stories =
+0 moved (the pass is a behavior-preserving superset). The `▶ DECISION` blocks are kept
+below as the rationale record.
 
-This doc is decision-oriented: each `▶ DECISION` block is a fork I want your call on
-before writing code. Everything else is the proposed default.
+**Resolved decisions:** 1 = separate top-down pass · 2 = pass is sole author (construction-
+time `inferEmbedded` stripped from the shape factories) · 3 = Route A deferred (no corpus
+oracle) · 4 = leave all `emX/emY` (capability-only; corpus unmoved).
+
+**Implementation note (refinement found while building):** a polar coord _forgets_ its
+axis measure (its underlying space is measureless), so the Route B gate could not read an
+"axis measure" off the coord as section 3 first proposed. Instead the discriminator is
+**mark-local**: compare a dim's size measure to its own _position_ measure (`min`/`center`/
+`max`) — a positioned mark's position measure _is_ the axis measure it sits on, and a
+pure-size mark (a bar) has no position to clash with → embeds. The gate is coord-scoped
+(only revokes inside a coord), keeping Cartesian byte-identical.
+
+Original framing follows. This doc was decision-oriented: each `▶ DECISION` block was a
+fork for the co-design; the resolutions are recorded above.
 
 ---
 
