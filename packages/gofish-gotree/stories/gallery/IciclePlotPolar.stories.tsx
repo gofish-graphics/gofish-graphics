@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/html";
-import { rect, polar } from "gofish-graphics";
+import { rect, polar, datum } from "gofish-graphics";
 import { tree, combine } from "../../src";
 import { byDepth, sampleTree } from "../data";
 import { initializeContainer } from "../helper";
@@ -23,31 +23,25 @@ import { initializeContainer } from "../helper";
 // is a polar wedge (rect swept through θ), per the brief.
 //
 // ── EMBEDDED-DIMENSION APPROACH (the hard part) ──────────────────────────────
-// A wedge SWEEPS in θ, so the θ-dimension is *embedded* in the node's width:
-//   w = d.width * leafTheta   with emX:true   (d.width = leaf count from d3-hierarchy)
-//   h = bandHeight            with emY:true   (radial ring thickness)
-// emX/emY tell gofish the rect's width/height are measured in the transform's
-// DOMAIN units (radians for θ, r-units for r), not pixels — so the rect renders
-// as an annular wedge once polar() maps it.
+// A wedge SWEEPS in θ, so the θ-dimension is *embedded* (emX) and the radial band
+// is *embedded* in h (emY), so once polar() maps it the rect renders as an
+// annular wedge.
 //
-// Because every node's angular width is its leaf-count share (leafTheta =
-// 2π / totalLeaves), a parent's width equals the sum of its children's widths
-// automatically. That embedded width — NOT a nest constraint — is what realizes
-// the dsl's "include" (parentChild-θ) relation: the parent wedge spans exactly
-// its children's combined angular extent. With the embedded width carrying the
-// span, the actual θ placement only needs distribute (siblings) + align
-// (parent over subtree), which combine() emits. This split — span encoded in the
-// mark's embedded dimension, placement in the layout constraints — is the
-// subtle bit: get the leaf-count math wrong and the rings stop lining up.
+// The dsl's "include" (X.Root) — parent SPANS its children's angular extent — is
+// realized by `nest` on θ (the proper containment primitive): the parent leaves
+// θ unsized and nest grows it to its children's combined arc. Leaves carry a unit
+// `thetaSize` weight; the coord is the σ-scale-root, summing the weights and
+// fitting them to the circle (#618), so every ring closes for any tree with no
+// hand-set leafTheta. (Earlier this used align-θ + a hand `d.width·leafTheta`
+// width as a workaround; `include → nest` + auto-fit renders identically and is
+// the principled spelling.)
 //
 // ── POLAR LIMITATIONS (no hacks; flagged, not faked) ─────────────────────────
-//  - polar() takes NO options: InnerRadius=0, Direction=clockwise, CentralAngle,
-//    StartAngle, and PolarAxis (the θ/r swap) from the dsl are NOT expressible.
-//    The plot always fills the full 2π disc from r=0.
-//  - NO angular auto-fit: there is no leaf-count allocation pass, so the total
-//    angular extent is hand-budgeted via leafTheta = 2π / totalLeaves. If that
-//    sum drifts from 2π the wedges overflow and wrap. Here the sample tree's
-//    leaf count is computed so each ring sums to exactly 2π.
+//  - polar() InnerRadius/Direction/StartAngle/PolarAxis (the θ/r swap) from the
+//    dsl are not all expressible here; the plot fills the full 2π disc.
+//  - The radial bands start at r=band (distribute-r), leaving a hollow center the
+//    dsl's InnerRadius:0 doesn't want — a separate radial-placement gap (shared
+//    with SectorTree2/HSC), unrelated to the angular auto-fit.
 //  - Links="curve" is unsupported under polar; filled wedges want no links
 //    anyway, so link:"none".
 const meta: Meta = {
@@ -59,24 +53,32 @@ export default meta;
 // dark at the root, lightening outward by depth.
 const icicleBlues = ["#2171b5", "#6baed6", "#9ecae1", "#c6dbef", "#deebf7"];
 
-// totalLeaves drives the angular budget so every ring sums to exactly 2π.
 // sampleTree: A(3) + B(B1, B2a, B2b = 3) + C(2) = 8 leaves.
-const totalLeaves = 8;
-const leafTheta = (2 * Math.PI) / totalLeaves; // angular share of one leaf
 const bandHeight = 46; // radial thickness of one depth ring
 
+// θ auto-fit (#618): leaves carry a unit angular weight; internal nodes leave θ
+// unsized so nest-θ grows each to its children's combined arc. The coord fits the
+// summed leaf weights to the circle. Ragged outer edge (shallow branches stop
+// early) is correct for an unbalanced icicle.
 const node = (d: any) =>
-  rect({
-    // θ-dimension embedded: width = this node's leaf-count share of the circle.
-    w: d.width * leafTheta,
-    emX: true,
-    // r-dimension embedded: one ring's radial thickness.
-    h: bandHeight,
-    emY: true,
-    fill: byDepth(icicleBlues)(d),
-    stroke: "white",
-    strokeWidth: 2,
-  });
+  d.height === 0
+    ? rect({
+        thetaSize: datum(1),
+        emX: true,
+        h: bandHeight,
+        emY: true,
+        fill: byDepth(icicleBlues)(d),
+        stroke: "white",
+        strokeWidth: 2,
+      })
+    : rect({
+        emX: true,
+        h: bandHeight,
+        emY: true,
+        fill: byDepth(icicleBlues)(d),
+        stroke: "white",
+        strokeWidth: 2,
+      });
 
 export const IciclePlot: StoryObj = {
   tags: ["gallery"],
@@ -97,7 +99,7 @@ export const IciclePlot: StoryObj = {
         // children outward) + align θ middle (parent centered over its subtree;
         // the embedded width already gives it the subtree's full angular span).
         parentChild: combine({
-          x: { kind: "align", alignment: "middle" },
+          x: { kind: "nest", pad: 0 },
           y: { kind: "distribute", spacing: 0 },
         }),
         // sibling: distribute θ (flatten → pack around the circle) + align r
