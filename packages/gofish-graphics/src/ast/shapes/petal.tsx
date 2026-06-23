@@ -8,8 +8,14 @@ import {
   subdividePath,
   transformPath,
 } from "../../path";
-import { GoFishNode } from "../_node";
+import { GoFishNode, type ToPixel } from "../_node";
 import { GoFishAST } from "../_ast";
+import type { DisplayList } from "gofish-ir";
+import {
+  lowerStyle,
+  pathToPixelSVG,
+  rectItemFromBox,
+} from "../displayList/lowerHelpers";
 import { CoordinateTransform } from "../coordinateTransforms/coord";
 import { linear } from "../coordinateTransforms/linear";
 import {
@@ -292,6 +298,94 @@ export const Petal = ({
             stroke-width={strokeWidth ?? 0}
           />
         );
+      },
+      // IR lowering — mirror of render. Petal is polar-only; `toPixel` is the
+      // coord content map set by coord.lower. The both-aesthetic branch is a
+      // point rect; otherwise the petal path is built from polar-transformed
+      // points and rotated by its angular center (the legacy `rotate(deg)`),
+      // baked into each point before `toPixel`.
+      lower: (
+        { intrinsicDims, transform, coordinateTransform, toPixel },
+        _children,
+        node
+      ): DisplayList.DisplayItem[] => {
+        if (!coordinateTransform || coordinateTransform.type !== "polar") {
+          return [];
+        }
+        const space = coordinateTransform;
+        const isXEmbedded = dims[0].embedded;
+        const isYEmbedded = dims[1].embedded;
+        const displayDims = displayDimsOf(intrinsicDims, transform);
+
+        const unitScale = node.getRenderSession().scaleContext?.unit;
+        const resolvedFill = resolveColorChannel(fill, unitScale);
+        const resolvedStroke =
+          resolveColorChannel(stroke, unitScale) ?? resolvedFill;
+
+        // Both aesthetic — transformed point rect.
+        if (!isXEmbedded && !isYEmbedded) {
+          const w = displayDims[0].size ?? 0;
+          const h = displayDims[1].size ?? 0;
+          const [tX, tY] = space.transform([
+            (displayDims[0].min ?? 0) + w / 2,
+            (displayDims[1].min ?? 0) + h / 2,
+          ]);
+          return [
+            rectItemFromBox(
+              tX - w / 2,
+              tX + w / 2,
+              tY - h / 2,
+              tY + h / 2,
+              toPixel,
+              {
+                role: "node",
+                datum: node.datum,
+                style: lowerStyle({
+                  fill: resolvedFill,
+                  stroke: resolvedStroke ?? "black",
+                  strokeWidth: strokeWidth ?? 0,
+                }),
+              }
+            ),
+          ];
+        }
+
+        // Petal shape — same points as render, rotated by the angular center
+        // (radians) and mapped to pixels.
+        const halfRadius = (displayDims[1].size ?? 0) / 2;
+        const s = space.transform([
+          -displayDims[0].size / 2 + Math.PI / 2,
+          halfRadius,
+        ]);
+        const e = space.transform([
+          displayDims[0].size / 2 + Math.PI / 2,
+          halfRadius,
+        ]);
+        const r = displayDims[1].size ?? 0;
+        const m: [number, number] = [halfRadius + r / 2, 0];
+        const c1: [number, number] = [halfRadius + r / 4, s[1]];
+        const c2: [number, number] = [halfRadius + r / 4, e[1]];
+
+        const center = displayDims[0].center ?? 0; // radians
+        const cos = Math.cos(center);
+        const sin = Math.sin(center);
+        const petalToPixel = ([x, y]: [number, number]): [number, number] =>
+          toPixel([x * cos - y * sin, x * sin + y * cos]);
+        const p = (pt: [number, number]) => petalToPixel(pt).join(",");
+
+        const d =
+          `M${p([0, 0])} L${p([s[0], s[1]])} Q${p(c1)} ${p(m)} ` +
+          `L${p(m)} Q${p(c2)} ${p([e[0], e[1]])} Z`;
+
+        return [
+          {
+            kind: "path",
+            d,
+            role: "node",
+            datum: node.datum,
+            style: lowerStyle({ fill: resolvedFill }),
+          },
+        ];
       },
     },
     []

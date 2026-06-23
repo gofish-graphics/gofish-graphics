@@ -7,8 +7,11 @@ import { ticks as d3Ticks, nice as d3Nice } from "d3-array";
 import type { JSX } from "solid-js";
 import { path, pathToSVGPath, transformPath } from "../../path";
 import { GoFishAST } from "../_ast";
-import { GoFishNode } from "../_node";
+import { GoFishNode, type ToPixel } from "../_node";
+import type { DisplayList } from "gofish-ir";
+import { lowerStyle, pathToPixelSVG } from "../displayList/lowerHelpers";
 import {
+  displayTranslate,
   elaborateDims,
   FancyDims,
   Interval,
@@ -565,6 +568,267 @@ export const coord = createNodeOperator(
               {polarAxisJSX()}
             </g>
           );
+        },
+        // IR lowering — mirror of render. Everything lives under the coord's
+        // `translate(transform) translate(contentOffset)` group, so a single
+        // `contentToPixel` folds that offset + the root flip. Content children
+        // warp through `coordTransform` in their own `lower` (rect/ellipse/petal
+        // emit paths); the grid + polar axes port the same overlay primitives.
+        lower: ({ transform, renderData }, _children, node) => {
+          const session = node.getRenderSession();
+          const outer = session.toPixel!;
+          const [coordTx, coordTy] = displayTranslate(transform);
+          const [offsetX, offsetY] = (renderData?.contentOffset as
+            | [number, number]
+            | undefined) ?? [0, 0];
+          const contentToPixel: ToPixel = ([cx, cy]) =>
+            outer([coordTx + offsetX + cx, coordTy + offsetY + cy]);
+
+          // Overlay primitive helpers (all in coord-local y-up coords).
+          const lineItem = (
+            x1: number,
+            y1: number,
+            x2: number,
+            y2: number,
+            stroke: string,
+            sw: number
+          ): DisplayList.PathItem => ({
+            kind: "path",
+            d: `M${contentToPixel([x1, y1]).join(",")} L${contentToPixel([x2, y2]).join(",")}`,
+            role: "overlay",
+            style: lowerStyle({ fill: "none", stroke, strokeWidth: sw }),
+          });
+          // Axis labels: legacy emits `transform="scale(1,-1)" x y=-y`, so the
+          // anchor point is (x, y) in y-up — upright under contentToPixel.
+          const textItem = (
+            x: number,
+            y: number,
+            text: string,
+            anchor: DisplayList.TextItem["textAnchor"],
+            baseline: DisplayList.TextItem["dominantBaseline"],
+            fontSize: number,
+            fill: string
+          ): DisplayList.TextItem => {
+            const [px, py] = contentToPixel([x, y]);
+            return {
+              kind: "text",
+              x: px,
+              y: py,
+              text,
+              textAnchor: anchor,
+              dominantBaseline: baseline,
+              fontSize,
+              role: "overlay",
+              style: lowerStyle({ fill }),
+            };
+          };
+
+          const items: DisplayList.DisplayItem[] = [];
+
+          // Content: warp each flattened child through the coord transform.
+          session.toPixel = contentToPixel;
+          try {
+            for (const child of children) {
+              for (const d of flattenLayout(child)) {
+                items.push(
+                  ...d.node.INTERNAL_lower(coordTransform, d.transform)
+                );
+              }
+            }
+          } finally {
+            session.toPixel = outer;
+          }
+
+          // Grid lines (rare; grid defaults off). Lines port faithfully; the
+          // grid tick text uses pt sizing and no flip in the legacy path — a
+          // latent corner reproduced approximately here.
+          if (grid) {
+            const domain = coordTransform.domain;
+            const gridPath = (a: [number, number], b: [number, number]) =>
+              pathToPixelSVG(
+                transformPath(
+                  path([a, b], { subdivision: 100 }),
+                  coordTransform
+                ),
+                contentToPixel
+              );
+            for (
+              let i = domain[0].min!;
+              i <= domain[0].max!;
+              i += domain[0].size! / 10
+            ) {
+              items.push({
+                kind: "path",
+                d: gridPath([i, domain[1].min!], [i, domain[1].max!]),
+                role: "overlay",
+                style: lowerStyle({ fill: "none", stroke: black }),
+              });
+              const [gx, gy] = coordTransform.transform([i, domain[1].max!]);
+              const [px, py] = contentToPixel([gx, gy]);
+              items.push({
+                kind: "text",
+                x: px,
+                y: py,
+                text: i.toFixed(0),
+                fontSize: 8 * (96 / 72),
+                role: "overlay",
+                style: lowerStyle({ fill: black }),
+              });
+            }
+            for (
+              let i = domain[1].min!;
+              i <= domain[1].max!;
+              i += domain[1].size! / 10
+            ) {
+              items.push({
+                kind: "path",
+                d: gridPath([domain[0].min!, i], [domain[0].max!, i]),
+                role: "overlay",
+                style: lowerStyle({ fill: "none", stroke: black }),
+              });
+              const [gx, gy] = coordTransform.transform([
+                domain[0].max! + domain[0].size! / 20,
+                i,
+              ]);
+              const [px, py] = contentToPixel([gx, gy]);
+              items.push({
+                kind: "text",
+                x: px,
+                y: py,
+                text: i.toFixed(0),
+                fontSize: 8 * (96 / 72),
+                role: "overlay",
+                style: lowerStyle({ fill: black }),
+              });
+            }
+          }
+
+          // Polar axes — port of polarAxisJSX.
+          if (axes && spaceRef.current) {
+            let axesX = typeof axes === "boolean" ? axes : (axes?.x ?? true);
+            let axesY = typeof axes === "boolean" ? axes : (axes?.y ?? true);
+            if ((node as any)._polarAxisX !== undefined)
+              axesX = (node as any)._polarAxisX;
+            if ((node as any)._polarAxisY !== undefined)
+              axesY = (node as any)._polarAxisY;
+            const [xSpace, ySpace] = spaceRef.current;
+            const rContent =
+              (renderData as any)?.coordinateSpaceBbox?.rMax ??
+              coordTransform.domain[1].max ??
+              100;
+            const RING_GAP = 20;
+            const rOuter = rContent + RING_GAP;
+
+            if (axesX && !isUNDEFINED(xSpace)) {
+              // Outer ring.
+              const [ringCx, ringCy] = contentToPixel([0, 0]);
+              items.push({
+                kind: "ellipse",
+                cx: ringCx,
+                cy: ringCy,
+                rx: rOuter,
+                ry: rOuter,
+                role: "overlay",
+                style: lowerStyle({
+                  fill: "none",
+                  stroke: "gray",
+                  strokeWidth: 1,
+                }),
+              });
+
+              const xIv = continuousInterval(xSpace);
+              const tickRing = (theta: number, label: string) => {
+                const [ix, iy] = coordTransform.transform([theta, rOuter]);
+                const [ox, oy] = coordTransform.transform([theta, rOuter + 6]);
+                items.push(lineItem(ix, iy, ox, oy, "gray", 1));
+                const [lx, ly] = coordTransform.transform([theta, rOuter + 16]);
+                const anchor = lx < -5 ? "end" : lx > 5 ? "start" : "middle";
+                items.push(
+                  textItem(lx, ly, label, anchor, "middle", 10, "gray")
+                );
+              };
+              if (isPOSITION(xSpace) && xIv) {
+                const xMin = xIv.min;
+                const xMax = xIv.max;
+                const [, nicedMax] = d3Nice(xMin, xMax, 8);
+                const tickVals = d3Ticks(xMin, nicedMax, 8).filter(
+                  (t) => t < nicedMax
+                );
+                for (const t of tickVals)
+                  tickRing((t / (nicedMax - xMin)) * 2 * Math.PI, String(t));
+              } else if (isORDINAL(xSpace) && xSpace.domain) {
+                const keys = xSpace.domain;
+                const n = keys.length;
+                const sectorWidth = (2 * Math.PI) / n;
+                for (let i = 0; i < n; i++) {
+                  const thetaStart = i * sectorWidth;
+                  const [ix, iy] = coordTransform.transform([
+                    thetaStart,
+                    rOuter,
+                  ]);
+                  const [ox, oy] = coordTransform.transform([
+                    thetaStart,
+                    rOuter + 6,
+                  ]);
+                  items.push(lineItem(ix, iy, ox, oy, "gray", 1));
+                  const [lx, ly] = coordTransform.transform([
+                    thetaStart + sectorWidth / 2,
+                    rOuter + 16,
+                  ]);
+                  const anchor = lx < -5 ? "end" : lx > 5 ? "start" : "middle";
+                  items.push(
+                    textItem(
+                      lx,
+                      ly,
+                      String(keys[i]),
+                      anchor,
+                      "middle",
+                      10,
+                      "gray"
+                    )
+                  );
+                }
+              }
+            }
+
+            const yIv = continuousInterval(ySpace);
+            if (axesY && isPOSITION(ySpace) && yIv) {
+              const yMin = yIv.min;
+              const yMax = yIv.max;
+              const dataToScreenR = (v: number) =>
+                yMax === yMin ? 0 : ((v - yMin) / (yMax - yMin)) * rContent;
+              const H_GAP = 6;
+              const tickVals = d3Ticks(yMin, yMax, 5);
+              const [x0, y0] = coordTransform.transform([
+                0,
+                dataToScreenR(yMin),
+              ]);
+              const [x1, y1] = coordTransform.transform([0, rContent]);
+              items.push(lineItem(x0 - H_GAP, y0, x1 - H_GAP, y1, "gray", 1));
+              for (const t of tickVals) {
+                const [tx, ty] = coordTransform.transform([
+                  0,
+                  dataToScreenR(t),
+                ]);
+                items.push(
+                  lineItem(tx - H_GAP - 4, ty, tx - H_GAP + 4, ty, "gray", 1)
+                );
+                items.push(
+                  textItem(
+                    tx - H_GAP - 6,
+                    ty,
+                    String(t),
+                    "end",
+                    "middle",
+                    10,
+                    "gray"
+                  )
+                );
+              }
+            }
+          }
+
+          return items;
         },
       },
       children

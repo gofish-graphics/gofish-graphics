@@ -1,7 +1,9 @@
 import { Show } from "solid-js";
 import { GoFishAST } from "../_ast";
-import { GoFishNode } from "../_node";
-import { Size, translateString } from "../dims";
+import { GoFishNode, type ToPixel } from "../_node";
+import { Size, displayTranslate, translateString } from "../dims";
+import type { DisplayList } from "gofish-ir";
+import { lowerStyle } from "../displayList/lowerHelpers";
 import { UNDEFINED, UnderlyingSpace } from "../underlyingSpace";
 import { createNodeOperator } from "../withGoFish";
 import { type ArrowOptions, getBoxToBoxArrow } from "perfect-arrows";
@@ -155,6 +157,80 @@ export const arrow = createNodeOperator(
               {childrenElements}
             </g>
           );
+        },
+        // IR lowering — mirror of render. The arrow's parts live under the
+        // node's translate (no local flip), so each point is offset by that
+        // translate and pushed through `toPixel`. The arrowhead's
+        // `translate(ex,ey) rotate(θ)` is baked into the emitted points.
+        lower: (
+          { transform, renderData, coordinateTransform },
+          _children,
+          node
+        ): DisplayList.DisplayItem[] => {
+          const data = renderData!;
+          const sw = props.strokeWidth ?? 0;
+          const endAngle = data.ae; // radians
+          const [tx, ty] = displayTranslate(transform);
+          const session = node.getRenderSession();
+          const outer = session.toPixel!;
+          const composed: ToPixel = ([cx, cy]) => outer([tx + cx, ty + cy]);
+          const px = (x: number, y: number) => composed([x, y]).join(",");
+
+          const stroke = props.stroke;
+          const items: DisplayList.DisplayItem[] = [];
+
+          if (props.start) {
+            const [cx, cy] = composed([data.sx, data.sy]);
+            items.push({
+              kind: "ellipse",
+              cx,
+              cy,
+              rx: (4 / 3) * sw,
+              ry: (4 / 3) * sw,
+              role: "overlay",
+              style: lowerStyle({ fill: stroke }),
+            });
+          }
+
+          // Quadratic body M sx,sy Q cx,cy ex,ey.
+          items.push({
+            kind: "path",
+            d: `M${px(data.sx, data.sy)} Q${px(data.cx, data.cy)} ${px(data.ex, data.ey)}`,
+            role: "overlay",
+            style: lowerStyle({ fill: "none", stroke, strokeWidth: sw }),
+          });
+
+          // Arrowhead: rotate each head point by the end angle, translate to
+          // (ex, ey), then map. SVG `rotate(θ)` = [[cosθ,-sinθ],[sinθ,cosθ]].
+          const cos = Math.cos(endAngle);
+          const sin = Math.sin(endAngle);
+          const head = [
+            [0, -2],
+            [4, 0],
+            [0, 2],
+          ]
+            .map(([x, y]) => [x * sw, y * sw])
+            .map(([x, y]) => [
+              data.ex + (x * cos - y * sin),
+              data.ey + (x * sin + y * cos),
+            ])
+            .map(([x, y]) => px(x, y));
+          items.push({
+            kind: "path",
+            d: `M${head[0]} L${head[1]} L${head[2]} Z`,
+            role: "overlay",
+            style: lowerStyle({ fill: stroke }),
+          });
+
+          // Children lower under the same translate.
+          session.toPixel = composed;
+          try {
+            for (const c of node.children)
+              items.push(...c.INTERNAL_lower(coordinateTransform));
+          } finally {
+            session.toPixel = outer;
+          }
+          return items;
         },
       },
       children
