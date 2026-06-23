@@ -77,7 +77,7 @@ export const coord = createNodeOperator(
       current: null,
     };
 
-    return new GoFishNode(
+    const coordNode = new GoFishNode(
       {
         type: "coord",
         key,
@@ -622,5 +622,9 @@ export const coord = createNodeOperator(
       },
       children
     );
+    // Declare this space's axis aliases (e.g. polar `{ x: "theta", y: "r" }`) so
+    // resolveAliases can rebind the alias scope for the coord's subtree.
+    coordNode._aliases = coordTransform.aliases;
+    return coordNode;
   }
 );

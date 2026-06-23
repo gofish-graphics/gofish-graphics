@@ -19,6 +19,57 @@ export type XYWHDims<T = number> = {
   y2?: T;
   h?: T;
   emY?: boolean;
+  // Coordinate-space axis aliases (e.g. polar `theta`/`r`). Stored unresolved at
+  // construction and resolved to x/y/w/h by the `resolveAliases` pass once the
+  // enclosing coord's declared aliases are known. `<name>`→position (like x/y),
+  // `<name>Size`→extent (like w/h). See KNOWN_ALIAS_KEYS / extractAliasCandidates.
+  theta?: T;
+  thetaSize?: T;
+  r?: T;
+  rSize?: T;
+};
+
+/**
+ * Recognized coordinate-space axis aliases. Extracted unresolved at construction
+ * (a mark is built before its enclosing coord exists) and resolved to x/y/w/h by
+ * the `resolveAliases` pass. Static (not a transform-call-time registry) because
+ * that registration would run too late. Add a transform's alias names here when
+ * it declares new ones (e.g. a future bipolar's `tau`/`sigma`/`tauSize`/…).
+ */
+export const KNOWN_ALIAS_KEYS = new Set(["theta", "thetaSize", "r", "rSize"]);
+
+/** Pull the alias-keyed entries out of a mark's dim options, to stash on the
+ * node for the `resolveAliases` pass. Non-alias keys are left for elaborateDims. */
+export const extractAliasCandidates = <T>(
+  dims: FancyDims<T>
+): Record<string, T> => {
+  const out: Record<string, T> = {};
+  for (const key of Object.keys(dims)) {
+    if (KNOWN_ALIAS_KEYS.has(key)) out[key] = (dims as any)[key];
+  }
+  return out;
+};
+
+/** How an alias key resolves onto a node's `dims`: which axis, and which facet
+ * (position aliases set `min` like x/y; `<name>Size` aliases set `size` like w/h). */
+export type AliasResolution = { axis: Direction; facet: "min" | "size" };
+
+/** Build the alias→(axis, facet) resolution map for a coord scope from the
+ * transform's declared position aliases (e.g. `{ x: "theta", y: "r" }`). */
+export const buildAliasMap = (aliases: {
+  x?: string;
+  y?: string;
+}): Record<string, AliasResolution> => {
+  const map: Record<string, AliasResolution> = {};
+  if (aliases.x) {
+    map[aliases.x] = { axis: 0, facet: "min" };
+    map[`${aliases.x}Size`] = { axis: 0, facet: "size" };
+  }
+  if (aliases.y) {
+    map[aliases.y] = { axis: 1, facet: "min" };
+    map[`${aliases.y}Size`] = { axis: 1, facet: "size" };
+  }
+  return map;
 };
 
 export type IndexedDims<T = number> = {
@@ -91,7 +142,7 @@ export const elaborateDims = <T>(dims: FancyDims<T>): Dimensions<T> => {
 };
 
 export type Direction = 0 | 1;
-export type FancyDirection = "x" | "y" | Direction;
+export type FancyDirection = "x" | "y" | "theta" | "r" | Direction;
 
 export type Anchor = "min" | "max" | "center" | "baseline";
 
@@ -132,6 +183,15 @@ export const elaborateDirection = (direction: FancyDirection): Direction => {
     case "x":
       return 0;
     case "y":
+      return 1;
+    // Coordinate-space direction aliases. Unlike mark dim aliases (resolved by
+    // the scope-bounded resolveAliases pass), `dir` is baked into an operator's
+    // constraints at construction — before its enclosing coord exists — so it
+    // can't be scope-checked. These map generically: `theta`=angular=x,
+    // `r`=radial=y, which is exactly polar's x/y assignment.
+    case "theta":
+      return 0;
+    case "r":
       return 1;
     default:
       return direction;

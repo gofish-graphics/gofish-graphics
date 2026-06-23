@@ -22,6 +22,7 @@ import {
   Dimensions,
   displayDims as displayDimsOf,
   elaborateDims,
+  extractAliasCandidates,
   FancyDims,
   FancySize,
   Size,
@@ -83,7 +84,7 @@ export const Rect = ({
   aspectRatio?: number;
 } & FancyDims<MaybeValue<number>>) => {
   const dims = elaborateDims(fancyDims).map(inferEmbedded);
-  return new GoFishNode(
+  const node = new GoFishNode(
     {
       name,
       key,
@@ -527,6 +528,9 @@ export const Rect = ({
     },
     []
   );
+  // Stash alias-keyed dims (theta/r/…) for the resolveAliases pass.
+  node._pendingAliases = extractAliasCandidates(fancyDims);
+  return node;
 };
 
 const baseRect = createMark(

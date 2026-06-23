@@ -5,7 +5,13 @@
 import { GoFishNode } from "../_node";
 import { shadowCheckScaleRoot } from "../solver/shadow";
 import { isToken } from "../createName";
-import { Size, elaborateDims, FancyDims, displayTranslate } from "../dims";
+import {
+  Size,
+  elaborateDims,
+  extractAliasCandidates,
+  FancyDims,
+  displayTranslate,
+} from "../dims";
 import { UNDEFINED, UnderlyingSpace, hasBaseline } from "../underlyingSpace";
 import { computeSize, foldFinite } from "../../util";
 import { CoordinateTransform } from "../coordinateTransforms/coord";
@@ -229,6 +235,7 @@ export const layer = createNodeOperatorSequential(
     }
 
     const dims = elaborateDims(options);
+    const pendingAliases = extractAliasCandidates(options);
 
     // SELF-SCALING REGIONS. When this layer is given an explicit pixel size on
     // a dim, it becomes a self-contained scaling region on that dim: its scales
@@ -252,7 +259,7 @@ export const layer = createNodeOperatorSequential(
     // SIZE against the allotted size and propose per-child slices.
     let constraintBudget: ComposeBudget | undefined;
 
-    return new GoFishNode(
+    const node = new GoFishNode(
       {
         type: options.box === true ? "box" : "layer",
         key: options.key,
@@ -613,5 +620,8 @@ export const layer = createNodeOperatorSequential(
       },
       children
     );
+    // Stash alias-keyed dims (theta/r/…) for the resolveAliases pass.
+    node._pendingAliases = pendingAliases;
+    return node;
   }
 );

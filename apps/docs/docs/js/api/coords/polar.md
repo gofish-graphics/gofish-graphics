@@ -42,6 +42,20 @@ o'clock and going clockwise.
 | `direction`    | `-1`     | `+1` counter-clockwise, `-1` clockwise.                       |
 | `center`       | `[0, 0]` | Screen-space center offset.                                   |
 
+## Axis aliases
+
+Inside a polar `coord`, dimensions can be named by their polar axis: `theta` (= `x`,
+angular position) and `r` (= `y`, radius), with extents `thetaSize` (= `w`) and
+`rSize` (= `h`). They coexist with `x`/`y` and are **scope-bounded** — valid only
+inside a coord that declares them (using one outside throws). The operator `dir`
+accepts the angular/radial aliases too.
+
+```ts
+chart(data, { coord: polar() })
+  .flow(spread({ by: "category", dir: "theta" }))
+  .mark(rect({ thetaSize: 0.4, rSize: "value", emX: true, emY: true }));
+```
+
 ## Usage
 
 Pass the coordinate transform to `chart()` via the `coord` option:

@@ -162,6 +162,9 @@ export async function layout(
   child.resolveColorScale();
   child.resolveNames();
   child.resolveLabels();
+  // Resolve coordinate-space axis aliases (polar theta/r/…) into x/y/w/h BEFORE
+  // space inference reads the dims. Top-down + scope-bounded (see resolveAliases).
+  child.resolveAliases();
   child.resolveUnderlyingSpace();
 
   // The original root content object stays in the tree as the plot after any

@@ -39,6 +39,20 @@ o'clock and going clockwise.
 | `direction`     | `-1`     | `+1` counter-clockwise, `-1` clockwise.                       |
 | `center`        | `[0, 0]` | Screen-space center offset.                                   |
 
+## Axis aliases
+
+Inside a polar `coord`, dimensions can be named by their polar axis: `theta` (= `x`,
+angular position) and `r` (= `y`, radius), with extents `thetaSize` (= `w`) and
+`rSize` (= `h`). Like `emX`/`emY`, these mark options are camelCase. They coexist
+with `x`/`y` and are **scope-bounded** — valid only inside a coord that declares them.
+The operator `dir` accepts the angular/radial aliases too.
+
+```python
+chart(data, coord=polar()) \
+    .flow(spread(by="category", dir="theta")) \
+    .mark(rect(thetaSize=0.4, rSize="value", emX=True, emY=True))
+```
+
 ## Usage
 
 Pass the coordinate transform to [`chart`](/python/api/core/chart) via the

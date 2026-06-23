@@ -22,13 +22,15 @@ import {
   localAnchorPoint,
   Size,
   Transform,
+  AliasResolution,
+  buildAliasMap,
 } from "./dims";
 import { gofish, gofishToSVGElement, gofishToSVG, gofishSave } from "./gofish";
 import type { AxesOptions, GoFishExportOptions } from "./gofish";
 import { GoFishRef } from "./_ref";
 import { GoFishAST } from "./_ast";
 import { CoordinateTransform } from "./coordinateTransforms/coord";
-import { getValue, isValue, MaybeValue } from "./data";
+import { getValue, isValue, MaybeValue, inferEmbedded } from "./data";
 import { color6 } from "../color";
 import * as Monotonic from "../util/monotonic";
 import {
@@ -257,6 +259,19 @@ export class GoFishNode {
    * correct polar axis (theta vs radial).
    */
   public axisDir?: 0 | 1;
+  /**
+   * Alias-keyed dim options (e.g. `{ theta: 0.5, rSize: "value" }`) stashed by a
+   * mark factory at construction, before its enclosing coord exists. Resolved
+   * into `args.dims` by {@link resolveAliases} once the coord's declared aliases
+   * are known. See `extractAliasCandidates` (dims.ts).
+   */
+  public _pendingAliases?: Record<string, any>;
+  /**
+   * Position aliases a `coord` node declares for its subtree (the transform's
+   * `aliases`, e.g. `{ x: "theta", y: "r" }`). Read by {@link resolveAliases} to
+   * rebind the active alias scope while walking into this coord.
+   */
+  public _aliases?: { x?: string; y?: string };
   constructor(
     {
       name,
@@ -459,6 +474,57 @@ export class GoFishNode {
    * Top-down walk that marks which nodes should render axes.
    * `claimed` tracks dimensions already claimed by an ancestor.
    */
+  /**
+   * Top-down pass that resolves coordinate-space axis aliases (e.g. polar
+   * `theta`/`r`/`thetaSize`/`rSize`) into the canonical `x/y/w/h` facets of each
+   * mark's `dims`. Mirrors {@link resolveAxes}: it carries the `active` alias
+   * scope downward, rebinding it at every `coord` node that declares aliases
+   * (a nested coord rebinds for its subtree).
+   *
+   * Runs BEFORE `resolveUnderlyingSpace` (which reads the resolved dims). It
+   * mutates `args.dims` in place — reassigning the array element (not its fields,
+   * because `inferEmbedded` returns a fresh object) so the mark's layout/space
+   * closures, which captured the same array reference, observe the resolution and
+   * the freshly-derived `embedded` flag.
+   *
+   * Hygiene: using an alias outside any coord that declares it (no `active` map),
+   * or naming an alias the enclosing coord doesn't declare, is a build-time error.
+   */
+  public resolveAliases(active?: Record<string, AliasResolution>): void {
+    // A coord that declares aliases rebinds the scope for its subtree.
+    let next = active;
+    if (this.type === "coord" && this._aliases) {
+      next = buildAliasMap(this._aliases);
+    }
+
+    const pending = this._pendingAliases;
+    if (pending) {
+      const dims = this.args?.dims as Dimensions | undefined;
+      for (const [key, value] of Object.entries(pending)) {
+        const res = next?.[key];
+        if (res === undefined) {
+          throw new Error(
+            next === undefined
+              ? `Axis alias "${key}" used outside any coordinate space that declares it. Wrap the mark in a coord (e.g. polar()) or use x/y/w/h.`
+              : `Axis alias "${key}" is not declared by the enclosing coordinate space. Declared aliases: ${Object.keys(
+                  next
+                ).join(", ")}.`
+          );
+        }
+        if (dims) {
+          dims[res.axis] = inferEmbedded({
+            ...dims[res.axis],
+            [res.facet]: value,
+          });
+        }
+      }
+    }
+
+    this.children.forEach((c) => {
+      if (c instanceof GoFishNode) c.resolveAliases(next);
+    });
+  }
+
   public resolveAxes(
     claimed: Set<0 | 1> = new Set(),
     enabled: Set<0 | 1> = new Set([0, 1])
