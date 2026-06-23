@@ -62,6 +62,17 @@ packages/gofish-graphics/stories/forwardsyntax/FacetedChart.stories.tsx
 # Tracked by #591 (bridge selectAll-label / ref-datum mark-fns to Python).
 packages/gofish-graphics/stories/lowlevel/FlowerChart.stories.tsx
 
+# Atom unit-visualization replications (stories/atom/) that build a per-group
+# *nested chart* inside a mark-as-function (`.mark((d) => chart(d).flow(...)...)`)
+# to wrap each unit grid. The Python mark-fn runs over the RPC bridge and
+# receives plain JSON rows, not a builder it can re-`chart()`, so these can't be
+# expressed as a Python mark-fn — same blocker as FacetedChart. (The pure-spec
+# atom stories TitanicFacet, TitanicUnitDots, and Mosaic ARE ported.)
+packages/gofish-graphics/stories/atom/UnitColumnChart.stories.tsx
+packages/gofish-graphics/stories/atom/UnitHistogram.stories.tsx
+packages/gofish-graphics/stories/atom/Violin.stories.tsx
+packages/gofish-graphics/stories/atom/UnitMosaic.stories.tsx
+
 # Forward syntax stories needing coord transforms other than clock
 # (clock is now supported)
 
