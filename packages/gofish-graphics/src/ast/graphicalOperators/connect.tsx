@@ -1,10 +1,13 @@
 import { For } from "solid-js";
 import { Path, PathSegment, pathToSVGPath, transformPath } from "../../path";
 import { GoFishAST } from "../_ast";
-import { GoFishNode } from "../_node";
+import { GoFishNode, type ToPixel } from "../_node";
 import { resolveColorChannel } from "../../color";
+import type { DisplayList } from "gofish-ir";
+import { lowerStyle, pathToPixelSVG } from "../displayList/lowerHelpers";
 import {
   Dimensions,
+  displayTranslate,
   elaborateDirection,
   FancyDirection,
   Size,
@@ -545,6 +548,52 @@ export const connect = createNodeOperator(
               </For>
             </g>
           );
+        },
+        // IR lowering — mirror of `render`. Each connector path is offset by the
+        // node's absolute translate (the legacy `<g transform>`), warped by any
+        // coordinate transform, then mapped through `toPixel`. Paint order
+        // (connector beneath the marks) is the connect node's zOrder(-1),
+        // resolved globally by the bake — not this method's concern.
+        lower: (
+          { transform, renderData, coordinateTransform, toPixel },
+          _children,
+          node
+        ): DisplayList.DisplayItem[] => {
+          const scaleContext = node.getRenderSession().scaleContext;
+          const rawFill: MaybeValue<string> | undefined =
+            fill ?? renderData.defaultColor;
+          const resolvedFill: string | undefined = resolveColorChannel(
+            rawFill as MaybeValue<string>,
+            scaleContext?.unit
+          );
+
+          // The legacy `<g transform="translate(tx,ty)">` offset, folded into a
+          // local pixel map so each path point lands at its absolute pixel.
+          const [tx, ty] = displayTranslate(transform);
+          const offsetToPixel: ToPixel = ([px, py]) =>
+            toPixel([px + tx, py + ty]);
+
+          const style = lowerStyle({
+            fill: mode === "center" ? "none" : (resolvedFill ?? "none"),
+            stroke: stroke ?? resolvedFill ?? "black",
+            strokeWidth: strokeWidth ?? 0,
+            opacity: opacity ?? 1,
+            mixBlendMode:
+              mixBlendMode ?? (mode === "center" ? "normal" : "multiply"),
+          });
+
+          return (renderData.paths as Path[]).map((path) => {
+            const transformedPath = coordinateTransform
+              ? transformPath(path, coordinateTransform, { resample: true })
+              : path;
+            return {
+              kind: "path",
+              d: pathToPixelSVG(transformedPath, offsetToPixel),
+              role: "node",
+              datum: node.datum,
+              style,
+            };
+          });
         },
       },
       children
