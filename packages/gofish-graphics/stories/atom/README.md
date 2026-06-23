@@ -59,7 +59,7 @@ GoFish has no dedicated `gridxy` operator; an Atom layout decomposes into a shor
 | `subgroup: flatten` | the terminal `.mark(...)` applied per record; grid wrapping via `derive(rows => chunk(rows, …))` + `spread(dir:"y")` + `spread(dir:"x")` |
 | `size: uniform` | a fixed mark size (`circle({ r })`, `rect({ w, h })`) |
 | `size: sum(field)` | `treemap({ valueField: field })` |
-| `size: count` | **no direct equivalent** — aggregate + `normalize()` for one axis only ([gap #1](#feature-gaps)) |
+| `size: count` | per-group count via `groupBy`, then main-axis value-proportional sizing through the σ solve (`rect({ h: "count" })` / `stack`); square-unit (2-D) case awaits equal-aspect coupling ([gap #1](#feature-gaps)) |
 | `aspect_ratio: square / fillX / fillY` | manual grid via `chunk(rows, cols)` (e.g. `cols = ceil(sqrt(n))` for square) ([gap #2](#feature-gaps)) |
 | `aspect_ratio: maxfill` | `treemap({ tile: "squarify" })`, or manual chunking |
 | `direction` (`LRBT`, `BT`, …) + `align` | `spread`'s `dir`, `reverse`, and `alignment` |
@@ -71,19 +71,31 @@ GoFish has no dedicated `gridxy` operator; an Atom layout decomposes into a shor
 Behaviors in Atom that have no first-class GoFish counterpart today. The stories work
 around them as noted; these are candidates for new operators.
 
-1. **`size: count` — container size from member count.** Atom can size any container by
-   how many records it holds, which is what makes a mosaic/fluctuation layout work (cell
-   *areas* proportional to a crosstab). GoFish has no count-sizing operator, so it has to
-   be reconstructed two ways depending on the mark:
-   - *Aggregated rects* — the [`Mosaic`](./Mosaic.stories.tsx) story counts up front and
-     uses `normalize()` for proportional **height**, but **column width** stays uniform
-     (`spread` lays out equal-width columns; the *Forward Syntax V3 / Mosaic Chart* has
-     the same limitation), so it's a 1-D mosaic.
-   - *Unit dots* — the [`UnitMosaic`](./UnitMosaic.stories.tsx) story gets a full 2-D
-     count-proportional mosaic by exploiting fixed-size dots: a cell of `n` dots in `R`
-     rows occupies area ∝ `n` for any `R`, and picking `R ∝ group size` makes the blocks
-     tile flush. It works, but only because the author precomputes the per-block row
-     counts by hand — a native `size: count` would remove that bookkeeping.
+1. **`size: count` — container size from member count.** Atom sizes a container by how
+   many records it holds, which is what makes a mosaic/fluctuation layout work (cell
+   *areas* proportional to a crosstab). GoFish has no `count` aggregator, but — contrary
+   to an earlier version of this note — it is *not* missing value-proportional sizing.
+   The scoped scale-factor (σ) solve already does that outside-in: a `stack`/`spread`
+   inverts its composed size-claims against its pixel budget (`σ = pixels / Σ values`,
+   `constraints/proposalPlan.ts`) so `rect({ h: "count" })` gives height ∝ count. Atom's
+   mosaic is single-axis-proportional at every level (slice/dice: `fillY` then `fillX`),
+   and that is exactly the **main-axis** case the σ solve handles — so a true marimekko of
+   rects (column widths *and* heights ∝ count) is expressible today by driving each level
+   with size-claims rather than equal-flex `spread`. The [`Mosaic`](./Mosaic.stories.tsx)
+   story keeps uniform column widths only because it uses `spread` (the existing
+   *Forward Syntax V3 / Mosaic Chart* does too); that's a recipe choice, not a hard wall.
+
+   What is genuinely deferred is the piece the **unit** ([`UnitMosaic`](./UnitMosaic.stories.tsx))
+   version needs: to fill differently-sized count-proportional cells with *uniform square
+   dots*, a data unit must measure the same on both axes — an equal-aspect coupling
+   `σ = min(W/rangeX, H/rangeY)` applied to both axes (**issue #582**; the general
+   `σ_y = k·σ_x` form and its candidate homes are in
+   `apps/docs/docs/internals/design/size-claims.md` § "Aspect ratio: three candidate
+   homes", gated on the bbox work in #39/#80). Lacking that coupling, `UnitMosaic` fixes
+   the dot size and hand-picks per-block row counts (`R ∝ group size`, so a cell of `n`
+   dots in `R` rows has area ∝ `n` for any `R`) to manufacture the same proportional areas
+   bottom-up. With the σ solve + equal-aspect coupling, that bookkeeping disappears and the
+   mosaic falls out of `count`-driven main-axis allocation directly.
 
 2. **Aspect-ratio-driven auto-wrapping.** Atom's `aspect_ratio` (`square`, `maxfill`,
    `fillX`, `fillY`) chooses the grid's row/column counts automatically to hit a target
