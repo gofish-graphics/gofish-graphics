@@ -101,16 +101,64 @@ const itemToSVG = (item: DisplayItem): string => {
   }
 };
 
+/** Deterministic id counter for composite/mask defs (Math.random is both
+ *  unavailable headlessly and non-reproducible). Reset per document by
+ *  `displayListToSVG`; the JSX backend uses the same scheme so the two backends
+ *  agree on id shape. */
+let compositeIdCounter = 0;
+
 /** Reconstruct the Porter-Duff filter / mask SVG from a structured
- *  composite/mask item. Filled in during the compositor migration. */
-const compositeToSVG = (_item: CompositeItem | MaskItem): string => {
-  throw new Error(
-    "[gofish-ir] display-list composite/mask SVG backend not yet implemented"
+ *  composite/mask item — ported verbatim from porterDuff.tsx's `renderComposite`
+ *  / mask render. The lower pass folded the legacy outer `<g transform>` into
+ *  the items' absolute pixels and the `bbox`, so no wrapper group is emitted. */
+const compositeToSVG = (item: CompositeItem | MaskItem): string => {
+  const uid = `gf-comp-${compositeIdCounter++}`;
+  const sourceId = `${uid}-source`;
+  const destinationId = `${uid}-destination`;
+
+  if (item.kind === "mask") {
+    const maskId = `${uid}-mask`;
+    return (
+      `<defs>` +
+      `<g id="${sourceId}">${item.mask.map(itemToSVG).join("")}</g>` +
+      `<g id="${destinationId}">${item.content.map(itemToSVG).join("")}</g>` +
+      `<mask id="${maskId}" maskUnits="userSpaceOnUse" maskContentUnits="userSpaceOnUse">` +
+      `<use href="#${sourceId}"/></mask>` +
+      `</defs>` +
+      `<use href="#${destinationId}" mask="url(#${maskId})"/>`
+    );
+  }
+
+  const filterId = `${uid}-filter`;
+  const { operator } = item;
+  const blendMode = item.blendMode ?? "color";
+  const tail =
+    operator === "in"
+      ? `<feBlend in="compositeResult" in2="graySource" mode="${esc(blendMode)}" result="blendedIntersect"/>` +
+        `<feComposite in="blendedIntersect" in2="compositeResult" operator="in"/>`
+      : operator === "over" || operator === "atop"
+        ? `<feBlend in="compositeResult" in2="graySource" mode="${esc(blendMode)}"/>`
+        : "";
+  const { x, y, w, h } = item.bbox;
+  return (
+    `<defs>` +
+    `<g id="${sourceId}">${item.source.map(itemToSVG).join("")}</g>` +
+    `<g id="${destinationId}">${item.dest.map(itemToSVG).join("")}</g>` +
+    `<filter id="${filterId}" x="${x}" y="${y}" width="${w}" height="${h}" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">` +
+    `<feImage href="#${sourceId}" result="sourceImage"/>` +
+    `<feColorMatrix in="sourceImage" type="saturate" values="0" result="graySource"/>` +
+    `<feImage href="#${destinationId}" result="destination"/>` +
+    `<feComposite in="destination" in2="graySource" operator="${operator}" result="compositeResult"/>` +
+    tail +
+    `</filter>` +
+    `</defs>` +
+    `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="transparent" filter="url(#${filterId})"/>`
   );
 };
 
 /** Render a display list to a standalone SVG document string. */
 export function displayListToSVG(doc: DisplayListDocument): string {
+  compositeIdCounter = 0;
   const { w, h } = doc.viewport;
   const body = doc.items.map(itemToSVG).join("");
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">${body}</svg>`;

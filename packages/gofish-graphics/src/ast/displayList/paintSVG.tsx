@@ -16,6 +16,12 @@ import type { DisplayList } from "gofish-ir";
 
 type Style = DisplayList.Style | undefined;
 
+/** Deterministic id counter for composite/mask defs — same scheme as gofish-ir's
+ *  string backend so the two backends agree on id shape. A module-level counter
+ *  (Math.random is non-reproducible); ids only need to be unique within a single
+ *  painted document. */
+let compositeIdCounter = 0;
+
 /** SolidJS `style` prop for the CSS-only bits (mix-blend-mode). */
 const cssStyle = (style: Style): Record<string, string> | undefined =>
   style?.mixBlendMode ? { "mix-blend-mode": style.mixBlendMode } : undefined;
@@ -110,11 +116,95 @@ export function paintSVG(item: DisplayList.DisplayItem): JSX.Element {
         </g>
       );
     }
-    case "composite":
-    case "mask":
-      // Ported from porterDuff.tsx in the compositor migration (task 6).
-      throw new Error(
-        `[gofish] paintSVG: ${item.kind} not yet implemented in the live backend`
+    case "composite": {
+      const uid = `gf-comp-${compositeIdCounter++}`;
+      const sourceId = `${uid}-source`;
+      const destinationId = `${uid}-destination`;
+      const filterId = `${uid}-filter`;
+      const { operator } = item;
+      const blendMode = (item.blendMode ?? "color") as "multiply" | "screen";
+      const tail =
+        operator === "in" ? (
+          <>
+            <feBlend
+              in="compositeResult"
+              in2="graySource"
+              mode={blendMode}
+              result="blendedIntersect"
+            />
+            <feComposite
+              in="blendedIntersect"
+              in2="compositeResult"
+              operator="in"
+            />
+          </>
+        ) : operator === "over" || operator === "atop" ? (
+          <feBlend in="compositeResult" in2="graySource" mode={blendMode} />
+        ) : null;
+      const { x, y, w, h } = item.bbox;
+      return (
+        <>
+          <defs>
+            <g id={sourceId}>{item.source.map(paintSVG)}</g>
+            <g id={destinationId}>{item.dest.map(paintSVG)}</g>
+            <filter
+              id={filterId}
+              x={x}
+              y={y}
+              width={w}
+              height={h}
+              filterUnits="userSpaceOnUse"
+              color-interpolation-filters="sRGB"
+            >
+              <feImage href={`#${sourceId}`} result="sourceImage" />
+              <feColorMatrix
+                in="sourceImage"
+                type="saturate"
+                values="0"
+                result="graySource"
+              />
+              <feImage href={`#${destinationId}`} result="destination" />
+              <feComposite
+                in="destination"
+                in2="graySource"
+                operator={operator}
+                result="compositeResult"
+              />
+              {tail}
+            </filter>
+          </defs>
+          <rect
+            x={x}
+            y={y}
+            width={w}
+            height={h}
+            fill="transparent"
+            filter={`url(#${filterId})`}
+          />
+        </>
       );
+    }
+    case "mask": {
+      const uid = `gf-comp-${compositeIdCounter++}`;
+      const sourceId = `${uid}-source`;
+      const destinationId = `${uid}-destination`;
+      const maskId = `${uid}-mask`;
+      return (
+        <>
+          <defs>
+            <g id={sourceId}>{item.mask.map(paintSVG)}</g>
+            <g id={destinationId}>{item.content.map(paintSVG)}</g>
+            <mask
+              id={maskId}
+              maskUnits="userSpaceOnUse"
+              maskContentUnits="userSpaceOnUse"
+            >
+              <use href={`#${sourceId}`} />
+            </mask>
+          </defs>
+          <use href={`#${destinationId}`} mask={`url(#${maskId})`} />
+        </>
+      );
+    }
   }
 }
