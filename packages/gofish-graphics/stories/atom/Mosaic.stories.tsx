@@ -74,7 +74,7 @@ export const Default: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    chart(mosaicCells, { color: palette(["#2b8cbe", "#ff8408"]) })
+    chart(mosaicCells, { color: palette(["#2b8cbe", "#ff8408"]), axes: true })
       .flow(
         // columns by class — width resolves ∝ classTotal through the σ solve
         stack({ by: "pclass", dir: "x", spacing: 2 }),
@@ -84,7 +84,7 @@ export const Default: StoryObj<Args> = {
         stack({ by: "survived", dir: "y" })
       )
       .mark(rect({ w: "classTotal", h: "count", fill: "survived", stroke: "white", strokeWidth: 1 }))
-      .render(container, { w: args.w, h: args.h, axes: true });
+      .render(container, { w: args.w, h: args.h });
 
     return container;
   },

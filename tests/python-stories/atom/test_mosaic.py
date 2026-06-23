@@ -37,7 +37,7 @@ def _mosaic_cells():
 
 def story_default():
     return (
-        chart(_mosaic_cells(), color=palette(["#2b8cbe", "#ff8408"]))
+        chart(_mosaic_cells(), color=palette(["#2b8cbe", "#ff8408"]), axes=True)
         .flow(
             stack(by="pclass", dir="x", spacing=2),
             derive(
@@ -57,5 +57,5 @@ def story_default():
                 strokeWidth=1,
             )
         ),
-        {"w": 520, "h": 420, "axes": True},
+        {"w": 520, "h": 420},
     )
