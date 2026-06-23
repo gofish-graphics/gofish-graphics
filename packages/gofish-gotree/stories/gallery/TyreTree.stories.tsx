@@ -67,14 +67,14 @@ const sampleTree = (() => {
 // agree, and the parent wedge spans exactly its subtree's arc (RootWidth=value).
 //
 // ── POLAR LIMITATIONS (no hacks; flagged, not faked) ─────────────────────────
-//  - polar() takes NO options, so several dsl knobs are NOT expressible:
-//     · InnerRadius 0.25 — the donut hole is NOT achievable. With align-r at the
-//       inner edge (r=0) the innermost leaf wedges reach the center, giving a
-//       SOLID disc instead of the dsl's 25%-radius hole. (Our wedges leave only
-//       a tiny accidental hole at the exact center where r→0 / strokes meet.)
-//     · PolarCenter "bottom" — polar() always centers the disc; no off-center pin.
-//     · Direction / StartAngle / CentralAngle — fixed full 2π sweep from a fixed
-//       start angle; no clockwise/CCW or sub-circle arc.
+//  - InnerRadius 0.25 — APPLIED via `polar({ innerRadius: 0.25 })`: the donut
+//    hub. The concentric depth bands now ring a 25%-radius hollow center instead
+//    of filling to r=0 (the headline "tyre" gap, now closed).
+//  - Still NOT expressible (flagged, not faked):
+//     · PolarCenter "bottom" — polar()'s `center` is a screen-space offset, not a
+//       semantic "bottom" pin; left centered here (cosmetic).
+//     · Direction / StartAngle / CentralAngle — polar() now has these knobs but
+//       this chart's spec only customizes InnerRadius; kept at defaults.
 //     · no θ/r axis swap (no transposed variant; PolarAxis swap not expressible).
 //  - NO angular auto-fit: there is no leaf-count allocation pass, so the angular
 //    budget is hand-set via leafTheta = 2π / totalLeaves. If that sum drifts from
@@ -150,7 +150,8 @@ export const TyreTree: StoryObj = {
           x: { kind: "distribute", spacing: 0 },
           y: { kind: "align", alignment: "start" },
         }),
-        coord: polar(),
+        // InnerRadius:0.25 — the donut hole (tyre hub). Now expressible.
+        coord: polar({ innerRadius: 0.25 }),
       },
       sampleTree
     ).render(container, { w: 560, h: 560 });
