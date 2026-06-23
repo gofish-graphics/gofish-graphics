@@ -104,15 +104,19 @@ which the render entry maps over directly.
   its own coord-local `flattenLayout` inside. The bake is **boundary-recursive**. (The
   boundary set is a string set today; replacing it with a node-declared flag is tracked
   in [#75](https://github.com/gofish-graphics/gofish-graphics/issues/75).)
-- **Draw order.** Paint order used to live in `layer` (a `(zOrder, index)` sort, or a
-  `zAbove` / `zBelow` topological sort). Flattening through `layer` would drop that, so
-  `bake` resolves draw order **globally** over the flattened list via the shared
-  `topoSortByZOrder` in `paintOrder.ts` — the same algorithm `layer` used, lifted out
-  and now applied once over the whole list. `layer` is consequently a _transparent_
-  positioning operator to the bake. This per-layer → global lift has two known latent
-  divergences (a `zOrder()` on a transparent intermediate layer is not yet propagated;
-  cross-layer `ref`-name collisions widen the cycle surface), tracked in
-  [#607](https://github.com/gofish-graphics/gofish-graphics/issues/607).
+- **Draw order.** Paint order is resolved **hierarchically** — per transparent layer,
+  over its component-granular children — exactly as the legacy `layer` render did, NOT
+  by one global sort. This is load-bearing: a `zOrder(-1)` (or a `zAbove` / `zBelow`
+  constraint) is **local** to its layer — it orders a child behind its _siblings_, not
+  behind the whole chart. A global flatten would regroup, e.g., all connectors before
+  all marks across sibling layers (the pulley diagram and the connected-scatter line
+  both broke this way, [#607](https://github.com/gofish-graphics/gofish-graphics/issues/607)).
+  So at each transparent layer `bake` orders its children with the same
+  `paintOrder.ts` helpers `layer` uses — `flattenForZOrder` (which keeps components
+  whole and hoists only plain nested layers) then a `(zOrder, index)` sort or a
+  `topoSortByZOrder` over its own `zAbove` / `zBelow` constraints — and only then
+  descends into each unit, so a component keeps its internal order. Transforms still
+  compose all the way to the leaves; only the _ordering_ is per-layer.
 
 This root bake is the first step toward a serializable [display
 list](/internals/design/display-list-plan) (the render IR): once each draw entry is a

@@ -14,6 +14,73 @@ import type { ZOrderConstraint } from "./constraints/zorder";
  * over the item shape so each caller keeps its own (`PaintItem` vs `BakeItem`).
  */
 
+/**
+ * A single paint unit in a layer's z-order resolution. Components stay whole
+ * (one PaintItem); only plain non-component nested layers are flattened through
+ * — so a mark/component is ordered as a unit, matching the legacy layer render.
+ */
+export type PaintItem = {
+  node: GoFishAST;
+  /** Sum of skipped-ancestor translates between this layer and the hoisted
+   *  element. */
+  accTranslate: [number, number];
+  /** Position in the flattened default order (stable tiebreaker). */
+  defaultOrder: number;
+  /** Existing numeric `_zOrder` hint (primary tiebreaker so `node.zOrder(-1)`
+   *  still pushes a node toward the back by default). */
+  defaultZ: number;
+};
+
+/**
+ * Flatten a layer's children into a paint list at COMPONENT granularity: plain
+ * (non-component) nested `layer`s are transparent and hoist their children into
+ * this paint context (accumulating translate), while components and leaves stay
+ * as single units. Shared by the `layer` z-order pass and the root `bake` so
+ * both resolve z-order over the same units.
+ */
+export function flattenForZOrder(children: GoFishAST[]): PaintItem[] {
+  const out: PaintItem[] = [];
+  let order = 0;
+  walk(children, 0, 0);
+  return out;
+
+  // NB: only translates are accumulated across transparent ancestors. A
+  // non-component nested layer that also carries `options.transform.scale`
+  // would hoist its children with the right translate but the *wrong* resolved
+  // size, since the scale isn't propagated here. No current story mixes z-order
+  // constraints with scaled inner layers; revisit if one does.
+  function walk(cs: GoFishAST[], accTx: number, accTy: number): void {
+    for (const child of cs) {
+      if (!(child instanceof GoFishNode)) {
+        out.push({
+          node: child,
+          accTranslate: [accTx, accTy],
+          defaultOrder: order++,
+          defaultZ: 0,
+        });
+        continue;
+      }
+      // Plain (non-component) nested layers are transparent for paint ordering —
+      // their children are hoisted into this paint context.
+      if (!child._isComponent && child.type === "layer") {
+        // Read the LEDGER projection, not raw `transform.translate` (#39 stage
+        // 3): a placed nested layer has its written translate cleared on solved
+        // axes, so `displayTranslate` would hoist children at [0,0].
+        const childTx = child.projectedTranslate(0) ?? 0;
+        const childTy = child.projectedTranslate(1) ?? 0;
+        walk(child.children, accTx + childTx, accTy + childTy);
+      } else {
+        out.push({
+          node: child,
+          accTranslate: [accTx, accTy],
+          defaultOrder: order++,
+          defaultZ: child.getZOrder(),
+        });
+      }
+    }
+  }
+}
+
 /** The resolved string name of a node (`.name("…")`), or undefined for an
  *  unnamed node / a `GoFishRef`. */
 export const nodeName = (node: GoFishAST): string | undefined => {
