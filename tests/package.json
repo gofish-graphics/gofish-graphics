@@ -19,6 +19,12 @@
     "build:parity-review-site": "tsx scripts/build-parity-review-site.ts",
     "test:python": "tsx scripts/capture-python-dom.ts && tsx scripts/compare-python.ts",
     "validate-python-ir": "tsx scripts/validate-python-ir.ts",
+    "bench": "tsx scripts/bench.ts",
+    "bench:quick": "tsx scripts/bench.ts all --quick",
+    "bench:synthetic": "tsx scripts/bench.ts synthetic",
+    "bench:examples-js": "tsx scripts/bench.ts examples-js",
+    "bench:examples-py": "tsx scripts/bench.ts examples-py",
+    "bench:plots": "tsx scripts/bench-plots.ts",
     "review": "tsx scripts/review-server.ts",
     "build:review-site": "tsx scripts/build-review-site.ts"
   },

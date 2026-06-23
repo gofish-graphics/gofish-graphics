@@ -2,7 +2,15 @@ import { defineConfig } from "vite";
 import solidPlugin from "vite-plugin-solid";
 import dts from "vite-plugin-dts";
 
-export default defineConfig({
+export default defineConfig(({ command }) => ({
+  // Strip the render-pass perf instrumentation (src/ast/perf.ts) from the
+  // published library build via dead-code elimination: replacing this constant
+  // with a literal `false` lets the minifier fold `perfEnabled()` to `false`
+  // and drop every guarded section. Left `true` for `pnpm dev` and (via its own
+  // Vite config) the bench harness, which need the instrumentation live.
+  define: {
+    __GOFISH_PERF_INSTRUMENTATION__: command === "build" ? "false" : "true",
+  },
   plugins: [
     solidPlugin(),
     dts({
@@ -42,4 +50,4 @@ export default defineConfig({
       },
     },
   },
-});
+}));

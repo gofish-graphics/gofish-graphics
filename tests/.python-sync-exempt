@@ -41,6 +41,13 @@ packages/gofish-graphics/stories/shapes/ImageMarks.stories.tsx
 # Docs regression test
 packages/gofish-graphics/stories/DocsContextRegression.stories.tsx
 
+# Benchmark plot stories: dev/bench tooling, not portable specs. They render
+# benchmark numbers injected at runtime via `window.__BENCH_RESULTS__` /
+# `__BENCH_HISTORY__` (with an embedded synthetic fallback) and use Math/window
+# — there is nothing for a Python story to byte-match. Captured by the JS
+# visual harness for regression tracking; intentionally not mirrored to Python.
+packages/gofish-graphics/stories/bench/Benchmarks.stories.tsx
+
 # Forward syntax stories needing unsupported features
 packages/gofish-graphics/stories/forwardsyntax/Bar/BarWithLabels.stories.tsx
 # LabeledChart uses a JS-side function-mark that composes resolved node refs

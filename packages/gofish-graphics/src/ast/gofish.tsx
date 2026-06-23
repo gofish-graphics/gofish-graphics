@@ -27,6 +27,7 @@ import {
   type UnderlyingSpace,
 } from "./underlyingSpace";
 import { shadowCheckScaleRoot } from "./solver/shadow";
+import { perfNow, perfAdd, perfBeginRun } from "./perf";
 import { elaborateAxes, elaborateAxisTitles } from "./axes/elaborate";
 import { elaborateLegend, legendOverhang } from "./legends/elaborate";
 
@@ -164,6 +165,7 @@ export async function layout(
   // const sizeThatFitsAST = domainAST.sizeThatFits();
   // const layoutAST = sizeThatFitsAST.layout();
   // return render({ width, height, transform }, layoutAST);
+  const __tResolve = perfNow();
   child.resolveColorScale();
   child.resolveNames();
   child.resolveLabels();
@@ -171,6 +173,7 @@ export async function layout(
   // space inference reads the dims. Top-down + scope-bounded (see resolveAliases).
   child.resolveAliases();
   child.resolveUnderlyingSpace();
+  perfAdd("resolve", perfNow() - __tResolve);
 
   // The original root content object stays in the tree as the plot after any
   // wrapping below (axis / legend / title elaboration each wrap, never replace,
@@ -187,6 +190,7 @@ export async function layout(
   ];
 
   // Node-based axis pipeline: mark axis nodes and apply nice-rounding in-place
+  const __tAxes = perfNow();
   if (axes) {
     // Which dims the chart-level `axes` option enables. `true` → both. For an
     // `{ x?, y? }` object, a dim is enabled unless it is explicitly `false` —
@@ -297,6 +301,7 @@ export async function layout(
     if (contexts?.session) child.setRenderSession(contexts.session);
     child.resolveUnderlyingSpace(); // memoized: computes only the new nodes
   }
+  perfAdd("axes", perfNow() - __tAxes);
 
   if (debug) {
     console.log("🌳 Underlying Space Tree:");
@@ -355,7 +360,9 @@ export async function layout(
   shadowCheckScaleRoot(niceUnderlyingSpaceX, canvasW, rootScaleFactors[0], 0);
   shadowCheckScaleRoot(niceUnderlyingSpaceY, canvasH, rootScaleFactors[1], 1);
 
+  const __tSolve = perfNow();
   child.layout([layoutW, layoutH], rootScaleFactors, posScales);
+  perfAdd("solve", perfNow() - __tSolve);
   // Root placement anchor. A GIVEN dimension keeps the baseline-anchored canvas
   // box [0, given]; content seated outside it (axis labels below 0, ticks above
   // `given`) is reserved as the per-side overhangs below. A SHRINK-TO-FIT
@@ -514,6 +521,10 @@ export async function runLayout(
           : { color: new Map(), colorConfig },
     },
   };
+  // Reset the per-pass accumulator at the start of every render so the bench
+  // harness reads a clean slate (the `lower`/`paint` passes land later, during
+  // SolidJS's reactive render — see perf.ts). No-op when instrumentation is off.
+  perfBeginRun();
   try {
     const contexts = { session };
 
@@ -527,7 +538,9 @@ export async function runLayout(
     // this isn't a full guarantee — but it's a strict improvement
     // for any consumer using <link>-loaded webfonts.
     if (typeof document !== "undefined" && document.fonts?.ready) {
+      const __tFonts = perfNow();
       await document.fonts.ready;
+      perfAdd("fonts", perfNow() - __tFonts);
     }
 
     return await layout(
@@ -810,7 +823,15 @@ export const render = (
     height + topReserve - gy,
   ];
   child.getRenderSession().toPixel = toPixel;
-  const paintBaked = () => lowerToDisplayList(child).map(paintSVG);
+  const paintBaked = () => {
+    const __tLower = perfNow();
+    const items = lowerToDisplayList(child);
+    perfAdd("lower", perfNow() - __tLower);
+    const __tPaint = perfNow();
+    const painted = items.map(paintSVG);
+    perfAdd("paint", perfNow() - __tPaint);
+    return painted;
+  };
   return (
     <svg
       width={
