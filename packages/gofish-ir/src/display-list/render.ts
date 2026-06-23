@@ -10,7 +10,13 @@
  * `arc` / `Path2D` calls instead of emitting tags.
  */
 
-import type { DisplayItem, DisplayListDocument, Style } from "./schema.js";
+import type {
+  CompositeItem,
+  DisplayItem,
+  DisplayListDocument,
+  MaskItem,
+  Style,
+} from "./schema.js";
 
 const esc = (s: string): string =>
   s
@@ -26,9 +32,14 @@ const styleAttrs = (style: Style | undefined): string => {
   if (style.stroke !== undefined) parts.push(`stroke="${esc(style.stroke)}"`);
   if (style.strokeWidth !== undefined)
     parts.push(`stroke-width="${style.strokeWidth}"`);
+  if (style.strokeDasharray !== undefined)
+    parts.push(`stroke-dasharray="${esc(style.strokeDasharray)}"`);
   if (style.opacity !== undefined) parts.push(`opacity="${style.opacity}"`);
   if (style.fillOpacity !== undefined)
     parts.push(`fill-opacity="${style.fillOpacity}"`);
+  if (style.mixBlendMode !== undefined)
+    parts.push(`style="mix-blend-mode:${esc(style.mixBlendMode)}"`);
+  if (style.filter !== undefined) parts.push(`filter="${esc(style.filter)}"`);
   return parts.length ? " " + parts.join(" ") : "";
 };
 
@@ -47,16 +58,55 @@ const itemToSVG = (item: DisplayItem): string => {
       return `<path d="${esc(item.d)}"${s}/>`;
     case "text": {
       const fs =
-        item.fontSize !== undefined ? ` font-size="${item.fontSize}"` : "";
+        item.fontSize !== undefined ? ` font-size="${item.fontSize}px"` : "";
+      const ff =
+        item.fontFamily !== undefined
+          ? ` font-family="${esc(item.fontFamily)}"`
+          : "";
       const ta =
         item.textAnchor !== undefined
           ? ` text-anchor="${item.textAnchor}"`
           : "";
-      return `<text x="${item.x}" y="${item.y}"${fs}${ta}${s}>${esc(item.text)}</text>`;
+      const db =
+        item.dominantBaseline !== undefined
+          ? ` dominant-baseline="${item.dominantBaseline}"`
+          : "";
+      const rot =
+        item.rotate !== undefined
+          ? ` transform="rotate(${item.rotate} ${item.x} ${item.y})"`
+          : "";
+      return `<text x="${item.x}" y="${item.y}"${fs}${ff}${ta}${db}${rot}${s}>${esc(item.text)}</text>`;
     }
-    case "image":
-      return `<image x="${item.x}" y="${item.y}" width="${item.w}" height="${item.h}" href="${esc(item.href)}"${s}/>`;
+    case "image": {
+      const par =
+        item.preserveAspectRatio !== undefined
+          ? ` preserveAspectRatio="${esc(item.preserveAspectRatio)}"`
+          : "";
+      return `<image x="${item.x}" y="${item.y}" width="${item.w}" height="${item.h}" href="${esc(item.href)}"${par}${s}/>`;
+    }
+    case "group": {
+      const t = item.transform;
+      const parts: string[] = [];
+      if (t.translate)
+        parts.push(`translate(${t.translate[0]} ${t.translate[1]})`);
+      if (t.scale) parts.push(`scale(${t.scale[0]} ${t.scale[1]})`);
+      const tr = parts.length ? ` transform="${parts.join(" ")}"` : "";
+      return `<g${tr}${s}>${item.children.map(itemToSVG).join("")}</g>`;
+    }
+    case "composite":
+    case "mask":
+      // Ported verbatim from porterDuff.tsx in the compositor migration step
+      // (display-list-plan task 6). Placeholder until then.
+      return compositeToSVG(item);
   }
+};
+
+/** Reconstruct the Porter-Duff filter / mask SVG from a structured
+ *  composite/mask item. Filled in during the compositor migration. */
+const compositeToSVG = (_item: CompositeItem | MaskItem): string => {
+  throw new Error(
+    "[gofish-ir] display-list composite/mask SVG backend not yet implemented"
+  );
 };
 
 /** Render a display list to a standalone SVG document string. */

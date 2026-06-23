@@ -24,7 +24,14 @@ import {
   Transform,
 } from "./dims";
 import { gofish, gofishToSVGElement, gofishToSVG, gofishSave } from "./gofish";
-import type { AxesOptions, GoFishExportOptions } from "./gofish";
+import type {
+  AxesOptions,
+  GoFishExportOptions,
+  GoFishRenderOptions,
+} from "./gofish";
+import { toDisplayList } from "./displayList/toDisplayList";
+import type { DisplayList } from "gofish-ir";
+import { lowerLabelItems } from "./labels/renderLabel";
 import { GoFishRef } from "./_ref";
 import { GoFishAST } from "./_ast";
 import { CoordinateTransform } from "./coordinateTransforms/coord";
@@ -67,6 +74,9 @@ import { renderLabelJSX } from "./labels/renderLabel";
 export type RenderSession = {
   tokenContext: TokenContext;
   scaleContext: ScaleContext;
+  /** Set by the lower emit driver (`lowerToDisplayList`) for the duration of a
+   *  lowering walk: the y-up→y-down pixel mapping every `lower` body uses. */
+  toPixel?: ToPixel;
 };
 
 export type ScaleFactorFunction = Monotonic.Monotonic;
@@ -141,6 +151,38 @@ export type Render = (
   node: GoFishNode
 ) => JSX.Element;
 
+/** Map a GoFish y-up display point to a final y-down absolute SVG pixel. The one
+ *  transform a `lower` body needs: it folds in both the per-shape `scale(1,-1)`
+ *  and the root flip the legacy render relied on. Set once per emit on the
+ *  render session. */
+export type ToPixel = (p: [number, number]) => [number, number];
+
+/**
+ * Lower a node into a fragment of the display-list IR — the per-primitive
+ * counterpart of {@link Render}. Each shape/operator owns its `lower`; the
+ * display list is the union of every node's fragment, painted by a single
+ * backend (no per-shape SVG). `children` are the already-lowered child items.
+ * The arg bag mirrors {@link Render} (so the geometry computation is reused
+ * verbatim) plus `toPixel`.
+ */
+export type Lower = (
+  {
+    intrinsicDims,
+    transform,
+    renderData,
+    coordinateTransform,
+    toPixel,
+  }: {
+    intrinsicDims?: Dimensions;
+    transform?: Transform;
+    renderData?: any;
+    coordinateTransform?: CoordinateTransform;
+    toPixel: ToPixel;
+  },
+  children: DisplayList.DisplayItem[],
+  node: GoFishNode
+) => DisplayList.DisplayItem[];
+
 export type ResolveUnderlyingSpace = (
   childSpaces: Size<UnderlyingSpace>[],
   childNodes: (GoFishNode | GoFishRef)[],
@@ -194,6 +236,10 @@ export class GoFishNode {
   public _underlyingSpace?: Size<UnderlyingSpace> = undefined;
   private _layout: Layout;
   private _render: Render;
+  /** Per-primitive IR lowering (see {@link Lower}). Optional during the
+   *  render→lower migration; once every factory supplies one, `_render` is
+   *  removed and this becomes the single draw description. */
+  private _lower?: Lower;
   public children: GoFishAST[];
   public intrinsicDims?: Dimensions;
   public transform?: Transform;
@@ -253,6 +299,7 @@ export class GoFishNode {
       resolveUnderlyingSpace,
       layout,
       render,
+      lower,
       shared = [false, false],
       color,
     }: {
@@ -264,6 +311,7 @@ export class GoFishNode {
       resolveUnderlyingSpace: ResolveUnderlyingSpace;
       layout: Layout;
       render: Render;
+      lower?: Lower;
       shared?: Size<boolean>;
       color?: MaybeValue<string>;
     },
@@ -275,6 +323,7 @@ export class GoFishNode {
     this._resolveUnderlyingSpace = resolveUnderlyingSpace;
     this._layout = layout;
     this._render = render;
+    this._lower = lower;
     this.children = children;
     children.forEach((child) => {
       child.parent = this;
@@ -932,6 +981,53 @@ export class GoFishNode {
     return shapeJSX;
   }
 
+  /**
+   * Lower this node and its subtree into display-list items. Structural mirror
+   * of {@link INTERNAL_render}: recurse children (clearing the coordinate
+   * transform across a `box`, as render does), call this node's `_lower`, then
+   * append the lowered label. `transformOverride` is the baked absolute
+   * transform from the bake pass.
+   */
+  public INTERNAL_lower(
+    coordinateTransform?: CoordinateTransform,
+    transformOverride?: Transform
+  ): DisplayList.DisplayItem[] {
+    // Unlike INTERNAL_render, children are NOT pre-recursed here. A node reaching
+    // INTERNAL_lower is either a leaf (no children) or a bake boundary (coord,
+    // box, connect, arrow, enclose, …) that carries its own absolute transform —
+    // a boundary must re-walk its subtree with that transform composed in (via
+    // `flattenLayout`) so descendants land in absolute coordinates before
+    // `toPixel`. Pre-recursed, parent-relative child items would be mispositioned.
+    if (!this._lower) {
+      throw new Error(
+        `[gofish] node type "${this.type}" has no lower() yet — cannot ` +
+          `emit the display list. (Migration in progress; see display-list-plan.)`
+      );
+    }
+    const toPixel = this.getRenderSession().toPixel;
+    if (!toPixel) {
+      throw new Error("[gofish] toPixel not set on the render session");
+    }
+
+    const transform = transformOverride ?? this._displayTransform;
+    const items = this._lower(
+      {
+        intrinsicDims: this.intrinsicDims,
+        transform,
+        renderData: this.renderData,
+        coordinateTransform,
+        toPixel,
+      },
+      [],
+      this
+    );
+    if (this._label && this.intrinsicDims) {
+      const labelItems = lowerLabelItems(this, transform, toPixel);
+      if (labelItems.length) return [...items, ...labelItems];
+    }
+    return items;
+  }
+
   public setRenderSession(session: RenderSession): void {
     this.renderSession = session;
     this.children.forEach((child) => {
@@ -1015,6 +1111,15 @@ export class GoFishNode {
   /** Render to a standalone SVG markup string. See {@link toSVGElement}. */
   public toSVG(options: GoFishExportOptions = {}): Promise<string> {
     return gofishToSVG(options, this);
+  }
+
+  /**
+   * Emit the post-layout *render IR* — a flat display list of positioned
+   * primitives in absolute pixels, solved at this viewport. The SVG/Canvas/
+   * WebGPU backends each consume it. See {@link toDisplayList}.
+   */
+  public toDisplayList(options: GoFishRenderOptions = {}) {
+    return toDisplayList(this, options);
   }
 
   /**

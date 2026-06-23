@@ -37,15 +37,24 @@ export type DisplayItem =
   | EllipseItem
   | PathItem
   | TextItem
-  | ImageItem;
+  | ImageItem
+  | GroupItem
+  | CompositeItem
+  | MaskItem;
+
+/** Source-data provenance carried by a primitive: one row, or rows for an
+ *  aggregate mark. */
+export type Datum = Record<string, unknown> | Record<string, unknown>[];
 
 /** Properties shared by every primitive. */
 export interface BaseDisplayItem {
   /** Resolved paint. */
   style?: Style;
-  /** The source data row this primitive was elaborated from — the hit-testing
-   *  / accessibility target. Provenance, not a data binding. */
-  datum?: Record<string, unknown>;
+  /** The source data this primitive was elaborated from — the hit-testing /
+   *  accessibility target. Provenance, not a data binding. A single row for a
+   *  one-to-one mark (a bar = one row), or the array of rows for an aggregate
+   *  mark (a bar summarizing a group). */
+  datum?: Datum;
   /** Whether this is a data-bearing primitive (`node`) or decorative chrome
    *  such as a label, axis, or glyph detail (`overlay`). Defaults to `node`. */
   role?: "node" | "overlay";
@@ -85,7 +94,12 @@ export interface TextItem extends BaseDisplayItem {
   y: number;
   text: string;
   fontSize?: number;
+  fontFamily?: string;
   textAnchor?: "start" | "middle" | "end";
+  dominantBaseline?: "auto" | "central" | "middle" | "hanging" | "mathematical";
+  /** Rotation in degrees about `(x, y)`, in final screen space (SVG
+   *  `rotate(deg, x, y)` convention). */
+  rotate?: number;
 }
 
 export interface ImageItem extends BaseDisplayItem {
@@ -95,6 +109,42 @@ export interface ImageItem extends BaseDisplayItem {
   w: number;
   h: number;
   href: string;
+  preserveAspectRatio?: string;
+}
+
+/**
+ * A transform group — children painted under an affine `transform` (the
+ * display-list analogue of an SVG `<g transform>` / a Canvas save+transform).
+ * Used for the rare cases the flat-absolute fold can't express on its own: a
+ * `box`/`frame` `scale`. Children are in the group's local pixel space.
+ */
+export interface GroupItem extends BaseDisplayItem {
+  kind: "group";
+  transform: { translate?: [number, number]; scale?: [number, number] };
+  children: DisplayItem[];
+}
+
+/**
+ * A Porter-Duff composite of two sub-lists (Figma-style operator names). The
+ * SVG backend reconstructs the `feImage`/`feComposite`/`feBlend` filter graph;
+ * a Canvas/WebGPU backend maps `operator`/`blendMode` to its own blend state.
+ */
+export interface CompositeItem extends BaseDisplayItem {
+  kind: "composite";
+  operator: "over" | "atop" | "in" | "out" | "xor";
+  /** CSS `mix-blend-mode` applied between the two layers. */
+  blendMode?: string;
+  bbox: { x: number; y: number; w: number; h: number };
+  source: DisplayItem[];
+  dest: DisplayItem[];
+}
+
+/** Clip `content` by the alpha of `mask`. */
+export interface MaskItem extends BaseDisplayItem {
+  kind: "mask";
+  bbox: { x: number; y: number; w: number; h: number };
+  mask: DisplayItem[];
+  content: DisplayItem[];
 }
 
 export interface Style {
@@ -103,6 +153,12 @@ export interface Style {
   strokeWidth?: number;
   opacity?: number;
   fillOpacity?: number;
+  /** CSS `mix-blend-mode`. */
+  mixBlendMode?: string;
+  /** SVG `stroke-dasharray`. */
+  strokeDasharray?: string;
+  /** A `url(#id)` reference to a user-supplied filter def. */
+  filter?: string;
 }
 
 export const DISPLAY_ITEM_KINDS = [
@@ -111,6 +167,9 @@ export const DISPLAY_ITEM_KINDS = [
   "path",
   "text",
   "image",
+  "group",
+  "composite",
+  "mask",
 ] as const;
 
 export type DisplayItemKind = (typeof DISPLAY_ITEM_KINDS)[number];
@@ -133,4 +192,13 @@ export function isTextItem(item: DisplayItem): item is TextItem {
 }
 export function isImageItem(item: DisplayItem): item is ImageItem {
   return item.kind === "image";
+}
+export function isGroupItem(item: DisplayItem): item is GroupItem {
+  return item.kind === "group";
+}
+export function isCompositeItem(item: DisplayItem): item is CompositeItem {
+  return item.kind === "composite";
+}
+export function isMaskItem(item: DisplayItem): item is MaskItem {
+  return item.kind === "mask";
 }

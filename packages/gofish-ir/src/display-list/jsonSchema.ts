@@ -15,12 +15,29 @@ const STYLE = {
     strokeWidth: { type: "number" },
     opacity: { type: "number" },
     fillOpacity: { type: "number" },
+    mixBlendMode: { type: "string" },
+    strokeDasharray: { type: "string" },
+    filter: { type: "string" },
+  },
+} as const;
+
+const BBOX = {
+  type: "object",
+  required: ["x", "y", "w", "h"],
+  additionalProperties: false,
+  properties: {
+    x: { type: "number" },
+    y: { type: "number" },
+    w: { type: "number" },
+    h: { type: "number" },
   },
 } as const;
 
 const BASE_PROPS = {
   style: { $ref: "#/$defs/Style" },
-  datum: { type: "object" },
+  datum: {
+    anyOf: [{ type: "object" }, { type: "array", items: { type: "object" } }],
+  },
   role: { enum: ["node", "overlay"] },
   id: { type: "string" },
 } as const;
@@ -55,7 +72,28 @@ export const DISPLAY_LIST_JSON_SCHEMA = {
         { $ref: "#/$defs/PathItem" },
         { $ref: "#/$defs/TextItem" },
         { $ref: "#/$defs/ImageItem" },
+        { $ref: "#/$defs/GroupItem" },
+        { $ref: "#/$defs/CompositeItem" },
+        { $ref: "#/$defs/MaskItem" },
       ],
+    },
+    GroupItem: {
+      type: "object",
+      required: ["kind", "transform", "children"],
+      additionalProperties: false,
+      properties: {
+        kind: { const: "group" },
+        transform: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            translate: { type: "array", items: { type: "number" } },
+            scale: { type: "array", items: { type: "number" } },
+          },
+        },
+        children: { type: "array", items: { $ref: "#/$defs/DisplayItem" } },
+        ...BASE_PROPS,
+      },
     },
     RectItem: {
       type: "object",
@@ -105,7 +143,12 @@ export const DISPLAY_LIST_JSON_SCHEMA = {
         y: { type: "number" },
         text: { type: "string" },
         fontSize: { type: "number" },
+        fontFamily: { type: "string" },
         textAnchor: { enum: ["start", "middle", "end"] },
+        dominantBaseline: {
+          enum: ["auto", "central", "middle", "hanging", "mathematical"],
+        },
+        rotate: { type: "number" },
         ...BASE_PROPS,
       },
     },
@@ -120,6 +163,33 @@ export const DISPLAY_LIST_JSON_SCHEMA = {
         w: { type: "number" },
         h: { type: "number" },
         href: { type: "string" },
+        preserveAspectRatio: { type: "string" },
+        ...BASE_PROPS,
+      },
+    },
+    CompositeItem: {
+      type: "object",
+      required: ["kind", "operator", "bbox", "source", "dest"],
+      additionalProperties: false,
+      properties: {
+        kind: { const: "composite" },
+        operator: { enum: ["over", "atop", "in", "out", "xor"] },
+        blendMode: { type: "string" },
+        bbox: BBOX,
+        source: { type: "array", items: { $ref: "#/$defs/DisplayItem" } },
+        dest: { type: "array", items: { $ref: "#/$defs/DisplayItem" } },
+        ...BASE_PROPS,
+      },
+    },
+    MaskItem: {
+      type: "object",
+      required: ["kind", "bbox", "mask", "content"],
+      additionalProperties: false,
+      properties: {
+        kind: { const: "mask" },
+        bbox: BBOX,
+        mask: { type: "array", items: { $ref: "#/$defs/DisplayItem" } },
+        content: { type: "array", items: { $ref: "#/$defs/DisplayItem" } },
         ...BASE_PROPS,
       },
     },

@@ -3,7 +3,8 @@
 // </gofish-wiki>
 
 import * as Monotonic from "../../util/monotonic";
-import { GoFishNode } from "../_node";
+import { GoFishNode, type ToPixel } from "../_node";
+import type { DisplayList } from "gofish-ir";
 import { shadowCheckScaleRoot } from "../solver/shadow";
 import { topoSortByZOrder } from "../paintOrder";
 import { Size, elaborateDims, FancyDims, displayTranslate } from "../dims";
@@ -1003,6 +1004,101 @@ export const layer = createNodeOperatorSequential(
               })}
             </g>
           );
+        },
+        // IR lowering — mirror of the box/layer render. The box's translate is
+        // composed into a child-local `toPixel` (so children land in the right
+        // pixels); a non-identity scale can't be folded into coordinates, so it
+        // becomes a `group` item wrapping the children. Z-order mirrors render.
+        lower: ({ transform, coordinateTransform }, _children, node) => {
+          const scaleX = options.transform?.scale?.x ?? 1;
+          const scaleY = options.transform?.scale?.y ?? 1;
+          const [wrapTx, wrapTy] = displayTranslate(transform);
+
+          const session = node.getRenderSession();
+          const outer = session.toPixel!;
+          // Translate-only composition (scale handled by the group below).
+          const composed: ToPixel = ([cx, cy]) =>
+            outer([wrapTx + cx, wrapTy + cy]);
+
+          // Lower the (z-ordered) children under `composed`, restoring `toPixel`
+          // afterward. A per-child accTranslate (z-constraint flatten) is folded
+          // into the mapping for that child.
+          const lowerChildren = (): DisplayList.DisplayItem[] => {
+            const zConstraints = (node.constraints ?? []).filter(
+              isZOrderConstraint
+            );
+            const items: DisplayList.DisplayItem[] = [];
+            const withToPixel = (
+              fn: ToPixel,
+              run: () => DisplayList.DisplayItem[]
+            ) => {
+              session.toPixel = fn;
+              try {
+                return run();
+              } finally {
+                session.toPixel = composed;
+              }
+            };
+
+            if (zConstraints.length === 0) {
+              const ordered = node.children
+                .map((child, index) => ({
+                  child,
+                  index,
+                  zOrder: child instanceof GoFishNode ? child.getZOrder() : 0,
+                }))
+                .sort((a, b) => a.zOrder - b.zOrder || a.index - b.index);
+              session.toPixel = composed;
+              try {
+                for (const { child } of ordered)
+                  items.push(...child.INTERNAL_lower(coordinateTransform));
+              } finally {
+                session.toPixel = outer;
+              }
+              return items;
+            }
+
+            const flat = flattenForZOrder(node.children);
+            const sorted = topoSortByZOrder(flat, zConstraints, {
+              node: (it) => it.node,
+              z: (it) => it.defaultZ,
+              order: (it) => it.defaultOrder,
+            });
+            try {
+              for (const item of sorted) {
+                const [ax, ay] = item.accTranslate;
+                const map: ToPixel =
+                  ax === 0 && ay === 0
+                    ? composed
+                    : ([cx, cy]) => composed([cx + ax, cy + ay]);
+                items.push(
+                  ...withToPixel(map, () =>
+                    item.node.INTERNAL_lower(coordinateTransform)
+                  )
+                );
+              }
+            } finally {
+              session.toPixel = outer;
+            }
+            return items;
+          };
+
+          const childItems = lowerChildren();
+
+          if (scaleX === 1 && scaleY === 1) return childItems;
+
+          // Scale about the box's pixel origin: p ↦ origin + s·(p − origin).
+          const [ox, oy] = outer([wrapTx, wrapTy]);
+          return [
+            {
+              kind: "group",
+              transform: {
+                translate: [ox * (1 - scaleX), oy * (1 - scaleY)],
+                scale: [scaleX, scaleY],
+              },
+              children: childItems,
+            },
+          ];
         },
       },
       children

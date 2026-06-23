@@ -15,6 +15,22 @@ import {
 } from "./_node";
 import { computePosScale } from "./domain";
 import { bake } from "./coordinateTransforms/bake";
+import { lowerToDisplayList } from "./displayList/lower";
+import { paintSVG } from "./displayList/paintSVG";
+import type { ToPixel } from "./_node";
+import { envFlag } from "../util";
+
+/**
+ * Dev gate for the two-pass IR render path (migration scaffold; removed once it
+ * is the only path). On in Node via `GOFISH_IR_RENDER=1`; in a browser (where
+ * `process.env` is absent) via {@link setIRRender}, which the capture harness
+ * and tests call. */
+let IR_RENDER_OVERRIDE: boolean | undefined;
+export const setIRRender = (on: boolean | undefined): void => {
+  IR_RENDER_OVERRIDE = on;
+};
+const irRenderEnabled = (): boolean =>
+  IR_RENDER_OVERRIDE ?? envFlag("GOFISH_IR_RENDER");
 import type { Size } from "./dims";
 import { isSIZE, type UnderlyingSpace } from "./underlyingSpace";
 import { shadowCheckScaleRoot } from "./solver/shadow";
@@ -482,7 +498,7 @@ type LayoutData = {
  * measured layout data. The single place the pipeline is driven — shared by
  * the live `gofish()` render path and the `gofishToSVG*` export paths.
  */
-async function runLayout(
+export async function runLayout(
   options: GoFishRenderOptions,
   child: GoFishNode | Promise<GoFishNode>
 ): Promise<LayoutData> {
@@ -807,6 +823,34 @@ export const render = (
   // its absolute transform. A thunk so only the mounted `<Show>` branch runs it.
   const renderBaked = () =>
     bake(child).map((d) => d.node.INTERNAL_render(undefined, d.transform));
+
+  // Two-pass IR path (dev flag during migration; becomes the only path once
+  // every primitive lowers). Lower the baked tree into the display list, then
+  // paint each item. Items are final y-down absolute pixels, so there is no
+  // outer flip `<g>` and no per-shape transform.
+  if (irRenderEnabled()) {
+    const toPixel: ToPixel = ([gx, gy]) => [
+      gx + leftReserve,
+      height + topReserve - gy,
+    ];
+    child.getRenderSession().toPixel = toPixel;
+    const paintBaked = () => lowerToDisplayList(child).map(paintSVG);
+    return (
+      <svg
+        width={
+          leftReserve + width + rightOverhang + reserve(rightContentOverhang)
+        }
+        height={topReserve + height + bottomReserve}
+        xmlns="http://www.w3.org/2000/svg"
+      >
+        <Show when={defs}>
+          <defs>{defs}</defs>
+        </Show>
+        {paintBaked()}
+      </svg>
+    );
+  }
+
   const result = (
     <svg
       width={

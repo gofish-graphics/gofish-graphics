@@ -40,6 +40,8 @@ import {
   UnderlyingSpace,
 } from "../underlyingSpace";
 import { createMark } from "../withGoFish";
+import type { DisplayList } from "gofish-ir";
+import { lowerStyle, pathToPixelSVG } from "../displayList/lowerHelpers";
 /* TODO: what should default embedding behavior be when all values are aesthetic? */
 export const Ellipse = ({
   name,
@@ -406,6 +408,206 @@ export const Ellipse = ({
             )}
           </>
         );
+      },
+      // IR lowering — the structural mirror of `render` above. Each branch
+      // computes the SAME geometry, then emits display-list items (coordinates
+      // pushed through `toPixel`) instead of JSX. Keep in lockstep with render
+      // until the render path is deleted.
+      lower: (
+        { intrinsicDims, transform, coordinateTransform, toPixel },
+        _children,
+        node
+      ): DisplayList.DisplayItem[] => {
+        const space = coordinateTransform ?? linear();
+
+        // Ellipse reads embedding from the closure `dims` (elaborateDims), not
+        // from intrinsicDims (whose entries carry no `embedded` flag here).
+        const isXEmbedded = dims[0].embedded;
+        const isYEmbedded = dims[1].embedded;
+
+        const displayDims = displayDimsOf(intrinsicDims, transform);
+
+        const unitScale = node.getRenderSession().scaleContext?.unit;
+        const originalFill = fill;
+        const resolvedFill = resolveColorChannel(fill, unitScale);
+        const resolvedStroke =
+          resolveColorChannel(stroke, unitScale) ?? resolvedFill ?? "black";
+
+        const labelText =
+          label && originalFill && isValue(originalFill)
+            ? String(getValue(originalFill) ?? "")
+            : undefined;
+
+        // The inline value-label (the `label` arg) — white text at the mark's
+        // center. Mirrors the `<text>` each render branch emits. `cx`/`cy` are
+        // the same display-space center coords render passed to the `<text>`;
+        // `toPixel` applies the y-flip the legacy `scale(1, -1)` did.
+        const valueLabel = (cx: number, cy: number): DisplayList.TextItem[] => {
+          if (!labelText) return [];
+          const [x, y] = toPixel([cx, cy]);
+          return [
+            {
+              kind: "text",
+              x,
+              y,
+              text: labelText,
+              fontSize: 12,
+              textAnchor: "middle",
+              dominantBaseline: "central",
+              role: "overlay",
+              style: { fill: "white" },
+            },
+          ];
+        };
+
+        const elementStyle = lowerStyle({
+          fill: resolvedFill,
+          stroke: resolvedStroke,
+          strokeWidth: strokeWidth ?? 0,
+        });
+
+        // Build an EllipseItem from a display-space center; radii are unchanged
+        // by `toPixel` (it is translate + y-flip only).
+        const ellipseItem = (
+          cx: number,
+          cy: number,
+          rx: number,
+          ry: number
+        ): DisplayList.EllipseItem => {
+          const [px, py] = toPixel([cx, cy]);
+          return {
+            kind: "ellipse",
+            cx: px,
+            cy: py,
+            rx,
+            ry,
+            style: elementStyle,
+            datum: node.datum,
+            role: "node",
+          };
+        };
+
+        // Both dimensions aesthetic — transformed point.
+        if (!isXEmbedded && !isYEmbedded) {
+          const center: [number, number] = [
+            (displayDims[0].min ?? 0) + (displayDims[0].size ?? 0) / 2,
+            (displayDims[1].min ?? 0) + (displayDims[1].size ?? 0) / 2,
+          ];
+          const [transformedX, transformedY] = space.transform(center);
+          const width = displayDims[0].size ?? 0;
+          const height = displayDims[1].size ?? 0;
+          return [
+            ellipseItem(transformedX, transformedY, width / 2, height / 2),
+            ...valueLabel(transformedX, transformedY),
+          ];
+        }
+
+        // One dimension data — line.
+        if (isXEmbedded !== isYEmbedded) {
+          const aestheticAxis = isXEmbedded ? 1 : 0;
+          const thickness = displayDims[aestheticAxis].size ?? 0;
+          const aestheticMid =
+            (displayDims[aestheticAxis].min ?? 0) +
+            (displayDims[aestheticAxis].size ?? 0) / 2;
+
+          // For linear spaces, render as an ellipse spanning the data axis.
+          if (space.type === "linear") {
+            const cx = isXEmbedded
+              ? ((displayDims[0].min ?? 0) + (displayDims[0].max ?? 0)) / 2
+              : aestheticMid;
+            const cy = isXEmbedded
+              ? aestheticMid
+              : ((displayDims[1].min ?? 0) + (displayDims[1].max ?? 0)) / 2;
+            const rx = isXEmbedded
+              ? ((displayDims[0].max ?? 0) - (displayDims[0].min ?? 0)) / 2
+              : thickness / 2;
+            const ry = isXEmbedded
+              ? thickness / 2
+              : ((displayDims[1].max ?? 0) - (displayDims[1].min ?? 0)) / 2;
+            return [ellipseItem(cx, cy, rx, ry), ...valueLabel(cx, cy)];
+          }
+
+          // Nonlinear — warped line path along the midline.
+          const linePath = path(
+            [
+              [
+                isXEmbedded ? (displayDims[0].min ?? 0) : aestheticMid,
+                isXEmbedded ? aestheticMid : (displayDims[1].min ?? 0),
+              ],
+              [
+                isXEmbedded ? (displayDims[0].max ?? 0) : aestheticMid,
+                isXEmbedded ? aestheticMid : (displayDims[1].max ?? 0),
+              ],
+            ],
+            { subdivision: 1000 }
+          );
+          const transformed = transformPath(linePath, space);
+
+          const mid: [number, number] = [
+            ((displayDims[0].min ?? 0) + (displayDims[0].max ?? 0)) / 2,
+            ((displayDims[1].min ?? 0) + (displayDims[1].max ?? 0)) / 2,
+          ];
+          const [labelX, labelY] = space.transform(mid);
+          return [
+            {
+              kind: "path",
+              d: pathToPixelSVG(transformed, toPixel),
+              datum: node.datum,
+              role: "node",
+              style: lowerStyle({
+                fill: "none",
+                stroke: resolvedStroke,
+                strokeWidth: thickness + 0.5,
+              }),
+            },
+            ...valueLabel(labelX, labelY),
+          ];
+        }
+
+        // Both dimensions data — area.
+        if (space.type === "linear") {
+          const x = displayDims[0].min ?? 0;
+          const y = displayDims[1].min ?? 0;
+          const width = (displayDims[0].max ?? 0) - x;
+          const height = (displayDims[1].max ?? 0) - y;
+          const cx = x + width / 2;
+          const cy = y + height / 2;
+          return [
+            ellipseItem(cx, cy, width / 2, height / 2),
+            ...valueLabel(cx, cy),
+          ];
+        }
+
+        const corners = path(
+          [
+            [displayDims[0].min ?? 0, displayDims[1].min ?? 0],
+            [displayDims[0].max ?? 0, displayDims[1].min ?? 0],
+            [displayDims[0].max ?? 0, displayDims[1].max ?? 0],
+            [displayDims[0].min ?? 0, displayDims[1].max ?? 0],
+          ],
+          { closed: true, subdivision: 1000 }
+        );
+        const transformed = transformPath(corners, space);
+
+        const mid: [number, number] = [
+          ((displayDims[0].min ?? 0) + (displayDims[0].max ?? 0)) / 2,
+          ((displayDims[1].min ?? 0) + (displayDims[1].max ?? 0)) / 2,
+        ];
+        const [labelX, labelY] = space.transform(mid);
+        return [
+          {
+            kind: "path",
+            d: pathToPixelSVG(transformed, toPixel),
+            datum: node.datum,
+            role: "node",
+            style: lowerStyle({
+              fill: resolvedFill,
+              stroke: resolvedStroke,
+              strokeWidth: strokeWidth ?? 0,
+            }),
+          },
+          ...valueLabel(labelX, labelY),
+        ];
       },
     },
     []

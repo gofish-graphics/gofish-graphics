@@ -25,6 +25,9 @@ const isObject = (v: unknown): v is Record<string, unknown> =>
 const isNum = (v: unknown): v is number =>
   typeof v === "number" && Number.isFinite(v);
 const isStr = (v: unknown): v is string => typeof v === "string";
+/** Datum provenance: a single row object, or an array of row objects. */
+const isDatum = (v: unknown): boolean =>
+  isObject(v) || (Array.isArray(v) && v.every(isObject));
 
 function checkStyle(
   style: unknown,
@@ -45,6 +48,28 @@ function checkStyle(
     if (s[k] !== undefined && !isNum(s[k]))
       errors.push({ path: `${path}.${k}`, message: `${k} must be a number` });
   }
+  for (const k of ["mixBlendMode", "strokeDasharray", "filter"] as const) {
+    if (s[k] !== undefined && !isStr(s[k]))
+      errors.push({ path: `${path}.${k}`, message: `${k} must be a string` });
+  }
+}
+
+function checkBBox(
+  bbox: unknown,
+  path: string,
+  errors: ValidationError[]
+): void {
+  if (
+    !isObject(bbox) ||
+    !isNum(bbox.x) ||
+    !isNum(bbox.y) ||
+    !isNum(bbox.w) ||
+    !isNum(bbox.h)
+  )
+    errors.push({
+      path,
+      message: "bbox must be { x, y, w, h: number }",
+    });
 }
 
 function checkBase(
@@ -53,8 +78,11 @@ function checkBase(
   errors: ValidationError[]
 ): void {
   checkStyle(item.style, `${path}.style`, errors);
-  if (item.datum !== undefined && !isObject(item.datum))
-    errors.push({ path: `${path}.datum`, message: "datum must be an object" });
+  if (item.datum !== undefined && !isDatum(item.datum))
+    errors.push({
+      path: `${path}.datum`,
+      message: "datum must be an object or an array of objects",
+    });
   if (
     item.role !== undefined &&
     item.role !== "node" &&
@@ -75,6 +103,9 @@ const REQUIRED_FIELDS: Record<string, { num?: string[]; str?: string[] }> = {
   path: { str: ["d"] },
   text: { num: ["x", "y"], str: ["text"] },
   image: { num: ["x", "y", "w", "h"], str: ["href"] },
+  group: {},
+  composite: {},
+  mask: {},
 };
 
 function checkItem(
@@ -106,6 +137,59 @@ function checkItem(
     if (!isStr(item[f]))
       errors.push({ path: `${path}.${f}`, message: `${f} must be a string` });
   }
+
+  // Recursive nesting items: validate bbox + the child item arrays.
+  if (kind === "group") {
+    if (!isObject(item.transform))
+      errors.push({
+        path: `${path}.transform`,
+        message: "transform must be an object",
+      });
+    if (!Array.isArray(item.children))
+      errors.push({
+        path: `${path}.children`,
+        message: "children must be an array",
+      });
+    else
+      item.children.forEach((c, i) =>
+        checkItem(c, `${path}.children[${i}]`, errors)
+      );
+  } else if (kind === "composite") {
+    checkBBox(item.bbox, `${path}.bbox`, errors);
+    if (
+      item.operator === undefined ||
+      !["over", "atop", "in", "out", "xor"].includes(item.operator as string)
+    )
+      errors.push({
+        path: `${path}.operator`,
+        message: "operator must be one of over, atop, in, out, xor",
+      });
+    for (const key of ["source", "dest"] as const) {
+      if (!Array.isArray(item[key]))
+        errors.push({
+          path: `${path}.${key}`,
+          message: `${key} must be an array`,
+        });
+      else
+        item[key].forEach((c, i) =>
+          checkItem(c, `${path}.${key}[${i}]`, errors)
+        );
+    }
+  } else if (kind === "mask") {
+    checkBBox(item.bbox, `${path}.bbox`, errors);
+    for (const key of ["mask", "content"] as const) {
+      if (!Array.isArray(item[key]))
+        errors.push({
+          path: `${path}.${key}`,
+          message: `${key} must be an array`,
+        });
+      else
+        item[key].forEach((c, i) =>
+          checkItem(c, `${path}.${key}[${i}]`, errors)
+        );
+    }
+  }
+
   checkBase(item, path, errors);
 }
 

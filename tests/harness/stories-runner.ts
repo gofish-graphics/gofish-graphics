@@ -10,6 +10,12 @@ const storyModules = import.meta.glob(
   { eager: true }
 ) as Record<string, any>;
 
+// Render-strategy toggle, so the pixel gate can capture each story twice —
+// legacy render vs the two-pass display-list IR path — and diff (see
+// scripts/capture-ir-parity.ts). Falls back to a no-op if the running lib
+// predates the export.
+import { setIRRender } from "gofish-graphics";
+
 interface StoryInfo {
   id: string;
   title: string;
@@ -64,6 +70,7 @@ declare global {
   interface Window {
     __listStories__: () => StoryInfo[];
     __renderStory__: (id: string) => Promise<boolean>;
+    __setIRRender__: (on: boolean) => void;
     __STORY_RENDER_DONE__: boolean;
     __STORY_RENDER_ERROR__: string | null;
     __STORIES_RUNNER_READY__: boolean;
@@ -72,6 +79,14 @@ declare global {
 }
 
 window.__listStories__ = () => allStories;
+
+window.__setIRRender__ = (on: boolean) => {
+  try {
+    setIRRender(on);
+  } catch {
+    /* older lib without the toggle — no-op */
+  }
+};
 
 /**
  * Render a single story into #stories-root.

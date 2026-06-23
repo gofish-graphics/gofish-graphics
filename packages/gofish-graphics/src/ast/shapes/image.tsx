@@ -25,6 +25,8 @@ import {
 } from "../underlyingSpace";
 import { createMark } from "../withGoFish";
 import { attachCut } from "../graphicalOperators/cut";
+import type { DisplayList } from "gofish-ir";
+import { lowerStyle } from "../displayList/lowerHelpers";
 
 type ImageDimensions = {
   width: number;
@@ -363,6 +365,38 @@ export const Image = ({
             opacity={opacity}
           />
         );
+      },
+      // IR lowering — structural mirror of `render`. The legacy
+      // `transform="scale(1,-1)" y={-y-height}` y-flip folds into `toPixel`: the
+      // y-up box has min-x `x` and spans y `[y, y+height]`, so its display
+      // top-left corner is `(x, y+height)`, which `toPixel` maps to the y-down
+      // top-left pixel.
+      lower: (
+        { intrinsicDims, transform, toPixel },
+        _children,
+        node
+      ): DisplayList.DisplayItem[] => {
+        const [tx, ty] = displayTranslate(transform);
+        const x = tx + (intrinsicDims?.[0]?.min ?? 0);
+        const y = ty + (intrinsicDims?.[1]?.min ?? 0);
+        const width = intrinsicDims?.[0]?.size ?? 0;
+        const height = intrinsicDims?.[1]?.size ?? 0;
+
+        const [px, py] = toPixel([x, y + height]);
+        const style = lowerStyle({ opacity, filter });
+        const item: DisplayList.ImageItem = {
+          kind: "image",
+          x: px,
+          y: py,
+          w: Math.abs(width),
+          h: Math.abs(height),
+          href,
+          preserveAspectRatio,
+          datum: node.datum,
+          role: "node",
+        };
+        if (Object.keys(style).length > 0) item.style = style;
+        return [item];
       },
     },
     []

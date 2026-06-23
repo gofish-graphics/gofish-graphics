@@ -42,6 +42,12 @@ import {
 import { interval } from "../../util/interval";
 import { createMark } from "../withGoFish";
 import { attachCut } from "../graphicalOperators/cut";
+import type { DisplayList } from "gofish-ir";
+import {
+  lowerStyle,
+  pathToPixelSVG,
+  rectItemFromBox,
+} from "../displayList/lowerHelpers";
 
 const computeIntrinsicSize = (
   input: MaybeValue<number> | undefined
@@ -523,6 +529,189 @@ export const Rect = ({
             opacity={opacity}
           />
         );
+      },
+      // IR lowering — the structural mirror of `render` above. Each branch
+      // computes the SAME geometry, then emits display-list items (coordinates
+      // pushed through `toPixel`) instead of JSX. Keep in lockstep with render
+      // until the render path is deleted.
+      lower: (
+        { intrinsicDims, transform, coordinateTransform, toPixel },
+        _children,
+        node
+      ): DisplayList.DisplayItem[] => {
+        const space = coordinateTransform ?? linear();
+        const isXEmbedded = intrinsicDims![0].embedded;
+        const isYEmbedded = intrinsicDims![1].embedded;
+        const displayDims = displayDimsOf(intrinsicDims, transform);
+
+        const unitScale = node.getRenderSession().scaleContext?.unit;
+        const originalFill = fill;
+        const resolvedFill = resolveColorChannel(fill, unitScale);
+        const resolvedStroke =
+          resolveColorChannel(stroke, unitScale) ?? resolvedFill ?? "black";
+
+        const labelText =
+          label && originalFill && isValue(originalFill)
+            ? String(getValue(originalFill) ?? "")
+            : undefined;
+
+        // The inline value-label (the `label` arg) — white text at the mark's
+        // transformed center. Mirrors the `<text>` each branch emits.
+        const valueLabel = (cx: number, cy: number): DisplayList.TextItem[] => {
+          if (!labelText) return [];
+          const [x, y] = toPixel([cx, cy]);
+          return [
+            {
+              kind: "text",
+              x,
+              y,
+              text: labelText,
+              fontSize: 12,
+              textAnchor: "middle",
+              dominantBaseline: "central",
+              role: "overlay",
+              style: { fill: "white" },
+            },
+          ];
+        };
+
+        const elementStyle = lowerStyle({
+          fill: resolvedFill,
+          stroke: resolvedStroke,
+          strokeWidth: strokeWidth ?? 0,
+          opacity,
+          filter,
+        });
+        const rectExtra = {
+          rx,
+          ry,
+          style: elementStyle,
+          datum: node.datum,
+          role: "node" as const,
+        };
+
+        // Both dimensions aesthetic — transformed point.
+        if (!isXEmbedded && !isYEmbedded) {
+          const center: [number, number] = [
+            displayDims[0].center ?? 0,
+            displayDims[1].center ?? 0,
+          ];
+          const [tX, tY] = space.transform(center);
+          const w = displayDims[0].size ?? 0;
+          const h = displayDims[1].size ?? 0;
+          return [
+            rectItemFromBox(
+              tX - w / 2,
+              tX + w / 2,
+              tY - h / 2,
+              tY + h / 2,
+              toPixel,
+              rectExtra
+            ),
+            ...valueLabel(tX, tY),
+          ];
+        }
+
+        // One dimension data — line.
+        if (isXEmbedded !== isYEmbedded) {
+          const aestheticAxis = isXEmbedded ? 1 : 0;
+          const thickness = displayDims[aestheticAxis].size ?? 0;
+          const aestheticMid = displayDims[aestheticAxis].center ?? 0;
+
+          if (space.type === "linear") {
+            const x = isXEmbedded
+              ? (displayDims[0].min ?? 0)
+              : aestheticMid - thickness / 2;
+            const y = isXEmbedded
+              ? aestheticMid - thickness / 2
+              : (displayDims[1].min ?? 0);
+            const width = isXEmbedded
+              ? (displayDims[0].max ?? 0) - (displayDims[0].min ?? 0)
+              : thickness;
+            const height = isXEmbedded
+              ? thickness
+              : (displayDims[1].max ?? 0) - (displayDims[1].min ?? 0);
+            const center: [number, number] = [x + width / 2, y + height / 2];
+            const [tX, tY] = space.transform(center);
+            return [
+              rectItemFromBox(x, x + width, y, y + height, toPixel, rectExtra),
+              ...valueLabel(tX, tY),
+            ];
+          }
+
+          // Nonlinear — line path along the midline.
+          const linePath = path(
+            [
+              [
+                isXEmbedded ? (displayDims[0].min ?? 0) : aestheticMid,
+                isXEmbedded ? aestheticMid : (displayDims[1].min ?? 0),
+              ],
+              [
+                isXEmbedded ? (displayDims[0].max ?? 0) : aestheticMid,
+                isXEmbedded ? aestheticMid : (displayDims[1].max ?? 0),
+              ],
+            ],
+            {}
+          );
+          const transformed = transformPath(linePath, space, {
+            resample: true,
+          });
+          return [
+            {
+              kind: "path",
+              d: pathToPixelSVG(transformed, toPixel),
+              datum: node.datum,
+              role: "node",
+              style: lowerStyle({
+                fill: "none",
+                stroke: resolvedStroke,
+                strokeWidth: thickness + 0.5,
+                opacity,
+                filter,
+              }),
+            },
+          ];
+        }
+
+        // Both dimensions data — area.
+        if (space.type === "linear") {
+          const x = displayDims[0].min ?? 0;
+          const y = displayDims[1].min ?? 0;
+          const xMax = displayDims[0].max ?? 0;
+          const yMax = displayDims[1].max ?? 0;
+          const center: [number, number] = [(x + xMax) / 2, (y + yMax) / 2];
+          const [tX, tY] = space.transform(center);
+          return [
+            rectItemFromBox(x, xMax, y, yMax, toPixel, rectExtra),
+            ...valueLabel(tX, tY),
+          ];
+        }
+
+        const corners = path(
+          [
+            [displayDims[0].min ?? 0, displayDims[1].min ?? 0],
+            [displayDims[0].max ?? 0, displayDims[1].min ?? 0],
+            [displayDims[0].max ?? 0, displayDims[1].max ?? 0],
+            [displayDims[0].min ?? 0, displayDims[1].max ?? 0],
+          ],
+          { closed: true }
+        );
+        const transformed = transformPath(corners, space, { resample: true });
+        return [
+          {
+            kind: "path",
+            d: pathToPixelSVG(transformed, toPixel),
+            datum: node.datum,
+            role: "node",
+            style: lowerStyle({
+              fill: resolvedFill,
+              stroke: resolvedStroke,
+              strokeWidth: strokeWidth ?? 0,
+              opacity,
+              filter,
+            }),
+          },
+        ];
       },
     },
     []

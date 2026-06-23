@@ -26,6 +26,8 @@ import {
   UNDEFINED,
 } from "../underlyingSpace";
 import { createMark } from "../withGoFish";
+import type { DisplayList } from "gofish-ir";
+import { lowerStyle, rectItemFromBox } from "../displayList/lowerHelpers";
 type TextDimensions = {
   width: number;
   height: number;
@@ -400,6 +402,92 @@ export const Text = ({
             </text>
           </>
         );
+      },
+      // IR lowering — mirror of `render`. The anchor maps through `toPixel`; the
+      // legacy `… rotate(rotate) scale(1,-1)` under the root flip nets to a
+      // screen-space rotate of `-rotate` about the pixel anchor (the extra flip
+      // negates the angle — see display-list-plan §3). Unrotated → upright text.
+      lower: (
+        { transform, renderData, toPixel },
+        _children,
+        node
+      ): DisplayList.DisplayItem[] => {
+        const finalText = isValue(textContent)
+          ? getValue(textContent)
+          : textContent;
+        const text = finalText == null ? "" : String(finalText);
+
+        const [anchorX, anchorY] = displayTranslate(transform);
+        const [px, py] = toPixel([anchorX, anchorY]);
+
+        const unitScale = node.getRenderSession().scaleContext?.unit;
+        const resolvedFill = resolveColorChannel(fill, unitScale);
+        const resolvedStroke = resolveColorChannel(stroke, unitScale);
+
+        const items: DisplayList.DisplayItem[] = [];
+
+        // Debug bbox (rare): the true rotated footprint, dashed.
+        if (debugBoundingBox) {
+          const layout =
+            (renderData as { layout?: TextLayout })?.layout ??
+            resolveTextLayout(
+              text,
+              fontSize,
+              fontFamily,
+              textAnchor,
+              dominantBaseline
+            );
+          const relRaw = {
+            minX: layout.bbox.minX - layout.anchor.x,
+            minY: layout.bbox.minY - layout.anchor.y,
+            maxX: layout.bbox.maxX - layout.anchor.x,
+            maxY: layout.bbox.maxY - layout.anchor.y,
+          };
+          const relRot = rotate ? rotateRelBBox(relRaw, rotate) : relRaw;
+          if (Number.isFinite(relRot.minX) && Number.isFinite(relRot.minY)) {
+            items.push(
+              rectItemFromBox(
+                anchorX + relRot.minX,
+                anchorX + relRot.maxX,
+                anchorY + relRot.minY,
+                anchorY + relRot.maxY,
+                toPixel,
+                {
+                  role: "overlay",
+                  style: lowerStyle({
+                    fill: "none",
+                    stroke: "#ff00aa",
+                    strokeWidth: 1,
+                    strokeDasharray: "4 3",
+                  }),
+                }
+              )
+            );
+          }
+        }
+
+        const textItem: DisplayList.TextItem = {
+          kind: "text",
+          x: px,
+          y: py,
+          text,
+          fontSize,
+          fontFamily,
+          textAnchor: textAnchor as DisplayList.TextItem["textAnchor"],
+          dominantBaseline:
+            dominantBaseline as DisplayList.TextItem["dominantBaseline"],
+          role: "node",
+          datum: node.datum,
+          style: lowerStyle({
+            fill: resolvedFill,
+            stroke: resolvedStroke,
+            strokeWidth: strokeWidth ?? 0,
+            filter,
+          }),
+        };
+        if (rotate) textItem.rotate = -rotate;
+        items.push(textItem);
+        return items;
       },
     },
     []
