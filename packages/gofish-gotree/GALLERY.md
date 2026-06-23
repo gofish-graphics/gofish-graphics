@@ -74,7 +74,7 @@ the sunburst family) is skipped.
 
 1. **No angular auto-fit.** Angle is not allocated by subtree leaf-count, so sibling θ-spacing is a fixed constant; wide/deep trees overflow the 2π budget and wrap (or render a partial arc). This is the dominant fidelity limiter. GoTree allocates θ adaptively (`SubtreeWidth: adaptive`).
 2. **`polar()` takes no options.** `InnerRadius` (donut hole / clock rim), `Direction`, `CentralAngle`, `StartAngle`, `PolarCenter` are not expressible — the disc is always centered and starts at r=0 (so e.g. ClockTree/TyreTree can't make a hollow ring).
-3. **`polarTransposed()` is currently identical to `polar()`** (both map x→θ), so the dsl's `PolarAxis: x-axis` θ/r swap is a no-op.
+3. **No θ/r axis swap.** GoFish's `polar()` always maps x→θ, y→r and has no transposed variant, so the dsl's `PolarAxis: x-axis` θ/r swap is not expressible. (The former `polarTransposed()` was a geometrically-identical no-op and was deleted.)
 4. **Embedded vs non-embedded dimensions.** Filled wedges need a dimension _embedded_ in the transform (rect `emX` width in θ-units that sweeps an arc); point nodes (circles) must NOT embed (use `mode:"center"`). `nest` on θ or r (angular/radial containment) needs a growable mark, so it's awkward with point/circle nodes and only partly works.
 5. **Non-linear links** (curve/arc/step/orthogonal) fall back to linear, which then bow under the transform rather than rendering as authored polar curves.
 

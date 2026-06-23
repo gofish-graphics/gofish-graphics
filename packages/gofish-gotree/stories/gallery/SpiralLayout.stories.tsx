@@ -24,7 +24,7 @@ import { initializeContainer } from "../helper";
 // NOTES — polar gaps (no hacks; flagged for follow-up):
 //  - polar() takes NO options: GoTree's spiral knobs are not expressible here —
 //    no InnerRadius (spiral start radius), Direction (CW/CCW winding), or
-//    CentralAngle. polarTransposed() would only swap which axis is θ vs r.
+//    CentralAngle. (A θ/r axis swap is also not expressible.)
 //  - No angular auto-fit: θ spacing is a fixed per-step constant, so the total
 //    angle is (#steps × spacing) and freely exceeds 2π — the spiral wraps past
 //    a full turn. For a spiral this overflow is partly intended, but it is

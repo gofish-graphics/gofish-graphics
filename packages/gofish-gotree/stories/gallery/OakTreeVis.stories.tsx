@@ -43,7 +43,7 @@ import { combine, byDepth, mount } from "./_shared";
 //  3. polar() takes no options: the dsl's PolarAxis=x-axis swap, PolarCenter,
 //     InnerRadius, Direction, CentralAngle, and Mode=bottom-up are not
 //     expressible. (PolarAxis x-axis already matches gofish's x→θ default, so
-//     plain polar() is the closer match here; polarTransposed() would map the
+//     plain polar() is the closer match here; a θ/r swap would map the
 //     radial sibling-stagger onto θ and lose the spiral.)
 //  4. Link=curveStepBefore (orthogonal step links) is NOT supported →
 //     {interpolation:"linear"}. The reference's right-angle "step" corners

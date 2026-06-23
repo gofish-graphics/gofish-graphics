@@ -46,8 +46,8 @@ import { combine, byDepth, mount } from "./_shared";
 //    automatically; gofish-gotree has no such pass.
 //  - Direction / CentralAngle: no clockwise/CCW swap, no sub-2π sweep — the
 //    budget is always the full 2π disc.
-//  - polarTransposed() is currently identical to polar() (both map x→θ), so the
-//    PolarAxis θ/r swap is a no-op; not used here.
+//  - GoFish polar() has no θ/r axis swap (no transposed variant), so the
+//    PolarAxis swap is not expressible; not needed here.
 //  - Link is "none" in the dsl (a clock face has no connecting edges) — correct
 //    here; nothing to draw.
 const meta: Meta = { title: "GoTree / Gallery / ClockTree" };
