@@ -1,3 +1,7 @@
+// <gofish-wiki> AUTO-GENERATED — see covers: in the essay; run `pnpm --filter docs sync-backlinks`
+// @wiki Rendering — /internals/core/rendering
+// </gofish-wiki>
+
 /**
  * GoFish Display List IR — schema types.
  *

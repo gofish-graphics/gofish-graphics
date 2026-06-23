@@ -1,3 +1,7 @@
+// <gofish-wiki> AUTO-GENERATED — see covers: in the essay; run `pnpm --filter docs sync-backlinks`
+// @wiki Rendering — /internals/core/rendering
+// </gofish-wiki>
+
 /**
  * The lower emit driver — turns a resolved, baked scenegraph into a flat
  * display-list item array.

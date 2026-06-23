@@ -1,3 +1,7 @@
+// <gofish-wiki> AUTO-GENERATED — see covers: in the essay; run `pnpm --filter docs sync-backlinks`
+// @wiki Rendering — /internals/core/rendering
+// </gofish-wiki>
+
 /**
  * Shared helpers for per-primitive `lower` bodies — the IR counterparts of the
  * small JSX-emitting snippets each shape's `render` uses. Keeping them here

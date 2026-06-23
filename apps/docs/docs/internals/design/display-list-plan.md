@@ -25,35 +25,61 @@ enabling [#42 (multiple rendering backends)](https://github.com/gofish-graphics/
 
 ## Status
 
+The core is **landed**: the legacy per-shape SVG render path has been **deleted** and
+replaced by the two-pass lower → paint pipeline this plan describes. See
+[Rendering](/internals/core/rendering) for the as-built model.
+
 - **Phase 0 (universal bake) — landed.** `bake()` is the single render entry
   (`coordinateTransforms/bake.ts`), boundary-recursive over the self-drawing /
   space-remapping operators, with draw order resolved globally. Verified
   pixel-behavior-preserving (`capture-diff` flags only the benign `<g>`-collapse;
   boundary charts — polar, compositing — are byte-identical).
+- **Phase 1 (self-contained primitives) — landed.** Every shape/operator now owns a
+  `lower(ctx) → DisplayItem[]` (the extension point), replacing `_render`. The lower
+  driver (`displayList/lower.ts`) walks the baked tree and concatenates each node's
+  fragment; boundaries (`coord`, `box`, `connect`, `arrow`, `enclose`, the
+  compositors) re-walk their own subtree. The per-shape `scale(1,-1)` and the root
+  flip are folded into one `toPixel` map (set on the render session), so items are in
+  final absolute pixels. `render`/`INTERNAL_render`/`_render`/`_renderLabel` are
+  **gone**; a node with no `lower()` throws.
+- **Phase 2 (backend emitters) — landed for SVG.** Rendering is
+  `lowerToDisplayList(child).map(paintSVG)`. `paintSVG` (`displayList/paintSVG.tsx`,
+  live SolidJS JSX) and `displayListToSVG` (`gofish-ir/render.ts`, pure string)
+  consume the same list; a cross-check test keeps them in lockstep. The IR is the
+  **default and only** render path. Canvas / WebGPU painters are still to come — they
+  are additive (`displayList.map(paintCanvas)`) and touch no part of the lower pass.
 - **Phase 3 (wire format) — landed.** `packages/gofish-ir/src/display-list/`
   defines the `gofish-display-list` document across the three encodings
   (`schema.ts` / `validate.ts` / `jsonSchema.ts`), with a reference SVG backend
   (`render.ts`, `displayListToSVG`) demonstrating backend-agnosticism, plus tests.
-- **Phase 1 body (per-shape `lower()`, coord-at-bake), Phase 2 (Canvas / WebGPU
-  backends), the live `toDisplayList` emitter, and [#605] — staged.** The
-  `DisplayItem` type is defined; populating it from a baked tree is the next step,
-  gated on the coord-transform model below.
+  The live emitter `toDisplayList(node, { w, h })` (`displayList/toDisplayList.ts`)
+  ships, exposed as `.toDisplayList()` on the chart builder and on any node.
+- **Phase 4 (downstream consumers) — remains.** The Semiotic adapter (a thin
+  `DisplayItem → scene-node/overlay` map keyed on `role`, plus a re-emit callback)
+  and the Canvas/WebGPU backends are the open work; both build _on_ the shipped IR
+  rather than changing it. `#605` (cross-boundary refs) is the one carried-forward
+  constraint — see below.
 
-## What already exists (the substrate)
+## What already existed (the substrate this built on)
+
+This section is preserved as the _starting point_ the migration began from; the gaps
+it names are now all closed (see Status above).
 
 - **`ast/_displayObject.ts`** — `DisplayObject = { node, transform }`, the flat
   child-less draw entry; explicitly the rendering IR, with its end-state named.
-- **`ast/coordinateTransforms/bake.ts` → `flattenLayout`** — already collapses a
+- **`ast/coordinateTransforms/bake.ts` → `flattenLayout`** — already collapsed a
   resolved scenegraph into a flat `DisplayObject[]` with absolute composed
-  transforms. **But only inside the `coord` operator** (`coord.tsx:352`); the
-  general path still renders via nested `<g transform>` recursion (`gofish.tsx:819`).
+  transforms. At the time only inside the `coord` operator; `bake()` now runs the
+  whole tree, and the lower driver (`displayList/lower.ts`) flat-maps over it.
 - **`_node.ts` → `INTERNAL_render(coordTransform?, transformOverride?) → JSX`** —
-  the draw method; calls each mark's `_render(...)` to emit SVG JSX.
+  the old draw method that called each mark's `_render(...)` to emit SVG JSX. It has
+  since been replaced by `INTERNAL_lower(...)` / per-shape `lower(...)`, which emit
+  display-list items rather than JSX.
 
-The three gaps between this and a display-list IR: (1) draw entries back-reference
-the AST and emit JSX directly — no backend split; (2) no serialization boundary;
-(3) coordinate-transform handling needs care — see the next section, which is the
-crux of the whole plan.
+The three gaps between that substrate and a display-list IR — all now closed: (1) draw
+entries back-referenced the AST and emitted JSX directly, with no backend split;
+(2) there was no serialization boundary; (3) coordinate-transform handling needs care
+— see the next section, which was the crux of the plan.
 
 ## The coordinate-transform model (corrected)
 
