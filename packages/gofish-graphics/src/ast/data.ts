@@ -307,15 +307,21 @@ export const getValueColorOps = <T>(value: MaybeValue<T>): ColorOp[] => {
   return Array.isArray(v._colorOps) ? v._colorOps : [];
 };
 
-export const inferEmbedded = <T>(interval: Interval<T>): Interval<T> => {
-  // size must be a value && min must be undefined, aesthetic, or a value of the same type as size
-  if (
-    (isValue(interval.size) || interval.size === undefined) &&
-    (interval.min === undefined ||
-      !isValue(interval.min) ||
-      getMeasure(interval.min) === getMeasure(interval.size))
-  ) {
-    return { ...interval, embedded: true };
-  }
-  return interval;
-};
+/**
+ * The intrinsic-embedding predicate: a dim's *own* extent is a coordinate-space
+ * extent (so a coord warps it) iff its size is a data {@link Value} (or unsized —
+ * the nest-growth case) AND its `min` doesn't contradict the size's measure. This
+ * is the measure-free half; the {@link GoFishNode.resolveEmbedding} pass layers
+ * the Route-B measure gate on top (a size denominated in a *foreign* measure to
+ * the axis stays ink, not a coord extent). Extracted so the pass is the sole
+ * author of `embedded` and the rule lives in one place. See
+ * `notes/design/embedding-resolution-pass.md` and #534.
+ */
+export const baseEmbedded = <T>(interval: Interval<T>): boolean =>
+  (isValue(interval.size) || interval.size === undefined) &&
+  (interval.min === undefined ||
+    !isValue(interval.min) ||
+    getMeasure(interval.min) === getMeasure(interval.size));
+
+export const inferEmbedded = <T>(interval: Interval<T>): Interval<T> =>
+  baseEmbedded(interval) ? { ...interval, embedded: true } : interval;

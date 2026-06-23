@@ -350,6 +350,12 @@ export async function layout(
   shadowCheckScaleRoot(niceUnderlyingSpaceX, canvasW, rootScaleFactors[0], 0);
   shadowCheckScaleRoot(niceUnderlyingSpaceY, canvasH, rootScaleFactors[1], 1);
 
+  // Author each dim's `embedded` flag (point/line/area) now that underlying
+  // space has resolved each coord axis's measure — Route B reads it to keep a
+  // foreign-measure size flat. Runs on the final (axis/title/legend-elaborated)
+  // tree, before layout/render consume the flag. See _node.resolveEmbedding.
+  child.resolveEmbedding();
+
   child.layout([layoutW, layoutH], rootScaleFactors, posScales);
   // Root placement anchor. A GIVEN dimension keeps the baseline-anchored canvas
   // box [0, given]; content seated outside it (axis labels below 0, ticks above

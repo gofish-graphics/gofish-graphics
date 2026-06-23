@@ -11,7 +11,6 @@ import { linear } from "../coordinateTransforms/linear";
 import {
   getMeasure,
   getValue,
-  inferEmbedded,
   isAesthetic,
   isValue,
   MaybeValue,
@@ -83,7 +82,9 @@ export const Rect = ({
    *  the constraining axis (smaller of the two scaled sizes) is used. */
   aspectRatio?: number;
 } & FancyDims<MaybeValue<number>>) => {
-  const dims = elaborateDims(fancyDims).map(inferEmbedded);
+  // `embedded` is authored by the resolveEmbedding pass (after underlying-space
+  // resolves the axis measure), not inferred here — see _node.resolveEmbedding.
+  const dims = elaborateDims(fancyDims);
   const node = new GoFishNode(
     {
       name,

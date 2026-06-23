@@ -6,7 +6,6 @@ import { GoFishNode } from "../_node";
 import {
   getMeasure,
   getValue,
-  inferEmbedded,
   isAesthetic,
   isValue,
   MaybeValue,
@@ -185,7 +184,8 @@ export const Text = ({
    *  bottom-to-top with glyph tops facing left. */
   rotate?: number;
 } & FancyDims<MaybeValue<number>>) => {
-  const dims = elaborateDims(fancyDims).map(inferEmbedded);
+  // `embedded` is authored by the resolveEmbedding pass — see rect.tsx.
+  const dims = elaborateDims(fancyDims);
 
   const textAnchor = "start";
   const dominantBaseline = "auto";
