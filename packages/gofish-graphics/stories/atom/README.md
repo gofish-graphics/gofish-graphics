@@ -25,7 +25,7 @@ a feature gap.
 | [`TitanicUnitDots`](./TitanicUnitDots.stories.tsx) | `squarified`, `size_sum_*`, `titanic_spec_packxy_*` | Circle treemap; each passenger a circle, packed and faceted by class, sized by fare. |
 | [`UnitColumnChart`](./UnitColumnChart.stories.tsx) | `unit_column_chart_shared`, `horizontal_unit_column` | One column of unit dots per class; equal dot size makes column height encode class count. |
 | [`UnitHistogram`](./UnitHistogram.stories.tsx) | `unit_small_multiple`, `titanic_spec1`, `editor` | Per-class age histograms whose bars are stacks of unit dots. |
-| [`Mosaic`](./Mosaic.stories.tsx) | `mosaic`, `size_sum_shared` | Survival mosaic (aggregated rects): per-class columns, block height ∝ survival count. |
+| [`Mosaic`](./Mosaic.stories.tsx) | `mosaic`, `size_sum_shared` | Survival mosaic (aggregated rects): true 2-D marimekko — column width ∝ class size, block height ∝ survival count. |
 | [`UnitMosaic`](./UnitMosaic.stories.tsx) | `mosaic`, `editor` | The headline Atom mosaic (paper Fig. 1b): class × sex rows × survived columns, each count-proportional cell filled one dot per passenger. |
 | [`Violin`](./Violin.stories.tsx) | `violin` | Per-class age violins; each bin is a centered horizontal row of unit dots, tracing a symmetric density silhouette. |
 
@@ -82,8 +82,10 @@ around them as noted; these are candidates for new operators.
    and that is exactly the **main-axis** case the σ solve handles — so a true marimekko of
    rects (column widths *and* heights ∝ count) is expressible today by driving each level
    with size-claims rather than equal-flex `spread`. The [`Mosaic`](./Mosaic.stories.tsx)
-   story keeps uniform column widths only because it uses `spread` (the existing
-   *Forward Syntax V3 / Mosaic Chart* does too); that's a recipe choice, not a hard wall.
+   story does exactly this: a horizontal `stack` with a `w: "classTotal"` claim resolves
+   column widths ∝ class size, composed with a `normalize`d vertical `stack` for heights —
+   a verified, variable-width mosaic with no `count` operator. (The existing
+   *Forward Syntax V3 / Mosaic Chart* still renders equal-width because it uses `spread`.)
 
    What is genuinely deferred is the piece the **unit** ([`UnitMosaic`](./UnitMosaic.stories.tsx))
    version needs: to fill differently-sized count-proportional cells with *uniform square
@@ -126,7 +128,7 @@ settings (see [gap #4](#feature-gaps)).
 | --- | --- |
 | `unit_column_chart_shared.json`, `unit_column_chart_shared_mark.json`, `horizontal_unit_column.json` | ✅ `UnitColumnChart` |
 | `unit_small_multiple.json`, `titanic_spec1.json` | ✅ `UnitHistogram` |
-| `mosaic.json` | ✅ `UnitMosaic` (full 2-D count-proportional unit mosaic); `Mosaic` is the aggregated-rect 1-D variant |
+| `mosaic.json` | ✅ `UnitMosaic` (count-proportional unit mosaic) and `Mosaic` (aggregated-rect 2-D marimekko, variable column widths) |
 | `fluctuation.json` | ✅ `TitanicFacet` (faceted unit grid; count-sizing gap #1) |
 | `squarified.json`, `titanic_spec_packxy_isolated.json`, `titanic_spec_packxy_mixed.json`, `titanic_spec_packxy_hierarchy.json` | ✅ `TitanicUnitDots` (treemap packing) |
 | `size_sum_shared.json`, `size_sum_notShared.json` | ✅ `TitanicUnitDots` (`treemap valueField`); ⚠️ non-treemap sum-sizing is gap #1 |
