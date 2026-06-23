@@ -65,7 +65,7 @@ export const Default: StoryObj<Args> = {
               .flow(
                 derive((rows) => orderBy(rows, ["survived"], ["desc"])),
                 derive((rows) => chunk(rows, args.width)),
-                spread({ spacing: 1.5, dir: "y", reverse: true }),
+                spread({ spacing: 1.5, dir: "y" }),
                 spread({ spacing: 1.5, dir: "x" })
               )
               .mark(circle({ r: 3, fill: "survived" }))
