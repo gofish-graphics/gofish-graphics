@@ -15,10 +15,12 @@ import { titanicPassengers } from "../../src/data/titanicPassengers";
  *
  * GoFish has no `count` sizing operator (see stories/atom/README.md, gap #1), but the
  * unit mosaic is still expressible: with a single shared dot size, a cell holding `n`
- * dots laid out in `R` rows occupies `R × ceil(n/R)` grid slots — area ∝ n for *any*
- * R. Choosing `R ∝ (class,sex) group size` makes every sub-block the same width, so the
- * blocks tile into a clean mosaic whose heights encode class/sex counts and whose
- * column splits encode survival — all from plain `spread`s over a fixed-size `circle`.
+ * dots in `R` rows occupies `R × ceil(n/R)` grid slots — area ∝ n for *any* R. Choosing
+ * `R ∝ (class,sex) group size` makes every sub-block the same height, so the blocks tile
+ * into a mosaic whose heights encode class/sex counts and whose column splits encode
+ * survival — all from plain `spread`s over a fixed-size `circle`. Dots fill each cell
+ * *column by column* (`R` tall) so the leftover lands in one short right-hand column
+ * rather than a ragged partial row, keeping every cell's top and bottom edges flush.
  */
 
 const DOTS_PER_ROW = 34; // target group-size per dot-row; tunes the mosaic's aspect
@@ -81,11 +83,14 @@ export const Default: StoryObj<Args> = {
               .mark((cell) =>
                 chart(cell)
                   .flow(
-                    derive((rows) =>
-                      chunk(rows, Math.ceil(rows.length / (rows[0]?.gridRows ?? 1)))
-                    ),
-                    spread({ spacing: 1, dir: "y", reverse: true }),
-                    spread({ spacing: 1, dir: "x" })
+                    // Fill column-by-column — each column `gridRows` tall — so
+                    // every cell has flush top and bottom edges and only the
+                    // last column is short. (Row-major chunking instead left a
+                    // ragged partial *row* spanning the whole cell width, which
+                    // broke the band boundaries.)
+                    derive((rows) => chunk(rows, rows[0]?.gridRows ?? 1)),
+                    spread({ spacing: 1, dir: "x" }),
+                    spread({ spacing: 1, dir: "y", reverse: true })
                   )
                   .mark(circle({ r: 3, fill: "survived" }))
               )
