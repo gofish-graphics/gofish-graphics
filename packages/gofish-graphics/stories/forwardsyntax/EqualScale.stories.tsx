@@ -1,14 +1,16 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
 
-import { chart, circle, gradient, scatter } from "../../src/lib";
+import { chart, circle, field, gradient, scatter } from "../../src/lib";
 
 /**
- * Equal-aspect coupling (#582). `aspectRatio` couples the x and y data→pixel
- * scales so one data unit measures the same on both axes — "1 unit on x = 1
- * unit on y". Without it, each axis scales to its own dimension, so a circle in
- * data space renders as an ellipse and a spiral shears. With it, the binding
- * axis fills its dimension and the other centers in the slack.
+ * Shared-measure scale equality (#582). When the x and y channels carry the
+ * **same unit of measure**, "1 unit on x" and "1 unit on y" are the same
+ * quantity, so GoFish gives them one data→pixel scale — a circle in data space
+ * stays a circle, never an ellipse. There is no `aspectRatio` knob: it follows
+ * from the measures matching (`field(name, "plane")` on both axes), the same way
+ * `circle({ r })` lowers to a `w`/`h` that share a measure and so can't distort.
+ * The binding axis fills its dimension; the other centers in the leftover space.
  *
  * The demo is a phyllotaxis ("sunflower") spiral: seed `i` sits at angle
  * `i · 137.5°` (the golden angle) and radius `√i`, the packing real sunflowers
@@ -24,7 +26,7 @@ const sunflower = Array.from({ length: 500 }, (_, i) => {
 });
 
 const meta: Meta = {
-  title: "Forward Syntax V3/Equal Aspect",
+  title: "Forward Syntax V3/Equal Scale",
   argTypes: {
     w: { control: { type: "number", min: 200, max: 1000, step: 10 } },
     h: { control: { type: "number", min: 200, max: 1000, step: 10 } },
@@ -39,19 +41,17 @@ export const Sunflower: StoryObj<Args> = {
   tags: ["gallery"],
   parameters: {
     gallery: {
-      title: "Sunflower (Equal Aspect)",
+      title: "Sunflower (Equal Scale)",
       description:
-        "A phyllotaxis spiral of 500 seeds placed by the golden angle, drawn with equal-aspect coupling so one data unit spans the same pixels on both axes and the packing stays perfectly circular in a wide canvas.",
+        "A phyllotaxis spiral of 500 seeds placed by the golden angle; tagging x and y with the same measure gives them one shared data→pixel scale, so the packing stays perfectly circular in a wide canvas.",
     },
   },
   render: (args: Args) => {
     const container = initializeContainer();
 
-    chart(sunflower, {
-      aspectRatio: "square",
-      color: gradient(["#fde725", "#21918c", "#440154"]),
-    })
-      .flow(scatter({ x: "x", y: "y" }))
+    chart(sunflower, { color: gradient(["#fde725", "#21918c", "#440154"]) })
+      // Same measure on both axes ⇒ one shared scale ⇒ a true circle.
+      .flow(scatter({ x: field("x", "plane"), y: field("y", "plane") }))
       .mark(circle({ r: 4, fill: "i" }))
       .render(container, { w: args.w, h: args.h });
 
@@ -59,8 +59,8 @@ export const Sunflower: StoryObj<Args> = {
   },
 };
 
-/** The same spiral without coupling — each axis scales independently, so the
- *  circular packing shears into an ellipse. */
+/** The same spiral with the measures left off — each axis scales independently,
+ *  so the circular packing shears into an ellipse. */
 export const Uncoupled: StoryObj<Args> = {
   args: { w: 640, h: 380 },
   render: (args: Args) => {

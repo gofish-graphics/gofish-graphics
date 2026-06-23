@@ -29,7 +29,6 @@ chart(data, options?)
 | `options.coord`       | `CoordinateTransform` | Coordinate transform (e.g. `polar()`)                                                                                                                                        |
 | `options.color`       | `ColorConfig`         | Color scale applied to all marks in this chart. Use [`palette()`](/js/api/color/palette) for categorical data or [`gradient()`](/js/api/color/gradient) for continuous data. |
 | `options.axes`        | `AxesOptions`         | Auto-generate axes, labels, and legends. See [Axes](#axes) below.                                                                                                            |
-| `options.aspectRatio` | `AspectRatio`         | Couple the x and y data→pixel scales so one data unit measures the same on both axes. See [Equal aspect](#equal-aspect) below.                                               |
 
 Returns a `ChartBuilder<T>` with [`.flow()`](/js/api/core/flow), [`.mark()`](/js/api/core/mark), [`.render()`](/js/api/core/render), [`.zOrder()`](#zorder), and [`.name()`](#name) methods.
 
@@ -58,33 +57,37 @@ to show the axis with no title. Manual `axis: true/false` overrides on individua
 operators within the chart are still respected when `axes: true`. See
 [render › Axes](/js/api/core/render#axes) for live examples.
 
-## Equal aspect
+## Equal scale from a shared measure
 
 By default each axis resolves its data→pixel scale independently — `x` against
-the width, `y` against the height — so equal data steps render unequal and a
-circle in data space becomes an ellipse. `aspectRatio` couples the two scales so
-**one data unit measures the same on both axes**, the way maps, geometric data,
-and correlation plots (where a 45° line must _look_ 45°) need.
+the width, `y` against the height — so a circle in data space becomes an ellipse.
+That is correct when the axes are different quantities. But when **x and y are
+the same unit of measure**, "1 unit on x" and "1 unit on y" are the _same_
+quantity, so their scales must be equal — a circle stays circular, a 45° line
+looks 45°. The way maps, geometric data, and correlation plots need.
+
+GoFish does this from the **measure**, not a knob: tag both channels with the
+same measure via `field(name, measure)` (or `datum(value, measure)`) and the
+shared scale follows.
 
 ```ts
-chart(data, { aspectRatio: "square" }); // 1 unit on x = 1 unit on y
-chart(data, { aspectRatio: "3:2" }); // a unit is 3 wide : 2 tall (w:h)
-chart(data, { aspectRatio: { w: 3, h: 2 } }); // the same, as an object
+chart(data)
+  .flow(scatter({ x: field("x", "plane"), y: field("y", "plane") }))
+  .mark(circle({ r: 4 }))
+  .render(container, { w: 640, h: 380 }); // a true circle, not an ellipse
 ```
 
-The value is always written **w:h**, so there is no ratio direction to
-remember. The full type is:
+This is the same rule the `circle` mark already obeys one level down:
+`circle({ r })` lowers to a `w` and `h` driven by one value, which share a
+measure and therefore one scale factor — so a circle can never distort into an
+ellipse. Equal scale at the chart level is exactly that, lifted to x and y.
 
-```ts
-type AspectRatio = "square" | `${number}:${number}` | { w: number; h: number };
-```
-
-The binding (more constrained) axis fills its dimension; the other axis is
-centered in the leftover space. `aspectRatio` may also be passed at render time
-(`.render(container, { aspectRatio })`), which takes precedence over the
-chart-level option. It applies to axes that carry a data-driven scale (a
-position scale over a data domain, or a data-driven size) — an axis with nothing
-to scale (a category axis, fixed-size marks) leaves coupling a no-op.
+The binding (more constrained) axis fills its dimension; the other is centered in
+the leftover space. It applies to axes that carry a data-driven scale (a position
+scale over a data domain, or a data-driven size); an axis with nothing to scale
+(a category axis) leaves it a no-op. Tagging the two axes the same is a unit
+claim — `bill_length` and `bill_depth` (both mm, but _different_ measures) stay
+independent, while `predicted` vs `actual` (both `"price"`) share a scale.
 
 ## Example
 

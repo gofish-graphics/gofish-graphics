@@ -347,14 +347,15 @@ omitted dimension is resolved per axis from that axis's root underlying space:
 
 `layout()` therefore distinguishes the concrete `canvasW`/`canvasH` (used to build
 the position scales and root scale factors) from the `layoutW`/`layoutH` it hands
-to `child.layout` (where a shrink-to-fit axis is left unsized). An optional
-`aspectRatio` (#582) adds one reconciliation step here, after the per-axis scales
-are built and before `child.layout`: each axis's pixels-per-data-unit — a POSITION
-domain's `canvas / range` or a baseline-magnitude σ — is coupled to the binding
-`min(W/rangeX, H/rangeY)·{w,h}` so one data unit measures the same on both axes
-(circles stay circular, maps stay undistorted); the binding axis fills, the other
-gets a recentered posScale. It is a single-coordinate-space coupling — it does not
-reach sizes solved in separate nested operator scopes. After layout it
+to `child.layout` (where a shrink-to-fit axis is left unsized). **Shared-measure
+equal scale** (#582) adds one reconciliation step here, after the per-axis scales
+are built and before `child.layout`: when `spaceMeasure(x) === spaceMeasure(y)`
+(the two axes are the same unit), each axis's pixels-per-data-unit — a POSITION
+domain's `canvas / range` or a baseline-magnitude σ — is equated to the binding
+`min(...)` so one data unit measures the same on both axes (circles stay circular,
+maps stay undistorted); the binding axis fills, the other gets a recentered
+posScale. It is type equality, not a knob, and a single-coordinate-space coupling
+— it does not reach sizes solved in separate nested operator scopes. After layout it
 reads the chart's _final_ extent back off the root via `child.dims[i].size`, so an
 unsized axis still yields a concrete SVG size (e.g. a no-width bar chart gets
 default-width bars and a width of `n·barWidth + spacing`). A user-supplied

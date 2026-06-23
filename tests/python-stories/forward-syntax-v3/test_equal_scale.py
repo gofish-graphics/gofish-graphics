@@ -1,8 +1,8 @@
-"""Equivalent of EqualAspect.stories.tsx — Forward Syntax V3/Equal Aspect."""
+"""Equivalent of EqualScale.stories.tsx — Forward Syntax V3/Equal Scale."""
 
 import math
 
-from gofish import chart, circle, gradient, scatter
+from gofish import chart, circle, field, gradient, scatter
 
 GOLDEN_ANGLE = math.pi * (3 - math.sqrt(5))  # ≈ 137.5°
 
@@ -17,15 +17,11 @@ SUNFLOWER = [
 
 
 def story_sunflower():
-    # Chart-level `aspectRatio` couples the x/y data scales so the phyllotaxis
-    # packing stays circular in a wide canvas (#582).
+    # Same measure on both axes ⇒ one shared data→pixel scale ⇒ a true circle
+    # (#582). No aspectRatio knob.
     return (
-        chart(
-            SUNFLOWER,
-            aspectRatio="square",
-            color=gradient(["#fde725", "#21918c", "#440154"]),
-        )
-        .flow(scatter(x="x", y="y"))
+        chart(SUNFLOWER, color=gradient(["#fde725", "#21918c", "#440154"]))
+        .flow(scatter(x=field("x", "plane"), y=field("y", "plane")))
         .mark(circle(r=4, fill="i")),
         {"w": 640, "h": 380},
     )

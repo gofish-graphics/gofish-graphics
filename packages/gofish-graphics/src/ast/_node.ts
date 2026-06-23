@@ -59,7 +59,6 @@ import type { ScaleContext } from "./gofish";
 import type { TokenContext } from "./tokenContext";
 import { isToken, Token } from "./createName";
 import type { ConstraintSpec, ConstraintRef } from "./constraints";
-import type { AspectRatio } from "./constraints/aspectRatio";
 import { collectConstraintRefs } from "./constraints";
 import {
   BBox,
@@ -1118,7 +1117,6 @@ export class GoFishNode {
       axisFields,
       colorConfig,
       padding,
-      aspectRatio,
     }: {
       w?: number;
       h?: number;
@@ -1131,7 +1129,6 @@ export class GoFishNode {
       axisFields?: { x?: string; y?: string };
       colorConfig?: ColorConfig;
       padding?: number;
-      aspectRatio?: AspectRatio;
     }
   ) {
     return gofish(
@@ -1148,7 +1145,6 @@ export class GoFishNode {
         axisFields,
         colorConfig,
         padding,
-        aspectRatio,
       },
       this
     );

@@ -59,7 +59,7 @@ GoFish has no dedicated `gridxy` operator; an Atom layout decomposes into a shor
 | `subgroup: flatten` | the terminal `.mark(...)` applied per record; grid wrapping via `derive(rows => chunk(rows, …))` + `spread(dir:"y")` + `spread(dir:"x")` |
 | `size: uniform` | a fixed mark size (`circle({ r })`, `rect({ w, h })`) |
 | `size: sum(field)` | `treemap({ valueField: field })` |
-| `size: count` | per-group count via `groupBy`, then main-axis value-proportional sizing through the σ solve (`rect({ h: "count" })` / `stack`); square-unit (2-D) case awaits equal-aspect coupling ([gap #1](#feature-gaps)) |
+| `size: count` | per-group count via `groupBy`, then main-axis value-proportional sizing through the σ solve (`rect({ h: "count" })` / `stack`); packed square-unit (2-D) case still awaits cross-scope size coupling ([gap #1](#feature-gaps)) |
 | `aspect_ratio: square / fillX / fillY` | manual grid via `chunk(rows, cols)` (e.g. `cols = ceil(sqrt(n))` for square) ([gap #2](#feature-gaps)) |
 | `aspect_ratio: maxfill` | `treemap({ tile: "squarify" })`, or manual chunking |
 | `direction` (`LRBT`, `BT`, …) + `align` | `spread`'s `dir`, `reverse`, and `alignment` |
@@ -88,10 +88,11 @@ around them as noted; these are candidates for new operators.
    *Forward Syntax V3 / Mosaic Chart* still renders equal-width because it uses `spread`.)
 
    A related coupling — making *one data unit measure the same on both axes* —
-   now exists as the chart/render option `aspectRatio` (**issue #582**; see
-   [chart › Equal aspect](../../../../apps/docs/docs/js/api/core/chart.md) and the
-   *Forward Syntax V3 / Equal Aspect* sunflower demo). It couples the two axes'
-   **data→pixel position scales** so circles stay circular and maps stay
+   now exists, **driven by measure** rather than a knob (**issue #582**; see
+   [chart › Equal scale](../../../../apps/docs/docs/js/api/core/chart.md) and the
+   *Forward Syntax V3 / Equal Scale* sunflower demo). When the x and y channels
+   carry the same measure (`field(name, measure)` on both), their **data→pixel
+   position scales** are equated, so circles stay circular and maps stay
    undistorted. That is the POSITION case; it does **not** by itself give the
    packed **unit** mosaic ([`UnitMosaic`](./UnitMosaic.stories.tsx)) uniform
    square dots, because there the two axes' *sizes* are solved in separate nested

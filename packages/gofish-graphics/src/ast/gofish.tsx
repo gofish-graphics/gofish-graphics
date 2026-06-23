@@ -28,11 +28,6 @@ import {
   type UnderlyingSpace,
 } from "./underlyingSpace";
 import { shadowCheckScaleRoot } from "./solver/shadow";
-import {
-  type AspectRatio,
-  coupleScaleFactors,
-  parseAspectRatio,
-} from "./constraints/aspectRatio";
 import { elaborateAxes, elaborateAxisTitles } from "./axes/elaborate";
 import { elaborateLegend, legendOverhang } from "./legends/elaborate";
 
@@ -123,7 +118,6 @@ export async function layout(
     debug = false,
     axes = false,
     axisFields,
-    aspectRatio,
   }: {
     w?: number;
     h?: number;
@@ -134,7 +128,6 @@ export async function layout(
     defs?: JSX.Element[];
     axes?: AxesOptions;
     axisFields?: { x?: string; y?: string };
-    aspectRatio?: AspectRatio;
   },
   child: GoFishNode | Promise<GoFishNode>,
   contexts?: {
@@ -357,16 +350,21 @@ export async function layout(
       : undefined,
   ];
 
-  // Equal-aspect coupling (#582): "1 data unit on x = 1 data unit on y" (or a
-  // chosen w:h). Each axis has a pixels-per-data-unit scale — from its POSITION
-  // data domain (`canvas / range`) or its baseline-magnitude σ. Take the
-  // binding (smaller, per `coupleScaleFactors`) one and apply it to both axes:
-  // the binding axis fills its dimension; the other gets slack, centered by
-  // convention. A POSITION axis writes back a recentered posScale; a SIZE axis
-  // writes back its σ (its content stays origin-anchored — SIZE-slack centering
-  // is deferred). No-op + warn if either axis has no data-driven scale.
-  if (aspectRatio !== undefined) {
-    const shape = parseAspectRatio(aspectRatio);
+  // Shared-measure scale equality (#582): when x and y carry the SAME unit of
+  // measure, "1 unit on x" and "1 unit on y" are the same quantity, so their
+  // data→pixel scales must be equal — a circle stays circular, a 45° line looks
+  // 45°. This is type equality, not an opt-in knob: it follows from the measures
+  // matching, the same way `circle({ r })` lowers to a `w`/`h` that share a
+  // measure and so cannot render as an ellipse. Each axis's pixels-per-data-unit
+  // comes from its POSITION domain (`canvas / range`) or its baseline-magnitude
+  // σ; we take the binding (smaller) one and apply it to both — the binding axis
+  // fills its dimension, the other gets slack, centered by convention. A POSITION
+  // axis writes back a recentered posScale; a SIZE axis writes back its σ (its
+  // content stays origin-anchored — SIZE-slack centering is deferred). Silently
+  // skipped when an axis has no continuous scale to equate (e.g. ordinal).
+  const measureX = spaceMeasure(niceUnderlyingSpaceX);
+  const measureY = spaceMeasure(niceUnderlyingSpaceY);
+  if (measureX !== undefined && measureX === measureY) {
     const axisInfo = ([0, 1] as const).map((axis) => {
       const space = axis === 0 ? niceUnderlyingSpaceX : niceUnderlyingSpaceY;
       const canvas = axis === 0 ? canvasW : canvasH;
@@ -386,22 +384,16 @@ export async function layout(
       return undefined;
     });
     const [ax, ay] = axisInfo;
-    if (ax === undefined || ay === undefined) {
-      console.warn(
-        "gofish: aspectRatio coupling needs a data-driven (POSITION or SIZE) " +
-          "scale on both axes; one axis has none, so coupling is a no-op."
-      );
-    } else {
-      const coupled = coupleScaleFactors([ax.unitPx, ay.unitPx], shape);
+    if (ax !== undefined && ay !== undefined) {
+      const shared = Math.min(ax.unitPx, ay.unitPx); // binding axis wins
       for (const axis of [0, 1] as const) {
         const info = axisInfo[axis]!;
-        const c = coupled[axis]!;
         if (info.kind === "position") {
-          const offset = (info.canvas - c * info.range) / 2; // center the slack
+          const offset = (info.canvas - shared * info.range) / 2; // center slack
           const min = info.min;
-          posScales[axis] = (pos: number) => (pos - min) * c + offset;
+          posScales[axis] = (pos: number) => (pos - min) * shared + offset;
         } else {
-          rootScaleFactors[axis] = c;
+          rootScaleFactors[axis] = shared;
         }
       }
     }
@@ -508,9 +500,6 @@ export type GoFishRenderOptions = {
   axisFields?: { x?: string; y?: string };
   colorConfig?: ColorConfig;
   padding?: number;
-  /** Couple the two axes' σ so a data unit renders w:h ("square" = 1:1).
-   *  Applies to the root σ-scope. See #582. */
-  aspectRatio?: AspectRatio;
 };
 
 /** Extra options for the SVG-export terminals (`toSVG` / `toSVGElement` / `save`). */
@@ -556,7 +545,6 @@ export async function runLayout(
     axes = false,
     axisFields,
     colorConfig,
-    aspectRatio,
   } = options;
   // Seed the unit color scale by config kind. A gradient is a continuous
   // color scale (its `scaleFn`/`domain` are finalized in resolveColorScale
@@ -593,7 +581,7 @@ export async function runLayout(
     }
 
     return await layout(
-      { w, h, x, y, transform, debug, defs, axes, axisFields, aspectRatio },
+      { w, h, x, y, transform, debug, defs, axes, axisFields },
       child,
       contexts
     );

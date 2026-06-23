@@ -28,7 +28,6 @@ chart(data, **options) -> ChartBuilder
 | `coord`       | keyword                     | Coordinate transform, e.g. `coord=clock()`                                                                         |
 | `color`       | keyword                     | Color scale applied to all marks — `palette(...)` or `gradient(...)`                                               |
 | `padding`     | keyword                     | Extra SVG padding (px) — useful for polar charts and overflowing labels                                            |
-| `aspectRatio` | keyword                     | Couple the x/y data scales so a data unit measures the same on both axes. See [Equal aspect](#equal-aspect) below. |
 
 Chart-level options are passed as keyword arguments:
 
@@ -72,24 +71,28 @@ Per-operator overrides use the same shape on
 chart(data, axes=True).flow(spread(by="species", dir="x", axes={"x": True, "y": False}))
 ```
 
-## Equal aspect
+## Equal scale from a shared measure
 
-By default each axis resolves its data→pixel scale independently — `x` against
-the width, `y` against the height — so a circle in data space becomes an ellipse.
-`aspectRatio` couples the two scales so **one data unit measures the same on
-both axes**, the way maps, geometric data, and correlation plots need.
+By default each axis resolves its data→pixel scale independently, so a circle in
+data space becomes an ellipse. But when **x and y are the same unit of measure**,
+their scales must be equal — a circle stays circular. GoFish does this from the
+**measure**, not a knob: tag both channels with the same measure via
+`field(name, measure)` and the shared scale follows.
 
 ```python
-chart(data, aspectRatio="square")        # 1 unit on x = 1 unit on y
-chart(data, aspectRatio="3:2")           # a unit is 3 wide : 2 tall (w:h)
-chart(data, aspectRatio={"w": 3, "h": 2})  # the same, as a dict
+(
+    chart(data)
+    .flow(scatter(x=field("x", "plane"), y=field("y", "plane")))
+    .mark(circle(r=4))
+    .render(w=640, h=380)  # a true circle, not an ellipse
+)
 ```
 
-The value is always written **w:h**, so there is no ratio direction to remember
-(`"square"`, a `"<w>:<h>"` string, or a `{"w", "h"}` dict). The binding axis
-fills its dimension; the other centers in the leftover space. It applies to axes
-that carry a data-driven scale; an axis with nothing to scale leaves coupling a
-no-op.
+This is the same rule the `circle` mark obeys one level down: `circle(r=...)`
+lowers to a `w` and `h` that share a measure, so it can never distort. The
+binding axis fills its dimension; the other centers in the leftover space.
+Tagging the two axes the same is a unit claim — different measures (e.g.
+`bill_length` vs `bill_depth`, both mm) stay independent.
 
 ## The builder
 
