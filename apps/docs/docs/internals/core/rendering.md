@@ -69,9 +69,11 @@ session (`RenderSession.toPixel` in `_node.ts`). Two conventions share this one 
   ```
 
 Which map is used is decided once at the root: `render()` computes
-`effYUp = options.yUp || subtreeHasChart(child)`, where `subtreeHasChart` walks the
-tree for any `_isChart` node (set by the chart builder) or any `coord` node (a
-coordinate system is inherently y-up). The chart builder also threads `yUp` through its
+`effYUp = options.yUp || !!options.axes || subtreeHasChart(child)`, where
+`subtreeHasChart` walks the tree for any `_isChart` node (set by the chart builder)
+or any `coord` node (a coordinate system is inherently y-up). Rendering with
+`axes: true` is also a y-up signal — a value axis is chart-like even for a low-level
+`node.render({ axes: true })` (a box-and-whisker built from primitives). The chart builder also threads `yUp` through its
 render options. This auto-detection means a chart stays y-up even when **composed**
 inside a free-space `gofish([...])`/`.layer()` whose render entry never saw the option
 (see issues #143 / #16). `leftReserve` / `topReserve` are the measured gutter reserves
