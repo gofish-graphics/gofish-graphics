@@ -35,9 +35,12 @@ export const globalFrame = createMark(({ stack }: GlobalFrameProps) => {
       )
     ).name(variablesTag),
   ]).constrain(({ label, frame, frameBorder, variables }) => [
-    Constraint.align({ x: "middle", y: "end" }, [label, frame]),
+    // y-down free space: "start" is the top edge. The "Global Frame" label
+    // sits at the top, variables stack below it (label-first), reading
+    // top→bottom (issue #143/#16).
+    Constraint.align({ x: "middle", y: "start" }, [label, frame]),
     Constraint.align({ x: "start", y: "middle" }, [frameBorder, frame]),
     Constraint.align({ x: "end" }, [variables, label]),
-    Constraint.distribute({ dir: "y", spacing: 10 }, [variables, label]),
+    Constraint.distribute({ dir: "y", spacing: 10 }, [label, variables]),
   ]);
 });
