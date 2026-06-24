@@ -3,9 +3,14 @@ name: Performance Benchmark
 # Records layout-engine performance: per-pass timings, ecologically-valid
 # end-to-end timing of every example on both the JS and Python paths, and
 # synthetic asymptotics sweeps. Record-only — it never fails the build (shared
-# CI runners are too noisy to gate on). On PRs it posts a delta comment vs the
-# latest `main` run; on main it appends the run to the append-only `benchmarks`
-# data branch, which feeds the trend plots and the PR baseline.
+# CI runners are too noisy to gate on).
+#
+# On PRs it does a Penrose-style same-runner pairwise comparison: it benchmarks
+# the base commit in the SAME job on the SAME runner (synthetic sweep), so the
+# base→PR delta is free of cross-machine hardware variance. The comment shows
+# that pairwise synthetic Δ plus HEAD-absolute ecological numbers. On main it
+# appends the run to the append-only `benchmarks` data branch, which feeds the
+# (necessarily cross-run, coarse) trend plots.
 on:
   push:
     branches: [main]
@@ -126,8 +131,40 @@ jobs:
       - name: Run benchmarks
         run: pnpm --filter @gofish/tests bench
 
+      # Penrose-style same-runner pairwise: benchmark the base commit in THIS
+      # job, on THIS runner, right after HEAD. The synthetic sweep is the
+      # controlled, identical-on-both workload (same specs, two engine builds),
+      # so its base→PR delta is free of cross-machine variance. Synthetic-only
+      # keeps it cheap and needs no Python env. Best-effort: a base that predates
+      # the bench tooling (or fails to build) just yields a HEAD-only comment.
+      - name: Benchmark base on the same runner (PR only)
+        if: github.event_name == 'pull_request'
+        continue-on-error: true
+        run: |
+          set -e
+          git fetch --no-tags --depth=1 origin main
+          BASE_SHA=$(git rev-parse FETCH_HEAD)
+          echo "Base commit: $BASE_SHA"
+          git worktree add /tmp/base-bench "$BASE_SHA"
+          if [ ! -f /tmp/base-bench/tests/scripts/bench.ts ]; then
+            echo "Base predates the bench tooling — HEAD-only comparison."
+            exit 0
+          fi
+          cd /tmp/base-bench
+          pnpm install
+          pnpm --filter gofish-ir build
+          pnpm --filter @gofish/tests exec tsx scripts/bench.ts synthetic
+          cp tests/tmp/bench/results.json /tmp/base-results.json
+          echo "Captured same-runner base synthetic results."
+
       - name: Build trend history + PR comment
-        run: pnpm --filter @gofish/tests exec tsx scripts/bench-report.ts --history-dir /tmp/bench-history
+        run: |
+          BASE_ARG=""
+          if [ -f /tmp/base-results.json ]; then
+            BASE_ARG="--base /tmp/base-results.json"
+          fi
+          pnpm --filter @gofish/tests exec tsx scripts/bench-report.ts \
+            --history-dir /tmp/bench-history $BASE_ARG
 
       - name: Render dogfooded plots
         run: pnpm --filter @gofish/tests bench:plots
