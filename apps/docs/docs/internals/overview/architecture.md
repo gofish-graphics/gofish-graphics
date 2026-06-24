@@ -66,6 +66,11 @@ coordinate transform. A coordinate transform is parameterized
 **axis-name aliases** (`theta`/`r`); a small top-down pass before layout resolves those
 aliases into the canonical `x`/`y`/`w`/`h` facets (see
 [Pass 5.5](/internals/layout/passes#pass-5-5-coordinate-space-alias-resolution)).
+A second top-down pass, `resolveEmbedding` (a `GoFishNode` method wired into the
+pipeline before layout), authors each dim's `embedded` flag — whether a coord
+warps that axis's extent into an arc/wedge (point/line/area) — gating a mark's
+own size on whether its measure matches the axis it sits in (see
+[Pass 8.5](/internals/layout/passes#pass-8-5-embedding-resolution)).
 
 The placement pass treats every real node as a `Placeable`: it can expose its
 dimensions, accept final placement pins, report whether an axis is already

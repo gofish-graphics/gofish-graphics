@@ -219,6 +219,22 @@ export function buildChildScalePlan(
     for (const axis of [0, 1] as const) {
       const dom = constraintBudget.sizeDomain[axis];
       if (dom === undefined || !Number.isFinite(layerSize[axis])) continue;
+      // Scale-root scoping: if an ancestor scale root already resolved σ for this
+      // axis (an inherited scale factor is present) AND this layer didn't itself
+      // introduce a new pixel scope (no self-scaled/stashed space on the axis),
+      // then this distribute is an INTERMEDIATE in the ancestor's σ-scope — it
+      // must PROPAGATE the inherited σ, not re-root by inverting its own σ-fold
+      // against the locally allocated size. In a consistently-sized layout the
+      // re-derived factor equals the inherited one (no-op); it only diverges when
+      // the allocated size disagrees with the inherited σ — e.g. an equal-slice
+      // budget under a coord, where the distribute axis IS the σ-scaled axis, so
+      // a nested group would otherwise silently re-derive a smaller σ (#618).
+      if (
+        inheritedScaleFactors?.[axis] !== undefined &&
+        selfScaledSpaces[axis] === undefined
+      ) {
+        continue;
+      }
       const sf = dom.inverse(layerSize[axis], {
         upperBoundGuess: layerSize[axis],
       });

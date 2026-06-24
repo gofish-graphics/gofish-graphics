@@ -3,14 +3,7 @@ import { GoFishNode } from "../_node";
 import { GoFishAST } from "../_ast";
 import type { DisplayList } from "gofish-ir";
 import { lowerStyle, rectItemFromBox } from "../displayList/lowerHelpers";
-import {
-  getMeasure,
-  getValue,
-  inferEmbedded,
-  isValue,
-  MaybeValue,
-  Value,
-} from "../data";
+import { getMeasure, getValue, isValue, MaybeValue, Value } from "../data";
 import {
   Dimensions,
   displayDims as displayDimsOf,
@@ -40,11 +33,15 @@ export const Petal = ({
   stroke?: MaybeValue<string>;
   strokeWidth?: number;
 } & FancyDims<MaybeValue<number>>) => {
-  const dims = elaborateDims(fancyDims).map(inferEmbedded);
+  // `embedded` is authored by the resolveEmbedding pass — see rect.tsx.
+  const dims = elaborateDims(fancyDims);
   const node = new GoFishNode(
     {
       name,
       type: "petal",
+      // Expose `dims` so resolveAliases / resolveEmbedding can author it in place
+      // (same array the closures below capture). See rect.tsx / _node passes.
+      args: { dims },
       // Seed the unit color scale. Prefer whichever channel is data-driven, so
       // `fill: "species"` registers its category (like rect/ellipse do).
       color: isValue(fill) ? fill : stroke,

@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/html";
-import { rect, polar } from "gofish-graphics";
+import { rect, polar, datum } from "gofish-graphics";
 import { combine, byDepth, mount } from "./_shared";
 
 // GoTree gallery port — SectorTree (concentric rings of thin sector wedges).
@@ -25,17 +25,13 @@ import { combine, byDepth, mount } from "./_shared";
 //   - sibling = (distribute θ, align r): siblings pack angularly into their
 //     parent's arc (X.Subtree flatten → distribute) and share one radial ring
 //     (Y.Subtree align → align). This is the dsl mapping verbatim.
-//   - parentChild: here the port DELIBERATELY DIVERGES from the dsl's literal
-//     Y.Root = within (→align r). See the NOTES block — aligning r would put
-//     parent and children on the SAME ring and collapse the whole tree to a
-//     single ring, which is NOT the reference. The reference's concentric rings
-//     come from GoTree's `RootHeight: rdepth` radius-by-depth encoding, which
-//     GoFish polar() cannot express. To honor the reference (concentric rings)
-//     the only renderable realization is distribute-r for parentChild (parent on
-//     the inner ring, child group one ring out), with align-θ centering the
-//     parent over its subtree (the embedded width already gives it the subtree's
-//     full angular span). X.Root juxtapose (→distribute) is kept on the radial
-//     axis; it is the angular axis where the divergence lives.
+//   - parentChild: nest θ realizes the dsl's X.Root = include (parent's arc spans
+//     its children's; nest grows the unsized parent θ). On the radial axis the
+//     port diverges from the dsl's literal Y.Root = within (→align r): aligning r
+//     would collapse the tree to one ring. The reference's concentric rings come
+//     from GoTree's `RootHeight: rdepth` radius-by-depth encoding, which polar()
+//     cannot express, so we use distribute-r (parent inner ring, child group one
+//     ring out) to realize them.
 //
 // ── NOTES — dsl features GoFish's polar() CANNOT express ──
 //    (no options, no hacks; flagged, not faked):
@@ -54,10 +50,9 @@ import { combine, byDepth, mount } from "./_shared";
 //  - InnerRadius / Direction / StartAngle / CentralAngle: polar() takes NO
 //    options, so the hollow-center inner radius, CW/CCW direction, start angle,
 //    and sub-2π central angle are all unavailable.
-//  - NO angular auto-fit: GoTree allocates angle by subtree leaf count; GoFish
-//    has no such pass, so the angular budget is HAND-SET via
-//    leafTheta = 2π / totalLeaves and summed by the embedded leaf widths. An
-//    unbalanced tree or a wrong leafTheta overflows 2π and the wedges wrap.
+//  - Angular AUTO-FIT (#618): leaves carry a unit thetaSize weight, nest-θ grows
+//    parents to their children's arc, and the coord fits the summed weights to
+//    the circle — so the rings close for any tree with no hand-set leafTheta.
 //  - Link: none — correct for filled wedges; matches the dsl.
 const meta: Meta = { title: "GoTree / Gallery / SectorTree" };
 export default meta;
@@ -91,23 +86,31 @@ const deepBalancedTree = (() => {
   return make(6);
 })();
 
-const LEAF_COUNT = 64; // 2^6
-const leafTheta = (2 * Math.PI) / LEAF_COUNT; // each leaf's angular share
 const RING_THICKNESS = 3; // thin radial band (approximates StaticThickness 2)
 const RING_GAP = 13; // radial gap between consecutive rings
 
-// Wedge node: width in θ-units (emX) sweeps an arc whose extent is the node's
-// leaf-count share; height in r-units (emY) is the thin ring thickness.
+// Wedge node (θ auto-fit, #618): leaves carry a unit angular weight; internal
+// nodes leave θ unsized so nest-θ grows each to its children's combined arc. The
+// coord fits the summed leaf weights to the circle. h (emY) is the thin ring.
 const node = (d: any) =>
-  rect({
-    w: d.width * leafTheta,
-    h: RING_THICKNESS,
-    emX: true,
-    emY: true,
-    fill: byDepth(sectorBlues)(d),
-    stroke: "#2f78b8",
-    strokeWidth: 0.75,
-  });
+  d.height === 0
+    ? rect({
+        thetaSize: datum(1),
+        h: RING_THICKNESS,
+        emX: true,
+        emY: true,
+        fill: byDepth(sectorBlues)(d),
+        stroke: "#2f78b8",
+        strokeWidth: 0.75,
+      })
+    : rect({
+        h: RING_THICKNESS,
+        emX: true,
+        emY: true,
+        fill: byDepth(sectorBlues)(d),
+        stroke: "#2f78b8",
+        strokeWidth: 0.75,
+      });
 
 export const SectorTree: StoryObj = {
   render: () =>
@@ -115,11 +118,11 @@ export const SectorTree: StoryObj = {
       {
         node,
         link: "none",
-        // parentChild: distribute r (parent inner ring → child group one ring
-        // out, gap = RING_GAP) + align θ middle (parent centered over its
-        // subtree; the embedded width already supplies the angular span).
+        // parentChild: nest θ (include → parent's arc spans its children's;
+        // nest grows the unsized parent θ) + distribute r (parent inner ring →
+        // child group one ring out, gap = RING_GAP).
         parentChild: combine({
-          x: { kind: "align", alignment: "middle" },
+          x: { kind: "nest", pad: 0 },
           y: { kind: "distribute", spacing: RING_GAP, mode: "edge" },
         }),
         // sibling: distribute θ (pack angularly into the parent's arc) +

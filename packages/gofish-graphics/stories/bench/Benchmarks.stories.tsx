@@ -73,10 +73,10 @@ function fallbackResults(): BenchResults {
       { path: "sample-b", totalMs: stat(2.3), loadMs: stat(7.5), e2eMs: stat(8.0), overheadMs: stat(4.5) },
     ],
     synthetic: [
-      ...mk("spread", { resolve: 0.003, solve: 0.016, lower: 0.002, paint: 0.011 }),
-      ...mk("stack", { resolve: 0.002, solve: 0.02, lower: 0.002, paint: 0.01 }),
-      ...mk("scatter", { resolve: 0.003, solve: 0.015, lower: 0.0025, paint: 0.012 }),
-      ...mk("grid", { resolve: 0.004, solve: 0.018, lower: 0.003, paint: 0.013 }),
+      ...mk("spread", { resolve: 0.003, embed: 0.001, solve: 0.016, lower: 0.002, paint: 0.011 }),
+      ...mk("stack", { resolve: 0.002, embed: 0.001, solve: 0.02, lower: 0.002, paint: 0.01 }),
+      ...mk("scatter", { resolve: 0.003, embed: 0.001, solve: 0.015, lower: 0.0025, paint: 0.012 }),
+      ...mk("grid", { resolve: 0.004, embed: 0.0012, solve: 0.018, lower: 0.003, paint: 0.013 }),
     ],
   };
 }
@@ -133,7 +133,7 @@ export const PassBreakdown: StoryObj<Args & { family: string }> = {
     const container = initializeContainer();
     // One panel per pass (resolve / solve / lower / paint) for a single family;
     // within a panel, log10(pass ms) vs log10(n).
-    const passes = ["resolve", "solve", "lower", "paint"];
+    const passes = ["resolve", "embed", "solve", "lower", "paint"];
     const pts = results().synthetic.filter((p) => p.family === args.family);
     const data = pts.flatMap((p) =>
       passes.map((pass) => ({
@@ -195,6 +195,7 @@ function fallbackHistory(): TrendRun[] {
     label: `r${i}`,
     passes: {
       resolve: 3 + Math.sin(i) * 0.3,
+      embed: 0.5 + Math.sin(i / 3) * 0.1,
       solve: 16 + Math.cos(i) * 0.8,
       lower: 2 + Math.sin(i / 2) * 0.2,
       paint: 11 + Math.cos(i / 2) * 0.5,
@@ -209,7 +210,7 @@ export const Trend: StoryObj<Args> = {
     const hist: TrendRun[] = (window as any).__BENCH_HISTORY__ ?? fallbackHistory();
     // One panel per pass; within a panel, pass time over recent runs (commit
     // order). Reads the appended series from the benchmarks data branch in CI.
-    const passes = ["resolve", "solve", "lower", "paint"];
+    const passes = ["resolve", "embed", "solve", "lower", "paint"];
     const data = hist.flatMap((run) =>
       passes.map((pass) => ({ pass, idx: run.idx, ms: run.passes[pass] ?? 0 }))
     );

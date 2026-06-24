@@ -71,6 +71,29 @@ Per-operator overrides use the same shape on
 chart(data, axes=True).flow(spread(by="species", dir="x", axes={"x": True, "y": False}))
 ```
 
+## Equal scale from a shared measure
+
+By default each axis resolves its data→pixel scale independently, so a circle in
+data space becomes an ellipse. But when **x and y are the same unit of measure**,
+their scales must be equal — a circle stays circular. GoFish does this from the
+**measure**, not a knob: tag both channels with the same measure via
+`field(name, measure)` and the shared scale follows.
+
+```python
+(
+    chart(data)
+    .flow(scatter(x=field("x", "plane"), y=field("y", "plane")))
+    .mark(circle(r=4))
+    .render(w=640, h=380)  # a true circle, not an ellipse
+)
+```
+
+This is the same rule the `circle` mark obeys one level down: `circle(r=...)`
+lowers to a `w` and `h` that share a measure, so it can never distort. The
+binding axis fills its dimension; the other centers in the leftover space.
+Tagging the two axes the same is a unit claim — different measures (e.g.
+`bill_length` vs `bill_depth`, both mm) stay independent.
+
 ## The builder
 
 Every builder method returns a **new** `ChartBuilder`, so chains are immutable

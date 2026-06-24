@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/html";
-import { rect, polar } from "gofish-graphics";
+import { rect, polar, datum } from "gofish-graphics";
 import { tree, combine } from "../../src";
 import { byDepth } from "../data";
 import { initializeContainer } from "../helper";
@@ -67,19 +67,18 @@ const sampleTree = (() => {
 // agree, and the parent wedge spans exactly its subtree's arc (RootWidth=value).
 //
 // ── POLAR LIMITATIONS (no hacks; flagged, not faked) ─────────────────────────
-//  - polar() takes NO options, so several dsl knobs are NOT expressible:
-//     · InnerRadius 0.25 — the donut hole is NOT achievable. With align-r at the
-//       inner edge (r=0) the innermost leaf wedges reach the center, giving a
-//       SOLID disc instead of the dsl's 25%-radius hole. (Our wedges leave only
-//       a tiny accidental hole at the exact center where r→0 / strokes meet.)
-//     · PolarCenter "bottom" — polar() always centers the disc; no off-center pin.
-//     · Direction / StartAngle / CentralAngle — fixed full 2π sweep from a fixed
-//       start angle; no clockwise/CCW or sub-circle arc.
+//  - InnerRadius 0.25 — APPLIED via `polar({ innerRadius: 0.25 })`: the donut
+//    hub. The concentric depth bands now ring a 25%-radius hollow center instead
+//    of filling to r=0 (the headline "tyre" gap, now closed).
+//  - Still NOT expressible (flagged, not faked):
+//     · PolarCenter "bottom" — polar()'s `center` is a screen-space offset, not a
+//       semantic "bottom" pin; left centered here (cosmetic).
+//     · Direction / StartAngle / CentralAngle — polar() now has these knobs but
+//       this chart's spec only customizes InnerRadius; kept at defaults.
 //     · no θ/r axis swap (no transposed variant; PolarAxis swap not expressible).
-//  - NO angular auto-fit: there is no leaf-count allocation pass, so the angular
-//    budget is hand-set via leafTheta = 2π / totalLeaves. If that sum drifts from
-//    2π the wedges overflow and wrap. Here sampleTree's 8 leaves make each ring
-//    sum to exactly 2π.
+//  - Angular AUTO-FIT (#618): leaves carry a unit thetaSize weight, nest-θ grows
+//    each parent to its children's arc, and the coord fits the summed weights to
+//    the circle — so the disc closes for any tree with no hand-set leafTheta.
 //  - REQUIRES a depth-balanced tree: align-r needs every leaf at the same depth
 //    so the radial bands line up. A mixed-depth tree makes the per-subtree r
 //    extents disagree and the angular budget overflows 2π (outer wedges spiral).
@@ -96,25 +95,33 @@ export default meta;
 // (inner), matching the reference. Color = depth.
 const tyreBlues = ["#08306b", "#2171b5", "#6baed6", "#c6dbef", "#deebf7"];
 
-// totalLeaves drives the angular budget so every ring sums to exactly 2π.
-// Balanced depth-3 binary tree → 8 leaves.
-const totalLeaves = 8;
-const leafTheta = (2 * Math.PI) / totalLeaves; // angular share of one leaf
 const band = 34; // radial thickness of one inclusion band
 
+// θ auto-fit (#618): leaves carry a unit angular weight; internal nodes leave θ
+// unsized so nest-θ grows each to its children's combined arc (no double-count —
+// only leaves are sized). The coord fits the summed leaf weights to the circle.
+// r-dimension embedded: rdepth → (height+1) bands, so a parent's wedge is taller
+// than (and, pinned to the same inner edge via align-r start, encloses) its
+// children's.
 const node = (d: any) =>
-  rect({
-    // θ-dimension embedded: width = this node's leaf-count share of the circle.
-    w: d.width * leafTheta,
-    emX: true,
-    // r-dimension embedded: rdepth → (height + 1) bands, so the parent's wedge
-    // is radially taller than (and thus encloses) its children's.
-    h: (d.height + 1) * band,
-    emY: true,
-    fill: byDepth(tyreBlues)(d),
-    stroke: "white",
-    strokeWidth: 2,
-  });
+  d.height === 0
+    ? rect({
+        thetaSize: datum(1),
+        emX: true,
+        h: (d.height + 1) * band,
+        emY: true,
+        fill: byDepth(tyreBlues)(d),
+        stroke: "white",
+        strokeWidth: 2,
+      })
+    : rect({
+        emX: true,
+        h: (d.height + 1) * band,
+        emY: true,
+        fill: byDepth(tyreBlues)(d),
+        stroke: "white",
+        strokeWidth: 2,
+      });
 
 export const TyreTree: StoryObj = {
   tags: ["gallery"],
@@ -131,17 +138,14 @@ export const TyreTree: StoryObj = {
       {
         node,
         link: "none",
-        // parentChild: the dsl's X.Root=include is conceptually a nest on θ, but
-        // the node's EMBEDDED width (value share) already carries the parent's
-        // full subtree arc — so a literal nest-θ double-counts the span and
-        // overflows the 2π budget (wedges wrap). Following the IciclePlot port,
-        // align θ "middle" centers the parent over its subtree and the embedded
-        // width realizes the inclusion. align r "start" pins every node's INNER
-        // edge to the same radius, so the taller (lower-depth) wedge reaches
-        // OUTWARD past its children — the radial "within" inclusion that makes
-        // the root the outer rim.
+        // parentChild: nest θ realizes the dsl's X.Root=include (parent's arc
+        // spans its children's). Only LEAVES are θ-sized (unit weight); internal
+        // nodes are unsized so nest grows them to the subtree arc — no double-
+        // count. align r "start" pins every node's INNER edge to the same radius,
+        // so the taller (lower-depth) wedge reaches OUTWARD past its children —
+        // the radial "within" inclusion that makes the root the outer rim.
         parentChild: combine({
-          x: { kind: "align", alignment: "middle" },
+          x: { kind: "nest", pad: 0 },
           y: { kind: "align", alignment: "start" },
         }),
         // sibling: distribute θ (pack siblings around the circle) + align r
@@ -150,7 +154,8 @@ export const TyreTree: StoryObj = {
           x: { kind: "distribute", spacing: 0 },
           y: { kind: "align", alignment: "start" },
         }),
-        coord: polar(),
+        // InnerRadius:0.25 — the donut hole (tyre hub). Now expressible.
+        coord: polar({ innerRadius: 0.25 }),
       },
       sampleTree
     ).render(container, { w: 560, h: 560 });

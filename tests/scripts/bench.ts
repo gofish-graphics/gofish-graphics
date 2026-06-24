@@ -18,8 +18,8 @@
  *   3. synthetic    — sweep a scale parameter across the micro-benchmark
  *                     families (tests/bench/specs.ts); the thesis asymptotics.
  *
- * The recognized per-pass labels are resolve / axes / solve / lower / paint /
- * fonts (see packages/gofish-graphics/src/ast/perf.ts).
+ * The recognized per-pass labels are resolve / axes / embed / solve / lower /
+ * paint / fonts (see packages/gofish-graphics/src/ast/perf.ts).
  *
  * Usage:
  *   tsx scripts/bench.ts [mode] [--filter <substr>] [--quick]
@@ -51,7 +51,15 @@ const OUT_DIR = join(TESTS_DIR, "tmp/bench");
 const HARNESS_PORT = 3010;
 const DERIVE_SERVER_PORT = 3011;
 
-const PASS_LABELS = ["resolve", "axes", "solve", "lower", "paint", "fonts"];
+const PASS_LABELS = [
+  "resolve",
+  "axes",
+  "embed",
+  "solve",
+  "lower",
+  "paint",
+  "fonts",
+];
 
 const argv = process.argv.slice(2);
 const QUICK = argv.includes("--quick");

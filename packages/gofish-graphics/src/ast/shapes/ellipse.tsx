@@ -5,14 +5,7 @@ import { path, transformPath } from "../../path";
 import { GoFishNode } from "../_node";
 import { GoFishAST } from "../_ast";
 import { linear } from "../coordinateTransforms/linear";
-import {
-  getMeasure,
-  getValue,
-  inferEmbedded,
-  isValue,
-  MaybeValue,
-  Value,
-} from "../data";
+import { getMeasure, getValue, isValue, MaybeValue, Value } from "../data";
 import {
   Dimensions,
   displayDims as displayDimsOf,
@@ -57,11 +50,15 @@ export const Ellipse = ({
   aspectRatio?: number;
   label?: boolean;
 } & FancyDims<MaybeValue<number>>) => {
-  const dims = elaborateDims(fancyDims).map(inferEmbedded);
+  // `embedded` is authored by the resolveEmbedding pass — see rect.tsx.
+  const dims = elaborateDims(fancyDims);
   const node = new GoFishNode(
     {
       name,
       type: "ellipse",
+      // Expose `dims` so resolveAliases / resolveEmbedding can author it in place
+      // (same array the closures below capture). See rect.tsx / _node passes.
+      args: { dims },
       color: fill,
       resolveUnderlyingSpace: (
         _children: Size<UnderlyingSpace>[],

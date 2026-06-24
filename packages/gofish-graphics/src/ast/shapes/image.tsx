@@ -2,13 +2,7 @@ import * as Monotonic from "../../util/monotonic";
 import { computeAesthetic } from "../../util";
 import { interval } from "../../util/interval";
 import { GoFishNode } from "../_node";
-import {
-  getMeasure,
-  getValue,
-  inferEmbedded,
-  isAesthetic,
-  isValue,
-} from "../data";
+import { getMeasure, getValue, isAesthetic, isValue } from "../data";
 import {
   Dimensions,
   displayTranslate,
@@ -243,7 +237,8 @@ export const Image = ({
   opacity?: number;
   preserveAspectRatio?: string;
 } & FancyDims<number>) => {
-  const dims = elaborateDims(fancyDims).map(inferEmbedded);
+  // `embedded` is authored by the resolveEmbedding pass — see rect.tsx.
+  const dims = elaborateDims(fancyDims);
 
   const node = new GoFishNode(
     {

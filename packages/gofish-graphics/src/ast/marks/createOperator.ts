@@ -39,7 +39,7 @@ import {
   stashLayerName,
 } from "./chartBuilder";
 import { inferSize, inferPos, inferColor, resolveMeasure } from "../channels";
-import { discretePosition } from "../data";
+import { discretePosition, copyMeasureProvenance } from "../data";
 import type { Measure } from "../data";
 import type { MaybeValue, Value } from "../data";
 import type { LabelAccessor, LabelOptions } from "../labels/labelPlacement";
@@ -826,6 +826,15 @@ export function createOperator<Datum, Options extends Record<string, any>>(
         const entries =
           splitResult instanceof Map ? splitResult : splitResult.entries;
         const keys = splitResult instanceof Map ? undefined : splitResult.keys;
+        // Split leaves are fresh sub-arrays (groupBy/filter/slice) that don't
+        // inherit `d`'s measure-provenance symbol. Re-tag each array leaf so a
+        // MARK channel applied per leaf (createMark → inferSize/inferPos with no
+        // precomputed measure) reads the source measure off its own data — e.g.
+        // a bin's `start`/`end`/`size` resolve to the source field's units, not
+        // the literal field name, matching the operator-channel path (#534).
+        for (const leaf of entries.values()) {
+          if (Array.isArray(leaf)) copyMeasureProvenance(leaf, d);
+        }
         // Route each leaf through applyMark so expand-kind marks (e.g. `cut`)
         // can return arrays that we flatten across leaves. Per-item marks
         // keep the legacy "one call per leaf" semantics — applyMark wraps

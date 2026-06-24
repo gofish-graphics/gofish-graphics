@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/html";
-import { rect, polar } from "gofish-graphics";
+import { rect, polar, datum } from "gofish-graphics";
 import { combine, byDepth, mount } from "./_shared";
 
 // GoTree gallery port — ClockTree (nodes arranged around a clock-face ring).
@@ -85,19 +85,16 @@ const clockTree = {
   ],
 };
 
-const countNodes = (n: any): number =>
-  1 + (n.children?.reduce((s: number, c: any) => s + countNodes(c), 0) ?? 0);
-
-const N_TOTAL = countNodes(clockTree); // every node gets one angular slot
-const thetaPerNode = (2 * Math.PI) / N_TOTAL; // hand-allocated θ share (no auto-fit)
 const bandUnit = 26; // radial thickness unit; node height = (rdepth+1)*bandUnit
 
-// Wedge node: width in θ-units (emX) sweeps an arc; height in r-units (emY) is
-// the radial band. RootHeight:rdepth → height grows with d.height (subtree
-// height): root tallest, leaves shortest.
+// Wedge node: thetaSize is a unit angular WEIGHT (every node an equal slot). The
+// coord is the single σ-scale-root: it sums the weights (N·σ) and fits them to
+// the angular budget, propagating one σ down through the nested distributes — so
+// the ring closes exactly with NO hand-set 2π/N. emX/emY make θ sweep an arc and
+// r a radial band. RootHeight:rdepth → height grows with d.height: root tallest.
 const node = (d: any) =>
   rect({
-    w: thetaPerNode,
+    thetaSize: datum(1),
     h: (d.height + 1) * bandUnit,
     emX: true,
     emY: true,

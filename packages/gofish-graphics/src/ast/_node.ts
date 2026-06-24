@@ -37,7 +37,13 @@ import { lowerLabelItems } from "./labels/renderLabel";
 import { GoFishRef } from "./_ref";
 import { GoFishAST } from "./_ast";
 import { CoordinateTransform } from "./coordinateTransforms/coord";
-import { getValue, isValue, MaybeValue, inferEmbedded } from "./data";
+import {
+  getValue,
+  isValue,
+  MaybeValue,
+  baseEmbedded,
+  getMeasure,
+} from "./data";
 import { color6 } from "../color";
 import * as Monotonic from "../util/monotonic";
 import {
@@ -509,10 +515,10 @@ export class GoFishNode {
    * (a nested coord rebinds for its subtree).
    *
    * Runs BEFORE `resolveUnderlyingSpace` (which reads the resolved dims). It
-   * mutates `args.dims` in place — reassigning the array element (not its fields,
-   * because `inferEmbedded` returns a fresh object) so the mark's layout/space
-   * closures, which captured the same array reference, observe the resolution and
-   * the freshly-derived `embedded` flag.
+   * mutates `args.dims` in place — reassigning the array element (not its fields)
+   * so the mark's layout/space closures, which captured the same array reference,
+   * observe the resolution. The `embedded` flag is authored later by
+   * {@link resolveEmbedding}, not here.
    *
    * Hygiene: using an alias outside any coord that declares it (no `active` map),
    * or naming an alias the enclosing coord doesn't declare, is a build-time error.
@@ -539,16 +545,80 @@ export class GoFishNode {
           );
         }
         if (dims) {
-          dims[res.axis] = inferEmbedded({
+          dims[res.axis] = {
             ...dims[res.axis],
             [res.facet]: value,
-          });
+          };
         }
       }
     }
 
     this.children.forEach((c) => {
       if (c instanceof GoFishNode) c.resolveAliases(next);
+    });
+  }
+
+  /**
+   * Top-down pass that authors each dim's `embedded` flag — the flag the shape
+   * `_render` switches on to draw a mark as point (0 embedded axes) / line (1) /
+   * area (2). It is the **sole author** of `embedded`, except an explicit
+   * `emX`/`emY` (or `connect`'s `embed()`), which lock the flag to `true` and are
+   * never recomputed here. Replaces the construction-time `inferEmbedded` the
+   * shape factories used to apply (which couldn't see the axis).
+   *
+   * Two routes by which a dim's edges become coordinate-space positions (so a
+   * coord warps the extent):
+   *
+   * - **Route B (intrinsic, measure-gated)** — implemented here. A dim embeds iff
+   *   {@link baseEmbedded} holds (its size is a data value or unsized) AND, when
+   *   inside a coordinate space, the size's own measure matches the dim's
+   *   *position* measure — the measure of wherever the box sits in coord space
+   *   (its `min`/`center`/`max`, whichever is a data value). A *foreign*-measure
+   *   size (a scatter bubble's area at a positioned center, area ≠ position
+   *   measure) stays ink — drawn flat at the mapped center. This is the #534
+   *   payoff: the size now carries the source measure to compare.
+   *
+   *   The discriminator is mark-LOCAL (size-vs-position on the same dim), not
+   *   read from the coord: a polar coord *forgets* its axis measure (its
+   *   underlying space is measureless), but a positioned mark's own position
+   *   measure IS the axis measure it sits on. A pure-size mark (a bar: size, no
+   *   position) has no position measure to clash with → embeds.
+   * - **Route A (relational, measure-free)** — deferred (no corpus oracle yet).
+   *
+   * The extra revocation only fires INSIDE a coord, so Cartesian behavior is
+   * byte-identical to the old construction-time `inferEmbedded` (which gated on
+   * `min` alone). Runs AFTER `resolveUnderlyingSpace`, BEFORE `layout`/render;
+   * like {@link resolveAliases} it mutates the shared `args.dims` element so the
+   * captured render closure observes it.
+   */
+  public resolveEmbedding(insideCoord: boolean = false): void {
+    const within = insideCoord || this.type === "coord";
+
+    const dims = this.args?.dims as Dimensions | undefined;
+    if (dims) {
+      for (const dir of [0, 1] as const) {
+        const dim = dims[dir];
+        if (dim === undefined) continue;
+        // Explicit emX/emY (or connect's embed()) is a hard claim — leave it.
+        if (dim.embedded === true) continue;
+        let embedded = baseEmbedded(dim);
+        // Route B gate (coord-scoped): a value-sized dim positioned in a measure
+        // FOREIGN to its size's measure is a foreign extent (a bubble) → ink.
+        if (embedded && within) {
+          const sizeMeasure = getMeasure(dim.size);
+          for (const pos of [dim.min, dim.center, dim.max]) {
+            if (isValue(pos) && getMeasure(pos) !== sizeMeasure) {
+              embedded = false;
+              break;
+            }
+          }
+        }
+        dims[dir] = { ...dim, embedded };
+      }
+    }
+
+    this.children.forEach((c) => {
+      if (c instanceof GoFishNode) c.resolveEmbedding(within);
     });
   }
 

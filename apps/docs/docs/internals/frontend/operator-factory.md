@@ -123,7 +123,13 @@ Walking `createOperator.ts:391-415`:
 
 1. **Split** — `cfg.split(opts, d)` partitions the input into a
    `Map<key, subdata>`. (Some operators, like `table`, also return `keys` —
-   row/column labels that get merged into the layout opts.)
+   row/column labels that get merged into the layout opts.) Each array leaf is
+   then re-tagged with `d`'s measure provenance (`copyMeasureProvenance`): a
+   leaf is a fresh sub-array that wouldn't otherwise inherit the
+   `MEASURE_PROVENANCE` symbol, so without this a _mark_ channel applied per
+   leaf would lose a transform's measure (e.g. a bin's `start`/`end`/`size`) and
+   fall back to the literal field name — see [underlying
+   space](/internals/core/underlying-space) and #534.
 2. **fmap** — for each `(key, subdata)` entry, call the user's mark with
    that subdata and a parent-prefixed key (`${key}-${i}`). The result is
    resolved to a `GoFishNode`. `node.setKey(...)` makes downstream

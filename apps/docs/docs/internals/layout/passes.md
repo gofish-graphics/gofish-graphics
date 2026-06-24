@@ -316,6 +316,30 @@ const posScales = [
 
 For `POSITION` spaces, this creates linear scales that map from data values to pixel coordinates. These scales are used during layout to position elements.
 
+### Pass 8.5: Embedding Resolution
+
+**Location**: `src/ast/gofish.tsx` (`child.resolveEmbedding()`), `src/ast/_node.ts`
+(`resolveEmbedding`)
+
+`resolveEmbedding` is the **sole author** of each dim's `embedded` flag — the
+flag the shape renders switch on for point (0 embedded axes) / line (1) / area
+(2). It runs top-down after underlying space resolves and before layout, and
+mutates the shared `args.dims` element in place (like `resolveAliases`) so the
+captured render closure observes it. Explicit `emX`/`emY` (and `connect`'s
+`embed()`) lock the flag to `true` and are never recomputed.
+
+A dim embeds iff its size is a data value or unsized (`baseEmbedded`, `data.ts`)
+AND — the **Route B** measure gate, only inside a coordinate space — its size's
+measure matches the dim's own _position_ measure (`min`/`center`/`max`). A size
+in a measure _foreign_ to where the mark sits (a scatter bubble's area ≠ its
+position units) stays ink: a flat point at the mapped center, not a swept wedge.
+The discriminator is mark-local because a polar coord forgets its axis measure;
+a positioned mark's own position measure is the axis measure it sits on. This
+consumes the measure provenance #534 carried to mark channels. The revocation is
+coord-scoped, so Cartesian behavior matches the former construction-time
+inference. (Route A — relational, measure-free embedding — is not yet
+implemented; tracked under #618.)
+
 ### Pass 9: Layout Calculation
 
 **Location**: `src/ast/gofish.tsx:208`
@@ -347,7 +371,15 @@ omitted dimension is resolved per axis from that axis's root underlying space:
 
 `layout()` therefore distinguishes the concrete `canvasW`/`canvasH` (used to build
 the position scales and root scale factors) from the `layoutW`/`layoutH` it hands
-to `child.layout` (where a shrink-to-fit axis is left unsized). After layout it
+to `child.layout` (where a shrink-to-fit axis is left unsized). **Shared-measure
+equal scale** (#582) adds one reconciliation step here, after the per-axis scales
+are built and before `child.layout`: when `spaceMeasure(x) === spaceMeasure(y)`
+(the two axes are the same unit), each axis's pixels-per-data-unit — a POSITION
+domain's `canvas / range` or a baseline-magnitude σ — is equated to the binding
+`min(...)` so one data unit measures the same on both axes (circles stay circular,
+maps stay undistorted); the binding axis fills, the other gets a recentered
+posScale. It is type equality, not a knob, and a single-coordinate-space coupling
+— it does not reach sizes solved in separate nested operator scopes. After layout it
 reads the chart's _final_ extent back off the root via `child.dims[i].size`, so an
 unsized axis still yields a concrete SVG size (e.g. a no-width bar chart gets
 default-width bars and a width of `n·barWidth + spacing`). A user-supplied
@@ -789,8 +821,9 @@ labeled phase is bracketed in `runLayout()` / `layout()` (and the paint path in
 `render()`) with `perfNow()` / `perfAdd(label, …)`, accumulating per-pass
 durations under the labels `resolve` (Passes 2–6: color/name/label/alias/space
 resolution = domain inference), `axes` (Pass 7 + title/legend elaboration),
-`solve` (Pass 9 constraint solve), `lower` (display-list lowering) and `paint`
-(display-item → SVG), plus `fonts` (the webfont-readiness await).
+`embed` (the `resolveEmbedding` pass), `solve` (Pass 9 constraint solve),
+`lower` (display-list lowering) and `paint` (display-item → SVG), plus `fonts`
+(the webfont-readiness await).
 
 Collection is **off by default and zero-cost when off**: the helpers short-circuit
 on `globalThis.__GOFISH_PERF__?.enabled`, and the published library build replaces

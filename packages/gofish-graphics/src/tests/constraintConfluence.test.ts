@@ -984,7 +984,16 @@ console.log("# constraint confluence: child scale factor planning");
     selfScaled.childScaleFactors[0] === 2 && selfScaled.childScaleFactors[1] === 4
   );
 
-  const budget = buildChildScalePlan(
+  // Scale-root scoping (#618): an INTERMEDIATE distribute — inherited scale
+  // present AND not self-scaled — is inside an ancestor scale root's σ-scope, so
+  // it must DEFER to the inherited σ rather than re-derive its own from the
+  // locally allocated size. (In a consistently sized layout the re-derived factor
+  // equals the inherited one, so this is a no-op; it diverges only when the
+  // allocated size disagrees with the inherited σ — e.g. an equal-slice budget
+  // under a coord, where the distribute axis IS the σ-scaled axis. This is what
+  // makes flat ≡ nested distribute for data-driven children — see
+  // coordConfluence.test.ts.)
+  const intermediate = buildChildScalePlan(
     [undefined, undefined],
     [UNDEFINED, UNDEFINED],
     [100, 80],
@@ -994,14 +1003,35 @@ console.log("# constraint confluence: child scale factor planning");
     [false, false]
   );
   ok(
-    "constraint SIZE budget overrides inherited child scale factor when invertible",
-    budget.childScaleFactors[0] === 10 && budget.childScaleFactors[1] === 3
+    "intermediate distribute defers to inherited child scale factor (scale-root scoping)",
+    intermediate.childScaleFactors[0] === 2 &&
+      intermediate.childScaleFactors[1] === 3
   );
   ok(
-    "non-invertible constraint SIZE budget is reported and keeps inherited scale",
-    budget.budgetFailures.length === 1 &&
-      budget.budgetFailures[0].axis === 1 &&
-      budget.budgetFailures[0].budget === 80
+    "intermediate distribute makes no budget-inversion attempt (no failures)",
+    intermediate.budgetFailures.length === 0
+  );
+
+  // When this layer IS the σ-root for the axis (no inherited scale), the budget
+  // applies: re-derive from the fold, and a non-invertible fold is reported.
+  const rootBudget = buildChildScalePlan(
+    [undefined, undefined],
+    [UNDEFINED, UNDEFINED],
+    [100, 80],
+    [undefined, undefined],
+    [inheritedX, inheritedY],
+    { sizeDomain: [Monotonic.linear(10, 0), Monotonic.linear(0, 10)] },
+    [false, false]
+  );
+  ok(
+    "σ-root distribute re-derives child scale factor from its budget when invertible",
+    rootBudget.childScaleFactors[0] === 10
+  );
+  ok(
+    "non-invertible constraint SIZE budget on a σ-root axis is reported",
+    rootBudget.budgetFailures.length === 1 &&
+      rootBudget.budgetFailures[0].axis === 1 &&
+      rootBudget.budgetFailures[0].budget === 80
   );
 
   const shared = buildChildScalePlan(

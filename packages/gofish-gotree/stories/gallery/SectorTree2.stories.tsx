@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/html";
-import { rect, polar } from "gofish-graphics";
+import { rect, polar, datum } from "gofish-graphics";
 import { tree, combine } from "../../src";
 import { byDepth } from "../data";
 import { initializeContainer } from "../helper";
@@ -56,10 +56,9 @@ import { initializeContainer } from "../helper";
 //    is correct here); polar links only support {interpolation:"linear"|"none"},
 //    never curved arcs, so the dsl's curve links are not representable anyway.
 //  - Thickness:static 2 maps to the wedge stroke width.
-//  - NO angular auto-fit: the layout engine does NOT allocate θ by subtree
-//    leaf-count. It tiles here only because leaf widths are hand-set to
-//    leafTheta and summed by nest; an unbalanced tree or a wrong leafTheta
-//    overflows 2π and wedges wrap. GoTree allocates angle automatically.
+//  - Angular AUTO-FIT (#618): leaves carry a unit thetaSize weight, nest-θ sums
+//    them up the tree, and the coord fits the total to the circle — so the disc
+//    closes for any tree with no hand-set leafTheta.
 const meta: Meta = {
   title: "GoTree / Gallery / SectorTree2",
 };
@@ -81,8 +80,6 @@ const deepBalancedTree = (() => {
   return make(4);
 })();
 
-const LEAF_COUNT = 16; // 2^4
-const leafTheta = (2 * Math.PI) / LEAF_COUNT; // each leaf's angular share
 const bandHeight = 42; // radial thickness of one ring
 
 // Wedge node: width in θ-units (emX) sweeps an arc; height in r-units (emY) is
@@ -92,7 +89,7 @@ const bandHeight = 42; // radial thickness of one ring
 const node = (d: any) =>
   d.height === 0
     ? rect({
-        w: leafTheta,
+        thetaSize: datum(1),
         h: bandHeight,
         emX: true,
         emY: true,

@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/html";
-import { rect, polar } from "gofish-graphics";
+import { rect, polar, datum } from "gofish-graphics";
 import { combine, byDepth, mount } from "./_shared";
 
 // GoTree gallery port — ClockTreeWithLink (a clock-face ring of nodes whose
@@ -30,28 +30,27 @@ import { combine, byDepth, mount } from "./_shared";
 // θ-width = 2π/N, edge-mode distribute sums the widths up the tree so the ring
 // tiles the full 2π exactly (N · leafTheta = 2π).
 //
-// NOTES — polar features in the dsl that gofish's polar() CANNOT express
-// (polar() takes no options; no hacks, gaps flagged not faked):
-//  - InnerRadius: 0.79 (a THIN outer ring with an empty center, the "clock
-//    rim" look) is NOT achievable. align-r with no radial distribute pins the
-//    band at the bottom of the r domain (r ∈ [0, bandHeight]), and r=0 maps to
-//    the disc center — so the band fills the disc from center to edge (a full
-//    pie ring) instead of a thin rim. polar() has no inner-radius origin knob.
+// NOW EXPRESSIBLE (parameterized polar(), #620):
+//  - InnerRadius: 0.79 — APPLIED via `polar({ innerRadius: 0.79 })`. The thin
+//    outer clock rim with an empty center that the links route through, instead
+//    of a full pie ring filling the disc from r=0. This was the headline gap.
+//  - Direction / StartAngle / CentralAngle: polar() now has these knobs; kept at
+//    the defaults here (full 2π disc, 12-o'clock start) — the GoTree spec only
+//    customizes InnerRadius for this chart.
+//
+// REMAINING GAPS (flagged, not faked):
 //  - Link: curveStepBefore (an orthogonal radial-then-angular step, the inward
 //    "spoke + arc" routing in the reference) is NOT supported — gofish-gotree
 //    links only do {interpolation:"linear"} (orthogonal/arc throw as M4+). So
-//    links are drawn as straight chords across the disc; under the polar
-//    transform a straight parent→child segment renders as a chord that bows
-//    relative to the reference's stepped spokes.
-//  - NO angular auto-fit: angle is NOT allocated by subtree leaf-count by the
-//    layout engine. The ring tiles only because every node's θ-width is
-//    hand-set to leafTheta = 2π/N and summed by edge-mode distribute. A wrong
-//    N or unbalanced widths overflows 2π and wedges wrap. GoTree sizes the
-//    angular slots automatically (and by subtree size).
-//  - Direction / StartAngle / CentralAngle / PolarAxis swap: polar() is a
-//    fixed full-2π disc with no orientation, start-angle, sweep, or θ/r-axis
-//    swap knob (polar() has no transposed variant), so the PolarAxis swap
-//    is not expressible here.
+//    links are drawn as straight chords through the hollow center; under the
+//    polar transform a straight parent→child segment bows relative to the
+//    reference's stepped spokes.
+//  - Angular AUTO-FIT (#618): each node carries a unit `thetaSize` weight and the
+//    coord fits the summed weights to the budget, so the ring closes for any node
+//    count with no hand-set 2π/N. (Weighting by subtree size instead of a unit
+//    weight is just `thetaSize: datum(d.leafCount)`.)
+//  - No θ/r axis swap (no transposed variant; PolarAxis swap not expressible);
+//    not needed here.
 const meta: Meta = { title: "GoTree / Gallery / ClockTreeWithLink" };
 export default meta;
 
@@ -73,18 +72,15 @@ const clockData = {
   ],
 };
 
-// Count every node so each gets an equal θ slice that tiles the full 2π.
-const countNodes = (t: any): number =>
-  1 + (t.children ?? []).reduce((s: number, c: any) => s + countNodes(c), 0);
-const N = countNodes(clockData);
-const leafTheta = (2 * Math.PI) / N; // each node's angular share
 const bandHeight = 60; // radial thickness of the ring band
 
-// Rectangle node: width in θ-units (emX) sweeps an arc; height in r-units
-// (emY) is the ring thickness. Colored by depth (dark root → light leaves).
+// Rectangle node: thetaSize is a unit angular WEIGHT (every node an equal slot);
+// the coord sums the weights and fits them to the angular budget, so the ring
+// closes exactly with no hand-set 2π/N. emX/emY make θ sweep an arc and r the
+// ring thickness. Colored by depth (dark root → light leaves).
 const node = (d: any) =>
   rect({
-    w: leafTheta,
+    thetaSize: datum(1),
     h: bandHeight,
     emX: true,
     emY: true,
@@ -112,7 +108,9 @@ export const ClockTreeWithLink: StoryObj = {
           // r: siblings share the ring.
           y: { kind: "align", alignment: "middle" },
         }),
-        coord: polar(),
+        // InnerRadius:0.79 — the thin outer clock rim with an empty center that
+        // the step/arc links route through. Now expressible.
+        coord: polar({ innerRadius: 0.79 }),
       },
       { w: 520, h: 520 },
       clockData

@@ -27,9 +27,13 @@ import {
   isORDINAL,
   isPOSITION,
   isUNDEFINED,
+  isBaselineMagnitude,
   forgetAllMeasures,
   continuousInterval,
+  type CONTINUOUS_TYPE,
 } from "../underlyingSpace";
+import { posScaleFromSpace } from "../domain";
+import * as Monotonic from "../../util/monotonic";
 import { createNodeOperator } from "../withGoFish";
 import { computeTransformedBoundingBox } from "./coordUtils";
 import { empty, union } from "../../util/bbox";
@@ -183,8 +187,43 @@ export const coord = createNodeOperator(
                     coordTransform.transform([theta, r + innerR]),
                 }
               : coordTransform;
+          // Fit the subtree into the coordinate budget, exactly as the ROOT
+          // fits content to the canvas (gofish.tsx) — here the budget plays the
+          // role of the canvas. A baseline-magnitude (data SIZE) axis scales by
+          // budget/total via `width.inverse(budget)` so the children fill the
+          // ring; an anchored (data POSITION) axis maps onto [0, budget] via a
+          // posScale. Only DATA-bound channels consume these — a plain number
+          // bypasses both scaleFactor and posScale (see `computeAesthetic`) — so
+          // hand-sized (radian/pixel) stories are unchanged. This is what lets a
+          // mark say `thetaSize: datum(count)` and have the ring auto-fit.
+          const fitAxis = (
+            axis: 0 | 1,
+            budget: number
+          ): [number, ((p: number) => number) | undefined] => {
+            // An anchored (data POSITION) axis: the coord's own
+            // `resolveUnderlyingSpace` already unioned the children's POSITION
+            // spaces into `spaceRef.current` — reuse it and map onto [0, budget].
+            const resolved = spaceRef.current?.[axis];
+            if (resolved !== undefined && isPOSITION(resolved)) {
+              return [1, posScaleFromSpace(resolved, budget)];
+            }
+            // A baseline-magnitude (data SIZE) axis: `resolveUnderlyingSpace`
+            // leaves this case UNDEFINED, so sum the children's widths here and
+            // scale by budget/total (`width.inverse(budget)`) to fill the ring.
+            const baseline = children
+              .map((c) => (c as GoFishNode)._underlyingSpace?.[axis])
+              .filter((s): s is UnderlyingSpace => s !== undefined)
+              .filter(isBaselineMagnitude);
+            if (baseline.length > 0) {
+              const width = Monotonic.add(...baseline.map((s) => s.width));
+              return [width.inverse(budget) ?? 1, undefined];
+            }
+            return [1, undefined];
+          };
+          const [sfX, psX] = fitAxis(0, angularBudget);
+          const [sfY, psY] = fitAxis(1, outerR - innerR);
           const childPlaceables = children.map((child) =>
-            child.layout(size, [1, 1], [undefined, undefined])
+            child.layout(size, [sfX, sfY], [psX, psY])
           );
           childPlaceables.forEach((c) => {
             c.place("x", 0, "baseline");

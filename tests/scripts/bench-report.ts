@@ -20,7 +20,7 @@ import { join } from "path";
 
 const TESTS_DIR = join(import.meta.dirname, "..");
 const BENCH_DIR = join(TESTS_DIR, "tmp/bench");
-const PASSES = ["resolve", "solve", "lower", "paint"];
+const PASSES = ["resolve", "axes", "embed", "solve", "lower", "paint"];
 
 type Stat = { median: number; min: number; p95: number; n: number };
 type Results = {

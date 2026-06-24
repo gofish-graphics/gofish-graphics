@@ -782,6 +782,24 @@ annotation or provenance is a hard claim. `inferSize`/`inferPos` tag the
 `value(...)` they emit with this resolved measure, which is what eventually
 lands on the space.
 
+**Provenance must reach mark channels, not only operator channels.** An operator
+resolves each channel's measure once from its whole input array (which carries
+the `MEASURE_PROVENANCE` symbol), but a _mark_ channel runs per split leaf — and
+a leaf is a fresh sub-array (groupBy/filter/slice) that doesn't inherit the
+symbol. So the operator re-tags each array leaf with its parent's provenance at
+the split site (`copyMeasureProvenance`, `data.ts`, applied in `createOperator`),
+letting a mark bound to a transform-output field (e.g. a bin's `start`/`end`/
+`size`) read the source measure off its own data instead of falling back to the
+literal field name — which would otherwise turn a legitimate same-unit overlay
+into a false conflict. (Residual, tracked in #534: single-`Datum` leaves and the
+Python derive-RPC bridge still need a wrap-time / RPC-carried tag.)
+
+This same size-vs-position measure comparison drives **embedding** (`baseEmbedded`,
+`data.ts`): inside a coordinate space, a dim's size becomes a swept coord extent
+only when its measure matches the dim's own position measure — a foreign-measure
+size (a bubble's area) stays a flat point. See the embedding-resolution pass under
+[layout passes](/internals/layout/passes#pass-8-5-embedding-resolution).
+
 **Constraint-domain measures.** A `position`/`span` constraint's datum
 coordinate carries the same resolved measure, and `collectPositionDomains`
 folds those per axis with `mergeMeasures` — so a layer's own positioning

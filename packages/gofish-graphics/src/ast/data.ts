@@ -52,6 +52,23 @@ export const setMeasureProvenance = <T>(
   return data;
 };
 
+/**
+ * Copy the measure-provenance map from `source` onto `target` (both arrays), if
+ * `source` carries one. A split leaf is a FRESH sub-array (groupBy/filter/slice)
+ * that doesn't inherit the operator input's symbol, so without this a MARK
+ * channel bound to a transform-output field (e.g. `bin()`'s `start`/`end`/`size`)
+ * sees no provenance and falls back to the literal field name — making a
+ * legitimate overlay against the source-field axis a false measure conflict.
+ * Re-tagging each leaf with its parent's provenance lets `inferSize`/`inferPos`
+ * read the source measure off their own `data` argument, so marks and operators
+ * share one mechanism. See {@link resolveMeasure} and #534.
+ */
+export const copyMeasureProvenance = <T>(target: T, source: unknown): T => {
+  const provenance = getMeasureProvenance(source);
+  if (provenance !== undefined) setMeasureProvenance(target, provenance);
+  return target;
+};
+
 export type Value<T> = T | DatumValue | DatumValueImpl;
 export type MaybeValue<T> = T | Value<T>;
 
@@ -290,15 +307,17 @@ export const getValueColorOps = <T>(value: MaybeValue<T>): ColorOp[] => {
   return Array.isArray(v._colorOps) ? v._colorOps : [];
 };
 
-export const inferEmbedded = <T>(interval: Interval<T>): Interval<T> => {
-  // size must be a value && min must be undefined, aesthetic, or a value of the same type as size
-  if (
-    (isValue(interval.size) || interval.size === undefined) &&
-    (interval.min === undefined ||
-      !isValue(interval.min) ||
-      getMeasure(interval.min) === getMeasure(interval.size))
-  ) {
-    return { ...interval, embedded: true };
-  }
-  return interval;
-};
+/**
+ * The intrinsic-embedding predicate: a dim's *own* extent is a coordinate-space
+ * extent (so a coord warps it) iff its size is a data {@link Value} (or unsized —
+ * the nest-growth case) AND its `min` doesn't contradict the size's measure. This
+ * is the measure-free half; the {@link GoFishNode.resolveEmbedding} pass layers
+ * the Route-B measure gate on top (a size denominated in a *foreign* measure to
+ * the axis stays ink, not a coord extent). Extracted so the pass is the sole
+ * author of `embedded` and the rule lives in one place. See #534.
+ */
+export const baseEmbedded = <T>(interval: Interval<T>): boolean =>
+  (isValue(interval.size) || interval.size === undefined) &&
+  (interval.min === undefined ||
+    !isValue(interval.min) ||
+    getMeasure(interval.min) === getMeasure(interval.size));

@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/html";
-import { rect, polar } from "gofish-graphics";
+import { rect, polar, datum } from "gofish-graphics";
 import { tree, combine } from "../../src";
 import { byDepth } from "../data";
 import { initializeContainer } from "../helper";
@@ -51,11 +51,9 @@ import { initializeContainer } from "../helper";
 //  - PolarAxis (θ/r axis swap) is not expressible.
 //  - Link:hidden → link:"none" here (correct for a filled-wedge sector chart);
 //    polar links only support {interpolation:"linear"|"none"}, never arcs.
-//  - NO angular auto-fit: the layout engine does NOT allocate angle by subtree
-//    leaf-count. It tiles only because leaf widths are hand-set to leafTheta and
-//    summed by nest. A wrong leafTheta or a width set by anything other than
-//    leaf count overflows 2π and wedges wrap. GoTree allocates angle
-//    automatically; here it is hand-budgeted as 2π / totalLeaves.
+//  - Angular AUTO-FIT (#618): leaves carry a unit thetaSize weight, nest-θ sums
+//    them up the tree, and the coord fits the total to the circle — so the disc
+//    closes for any tree with no hand-set leafTheta.
 //  - Node:rectangle in the dsl renders, faithfully, as filled arc wedges (a
 //    rect in polar space IS a sector), matching the reference.
 //  - ColorRange ["#DE4006","#EFD648"] (orange→yellow by depth) is reproduced by
@@ -92,14 +90,6 @@ const sectorTree = {
   ],
 };
 
-// Hand-budget the angular share: leafTheta = 2π / totalLeaves so the leaves
-// tile the full disc exactly (no auto-fit — see NOTES).
-const countLeaves = (n: any): number =>
-  n.children?.length
-    ? n.children.reduce((s: number, c: any) => s + countLeaves(c), 0)
-    : 1;
-const LEAF_COUNT = countLeaves(sectorTree); // 3+2+4+2+3 = 14
-const leafTheta = (2 * Math.PI) / LEAF_COUNT; // each leaf's angular share
 const bandHeight = 56; // radial thickness of one ring
 
 // Wedge node: width in θ-units (emX) sweeps an arc; height in r-units (emY) is
@@ -108,7 +98,7 @@ const bandHeight = 56; // radial thickness of one ring
 const node = (d: any) =>
   d.height === 0
     ? rect({
-        w: leafTheta,
+        thetaSize: datum(1),
         h: bandHeight,
         emX: true,
         emY: true,

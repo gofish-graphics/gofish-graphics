@@ -47,10 +47,13 @@ sizes carry no measure, so nothing can infer Route B. So **`emX`/`emY` is a stan
 missing measure provenance** — once #534 lands it shrinks to a rare, renamed escape
 hatch (mark-level) rather than the primary API.
 
-**Untested oracle case to add:** a scatter with a size channel under `polar()` — bubbles
-must stay flat circles (Route B fails: size measure ≠ position measure) while their x/y
-positions warp. Not in the all-tree gotree corpus; the cleanest test of the measure
-discriminator.
+**Oracle case (now implemented):** a mark with a size in a measure foreign to its
+position under `polar()` — bubbles must stay flat circles (Route B fails: size measure ≠
+position measure) while their x/y positions warp. Not in the all-tree gotree corpus; the
+cleanest test of the measure discriminator. Now pinned in
+`packages/gofish-graphics/src/tests/embedding.test.ts` (the "polar bubble" case), and
+Route B is implemented as the `resolveEmbedding` pass — see
+`notes/design/embedding-resolution-pass.md`.
 
 This resolves #618's "embedded vs non-embedded dimensions on θ/r" + "single-axis nest
 with point nodes" and is the same axis as the edge/center-mode question (#8/#56).
