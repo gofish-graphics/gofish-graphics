@@ -60,10 +60,12 @@ export const Default: StoryObj<Args> = {
       // x = pclass (the panels); y is the dot-row index, so suppress it.
       axes: { x: true, y: false },
     })
-      .flow(spread({ by: "pclass", dir: "x", spacing: 40, alignment: "start" }))
+      // Bottom-align panels and their age-bin bars (y-down free space: "end" =
+      // bottom) so every unit stack shares a baseline and grows upward.
+      .flow(spread({ by: "pclass", dir: "x", spacing: 40, alignment: "end" }))
       .mark((panel) =>
         chart(panel)
-          .flow(spread({ by: "ageBin", dir: "x", spacing: 6, alignment: "start" }))
+          .flow(spread({ by: "ageBin", dir: "x", spacing: 6, alignment: "end" }))
           .mark((bin) =>
             chart(bin)
               .flow(

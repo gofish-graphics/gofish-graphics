@@ -52,7 +52,11 @@ export const Default: StoryObj<Args> = {
       // x = pclass (the columns); y is the dot-row index, so suppress it.
       axes: { x: true, y: false },
     })
-      .flow(spread({ by: "pclass", dir: "x", spacing: 24, alignment: "start" }))
+      // Bottom-align the columns (y-down free space: "end" = bottom) so the
+      // unit stacks share a baseline and grow upward. (The pclass tick labels
+      // collapsing to the origin is a pre-existing nested-chart axis limitation,
+      // independent of y-up/down.)
+      .flow(spread({ by: "pclass", dir: "x", spacing: 24, alignment: "end" }))
       .mark((d) =>
         chart(d)
           .flow(
