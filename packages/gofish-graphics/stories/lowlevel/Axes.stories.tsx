@@ -149,7 +149,7 @@ export const ContinuousYAxis: StoryObj<Args> = {
           Constraint.align({ y: "middle" }, [g.axis, g.title]),
         ];
       })
-      .render(container, { w: args.w, h: args.h });
+      .render(container, { w: args.w, h: args.h, yUp: true });
 
     return container;
   },
@@ -204,7 +204,7 @@ export const NonUniformYAxis: StoryObj<Args> = {
           Constraint.align({ y: "middle" }, [g.axis, g.title]),
         ];
       })
-      .render(container, { w: args.w, h: args.h });
+      .render(container, { w: args.w, h: args.h, yUp: true });
 
     return container;
   },

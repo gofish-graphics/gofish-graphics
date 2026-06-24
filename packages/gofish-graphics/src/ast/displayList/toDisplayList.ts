@@ -72,7 +72,7 @@ export async function toDisplayList(
   // renders y-UP (`options.yUp` threaded from the builder): mirror y about the
   // canvas height — bars grow up, y-axis increases upward — reproducing the old
   // global flip. See issue #143/#16.
-  const effYUp = options.yUp || !!options.axes || subtreeHasChart(data.child);
+  const effYUp = options.yUp || subtreeHasChart(data.child);
   const toPixel: ToPixel = effYUp
     ? ([gx, gy]) => [gx + leftReserve, data.height + topReserve - gy]
     : ([gx, gy]) => [gx + leftReserve, gy + topReserve];

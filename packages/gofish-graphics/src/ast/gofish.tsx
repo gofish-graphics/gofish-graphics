@@ -649,12 +649,7 @@ export const gofish = (
         {(() => {
           const data = layoutData();
           if (!data) return null;
-          return renderLayout(
-            data,
-            svgPadding,
-            options.defs,
-            options.yUp || !!options.axes
-          );
+          return renderLayout(data, svgPadding, options.defs, options.yUp);
         })()}
       </Suspense>
     );
@@ -727,13 +722,7 @@ export async function gofishToSVGElement(
   const root = document.createElement("div");
   // Layout is already awaited, so the SVG mounts synchronously — no Suspense.
   const dispose = solidRender(
-    () =>
-      renderLayout(
-        data,
-        svgPadding,
-        options.defs,
-        options.yUp || !!options.axes
-      ),
+    () => renderLayout(data, svgPadding, options.defs, options.yUp),
     root
   );
   const svg = root.querySelector("svg");
