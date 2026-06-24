@@ -38,9 +38,12 @@ export const pathToPixelSVG = (path: Path, toPixel: ToPixel): string =>
     )
   );
 
-/** Build a `RectItem` from a GoFish y-up box (min/max per axis). The y-up top
- *  edge (`gyMax`) maps to the smaller SVG y, so the top-left corner is
- *  `toPixel([gxMin, gyMax])`. */
+/** Build a `RectItem` from a GoFish box (min/max per axis). Flip-AGNOSTIC: maps
+ *  both diagonal corners through `toPixel` and takes the component-wise min for
+ *  the SVG top-left, abs for w/h. Correct under any axis-aligned affine
+ *  `toPixel` — y-down free space (top-left = `toPixel([gxMin, gyMin])`) or the
+ *  `yUp` chart scope (top-left = `toPixel([gxMin, gyMax])`) — so the same shape
+ *  code serves both (issue #143/#16). */
 export const rectItemFromBox = (
   gxMin: number,
   gxMax: number,
@@ -49,16 +52,24 @@ export const rectItemFromBox = (
   toPixel: ToPixel,
   extra: Partial<DisplayList.RectItem> = {}
 ): DisplayList.RectItem => {
-  const [x, y] = toPixel([gxMin, gyMax]);
+  const [ax, ay] = toPixel([gxMin, gyMin]);
+  const [bx, by] = toPixel([gxMax, gyMax]);
   return {
     kind: "rect",
-    x,
-    y,
-    w: gxMax - gxMin,
-    h: gyMax - gyMin,
+    x: Math.min(ax, bx),
+    y: Math.min(ay, by),
+    w: Math.abs(bx - ax),
+    h: Math.abs(by - ay),
     ...extra,
   };
 };
+
+/** True when `toPixel` mirrors the y axis (pixel-y decreases as GoFish-y
+ *  increases) — i.e. an active `yUp` chart scope. Lets orientation-dependent
+ *  shapes (text rotation) pick the right sign by reading the flip out of
+ *  `toPixel` rather than carrying a separate flag (issue #143/#16). */
+export const toPixelFlipsY = (toPixel: ToPixel): boolean =>
+  toPixel([0, 1])[1] < toPixel([0, 0])[1];
 
 /** Assemble a `Style` from resolved presentation values, dropping undefined
  *  keys (and a zero/undefined stroke-width, which the legacy render omitted). */

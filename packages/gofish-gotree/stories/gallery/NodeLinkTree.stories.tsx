@@ -11,7 +11,7 @@ import { initializeContainer } from "../helper";
 // Mapping (include→nest, juxtapose/flatten→distribute, within/align→align):
 //   parentChild = combine({ x: align middle (parent centered over subtree),
 //                           y: distribute (parent stacked above its subtree) })
-//                 order:"reverse" on y puts the root at the TOP (y-up).
+//                  on y puts the root at the TOP (y-up).
 //   sibling     = combine({ x: distribute (siblings laid out flat side-by-side),
 //                           y: align start (siblings share a baseline/row) })
 const meta: Meta = {
@@ -71,7 +71,7 @@ export const NodeLinkTree: StoryObj = {
         link: { interpolation: "linear", stroke: "#555", strokeWidth: 1.5 },
         parentChild: combine({
           x: { kind: "align", alignment: "middle" },
-          y: { kind: "distribute", spacing: 90, order: "reverse" },
+          y: { kind: "distribute", spacing: 90 },
         }),
         sibling: combine({
           x: { kind: "distribute", spacing: 24 },

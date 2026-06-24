@@ -408,9 +408,10 @@ export const CroissantStack: StoryObj<Args> = {
 
     layer([bands, axis])
       .constrain(({ bands, axis }: any) => [
-        // Axis row centered under the bands (both are W wide).
+        // Axis row centered under the bands (both are W wide). y-down free
+        // space: bands-first renders on top, axis below (issue #143/#16).
         Constraint.align({ x: "middle" }, [bands, axis]),
-        Constraint.distribute({ dir: "y", spacing: 12 }, [axis, bands]),
+        Constraint.distribute({ dir: "y", spacing: 12 }, [bands, axis]),
       ])
       .render(container, { axes: false });
 

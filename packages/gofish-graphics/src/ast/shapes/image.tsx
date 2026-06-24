@@ -335,11 +335,12 @@ export const Image = ({
           },
         };
       },
-      // IR lowering — structural mirror of `render`. The legacy
-      // `transform="scale(1,-1)" y={-y-height}` y-flip folds into `toPixel`: the
-      // y-up box has min-x `x` and spans y `[y, y+height]`, so its display
-      // top-left corner is `(x, y+height)`, which `toPixel` maps to the y-down
-      // top-left pixel.
+      // IR lowering — structural mirror of `render`. Flip-AGNOSTIC: the box
+      // spans x `[x, x+width]`, y `[y, y+height]`; map both diagonal corners
+      // through `toPixel` and take the component-wise min for the SVG top-left.
+      // Correct under y-down free space and the `yUp` chart scope alike — where
+      // `toPixel` un-mirrors, the top-left is `(x, y+height)`; in y-down it is
+      // `(x, y)` (issue #143/#16).
       lower: (
         { intrinsicDims, transform, toPixel },
         _children,
@@ -351,12 +352,13 @@ export const Image = ({
         const width = intrinsicDims?.[0]?.size ?? 0;
         const height = intrinsicDims?.[1]?.size ?? 0;
 
-        const [px, py] = toPixel([x, y + height]);
+        const [ax, ay] = toPixel([x, y]);
+        const [bx, by] = toPixel([x + width, y + height]);
         const style = lowerStyle({ opacity, filter });
         const item: DisplayList.ImageItem = {
           kind: "image",
-          x: px,
-          y: py,
+          x: Math.min(ax, bx),
+          y: Math.min(ay, by),
           w: Math.abs(width),
           h: Math.abs(height),
           href,

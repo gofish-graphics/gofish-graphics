@@ -53,7 +53,6 @@ export const SideTree: StoryObj = {
             kind: "distribute",
             spacing: 0.5,
             mode: "center",
-            order: "reverse",
           },
           y: { kind: "distribute", spacing: 70, mode: "center" },
         }),

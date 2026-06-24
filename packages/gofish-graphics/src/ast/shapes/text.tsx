@@ -27,7 +27,11 @@ import {
 } from "../underlyingSpace";
 import { createMark } from "../withGoFish";
 import type { DisplayList } from "gofish-ir";
-import { lowerStyle, rectItemFromBox } from "../displayList/lowerHelpers";
+import {
+  lowerStyle,
+  rectItemFromBox,
+  toPixelFlipsY,
+} from "../displayList/lowerHelpers";
 type TextDimensions = {
   width: number;
   height: number;
@@ -301,10 +305,12 @@ export const Text = ({
           renderData: { layout },
         };
       },
-      // IR lowering — mirror of `render`. The anchor maps through `toPixel`; the
-      // legacy `… rotate(rotate) scale(1,-1)` under the root flip nets to a
-      // screen-space rotate of `-rotate` about the pixel anchor (the extra flip
-      // negates the angle — see the rendering essay). Unrotated → upright text.
+      // IR lowering — mirror of `render`. The anchor maps through `toPixel`.
+      // Rotation sign is flip-AGNOSTIC: in a `yUp` chart scope `toPixel` mirrors
+      // y, which negates a screen-space rotate (`-rotate`); in y-down free space
+      // there is no mirror, so the rotate passes through (`+rotate`). We read the
+      // flip out of `toPixel` via `toPixelFlipsY` (issue #143/#16). Unrotated →
+      // upright text either way.
       lower: (
         { transform, renderData, toPixel },
         _children,
@@ -383,7 +389,7 @@ export const Text = ({
             filter,
           }),
         };
-        if (rotate) textItem.rotate = -rotate;
+        if (rotate) textItem.rotate = toPixelFlipsY(toPixel) ? -rotate : rotate;
         items.push(textItem);
         return items;
       },

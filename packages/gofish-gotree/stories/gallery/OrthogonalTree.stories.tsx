@@ -43,13 +43,13 @@ export const OrthogonalTree: StoryObj = {
         // left), distribute y reverse (parent at high y = top, GoFish is y-up).
         parentChild: combine({
           x: { kind: "distribute", spacing: 18 },
-          y: { kind: "distribute", spacing: 18, order: "reverse" },
+          y: { kind: "distribute", spacing: 18 },
         }),
         // siblings step down-right: each later sibling further right (x forward)
         // and lower (y reverse) → the diagonal cascade.
         sibling: combine({
           x: { kind: "distribute", spacing: 18 },
-          y: { kind: "distribute", spacing: 18, order: "reverse" },
+          y: { kind: "distribute", spacing: 18 },
         }),
       },
       sampleTree

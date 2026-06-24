@@ -50,7 +50,7 @@ export const Cheops: StoryObj = {
       mode: "bottomUp",
       parentChild: combine({
         x: { kind: "nest", pad: 0 },
-        y: { kind: "distribute", spacing: 2, order: "reverse" },
+        y: { kind: "distribute", spacing: 2 },
       }),
       sibling: combine({
         x: { kind: "distribute", spacing: -8 },

@@ -37,9 +37,9 @@ export const Iptp: StoryObj = {
         link: "none",
         parentChild: combine({
           x: { kind: "distribute", spacing: 6 },
-          // order:"reverse" puts the parent at HIGH y (top of screen, y-up) so the
+          //  puts the parent at HIGH y (top of screen, y-up) so the
           // root sits above its subtree — matching the reference's root-at-top.
-          y: { kind: "distribute", spacing: 6, order: "reverse" },
+          y: { kind: "distribute", spacing: 6 },
         }),
         sibling: combine({
           x: { kind: "distribute", spacing: 6 },

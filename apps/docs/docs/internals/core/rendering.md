@@ -45,30 +45,52 @@ paints — is the whole architecture of this pass.
 
 ## The coordinate fold: `toPixel`
 
-GoFish lays out in a **y-up** frame (larger _y_ is higher on the page), the
-mathematical convention. SVG is **y-down**. The old renderer reconciled the two with
-two stacked SVG transforms: a per-shape `scale(1,-1)` and a root flip
-`scale(1,-1) translate(leftReserve, -(height + topReserve))`.
+Layout produces a tree of boxes; the lower pass maps each box's coordinates to final
+SVG pixels through a single affine map, `toPixel`, set once per emit on the render
+session (`RenderSession.toPixel` in `_node.ts`). Two conventions share this one map:
 
-The lower pass folds both of those into a single affine map, `toPixel`, set once per
-emit on the render session (`RenderSession.toPixel` in `_node.ts`):
+- **Free space is y-DOWN** (SVG-native, top-left origin). A vertical list written
+  `[A, B]` reads top→bottom, an explicit `y:` grows downward — what you'd expect from
+  SVG, Bluefish, or Typst. This is the **default**:
 
-```ts
-const toPixel: ToPixel = ([gx, gy]) => [
-  gx + leftReserve,
-  height + topReserve - gy,
-];
-```
+  ```ts
+  const toPixel: ToPixel = ([gx, gy]) => [gx + leftReserve, gy + topReserve];
+  ```
 
-A GoFish-space point `(gx, gy)` lands at the SVG pixel
-`(gx + leftReserve, (height + topReserve) − gy)`. `leftReserve` and `topReserve` are
-the measured gutter reserves layout computed for chrome seated past the canvas (see
-[the passes](/internals/layout/passes) for how the per-side overhangs are reserved).
-Because `toPixel` already carries the flip and the viewport offset, the display list
-is in **final absolute pixels** — the SVG backend emits each item verbatim, with **no
-outer flip `<g>` and no per-shape transform**.
+- **A `chart()` (or any `coord` scope) is y-UP** (larger _y_ is higher, the
+  mathematical convention bars and y-axes want). The root mirrors _y_ about the canvas
+  height — reproducing the legacy global flip:
 
-`toPixel` is affine (a translate plus a y-flip), so a straight path stays straight: a
+  ```ts
+  const toPixel: ToPixel = ([gx, gy]) => [
+    gx + leftReserve,
+    height + topReserve - gy,
+  ];
+  ```
+
+Which map is used is decided once at the root: `render()` computes
+`effYUp = options.yUp || subtreeHasChart(child)`, where `subtreeHasChart` walks the
+tree for any `_isChart` node (set by the chart builder) or any `coord` node (a
+coordinate system is inherently y-up). The chart builder also threads `yUp` through its
+render options. This auto-detection means a chart stays y-up even when **composed**
+inside a free-space `gofish([...])`/`.layer()` whose render entry never saw the option
+(see issues #143 / #16). `leftReserve` / `topReserve` are the measured gutter reserves
+for chrome seated past the canvas (see [the passes](/internals/layout/passes)).
+
+> **Historical note.** Before #143, the world was y-up _everywhere_ (one global
+> `scale(1,-1)` at the root, plus a per-shape `scale(1,-1)` to un-mirror content). The
+> y-down default relocated that flip behind the `yUp` switch above. Shape lowering is
+> now **flip-agnostic** — `rectItemFromBox`/image map both box corners through `toPixel`
+> and take the component-wise min/abs; text & label rotation read the flip out of
+> `toPixel` via `toPixelFlipsY` — so the same shape code is correct under either map. A
+> follow-up will express y-up as a true `cartesian` coordinate transform (making it
+> composable per-subtree instead of root-global).
+
+Because `toPixel` already carries the orientation and the viewport offset, the display
+list is in **final absolute pixels** — the SVG backend emits each item verbatim, with
+**no outer flip `<g>` and no per-shape transform**.
+
+`toPixel` is affine (a translate, optionally a y-flip), so a straight path stays straight: a
 shape with a curved path just maps each of its control points through `toPixel` and
 re-serializes (`pathToPixelSVG` in `lowerHelpers.ts`), with no resampling.
 
@@ -185,11 +207,14 @@ filter graphs and assigning their deterministic def ids.
 ## How the live `render()` wires it together
 
 The orchestrator `render()` in `gofish.tsx` is now small. It computes the gutter
-reserves, builds `toPixel`, stores it on the render session, and paints the lowered
-list into an `<svg>`:
+reserves, picks the y-up or y-down `toPixel` (per `effYUp`, above), stores it on the
+render session, and paints the lowered list into an `<svg>`:
 
 ```ts
-const toPixel: ToPixel = ([gx, gy]) => [gx + leftReserve, height + topReserve - gy];
+const effYUp = yUp || subtreeHasChart(child); // chart()/coord ⇒ y-up; else y-down
+const toPixel: ToPixel = effYUp
+  ? ([gx, gy]) => [gx + leftReserve, height + topReserve - gy]
+  : ([gx, gy]) => [gx + leftReserve, gy + topReserve];
 child.getRenderSession().toPixel = toPixel;
 const paintBaked = () => lowerToDisplayList(child).map(paintSVG);
 return (

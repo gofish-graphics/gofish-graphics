@@ -508,6 +508,12 @@ export class ChartBuilder<TInput, TOutput = TInput> {
       result = await Layer({}, [node, connectFrame]);
     }
 
+    // Mark the resolved node as a chart so the root render knows to use the
+    // y-UP scope even when this chart is composed inside a `gofish([...])` /
+    // `.layer()` whose render entry never saw the builder's `yUp` option. See
+    // `_isChart` and issue #143/#16.
+    result._isChart = true;
+
     if (this.nodeZOrder !== undefined) {
       result.zOrder(this.nodeZOrder);
     }
@@ -591,6 +597,10 @@ export class ChartBuilder<TInput, TOutput = TInput> {
     return {
       node,
       options: {
+        // A chart is a y-UP render scope (bars grow up, y-axis increases
+        // upward). Free-space `gofish()` renders y-down (SVG-native top-left
+        // origin); `chart()` opts into y-up here. See issue #143/#16.
+        yUp: true,
         ...options,
         axes: this.options?.axes,
         colorConfig: this.options?.color,
@@ -745,6 +755,9 @@ export class LayerBuilder {
     return {
       node,
       options: {
+        // A chart is a y-UP render scope — see the sibling resolveForRender and
+        // issue #143/#16. Free-space `gofish()` stays y-down.
+        yUp: true,
         ...options,
         axes: (options as any).axes ?? meta.axes,
         colorConfig: meta.colorConfig,

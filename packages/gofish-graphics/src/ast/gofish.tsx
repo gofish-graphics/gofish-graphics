@@ -11,7 +11,7 @@ import {
   debugInputSceneGraph,
   debugNodeTree,
   debugUnderlyingSpaceTree,
-  type GoFishNode,
+  GoFishNode,
   type RenderSession,
 } from "./_node";
 import { posScaleFromSpace } from "./domain";
@@ -506,6 +506,15 @@ export type GoFishRenderOptions = {
   axisFields?: { x?: string; y?: string };
   colorConfig?: ColorConfig;
   padding?: number;
+  /**
+   * y-UP render scope (issue #143/#16): when true the root `toPixel` mirrors y
+   * about the canvas height — the convention charts want (bars grow up, y-axis
+   * increases upward). Default (free space, raw `gofish()`) is y-DOWN: a
+   * top-left origin where a vertical list reads top→bottom. `chart()` threads
+   * this true; a true y-up coordinate transform (the follow-up) will later make
+   * this composable per-subtree instead of root-global.
+   */
+  yUp?: boolean;
 };
 
 /** Extra options for the SVG-export terminals (`toSVG` / `toSVGElement` / `save`). */
@@ -603,7 +612,8 @@ export async function runLayout(
 function renderLayout(
   data: LayoutData,
   svgPadding: number,
-  defs?: JSX.Element[]
+  defs?: JSX.Element[],
+  yUp?: boolean
 ): JSX.Element {
   return render(
     {
@@ -611,6 +621,7 @@ function renderLayout(
       height: data.height,
       svgPadding,
       defs,
+      yUp,
       rightOverhang: data.rightOverhang,
       rightContentOverhang: data.rightContentOverhang,
       topOverhang: data.topOverhang,
@@ -638,7 +649,7 @@ export const gofish = (
         {(() => {
           const data = layoutData();
           if (!data) return null;
-          return renderLayout(data, svgPadding, options.defs);
+          return renderLayout(data, svgPadding, options.defs, options.yUp);
         })()}
       </Suspense>
     );
@@ -711,7 +722,7 @@ export async function gofishToSVGElement(
   const root = document.createElement("div");
   // Layout is already awaited, so the SVG mounts synchronously — no Suspense.
   const dispose = solidRender(
-    () => renderLayout(data, svgPadding, options.defs),
+    () => renderLayout(data, svgPadding, options.defs, options.yUp),
     root
   );
   const svg = root.querySelector("svg");
@@ -794,6 +805,23 @@ const PADDING = 40;
  * Checks the node itself first, then its immediate children.
  * Returns the coord node's transform.translate values, or null if not found.
  */
+/** True if `node` or any descendant establishes a y-UP scope: a `chart()`-
+ *  produced node (`_isChart`) or a `coord` node (a coordinate system is y-up).
+ *  The root render uses this to pick y-up vs the SVG-native y-down default, so a
+ *  chart or a polar/coord visualization renders y-up even when composed inside a
+ *  free-space `gofish([...])`/`.layer()`. Pure free-space diagrams match neither
+ *  and render y-down. See issue #143/#16. */
+export const subtreeHasChart = (node: GoFishNode): boolean => {
+  // A `chart()` node or any `coord` node (a coordinate system is inherently
+  // y-up — polar/clock/wavy) establishes a y-up scope. See issue #143/#16.
+  if (node._isChart || node.type === "coord") return true;
+  const kids = node.children as (GoFishNode | unknown)[] | undefined;
+  if (kids)
+    for (const k of kids)
+      if (k instanceof GoFishNode && subtreeHasChart(k)) return true;
+  return false;
+};
+
 export const render = (
   {
     width,
@@ -806,6 +834,7 @@ export const render = (
     leftOverhang = 0,
     bottomOverhang = 0,
     svgPadding,
+    yUp = false,
   }: {
     width: number;
     height: number;
@@ -817,6 +846,7 @@ export const render = (
     leftOverhang?: number;
     bottomOverhang?: number;
     svgPadding?: number;
+    yUp?: boolean;
   },
   child: GoFishNode
 ): JSX.Element => {
@@ -858,13 +888,17 @@ export const render = (
   // <g> translate, so it needn't be pixel-snapped — a fractional width is
   // harmless (legend overhangs are fractional text widths).
   // Two-pass render: lower the baked scenegraph into the display-list IR, then
-  // paint each item. Items are final y-down absolute pixels (the `toPixel` fold
-  // carries the gutter offset + the y-flip), so there is no outer flip `<g>` and
-  // no per-shape transform.
-  const toPixel: ToPixel = ([gx, gy]) => [
-    gx + leftReserve,
-    height + topReserve - gy,
-  ];
+  // paint each item. Items are final absolute pixels. The default frame is
+  // SVG-native y-DOWN (top-left origin): a vertical list reads top→bottom and
+  // `toPixel` only offsets by the gutter reserves. A `chart()` renders y-UP
+  // (`yUp` threaded from the builder): the root mirrors y about the canvas
+  // height — bars grow up, the y-axis increases upward — reproducing the old
+  // global flip. See issue #143/#16. (A true y-up coordinate transform — the
+  // follow-up — will make this composable per-subtree instead of root-global.)
+  const effYUp = yUp || subtreeHasChart(child);
+  const toPixel: ToPixel = effYUp
+    ? ([gx, gy]) => [gx + leftReserve, height + topReserve - gy]
+    : ([gx, gy]) => [gx + leftReserve, gy + topReserve];
   child.getRenderSession().toPixel = toPixel;
   const paintBaked = () => lowerToDisplayList(child).map(paintSVG);
   return (

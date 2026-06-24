@@ -26,7 +26,7 @@ export const globalFrame = createMark(({ stack }: GlobalFrameProps) => {
       text: "Global Frame",
     }).name("label"),
     Spread(
-      { dir: "y", alignment: "end", spacing: 10, reverse: true },
+      { dir: "y", alignment: "end", spacing: 10 },
       stack.map((slot) =>
         stackSlot({
           variable: slot.variable,
