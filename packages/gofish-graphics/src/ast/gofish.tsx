@@ -21,6 +21,7 @@ import { paintSVG } from "./displayList/paintSVG";
 import type { ToPixel } from "./_node";
 import type { Size } from "./dims";
 import {
+  continuousInterval,
   hasBaseline,
   isBaselineMagnitude,
   spaceMeasure,
@@ -348,6 +349,55 @@ export async function layout(
       ? (niceUnderlyingSpaceY.width.inverse(canvasH) ?? undefined)
       : undefined,
   ];
+
+  // Shared-measure scale equality (#582): when x and y carry the SAME unit of
+  // measure, "1 unit on x" and "1 unit on y" are the same quantity, so their
+  // data→pixel scales must be equal — a circle stays circular, a 45° line looks
+  // 45°. This is type equality, not an opt-in knob: it follows from the measures
+  // matching, the same way `circle({ r })` lowers to a `w`/`h` that share a
+  // measure and so cannot render as an ellipse. Each axis's pixels-per-data-unit
+  // comes from its POSITION domain (`canvas / range`) or its baseline-magnitude
+  // σ; we take the binding (smaller) one and apply it to both — the binding axis
+  // fills its dimension, the other gets slack, centered by convention. A POSITION
+  // axis writes back a recentered posScale; a SIZE axis writes back its σ (its
+  // content stays origin-anchored — SIZE-slack centering is deferred). Silently
+  // skipped when an axis has no continuous scale to equate (e.g. ordinal).
+  const measureX = spaceMeasure(niceUnderlyingSpaceX);
+  const measureY = spaceMeasure(niceUnderlyingSpaceY);
+  if (measureX !== undefined && measureX === measureY) {
+    const axisInfo = ([0, 1] as const).map((axis) => {
+      const space = axis === 0 ? niceUnderlyingSpaceX : niceUnderlyingSpaceY;
+      const canvas = axis === 0 ? canvasW : canvasH;
+      const ival = continuousInterval(space);
+      if (ival !== undefined && ival.max > ival.min) {
+        const range = ival.max - ival.min;
+        return {
+          kind: "position" as const,
+          unitPx: canvas / range,
+          min: ival.min,
+          range,
+          canvas,
+        };
+      }
+      const sigma = rootScaleFactors[axis];
+      if (sigma !== undefined) return { kind: "size" as const, unitPx: sigma };
+      return undefined;
+    });
+    const [ax, ay] = axisInfo;
+    if (ax !== undefined && ay !== undefined) {
+      const shared = Math.min(ax.unitPx, ay.unitPx); // binding axis wins
+      for (const axis of [0, 1] as const) {
+        const info = axisInfo[axis]!;
+        if (info.kind === "position") {
+          const offset = (info.canvas - shared * info.range) / 2; // center slack
+          const min = info.min;
+          posScales[axis] = (pos: number) => (pos - min) * shared + offset;
+        } else {
+          rootScaleFactors[axis] = shared;
+        }
+      }
+    }
+  }
 
   // Solver shadow (#39): the ROOT σ-scope — the SIZE frame equation
   // content(σ)=canvas the whole chart resolves against. No-op unless

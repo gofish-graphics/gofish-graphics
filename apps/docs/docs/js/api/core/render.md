@@ -11,12 +11,12 @@ instead, see [export](/js/api/core/export).
 
 ## Parameters
 
-| Parameter      | Type          | Description                                                       |
-| -------------- | ------------- | ----------------------------------------------------------------- |
-| `container`    | `HTMLElement` | The DOM element to render into                                    |
-| `options.w`    | `number?`     | Width in pixels. Optional — see [Inferred size](#inferred-size).  |
-| `options.h`    | `number?`     | Height in pixels. Optional — see [Inferred size](#inferred-size). |
-| `options.axes` | `AxesOptions` | Auto-generate axes, labels, and legends. See [Axes](#axes) below. |
+| Parameter             | Type          | Description                                                                                                                                                                   |
+| --------------------- | ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `container`           | `HTMLElement` | The DOM element to render into                                                                                                                                                |
+| `options.w`           | `number?`     | Width in pixels. Optional — see [Inferred size](#inferred-size).                                                                                                              |
+| `options.h`           | `number?`     | Height in pixels. Optional — see [Inferred size](#inferred-size).                                                                                                             |
+| `options.axes`        | `AxesOptions` | Auto-generate axes, labels, and legends. See [Axes](#axes) below.                                                                                                             |
 
 ## Inferred size
 

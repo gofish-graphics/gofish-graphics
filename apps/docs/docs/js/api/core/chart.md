@@ -21,14 +21,14 @@ chart(data, options?)
 
 ## Parameters
 
-| Parameter       | Type                  | Description                                                                                                                                                                  |
-| --------------- | --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `data`          | `T`                   | The dataset to visualize                                                                                                                                                     |
-| `options.w`     | `number`              | Width hint for the chart frame                                                                                                                                               |
-| `options.h`     | `number`              | Height hint for the chart frame                                                                                                                                              |
-| `options.coord` | `CoordinateTransform` | Coordinate transform (e.g. `polar()`)                                                                                                                                        |
-| `options.color` | `ColorConfig`         | Color scale applied to all marks in this chart. Use [`palette()`](/js/api/color/palette) for categorical data or [`gradient()`](/js/api/color/gradient) for continuous data. |
-| `options.axes`  | `AxesOptions`         | Auto-generate axes, labels, and legends. See [Axes](#axes) below.                                                                                                            |
+| Parameter             | Type                  | Description                                                                                                                                                                  |
+| --------------------- | --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `data`                | `T`                   | The dataset to visualize                                                                                                                                                     |
+| `options.w`           | `number`              | Width hint for the chart frame                                                                                                                                               |
+| `options.h`           | `number`              | Height hint for the chart frame                                                                                                                                              |
+| `options.coord`       | `CoordinateTransform` | Coordinate transform (e.g. `polar()`)                                                                                                                                        |
+| `options.color`       | `ColorConfig`         | Color scale applied to all marks in this chart. Use [`palette()`](/js/api/color/palette) for categorical data or [`gradient()`](/js/api/color/gradient) for continuous data. |
+| `options.axes`        | `AxesOptions`         | Auto-generate axes, labels, and legends. See [Axes](#axes) below.                                                                                                            |
 
 Returns a `ChartBuilder<T>` with [`.flow()`](/js/api/core/flow), [`.mark()`](/js/api/core/mark), [`.render()`](/js/api/core/render), [`.zOrder()`](#zorder), and [`.name()`](#name) methods.
 
@@ -56,6 +56,38 @@ Each axis title defaults to the field that dimension encodes (e.g. `count` for
 to show the axis with no title. Manual `axis: true/false` overrides on individual
 operators within the chart are still respected when `axes: true`. See
 [render › Axes](/js/api/core/render#axes) for live examples.
+
+## Equal scale from a shared measure
+
+By default each axis resolves its data→pixel scale independently — `x` against
+the width, `y` against the height — so a circle in data space becomes an ellipse.
+That is correct when the axes are different quantities. But when **x and y are
+the same unit of measure**, "1 unit on x" and "1 unit on y" are the _same_
+quantity, so their scales must be equal — a circle stays circular, a 45° line
+looks 45°. The way maps, geometric data, and correlation plots need.
+
+GoFish does this from the **measure**, not a knob: tag both channels with the
+same measure via `field(name, measure)` (or `datum(value, measure)`) and the
+shared scale follows.
+
+```ts
+chart(data)
+  .flow(scatter({ x: field("x", "plane"), y: field("y", "plane") }))
+  .mark(circle({ r: 4 }))
+  .render(container, { w: 640, h: 380 }); // a true circle, not an ellipse
+```
+
+This is the same rule the `circle` mark already obeys one level down:
+`circle({ r })` lowers to a `w` and `h` driven by one value, which share a
+measure and therefore one scale factor — so a circle can never distort into an
+ellipse. Equal scale at the chart level is exactly that, lifted to x and y.
+
+The binding (more constrained) axis fills its dimension; the other is centered in
+the leftover space. It applies to axes that carry a data-driven scale (a position
+scale over a data domain, or a data-driven size); an axis with nothing to scale
+(a category axis) leaves it a no-op. Tagging the two axes the same is a unit
+claim — `bill_length` and `bill_depth` (both mm, but _different_ measures) stay
+independent, while `predicted` vs `actual` (both `"price"`) share a scale.
 
 ## Example
 

@@ -421,13 +421,28 @@ deferred to the #39/#547 round:
    across axes at space-resolution time (`rect.tsx:113-127`). Free, but only
    covers the one-axis-data-driven case; it has nothing to say when both
    axes carry scales.
-3. **Scale-level coupling**: aspect ratio as an equation between the two
-   axes' scale factors (`σ_y = k·σ_x`), substituted before solving so each
-   axis still inverts with one unknown. Stays O(1), expresses waffle-style
-   square cells (both axes scaled, cells square), and becomes natural once
-   scales are measure-keyed (#547). The pixel-layer ledger (option 1) and
-   this are complementary, not competing: one constrains boxes, the other
-   constrains scales.
+3. **Scale-level coupling**: equating the two axes' scale factors so a data
+   unit is square, substituted before solving so each axis still inverts with
+   one unknown. Stays O(1), expresses waffle-style square cells, and becomes
+   natural once scales are measure-keyed (#547). The pixel-layer ledger (option
+   1) and this are complementary, not competing: one constrains boxes, the other
+   constrains scales. (A `σ_y = k·σ_x` _ratio_ was considered and rejected as
+   redundant — a `k ≠ 1` factor is just a linear coordinate transform scaling one
+   axis; the only meaningful case is equality, `k = 1`.)
+
+   **Partially shipped (#582)**, and crucially **driven by measure, not a knob**:
+   when the x and y underlying spaces carry the **same measure**
+   (`spaceMeasure(x) === spaceMeasure(y)`), their scales are equated at the
+   **root scope** in `gofish.tsx` — each axis's pixels-per-data-unit (a POSITION
+   domain's `canvas/range`, or a baseline-magnitude σ) is reconciled with
+   `min(...)`, the binding axis fills, the other centers. Equal scale is thus a
+   _consequence_ of the unit-of-measure type system, the same rule the circle
+   mark obeys (a `w`/`h` from one value share a measure → one scale → no
+   ellipse), not an `aspectRatio` setting. This covers the
+   **single-coordinate-space** case — scatter/correlation/maps. It does **not**
+   yet cover a packed layout whose two axes' _sizes_ are solved in separate
+   nested scopes (the unit mosaic): there is no single scope to couple, the
+   genuinely deferred part that waits on the cross-scope SIZE coupling above.
 
 ## Recommendation and staging
 
