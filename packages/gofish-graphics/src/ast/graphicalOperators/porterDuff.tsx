@@ -114,10 +114,14 @@ const createCompositeRelation = (type: string, operator: CompositeOperator) =>
             const minY = intrinsicDims?.[1]?.min ?? 0;
             const width = intrinsicDims?.[0]?.size ?? 0;
             const height = intrinsicDims?.[1]?.size ?? 0;
-            // Pixel bbox: the y-up box [tx+minX, …] × [ty+minY, …] mapped
-            // through the outer toPixel. The y-up top edge (gyMax) maps to the
-            // smaller SVG y, so the top-left corner is toPixel([xMin, yMax]).
-            const [bx, by] = outer([tx + minX, ty + minY + height]);
+            // Pixel bbox top-left, flip-AGNOSTIC: map both diagonal corners
+            // through the outer toPixel and take the component-wise min. Under
+            // the y-up flip the top edge is `gyMax`; in y-down free space it is
+            // `gyMin` — `min` picks the right one either way (issue #143/#16).
+            const [c0x, c0y] = outer([tx + minX, ty + minY]);
+            const [c1x, c1y] = outer([tx + minX + width, ty + minY + height]);
+            const bx = Math.min(c0x, c1x);
+            const by = Math.min(c0y, c1y);
 
             // The two layers are lowered RELATIVE to the bbox pixel origin, not
             // at absolute pixels. The SVG backend places each layer in a
@@ -298,7 +302,11 @@ export const mask = createNodeOperator(
           const minY = intrinsicDims?.[1]?.min ?? 0;
           const width = intrinsicDims?.[0]?.size ?? 0;
           const height = intrinsicDims?.[1]?.size ?? 0;
-          const [bx, by] = outer([tx + minX, ty + minY + height]);
+          // Flip-agnostic bbox top-left — see the compositor above (#143/#16).
+          const [c0x, c0y] = outer([tx + minX, ty + minY]);
+          const [c1x, c1y] = outer([tx + minX + width, ty + minY + height]);
+          const bx = Math.min(c0x, c1x);
+          const by = Math.min(c0y, c1y);
 
           return [
             {
