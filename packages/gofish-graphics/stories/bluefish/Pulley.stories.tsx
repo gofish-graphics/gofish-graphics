@@ -65,12 +65,13 @@ const Weight = createMark(
   }) =>
     Layer([
       polygon({
-        // GoFish y-up: full-width bottom edge at y=0, inset top edge at y=height.
+        // y-down free space (issue #143/#16): the inset top edge is at y=0, the
+        // full-width bottom edge at y=height — a weight wider at the bottom.
         points: [
-          [0, 0],
-          [width, 0],
-          [width - 10, height],
-          [10, height],
+          [10, 0],
+          [width - 10, 0],
+          [width, height],
+          [0, height],
         ],
         fill: "#545454",
         stroke: "#545454",
@@ -129,10 +130,11 @@ export const Pulley: StoryObj<Args> = {
         Constraint.align({ x: ["middle", "start"] }, [c.A, c.B]),
         Constraint.align({ x: ["end", "start"] }, [c.B, c.C]),
 
-        // vertical placement (GoFish is y-up; pair order flipped vs Bluefish)
-        Constraint.distribute({ dir: "y", spacing: 40, mode: "edge" }, [c.B, c.ceiling]),
-        Constraint.distribute({ dir: "y", spacing: 30, mode: "edge" }, [c.A, c.B]),
-        Constraint.distribute({ dir: "y", spacing: 50, mode: "edge" }, [c.C, c.B]),
+        // vertical placement: y-down free space matches Bluefish's ttb order
+        // (ceiling on top, pulleys below, weights at the bottom) — #143/#16.
+        Constraint.distribute({ dir: "y", spacing: 40, mode: "edge" }, [c.ceiling, c.B]),
+        Constraint.distribute({ dir: "y", spacing: 30, mode: "edge" }, [c.B, c.A]),
+        Constraint.distribute({ dir: "y", spacing: 50, mode: "edge" }, [c.B, c.C]),
 
         // ceiling centered over the cluster (substitute for Bluefish <Group>)
         Constraint.align({ x: "middle" }, [c.B, c.ceiling]),
@@ -140,7 +142,7 @@ export const Pulley: StoryObj<Args> = {
         // weights (negative spacing offsets each weight so its inset trapezoid
         // top sits under the rope source points — not natural anchor points,
         // so these stay as `distribute`)
-        Constraint.distribute({ dir: "y", spacing: 50, mode: "edge" }, [c.w2, c.C]),
+        Constraint.distribute({ dir: "y", spacing: 50, mode: "edge" }, [c.C, c.w2]),
         Constraint.distribute({ dir: "x", spacing: -20, mode: "edge" }, [c.A, c.w2]),
         Constraint.distribute({ dir: "x", spacing: -15, mode: "edge" }, [c.w1, c.A]),
         Constraint.align({ y: "middle" }, [c.w2, c.w1]),
@@ -149,9 +151,9 @@ export const Pulley: StoryObj<Args> = {
         // one side and y-anchors to one corner of the wheel.
         ...(
           [
-            { pulley: c.A, label: c.Alabel, side: "left", y: "end" },
-            { pulley: c.B, label: c.Blabel, side: "right", y: "end" },
-            { pulley: c.C, label: c.Clabel, side: "right", y: "start" },
+            { pulley: c.A, label: c.Alabel, side: "left", y: "start" },
+            { pulley: c.B, label: c.Blabel, side: "right", y: "start" },
+            { pulley: c.C, label: c.Clabel, side: "right", y: "end" },
           ] as const
         ).flatMap(({ pulley, label, side, y }) => [
           Constraint.distribute(
