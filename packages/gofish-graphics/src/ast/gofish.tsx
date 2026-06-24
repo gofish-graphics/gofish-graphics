@@ -118,6 +118,7 @@ export async function layout(
     debug = false,
     axes = false,
     axisFields,
+    yUp = false,
   }: {
     w?: number;
     h?: number;
@@ -128,6 +129,7 @@ export async function layout(
     defs?: JSX.Element[];
     axes?: AxesOptions;
     axisFields?: { x?: string; y?: string };
+    yUp?: boolean;
   },
   child: GoFishNode | Promise<GoFishNode>,
   contexts?: {
@@ -290,9 +292,15 @@ export async function layout(
     (isCategoricalScale(unitScale) && unitScale.color.size > 0) ||
     isContinuousColorScale(unitScale);
   if (hasLegend && unitScale) {
+    // The legend entries should read top→bottom. Under the y-up chart flip that
+    // needs `reverse` (a y-spread lays out bottom→top); in y-down free space the
+    // natural order already reads top→bottom. Pass the effective orientation so
+    // the swatch column reverses only when y-up. See issue #143/#16.
+    const effYUp = yUp || subtreeHasChart(child);
     child = await elaborateLegend(
       child,
-      unitScale as CategoricalScale | ContinuousColorScale
+      unitScale as CategoricalScale | ContinuousColorScale,
+      effYUp
     );
     legendAdded = true;
     if (contexts?.session) child.setRenderSession(contexts.session);
@@ -596,7 +604,18 @@ export async function runLayout(
     }
 
     return await layout(
-      { w, h, x, y, transform, debug, defs, axes, axisFields },
+      {
+        w,
+        h,
+        x,
+        y,
+        transform,
+        debug,
+        defs,
+        axes,
+        axisFields,
+        yUp: options.yUp,
+      },
       child,
       contexts
     );

@@ -51,16 +51,20 @@ function legendRow(key: any, color: string): GoFishNode {
 }
 
 /**
- * The swatch column. `reverse: true` because `Spread({dir:"y"})` lays children
- * bottom→top in y-up coordinates, so the first color-map entry must render last
- * (at the top), matching the bespoke legend.
+ * The swatch column. Entries read top→bottom. Under the y-up chart flip a
+ * `Spread({dir:"y"})` lays children bottom→top, so the first color-map entry
+ * must render last (`reverse`) to land at the top; in y-down free space the
+ * natural order already reads top→bottom, so no reverse. See issue #143/#16.
  */
-export function legendColumn(colorMap: Map<any, string>): GoFishNode {
+export function legendColumn(
+  colorMap: Map<any, string>,
+  yUp = true
+): GoFishNode {
   const rows = [...colorMap.entries()].map(([key, color]) =>
     legendRow(key, color)
   );
   return (Spread as any)(
-    { dir: "y", spacing: ROW_GAP, alignment: "start", reverse: true },
+    { dir: "y", spacing: ROW_GAP, alignment: "start", reverse: yUp },
     rows
   ).name(LEGEND_NAME) as GoFishNode;
 }
@@ -194,12 +198,13 @@ export async function legendColorbar(
  */
 export async function elaborateLegend(
   node: GoFishNode,
-  scale: CategoricalScale | ContinuousColorScale
+  scale: CategoricalScale | ContinuousColorScale,
+  yUp = true
 ): Promise<GoFishNode> {
   const legend =
     "scaleFn" in scale
       ? await legendColorbar(scale.scaleFn, scale.domain)
-      : legendColumn(scale.color);
+      : legendColumn(scale.color, yUp);
   return wrapPreservingIdentity(node, async (content) => {
     content.name(CONTENT_NAME);
 
