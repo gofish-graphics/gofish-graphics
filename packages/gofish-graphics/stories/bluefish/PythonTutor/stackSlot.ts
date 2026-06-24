@@ -40,7 +40,9 @@ export const stackSlot = createMark(
             ),
       ]).constrain(({ box, boxBorderBottom, boxBorderLeft, value }) => [
         Constraint.align({ x: "middle", y: "middle" }, [box, value]),
-        Constraint.align({ x: "middle", y: "start" }, [box, boxBorderBottom]),
+        // y-down free space: "end" is the bottom edge — keep the bottom border
+        // at the bottom of the box (issue #143/#16).
+        Constraint.align({ x: "middle", y: "end" }, [box, boxBorderBottom]),
         Constraint.align({ x: "start", y: "middle" }, [box, boxBorderLeft]),
       ]),
     ]);
