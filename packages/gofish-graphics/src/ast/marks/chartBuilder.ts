@@ -508,11 +508,12 @@ export class ChartBuilder<TInput, TOutput = TInput> {
       result = await Layer({}, [node, connectFrame]);
     }
 
-    // Mark the resolved node as a chart so the root render knows to use the
-    // y-UP scope even when this chart is composed inside a `gofish([...])` /
-    // `.layer()` whose render entry never saw the builder's `yUp` option. See
-    // `_isChart` and issue #143/#16.
-    result._isChart = true;
+    // y-up is no longer a chart-vs-not flag: the root render decides it
+    // semantically from the resolved y space (a CONTINUOUS value axis flips,
+    // an ORDINAL category axis does not), so a vertical bar chart flips while a
+    // horizontal one reads top-down — and a chart composed inside a
+    // `gofish([...])`/`.layer()` gets the same treatment for free. See
+    // `subtreeHasCoord`/`isCONTINUOUS` in gofish.tsx and issue #143/#16.
 
     if (this.nodeZOrder !== undefined) {
       result.zOrder(this.nodeZOrder);
@@ -597,10 +598,9 @@ export class ChartBuilder<TInput, TOutput = TInput> {
     return {
       node,
       options: {
-        // A chart is a y-UP render scope (bars grow up, y-axis increases
-        // upward). Free-space `gofish()` renders y-down (SVG-native top-left
-        // origin); `chart()` opts into y-up here. See issue #143/#16.
-        yUp: true,
+        // y-up is decided by the root render from the resolved y space (a
+        // CONTINUOUS value axis flips, an ORDINAL category axis reads
+        // top-down) — not forced here. See issue #143/#16.
         ...options,
         axes: this.options?.axes,
         colorConfig: this.options?.color,
@@ -755,9 +755,8 @@ export class LayerBuilder {
     return {
       node,
       options: {
-        // A chart is a y-UP render scope — see the sibling resolveForRender and
-        // issue #143/#16. Free-space `gofish()` stays y-down.
-        yUp: true,
+        // y-up is decided by the root render from the resolved y space — see
+        // the sibling resolveForRender and issue #143/#16.
         ...options,
         axes: (options as any).axes ?? meta.axes,
         colorConfig: meta.colorConfig,

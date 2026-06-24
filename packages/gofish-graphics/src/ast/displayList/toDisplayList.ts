@@ -28,11 +28,7 @@
 
 import type { DisplayList } from "gofish-ir";
 import type { ToPixel } from "../_node";
-import {
-  runLayout,
-  subtreeHasChart,
-  type GoFishRenderOptions,
-} from "../gofish";
+import { runLayout, type GoFishRenderOptions } from "../gofish";
 import { GoFishNode } from "../_node";
 import { lowerToDisplayList } from "./lower";
 
@@ -68,11 +64,13 @@ export async function toDisplayList(
   };
 
   // Default frame is SVG-native y-DOWN (top-left origin): a vertical list reads
-  // top→bottom and this map only offsets by the gutter reserves. A `chart()`
-  // renders y-UP (`options.yUp` threaded from the builder): mirror y about the
-  // canvas height — bars grow up, y-axis increases upward — reproducing the old
-  // global flip. See issue #143/#16.
-  const effYUp = options.yUp || subtreeHasChart(data.child);
+  // top→bottom and this map only offsets by the gutter reserves. A CONTINUOUS-y
+  // root (a chart's value axis, box-and-whisker, hand-drawn axes) or a `coord`
+  // scope renders y-UP: mirror y about the canvas height — bars grow up, the
+  // y-axis increases upward — reproducing the old global flip. That decision is
+  // made in `layout()` from the root y space and threaded here as `data.yUp`.
+  // See issue #143/#16.
+  const effYUp = data.yUp;
   const toPixel: ToPixel = effYUp
     ? ([gx, gy]) => [gx + leftReserve, data.height + topReserve - gy]
     : ([gx, gy]) => [gx + leftReserve, gy + topReserve];

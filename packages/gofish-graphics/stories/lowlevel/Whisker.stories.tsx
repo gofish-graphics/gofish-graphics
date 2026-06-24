@@ -19,7 +19,6 @@ export const SingleBoxWhisker: StoryObj<Args> = {
 
     testSingleBoxWhisker().render(container, {
       axes: true,
-      yUp: true,
     });
 
     return container;
@@ -32,7 +31,6 @@ export const PairBoxWhisker: StoryObj<Args> = {
 
     testPairBoxWhisker().render(container, {
       axes: true,
-      yUp: true,
     });
 
     return container;
@@ -53,7 +51,6 @@ export const BoxWhisker: StoryObj<Args> = {
 
     testBoxWhiskerPlot().render(container, {
       axes: true,
-      yUp: true,
     });
 
     return container;

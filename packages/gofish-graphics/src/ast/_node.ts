@@ -232,15 +232,6 @@ export class GoFishNode {
    * across component boundaries even if a future operator silently scopes.
    */
   public _isComponent: boolean = false;
-  /**
-   * Marks a node produced by the `chart()` builder (issue #143/#16). A chart is
-   * a y-UP render scope; the root render reads this (anywhere in the tree) to
-   * decide y-up vs the SVG-native y-down default, so a chart still renders y-up
-   * even when COMPOSED inside a `gofish([...])`/`.layer()` whose own render entry
-   * never saw the builder's `yUp` option. Free-space content carries no marker
-   * and renders y-down.
-   */
-  public _isChart: boolean = false;
   public _scopeMap?: Map<string, GoFishNode>;
   public parent?: GoFishNode;
   public datum?: any;

@@ -24,6 +24,7 @@ import {
   continuousInterval,
   hasBaseline,
   isBaselineMagnitude,
+  isCONTINUOUS,
   spaceMeasure,
   type UnderlyingSpace,
 } from "./underlyingSpace";
@@ -138,6 +139,7 @@ export async function layout(
 ): Promise<{
   underlyingSpaceX: UnderlyingSpace;
   underlyingSpaceY: UnderlyingSpace;
+  yUp: boolean;
   posScales: [
     ((pos: number) => number) | undefined,
     ((pos: number) => number) | undefined,
@@ -232,6 +234,21 @@ export async function layout(
   const niceUnderlyingSpaceX = child._underlyingSpace![0];
   const niceUnderlyingSpaceY = child._underlyingSpace![1];
 
+  // y-UP scope decision (issue #143/#16). The y axis is "inverted" — origin at
+  // the bottom, values increasing upward — exactly when it carries a CONTINUOUS
+  // scale: a chart's value axis, or any low-level spec with datum-positioned or
+  // baseline-magnitude y (box-and-whisker, hand-drawn axes). An ORDINAL or
+  // UNDEFINED y (a category axis, a free-space diagram, an icicle/mosaic) stays
+  // SVG-native y-DOWN so it reads top→bottom. This is the semantic rule that
+  // replaces the old "is this a chart()?" structural heuristic: a vertical bar
+  // chart flips because its value axis is continuous, a horizontal bar chart
+  // does NOT (its y is the ordinal category axis, which should read top-down),
+  // and a continuous low-level spec flips without needing an explicit `yUp`. A
+  // `coord` (polar/clock) subtree keeps its existing y-up handling (the right
+  // convention there is still open). `yUp` (from options) is an explicit
+  // override on top. See the `subtreeHasCoord`/`isCONTINUOUS` callers.
+  const effYUp = yUp || subtreeHasContinuousY(child) || subtreeHasCoord(child);
+
   // Reference to the content node whose extent defines the final canvas
   // (`finalW`/`finalH` via the `finalDim` readback below). Both the title pass
   // and the legend pass wrap `child`, so `contentNode` keeps pointing at the
@@ -294,9 +311,9 @@ export async function layout(
   if (hasLegend && unitScale) {
     // The legend entries should read top→bottom. Under the y-up chart flip that
     // needs `reverse` (a y-spread lays out bottom→top); in y-down free space the
-    // natural order already reads top→bottom. Pass the effective orientation so
-    // the swatch column reverses only when y-up. See issue #143/#16.
-    const effYUp = yUp || subtreeHasChart(child);
+    // natural order already reads top→bottom. Pass the effective orientation
+    // (`effYUp`, computed above from the root y space) so the swatch column
+    // reverses only when y-up. See issue #143/#16.
     child = await elaborateLegend(
       child,
       unitScale as CategoricalScale | ContinuousColorScale,
@@ -487,6 +504,7 @@ export async function layout(
   return {
     underlyingSpaceX: niceUnderlyingSpaceX,
     underlyingSpaceY: niceUnderlyingSpaceY,
+    yUp: effYUp,
     posScales,
     child,
     width: finalW,
@@ -534,6 +552,8 @@ export type GoFishExportOptions = GoFishRenderOptions & {
 type LayoutData = {
   underlyingSpaceX: UnderlyingSpace;
   underlyingSpaceY: UnderlyingSpace;
+  /** Whether the root renders y-UP (continuous y / coord scope). See #143/#16. */
+  yUp: boolean;
   posScales: [
     ((pos: number) => number) | undefined,
     ((pos: number) => number) | undefined,
@@ -631,8 +651,7 @@ export async function runLayout(
 function renderLayout(
   data: LayoutData,
   svgPadding: number,
-  defs?: JSX.Element[],
-  yUp?: boolean
+  defs?: JSX.Element[]
 ): JSX.Element {
   return render(
     {
@@ -640,7 +659,8 @@ function renderLayout(
       height: data.height,
       svgPadding,
       defs,
-      yUp,
+      // The resolved y-up decision (root y space), computed in `layout()`.
+      yUp: data.yUp,
       rightOverhang: data.rightOverhang,
       rightContentOverhang: data.rightContentOverhang,
       topOverhang: data.topOverhang,
@@ -668,7 +688,7 @@ export const gofish = (
         {(() => {
           const data = layoutData();
           if (!data) return null;
-          return renderLayout(data, svgPadding, options.defs, options.yUp);
+          return renderLayout(data, svgPadding, options.defs);
         })()}
       </Suspense>
     );
@@ -741,7 +761,7 @@ export async function gofishToSVGElement(
   const root = document.createElement("div");
   // Layout is already awaited, so the SVG mounts synchronously — no Suspense.
   const dispose = solidRender(
-    () => renderLayout(data, svgPadding, options.defs, options.yUp),
+    () => renderLayout(data, svgPadding, options.defs),
     root
   );
   const svg = root.querySelector("svg");
@@ -824,20 +844,42 @@ const PADDING = 40;
  * Checks the node itself first, then its immediate children.
  * Returns the coord node's transform.translate values, or null if not found.
  */
-/** True if `node` or any descendant establishes a y-UP scope: a `chart()`-
- *  produced node (`_isChart`) or a `coord` node (a coordinate system is y-up).
- *  The root render uses this to pick y-up vs the SVG-native y-down default, so a
- *  chart or a polar/coord visualization renders y-up even when composed inside a
- *  free-space `gofish([...])`/`.layer()`. Pure free-space diagrams match neither
- *  and render y-down. See issue #143/#16. */
-export const subtreeHasChart = (node: GoFishNode): boolean => {
-  // A `chart()` node or any `coord` node (a coordinate system is inherently
-  // y-up — polar/clock/wavy) establishes a y-up scope. See issue #143/#16.
-  if (node._isChart || node.type === "coord") return true;
+/** True if `node` or any descendant is a `coord` node (polar/clock/wavy). A
+ *  coordinate system currently renders y-up regardless of its y-space kind, so
+ *  the root flips when one is present even nested inside free-space
+ *  `gofish([...])`/`.layer()`. This is the ONE remaining structural y-up trigger:
+ *  cartesian y-up is now decided semantically from the root y space
+ *  (`isCONTINUOUS`), but the right convention for polar/coord is still open, so
+ *  its legacy behavior is preserved here. See issue #143/#16. */
+export const subtreeHasCoord = (node: GoFishNode): boolean => {
+  if (node.type === "coord") return true;
   const kids = node.children as (GoFishNode | unknown)[] | undefined;
   if (kids)
     for (const k of kids)
-      if (k instanceof GoFishNode && subtreeHasChart(k)) return true;
+      if (k instanceof GoFishNode && subtreeHasCoord(k)) return true;
+  return false;
+};
+
+/** True if `node` or ANY descendant has a CONTINUOUS y underlying space — i.e.
+ *  somewhere in the tree y is a real position/magnitude scale (a value axis, a
+ *  datum-positioned mark, a swarm's distribution), not an ordinal/undefined
+ *  category band. This is the y-up trigger (issue #143/#16): the rule is "a
+ *  cartesian scope with a continuous y position is inverted", so the presence of
+ *  ANY such scope flips the (currently global) root frame. Checking the whole
+ *  subtree — not just the root y — is what keeps a faceted scatter or a violin
+ *  swarm upright: their root y is the ordinal facet/category axis, but the
+ *  scatter/distribution NESTED inside is continuous, and that inner scope is what
+ *  wants y-up. An all-ordinal chart (heatmap, horizontal bar, strip plot) has no
+ *  continuous y anywhere and stays SVG-native y-down (reads top→bottom). A true
+ *  per-scope coordinate transform (the follow-up) will localize this so a mixed
+ *  composition can flip only the continuous scopes; today it is one global flip. */
+export const subtreeHasContinuousY = (node: GoFishNode): boolean => {
+  const sy = node._underlyingSpace?.[1];
+  if (sy !== undefined && isCONTINUOUS(sy)) return true;
+  const kids = node.children as (GoFishNode | unknown)[] | undefined;
+  if (kids)
+    for (const k of kids)
+      if (k instanceof GoFishNode && subtreeHasContinuousY(k)) return true;
   return false;
 };
 
@@ -914,8 +956,9 @@ export const render = (
   // height — bars grow up, the y-axis increases upward — reproducing the old
   // global flip. See issue #143/#16. (A true y-up coordinate transform — the
   // follow-up — will make this composable per-subtree instead of root-global.)
-  const effYUp = yUp || subtreeHasChart(child);
-  const toPixel: ToPixel = effYUp
+  // `yUp` is the resolved decision threaded from `layout()` (`LayoutData.yUp`,
+  // computed from the root y space), not a raw option — see `subtreeHasCoord`.
+  const toPixel: ToPixel = yUp
     ? ([gx, gy]) => [gx + leftReserve, height + topReserve - gy]
     : ([gx, gy]) => [gx + leftReserve, gy + topReserve];
   child.getRenderSession().toPixel = toPixel;
