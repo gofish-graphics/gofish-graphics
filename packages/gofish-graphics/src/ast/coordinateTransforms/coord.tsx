@@ -200,30 +200,22 @@ export const coord = createNodeOperator(
             axis: 0 | 1,
             budget: number
           ): [number, ((p: number) => number) | undefined] => {
-            const spaces = children
-              .map((c) => (c as GoFishNode)._underlyingSpace?.[axis])
-              .filter((s): s is UnderlyingSpace => s !== undefined);
-            const anchored = spaces.filter(isPOSITION);
-            if (anchored.length > 0) {
-              const domain = IntervalLib.unionAll(
-                ...anchored.map((s) => continuousInterval(s)!)
-              );
-              return [
-                1,
-                posScaleFromSpace(
-                  {
-                    kind: "continuous",
-                    dataDomain: { min: domain.min, max: domain.max },
-                  },
-                  budget
-                ),
-              ];
+            // An anchored (data POSITION) axis: the coord's own
+            // `resolveUnderlyingSpace` already unioned the children's POSITION
+            // spaces into `spaceRef.current` — reuse it and map onto [0, budget].
+            const resolved = spaceRef.current?.[axis];
+            if (resolved !== undefined && isPOSITION(resolved)) {
+              return [1, posScaleFromSpace(resolved, budget)];
             }
-            const baseline = spaces.filter(isBaselineMagnitude);
+            // A baseline-magnitude (data SIZE) axis: `resolveUnderlyingSpace`
+            // leaves this case UNDEFINED, so sum the children's widths here and
+            // scale by budget/total (`width.inverse(budget)`) to fill the ring.
+            const baseline = children
+              .map((c) => (c as GoFishNode)._underlyingSpace?.[axis])
+              .filter((s): s is UnderlyingSpace => s !== undefined)
+              .filter(isBaselineMagnitude);
             if (baseline.length > 0) {
-              const width = Monotonic.add(
-                ...baseline.map((s) => (s as CONTINUOUS_TYPE).width)
-              );
+              const width = Monotonic.add(...baseline.map((s) => s.width));
               return [width.inverse(budget) ?? 1, undefined];
             }
             return [1, undefined];

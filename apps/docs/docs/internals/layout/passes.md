@@ -338,7 +338,7 @@ a positioned mark's own position measure is the axis measure it sits on. This
 consumes the measure provenance #534 carried to mark channels. The revocation is
 coord-scoped, so Cartesian behavior matches the former construction-time
 inference. (Route A — relational, measure-free embedding — is not yet
-implemented; see `the embedding-resolution design essay (/internals/design/embedding-resolution)`.)
+implemented; tracked under #618.)
 
 ### Pass 9: Layout Calculation
 

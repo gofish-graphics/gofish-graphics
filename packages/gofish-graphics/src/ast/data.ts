@@ -314,14 +314,10 @@ export const getValueColorOps = <T>(value: MaybeValue<T>): ColorOp[] => {
  * is the measure-free half; the {@link GoFishNode.resolveEmbedding} pass layers
  * the Route-B measure gate on top (a size denominated in a *foreign* measure to
  * the axis stays ink, not a coord extent). Extracted so the pass is the sole
- * author of `embedded` and the rule lives in one place. See
- * `the embedding-resolution design essay (/internals/design/embedding-resolution)` and #534.
+ * author of `embedded` and the rule lives in one place. See #534.
  */
 export const baseEmbedded = <T>(interval: Interval<T>): boolean =>
   (isValue(interval.size) || interval.size === undefined) &&
   (interval.min === undefined ||
     !isValue(interval.min) ||
     getMeasure(interval.min) === getMeasure(interval.size));
-
-export const inferEmbedded = <T>(interval: Interval<T>): Interval<T> =>
-  baseEmbedded(interval) ? { ...interval, embedded: true } : interval;

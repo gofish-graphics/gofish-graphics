@@ -567,7 +567,7 @@ export class GoFishNode {
    * shape factories used to apply (which couldn't see the axis).
    *
    * Two routes by which a dim's edges become coordinate-space positions (so a
-   * coord warps the extent), per `the embedding-resolution design essay (/internals/design/embedding-resolution)`:
+   * coord warps the extent):
    *
    * - **Route B (intrinsic, measure-gated)** — implemented here. A dim embeds iff
    *   {@link baseEmbedded} holds (its size is a data value or unsized) AND, when
