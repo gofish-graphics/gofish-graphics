@@ -76,14 +76,26 @@ const tickRect = (dim: 0 | 1): GoFishNode =>
       : { w: 1, h: TICK_LEN, fill: AXIS_COLOR }
   );
 
-/** A short label+tick mark pair, stacked along the cross axis. */
-function tickMark(dim: 0 | 1, label: string, name: string): GoFishNode {
+/** A short label+tick mark pair, stacked along the cross axis. The tick is the
+ *  INNER element (facing the content) and the label the outer one, so the order
+ *  follows `side`: with the axis on the near/start side the inner edge is the
+ *  cross-`end`, so `[label, tick]`; on the far/end side the inner edge is the
+ *  cross-`start`, so `[tick, label]`. */
+function tickMark(
+  dim: 0 | 1,
+  label: string,
+  name: string,
+  side: "start" | "end" = "start"
+): GoFishNode {
+  const text = Text({
+    text: label,
+    fontSize: LABEL_FONT_SIZE,
+    fill: AXIS_COLOR,
+  });
+  const tick = tickRect(dim);
   return (Spread as any)(
     { dir: crossName(dim), spacing: LABEL_TICK_GAP, alignment: "middle" },
-    [
-      Text({ text: label, fontSize: LABEL_FONT_SIZE, fill: AXIS_COLOR }),
-      tickRect(dim),
-    ]
+    side === "end" ? [tick, text] : [text, tick]
   ).name(name) as GoFishNode;
 }
 
@@ -123,32 +135,43 @@ function gutterConstraints(
   g: Record<string, any>,
   lineName: string,
   ticks: any[],
-  crossFloor?: number
+  crossFloor?: number,
+  side: "start" | "end" = "start"
 ): any[] {
   // A degenerate domain can yield zero ticks; emit no gutter rather than
   // dereferencing ticks[0]/ticks[last] (which would create invalid placement
   // constraints).
   if (ticks.length === 0) return [];
   const d = crossName(dim);
-  // "inner" = the edge facing the content (cross-end of the gutter pieces).
-  const innerAlign = cross(dim) === 0 ? { x: "end" } : { y: "end" };
+  const atEnd = side === "end";
+  // "inner" = the edge facing the content. With the axis on the near/start side
+  // the content lies toward cross-`end`; on the far/end side it lies toward
+  // cross-`start`. The ticks+line align flush on that inner edge; labels extend
+  // outward into the gutter.
+  const innerEdge = atEnd ? "start" : "end";
+  const innerAlign = cross(dim) === 0 ? { x: innerEdge } : { y: innerEdge };
   const seat =
     crossFloor !== undefined
       ? // Standoff: the line sits AXIS_CONTENT_GAP outside the plot edge, so
         // marks at the domain floor (a y=0 histogram bin) don't straddle it.
         // Both lines get the same outward offset, so they still frame the
         // corner. `datum(v).offset(px)` = "this data position, plus pixels".
+        // `side` flips which way "outward" is.
         Constraint.position(
           {
-            [d]: datum(crossFloor).offset(-AXIS_CONTENT_GAP),
-            anchor: "end",
+            [d]: datum(crossFloor).offset(
+              atEnd ? AXIS_CONTENT_GAP : -AXIS_CONTENT_GAP
+            ),
+            anchor: innerEdge,
           } as any,
           [g[lineName]]
         )
-      : Constraint.distribute({ dir: d, spacing: AXIS_CONTENT_GAP }, [
-          g[lineName],
-          g[CONTENT_NAME],
-        ]);
+      : Constraint.distribute(
+          { dir: d, spacing: AXIS_CONTENT_GAP },
+          atEnd
+            ? [g[CONTENT_NAME], g[lineName]]
+            : [g[lineName], g[CONTENT_NAME]]
+        );
   return [
     seat,
     // Tick marks' inner edge flush with the line; labels extend into the gutter.
@@ -176,8 +199,11 @@ function positionAxis(opts: {
   /** The other dim's scale floor, when it also carries a position-like axis —
    *  seats this line at the plot corner instead of the content edge. */
   crossFloor?: number;
+  /** Which frame edge to seat the axis on (default near/origin = "start"). */
+  side?: "start" | "end";
 }): AxisElaboration {
   const { dim, prefix, lineMin, lineMax, tickValues } = opts;
+  const side = opts.side ?? "start";
   const lineName = `${prefix}line`;
   const tickName = (i: number) => `${prefix}t${i}`;
   const labelName = (i: number) => `${prefix}l${i}`;
@@ -205,7 +231,9 @@ function positionAxis(opts: {
     // distributes off it — an unplaced-anchor distribute would walk from 0
     // and drag the line into the plot. Tick marks align flush with the line
     // (their inner edge IS the tick).
-    cs.push(...gutterConstraints(dim, g, lineName, ticks, opts.crossFloor));
+    cs.push(
+      ...gutterConstraints(dim, g, lineName, ticks, opts.crossFloor, side)
+    );
     // Each extra label is pinned at its data position along the axis, and —
     // having no tick of its own to provide an offset — DISTRIBUTEs off the
     // (now seated) line, at the same outer offset as the continuous labels
@@ -216,7 +244,9 @@ function positionAxis(opts: {
       cs.push(
         Constraint.distribute(
           { dir: crossName(dim), spacing: TICK_LEN + LABEL_TICK_GAP },
-          [label, g[lineName]]
+          // Label sits on the OUTER side of the line — past it toward the gutter,
+          // which flips with `side`.
+          side === "end" ? [g[lineName], label] : [label, g[lineName]]
         )
       );
     });
@@ -241,7 +271,8 @@ function elaborateContinuousAxis(
   dim: 0 | 1,
   nice: [number, number],
   prefix: string,
-  crossFloor?: number
+  crossFloor?: number,
+  side: "start" | "end" = "start"
 ): AxisElaboration {
   const [niceMin, niceMax] = nice;
   const tickValues = d3Ticks(niceMin, niceMax, TICK_COUNT);
@@ -251,8 +282,9 @@ function elaborateContinuousAxis(
     lineMin: niceMin,
     lineMax: niceMax,
     tickValues,
-    tickNode: (v, _i, name) => tickMark(dim, fmtNum(v), name),
+    tickNode: (v, _i, name) => tickMark(dim, fmtNum(v), name, side),
     crossFloor,
+    side,
   });
 }
 
@@ -261,7 +293,8 @@ function elaborateDifferenceAxis(
   dim: 0 | 1,
   space: CONTINUOUS_TYPE,
   prefix: string,
-  crossFloor?: number
+  crossFloor?: number,
+  side: "start" | "end" = "start"
 ): AxisElaboration {
   // Scale over the RAW width (not a niced max) so the tick scale equals the
   // content's own width-based scaleFactor (size/width) and ticks line up with
@@ -288,6 +321,7 @@ function elaborateDifferenceAxis(
     tickNode: (_v, _i, name) => tickRect(dim).name(name),
     extraLabels,
     crossFloor,
+    side,
   });
 }
 
@@ -443,11 +477,17 @@ function elaborationsFor(
     const prefix = dim === 1 ? "__y" : "__x";
     const crossFloor = floors[cross(dim)];
     if (isPOSITION(s)) {
-      const e = elaborateContinuousAxis(dim, nices[dim]!, prefix, crossFloor);
+      const e = elaborateContinuousAxis(
+        dim,
+        nices[dim]!,
+        prefix,
+        crossFloor,
+        sides[dim]
+      );
       constrained.push(e);
       anchors[dim] = e.anchor;
     } else if (isDIFFERENCE(s)) {
-      const e = elaborateDifferenceAxis(dim, s, prefix, crossFloor);
+      const e = elaborateDifferenceAxis(dim, s, prefix, crossFloor, sides[dim]);
       constrained.push(e);
       anchors[dim] = e.anchor;
     } else if (isORDINAL(s)) {
@@ -665,9 +705,18 @@ export async function elaborateAxisTitles(
     anchors: [GoFishNode | undefined, GoFishNode | undefined];
     plotNode: GoFishNode;
     yUp?: boolean;
+    /** Per-dim axis side, so each title follows its axis to the same edge. */
+    sides?: ["start" | "end", "start" | "end"];
   }
 ): Promise<GoFishNode> {
-  const { xTitle, yTitle, anchors, plotNode, yUp = true } = opts;
+  const {
+    xTitle,
+    yTitle,
+    anchors,
+    plotNode,
+    yUp = true,
+    sides = ["start", "start"],
+  } = opts;
 
   return wrapPreservingIdentity(node, async (content) => {
     content.name(TITLE_CONTENT_NAME);
@@ -714,15 +763,16 @@ export async function elaborateAxisTitles(
             g[X_TITLE_NAME],
           ])
         );
-        // … and seat it below the FULL content bbox: title listed BEFORE the
-        // placed content anchor, so distribute's backward walk places the
-        // title's far (max) edge GAP below the content's min edge — clearing
-        // the tick/ordinal label rows that are part of the content bbox.
+        // … and seat it past the FULL content bbox on the same edge as the
+        // axis: title BEFORE the content seats it on the start edge, AFTER on
+        // the end edge (so it clears the tick/label rows and tracks `side`).
         cs.push(
-          Constraint.distribute({ dir: "y", spacing: TITLE_CONTENT_GAP }, [
-            g[X_TITLE_NAME],
-            g[TITLE_CONTENT_NAME],
-          ])
+          Constraint.distribute(
+            { dir: "y", spacing: TITLE_CONTENT_GAP },
+            sides[0] === "end"
+              ? [g[TITLE_CONTENT_NAME], g[X_TITLE_NAME]]
+              : [g[X_TITLE_NAME], g[TITLE_CONTENT_NAME]]
+          )
         );
       }
       if (yTitle !== undefined) {
@@ -733,12 +783,15 @@ export async function elaborateAxisTitles(
             g[Y_TITLE_NAME],
           ])
         );
-        // … and seat it left of the full content bbox (the gutter).
+        // … and seat it past the content bbox on the axis's side (left for
+        // "start", right for "end").
         cs.push(
-          Constraint.distribute({ dir: "x", spacing: TITLE_CONTENT_GAP }, [
-            g[Y_TITLE_NAME],
-            g[TITLE_CONTENT_NAME],
-          ])
+          Constraint.distribute(
+            { dir: "x", spacing: TITLE_CONTENT_GAP },
+            sides[1] === "end"
+              ? [g[TITLE_CONTENT_NAME], g[Y_TITLE_NAME]]
+              : [g[Y_TITLE_NAME], g[TITLE_CONTENT_NAME]]
+          )
         );
       }
       return cs;

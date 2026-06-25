@@ -302,6 +302,7 @@ export async function layout(
       anchors: titleAnchors,
       plotNode,
       yUp: effYUp,
+      sides: resolveAxisSides(axes),
     });
     if (contexts?.session) child.setRenderSession(contexts.session);
     // The title pass introduces `ref()` stand-ins (to the axis line / plot) that

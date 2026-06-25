@@ -43,7 +43,7 @@ export default meta;
 type Args = { w: number; h: number; width: number };
 
 export const Default: StoryObj<Args> = {
-  args: { w: 900, h: 380, width: 3 },
+  args: { w: 900, h: 560, width: 3 },
   tags: ["gallery"],
   parameters: {
     gallery: {
@@ -57,8 +57,9 @@ export const Default: StoryObj<Args> = {
 
     chart(agedPassengers, {
       color: palette(["#2b8cbe", "#ff8408"]),
-      // x = pclass (the panels); y is the dot-row index, so suppress it.
-      axes: { x: true, y: false },
+      // x = pclass (the panels) at the bottom (y-end); y is the dot-row index,
+      // so suppress it.
+      axes: { x: { side: "end" }, y: false },
     })
       // Bottom-align panels and their age-bin bars (y-down free space: "end" =
       // bottom) so every unit stack shares a baseline and grows upward.
@@ -71,7 +72,8 @@ export const Default: StoryObj<Args> = {
               .flow(
                 derive((rows) => orderBy(rows, ["survived"], ["desc"])),
                 derive((rows) => chunk(rows, args.width)),
-                spread({ spacing: 1.5, dir: "y" }),
+                // Reverse so the ragged partial row lands at the top.
+                spread({ spacing: 1.5, dir: "y", reverse: true }),
                 spread({ spacing: 1.5, dir: "x" })
               )
               .mark(circle({ r: 3, fill: "survived" }))
