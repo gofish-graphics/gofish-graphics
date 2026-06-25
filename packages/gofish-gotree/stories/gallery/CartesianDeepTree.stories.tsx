@@ -62,7 +62,10 @@ export const CartesianDeepTree: StoryObj = {
         link: { interpolation: "linear", stroke: "#5f6b7a", strokeWidth: 1.5 },
         parentChild: combine({
           x: { kind: "nest", pad: 0 },
-          y: { kind: "distribute", spacing: 80 },
+          // order "reverse" puts the parent at HIGH y = the bottom in y-down
+          // free space, so the root sits at the bottom and leaves climb upward
+          // (matching the reference). See issue #143/#16.
+          y: { kind: "distribute", spacing: 80, order: "reverse" },
         }),
         sibling: combine({
           x: { kind: "distribute", spacing: 22 },
