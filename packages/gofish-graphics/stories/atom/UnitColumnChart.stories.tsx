@@ -35,7 +35,7 @@ export default meta;
 type Args = { w: number; h: number; cols: number };
 
 export const Default: StoryObj<Args> = {
-  args: { w: 520, h: 420, cols: 14 },
+  args: { w: 520, h: 580, cols: 14 },
   tags: ["gallery"],
   parameters: {
     gallery: {
