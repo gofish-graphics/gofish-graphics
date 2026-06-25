@@ -221,8 +221,14 @@ export async function elaborateLegend(
         g[CONTENT_NAME],
         g[LEGEND_NAME],
       ]),
-      // Top-align the column with the content top (y-up: end = top).
-      Constraint.align({ y: "end" }, [g[CONTENT_NAME], g[LEGEND_NAME]]),
+      // Top-align the column with the content top. "Top" is the far edge in
+      // y-up (end) but the near edge in y-down (start), so the anchor follows
+      // the render orientation — otherwise a y-down chart (heatmap) seats the
+      // legend at the bottom. See issue #143/#16.
+      Constraint.align({ y: yUp ? "end" : "start" }, [
+        g[CONTENT_NAME],
+        g[LEGEND_NAME],
+      ]),
     ]);
 
     return root;
