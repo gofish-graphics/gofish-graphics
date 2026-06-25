@@ -138,7 +138,9 @@ export const LabeledFileTree: StoryObj<Args> = {
           spacing: 36,
           alignment: "middle",
         }),
-        sibling: distribute({ dir: "x", spacing: 12, alignment: "start" }),
+        // Bottom-align siblings (y-down: "end" = bottom) so every leaf lands on
+        // a common bottom row regardless of its depth. See issue #143/#16.
+        sibling: distribute({ dir: "x", spacing: 12, alignment: "end" }),
       },
       fileTreeData
     ).render(container, { w: args.w, h: args.h });

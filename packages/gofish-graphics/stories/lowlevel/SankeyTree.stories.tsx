@@ -34,7 +34,9 @@ export const Default: StoryObj = {
     layer([
       spreadX({ spacing: layerSpacing, alignment: "middle" }, [
         stackY(
-          { spacing: 0, alignment: "middle" },
+          // y-down: reverse every vertical ordering so the tiers read the same
+          // way they did under the old y-up convention. See issue #143/#16.
+          { spacing: 0, alignment: "middle", reverse: true },
           For(groupBy(titanic, "class"), (items, cls) =>
             rect({
               w: 40,
@@ -44,11 +46,11 @@ export const Default: StoryObj = {
           )
         ),
         spreadY(
-          { spacing: internalSpacing, alignment: "middle" },
+          { spacing: internalSpacing, alignment: "middle", reverse: true },
           For(groupBy(titanic, "class"), (items, cls) =>
             spreadX({ spacing: layerSpacing, alignment: "middle" }, [
               stackY(
-                { spacing: 0, alignment: "middle" },
+                { spacing: 0, alignment: "middle", reverse: true },
                 For(groupBy(items, "sex"), (items, sex) =>
                   rect({
                     w: 40,
@@ -62,6 +64,7 @@ export const Default: StoryObj = {
                   h: _(items).sumBy("count") / 10,
                   spacing: internalSpacing * 2,
                   alignment: "middle",
+                  reverse: true,
                 },
                 For(groupBy(items, "sex"), (items, sex) =>
                   spreadX({ spacing: layerSpacing, alignment: "middle" }, [
@@ -69,6 +72,7 @@ export const Default: StoryObj = {
                       {
                         spacing: 0,
                         alignment: "middle",
+                        reverse: true,
                       },
                       For(groupBy(items, "survived"), (survivedItems, survived) =>
                         rect({
@@ -83,6 +87,7 @@ export const Default: StoryObj = {
                         w: 40,
                         spacing: internalSpacing * 4,
                         alignment: "middle",
+                        reverse: true,
                       },
                       For(groupBy(items, "survived"), (survivedItems, survived) => {
                         return rect({
