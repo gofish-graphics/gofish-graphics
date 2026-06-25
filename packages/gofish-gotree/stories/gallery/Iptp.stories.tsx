@@ -43,7 +43,9 @@ export const Iptp: StoryObj = {
         }),
         sibling: combine({
           x: { kind: "distribute", spacing: 6 },
-          y: { kind: "align", alignment: "end" },
+          // Align siblings to the TOP of their bands (y-down free space: "start"
+          // = near/top edge) so same-depth nodes share a row. See #143/#16.
+          y: { kind: "align", alignment: "start" },
         }),
       },
       sampleTree

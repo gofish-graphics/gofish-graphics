@@ -75,9 +75,11 @@ export const NodeLinkTree: StoryObj = {
         }),
         sibling: combine({
           x: { kind: "distribute", spacing: 24 },
-          // "top" alignment: in y-up the top of the screen is high y → "end",
-          // so every depth-1 node (even childless ones) sits on one row.
-          y: { kind: "align", alignment: "end" },
+          // Align siblings to the TOP of their bands so every depth-1 node (even
+          // childless ones) sits on one row. In y-down free space the top is the
+          // near edge → "start"; otherwise a childless node bottom-aligns down to
+          // the leaf row. See issue #143/#16.
+          y: { kind: "align", alignment: "start" },
         }),
       },
       nodeLinkData
