@@ -1187,6 +1187,7 @@ export class GoFishNode {
       axisFields,
       colorConfig,
       padding,
+      yUp,
     }: {
       w?: number;
       h?: number;
@@ -1199,6 +1200,7 @@ export class GoFishNode {
       axisFields?: { x?: string; y?: string };
       colorConfig?: ColorConfig;
       padding?: number;
+      yUp?: boolean;
     }
   ) {
     return gofish(
@@ -1215,6 +1217,7 @@ export class GoFishNode {
         axisFields,
         colorConfig,
         padding,
+        yUp,
       },
       this
     );

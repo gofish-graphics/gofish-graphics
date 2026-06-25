@@ -21,7 +21,7 @@ import {
 import { createMark } from "../withGoFish";
 import { attachCut } from "../graphicalOperators/cut";
 import type { DisplayList } from "gofish-ir";
-import { lowerStyle } from "../displayList/lowerHelpers";
+import { lowerStyle, pixelBox } from "../displayList/lowerHelpers";
 
 type ImageDimensions = {
   width: number;
@@ -335,11 +335,12 @@ export const Image = ({
           },
         };
       },
-      // IR lowering — structural mirror of `render`. The legacy
-      // `transform="scale(1,-1)" y={-y-height}` y-flip folds into `toPixel`: the
-      // y-up box has min-x `x` and spans y `[y, y+height]`, so its display
-      // top-left corner is `(x, y+height)`, which `toPixel` maps to the y-down
-      // top-left pixel.
+      // IR lowering — structural mirror of `render`. Flip-AGNOSTIC: the box
+      // spans x `[x, x+width]`, y `[y, y+height]`; map both diagonal corners
+      // through `toPixel` and take the component-wise min for the SVG top-left.
+      // Correct under y-down free space and the `yUp` chart scope alike — where
+      // `toPixel` un-mirrors, the top-left is `(x, y+height)`; in y-down it is
+      // `(x, y)` (issue #143/#16).
       lower: (
         { intrinsicDims, transform, toPixel },
         _children,
@@ -351,7 +352,11 @@ export const Image = ({
         const width = intrinsicDims?.[0]?.size ?? 0;
         const height = intrinsicDims?.[1]?.size ?? 0;
 
-        const [px, py] = toPixel([x, y + height]);
+        const { x: px, y: py } = pixelBox(
+          [x, y],
+          [x + width, y + height],
+          toPixel
+        );
         const style = lowerStyle({ opacity, filter });
         const item: DisplayList.ImageItem = {
           kind: "image",

@@ -27,7 +27,11 @@ import {
 } from "../underlyingSpace";
 import { createMark } from "../withGoFish";
 import type { DisplayList } from "gofish-ir";
-import { lowerStyle, rectItemFromBox } from "../displayList/lowerHelpers";
+import {
+  lowerStyle,
+  rectItemFromBox,
+  toPixelFlipsY,
+} from "../displayList/lowerHelpers";
 type TextDimensions = {
   width: number;
   height: number;
@@ -301,12 +305,14 @@ export const Text = ({
           renderData: { layout },
         };
       },
-      // IR lowering — mirror of `render`. The anchor maps through `toPixel`; the
-      // legacy `… rotate(rotate) scale(1,-1)` under the root flip nets to a
-      // screen-space rotate of `-rotate` about the pixel anchor (the extra flip
-      // negates the angle — see the rendering essay). Unrotated → upright text.
+      // IR lowering — mirror of `render`. The anchor maps through `toPixel`.
+      // Rotation sign is flip-AGNOSTIC: in a `yUp` chart scope `toPixel` mirrors
+      // y, which negates a screen-space rotate (`-rotate`); in y-down free space
+      // there is no mirror, so the rotate passes through (`+rotate`). We read the
+      // flip out of `toPixel` via `toPixelFlipsY` (issue #143/#16). Unrotated →
+      // upright text either way.
       lower: (
-        { transform, renderData, toPixel },
+        { transform, renderData, toPixel, intrinsicDims },
         _children,
         node
       ): DisplayList.DisplayItem[] => {
@@ -315,8 +321,21 @@ export const Text = ({
           : textContent;
         const text = finalText == null ? "" : String(finalText);
 
+        const flips = toPixelFlipsY(toPixel);
         const [anchorX, anchorY] = displayTranslate(transform);
-        const [px, py] = toPixel([anchorX, anchorY]);
+        const [px, py0] = toPixel([anchorX, anchorY]);
+        // Text's vertical box is asymmetric about the baseline (ascent ≠ descent
+        // for `auto`). Under the y-up flip that asymmetry resolves correctly; in
+        // y-down free space the SVG baseline must shift by (minY + maxY) so the
+        // glyphs fill the un-mirrored layout box (zero for a symmetric `central`
+        // baseline, and zero under the flip → charts stay byte-identical). The
+        // rotated case carries its footprint in the rotate transform. #143/#16.
+        const baselineShift =
+          flips || rotate
+            ? 0
+            : 2 * (intrinsicDims?.[1]?.min ?? 0) +
+              (intrinsicDims?.[1]?.size ?? 0);
+        const py = py0 + baselineShift;
 
         const unitScale = node.getRenderSession().scaleContext?.unit;
         const resolvedFill = resolveColorChannel(fill, unitScale);
@@ -383,7 +402,7 @@ export const Text = ({
             filter,
           }),
         };
-        if (rotate) textItem.rotate = -rotate;
+        if (rotate) textItem.rotate = flips ? -rotate : rotate;
         items.push(textItem);
         return items;
       },

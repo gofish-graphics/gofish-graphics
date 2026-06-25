@@ -62,7 +62,6 @@ export const OutsideInTree: StoryObj = {
             kind: "distribute",
             spacing: 70,
             mode: "center",
-            order: "reverse",
           },
         }),
         sibling: combine({

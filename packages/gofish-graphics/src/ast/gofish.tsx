@@ -11,7 +11,7 @@ import {
   debugInputSceneGraph,
   debugNodeTree,
   debugUnderlyingSpaceTree,
-  type GoFishNode,
+  GoFishNode,
   type RenderSession,
 } from "./_node";
 import { posScaleFromSpace } from "./domain";
@@ -24,6 +24,7 @@ import {
   continuousInterval,
   hasBaseline,
   isBaselineMagnitude,
+  isCONTINUOUS,
   spaceMeasure,
   type UnderlyingSpace,
 } from "./underlyingSpace";
@@ -73,7 +74,23 @@ export const isContinuousColorScale = (
   s: Scale | undefined
 ): s is ContinuousColorScale => s !== undefined && "scaleFn" in s;
 export type AxesOptions = boolean | { x?: AxisOptions; y?: AxisOptions };
-export type AxisOptions = boolean | { title?: string | false };
+/** `side` (issue #143/#16): which frame edge the axis seats on — `"start"`
+ *  (default: the near/origin side — bottom in y-up, top in y-down) or `"end"`
+ *  (the far side — top in y-up, bottom in y-down). Frame-relative, matching the
+ *  start/end vocabulary of alignment/distribute. */
+export type AxisOptions =
+  | boolean
+  | { title?: string | false; side?: "start" | "end" };
+
+/** Per-dim axis `side`, defaulting to `"start"` (the existing seating). */
+export function resolveAxisSides(
+  axes: AxesOptions | undefined
+): ["start" | "end", "start" | "end"] {
+  const sideOf = (o: AxisOptions | undefined): "start" | "end" =>
+    o && typeof o === "object" && o.side === "end" ? "end" : "start";
+  if (axes && typeof axes === "object") return [sideOf(axes.x), sideOf(axes.y)];
+  return ["start", "start"];
+}
 
 // Fallback extent for an omitted `w`/`h` on a POSITION or data-driven SIZE axis,
 // which needs a concrete canvas to scale data into (see the per-axis comment in
@@ -118,6 +135,7 @@ export async function layout(
     debug = false,
     axes = false,
     axisFields,
+    yUp = false,
   }: {
     w?: number;
     h?: number;
@@ -128,6 +146,7 @@ export async function layout(
     defs?: JSX.Element[];
     axes?: AxesOptions;
     axisFields?: { x?: string; y?: string };
+    yUp?: boolean;
   },
   child: GoFishNode | Promise<GoFishNode>,
   contexts?: {
@@ -136,6 +155,7 @@ export async function layout(
 ): Promise<{
   underlyingSpaceX: UnderlyingSpace;
   underlyingSpaceY: UnderlyingSpace;
+  yUp: boolean;
   posScales: [
     ((pos: number) => number) | undefined,
     ((pos: number) => number) | undefined,
@@ -209,7 +229,7 @@ export async function layout(
     // handled axis flags; the new subtree is then re-resolved below. A flag the
     // pass doesn't handle (e.g. an UNDEFINED space) is inert — nothing else
     // consumes `node.axis`.
-    const elaborated = await elaborateAxes(child);
+    const elaborated = await elaborateAxes(child, resolveAxisSides(axes));
     titleAnchors = elaborated.titleAnchors;
     if (elaborated.changed) {
       child = elaborated.node;
@@ -229,6 +249,21 @@ export async function layout(
   // Use (possibly nice-rounded) underlying spaces for posScales
   const niceUnderlyingSpaceX = child._underlyingSpace![0];
   const niceUnderlyingSpaceY = child._underlyingSpace![1];
+
+  // y-UP scope decision (issue #143/#16). The y axis is "inverted" — origin at
+  // the bottom, values increasing upward — exactly when it carries a CONTINUOUS
+  // scale: a chart's value axis, or any low-level spec with datum-positioned or
+  // baseline-magnitude y (box-and-whisker, hand-drawn axes). An ORDINAL or
+  // UNDEFINED y (a category axis, a free-space diagram, an icicle/mosaic) stays
+  // SVG-native y-DOWN so it reads top→bottom. This is the semantic rule that
+  // replaces the old "is this a chart()?" structural heuristic: a vertical bar
+  // chart flips because its value axis is continuous, a horizontal bar chart
+  // does NOT (its y is the ordinal category axis, which should read top-down),
+  // and a continuous low-level spec flips without needing an explicit `yUp`. A
+  // `coord` (polar/clock) subtree keeps its existing y-up handling (the right
+  // convention there is still open). `yUp` (from options) is an explicit
+  // override on top. See the `subtreeHasCoord`/`isCONTINUOUS` callers.
+  const effYUp = yUp || subtreeHasContinuousY(child) || subtreeHasCoord(child);
 
   // Reference to the content node whose extent defines the final canvas
   // (`finalW`/`finalH` via the `finalDim` readback below). Both the title pass
@@ -266,6 +301,8 @@ export async function layout(
       yTitle,
       anchors: titleAnchors,
       plotNode,
+      yUp: effYUp,
+      sides: resolveAxisSides(axes),
     });
     if (contexts?.session) child.setRenderSession(contexts.session);
     // The title pass introduces `ref()` stand-ins (to the axis line / plot) that
@@ -290,9 +327,15 @@ export async function layout(
     (isCategoricalScale(unitScale) && unitScale.color.size > 0) ||
     isContinuousColorScale(unitScale);
   if (hasLegend && unitScale) {
+    // The legend entries should read top→bottom. Under the y-up chart flip that
+    // needs `reverse` (a y-spread lays out bottom→top); in y-down free space the
+    // natural order already reads top→bottom. Pass the effective orientation
+    // (`effYUp`, computed above from the root y space) so the swatch column
+    // reverses only when y-up. See issue #143/#16.
     child = await elaborateLegend(
       child,
-      unitScale as CategoricalScale | ContinuousColorScale
+      unitScale as CategoricalScale | ContinuousColorScale,
+      effYUp
     );
     legendAdded = true;
     if (contexts?.session) child.setRenderSession(contexts.session);
@@ -479,6 +522,7 @@ export async function layout(
   return {
     underlyingSpaceX: niceUnderlyingSpaceX,
     underlyingSpaceY: niceUnderlyingSpaceY,
+    yUp: effYUp,
     posScales,
     child,
     width: finalW,
@@ -506,6 +550,15 @@ export type GoFishRenderOptions = {
   axisFields?: { x?: string; y?: string };
   colorConfig?: ColorConfig;
   padding?: number;
+  /**
+   * y-UP render scope (issue #143/#16): when true the root `toPixel` mirrors y
+   * about the canvas height — the convention charts want (bars grow up, y-axis
+   * increases upward). Default (free space, raw `gofish()`) is y-DOWN: a
+   * top-left origin where a vertical list reads top→bottom. `chart()` threads
+   * this true; a true y-up coordinate transform (the follow-up) will later make
+   * this composable per-subtree instead of root-global.
+   */
+  yUp?: boolean;
 };
 
 /** Extra options for the SVG-export terminals (`toSVG` / `toSVGElement` / `save`). */
@@ -517,6 +570,8 @@ export type GoFishExportOptions = GoFishRenderOptions & {
 type LayoutData = {
   underlyingSpaceX: UnderlyingSpace;
   underlyingSpaceY: UnderlyingSpace;
+  /** Whether the root renders y-UP (continuous y / coord scope). See #143/#16. */
+  yUp: boolean;
   posScales: [
     ((pos: number) => number) | undefined,
     ((pos: number) => number) | undefined,
@@ -587,7 +642,18 @@ export async function runLayout(
     }
 
     return await layout(
-      { w, h, x, y, transform, debug, defs, axes, axisFields },
+      {
+        w,
+        h,
+        x,
+        y,
+        transform,
+        debug,
+        defs,
+        axes,
+        axisFields,
+        yUp: options.yUp,
+      },
       child,
       contexts
     );
@@ -611,6 +677,8 @@ function renderLayout(
       height: data.height,
       svgPadding,
       defs,
+      // The resolved y-up decision (root y space), computed in `layout()`.
+      yUp: data.yUp,
       rightOverhang: data.rightOverhang,
       rightContentOverhang: data.rightContentOverhang,
       topOverhang: data.topOverhang,
@@ -794,6 +862,49 @@ const PADDING = 40;
  * Checks the node itself first, then its immediate children.
  * Returns the coord node's transform.translate values, or null if not found.
  */
+/** True if `node` or any descendant satisfies `pred`. Shared depth-first walk
+ *  behind the y-up triggers below. */
+const subtreeHas = (
+  node: GoFishNode,
+  pred: (n: GoFishNode) => boolean
+): boolean => {
+  if (pred(node)) return true;
+  const kids = node.children as (GoFishNode | unknown)[] | undefined;
+  if (kids)
+    for (const k of kids)
+      if (k instanceof GoFishNode && subtreeHas(k, pred)) return true;
+  return false;
+};
+
+/** True if `node` or any descendant is a `coord` node (polar/clock/wavy). A
+ *  coordinate system currently renders y-up regardless of its y-space kind, so
+ *  the root flips when one is present even nested inside free-space
+ *  `gofish([...])`/`.layer()`. This is the ONE remaining structural y-up trigger:
+ *  cartesian y-up is now decided semantically from the root y space
+ *  (`isCONTINUOUS`), but the right convention for polar/coord is still open, so
+ *  its legacy behavior is preserved here. See issue #143/#16. */
+export const subtreeHasCoord = (node: GoFishNode): boolean =>
+  subtreeHas(node, (n) => n.type === "coord");
+
+/** True if `node` or ANY descendant has a CONTINUOUS y underlying space — i.e.
+ *  somewhere in the tree y is a real position/magnitude scale (a value axis, a
+ *  datum-positioned mark, a swarm's distribution), not an ordinal/undefined
+ *  category band. This is the y-up trigger (issue #143/#16): the rule is "a
+ *  cartesian scope with a continuous y position is inverted", so the presence of
+ *  ANY such scope flips the (currently global) root frame. Checking the whole
+ *  subtree — not just the root y — is what keeps a faceted scatter or a violin
+ *  swarm upright: their root y is the ordinal facet/category axis, but the
+ *  scatter/distribution NESTED inside is continuous, and that inner scope is what
+ *  wants y-up. An all-ordinal chart (heatmap, horizontal bar, strip plot) has no
+ *  continuous y anywhere and stays SVG-native y-down (reads top→bottom). A true
+ *  per-scope coordinate transform (the follow-up) will localize this so a mixed
+ *  composition can flip only the continuous scopes; today it is one global flip. */
+export const subtreeHasContinuousY = (node: GoFishNode): boolean =>
+  subtreeHas(node, (n) => {
+    const sy = n._underlyingSpace?.[1];
+    return sy !== undefined && isCONTINUOUS(sy);
+  });
+
 export const render = (
   {
     width,
@@ -806,6 +917,7 @@ export const render = (
     leftOverhang = 0,
     bottomOverhang = 0,
     svgPadding,
+    yUp = false,
   }: {
     width: number;
     height: number;
@@ -817,6 +929,7 @@ export const render = (
     leftOverhang?: number;
     bottomOverhang?: number;
     svgPadding?: number;
+    yUp?: boolean;
   },
   child: GoFishNode
 ): JSX.Element => {
@@ -858,13 +971,18 @@ export const render = (
   // <g> translate, so it needn't be pixel-snapped — a fractional width is
   // harmless (legend overhangs are fractional text widths).
   // Two-pass render: lower the baked scenegraph into the display-list IR, then
-  // paint each item. Items are final y-down absolute pixels (the `toPixel` fold
-  // carries the gutter offset + the y-flip), so there is no outer flip `<g>` and
-  // no per-shape transform.
-  const toPixel: ToPixel = ([gx, gy]) => [
-    gx + leftReserve,
-    height + topReserve - gy,
-  ];
+  // paint each item. Items are final absolute pixels. The default frame is
+  // SVG-native y-DOWN (top-left origin): a vertical list reads top→bottom and
+  // `toPixel` only offsets by the gutter reserves. A `chart()` renders y-UP
+  // (`yUp` threaded from the builder): the root mirrors y about the canvas
+  // height — bars grow up, the y-axis increases upward — reproducing the old
+  // global flip. See issue #143/#16. (A true y-up coordinate transform — the
+  // follow-up — will make this composable per-subtree instead of root-global.)
+  // `yUp` is the resolved decision threaded from `layout()` (`LayoutData.yUp`,
+  // computed from the root y space), not a raw option — see `subtreeHasCoord`.
+  const toPixel: ToPixel = yUp
+    ? ([gx, gy]) => [gx + leftReserve, height + topReserve - gy]
+    : ([gx, gy]) => [gx + leftReserve, gy + topReserve];
   child.getRenderSession().toPixel = toPixel;
   const paintBaked = () => lowerToDisplayList(child).map(paintSVG);
   return (

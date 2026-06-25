@@ -28,7 +28,7 @@ export const Simplified: StoryObj = {
         fill: neutral,
       }),
       stackY(
-        { reverse: true, alignment: "middle" },
+        { alignment: "middle" },
         _(titanic)
           .groupBy("class")
           .map((items, cls) =>
@@ -66,7 +66,7 @@ export const Default: StoryObj = {
         fill: neutral,
       }),
       stackY(
-        { reverse: true, alignment: "middle" },
+        { alignment: "middle" },
         _(titanic)
           .groupBy("class")
           .map((items, cls) =>
@@ -78,7 +78,7 @@ export const Default: StoryObj = {
               [
                 rect({ w: 40, fill: classColor[cls] }),
                 stackY(
-                  { reverse: true, alignment: "middle" },
+                  { alignment: "middle" },
                   _(items)
                     .groupBy("sex")
                     .map((items, sex) =>
@@ -91,7 +91,7 @@ export const Default: StoryObj = {
                         stackY(
                           {
                             w: 40,
-                            reverse: true,
+
                             alignment: "middle",
                           },
                           _(items)

@@ -12,7 +12,7 @@ export const heapObject = createMark(
   ({ objectType, objectValues }: HeapObjectProps) => {
     const elmTuplesTag = createName("elmTuples");
     return Spread(
-      { dir: "y", alignment: "start", spacing: 10, reverse: true },
+      { dir: "y", alignment: "start", spacing: 10 },
       [
         text({
           fontFamily,

@@ -27,10 +27,12 @@ def story_default():
                 for survived, items in group_by(sex_items, "survived").items()
             ],
             dir="y",
-            reverse=True,
             w=(sum_by(sex_items, "count") / sum_by(class_items, "count")) * 100,
             alignment="middle",
             sharedScale=True,
+            # y-down: reverse so the colored (survived) part stacks ABOVE the
+            # gray (did-not-survive) part.
+            reverse=True,
         )
 
     def _class_row(cls, items):
@@ -50,9 +52,11 @@ def story_default():
         spread(
             [_class_row(cls, items) for cls, items in group_by(TITANIC, "class").items()],
             dir="y",
-            reverse=True,
+            # y-down free space: reverse so the first class (First) reads at the
+            # top and Crew at the bottom.
             spacing=4,
             alignment="start",
+            reverse=True,
         ),
         {"axes": True},
     )

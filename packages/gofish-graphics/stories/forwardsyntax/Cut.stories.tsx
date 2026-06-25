@@ -91,7 +91,11 @@ export const ImageCutWithLabels: StoryObj<Args> = {
     type Datum = { category: string; amount: number };
 
     layer<Datum>([
-      chart(bottleData)
+      // The cut ties each slice's image band to data order (slice i = band i,
+      // top→bottom). To land Grape juice (the bulk) at the BOTTOM showing the
+      // bottle BODY, it must be the LAST data row (bottom band) AND positioned
+      // last — so reverse the data and keep `reverse: true` on the spread.
+      chart([...bottleData].reverse())
         .flow(spread({ dir: "y", spacing: 20, reverse: true }))
         .mark(
           image({ href: bottlePng, w: 193, h: 600 })
@@ -408,9 +412,10 @@ export const CroissantStack: StoryObj<Args> = {
 
     layer([bands, axis])
       .constrain(({ bands, axis }: any) => [
-        // Axis row centered under the bands (both are W wide).
+        // Axis row centered under the bands (both are W wide). y-down free
+        // space: bands-first renders on top, axis below (issue #143/#16).
         Constraint.align({ x: "middle" }, [bands, axis]),
-        Constraint.distribute({ dir: "y", spacing: 12 }, [axis, bands]),
+        Constraint.distribute({ dir: "y", spacing: 12 }, [bands, axis]),
       ])
       .render(container, { axes: false });
 

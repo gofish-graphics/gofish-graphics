@@ -40,7 +40,7 @@ export const Default: StoryObj<Args> = {
               .groupBy("sex")
               .map((sex) =>
                 spreadY(
-                  { spacing: 0.5, alignment: "end" },
+                  { spacing: 0.5, alignment: "start" },
                   _(sex) // Was missing this lodash chain before .reverse()
                     .reverse()
                     .flatMap((d) => Array(d.count).fill(d))
@@ -52,7 +52,7 @@ export const Default: StoryObj<Args> = {
                     .reverse()
                     .map((d) =>
                       spreadX(
-                        { spacing: 0.5, alignment: "end" },
+                        { spacing: 0.5, alignment: "start" },
                         d.map((d) =>
                           ellipse({
                             w: 4,

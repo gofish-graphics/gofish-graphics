@@ -61,6 +61,22 @@ rather than the visible data extent. The standoff also keeps marks exactly on
 the domain floor (for example, a histogram bin at `y = 0`) from straddling the
 axis line.
 
+### Which side the axis seats on
+
+By default that gutter is the **near/start** edge (the smaller cross-coordinate),
+which renders at the bottom in a y-up chart and the top in y-down free space. The
+public `axes: { x: { side: "start" | "end" } }` option (issue #143/#16,
+frame-relative) flips an axis to the far/end edge instead — so a category x-axis
+can sit at the bottom of an upward-filling y-down chart. The per-dim
+`side` is threaded `elaborateAxes → elaborationsFor → elaborate{Continuous,
+Difference,Ordinal}Axis`, and each seating decision reads it: `gutterConstraints`
+flips the `innerAlign` edge and the `distribute`/standoff order, `tickMark` swaps
+the label/tick order so the tick still faces the content, the ordinal label row
+flips its `distribute([label, content])` pair, and the axis **titles** follow
+their axis to the same edge (`elaborateAxisTitles` takes the same `sides`).
+Default `"start"` reproduces the original seating exactly (continuous charts stay
+byte-identical).
+
 The wrapper inherits the wrapped node's `key` and `_name`, so faceting and
 external refs keep resolving to it. After the rewrite, the whole tree's underlying
 space is recomputed (the cache is cleared) and re-niced; then normal layout runs.

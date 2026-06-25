@@ -40,7 +40,7 @@ def story_default():
                 stack(
                     [
                         rect(
-                            y=x / 40, w=y * 100000, h=0, fill=datum(species)
+                            y=-x / 40, w=y * 100000, h=0, fill=datum(species)
                         ).name(name)
                         for (x, y), name in zip(points, names)
                     ],

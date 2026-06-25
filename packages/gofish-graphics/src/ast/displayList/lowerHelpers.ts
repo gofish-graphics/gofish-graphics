@@ -38,9 +38,28 @@ export const pathToPixelSVG = (path: Path, toPixel: ToPixel): string =>
     )
   );
 
-/** Build a `RectItem` from a GoFish y-up box (min/max per axis). The y-up top
- *  edge (`gyMax`) maps to the smaller SVG y, so the top-left corner is
- *  `toPixel([gxMin, gyMax])`. */
+/** Map the two diagonal corners of an axis-aligned GoFish box through `toPixel`
+ *  and return the flip-AGNOSTIC SVG rect: top-left = component-wise min, w/h =
+ *  abs of the mapped span. Correct under any axis-aligned affine `toPixel` —
+ *  y-down free space (top-left = `toPixel(c0)`) or the `yUp` chart scope (the
+ *  flip makes `toPixel(c1)` the top-left) — so rect / image / compositor lower
+ *  bodies share one box mapping (issue #143/#16). */
+export const pixelBox = (
+  c0: Point,
+  c1: Point,
+  toPixel: ToPixel
+): { x: number; y: number; w: number; h: number } => {
+  const [ax, ay] = toPixel(c0);
+  const [bx, by] = toPixel(c1);
+  return {
+    x: Math.min(ax, bx),
+    y: Math.min(ay, by),
+    w: Math.abs(bx - ax),
+    h: Math.abs(by - ay),
+  };
+};
+
+/** Build a `RectItem` from a GoFish box (min/max per axis) — see {@link pixelBox}. */
 export const rectItemFromBox = (
   gxMin: number,
   gxMax: number,
@@ -48,17 +67,18 @@ export const rectItemFromBox = (
   gyMax: number,
   toPixel: ToPixel,
   extra: Partial<DisplayList.RectItem> = {}
-): DisplayList.RectItem => {
-  const [x, y] = toPixel([gxMin, gyMax]);
-  return {
-    kind: "rect",
-    x,
-    y,
-    w: gxMax - gxMin,
-    h: gyMax - gyMin,
-    ...extra,
-  };
-};
+): DisplayList.RectItem => ({
+  kind: "rect",
+  ...pixelBox([gxMin, gyMin], [gxMax, gyMax], toPixel),
+  ...extra,
+});
+
+/** True when `toPixel` mirrors the y axis (pixel-y decreases as GoFish-y
+ *  increases) — i.e. an active `yUp` chart scope. Lets orientation-dependent
+ *  shapes (text rotation) pick the right sign by reading the flip out of
+ *  `toPixel` rather than carrying a separate flag (issue #143/#16). */
+export const toPixelFlipsY = (toPixel: ToPixel): boolean =>
+  toPixel([0, 1])[1] < toPixel([0, 0])[1];
 
 /** Assemble a `Style` from resolved presentation values, dropping undefined
  *  keys (and a zero/undefined stroke-width, which the legacy render omitted). */

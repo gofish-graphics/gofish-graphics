@@ -4,6 +4,7 @@ import { luv } from "culori";
 import type { DisplayList } from "gofish-ir";
 import type { GoFishNode, ToPixel } from "../_node";
 import { displayTranslate, type Transform } from "../dims";
+import { toPixelFlipsY } from "../displayList/lowerHelpers";
 import { getValue, type MaybeValue } from "../data";
 import { resolveColorChannel } from "../../color";
 import {
@@ -140,10 +141,11 @@ function computeLabel(
 
 /**
  * Lower a node's label to a display-list `TextItem` (role `overlay`). Mirrors
- * {@link renderLabelJSX}: the anchor is mapped to a final pixel via `toPixel`,
- * and the label's `rotate(-rotate) scale(1,-1)` under the root flip becomes a
- * screen-space `rotate(+rotate)` about the pixel anchor (the extra flip negates
- * the angle; see the rendering essay).
+ * {@link renderLabelJSX}: the anchor is mapped to a final pixel via `toPixel`.
+ * Rotation sign is flip-AGNOSTIC: in a `yUp` chart scope `toPixel` mirrors y,
+ * which negates the authored `rotate(-rotate)` into a screen `+rotate`; in
+ * y-down free space there is no mirror, so it stays `-rotate`. Read out of
+ * `toPixel` via `toPixelFlipsY` (issue #143/#16).
  */
 export function lowerLabelItems(
   node: GoFishNode,
@@ -166,6 +168,6 @@ export function lowerLabelItems(
     role: "overlay",
     style: { fill: l.labelColor },
   };
-  if (l.rotate) item.rotate = l.rotate;
+  if (l.rotate) item.rotate = toPixelFlipsY(toPixel) ? l.rotate : -l.rotate;
   return [item];
 }

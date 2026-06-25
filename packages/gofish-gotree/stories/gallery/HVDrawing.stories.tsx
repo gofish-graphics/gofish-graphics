@@ -27,7 +27,7 @@ const H = combine({
 // V: parent above subtree, children in a column (spread y, centered x).
 const V = combine({
   x: { kind: "align", alignment: "middle" },
-  y: { kind: "distribute", spacing: S, order: "reverse" },
+  y: { kind: "distribute", spacing: S },
 });
 
 export const HVDrawing: StoryObj = {

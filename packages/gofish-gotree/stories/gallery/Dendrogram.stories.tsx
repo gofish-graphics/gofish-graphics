@@ -12,7 +12,7 @@ import { initializeContainer } from "../helper";
 // Mapping (include→nest, juxtapose/flatten→distribute, within/align→align):
 //   parentChild = combine({ x: nest  (parent box grows to span its subtree),
 //                           y: distribute (parent stacked above its subtree) })
-//                 order:"reverse" on y puts the root at the TOP (y-up); leaves
+//                  on y puts the root at the TOP (y-up); leaves
 //                 fall to the bottom (mode=bottom-up).
 //   sibling     = combine({ x: distribute (siblings laid out flat side-by-side),
 //                           y: align (siblings share a baseline) })
@@ -98,7 +98,7 @@ export const Dendrogram: StoryObj = {
         }),
         parentChild: combine({
           x: { kind: "nest", pad: 0 },
-          y: { kind: "distribute", spacing: 70, order: "reverse" },
+          y: { kind: "distribute", spacing: 70 },
         }),
         sibling: combine({
           x: { kind: "distribute", spacing: 22 },

@@ -11,13 +11,15 @@
  * **final, absolute, y-down pixels** — the {@link DisplayList.DisplayListDocument}
  * a non-SVG backend (Canvas, WebGPU) or a foreign host (Semiotic) consumes.
  *
- * Coordinate model. GoFish lays out in a y-up frame and flips once at the SVG
- * root (`scale(1,-1) translate(leftReserve, -(height+topReserve))`). Composing
- * that root flip with each mark's local flip, a GoFish-space point `(gx, gy)`
- * lands at the SVG pixel `(gx + leftReserve, (height + topReserve) - gy)`. The
- * emitter bakes that mapping (`toPixel`) into every coordinate, so the display
- * list needs no further transform — the reference SVG backend
- * (`DisplayList.displayListToSVG`) emits it verbatim.
+ * Coordinate model. The default frame is SVG-native y-DOWN (top-left origin): a
+ * GoFish-space point `(gx, gy)` lands at `(gx + leftReserve, gy + topReserve)` —
+ * no flip, so a vertical list reads top→bottom. A `chart()` renders y-UP
+ * (`options.yUp`, threaded from the builder): the root mirrors y about the
+ * canvas height, `(gx + leftReserve, height + topReserve - gy)` — bars grow up,
+ * the y-axis increases upward — reproducing the legacy global flip (issue
+ * #143/#16). The emitter bakes the pixel mapping (`toPixel`) into every
+ * coordinate, so the display list needs no further transform — the reference SVG
+ * backend (`DisplayList.displayListToSVG`) emits it verbatim.
  *
  * Each primitive owns its lowering (`lower` on the factory → `INTERNAL_lower`);
  * this module only drives layout, computes the viewport + `toPixel`, and walks
@@ -61,12 +63,17 @@ export async function toDisplayList(
     h: topReserve + data.height + bottomReserve,
   };
 
-  // GoFish y-up → SVG y-down absolute pixels. This single map folds in both the
-  // per-shape local `scale(1,-1)` and the root flip the legacy render used.
-  const toPixel: ToPixel = ([gx, gy]) => [
-    gx + leftReserve,
-    data.height + topReserve - gy,
-  ];
+  // Default frame is SVG-native y-DOWN (top-left origin): a vertical list reads
+  // top→bottom and this map only offsets by the gutter reserves. A CONTINUOUS-y
+  // root (a chart's value axis, box-and-whisker, hand-drawn axes) or a `coord`
+  // scope renders y-UP: mirror y about the canvas height — bars grow up, the
+  // y-axis increases upward — reproducing the old global flip. That decision is
+  // made in `layout()` from the root y space and threaded here as `data.yUp`.
+  // See issue #143/#16.
+  const effYUp = data.yUp;
+  const toPixel: ToPixel = effYUp
+    ? ([gx, gy]) => [gx + leftReserve, data.height + topReserve - gy]
+    : ([gx, gy]) => [gx + leftReserve, gy + topReserve];
 
   // Thread `toPixel` to every `lower` body (and the boundary operators that call
   // `flattenLayout` internally) via the shared render session.

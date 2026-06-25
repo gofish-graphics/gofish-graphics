@@ -21,13 +21,13 @@ chart(data, **options) -> ChartBuilder
 
 ## Parameters
 
-| Parameter     | Type                        | Description                                                                                                        |
-| ------------- | --------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| `data`        | `list[dict]` \| `DataFrame` | The dataset to visualize, or [`selectAll()` / `ref()`](#cross-chart-references) for a layer reference              |
-| `axes`        | keyword                     | Auto-generate axes, labels, and legends. See [Axes](#axes) below.                                                  |
-| `coord`       | keyword                     | Coordinate transform, e.g. `coord=clock()`                                                                         |
-| `color`       | keyword                     | Color scale applied to all marks — `palette(...)` or `gradient(...)`                                               |
-| `padding`     | keyword                     | Extra SVG padding (px) — useful for polar charts and overflowing labels                                            |
+| Parameter | Type                        | Description                                                                                           |
+| --------- | --------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `data`    | `list[dict]` \| `DataFrame` | The dataset to visualize, or [`selectAll()` / `ref()`](#cross-chart-references) for a layer reference |
+| `axes`    | keyword                     | Auto-generate axes, labels, and legends. See [Axes](#axes) below.                                     |
+| `coord`   | keyword                     | Coordinate transform, e.g. `coord=clock()`                                                            |
+| `color`   | keyword                     | Color scale applied to all marks — `palette(...)` or `gradient(...)`                                  |
+| `padding` | keyword                     | Extra SVG padding (px) — useful for polar charts and overflowing labels                               |
 
 Chart-level options are passed as keyword arguments:
 
@@ -56,7 +56,14 @@ chart(data, axes=False)                       # no axes
 chart(data, axes={"x": True, "y": False})     # x only
 chart(data, axes={"x": {"title": "Year"}, "y": True})   # custom x title
 chart(data, axes={"x": {"title": False}, "y": True})    # suppress inferred x title
+chart(data, axes={"x": {"side": "end"}})                # x-axis on the far edge
 ```
+
+Each per-axis dict also accepts `"side": "start" | "end"` (default `"start"`).
+The side is **frame-relative**: `"start"` is the near/origin edge (bottom in a
+y-up chart, top in y-down free space), `"end"` the far edge — e.g.
+`{"x": {"side": "end"}}` puts a category x-axis at the bottom of an
+upward-filling unit/waffle chart. Currently applies to ordinal (category) axes.
 
 For polar charts, combine with `coord` (and `padding` for label room):
 

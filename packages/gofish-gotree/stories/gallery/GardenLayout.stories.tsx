@@ -43,7 +43,7 @@ export const GardenLayout: StoryObj = {
         link: { interpolation: "linear", stroke: "#90a4ae", strokeWidth: 1.5 },
         parentChild: combine({
           x: { kind: "align", alignment: "middle" },
-          y: { kind: "distribute", spacing: 48, order: "reverse" },
+          y: { kind: "distribute", spacing: 48 },
         }),
         sibling: combine({
           x: { kind: "distribute", spacing: 24 },

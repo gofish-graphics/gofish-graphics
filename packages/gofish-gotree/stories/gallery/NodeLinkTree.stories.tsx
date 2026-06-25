@@ -11,7 +11,7 @@ import { initializeContainer } from "../helper";
 // Mapping (include→nest, juxtapose/flatten→distribute, within/align→align):
 //   parentChild = combine({ x: align middle (parent centered over subtree),
 //                           y: distribute (parent stacked above its subtree) })
-//                 order:"reverse" on y puts the root at the TOP (y-up).
+//                  on y puts the root at the TOP (y-up).
 //   sibling     = combine({ x: distribute (siblings laid out flat side-by-side),
 //                           y: align start (siblings share a baseline/row) })
 const meta: Meta = {
@@ -71,13 +71,15 @@ export const NodeLinkTree: StoryObj = {
         link: { interpolation: "linear", stroke: "#555", strokeWidth: 1.5 },
         parentChild: combine({
           x: { kind: "align", alignment: "middle" },
-          y: { kind: "distribute", spacing: 90, order: "reverse" },
+          y: { kind: "distribute", spacing: 90 },
         }),
         sibling: combine({
           x: { kind: "distribute", spacing: 24 },
-          // "top" alignment: in y-up the top of the screen is high y → "end",
-          // so every depth-1 node (even childless ones) sits on one row.
-          y: { kind: "align", alignment: "end" },
+          // Align siblings to the TOP of their bands so every depth-1 node (even
+          // childless ones) sits on one row. In y-down free space the top is the
+          // near edge → "start"; otherwise a childless node bottom-aligns down to
+          // the leaf row. See issue #143/#16.
+          y: { kind: "align", alignment: "start" },
         }),
       },
       nodeLinkData

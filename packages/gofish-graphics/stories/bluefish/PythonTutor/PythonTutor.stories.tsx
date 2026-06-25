@@ -103,7 +103,9 @@ export const PythonTutor: StoryObj = {
     );
 
     Layer([
-      Spread({ dir: "x", alignment: "end", spacing: 100 }, [
+      // y-down free space: cross-axis "start" tops-aligns the global frame and
+      // the heap (issue #143/#16).
+      Spread({ dir: "x", alignment: "start", spacing: 100 }, [
         globalFrame({ stack: data.stack }).name(globalFrameName),
         heap({
           heap: data.heap,

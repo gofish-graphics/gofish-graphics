@@ -3,6 +3,7 @@ import { GoFishAST } from "../_ast";
 import { GoFishNode } from "../_node";
 import type { Placeable, ToPixel } from "../_node";
 import { Size, displayTranslate } from "../dims";
+import { pixelBox } from "../displayList/lowerHelpers";
 import { UnderlyingSpace } from "../underlyingSpace";
 import { createNodeOperator } from "../withGoFish";
 import { unionChildSpaces } from "./alignment";
@@ -114,10 +115,14 @@ const createCompositeRelation = (type: string, operator: CompositeOperator) =>
             const minY = intrinsicDims?.[1]?.min ?? 0;
             const width = intrinsicDims?.[0]?.size ?? 0;
             const height = intrinsicDims?.[1]?.size ?? 0;
-            // Pixel bbox: the y-up box [tx+minX, …] × [ty+minY, …] mapped
-            // through the outer toPixel. The y-up top edge (gyMax) maps to the
-            // smaller SVG y, so the top-left corner is toPixel([xMin, yMax]).
-            const [bx, by] = outer([tx + minX, ty + minY + height]);
+            // Pixel bbox top-left, flip-AGNOSTIC (see `pixelBox`): under the
+            // y-up flip the top edge is `gyMax`, in y-down free space it is
+            // `gyMin` — the component-wise min picks the right one (issue #143/#16).
+            const { x: bx, y: by } = pixelBox(
+              [tx + minX, ty + minY],
+              [tx + minX + width, ty + minY + height],
+              outer
+            );
 
             // The two layers are lowered RELATIVE to the bbox pixel origin, not
             // at absolute pixels. The SVG backend places each layer in a
@@ -298,7 +303,12 @@ export const mask = createNodeOperator(
           const minY = intrinsicDims?.[1]?.min ?? 0;
           const width = intrinsicDims?.[0]?.size ?? 0;
           const height = intrinsicDims?.[1]?.size ?? 0;
-          const [bx, by] = outer([tx + minX, ty + minY + height]);
+          // Flip-agnostic bbox top-left — see `pixelBox` / the compositor (#143/#16).
+          const { x: bx, y: by } = pixelBox(
+            [tx + minX, ty + minY],
+            [tx + minX + width, ty + minY + height],
+            outer
+          );
 
           return [
             {

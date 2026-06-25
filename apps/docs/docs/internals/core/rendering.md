@@ -45,30 +45,68 @@ paints — is the whole architecture of this pass.
 
 ## The coordinate fold: `toPixel`
 
-GoFish lays out in a **y-up** frame (larger _y_ is higher on the page), the
-mathematical convention. SVG is **y-down**. The old renderer reconciled the two with
-two stacked SVG transforms: a per-shape `scale(1,-1)` and a root flip
-`scale(1,-1) translate(leftReserve, -(height + topReserve))`.
+Layout produces a tree of boxes; the lower pass maps each box's coordinates to final
+SVG pixels through a single affine map, `toPixel`, set once per emit on the render
+session (`RenderSession.toPixel` in `_node.ts`). Two conventions share this one map:
 
-The lower pass folds both of those into a single affine map, `toPixel`, set once per
-emit on the render session (`RenderSession.toPixel` in `_node.ts`):
+- **Free space is y-DOWN** (SVG-native, top-left origin). A vertical list written
+  `[A, B]` reads top→bottom, an explicit `y:` grows downward — what you'd expect from
+  SVG, Bluefish, or Typst. This is the **default**:
 
-```ts
-const toPixel: ToPixel = ([gx, gy]) => [
-  gx + leftReserve,
-  height + topReserve - gy,
-];
-```
+  ```ts
+  const toPixel: ToPixel = ([gx, gy]) => [gx + leftReserve, gy + topReserve];
+  ```
 
-A GoFish-space point `(gx, gy)` lands at the SVG pixel
-`(gx + leftReserve, (height + topReserve) − gy)`. `leftReserve` and `topReserve` are
-the measured gutter reserves layout computed for chrome seated past the canvas (see
-[the passes](/internals/layout/passes) for how the per-side overhangs are reserved).
-Because `toPixel` already carries the flip and the viewport offset, the display list
-is in **final absolute pixels** — the SVG backend emits each item verbatim, with **no
-outer flip `<g>` and no per-shape transform**.
+- **A continuous-_y_ scope (or any `coord` scope) is y-UP** (larger _y_ is higher, the
+  mathematical convention bars and y-axes want). The root mirrors _y_ about the canvas
+  height — reproducing the legacy global flip:
 
-`toPixel` is affine (a translate plus a y-flip), so a straight path stays straight: a
+  ```ts
+  const toPixel: ToPixel = ([gx, gy]) => [
+    gx + leftReserve,
+    height + topReserve - gy,
+  ];
+  ```
+
+Which map is used is decided **semantically**, once, in `layout()`:
+`effYUp = options.yUp || subtreeHasContinuousY(child) || subtreeHasCoord(child)`.
+The rule is "_a cartesian scope whose y is a continuous position scale is inverted_":
+a value axis, a datum-positioned mark, a swarm's distribution. `subtreeHasContinuousY`
+walks the resolved underlying-space tree for **any** node whose y space `isCONTINUOUS`
+— checking the whole subtree, not just the root y, so a faceted scatter or a violin
+(ordinal facet/category axis at the root, continuous scatter/distribution nested
+inside) still flips on the strength of that inner scope. An **all-ordinal** chart
+(heatmap, horizontal bar, strip plot, icicle, mosaic) has no continuous y anywhere and
+stays SVG-native y-down — it reads top→bottom, which is exactly what those want. This
+replaces the older "is it a `chart()`?" structural heuristic: a vertical bar chart
+flips because its value axis is continuous, a horizontal bar chart does not because its
+y is the ordinal category axis. A box-and-whisker built from primitives flips with **no**
+explicit opt-in, because its y is continuous; `options.yUp` remains as an explicit
+override. `leftReserve` / `topReserve` are the measured gutter reserves for chrome
+seated past the canvas (see [the passes](/internals/layout/passes)).
+
+> **Caveat (count-as-magnitude).** A unit visualization that encodes a quantity as a
+> _count of ordinal units_ (a unit column chart: `spread`-ing one dot per row) has no
+> continuous y, so the rule leaves it y-down. Such stories are authored for y-down
+> directly — bottom-aligning their stacks (`alignment: "end"`) so the units grow
+> upward — rather than forced y-up. The principled end-state is to model a unit-count
+> stack as a baseline magnitude (continuous), at which point the rule flips it for free.
+
+> **Historical note.** Before #143, the world was y-up _everywhere_ (one global
+> `scale(1,-1)` at the root, plus a per-shape `scale(1,-1)` to un-mirror content). The
+> y-down default relocated that flip behind the `effYUp` switch above. Shape lowering is
+> now **flip-agnostic** — `rectItemFromBox`/image map both box corners through `toPixel`
+> and take the component-wise min/abs; text & label rotation read the flip out of
+> `toPixel` via `toPixelFlipsY` — so the same shape code is correct under either map. A
+> follow-up will express y-up as a true `cartesian` coordinate transform (making it
+> composable per-subtree instead of root-global — so a _mixed_ composition can flip only
+> its continuous scopes, which the single global flip cannot).
+
+Because `toPixel` already carries the orientation and the viewport offset, the display
+list is in **final absolute pixels** — the SVG backend emits each item verbatim, with
+**no outer flip `<g>` and no per-shape transform**.
+
+`toPixel` is affine (a translate, optionally a y-flip), so a straight path stays straight: a
 shape with a curved path just maps each of its control points through `toPixel` and
 re-serializes (`pathToPixelSVG` in `lowerHelpers.ts`), with no resampling.
 
@@ -185,11 +223,15 @@ filter graphs and assigning their deterministic def ids.
 ## How the live `render()` wires it together
 
 The orchestrator `render()` in `gofish.tsx` is now small. It computes the gutter
-reserves, builds `toPixel`, stores it on the render session, and paints the lowered
-list into an `<svg>`:
+reserves, picks the y-up or y-down `toPixel` (per `effYUp`, above), stores it on the
+render session, and paints the lowered list into an `<svg>`. The `yUp` boolean is the
+decision already made in `layout()` (continuous-y / coord ⇒ y-up; else y-down),
+threaded in via `LayoutData.yUp` — `render()` does not re-derive it:
 
 ```ts
-const toPixel: ToPixel = ([gx, gy]) => [gx + leftReserve, height + topReserve - gy];
+const toPixel: ToPixel = yUp
+  ? ([gx, gy]) => [gx + leftReserve, height + topReserve - gy]
+  : ([gx, gy]) => [gx + leftReserve, gy + topReserve];
 child.getRenderSession().toPixel = toPixel;
 const paintBaked = () => lowerToDisplayList(child).map(paintSVG);
 return (

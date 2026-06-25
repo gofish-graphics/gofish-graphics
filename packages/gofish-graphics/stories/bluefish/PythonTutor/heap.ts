@@ -10,7 +10,7 @@ export interface HeapProps {
 export const heap = createMark(
   ({ heap: heapObjects, heapArrangement }: HeapProps) =>
     Spread(
-      { dir: "y", alignment: "start", spacing: 75, reverse: true },
+      { dir: "y", alignment: "start", spacing: 75 },
       heapArrangement.map((row) =>
         Spread(
           { dir: "x", alignment: "end", spacing: 75 },

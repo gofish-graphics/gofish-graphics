@@ -14,7 +14,7 @@ import { initializeContainer } from "../helper";
 //   sibling     = (distribute x, align top y)      → siblings spread across,
 //                 their tops aligned on a level.
 // This is a node-link tree (same layout family as NodeLinkTree). distribute on
-// y uses order:"reverse" so the parent lands at high y = top of screen (y-up),
+// y uses  so the parent lands at high y = top of screen (y-up),
 // matching the reference (root at top, leaves at bottom).
 //
 // TODO: needs orthogonal links implemented — the dsl uses orthogonal (elbow)
@@ -40,7 +40,7 @@ export const ReadableTreeLayout: StoryObj = {
         link: { interpolation: "linear", stroke: "#555555", strokeWidth: 2 },
         parentChild: combine({
           x: { kind: "align", alignment: "middle" },
-          y: { kind: "distribute", spacing: 60, order: "reverse" },
+          y: { kind: "distribute", spacing: 60 },
         }),
         sibling: combine({
           x: { kind: "distribute", spacing: 18 },

@@ -46,7 +46,6 @@ def story_default():
             for station, station_rows in by_station.items()
         ],
         dir="y",
-        reverse=True,
         spacing=8,
         alignment="start",
     )

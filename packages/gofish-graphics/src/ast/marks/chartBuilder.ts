@@ -508,6 +508,13 @@ export class ChartBuilder<TInput, TOutput = TInput> {
       result = await Layer({}, [node, connectFrame]);
     }
 
+    // y-up is no longer a chart-vs-not flag: the root render decides it
+    // semantically from the resolved y space (a CONTINUOUS value axis flips,
+    // an ORDINAL category axis does not), so a vertical bar chart flips while a
+    // horizontal one reads top-down — and a chart composed inside a
+    // `gofish([...])`/`.layer()` gets the same treatment for free. See
+    // `subtreeHasCoord`/`isCONTINUOUS` in gofish.tsx and issue #143/#16.
+
     if (this.nodeZOrder !== undefined) {
       result.zOrder(this.nodeZOrder);
     }
@@ -591,6 +598,9 @@ export class ChartBuilder<TInput, TOutput = TInput> {
     return {
       node,
       options: {
+        // y-up is decided by the root render from the resolved y space (a
+        // CONTINUOUS value axis flips, an ORDINAL category axis reads
+        // top-down) — not forced here. See issue #143/#16.
         ...options,
         axes: this.options?.axes,
         colorConfig: this.options?.color,
@@ -745,6 +755,8 @@ export class LayerBuilder {
     return {
       node,
       options: {
+        // y-up is decided by the root render from the resolved y space — see
+        // the sibling resolveForRender and issue #143/#16.
         ...options,
         axes: (options as any).axes ?? meta.axes,
         colorConfig: meta.colorConfig,
