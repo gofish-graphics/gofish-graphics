@@ -285,6 +285,7 @@ export async function layout(
       yTitle,
       anchors: titleAnchors,
       plotNode,
+      yUp: effYUp,
     });
     if (contexts?.session) child.setRenderSession(contexts.session);
     // The title pass introduces `ref()` stand-ins (to the axis line / plot) that

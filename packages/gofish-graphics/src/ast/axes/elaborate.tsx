@@ -603,14 +603,18 @@ export function xAxisTitle(text: string): GoFishNode {
   );
 }
 
-/** The y-axis title: `rotate: 90` (the Text rotate option) makes it read
- *  bottom-to-top in the left gutter. Customization seam, like `xAxisTitle`. */
-export function yAxisTitle(text: string): GoFishNode {
+/** The y-axis title, reading bottom-to-top (facing inward) in the left gutter.
+ *  Text lowering applies `flips ? -rotate : rotate`, so the SAME screen rotation
+ *  (-90°) needs the stored `rotate` to follow the frame: `90` under the y-up flip,
+ *  `-90` in y-down (no flip). Otherwise a y-down chart (heatmap) reads its title
+ *  top-to-bottom, facing outward. See issue #143/#16. Customization seam, like
+ *  `xAxisTitle`. */
+export function yAxisTitle(text: string, yUp = true): GoFishNode {
   return Text({
     text,
     fontSize: TITLE_FONT_SIZE,
     fill: TITLE_COLOR,
-    rotate: 90,
+    rotate: yUp ? 90 : -90,
   }).name(Y_TITLE_NAME);
 }
 
@@ -644,9 +648,10 @@ export async function elaborateAxisTitles(
     yTitle?: string;
     anchors: [GoFishNode | undefined, GoFishNode | undefined];
     plotNode: GoFishNode;
+    yUp?: boolean;
   }
 ): Promise<GoFishNode> {
-  const { xTitle, yTitle, anchors, plotNode } = opts;
+  const { xTitle, yTitle, anchors, plotNode, yUp = true } = opts;
 
   return wrapPreservingIdentity(node, async (content) => {
     content.name(TITLE_CONTENT_NAME);
@@ -665,7 +670,7 @@ export async function elaborateAxisTitles(
       refs.push(
         (ref(anchorNode) as any).name(Y_TITLE_ANCHOR_NAME) as GoFishNode
       );
-      titles.push(yAxisTitle(yTitle));
+      titles.push(yAxisTitle(yTitle, yUp));
     }
 
     const root = (await (layer as any)([
