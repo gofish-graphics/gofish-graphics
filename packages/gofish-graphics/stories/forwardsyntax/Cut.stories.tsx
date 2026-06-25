@@ -91,10 +91,12 @@ export const ImageCutWithLabels: StoryObj<Args> = {
     type Datum = { category: string; amount: number };
 
     layer<Datum>([
-      chart(bottleData)
-        // y-down free space: no reverse, so the first ingredient (Grape juice,
-        // the bulk) fills the bottle body at the bottom and Marketing sits up top.
-        .flow(spread({ dir: "y", spacing: 20 }))
+      // The cut ties each slice's image band to data order (slice i = band i,
+      // top→bottom). To land Grape juice (the bulk) at the BOTTOM showing the
+      // bottle BODY, it must be the LAST data row (bottom band) AND positioned
+      // last — so reverse the data and keep `reverse: true` on the spread.
+      chart([...bottleData].reverse())
+        .flow(spread({ dir: "y", spacing: 20, reverse: true }))
         .mark(
           image({ href: bottlePng, w: 193, h: 600 })
             .cut({ dir: "y", size: "amount", inset: 4 })

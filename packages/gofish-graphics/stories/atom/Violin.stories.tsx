@@ -67,8 +67,9 @@ export const Default: StoryObj<Args> = {
 
     chart(agedPassengers, {
       color: palette(["#2b8cbe", "#ff8408"]),
-      // x = pclass (the violins); y is the dot-row index, so suppress it.
-      axes: { x: true, y: false },
+      // x = pclass (the violins) at the bottom (y-end); y is the dot-row index,
+      // so suppress it.
+      axes: { x: { side: "end" }, y: false },
     })
       .flow(spread({ by: "pclass", dir: "x", spacing: 48, alignment: "middle" }))
       .mark((panel) =>

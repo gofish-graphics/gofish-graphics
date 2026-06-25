@@ -400,7 +400,11 @@ export const NormalizedStackedBarWithLabels: StoryObj<Args> = {
 
     chart(
       context.loaded.population.filter((row: any) => row.year === 2000) as any[],
-      { color: palette({ Female: "#675193", Male: "#ca8861" }), axes: true }
+      {
+        color: palette({ Female: "#675193", Male: "#ca8861" }),
+        // Keep the continuous proportion x-axis at the bottom (y-end).
+        axes: { x: { side: "end" }, y: true },
+      }
     )
       .flow(
         // Decode the sex field to a readable string

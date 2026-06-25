@@ -33,10 +33,11 @@ export const Default: StoryObj<Args> = {
         cylinders: Math.round(d.Cylinders),
       }));
 
-    chart(cars, { axes: true })
+    chart(cars, { axes: { x: { side: "end" }, y: true } })
       .flow(
-        derive((d) => [...d].sort((a, b) => b.cylinders - a.cylinders)),
-        spread({ by: "cylinders",  dir: "y" }),
+        // Ascending so cylinders read 3 at the top → 8 at the bottom in y-down.
+        derive((d) => [...d].sort((a, b) => a.cylinders - b.cylinders)),
+        spread({ by: "cylinders", dir: "y" }),
         scatter({ x: "horsepower" })
       )
       .mark(

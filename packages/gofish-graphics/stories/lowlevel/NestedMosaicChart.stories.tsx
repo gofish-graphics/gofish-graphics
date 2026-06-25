@@ -42,6 +42,9 @@ export const Default: StoryObj = {
                 w: (_(sItems).sumBy("count") / _(items).sumBy("count")) * 100,
                 alignment: "middle",
                 sharedScale: true,
+                // y-down: reverse so the colored (survived) part stacks ABOVE
+                // the gray (did-not-survive) part.
+                reverse: true,
               },
               For(groupBy(sItems, "survived"), (items, survived) =>
                 rect({

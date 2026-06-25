@@ -216,5 +216,6 @@ def story_normalized_stacked_bar_with_labels():
                 "people", position="center", color="white"
             )
         ),
-        {"w": 350, "h": 400, "axes": True},
+        # Keep the continuous proportion x-axis at the bottom (y-end).
+        {"w": 350, "h": 400, "axes": {"x": {"side": "end"}, "y": True}},
     )
