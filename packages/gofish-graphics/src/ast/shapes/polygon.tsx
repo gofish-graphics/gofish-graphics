@@ -17,13 +17,11 @@ import {
  * system places it via `transform.translate`.
  */
 export const Polygon = ({
-  name,
   fill = "black",
   stroke = fill,
   strokeWidth = 0,
   points,
 }: {
-  name?: string;
   fill?: string;
   stroke?: string;
   strokeWidth?: number;
@@ -45,7 +43,6 @@ export const Polygon = ({
 
   return new GoFishNode(
     {
-      name,
       type: "polygon",
       resolveUnderlyingSpace: (
         _children: Size<UnderlyingSpace>[],

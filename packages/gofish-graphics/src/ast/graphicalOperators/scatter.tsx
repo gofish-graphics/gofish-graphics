@@ -20,7 +20,6 @@ const unwrapLodashArray = function <T>(value: T[] | Collection<T>): T[] {
 };
 
 export type ScatterProps = {
-  name?: string;
   key?: string;
   x?: PositionValue[];
   y?: PositionValue[];
@@ -39,7 +38,6 @@ export const Scatter = createNodeOperator(
     children: GoFishAST[] | Collection<GoFishAST>
   ) => {
     const {
-      name,
       key,
       x,
       y,
@@ -133,7 +131,6 @@ export const Scatter = createNodeOperator(
       if (!hasY) cs.push(Constraint.align({ y: alignment }, refs));
       return cs;
     });
-    if (name !== undefined) node._name = name;
     if (axes !== undefined) {
       const toShow = (opt: AxisOptions | undefined): boolean | undefined =>
         opt === undefined ? undefined : opt === false ? false : true;

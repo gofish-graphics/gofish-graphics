@@ -63,7 +63,6 @@ const DEFAULT_RECT_SIZE = 16;
 /* TODO: what should default embedding behavior be when all values are aesthetic? */
 export const Rect = ({
   key,
-  name,
   fill = color6[0],
   stroke = fill,
   strokeWidth = 0,
@@ -76,7 +75,6 @@ export const Rect = ({
   ...fancyDims
 }: {
   key?: string;
-  name?: string;
   fill?: MaybeValue<string>;
   stroke?: MaybeValue<string>;
   strokeWidth?: number;
@@ -94,12 +92,10 @@ export const Rect = ({
   const dims = elaborateDims(fancyDims);
   const node = new GoFishNode(
     {
-      name,
       key,
       type: "rect",
       args: {
         key,
-        name,
         fill,
         stroke,
         strokeWidth,

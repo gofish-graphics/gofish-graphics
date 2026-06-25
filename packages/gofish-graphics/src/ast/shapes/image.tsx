@@ -223,7 +223,6 @@ const resolveRenderedDimensions = (
 
 export const Image = ({
   key,
-  name,
   href,
   filter,
   opacity,
@@ -231,7 +230,6 @@ export const Image = ({
   ...fancyDims
 }: {
   key?: string;
-  name?: string;
   href: string;
   filter?: string;
   opacity?: number;
@@ -242,12 +240,10 @@ export const Image = ({
 
   const node = new GoFishNode(
     {
-      name,
       key,
       type: "image",
       args: {
         key,
-        name,
         href,
         filter,
         opacity,

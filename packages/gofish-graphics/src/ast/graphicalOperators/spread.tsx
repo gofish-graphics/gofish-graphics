@@ -38,7 +38,6 @@ const unwrapLodashArray = function <T>(value: T[] | Collection<T>): T[] {
 export const Spread = createNodeOperator(
   async (
     {
-      name,
       key,
       dir,
       spacing = 8,
@@ -51,7 +50,6 @@ export const Spread = createNodeOperator(
       __axisFields: axisFieldMeta,
       ...fancyDims
     }: {
-      name?: string;
       key?: string;
       dir: FancyDirection;
       spacing?: number;
@@ -115,7 +113,6 @@ export const Spread = createNodeOperator(
       ];
     });
 
-    if (name !== undefined) node._name = name;
     // `sharedScale` is a scale-scope annotation (claim hoisting, #549): the node
     // solves σ locally and shares it with descendants. The layer honors this in
     // `layout` (it self-solves per axis when `shared`, into a fresh array).

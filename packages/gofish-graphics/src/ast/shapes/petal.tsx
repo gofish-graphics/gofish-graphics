@@ -26,13 +26,11 @@ import { createMark } from "../withGoFish";
 /* Implementation inspired by https://web.archive.org/web/20220808041640/http://bl.ocks.org/herrstucki/6199768 */
 /* TODO: what should default embedding behavior be when all values are aesthetic? */
 export const Petal = ({
-  name,
   fill = "black",
   stroke = fill,
   strokeWidth = 0,
   ...fancyDims
 }: {
-  name?: string;
   fill?: MaybeValue<string>;
   stroke?: MaybeValue<string>;
   strokeWidth?: number;
@@ -41,7 +39,6 @@ export const Petal = ({
   const dims = elaborateDims(fancyDims);
   const node = new GoFishNode(
     {
-      name,
       type: "petal",
       // Expose `dims` so resolveAliases / resolveEmbedding can author it in place
       // (same array the closures below capture). See rect.tsx / _node passes.

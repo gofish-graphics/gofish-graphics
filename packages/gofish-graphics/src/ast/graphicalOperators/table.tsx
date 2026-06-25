@@ -15,14 +15,12 @@ import { childNameKey } from "../constraints/shared";
 export const Table = createNodeOperator(
   async (
     {
-      name,
       key,
       numCols: numColsOpt,
       spacing = 0,
       colKeys,
       rowKeys,
     }: {
-      name?: string;
       key?: string;
       numCols?: number;
       spacing?: number | [number, number];
@@ -69,7 +67,6 @@ export const Table = createNodeOperator(
     node._ordinalKeyMap = keyMap;
 
     if (key !== undefined) node.key = key;
-    if (name !== undefined) node._name = name;
     return node;
   }
 );
