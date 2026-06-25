@@ -862,6 +862,20 @@ const PADDING = 40;
  * Checks the node itself first, then its immediate children.
  * Returns the coord node's transform.translate values, or null if not found.
  */
+/** True if `node` or any descendant satisfies `pred`. Shared depth-first walk
+ *  behind the y-up triggers below. */
+const subtreeHas = (
+  node: GoFishNode,
+  pred: (n: GoFishNode) => boolean
+): boolean => {
+  if (pred(node)) return true;
+  const kids = node.children as (GoFishNode | unknown)[] | undefined;
+  if (kids)
+    for (const k of kids)
+      if (k instanceof GoFishNode && subtreeHas(k, pred)) return true;
+  return false;
+};
+
 /** True if `node` or any descendant is a `coord` node (polar/clock/wavy). A
  *  coordinate system currently renders y-up regardless of its y-space kind, so
  *  the root flips when one is present even nested inside free-space
@@ -869,14 +883,8 @@ const PADDING = 40;
  *  cartesian y-up is now decided semantically from the root y space
  *  (`isCONTINUOUS`), but the right convention for polar/coord is still open, so
  *  its legacy behavior is preserved here. See issue #143/#16. */
-export const subtreeHasCoord = (node: GoFishNode): boolean => {
-  if (node.type === "coord") return true;
-  const kids = node.children as (GoFishNode | unknown)[] | undefined;
-  if (kids)
-    for (const k of kids)
-      if (k instanceof GoFishNode && subtreeHasCoord(k)) return true;
-  return false;
-};
+export const subtreeHasCoord = (node: GoFishNode): boolean =>
+  subtreeHas(node, (n) => n.type === "coord");
 
 /** True if `node` or ANY descendant has a CONTINUOUS y underlying space — i.e.
  *  somewhere in the tree y is a real position/magnitude scale (a value axis, a
@@ -891,15 +899,11 @@ export const subtreeHasCoord = (node: GoFishNode): boolean => {
  *  continuous y anywhere and stays SVG-native y-down (reads top→bottom). A true
  *  per-scope coordinate transform (the follow-up) will localize this so a mixed
  *  composition can flip only the continuous scopes; today it is one global flip. */
-export const subtreeHasContinuousY = (node: GoFishNode): boolean => {
-  const sy = node._underlyingSpace?.[1];
-  if (sy !== undefined && isCONTINUOUS(sy)) return true;
-  const kids = node.children as (GoFishNode | unknown)[] | undefined;
-  if (kids)
-    for (const k of kids)
-      if (k instanceof GoFishNode && subtreeHasContinuousY(k)) return true;
-  return false;
-};
+export const subtreeHasContinuousY = (node: GoFishNode): boolean =>
+  subtreeHas(node, (n) => {
+    const sy = n._underlyingSpace?.[1];
+    return sy !== undefined && isCONTINUOUS(sy);
+  });
 
 export const render = (
   {

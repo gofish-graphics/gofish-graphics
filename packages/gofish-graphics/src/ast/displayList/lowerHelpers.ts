@@ -38,12 +38,28 @@ export const pathToPixelSVG = (path: Path, toPixel: ToPixel): string =>
     )
   );
 
-/** Build a `RectItem` from a GoFish box (min/max per axis). Flip-AGNOSTIC: maps
- *  both diagonal corners through `toPixel` and takes the component-wise min for
- *  the SVG top-left, abs for w/h. Correct under any axis-aligned affine
- *  `toPixel` — y-down free space (top-left = `toPixel([gxMin, gyMin])`) or the
- *  `yUp` chart scope (top-left = `toPixel([gxMin, gyMax])`) — so the same shape
- *  code serves both (issue #143/#16). */
+/** Map the two diagonal corners of an axis-aligned GoFish box through `toPixel`
+ *  and return the flip-AGNOSTIC SVG rect: top-left = component-wise min, w/h =
+ *  abs of the mapped span. Correct under any axis-aligned affine `toPixel` —
+ *  y-down free space (top-left = `toPixel(c0)`) or the `yUp` chart scope (the
+ *  flip makes `toPixel(c1)` the top-left) — so rect / image / compositor lower
+ *  bodies share one box mapping (issue #143/#16). */
+export const pixelBox = (
+  c0: Point,
+  c1: Point,
+  toPixel: ToPixel
+): { x: number; y: number; w: number; h: number } => {
+  const [ax, ay] = toPixel(c0);
+  const [bx, by] = toPixel(c1);
+  return {
+    x: Math.min(ax, bx),
+    y: Math.min(ay, by),
+    w: Math.abs(bx - ax),
+    h: Math.abs(by - ay),
+  };
+};
+
+/** Build a `RectItem` from a GoFish box (min/max per axis) — see {@link pixelBox}. */
 export const rectItemFromBox = (
   gxMin: number,
   gxMax: number,
@@ -51,18 +67,11 @@ export const rectItemFromBox = (
   gyMax: number,
   toPixel: ToPixel,
   extra: Partial<DisplayList.RectItem> = {}
-): DisplayList.RectItem => {
-  const [ax, ay] = toPixel([gxMin, gyMin]);
-  const [bx, by] = toPixel([gxMax, gyMax]);
-  return {
-    kind: "rect",
-    x: Math.min(ax, bx),
-    y: Math.min(ay, by),
-    w: Math.abs(bx - ax),
-    h: Math.abs(by - ay),
-    ...extra,
-  };
-};
+): DisplayList.RectItem => ({
+  kind: "rect",
+  ...pixelBox([gxMin, gyMin], [gxMax, gyMax], toPixel),
+  ...extra,
+});
 
 /** True when `toPixel` mirrors the y axis (pixel-y decreases as GoFish-y
  *  increases) — i.e. an active `yUp` chart scope. Lets orientation-dependent

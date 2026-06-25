@@ -21,7 +21,7 @@ import {
 import { createMark } from "../withGoFish";
 import { attachCut } from "../graphicalOperators/cut";
 import type { DisplayList } from "gofish-ir";
-import { lowerStyle } from "../displayList/lowerHelpers";
+import { lowerStyle, pixelBox } from "../displayList/lowerHelpers";
 
 type ImageDimensions = {
   width: number;
@@ -352,13 +352,16 @@ export const Image = ({
         const width = intrinsicDims?.[0]?.size ?? 0;
         const height = intrinsicDims?.[1]?.size ?? 0;
 
-        const [ax, ay] = toPixel([x, y]);
-        const [bx, by] = toPixel([x + width, y + height]);
+        const { x: px, y: py } = pixelBox(
+          [x, y],
+          [x + width, y + height],
+          toPixel
+        );
         const style = lowerStyle({ opacity, filter });
         const item: DisplayList.ImageItem = {
           kind: "image",
-          x: Math.min(ax, bx),
-          y: Math.min(ay, by),
+          x: px,
+          y: py,
           w: Math.abs(width),
           h: Math.abs(height),
           href,
