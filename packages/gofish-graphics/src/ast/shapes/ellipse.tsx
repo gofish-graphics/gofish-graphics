@@ -30,6 +30,7 @@ import type { DisplayList } from "gofish-ir";
 import {
   lowerStyle,
   pathToPixelSVG,
+  roleFor,
   valueLabelItems,
 } from "../displayList/lowerHelpers";
 /* TODO: what should default embedding behavior be when all values are aesthetic? */
@@ -206,7 +207,7 @@ export const Ellipse = ({
             ry,
             style: elementStyle,
             datum: node.datum,
-            role: "node",
+            role: roleFor(node.datum),
           };
         };
 
@@ -276,7 +277,7 @@ export const Ellipse = ({
               kind: "path",
               d: pathToPixelSVG(transformed, toPixel),
               datum: node.datum,
-              role: "node",
+              role: roleFor(node.datum),
               style: lowerStyle({
                 fill: "none",
                 stroke: resolvedStroke,
@@ -322,7 +323,7 @@ export const Ellipse = ({
             kind: "path",
             d: pathToPixelSVG(transformed, toPixel),
             datum: node.datum,
-            role: "node",
+            role: roleFor(node.datum),
             style: lowerStyle({
               fill: resolvedFill,
               stroke: resolvedStroke,

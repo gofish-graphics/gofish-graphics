@@ -46,6 +46,7 @@ import {
   lowerStyle,
   pathToPixelSVG,
   rectItemFromBox,
+  roleFor,
   valueLabelItems,
 } from "../displayList/lowerHelpers";
 
@@ -330,7 +331,7 @@ export const Rect = ({
           ry,
           style: elementStyle,
           datum: node.datum,
-          role: "node" as const,
+          role: roleFor(node.datum),
         };
 
         // Both dimensions aesthetic — transformed point.
@@ -404,7 +405,7 @@ export const Rect = ({
               kind: "path",
               d: pathToPixelSVG(transformed, toPixel),
               datum: node.datum,
-              role: "node",
+              role: roleFor(node.datum),
               style: lowerStyle({
                 fill: "none",
                 stroke: resolvedStroke,
@@ -445,7 +446,7 @@ export const Rect = ({
             kind: "path",
             d: pathToPixelSVG(transformed, toPixel),
             datum: node.datum,
-            role: "node",
+            role: roleFor(node.datum),
             style: lowerStyle({
               fill: resolvedFill,
               stroke: resolvedStroke,

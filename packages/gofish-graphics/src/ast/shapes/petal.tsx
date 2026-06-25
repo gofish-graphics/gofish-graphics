@@ -2,7 +2,11 @@ import { resolveColorChannel } from "../../color";
 import { GoFishNode } from "../_node";
 import { GoFishAST } from "../_ast";
 import type { DisplayList } from "gofish-ir";
-import { lowerStyle, rectItemFromBox } from "../displayList/lowerHelpers";
+import {
+  lowerStyle,
+  rectItemFromBox,
+  roleFor,
+} from "../displayList/lowerHelpers";
 import { getMeasure, getValue, isValue, MaybeValue, Value } from "../data";
 import {
   Dimensions,
@@ -153,7 +157,7 @@ export const Petal = ({
               tY + h / 2,
               toPixel,
               {
-                role: "node",
+                role: roleFor(node.datum),
                 datum: node.datum,
                 style: lowerStyle({
                   fill: resolvedFill,
@@ -196,7 +200,7 @@ export const Petal = ({
           {
             kind: "path",
             d,
-            role: "node",
+            role: roleFor(node.datum),
             datum: node.datum,
             style: lowerStyle({ fill: resolvedFill }),
           },

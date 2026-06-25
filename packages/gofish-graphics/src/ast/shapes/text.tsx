@@ -30,6 +30,7 @@ import type { DisplayList } from "gofish-ir";
 import {
   lowerStyle,
   rectItemFromBox,
+  roleFor,
   toPixelFlipsY,
 } from "../displayList/lowerHelpers";
 type TextDimensions = {
@@ -393,7 +394,7 @@ export const Text = ({
           textAnchor: textAnchor as DisplayList.TextItem["textAnchor"],
           dominantBaseline:
             dominantBaseline as DisplayList.TextItem["dominantBaseline"],
-          role: "node",
+          role: roleFor(node.datum),
           datum: node.datum,
           style: lowerStyle({
             fill: resolvedFill,

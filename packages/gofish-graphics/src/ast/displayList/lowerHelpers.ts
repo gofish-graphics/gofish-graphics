@@ -15,6 +15,19 @@ import type { CoordinateTransform } from "../coordinateTransforms/coord";
 import { displayTranslate, type Transform } from "../dims";
 import { type Path, type Point, pathToSVGPath } from "../../path";
 
+/**
+ * The display-list `role` of a lowered item, derived from whether it is
+ * data-bound. `role` is a *projection of datum-presence*: an item that carries a
+ * `datum` is a data mark (`"node"` — a hit target); an item with no datum is
+ * generated chrome / decoration (`"overlay"` — axes, legends, annotations,
+ * value labels). Defining role this way keeps the two fields from ever
+ * disagreeing, so a host can trust `role` alone to split data from chrome
+ * without also inspecting `datum`. Shape `lower` bodies call this instead of
+ * hard-coding `role: "node"`, which previously mis-tagged datum-less chrome.
+ */
+export const roleFor = (datum: unknown): DisplayList.DisplayItem["role"] =>
+  datum !== undefined ? "node" : "overlay";
+
 /** Map every point of a path through `toPixel`, then serialize to an SVG `d`.
  *  `toPixel` is affine (translate + y-flip), so no resampling is needed. */
 export const pathToPixelSVG = (path: Path, toPixel: ToPixel): string =>

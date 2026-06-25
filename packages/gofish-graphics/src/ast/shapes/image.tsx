@@ -21,7 +21,7 @@ import {
 import { createMark } from "../withGoFish";
 import { attachCut } from "../graphicalOperators/cut";
 import type { DisplayList } from "gofish-ir";
-import { lowerStyle, pixelBox } from "../displayList/lowerHelpers";
+import { lowerStyle, pixelBox, roleFor } from "../displayList/lowerHelpers";
 
 type ImageDimensions = {
   width: number;
@@ -367,7 +367,7 @@ export const Image = ({
           href,
           preserveAspectRatio,
           datum: node.datum,
-          role: "node",
+          role: roleFor(node.datum),
         };
         if (Object.keys(style).length > 0) item.style = style;
         return [item];
