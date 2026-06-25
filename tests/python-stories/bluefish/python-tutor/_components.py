@@ -58,7 +58,7 @@ def stack_slot(variable: str, value=None):
                 lambda box, boxBorderBottom, boxBorderLeft, value: [
                     Constraint.align([box, value], x="middle", y="middle"),
                     Constraint.align(
-                        [box, boxBorderBottom], x="middle", y="start"
+                        [box, boxBorderBottom], x="middle", y="end"
                     ),
                     Constraint.align(
                         [box, boxBorderLeft], x="start", y="middle"
@@ -104,7 +104,7 @@ def elm_tuple(tupleIndex: str, tupleData=None):
     ).constrain(
         lambda box, label, val: [
             Constraint.align([val, box], x="middle", y="middle"),
-            Constraint.align([label, box], x="start", y="end"),
+            Constraint.align([label, box], x="start", y="start"),
         ]
     )
 
@@ -138,7 +138,6 @@ def heap_object(objectType: str, objectValues: list):
         dir="y",
         alignment="start",
         spacing=10,
-        reverse=True,
     )
 
 
@@ -182,7 +181,6 @@ def heap(heap: list, heapArrangement: list):
         dir="y",
         alignment="start",
         spacing=75,
-        reverse=True,
     )
 
 
@@ -213,14 +211,13 @@ def global_frame(stack: list):
                 dir="y",
                 alignment="end",
                 spacing=10,
-                reverse=True,
             ).name(variables_tag),
         ]
     ).constrain(
         lambda label, frame, frameBorder, variables: [
-            Constraint.align([label, frame], x="middle", y="end"),
+            Constraint.align([label, frame], x="middle", y="start"),
             Constraint.align([frameBorder, frame], x="start", y="middle"),
             Constraint.align([variables, label], x="end"),
-            Constraint.distribute([variables, label], dir="y", spacing=10),
+            Constraint.distribute([label, variables], dir="y", spacing=10),
         ]
     )
