@@ -93,19 +93,32 @@ const BAR_LABEL_GAP = 4; // gap between a tick mark and its label
  */
 export async function legendColorbar(
   scaleFn: (v: number) => string,
-  domain: [number, number]
+  domain: [number, number],
+  yUp = true
 ): Promise<GoFishNode> {
   const [min, max] = domain;
   const bandH = BAR_HEIGHT / BAND_COUNT;
+  // The bar is laid out in fixed y-up logical coordinates (band 0 at the base,
+  // domain max at the top). The PHYSICAL layout never changes — what flips for a
+  // y-down render is which value each slot shows and where the ticks land — so
+  // the band-overlap seam logic below stays intact (a pure coordinate mirror
+  // would invert the overlap and reopen seams). In y-up the slot at height `y`
+  // shows value `min + y/BAR_HEIGHT·range`; in y-down it shows the mirror, so the
+  // domain max still reads at the top of the (now unflipped) bar. See #143/#16.
   const valueToPx = (v: number) =>
     (max === min ? 0 : (v - min) / (max - min)) * BAR_HEIGHT;
+  // Pixel height (from the band-0 base) at which value `v`'s color/tick belongs.
+  const valueToBarY = (v: number) =>
+    yUp ? valueToPx(v) : BAR_HEIGHT - valueToPx(v);
 
   const bandName = (i: number) => `__cbBand${i}`;
   const tickName = (i: number) => `__cbTick${i}`;
   const labelName = (i: number) => `__cbLabel${i}`;
 
   const bands = Array.from({ length: BAND_COUNT }, (_, i) => {
-    const value = min + ((i + 0.5) / BAND_COUNT) * (max - min);
+    // Slot `i` sits at height `i·bandH`; the value shown there mirrors when y-down.
+    const frac = (yUp ? i + 0.5 : BAND_COUNT - i - 0.5) / BAND_COUNT;
+    const value = min + frac * (max - min);
     return Rect({
       w: BAR_WIDTH,
       h: bandH + BAND_OVERLAP,
@@ -163,7 +176,7 @@ export async function legendColorbar(
     // separate position constraints so the label can sit start-aligned in x
     // while staying middle-aligned in y (one shared anchor can't do both).
     tickValues.forEach((v, i) => {
-      const cy = valueToPx(v);
+      const cy = valueToBarY(v);
       cs.push(
         Constraint.position(
           { x: BAR_WIDTH + TICK_MARK_LEN / 2, y: cy, anchor: "middle" },
@@ -203,7 +216,7 @@ export async function elaborateLegend(
 ): Promise<GoFishNode> {
   const legend =
     "scaleFn" in scale
-      ? await legendColorbar(scale.scaleFn, scale.domain)
+      ? await legendColorbar(scale.scaleFn, scale.domain, yUp)
       : legendColumn(scale.color, yUp);
   return wrapPreservingIdentity(node, async (content) => {
     content.name(CONTENT_NAME);
