@@ -18,5 +18,6 @@ def story_default():
             spread(spacing=2, dir="x"),
         )
         .mark(rect(w=8, h=8, fill="species")),
-        {"axes": True},
+        # x-axis at the bottom (y-end), under the upward-filling columns.
+        {"axes": {"x": {"side": "end"}}},
     )

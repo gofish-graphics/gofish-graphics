@@ -11,12 +11,12 @@ instead, see [export](/js/api/core/export).
 
 ## Parameters
 
-| Parameter             | Type          | Description                                                                                                                                                                   |
-| --------------------- | ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `container`           | `HTMLElement` | The DOM element to render into                                                                                                                                                |
-| `options.w`           | `number?`     | Width in pixels. Optional — see [Inferred size](#inferred-size).                                                                                                              |
-| `options.h`           | `number?`     | Height in pixels. Optional — see [Inferred size](#inferred-size).                                                                                                             |
-| `options.axes`        | `AxesOptions` | Auto-generate axes, labels, and legends. See [Axes](#axes) below.                                                                                                             |
+| Parameter      | Type          | Description                                                       |
+| -------------- | ------------- | ----------------------------------------------------------------- |
+| `container`    | `HTMLElement` | The DOM element to render into                                    |
+| `options.w`    | `number?`     | Width in pixels. Optional — see [Inferred size](#inferred-size).  |
+| `options.h`    | `number?`     | Height in pixels. Optional — see [Inferred size](#inferred-size). |
+| `options.axes` | `AxesOptions` | Auto-generate axes, labels, and legends. See [Axes](#axes) below. |
 
 ## Inferred size
 
@@ -67,7 +67,15 @@ axes: false                                    // no axes (the default)
 axes: { x: true, y: false }                    // x only
 axes: { x: { title: "Year" }, y: true }        // custom x title, inferred y title
 axes: { x: { title: false }, y: true }         // suppress the inferred x title
+axes: { x: { side: "end" } }                   // seat the x-axis on the far edge
 ```
+
+Each per-axis object also accepts `side: "start" | "end"` (default `"start"`).
+The side is **frame-relative**: `"start"` is the near/origin edge (bottom in a
+y-up chart, top in y-down free space) and `"end"` is the far edge. Use
+`{ x: { side: "end" } }` to put a category x-axis at the bottom of an
+upward-filling free-space chart (e.g. a unit/waffle column chart). It currently
+applies to ordinal (category) axes.
 
 `axes` is most naturally a `chart()`/`chart()` option (e.g.
 `gf.chart(data, { axes: true })`); it is also accepted directly on `.render()`, as

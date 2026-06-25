@@ -74,7 +74,23 @@ export const isContinuousColorScale = (
   s: Scale | undefined
 ): s is ContinuousColorScale => s !== undefined && "scaleFn" in s;
 export type AxesOptions = boolean | { x?: AxisOptions; y?: AxisOptions };
-export type AxisOptions = boolean | { title?: string | false };
+/** `side` (issue #143/#16): which frame edge the axis seats on — `"start"`
+ *  (default: the near/origin side — bottom in y-up, top in y-down) or `"end"`
+ *  (the far side — top in y-up, bottom in y-down). Frame-relative, matching the
+ *  start/end vocabulary of alignment/distribute. */
+export type AxisOptions =
+  | boolean
+  | { title?: string | false; side?: "start" | "end" };
+
+/** Per-dim axis `side`, defaulting to `"start"` (the existing seating). */
+export function resolveAxisSides(
+  axes: AxesOptions | undefined
+): ["start" | "end", "start" | "end"] {
+  const sideOf = (o: AxisOptions | undefined): "start" | "end" =>
+    o && typeof o === "object" && o.side === "end" ? "end" : "start";
+  if (axes && typeof axes === "object") return [sideOf(axes.x), sideOf(axes.y)];
+  return ["start", "start"];
+}
 
 // Fallback extent for an omitted `w`/`h` on a POSITION or data-driven SIZE axis,
 // which needs a concrete canvas to scale data into (see the per-axis comment in
@@ -213,7 +229,7 @@ export async function layout(
     // handled axis flags; the new subtree is then re-resolved below. A flag the
     // pass doesn't handle (e.g. an UNDEFINED space) is inert — nothing else
     // consumes `node.axis`.
-    const elaborated = await elaborateAxes(child);
+    const elaborated = await elaborateAxes(child, resolveAxisSides(axes));
     titleAnchors = elaborated.titleAnchors;
     if (elaborated.changed) {
       child = elaborated.node;

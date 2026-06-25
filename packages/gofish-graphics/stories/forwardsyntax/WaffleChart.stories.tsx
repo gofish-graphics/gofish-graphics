@@ -24,7 +24,9 @@ export const Default: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    chart(seafood, { axes: true })
+    // x-axis at the bottom (y-end) so the lake labels sit under the upward-
+    // filling waffle columns rather than above them.
+    chart(seafood, { axes: { x: { side: "end" } } })
       .flow(
       // Bottom-align the lake columns (y-down free space: "end" = bottom) so the
       // waffles sit on a shared baseline and fill upward rather than hang down.

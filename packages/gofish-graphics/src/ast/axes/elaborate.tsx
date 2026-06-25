@@ -306,7 +306,8 @@ function elaborateOrdinalAxis(
   dim: 0 | 1,
   space: Extract<UnderlyingSpace, { kind: "ordinal" }>,
   keyMap: Record<string, GoFishNode>,
-  prefix: string
+  prefix: string,
+  side: "start" | "end" = "start"
 ): AxisElaboration {
   const keys = (space.domain ?? []).filter((k) => keyMap[k] !== undefined);
   const trackAxis = dirName(dim); // labels track their key along the axis dim
@@ -334,14 +335,20 @@ function elaborateOrdinalAxis(
           g[rName(i)],
         ])
       );
-      // … and sit just past the content's near edge in the gutter, anchored to
-      // the whole content layer (so the row clears any nested inner labels)
-      // rather than the individual mark.
+      // … and sit just past one of the content's gutter edges, anchored to the
+      // whole content layer (so the row clears any nested inner labels) rather
+      // than the individual mark. `side` picks the edge: "start" seats the row
+      // before the content (label → content), "end" after it (content → label)
+      // — flipping which frame edge (top/bottom or left/right) the axis lands on.
+      const pair =
+        side === "end"
+          ? [g[INNER_REF_NAME], g[lName(i)]]
+          : [g[lName(i)], g[INNER_REF_NAME]];
       cs.push(
-        Constraint.distribute({ dir: gutterDir, spacing: ORDINAL_LABEL_GAP }, [
-          g[lName(i)],
-          g[INNER_REF_NAME],
-        ])
+        Constraint.distribute(
+          { dir: gutterDir, spacing: ORDINAL_LABEL_GAP },
+          pair
+        )
       );
     });
     return cs;
@@ -383,7 +390,10 @@ function collectKeyMap(node: GoFishNode): Record<string, GoFishNode> {
  *    tier. Otherwise the ref captures the pre-shift position and the labels miss
  *    the continuous-axis gutter offset.
  */
-function elaborationsFor(node: GoFishNode): {
+function elaborationsFor(
+  node: GoFishNode,
+  sides: ["start" | "end", "start" | "end"]
+): {
   constrained: AxisElaboration[];
   refBased: AxisElaboration[];
   /** Per-dim [x, y] title anchor (the axis line) for the constrained axes this
@@ -442,7 +452,7 @@ function elaborationsFor(node: GoFishNode): {
       anchors[dim] = e.anchor;
     } else if (isORDINAL(s)) {
       keyMap ??= collectKeyMap(node);
-      refBased.push(elaborateOrdinalAxis(dim, s, keyMap, prefix));
+      refBased.push(elaborateOrdinalAxis(dim, s, keyMap, prefix, sides[dim]));
     } else {
       continue;
     }
@@ -478,7 +488,10 @@ function elaborationsFor(node: GoFishNode): {
  * visited last wins. We don't try to disambiguate (a per-facet title is out of
  * scope); the chart-level title just tracks one of them.
  */
-export async function elaborateAxes(node: GoFishNode): Promise<{
+export async function elaborateAxes(
+  node: GoFishNode,
+  sides: ["start" | "end", "start" | "end"] = ["start", "start"]
+): Promise<{
   node: GoFishNode;
   changed: boolean;
   titleAnchors: [GoFishNode | undefined, GoFishNode | undefined];
@@ -492,7 +505,7 @@ export async function elaborateAxes(node: GoFishNode): Promise<{
   for (let i = 0; i < node.children.length; i++) {
     const child = node.children[i];
     if (child instanceof GoFishNode) {
-      const res = await elaborateAxes(child);
+      const res = await elaborateAxes(child, sides);
       if (res.changed) changed = true;
       // A child's anchor fills a dim slot we haven't claimed yet.
       for (const dim of [0, 1] as (0 | 1)[]) {
@@ -507,7 +520,10 @@ export async function elaborateAxes(node: GoFishNode): Promise<{
     }
   }
 
-  const { constrained, refBased, anchors, owned } = elaborationsFor(node);
+  const { constrained, refBased, anchors, owned } = elaborationsFor(
+    node,
+    sides
+  );
   // Any dim this node owns an axis on is claimed — its own anchor replaces
   // whatever bubbled up from children, INCLUDING replacing it with undefined
   // when the owned axis is ordinal (so the title pass falls back to the plot
