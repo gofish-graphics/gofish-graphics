@@ -30,7 +30,9 @@ export const Default: StoryObj = {
   render: () => {
     const container = initializeContainer();
     spreadY(
-      { spacing: 4, alignment: "start" },
+      // y-down free space: reverse so the first class (First) reads at the top
+      // and Crew at the bottom.
+      { spacing: 4, alignment: "start", reverse: true },
       For(groupBy(titanic, "class"), (items, cls) =>
         spreadX(
           { key: cls, h: _(items).sumBy("count") / 10, spacing: 2, alignment: "middle" },

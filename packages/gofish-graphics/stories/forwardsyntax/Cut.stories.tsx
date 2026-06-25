@@ -92,7 +92,9 @@ export const ImageCutWithLabels: StoryObj<Args> = {
 
     layer<Datum>([
       chart(bottleData)
-        .flow(spread({ dir: "y", spacing: 20, reverse: true }))
+        // y-down free space: no reverse, so the first ingredient (Grape juice,
+        // the bulk) fills the bottle body at the bottom and Marketing sits up top.
+        .flow(spread({ dir: "y", spacing: 20 }))
         .mark(
           image({ href: bottlePng, w: 193, h: 600 })
             .cut({ dir: "y", size: "amount", inset: 4 })
