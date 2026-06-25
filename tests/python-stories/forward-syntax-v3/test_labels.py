@@ -206,7 +206,8 @@ def story_normalized_stacked_bar_with_labels():
         )
         .flow(
             derive(_decode_sex),
-            spread(by="age", dir="y", reverse=True, spacing=2),
+            # y-down reads top→bottom, so age 0 lands at the top (Vega-Lite ref).
+            spread(by="age", dir="y", spacing=2),
             derive(_add_proportion),
             derive(_order_by_sex),
             stack(by="sex", dir="x"),
