@@ -3,7 +3,11 @@ import { GoFishAST } from "../_ast";
 import { GoFishNode, type ToPixel } from "../_node";
 import { resolveColorChannel } from "../../color";
 import type { DisplayList } from "gofish-ir";
-import { lowerStyle, pathToPixelSVG } from "../displayList/lowerHelpers";
+import {
+  lowerStyle,
+  pathToPixelSVG,
+  roleFor,
+} from "../displayList/lowerHelpers";
 import {
   Dimensions,
   displayTranslate,
@@ -540,7 +544,7 @@ export const connect = createNodeOperator(
             return {
               kind: "path",
               d: pathToPixelSVG(transformedPath, offsetToPixel),
-              role: "node",
+              role: roleFor(node.datum),
               datum: node.datum,
               style,
             };

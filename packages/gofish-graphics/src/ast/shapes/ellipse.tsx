@@ -30,11 +30,11 @@ import type { DisplayList } from "gofish-ir";
 import {
   lowerStyle,
   pathToPixelSVG,
+  roleFor,
   valueLabelItems,
 } from "../displayList/lowerHelpers";
 /* TODO: what should default embedding behavior be when all values are aesthetic? */
 export const Ellipse = ({
-  name,
   fill = color6_old[0],
   stroke = fill,
   strokeWidth = 0,
@@ -42,7 +42,6 @@ export const Ellipse = ({
   label,
   ...fancyDims
 }: {
-  name?: string;
   fill?: MaybeValue<string>;
   stroke?: MaybeValue<string>;
   strokeWidth?: number;
@@ -54,7 +53,6 @@ export const Ellipse = ({
   const dims = elaborateDims(fancyDims);
   const node = new GoFishNode(
     {
-      name,
       type: "ellipse",
       // Expose `dims` so resolveAliases / resolveEmbedding can author it in place
       // (same array the closures below capture). See rect.tsx / _node passes.
@@ -206,7 +204,7 @@ export const Ellipse = ({
             ry,
             style: elementStyle,
             datum: node.datum,
-            role: "node",
+            role: roleFor(node.datum),
           };
         };
 
@@ -276,7 +274,7 @@ export const Ellipse = ({
               kind: "path",
               d: pathToPixelSVG(transformed, toPixel),
               datum: node.datum,
-              role: "node",
+              role: roleFor(node.datum),
               style: lowerStyle({
                 fill: "none",
                 stroke: resolvedStroke,
@@ -322,7 +320,7 @@ export const Ellipse = ({
             kind: "path",
             d: pathToPixelSVG(transformed, toPixel),
             datum: node.datum,
-            role: "node",
+            role: roleFor(node.datum),
             style: lowerStyle({
               fill: resolvedFill,
               stroke: resolvedStroke,

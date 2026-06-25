@@ -30,6 +30,7 @@ import type { DisplayList } from "gofish-ir";
 import {
   lowerStyle,
   rectItemFromBox,
+  roleFor,
   toPixelFlipsY,
 } from "../displayList/lowerHelpers";
 type TextDimensions = {
@@ -163,7 +164,6 @@ const resolveTextLayout = (
 
 export const Text = ({
   key,
-  name,
   text: textContent,
   fill = "black",
   stroke,
@@ -176,7 +176,6 @@ export const Text = ({
   ...fancyDims
 }: {
   key?: string;
-  name?: string;
   text: MaybeValue<string | number>;
   fill?: MaybeValue<string>;
   stroke?: MaybeValue<string>;
@@ -198,12 +197,10 @@ export const Text = ({
 
   const node = new GoFishNode(
     {
-      name,
       key,
       type: "text",
       args: {
         key,
-        name,
         text: textContent,
         fill,
         stroke,
@@ -393,7 +390,7 @@ export const Text = ({
           textAnchor: textAnchor as DisplayList.TextItem["textAnchor"],
           dominantBaseline:
             dominantBaseline as DisplayList.TextItem["dominantBaseline"],
-          role: "node",
+          role: roleFor(node.datum),
           datum: node.datum,
           style: lowerStyle({
             fill: resolvedFill,

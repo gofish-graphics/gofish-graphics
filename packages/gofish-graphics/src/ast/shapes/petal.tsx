@@ -2,7 +2,11 @@ import { resolveColorChannel } from "../../color";
 import { GoFishNode } from "../_node";
 import { GoFishAST } from "../_ast";
 import type { DisplayList } from "gofish-ir";
-import { lowerStyle, rectItemFromBox } from "../displayList/lowerHelpers";
+import {
+  lowerStyle,
+  rectItemFromBox,
+  roleFor,
+} from "../displayList/lowerHelpers";
 import { getMeasure, getValue, isValue, MaybeValue, Value } from "../data";
 import {
   Dimensions,
@@ -22,13 +26,11 @@ import { createMark } from "../withGoFish";
 /* Implementation inspired by https://web.archive.org/web/20220808041640/http://bl.ocks.org/herrstucki/6199768 */
 /* TODO: what should default embedding behavior be when all values are aesthetic? */
 export const Petal = ({
-  name,
   fill = "black",
   stroke = fill,
   strokeWidth = 0,
   ...fancyDims
 }: {
-  name?: string;
   fill?: MaybeValue<string>;
   stroke?: MaybeValue<string>;
   strokeWidth?: number;
@@ -37,7 +39,6 @@ export const Petal = ({
   const dims = elaborateDims(fancyDims);
   const node = new GoFishNode(
     {
-      name,
       type: "petal",
       // Expose `dims` so resolveAliases / resolveEmbedding can author it in place
       // (same array the closures below capture). See rect.tsx / _node passes.
@@ -153,7 +154,7 @@ export const Petal = ({
               tY + h / 2,
               toPixel,
               {
-                role: "node",
+                role: roleFor(node.datum),
                 datum: node.datum,
                 style: lowerStyle({
                   fill: resolvedFill,
@@ -196,7 +197,7 @@ export const Petal = ({
           {
             kind: "path",
             d,
-            role: "node",
+            role: roleFor(node.datum),
             datum: node.datum,
             style: lowerStyle({ fill: resolvedFill }),
           },

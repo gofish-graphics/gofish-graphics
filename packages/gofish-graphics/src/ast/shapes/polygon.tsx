@@ -5,7 +5,11 @@ import { UNDEFINED, UnderlyingSpace } from "../underlyingSpace";
 import { createMark } from "../withGoFish";
 import { path } from "../../path";
 import type { DisplayList } from "gofish-ir";
-import { lowerStyle, pathToPixelSVG } from "../displayList/lowerHelpers";
+import {
+  lowerStyle,
+  pathToPixelSVG,
+  roleFor,
+} from "../displayList/lowerHelpers";
 
 /**
  * A closed polygon defined by explicit local-coordinate points (GoFish-native
@@ -13,13 +17,11 @@ import { lowerStyle, pathToPixelSVG } from "../displayList/lowerHelpers";
  * system places it via `transform.translate`.
  */
 export const Polygon = ({
-  name,
   fill = "black",
   stroke = fill,
   strokeWidth = 0,
   points,
 }: {
-  name?: string;
   fill?: string;
   stroke?: string;
   strokeWidth?: number;
@@ -41,7 +43,6 @@ export const Polygon = ({
 
   return new GoFishNode(
     {
-      name,
       type: "polygon",
       resolveUnderlyingSpace: (
         _children: Size<UnderlyingSpace>[],
@@ -82,7 +83,7 @@ export const Polygon = ({
             kind: "path",
             d: pathToPixelSVG(poly, toPixel),
             datum: node.datum,
-            role: "node",
+            role: roleFor(node.datum),
             style: lowerStyle({
               fill,
               stroke: stroke ?? fill ?? "black",

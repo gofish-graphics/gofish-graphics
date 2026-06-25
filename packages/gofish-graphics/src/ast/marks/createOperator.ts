@@ -48,6 +48,7 @@ import {
   positionNode,
   type PositionNodeOptions,
 } from "../graphicalOperators/positionNode";
+import { attachTerminals } from "./terminals";
 
 // Re-exports for callers that previously got these from createOperator.
 export type { LayerContext } from "./chartBuilder";
@@ -138,9 +139,10 @@ export async function applyMark<T>(
  * and the mark-kind tag + IR-serialize metadata ride along.
  *
  * `createModifier` captures that shape as a config; `attachModifiers` wires a
- * set of them (plus a top-level `.render()`) onto a base mark. This is the one
- * system behind `nameableMark` (here), `createMark` (withGoFish.ts), and
- * `makeConstrainableMark` (chart.ts) — replacing three hand-rolled copies.
+ * set of them (plus the export terminals from `terminals.ts`) onto a base mark.
+ * This is the one system behind `nameableMark` (here), `createMark`
+ * (withGoFish.ts), and `makeConstrainableMark` (chart.ts) — replacing three
+ * hand-rolled copies.
  * ------------------------------------------------------------------------ */
 
 /**
@@ -265,45 +267,13 @@ export function attachModifiers<T>(
     writable: true,
     configurable: true,
   });
-  Object.defineProperty(base, "render", {
-    value: async (
-      container: Parameters<GoFishNode["render"]>[0],
-      options: Parameters<GoFishNode["render"]>[1]
-    ) => {
-      const node = await resolveMarkResult((base as any)(undefined));
-      return node.render(container, options);
-    },
-    writable: true,
-    configurable: true,
-  });
-  // SVG-export terminals, mirroring `.render()` above.
-  Object.defineProperty(base, "toSVG", {
-    value: async (options?: Parameters<GoFishNode["toSVG"]>[0]) => {
-      const node = await resolveMarkResult((base as any)(undefined));
-      return node.toSVG(options);
-    },
-    writable: true,
-    configurable: true,
-  });
-  Object.defineProperty(base, "toSVGElement", {
-    value: async (options?: Parameters<GoFishNode["toSVGElement"]>[0]) => {
-      const node = await resolveMarkResult((base as any)(undefined));
-      return node.toSVGElement(options);
-    },
-    writable: true,
-    configurable: true,
-  });
-  Object.defineProperty(base, "save", {
-    value: async (
-      filename: string,
-      options?: Parameters<GoFishNode["save"]>[1]
-    ) => {
-      const node = await resolveMarkResult((base as any)(undefined));
-      return node.save(filename, options);
-    },
-    writable: true,
-    configurable: true,
-  });
+  // Export terminals (render / toSVG / toSVGElement / save / toDisplayList) come
+  // from the shared registry, so adding one touches a single list. A mark
+  // resolves to a node by calling it with `undefined`. See terminals.ts.
+  attachTerminals(
+    base,
+    () => resolveMarkResult((base as any)(undefined)) as Promise<GoFishNode>
+  );
   return base;
 }
 

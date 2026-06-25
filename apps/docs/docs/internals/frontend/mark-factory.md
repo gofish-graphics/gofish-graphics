@@ -173,8 +173,10 @@ which is one application of the shared **modifier factory** in
 node — every slice for an expand mark like `cut`); `tag` stamps metadata on the
 wrapped mark function once (propagating the `__serialize`/`__axisFields` tags
 and stashing the layer name). `attachModifiers` wires the set onto the base and
-adds a top-level `.render()`, re-decorating each method's result with the same
-set so chains stay extensible and the mark-kind tag rides along. `.name()`
+adds the export terminals (`render` / `toSVG` / `toSVGElement` / `save` /
+`toDisplayList`) from the shared `terminals.ts` registry, re-decorating each
+method's result with the same set so chains stay extensible and the mark-kind tag
+rides along. `.name()`
 defers its layer registration via a `__layerRegistration` tag collected in a
 single post-resolve DFS walk (`collectLayerRegistrations`), so registry order
 follows parent-iteration order, not async-completion order. The same factory

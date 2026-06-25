@@ -61,7 +61,6 @@ export const coord = createNodeOperator(
   (
     {
       key,
-      name,
       transform: coordTransform,
       grid = false,
       axes,
@@ -69,7 +68,6 @@ export const coord = createNodeOperator(
       ...fancyDims
     }: {
       key?: string;
-      name?: string;
       transform: CoordinateTransform;
       grid?: boolean;
       axes?: AxesOptions;
@@ -86,7 +84,6 @@ export const coord = createNodeOperator(
       {
         type: "coord",
         key,
-        name,
         resolveUnderlyingSpace: (
           children: Size<UnderlyingSpace>[],
           _childNodes: GoFishAST[]

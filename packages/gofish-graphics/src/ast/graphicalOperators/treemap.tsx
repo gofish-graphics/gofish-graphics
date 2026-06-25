@@ -42,7 +42,6 @@ type TreemapTile =
 type TreemapSort = "asc" | "desc" | "none";
 
 type TreemapProps = {
-  name?: string;
   key?: string;
   paddingInner?: number;
   paddingOuter?: number;
@@ -93,7 +92,6 @@ function resolveWeightFromChild(
 export const Treemap = createNodeOperator(
   (opts: TreemapProps, children: GoFishAST[]) => {
     const {
-      name,
       key,
       paddingInner = 0,
       paddingOuter = 0,
@@ -114,7 +112,6 @@ export const Treemap = createNodeOperator(
         type: "treemap",
         args: {
           key,
-          name,
           paddingInner,
           paddingOuter,
           round,
@@ -126,7 +123,6 @@ export const Treemap = createNodeOperator(
           dims,
         },
         key,
-        name,
         shared: [false, false],
         resolveUnderlyingSpace: (): Size<UnderlyingSpace> => {
           // Mirror Spread's explicit-size handling (spread.tsx:123-131): when a
@@ -330,7 +326,7 @@ export const Treemap = createNodeOperator(
 export const treemap = createOperator<any, TreemapProps>(
   (props: TreemapProps, children: GoFishAST[]) => Treemap(props, children),
   {
-    split: ({ name }, d) => new Map(d.map((r, i) => [i, r])),
+    split: (_opts, d) => new Map(d.map((r, i) => [i, r])),
     channels: {
       w: "size",
       h: "size",

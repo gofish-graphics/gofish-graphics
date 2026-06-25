@@ -5,6 +5,7 @@ order: 30
 status: draft
 covers:
   - packages/gofish-graphics/src/ast/marks/createOperator.ts
+  - packages/gofish-graphics/src/ast/marks/terminals.ts
 ---
 
 # `createOperator`: turning a layout into a frontend operator
@@ -260,6 +261,20 @@ stashes the passed name on the returned mark function via `stashLayerName`
 (defined in `chartBuilder.ts`, called by the `name` modifier's `tag` hook), so
 [`ChartBuilder.connect()`](/js/api/core/connect) can detect a user-chained name
 without parsing the `__serialize` tag.
+
+The **export terminals** — `render`, `toSVG`, `toSVGElement`, `save`,
+`toDisplayList` — are the dual of modifiers: where a modifier mutates the
+produced node and returns a chainable mark, a terminal _resolves_ the surface to
+a final `GoFishNode` and calls through to that node's method, ending the chain.
+They live in their own registry (`terminals.ts`): a `TERMINALS` list plus
+`attachTerminals(target, resolveNode)`, where each surface supplies only its own
+node-resolution strategy (a combinator mark resolves by calling itself with
+`undefined`; a `withGoFish` promise resolves by awaiting). Both `attachModifiers`
+here and `addRenderMethod` in `withGoFish.ts` call `attachTerminals`, so the set
+of terminals is defined once — adding one (as `toDisplayList` was) touches a
+single list and lands on every surface at once, instead of being hand-rolled per
+surface (which previously left `toDisplayList` off the combinator surface
+entirely).
 
 A second flavor, `attachTransformModifiers`, handles methods that map a mark to
 a _different_ mark rather than mutating its nodes — e.g. `image(...).cut(opts)`

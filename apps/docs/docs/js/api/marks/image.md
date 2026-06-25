@@ -22,21 +22,20 @@ gf.chart([{ label: "badge" }])
 ## Signature
 
 ```ts
-image({ href, w?, h?, x?, y?, opacity?, filter?, preserveAspectRatio?, name? })
+image({ href, w?, h?, x?, y?, opacity?, filter?, preserveAspectRatio? })
 ```
 
 ## Parameters
 
-| Option                | Type               | Description                                                    |
-| --------------------- | ------------------ | -------------------------------------------------------------- |
-| `href`                | `string`           | Image source — a URL, asset import, or `data:` URI (required)  |
-| `w`                   | `number \| string` | Width — number for fixed pixels, field name to encode data     |
-| `h`                   | `number \| string` | Height — number for fixed pixels, field name to encode data    |
-| `x`, `y`              | `number \| string` | Explicit position accessors                                    |
-| `opacity`             | `number`           | Opacity, `0`–`1`                                               |
-| `filter`              | `string`           | SVG filter reference applied to the image                      |
-| `preserveAspectRatio` | `string`           | SVG `preserveAspectRatio` value (default `"xMidYMid meet"`)    |
-| `name`                | `string`           | Layer name for use with [`selectAll()`](/js/api/selection/ref) |
+| Option                | Type               | Description                                                   |
+| --------------------- | ------------------ | ------------------------------------------------------------- |
+| `href`                | `string`           | Image source — a URL, asset import, or `data:` URI (required) |
+| `w`                   | `number \| string` | Width — number for fixed pixels, field name to encode data    |
+| `h`                   | `number \| string` | Height — number for fixed pixels, field name to encode data   |
+| `x`, `y`              | `number \| string` | Explicit position accessors                                   |
+| `opacity`             | `number`           | Opacity, `0`–`1`                                              |
+| `filter`              | `string`           | SVG filter reference applied to the image                     |
+| `preserveAspectRatio` | `string`           | SVG `preserveAspectRatio` value (default `"xMidYMid meet"`)   |
 
 ## Sizing
 

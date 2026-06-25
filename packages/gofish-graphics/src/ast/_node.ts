@@ -307,7 +307,6 @@ export class GoFishNode {
   public _aliases?: { x?: string; y?: string };
   constructor(
     {
-      name,
       key,
       type,
       args,
@@ -318,7 +317,6 @@ export class GoFishNode {
       shared = [false, false],
       color,
     }: {
-      name?: string;
       key?: string;
       type: string;
       args?: any;
@@ -341,7 +339,6 @@ export class GoFishNode {
     children.forEach((child) => {
       child.parent = this;
     });
-    this._name = name;
     this.key = key;
     this.type = type;
     this.args = args;
