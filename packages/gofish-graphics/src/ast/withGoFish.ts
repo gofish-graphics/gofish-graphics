@@ -38,6 +38,7 @@ import { Mark } from "./types";
 import type { ConstraintSpec, ConstraintRef } from "./constraints";
 import type { LabelAccessor, LabelOptions } from "./labels/labelPlacement";
 import type { Token } from "./createName";
+import { attachTerminals } from "./marks/terminals";
 
 /**
  * Options for rendering a GoFish node
@@ -100,6 +101,9 @@ export interface PromiseWithRender<T> extends Promise<T> {
     filename: string,
     options?: Parameters<GoFishNode["save"]>[1]
   ): Promise<void>;
+  toDisplayList(
+    options?: Parameters<GoFishNode["toDisplayList"]>[0]
+  ): ReturnType<GoFishNode["toDisplayList"]>;
   name(name: string | Token): PromiseWithRender<T>;
   label(accessor: LabelAccessor, options?: LabelOptions): PromiseWithRender<T>;
   setKey(key: string): PromiseWithRender<T>;
@@ -130,57 +134,17 @@ function isChartBuilder(value: any): value is ChartBuilder<any, any> {
  * This allows calling .render(), .name(), .setKey(), .setShared() on promises.
  */
 export function addRenderMethod<T>(promise: Promise<T>): PromiseWithRender<T> {
-  // Add the render method directly to the promise object
-  // In JavaScript, you can add properties to any object, including Promises
-  (promise as any).render = function (
-    container: HTMLElement,
-    options: RenderOptions
-  ): HTMLElement | Promise<HTMLElement> {
-    return promise.then((result) => {
-      // Check if the result has a render method (like GoFishNode)
-      if (hasRenderMethod(result)) {
-        return result.render(container, options);
-      }
-      throw new Error(
-        "Cannot call render on this result. Only GoFishNode instances have a render method."
-      );
-    });
-  };
-
-  // SVG-export terminals, mirroring `.render()` above.
-  (promise as any).toSVG = function (
-    options?: Parameters<GoFishNode["toSVG"]>[0]
-  ): Promise<string> {
-    return promise.then((result) => {
-      if (hasRenderMethod(result)) return result.toSVG(options);
-      throw new Error(
-        "Cannot call toSVG on this result. Only GoFishNode instances support export."
-      );
-    });
-  };
-
-  (promise as any).toSVGElement = function (
-    options?: Parameters<GoFishNode["toSVGElement"]>[0]
-  ): Promise<SVGSVGElement> {
-    return promise.then((result) => {
-      if (hasRenderMethod(result)) return result.toSVGElement(options);
-      throw new Error(
-        "Cannot call toSVGElement on this result. Only GoFishNode instances support export."
-      );
-    });
-  };
-
-  (promise as any).save = function (
-    filename: string,
-    options?: Parameters<GoFishNode["save"]>[1]
-  ): Promise<void> {
-    return promise.then((result) => {
-      if (hasRenderMethod(result)) return result.save(filename, options);
-      throw new Error(
-        "Cannot call save on this result. Only GoFishNode instances support export."
-      );
-    });
-  };
+  // Export terminals (render / toSVG / toSVGElement / save / toDisplayList) come
+  // from the shared registry, so adding one touches a single list. The promise
+  // resolves to a node directly; a non-GoFishNode result is unexportable.
+  // See terminals.ts.
+  attachTerminals(promise, async () => {
+    const result = await promise;
+    if (hasRenderMethod(result)) return result;
+    throw new Error(
+      "Cannot call an export terminal on this result. Only GoFishNode instances support export."
+    );
+  });
 
   // Add chainable methods that return new PromiseWithRender
   (promise as any).name = function (
@@ -499,6 +463,9 @@ export type NameableMark<T> = Mark<T> & {
     filename: string,
     options?: Parameters<GoFishNode["save"]>[1]
   ): Promise<void>;
+  toDisplayList(
+    options?: Parameters<GoFishNode["toDisplayList"]>[0]
+  ): ReturnType<GoFishNode["toDisplayList"]>;
 };
 
 /**
