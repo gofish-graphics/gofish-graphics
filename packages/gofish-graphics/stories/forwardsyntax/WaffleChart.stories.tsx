@@ -26,7 +26,9 @@ export const Default: StoryObj<Args> = {
 
     chart(seafood, { axes: true })
       .flow(
-      spread({ by: "lake",  spacing: 8, dir: "x", axes: false }),
+      // Bottom-align the lake columns (y-down free space: "end" = bottom) so the
+      // waffles sit on a shared baseline and fill upward rather than hang down.
+      spread({ by: "lake", spacing: 8, dir: "x", axes: false, alignment: "end" }),
         derive((d) => d.flatMap((d) => repeat(d, "count"))),
         derive((d) => _.chunk(d, 5)),
         spread({ spacing: 2, dir: "y" }),

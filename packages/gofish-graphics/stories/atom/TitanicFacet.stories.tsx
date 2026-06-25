@@ -48,7 +48,9 @@ export const Default: StoryObj<Args> = {
             .flow(
               derive((rows) => orderBy(rows, ["survived"], ["desc"])),
               derive((rows) => chunk(rows, Math.ceil(Math.sqrt(rows.length)))),
-              spread({ spacing: 2, dir: "y" }),
+              // Fill each cell bottom-up (y-down free space: reverse so the
+              // partial last row lands at the top), like a waffle that grows up.
+              spread({ spacing: 2, dir: "y", reverse: true }),
               spread({ spacing: 2, dir: "x" })
             )
             .mark(circle({ r: 4, fill: "survived" }))
