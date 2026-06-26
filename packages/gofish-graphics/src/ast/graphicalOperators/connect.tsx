@@ -1,4 +1,5 @@
-import { Path, transformPath } from "../../path";
+import { Path, Point, transformPath } from "../../path";
+import { convertPointsToBezierCurves } from "../../adaptive-resampling";
 import { GoFishAST } from "../_ast";
 import { GoFishNode, type ToPixel } from "../_node";
 import { resolveColorChannel } from "../../color";
@@ -20,7 +21,12 @@ import { pairs } from "../../util";
 import { linear } from "../coordinateTransforms/linear";
 import { MaybeValue } from "../data";
 import { Domain } from "../domain";
-import { UNDEFINED, UnderlyingSpace } from "../underlyingSpace";
+import {
+  UNDEFINED,
+  UnderlyingSpace,
+  isPOSITION,
+  isORDINAL,
+} from "../underlyingSpace";
 import { createNodeOperator } from "../withGoFish";
 import { resolveCurve, type Curve } from "./routers";
 
@@ -107,12 +113,8 @@ export const connect = createNodeOperator(
     const resolvedTarget =
       target !== undefined ? resolveAnchor(target) : undefined;
     const dir = elaborateDirection(direction ?? 0);
-    // Edge ("ribbon") mode supports only straight (linear band) vs bezier
-    // (S-curve band); read the curve's name to pick. Center mode resolves the
-    // full curve through the registry below.
-    const curveType =
-      (typeof curve === "string" ? curve : curve?.type) ?? "straight";
-    const edgeBezier = curveType === "bezier";
+    const curveNameOf = (c: Curve | undefined): string | undefined =>
+      c === undefined ? undefined : typeof c === "string" ? c : c.type;
 
     return new GoFishNode(
       {
@@ -144,6 +146,59 @@ export const connect = createNodeOperator(
             child.layout(size, scaleFactors, [undefined, undefined])
           );
           const bboxPairs = pairs(childPlaceables.map((child) => child.dims));
+
+          // Resolve the curve. An omitted/`"auto"` curve detects whether the
+          // connected points share a homogeneous *continuous* space on the
+          // connection axis (i.e. they are samples of a continuous variable):
+          // if so we smooth with a centripetal Catmull-Rom spline; otherwise we
+          // fall back to the always-drawable discrete connector (line→straight,
+          // ribbon→bezier). Connecting two arbitrary points is therefore always
+          // valid — it just isn't smoothed. Explicit curves always win.
+          //
+          // The children carry the space because `resolveNames` runs before the
+          // underlying-space pass, so a `ref` already proxies its target's space
+          // (falling back to ORDINAL ⇒ discrete when unresolved).
+          const isAuto = curve === undefined || curveNameOf(curve) === "auto";
+          let resolvedCurve: Curve;
+          if (!isAuto) {
+            resolvedCurve = curve as Curve;
+          } else {
+            const axis = dir as 0 | 1;
+            // The connection-axis *positioning* space lives on whatever placed
+            // the connected marks: the mark itself (a data-bound
+            // `ellipse({ x: value(…) })` reports POSITION) or an ancestor (a
+            // `circle`/`blank` placed by `scatter` — the scatter reports
+            // POSITION). So walk up from each mark to the nearest ancestor whose
+            // connection-axis space is a *positioning* kind (POSITION = data
+            // axis, ORDINAL = category axis), skipping the mark's own SIZE
+            // (its extent, e.g. a circle's radius) and UNDEFINED.
+            const connectionSpaceOf = (
+              c: GoFishAST
+            ): UnderlyingSpace | undefined => {
+              let node: any = (c as any).targetNode ?? c;
+              while (node) {
+                const s = node.resolveUnderlyingSpace?.()?.[axis];
+                if (s !== undefined && (isPOSITION(s) || isORDINAL(s)))
+                  return s;
+                node = node.parent;
+              }
+              return undefined;
+            };
+            const spaces = children.map(connectionSpaceOf);
+            const homogeneousContinuous =
+              spaces.length >= 2 &&
+              spaces.every((s) => s !== undefined && isPOSITION(s));
+            resolvedCurve =
+              mode === "center"
+                ? homogeneousContinuous
+                  ? "catmullRom"
+                  : "straight"
+                : "bezier";
+          }
+          const resolvedCurveName = curveNameOf(resolvedCurve);
+          // Edge ("ribbon") mode supports only straight (linear band) vs bezier
+          // (S-curve band).
+          const edgeBezier = resolvedCurveName === "bezier";
 
           // Anchor mode: connect normalized points on each endpoint's bbox.
           if (hasAnchors) {
@@ -244,17 +299,27 @@ export const connect = createNodeOperator(
             }
           }
 
-          // Center mode = the "line" component: each endpoint pair is routed by
-          // a registered, screen-space curve (straight | bezier | orthogonal |
-          // arc | perfectArrows | …) resolved from the `curve` option.
+          // Center mode = the "line" component. `catmullRom` is a *sequence*
+          // curve — it threads the whole run of centers as one centripetal
+          // spline (d3's `.curve(curveCatmullRom)`), so it bypasses the pairwise
+          // router loop. Every other curve (straight | bezier | orthogonal | arc
+          // | perfectArrows | …) is pairwise: routed per consecutive endpoint.
           if (mode === "center") {
-            const { router, options: routeOpts } = resolveCurve(
-              curve ?? "straight"
-            );
-            for (const [b0, b1] of bboxPairs) {
-              paths.push(
-                router(b0, b1, { dir: dir as 0 | 1, opts: routeOpts })
-              );
+            if (resolvedCurveName === "catmullRom") {
+              const centerOf = (b: Dimensions): Point => [
+                (b[0].min! + b[0].max!) / 2,
+                (b[1].min! + b[1].max!) / 2,
+              ];
+              const centers = childPlaceables.map((c) => centerOf(c.dims));
+              paths.push(convertPointsToBezierCurves(centers));
+            } else {
+              const { router, options: routeOpts } =
+                resolveCurve(resolvedCurve);
+              for (const [b0, b1] of bboxPairs) {
+                paths.push(
+                  router(b0, b1, { dir: dir as 0 | 1, opts: routeOpts })
+                );
+              }
             }
           } else if (dir === 0) {
             // Edge ("ribbon") mode: a filled quad between the facing edges.

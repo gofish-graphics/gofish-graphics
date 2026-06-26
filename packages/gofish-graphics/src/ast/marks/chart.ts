@@ -361,7 +361,9 @@ export const line = createDerivedMark<LineOptions>("line", (o, children) =>
       strokeWidth: o.strokeWidth ?? 1,
       opacity: o.opacity,
       mixBlendMode: o.mixBlendMode,
-      curve: o.curve ?? "straight",
+      // Omitted ⇒ "auto": connect smooths (catmullRom) when the connected
+      // points share a continuous connection axis, else a straight line.
+      curve: o.curve,
       source: o.source,
       target: o.target,
     },
@@ -397,7 +399,9 @@ export const ribbon = createDerivedMark<RibbonOptions>(
         stroke: o.stroke,
         strokeWidth: o.strokeWidth ?? 0,
         opacity: o.opacity,
-        curve: o.curve ?? "bezier",
+        // Omitted ⇒ "auto": edge mode currently resolves to a bezier band
+        // (continuous-ribbon Catmull-Rom is a follow-on).
+        curve: o.curve,
       },
       children
     )
