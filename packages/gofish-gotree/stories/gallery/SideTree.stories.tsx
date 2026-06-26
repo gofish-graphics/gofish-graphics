@@ -45,7 +45,7 @@ export const SideTree: StoryObj = {
     mount(
       {
         node,
-        link: { interpolation: "linear", stroke: "#607d8b", strokeWidth: 1.5 },
+        link: { route: "straight", stroke: "#607d8b", strokeWidth: 1.5 },
         // parentChild = (distribute θ, distribute r): child leans away in angle
         // and steps outward in radius from its parent.
         parentChild: combine({

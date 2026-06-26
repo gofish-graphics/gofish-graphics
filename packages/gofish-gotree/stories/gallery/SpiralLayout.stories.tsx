@@ -18,7 +18,7 @@ import { initializeContainer } from "../helper";
 //     the prior sibling, so a fan of children itself spirals.
 // Point-like circle nodes ⇒ mode:"center" so spacing is read in domain units
 // (radians for θ, r-units for r) and bboxes don't accumulate. Color = depth.
-// Links straight ⇒ {interpolation: "linear"}. See the polar Sunburst /
+// Links straight ⇒ {route: "straight"}. See the polar Sunburst /
 // RadialNodes / RadialTree siblings for the same θ/r decomposition.
 //
 // NOTES — polar gaps (no hacks; flagged for follow-up):
@@ -56,7 +56,7 @@ export const SpiralLayout: StoryObj = {
     tree(
       {
         node,
-        link: { interpolation: "linear", stroke: "#90a4ae", strokeWidth: 1.5 },
+        link: { route: "straight", stroke: "#90a4ae", strokeWidth: 1.5 },
         // parentChild: step around (θ) and outward (r) from the parent.
         parentChild: combine({
           x: {

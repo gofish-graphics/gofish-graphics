@@ -85,7 +85,7 @@ export const NodeLink: StoryObj<Args> = {
             stroke: "#1f3a5f",
             strokeWidth: 1,
           }),
-        link: { interpolation: "linear", stroke: "#90a4ae", strokeWidth: 1.5 },
+        link: { route: "straight", stroke: "#90a4ae", strokeWidth: 1.5 },
         // distribute on y → parent first goes at low y; ``
         // flips so parent ends up at HIGH y = top of screen (y-up). Aligned
         // middle on the orthogonal x axis (separate align constraint).
@@ -132,7 +132,7 @@ export const LabeledFileTree: StoryObj<Args> = {
     tree(
       {
         node: labeledNode,
-        link: { interpolation: "linear", stroke: "#9bb1c4", strokeWidth: 1.5 },
+        link: { route: "straight", stroke: "#9bb1c4", strokeWidth: 1.5 },
         parentChild: distribute({
           dir: "y",
           spacing: 36,
@@ -495,7 +495,7 @@ export const RadialNodes: StoryObj<Args> = {
             stroke: "#1f3a5f",
             strokeWidth: 1,
           }),
-        link: { interpolation: "linear", stroke: "#90a4ae", strokeWidth: 1.5 },
+        link: { route: "straight", stroke: "#90a4ae", strokeWidth: 1.5 },
         // distribute on y forward order: parent at LOW y → r=0 (canvas
         // center), children at HIGH y → outer rings. mode:"center" treats
         // children as points (no bbox accumulation) and reads spacing in

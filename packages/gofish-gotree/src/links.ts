@@ -1,17 +1,31 @@
-import { connect, ref } from "gofish-graphics";
+import {
+  connect,
+  ref,
+  straight,
+  bezier,
+  orthogonal,
+  arc,
+  type Route,
+} from "gofish-graphics";
 import type { HierarchyNode } from "d3-hierarchy";
 import type { LinkOptions, LinkSpec } from "./spec";
 import { nodePath, toDatum } from "./data";
 
 const DEFAULTS: Required<
-  Pick<LinkOptions, "interpolation" | "stroke" | "strokeWidth">
+  Pick<LinkOptions, "route" | "stroke" | "strokeWidth">
 > = {
-  interpolation: "linear",
+  route: "straight",
   stroke: "gray",
   strokeWidth: 1,
 };
 
-const M2_INTERPOLATIONS = new Set(["orthogonal", "arc"]);
+// GoTree's Link style → a GoFish layout-time route factory.
+const ROUTE_FOR: Record<NonNullable<LinkOptions["route"]>, () => Route> = {
+  straight,
+  bezier,
+  orthogonal,
+  arc,
+};
 
 function resolveLinkOptions(
   link: LinkSpec | undefined,
@@ -31,16 +45,11 @@ function linkMark(
   sourcePath: string,
   targetPath: string
 ): any {
-  const interpolation = opts.interpolation ?? DEFAULTS.interpolation;
-  if (M2_INTERPOLATIONS.has(interpolation)) {
-    throw new Error(
-      `gofish-gotree: link interpolation '${interpolation}' is M4+ and not yet implemented`
-    );
-  }
+  const route = opts.route ?? DEFAULTS.route;
   return connect(
     {
       mode: "center",
-      interpolation: interpolation as "linear" | "bezier",
+      route: ROUTE_FOR[route](),
       // connect's default `fill` falls back to children[0].color ?? "black".
       // For a straight cartesian line that's invisible (fill area of a
       // zero-thickness line is zero), but under a polar coord transform the

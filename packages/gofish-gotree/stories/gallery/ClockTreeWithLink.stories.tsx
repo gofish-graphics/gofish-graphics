@@ -41,7 +41,7 @@ import { combine, byDepth, mount } from "./_shared";
 // REMAINING GAPS (flagged, not faked):
 //  - Link: curveStepBefore (an orthogonal radial-then-angular step, the inward
 //    "spoke + arc" routing in the reference) is NOT supported — gofish-gotree
-//    links only do {interpolation:"linear"} (orthogonal/arc throw as M4+). So
+//    links only do {route:"straight"} (orthogonal/arc throw as M4+). So
 //    links are drawn as straight chords through the hollow center; under the
 //    polar transform a straight parent→child segment bows relative to the
 //    reference's stepped spokes.
@@ -95,7 +95,7 @@ export const ClockTreeWithLink: StoryObj = {
       {
         node,
         // curveStepBefore is unsupported → straight chord (bows under polar).
-        link: { interpolation: "linear", stroke: "#90a4ae", strokeWidth: 1 },
+        link: { route: "straight", stroke: "#90a4ae", strokeWidth: 1 },
         parentChild: combine({
           // θ: parent at the start of its subtree's slot, group after it.
           x: { kind: "distribute", spacing: 0, mode: "edge" },

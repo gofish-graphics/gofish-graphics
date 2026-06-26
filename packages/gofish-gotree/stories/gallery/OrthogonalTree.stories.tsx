@@ -11,10 +11,8 @@ import { initializeContainer } from "../helper";
 // Every relationship distributes on BOTH axes: a parent sits up-left of its
 // subtree and each sibling steps further down-right, so the whole tree cascades
 // along a diagonal — the classic orthogonal node-link "staircase" grid.
-//
-// TODO: needs step/orthogonal links implemented — GoTree's Link is
-//   `curveStepBefore` (right-angle elbow connectors), which the link renderer
-//   does not yet support, so links fall back to {interpolation:"linear"}.
+// Links use the `orthogonal` route: right-angle elbows bending at the
+// parent↔child midpoint (GoTree's orthogonal link, `ue`).
 const meta: Meta = {
   title: "GoTree / Gallery / OrthogonalTree",
 };
@@ -37,8 +35,7 @@ export const OrthogonalTree: StoryObj = {
     tree(
       {
         node,
-        // TODO: needs step/orthogonal links implemented — fall back to linear.
-        link: { interpolation: "linear", stroke: "#90a4ae", strokeWidth: 1.5 },
+        link: { route: "orthogonal", stroke: "#90a4ae", strokeWidth: 1.5 },
         // parent up-left of its subtree: distribute x forward (parent at low x =
         // left), distribute y reverse (parent at high y = top, GoFish is y-up).
         parentChild: combine({

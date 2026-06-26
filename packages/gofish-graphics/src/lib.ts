@@ -101,6 +101,21 @@ export { spreadX, spreadX as SpreadX } from "./ast/graphicalOperators/spreadX";
 export { spreadY, spreadY as SpreadY } from "./ast/graphicalOperators/spreadY";
 export { layer as Layer } from "./ast/graphicalOperators/layer";
 export { connect, connect as Connect } from "./ast/graphicalOperators/connect";
+export {
+  registerRoute,
+  getRoute,
+  hasRoute,
+  resolveRoute,
+  straight,
+  bezier,
+  orthogonal,
+  arc,
+  perfectArrows,
+  type Router,
+  type RouteContext,
+  type Route,
+  type RouteSpec,
+} from "./ast/graphicalOperators/routers";
 export { treemap, Treemap } from "./ast/graphicalOperators/treemap";
 export {
   connectX,
@@ -149,6 +164,7 @@ export {
   line,
   blank,
   area,
+  createDerivedMark,
   normalize,
   repeat,
   log,
