@@ -37,7 +37,7 @@ export const testSingletonAreaChart = () =>
     ribbon(
       {
         dir: "x",
-        interpolation: "linear",
+        curve: "straight",
         // opacity: 0.7,
         // mixBlendMode: "normal",
         opacity: 0.7,
@@ -75,7 +75,7 @@ export const testAreaChart = () =>
         ribbon(
           {
             dir: "x",
-            interpolation: "linear",
+            curve: "straight",
             // opacity: 0.7,
             // mixBlendMode: "normal",
             opacity: 0.7,

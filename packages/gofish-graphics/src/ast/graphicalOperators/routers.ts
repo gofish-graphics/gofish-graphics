@@ -1,16 +1,19 @@
 /**
- * Route registry — pluggable, layout-time routing algorithms for the `line`
- * mark (and any connector). A *route* shapes the stroke between two already
- * resolved endpoints (their bboxes), as opposed to *interpolation*, which is a
- * data-time transform that fills points between data samples (see
- * `adaptive-resampling.ts`). Routes operate on resolved geometry that only
- * exists after layout — orthogonal elbows, arcs, perfect-arrows, and (later)
- * ELK edge routers all live here.
+ * Curve registry — pluggable path-shaping algorithms for the `line`/`ribbon`
+ * mark (and any connector). The public `curve` option resolves (via
+ * `resolveCurve`) to a *router*: a function that shapes the stroke between two
+ * already-resolved endpoints (their bboxes). All of these are screen-space and
+ * pure geometry of the resolved point sequence — the data-space cousin
+ * (statistical smoothing: loess/regression) is a separate `derive` operator
+ * (see issue #635), not a curve.
+ *
+ * Built-ins below are the *routing* curves (straight / bezier / orthogonal /
+ * arc — the GoTree link styles, Li et al. CHI 2020 — plus perfect-arrows), each
+ * pairwise. Sequence curves that thread the whole point run (catmullRom /
+ * monotone / step) are added in a later stage.
  *
  * Register a new router with `registerRoute(name, fn)`; look one up with
- * `getRoute(name)`. The built-ins below cover the GoTree link styles
- * (straight / bezier / orthogonal / arc — Li et al., CHI 2020) plus
- * perfect-arrows.
+ * `getRoute(name)`.
  */
 import {
   type Path,
@@ -44,14 +47,19 @@ export type Router = (
 ) => Path;
 
 /**
- * A serializable route value, produced by a route factory (`orthogonal()`,
- * `arc({ direction: "down" })`, …) — the same builder-object idiom GoFish uses
- * for coordinate spaces, axes, and labels. `type` names a registered router;
- * `options` are forwarded to it. A bare string is accepted as shorthand for an
- * option-less route.
+ * A serializable curve value, produced by a curve factory (`straight()`,
+ * `bezier()`, `orthogonal()`, `arc({ direction: "down" })`, …) — the same
+ * builder-object idiom GoFish uses for coordinate spaces, axes, and labels.
+ * `type` names a registered router; `options` are forwarded to it. A bare
+ * string is accepted as shorthand for an option-less curve (`"straight"`).
+ *
+ * `curve` is the single screen-space path-shaping key on `line`/`ribbon` — it
+ * holds both interpolating curves that thread the point sequence (straight,
+ * bezier, catmullRom, …) and routing curves that shape the stroke between two
+ * anchors (orthogonal, arc, perfectArrows). A curve resolves to a `Router`.
  */
-export type RouteSpec = { type: string; options?: Record<string, any> };
-export type Route = string | RouteSpec;
+export type CurveSpec = { type: string; options?: Record<string, any> };
+export type Curve = string | CurveSpec;
 
 type RouteEntry = {
   fn: Router;
@@ -85,13 +93,13 @@ export function hasRoute(name: string): boolean {
   return registry.has(name);
 }
 
-/** Resolve a `Route` (string or spec) to its router fn + options. */
-export function resolveRoute(route: Route): {
+/** Resolve a `Curve` (string or spec) to its router fn + options. */
+export function resolveCurve(curve: Curve): {
   router: Router;
   options?: Record<string, any>;
 } {
-  if (typeof route === "string") return { router: getRoute(route) };
-  return { router: getRoute(route.type), options: route.options };
+  if (typeof curve === "string") return { router: getRoute(curve) };
+  return { router: getRoute(curve.type), options: curve.options };
 }
 
 // --- geometry helpers -------------------------------------------------------
@@ -221,28 +229,28 @@ registerRoute("orthogonal", orthogonalRouter, { ribbon: false });
 registerRoute("arc", arcRouter, { ribbon: false });
 registerRoute("perfectArrows", perfectArrowsRouter, { ribbon: false });
 
-// --- route factories --------------------------------------------------------
+// --- curve factories --------------------------------------------------------
 // Builder-object idiom (like `polar({…})` / axis / label specs): each returns a
-// serializable `RouteSpec` carrying its own options, so call sites read
-// `line({ route: orthogonal() })`, `line({ route: arc({ direction: "down" }) })`.
+// serializable `CurveSpec` carrying its own options, so call sites read
+// `line({ curve: orthogonal() })`, `line({ curve: arc({ direction: "down" }) })`.
 
 /** Straight center-to-center line. */
-export const straight = (): RouteSpec => ({ type: "straight" });
+export const straight = (): CurveSpec => ({ type: "straight" });
 
 /** Cubic bezier (d3.linkVertical/horizontal convention). */
-export const bezier = (): RouteSpec => ({ type: "bezier" });
+export const bezier = (): CurveSpec => ({ type: "bezier" });
 
 /** Right-angle elbow bending at the main-axis midpoint (GoTree orthogonal). */
-export const orthogonal = (): RouteSpec => ({ type: "orthogonal" });
+export const orthogonal = (): CurveSpec => ({ type: "orthogonal" });
 
 /** Semicircular arc through both endpoints (GoTree arccurve). */
-export const arc = (options?: { direction?: "up" | "down" }): RouteSpec => ({
+export const arc = (options?: { direction?: "up" | "down" }): CurveSpec => ({
   type: "arc",
   ...(options ? { options } : {}),
 });
 
 /** Box-to-box arrow arc via perfect-arrows (bow/stretch/pad/… options). */
-export const perfectArrows = (options?: Record<string, any>): RouteSpec => ({
+export const perfectArrows = (options?: Record<string, any>): CurveSpec => ({
   type: "perfectArrows",
   ...(options ? { options } : {}),
 });

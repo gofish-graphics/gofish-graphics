@@ -43,7 +43,7 @@ export const RadialTreeIncline: StoryObj = {
     mount(
       {
         node,
-        link: { route: "straight", stroke: "#90a4ae", strokeWidth: 1.5 },
+        link: { curve: "straight", stroke: "#90a4ae", strokeWidth: 1.5 },
         parentChild: combine({
           // θ: parent offset angularly from its subtree (the incline).
           x: {

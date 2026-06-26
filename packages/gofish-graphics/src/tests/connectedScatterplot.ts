@@ -58,7 +58,7 @@ export const testConnectedScatterplot = () =>
     line(
       {
         dir: "x",
-        interpolation: "linear",
+        curve: "straight",
         stroke: "black",
         strokeWidth: 2,
       },

@@ -53,7 +53,7 @@ export const Default: StoryObj<Args> = {
       ),
       For(groupBy(caltrainProcessed, "Train"), (d) =>
         line(
-          { dir: "y", strokeWidth: 1, interpolation: "bezier" },
+          { dir: "y", strokeWidth: 1, curve: "bezier" },
           For(d, (d) => ref(`${d.Train}-${d.Station}-${d.Time}`))
         )
       ),

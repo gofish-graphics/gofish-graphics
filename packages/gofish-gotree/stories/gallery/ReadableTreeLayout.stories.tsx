@@ -34,7 +34,7 @@ export const ReadableTreeLayout: StoryObj = {
     tree(
       {
         node,
-        link: { route: "orthogonal", stroke: "#555555", strokeWidth: 2 },
+        link: { curve: "orthogonal", stroke: "#555555", strokeWidth: 2 },
         parentChild: combine({
           x: { kind: "align", alignment: "middle" },
           y: { kind: "distribute", spacing: 60 },

@@ -12,7 +12,7 @@ import { combine, byDepth, mount } from "./_shared";
 // x and y) so every sibling steps diagonally — the woven, braided look.
 // TODO: needs curve links implemented — dsl Link is "curve" but the gotree
 // LinkSpec only supports interpolation linear/bezier/orthogonal/arc, so we
-// fall back to { route: "straight" }.
+// fall back to { curve: "straight" }.
 const meta: Meta = { title: "GoTree / Gallery / WeaveTree" };
 export default meta;
 
@@ -23,7 +23,7 @@ export const WeaveTree: StoryObj = {
     mount({
       node,
       // TODO: needs curve links implemented
-      link: { route: "straight", stroke: "#666", strokeWidth: 1 },
+      link: { curve: "straight", stroke: "#666", strokeWidth: 1 },
       parentChild: combine({
         x: { kind: "distribute", spacing: 8 },
         y: { kind: "align", alignment: "end" },

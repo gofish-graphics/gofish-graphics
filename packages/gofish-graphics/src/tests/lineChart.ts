@@ -42,7 +42,7 @@ export const testLineChart = () =>
         line(
           {
             dir: "x",
-            interpolation: "linear",
+            curve: "straight",
             // opacity: 0.7,
             strokeWidth: 1,
           },

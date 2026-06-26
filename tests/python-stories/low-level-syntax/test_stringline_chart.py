@@ -55,7 +55,7 @@ def story_default():
             [ref(_dot_name(d)) for d in train_rows],
             dir="y",
             strokeWidth=1,
-            interpolation="bezier",
+            curve="bezier",
         )
         for train_rows in group_by(rows, "Train").values()
     ]

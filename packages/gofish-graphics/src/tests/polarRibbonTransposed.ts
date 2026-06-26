@@ -90,7 +90,7 @@ export const testPolarRibbonTransposed = (size: { width: number; height: number 
               // fill: "black",
               // fill: "none",
               // stroke: i == 3 ? "black" : "none",
-              interpolation: "bezier",
+              curve: "bezier",
               opacity: 0.7,
             },
             items.map((d) => ref(`${d.category}-${d.group}`))

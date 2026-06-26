@@ -16,7 +16,7 @@ export const testBumpChart = () =>
     ),
     For(groupBy(newCarColors, "Color"), (d) =>
       line(
-        { dir: "y", strokeWidth: 1, interpolation: "bezier" },
+        { dir: "y", strokeWidth: 1, curve: "bezier" },
         For(d, (d) => ref(`${d.Color}-${d.Year}`))
       )
     ),

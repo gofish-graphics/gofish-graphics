@@ -35,7 +35,7 @@ export const OrthogonalTree: StoryObj = {
     tree(
       {
         node,
-        link: { route: "orthogonal", stroke: "#90a4ae", strokeWidth: 1.5 },
+        link: { curve: "orthogonal", stroke: "#90a4ae", strokeWidth: 1.5 },
         // parent up-left of its subtree: distribute x forward (parent at low x =
         // left), distribute y reverse (parent at high y = top, GoFish is y-up).
         parentChild: combine({

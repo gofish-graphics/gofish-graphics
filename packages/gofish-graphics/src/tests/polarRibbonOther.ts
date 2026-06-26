@@ -92,7 +92,7 @@ export const testPolarRibbonOther = (size: { width: number; height: number }) =>
               // fill: "black",
               // fill: "none",
               stroke: i == 0 ? "black" : "none",
-              interpolation: "bezier",
+              curve: "bezier",
               opacity: 1,
             },
             items.map((d) => ref(`${d.category}-${d.group}`))

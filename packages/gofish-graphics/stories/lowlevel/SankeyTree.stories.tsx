@@ -115,7 +115,7 @@ export const Default: StoryObj = {
           {
             dir: "x",
             fill: classColor[cls],
-            interpolation: "bezier",
+            curve: "bezier",
             opacity: 0.7,
             mixBlendMode: "multiply",
           },
@@ -126,7 +126,7 @@ export const Default: StoryObj = {
             {
               dir: "x",
               fill: sex === "Female" ? color6[4] : color6[5],
-              interpolation: "bezier",
+              curve: "bezier",
               opacity: 0.7,
               mixBlendMode: "multiply",
             },
@@ -144,7 +144,7 @@ export const Default: StoryObj = {
                     : survived === "No"
                       ? gray
                       : color6[5],
-                interpolation: "bezier",
+                curve: "bezier",
                 opacity: 0.7,
                 mixBlendMode: "multiply",
               },

@@ -2176,7 +2176,7 @@ def line(
     strokeWidth: Optional[int] = None,
     opacity: Optional[float] = None,
     mixBlendMode: Optional[str] = None,
-    interpolation: Optional[str] = None,
+    curve: Optional[Union[str, Dict[str, Any]]] = None,
     from_: Optional[str] = None,
     to: Optional[str] = None,
 ) -> Mark:
@@ -2201,7 +2201,7 @@ def line(
         ("strokeWidth", strokeWidth),
         ("opacity", opacity),
         ("mixBlendMode", mixBlendMode),
-        ("interpolation", interpolation),
+        ("curve", curve),
         ("from", from_),
         ("to", to),
     ]:
@@ -2221,7 +2221,7 @@ def ribbon(
     strokeWidth: Optional[int] = None,
     opacity: Optional[float] = None,
     mixBlendMode: Optional[str] = None,
-    interpolation: Optional[str] = None,
+    curve: Optional[Union[str, Dict[str, Any]]] = None,
     from_: Optional[str] = None,
     to: Optional[str] = None,
 ) -> Mark:
@@ -2241,7 +2241,7 @@ def ribbon(
         ("strokeWidth", strokeWidth),
         ("opacity", opacity),
         ("mixBlendMode", mixBlendMode),
-        ("interpolation", interpolation),
+        ("curve", curve),
         ("from", from_),
         ("to", to),
     ]:

@@ -22,7 +22,7 @@ export const ArcTree: StoryObj = {
   render: () =>
     mount({
       node,
-      link: { route: "arc", stroke: "#90a4ae", strokeWidth: 1.5 },
+      link: { curve: "arc", stroke: "#90a4ae", strokeWidth: 1.5 },
       parentChild: combine({
         x: { kind: "distribute", spacing: 14 },
         y: { kind: "align", alignment: "middle" },

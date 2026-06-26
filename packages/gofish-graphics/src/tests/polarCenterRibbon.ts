@@ -92,7 +92,7 @@ export const testPolarCenterRibbon = (size: { width: number; height: number }) =
               {
                 dir: "y",
                 fill: colorScale[group as keyof typeof colorScale],
-                interpolation: "bezier",
+                curve: "bezier",
                 opacity: 0.5,
                 mixBlendMode: "multiply",
               },

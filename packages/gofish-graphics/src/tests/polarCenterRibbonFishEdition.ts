@@ -94,7 +94,7 @@ export const testPolarCenterRibbonFishEdition = (size: { width: number; height: 
               {
                 dir: "y",
                 fill: colorScale[FishType as keyof typeof colorScale],
-                interpolation: "bezier",
+                curve: "bezier",
                 opacity: 0.8,
                 mixBlendMode: "multiply",
               },

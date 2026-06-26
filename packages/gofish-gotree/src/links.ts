@@ -5,22 +5,22 @@ import {
   bezier,
   orthogonal,
   arc,
-  type Route,
+  type Curve,
 } from "gofish-graphics";
 import type { HierarchyNode } from "d3-hierarchy";
 import type { LinkOptions, LinkSpec } from "./spec";
 import { nodePath, toDatum } from "./data";
 
 const DEFAULTS: Required<
-  Pick<LinkOptions, "route" | "stroke" | "strokeWidth">
+  Pick<LinkOptions, "curve" | "stroke" | "strokeWidth">
 > = {
-  route: "straight",
+  curve: "straight",
   stroke: "gray",
   strokeWidth: 1,
 };
 
-// GoTree's Link style → a GoFish layout-time route factory.
-const ROUTE_FOR: Record<NonNullable<LinkOptions["route"]>, () => Route> = {
+// GoTree's Link style → a GoFish screen-space curve factory.
+const CURVE_FOR: Record<NonNullable<LinkOptions["curve"]>, () => Curve> = {
   straight,
   bezier,
   orthogonal,
@@ -45,10 +45,10 @@ function linkMark(
   sourcePath: string,
   targetPath: string
 ): any {
-  const route = opts.route ?? DEFAULTS.route;
+  const curve = opts.curve ?? DEFAULTS.curve;
   return line(
     {
-      route: ROUTE_FOR[route](),
+      curve: CURVE_FOR[curve](),
       // The connector's default `fill` falls back to children[0].color ?? "black".
       // For a straight cartesian line that's invisible (fill area of a
       // zero-thickness line is zero), but under a polar coord transform the

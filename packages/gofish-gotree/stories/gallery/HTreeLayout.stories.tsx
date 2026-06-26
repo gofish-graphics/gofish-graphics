@@ -70,7 +70,7 @@ export const HTreeLayout: StoryObj = {
     tree(
       {
         node,
-        link: { route: "straight", stroke: "#90a4ae", strokeWidth: 2 },
+        link: { curve: "straight", stroke: "#90a4ae", strokeWidth: 2 },
         // Parent centered inside its child-group on BOTH axes (Root `within`).
         parentChild: combine({
           x: { kind: "align", alignment: "middle" },

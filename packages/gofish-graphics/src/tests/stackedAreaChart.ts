@@ -43,7 +43,7 @@ export const testStackedAreaChart = () =>
         ribbon(
           {
             dir: "x",
-            interpolation: "linear",
+            curve: "straight",
             // opacity: 0.7,
             mixBlendMode: "normal",
             strokeWidth: 1,

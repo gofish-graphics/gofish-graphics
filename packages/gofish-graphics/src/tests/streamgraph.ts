@@ -52,7 +52,7 @@ export const testStreamgraph = () =>
         ribbon(
           {
             dir: "x",
-            interpolation: "linear",
+            curve: "straight",
             mixBlendMode: "normal",
             strokeWidth: 1,
           },

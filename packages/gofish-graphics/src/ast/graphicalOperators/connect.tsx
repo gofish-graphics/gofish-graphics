@@ -22,7 +22,7 @@ import { MaybeValue } from "../data";
 import { Domain } from "../domain";
 import { UNDEFINED, UnderlyingSpace } from "../underlyingSpace";
 import { createNodeOperator } from "../withGoFish";
-import { resolveRoute, type Route } from "./routers";
+import { resolveCurve, type Curve } from "./routers";
 
 // Per-axis bbox anchor. A literal number is the raw fraction in [0, 1]; the
 // keywords map to {start: 0, middle: 0.5, end: 1}. GoFish is y-up, so
@@ -61,8 +61,7 @@ export const connect = createNodeOperator(
     {
       direction,
       fill,
-      interpolation,
-      route,
+      curve,
       stroke,
       strokeWidth,
       opacity,
@@ -74,13 +73,13 @@ export const connect = createNodeOperator(
       // Optional in anchor mode (source/target), where it is ignored.
       direction?: FancyDirection;
       fill?: MaybeValue<string>;
-      interpolation?: "linear" | "bezier";
-      // Layout-time routing algorithm for center mode (the "line" component):
-      // a route value from a factory (`orthogonal()`, `arc({ direction })`,
-      // `perfectArrows({ bow })`, …) or a bare route name. Takes precedence over
-      // `interpolation` in center mode; `interpolation` is kept as a back-compat
-      // alias (linear→straight, bezier→bezier). Ignored in edge ("ribbon") mode.
-      route?: Route;
+      // The single screen-space path-shaping key. A curve value from a factory
+      // (`straight()`, `bezier()`, `orthogonal()`, `arc({ direction })`,
+      // `perfectArrows({ bow })`, …) or a bare name (`"straight"` | `"bezier"`).
+      // Center ("line") mode resolves it through the curve registry; edge
+      // ("ribbon") mode only honors `straight` (linear band) vs `bezier`
+      // (S-curve band). Defaults to `"straight"` when omitted.
+      curve?: Curve;
       stroke?: string;
       strokeWidth?: number;
       opacity?: number;
@@ -108,7 +107,12 @@ export const connect = createNodeOperator(
     const resolvedTarget =
       target !== undefined ? resolveAnchor(target) : undefined;
     const dir = elaborateDirection(direction ?? 0);
-    interpolation = interpolation ?? "linear";
+    // Edge ("ribbon") mode supports only straight (linear band) vs bezier
+    // (S-curve band); read the curve's name to pick. Center mode resolves the
+    // full curve through the registry below.
+    const curveType =
+      (typeof curve === "string" ? curve : curve?.type) ?? "straight";
+    const edgeBezier = curveType === "bezier";
 
     return new GoFishNode(
       {
@@ -241,12 +245,11 @@ export const connect = createNodeOperator(
           }
 
           // Center mode = the "line" component: each endpoint pair is routed by
-          // a registered, layout-time routing algorithm (straight | bezier |
-          // orthogonal | arc | perfectArrows | …). `route` wins; `interpolation`
-          // is a back-compat alias (linear→straight, bezier→bezier).
+          // a registered, screen-space curve (straight | bezier | orthogonal |
+          // arc | perfectArrows | …) resolved from the `curve` option.
           if (mode === "center") {
-            const { router, options: routeOpts } = resolveRoute(
-              route ?? (interpolation === "bezier" ? "bezier" : "straight")
+            const { router, options: routeOpts } = resolveCurve(
+              curve ?? "straight"
             );
             for (const [b0, b1] of bboxPairs) {
               paths.push(
@@ -255,7 +258,7 @@ export const connect = createNodeOperator(
             }
           } else if (dir === 0) {
             // Edge ("ribbon") mode: a filled quad between the facing edges.
-            if (interpolation === "linear") {
+            if (!edgeBezier) {
               for (const [b0, b1] of bboxPairs) {
                 paths.push([
                   {
@@ -288,7 +291,7 @@ export const connect = createNodeOperator(
                   },
                 ]);
               }
-            } else if (interpolation === "bezier") {
+            } else {
               for (const [b0, b1] of bboxPairs) {
                 const midX = (b0[0].max! + b1[0].min!) / 2;
                 paths.push([
@@ -324,7 +327,7 @@ export const connect = createNodeOperator(
               }
             }
           } else {
-            if (interpolation === "linear") {
+            if (!edgeBezier) {
               for (const [b0, b1] of bboxPairs) {
                 paths.push([
                   {
@@ -357,7 +360,7 @@ export const connect = createNodeOperator(
                   },
                 ]);
               }
-            } else if (interpolation === "bezier") {
+            } else {
               for (const [b0, b1] of bboxPairs) {
                 const midY = (b0[1].max! + b1[1].min!) / 2;
                 paths.push([

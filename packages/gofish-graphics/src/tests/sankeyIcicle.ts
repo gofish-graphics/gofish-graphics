@@ -205,7 +205,7 @@ export const testSankeyIcicle = () =>
           {
             dir: "x",
             fill: classColor[cls as keyof typeof classColor],
-            interpolation: "bezier",
+            curve: "bezier",
             opacity: 0.7,
             mixBlendMode: "multiply",
           },
@@ -231,7 +231,7 @@ export const testSankeyIcicle = () =>
                 //     neutral,
                 //     mixPct[cls as keyof typeof mixPct]
                 //   ),
-                interpolation: "bezier",
+                curve: "bezier",
                 opacity: 0.7,
                 mixBlendMode: "multiply",
               },
@@ -261,7 +261,7 @@ export const testSankeyIcicle = () =>
                     //     neutral,
                     //     mixPct[cls as keyof typeof mixPct]
                     //   ),
-                    interpolation: "bezier",
+                    curve: "bezier",
                     opacity: 0.7,
                     mixBlendMode: "multiply",
                   },
@@ -366,7 +366,7 @@ export const testSankeyIcicleAPIv2 = () =>
         {
           dir: "x",
           fill: classColor[cls as keyof typeof classColor],
-          interpolation: "bezier",
+          curve: "bezier",
           opacity: 0.7,
           mixBlendMode: "multiply",
         },
@@ -377,7 +377,7 @@ export const testSankeyIcicleAPIv2 = () =>
           {
             dir: "x",
             fill: sex === "Female" ? color6_old[2] : color6_old[3],
-            interpolation: "bezier",
+            curve: "bezier",
             opacity: 0.7,
             mixBlendMode: "multiply",
           },
@@ -395,7 +395,7 @@ export const testSankeyIcicleAPIv2 = () =>
                   : survived === "No"
                     ? mix(color6_old[3], black, 0.5)
                     : mix(color6_old[3], white, 0.5),
-              interpolation: "bezier",
+              curve: "bezier",
               opacity: 0.7,
               mixBlendMode: "multiply",
             },

@@ -200,7 +200,7 @@ def story_default():
             [ref(_dot_name(d)) for d in color_rows],
             dir="y",
             strokeWidth=2,
-            interpolation="bezier",
+            curve="bezier",
         )
         for color_rows in group_by(NEW_CAR_COLORS, "Color").values()
     ]

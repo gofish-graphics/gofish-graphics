@@ -32,7 +32,7 @@ const boxAndWhisker = ({
   return layer({}, [
     rect({ w: 8, h: 1, y: v(min), fill: "gray" }).name(minName),
     rect({ w: 8, h: 1, y: v(max), fill: "gray" }).name(maxName),
-    line({ dir: "y", strokeWidth: 1, interpolation: "bezier" }, [
+    line({ dir: "y", strokeWidth: 1, curve: "bezier" }, [
       ref(minName),
       ref(maxName),
     ]),

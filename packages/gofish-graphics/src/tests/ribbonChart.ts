@@ -126,7 +126,7 @@ export const testRibbonChart = (size: { width: number; height: number }) =>
             {
               dir: "x",
               fill: colorScale[group as keyof typeof colorScale],
-              interpolation: "bezier",
+              curve: "bezier",
               // opacity: 0.8,
               mixBlendMode: "multiply",
             },

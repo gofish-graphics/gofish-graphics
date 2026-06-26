@@ -44,7 +44,7 @@ export const HVDrawing: StoryObj = {
     tree(
       {
         node,
-        link: { route: "straight", stroke: "#90a4ae", strokeWidth: 1.5 },
+        link: { curve: "straight", stroke: "#90a4ae", strokeWidth: 1.5 },
         mode: "bottomUp",
         // Both relations alternate in sync (resolved at the same node depth).
         parentChild: alternate([H, V]),

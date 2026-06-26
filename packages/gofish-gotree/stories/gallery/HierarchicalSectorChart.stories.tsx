@@ -50,7 +50,7 @@ import { initializeContainer } from "../helper";
 //    sub-2π knobs are not expressible.
 //  - PolarAxis (θ/r axis swap) is not expressible.
 //  - Link:hidden → link:"none" here (correct for a filled-wedge sector chart);
-//    polar links only support {route:"straight"|"none"}, never arcs.
+//    polar links only support {curve:"straight"|"none"}, never arcs.
 //  - Angular AUTO-FIT (#618): leaves carry a unit thetaSize weight, nest-θ sums
 //    them up the tree, and the coord fits the total to the circle — so the disc
 //    closes for any tree with no hand-set leafTheta.

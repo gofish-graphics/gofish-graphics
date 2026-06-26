@@ -53,7 +53,7 @@ import { initializeContainer } from "../helper";
 //  - InnerRadius: there is no inner-radius origin knob, so the root band
 //    starts at r = bandHeight (a small hollow center), not at r = 0.
 //  - Link:curve — links are not drawn for filled sector wedges (link:"none"
-//    is correct here); polar links only support {route:"straight"|"none"},
+//    is correct here); polar links only support {curve:"straight"|"none"},
 //    never curved arcs, so the dsl's curve links are not representable anyway.
 //  - Thickness:static 2 maps to the wedge stroke width.
 //  - Angular AUTO-FIT (#618): leaves carry a unit thetaSize weight, nest-θ sums

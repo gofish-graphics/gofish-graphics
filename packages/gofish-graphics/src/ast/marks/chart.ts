@@ -1,4 +1,4 @@
-import { sumBy, v, type Route } from "../../lib";
+import { sumBy, v, type Curve } from "../../lib";
 import {
   connect as Connect,
   type AnchorSpec,
@@ -334,11 +334,10 @@ export type LineOptions = {
   strokeWidth?: number;
   opacity?: number;
   mixBlendMode?: "normal" | "multiply";
-  interpolation?: "linear" | "bezier";
-  // Layout-time routing algorithm, as a factory call: `orthogonal()`,
-  // `arc({ direction })`, `perfectArrows({ bow })`, … (or a bare route name).
-  // Wins over `interpolation`.
-  route?: Route;
+  // Screen-space path shape, as a factory call (`straight()`, `bezier()`,
+  // `catmullRom()`, `orthogonal()`, `arc({ direction })`, `perfectArrows({ bow })`,
+  // …) or a bare name (`"straight"` | `"bezier"`). The single path-shaping key.
+  curve?: Curve;
   dir?: "x" | "y";
   // Anchor mode: pin each endpoint to a normalized point on its mark's bbox
   // (Bluefish-style `Line`) instead of the center — for ropes, node-link edges,
@@ -362,8 +361,7 @@ export const line = createDerivedMark<LineOptions>("line", (o, children) =>
       strokeWidth: o.strokeWidth ?? 1,
       opacity: o.opacity,
       mixBlendMode: o.mixBlendMode,
-      interpolation: o.interpolation ?? "linear",
-      route: o.route,
+      curve: o.curve ?? "straight",
       source: o.source,
       target: o.target,
     },
@@ -378,8 +376,9 @@ export type RibbonOptions = {
   opacity?: number;
   mixBlendMode?: "normal" | "multiply";
   dir?: "x" | "y";
-  interpolation?: "linear" | "bezier";
-  route?: Route;
+  // Screen-space path shape for the band edges (`straight()` | `bezier()`).
+  // Edge mode honors straight (linear band) vs bezier (S-curve band).
+  curve?: Curve;
   from?: string;
   to?: string;
 };
@@ -398,8 +397,7 @@ export const ribbon = createDerivedMark<RibbonOptions>(
         stroke: o.stroke,
         strokeWidth: o.strokeWidth ?? 0,
         opacity: o.opacity,
-        interpolation: o.interpolation ?? "bezier",
-        route: o.route,
+        curve: o.curve ?? "bezier",
       },
       children
     )

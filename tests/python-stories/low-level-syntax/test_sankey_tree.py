@@ -143,7 +143,7 @@ def story_default():
                 [ref(f"{cls}-src"), ref(f"{cls}-tgt")],
                 dir="x",
                 fill=_CLASS_COLOR[cls],
-                interpolation="bezier",
+                curve="bezier",
                 opacity=0.7,
                 mixBlendMode="multiply",
             )
@@ -154,7 +154,7 @@ def story_default():
                     [ref(f"{cls}-{sex}-src"), ref(f"{cls}-{sex}-tgt")],
                     dir="x",
                     fill=_sex_color(sex),
-                    interpolation="bezier",
+                    curve="bezier",
                     opacity=0.7,
                     mixBlendMode="multiply",
                 )
@@ -168,7 +168,7 @@ def story_default():
                         ],
                         dir="x",
                         fill=_tgt_color(sex, survived),
-                        interpolation="bezier",
+                        curve="bezier",
                         opacity=0.7,
                         mixBlendMode="multiply",
                     )

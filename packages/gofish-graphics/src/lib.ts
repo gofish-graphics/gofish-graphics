@@ -104,7 +104,7 @@ export {
   registerRoute,
   getRoute,
   hasRoute,
-  resolveRoute,
+  resolveCurve,
   straight,
   bezier,
   orthogonal,
@@ -112,8 +112,8 @@ export {
   perfectArrows,
   type Router,
   type RouteContext,
-  type Route,
-  type RouteSpec,
+  type Curve,
+  type CurveSpec,
 } from "./ast/graphicalOperators/routers";
 export { treemap, Treemap } from "./ast/graphicalOperators/treemap";
 export { enclose, enclose as Enclose } from "./ast/graphicalOperators/enclose";
