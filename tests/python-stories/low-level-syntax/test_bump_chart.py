@@ -7,7 +7,7 @@ is a `spread` column of dots stacked top-to-bottom by rank; every dot is named
 wrapped in a single `layer`.
 """
 
-from gofish import layer, spread, connect, ellipse, ref, datum
+from gofish import layer, spread, line, ellipse, ref, datum
 from python_stories._lowlevel_helpers import group_by, order_by
 
 NEW_CAR_COLORS = [
@@ -196,11 +196,11 @@ def story_default():
     ]
 
     color_lines = [
-        connect(
+        line(
             [ref(_dot_name(d)) for d in color_rows],
-            direction="y",
+            dir="y",
             strokeWidth=2,
-            mode="center",
+            interpolation="bezier",
         )
         for color_rows in group_by(NEW_CAR_COLORS, "Color").values()
     ]

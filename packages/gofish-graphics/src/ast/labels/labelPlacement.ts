@@ -102,7 +102,7 @@ export interface LabelConfig {
 }
 
 export interface ShapeInfo {
-  type: "rect" | "ellipse" | "petal" | "line" | "area";
+  type: "rect" | "ellipse" | "petal" | "line" | "ribbon";
   dimensions: Size;
   direction?: Direction;
   coordinateSystem?: "linear" | "polar" | "bipolar";
@@ -166,7 +166,7 @@ export const inferLabelPosition = (
   }
 
   if (
-    (shape.type === "line" || shape.type === "area") &&
+    (shape.type === "line" || shape.type === "ribbon") &&
     context.isMultiSeries
   ) {
     return "outset-right";

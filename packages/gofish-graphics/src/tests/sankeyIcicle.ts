@@ -24,7 +24,7 @@ import {
   rect,
   groupBy,
   For,
-  area,
+  ribbon,
   ref,
   spreadX,
   spreadY,
@@ -201,7 +201,7 @@ export const testSankeyIcicle = () =>
     ..._(titanic)
       .groupBy("class")
       .flatMap((items, cls) => [
-        area(
+        ribbon(
           {
             dir: "x",
             fill: classColor[cls as keyof typeof classColor],
@@ -214,7 +214,7 @@ export const testSankeyIcicle = () =>
         ..._(items)
           .groupBy("sex")
           .flatMap((sexItems, sex) => [
-            area(
+            ribbon(
               {
                 dir: "x",
                 fill:
@@ -240,7 +240,7 @@ export const testSankeyIcicle = () =>
             ..._(sexItems)
               .groupBy("survived")
               .map((survivedItems, survived) =>
-                area(
+                ribbon(
                   {
                     dir: "x",
                     fill:
@@ -362,7 +362,7 @@ export const testSankeyIcicleAPIv2 = () =>
       ),
     ]),
     For(groupBy(titanic, "class"), (items, cls) => [
-      area(
+      ribbon(
         {
           dir: "x",
           fill: classColor[cls as keyof typeof classColor],
@@ -373,7 +373,7 @@ export const testSankeyIcicleAPIv2 = () =>
         [ref(`${cls}-src`), ref(`${cls}-tgt`)]
       ),
       For(groupBy(items, "sex"), (sexItems, sex) => [
-        area(
+        ribbon(
           {
             dir: "x",
             fill: sex === "Female" ? color6_old[2] : color6_old[3],
@@ -384,7 +384,7 @@ export const testSankeyIcicleAPIv2 = () =>
           [ref(`${cls}-${sex}-src`), ref(`${cls}-${sex}-tgt`)]
         ),
         For(groupBy(sexItems, "survived"), (survivedItems, survived) =>
-          area(
+          ribbon(
             {
               dir: "x",
               fill:

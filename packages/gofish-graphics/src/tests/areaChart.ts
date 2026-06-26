@@ -15,7 +15,7 @@ import { ref } from "../ast/shapes/ref";
 import { streamgraphData, streamgraphColorPalette } from "../data/streamgraphData";
 import { stackX } from "../ast/graphicalOperators/stackX";
 import { frame } from "../ast/graphicalOperators/frame";
-import { area, For, frame, stackX } from "../lib";
+import { ribbon, For, frame, stackX } from "../lib";
 const data = streamgraphData;
 const colorPalette = streamgraphColorPalette;
 
@@ -34,7 +34,7 @@ export const testSingletonAreaChart = () =>
           })
       )
     ),
-    area(
+    ribbon(
       {
         dir: "x",
         interpolation: "linear",
@@ -72,7 +72,7 @@ export const testAreaChart = () =>
     ..._(data)
       .groupBy("c")
       .map((items, c) =>
-        area(
+        ribbon(
           {
             dir: "x",
             interpolation: "linear",

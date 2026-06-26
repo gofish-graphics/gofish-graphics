@@ -17,7 +17,7 @@ import { polar_DEPRECATED } from "../ast/coordinateTransforms/polar_DEPRECATED";
 import { polar } from "../ast/coordinateTransforms/polar";
 import { stackX } from "../ast/graphicalOperators/stackX";
 import { stackY } from "../ast/graphicalOperators/stackY";
-import { area } from "../lib";
+import { ribbon } from "../lib";
 import { frame } from "../ast/graphicalOperators/frame";
 // import { fishData } from "../data/fish";
 
@@ -230,7 +230,7 @@ export const testFishPolarRibbonChartTextured = (
       ..._(seafood)
         .groupBy("species")
         .map((items, species) =>
-          area(
+          ribbon(
             { dir: "x", opacity: 0.8, stroke: "black", strokeWidth: 3, mixBlendMode: "multiply" },
             items.map((d) => ref(`${d.lake}-${d.species}`))
           )

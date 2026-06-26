@@ -7,7 +7,7 @@ import {
   rect,
   v,
   frame,
-  area,
+  ribbon,
   ref,
 } from "../lib";
 
@@ -28,7 +28,7 @@ export const testRidgeline = () =>
             }).name(`${d.c}-${d.x}`)
           )
         ),
-        area(
+        ribbon(
           {
             dir: "x",
             opacity: 0.7,

@@ -5,7 +5,7 @@ import { spread } from "../ast/graphicalOperators/spread";
 import { rect } from "../ast/shapes/rect";
 import { color, color6 } from "../color";
 import { layer } from "../ast/graphicalOperators/layer";
-import { area } from "../lib";
+import { ribbon } from "../lib";
 import { ref } from "../ast/shapes/ref";
 import { color10Order } from "./color10";
 import { mix } from "spectral.js";
@@ -68,7 +68,7 @@ export const testSankey = (size: { width: number; height: number }) =>
         )
       ),
       ...Object.entries(_.groupBy(data, "group")).map(([group, items]) =>
-        area(
+        ribbon(
           {
             dir: "y",
             fill: colorScale[group as keyof typeof colorScale],

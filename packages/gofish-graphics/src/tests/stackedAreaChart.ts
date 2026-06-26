@@ -13,7 +13,7 @@ import { streamgraphData, streamgraphColorPalette } from "../data/streamgraphDat
 import { stackX } from "../ast/graphicalOperators/stackX";
 import { stackY } from "../ast/graphicalOperators/stackY";
 import { frame } from "../ast/graphicalOperators/frame";
-import { area, frame, groupBy, For, rect, ref, stackX, stackY, v } from "../lib";
+import { ribbon, frame, groupBy, For, rect, ref, stackX, stackY, v } from "../lib";
 const data = streamgraphData;
 const colorPalette = streamgraphColorPalette;
 
@@ -40,7 +40,7 @@ export const testStackedAreaChart = () =>
     _(data)
       .groupBy("c")
       .map((items, c) =>
-        area(
+        ribbon(
           {
             dir: "x",
             interpolation: "linear",
@@ -72,7 +72,7 @@ export const testStackedAreaChartV2API = () =>
       ),
     ]),
     For(groupBy(data, "c"), (items, c) =>
-      area(
+      ribbon(
         {
           dir: "x",
           // opacity: 0.7,

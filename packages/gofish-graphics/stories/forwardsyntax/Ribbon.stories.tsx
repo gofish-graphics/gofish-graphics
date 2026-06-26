@@ -11,7 +11,7 @@ import {
   layer,
   selectAll,
 } from "../../src/lib";
-import { area, group } from "../../src/lib";
+import { ribbon, group } from "../../src/lib";
 import { orderBy } from "lodash";
 import { clock } from "../../src/ast/coordinateTransforms/clock";
 
@@ -53,7 +53,7 @@ export const Basic: StoryObj<Args> = {
         .mark(rect({ h: "count", fill: "species" }).name("bars")),
       chart(selectAll("bars"))
         .flow(group({ by: "species" }))
-        .mark(area({ opacity: 0.8 })),
+        .mark(ribbon({ opacity: 0.8 })),
     ]).render(container, {
       w: args.w,
       h: args.h,
@@ -84,7 +84,7 @@ export const Layered: StoryObj<Args> = {
       .layer(
         chart() // empty scope = the previous tier's marks
           .flow(group({ by: "species" }))
-          .mark(area({ opacity: 0.8 }))
+          .mark(ribbon({ opacity: 0.8 }))
       )
       .render(container, {
         w: args.w,
@@ -123,7 +123,7 @@ export const Polar: StoryObj<Args> = {
         .mark(rect({ w: 0.1, h: "count", fill: "species" }).name("bars")),
       chart(selectAll("bars"))
         .flow(group({ by: "species" }))
-        .mark(area({ opacity: 0.8 })),
+        .mark(ribbon({ opacity: 0.8 })),
     ]).render(container, {
       w: args.w,
       h: args.h,

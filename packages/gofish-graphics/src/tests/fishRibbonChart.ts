@@ -13,7 +13,7 @@ import { layer } from "../ast/graphicalOperators/layer";
 import { ref } from "../ast/shapes/ref";
 import { stackX } from "../ast/graphicalOperators/stackX";
 import { stackY } from "../ast/graphicalOperators/stackY";
-import { area } from "../lib";
+import { ribbon } from "../lib";
 import { frame } from "../ast/graphicalOperators/frame";
 const fishColors = {
   Bass: color.blue[5],
@@ -50,7 +50,7 @@ export const testFishRibbonChart = () =>
     _(seafood)
       .groupBy("species")
       .map((items) =>
-        area(
+        ribbon(
           { dir: "x", opacity: 0.8, mixBlendMode: "multiply" },
           items.map((d) => ref(`${d.lake}-${d.species}`))
         )

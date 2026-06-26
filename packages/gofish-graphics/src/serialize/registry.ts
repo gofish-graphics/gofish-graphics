@@ -18,7 +18,7 @@
 // module-load. Importing directly from each source module keeps the
 // dependency graph acyclic.
 import {
-  area,
+  ribbon,
   paint,
   blank,
   circle,
@@ -48,7 +48,6 @@ import { scatter } from "../ast/graphicalOperators/scatter";
 import { group } from "../ast/graphicalOperators/group";
 import { table } from "../ast/graphicalOperators/table";
 import { arrow } from "../ast/graphicalOperators/arrow";
-import { connect } from "../ast/graphicalOperators/connect";
 import {
   treemap as treemapOperator,
   Treemap,
@@ -118,8 +117,11 @@ export const COMBINATOR_FACTORIES: Record<
   table: (opts, marks) => (table as any)(opts, marks) as unknown as Mark<any>,
   layer: (opts, marks) => (layer as any)(opts, marks) as unknown as Mark<any>,
   arrow: (opts, marks) => (arrow as any)(opts, marks) as unknown as Mark<any>,
-  connect: (opts, marks) =>
-    (connect as any)(opts, marks) as unknown as Mark<any>,
+  // `line`/`ribbon` are derived marks (createDerivedMark) whose `(opts, marks)`
+  // overload is the low-level combinator form (the drop-in for the removed
+  // `connect`/`connectX`/`connectY`). It builds the internal connect node.
+  line: (opts, marks) => (line as any)(opts, marks) as unknown as Mark<any>,
+  ribbon: (opts, marks) => (ribbon as any)(opts, marks) as unknown as Mark<any>,
   treemap: (opts, marks) =>
     (Treemap as any)(opts, marks) as unknown as Mark<any>,
   // Keys are the IR wire types (unchanged); values are the renamed
@@ -213,7 +215,7 @@ export const MARK_MAP: Record<
   rect: (opts) => rect(opts),
   circle: (opts) => circle(opts),
   line: (opts) => line(opts),
-  area: (opts) => area(opts),
+  ribbon: (opts) => ribbon(opts),
   blank: (opts) => blank(opts),
   ellipse: (opts) => ellipse(opts),
   petal: (opts) => petal(opts),

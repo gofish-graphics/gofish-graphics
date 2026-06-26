@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
 import { titanic } from "../../src/data/titanic";
-import { layer, spreadX, spreadY, stackY, rect, For, area, ref } from "../../src/lib";
+import { layer, spreadX, spreadY, stackY, rect, For, ribbon, ref } from "../../src/lib";
 import { color6, gray, neutral } from "../../src/color";
 import { groupBy } from "lodash";
 import _ from "lodash";
@@ -111,7 +111,7 @@ export const Default: StoryObj = {
         ),
       ]),
       For(groupBy(titanic, "class"), (items, cls) => [
-        area(
+        ribbon(
           {
             dir: "x",
             fill: classColor[cls],
@@ -122,7 +122,7 @@ export const Default: StoryObj = {
           [ref(`${cls}-src`), ref(`${cls}-tgt`)]
         ),
         For(groupBy(items, "sex"), (sexItems, sex) => [
-          area(
+          ribbon(
             {
               dir: "x",
               fill: sex === "Female" ? color6[4] : color6[5],
@@ -133,7 +133,7 @@ export const Default: StoryObj = {
             [ref(`${cls}-${sex}-src`), ref(`${cls}-${sex}-tgt`)]
           ),
           For(groupBy(sexItems, "survived"), (survivedItems, survived) =>
-            area(
+            ribbon(
               {
                 dir: "x",
                 fill:

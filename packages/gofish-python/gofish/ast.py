@@ -993,7 +993,7 @@ class ChartBuilder:
         resolve time.
 
         Args:
-            mark: A connector `Mark` (e.g. `line()`, `area()`)
+            mark: A connector `Mark` (e.g. `line()`, `ribbon()`)
 
         Returns:
             New ChartBuilder with the connector set
@@ -1005,7 +1005,7 @@ class ChartBuilder:
                 "selectAll(name) for additional overlays."
             )
         if not isinstance(mark, Mark):
-            raise TypeError(".connect() expects a Mark (e.g. line(), area())")
+            raise TypeError(".connect() expects a Mark (e.g. line(), ribbon())")
         new_builder = ChartBuilder(
             self.data, self.options, self.operators, z_order=self._z_order
         )
@@ -1016,7 +1016,7 @@ class ChartBuilder:
     def layer(self, child: "ChartBuilder") -> "LayerBuilder":
         """Stack another tier over this one. ``child`` is its own ``chart(...)``
         pipeline; an empty ``chart()`` scope (no data) inherits *this* tier's
-        marks (so ``.layer(chart().flow(group(by=...)).mark(area()))`` connects
+        marks (so ``.layer(chart().flow(group(by=...)).mark(ribbon()))`` connects
         what you just drew), while ``chart(table)`` drives the tier from another
         dataset (resolve back into the chart with
         ``resolve(..., from_=selectAll(...))``). Returns a ``LayerBuilder`` so
@@ -2162,63 +2162,94 @@ def circle(
 
 
 def line(
-    stroke: Optional[str] = None,
-    strokeWidth: Optional[int] = None,
-    opacity: Optional[float] = None,
-    interpolation: Optional[str] = None,
-    from_: Optional[str] = None,
-    to: Optional[str] = None,
-) -> Mark:
-    """Line mark.
-
-    Two forms: bag form (over a ``selectAll(...)`` ref array — one polyline) and
-    pairwise form ``line(from_=..., to=...)`` over rows whose ``from``/``to``
-    columns hold refs (one segment per row, after :func:`resolve` — node-link
-    edges).
-    """
-    kwargs: Dict[str, Any] = {}
-    for k, value in [
-        ("stroke", stroke),
-        ("strokeWidth", strokeWidth),
-        ("opacity", opacity),
-        ("interpolation", interpolation),
-        ("from", from_),
-        ("to", to),
-    ]:
-        if value is not None:
-            kwargs[k] = value
-    return Mark("line", **kwargs)
-
-
-def area(
+    children: Optional[List["Mark"]] = None,
+    *,
+    dir: Optional[str] = None,
+    source: Optional[
+        Union[str, List[Union[str, float]], Dict[str, Union[str, float]]]
+    ] = None,
+    target: Optional[
+        Union[str, List[Union[str, float]], Dict[str, Union[str, float]]]
+    ] = None,
+    fill: Optional[str] = None,
     stroke: Optional[str] = None,
     strokeWidth: Optional[int] = None,
     opacity: Optional[float] = None,
     mixBlendMode: Optional[str] = None,
-    dir: Optional[str] = None,
     interpolation: Optional[str] = None,
     from_: Optional[str] = None,
     to: Optional[str] = None,
 ) -> Mark:
-    """Area mark.
+    """Line mark — a center-mode connector (the path between mark centers).
 
-    Like :func:`line`, has a bag form and a pairwise form
-    ``area(from_=..., to=...)`` (one band per row, after :func:`resolve`).
+    Three forms:
+      - combinator form ``line([ref(a), ref(b)], dir="x")`` — the low-level
+        connector over explicitly listed children (the drop-in for the removed
+        ``connect``). ``source``/``target`` pin each endpoint to a normalized
+        anchor on its bbox (Bluefish-style ``Line``) instead of the center.
+      - bag form ``line(...)`` over a ``selectAll(...)`` ref array (one polyline)
+      - pairwise form ``line(from_=..., to=...)`` over rows whose ``from``/``to``
+        columns hold refs (one segment per row, after :func:`resolve`).
     """
     kwargs: Dict[str, Any] = {}
     for k, value in [
+        ("dir", dir),
+        ("source", source),
+        ("target", target),
+        ("fill", fill),
         ("stroke", stroke),
         ("strokeWidth", strokeWidth),
         ("opacity", opacity),
         ("mixBlendMode", mixBlendMode),
-        ("dir", dir),
         ("interpolation", interpolation),
         ("from", from_),
         ("to", to),
     ]:
         if value is not None:
             kwargs[k] = value
-    return Mark("area", **kwargs)
+    if children is not None:
+        return Mark("line", _children=list(children), **kwargs)
+    return Mark("line", **kwargs)
+
+
+def ribbon(
+    children: Optional[List["Mark"]] = None,
+    *,
+    dir: Optional[str] = None,
+    fill: Optional[str] = None,
+    stroke: Optional[str] = None,
+    strokeWidth: Optional[int] = None,
+    opacity: Optional[float] = None,
+    mixBlendMode: Optional[str] = None,
+    interpolation: Optional[str] = None,
+    from_: Optional[str] = None,
+    to: Optional[str] = None,
+) -> Mark:
+    """Ribbon mark — an edge-mode connector: a filled band between the facing
+    edges of consecutive marks (areas, streamgraphs, sankey ribbons).
+
+    Three forms, like :func:`line`: combinator form
+    ``ribbon([ref(a), ref(b)], dir="x")`` (the low-level connector over listed
+    children — drop-in for the removed ``connect``), bag form, and pairwise form
+    ``ribbon(from_=..., to=...)`` (one band per row, after :func:`resolve`).
+    """
+    kwargs: Dict[str, Any] = {}
+    for k, value in [
+        ("dir", dir),
+        ("fill", fill),
+        ("stroke", stroke),
+        ("strokeWidth", strokeWidth),
+        ("opacity", opacity),
+        ("mixBlendMode", mixBlendMode),
+        ("interpolation", interpolation),
+        ("from", from_),
+        ("to", to),
+    ]:
+        if value is not None:
+            kwargs[k] = value
+    if children is not None:
+        return Mark("ribbon", _children=list(children), **kwargs)
+    return Mark("ribbon", **kwargs)
 
 
 def blank(
@@ -2396,67 +2427,6 @@ def polygon(
         if value is not None:
             kwargs[k] = value
     return Mark("polygon", **kwargs)
-
-
-def connect(
-    children: List["Mark"],
-    *,
-    source: Optional[
-        Union[str, List[Union[str, float]], Dict[str, Union[str, float]]]
-    ] = None,
-    target: Optional[
-        Union[str, List[Union[str, float]], Dict[str, Union[str, float]]]
-    ] = None,
-    stroke: Optional[str] = None,
-    strokeWidth: Optional[float] = None,
-    fill: Optional[str] = None,
-    opacity: Optional[float] = None,
-    mixBlendMode: Optional[str] = None,
-    interpolation: Optional[str] = None,
-    direction: Optional[Union[str, int]] = None,
-    mode: Optional[str] = None,
-) -> Mark:
-    """Low-level combinator-form connector.
-
-    Draws a connector (line) between each consecutive pair of children.
-    Children are typically `ref(...)` calls pointing at named elements
-    placed by an earlier tier.
-
-    Anchor mode (recommended): provide `source` and/or `target` as one of:
-        - `"start"` | `"middle"` | `"end"` (single keyword, both axes)
-        - `["start", "middle"]` (tuple, per-axis)
-        - `{"x": "start", "y": 0.5}` (axis-keyed dict; omitted axis = 0.5)
-
-    Where `start` → 0, `middle` → 0.5, `end` → 1. GoFish is y-up. If only
-    one anchor is given, the other endpoint is the same point clamped onto
-    the opposite bbox per axis (Bluefish `Line` behavior).
-
-    Edge mode (no anchors): falls back to routing between the children's
-    facing edges along `direction`.
-
-    Mirrors JS `connect({source?, target?, stroke?, ...}, [m1, m2, ...])`
-    from `packages/gofish-graphics/src/ast/graphicalOperators/connect.tsx`.
-    """
-    options: Dict[str, Any] = {}
-    for k, value in [
-        ("source", source),
-        ("target", target),
-        ("stroke", stroke),
-        ("strokeWidth", strokeWidth),
-        ("fill", fill),
-        ("opacity", opacity),
-        ("mixBlendMode", mixBlendMode),
-        ("interpolation", interpolation),
-        ("direction", direction),
-        ("mode", mode),
-    ]:
-        if value is not None:
-            options[k] = value
-    return Mark("connect", _children=list(children), **options)
-
-
-# JS exports both spellings (`connect` and `Connect`); mirror that.
-Connect = connect
 
 
 # ─── cut: slice a source shape into N clipped sub-shapes ────────────────────

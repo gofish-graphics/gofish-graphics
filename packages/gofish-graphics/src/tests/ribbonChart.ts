@@ -6,7 +6,7 @@ import { spread } from "../ast/graphicalOperators/spread";
 import { rect } from "../ast/shapes/rect";
 import { color } from "../color";
 import { layer } from "../ast/graphicalOperators/layer";
-import { area } from "../lib";
+import { ribbon } from "../lib";
 import { ref } from "../ast/shapes/ref";
 import { color10Order } from "./color10";
 import { mix } from "spectral.js";
@@ -122,7 +122,7 @@ export const testRibbonChart = (size: { width: number; height: number }) =>
       ..._(data)
         .groupBy("group")
         .map((items, group) =>
-          area(
+          ribbon(
             {
               dir: "x",
               fill: colorScale[group as keyof typeof colorScale],

@@ -5,7 +5,7 @@ import { stackY } from "../ast/graphicalOperators/stackY";
 import { stackX } from "../ast/graphicalOperators/stackX";
 import { seattleWeather } from "../data/seatle-weather";
 import { frame } from "../ast/graphicalOperators/frame";
-import { area } from "../lib";
+import { ribbon } from "../lib";
 import { ref } from "../ast/shapes/ref";
 
 const colorScale = {
@@ -85,7 +85,7 @@ export const testVLStackedBar = () =>
     _(seattleWeather)
       .groupBy("month")
       .map((items) =>
-        area(
+        ribbon(
           { dir: "x", opacity: 0.8, mixBlendMode: "multiply" },
           items.map((d) => {
             const date = new Date(d.date);

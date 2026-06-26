@@ -14,7 +14,7 @@ import { linear } from "../ast/coordinateTransforms/linear";
 import _ from "lodash";
 import { layer } from "../ast/graphicalOperators/layer";
 import { ref } from "../ast/shapes/ref";
-import { area } from "../lib";
+import { ribbon } from "../lib";
 import { fishData } from "../data/fish";
 const data = [
   { category: "A", group: "x", value: 0.1 },
@@ -90,7 +90,7 @@ export const testPolarCenterRibbonFishEdition = (size: { width: number; height: 
         ..._(fishData)
           .groupBy("Fish Type")
           .map((items, FishType) =>
-            area(
+            ribbon(
               {
                 dir: "y",
                 fill: colorScale[FishType as keyof typeof colorScale],

@@ -14,7 +14,7 @@ import { linear } from "../ast/coordinateTransforms/linear";
 import _ from "lodash";
 import { layer } from "../ast/graphicalOperators/layer";
 import { ref } from "../ast/shapes/ref";
-import { area } from "../lib";
+import { ribbon } from "../lib";
 const data = [
   { category: "A", group: "x", value: 0.1 },
   { category: "A", group: "y", value: 0.6 },
@@ -88,7 +88,7 @@ export const testPolarCenterRibbon = (size: { width: number; height: number }) =
         ..._(data)
           .groupBy("group")
           .map((items, group) =>
-            area(
+            ribbon(
               {
                 dir: "y",
                 fill: colorScale[group as keyof typeof colorScale],

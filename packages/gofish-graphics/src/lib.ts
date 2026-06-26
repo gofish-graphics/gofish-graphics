@@ -154,7 +154,7 @@ export {
   selectAll,
   line,
   blank,
-  area,
+  ribbon,
   createDerivedMark,
   normalize,
   repeat,

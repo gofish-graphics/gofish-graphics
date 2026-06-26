@@ -12,8 +12,8 @@ Exercises the Python wrapper's new `connect` operator with keyword anchors
 
 from gofish import (
     Constraint,
-    connect,
     createName,
+    line,
     layer,
     mark,
     rect,
@@ -80,7 +80,7 @@ def story_node_link():
                     ]
                 ),
                 # ── tier 2: edges ───────────────────────────────────────────
-                connect(
+                line(
                     [ref(A), ref(B)],
                     source=["end", "middle"],
                     target=["start", "middle"],
@@ -88,7 +88,7 @@ def story_node_link():
                 )
                 .name("e1")
                 .z_order(-1),
-                connect(
+                line(
                     [ref(B), ref(C)],
                     source=["end", "middle"],
                     target=["start", "middle"],
@@ -96,7 +96,7 @@ def story_node_link():
                 )
                 .name("e2")
                 .z_order(-1),
-                connect(
+                line(
                     [ref(B), ref(D)],
                     source=["middle", "start"],
                     target=["middle", "end"],

@@ -371,7 +371,7 @@ export const line = createDerivedMark<LineOptions>("line", (o, children) =>
   )
 );
 
-export type AreaOptions = {
+export type RibbonOptions = {
   fill?: MaybeValue<string>;
   stroke?: string;
   strokeWidth?: number;
@@ -384,24 +384,25 @@ export type AreaOptions = {
   to?: string;
 };
 
-// `area` — an edge-mode connector: a filled band between the facing edges of
-// consecutive marks (areas, streamgraphs, sankey ribbons). Renamed to `ribbon`
-// in the cross-language rename (Stage 3).
-export const area = createDerivedMark<AreaOptions>("area", (o, children) =>
-  Connect(
-    {
-      direction: o.dir ?? "x",
-      mode: "edge",
-      mixBlendMode: o.mixBlendMode ?? "normal",
-      fill: o.fill,
-      stroke: o.stroke,
-      strokeWidth: o.strokeWidth ?? 0,
-      opacity: o.opacity,
-      interpolation: o.interpolation ?? "bezier",
-      route: o.route,
-    },
-    children
-  )
+// `ribbon` — an edge-mode connector: a filled band between the facing edges of
+// consecutive marks (areas, streamgraphs, sankey ribbons).
+export const ribbon = createDerivedMark<RibbonOptions>(
+  "ribbon",
+  (o, children) =>
+    Connect(
+      {
+        direction: o.dir ?? "x",
+        mode: "edge",
+        mixBlendMode: o.mixBlendMode ?? "normal",
+        fill: o.fill,
+        stroke: o.stroke,
+        strokeWidth: o.strokeWidth ?? 0,
+        opacity: o.opacity,
+        interpolation: o.interpolation ?? "bezier",
+        route: o.route,
+      },
+      children
+    )
 );
 
 // blank() mark creates invisible guides for positioning
