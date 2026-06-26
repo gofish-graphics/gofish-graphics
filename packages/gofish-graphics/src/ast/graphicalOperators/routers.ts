@@ -93,6 +93,16 @@ export function hasRoute(name: string): boolean {
   return registry.has(name);
 }
 
+/**
+ * Sequence curves thread the *whole* run of points as one spline (centripetal
+ * Catmull-Rom, and later monotone/step), rather than routing each consecutive
+ * pair independently. `connect` builds these from the full center sequence
+ * instead of the pairwise router loop. Listed here, not hardcoded at the
+ * callsite, so adding monotone/step is a one-line change.
+ */
+export const isSequenceCurve = (name: string | undefined): boolean =>
+  name === "catmullRom";
+
 /** Resolve a `Curve` (string or spec) to its router fn + options. */
 export function resolveCurve(curve: Curve): {
   router: Router;
@@ -107,7 +117,10 @@ export function resolveCurve(curve: Curve): {
 const center = (b: Dimensions, axis: 0 | 1): number =>
   (b[axis].min! + b[axis].max!) / 2;
 
-const centerPoint = (b: Dimensions): Point => [center(b, 0), center(b, 1)];
+export const centerPoint = (b: Dimensions): Point => [
+  center(b, 0),
+  center(b, 1),
+];
 
 /** Build a point from a main-axis and cross-axis coordinate. */
 const byAxis = (dir: 0 | 1, mainVal: number, crossVal: number): Point => {

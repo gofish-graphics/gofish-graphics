@@ -249,6 +249,12 @@ export const UNDEFINED: UnderlyingSpace = { kind: "undefined" };
 export const isUNDEFINED = (space: UnderlyingSpace): space is UNDEFINED_TYPE =>
   space.kind === "undefined";
 
+/** A *positioning* space — one that places marks along an axis (a `POSITION`
+ *  data axis or an `ORDINAL` category axis), as opposed to `SIZE` (a mark's own
+ *  extent) or `UNDEFINED`. Used to find the axis a set of marks is laid out on. */
+export const isPositioningSpace = (space: UnderlyingSpace): boolean =>
+  isPOSITION(space) || isORDINAL(space);
+
 /** Read the measure of any space, or undefined for the measureless kind
  *  (UNDEFINED). Both CONTINUOUS (unit) and ORDINAL (grouping field) carry one. */
 export const spaceMeasure = (

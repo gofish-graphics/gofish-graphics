@@ -1,4 +1,4 @@
-import { Path, Point, transformPath } from "../../path";
+import { Path, transformPath } from "../../path";
 import { convertPointsToBezierCurves } from "../../adaptive-resampling";
 import { GoFishAST } from "../_ast";
 import { GoFishNode, type ToPixel } from "../_node";
@@ -25,10 +25,15 @@ import {
   UNDEFINED,
   UnderlyingSpace,
   isPOSITION,
-  isORDINAL,
+  isPositioningSpace,
 } from "../underlyingSpace";
 import { createNodeOperator } from "../withGoFish";
-import { resolveCurve, type Curve } from "./routers";
+import {
+  resolveCurve,
+  centerPoint,
+  isSequenceCurve,
+  type Curve,
+} from "./routers";
 
 // Per-axis bbox anchor. A literal number is the raw fraction in [0, 1]; the
 // keywords map to {start: 0, middle: 0.5, end: 1}. GoFish is y-up, so
@@ -178,16 +183,20 @@ export const connect = createNodeOperator(
               let node: any = (c as any).targetNode ?? c;
               while (node) {
                 const s = node.resolveUnderlyingSpace?.()?.[axis];
-                if (s !== undefined && (isPOSITION(s) || isORDINAL(s)))
-                  return s;
+                // Stop at the nearest *positioning* space — an ORDINAL ancestor
+                // must win over a continuous grandparent (a grouped layout is
+                // discrete even inside a continuous frame), so we can't skip it.
+                if (s !== undefined && isPositioningSpace(s)) return s;
                 node = node.parent;
               }
               return undefined;
             };
-            const spaces = children.map(connectionSpaceOf);
             const homogeneousContinuous =
-              spaces.length >= 2 &&
-              spaces.every((s) => s !== undefined && isPOSITION(s));
+              children.length >= 2 &&
+              children.every((c) => {
+                const s = connectionSpaceOf(c);
+                return s !== undefined && isPOSITION(s);
+              });
             resolvedCurve =
               mode === "center"
                 ? homogeneousContinuous
@@ -305,12 +314,8 @@ export const connect = createNodeOperator(
           // router loop. Every other curve (straight | bezier | orthogonal | arc
           // | perfectArrows | …) is pairwise: routed per consecutive endpoint.
           if (mode === "center") {
-            if (resolvedCurveName === "catmullRom") {
-              const centerOf = (b: Dimensions): Point => [
-                (b[0].min! + b[0].max!) / 2,
-                (b[1].min! + b[1].max!) / 2,
-              ];
-              const centers = childPlaceables.map((c) => centerOf(c.dims));
+            if (isSequenceCurve(resolvedCurveName)) {
+              const centers = childPlaceables.map((c) => centerPoint(c.dims));
               paths.push(convertPointsToBezierCurves(centers));
             } else {
               const { router, options: routeOpts } =
