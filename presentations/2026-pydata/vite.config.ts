@@ -9,9 +9,9 @@ export default defineConfig({
   plugins: [solidPlugin()],
   resolve: {
     alias: {
-      "gofish-graphics": path.resolve(
+      "@gofish-data": path.resolve(
         __dirname,
-        "../../packages/gofish-graphics/src/lib.ts"
+        "../../packages/gofish-graphics/src/data"
       ),
     },
   },

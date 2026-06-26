@@ -1,32 +1,72 @@
 import {
-  Chart,
+  chart as gofishChart,
   Layer,
-  spread,
-  stack,
-  scatter,
+  color,
+  value,
+  spread as gofishSpread,
+  stack as gofishStack,
+  scatter as gofishScatter,
   derive,
-  table,
+  table as gofishTable,
   rect,
-  scaffold,
+  blank as scaffold,
   line,
-  select,
+  selectAll as select,
   clock,
+  polar,
   area,
-  group,
+  group as gofishGroup,
+  layer as markLayer,
   Frame,
+  stackX,
   ellipse,
+  petal,
   wavy,
   palette,
   gradient,
 } from "gofish-graphics";
 import _ from "lodash";
-import {
-  seafood,
-  catchLocations,
-} from "../../packages/gofish-graphics/src/data/catch";
+import { seafood, catchLocations } from "@gofish-data/catch";
 
 const CHART_W = 480;
 const CHART_H = 320;
+
+const Chart = (data?: unknown, options: Record<string, unknown> = {}) =>
+  data === undefined
+    ? gofishChart()
+    : gofishChart(data, { axes: true, ...options });
+
+const spread = (byOrOptions: string | Record<string, unknown>, options = {}) =>
+  typeof byOrOptions === "string"
+    ? gofishSpread({ by: byOrOptions, ...options })
+    : gofishSpread(byOrOptions);
+
+const stack = (byOrOptions: string | Record<string, unknown>, options = {}) =>
+  typeof byOrOptions === "string"
+    ? gofishStack({ by: byOrOptions, ...options })
+    : gofishStack(byOrOptions);
+
+const scatter = (
+  byOrOptions: string | Record<string, unknown>,
+  options = {}
+) =>
+  typeof byOrOptions === "string"
+    ? gofishScatter({ by: byOrOptions, ...options })
+    : gofishScatter(byOrOptions);
+
+const group = (byOrOptions: string | Record<string, unknown>) =>
+  typeof byOrOptions === "string"
+    ? gofishGroup({ by: byOrOptions })
+    : gofishGroup(byOrOptions);
+
+const table = (
+  xOrOptions: string | Record<string, unknown>,
+  y?: string,
+  options = {}
+) =>
+  typeof xOrOptions === "string"
+    ? gofishTable({ by: { x: xOrOptions, y }, ...options })
+    : gofishTable(xOrOptions);
 
 const color6 = [
   "#4190c5",
@@ -39,76 +79,6 @@ const color6 = [
 
 function getContainer(id: string): HTMLElement | null {
   return document.getElementById(id);
-}
-
-// Inject both rows of x-axis labels manually (used when axes: {y: true}).
-// outerLabels = one per group (shown lower); innerLabels = one per bar (shown closer to axis).
-// Positions are computed from the same parameters GoFish uses internally.
-function injectAxisLabels(
-  el: HTMLElement,
-  outerLabels: string[],
-  innerLabels: string[],
-  spacingOuter: number,
-  spacingInner: number,
-  chartW: number = CHART_W
-) {
-  const wait = new MutationObserver(() => {
-    const svg = el.querySelector("svg");
-    if (!svg) return;
-    wait.disconnect();
-
-    // Expand SVG height to make room for two rows of injected labels
-    const extraH = 35;
-    const curH = parseFloat(svg.getAttribute("height") || "0");
-    if (curH > 0) svg.setAttribute("height", String(curH + extraH));
-    const vb = svg.getAttribute("viewBox");
-    if (vb) {
-      const parts = vb.split(/\s+/).map(Number);
-      if (parts.length === 4)
-        svg.setAttribute(
-          "viewBox",
-          `${parts[0]} ${parts[1]} ${parts[2]} ${parts[3] + extraH}`
-        );
-    }
-
-    const lm = 40; // left axis margin
-    const rm = 15; // right margin (no legend)
-    const plotW = chartW - lm - rm;
-    const outerN = outerLabels.length;
-    const innerN = innerLabels.length;
-    const groupW = (plotW - (outerN - 1) * spacingOuter) / outerN;
-    const barW = (groupW - (innerN - 1) * spacingInner) / innerN;
-    const mainG = svg.querySelector(":scope > g");
-    if (!mainG) return;
-
-    function makeLabel(cx: number, y: number, text: string) {
-      const t = document.createElementNS("http://www.w3.org/2000/svg", "text");
-      t.setAttribute("x", String(Math.round(cx)));
-      t.setAttribute("y", String(y));
-      t.setAttribute("transform", "scale(1,-1)");
-      t.setAttribute("text-anchor", "middle");
-      t.setAttribute("dominant-baseline", "hanging");
-      t.setAttribute("fill", "#888");
-      t.setAttribute("font-size", "10");
-      t.textContent = text;
-      mainG.appendChild(t);
-    }
-
-    // Inner row: one label per bar, just below axis line
-    for (let gi = 0; gi < outerN; gi++) {
-      const groupStart = gi * (groupW + spacingOuter);
-      for (let bi = 0; bi < innerN; bi++) {
-        const cx = groupStart + bi * (barW + spacingInner) + barW / 2;
-        makeLabel(cx, 8, innerLabels[bi]);
-      }
-    }
-    // Outer row: one label per group, second row below inner
-    for (let gi = 0; gi < outerN; gi++) {
-      const cx = gi * (groupW + spacingOuter) + groupW / 2;
-      makeLabel(cx, 22, outerLabels[gi]);
-    }
-  });
-  wait.observe(el, { childList: true, subtree: true });
 }
 
 // ── Opening: Franconeri — same data, two groupings ────────────────────────
@@ -140,8 +110,7 @@ function renderFranconeriA() {
       spread("person", { dir: "x", spacing: 8 })
     )
     .mark(rect({ h: "height", fill: FRANCONERI_BAR_COLOR }))
-    .render(el, { w: CHART_W, h: CHART_H, axes: { y: true } as any });
-  injectAxisLabels(el, ["8", "10", "12"], ["Charlie", "River"], 32, 8);
+    .render(el, { w: CHART_W, h: CHART_H, axes: true });
 }
 
 const KEY_W = 280;
@@ -209,8 +178,7 @@ function renderFranconeriB() {
       spread("age", { dir: "x", spacing: 8 })
     )
     .mark(rect({ h: "height", fill: FRANCONERI_BAR_COLOR }))
-    .render(el, { w: CHART_W, h: CHART_H, axes: { y: true } as any });
-  injectAxisLabels(el, ["Charlie", "River"], ["8", "10", "12"], 32, 8);
+    .render(el, { w: CHART_W, h: CHART_H, axes: true });
 }
 
 function renderFranconeriBKey() {
@@ -387,6 +355,48 @@ function renderScatterPieChart() {
     .render(el, { w: CHART_W, h: CHART_H, axes: true });
 }
 
+function renderFlowerChart() {
+  const el = getContainer("chart-flower");
+  if (!el || el.children.length > 0) return;
+
+  const FLOWER_RADIUS = 40;
+  const stemData = seafood.map((d) => ({
+    ...d,
+    x: catchLocations[d.lake as keyof typeof catchLocations].x,
+  }));
+
+  Layer([
+    gofishChart(stemData)
+      .flow(gofishScatter({ by: "lake", x: "x" }))
+      .mark(rect({ w: 4, h: "count", fill: color.green[5] }).name("stems")),
+    gofishChart(select("stems"))
+      .flow(gofishGroup({ by: "lake" }))
+      .mark(((d: any[]) =>
+        gofishSpread(
+          { dir: "y", alignment: "middle", spacing: -FLOWER_RADIUS },
+          [
+            d[0],
+            markLayer({ coord: polar() }, [
+              stackX(
+                {
+                  h: FLOWER_RADIUS,
+                  spacing: 0,
+                  alignment: "start",
+                  sharedScale: true,
+                },
+                (d[0].datum as { species: string; count: number }[]).map((r) =>
+                  petal({
+                    w: value(r.count),
+                    fill: value(r.species).lighten(0.5),
+                  })
+                )
+              ),
+            ]),
+          ]
+        )) as any),
+  ]).render(el, { w: CHART_W, h: CHART_H, axes: false });
+}
+
 // ── Part 2: Balloon chart ─────────────────────────────────────────────────
 // Species appear in seafood in this order → map to color6 indices
 const speciesColorMap: Record<string, string> = {
@@ -405,7 +415,7 @@ function renderBalloonChart() {
     x: number,
     y: number,
     scale: number,
-    topColors: [string, string, string]
+    colors: { body: string; highlight: string; knot: string }
   ) =>
     Frame(
       {
@@ -420,23 +430,32 @@ function renderBalloonChart() {
           cy: 15,
           w: 24,
           h: 30,
-          fill: topColors[0],
+          fill: colors.body,
         }),
         ellipse({
           cx: 12,
           cy: 11,
           w: 7,
           h: 11,
-          fill: topColors[1],
+          fill: colors.highlight,
         }),
         rect({
           cx: 15,
           cy: 32,
           w: 8,
           h: 4,
-          fill: topColors[2],
+          fill: colors.knot,
           rx: 3,
           ry: 2,
+        }),
+        rect({
+          cx: 15,
+          cy: 32,
+          w: 5,
+          h: 2.4,
+          fill: colors.knot,
+          rx: 2,
+          ry: 1,
         }),
       ]
     );
@@ -445,14 +464,14 @@ function renderBalloonChart() {
     { coord: wavy(), x: 0, y: 0 },
     scatterByLake.map((data) => {
       const top3 = _.orderBy(data.collection, "count", "desc").slice(0, 3);
-      const topColors: [string, string, string] = [
-        speciesColorMap[top3[0]?.species] ?? color6[0],
-        speciesColorMap[top3[1]?.species] ?? color6[1],
-        speciesColorMap[top3[2]?.species] ?? color6[2],
-      ];
+      const colors = {
+        body: speciesColorMap[top3[0]?.species] ?? color6[0],
+        highlight: speciesColorMap[top3[1]?.species] ?? color6[1],
+        knot: speciesColorMap[top3[2]?.species] ?? color6[2],
+      };
       return Frame({ x: data.x }, [
         rect({ x: 0, y: 0, w: 1, h: data.y, emY: true, fill: "#333" }),
-        Balloon(0, data.y, 1, topColors),
+        Balloon(0, data.y, 1, colors),
       ]);
     })
   ).render(el, { w: CHART_W, h: CHART_H, axes: true });
@@ -478,6 +497,7 @@ export function renderCharts() {
   renderRibbonHighlightChart();
   renderPolarHighlightChart();
   renderScatterPieChart();
+  renderFlowerChart();
   renderBalloonChart();
   // ribbon build sequence
   renderChartById("chart-ribbon-build-sorted");
@@ -762,5 +782,6 @@ export const chartRenderers: Record<string, () => void> = {
   "chart-ribbon-highlight": renderRibbonHighlightChart,
   "chart-polar-highlight": renderPolarHighlightChart,
   "chart-scatter-pie": renderScatterPieChart,
+  "chart-flower": renderFlowerChart,
   "chart-balloon": renderBalloonChart,
 };

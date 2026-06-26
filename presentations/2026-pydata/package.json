@@ -9,12 +9,12 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "gofish-graphics": "workspace:*",
+    "gofish-graphics": "nightly",
+    "lodash": "^4.17.21",
     "reveal.js": "^5.1.0",
     "solid-js": "^1.9.5"
   },
   "devDependencies": {
-    "lodash": "^4.17.21",
     "@types/lodash": "^4.17.16",
     "typescript": "^5.7.2",
     "vite": "^6.0.0",
