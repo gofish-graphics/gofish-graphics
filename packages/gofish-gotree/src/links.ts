@@ -1,5 +1,5 @@
 import {
-  connect,
+  line,
   ref,
   straight,
   bezier,
@@ -46,11 +46,10 @@ function linkMark(
   targetPath: string
 ): any {
   const route = opts.route ?? DEFAULTS.route;
-  return connect(
+  return line(
     {
-      mode: "center",
       route: ROUTE_FOR[route](),
-      // connect's default `fill` falls back to children[0].color ?? "black".
+      // The connector's default `fill` falls back to children[0].color ?? "black".
       // For a straight cartesian line that's invisible (fill area of a
       // zero-thickness line is zero), but under a polar coord transform the
       // line is resampled into an arc — and SVG fills the segment between

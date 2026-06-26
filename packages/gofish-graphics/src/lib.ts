@@ -100,7 +100,6 @@ export { Scatter, scatter } from "./ast/graphicalOperators/scatter";
 export { spreadX, spreadX as SpreadX } from "./ast/graphicalOperators/spreadX";
 export { spreadY, spreadY as SpreadY } from "./ast/graphicalOperators/spreadY";
 export { layer as Layer } from "./ast/graphicalOperators/layer";
-export { connect, connect as Connect } from "./ast/graphicalOperators/connect";
 export {
   registerRoute,
   getRoute,
@@ -117,14 +116,6 @@ export {
   type RouteSpec,
 } from "./ast/graphicalOperators/routers";
 export { treemap, Treemap } from "./ast/graphicalOperators/treemap";
-export {
-  connectX,
-  connectX as ConnectX,
-} from "./ast/graphicalOperators/connectX";
-export {
-  connectY,
-  connectY as ConnectY,
-} from "./ast/graphicalOperators/connectY";
 export { enclose, enclose as Enclose } from "./ast/graphicalOperators/enclose";
 export { Frame, Frame as frame } from "./ast/graphicalOperators/frame";
 export { group } from "./ast/graphicalOperators/group";

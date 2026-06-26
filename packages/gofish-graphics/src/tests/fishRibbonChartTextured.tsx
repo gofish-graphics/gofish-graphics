@@ -11,11 +11,10 @@ import { color, color6 } from "../color";
 import { seafood } from "../data/catch";
 import _ from "lodash";
 import { layer } from "../ast/graphicalOperators/layer";
-import { connect } from "../ast/graphicalOperators/connect";
 import { ref } from "../ast/shapes/ref";
 import { stackX } from "../ast/graphicalOperators/stackX";
 import { stackY } from "../ast/graphicalOperators/stackY";
-import { connectX } from "../ast/graphicalOperators/connectX";
+import { area } from "../lib";
 import { frame } from "../ast/graphicalOperators/frame";
 const fishColors = {
   /* Bass: color.blue[5],
@@ -60,8 +59,8 @@ export const testFishRibbonChartTextured = () =>
     ..._(seafood)
       .groupBy("species")
       .map((items) =>
-        connectX(
-          { opacity: 0.8, stroke: "black", strokeWidth: 3 },
+        area(
+          { dir: "x", opacity: 0.8, stroke: "black", strokeWidth: 3, mixBlendMode: "multiply" },
           items.map((d) => ref(`${d.lake}-${d.species}`))
         )
       )

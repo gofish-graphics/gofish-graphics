@@ -3,7 +3,7 @@ import { initializeContainer } from "../helper";
 import {
   Layer,
   Constraint,
-  Connect,
+  line,
   createMark,
   createName,
   rect,
@@ -32,9 +32,8 @@ type Args = { w: number; h: number };
 
 const r = 25;
 const w2jut = 10;
-// Connect's default mix-blend-mode is "multiply" — that turns the brown stroke
-// translucent over the gray pulleys. Override to "normal" so the ropes are
-// solid/opaque, matching the Bluefish reference.
+// Keep mix-blend-mode "normal" (line's default) so the brown ropes stay
+// solid/opaque over the gray pulleys, matching the Bluefish reference.
 const rope = {
   stroke: "#774e32",
   strokeWidth: 3,
@@ -169,31 +168,31 @@ export const Pulley: StoryObj<Args> = {
       // zOrder(-1): painted behind tier 1, so the wheels draw over rope ends.
       // `ropeSupport` is the unlabeled support rope from the ceiling to B; the
       // rest are named after the dimension letter (x/y/z/p/q/s) they carry.
-      Connect({ ...rope, target: "middle" }, [ref(ceiling), ref(B)])
+      line({ ...rope, target: "middle" }, [ref(ceiling), ref(B)])
         .name("ropeSupport")
         .zOrder(-1),
-      Connect({ ...rope, source: ["start", "middle"], target: "middle" }, [
+      line({ ...rope, source: ["start", "middle"], target: "middle" }, [
         ref(B),
         ref(A),
       ])
         .name("ropeX")
         .zOrder(-1),
-      Connect(
+      line(
         { ...rope, source: ["end", "middle"], target: ["start", "middle"] },
         [ref(B), ref(C)]
       )
         .name("ropeY")
         .zOrder(-1),
-      Connect({ ...rope, target: ["end", "middle"] }, [ref(ceiling), ref(C)])
+      line({ ...rope, target: ["end", "middle"] }, [ref(ceiling), ref(C)])
         .name("ropeZ")
         .zOrder(-1),
-      Connect({ ...rope, source: ["start", "middle"] }, [ref(A), ref(w1)])
+      line({ ...rope, source: ["start", "middle"] }, [ref(A), ref(w1)])
         .name("ropeP")
         .zOrder(-1),
-      Connect({ ...rope, source: ["end", "middle"] }, [ref(A), ref(w2)])
+      line({ ...rope, source: ["end", "middle"] }, [ref(A), ref(w2)])
         .name("ropeQ")
         .zOrder(-1),
-      Connect({ ...rope, source: "middle" }, [ref(C), ref(w2)])
+      line({ ...rope, source: "middle" }, [ref(C), ref(w2)])
         .name("ropeS")
         .zOrder(-1),
 

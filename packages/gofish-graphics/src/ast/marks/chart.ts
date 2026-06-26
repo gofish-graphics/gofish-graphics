@@ -1,7 +1,11 @@
-import { sumBy, v, Connect, type Route } from "../../lib";
+import { sumBy, v, type Route } from "../../lib";
+import {
+  connect as Connect,
+  type AnchorSpec,
+} from "../graphicalOperators/connect";
 import chunk from "lodash/chunk";
 import { GoFishNode } from "../_node";
-import type { Value } from "../data";
+import type { MaybeValue, Value } from "../data";
 import { GoFishRef } from "../_ref";
 import type { GoFishAST } from "../_ast";
 import type { Token } from "../createName";
@@ -325,15 +329,22 @@ export function createDerivedMark<O extends DerivedMarkOptions>(
 }
 
 export type LineOptions = {
+  fill?: MaybeValue<string>;
   stroke?: string;
   strokeWidth?: number;
   opacity?: number;
+  mixBlendMode?: "normal" | "multiply";
   interpolation?: "linear" | "bezier";
   // Layout-time routing algorithm, as a factory call: `orthogonal()`,
   // `arc({ direction })`, `perfectArrows({ bow })`, … (or a bare route name).
   // Wins over `interpolation`.
   route?: Route;
   dir?: "x" | "y";
+  // Anchor mode: pin each endpoint to a normalized point on its mark's bbox
+  // (Bluefish-style `Line`) instead of the center — for ropes, node-link edges,
+  // etc. When given, the anchor points win over the routed center path.
+  source?: AnchorSpec;
+  target?: AnchorSpec;
   from?: string;
   to?: string;
 };
@@ -346,17 +357,22 @@ export const line = createDerivedMark<LineOptions>("line", (o, children) =>
     {
       direction: o.dir ?? "x",
       mode: "center",
+      fill: o.fill,
       stroke: o.stroke,
       strokeWidth: o.strokeWidth ?? 1,
       opacity: o.opacity,
+      mixBlendMode: o.mixBlendMode,
       interpolation: o.interpolation ?? "linear",
       route: o.route,
+      source: o.source,
+      target: o.target,
     },
     children
   )
 );
 
 export type AreaOptions = {
+  fill?: MaybeValue<string>;
   stroke?: string;
   strokeWidth?: number;
   opacity?: number;
@@ -377,6 +393,7 @@ export const area = createDerivedMark<AreaOptions>("area", (o, children) =>
       direction: o.dir ?? "x",
       mode: "edge",
       mixBlendMode: o.mixBlendMode ?? "normal",
+      fill: o.fill,
       stroke: o.stroke,
       strokeWidth: o.strokeWidth ?? 0,
       opacity: o.opacity,

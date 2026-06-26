@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
 import { penguins } from "../../src/data/penguins";
-import { spreadX, For, layer, stackY, rect, connectY, ref, v } from "../../src/lib";
+import { spreadX, For, layer, stackY, rect, area, ref, v } from "../../src/lib";
 import { groupBy } from "lodash";
 import { density1d } from 'fast-kde';
 
@@ -39,8 +39,8 @@ export const Default: StoryObj<Args> = {
               )
             )
           ),
-          connectY(
-            { opacity: 1, mixBlendMode: "normal" },
+          area(
+            { dir: "y", opacity: 1, mixBlendMode: "normal" },
             For(density, (d) => ref(`${species}-${d.x}`))
           ),
         ]);

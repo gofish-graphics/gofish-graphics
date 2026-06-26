@@ -3,7 +3,7 @@ import { initializeContainer } from "../helper";
 import {
   Layer,
   Constraint,
-  Connect,
+  line,
   createMark,
   createName,
   rect,
@@ -83,19 +83,19 @@ export const NodeLink: StoryObj<Args> = {
       ]),
 
       // ── tier 2: edges — read the placed nodes; painted behind them ──────
-      Connect(
+      line(
         { ...edge, source: ["end", "middle"], target: ["start", "middle"] },
         [ref(A), ref(B)]
       )
         .name("e1")
         .zOrder(-1),
-      Connect(
+      line(
         { ...edge, source: ["end", "middle"], target: ["start", "middle"] },
         [ref(B), ref(C)]
       )
         .name("e2")
         .zOrder(-1),
-      Connect(
+      line(
         { ...edge, source: ["middle", "start"], target: ["middle", "end"] },
         [ref(B), ref(D)]
       )

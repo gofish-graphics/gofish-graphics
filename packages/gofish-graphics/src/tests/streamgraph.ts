@@ -12,11 +12,10 @@ import { layer } from "../ast/graphicalOperators/layer";
 import { ellipse } from "../ast/shapes/ellipse";
 import _ from "lodash";
 import { ref } from "../ast/shapes/ref";
-import { connect } from "../ast/graphicalOperators/connect";
 import { streamgraphData, streamgraphColorPalette } from "../data/streamgraphData";
 import { stackX } from "../ast/graphicalOperators/stackX";
 import { stackY } from "../ast/graphicalOperators/stackY";
-import { connectX } from "../ast/graphicalOperators/connectX";
+import { area } from "../lib";
 import { frame } from "../ast/graphicalOperators/frame";
 const data = streamgraphData;
 const colorPalette = streamgraphColorPalette;
@@ -50,8 +49,9 @@ export const testStreamgraph = () =>
     ..._(data)
       .groupBy("c")
       .map((items, c) =>
-        connectX(
+        area(
           {
+            dir: "x",
             interpolation: "linear",
             mixBlendMode: "normal",
             strokeWidth: 1,

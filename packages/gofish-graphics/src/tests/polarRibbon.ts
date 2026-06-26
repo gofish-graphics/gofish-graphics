@@ -6,7 +6,7 @@ import { spread } from "../ast/graphicalOperators/spread";
 import { rect } from "../ast/shapes/rect";
 import { color, color6 } from "../color";
 import { layer } from "../ast/graphicalOperators/layer";
-import { connect } from "../ast/graphicalOperators/connect";
+import { area } from "../lib";
 import { ref } from "../ast/shapes/ref";
 import { color10Order } from "./color10";
 import { mix } from "spectral.js";
@@ -83,15 +83,16 @@ export const testPolarRibbon = (size: { width: number; height: number }) =>
           )
         ),
         ...Object.entries(_.groupBy(data, "group")).map(([group, items], i) =>
-          connect(
+          area(
             {
-              direction: "x",
+              dir: "x",
               fill: colorScale[group as keyof typeof colorScale],
               // fill: "black",
               // fill: "none",
               // stroke: i == 3 ? "black" : "none",
               interpolation: "linear",
               opacity: 0.7,
+              mixBlendMode: "multiply",
             },
             items.map((d) => ref(`${d.category}-${d.group}`))
           )

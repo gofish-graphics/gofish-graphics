@@ -10,11 +10,10 @@ import { color, color6 } from "../color";
 import { layer } from "../ast/graphicalOperators/layer";
 import _ from "lodash";
 import { ref } from "../ast/shapes/ref";
-import { connect } from "../ast/graphicalOperators/connect";
 import { streamgraphColorPalette, streamgraphData } from "../data/streamgraphData";
 import { frame } from "../ast/graphicalOperators/frame";
 import { drivingShifts } from "../data/drivingShifts";
-import { connectX, ellipse, For, frame } from "../lib";
+import { line, ellipse, For, frame } from "../lib";
 
 // const data = [
 //   { x: 0, y: 28, c: 0 },
@@ -56,12 +55,12 @@ export const testConnectedScatterplot = () =>
         strokeWidth: 2,
       }).name(`${d.year}`)
     ),
-    connectX(
+    line(
       {
+        dir: "x",
         interpolation: "linear",
         stroke: "black",
         strokeWidth: 2,
-        mode: "center",
       },
       For(drivingShifts, (d) => ref(`${d.year}`))
     ),

@@ -1,6 +1,6 @@
 import _ from "lodash";
 import { NewCarColor, newCarColors } from "../data/newCarColors";
-import { connectY, ellipse, For, frame, groupBy, ref, stackY, v } from "../lib";
+import { line, ellipse, For, frame, groupBy, ref, stackY, v } from "../lib";
 
 export const testBumpChart = () =>
   frame({}, [
@@ -15,8 +15,8 @@ export const testBumpChart = () =>
       )
     ),
     For(groupBy(newCarColors, "Color"), (d) =>
-      connectY(
-        { strokeWidth: 1, mode: "center" },
+      line(
+        { dir: "y", strokeWidth: 1, interpolation: "bezier" },
         For(d, (d) => ref(`${d.Color}-${d.Year}`))
       )
     ),

@@ -12,7 +12,7 @@ import { layer } from "../ast/graphicalOperators/layer";
 import { ellipse } from "../ast/shapes/ellipse";
 import _ from "lodash";
 import { ref } from "../ast/shapes/ref";
-import { connectX } from "../ast/graphicalOperators/connectX";
+import { line } from "../lib";
 import { streamgraphData, streamgraphColorPalette } from "../data/streamgraphData";
 import { frame } from "../ast/graphicalOperators/frame";
 
@@ -39,11 +39,11 @@ export const testLineChart = () =>
     ..._(data)
       .groupBy("c")
       .map((items, c) =>
-        connectX(
+        line(
           {
+            dir: "x",
             interpolation: "linear",
             // opacity: 0.7,
-            mode: "center",
             strokeWidth: 1,
           },
           items.map((d) => ref(`${c}-${d.x}`))
