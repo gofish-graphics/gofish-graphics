@@ -110,7 +110,7 @@ So a ribbon chart reads:
 ```ts
 chart(selectAll("bars")) // stream of refs
   .flow(group({ by: "datum.species" })) // by → ref stream → datum path
-  .mark(area({ opacity: 0.8 })); // channel → raw record, no prefix
+  .mark(ribbon({ opacity: 0.8 })); // channel → raw record, no prefix
 ```
 
 Do **not** "consistency-refactor" channels into `datum.count` — a channel like

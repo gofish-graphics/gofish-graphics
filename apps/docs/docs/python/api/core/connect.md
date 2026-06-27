@@ -2,7 +2,7 @@
 
 Draws a connector through the chart's own marks. `.connect(line())` is builder
 sugar for the two-layer `selectAll` recipe: it positions the chart's marks, then
-threads a [`line`](/python/api/marks/line) or [`area`](/python/api/marks/area)
+threads a [`line`](/python/api/marks/line) or [`ribbon`](/python/api/marks/ribbon)
 through exactly those nodes, painted underneath.
 
 ::: gofish example:connected-scatter-plot hidden
@@ -26,9 +26,9 @@ ChartBuilder.connect(mark) -> ChartBuilder
 
 ## Parameters
 
-| Parameter | Type   | Description                                                                                               |
-| --------- | ------ | --------------------------------------------------------------------------------------------------------- |
-| `mark`    | `Mark` | A ref-consuming mark — typically [`line()`](/python/api/marks/line) or [`area()`](/python/api/marks/area) |
+| Parameter | Type   | Description                                                                                                   |
+| --------- | ------ | ------------------------------------------------------------------------------------------------------------- |
+| `mark`    | `Mark` | A ref-consuming mark — typically [`line()`](/python/api/marks/line) or [`ribbon()`](/python/api/marks/ribbon) |
 
 Returns a new `ChartBuilder` with the connector set.
 
@@ -66,7 +66,7 @@ keeps the IR small and never leaks an extra layer into your code.
   applies `zOrder(-1)` to the connector layer). This is fixed; reach for the
   manual `layer([...])` form if you need a different paint order.
 - **Connector type** — any ref-consuming mark works:
-  [`line()`](/python/api/marks/line), [`area()`](/python/api/marks/area).
+  [`line()`](/python/api/marks/line), [`ribbon()`](/python/api/marks/ribbon).
 
 ## Constraints
 

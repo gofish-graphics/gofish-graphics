@@ -10,9 +10,9 @@ Sets the visual mark used to render each data group.
 
 ## Parameters
 
-| Parameter | Type   | Description                                                       |
-| --------- | ------ | ----------------------------------------------------------------- |
-| `mark`    | `Mark` | The mark to use for rendering (e.g. `rect()`, `line()`, `area()`) |
+| Parameter | Type   | Description                                                         |
+| --------- | ------ | ------------------------------------------------------------------- |
+| `mark`    | `Mark` | The mark to use for rendering (e.g. `rect()`, `line()`, `ribbon()`) |
 
 ## Example
 

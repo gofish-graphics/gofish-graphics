@@ -28,7 +28,7 @@ chart(seafood, axes=True).flow(
 ).mark(rect(h="count", fill="species")).layer(
     chart()  # empty scope = the previous tier's marks
     .flow(group(by="species"))
-    .mark(area(opacity=0.8))
+    .mark(ribbon(opacity=0.8))
 ).render(w=400, h=320)
 ```
 

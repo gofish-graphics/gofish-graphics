@@ -75,7 +75,7 @@ include:
 - [`rect()`](/python/api/marks/rect) — rectangles (bars)
 - [`circle()`](/python/api/marks/circle) — circles
 - [`line()`](/python/api/marks/line) — connecting line
-- [`area()`](/python/api/marks/area) — filled area
+- [`ribbon()`](/python/api/marks/ribbon) — filled area
 
 Mark options can use fixed values or reference data fields:
 

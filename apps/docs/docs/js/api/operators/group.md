@@ -19,7 +19,7 @@ group({ by });
 ```ts
 // One frame per species, with the per-species mark inside.
 .flow(group({ by: "species" }))
-.mark(area({ opacity: 0.7 }))
+.mark(ribbon({ opacity: 0.7 }))
 ```
 
 `group` is most often reached for right after a
@@ -30,7 +30,7 @@ the **datum path** — `by: "datum.species"`:
 ```ts
 chart(selectAll("bars"))
   .flow(group({ by: "datum.species" }))
-  .mark(area({ opacity: 0.8 }));
+  .mark(ribbon({ opacity: 0.8 }));
 ```
 
 A `datum.field` path resolves to a scalar only when every row in the ref's bag
