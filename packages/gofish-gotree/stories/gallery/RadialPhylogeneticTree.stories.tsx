@@ -29,7 +29,7 @@ import { combine, byDepth, mount } from "./_shared";
 //  2. polar() takes no options: the dsl's InnerRadius, Direction, CentralAngle and
 //     the PolarAxis θ/r swap are not expressible. Mode=bottom-up is also not
 //     expressible (placement is always parent-out here).
-//  3. Link=straight → {interpolation:"linear"}; segments curve under the polar
+//  3. Link=straight → {curve:"straight"}; segments curve under the polar
 //     transform, which is expected (a straight cartesian edge maps to a polar arc).
 //  4. With nest-θ active the parent is no longer a true point, so parentChild-r
 //     uses mode:"center" to keep the radial spacing read in r-units (no bbox
@@ -47,7 +47,7 @@ export const RadialPhylogeneticTree: StoryObj = {
         node,
         // Color=depth lives on the link (target depth), since the node is hidden.
         link: (_s: any, t: any) => ({
-          interpolation: "linear",
+          curve: "straight",
           stroke: byDepth()(t),
           strokeWidth: 1.5,
         }),

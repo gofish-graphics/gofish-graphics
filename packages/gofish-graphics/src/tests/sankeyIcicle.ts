@@ -15,7 +15,6 @@ import {
 import { titanic } from "../data/titanic";
 import { mix } from "spectral.js";
 import { layer } from "../ast/graphicalOperators/layer";
-import { connect } from "../ast/graphicalOperators/connect";
 import { ref } from "../ast/shapes/ref";
 import { frame } from "../ast/graphicalOperators/frame";
 import {
@@ -25,7 +24,7 @@ import {
   rect,
   groupBy,
   For,
-  connectX,
+  ribbon,
   ref,
   spreadX,
   spreadY,
@@ -202,21 +201,22 @@ export const testSankeyIcicle = () =>
     ..._(titanic)
       .groupBy("class")
       .flatMap((items, cls) => [
-        connect(
+        ribbon(
           {
-            direction: "x",
+            dir: "x",
             fill: classColor[cls as keyof typeof classColor],
-            interpolation: "bezier",
+            curve: "bezier",
             opacity: 0.7,
+            mixBlendMode: "multiply",
           },
           [ref(`${cls}-src`), ref(`${cls}-tgt`)]
         ),
         ..._(items)
           .groupBy("sex")
           .flatMap((sexItems, sex) => [
-            connect(
+            ribbon(
               {
-                direction: "x",
+                dir: "x",
                 fill:
                   sex === "Female"
                     ? color6[4]
@@ -231,17 +231,18 @@ export const testSankeyIcicle = () =>
                 //     neutral,
                 //     mixPct[cls as keyof typeof mixPct]
                 //   ),
-                interpolation: "bezier",
+                curve: "bezier",
                 opacity: 0.7,
+                mixBlendMode: "multiply",
               },
               [ref(`${cls}-${sex}-src`), ref(`${cls}-${sex}-tgt`)]
             ),
             ..._(sexItems)
               .groupBy("survived")
               .map((survivedItems, survived) =>
-                connect(
+                ribbon(
                   {
-                    direction: "x",
+                    dir: "x",
                     fill:
                       sex === "Female"
                         ? survived === "No"
@@ -260,8 +261,9 @@ export const testSankeyIcicle = () =>
                     //     neutral,
                     //     mixPct[cls as keyof typeof mixPct]
                     //   ),
-                    interpolation: "bezier",
+                    curve: "bezier",
                     opacity: 0.7,
+                    mixBlendMode: "multiply",
                   },
                   [
                     ref(`${cls}-${sex}-${survived}-src`),
@@ -360,26 +362,31 @@ export const testSankeyIcicleAPIv2 = () =>
       ),
     ]),
     For(groupBy(titanic, "class"), (items, cls) => [
-      connectX(
+      ribbon(
         {
+          dir: "x",
           fill: classColor[cls as keyof typeof classColor],
-          interpolation: "bezier",
+          curve: "bezier",
           opacity: 0.7,
+          mixBlendMode: "multiply",
         },
         [ref(`${cls}-src`), ref(`${cls}-tgt`)]
       ),
       For(groupBy(items, "sex"), (sexItems, sex) => [
-        connectX(
+        ribbon(
           {
+            dir: "x",
             fill: sex === "Female" ? color6_old[2] : color6_old[3],
-            interpolation: "bezier",
+            curve: "bezier",
             opacity: 0.7,
+            mixBlendMode: "multiply",
           },
           [ref(`${cls}-${sex}-src`), ref(`${cls}-${sex}-tgt`)]
         ),
         For(groupBy(sexItems, "survived"), (survivedItems, survived) =>
-          connectX(
+          ribbon(
             {
+              dir: "x",
               fill:
                 sex === "Female"
                   ? survived === "No"
@@ -388,8 +395,9 @@ export const testSankeyIcicleAPIv2 = () =>
                   : survived === "No"
                     ? mix(color6_old[3], black, 0.5)
                     : mix(color6_old[3], white, 0.5),
-              interpolation: "bezier",
+              curve: "bezier",
               opacity: 0.7,
+              mixBlendMode: "multiply",
             },
             [
               ref(`${cls}-${sex}-${survived}-src`),

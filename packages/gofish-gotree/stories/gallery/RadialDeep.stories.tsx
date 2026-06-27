@@ -19,7 +19,7 @@ import { initializeContainer } from "../helper";
 //
 // NOTES (polar gaps — no hacks, flagged for follow-up):
 //  - Link=curve is NOT supported. curve link interpolation is unimplemented, so
-//    we fall back to {interpolation:"linear"} straight spokes. The reference's
+//    we fall back to {curve:"straight"} straight spokes. The reference's
 //    gentle radial curves are therefore drawn as straight radial lines.
 //  - NO angular auto-fit. Sibling angular spacing is NOT derived from the
 //    subtree leaf-count the way GoTree allocates angle (outer ring exactly fills
@@ -69,7 +69,7 @@ export const RadialDeep: StoryObj = {
         node,
         // NOTE: dsl asks for curve links; curve interpolation unimplemented →
         // linear fallback (straight radial spokes).
-        link: { interpolation: "linear", stroke: "#5f6b7a", strokeWidth: 2 },
+        link: { curve: "straight", stroke: "#5f6b7a", strokeWidth: 2 },
         parentChild: combine({
           // θ: parent centered over its subtree's angular span.
           x: { kind: "align", alignment: "middle" },

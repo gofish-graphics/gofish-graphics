@@ -1,4 +1,5 @@
 import { Path, transformPath } from "../../path";
+import { convertPointsToBezierCurves } from "../../adaptive-resampling";
 import { GoFishAST } from "../_ast";
 import { GoFishNode, type ToPixel } from "../_node";
 import { resolveColorChannel } from "../../color";
@@ -20,8 +21,19 @@ import { pairs } from "../../util";
 import { linear } from "../coordinateTransforms/linear";
 import { MaybeValue } from "../data";
 import { Domain } from "../domain";
-import { UNDEFINED, UnderlyingSpace } from "../underlyingSpace";
+import {
+  UNDEFINED,
+  UnderlyingSpace,
+  isPOSITION,
+  isPositioningSpace,
+} from "../underlyingSpace";
 import { createNodeOperator } from "../withGoFish";
+import {
+  resolveCurve,
+  centerPoint,
+  isSequenceCurve,
+  type Curve,
+} from "./routers";
 
 // Per-axis bbox anchor. A literal number is the raw fraction in [0, 1]; the
 // keywords map to {start: 0, middle: 0.5, end: 1}. GoFish is y-up, so
@@ -60,7 +72,7 @@ export const connect = createNodeOperator(
     {
       direction,
       fill,
-      interpolation,
+      curve,
       stroke,
       strokeWidth,
       opacity,
@@ -72,7 +84,13 @@ export const connect = createNodeOperator(
       // Optional in anchor mode (source/target), where it is ignored.
       direction?: FancyDirection;
       fill?: MaybeValue<string>;
-      interpolation?: "linear" | "bezier";
+      // The single screen-space path-shaping key. A curve value from a factory
+      // (`straight()`, `bezier()`, `orthogonal()`, `arc({ direction })`,
+      // `perfectArrows({ bow })`, …) or a bare name (`"straight"` | `"bezier"`).
+      // Center ("line") mode resolves it through the curve registry; edge
+      // ("ribbon") mode only honors `straight` (linear band) vs `bezier`
+      // (S-curve band). Defaults to `"straight"` when omitted.
+      curve?: Curve;
       stroke?: string;
       strokeWidth?: number;
       opacity?: number;
@@ -100,7 +118,8 @@ export const connect = createNodeOperator(
     const resolvedTarget =
       target !== undefined ? resolveAnchor(target) : undefined;
     const dir = elaborateDirection(direction ?? 0);
-    interpolation = interpolation ?? "linear";
+    const curveNameOf = (c: Curve | undefined): string | undefined =>
+      c === undefined ? undefined : typeof c === "string" ? c : c.type;
 
     return new GoFishNode(
       {
@@ -132,6 +151,63 @@ export const connect = createNodeOperator(
             child.layout(size, scaleFactors, [undefined, undefined])
           );
           const bboxPairs = pairs(childPlaceables.map((child) => child.dims));
+
+          // Resolve the curve. An omitted/`"auto"` curve detects whether the
+          // connected points share a homogeneous *continuous* space on the
+          // connection axis (i.e. they are samples of a continuous variable):
+          // if so we smooth with a centripetal Catmull-Rom spline; otherwise we
+          // fall back to the always-drawable discrete connector (line→straight,
+          // ribbon→bezier). Connecting two arbitrary points is therefore always
+          // valid — it just isn't smoothed. Explicit curves always win.
+          //
+          // The children carry the space because `resolveNames` runs before the
+          // underlying-space pass, so a `ref` already proxies its target's space
+          // (falling back to ORDINAL ⇒ discrete when unresolved).
+          const isAuto = curve === undefined || curveNameOf(curve) === "auto";
+          let resolvedCurve: Curve;
+          if (!isAuto) {
+            resolvedCurve = curve as Curve;
+          } else {
+            const axis = dir as 0 | 1;
+            // The connection-axis *positioning* space lives on whatever placed
+            // the connected marks: the mark itself (a data-bound
+            // `ellipse({ x: value(…) })` reports POSITION) or an ancestor (a
+            // `circle`/`blank` placed by `scatter` — the scatter reports
+            // POSITION). So walk up from each mark to the nearest ancestor whose
+            // connection-axis space is a *positioning* kind (POSITION = data
+            // axis, ORDINAL = category axis), skipping the mark's own SIZE
+            // (its extent, e.g. a circle's radius) and UNDEFINED.
+            const connectionSpaceOf = (
+              c: GoFishAST
+            ): UnderlyingSpace | undefined => {
+              let node: any = (c as any).targetNode ?? c;
+              while (node) {
+                const s = node.resolveUnderlyingSpace?.()?.[axis];
+                // Stop at the nearest *positioning* space — an ORDINAL ancestor
+                // must win over a continuous grandparent (a grouped layout is
+                // discrete even inside a continuous frame), so we can't skip it.
+                if (s !== undefined && isPositioningSpace(s)) return s;
+                node = node.parent;
+              }
+              return undefined;
+            };
+            const homogeneousContinuous =
+              children.length >= 2 &&
+              children.every((c) => {
+                const s = connectionSpaceOf(c);
+                return s !== undefined && isPOSITION(s);
+              });
+            resolvedCurve =
+              mode === "center"
+                ? homogeneousContinuous
+                  ? "catmullRom"
+                  : "straight"
+                : "bezier";
+          }
+          const resolvedCurveName = curveNameOf(resolvedCurve);
+          // Edge ("ribbon") mode supports only straight (linear band) vs bezier
+          // (S-curve band).
+          const edgeBezier = resolvedCurveName === "bezier";
 
           // Anchor mode: connect normalized points on each endpoint's bbox.
           if (hasAnchors) {
@@ -232,63 +308,60 @@ export const connect = createNodeOperator(
             }
           }
 
-          if (dir === 0) {
-            if (interpolation === "linear") {
-              if (mode === "center") {
-                for (const [b0, b1] of bboxPairs) {
-                  const midX = (b0[0].max! + b1[0].min!) / 2;
-                  const midY = (b0[1].max! + b1[1].min!) / 2;
-                  paths.push([
-                    {
-                      type: "line",
-                      points: [
-                        [
-                          (b0[0].min! + b0[0].max!) / 2,
-                          (b0[1].min! + b0[1].max!) / 2,
-                        ],
-                        [
-                          (b1[0].min! + b1[0].max!) / 2,
-                          (b1[1].min! + b1[1].max!) / 2,
-                        ],
-                      ],
-                    },
-                  ]);
-                }
-              } else {
-                for (const [b0, b1] of bboxPairs) {
-                  paths.push([
-                    {
-                      type: "line",
-                      points: [
-                        [b0[0].max!, b0[1].min!],
-                        [b1[0].min!, b1[1].min!],
-                      ],
-                    },
-                    {
-                      type: "line",
-                      points: [
-                        [b1[0].min!, b1[1].min!],
-                        [b1[0].min!, b1[1].max!],
-                      ],
-                    },
-                    {
-                      type: "line",
-                      points: [
-                        [b1[0].min!, b1[1].max!],
-                        [b0[0].max!, b0[1].max!],
-                      ],
-                    },
-                    {
-                      type: "line",
-                      points: [
-                        [b0[0].max!, b0[1].max!],
-                        [b0[0].max!, b0[1].min!],
-                      ],
-                    },
-                  ]);
-                }
+          // Center mode = the "line" component. `catmullRom` is a *sequence*
+          // curve — it threads the whole run of centers as one centripetal
+          // spline (d3's `.curve(curveCatmullRom)`), so it bypasses the pairwise
+          // router loop. Every other curve (straight | bezier | orthogonal | arc
+          // | perfectArrows | …) is pairwise: routed per consecutive endpoint.
+          if (mode === "center") {
+            if (isSequenceCurve(resolvedCurveName)) {
+              const centers = childPlaceables.map((c) => centerPoint(c.dims));
+              paths.push(convertPointsToBezierCurves(centers));
+            } else {
+              const { router, options: routeOpts } =
+                resolveCurve(resolvedCurve);
+              for (const [b0, b1] of bboxPairs) {
+                paths.push(
+                  router(b0, b1, { dir: dir as 0 | 1, opts: routeOpts })
+                );
               }
-            } else if (interpolation === "bezier") {
+            }
+          } else if (dir === 0) {
+            // Edge ("ribbon") mode: a filled quad between the facing edges.
+            if (!edgeBezier) {
+              for (const [b0, b1] of bboxPairs) {
+                paths.push([
+                  {
+                    type: "line",
+                    points: [
+                      [b0[0].max!, b0[1].min!],
+                      [b1[0].min!, b1[1].min!],
+                    ],
+                  },
+                  {
+                    type: "line",
+                    points: [
+                      [b1[0].min!, b1[1].min!],
+                      [b1[0].min!, b1[1].max!],
+                    ],
+                  },
+                  {
+                    type: "line",
+                    points: [
+                      [b1[0].min!, b1[1].max!],
+                      [b0[0].max!, b0[1].max!],
+                    ],
+                  },
+                  {
+                    type: "line",
+                    points: [
+                      [b0[0].max!, b0[1].max!],
+                      [b0[0].max!, b0[1].min!],
+                    ],
+                  },
+                ]);
+              }
+            } else {
               for (const [b0, b1] of bboxPairs) {
                 const midX = (b0[0].max! + b1[0].min!) / 2;
                 paths.push([
@@ -324,112 +397,72 @@ export const connect = createNodeOperator(
               }
             }
           } else {
-            if (interpolation === "linear") {
-              if (mode === "center") {
-                for (const [b0, b1] of bboxPairs) {
-                  paths.push([
-                    {
-                      type: "line",
-                      points: [
-                        [
-                          (b0[0].min! + b0[0].max!) / 2,
-                          (b0[1].min! + b0[1].max!) / 2,
-                        ],
-                        [
-                          (b1[0].min! + b1[0].max!) / 2,
-                          (b1[1].min! + b1[1].max!) / 2,
-                        ],
-                      ],
-                    },
-                  ]);
-                }
-              } else {
-                for (const [b0, b1] of bboxPairs) {
-                  paths.push([
-                    {
-                      type: "line",
-                      points: [
-                        [b0[0].min!, b0[1].max!],
-                        [b1[0].min!, b1[1].min!],
-                      ],
-                    },
-                    {
-                      type: "line",
-                      points: [
-                        [b1[0].min!, b1[1].min!],
-                        [b1[0].max!, b1[1].min!],
-                      ],
-                    },
-                    {
-                      type: "line",
-                      points: [
-                        [b1[0].max!, b1[1].min!],
-                        [b0[0].max!, b0[1].max!],
-                      ],
-                    },
-                    {
-                      type: "line",
-                      points: [
-                        [b0[0].max!, b0[1].max!],
-                        [b0[0].min!, b0[1].max!],
-                      ],
-                    },
-                  ]);
-                }
+            if (!edgeBezier) {
+              for (const [b0, b1] of bboxPairs) {
+                paths.push([
+                  {
+                    type: "line",
+                    points: [
+                      [b0[0].min!, b0[1].max!],
+                      [b1[0].min!, b1[1].min!],
+                    ],
+                  },
+                  {
+                    type: "line",
+                    points: [
+                      [b1[0].min!, b1[1].min!],
+                      [b1[0].max!, b1[1].min!],
+                    ],
+                  },
+                  {
+                    type: "line",
+                    points: [
+                      [b1[0].max!, b1[1].min!],
+                      [b0[0].max!, b0[1].max!],
+                    ],
+                  },
+                  {
+                    type: "line",
+                    points: [
+                      [b0[0].max!, b0[1].max!],
+                      [b0[0].min!, b0[1].max!],
+                    ],
+                  },
+                ]);
               }
-            } else if (interpolation === "bezier") {
-              if (mode === "center") {
-                for (const [b0, b1] of bboxPairs) {
-                  paths.push([
-                    {
-                      type: "line",
-                      points: [
-                        [
-                          (b0[0].min! + b0[0].max!) / 2,
-                          (b0[1].min! + b0[1].max!) / 2,
-                        ],
-                        [
-                          (b1[0].min! + b1[0].max!) / 2,
-                          (b1[1].min! + b1[1].max!) / 2,
-                        ],
-                      ],
-                    },
-                  ]);
-                }
-              } else {
-                for (const [b0, b1] of bboxPairs) {
-                  const midY = (b0[1].max! + b1[1].min!) / 2;
-                  paths.push([
-                    {
-                      type: "bezier",
-                      start: [b0[0].min!, b0[1].max!],
-                      control1: [b0[0].min!, midY],
-                      control2: [b1[0].min!, midY],
-                      end: [b1[0].min!, b1[1].min!],
-                    },
-                    {
-                      type: "line",
-                      points: [
-                        [b1[0].min!, b1[1].min!],
-                        [b1[0].max!, b1[1].min!],
-                      ],
-                    },
-                    {
-                      type: "bezier",
-                      start: [b1[0].max!, b1[1].min!],
-                      control1: [b1[0].max!, midY],
-                      control2: [b0[0].max!, midY],
-                      end: [b0[0].max!, b0[1].max!],
-                    },
-                    {
-                      type: "line",
-                      points: [
-                        [b0[0].max!, b0[1].max!],
-                        [b0[0].min!, b0[1].max!],
-                      ],
-                    },
-                  ]);
-                }
+            } else {
+              for (const [b0, b1] of bboxPairs) {
+                const midY = (b0[1].max! + b1[1].min!) / 2;
+                paths.push([
+                  {
+                    type: "bezier",
+                    start: [b0[0].min!, b0[1].max!],
+                    control1: [b0[0].min!, midY],
+                    control2: [b1[0].min!, midY],
+                    end: [b1[0].min!, b1[1].min!],
+                  },
+                  {
+                    type: "line",
+                    points: [
+                      [b1[0].min!, b1[1].min!],
+                      [b1[0].max!, b1[1].min!],
+                    ],
+                  },
+                  {
+                    type: "bezier",
+                    start: [b1[0].max!, b1[1].min!],
+                    control1: [b1[0].max!, midY],
+                    control2: [b0[0].max!, midY],
+                    end: [b0[0].max!, b0[1].max!],
+                  },
+                  {
+                    type: "line",
+                    points: [
+                      [b0[0].max!, b0[1].max!],
+                      [b0[0].min!, b0[1].max!],
+                    ],
+                  },
+                ]);
               }
             }
           }

@@ -12,11 +12,10 @@ import { layer } from "../ast/graphicalOperators/layer";
 import { ellipse } from "../ast/shapes/ellipse";
 import _ from "lodash";
 import { ref } from "../ast/shapes/ref";
-import { connectX } from "../ast/graphicalOperators/connectX";
 import { streamgraphData, streamgraphColorPalette } from "../data/streamgraphData";
 import { stackX } from "../ast/graphicalOperators/stackX";
 import { frame } from "../ast/graphicalOperators/frame";
-import { connectX, For, frame, stackX } from "../lib";
+import { ribbon, For, frame, stackX } from "../lib";
 const data = streamgraphData;
 const colorPalette = streamgraphColorPalette;
 
@@ -35,12 +34,14 @@ export const testSingletonAreaChart = () =>
           })
       )
     ),
-    connectX(
+    ribbon(
       {
-        interpolation: "linear",
+        dir: "x",
+        curve: "straight",
         // opacity: 0.7,
         // mixBlendMode: "normal",
         opacity: 0.7,
+        mixBlendMode: "multiply",
       },
       For(
         data.filter((d) => d.c === 1),
@@ -71,12 +72,14 @@ export const testAreaChart = () =>
     ..._(data)
       .groupBy("c")
       .map((items, c) =>
-        connectX(
+        ribbon(
           {
-            interpolation: "linear",
+            dir: "x",
+            curve: "straight",
             // opacity: 0.7,
             // mixBlendMode: "normal",
             opacity: 0.7,
+            mixBlendMode: "multiply",
           },
           items.map((d) => ref(`${c}-${d.x}`))
         )

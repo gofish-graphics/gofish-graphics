@@ -126,7 +126,7 @@ chart(seafood).flow(spread(by="lake", dir="x")).mark(rect(h="count"))
 
 Pass `selectAll("layerName")` as the data argument to reference a named mark from
 another chart — it resolves to an **array of refs**, one per named node, which
-connectors like [`line`](/python/api/marks/line) and [`area`](/python/api/marks/area)
+connectors like [`line`](/python/api/marks/line) and [`ribbon`](/python/api/marks/ribbon)
 consume directly. Use `ref("layerName")` as data for the singular case: it returns a
 **single ref** and raises if the layer matched zero or more than one node.
 

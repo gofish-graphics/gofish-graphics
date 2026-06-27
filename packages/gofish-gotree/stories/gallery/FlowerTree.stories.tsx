@@ -32,7 +32,7 @@ import { combine, byDepth, mount, sampleTree } from "./_shared";
 //    padding is a flat radian pad, not a true wedge inset, and enclosure is
 //    only "visible" because parents are hand-sized bigger than children. With
 //    a uniform-size node the nest would not read as a petal at all.
-//  - Link "straight" maps to interpolation:"linear", but with parentChild
+//  - Link "straight" maps to curve:"straight", but with parentChild
 //    aligned on r the parent/child radii coincide, so links are short chords
 //    inside each petal rather than radial spokes.
 const meta: Meta = { title: "GoTree / Gallery / FlowerTree" };
@@ -53,7 +53,7 @@ export const FlowerTree: StoryObj = {
     mount(
       {
         node,
-        link: { interpolation: "linear", stroke: "#90a4ae", strokeWidth: 1.5 },
+        link: { curve: "straight", stroke: "#90a4ae", strokeWidth: 1.5 },
         parentChild: combine({
           // θ: parent wedge encloses (nests) the child group's angular span.
           x: { kind: "nest", pad: 0.04 },

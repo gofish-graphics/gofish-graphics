@@ -1,7 +1,7 @@
 import _ from "lodash";
 import { caltrain, caltrainStopOrder } from "../data/caltrain";
 import {
-  connectY,
+  line,
   ellipse,
   For,
   frame,
@@ -42,8 +42,8 @@ export const testStringLine = () =>
       )
     ),
     For(groupBy(caltrainProcessed, "Train"), (d) =>
-      connectY(
-        { strokeWidth: 1, mode: "center" },
+      line(
+        { dir: "y", strokeWidth: 1, curve: "bezier" },
         For(d, (d) => ref(`${d.Train}-${d.Station}-${d.Time}`))
       )
     ),

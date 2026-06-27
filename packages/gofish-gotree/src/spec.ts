@@ -35,7 +35,10 @@ export type HierarchyDatum = {
 export type NodeFactory = (datum: HierarchyDatum) => Mark<any>;
 
 export type LinkOptions = {
-  interpolation?: "linear" | "bezier" | "orthogonal" | "arc";
+  // Screen-space path shape for the link (GoTree's `Link` element). Maps to a
+  // GoFish `curve` of the same name (GoTree's "straight" link → `straight`,
+  // "curve" → `bezier`).
+  curve?: "straight" | "bezier" | "orthogonal" | "arc";
   stroke?: string;
   strokeWidth?: number;
   opacity?: number;

@@ -34,7 +34,7 @@ const data = {
 const chart = tree(
   {
     node: (d) => circle({ r: 10, fill: "steelblue" }),
-    link: { interpolation: "linear", stroke: "#888" },
+    link: { curve: "straight", stroke: "#888" },
     parentChild: spread({ dir: "y", spacing: 48, alignment: "middle" }),
     sibling: spread({ dir: "x", spacing: 24, alignment: "start" }),
   },
@@ -109,15 +109,15 @@ node: (d) => circle({ r: 4 + d.height * 2, fill: colorByDepth(d.depth) });
 ### `link` — the edge encoding
 
 - `"none"` — omit all edges (useful for nested-box / icicle / treemap variants).
-- An options object `{ interpolation, stroke, strokeWidth, opacity }` — applied
+- An options object `{ curve, stroke, strokeWidth, opacity }` — applied
   uniformly.
 - A function `(source, target) => LinkOptions` — per-edge styling.
 
 ```ts
-link: { interpolation: "linear", stroke: "#90a4ae", strokeWidth: 1.5 }
+link: { curve: "straight", stroke: "#90a4ae", strokeWidth: 1.5 }
 ```
 
-Currently only `interpolation: "linear"` is supported. `"bezier"`, `"orthogonal"`,
+Currently only `curve: "straight"` is supported. `"bezier"`, `"orthogonal"`,
 and `"arc"` are planned for later milestones.
 
 ### `parentChild` and `sibling` — the layout combiners
@@ -336,7 +336,7 @@ conventions and switch from JSON descriptors to callable helpers.
 | Paper                             | GoTree-in-GoFish                                   |
 | --------------------------------- | -------------------------------------------------- |
 | `Element.Node: "rectangle"`       | `node: (d) => rect({...})`                         |
-| `Element.Link: "straight"`        | `link: { interpolation: "linear" }`                |
+| `Element.Link: "straight"`        | `link: { curve: "straight" }`                      |
 | `Element.Color: "depth"`          | inside `node`: `fill: byDepth(d.depth)`            |
 | `Element.Width/Height`            | inside `node`: `w` / `h` on the mark               |
 | `Element.LinkWidth`               | `link.strokeWidth`                                 |
@@ -363,4 +363,4 @@ conventions and switch from JSON descriptors to callable helpers.
 - **M5** — `bottomUp` mode for dendrograms via intrinsic-dim wiring.
 
 Trying to use values from M3+ (`coord: polar(...)`, `orthogonal`/`bezier`/`arc`
-link interpolations) raises an explicit error.
+link curves) raises an explicit error.

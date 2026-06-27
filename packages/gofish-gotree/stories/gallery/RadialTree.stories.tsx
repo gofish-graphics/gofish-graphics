@@ -30,7 +30,7 @@ export const RadialTree: StoryObj = {
     mount(
       {
         node,
-        link: { interpolation: "linear", stroke: "#90a4ae", strokeWidth: 1.5 },
+        link: { curve: "straight", stroke: "#90a4ae", strokeWidth: 1.5 },
         parentChild: combine({
           // θ: parent centered over its subtree's angular span.
           x: { kind: "align", alignment: "middle" },

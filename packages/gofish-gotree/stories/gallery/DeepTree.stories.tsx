@@ -23,7 +23,7 @@ import { combine, byDepth, mount } from "./_shared";
 // NOTES — polar limitations (no hacks; flagged for follow-up):
 //  - Links: the dsl asks for "curve" links with depth-driven width
 //    (LinkWidth=depth). Curved link interpolation isn't implemented, so this
-//    falls back to fixed-width {interpolation:"linear"}. Under polar() the
+//    falls back to fixed-width {curve:"straight"}. Under polar() the
 //    straight segments still bow into arcs through the coord transform, but they
 //    are NOT the dsl's authored curves and ignore LinkWidth/Thickness=depth.
 //  - NO angular auto-fit: sibling θ spacing is a fixed per-level constant, it
@@ -67,7 +67,7 @@ export const DeepTree: StoryObj = {
       {
         node,
         // NOTE: dsl wants curve links (LinkWidth=depth); falling back to linear.
-        link: { interpolation: "linear", stroke: "#5f6b7a", strokeWidth: 1.5 },
+        link: { curve: "straight", stroke: "#5f6b7a", strokeWidth: 1.5 },
         parentChild: combine({
           // θ: nest centers the parent circle over its subtree's angular span.
           x: { kind: "nest", pad: 0 },

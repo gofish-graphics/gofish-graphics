@@ -33,7 +33,7 @@ import { combine, byDepth, mount } from "./_shared";
 //    the literal nest mapping render — but then it is a sunburst, not the
 //    circle node-link the dsl's Node=circle calls for.
 //  - Link=curve is not supported; links render as straight segments
-//    ({interpolation:"linear"}) which in polar appear as chords, not arcs.
+//    ({curve:"straight"}) which in polar appear as chords, not arcs.
 //  - No angular auto-fit: angular spacing is a fixed per-level constant and
 //    does NOT shrink with the node count at a depth, so wide levels overflow
 //    the 2π budget and wedges wrap. GoTree allocates angle by subtree
@@ -51,7 +51,7 @@ export const OutsideInTree: StoryObj = {
     mount(
       {
         node,
-        link: { interpolation: "linear", stroke: "#90a4ae", strokeWidth: 1.5 },
+        link: { curve: "straight", stroke: "#90a4ae", strokeWidth: 1.5 },
         parentChild: combine({
           // θ: parent centered over its subtree's angular span (nest approx —
           // see NOTES; circles can't grow to enclose).

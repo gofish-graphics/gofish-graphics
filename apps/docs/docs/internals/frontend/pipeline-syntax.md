@@ -47,7 +47,9 @@ rect(seafood, { h: "count", fill: "species" })
   .stackY("species")
   .derive(sort("count"))
   .spreadX("lake", { spacing: 64 })
-  .connectX("species", { over: "lake", opacity: 0.8 })
+  // group the bars by species, then draw one ribbon through each group
+  .group({ by: "datum.species" })
+  .connect(ribbon({ opacity: 0.8 }))
   .render(root, { w: 500, h: 300, axes: true });
 ```
 
@@ -474,7 +476,7 @@ const area = createMark((data, { x, y }) =>
 
 chart(seafood)
   .flow(spread("species", { dir: "y", spacing: -16 }))
-  .mark(area({ x: "lakeLocX", y: "count" }));
+  .mark(ribbon({ x: "lakeLocX", y: "count" }));
 ```
 
 **layered area**
@@ -492,7 +494,7 @@ const area = createMark((data, { x, y }) =>
 
 chart(seafood)
   .flow(group("species"))
-  .mark(area({ x: "lakeLocX", y: "count" }));
+  .mark(ribbon({ x: "lakeLocX", y: "count" }));
 ```
 
 **scatter pie**

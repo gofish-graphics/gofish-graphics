@@ -9,12 +9,11 @@ import { stack } from "../ast/graphicalOperators/stack";
 import { color, color6 } from "../color";
 import { layer } from "../ast/graphicalOperators/layer";
 import _ from "lodash";
-import { connectX } from "../ast/graphicalOperators/connectX";
 import { streamgraphData, streamgraphColorPalette } from "../data/streamgraphData";
 import { stackX } from "../ast/graphicalOperators/stackX";
 import { stackY } from "../ast/graphicalOperators/stackY";
 import { frame } from "../ast/graphicalOperators/frame";
-import { connectX, frame, groupBy, For, rect, ref, stackX, stackY, v } from "../lib";
+import { ribbon, frame, groupBy, For, rect, ref, stackX, stackY, v } from "../lib";
 const data = streamgraphData;
 const colorPalette = streamgraphColorPalette;
 
@@ -41,9 +40,10 @@ export const testStackedAreaChart = () =>
     _(data)
       .groupBy("c")
       .map((items, c) =>
-        connectX(
+        ribbon(
           {
-            interpolation: "linear",
+            dir: "x",
+            curve: "straight",
             // opacity: 0.7,
             mixBlendMode: "normal",
             strokeWidth: 1,
@@ -72,8 +72,9 @@ export const testStackedAreaChartV2API = () =>
       ),
     ]),
     For(groupBy(data, "c"), (items, c) =>
-      connectX(
+      ribbon(
         {
+          dir: "x",
           // opacity: 0.7,
           mixBlendMode: "normal",
           strokeWidth: 1,

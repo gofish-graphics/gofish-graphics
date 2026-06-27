@@ -36,7 +36,7 @@ import { combine, byDepth, mount } from "./_shared";
 //    offsets; the genuine root-center-vs-outer-ring radial separation of the
 //    reference is NOT expressible.
 //  - Link=arccurve is NOT supported. There is no arc/curve link interpolation,
-//    so links fall back to {interpolation:"linear"}. Under polar() a straight
+//    so links fall back to {curve:"straight"}. Under polar() a straight
 //    cartesian segment between two (θ,r) endpoints still bows, but it does NOT
 //    reproduce GoTree's controlled arccurve with ArcDirection=bottom, so the
 //    characteristic uniform swirl of the reference is only approximated.
@@ -63,7 +63,7 @@ export const RotationTree: StoryObj = {
     mount(
       {
         node,
-        link: { interpolation: "linear", stroke: "#5b6b7a", strokeWidth: 1.5 },
+        link: { curve: "straight", stroke: "#5b6b7a", strokeWidth: 1.5 },
         // Root juxtapose / within → distribute θ, align r. The θ offset between a
         // parent and its subtree group is the "rotation".
         parentChild: combine({

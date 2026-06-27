@@ -7,7 +7,7 @@ import {
   rect,
   v,
   frame,
-  connectX,
+  ribbon,
   ref,
 } from "../lib";
 
@@ -28,12 +28,11 @@ export const testRidgeline = () =>
             }).name(`${d.c}-${d.x}`)
           )
         ),
-        connectX(
+        ribbon(
           {
-            // interpolation: "linear",
-            // opacity: 0.7,
-            // mixBlendMode: "normal",
+            dir: "x",
             opacity: 0.7,
+            mixBlendMode: "multiply",
           },
           For(items, (d) => ref(`${d.c}-${d.x}`))
         ),

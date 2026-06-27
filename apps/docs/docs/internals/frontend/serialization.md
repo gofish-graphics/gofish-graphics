@@ -117,10 +117,10 @@ The root types mirror the v3 fluent builder shapes:
 `data` is either `{type: "inline", rows}`, `{type: "select", layer}`, or
 `{type: "external", id?}`. Operators are a flat list (`derive`, `spread`,
 `stack`, `group`, `scatter`, `table`, `log`). Marks are a tree — leaves
-(`rect`, `circle`, `line`, `area`, `blank`, `ellipse`, `petal`, `text`,
+(`rect`, `circle`, `blank`, `ellipse`, `petal`, `text`,
 `image`, `polygon`, plus the Python-bridge `mark-fn`), combinators (with
 `__combinator: true` and a `children` array — `layer`, `spread`, `stack`,
-`arrow`, `connect`, `treemap`, and the Porter-Duff family), refs, or the
+`arrow`, `line`, `ribbon`, `treemap`, and the Porter-Duff family), refs, or the
 two self-discriminating wrapper marks `offset` and `cut` (below).
 
 Operators and marks may also carry `translate: {x?, y?}`. This is canonical
@@ -249,7 +249,7 @@ chart(data).mark(
 
 The `__combinator: true` flag tells the deserializer to dispatch this
 node through the combinator factory registry (`layer`, `spread`,
-`arrow`, `connect`, `treemap`, Porter-Duff) rather than the leaf-mark
+`arrow`, `line`, `ribbon`, `treemap`, Porter-Duff) rather than the leaf-mark
 registry — same `type` discriminator namespace, different code path.
 
 ## The JSON Schema

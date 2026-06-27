@@ -1,17 +1,31 @@
-import { connect, ref } from "gofish-graphics";
+import {
+  line,
+  ref,
+  straight,
+  bezier,
+  orthogonal,
+  arc,
+  type Curve,
+} from "gofish-graphics";
 import type { HierarchyNode } from "d3-hierarchy";
 import type { LinkOptions, LinkSpec } from "./spec";
 import { nodePath, toDatum } from "./data";
 
 const DEFAULTS: Required<
-  Pick<LinkOptions, "interpolation" | "stroke" | "strokeWidth">
+  Pick<LinkOptions, "curve" | "stroke" | "strokeWidth">
 > = {
-  interpolation: "linear",
+  curve: "straight",
   stroke: "gray",
   strokeWidth: 1,
 };
 
-const M2_INTERPOLATIONS = new Set(["orthogonal", "arc"]);
+// GoTree's Link style → a GoFish screen-space curve factory.
+const CURVE_FOR: Record<NonNullable<LinkOptions["curve"]>, () => Curve> = {
+  straight,
+  bezier,
+  orthogonal,
+  arc,
+};
 
 function resolveLinkOptions(
   link: LinkSpec | undefined,
@@ -31,17 +45,11 @@ function linkMark(
   sourcePath: string,
   targetPath: string
 ): any {
-  const interpolation = opts.interpolation ?? DEFAULTS.interpolation;
-  if (M2_INTERPOLATIONS.has(interpolation)) {
-    throw new Error(
-      `gofish-gotree: link interpolation '${interpolation}' is M4+ and not yet implemented`
-    );
-  }
-  return connect(
+  const curve = opts.curve ?? DEFAULTS.curve;
+  return line(
     {
-      mode: "center",
-      interpolation: interpolation as "linear" | "bezier",
-      // connect's default `fill` falls back to children[0].color ?? "black".
+      curve: CURVE_FOR[curve](),
+      // The connector's default `fill` falls back to children[0].color ?? "black".
       // For a straight cartesian line that's invisible (fill area of a
       // zero-thickness line is zero), but under a polar coord transform the
       // line is resampled into an arc — and SVG fills the segment between

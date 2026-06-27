@@ -25,7 +25,7 @@ import {
   rect,
   circle,
   line,
-  area,
+  ribbon,
   blank,
   ellipse,
   petal,
@@ -41,7 +41,6 @@ import {
   Constraint,
   ref,
   arrow,
-  connect,
   // Region-compositing combinators. PR #404's Stage-2 rename (#196/#202)
   // renamed the public Porter-Duff exports to Figma-inspired names:
   //   inside → intersect, xor → exclude, out → subtract, atop → paint.
@@ -91,7 +90,9 @@ const COMBINATOR_FACTORIES: Record<
   table: (opts, marks) => table(opts, marks) as unknown as Mark<any>,
   layer: (opts, marks) => layer(opts, marks) as unknown as Mark<any>,
   arrow: (opts, marks) => arrow(opts, marks) as unknown as Mark<any>,
-  connect: (opts, marks) => connect(opts, marks) as unknown as Mark<any>,
+  // line/ribbon low-level combinator form (replaces the removed connect).
+  line: (opts, marks) => line(opts, marks) as unknown as Mark<any>,
+  ribbon: (opts, marks) => ribbon(opts, marks) as unknown as Mark<any>,
   treemap: (opts, marks) => Treemap(opts, marks) as unknown as Mark<any>,
   // Keys are the IR wire types (UNCHANGED — the serializer never renamed
   // them); values are the renamed (#196/#202) combinator factories. Mirrors
@@ -437,7 +438,7 @@ const MARK_MAP: Record<string, (opts: Record<string, any>) => Mark<any>> = {
   rect: (opts) => rect(opts),
   circle: (opts) => circle(opts),
   line: (opts) => line(opts),
-  area: (opts) => area(opts),
+  ribbon: (opts) => ribbon(opts),
   blank: (opts) => blank(opts),
   ellipse: (opts) => ellipse(opts),
   petal: (opts) => petal(opts),

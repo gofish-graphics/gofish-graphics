@@ -2,7 +2,7 @@
 
 Draws a connector through the chart's own marks. `.connect(line())` is builder
 sugar for the two-layer `selectAll` recipe: it positions the chart's marks, then
-threads a [`line`](/js/api/marks/line) or [`area`](/js/api/marks/area) through
+threads a [`line`](/js/api/marks/line) or [`ribbon`](/js/api/marks/ribbon) through
 exactly those nodes, painted underneath.
 
 > For anything beyond a single connector mark — grouping the marks into bands, or
@@ -36,9 +36,9 @@ gf.chart(locations, { axes: true })
 
 ## Parameters
 
-| Parameter       | Type                | Description                                                                                       |
-| --------------- | ------------------- | ------------------------------------------------------------------------------------------------- |
-| `connectorMark` | `Mark<GoFishRef[]>` | A ref-consuming mark — typically [`line()`](/js/api/marks/line) or [`area()`](/js/api/marks/area) |
+| Parameter       | Type                | Description                                                                                           |
+| --------------- | ------------------- | ----------------------------------------------------------------------------------------------------- |
+| `connectorMark` | `Mark<GoFishRef[]>` | A ref-consuming mark — typically [`line()`](/js/api/marks/line) or [`ribbon()`](/js/api/marks/ribbon) |
 
 Returns a new `ChartBuilder` — `connect` is immutable.
 
@@ -79,7 +79,7 @@ keeps the IR small and never leaks an extra layer into your code.
   applies `zOrder(-1)` to the connector layer). This is fixed; reach for the
   manual `layer([...])` form if you need a different paint order.
 - **Connector type** — any `Mark<GoFishRef[]>` works: [`line()`](/js/api/marks/line),
-  [`area()`](/js/api/marks/area).
+  [`ribbon()`](/js/api/marks/ribbon).
 
 ## Constraints
 
@@ -96,5 +96,5 @@ This page documents the **v3 builder method** `ChartBuilder.connect()`. It is
 distinct from the lower-level [`connect` / `Connect` operator](/js/api/operators/connect),
 which draws a connector between explicitly-listed `ref(...)` children inside a
 layout (anchor/edge modes, source/target anchors). The builder sugar wraps a
-ref-consuming _mark_ (`line` / `area`); the operator is a _layout primitive_ you
+ref-consuming _mark_ (`line` / `ribbon`); the operator is a _layout primitive_ you
 place children into directly.

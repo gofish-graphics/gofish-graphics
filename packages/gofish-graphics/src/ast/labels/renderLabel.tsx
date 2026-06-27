@@ -103,7 +103,7 @@ function computeLabel(
   const h = node.intrinsicDims[1].size ?? 0;
 
   const shapeType = (
-    ["rect", "ellipse", "petal", "line", "area"].includes(node.type)
+    ["rect", "ellipse", "petal", "line", "ribbon"].includes(node.type)
       ? node.type
       : "rect"
   ) as ShapeInfo["type"];

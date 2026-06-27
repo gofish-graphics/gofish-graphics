@@ -19,7 +19,7 @@ GoFish is **declarative**: you never tell it to draw — you describe _what_ the
 and the engine works out the rest. That description is an **abstract syntax tree** of
 `GoFishNode`s. Two kinds of node make up the tree:
 
-- **Marks** — the things you can see: `rect`, `ellipse`, `line`, `area`, `text`.
+- **Marks** — the things you can see: `rect`, `ellipse`, `line`, `ribbon`, `text`.
 - **Graphical operators** — composition: `stackX`, `spread`, `layer`, `connect`,
   `coord`, and so on. An operator arranges its children; it has no appearance of its own.
 
