@@ -425,10 +425,10 @@ deferred to the #39/#547 round:
    unit is square, substituted before solving so each axis still inverts with
    one unknown. Stays O(1), expresses waffle-style square cells, and becomes
    natural once scales are measure-keyed (#547). The pixel-layer ledger (option
-   1) and this are complementary, not competing: one constrains boxes, the other
-   constrains scales. (A `σ_y = k·σ_x` _ratio_ was considered and rejected as
-   redundant — a `k ≠ 1` factor is just a linear coordinate transform scaling one
-   axis; the only meaningful case is equality, `k = 1`.)
+   1. and this are complementary, not competing: one constrains boxes, the other
+      constrains scales. (A `σ_y = k·σ_x` _ratio_ was considered and rejected as
+      redundant — a `k ≠ 1` factor is just a linear coordinate transform scaling one
+      axis; the only meaningful case is equality, `k = 1`.)
 
    **Partially shipped (#582)**, and crucially **driven by measure, not a knob**:
    when the x and y underlying spaces carry the **same measure**

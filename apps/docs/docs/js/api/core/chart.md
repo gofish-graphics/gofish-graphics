@@ -21,14 +21,14 @@ chart(data, options?)
 
 ## Parameters
 
-| Parameter             | Type                  | Description                                                                                                                                                                  |
-| --------------------- | --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `data`                | `T`                   | The dataset to visualize                                                                                                                                                     |
-| `options.w`           | `number`              | Width hint for the chart frame                                                                                                                                               |
-| `options.h`           | `number`              | Height hint for the chart frame                                                                                                                                              |
-| `options.coord`       | `CoordinateTransform` | Coordinate transform (e.g. `polar()`)                                                                                                                                        |
-| `options.color`       | `ColorConfig`         | Color scale applied to all marks in this chart. Use [`palette()`](/js/api/color/palette) for categorical data or [`gradient()`](/js/api/color/gradient) for continuous data. |
-| `options.axes`        | `AxesOptions`         | Auto-generate axes, labels, and legends. See [Axes](#axes) below.                                                                                                            |
+| Parameter       | Type                  | Description                                                                                                                                                                  |
+| --------------- | --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `data`          | `T`                   | The dataset to visualize                                                                                                                                                     |
+| `options.w`     | `number`              | Width hint for the chart frame                                                                                                                                               |
+| `options.h`     | `number`              | Height hint for the chart frame                                                                                                                                              |
+| `options.coord` | `CoordinateTransform` | Coordinate transform (e.g. `polar()`)                                                                                                                                        |
+| `options.color` | `ColorConfig`         | Color scale applied to all marks in this chart. Use [`palette()`](/js/api/color/palette) for categorical data or [`gradient()`](/js/api/color/gradient) for continuous data. |
+| `options.axes`  | `AxesOptions`         | Auto-generate axes, labels, and legends. See [Axes](#axes) below.                                                                                                            |
 
 Returns a `ChartBuilder<T>` with [`.flow()`](/js/api/core/flow), [`.mark()`](/js/api/core/mark), [`.render()`](/js/api/core/render), [`.zOrder()`](#zorder), and [`.name()`](#name) methods.
 

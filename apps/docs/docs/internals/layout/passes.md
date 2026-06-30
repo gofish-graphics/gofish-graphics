@@ -814,6 +814,25 @@ if (debug) {
 - **Single Traversal**: Each pass traverses the tree only once when possible.
 - **Per-run sessions**: Contexts are scoped to a single render session and discarded afterward, so there is no leakage between renders.
 
+### Measuring the passes
+
+The passes above are instrumented for benchmarking via `src/ast/perf.ts`. Each
+labeled phase is bracketed in `runLayout()` / `layout()` (and the paint path in
+`render()`) with `perfNow()` / `perfAdd(label, …)`, accumulating per-pass
+durations under the labels `resolve` (Passes 2–6: color/name/label/alias/space
+resolution = domain inference), `axes` (Pass 7 + title/legend elaboration),
+`embed` (the `resolveEmbedding` pass), `solve` (Pass 9 constraint solve),
+`lower` (display-list lowering) and `paint` (display-item → SVG), plus `fonts`
+(the webfont-readiness await).
+
+Collection is **off by default and zero-cost when off**: the helpers short-circuit
+on `globalThis.__GOFISH_PERF__?.enabled`, and the published library build replaces
+the compile-time constant `__GOFISH_PERF_INSTRUMENTATION__` with `false` (via
+`vite.config.ts`'s `define`), so the minifier dead-code-eliminates the whole
+subsystem — the npm package ships none of it. The bench harness
+(`tests/scripts/bench.ts`) flips the runtime flag on to read per-pass numbers
+for the ecological example suites and the synthetic asymptotics sweeps.
+
 ## Key Takeaways
 
 1. **Layout is separate from rendering**: All spatial calculations happen in the layout phase
