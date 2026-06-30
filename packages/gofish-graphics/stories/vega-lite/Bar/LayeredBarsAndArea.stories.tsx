@@ -117,6 +117,11 @@ export const HoistedVarietySpread: StoryObj<Args> = {
 
     chart(barley, {
       color: palette({ Morris: "#e15759", "Grand Rapids": "#4e79a7" }),
+      // TODO(#606): manual axis annotation. The outer chart unions the inner
+      // cells' yield spaces, so `axes: true` here renders ONE global yield (y)
+      // axis plus the variety (x) axis — instead of a per-cell y axis. Remove
+      // once recursive axes auto-infers these through the nested-facet structure.
+      axes: true,
     })
       .flow(spread({ by: "variety", dir: "x", spacing: 20 }))
       .mark(
@@ -138,7 +143,7 @@ export const HoistedVarietySpread: StoryObj<Args> = {
             ),
         ])
       )
-      .render(container, { w: args.w, h: args.h, axes: true });
+      .render(container, { w: args.w, h: args.h });
 
     return container;
   },
