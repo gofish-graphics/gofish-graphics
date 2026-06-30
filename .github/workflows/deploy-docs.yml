@@ -47,6 +47,10 @@ jobs:
         run: pnpm install # or pnpm install / yarn install / bun install
       - name: Build gofish-graphics library
         run: pnpm --filter gofish-graphics build
+      # docs:build runs predocs:build, which renders the gallery thumbnails + OG
+      # cards headlessly (they are build artifacts, not committed).
+      - name: Install Playwright Chromium
+        run: pnpm --filter @gofish/tests exec playwright install --with-deps chromium
       - name: Build with VitePress
         run: pnpm --filter docs docs:build
       - name: Upload artifact

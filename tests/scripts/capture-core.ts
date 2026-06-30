@@ -54,7 +54,10 @@ export interface CaptureResult {
   skipped: string[];
 }
 
-function startViteServer(harnessDir: string, port: number): ChildProcess {
+export function startViteServer(
+  harnessDir: string,
+  port: number
+): ChildProcess {
   return spawn(
     "npx",
     [
@@ -72,7 +75,10 @@ function startViteServer(harnessDir: string, port: number): ChildProcess {
   );
 }
 
-async function waitForVite(port: number, timeoutMs = 30_000): Promise<void> {
+export async function waitForVite(
+  port: number,
+  timeoutMs = 30_000
+): Promise<void> {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
     try {
