@@ -34,14 +34,6 @@ const isEmphasized = (site: unknown) =>
 export const Default: StoryObj<Args> = {
   args: { w: 400, h: 400 },
   loaders: [async () => ({ barley: await data["barley.json"]() })],
-  tags: ["gallery"],
-  parameters: {
-    gallery: {
-      title: "Layered Bars and Area",
-      description:
-        "Barley yield across all six field sites: stacked bars per variety and year, overlaid with translucent areas connecting each site's yield across the two years. Morris and Grand Rapids are colored and raised above the gray remaining sites via a data-driven paint order.",
-    },
-  },
   render: (args: Args, context: any) => {
     const container = initializeContainer();
     const barley = context.loaded.barley as any[];
@@ -111,6 +103,14 @@ export const TwoSites: StoryObj<Args> = {
 export const HoistedVarietySpread: StoryObj<Args> = {
   args: { w: 400, h: 400 },
   loaders: [async () => ({ barley: await data["barley.json"]() })],
+  tags: ["gallery"],
+  parameters: {
+    gallery: {
+      title: "Layered Bars and Area",
+      description:
+        "Barley yield across all six field sites: stacked bars per variety and year, overlaid with translucent areas connecting each site's yield across the two years. Morris and Grand Rapids are colored and raised above the gray remaining sites via a data-driven paint order.",
+    },
+  },
   render: (args: Args, context: any) => {
     const container = initializeContainer();
     const barley = context.loaded.barley as any[];
