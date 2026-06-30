@@ -8,6 +8,7 @@ import { getValue, type MaybeValue } from "../data";
 import { resolveColorChannel } from "../../color";
 import {
   type LabelPosition,
+  type LabelSpec,
   type ShapeInfo,
   inferLabelPosition,
   calculateLabelOffset,
@@ -89,13 +90,14 @@ const LABEL_FONT_FAMILY = "source-sans-pro, sans-serif";
 
 function computeLabel(
   node: GoFishNode,
+  spec: LabelSpec,
   transformOverride?: Transform
 ): LabelLayout | null {
-  if (!node._label || !node.intrinsicDims) return null;
+  if (!node.intrinsicDims) return null;
   const datum = node.datum;
   if (datum === undefined) return null;
 
-  const labelText = resolveLabelText(node._label.accessor, datum);
+  const labelText = resolveLabelText(spec.accessor, datum);
   if (!labelText) return null;
 
   const w = node.intrinsicDims[0].size ?? 0;
@@ -114,13 +116,13 @@ function computeLabel(
       availableSpace: { top: 20, right: 20, bottom: 20, left: 20 },
     },
     {
-      position: node._label.position ?? "outset",
-      offset: node._label.offset,
+      position: spec.position ?? "outset",
+      offset: spec.offset,
     }
   );
 
   const offset = calculateLabelOffset(position, [w, h], {
-    offset: node._label.offset,
+    offset: spec.offset,
   });
 
   const [tx, ty] = displayTranslate(transformOverride ?? node.transform);
@@ -131,10 +133,10 @@ function computeLabel(
     labelText,
     ax: cx + offset.x,
     ay: cy + offset.y,
-    labelColor: node._label.color ?? autoLabelColor(node, position),
+    labelColor: spec.color ?? autoLabelColor(node, position),
     textAnchor: getLabelTextAnchor(position),
-    rotate: node._label.rotate,
-    fontSize: node._label.fontSize ?? 11,
+    rotate: spec.rotate,
+    fontSize: spec.fontSize ?? 11,
   };
 }
 
@@ -150,22 +152,26 @@ export function lowerLabelItems(
   transformOverride: Transform | undefined,
   toPixel: ToPixel
 ): DisplayList.DisplayItem[] {
-  const l = computeLabel(node, transformOverride);
-  if (!l) return [];
+  const items: DisplayList.DisplayItem[] = [];
+  for (const spec of node._labels) {
+    const l = computeLabel(node, spec, transformOverride);
+    if (!l) continue;
 
-  const [x, y] = toPixel([l.ax, l.ay]);
-  const item: DisplayList.TextItem = {
-    kind: "text",
-    x,
-    y,
-    text: l.labelText,
-    fontSize: l.fontSize,
-    fontFamily: LABEL_FONT_FAMILY,
-    textAnchor: l.textAnchor as DisplayList.TextItem["textAnchor"],
-    dominantBaseline: "central",
-    role: "overlay",
-    style: { fill: l.labelColor },
-  };
-  if (l.rotate) item.rotate = l.rotate;
-  return [item];
+    const [x, y] = toPixel([l.ax, l.ay]);
+    const item: DisplayList.TextItem = {
+      kind: "text",
+      x,
+      y,
+      text: l.labelText,
+      fontSize: l.fontSize,
+      fontFamily: LABEL_FONT_FAMILY,
+      textAnchor: l.textAnchor as DisplayList.TextItem["textAnchor"],
+      dominantBaseline: "central",
+      role: "overlay",
+      style: { fill: l.labelColor },
+    };
+    if (l.rotate) item.rotate = l.rotate;
+    items.push(item);
+  }
+  return items;
 }

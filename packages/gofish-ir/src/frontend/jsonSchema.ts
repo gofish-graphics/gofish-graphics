@@ -295,7 +295,7 @@ export const FRONTEND_IR_JSON_SCHEMA = {
           ],
         },
         name: { type: "string" },
-        label: { $ref: "#/$defs/LabelIR" },
+        label: { $ref: "#/$defs/LabelOrArrayIR" },
         constraints: {
           type: "array",
           items: { $ref: "#/$defs/ConstraintIR" },
@@ -331,7 +331,7 @@ export const FRONTEND_IR_JSON_SCHEMA = {
         options: { type: "object" },
         children: { type: "array", items: { $ref: "#/$defs/MarkIR" } },
         name: { type: "string" },
-        label: { $ref: "#/$defs/LabelIR" },
+        label: { $ref: "#/$defs/LabelOrArrayIR" },
         constraints: {
           type: "array",
           items: { $ref: "#/$defs/ConstraintIR" },
@@ -355,7 +355,7 @@ export const FRONTEND_IR_JSON_SCHEMA = {
           ],
         },
         name: { type: "string" },
-        label: { $ref: "#/$defs/LabelIR" },
+        label: { $ref: "#/$defs/LabelOrArrayIR" },
         zOrder: { type: "number" },
         translate: { $ref: "#/$defs/Translate" },
       },
@@ -381,6 +381,13 @@ export const FRONTEND_IR_JSON_SCHEMA = {
             rotate: { type: "number" },
           },
         },
+      ],
+    },
+    // A mark's `label` field: one label, or an array stacking several.
+    LabelOrArrayIR: {
+      oneOf: [
+        { $ref: "#/$defs/LabelIR" },
+        { type: "array", items: { $ref: "#/$defs/LabelIR" } },
       ],
     },
     ConstraintIR: {

@@ -478,7 +478,7 @@ for the API.
           "type": "string"
         },
         "label": {
-          "$ref": "#/$defs/LabelIR"
+          "$ref": "#/$defs/LabelOrArrayIR"
         },
         "constraints": {
           "type": "array",
@@ -533,7 +533,7 @@ for the API.
           "type": "string"
         },
         "label": {
-          "$ref": "#/$defs/LabelIR"
+          "$ref": "#/$defs/LabelOrArrayIR"
         },
         "constraints": {
           "type": "array",
@@ -580,7 +580,7 @@ for the API.
           "type": "string"
         },
         "label": {
-          "$ref": "#/$defs/LabelIR"
+          "$ref": "#/$defs/LabelOrArrayIR"
         },
         "zOrder": {
           "type": "number"
@@ -623,6 +623,19 @@ for the API.
             "rotate": {
               "type": "number"
             }
+          }
+        }
+      ]
+    },
+    "LabelOrArrayIR": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/LabelIR"
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/LabelIR"
           }
         }
       ]

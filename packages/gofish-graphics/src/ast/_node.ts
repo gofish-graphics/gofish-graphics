@@ -270,7 +270,11 @@ export class GoFishNode {
   public color?: MaybeValue<string>;
   public constraints: ConstraintSpec[] = [];
   public colorConfig?: ColorConfig;
-  public _label?: LabelSpec;
+  /** Labels attached to this node via `.label()`. A node can carry several
+   *  (e.g. a value above a bar and a category below it); each renders as an
+   *  independent post-layout overlay, so labels never affect the node's own
+   *  size or its siblings' alignment. */
+  public _labels: LabelSpec[] = [];
   private _zOrder = 0;
   private renderSession?: RenderSession;
   // Axis state per dimension. Set by `resolveAxes` and consumed by the axis
@@ -1144,7 +1148,7 @@ export class GoFishNode {
       [],
       this
     );
-    if (this._label && this.intrinsicDims) {
+    if (this._labels.length > 0 && this.intrinsicDims) {
       const labelItems = lowerLabelItems(this, transform, toPixel);
       if (labelItems.length) return [...items, ...labelItems];
     }
@@ -1268,21 +1272,25 @@ export class GoFishNode {
   }
 
   public label(accessor: LabelAccessor, options?: LabelOptions): this {
-    this._label = { accessor, ...options };
+    this._labels.push({ accessor, ...options });
     return this;
   }
 
   public resolveLabels(): void {
     // Propagate only when this node has no datum of its own.
     // Nodes with datum (leaf shapes, or spread combinators that carry group data)
-    // render their label directly rather than pushing it to children.
-    if (this._label && this.children.length > 0 && this.datum === undefined) {
+    // render their labels directly rather than pushing them to children.
+    if (
+      this._labels.length > 0 &&
+      this.children.length > 0 &&
+      this.datum === undefined
+    ) {
       for (const child of this.children) {
-        if (child instanceof GoFishNode && !child._label) {
-          child._label = this._label;
+        if (child instanceof GoFishNode && child._labels.length === 0) {
+          child._labels = this._labels;
         }
       }
-      this._label = undefined;
+      this._labels = [];
     }
     for (const child of this.children) {
       if (child instanceof GoFishNode) child.resolveLabels();

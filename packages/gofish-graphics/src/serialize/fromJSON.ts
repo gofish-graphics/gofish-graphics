@@ -412,6 +412,27 @@ export function mapMark(
       throw new Error(`Unknown combinator mark type: ${spec.type}`);
     }
     let mark = factory(opts, childMarks);
+    // A combinator mark (e.g. a `paint`ed image) can carry stacked `.label()`
+    // calls too — reapply them, mirroring the leaf-mark path below.
+    const combLabel = (spec as any).label;
+    const isLabelObj = (l: unknown): l is LabelSpec =>
+      l !== undefined && l !== null && typeof l === "object";
+    const combLabels: LabelSpec[] = Array.isArray(combLabel)
+      ? (combLabel as unknown[]).filter(isLabelObj)
+      : isLabelObj(combLabel) && !Array.isArray(combLabel)
+        ? [combLabel as LabelSpec]
+        : [];
+    for (const labelObj of combLabels) {
+      if (typeof (mark as any).label !== "function") break;
+      const { accessor, ...labelOpts } = labelObj as Exclude<
+        LabelSpec,
+        true | string
+      >;
+      mark = (mark as any).label(
+        accessor,
+        Object.keys(labelOpts).length > 0 ? labelOpts : undefined
+      );
+    }
     if (spec.constraints && typeof (mark as any).constrain === "function") {
       const constraints = spec.constraints as ConstraintSpec[];
       mark = (mark as any).constrain((refs: Record<string, any>) =>
@@ -446,21 +467,23 @@ export function mapMark(
   }
 
   const { type, name: layerName, ...rest } = spec as any;
-  // Label has two shapes:
+  // Label has three shapes:
   //   - Object `{accessor, ...opts}` — pull out and call the chained
   //     `.label(accessor, opts)` method (adds an external label layer).
+  //   - An array of those objects — one `.label()` call per element.
   //   - Boolean / string shorthand — keep in opts so the mark *shape*
   //     interprets it directly (e.g. rect's `label?: boolean` prop).
-  let labelObj: LabelSpec | undefined;
+  let labelObjs: LabelSpec[] = [];
   let opts: Record<string, any>;
-  if (
-    rest.label !== undefined &&
-    rest.label !== null &&
-    typeof rest.label === "object" &&
-    !Array.isArray(rest.label)
-  ) {
+  const isLabelObject = (l: unknown): l is LabelSpec =>
+    l !== undefined && l !== null && typeof l === "object";
+  if (Array.isArray(rest.label) && rest.label.every(isLabelObject)) {
     const { label: lbl, ...rest2 } = rest;
-    labelObj = lbl as LabelSpec;
+    labelObjs = lbl as LabelSpec[];
+    opts = rest2;
+  } else if (isLabelObject(rest.label) && !Array.isArray(rest.label)) {
+    const { label: lbl, ...rest2 } = rest;
+    labelObjs = [lbl as LabelSpec];
     opts = rest2;
   } else {
     opts = rest;
@@ -471,7 +494,8 @@ export function mapMark(
     throw new Error(`Unknown mark type: ${String(type)}`);
   }
   let mark = factory(unwrapMarkOpts(opts, bridge));
-  if (labelObj && typeof (mark as any).label === "function") {
+  for (const labelObj of labelObjs) {
+    if (typeof (mark as any).label !== "function") break;
     const { accessor, ...labelOpts } = labelObj as Exclude<
       LabelSpec,
       true | string

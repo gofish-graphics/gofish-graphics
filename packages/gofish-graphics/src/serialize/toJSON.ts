@@ -35,8 +35,11 @@ interface SerializeTag {
   children?: Mark<any>[] | Promise<Mark<any>[]>;
   /** Set when `.name(layerName)` is chained on a mark. Strings pass through; Tokens become bridge-style sentinels. */
   name?: string | { __gofish_token: string; __tag: string };
-  /** Set when `.label(accessor, options)` is chained on a mark (object form). */
-  label?: { accessor: string; [k: string]: unknown };
+  /** Set when `.label(accessor, options)` is chained on a mark (object form).
+   *  An array when several `.label()` calls stack on one mark. */
+  label?:
+    | { accessor: string; [k: string]: unknown }
+    | Array<{ accessor: string; [k: string]: unknown }>;
 }
 
 function readTag(value: unknown): SerializeTag | undefined {

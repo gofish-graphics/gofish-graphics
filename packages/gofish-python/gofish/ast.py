@@ -205,7 +205,10 @@ class Mark:
         self.mark_type = mark_type
         self.kwargs = kwargs
         self._name: Optional[Union[str, "Token"]] = None
-        self._label: Optional[dict] = None
+        # A mark may stack several `.label()` calls; each renders as an
+        # independent post-layout overlay. `to_dict()` emits a scalar for the
+        # single-label case and an array when there are several.
+        self._labels: List[dict] = []
         # When set, this Mark is the combinator form of a layout operator
         # (e.g. `spread([rect, rect], dir="x")`) and `to_dict()` will emit a
         # `__combinator: true` payload the harness/widget reconstructs by
@@ -230,7 +233,7 @@ class Mark:
 
     def _copy_meta(self, target: "Mark") -> "Mark":
         target._name = self._name
-        target._label = self._label
+        target._labels = list(self._labels)
         target._children = self._children
         target._is_scope = self._is_scope
         target._datum = self._datum
@@ -372,7 +375,7 @@ class Mark:
             label_spec["minSpace"] = minSpace
         if rotate is not None:
             label_spec["rotate"] = rotate
-        new_mark._label = label_spec
+        new_mark._labels = self._labels + [label_spec]
         return new_mark
 
     def to_dict(self) -> dict:
@@ -405,8 +408,10 @@ class Mark:
                 if isinstance(self._name, Token)
                 else self._name
             )
-        if self._label is not None:
-            d["label"] = self._label
+        if self._labels:
+            d["label"] = (
+                self._labels[0] if len(self._labels) == 1 else list(self._labels)
+            )
         # Only ConstrainableMark carries _constraints, but reading via getattr
         # keeps the base class oblivious to the subclass extension.
         constraints = getattr(self, "_constraints", None)
@@ -1375,7 +1380,7 @@ def layer(
 # fails, so this is mostly defensive — but explicit guards make the
 # failure mode loud if a child happens to be named e.g. "kwargs".
 _REF_PROXY_RESERVED = frozenset({
-    "mark_type", "kwargs", "_name", "_label", "_children", "_is_scope",
+    "mark_type", "kwargs", "_name", "_labels", "_children", "_is_scope",
     "name", "label", "to_dict", "to_ir", "render", "_copy_meta",
     "_repr_mimebundle_", "constrain", "multiplicity",
 })
@@ -2297,6 +2302,7 @@ def text(
     fontSize: Optional[Union[int, str]] = None,
     fontWeight: Optional[Union[int, str]] = None,
     fontFamily: Optional[str] = None,
+    rotate: Optional[Union[int, float]] = None,
     debugBoundingBox: Optional[bool] = None,
     label: Optional[str] = None,
     debug: Optional[bool] = None,
@@ -2311,6 +2317,8 @@ def text(
             populates an auto-generated field per row.
         fill: Text color.
         fontSize / fontWeight / fontFamily: Typography.
+        rotate: Rotation in degrees; `rotate=90` yields a y-axis-title style
+            vertical label.
         debugBoundingBox: Draw the text's bounding box (for layout debug).
         label: Auto-value-label flag (different from text content).
     """
@@ -2327,6 +2335,7 @@ def text(
         ("fontSize", fontSize),
         ("fontWeight", fontWeight),
         ("fontFamily", fontFamily),
+        ("rotate", rotate),
         ("debugBoundingBox", debugBoundingBox),
         ("label", label),
         ("debug", debug),

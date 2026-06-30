@@ -318,7 +318,7 @@ export type CombinatorMarkType =
 export interface LeafMarkIR extends BaseIRNode {
   type: LeafMarkType;
   name?: string;
-  label?: LabelIR;
+  label?: LabelIR | LabelIR[];
   constraints?: ConstraintIR[];
   zOrder?: number;
   translate?: TranslateIR;
@@ -336,7 +336,7 @@ export interface CombinatorMarkIR extends BaseIRNode {
   options?: Record<string, unknown>;
   children: MarkIR[];
   name?: string;
-  label?: LabelIR;
+  label?: LabelIR | LabelIR[];
   constraints?: ConstraintIR[];
   zOrder?: number;
   translate?: TranslateIR;
@@ -347,7 +347,7 @@ export interface RefMarkIR extends BaseIRNode {
   type: "ref";
   selection: string | Array<string | number>;
   name?: string;
-  label?: LabelIR;
+  label?: LabelIR | LabelIR[];
   zOrder?: number;
   translate?: TranslateIR;
 }

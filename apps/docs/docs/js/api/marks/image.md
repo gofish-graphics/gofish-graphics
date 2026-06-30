@@ -59,6 +59,10 @@ dimensions when not given:
 // Scale to a width, keep the aspect ratio
 .mark(image({ href: bottleJpg, w: 90 }))
 
+// Data-driven height (a field name), width follows the aspect ratio —
+// one bottle per row, sized by the data
+.mark(image({ href: bottlePng, h: "size" }))
+
 // Intrinsic size from a data URI
 .mark(image({ href: inlineBadgeSvg }))
 

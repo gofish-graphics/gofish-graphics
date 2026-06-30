@@ -347,10 +347,16 @@ export const labelModifier = createModifier<
   tag: (wrapped, base, accessor, options) => {
     propagateSerialize(base, wrapped, (tag) => {
       if (typeof accessor === "string") {
-        tag.label = {
+        // Accumulate: a mark may carry several `.label()` calls. Keep `label`
+        // scalar for the common single-label case (so existing IR is
+        // unchanged) and promote to an array on the second label.
+        const spec = {
           accessor,
           ...(options && typeof options === "object" ? options : {}),
         };
+        if (tag.label === undefined) tag.label = spec;
+        else if (Array.isArray(tag.label)) tag.label = [...tag.label, spec];
+        else tag.label = [tag.label, spec];
       } else if (
         typeof accessor === "function" &&
         typeof console !== "undefined" &&

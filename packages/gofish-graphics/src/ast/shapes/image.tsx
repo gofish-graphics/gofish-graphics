@@ -375,7 +375,21 @@ export const Image = ({
   return node;
 };
 
-const rawImage = createMark(Image, {}, "image");
+const rawImage = createMark(
+  Image,
+  {
+    // Data-driven sizing/positioning, mirroring `rect`. Supplying only one of
+    // `w`/`h` lets `resolveRenderedDimensions` derive the other from the image's
+    // intrinsic aspect ratio, so a bound height scales the whole image faithfully.
+    w: "size",
+    h: "size",
+    x: "pos",
+    y: "pos",
+    cx: "pos",
+    cy: "pos",
+  },
+  "image"
+);
 
 /** Wrap an image mark so it awaits intrinsic dimension loading before producing
  *  a node. Recursively wraps .name/.label so chained calls stay awaiting. */

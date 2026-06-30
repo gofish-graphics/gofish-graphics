@@ -800,6 +800,12 @@ function walkLeafMark(
 }
 
 function walkLabel(node: unknown, path: string, ctx: Context): void {
+  // An array stacks several labels on one mark (e.g. a value above and a
+  // category below); validate each element with the same rules.
+  if (Array.isArray(node)) {
+    node.forEach((el, i) => walkLabel(el, `${path}[${i}]`, ctx));
+    return;
+  }
   // Shorthand forms (matching the JS API):
   //   label: true   → "label with default settings"
   //   label: "field" → "label with this field accessor, defaults elsewhere"

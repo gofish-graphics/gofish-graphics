@@ -624,6 +624,24 @@ function mapMark(
       throw new Error(`Unknown combinator mark type: ${spec.type}`);
     }
     let mark = factory(opts, childMarks);
+    // Reapply stacked `.label()` calls — a combinator mark (e.g. a `paint`ed
+    // bottle) can carry labels too, and the leaf path below reapplies them but
+    // this branch returns early. Same structured-label shape as the leaf path.
+    const isCombLabelDict = (
+      l: unknown
+    ): l is { accessor: any } & Record<string, any> =>
+      !!l && typeof l === "object" && !Array.isArray(l);
+    const combLabels = Array.isArray(spec.label)
+      ? (spec.label as any[]).filter(isCombLabelDict)
+      : isCombLabelDict(spec.label)
+        ? [spec.label]
+        : [];
+    if (combLabels.length > 0 && typeof (mark as any).label === "function") {
+      for (const lbl of combLabels) {
+        const { accessor, ...labelOpts } = lbl;
+        mark = (mark as any).label(accessor, labelOpts);
+      }
+    }
     // Constraint chain. The Python side serializes refs by name; reify the
     // JS-side ConstraintRef objects from those names by looking them up in
     // the `refs` map the JS callback receives.
@@ -674,11 +692,21 @@ function mapMark(
 
   // `label: true` (boolean) is a primitive kwarg the mark itself understands
   // (auto-value labels). The Python Mark.label() chain emits a structured
-  // `{accessor, position?, fontSize?, ...}` dict that must be reapplied as a
-  // chained `.label(accessor, options)` call — same shape the JS storybook
-  // uses (e.g. `rect({h: "count"}).label("count", {position: "outset"})`).
-  const isStructuredLabel =
-    label && typeof label === "object" && !Array.isArray(label);
+  // `{accessor, position?, fontSize?, ...}` dict (or an array of them when a
+  // mark stacks several labels) that must be reapplied as chained
+  // `.label(accessor, options)` calls — same shape the JS storybook uses
+  // (e.g. `rect({h: "count"}).label("count", {position: "outset"})`).
+  const isLabelDict = (
+    l: unknown
+  ): l is { accessor: any } & Record<string, any> =>
+    !!l && typeof l === "object" && !Array.isArray(l);
+  const structuredLabels: Array<{ accessor: any } & Record<string, any>> =
+    Array.isArray(label)
+      ? (label as any[]).filter(isLabelDict)
+      : isLabelDict(label)
+        ? [label]
+        : [];
+  const isStructuredLabel = structuredLabels.length > 0;
   const factoryOpts: Record<string, any> = unwrapMarkOpts(
     isStructuredLabel
       ? opts
@@ -688,11 +716,10 @@ function mapMark(
 
   let mark = factory(factoryOpts);
   if (isStructuredLabel && typeof (mark as any).label === "function") {
-    const { accessor, ...labelOpts } = label as { accessor: any } & Record<
-      string,
-      any
-    >;
-    mark = (mark as any).label(accessor, labelOpts);
+    for (const lbl of structuredLabels) {
+      const { accessor, ...labelOpts } = lbl;
+      mark = (mark as any).label(accessor, labelOpts);
+    }
   }
   if (spec.__scope) {
     mark = wrapWithScope(mark);

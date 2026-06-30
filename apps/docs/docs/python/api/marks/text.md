@@ -15,20 +15,21 @@ chart([{"label": "GoFish"}]).mark(
 
 ```python
 text(text=None, fill=None, fontSize=None, fontWeight=None, fontFamily=None,
-     debugBoundingBox=None, label=None) -> Mark
+     rotate=None, debugBoundingBox=None, label=None) -> Mark
 ```
 
 ## Parameters
 
-| Parameter          | Type            | Description                                                                   |
-| ------------------ | --------------- | ----------------------------------------------------------------------------- |
-| `text`             | `str` \| `int`  | The string to render — a constant, a field name, or a `(row) -> str` callable |
-| `fill`             | `str`           | Fill color — a constant or a field name                                       |
-| `fontSize`         | `int` \| `str`  | Font size in pixels                                                           |
-| `fontWeight`       | `int` \| `str`  | Font weight                                                                   |
-| `fontFamily`       | `str`           | Font family                                                                   |
-| `debugBoundingBox` | `bool`          | Draw the text's bounding box (for layout debugging)                           |
-| `label`            | `bool` \| `str` | Auto value-label flag (distinct from `text` content)                          |
+| Parameter          | Type             | Description                                                                   |
+| ------------------ | ---------------- | ----------------------------------------------------------------------------- |
+| `text`             | `str` \| `int`   | The string to render — a constant, a field name, or a `(row) -> str` callable |
+| `fill`             | `str`            | Fill color — a constant or a field name                                       |
+| `fontSize`         | `int` \| `str`   | Font size in pixels                                                           |
+| `fontWeight`       | `int` \| `str`   | Font weight                                                                   |
+| `fontFamily`       | `str`            | Font family                                                                   |
+| `rotate`           | `int` \| `float` | Rotation in degrees about the anchor; `90` reads bottom-to-top for a y-title  |
+| `debugBoundingBox` | `bool`           | Draw the text's bounding box (for layout debugging)                           |
+| `label`            | `bool` \| `str`  | Auto value-label flag (distinct from `text` content)                          |
 
 Returns a `Mark` for use in [`.mark()`](/python/api/core/mark).
 

@@ -145,7 +145,7 @@ const isTransparent = (node: GoFishAST): boolean =>
   !!node.children &&
   node.children.length > 0 &&
   !BAKE_BOUNDARY_TYPES.has((node as { type?: string }).type ?? "") &&
-  !(node instanceof GoFishNode && node._label !== undefined);
+  !(node instanceof GoFishNode && node._labels.length > 0);
 
 /** The `_zOrder` hint of a node (0 for a `GoFishRef`). */
 const zOf = (node: GoFishAST): number =>
