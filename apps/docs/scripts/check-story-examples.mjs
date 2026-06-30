@@ -172,6 +172,9 @@ async function main() {
     if (!existsSync(resolve(THUMB_DIR, `${ex.id}.png`))) {
       issues.push("missing thumbnail png");
     }
+    if (!existsSync(resolve(THUMB_DIR, "og", `${ex.id}.png`))) {
+      issues.push("missing OG card png");
+    }
 
     const status = issues.length ? "FAIL" : ex.isFallback ? "fallback" : "ok";
     if (issues.length) failures++;

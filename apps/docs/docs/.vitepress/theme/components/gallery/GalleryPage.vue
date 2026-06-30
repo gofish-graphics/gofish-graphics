@@ -87,7 +87,7 @@ onMounted(() => {
   const desktop = window.matchMedia(
     "(hover: hover) and (pointer: fine)"
   ).matches;
-  const DOLLY_MS = 500; // duration of the dolly-in (keep in sync with gallery.css)
+  const DOLLY_MS = 300; // duration of the dolly-in (keep in sync with gallery.css)
 
   // Click-through target. Per-example pages currently exist only under
   // /js/examples/ (the Python docs direct readers to that catalog, which renders
@@ -1060,19 +1060,28 @@ onMounted(() => {
       }
       // Dolly-in: scale the whole scene about the clicked frame's center so that
       // point stays put while everything grows around it — reads as the viewer
-      // walking up to the painting until it fills the view — then fade and navigate.
+      // walking up to the painting until it fills the view. Meanwhile fade a cover
+      // in the PAGE background color (white in light, dark in dark) over the top so
+      // we land on the next page's color, not the brown gallery desk, then navigate.
       const sRect = scene.getBoundingClientRect();
       const r = el.getBoundingClientRect();
       const ox = r.left + r.width / 2 - sRect.left;
       const oy = r.top + r.height / 2 - sRect.top;
-      // Register the transition (via the class) + origin, force a reflow so the
-      // browser snapshots the un-transformed state as the transition's start, THEN
-      // change transform/opacity so it animates instead of jumping to the end state.
+      // The cover lives on <body> (outside the scaling scene) so it isn't scaled.
+      // It's torn down on unmount — navigation lands on the same --vp-c-bg color,
+      // so removing it is seamless.
+      const cover = document.createElement("div");
+      cover.className = "dolly-cover";
+      document.body.appendChild(cover);
+      cleanups.push(() => cover.remove());
+      // Register the transitions (via the class) + origin, force a reflow so the
+      // browser snapshots the start state, THEN change transform/opacity so they
+      // animate instead of jumping straight to the end state.
       scene.classList.add("dolly-in");
       scene.style.transformOrigin = ox + "px " + oy + "px";
       void scene.offsetWidth; // force reflow
       scene.style.transform = "scale(3.2)";
-      scene.style.opacity = "0";
+      cover.style.opacity = "1";
       window.setTimeout(() => {
         if (!cancelled) router.go(navTo);
       }, DOLLY_MS);
@@ -1509,20 +1518,48 @@ onMounted(() => {
   };
   hall.addEventListener("pointerdown", onHallDown);
 
+  // Arrow keys: a single tap pages by ~0.8 screens (smooth glide); HOLDING runs a
+  // continuous constant-speed scroll. We must ignore the OS key-repeat events and
+  // drive one rAF loop instead — re-issuing a `scrollTo({behavior:"smooth"})` (or a
+  // fresh glide) on every repeat restarts the easing near its slow start each time,
+  // which is the stutter/slowdown.
+  const ARROW_SPEED = 22; // px/frame while a key is held
+  let arrowDir = 0; // -1 left, +1 right, 0 idle
+  let arrowRAF = 0;
+  let arrowDownAt = 0;
+  function arrowStep() {
+    arrowRAF = 0;
+    if (!arrowDir) return;
+    const max = maxScrollNow();
+    const next = Math.max(
+      0,
+      Math.min(max, hall.scrollLeft + arrowDir * ARROW_SPEED)
+    );
+    hall.scrollLeft = next;
+    if ((arrowDir < 0 && next > 0) || (arrowDir > 0 && next < max))
+      arrowRAF = requestAnimationFrame(arrowStep);
+  }
+  function stopArrow() {
+    arrowDir = 0;
+    if (arrowRAF) {
+      cancelAnimationFrame(arrowRAF);
+      arrowRAF = 0;
+    }
+  }
+
   const onKeydown = (e: KeyboardEvent) => {
     if (e.target === search) return;
-    if (e.key === "ArrowRight") {
-      hall.scrollTo({
-        left: hall.scrollLeft + hall.clientWidth * 0.8,
-        behavior: "smooth",
-      });
+    const dir = e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0;
+    if (dir) {
       e.preventDefault();
-    } else if (e.key === "ArrowLeft") {
-      hall.scrollTo({
-        left: hall.scrollLeft - hall.clientWidth * 0.8,
-        behavior: "smooth",
-      });
-      e.preventDefault();
+      if (arrowDir !== dir) {
+        // First press for this direction — start the continuous loop. (Auto-repeat
+        // events re-enter here with the same dir and are intentionally ignored.)
+        cancelGlide();
+        arrowDir = dir;
+        arrowDownAt = performance.now();
+        if (!arrowRAF) arrowRAF = requestAnimationFrame(arrowStep);
+      }
     } else if (e.key === "Home") {
       glideTo(0);
       e.preventDefault();
@@ -1531,7 +1568,16 @@ onMounted(() => {
       e.preventDefault();
     }
   };
+  const onKeyup = (e: KeyboardEvent) => {
+    const dir = e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0;
+    if (!dir || arrowDir !== dir) return;
+    const held = performance.now() - arrowDownAt;
+    stopArrow();
+    // Quick tap → page one screen with a smooth glide; a hold just stops where it is.
+    if (held < 180) glideTo(hall.scrollLeft + dir * hall.clientWidth * 0.8);
+  };
   window.addEventListener("keydown", onKeydown);
+  window.addEventListener("keyup", onKeyup);
 
   const onBackstart = () => glideTo(0);
   backstart.addEventListener("click", onBackstart);
@@ -1561,6 +1607,8 @@ onMounted(() => {
     hall.removeEventListener("wheel", onWheel);
     hall.removeEventListener("pointerdown", onHallDown);
     window.removeEventListener("keydown", onKeydown);
+    window.removeEventListener("keyup", onKeyup);
+    stopArrow();
     backstart.removeEventListener("click", onBackstart);
     hall.removeEventListener("scroll", onScroll);
     search.removeEventListener("input", onSearchInput);
