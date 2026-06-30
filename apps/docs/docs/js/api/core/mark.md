@@ -44,6 +44,25 @@ it binds the incoming group, and inside [`.layer(...)`](/js/api/core/layer) it
 binds the previous tier's marks. (The older `.mark((data) => chart(data, ...))`
 callback still works and is equivalent.)
 
+The same binding applies to an empty-scope `chart()` used as a child of the
+[`layer([...])`](/js/api/operators/layer) combinator, so a per-group overlay
+(e.g. bars plus an area that selects them) can be a mark without a callback:
+
+```ts
+chart(barley)
+  .flow(spread({ by: "variety", dir: "x" }))
+  .mark(
+    layer([
+      chart() // inherits this variety's rows
+        .flow(spread({ by: "year", dir: "x" }), stack({ by: "site", dir: "y" }))
+        .mark(rect({ h: "yield", fill: "site" }).name("bars")),
+      chart(selectAll("bars")) // scoped to this variety's layer
+        .flow(group({ by: "site" }))
+        .mark(area({ opacity: 0.7 })),
+    ])
+  );
+```
+
 Marks can also call `.name("layerName")` to register their output nodes for later use with [`ref` / `selectAll`](/js/api/selection/ref):
 
 ```ts
