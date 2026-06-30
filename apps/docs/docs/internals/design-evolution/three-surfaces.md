@@ -17,6 +17,15 @@ landed where it did is recorded.
 The module also re-exports a few lodash data helpers (`groupBy`, `sumBy`,
 `orderBy`, `meanBy`) for convenience; those are implemented with per-helper
 entrypoint imports so the public surface is stable in native ESM runtimes.
+Alongside them it exports two datum-projection helpers for reading fields off a
+selection's refs: `pluck(source, path)` returns the **un-collapsed** multiset of
+distinct values at a path ("every value here"), while `project(source, path)`
+(the public name for the internal `projectPath`) is its **collapsing**
+counterpart — the single value when the row-bag agrees on the field (the same
+homogeneity collapse `by:` performs), else `undefined`. Reach for `project` to
+read a field off the datum a mark is bound to (e.g. inside a `.zOrder(d => …)`
+callback) without indexing `pluck(...)[0]`; reach for `pluck` when the field is
+genuinely multi-valued in the bag.
 
 A naming note before anything else: internally, these surfaces were "v1",
 "v2", and "v3", and a lot of code still uses those names. The wiki has

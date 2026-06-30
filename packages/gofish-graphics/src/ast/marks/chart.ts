@@ -20,8 +20,10 @@ import {
   createModifier,
   nameModifier,
   labelModifier,
+  zOrderModifier,
   LayerContext,
 } from "./createOperator";
+import type { ZOrderValue } from "./createOperator";
 import { layer as Layer } from "../graphicalOperators/layer";
 import {
   // `over` stays internal (not re-exported from lib) — it backs the
@@ -320,7 +322,7 @@ export function line(options?: {
   interpolation?: "linear" | "bezier";
   from?: string;
   to?: string;
-}): Mark<any> {
+}): NameableMark<any> {
   if (options?.from !== undefined && options?.to !== undefined) {
     return pairwiseConnect("line", options, {
       mode: "center",
@@ -346,8 +348,9 @@ export function line(options?: {
       d
     );
   };
-  (mark as any).__serialize = { type: "line", opts: options ?? {} };
-  return mark;
+  const result = nameableMark(mark);
+  (result as any).__serialize = { type: "line", opts: options ?? {} };
+  return result;
 }
 
 // Shared pairwise (per-row) connector: each row carries two ref-valued columns
@@ -370,7 +373,7 @@ function pairwiseConnect(
     strokeWidth: number;
     interpolation: "linear" | "bezier";
   }
-): Mark<any> {
+): NameableMark<any> {
   const from = options.from as string;
   const to = options.to as string;
   const mark: Mark<any[]> = async (
@@ -407,8 +410,9 @@ function pairwiseConnect(
     );
     return Layer({}, segments);
   };
-  (mark as any).__serialize = { type: irType, opts: options };
-  return mark;
+  const result = nameableMark(mark);
+  (result as any).__serialize = { type: irType, opts: options };
+  return result;
 }
 
 // area() mark connects data points using edge-to-edge mode
@@ -421,7 +425,7 @@ export function area(options?: {
   interpolation?: "linear" | "bezier";
   from?: string;
   to?: string;
-}): Mark<any> {
+}): NameableMark<any> {
   if (options?.from !== undefined && options?.to !== undefined) {
     return pairwiseConnect("area", options, {
       mode: "edge",
@@ -448,8 +452,9 @@ export function area(options?: {
       d
     );
   };
-  (mark as any).__serialize = { type: "area", opts: options ?? {} };
-  return mark;
+  const result = nameableMark(mark);
+  (result as any).__serialize = { type: "area", opts: options ?? {} };
+  return result;
 }
 
 // blank() mark creates invisible guides for positioning
@@ -515,6 +520,7 @@ type PdOptions = { blendMode?: BlendMode };
 export type ConstrainableMark<T> = Mark<T> & {
   name(layerName: string | Token): ConstrainableMark<T>;
   label(accessor: LabelAccessor, options?: LabelOptions): ConstrainableMark<T>;
+  zOrder(value: ZOrderValue<T>): ConstrainableMark<T>;
   constrain(
     fn: (refs: Record<string, ConstraintRef>) => ConstraintSpec[]
   ): ConstrainableMark<T>;
@@ -542,7 +548,7 @@ const constrainModifier = createModifier<
   [fn: (refs: Record<string, ConstraintRef>) => ConstraintSpec[]]
 >({
   name: "constrain",
-  apply: (node, _layerContext, fn) => {
+  apply: (node, _layerContext, _datum, fn) => {
     node.constrain(fn);
   },
 });
@@ -552,6 +558,7 @@ function makeConstrainableMark<T>(base: Mark<T>): ConstrainableMark<T> {
     nameModifier,
     labelModifier,
     constrainModifier,
+    zOrderModifier,
   ]) as unknown as ConstrainableMark<T>;
 }
 
@@ -576,17 +583,31 @@ export function layer<T>(
 ): ConstrainableMark<T> {
   const opts = Array.isArray(marksOrOpts) ? {} : marksOrOpts;
   const marks = (Array.isArray(marksOrOpts) ? marksOrOpts : maybeMarks) ?? [];
-  const base: Mark<T> = async (d, key, layerContext) => {
-    // Share one layerContext across all children so that ref(name)/
-    // selectAll(name) in one child can find a sibling's .name(name)
-    // registration. Inherit from the caller when present (nested-layer case),
-    // else create a fresh context (top-level .render() case). Resolve
-    // sequentially so a child referencing a name sees registrations from
-    // earlier siblings.
-    const sharedContext = layerContext ?? {};
+  const base: Mark<T> = async (d, key, _layerContext) => {
+    // A layer establishes its OWN local name context: `.name(...)` registrations
+    // and the `ref(name)`/`selectAll(name)` that read them are scoped to *this*
+    // layer's children. We deliberately do NOT inherit the enclosing
+    // `_layerContext` — otherwise a layer nested inside an operator (e.g. one
+    // `layer([bars, area])` per `spread` cell) would share a single context
+    // across every cell, so each cell's `selectAll("bars")` would match every
+    // other cell's bars too (and reference siblings not yet laid out). Names are
+    // local to their layer, mirroring `LayerBuilder.resolve`. Resolve
+    // sequentially so a child referencing a name sees earlier siblings'
+    // registrations.
+    const sharedContext: LayerContext = {};
     const resolved: GoFishNode[] = [];
     for (const m of marks) {
-      const result = typeof m === "function" ? m(d, key, sharedContext) : m;
+      // A nested empty-scope `chart()` child inherits this layer's incoming
+      // partition datum (issue #243), exactly as `.mark(chart())` does — so
+      // `layer([chart().flow(...).mark(...), chart(selectAll(...)).mark(...)])`
+      // can be a mark without a `(d) => …` callback. A child with its own data
+      // (e.g. `chart(selectAll(...))`) is left untouched.
+      const child =
+        m instanceof ChartBuilder && m.usesPreviousLayerMarks()
+          ? m.withData(d)
+          : m;
+      const result =
+        typeof child === "function" ? child(d, key, sharedContext) : child;
       resolved.push(await resolveMarkResult(result, sharedContext));
     }
     const node = await Layer(opts, resolved);

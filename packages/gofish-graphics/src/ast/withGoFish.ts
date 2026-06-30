@@ -31,6 +31,7 @@ import {
   nameableMark,
   type TranslateModifierOptions,
   type MarkKind,
+  type ZOrderValue,
 } from "./marks/createOperator";
 import { isValue } from "./data";
 import { KNOWN_ALIAS_KEYS } from "./dims";
@@ -450,6 +451,7 @@ export function createNodeOperatorSequential<T extends Record<string, any>, R>(
 export type NameableMark<T> = Mark<T> & {
   name(layerName: string | Token): NameableMark<T>;
   label(accessor: LabelAccessor, options?: LabelOptions): NameableMark<T>;
+  zOrder(value: ZOrderValue<T>): NameableMark<T>;
   translate(opts: TranslateModifierOptions): NameableMark<T>;
   render(
     container: Parameters<GoFishNode["render"]>[0],
