@@ -1693,6 +1693,46 @@ def resolve(cols: List[str], *, from_: Any, key: Optional[str] = None) -> Operat
     return Operator("resolve", **op_kwargs)
 
 
+def join(right: Any, *, on: str) -> Operator:
+    """One-to-many equi-join of the incoming rows against another table.
+
+    For each incoming (left) row, every ``right`` row whose ``on`` value matches
+    contributes one merged output row (``{**left, **right}``); incoming rows with
+    no match drop out. This is the relational join of two data tables — SQL
+    ``JOIN ... USING (on)``, pandas/polars ``left.merge(right, on=...)``, dplyr
+    ``left_join(right, by = on)``.
+
+    Unlike :func:`resolve` (which dereferences columns into drawn nodes of a
+    prior layer), ``join`` relates two plain tables, so ``right`` is inlined into
+    the IR as JSON rows and round-trips without a bridge.
+
+    Pairs with a nested chart that inherits its parent partition::
+
+        chart(catch_locations).flow(scatter(by="lake", x="x", y="y")).mark(
+            lambda data: chart(data, coord=clock())
+            .flow(join(SEAFOOD, on="lake"), stack(by="species", dir="x", h=20))
+            .mark(rect(w="count", fill="species"))
+        )
+
+    Args:
+        right: The right-hand table — a list of row dicts or a pandas DataFrame.
+        on: Shared key field matched between the incoming rows and ``right``.
+
+    Returns:
+        Operator object — IR ``{type: "join", on, right}``.
+    """
+    try:
+        import pandas as pd
+
+        if isinstance(right, pd.DataFrame):
+            right_rows: List[Any] = right.to_dict(orient="records")
+        else:
+            right_rows = list(right)
+    except ImportError:
+        right_rows = list(right)
+    return Operator("join", on=on, right=right_rows)
+
+
 def scatter(
     *,
     by: Optional[str] = None,

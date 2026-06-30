@@ -272,6 +272,7 @@ function walkOperator(node: unknown, path: string, ctx: Context): void {
   const knownFields: Record<string, string[]> = {
     derive: ["type", "lambdaId", "provenance", "translate", "origin", "meta"],
     resolve: ["type", "cols", "from", "key", "translate", "origin", "meta"],
+    join: ["type", "on", "right", "translate", "origin", "meta"],
     spread: [
       "type",
       "by",
@@ -338,6 +339,17 @@ function walkOperator(node: unknown, path: string, ctx: Context): void {
       });
       optionalField(node, "from", path, ctx, expectString);
       optionalField(node, "key", path, ctx, expectString);
+      break;
+    case "join":
+      expectField(node, "on", path, ctx, expectString);
+      expectField(node, "right", path, ctx, (v, p) => {
+        if (!Array.isArray(v) || !v.every((x) => isObject(x))) {
+          ctx.errors.push({
+            path: p,
+            message: "join.right must be an array of row objects",
+          });
+        }
+      });
       break;
     case "spread":
     case "stack":

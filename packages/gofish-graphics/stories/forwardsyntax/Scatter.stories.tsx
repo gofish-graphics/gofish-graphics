@@ -1,11 +1,10 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
-import { catchLocationsArray, seafood, catchLocations } from "../../src/data/catch";
+import { catchLocationsArray, seafood } from "../../src/data/catch";
 import { drivingShifts } from "../../src/data/drivingShifts";
-import { chart, line, rect, stack } from "../../src/lib";
+import { chart, line, rect, stack, join } from "../../src/lib";
 import { circle, scatter } from "../../src/lib";
 import { clock } from "../../src/ast/coordinateTransforms/clock";
-import _ from "lodash";
 
 const meta: Meta = {
   title: "Forward Syntax V3/Scatter",
@@ -78,24 +77,16 @@ export const WithPieGlyphs: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    const scatterData = _(seafood)
-      .groupBy("lake")
-      .map((lakeData, lake) => ({
-        lake,
-        x: catchLocations[lake as keyof typeof catchLocations].x,
-        y: catchLocations[lake as keyof typeof catchLocations].y,
-        collection: lakeData.map((item) => ({
-          species: item.species,
-          count: item.count,
-        })),
-      }))
-      .value();
-
-    chart(scatterData, { axes: true })
+    chart(catchLocationsArray, { axes: true })
       .flow(scatter({ by: "lake",  x: "x", y: "y" }))
       .mark((data) =>
-        chart(data[0].collection, { coord: clock() })
-          .flow(stack({ by: "species",  dir: "x", /* h: "count" */ h: 20 }))
+        // Each lake glyph inherits its parent partition (the lake's row) and
+        // joins in that lake's catch rows, then draws them as a polar pie.
+        chart(data, { coord: clock() })
+          .flow(
+            join(seafood, { on: "lake" }),
+            stack({ by: "species",  dir: "x", /* h: "count" */ h: 20 })
+          )
           .mark(rect({ w: "count", fill: "species" }))
       )
       .render(container, {
