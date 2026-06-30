@@ -1,26 +1,26 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref } from "vue";
-import { useRoute, useRouter } from "vitepress";
+import { useRoute, useRouter, withBase } from "vitepress";
 import { effectiveLang } from "../../docsLang";
 import { data as examplesData } from "../../../data/storyExamples.data.js";
-import {
-  renderExampleInto,
-  namespaceSvgIds,
-} from "../../../../../components/galleryRender";
+import galleryThumbnails from "../../../data/galleryThumbnails.json";
 import "./gallery.css";
 
 // The example gallery is a horizontally-scrolling "museum hall": every registered
-// example is rendered LIVE in the browser (no shipped baked-SVG blob), measured for
-// its true size, hung in a frame proportional to that size, packed greedily onto a
-// long wall, lit by spotlights, and walked by silhouette visitors that step aside
-// from the pointer. Ported from prototypes/gallery/index.html — see that file and
-// prototypes/gallery/SPEC.md for the full behavioral spec. The DOM-heavy logic runs
-// only in onMounted (SSR-safe); every listener/observer/rAF is torn down on unmount.
+// example hangs a PRECOMPUTED PNG thumbnail (built by
+// `pnpm --filter @gofish/tests capture-gallery` → public/gallery/<id>.png +
+// galleryThumbnails.json), framed proportional to its captured size, packed greedily
+// onto a long wall, lit by spotlights, and walked by silhouette visitors that step
+// aside from the pointer. Ported from prototypes/gallery/index.html — see that file
+// and prototypes/gallery/SPEC.md for the full behavioral spec. The DOM-heavy logic
+// runs only in onMounted (SSR-safe); every listener/observer/rAF is torn down on
+// unmount.
 //
-// SCALE NOTE: examples are measured on mount (≈30 charts; the old grid gallery
-// already mounted all of them live). At 100–200 examples a build-time dimension
-// manifest could replace measure-on-mount, but the live render is still needed for
-// the lazily-injected chart art, so only the *measuring* pass would change.
+// Thumbnails are precomputed (not rendered live) so the page never executes the ~92
+// SolidJS chart pipelines on load — that measure-on-mount pass was the slowness.
+// Per-example detail pages (/js/examples/<id>) still render the real chart live.
+// Dimensions come from the build-time manifest, so the wall packs synchronously.
+const thumbDims = galleryThumbnails as Record<string, { w: number; h: number }>;
 
 const route = useRoute();
 const router = useRouter();
@@ -82,6 +82,12 @@ onMounted(() => {
   const reduceMotion = window.matchMedia(
     "(prefers-reduced-motion: reduce)"
   ).matches;
+  // The "walk up to the painting" dolly-in plays only on desktop pointers; touch /
+  // coarse pointers navigate straight through.
+  const desktop = window.matchMedia(
+    "(hover: hover) and (pointer: fine)"
+  ).matches;
+  const DOLLY_MS = 300; // duration of the dolly-in (keep in sync with gallery.css)
 
   // Click-through target. Per-example pages currently exist only under
   // /js/examples/ (the Python docs direct readers to that catalog, which renders
@@ -96,20 +102,12 @@ onMounted(() => {
   }
 
   // =====================================================================
-  // LIVE RENDER + MEASURE — replaces the prototype's window.GALLERY_RENDERS.
-  // An offscreen host lays out each chart so we can read its true pixel size,
-  // then we keep the normalized <svg> NODE in memory and lazily clone it into
-  // frames on scroll proximity (preserving the prototype's lazy-DOM perf work
-  // without ever re-executing chart code).
+  // PRECOMPUTED THUMBNAILS — replaces the prototype's window.GALLERY_RENDERS and
+  // the old live render+measure pass. Each entry carries the URL of its committed
+  // PNG (public/gallery/<id>.png) and its captured pixel size (from the manifest),
+  // so the wall packs synchronously and we lazily inject an <img> on scroll
+  // proximity (preserving the prototype's lazy-DOM perf work).
   // =====================================================================
-  const measureHost = document.createElement("div");
-  measureHost.setAttribute(
-    "style",
-    "position:absolute;left:-99999px;top:0;visibility:hidden;pointer-events:none;contain:layout style;"
-  );
-  document.body.appendChild(measureHost);
-  cleanups.push(() => measureHost.remove());
-
   type Entry = {
     uid: number;
     id: string;
@@ -117,70 +115,23 @@ onMounted(() => {
     description: string;
     w: number;
     h: number;
-    svgNode: SVGElement;
+    src: string;
     jY: number;
     jRot: number;
     frameClass: string;
     _gone?: boolean;
   };
 
-  const raf = () =>
-    new Promise<void>((res) => requestAnimationFrame(() => res()));
-
-  // gofish renders through an async (rAF-driven) layout pipeline, so the <svg> is
-  // not present synchronously after .render(); the host must be connected and we
-  // must wait for the svg to appear with a settled non-zero box before measuring.
-  // Rendering the example is itself async now (the story module is dynamically
-  // imported, its loaders run, and its render is awaited), so we connect the root
-  // to the measure host first — gofish's layout pass measures text via getBBox and
-  // needs the node in the document — then render into it and poll for the svg.
-  async function measure(
-    id: string
-  ): Promise<{ w: number; h: number; node: SVGElement } | null> {
-    const root = document.createElement("div");
-    measureHost.appendChild(root);
-    try {
-      await renderExampleInto(root, id);
-      if (cancelled) return null;
-      let svg = root.querySelector("svg") as SVGElement | null;
-      for (
-        let i = 0;
-        i < 90 && (!svg || svg.getBoundingClientRect().width <= 0);
-        i++
-      ) {
-        await raf();
-        if (cancelled) return null;
-        svg = root.querySelector("svg") as SVGElement | null;
-      }
-      if (!svg) return null;
-      const wAttr = svg.getAttribute("width");
-      const hAttr = svg.getAttribute("height");
-      const r = svg.getBoundingClientRect();
-      let w = wAttr && !wAttr.includes("%") ? parseFloat(wAttr) : r.width;
-      let h = hAttr && !hAttr.includes("%") ? parseFloat(hAttr) : r.height;
-      if (!w || !h) {
-        w = r.width;
-        h = r.height;
-      }
-      // Force responsive sizing so the svg SCALES to its frame instead of cropping
-      // to a corner (the "blank frames" bug): synthesize a viewBox if missing.
-      if (!svg.getAttribute("viewBox")) {
-        svg.setAttribute("viewBox", "0 0 " + w + " " + h);
-      }
-      svg.setAttribute("width", "100%");
-      svg.setAttribute("height", "100%");
-      if (!svg.getAttribute("preserveAspectRatio"))
-        svg.setAttribute("preserveAspectRatio", "xMidYMid meet");
-      namespaceSvgIds(svg, id);
-      svg.remove(); // detach; survives the measure host being emptied
-      return { w: Math.round(w), h: Math.round(h), node: svg };
-    } finally {
-      root.remove();
-    }
-  }
-
   function injectChart(artEl: HTMLElement, d: Entry): void {
-    artEl.replaceChildren(d.svgNode.cloneNode(true));
+    const img = document.createElement("img");
+    img.src = d.src;
+    img.alt = d.title;
+    img.loading = "lazy";
+    img.decoding = "async";
+    img.style.width = "100%";
+    img.style.height = "100%";
+    img.style.objectFit = "contain";
+    artEl.replaceChildren(img);
     artEl.classList.remove("empty");
   }
 
@@ -1052,10 +1003,18 @@ onMounted(() => {
   }
 
   function buildPiece(d: Entry): void {
-    const el = document.createElement("div");
+    // A real <a href> so cmd/ctrl/middle-click opens the example in a new tab
+    // (VitePress's router only intercepts plain left-clicks) and the link is
+    // keyboard-activatable natively.
+    const el = document.createElement("a");
     el.className = "piece";
-    el.tabIndex = 0;
-    el.setAttribute("role", "link");
+    el.setAttribute("href", exampleHref(d.id));
+    // VitePress intercepts plain internal-link clicks in the CAPTURE phase and
+    // navigates before our handler can run — but it skips any link with a `target`
+    // attribute. `target="_self"` makes it ignore our pieces so we fully control the
+    // click (dolly-in + router.go); cmd/ctrl/middle-click still open a new tab since
+    // the modifier overrides the target.
+    el.setAttribute("target", "_self");
     el.setAttribute("aria-label", d.title + " — open example");
     el.style.opacity = "0"; // fade in once placed
 
@@ -1078,10 +1037,54 @@ onMounted(() => {
     el.appendChild(frame);
     el.appendChild(plaque);
 
-    const go = () => router.go(exampleHref(d.id));
-    el.addEventListener("click", go);
-    el.addEventListener("keydown", (ev) => {
-      if ((ev as KeyboardEvent).key === "Enter") go();
+    el.addEventListener("click", (ev) => {
+      const e = ev as MouseEvent;
+      // Modifier / non-left / middle click → don't intercept: let VitePress bail
+      // and the browser open the example in a new tab. No dolly-in.
+      if (
+        e.defaultPrevented ||
+        e.button !== 0 ||
+        e.metaKey ||
+        e.ctrlKey ||
+        e.shiftKey ||
+        e.altKey
+      )
+        return;
+      // Plain left-click: suppress VitePress's instant SPA nav and drive it
+      // ourselves after the dolly-in finishes.
+      e.preventDefault();
+      const navTo = exampleHref(d.id);
+      if (reduceMotion || !desktop) {
+        router.go(navTo);
+        return;
+      }
+      // Dolly-in: scale the whole scene about the clicked frame's center so that
+      // point stays put while everything grows around it — reads as the viewer
+      // walking up to the painting until it fills the view. Meanwhile fade a cover
+      // in the PAGE background color (white in light, dark in dark) over the top so
+      // we land on the next page's color, not the brown gallery desk, then navigate.
+      const sRect = scene.getBoundingClientRect();
+      const r = el.getBoundingClientRect();
+      const ox = r.left + r.width / 2 - sRect.left;
+      const oy = r.top + r.height / 2 - sRect.top;
+      // The cover lives on <body> (outside the scaling scene) so it isn't scaled.
+      // It's torn down on unmount — navigation lands on the same --vp-c-bg color,
+      // so removing it is seamless.
+      const cover = document.createElement("div");
+      cover.className = "dolly-cover";
+      document.body.appendChild(cover);
+      cleanups.push(() => cover.remove());
+      // Register the transitions (via the class) + origin, force a reflow so the
+      // browser snapshots the start state, THEN change transform/opacity so they
+      // animate instead of jumping straight to the end state.
+      scene.classList.add("dolly-in");
+      scene.style.transformOrigin = ox + "px " + oy + "px";
+      void scene.offsetWidth; // force reflow
+      scene.style.transform = "scale(3.2)";
+      cover.style.opacity = "1";
+      window.setTimeout(() => {
+        if (!cancelled) router.go(navTo);
+      }, DOLLY_MS);
     });
 
     const p: Piece = {
@@ -1110,25 +1113,12 @@ onMounted(() => {
   }
 
   // =====================================================================
-  // TRANSIT VELOCITY GATE + budgeted injection (see prototype's notes).
+  // LAZY <img> INJECTION. Pieces near the viewport get their thumbnail injected
+  // and keep it — thumbnails are cheap PNGs (browser-native lazy decode), so we no
+  // longer throttle injection on scroll velocity or reclaim off-screen images
+  // (the old gate did, to avoid expensive live-SVG cloning during fast scroll).
+  // One injection per frame still keeps the initial fill smooth.
   // =====================================================================
-  const VEL_GATE = 55;
-  const SETTLE_FRAMES = 2;
-  let hallVel = 0;
-  let lastSampleLeft = hall.scrollLeft;
-  let velRAF = 0,
-    settleFrames = 0;
-  const pendingReclaim = new Set<Piece>();
-  function isFast() {
-    return hallVel > VEL_GATE;
-  }
-  function reclaim(p: Piece) {
-    p.artEl.innerHTML = "";
-    p.artEl.classList.add("empty");
-    p.injected = false;
-    p._queued = false;
-    pendingReclaim.delete(p);
-  }
   const injectQueue: Piece[] = [];
   let injectRAF = 0;
   function enqueueInject(p: Piece) {
@@ -1139,53 +1129,15 @@ onMounted(() => {
   }
   function drainInject() {
     injectRAF = 0;
-    if (!isFast()) {
-      const p = injectQueue.shift();
-      if (p) {
-        p._queued = false;
-        if (!p.injected && !p.data._gone) {
-          injectChart(p.artEl, p.data);
-          p.injected = true;
-        }
+    const p = injectQueue.shift();
+    if (p) {
+      p._queued = false;
+      if (!p.injected && !p.data._gone) {
+        injectChart(p.artEl, p.data);
+        p.injected = true;
       }
     }
     if (injectQueue.length) injectRAF = requestAnimationFrame(drainInject);
-  }
-  function onSettle() {
-    hallVel = 0;
-    ensureVisible();
-    if (pendingReclaim.size) {
-      const left = hall.scrollLeft - 1900;
-      const right = hall.scrollLeft + hall.clientWidth + 1900;
-      for (const p of [...pendingReclaim]) {
-        if (p.x == null || p.x + p.boxW! < left || p.x > right) reclaim(p);
-        else pendingReclaim.delete(p);
-      }
-    }
-  }
-  function velTick() {
-    velRAF = 0;
-    const sl = hall.scrollLeft;
-    hallVel = Math.abs(sl - lastSampleLeft);
-    lastSampleLeft = sl;
-    if (hallVel > VEL_GATE) {
-      settleFrames = 0;
-      velRAF = requestAnimationFrame(velTick);
-    } else if (settleFrames < SETTLE_FRAMES) {
-      settleFrames++;
-      velRAF = requestAnimationFrame(velTick);
-    } else {
-      onSettle();
-    }
-  }
-  function kickVel() {
-    if (!velRAF) velRAF = requestAnimationFrame(velTick);
-  }
-  function instantJumpInject() {
-    hallVel = 0;
-    settleFrames = SETTLE_FRAMES;
-    lastSampleLeft = hall.scrollLeft;
-    ensureVisible();
   }
 
   const io = new IntersectionObserver(
@@ -1193,13 +1145,7 @@ onMounted(() => {
       for (const en of entries) {
         const p = (en.target as unknown as { _piece: Piece })._piece;
         if (!p) continue;
-        if (en.isIntersecting) {
-          pendingReclaim.delete(p);
-          if (!isFast()) enqueueInject(p);
-        } else if (p.injected) {
-          if (isFast()) pendingReclaim.add(p);
-          else reclaim(p);
-        }
+        if (en.isIntersecting) enqueueInject(p);
       }
     },
     { root: hall, rootMargin: "300px 1800px 300px 1800px", threshold: 0 }
@@ -1338,7 +1284,6 @@ onMounted(() => {
   }
 
   function ensureVisible() {
-    if (isFast()) return;
     const sl = hall.scrollLeft;
     const left = sl - 1900;
     const right = sl + hall.clientWidth + 1900;
@@ -1524,7 +1469,7 @@ onMounted(() => {
     target = Math.max(0, Math.min(target, max));
     if (reduceMotion) {
       hall.scrollLeft = target;
-      instantJumpInject();
+      ensureVisible();
       return;
     }
     const from = hall.scrollLeft;
@@ -1551,7 +1496,7 @@ onMounted(() => {
         glideActive = false;
         hall.scrollLeft = target;
         if (longSweep) exitTransit();
-        onSettle();
+        ensureVisible();
       }
     }
     glideRAF = requestAnimationFrame(step);
@@ -1573,20 +1518,48 @@ onMounted(() => {
   };
   hall.addEventListener("pointerdown", onHallDown);
 
+  // Arrow keys: a single tap pages by ~0.8 screens (smooth glide); HOLDING runs a
+  // continuous constant-speed scroll. We must ignore the OS key-repeat events and
+  // drive one rAF loop instead — re-issuing a `scrollTo({behavior:"smooth"})` (or a
+  // fresh glide) on every repeat restarts the easing near its slow start each time,
+  // which is the stutter/slowdown.
+  const ARROW_SPEED = 22; // px/frame while a key is held
+  let arrowDir = 0; // -1 left, +1 right, 0 idle
+  let arrowRAF = 0;
+  let arrowDownAt = 0;
+  function arrowStep() {
+    arrowRAF = 0;
+    if (!arrowDir) return;
+    const max = maxScrollNow();
+    const next = Math.max(
+      0,
+      Math.min(max, hall.scrollLeft + arrowDir * ARROW_SPEED)
+    );
+    hall.scrollLeft = next;
+    if ((arrowDir < 0 && next > 0) || (arrowDir > 0 && next < max))
+      arrowRAF = requestAnimationFrame(arrowStep);
+  }
+  function stopArrow() {
+    arrowDir = 0;
+    if (arrowRAF) {
+      cancelAnimationFrame(arrowRAF);
+      arrowRAF = 0;
+    }
+  }
+
   const onKeydown = (e: KeyboardEvent) => {
     if (e.target === search) return;
-    if (e.key === "ArrowRight") {
-      hall.scrollTo({
-        left: hall.scrollLeft + hall.clientWidth * 0.8,
-        behavior: "smooth",
-      });
+    const dir = e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0;
+    if (dir) {
       e.preventDefault();
-    } else if (e.key === "ArrowLeft") {
-      hall.scrollTo({
-        left: hall.scrollLeft - hall.clientWidth * 0.8,
-        behavior: "smooth",
-      });
-      e.preventDefault();
+      if (arrowDir !== dir) {
+        // First press for this direction — start the continuous loop. (Auto-repeat
+        // events re-enter here with the same dir and are intentionally ignored.)
+        cancelGlide();
+        arrowDir = dir;
+        arrowDownAt = performance.now();
+        if (!arrowRAF) arrowRAF = requestAnimationFrame(arrowStep);
+      }
     } else if (e.key === "Home") {
       glideTo(0);
       e.preventDefault();
@@ -1595,7 +1568,16 @@ onMounted(() => {
       e.preventDefault();
     }
   };
+  const onKeyup = (e: KeyboardEvent) => {
+    const dir = e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0;
+    if (!dir || arrowDir !== dir) return;
+    const held = performance.now() - arrowDownAt;
+    stopArrow();
+    // Quick tap → page one screen with a smooth glide; a hold just stops where it is.
+    if (held < 180) glideTo(hall.scrollLeft + dir * hall.clientWidth * 0.8);
+  };
   window.addEventListener("keydown", onKeydown);
+  window.addEventListener("keyup", onKeyup);
 
   const onBackstart = () => glideTo(0);
   backstart.addEventListener("click", onBackstart);
@@ -1610,7 +1592,6 @@ onMounted(() => {
     }
     backstart.classList.toggle("show", hall.scrollLeft > hall.clientWidth);
     if (pointerActive) kickFigures();
-    kickVel();
     if (!scrollRAF)
       scrollRAF = requestAnimationFrame(() => {
         scrollRAF = 0;
@@ -1626,6 +1607,8 @@ onMounted(() => {
     hall.removeEventListener("wheel", onWheel);
     hall.removeEventListener("pointerdown", onHallDown);
     window.removeEventListener("keydown", onKeydown);
+    window.removeEventListener("keyup", onKeyup);
+    stopArrow();
     backstart.removeEventListener("click", onBackstart);
     hall.removeEventListener("scroll", onScroll);
     search.removeEventListener("input", onSearchInput);
@@ -1699,7 +1682,7 @@ onMounted(() => {
     id: string,
     title: string,
     description: string,
-    m: { w: number; h: number; node: SVGElement }
+    m: { w: number; h: number }
   ): Entry {
     const uid = baseEntries.length + synthCount;
     const d: Entry = {
@@ -1709,7 +1692,7 @@ onMounted(() => {
       description,
       w: m.w,
       h: m.h,
-      svgNode: m.node,
+      src: withBase("/gallery/" + id + ".png"),
       jY: 0,
       jRot: 0,
       frameClass: "f-walnut",
@@ -1725,19 +1708,21 @@ onMounted(() => {
     new Promise<void>((res) => requestAnimationFrame(() => res()));
 
   (async () => {
+    // Synchronous: dimensions come from the build-time manifest, so there's no
+    // per-example render/measure. An example missing from the manifest means its
+    // thumbnail wasn't captured (run `pnpm --filter @gofish/tests capture-gallery`).
     for (const ex of examples) {
       if (cancelled) return;
-      try {
-        const m = await measure(ex.id);
-        if (m)
-          baseEntries.push(addEntry(ex.id, ex.title, ex.description || "", m));
-      } catch (err) {
-        console.warn("gallery: example failed to render", ex.id, err);
+      const dims = thumbDims[ex.id];
+      if (!dims) {
+        console.warn("gallery: no thumbnail for example", ex.id);
+        continue;
       }
+      baseEntries.push(addEntry(ex.id, ex.title, ex.description || "", dims));
     }
     if (cancelled) return;
 
-    // ---- ?n=150 scale test: synthesize a bigger wall by cycling measured renders.
+    // ---- ?n=150 scale test: synthesize a bigger wall by cycling captured thumbnails.
     if (N > baseEntries.length && baseEntries.length) {
       for (let i = baseEntries.length; i < N; i++) {
         if (cancelled) return;
@@ -1751,7 +1736,7 @@ onMounted(() => {
           description: base.description,
           w: base.w,
           h: base.h,
-          svgNode: base.svgNode,
+          src: base.src,
           jY: 0,
           jRot: 0,
           frameClass: "f-walnut",
