@@ -119,9 +119,10 @@ export const HoistedVarietySpread: StoryObj<Args> = {
       color: palette({ Morris: "#e15759", "Grand Rapids": "#4e79a7" }),
     })
       .flow(spread({ by: "variety", dir: "x", spacing: 20 }))
-      .mark((d) =>
+      .mark(
         layer([
-          chart(d)
+          // Empty-scope `chart()` inherits this variety cell's partition (#243).
+          chart()
             .flow(
               spread({ by: "year", dir: "x", spacing: 40 }),
               derive((rows) => orderBy(rows, "yield", "asc")),

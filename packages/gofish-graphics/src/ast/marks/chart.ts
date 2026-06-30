@@ -597,7 +597,17 @@ export function layer<T>(
     const sharedContext: LayerContext = {};
     const resolved: GoFishNode[] = [];
     for (const m of marks) {
-      const result = typeof m === "function" ? m(d, key, sharedContext) : m;
+      // A nested empty-scope `chart()` child inherits this layer's incoming
+      // partition datum (issue #243), exactly as `.mark(chart())` does — so
+      // `layer([chart().flow(...).mark(...), chart(selectAll(...)).mark(...)])`
+      // can be a mark without a `(d) => …` callback. A child with its own data
+      // (e.g. `chart(selectAll(...))`) is left untouched.
+      const child =
+        m instanceof ChartBuilder && m.usesPreviousLayerMarks()
+          ? m.withData(d)
+          : m;
+      const result =
+        typeof child === "function" ? child(d, key, sharedContext) : child;
       resolved.push(await resolveMarkResult(result, sharedContext));
     }
     const node = await Layer(opts, resolved);
