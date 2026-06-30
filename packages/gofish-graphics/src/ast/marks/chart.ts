@@ -20,8 +20,10 @@ import {
   createModifier,
   nameModifier,
   labelModifier,
+  zOrderModifier,
   LayerContext,
 } from "./createOperator";
+import type { ZOrderValue } from "./createOperator";
 import { layer as Layer } from "../graphicalOperators/layer";
 import {
   // `over` stays internal (not re-exported from lib) — it backs the
@@ -269,7 +271,7 @@ export function line(options?: {
   interpolation?: "linear" | "bezier";
   from?: string;
   to?: string;
-}): Mark<any> {
+}): NameableMark<any> {
   if (options?.from !== undefined && options?.to !== undefined) {
     return pairwiseConnect("line", options, {
       mode: "center",
@@ -295,8 +297,9 @@ export function line(options?: {
       d
     );
   };
-  (mark as any).__serialize = { type: "line", opts: options ?? {} };
-  return mark;
+  const result = nameableMark(mark);
+  (result as any).__serialize = { type: "line", opts: options ?? {} };
+  return result;
 }
 
 // Shared pairwise (per-row) connector: each row carries two ref-valued columns
@@ -319,7 +322,7 @@ function pairwiseConnect(
     strokeWidth: number;
     interpolation: "linear" | "bezier";
   }
-): Mark<any> {
+): NameableMark<any> {
   const from = options.from as string;
   const to = options.to as string;
   const mark: Mark<any[]> = async (
@@ -356,8 +359,9 @@ function pairwiseConnect(
     );
     return Layer({}, segments);
   };
-  (mark as any).__serialize = { type: irType, opts: options };
-  return mark;
+  const result = nameableMark(mark);
+  (result as any).__serialize = { type: irType, opts: options };
+  return result;
 }
 
 // area() mark connects data points using edge-to-edge mode
@@ -370,7 +374,7 @@ export function area(options?: {
   interpolation?: "linear" | "bezier";
   from?: string;
   to?: string;
-}): Mark<any> {
+}): NameableMark<any> {
   if (options?.from !== undefined && options?.to !== undefined) {
     return pairwiseConnect("area", options, {
       mode: "edge",
@@ -397,8 +401,9 @@ export function area(options?: {
       d
     );
   };
-  (mark as any).__serialize = { type: "area", opts: options ?? {} };
-  return mark;
+  const result = nameableMark(mark);
+  (result as any).__serialize = { type: "area", opts: options ?? {} };
+  return result;
 }
 
 // blank() mark creates invisible guides for positioning
@@ -464,6 +469,7 @@ type PdOptions = { blendMode?: BlendMode };
 export type ConstrainableMark<T> = Mark<T> & {
   name(layerName: string | Token): ConstrainableMark<T>;
   label(accessor: LabelAccessor, options?: LabelOptions): ConstrainableMark<T>;
+  zOrder(value: ZOrderValue<T>): ConstrainableMark<T>;
   constrain(
     fn: (refs: Record<string, ConstraintRef>) => ConstraintSpec[]
   ): ConstrainableMark<T>;
@@ -491,7 +497,7 @@ const constrainModifier = createModifier<
   [fn: (refs: Record<string, ConstraintRef>) => ConstraintSpec[]]
 >({
   name: "constrain",
-  apply: (node, _layerContext, fn) => {
+  apply: (node, _layerContext, _datum, fn) => {
     node.constrain(fn);
   },
 });
@@ -501,6 +507,7 @@ function makeConstrainableMark<T>(base: Mark<T>): ConstrainableMark<T> {
     nameModifier,
     labelModifier,
     constrainModifier,
+    zOrderModifier,
   ]) as unknown as ConstrainableMark<T>;
 }
 

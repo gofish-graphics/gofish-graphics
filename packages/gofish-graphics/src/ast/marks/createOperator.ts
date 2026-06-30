@@ -154,13 +154,21 @@ export async function applyMark<T>(
 export type ModifierConfig<Args extends any[] = any[]> = {
   /** Method name exposed on the mark, e.g. "name" | "label" | "constrain". */
   name: string;
+  /** `datum` is the per-instance data the mark was called with (the same value
+   *  the shape factory saw). Modifiers that don't need it ignore it; `.zOrder`
+   *  uses it to resolve a per-datum paint-order callback. */
   apply: (
     node: GoFishNode,
     layerContext: LayerContext | undefined,
+    datum: unknown,
     ...args: Args
   ) => void;
   tag?: (wrapped: Mark<any>, base: Mark<any>, ...args: Args) => void;
 };
+
+/** A paint-order hint: a constant, or a callback resolved per-instance against
+ *  the datum the mark is bound to. */
+export type ZOrderValue<T = any> = number | ((datum: T) => number);
 
 /** Register a modifier. Identity at runtime; the value is the typed config. */
 export function createModifier<Args extends any[]>(
@@ -213,11 +221,11 @@ function modifierMethod(
         const nodes = await Promise.all(
           raw.map((r) => resolveMarkResult(r, layerContext))
         );
-        for (const node of nodes) cfg.apply(node, layerContext, ...args);
+        for (const node of nodes) cfg.apply(node, layerContext, d, ...args);
         return nodes as unknown as GoFishNode;
       }
       const node = await resolveMarkResult(raw, layerContext);
-      cfg.apply(node, layerContext, ...args);
+      cfg.apply(node, layerContext, d, ...args);
       return node;
     };
     // Preserve the kind tag so applyMark dispatches correctly through the
@@ -287,7 +295,7 @@ export function attachModifiers<T>(
  */
 export const nameModifier = createModifier<[layerName: string | symbol]>({
   name: "name",
-  apply: (node, layerContext, layerName) => {
+  apply: (node, layerContext, _datum, layerName) => {
     node.name(layerName as any);
     if (layerContext && typeof layerName === "string" && layerName) {
       (node as { __layerRegistration?: string }).__layerRegistration =
@@ -311,7 +319,7 @@ export const labelModifier = createModifier<
   [accessor: LabelAccessor, options?: LabelOptions]
 >({
   name: "label",
-  apply: (node, _layerContext, accessor, options) => {
+  apply: (node, _layerContext, _datum, accessor, options) => {
     node.label(accessor, options);
   },
   tag: (wrapped, base, accessor, options) => {
@@ -340,13 +348,37 @@ export const labelModifier = createModifier<
 });
 
 /**
- * Attach chainable .name() and .label() to a mark, registering it into the
- * layer context when named so that ref(...)/selectAll(...) can find it back.
+ * `.zOrder(value)` — sets the node's paint-order hint. `value` is either a
+ * constant or a callback resolved per-instance against the datum the mark is
+ * bound to, so paint order can be data-driven (e.g. raise one category over
+ * the rest) without splitting the mark into separately-named layers. The hint
+ * is consumed by the bake pass's per-layer `(zOrder, index)` sort.
+ */
+export const zOrderModifier = createModifier<[value: ZOrderValue]>({
+  name: "zOrder",
+  apply: (node, _layerContext, datum, value) => {
+    node.zOrder(typeof value === "function" ? value(datum) : value);
+  },
+  tag: (wrapped, base, value) => {
+    // A constant hint round-trips; a callback can't be JSON-serialized, so it
+    // is dropped from the emitted IR (the rest of the tag still propagates),
+    // mirroring `.label(fn)`.
+    propagateSerialize(base, wrapped, (tag) => {
+      if (typeof value === "number") tag.zOrder = value;
+    });
+  },
+});
+
+/**
+ * Attach chainable .name(), .label(), and .zOrder() to a mark, registering it
+ * into the layer context when named so that ref(...)/selectAll(...) can find
+ * it back.
  */
 export function nameableMark<T>(base: Mark<T>): NameableMark<T> {
   return attachModifiers(base, [
     nameModifier,
     labelModifier,
+    zOrderModifier,
   ]) as NameableMark<T>;
 }
 
