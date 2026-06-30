@@ -230,6 +230,7 @@ for the API.
           "enum": [
             "derive",
             "resolve",
+            "join",
             "spread",
             "stack",
             "group",
@@ -261,6 +262,15 @@ for the API.
         },
         "key": {
           "type": "string"
+        },
+        "on": {
+          "type": "string"
+        },
+        "right": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
         }
       }
     },

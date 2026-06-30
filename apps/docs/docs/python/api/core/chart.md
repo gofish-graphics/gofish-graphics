@@ -17,7 +17,13 @@ chart(seafood, axes=True).flow(spread(by="lake", dir="x")).mark(
 
 ```python
 chart(data, **options) -> ChartBuilder
+chart(**options) -> ChartBuilder  # empty scope — data inherited from context
 ```
+
+Calling `chart()` (or `chart(**options)`) with **no data** creates an _empty
+scope_ that inherits its data from the enclosing context: the incoming partition
+when used directly as a [`.mark(...)`](/python/api/core/mark), or the previous
+tier's marks inside [`.layer(...)`](/python/api/core/layer).
 
 ## Parameters
 

@@ -10,9 +10,9 @@ Sets the visual mark used to render each data group.
 
 ## Parameters
 
-| Parameter | Type   | Description                                                       |
-| --------- | ------ | ----------------------------------------------------------------- |
-| `mark`    | `Mark` | The mark to use for rendering (e.g. `rect()`, `line()`, `area()`) |
+| Parameter | Type                     | Description                                                                          |
+| --------- | ------------------------ | ------------------------------------------------------------------------------------ |
+| `mark`    | `Mark` \| `ChartBuilder` | A mark (e.g. `rect()`, `line()`, `area()`), or a nested `chart(...)` drawn per group |
 
 ## Example
 
@@ -21,6 +21,28 @@ chart(data)
   .flow(spread({ by: "category", dir: "x" }))
   .mark(rect({ h: "value" }));
 ```
+
+## Nested chart as a mark
+
+A mark can be a whole nested `chart(...)` — one sub-chart drawn per group (a pie
+glyph per scatter point, a small multiple per facet). Leave the nested chart's
+**data off** and it inherits the incoming partition (the group's rows), so you
+don't thread the data through a callback:
+
+```ts
+chart(catchLocationsArray)
+  .flow(scatter({ by: "lake", x: "x", y: "y" }))
+  .mark(
+    chart({ coord: clock() }) // no data → inherits this lake's partition
+      .flow(stack({ by: "species", dir: "x", h: 20 }))
+      .mark(rect({ w: "count", fill: "species" }))
+  );
+```
+
+`chart()` / `chart(options)` with no data is an **empty scope**: as a `.mark(...)`
+it binds the incoming group, and inside [`.layer(...)`](/js/api/core/layer) it
+binds the previous tier's marks. (The older `.mark((data) => chart(data, ...))`
+callback still works and is equivalent.)
 
 Marks can also call `.name("layerName")` to register their output nodes for later use with [`ref` / `selectAll`](/js/api/selection/ref):
 

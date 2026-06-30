@@ -154,6 +154,7 @@ export type DataIR =
 export type OperatorIR =
   | DeriveOperator
   | ResolveOperator
+  | JoinOperator
   | SpreadOperator
   | StackOperator
   | GroupOperator
@@ -193,6 +194,22 @@ export interface ResolveOperator extends BaseIRNode, TranslatableIR {
   from?: string;
   /** Explicit match field; defaults to the producing operator's `by`. */
   key?: string;
+}
+
+/**
+ * `join(right, { on })` — one-to-many equi-join of the incoming rows against
+ * an inlined `right` table on a shared `on` key. Each incoming row fans out to
+ * one output row per matching `right` row, merging their columns
+ * (`{ ...left, ...right }`); unmatched incoming rows drop out. Relates two plain
+ * data tables (contrast `resolve`, which dereferences columns into drawn
+ * nodes), so `right` rides in the IR as inline JSON and round-trips.
+ */
+export interface JoinOperator extends BaseIRNode, TranslatableIR {
+  type: "join";
+  /** Shared key field matched between the incoming rows and `right`. */
+  on: string;
+  /** The right-hand table, inlined as JSON rows. */
+  right: Record<string, unknown>[];
 }
 
 export interface SpreadOperator extends BaseIRNode, TranslatableIR {
@@ -535,6 +552,7 @@ export function isLeafMarkIR(mark: MarkIR): mark is LeafMarkIR {
 export const OPERATOR_TYPES = [
   "derive",
   "resolve",
+  "join",
   "spread",
   "stack",
   "group",

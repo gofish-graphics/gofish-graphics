@@ -33,9 +33,10 @@ the casing convention unambiguous (capital `Layer`, for instance, still
 exports, but only as the capitalized-surface combinator, distinct from the
 fluent builder's `.layer()` method). The fluent surface also carries the
 operators used inside `.flow(...)` — `spread`, `stack`, `scatter`, `group`,
-`derive`, and `resolve` (the last dereferences reference columns into drawn
-node refs, driving the ribbon / node-link / labeling patterns via
-`.layer()` + `resolve`).
+`derive`, `resolve`, and `join` (`resolve` dereferences reference columns into
+drawn node refs, driving the ribbon / node-link / labeling patterns via
+`.layer()` + `resolve`; `join` is a one-to-many equi-join relating two data
+tables on a shared key).
 
 ## Planned contents
 
