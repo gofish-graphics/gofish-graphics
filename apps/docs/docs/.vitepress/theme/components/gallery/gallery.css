@@ -264,7 +264,22 @@ html.gallery-page .DocSearch-Button {
   z-index: 4;
   cursor: pointer;
   content-visibility: auto;
+  display: block;
+  text-decoration: none;
   transition: opacity 0.45s ease;
+}
+
+/* Dolly-in: when a piece is clicked we scale the whole scene about that frame's
+   center (set inline) and fade it out, so it reads as the viewer walking up to the
+   painting until it fills the view, then the detail page loads. The scene unmounts
+   on navigation, so this transform is never reverted. Duration matches DOLLY_MS in
+   GalleryPage.vue. */
+.gallery-scene.dolly-in {
+  transition:
+    transform 0.5s cubic-bezier(0.4, 0, 0.2, 1),
+    opacity 0.5s ease;
+  will-change: transform, opacity;
+  pointer-events: none;
 }
 .gallery-scene .track.animate .piece {
   transition:

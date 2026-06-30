@@ -1,0 +1,394 @@
+{
+  "1d-strip-plot": {
+    "w": 380,
+    "h": 144
+  },
+  "activity-heatmap": {
+    "w": 754,
+    "h": 489
+  },
+  "aggregate-bar-chart": {
+    "w": 594,
+    "h": 394
+  },
+  "annotated-planets": {
+    "w": 458,
+    "h": 208
+  },
+  "area-chart": {
+    "w": 600,
+    "h": 395
+  },
+  "balloon-chart": {
+    "w": 242,
+    "h": 322
+  },
+  "bar-chart": {
+    "w": 500,
+    "h": 495
+  },
+  "bar-chart-with-negative-values": {
+    "w": 500,
+    "h": 495
+  },
+  "bar-chart-with-value-labels": {
+    "w": 500,
+    "h": 480
+  },
+  "bottle-fill-chart": {
+    "w": 840,
+    "h": 522
+  },
+  "bump-chart": {
+    "w": 668,
+    "h": 304
+  },
+  "categorical-color-palette": {
+    "w": 572,
+    "h": 495
+  },
+  "circle-treemap": {
+    "w": 917,
+    "h": 500
+  },
+  "colored-scatter-plot": {
+    "w": 499,
+    "h": 394
+  },
+  "connected-scatter-plot": {
+    "w": 498,
+    "h": 494
+  },
+  "croissant-chart": {
+    "w": 490,
+    "h": 235
+  },
+  "donut-chart": {
+    "w": 551,
+    "h": 480
+  },
+  "faceted-scatter-plot": {
+    "w": 536,
+    "h": 910
+  },
+  "flower-chart": {
+    "w": 599,
+    "h": 488
+  },
+  "gotree-barcode-tree": {
+    "w": 640,
+    "h": 420
+  },
+  "gotree-beam-tree": {
+    "w": 640,
+    "h": 420
+  },
+  "gotree-cartesian-deep-tree": {
+    "w": 900,
+    "h": 520
+  },
+  "gotree-cascaded-treemap": {
+    "w": 640,
+    "h": 420
+  },
+  "gotree-dendrogram": {
+    "w": 900,
+    "h": 520
+  },
+  "gotree-elastic-hierarchy": {
+    "w": 640,
+    "h": 420
+  },
+  "gotree-garden-layout": {
+    "w": 640,
+    "h": 420
+  },
+  "gotree-h-tree-layout": {
+    "w": 720,
+    "h": 560
+  },
+  "gotree-hierarchical-sector-chart": {
+    "w": 560,
+    "h": 560
+  },
+  "gotree-hv-drawing": {
+    "w": 640,
+    "h": 420
+  },
+  "gotree-indented-pixel-tree": {
+    "w": 640,
+    "h": 420
+  },
+  "gotree-indented-tree": {
+    "w": 640,
+    "h": 420
+  },
+  "gotree-multilevel-silhouette-tree": {
+    "w": 480,
+    "h": 480
+  },
+  "gotree-nested-pie-tree": {
+    "w": 640,
+    "h": 420
+  },
+  "gotree-node-link-tree": {
+    "w": 900,
+    "h": 560
+  },
+  "gotree-orthogonal-tree": {
+    "w": 640,
+    "h": 420
+  },
+  "gotree-oval-treemap": {
+    "w": 640,
+    "h": 420
+  },
+  "gotree-polar-icicle": {
+    "w": 560,
+    "h": 560
+  },
+  "gotree-radial-deep-tree": {
+    "w": 520,
+    "h": 520
+  },
+  "gotree-readable-tree-layout": {
+    "w": 640,
+    "h": 420
+  },
+  "gotree-sector-tree": {
+    "w": 540,
+    "h": 540
+  },
+  "gotree-slice-treemap": {
+    "w": 900,
+    "h": 360
+  },
+  "gotree-spiral-layout": {
+    "w": 520,
+    "h": 520
+  },
+  "gotree-stair-tree": {
+    "w": 640,
+    "h": 420
+  },
+  "gotree-sunburst": {
+    "w": 540,
+    "h": 540
+  },
+  "gotree-treemap": {
+    "w": 640,
+    "h": 420
+  },
+  "gotree-tyre-tree": {
+    "w": 560,
+    "h": 560
+  },
+  "grouped-bar-chart": {
+    "w": 566,
+    "h": 495
+  },
+  "grouped-box-and-whisker-plot": {
+    "w": 351,
+    "h": 512
+  },
+  "highlighted-ribbon-chart": {
+    "w": 580,
+    "h": 480
+  },
+  "histogram": {
+    "w": 607,
+    "h": 394
+  },
+  "horizontal-bar-chart": {
+    "w": 514,
+    "h": 494
+  },
+  "horizontal-stacked-bar-chart": {
+    "w": 785,
+    "h": 494
+  },
+  "icicle-chart": {
+    "w": 200,
+    "h": 300
+  },
+  "inner-planets-to-scale": {
+    "w": 450,
+    "h": 156
+  },
+  "labeled-heatmap": {
+    "w": 574,
+    "h": 369
+  },
+  "layered-area-chart": {
+    "w": 595,
+    "h": 380
+  },
+  "line-chart": {
+    "w": 598,
+    "h": 494
+  },
+  "marginal-histogram-jointplot": {
+    "w": 553,
+    "h": 552
+  },
+  "mosaic-chart": {
+    "w": 567,
+    "h": 495
+  },
+  "nested-boxes-tree": {
+    "w": 236,
+    "h": 488
+  },
+  "nested-mosaic-chart": {
+    "w": 226,
+    "h": 307
+  },
+  "nested-waffle-chart": {
+    "w": 232,
+    "h": 408
+  },
+  "nightingale-rose-chart": {
+    "w": 554,
+    "h": 480
+  },
+  "nightingale-rose-diagram": {
+    "w": 529,
+    "h": 480
+  },
+  "node-link-diagram": {
+    "w": 500,
+    "h": 300
+  },
+  "normalized-stacked-bar-chart": {
+    "w": 668,
+    "h": 395
+  },
+  "normalized-stacked-bar-with-labels": {
+    "w": 516,
+    "h": 494
+  },
+  "pie-chart": {
+    "w": 551,
+    "h": 480
+  },
+  "polar-ribbon-chart": {
+    "w": 690,
+    "h": 588
+  },
+  "pulley-diagram": {
+    "w": 305,
+    "h": 370
+  },
+  "python-tutor-memory-diagram": {
+    "w": 1445,
+    "h": 380
+  },
+  "ribbon-chart": {
+    "w": 580,
+    "h": 480
+  },
+  "ridgeline-chart": {
+    "w": 595,
+    "h": 499
+  },
+  "sankey-tree": {
+    "w": 432,
+    "h": 386
+  },
+  "scatter-plot": {
+    "w": 395,
+    "h": 394
+  },
+  "scatter-plot-with-pie-glyphs": {
+    "w": 579,
+    "h": 494
+  },
+  "seattle-weather-stacked-bar-chart": {
+    "w": 767,
+    "h": 395
+  },
+  "selective-highlight": {
+    "w": 566,
+    "h": 495
+  },
+  "sequential-color-gradient": {
+    "w": 560,
+    "h": 495
+  },
+  "simple-bar-chart": {
+    "w": 319,
+    "h": 395
+  },
+  "stacked-area-chart": {
+    "w": 506,
+    "h": 480
+  },
+  "stacked-bar-chart": {
+    "w": 571,
+    "h": 495
+  },
+  "stacked-bar-chart-with-labels": {
+    "w": 571,
+    "h": 495
+  },
+  "stacked-bar-with-centered-labels": {
+    "w": 571,
+    "h": 395
+  },
+  "streamgraph": {
+    "w": 501,
+    "h": 480
+  },
+  "stringline-chart": {
+    "w": 781,
+    "h": 428
+  },
+  "sunflower-equal-scale": {
+    "w": 720,
+    "h": 460
+  },
+  "titanic-fare-circle-treemap": {
+    "w": 1121,
+    "h": 400
+  },
+  "titanic-survival-mosaic": {
+    "w": 671,
+    "h": 514
+  },
+  "titanic-survival-unit-grid": {
+    "w": 835,
+    "h": 560
+  },
+  "titanic-unit-column-chart": {
+    "w": 600,
+    "h": 660
+  },
+  "titanic-unit-histogram": {
+    "w": 980,
+    "h": 640
+  },
+  "titanic-unit-mosaic": {
+    "w": 480,
+    "h": 380
+  },
+  "titanic-unit-violin": {
+    "w": 760,
+    "h": 340
+  },
+  "treemap": {
+    "w": 917,
+    "h": 500
+  },
+  "violin-plot": {
+    "w": 541,
+    "h": 197
+  },
+  "waffle-chart": {
+    "w": 479,
+    "h": 378
+  },
+  "what-s-in-a-bottle-of-wine": {
+    "w": 414,
+    "h": 762
+  }
+}

@@ -4,6 +4,22 @@ editLink: false
 ---
 
 <style>
+/* "← Examples" back link above the title. Scoped under `.vp-doc a` to beat
+   VitePress's default link color, and pulled up tight above the H1. */
+.vp-doc a.example-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35em;
+  margin: 0 0 0.75rem;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--vp-c-text-2);
+  text-decoration: none;
+  transition: color 0.2s ease;
+}
+.vp-doc a.example-back:hover {
+  color: var(--vp-c-brand-1);
+}
 .example-actions {
   margin: 1.5rem 0 2rem;
 }
