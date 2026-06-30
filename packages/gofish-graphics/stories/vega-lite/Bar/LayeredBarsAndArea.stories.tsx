@@ -103,3 +103,42 @@ export const TwoSites: StoryObj<Args> = {
     return container;
   },
 };
+
+// Same chart, restructured: the shared `variety` spread is hoisted to an outer
+// chart, and each variety cell holds its own bars+area layer. The inner
+// `selectAll("bars")` is scoped per cell (the layer shares one name context per
+// variety), so the area only needs to group by site — not by variety.
+export const HoistedVarietySpread: StoryObj<Args> = {
+  args: { w: 400, h: 400 },
+  loaders: [async () => ({ barley: await data["barley.json"]() })],
+  render: (args: Args, context: any) => {
+    const container = initializeContainer();
+    const barley = context.loaded.barley as any[];
+
+    chart(barley, {
+      color: palette({ Morris: "#e15759", "Grand Rapids": "#4e79a7" }),
+    })
+      .flow(spread({ by: "variety", dir: "x", spacing: 20 }))
+      .mark((d) =>
+        layer([
+          chart(d)
+            .flow(
+              spread({ by: "year", dir: "x", spacing: 40 }),
+              derive((rows) => orderBy(rows, "yield", "asc")),
+              stack({ by: "site", dir: "y" })
+            )
+            .mark(rect({ h: "yield", fill: "site" }).name("bars")),
+          chart(selectAll("bars"))
+            .flow(group({ by: "site" }))
+            .mark(
+              area({ opacity: 0.7 }).zOrder((a) =>
+                isEmphasized(project(a, "site")) ? 1 : 0
+              )
+            ),
+        ])
+      )
+      .render(container, { w: args.w, h: args.h, axes: true });
+
+    return container;
+  },
+};

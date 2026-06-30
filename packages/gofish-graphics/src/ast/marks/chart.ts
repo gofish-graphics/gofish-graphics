@@ -532,14 +532,18 @@ export function layer<T>(
 ): ConstrainableMark<T> {
   const opts = Array.isArray(marksOrOpts) ? {} : marksOrOpts;
   const marks = (Array.isArray(marksOrOpts) ? marksOrOpts : maybeMarks) ?? [];
-  const base: Mark<T> = async (d, key, layerContext) => {
-    // Share one layerContext across all children so that ref(name)/
-    // selectAll(name) in one child can find a sibling's .name(name)
-    // registration. Inherit from the caller when present (nested-layer case),
-    // else create a fresh context (top-level .render() case). Resolve
-    // sequentially so a child referencing a name sees registrations from
-    // earlier siblings.
-    const sharedContext = layerContext ?? {};
+  const base: Mark<T> = async (d, key, _layerContext) => {
+    // A layer establishes its OWN local name context: `.name(...)` registrations
+    // and the `ref(name)`/`selectAll(name)` that read them are scoped to *this*
+    // layer's children. We deliberately do NOT inherit the enclosing
+    // `_layerContext` — otherwise a layer nested inside an operator (e.g. one
+    // `layer([bars, area])` per `spread` cell) would share a single context
+    // across every cell, so each cell's `selectAll("bars")` would match every
+    // other cell's bars too (and reference siblings not yet laid out). Names are
+    // local to their layer, mirroring `LayerBuilder.resolve`. Resolve
+    // sequentially so a child referencing a name sees earlier siblings'
+    // registrations.
+    const sharedContext: LayerContext = {};
     const resolved: GoFishNode[] = [];
     for (const m of marks) {
       const result = typeof m === "function" ? m(d, key, sharedContext) : m;
