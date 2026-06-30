@@ -25,12 +25,6 @@ export default {
     return loadStoryExamples().map((ex) => {
       const parts: string[] = [];
 
-      // Back link to the gallery, above the title.
-      parts.push(
-        `<a class="example-back" href="/js/examples/">← Examples</a>`,
-        ""
-      );
-
       parts.push(`# ${ex.title}`, "");
       if (ex.description) {
         parts.push(ex.description, "");

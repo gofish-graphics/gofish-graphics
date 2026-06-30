@@ -281,17 +281,14 @@ html[data-docs-lang="js"] .lang-toggle__btn[data-lang="js"] {
   display: none;
 }
 
-/* Suppress the VERTICAL overscroll rubber-band. Bouncing the page or the sidebar
-   past its scroll limit flashed sidebar content up into the header region. Only the
-   y-axis is pinned — using the `overscroll-behavior` shorthand (x + y) also set
-   `overscroll-behavior-x: none`, which disables the browser's two-finger
-   swipe-to-go-back gesture on every page. `.VPSidebar` is doubled so it outweighs
-   VitePress's own `overscroll-behavior: contain`. */
+/* Suppress the overscroll rubber-band. Bouncing the page or the sidebar past its
+   scroll limit flashed sidebar content up into the header region. `.VPSidebar`
+   is doubled so it outweighs VitePress's own `overscroll-behavior: contain`. */
 html {
-  overscroll-behavior-y: none;
+  overscroll-behavior: none;
 }
 .VPSidebar.VPSidebar {
-  overscroll-behavior-y: none;
+  overscroll-behavior: none;
 }
 
 /**
