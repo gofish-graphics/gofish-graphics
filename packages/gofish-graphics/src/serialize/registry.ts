@@ -24,6 +24,7 @@ import {
   circle,
   derive,
   resolve as resolveOp,
+  join as joinOp,
   selectAll,
   intersect,
   layer,
@@ -194,6 +195,7 @@ export const OPERATOR_MAP: Record<
       key: opts.key as string | undefined,
     });
   },
+  join: (opts) => joinOp(opts.right as any[], { on: opts.on as string }),
   spread: (opts) => spread(opts as any),
   stack: (opts) => stack(opts as any),
   group: (opts) => group(opts as any),

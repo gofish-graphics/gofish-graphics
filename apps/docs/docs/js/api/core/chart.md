@@ -17,18 +17,26 @@ gf.chart(seafood, { axes: true })
 
 ```ts
 chart(data, options?)
+chart(options?) // empty scope — data inherited from context
 ```
+
+Calling `chart()` (or `chart(options)`) with **no data** creates an _empty
+scope_ that inherits its data from the enclosing context: the incoming partition
+when used directly as a [`.mark(...)`](/js/api/core/mark), or the previous tier's
+marks inside [`.layer(...)`](/js/api/core/layer). Chart data is always an array
+or a [`selectAll`](/js/api/selection/ref) reference, so a lone options object is
+never mistaken for data.
 
 ## Parameters
 
-| Parameter             | Type                  | Description                                                                                                                                                                  |
-| --------------------- | --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `data`                | `T`                   | The dataset to visualize                                                                                                                                                     |
-| `options.w`           | `number`              | Width hint for the chart frame                                                                                                                                               |
-| `options.h`           | `number`              | Height hint for the chart frame                                                                                                                                              |
-| `options.coord`       | `CoordinateTransform` | Coordinate transform (e.g. `polar()`)                                                                                                                                        |
-| `options.color`       | `ColorConfig`         | Color scale applied to all marks in this chart. Use [`palette()`](/js/api/color/palette) for categorical data or [`gradient()`](/js/api/color/gradient) for continuous data. |
-| `options.axes`        | `AxesOptions`         | Auto-generate axes, labels, and legends. See [Axes](#axes) below.                                                                                                            |
+| Parameter       | Type                  | Description                                                                                                                                                                  |
+| --------------- | --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `data`          | `T`                   | The dataset to visualize                                                                                                                                                     |
+| `options.w`     | `number`              | Width hint for the chart frame                                                                                                                                               |
+| `options.h`     | `number`              | Height hint for the chart frame                                                                                                                                              |
+| `options.coord` | `CoordinateTransform` | Coordinate transform (e.g. `polar()`)                                                                                                                                        |
+| `options.color` | `ColorConfig`         | Color scale applied to all marks in this chart. Use [`palette()`](/js/api/color/palette) for categorical data or [`gradient()`](/js/api/color/gradient) for continuous data. |
+| `options.axes`  | `AxesOptions`         | Auto-generate axes, labels, and legends. See [Axes](#axes) below.                                                                                                            |
 
 Returns a `ChartBuilder<T>` with [`.flow()`](/js/api/core/flow), [`.mark()`](/js/api/core/mark), [`.render()`](/js/api/core/render), [`.zOrder()`](#zorder), and [`.name()`](#name) methods.
 

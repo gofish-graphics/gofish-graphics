@@ -185,6 +185,57 @@ export function resolve(
   return op;
 }
 
+/**
+ * Equi-join the incoming rows against another data table on a shared key — a
+ * one-to-many left join (SQL `JOIN ... USING (on)`, pandas/polars
+ * `.merge(right, on=...)`, dplyr `left_join(right, by = on)`). For each
+ * incoming row, every `right` row whose `on` value matches contributes one
+ * output row of the merged columns `{ ...left, ...right }`; incoming rows with
+ * no match drop out (inner-join semantics on the match, fan-out on the right).
+ *
+ * Unlike `resolve` (which dereferences columns into *drawn nodes* of a prior
+ * layer), `join` relates two plain data tables, so the `right` table is
+ * inlined into the IR and round-trips as JSON.
+ *
+ * Pairs with a nested chart that inherits its parent's partition: e.g. scatter
+ * lakes by location, then in each glyph
+ * `chart(data).flow(join(seafood, { on: "lake" }), stack(...))` pulls in that
+ * lake's catch rows.
+ */
+export function join<
+  L extends Record<string, any>,
+  R extends Record<string, any>,
+>(right: R[], opts: { on: string }): Operator<L[], (L & R)[]> {
+  const op: Operator<L[], (L & R)[]> = async (mark: Mark<(L & R)[]>) => {
+    return (async (
+      left: L[],
+      key?: string | number,
+      layerContext?: LayerContext
+    ) => {
+      const leftRows = Array.isArray(left) ? left : left == null ? [] : [left];
+      const rightByKey = new Map<unknown, R[]>();
+      for (const r of right) {
+        const k = r[opts.on];
+        const bucket = rightByKey.get(k);
+        if (bucket) bucket.push(r);
+        else rightByKey.set(k, [r]);
+      }
+      const joined: (L & R)[] = [];
+      for (const l of leftRows) {
+        for (const r of rightByKey.get(l[opts.on]) ?? []) {
+          joined.push({ ...l, ...r });
+        }
+      }
+      return mark(joined, key, layerContext);
+    }) as Mark<L[]>;
+  };
+  (op as any).__serialize = {
+    type: "join",
+    opts: { on: opts.on, right },
+  };
+  return op;
+}
+
 /* END Data Transformation Operators */
 
 export function circle<T extends Record<string, any>>({

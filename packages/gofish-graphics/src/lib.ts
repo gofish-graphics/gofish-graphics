@@ -146,6 +146,7 @@ export {
   chart,
   derive,
   resolve,
+  join,
   rect,
   circle,
   selectAll,
