@@ -25,21 +25,16 @@ one denormalized array:
 ::: gofish example:scatter-plot-with-pie-glyphs hidden
 :::
 
-The nested chart inherits its parent partition (the lake's row) and joins the
-catch table onto it:
+The nested glyph chart leaves off its data, so it inherits its parent partition
+(the lake's row) and joins the catch table onto it:
 
 ```python
 from gofish import chart, scatter, join, stack, rect, clock
 
-def pie_glyph(data):
-    return (
-        chart(data, coord=clock())
-        .flow(join(seafood, on="lake"), stack(by="species", dir="x", h=20))
-        .mark(rect(w="count", fill="species"))
-    )
-
 chart(catch_locations).flow(scatter(by="lake", x="x", y="y")).mark(
-    pie_glyph
+    chart(coord=clock())  # no data -> inherits this lake's partition
+    .flow(join(seafood, on="lake"), stack(by="species", dir="x", h=20))
+    .mark(rect(w="count", fill="species"))
 ).render(w=400, h=400)
 ```
 

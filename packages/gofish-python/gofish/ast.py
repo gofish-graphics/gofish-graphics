@@ -962,12 +962,14 @@ class ChartBuilder:
         Set the mark for the chart.
 
         Args:
-            mark: A `Mark` (rect/circle/line/...) **or** a callable
-                `(data) -> ChartBuilder` — the mark-as-function pattern. The
-                callable receives the per-group data slice (after the
-                pipeline operators run on the JS side) and returns a new
-                ChartBuilder for that slice. Mirrors JS storybook spelling
-                `.mark((data) => Chart(data[0].collection, ...).flow(...).mark(...))`.
+            mark: A `Mark` (rect/circle/line/...), a nested `ChartBuilder`, or a
+                callable `(data) -> ChartBuilder`. A nested ChartBuilder is the
+                preferred spelling for a per-group sub-chart (issue #243): an
+                empty-scope child (``chart()`` / ``chart(coord=...)``) inherits
+                the incoming partition datum, replacing the
+                ``.mark(lambda data: chart(data, ...).flow(...).mark(...))``
+                callback. A callable receives the per-group data slice and
+                returns a ChartBuilder for that slice (the older spelling).
 
         Returns:
             New ChartBuilder with mark set
@@ -975,9 +977,19 @@ class ChartBuilder:
         new_builder = ChartBuilder(
             self.data, self.options, self.operators, z_order=self._z_order
         )
+        # A nested ChartBuilder becomes a mark-fn that binds the incoming
+        # partition datum (empty scope) or draws as-is — reusing the same
+        # lambda_id / derive-server path as an explicit callback.
+        if isinstance(mark, ChartBuilder):
+            child = mark
+            new_builder._mark = _MarkFn(
+                (lambda data: child._with_data(data))
+                if child._uses_previous_marks()
+                else (lambda data: child)
+            )
         # Wrap callables in `_MarkFn` so the IR carries a stable lambda_id
         # the derive-server can register and the harness can RPC into.
-        if not isinstance(mark, Mark) and callable(mark):
+        elif not isinstance(mark, Mark) and callable(mark):
             new_builder._mark = _MarkFn(mark)
         else:
             new_builder._mark = mark

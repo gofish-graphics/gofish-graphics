@@ -106,6 +106,15 @@ CATCH_LOCATIONS_ARRAY = [
     {"lake": "Lake F", "x": 85.99, "y": 172.78},
 ]
 
+# Denormalized: each catch row stamped with its lake's x/y (mirrors JS
+# `catchDataWithLocations`). One flat table instead of a normalized join.
+_CATCH_LOC_BY_LAKE = {row["lake"]: row for row in CATCH_LOCATIONS_ARRAY}
+CATCH_DATA_WITH_LOCATIONS = [
+    {**item, "x": _CATCH_LOC_BY_LAKE[item["lake"]]["x"],
+     "y": _CATCH_LOC_BY_LAKE[item["lake"]]["y"]}
+    for item in SEAFOOD
+]
+
 # Scatter (Connected) data — US vehicle miles vs gas prices 1956–2010
 DRIVING_SHIFTS = [
     {"side": "left", "year": 1956, "miles": 3675, "gas": 2.38},

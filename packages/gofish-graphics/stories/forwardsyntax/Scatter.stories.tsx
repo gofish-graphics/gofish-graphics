@@ -1,6 +1,10 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
-import { catchLocationsArray, seafood } from "../../src/data/catch";
+import {
+  catchLocationsArray,
+  catchDataWithLocations,
+  seafood,
+} from "../../src/data/catch";
 import { drivingShifts } from "../../src/data/drivingShifts";
 import { chart, line, rect, stack, join } from "../../src/lib";
 import { circle, scatter } from "../../src/lib";
@@ -79,14 +83,39 @@ export const WithPieGlyphs: StoryObj<Args> = {
 
     chart(catchLocationsArray, { axes: true })
       .flow(scatter({ by: "lake",  x: "x", y: "y" }))
-      .mark((data) =>
-        // Each lake glyph inherits its parent partition (the lake's row) and
-        // joins in that lake's catch rows, then draws them as a polar pie.
-        chart(data, { coord: clock() })
+      // The glyph chart leaves off its data: as a nested mark it inherits its
+      // parent partition (the lake's row), joins in that lake's catch rows, and
+      // draws them as a polar pie — no `(data) => chart(data, ...)` callback.
+      .mark(
+        chart({ coord: clock() })
           .flow(
             join(seafood, { on: "lake" }),
             stack({ by: "species",  dir: "x", /* h: "count" */ h: 20 })
           )
+          .mark(rect({ w: "count", fill: "species" }))
+      )
+      .render(container, {
+        w: args.w,
+        h: args.h,
+      });
+
+    return container;
+  },
+};
+
+// Same pie-glyph chart from a single *denormalized* table: `catchDataWithLocations`
+// stamps each lake's x/y onto every catch row, so the scatter partition already
+// carries each glyph's rows — the nested chart inherits them directly, no join.
+export const WithPieGlyphsDenormalized: StoryObj<Args> = {
+  args: { w: 400, h: 400 },
+  render: (args: Args) => {
+    const container = initializeContainer();
+
+    chart(catchDataWithLocations, { axes: true })
+      .flow(scatter({ by: "lake", x: "x", y: "y" }))
+      .mark(
+        chart({ coord: clock() })
+          .flow(stack({ by: "species", dir: "x", h: 20 }))
           .mark(rect({ w: "count", fill: "species" }))
       )
       .render(container, {

@@ -25,15 +25,15 @@ one denormalized array:
 ::: gofish example:scatter-plot-with-pie-glyphs
 :::
 
-The nested chart inherits its parent partition (the lake's row) and joins the
-catch table onto it:
+The nested glyph chart leaves off its data, so it inherits its parent partition
+(the lake's row) and joins the catch table onto it:
 
 ```js
 gf.chart(catchLocationsArray)
   .flow(gf.scatter({ by: "lake", x: "x", y: "y" }))
-  .mark((data) =>
+  .mark(
     gf
-      .chart(data, { coord: gf.clock() })
+      .chart({ coord: gf.clock() }) // no data → inherits this lake's partition
       .flow(
         gf.join(seafood, { on: "lake" }),
         gf.stack({ by: "species", dir: "x", h: 20 })

@@ -11,6 +11,7 @@ from gofish import (
     stack,
 )
 from python_stories.data import (
+    CATCH_DATA_WITH_LOCATIONS,
     CATCH_LOCATIONS_ARRAY,
     DRIVING_SHIFTS,
     SEAFOOD,
@@ -27,22 +28,35 @@ def story_basic():
 
 
 def story_with_pie_glyphs():
-    # Mark-as-function: each lake glyph inherits its parent partition (the
-    # lake's row) and joins in that lake's catch rows, then draws them as a
-    # polar pie. Mirrors JS storybook's
-    # `.mark((data) => chart(data, {coord: clock()})
-    #     .flow(join(seafood, {on: "lake"}), stack(...)))`.
-    def _pie_glyph(data):
-        return (
-            chart(data, coord=clock())
-            .flow(join(SEAFOOD, on="lake"), stack(by="species", dir="x", h=20))
-            .mark(rect(w="count", fill="species"))
-        )
-
+    # The glyph chart leaves off its data: as a nested mark it inherits its
+    # parent partition (the lake's row), joins in that lake's catch rows, and
+    # draws them as a polar pie — no `lambda data: chart(data, ...)` callback.
+    # Mirrors JS storybook's `.mark(chart({coord: clock()}).flow(...))`.
     return (
         chart(CATCH_LOCATIONS_ARRAY)
         .flow(scatter(by="lake", x="x", y="y"))
-        .mark(_pie_glyph),
+        .mark(
+            chart(coord=clock())
+            .flow(join(SEAFOOD, on="lake"), stack(by="species", dir="x", h=20))
+            .mark(rect(w="count", fill="species"))
+        ),
+        {"w": 400, "h": 400, "axes": True},
+    )
+
+
+def story_with_pie_glyphs_denormalized():
+    # Same pie-glyph chart from a single denormalized table: each catch row
+    # already carries its lake's x/y, so the scatter partition holds each
+    # glyph's rows — the nested chart inherits them directly, no join. Mirrors
+    # JS `Scatter.stories.tsx::WithPieGlyphsDenormalized`.
+    return (
+        chart(CATCH_DATA_WITH_LOCATIONS)
+        .flow(scatter(by="lake", x="x", y="y"))
+        .mark(
+            chart(coord=clock())
+            .flow(stack(by="species", dir="x", h=20))
+            .mark(rect(w="count", fill="species"))
+        ),
         {"w": 400, "h": 400, "axes": True},
     )
 
