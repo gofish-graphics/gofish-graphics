@@ -350,24 +350,26 @@ composes its targets' spaces into the layer's claim on that axis:
   inside-out on one axis and outside-in on the other is rejected as mixed — the
   layer enforces both at constraint-collection time (see [[size-claims]]).
 
-- `Constraint.span` (`constraints/span.ts`) is the second size-setting
-  constraint: pin BOTH edges of a target on an axis (`x: [min, max]`) and the
-  **size falls out** — the relation `place()`'s position-only protocol cannot
-  express. It is built on the **linear-system bbox** (`constraints/bbox.ts`,
-  #39): a per-axis 2-unknown system in `(min, size)` where each facet
-  (`min`/`max`/`center`/`size`) is one equation; two independent facets are
-  rank 2, so the rest are inferred (two edges ⇒ a size), and a third, dependent
-  write is a structured over-determination report rather than a silent
-  last-writer-wins. A span's datum endpoints feed the axis's POSITION domain via
-  `collectPositionDomains` (like a `position` pin's coordinate), and
-  `composeConstraintSpaces` treats a span as an **extent-establisher** (like a
-  distribute), so the cross-axis `align` fold still runs — a histogram is a span
-  on x plus an `align` on y, and it is that align fold (SIZE→POSITION) that makes
-  the count axis. The solved `(min, size)` is bridged into GoFish's
+- The **interval form** of `Constraint.position` (`{ x: [min, max] }`, lowered
+  by `constraints/span.ts`) is the second size-setting constraint: pin BOTH
+  edges of a target on an axis and the **size falls out** — the relation
+  `place()`'s position-only protocol cannot express. It is built on the
+  **linear-system bbox** (`constraints/bbox.ts`, #39): a per-axis 2-unknown
+  system in `(min, size)` where each facet (`min`/`max`/`center`/`size`) is one
+  equation; two independent facets are rank 2, so the rest are inferred (two
+  edges ⇒ a size), and a third, dependent write is a structured
+  over-determination report rather than a silent last-writer-wins. An interval's
+  datum endpoints feed the axis's POSITION domain via `collectPositionDomains`
+  (like a point coordinate does), and `composeConstraintSpaces` treats an
+  interval position as an **extent-establisher** (like a distribute), so the
+  cross-axis `align` fold still runs — a histogram is an interval position on x
+  plus an `align` on y, and it is that align fold (SIZE→POSITION) that makes the
+  count axis. The solved `(min, size)` is bridged into GoFish's
   `(local box, translate)` split by stamping `[0, size]` into the local box and
-  deriving the absolute `min` through the placement ledger. `scatter` uses both:
-  plain `x`/`y` → `Constraint.position`, range `xMin`/`xMax`/`yMin`/`yMax` →
-  `Constraint.span` (the operator no longer has a bespoke layout). A categorical
+  deriving the absolute `min` through the placement ledger. `scatter` uses both
+  forms of `Constraint.position`: plain `x`/`y` → a point coordinate, range
+  `xMin`/`xMax`/`yMin`/`yMax` → an interval coordinate (the operator no longer
+  has a bespoke layout). A categorical
   scatter channel such as `x: "lake"` lowers to discrete placement coordinates
   `i / count · axisSize`; those are placement coordinates, not datum values, so
   they become numeric placement facts without affecting the layer's data domain.
@@ -470,14 +472,15 @@ path; spread, scatter, table, axes, and hand-written constraints all lower to
 the same solver entrypoint. Span edge claims are still pre-validated with the
 bbox helper so duplicate edge claims collapse and contradictory spans report a
 span-specific conflict, but the resulting edge pins participate in the same
-relation solve as placement. An incompatible same-solve `span` + `position` on the same
-target/axis reports an over-determined placement instead of letting one silently
-yield to the other.
+relation solve as placement. An incompatible same-solve interval + point
+`position` on the same target/axis reports an over-determined placement instead
+of letting one silently yield to the other.
 
 Placement-time alignment dispatches on the same resolution. `align` emits
 relations between child anchors; it no longer chooses an absolute fallback
-baseline for an otherwise-floating system. If no explicit `position`, `span`,
-self-placement, or other strong pin fixes a connected component, the solver
+baseline for an otherwise-floating system. If no explicit `position` (point or
+interval), self-placement, or other strong pin fixes a connected component, the
+solver
 normalizes that component so its minimum solved coordinate is `0`. A user who
 needs the aligned system to appear at a particular place must say so explicitly
 with a placement constraint.
@@ -857,11 +860,11 @@ only when its measure matches the dim's own position measure — a foreign-measu
 size (a bubble's area) stays a flat point. See the embedding-resolution pass under
 [layout passes](/internals/layout/passes#pass-8-5-embedding-resolution).
 
-**Constraint-domain measures.** A `position`/`span` constraint's datum
-coordinate carries the same resolved measure, and `collectPositionDomains`
-folds those per axis with `mergeMeasures` — so a layer's own positioning
-constraints in clashing units (a span with one endpoint in `mm` and the other
-in `inch`) throw at the source. The layer's `resolveAxis` (`layer.tsx`) then
+**Constraint-domain measures.** A `position` constraint's datum coordinate
+carries the same resolved measure, and `collectPositionDomains` folds those per
+axis with `mergeMeasures` — so a layer's own positioning constraints in clashing
+units (an interval coordinate with one endpoint in `mm` and the other in `inch`)
+throw at the source. The layer's `resolveAxis` (`layer.tsx`) then
 treats this constraint-domain measure as the axis's unit: it **prefers** the
 constraint measure and falls back to the children's POSITION measure only when
 the coordinates are untagged (literal pixels). It deliberately does _not_

@@ -147,14 +147,31 @@ at its value rather than assuming uniform spacing.
 Constraint.position({ x?, y?, anchor? }, [ref]);
 ```
 
-| Option   | Type              | Default    | Description                                         |
-| -------- | ----------------- | ---------- | --------------------------------------------------- |
-| `x`      | `number \| Value` | —          | x coordinate — literal pixel or `datum(n)` (scaled) |
-| `y`      | `number \| Value` | —          | y coordinate — literal pixel or `datum(n)` (scaled) |
-| `anchor` | `Alignment`       | `"middle"` | Which anchor of the ref lands on the coordinate     |
+| Option   | Type                        | Default    | Description                                                    |
+| -------- | --------------------------- | ---------- | -------------------------------------------------------------- |
+| `x`      | `number \| Value \| [a, b]` | —          | x coordinate — point (literal/`datum(n)`) or interval `[a, b]` |
+| `y`      | `number \| Value \| [a, b]` | —          | y coordinate — point (literal/`datum(n)`) or interval `[a, b]` |
+| `anchor` | `Alignment`                 | `"middle"` | Which anchor of the ref lands on a **point** coordinate        |
 
 At least one of `x` / `y` is required. Only `datum` coordinates feed the layer's
 inferred scale; literal pixels are placed directly and don't define the domain.
+
+**Interval form.** A coordinate may be a two-element `[min, max]` interval
+instead of a point. The ref's min edge lands at `min`, its max edge at `max`,
+and the two edges **determine its size** on that axis (each endpoint is a
+literal pixel or `datum(n)`, never a categorical position). This is the
+size-setting range form the `scatter` operator's `xMin`/`xMax`/`yMin`/`yMax`
+channels lower to — use it directly to make a ref span a data range:
+
+```ts
+// Bar occupying x ∈ [datum(0), datum(count)] — its width is set by the two
+// edges, not by an intrinsic size.
+Constraint.position({ x: [datum(0), datum(count)] }, [bar]);
+```
+
+`anchor` and `override` apply to point coordinates only; an interval already
+pins both edges. Both endpoints of an interval unify their measures, so a range
+in mixed units is an error.
 
 A datum coordinate can carry a **pixel offset** applied after the scale
 mapping — "this data position, plus pixels":

@@ -23,10 +23,7 @@ import {
   relationFact,
 } from "../ast/constraints/placementFacts";
 import type { PositionConstraint } from "../ast/constraints/position";
-import {
-  lowerSpanEdgePins,
-  type SpanConstraint,
-} from "../ast/constraints/span";
+import { lowerSpanEdgePins } from "../ast/constraints/span";
 import type { ZAboveConstraint } from "../ast/constraints/zorder";
 import type { Anchor, Dimensions, FancyDirection } from "../ast/dims";
 import { elaborateDirection, localAnchorPoint } from "../ast/dims";
@@ -35,7 +32,10 @@ import {
   applyNestSpacePlan,
   buildNestPlan,
 } from "../ast/constraints/nestPlan";
-import { resolveLayerBaseSpaces } from "../ast/constraints/compose";
+import {
+  composeConstraintSpaces,
+  resolveLayerBaseSpaces,
+} from "../ast/constraints/compose";
 import {
   buildChildScalePlan,
   buildDistributeSliceMap,
@@ -54,7 +54,6 @@ type Constraint =
   | AlignConstraint
   | DistributeConstraint
   | PositionConstraint
-  | SpanConstraint
   | NestConstraint
   | GridConstraint;
 type Geometry = Record<string, { min?: number; center?: number; max?: number }>;
@@ -208,9 +207,16 @@ const distributeWithSpacing = (
   spacing,
 });
 
-const span = (name: string, min: number, max: number): SpanConstraint => ({
-  type: "span",
+// The interval form of `position`, replacing the retired `Constraint.span`.
+const span = (
+  name: string,
+  min: number,
+  max: number
+): PositionConstraint => ({
+  type: "position",
   x: [min, max],
+  anchor: "middle",
+  override: false,
   children: [child(name)],
 });
 
@@ -956,6 +962,106 @@ console.log("# constraint confluence: placement constraint lowering");
       spanEdgeFacts[1].fact.edge === "max" &&
       !("target" in spanEdgeFacts[1].fact)
   );
+
+  // A single position constraint carrying a POINT on one axis and an INTERVAL on
+  // the other: the interval axis lowers to an edge-pin extent, the point axis to
+  // a single pin. Both forms coexist on one constraint.
+  const mixed: PositionConstraint = {
+    type: "position",
+    x: 12,
+    y: [10, 30],
+    anchor: "middle",
+    override: false,
+    children: [child("C")],
+  };
+  const loweredMixed = lowerPlacementConstraints(
+    [mixed],
+    targets("C"),
+    [300, 200]
+  );
+  ok(
+    "interval+point on one constraint: interval axis yields a span extent",
+    loweredMixed.spanExtents.some(
+      (extent) =>
+        extent.axis === "y" && extent.name === "C" && extent.size === 20
+    ) && !loweredMixed.spanExtents.some((extent) => extent.axis === "x")
+  );
+  ok(
+    "interval+point on one constraint: point axis yields a single pin",
+    loweredMixed.program.axes[0].some(
+      (fact) => fact.type === "pin" && fact.expr.node === "C"
+    )
+  );
+}
+
+console.log("# constraint confluence: interval position + align");
+{
+  // An interval position on x (sizes A) plus an align on x (overlays B onto A's
+  // center) must be declaration-order-independent — the interval and align feed
+  // the same relational solve.
+  const spanA = span("A", 10, 30);
+  const alignAB: AlignConstraint = {
+    type: "align",
+    x: "middle",
+    children: [A, B],
+  };
+  expectConfluent(
+    "interval-position/align",
+    solve([spanA, alignAB], ["A", "B"]),
+    solve([alignAB, spanA], ["A", "B"]),
+    {
+      A: { min: 10, center: 20, max: 30 },
+      B: { min: 15, center: 20, max: 25 },
+    }
+  );
+}
+
+console.log("# constraint confluence: interval vs point compose bail");
+{
+  // compose treats an interval position as span-like (it composes alongside a
+  // distribute), but a constraint carrying ANY point coordinate bails to the
+  // layer's default union — conservatively, even when it also carries an
+  // interval on the other axis.
+  const childNodes = [
+    { _name: "A", key: "A" },
+    { _name: "B", key: "B" },
+  ] as unknown as Parameters<typeof composeConstraintSpaces>[1];
+  const childSpaces: Parameters<typeof composeConstraintSpaces>[2] = [
+    [SIZE(Monotonic.linear(10, 0)), UNDEFINED],
+    [SIZE(Monotonic.linear(10, 0)), UNDEFINED],
+  ];
+  const distAB = distribute(["A", "B"]);
+  const pureInterval: PositionConstraint = {
+    type: "position",
+    y: [value(0), value(10)],
+    anchor: "middle",
+    override: false,
+    children: [A],
+  };
+  const pointPlusInterval: PositionConstraint = {
+    type: "position",
+    x: value(5),
+    y: [value(0), value(10)],
+    anchor: "middle",
+    override: false,
+    children: [A],
+  };
+  ok(
+    "pure-interval position composes with a distribute (span-like)",
+    composeConstraintSpaces(
+      [distAB, pureInterval],
+      childNodes,
+      childSpaces
+    ) !== undefined
+  );
+  ok(
+    "point+interval position bails composition (conservatively point-form)",
+    composeConstraintSpaces(
+      [distAB, pointPlusInterval],
+      childNodes,
+      childSpaces
+    ) === undefined
+  );
 }
 
 console.log("# constraint confluence: child scale factor planning");
@@ -1245,7 +1351,7 @@ console.log("# constraint confluence: contradictions are diagnosed");
 
   const spanA10_30 = span("A", 10, 30);
   const spanA10_40 = span("A", 10, 40);
-  const spanThrows = (constraints: SpanConstraint[]): boolean => {
+  const spanThrows = (constraints: PositionConstraint[]): boolean => {
     try {
       solvePlacementConstraints(
         constraints,
@@ -1267,7 +1373,7 @@ console.log("# constraint confluence: contradictions are diagnosed");
   );
 
   const spanPositionThrows = (
-    constraints: (SpanConstraint | PositionConstraint)[]
+    constraints: PositionConstraint[]
   ): boolean => {
     try {
       solvePlacementConstraints(

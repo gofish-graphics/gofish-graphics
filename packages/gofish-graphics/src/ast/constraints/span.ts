@@ -4,31 +4,29 @@
 
 import type { Placeable } from "../_node";
 import { getValue, isValue, MaybeValue } from "../data";
-import { ConstraintRef, Axis } from "./shared";
+import { Axis } from "./shared";
 import { BBox, type BBoxFacet } from "./bbox";
 import * as Interval from "../../util/interval";
 import { edgePinFact, type PlacementEdgePin } from "./placementFacts";
+import type { PositionConstraint, PositionInterval } from "./position";
+import { isPositionInterval } from "./position";
 
 /**
- * A **size-setting** constraint (#39/#546): pin BOTH edges of each target on an
- * axis (`x: [min, max]`) and let the edges *determine the size*. This is the
- * first consumer of the linsys bbox ({@link BBox}): two anchors on one axis are
- * rank 2, so the extent (`size = max − min`) falls out — the relation scatter's
- * `xMin`/`xMax` interval channels need, which `place()`'s position-only,
- * write-once protocol could not express (it can pin a point, not set a size).
+ * The internal **size-setting** lowering (#39/#546) that backs the interval form
+ * of `position` (`x: [min, max]`): pin BOTH edges of each target on an axis and
+ * let the edges *determine the size*. This is the first consumer of the linsys
+ * bbox ({@link BBox}): two anchors on one axis are rank 2, so the extent
+ * (`size = max − min`) falls out — the relation scatter's `xMin`/`xMax` interval
+ * channels need, which point placement's write-once protocol could not express
+ * (it can pin a point, not set a size).
  *
  * Each endpoint is a literal pixel coordinate or a datum (`value(n)`) mapped
- * through the layer's posScale, exactly like `position`. The resolved
+ * through the layer's posScale, exactly like a point position. The resolved
  * `(min, size)` is stamped into GoFish's `(local box, translate)` split: the
  * target's local box becomes `[0, size]` and its translate becomes the absolute
- * `min` on that axis.
+ * `min` on that axis. Kept as its own module until the rank-2 placement solve
+ * (Stage 5) folds it into the general cell closure.
  */
-export interface SpanConstraint {
-  type: "span";
-  x?: [MaybeValue<number>, MaybeValue<number>];
-  y?: [MaybeValue<number>, MaybeValue<number>];
-  children: ConstraintRef[];
-}
 
 /** One lowered span edge plus the resolved target needed to derive extent metadata. */
 export interface SpanEdgeClaim {
@@ -54,33 +52,12 @@ export interface SpanExtent {
   size: number;
 }
 
-export interface SpanOptions {
-  x?: [MaybeValue<number>, MaybeValue<number>];
-  y?: [MaybeValue<number>, MaybeValue<number>];
-}
-
-export const createSpanConstraint = (
-  { x, y }: SpanOptions,
-  children: ConstraintRef[]
-): SpanConstraint => {
-  if (x === undefined && y === undefined) {
-    throw new Error(
-      "Constraint.span: at least one of `x` or `y` must be specified"
-    );
-  }
-  return { type: "span", x, y, children };
-};
-
-export const isSpanConstraint = (
-  c: { type: string } | undefined
-): c is SpanConstraint => c !== undefined && c.type === "span";
-
 /** Each endpoint contributes its datum value to the axis's POSITION domain
- *  (parallel to `collectPositionDomains` for `position` constraints), so the
- *  layer builds a posScale that covers the spanned range. Literal-pixel
- *  endpoints are not data and don't contribute. */
+ *  (parallel to point coordinates in `collectPositionDomains`), so the layer
+ *  builds a posScale that covers the spanned range. Literal-pixel endpoints are
+ *  not data and don't contribute. */
 export function spanDatumInterval(
-  span: [MaybeValue<number>, MaybeValue<number>] | undefined
+  span: PositionInterval | undefined
 ): Interval.Interval | undefined {
   if (span === undefined) return undefined;
   const vals = span.filter(isValue).map((v) => getValue(v)!);
@@ -88,8 +65,10 @@ export function spanDatumInterval(
   return Interval.interval(Math.min(...vals), Math.max(...vals));
 }
 
+/** Lower the interval-form axes of a `position` constraint to edge pins. Point
+ *  axes are skipped here (they lower to a single pin via `lowerPositionPlacement`). */
 export function lowerSpanEdgePins(
-  constraint: SpanConstraint,
+  constraint: PositionConstraint,
   targets: Map<string, Placeable>,
   owner: string,
   resolveCoordinate: (
@@ -98,11 +77,9 @@ export function lowerSpanEdgePins(
   ) => number | undefined
 ): SpanEdgeClaim[] {
   const out: SpanEdgeClaim[] = [];
-  const emitAxis = (
-    axis: Axis,
-    span: [MaybeValue<number>, MaybeValue<number>] | undefined
-  ) => {
-    if (span === undefined) return;
+  const emitAxis = (axis: Axis, coord: PositionConstraint["x"]) => {
+    if (!isPositionInterval(coord)) return;
+    const span = coord;
     const min = resolveCoordinate(axis, span[0]);
     const max = resolveCoordinate(axis, span[1]);
     if (min === undefined || max === undefined) return;

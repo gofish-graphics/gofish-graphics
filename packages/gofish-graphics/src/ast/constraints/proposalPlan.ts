@@ -28,7 +28,7 @@ export type SliceSegment = {
 
 /**
  * The set of names whose position or extent is owned by geometric constraints
- * (`align` / `distribute` / `position` / `span` / `nest` / `grid`). Used by
+ * (`align` / `distribute` / `position` / `nest` / `grid`). Used by
  * `layer.tsx` to decide which children skip phase-1 baseline placement. z-order
  * constraints don't position, so they are excluded.
  *
@@ -284,11 +284,14 @@ export function selectGridConstraint(
   return selected;
 }
 
-/** Per-child axes whose placement is owned by datum-valued position
+/** Per-child axes whose placement is owned by datum-valued *point* position
  * constraints. Those children must not also receive the same posScale from the
  * enclosing layer: the constraint consumes the scale to place them. Literal
  * pixel positions are deliberately excluded because they do not consume a data
- * scale, so the child may still need that scale for its own geometry. */
+ * scale, so the child may still need that scale for its own geometry. Interval
+ * (`[min, max]`) coordinates are also excluded — `isValue` is false for the
+ * array — matching the pre-unification span behavior, where the target still
+ * received the layer scale for its own geometry. */
 export function buildPositionTargetDims(
   constraints: readonly ConstraintSpec[]
 ): Map<string, Set<0 | 1>> {

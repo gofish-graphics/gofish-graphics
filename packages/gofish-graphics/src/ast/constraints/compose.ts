@@ -54,8 +54,19 @@ import * as Interval from "../../util/interval";
 import type { Measure } from "../data";
 import { distributeSpaceFold, type DistributeConstraint } from "./distribute";
 import { alignSpaceFold, type AlignConstraint } from "./align";
-import type { SpanConstraint } from "./span";
+import { isPositionInterval, type PositionConstraint } from "./position";
 type AlignAnchor = "start" | "middle" | "end" | "baseline";
+
+/** A position constraint whose coordinates are *purely* interval form (at least
+ *  one interval axis, no point axis). This is span's old regime: it size-sets
+ *  its axis without blocking composition. A position carrying any *point*
+ *  coordinate is conservatively NOT span-like — it bails composition to the
+ *  layer's default union (the distribute-relative-to-a-pin solve is deferred). */
+const isPureIntervalPosition = (c: ConstraintSpec): c is PositionConstraint =>
+  c.type === "position" &&
+  (c.x === undefined || isPositionInterval(c.x)) &&
+  (c.y === undefined || isPositionInterval(c.y)) &&
+  (isPositionInterval(c.x) || isPositionInterval(c.y));
 
 const axisIndex = (axis: "x" | "y"): 0 | 1 => (axis === "x" ? 0 : 1);
 
@@ -190,27 +201,28 @@ export function composeConstraintSpaces(
   const aligns = constraints.filter(
     (c): c is AlignConstraint => c.type === "align"
   );
-  // `span` (the size-setting interval constraint, #39/#546) establishes its
-  // axis's extent like a distribute does — its datum range already feeds the
-  // layer's POSITION domain via `collectPositionDomains`, so it needs no fold
-  // here, but its PRESENCE means this is NOT a pure overlay: the cross-axis
-  // align fold (SIZE→POSITION) must still run (e.g. a histogram = span on x,
-  // align on y; the align fold is what makes the count axis).
-  const spans = constraints.filter(
-    (c): c is SpanConstraint => c.type === "span"
-  );
-  // Compose only layers that are PURELY distributes + aligns + spans. A
-  // `position` pin (or z-order) puts the layer in a different regime — the
-  // distribute-relative-to-a-pin solve is deferred (layout-synthesis.md) — so
-  // leave it to the layer's default union, which already merges position
-  // data domains.
+  // An interval-form `position` (the size-setting range form, #39/#546)
+  // establishes its axis's extent like a distribute does — its datum range
+  // already feeds the layer's POSITION domain via `collectPositionDomains`, so
+  // it needs no fold here, but its PRESENCE means this is NOT a pure overlay:
+  // the cross-axis align fold (SIZE→POSITION) must still run (e.g. a histogram =
+  // interval position on x, align on y; the align fold is what makes the count
+  // axis).
+  const spans = constraints.filter(isPureIntervalPosition);
+  // Compose only layers that are PURELY distributes + aligns + interval
+  // positions. A *point* position pin (or z-order) puts the layer in a different
+  // regime — the distribute-relative-to-a-pin solve is deferred
+  // (layout-synthesis.md) — so leave it to the layer's default union, which
+  // already merges position data domains. A position mixing a point on one axis
+  // with an interval on the other is conservatively point-form: not span-like,
+  // so it bails here too.
   if (distributes.length + aligns.length + spans.length !== constraints.length)
     return undefined;
-  // No series and no span → a pure overlay. Align-only composition WOULD fold
-  // (alignSpaceFold converts SIZE→POSITION), but for a pure overlay that
-  // conversion only changes the layer's reported space (e.g. a legend's), so
-  // defer it: fall to the default union. (A span on the other axis makes it not
-  // an overlay, so the align fold runs.)
+  // No series and no interval position → a pure overlay. Align-only composition
+  // WOULD fold (alignSpaceFold converts SIZE→POSITION), but for a pure overlay
+  // that conversion only changes the layer's reported space (e.g. a legend's),
+  // so defer it: fall to the default union. (An interval position on the other
+  // axis makes it not an overlay, so the align fold runs.)
   if (distributes.length === 0 && spans.length === 0) return undefined;
 
   const indexByName = buildNameIndex(childNodes);
@@ -265,13 +277,13 @@ export function composeConstraintSpaces(
     }
   }
 
-  // A span COVERS its children on the axis it sizes. Its datum range already
-  // feeds the POSITION domain through `collectPositionDomains`, and the
-  // placement solver later turns the resolved pixel endpoints into the target's
-  // extent. It contributes no fold here, but its children must be marked covered
-  // so the per-axis loop below does not also fold their raw extent in as an
-  // overlay sibling (double-counting) when a distribute/align shares the same
-  // axis.
+  // An interval position COVERS its children on the axis it sizes. Its datum
+  // range already feeds the POSITION domain through `collectPositionDomains`,
+  // and the placement solver later turns the resolved pixel endpoints into the
+  // target's extent. It contributes no fold here, but its children must be
+  // marked covered so the per-axis loop below does not also fold their raw
+  // extent in as an overlay sibling (double-counting) when a distribute/align
+  // shares the same axis.
   const spanCover: [Set<number>, Set<number>] = [new Set(), new Set()];
   for (const s of spans) {
     const idx = idxOf(s.children);
