@@ -5,6 +5,7 @@
 import { GoFishNode, type ToPixel } from "../_node";
 import type { DisplayList } from "gofish-ir";
 import { shadowCheckScaleRoot } from "../solver/shadow";
+import { getScopeRegistry } from "../solver/scopes";
 import { flattenForZOrder, topoSortByZOrder } from "../paintOrder";
 import { isToken } from "../createName";
 import {
@@ -247,7 +248,11 @@ export const layer = createNodeOperatorSequential(
             inheritedScaleFactors,
             inheritedPosScales,
             constraintBudget,
-            shared
+            shared,
+            // Stage 6b: derive every scale this layer roots through the render's
+            // one σ-scope registry (shared with the root and coord boundaries).
+            getScopeRegistry(node.tryGetRenderSession()),
+            node.key ?? node.type
           );
           const { basePosScales, childScaleFactors } = childScalePlan;
           for (const failure of childScalePlan.budgetFailures) {

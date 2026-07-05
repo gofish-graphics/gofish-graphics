@@ -691,6 +691,48 @@ This dispatch is the practical embodiment of the underlying-space-kind
 distinction. It also happens to make the rendering pipeline more readable:
 once you know the kind, you know which arithmetic applies.
 
+## The one solve site: the σ-scope registry
+
+Every scale above resolves the same frame equation — `content(σ) = allocated`,
+inverted once by `Monotonic.inverse` — but historically that inversion was
+written out at four-plus places, each with its own pixel budget and fallback:
+the render root (`gofish.tsx`), an explicit-pixel-size axis and a composed
+distribute budget and a `sharedScale` scope (all three inside
+`buildChildScalePlan`), and a coord boundary (`coord.tsx`'s `fitAxis`). Keeping
+them consistent needed a hand-written guard (the #618 "an intermediate must
+propagate the inherited σ, not re-root against its own budget" rule).
+
+Stage 6b makes those a **single mechanism**. A `ScopeRegistry`
+(`ast/solver/scopes.ts`), created once per render on the `RenderSession`, is the
+one place σ / posScale is derived: `solveSize(frame, allocated)` inverts the σ
+slope, `solvePosition(space, allocated)` builds the anchored `AxisMap`. The
+derivation sites are now **σ-scope roots** — the render root, an axis with an
+explicit pixel size, a constraint budget that roots its own scope, a
+`sharedScale` operator, and a coord boundary — and each calls the registry.
+**Everyone else inherits**: the #618 guard is now the structural rule "not a root
+→ don't call the solve", so the inherited σ propagates unchanged (in
+`buildChildScalePlan`, an intermediate budget simply skips the solve — the
+`inheritedScaleFactors[axis] !== undefined && selfScaledSpaces[axis] ===
+undefined` test that _was_ the guard is now the "is this a scope root?"
+predicate). Because the arithmetic is exactly what the sites ran inline, the
+solved numbers are unchanged; the registry only adds the choke-point.
+
+Behind `GOFISH_DUMP_SCOPES` the registry prints every scope it solved as a
+printable frame equation — the debuggability bar the σ-affine model was chosen
+for. One line per scope, e.g. a stacked bar (root POSITION scope + a shared SIZE
+scope on the same axis, agreeing on one slope) and a sunburst (a coord boundary
+re-rooting σ on the angular axis):
+
+```
+[scope] root   key=root  axis=y [0,140]→[0,400] = 400  σ=2.857 map=yes
+[scope] shared key=layer axis=y 140σ = 400            σ=2.857 map=no
+[scope] coord  key=coord axis=x 16σ = 6.283           σ=0.393 map=no
+```
+
+That the root and shared scopes on one axis print the same σ is Stage 6's
+invariant made visible: **one slope per σ-scope, by construction**, because the
+frame equation is solved once and the posScale is a derived view of that solve.
+
 ## Scales generalize flex factors
 
 A size scale whose range resolves to the parent's extent is doing exactly

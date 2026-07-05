@@ -12,6 +12,7 @@ import {
   type UnderlyingSpace,
 } from "../underlyingSpace";
 import { allocateSlices } from "./folds";
+import type { ScopeRegistry } from "../solver/scopes";
 import type { ConstraintSpec } from ".";
 import type { GridConstraint } from "./grid";
 import type { ConstraintPosScales } from "./shared";
@@ -189,7 +190,12 @@ export function buildChildScalePlan(
   inheritedScaleFactors: Size<number | undefined> | undefined,
   inheritedPosScales: ConstraintPosScales,
   constraintBudget: ScaleBudget | undefined,
-  shared: Size<boolean>
+  shared: Size<boolean>,
+  // Stage 6b: the ONE σ-solve site. Every scale this plan roots is derived
+  // through the registry (so `GOFISH_DUMP_SCOPES` sees it and the numbers have a
+  // single source); `rootKey` labels the owning layer node in the dump.
+  scopes: ScopeRegistry,
+  rootKey: string
 ): ChildScalePlan {
   const basePosScales: ConstraintPosScales = [
     inheritedPosScales[0],
@@ -207,11 +213,19 @@ export function buildChildScalePlan(
     if (stashed === undefined || !Number.isFinite(layerSize[axis])) continue;
     if (isPOSITION(stashed)) {
       basePosScales[axis] =
-        posScaleFromSpace(stashed, layerSize[axis]) ?? inheritedPosScales[axis];
+        scopes.solvePosition(
+          { kind: "self-scaled", rootKey, axis },
+          stashed,
+          layerSize[axis]
+        ) ?? inheritedPosScales[axis];
     }
     if (isBaselineMagnitude(stashed)) {
       childScaleFactors[axis] =
-        stashed.width.inverse(layerSize[axis]) ?? inheritedScaleFactors?.[axis];
+        scopes.solveSize(
+          { kind: "self-scaled", rootKey, axis },
+          stashed.width,
+          layerSize[axis]
+        ) ?? inheritedScaleFactors?.[axis];
     }
   }
 
@@ -219,25 +233,27 @@ export function buildChildScalePlan(
     for (const axis of [0, 1] as const) {
       const dom = constraintBudget.sizeDomain[axis];
       if (dom === undefined || !Number.isFinite(layerSize[axis])) continue;
-      // Scale-root scoping: if an ancestor scale root already resolved σ for this
-      // axis (an inherited scale factor is present) AND this layer didn't itself
-      // introduce a new pixel scope (no self-scaled/stashed space on the axis),
-      // then this distribute is an INTERMEDIATE in the ancestor's σ-scope — it
-      // must PROPAGATE the inherited σ, not re-root by inverting its own σ-fold
-      // against the locally allocated size. In a consistently-sized layout the
-      // re-derived factor equals the inherited one (no-op); it only diverges when
-      // the allocated size disagrees with the inherited σ — e.g. an equal-slice
-      // budget under a coord, where the distribute axis IS the σ-scaled axis, so
-      // a nested group would otherwise silently re-derive a smaller σ (#618).
-      if (
-        inheritedScaleFactors?.[axis] !== undefined &&
-        selfScaledSpaces[axis] === undefined
-      ) {
-        continue;
-      }
-      const sf = dom.inverse(layerSize[axis], {
-        upperBoundGuess: layerSize[axis],
-      });
+      // Structural σ-scope rule (Stage 6b — the former #618 propagate-vs-re-root
+      // guard, made structural): ONLY A SCOPE ROOT SOLVES. This budget roots a
+      // scope on the axis unless an ancestor scope already owns it — i.e. an
+      // inherited σ is present AND this layer introduced no pixel scope of its
+      // own (no self-scaled space). In that INTERMEDIATE case the inherited σ has
+      // already been copied into `childScaleFactors`, so inherit it: do NOT
+      // re-root by inverting the local σ-fold against the allocated size. The
+      // re-derive-equal cases produce the same σ (no-op); the divergent case is
+      // an equal-slice budget under a coord, where the distribute axis IS the
+      // σ-scaled axis — a nested group would otherwise silently re-derive a
+      // smaller σ (#618).
+      const rootsScope =
+        inheritedScaleFactors?.[axis] === undefined ||
+        selfScaledSpaces[axis] !== undefined;
+      if (!rootsScope) continue;
+      const sf = scopes.solveSize(
+        { kind: "constraint-budget", rootKey, axis },
+        dom,
+        layerSize[axis],
+        { upperBoundGuess: layerSize[axis] }
+      );
       if (sf !== undefined) childScaleFactors[axis] = sf;
       else budgetFailures.push({ axis, budget: layerSize[axis] });
     }
@@ -248,9 +264,12 @@ export function buildChildScalePlan(
     const sp = selfScaledSpaces[axis] ?? layerSpace?.[axis];
     if (sp === undefined) continue;
     const sf = isCONTINUOUS(sp)
-      ? (sp.width.inverse(layerSize[axis], {
-          upperBoundGuess: layerSize[axis],
-        }) ?? 0)
+      ? (scopes.solveSize(
+          { kind: "shared", rootKey, axis },
+          sp.width,
+          layerSize[axis],
+          { upperBoundGuess: layerSize[axis] }
+        ) ?? 0)
       : undefined;
     if (sf !== undefined) childScaleFactors[axis] = sf;
     sharedScaleChecks.push({ axis, space: sp, sigma: sf });

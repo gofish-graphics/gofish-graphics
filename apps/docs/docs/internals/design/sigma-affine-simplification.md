@@ -358,7 +358,17 @@ still has two independent slopes after Stage 6, that is a bug in Stage 6.
 - **6b — one solve site.** Move the root inversion + the three
   `buildChildScalePlan` steps behind a single scope-root API with the same
   numbers and priority. The #618 guard becomes "not a root → inherit".
-  Pixel gate.
+  Pixel gate. **Landed:** `ast/solver/scopes.ts` holds a per-render
+  `ScopeRegistry` (on the `RenderSession`) whose `solveSize` / `solvePosition`
+  are the ONE place σ / posScale is derived; the render root (`gofish.tsx`),
+  `buildChildScalePlan`'s self-scaled / constraint-budget / shared steps, and the
+  coord boundary (`coord.tsx` `fitAxis`) all call it with bit-identical
+  arithmetic. The #618 propagate-vs-re-root guard is now the structural
+  "is this a scope root?" predicate in `buildChildScalePlan` (an intermediate
+  budget skips the solve and inherits). `GOFISH_DUMP_SCOPES` prints one frame
+  equation per scope. The sweep (`capture-sweep`) stayed clean and the
+  coord/confluence tests (flat ≡ nested σ) pass, confirming goTree/polar render
+  identically.
 - **6c — σ-affine claims flow.** Marks/folds contribute width `Monotonic`s
   into cells instead of pre-multiplied numbers; evaluation defers to the
   scope boundary; the "evaluate at σ, hand concrete sizes down" double

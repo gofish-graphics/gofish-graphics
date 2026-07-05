@@ -23,6 +23,7 @@ import {
   UnderlyingSpace,
   UNDEFINED,
   POSITION,
+  SIZE,
   ORDINAL,
   isORDINAL,
   isPOSITION,
@@ -32,7 +33,9 @@ import {
   continuousInterval,
   type CONTINUOUS_TYPE,
 } from "../underlyingSpace";
-import { posScaleFromSpace, axisScale, type AxisMap } from "../domain";
+import { axisScale, type AxisMap } from "../domain";
+import { shadowCheckScaleRoot } from "../solver/shadow";
+import { getScopeRegistry } from "../solver/scopes";
 import * as Monotonic from "../../util/monotonic";
 import { createNodeOperator } from "../withGoFish";
 import { computeTransformedBoundingBox } from "./coordUtils";
@@ -162,7 +165,11 @@ export const coord = createNodeOperator(
           spaceRef.current = result;
           return result;
         },
-        layout: (shared, size, scales, children) => {
+        layout: (shared, size, scales, children, node) => {
+          // Stage 6b: a coord boundary is a σ-scope root — it re-roots σ for its
+          // subtree. Derive through the render's one registry, shared with the
+          // render root and every layer scope.
+          const scopes = getScopeRegistry(node.tryGetRenderSession());
           /* TODO: need correct scale factors */
           // TODO: only works for polar-family transforms right now
           const [origW, origH] = size;
@@ -202,7 +209,14 @@ export const coord = createNodeOperator(
             // spaces into `spaceRef.current` — reuse it and map onto [0, budget].
             const resolved = spaceRef.current?.[axis];
             if (resolved !== undefined && isPOSITION(resolved)) {
-              return [1, posScaleFromSpace(resolved, budget)];
+              return [
+                1,
+                scopes.solvePosition(
+                  { kind: "coord", rootKey: node.key ?? node.type, axis },
+                  resolved,
+                  budget
+                ),
+              ];
             }
             // A baseline-magnitude (data SIZE) axis: `resolveUnderlyingSpace`
             // leaves this case UNDEFINED, so sum the children's widths here and
@@ -213,7 +227,26 @@ export const coord = createNodeOperator(
               .filter(isBaselineMagnitude);
             if (baseline.length > 0) {
               const width = Monotonic.add(...baseline.map((s) => s.width));
-              return [width.inverse(budget) ?? 1, undefined];
+              // Stage 6b: the coord boundary's SIZE frame — solved through the one
+              // registry (content(σ)=budget via Monotonic.inverse).
+              const sigma = scopes.solveSize(
+                { kind: "coord", rootKey: node.key ?? node.type, axis },
+                width,
+                budget
+              );
+              // Solver shadow (#39): a coord boundary RE-ROOTS σ for its subtree,
+              // exactly as the root fits content to the canvas — assert the same
+              // frame equation content(σ)=budget closes at the boundary. Pass the
+              // raw inverse (undefined when it fails) so a degenerate re-root is
+              // caught, mirroring shadowCheckScaleRoot at the root. No-op unless
+              // GOFISH_SOLVER_CHECK is set.
+              shadowCheckScaleRoot(
+                SIZE(width),
+                budget,
+                sigma ?? undefined,
+                axis
+              );
+              return [sigma ?? 1, undefined];
             }
             return [1, undefined];
           };

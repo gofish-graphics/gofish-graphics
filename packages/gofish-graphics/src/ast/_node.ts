@@ -6,6 +6,9 @@
 // </gofish-wiki>
 
 import type { JSX } from "solid-js";
+// Type-only (erased) so no runtime cycle with solver/scopes.ts, which imports
+// RenderSession from here.
+import type { ScopeRegistry } from "./solver/scopes";
 import {
   Anchor,
   Dimensions,
@@ -90,6 +93,10 @@ export type RenderSession = {
   /** Set by the lower emit driver (`lowerToDisplayList`) for the duration of a
    *  lowering walk: the y-up→y-down pixel mapping every `lower` body uses. */
   toPixel?: ToPixel;
+  /** The σ-scope registry (#39 Stage 6b): the one place σ / posScale is derived,
+   *  shared by every scope root in this render. Created on first use
+   *  (`getScopeRegistry`). */
+  scopes?: ScopeRegistry;
 };
 
 export type ScaleFactorFunction = Monotonic.Monotonic;
@@ -1168,6 +1175,20 @@ export class GoFishNode {
       return this.parent.getRenderSession();
     }
     throw new Error("Render session not set");
+  }
+
+  /** Non-throwing session lookup for the layout-path σ-scope registry (Stage 6b):
+   *  the full `gofish()` flow always sets a session before layout, but a
+   *  standalone `node.layout(...)` (some coord/confluence tests) has none — then
+   *  the scope solve just uses a throwaway registry with identical arithmetic. */
+  public tryGetRenderSession(): RenderSession | undefined {
+    if (this.renderSession) return this.renderSession;
+    const parent = this.parent as
+      | { tryGetRenderSession?: () => RenderSession | undefined }
+      | undefined;
+    return parent && typeof parent.tryGetRenderSession === "function"
+      ? parent.tryGetRenderSession()
+      : undefined;
   }
 
   public render(

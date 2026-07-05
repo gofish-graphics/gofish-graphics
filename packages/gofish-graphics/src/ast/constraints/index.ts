@@ -26,8 +26,13 @@ import type { PositionConstraint, PositionOptions } from "./position";
 import type { ZAboveConstraint, ZBelowConstraint } from "./zorder";
 import type { NestConstraint, NestOptions } from "./nest";
 import type { GridConstraint } from "./grid";
-import { type ConstraintPosScales, type ConstraintRef } from "./shared";
+import {
+  isPlacedOn,
+  type ConstraintPosScales,
+  type ConstraintRef,
+} from "./shared";
 import { solvePlacementConstraints } from "./placementSolver";
+import { shadowCheckConstraint, solverCheckEnabled } from "../solver/shadow";
 
 export type {
   Axis,
@@ -246,5 +251,45 @@ export function applyConstraints(
       | NestConstraint
       | GridConstraint => !isZOrderConstraint(constraint)
   );
+
+  // Solver shadow (#39, disposable observe→assert): snapshot each child's
+  // per-axis placement BEFORE the solve — only when the check is on, so
+  // production pays nothing — so each constraint's shadow can tell a child it
+  // packed from one that arrived pre-positioned. The rank-2 solve places every
+  // target at once (no per-constraint apply boundary), so the checks run once
+  // AFTER the solve against the settled positions.
+  const prePlaced = solverCheckEnabled()
+    ? new Map<string, [boolean, boolean]>(
+        [...nameToPlaceable].map(([name, p]) => [
+          name,
+          [isPlacedOn(p, 0), isPlacedOn(p, 1)] as [boolean, boolean],
+        ])
+      )
+    : undefined;
+
   solvePlacementConstraints(placement, nameToPlaceable, sizes, posScales);
+
+  if (prePlaced) {
+    for (const constraint of placement) {
+      // Build the target list and its aligned pre-solve placement snapshot in
+      // one pass (index i of each array is the same child), so the per-target
+      // `prePlaced` the checks read is the state BEFORE the solve, not after.
+      const targets: Placeable[] = [];
+      const targetPrePlaced: [boolean, boolean][] = [];
+      for (const ref of constraint.children) {
+        const p = ref ? nameToPlaceable.get(ref.name) : undefined;
+        if (p === undefined) continue;
+        targets.push(p);
+        targetPrePlaced.push(prePlaced.get(ref!.name) ?? [false, false]);
+      }
+      shadowCheckConstraint(
+        constraint,
+        targets,
+        posScales,
+        targetPrePlaced,
+        nameToPlaceable,
+        sizes
+      );
+    }
+  }
 }

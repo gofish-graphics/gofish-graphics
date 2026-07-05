@@ -46,6 +46,7 @@ import {
 import { discretePosition, value } from "../ast/data";
 import { pxOf, type AxisMap } from "../ast/domain";
 import { POSITION, SIZE, UNDEFINED } from "../ast/underlyingSpace";
+import { ScopeRegistry } from "../ast/solver/scopes";
 import { interval } from "../util/interval";
 
 type Constraint =
@@ -1131,7 +1132,9 @@ console.log("# constraint confluence: child scale factor planning");
     [2, 3],
     [inheritedX, inheritedY],
     undefined,
-    [false, false]
+    [false, false],
+    new ScopeRegistry(),
+    "test"
   );
   ok(
     "self-scaled POSITION axis builds local posScale",
@@ -1159,7 +1162,9 @@ console.log("# constraint confluence: child scale factor planning");
     [2, 3],
     [inheritedX, inheritedY],
     { sizeDomain: [Monotonic.linear(10, 0), Monotonic.linear(0, 10)] },
-    [false, false]
+    [false, false],
+    new ScopeRegistry(),
+    "test"
   );
   ok(
     "intermediate distribute defers to inherited child scale factor (scale-root scoping)",
@@ -1180,7 +1185,9 @@ console.log("# constraint confluence: child scale factor planning");
     [undefined, undefined],
     [inheritedX, inheritedY],
     { sizeDomain: [Monotonic.linear(10, 0), Monotonic.linear(0, 10)] },
-    [false, false]
+    [false, false],
+    new ScopeRegistry(),
+    "test"
   );
   ok(
     "σ-root distribute re-derives child scale factor from its budget when invertible",
@@ -1200,7 +1207,9 @@ console.log("# constraint confluence: child scale factor planning");
     [2, 3],
     [inheritedX, inheritedY],
     { sizeDomain: [Monotonic.linear(10, 0), undefined] },
-    [true, false]
+    [true, false],
+    new ScopeRegistry(),
+    "test"
   );
   ok(
     "shared scale scope overrides budget scale factor and emits shadow check",

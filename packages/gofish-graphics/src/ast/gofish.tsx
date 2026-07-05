@@ -14,12 +14,7 @@ import {
   GoFishNode,
   type RenderSession,
 } from "./_node";
-import {
-  posScaleFromSpace,
-  axisScale,
-  type AxisMap,
-  type AxisScale,
-} from "./domain";
+import { axisScale, type AxisMap, type AxisScale } from "./domain";
 import { bake } from "./coordinateTransforms/bake";
 import { lowerToDisplayList } from "./displayList/lower";
 import { paintSVG } from "./displayList/paintSVG";
@@ -34,6 +29,7 @@ import {
   type UnderlyingSpace,
 } from "./underlyingSpace";
 import { shadowCheckScaleRoot } from "./solver/shadow";
+import { getScopeRegistry } from "./solver/scopes";
 import { elaborateAxes, elaborateAxisTitles } from "./axes/elaborate";
 import { elaborateLegend, legendOverhang } from "./legends/elaborate";
 
@@ -370,10 +366,26 @@ export async function layout(
   const layoutW = w ?? (needsCanvas(niceUnderlyingSpaceX) ? canvasW : UNSIZED);
   const layoutH = h ?? (needsCanvas(niceUnderlyingSpaceY) ? canvasH : UNSIZED);
 
-  // An anchored CONTINUOUS root builds a data→pixel map over its data interval.
+  // The render's σ-scope registry: the ONE place σ / posScale is derived
+  // (Stage 6b). The root is the first scope root; every other scope (self-scaled
+  // axis, constraint budget, shared, coord boundary) solves through the same
+  // registry. Reset so a re-run layout pass starts clean.
+  const scopes = getScopeRegistry(contexts?.session);
+  scopes.reset();
+
+  // An anchored CONTINUOUS root builds a data→pixel map over its data interval —
+  // the root POSITION scope solved by the registry.
   const posScales: Size<AxisMap | undefined> = [
-    posScaleFromSpace(niceUnderlyingSpaceX, canvasW),
-    posScaleFromSpace(niceUnderlyingSpaceY, canvasH),
+    scopes.solvePosition(
+      { kind: "root", rootKey: "root", axis: 0 },
+      niceUnderlyingSpaceX,
+      canvasW
+    ),
+    scopes.solvePosition(
+      { kind: "root", rootKey: "root", axis: 1 },
+      niceUnderlyingSpaceY,
+      canvasH
+    ),
   ];
 
   if (debug) {
@@ -381,14 +393,23 @@ export async function layout(
   }
 
   // Root scale factor: a baseline magnitude ("free") root inverts its Monotonic
-  // against the canvas. Anchored roots use the posScale (above) instead; a
-  // difference root shrink-to-fits.
+  // against the canvas — the root SIZE scope, solved by the same registry.
+  // Anchored roots use the posScale (above) instead; a difference root
+  // shrink-to-fits.
   const rootScaleFactors: Size<number | undefined> = [
     isBaselineMagnitude(niceUnderlyingSpaceX)
-      ? (niceUnderlyingSpaceX.width.inverse(canvasW) ?? undefined)
+      ? scopes.solveSize(
+          { kind: "root", rootKey: "root", axis: 0 },
+          niceUnderlyingSpaceX.width,
+          canvasW
+        )
       : undefined,
     isBaselineMagnitude(niceUnderlyingSpaceY)
-      ? (niceUnderlyingSpaceY.width.inverse(canvasH) ?? undefined)
+      ? scopes.solveSize(
+          { kind: "root", rootKey: "root", axis: 1 },
+          niceUnderlyingSpaceY.width,
+          canvasH
+        )
       : undefined,
   ];
 
@@ -466,6 +487,9 @@ export async function layout(
   ];
 
   child.layout([layoutW, layoutH], rootScales);
+  // Scope dump (#39 Stage 6b): every σ-scope solved during the layout pass just
+  // above, as printable frame equations. No-op unless GOFISH_DUMP_SCOPES is set.
+  scopes.dump();
   // Root placement anchor. A GIVEN dimension keeps the baseline-anchored canvas
   // box [0, given]; content seated outside it (axis labels below 0, ticks above
   // `given`) is reserved as the per-side overhangs below. A SHRINK-TO-FIT
