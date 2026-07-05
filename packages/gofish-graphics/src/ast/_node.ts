@@ -53,7 +53,7 @@ import {
   isPOSITION,
   isUNDEFINED,
   continuousInterval,
-  placementOf,
+  spacePlacement,
   CONTINUOUS_TYPE,
   type Placement,
   UnderlyingSpace,
@@ -120,10 +120,11 @@ export type Placeable = {
    *  uses this to express every anchor as `absoluteMin + constant`, including
    *  `baseline` for asymmetric boxes such as text and negative bars. */
   localAnchor?: (axis: FancyDirection, anchor: Anchor) => number | undefined;
-  /** This target's abstract {@link Placement} on `dir` (free / determined(at) /
-   *  conflict), or `undefined` for a non-continuous axis. `align` reads it to
-   *  leave self-positioned children alone. Omitted by `ref` stand-ins (→
-   *  `undefined`, so they get the fallback baseline like any chrome). */
+  /** This target's abstract {@link Placement} on `dir` (`"free"` /
+   *  `"determined"` / `"conflict"`), or `undefined` for a non-continuous axis.
+   *  `align` reads it to leave self-positioned children alone. Omitted by `ref`
+   *  stand-ins (→ `undefined`, so they get the fallback baseline like any
+   *  chrome). */
   placementOn?: (dir: Direction) => Placement | undefined;
   place: (axis: FancyDirection, value: number, anchor?: Anchor) => void;
   /** Write an axis extent from owned bbox facets (the size-setting primitive
@@ -726,10 +727,10 @@ export class GoFishNode {
         if (isPOSITION(space)) {
           const iv = continuousInterval(space)!;
           const [niceMin, niceMax] = nice(iv.min, iv.max, 10);
-          // Nicing changes the DATA domain (and the width derived from it) and
-          // re-pins the placement at the niced min — all in lockstep.
+          // Nicing changes the DATA domain (and the width derived from it);
+          // placement is a derived view of dataDomain, so the niced interval
+          // keeps it "determined" without a separate write.
           (space as CONTINUOUS_TYPE).dataDomain = interval(niceMin, niceMax);
-          (space as CONTINUOUS_TYPE).placement = placementOf(niceMin);
           (space as CONTINUOUS_TYPE).width = Monotonic.linear(
             niceMax - niceMin,
             0
@@ -894,14 +895,16 @@ export class GoFishNode {
   }
 
   /** This node's abstract {@link Placement} on `dir` (the layout half of its
-   *  underlying space) — `free` (awaiting a position), `determined(at)` (already
-   *  committed to a data coordinate), or `conflict`. `undefined` for a
+   *  underlying space) — `"free"` (awaiting a position), `"determined"` (already
+   *  committed to a data coordinate), or `"conflict"`. `undefined` for a
    *  non-continuous / unresolved axis (chrome). `align` reads it to leave
    *  self-positioned children (a scatter facet) where their own scale puts them
    *  — the principled replacement for the data-positioned guard. */
   public placementOn(dir: Direction): Placement | undefined {
     const sp = this._underlyingSpace?.[dir];
-    return sp !== undefined && isCONTINUOUS(sp) ? sp.placement : undefined;
+    return sp !== undefined && isCONTINUOUS(sp)
+      ? spacePlacement(sp)
+      : undefined;
   }
 
   private get _displayTransform(): Transform | undefined {
@@ -1430,9 +1433,10 @@ export const debugUnderlyingSpaceTree = (
   ): string => {
     const fmt = (s: UnderlyingSpace): string => {
       if (isCONTINUOUS(s)) {
-        return s.placement.tag === "determined"
+        const placement = spacePlacement(s);
+        return placement === "determined"
           ? `position(${toJSON(continuousInterval(s)!)})`
-          : s.placement.tag === "free"
+          : placement === "free"
             ? `size(${s.width.run(1)})`
             : `difference(${s.width.run(1)})`;
       } else if (isORDINAL(s)) {
