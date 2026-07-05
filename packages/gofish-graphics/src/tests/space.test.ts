@@ -15,7 +15,7 @@ import {
   isDIFFERENCE,
   isBaselineMagnitude,
   placementOf,
-  originOf,
+  spacePlacement,
   type CONTINUOUS_TYPE,
   type UnderlyingSpace,
 } from "../ast/underlyingSpace";
@@ -80,7 +80,7 @@ console.log("# space: baseline magnitude vs data axis anchored at 0");
   ok(
     "...and the forgotten composition is itself a baseline magnitude",
     composed !== undefined && isBaselineMagnitude(composed),
-    composed && `placement=${JSON.stringify((composed as any).placement)}`
+    composed && `dataDomain=${JSON.stringify((composed as any).dataDomain)}`
   );
 }
 
@@ -100,22 +100,18 @@ console.log(
   "# space: the abstract placement lattice is total over origin (Phase A)"
 );
 {
-  // placementOf maps each of the three origin states.
+  // placementOf maps each of the three anchor states to a bare placement.
+  ok('anchor "free" → placement free', placementOf("free") === "free");
   ok(
-    'origin "free" → placement free',
-    placementOf("free").tag === "free"
+    'anchor "impossible" → placement conflict',
+    placementOf("impossible") === "conflict"
   );
   ok(
-    'origin "impossible" → placement conflict',
-    placementOf("impossible").tag === "conflict"
-  );
-  const det = placementOf(1955);
-  ok(
-    "origin <number> → placement determined at that DATA coordinate",
-    det.tag === "determined" && det.at === 1955
+    "anchor <number> → placement determined (data coordinate lives in dataDomain)",
+    placementOf(1955) === "determined"
   );
 
-  // Constructors carry placement + dataDomain; originOf round-trips placement.
+  // Constructors carry dataDomain; placement is derived from its shape.
   const cases: [string, CONTINUOUS_TYPE, string, unknown][] = [
     ["SIZE", SIZE(M.linear(10, 0)) as CONTINUOUS_TYPE, "free", undefined],
     [
@@ -128,17 +124,12 @@ console.log(
   ];
   for (const [label, sp, expectedTag, expectedDomain] of cases) {
     ok(
-      `${label} carries placement.tag === "${expectedTag}"`,
-      sp.placement.tag === expectedTag
+      `${label} derives placement === "${expectedTag}"`,
+      spacePlacement(sp) === expectedTag
     );
     ok(
       `${label} carries the expected dataDomain`,
       JSON.stringify(sp.dataDomain) === JSON.stringify(expectedDomain)
-    );
-    ok(
-      `${label}: placementOf(originOf(sp)) round-trips placement`,
-      JSON.stringify(placementOf(originOf(sp))) ===
-        JSON.stringify(sp.placement)
     );
   }
 }

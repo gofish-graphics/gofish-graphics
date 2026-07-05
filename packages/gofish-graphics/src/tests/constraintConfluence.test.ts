@@ -1163,7 +1163,7 @@ console.log("# constraint confluence: self-placement and override");
     ["A", makePlaceable()],
     ["B", makePlaceable()],
   ]);
-  targets.get("A")!.placementOn = () => ({ tag: "determined", at: 0 });
+  targets.get("A")!.placementOn = () => "determined";
   solvePlacementConstraints(
     [{ type: "align", x: "baseline", children: [A, B] }],
     targets,

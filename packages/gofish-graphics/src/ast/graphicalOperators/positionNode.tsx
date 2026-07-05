@@ -4,6 +4,7 @@ import { Size, translateString } from "../dims";
 import { getMeasure, getValue, isValue, MaybeValue } from "../data";
 import {
   CONTINUOUS,
+  continuousInterval,
   isCONTINUOUS,
   UNDEFINED,
   UnderlyingSpace,
@@ -24,11 +25,13 @@ const offsetSpace = (
   const value = isValue(offset) ? getValue(offset) : offset;
   if (value === undefined) return space;
 
-  const origin =
-    space.placement.tag === "determined" ? space.placement.at + value : value;
+  // An anchored space offsets from its domain min (≡ the old placement `at`); a
+  // free / difference space anchors at `value` itself.
+  const iv = continuousInterval(space);
+  const anchor = iv !== undefined ? iv.min + value : value;
   return CONTINUOUS(
     space.width,
-    origin,
+    anchor,
     space.measure ?? getMeasure(offset),
     space.coordinateTransform
   );
