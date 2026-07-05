@@ -53,16 +53,56 @@ export const unifyContinuousDomains = (
   });
 };
 
-// creates an affine scale transforming the domain to [0, size] or [size, 0] if reverse is true
+/** One continuous axis's data→pixel affine map, with the intercept explicit
+ *  instead of closed over a function: `px(d) = pxMin + sigma·(d − domainMin)`.
+ *  `sigma` is the map's own slope (px per data unit); it need NOT equal an
+ *  {@link AxisScale}'s top-level `sigma` — a sub-budget layer can scale a mark's
+ *  size and its data position against different pixel extents. Evaluated by
+ *  {@link pxOf}; the old `posScale(0)` intercept is `pxOf(map, 0)`. */
+export type AxisMap = { sigma: number; domainMin: number; pxMin: number };
+
+/** One axis's data→pixel affine scale — the single carrier that replaced the
+ *  parallel `scaleFactors` (slope-only) and `posScales` (whole map) channels.
+ *  `sigma` is px per data unit for UNANCHORED size consumers (the old
+ *  `scaleFactor`); `map` is the anchored data→pixel map (the old `posScale`),
+ *  present iff the axis is anchored. */
+export type AxisScale = { sigma?: number; map?: AxisMap };
+
+/** Evaluate an anchored map at a data value. */
+export const pxOf = (map: AxisMap, d: number): number =>
+  map.pxMin + map.sigma * (d - map.domainMin);
+
+/** Function view of an anchored map, for consumers that take a `(d)=>px`
+ *  callback (`computeAesthetic`). A local derivation at the consumption site —
+ *  never threaded between nodes. Undefined when the axis is unanchored. */
+export const posFn = (
+  map: AxisMap | undefined
+): ((d: number) => number) | undefined =>
+  map === undefined ? undefined : (d) => pxOf(map, d);
+
+/** Assemble one axis's {@link AxisScale} from its σ (size slope) and anchored
+ *  map, collapsing "neither present" to `undefined` so a bare axis stays
+ *  undefined (not an empty record). */
+export const axisScale = (
+  sigma: number | undefined,
+  map: AxisMap | undefined
+): AxisScale | undefined =>
+  sigma === undefined && map === undefined ? undefined : { sigma, map };
+
+// creates an affine map transforming the domain to [0, size] or [size, 0] if reverse is true
 export const computePosScale = (
   domain: ContinuousDomain,
   size: number,
   reverse: boolean = false
-) => {
+): AxisMap => {
   const [min, max] = domain.value;
   const scale = size / (max - min);
-  return (pos: number) =>
-    reverse ? size - (pos - min) * scale : (pos - min) * scale;
+  // px(d) = pxMin + sigma·(d − domainMin) reproduces the former closure exactly:
+  // forward  `(d − min)·scale`         → pxMin 0,    sigma  scale;
+  // reverse  `size − (d − min)·scale`  → pxMin size, sigma −scale.
+  return reverse
+    ? { sigma: -scale, domainMin: min, pxMin: size }
+    : { sigma: scale, domainMin: min, pxMin: 0 };
 };
 
 /**
@@ -83,7 +123,7 @@ export const posScaleFromSpace = (
       }
     | undefined,
   size: number
-): ((pos: number) => number) | undefined =>
+): AxisMap | undefined =>
   space &&
   space.kind === "continuous" &&
   space.dataDomain !== undefined &&

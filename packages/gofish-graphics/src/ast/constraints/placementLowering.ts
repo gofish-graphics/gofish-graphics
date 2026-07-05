@@ -25,6 +25,7 @@ import { isPositionInterval, lowerPositionPlacement } from "./position";
 import type { SpanExtent } from "./span";
 import { collectSpanExtents, lowerSpanEdgePins } from "./span";
 import { axisIndex, type Axis, type ConstraintPosScales } from "./shared";
+import { pxOf, type AxisMap } from "../domain";
 import type { PlacementProgram } from "./placementFacts";
 
 export type PlacementConstraint =
@@ -52,7 +53,7 @@ const placementKey = (axis: Axis, name: string): string => `${axis}:${name}`;
 
 export function compilePlacementCoordinate(
   coordinate: PositionValue,
-  scale: ((value: number) => number) | undefined,
+  scale: AxisMap | undefined,
   axisSize?: number
 ): PlacementCoordinate {
   if (isDiscretePosition(coordinate)) {
@@ -61,12 +62,12 @@ export function compilePlacementCoordinate(
   }
   if (!isValue(coordinate)) return coordinate;
   if (scale === undefined) return undefined;
-  return scale(getValue(coordinate)!) + getValueOffset(coordinate);
+  return pxOf(scale, getValue(coordinate)!) + getValueOffset(coordinate);
 }
 
 function resolveCoordinate(
   coordinate: PositionValue,
-  scale: ((value: number) => number) | undefined,
+  scale: AxisMap | undefined,
   axisSize?: number
 ): number | undefined {
   return compilePlacementCoordinate(coordinate, scale, axisSize);

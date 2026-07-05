@@ -113,16 +113,20 @@ carries its _own_ intercept — the σ-independent pixel part of an _extent_
 intercept`. That is an intercept of the size equation, not of the data→screen
 map; the two never mean the same thing.
 
-**The two scale carriers, honestly.** Layout currently threads two parallel
-per-axis channels downward (see [Layout dispatch](#layout-dispatch)).
-`scaleFactors` carries only the slope σ, for _unanchored_ extents — a free
-magnitude has no committed baseline, so its intercept is implicit in where its
-parent places it (baseline placement + `transform.translate`) and never needs to
-travel with the scale. `posScales` carries the _whole_ map `px(d)` for _anchored_
-extents, closing σ and the intercept together over one function. So "anchored"
-shows up operationally as "has a posScale"; "unanchored" as "has only a scale
-factor." Stage 4 of [the σ-affine plan](/internals/design/sigma-affine-simplification)
-folds these two into a single affine record.
+**The single scale carrier.** Layout threads one per-axis record downward (see
+[Layout dispatch](#layout-dispatch)): the `AxisScale` = `{ sigma?, map? }`
+(`domain.ts`). `sigma` is the slope σ for _unanchored_ extents — a free magnitude
+has no committed baseline, so its intercept is implicit in where its parent
+places it (baseline placement + `transform.translate`) and never travels with the
+scale. `map` is the _whole_ anchored map, with the intercept explicit as data
+rather than closed over a function: `px(d) = pxMin + sigma·(d − domainMin)`,
+evaluated by `pxOf` (the old `posScale(0)` intercept is `pxOf(map, 0)`). So
+"anchored" shows up operationally as "has a `map`"; "unanchored" as "has only a
+`sigma`." `map` carries its own slope, which need not equal the top-level
+`sigma` — a sub-budget layer scales a mark's size and its data position against
+different pixel extents. This single record replaced the former two parallel
+channels (`scaleFactors` = slope-only, `posScales` = whole map) in Stage 4 of
+[the σ-affine plan](/internals/design/sigma-affine-simplification).
 
 ## Why an explicit IR
 
@@ -648,10 +652,10 @@ reproduces both divisions, and the switch folds away:
 
 ```
 gofish.tsx (root):
-  if root[axis] is a free magnitude            → scale factor = width.inverse(canvas)
-  if root[axis].dataDomain is an interval       → build a posScale over it
-  pass both downward as (scaleFactors, posScales) — a child reads whichever
-  it needs
+  if root[axis] is a free magnitude            → sigma = width.inverse(canvas)
+  if root[axis].dataDomain is an interval       → map = an AxisMap over it
+  pass one `AxisScale` = { sigma?, map? } downward per axis — a child reads
+  `sigma` for size, `map` for data position (they're mutually exclusive at root)
 
 layer.layout, on an axis the node scopes (node.shared[axis] — set by
 `spread`/`stack`'s `sharedScale`; default [false, false] is a no-op):
@@ -659,19 +663,21 @@ layer.layout, on an axis the node scopes (node.shared[axis] — set by
     else → undefined (ORDINAL/UNDEFINED don't need a continuous scale factor)
 ```
 
-Leaf shapes never need to compute their own scale factors — they receive
-them via the `scaleFactors` parameter and apply them in `computeSize`.
+Leaf shapes never need to compute their own scale factors — they receive the
+per-axis `AxisScale` via the `scales` parameter and read its `sigma` in
+`computeSize` (and its `map` via `pxOf` for data position).
 
 `spread`/`stack` no longer have their own `layout` — they **elaborate to
 `layer + align + distribute`** (`spread.tsx`), so the dispatch above lives
 entirely in `layer.layout`. `buildChildScalePlan` is the shared layout-time
-planner: explicit self-scaled axes first derive local posScales/scale factors, a
+planner: explicit self-scaled axes first derive local maps/scale factors, a
 layer whose constraints fold to a SIZE claim then inverts that fold against its
 allotted size (`fold.inverse(size[axis])`) to derive a local scale factor for
 its constrained children (returning failures so `layer` can warn before falling
 back), and a `sharedScale` scope finally runs the per-axis solve in the
-pseudocode above. The result is a **fresh `childScaleFactors` array** handed to
-descendants — **no node ever mutates the inherited `scaleFactors`**. That is the
+pseudocode above. `layer` recombines the per-axis σ and `map` into one
+`AxisScale` per child at `child.layout`. The result is a **fresh `childScaleFactors`
+array** handed to descendants — **no node ever mutates the inherited σ**. That is the
 claim-hoisting form of `sharedScale` (#549): a scale solves at the lowest node
 where its measure stops being shared, and the result flows to descendants only,
 never leaking to siblings.

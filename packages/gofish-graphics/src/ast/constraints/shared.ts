@@ -1,6 +1,7 @@
 import { GoFishNode, type Placeable } from "../_node";
 import { GoFishRef } from "../_ref";
 import type { GoFishAST } from "../_ast";
+import type { AxisMap } from "../domain";
 import { isToken } from "../createName";
 
 export type Axis = "x" | "y";
@@ -15,13 +16,12 @@ export type AlignAnchor = Alignment | "baseline";
 /** Lightweight handle for referencing a named child inside .constrain() */
 export type ConstraintRef = { readonly name: string };
 
-/** Per-axis data→pixel position scales, as built by `layer.tsx` and consumed
+/** Per-axis data→pixel position maps, as built by `layer.tsx` and consumed
  *  by `Constraint.position` (a literal coordinate is a raw pixel; a `datum`
- *  coordinate is mapped through the matching scale). */
-export type ConstraintPosScales = [
-  ((value: number) => number) | undefined,
-  ((value: number) => number) | undefined,
-];
+ *  coordinate is mapped through the matching map via `pxOf`). An entry is
+ *  `undefined` exactly when the axis is unanchored — the position half of the
+ *  single {@link AxisScale} carrier. */
+export type ConstraintPosScales = [AxisMap | undefined, AxisMap | undefined];
 
 /** Convert axis name to dimension index (0 = x, 1 = y) */
 export const axisIndex = (axis: Axis): 0 | 1 => (axis === "x" ? 0 : 1);

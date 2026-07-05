@@ -16,7 +16,7 @@ import {
   Size,
   Transform,
 } from "../dims";
-import { aesthetic, continuous } from "../domain";
+import { aesthetic, continuous, posFn } from "../domain";
 import { interval } from "../../util/interval";
 import {
   ORDINAL,
@@ -103,12 +103,12 @@ export const Ellipse = ({
 
         return [resolveAxis(0, wDomain), resolveAxis(1, hDomain)];
       },
-      layout: (shared, size, scaleFactors, children, posScales) => {
+      layout: (shared, size, scales, children) => {
         let w = isValue(dims[0].size)
-          ? getValue(dims[0].size!) * scaleFactors[0]!
+          ? getValue(dims[0].size!) * scales[0]?.sigma!
           : (dims[0].size ?? size[0]);
         let h = isValue(dims[1].size)
-          ? getValue(dims[1].size!) * scaleFactors[1]!
+          ? getValue(dims[1].size!) * scales[1]?.sigma!
           : (dims[1].size ?? size[1]);
 
         if (aspectRatio !== undefined && aspectRatio > 0) {
@@ -126,8 +126,16 @@ export const Ellipse = ({
           }
         }
 
-        const x = computeAesthetic(dims[0].min, posScales[0]!, undefined);
-        const y = computeAesthetic(dims[1].min, posScales[1]!, undefined);
+        const x = computeAesthetic(
+          dims[0].min,
+          posFn(scales[0]?.map)!,
+          undefined
+        );
+        const y = computeAesthetic(
+          dims[1].min,
+          posFn(scales[1]?.map)!,
+          undefined
+        );
 
         return {
           intrinsicDims: [
