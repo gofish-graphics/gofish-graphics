@@ -181,68 +181,196 @@ exactly the numbers the two channels carry today.
 ## Stage 5 — rank-2 placement solve
 
 Extend the relational placement solver from one unknown per (node, axis) to
-the per-node box `(min, size)` — i.e., adopt the ledger/`SolverBox` cell
-_inside_ the cross-node solve (`placementSolver.ts`). The node-side ledger
-(`_node.ts` `_bbox`) is already rank-2; only the cross-node pass is rank-1.
+the per-node box `(min, size)` — i.e., adopt the ledger/`BBox` cell _inside_
+the cross-node solve (`placementSolver.ts`). The node-side ledger (`_node.ts`
+`_bbox`) is already rank-2; only the cross-node pass is rank-1.
 
-Payoffs, all deletions:
+### Where rank-1 is baked in today
 
-- interval-form `position` (née span) becomes two facet equations on one box —
-  delete the extent side-channel: `collectSpanExtents`, the `spanExtentByKey`
-  threading through `classifyAxisFacts` (`placementSolver.ts:107-115`), the
-  post-solve `setExtent` re-application (`placementSolver.ts:295-298`), and
-  `spanCover` in `compose.ts:269-281`;
-- align anchors become facet-equality relations
-  (`min/center/max = baseline + (minCoeff + k)·size`), making the
-  determinacy question ("is this child already positioned?") a structural read
-  instead of the `placementOn`/guard protocol;
-- conflicts stay named: the box-level `BBox` conflict contract and the
-  relation-graph conflict contract merge into one report.
+The fact vocabulary (`placementFacts.ts`) has four fact kinds — `pin`,
+`relation`, `edge-pin` (span only), `participant` — and every one of them is
+affine in a _single_ variable per node (`start`), because
+`PlacementProgramLowerer.anchorOffset` (`placementProgramLowerer.ts:31-53`)
+pre-evaluates every anchor to a numeric offset from `start` using the target's
+_already-known_ size (`localAnchor`/`dims`) at lowering time. A target whose
+size isn't known yet (a span target) can't be offset, hence the `spannedSize`
+side-channel callback threaded through the lowerer, the `edge-pin` fact kind,
+the `max → min − size` rewrite in `classifyAxisFacts`
+(`placementSolver.ts:107-115`), and the post-solve `setExtent` re-application
+(`placementSolver.ts:295-298`).
 
-Known behavior edge to decide explicitly (not silently): the current fold
-treats `start`/`end` align as baseline-equivalent (`alignment.ts:135-136`),
-which is only true for `minCoeff = 0` boxes. The rank view computes the true
-answer for mixed-sign/asymmetric boxes. Ship the _engine_ in
-compatibility-of-results mode first (pixel gate), then decide whether to adopt
-the sharper transfer function as a separate, visible change.
+### The rank-2 design
 
-- Files: `placementSolver.ts`, `placementLowering.ts`, `span.ts` (absorbed),
-  `align.ts`, `compose.ts`, confluence test (which becomes the spec of the new
-  solve).
-- Gate: pixel equality; `GOFISH_CONFLICT_CHECK` clean across stories.
-- Size: medium-large. Independent of Stage 4 in principle; do 4 first anyway
-  (it simplifies what the solver hands back to scale consumers).
+1. **Facet facts.** Facts reference `(node, facet)` with
+   facet ∈ {min, center, max, size, baseline}:
+   `pin(node, facet, value, owner)` and
+   `relate(from(node, facet), to(node, facet), gap, owner)`. The
+   anchor→facet mapping (`BOX_ANCHOR`) stays in lowering, but _no numeric
+   pre-evaluation happens there_ — offsets move into the solver. `edge-pin`
+   and the `spannedSize` callback are deleted; span's two edges are ordinary
+   `min`/`max` facet pins.
+2. **Per-node cells with two-tier authority.** Each (node, axis) gets a `BBox`
+   (`constraints/bbox.ts` — the existing 2-unknown cell with named-owner
+   conflicts). Constraint-owned equations are _strong_; the node's self-layout
+   size and any self-placed min (today's
+   `PlacementOwnershipPlan.initiallyPlaced`/`authoritative` sets) seed as
+   _weak_ defaults that a strong rank-2 determination discards — which is
+   exactly what `setExtent`'s ledger reset does today, made explicit as tiers
+   instead of four hand-maintained name-sets.
+3. **Two-phase solve per axis.**
+   - _Cell closure:_ apply strong pins; a cell reaching rank 2 has its size
+     determined (the span case); every other cell takes its weak layout size.
+     After closure all participating sizes are known — reachable programs
+     never leave a size free (align/distribute/nest/grid emit no size
+     equations).
+   - _Difference graph, unchanged:_ relation offsets are now computed inside
+     the solver from closed cells (the same `localAnchorPoint` arithmetic
+     `anchorOffset` does today, moved from lowering-time to post-closure).
+     The BFS components, pin application, `distributeOriginFor` sequence
+     origin, and normalized-origin fallback (`placementSolver.ts:222-251`)
+     are preserved verbatim — that part of the solver is already general.
+   - `baseline` participates in closure as `min + c` where `c` is a
+     node-local constant from `localAnchor` (independent of the size unknown;
+     a span-determined box has baseline ≡ min since its local frame resets to
+     `[0, size]`).
+4. **One commit path.** Every solved cell writes back through a single
+   function — rank-2-determined → `setExtent({min, max})`, position-only →
+   `pinAnchor(min)` — replacing the three-way branch at
+   `placementSolver.ts:289-301`. `BBox` conflicts and graph conflicts merge
+   into one named-conflict report shape (same owner/asserted/implied fields).
+5. **Deletions.** `span.ts`'s `collectSpanExtents`/`SpanExtent`/
+   `lowerSpanEdgePins`, the `edge-pin` fact kind, the `classifyAxisFacts`
+   rewrite, `PlacementOwnershipPlan.spanPinned`, the `spannedSize` lowerer
+   parameter, and the extent maps threaded through
+   `lowerPlacementConstraints`/`solvePlacementConstraints`.
+
+### Landing sequence (shadow-first, same discipline as the ledger)
+
+- **5a.** Emit facet-facts _alongside_ the current program; run the rank-2
+  solve in shadow and assert it reproduces the rank-1 result across all
+  stories (extend `GOFISH_SOLVER_CHECK`). No behavior.
+- **5b.** Flip the commit path to the rank-2 solve. Pixel gate.
+- **5c.** Delete the rank-1 path and the span side-channel.
+
+### Non-goals, held explicitly
+
+- The align `start`/`end`-as-baseline transfer function in _space resolution_
+  (`alignment.ts:135-136`) is unchanged; it is only exact for `minCoeff = 0`
+  boxes. The rank-2 solver computes the true placement for asymmetric boxes —
+  observe any divergence under the shadow check first, then decide adoption as
+  a separate visible change.
+- Signed sizes stay magnitudes (`Math.abs` semantics preserved; sign is a
+  layout fact carried by the local frame, not a solver unknown).
+- No changes to the space folds (`compose.ts`) beyond what Stage 2 already
+  re-keyed.
+
+### Tests and gates
+
+- Confluence test grows cases: interval-position + align on the same axis
+  (both declaration orders), interval-position inside a distribute chain,
+  authoritative override pins on rank-2 cells, and a conflict case asserting
+  both owners are named.
+- Gates: pixel equality across stories; `GOFISH_CONFLICT_CHECK` sweep clean;
+  the 5a shadow assertion clean before 5b flips.
+- Size: medium-large. Depends on Stage 4 only softly; do 4 first anyway (it
+  simplifies what the solver hands back to scale consumers).
 
 ## Stage 6 — σ into the same system (the #39 endgame)
 
-Fold the σ resolution into the same linear system, per scope
-(`AxisScope`, `solver/index.ts`):
+Fold the σ resolution into the same linear system, per scope. The two hooks
+already exist: `BBox` facet values are already σ-affine `Monotonic`s (the
+"unified-propagation stage 1" note in `bbox.ts` — every caller just happens to
+pass constants today), and `AxisScope`/`SolverBox` (`solver/index.ts`) is the
+validated Phase-0 model.
 
-- facet values become σ-affine Monotonics; the **frame equation**
-  `content(σ) = allocated` resolves σ once per σ-scope (this is already how
-  `buildChildScalePlan` finds σ — `width.inverse` — just deferred to the
-  boundary and made the only site);
-- the Stage-4 `AxisScale` record becomes a _view_ of the solved scope
-  (σ = slope, intercept = the scope's solved baseline at data-0);
-- `transform.translate` completes its retirement into a projection of the
-  ledger (#39 stage 3-D, already in motion);
-- `grid` generalizes to track variables + equations (equal tracks = equal-flex
-  special case; content-sized tracks = Σ-over-max rows in the same system),
-  deleting the layer bypasses from Stage 3;
-- `placement` (the Stage-1 derived view) retires as stored/derived _space_
-  state entirely — determinacy is the rank/consistency of the baseline
-  subsystem, read off the solve; space resolution keeps only the data facts
-  (`width`, `dataDomain`, `measure`).
+### The sites that become one mechanism
 
-De-risking already exists: the Phase-0 spike (`solver/index.ts`), the shadow
-checker (`solver/shadow.ts`, `GOFISH_SOLVER_CHECK`) — extend shadow coverage
-mode-by-mode before each flip, same observe→assert discipline that landed the
-ledger.
+σ (or its posScale twin) is solved today at four+ places, in a hand-ordered
+priority. All become _one_ rule — **only a σ-scope root solves; everyone else
+inherits**:
 
-- Gate: shadow-clean per covered mode before flipping; pixel equality at each
-  flip; benign DOM reshuffles acceptable per the established policy.
-- Size: large; its own multi-PR plan when we get there. This document is the
-  map, not the schedule, for Stage 6.
+1. the root: `gofish.tsx:385-392` (`width.inverse` against the canvas),
+   `posScaleFromSpace` at `gofish.tsx:371-377`, and the recentering writeback
+   around `gofish.tsx:405-437`;
+2. self-scaling regions (explicit pixel size on an axis):
+   `buildChildScalePlan` step 2 (`proposalPlan.ts:205-216`);
+3. composed constraint budgets: step 3 (`proposalPlan.ts:218-244`) — whose
+   #618 propagate-vs-re-root guard is exactly the "intermediates must not
+   re-root" rule, hand-written; it becomes structural;
+4. shared-scale scopes: step 4 (`proposalPlan.ts:246-257`) + spread's
+   `sharedScale` annotation;
+5. coord boundaries (the scoped-resolution thread: bake/resolution must be
+   boundary-recursive, not root-global).
+
+σ-scope roots are therefore: the root, an explicit-pixel-size axis, a
+`sharedScale` operator, a coord boundary. One `AxisScope` per (scope root,
+axis): a registry of member cells; the **frame equation**
+`content(σ) = allocated` solved once by `Monotonic.inverse`; the scope's
+posScale and σ are _views_ of the solved system (the Stage-4 `AxisScale`
+record becomes exactly this view: σ = slope, `map` = anchored min facet +
+pixel min; the intercept is `posScale(0)`, derived, never stored).
+
+### Sub-stages, each gated
+
+- **6a — observe.** Extend `solver/shadow.ts` coverage to the modes it skips:
+  center-mode distribute, pre-placed/data-positioned chains, nest, grid,
+  coord scopes. Run all stories under `GOFISH_SOLVER_CHECK` until clean.
+  No behavior change; this is the risk-retirement step and can start any time
+  after Stage 5a exists.
+- **6b — one solve site.** Move the root inversion + the three
+  `buildChildScalePlan` steps behind a single scope-root API with the same
+  numbers and priority. The #618 guard becomes "not a root → inherit".
+  Pixel gate.
+- **6c — σ-affine claims flow.** Marks/folds contribute width `Monotonic`s
+  into cells instead of pre-multiplied numbers; evaluation defers to the
+  scope boundary; the "evaluate at σ, hand concrete sizes down" double
+  bookkeeping (`computeSize`'s scaleFactor path) collapses. Pixel gate.
+- **6d — translate retirement (#39 stage 3-D).** Render consumes baked
+  absolute coordinates through the `displayTranslate`/`translateString`
+  chokepoints (`dims.ts:268-294` was written to make this a one-function
+  change); the per-container `<g translate>` wrappers collapse. Expect benign
+  DOM reshuffles — this is precisely the pixel-not-DOM gate case.
+- **6e — grid as tracks.** A grid scope introduces `numCols + numRows` track
+  cells; each cell(i, j) gets equations `cell.min = track.min` and
+  `cell.size = track.size` per axis. Equal-flex is "all track sizes equal +
+  Σ tracks + gaps = W" (today's `sliceExtent`, as equations); content-sized
+  tracks are `track.size ≥ max(cell claims)` — note `max` leaves the linear
+  fragment (piecewise claims; see the `monoEqual` two-point-probe caveat in
+  `bbox.ts`), so this lands as an iterate-or-piecewise extension, and is the
+  point where `table` gains content-sized tracks. The Stage-3 layer bypasses
+  (space-fold early return, cell-budget special case, mixing throw) delete;
+  `gridSpaces`' ORDINAL axes contribution stays but composes.
+- **6f — determinacy from rank.** The Stage-1 `spacePlacement` view retires:
+  free/determined/conflict is read off the scope system's baseline-subsystem
+  rank/consistency. Space resolution keeps only data facts
+  (`width`, `dataDomain`, `measure`). The align transfer functions become
+  transfer functions _of the solver's abstract domain_, closing the
+  "guards should be blindingly obvious" thread.
+
+### Open design questions (resolve during 6, tracked now)
+
+- **Authority model (#583):** Stage 5's weak/strong tiers may need a third
+  tier (user-explicit vs constraint-derived) once σ-affine claims and
+  placement claims live in one system.
+- **Multi-measure scopes:** a scope keyed by (axis, measure) — the
+  measure-keyed set of underlying spaces idea — would retire the
+  childPosScales workaround and permit dual-axis charts; decide whether 6b's
+  scope registry is keyed that way from the start.
+- **Where scope state lives:** on the render session (like `toPixel`) vs a
+  map keyed by scope-root uid; must survive resume/re-layout.
+- **Piecewise claims:** `max`-composition (6e) and any future clamp break the
+  two-point `monoEqual` probe; decide the claim representation before 6e.
+
+### Debuggability requirement
+
+Every scope must be dumpable as printable equations (`Monotonic.print` per
+facet, one line per member cell, frame equation last) behind a debug flag —
+the printable-equations bar the σ-affine model was chosen for.
+
+- Gate: shadow-clean per covered mode before each flip; pixel equality at
+  every flip; benign DOM reshuffles acceptable only at 6d.
+- Size: large; each sub-stage is its own PR. This document is the map, not
+  the schedule, for Stage 6.
 
 ---
 
