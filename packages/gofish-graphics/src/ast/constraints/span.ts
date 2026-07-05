@@ -5,7 +5,7 @@
 import type { Placeable } from "../_node";
 import { getValue, isValue, MaybeValue } from "../data";
 import { Axis } from "./shared";
-import { BBox, type BBoxFacet } from "./bbox";
+import { BBox, type BBoxKey } from "./bbox";
 import * as Interval from "../../util/interval";
 import { edgePinFact, type PlacementEdgePin } from "./placementFacts";
 import type { PositionConstraint, PositionInterval } from "./position";
@@ -128,14 +128,14 @@ export function collectSpanExtents(placements: SpanEdgeClaim[]): SpanExtent[] {
     }
 
     const conflict = group.bbox.add(
-      fact.edge as BBoxFacet,
+      fact.edge as BBoxKey,
       fact.value,
       fact.owner
     );
     if (conflict) {
       throw new Error(
         `Constraint span conflict on ${fact.axis}: ${conflict.owner} ` +
-          `asserts ${conflict.facet}=${conflict.asserted}, but ` +
+          `asserts ${conflict.key}=${conflict.asserted}, but ` +
           `${conflict.priorOwner} implies ${conflict.implied}`
       );
     }

@@ -49,7 +49,7 @@ export interface PositionOptions {
    *
    *  Interim: once #39's linsys ledger ({@link BBox}) becomes the node's actual
    *  dimension state, per-equation ownership subsumes this — a pin would simply
-   *  own the position facet, and a second writer would be a named conflict
+   *  own the position anchor, and a second writer would be a named conflict
    *  rather than a silent no-op needing a per-call opt-out. */
   override?: boolean;
 }

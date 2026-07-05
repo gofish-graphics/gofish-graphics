@@ -6,6 +6,49 @@ import type { AlignAnchor, Axis } from "./shared";
 
 export type NodeId = string;
 
+// --- Rank-2 anchor program (#39 stage 5, shadow) -------------------------
+// A parallel fact form that does NOT pre-evaluate anchor offsets: facts name a
+// node anchor directly (`start`/`middle`/`end`/`baseline`), and the offset from
+// `min` is derived in the solver post-closure (once sizes are known), instead of
+// at lowering time against an already-known size. Emitted alongside the shipped
+// `PlacementProgram`; consumed only by `rank2Placement.ts`.
+
+export type AnchorRef = { node: NodeId; anchor: AlignAnchor };
+
+export type AnchorPinFact = {
+  type: "anchor-pin";
+  node: NodeId;
+  axis: Axis;
+  anchor: AlignAnchor;
+  value: number;
+  owner: string;
+};
+
+export type AnchorRelationFact = {
+  type: "anchor-relation";
+  axis: Axis;
+  from: AnchorRef;
+  to: AnchorRef;
+  gap: number;
+  owner: string;
+};
+
+export type AnchorParticipantFact = {
+  type: "anchor-participant";
+  node: NodeId;
+  axis: Axis;
+  owner: string;
+};
+
+export type AnchorFact =
+  | AnchorPinFact
+  | AnchorRelationFact
+  | AnchorParticipantFact;
+
+export type AnchorProgram = { axes: [AnchorFact[], AnchorFact[]] };
+
+export const emptyAnchorProgram = (): AnchorProgram => ({ axes: [[], []] });
+
 /** A concrete anchor on one node axis. Datum coordinates have already been
  *  elaborated through the layer's scale before facts are emitted, so the raw
  *  placement algebra is numeric. */

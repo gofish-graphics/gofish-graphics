@@ -9,56 +9,23 @@ import {
 } from "./placementLowering";
 import type { SpanExtent } from "./span";
 import { type Axis, type ConstraintPosScales } from "./shared";
-import type {
-  NodeId,
-  PlacementFact,
-  PlacementParticipant,
-  PlacementRelation,
-} from "./placementFacts";
+import type { NodeId, PlacementFact } from "./placementFacts";
+import {
+  axisName,
+  placementKey,
+  solveAxisProblem,
+  type AxisProblem,
+  type PlacementConflict,
+  type PlacementPinClaim,
+} from "./differenceGraph";
+import { shadowCheckRank2Placement } from "./rank2Placement";
 
 export {
   compilePlacementCoordinate,
   lowerPlacementConstraints,
 } from "./placementLowering";
+export type { PlacementConflict } from "./differenceGraph";
 
-export interface PlacementConflict {
-  axis: Axis;
-  owner: string;
-  priorOwner: string;
-  asserted: number;
-  implied: number;
-}
-
-type PlacementPinClaim = {
-  node: NodeId;
-  value: number;
-  owner: string;
-};
-
-type AxisProblem = {
-  relations: PlacementRelation[];
-  pins: PlacementPinClaim[];
-  participantFacts: PlacementParticipant[];
-  participants: Set<NodeId>;
-};
-
-type RelationEdge = {
-  node: NodeId;
-  delta: number;
-  owner: string;
-};
-
-type RelationComponents = {
-  relative: Map<NodeId, number>;
-  componentOf: Map<NodeId, number>;
-  components: NodeId[][];
-  conflicts: PlacementConflict[];
-};
-
-const TOLERANCE = 1e-6;
-
-const axisName = (axis: 0 | 1): Axis => (axis === 0 ? "x" : "y");
-const placementKey = (axis: Axis, name: string): string => `${axis}:${name}`;
 const spanExtentKey = (extent: SpanExtent): string =>
   placementKey(extent.axis, extent.name);
 
@@ -72,9 +39,9 @@ function classifyAxisFacts(
   facts: PlacementFact[],
   spanExtents: Map<string, SpanExtent>
 ): AxisProblem {
-  const relations: PlacementRelation[] = [];
+  const relations: AxisProblem["relations"] = [];
   const pins: PlacementPinClaim[] = [];
-  const participantFacts: PlacementParticipant[] = [];
+  const participantFacts: AxisProblem["participantFacts"] = [];
   const participants = new Set<NodeId>();
 
   for (const fact of facts) {
@@ -117,145 +84,12 @@ function classifyAxisFacts(
   return { relations, pins, participantFacts, participants };
 }
 
-function buildRelationGraph(
-  relations: PlacementRelation[]
-): Map<NodeId, RelationEdge[]> {
-  const adjacency = new Map<NodeId, RelationEdge[]>();
-  const addEdge = (from: NodeId, to: NodeId, delta: number, owner: string) => {
-    const list = adjacency.get(from) ?? [];
-    list.push({ node: to, delta, owner });
-    adjacency.set(from, list);
-  };
-
-  for (const relation of relations) {
-    addEdge(
-      relation.from.node,
-      relation.to.node,
-      relation.offset,
-      relation.owner
-    );
-    addEdge(
-      relation.to.node,
-      relation.from.node,
-      -relation.offset,
-      relation.owner
-    );
-  }
-
-  return adjacency;
-}
-
-function solveRelationComponents(
-  axis: Axis,
-  problem: AxisProblem
-): RelationComponents {
-  const adjacency = buildRelationGraph(problem.relations);
-  const relative = new Map<NodeId, number>();
-  const componentOf = new Map<NodeId, number>();
-  const components: NodeId[][] = [];
-  const conflicts: PlacementConflict[] = [];
-
-  for (const start of [...problem.participants].sort()) {
-    if (relative.has(start)) continue;
-    const component = components.length;
-    const nodes: NodeId[] = [];
-    const queue: NodeId[] = [start];
-    relative.set(start, 0);
-    componentOf.set(start, component);
-    while (queue.length > 0) {
-      const current = queue.shift()!;
-      nodes.push(current);
-      for (const edge of adjacency.get(current) ?? []) {
-        const expected = relative.get(current)! + edge.delta;
-        const prior = relative.get(edge.node);
-        if (prior === undefined) {
-          relative.set(edge.node, expected);
-          componentOf.set(edge.node, component);
-          queue.push(edge.node);
-        } else if (Math.abs(prior - expected) > TOLERANCE) {
-          conflicts.push({
-            axis,
-            owner: edge.owner,
-            priorOwner: "relation graph",
-            asserted: expected,
-            implied: prior,
-          });
-        }
-      }
-    }
-    components.push(nodes);
-  }
-
-  return { relative, componentOf, components, conflicts };
-}
-
 function solveAxis(
   axis: Axis,
   facts: PlacementFact[],
   spanExtents: Map<string, SpanExtent>
 ): { positions: Map<NodeId, number>; conflicts: PlacementConflict[] } {
-  const problem = classifyAxisFacts(facts, spanExtents);
-  const { relative, componentOf, components, conflicts } =
-    solveRelationComponents(axis, problem);
-
-  const offsets = new Map<number, { value: number; owner: string }>();
-  const applyPin = (node: NodeId, value: number, owner: string) => {
-    const component = componentOf.get(node);
-    const rel = relative.get(node);
-    if (component === undefined || rel === undefined) return;
-    const assertedOffset = value - rel;
-    const prior = offsets.get(component);
-    if (prior === undefined) {
-      offsets.set(component, { value: assertedOffset, owner });
-    } else if (Math.abs(prior.value - assertedOffset) > TOLERANCE) {
-      conflicts.push({
-        axis,
-        owner,
-        priorOwner: prior.owner,
-        asserted: value,
-        implied: rel + prior.value,
-      });
-    }
-  };
-  for (const pin of problem.pins) applyPin(pin.node, pin.value, pin.owner);
-
-  const distributeOriginFor = (component: number): NodeId | undefined => {
-    const outgoing = new Set<NodeId>();
-    const incoming = new Set<NodeId>();
-    for (const relation of problem.relations) {
-      if (!relation.owner.startsWith("distribute[")) continue;
-      if (componentOf.get(relation.from.node) !== component) continue;
-      outgoing.add(relation.from.node);
-      incoming.add(relation.to.node);
-    }
-    return [...outgoing].filter((node) => !incoming.has(node)).sort()[0];
-  };
-
-  for (let component = 0; component < components.length; component++) {
-    if (offsets.has(component)) continue;
-    const origin = distributeOriginFor(component);
-    if (origin !== undefined) {
-      offsets.set(component, {
-        value: -(relative.get(origin) ?? 0),
-        owner: "sequence-origin",
-      });
-      continue;
-    }
-    const min = Math.min(
-      ...components[component].map((node) => relative.get(node) ?? 0)
-    );
-    offsets.set(component, {
-      value: -min,
-      owner: "normalized-origin",
-    });
-  }
-
-  const positions = new Map<NodeId, number>();
-  for (const [node, rel] of relative) {
-    const component = componentOf.get(node)!;
-    positions.set(node, rel + offsets.get(component)!.value);
-  }
-  return { positions, conflicts };
+  return solveAxisProblem(axis, classifyAxisFacts(facts, spanExtents));
 }
 
 export function solvePlacementConstraints(
@@ -285,6 +119,19 @@ export function solvePlacementConstraints(
         `${conflict.implied}`
     );
   }
+
+  // Rank-2 shadow (#39 stage 5a): run the anchor-fact solve alongside and assert
+  // it reproduces the rank-1 `(min, size)`. Reads pre-commit target state, same
+  // as the shipped lowering did; zero-cost unless GOFISH_SOLVER_CHECK is set.
+  shadowCheckRank2Placement(
+    lowered.anchorProgram,
+    results.map((r) => r.positions) as [
+      Map<NodeId, number>,
+      Map<NodeId, number>,
+    ],
+    spanExtentByKey,
+    targets
+  );
 
   results.forEach((result, axisIndexValue) => {
     const axis = axisIndexValue as 0 | 1;

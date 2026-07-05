@@ -16,6 +16,8 @@ covers:
   - packages/gofish-graphics/src/ast/constraints/distribute.ts
   - packages/gofish-graphics/src/ast/constraints/align.ts
   - packages/gofish-graphics/src/ast/constraints/placementSolver.ts
+  - packages/gofish-graphics/src/ast/constraints/differenceGraph.ts
+  - packages/gofish-graphics/src/ast/constraints/rank2Placement.ts
   - packages/gofish-graphics/src/ast/constraints/placementLowering.ts
   - packages/gofish-graphics/src/ast/constraints/placementProgramLowerer.ts
   - packages/gofish-graphics/src/ast/constraints/placementFacts.ts
@@ -362,8 +364,8 @@ composes its targets' spaces into the layer's claim on that axis:
   edges of a target on an axis and the **size falls out** — the relation
   `place()`'s position-only protocol cannot express. It is built on the
   **linear-system bbox** (`constraints/bbox.ts`, #39): a per-axis 2-unknown
-  system in `(min, size)` where each facet (`min`/`max`/`center`/`size`) is one
-  equation; two independent facets are rank 2, so the rest are inferred (two
+  system in `(min, size)` where each box key (`min`/`max`/`center`/`size`) is one
+  equation; two independent keys are rank 2, so the rest are inferred (two
   edges ⇒ a size), and a third, dependent write is a structured
   over-determination report rather than a silent last-writer-wins. An interval's
   datum endpoints feed the axis's POSITION domain via `collectPositionDomains`
@@ -465,7 +467,7 @@ Span lowers to two explicit edge claims per target axis: an `edge-pin` for
 facts themselves go into the inspectable `PlacementProgram`. During solving,
 `edge-pin(min)` is a strong pin on the target's solved `min`; `edge-pin(max)`
 pins that same `min` through the derived span size (`max - size`). Known-size
-children contribute their intrinsic size. With sizes known, every anchor facet
+children contribute their intrinsic size. With sizes known, every anchor
 reduces to `min + offset`: `start`, `middle`, `end`, and `baseline` are just
 different offsets. `position`, `align`, `distribute`, `nest`, and `grid` then
 emit pins or weighted relations over target `min` values; the solver propagates

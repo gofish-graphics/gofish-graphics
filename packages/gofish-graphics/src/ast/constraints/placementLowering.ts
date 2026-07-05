@@ -26,7 +26,7 @@ import type { SpanExtent } from "./span";
 import { collectSpanExtents, lowerSpanEdgePins } from "./span";
 import { axisIndex, type Axis, type ConstraintPosScales } from "./shared";
 import { pxOf, type AxisMap } from "../domain";
-import type { PlacementProgram } from "./placementFacts";
+import type { AnchorProgram, PlacementProgram } from "./placementFacts";
 
 export type PlacementConstraint =
   | AlignConstraint
@@ -37,6 +37,9 @@ export type PlacementConstraint =
 
 export interface LoweredPlacement {
   program: PlacementProgram;
+  /** The rank-2 anchor program (#39 stage 5a), emitted alongside `program` for
+   *  the shadow solve. Not consumed by the shipped solver. */
+  anchorProgram: AnchorProgram;
   spanExtents: SpanExtent[];
 }
 
@@ -262,5 +265,9 @@ export function lowerPlacementConstraints(
     lowerGridPlacement(constraint, owner, sizes, lowerer);
   });
 
-  return { program: lowerer.program, spanExtents };
+  return {
+    program: lowerer.program,
+    anchorProgram: lowerer.anchorProgram,
+    spanExtents,
+  };
 }

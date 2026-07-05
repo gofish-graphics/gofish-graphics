@@ -4,7 +4,7 @@
  * Validates the model before any pipeline wiring: a measure's data→screen map on
  * one axis is affine, `screen(d) = origin + σ·d`, with two parameters —
  * **σ = slope** (px per data unit) and **origin/baseline = intercept** (screen
- * position of data-0). Layout is equations in these; facet values are σ-affine
+ * position of data-0). Layout is equations in these; key values are σ-affine
  * (`Monotonic` = `slope·σ + intercept`, reused from `util/monotonic`), so the
  * system propagates with σ symbolic and resolves it once per scope at the frame
  * equation.
@@ -16,12 +16,13 @@
  */
 import * as M from "../../util/monotonic";
 
-/** A named position. `baseline` is the origin (intercept); the others are
- *  free-space guidelines at offsets from it. */
-export type Facet = "baseline" | "min" | "center" | "max" | "size";
+/** A named box key. `baseline` is the origin (intercept); the anchors
+ *  (min/center/max) are free-space guidelines at offsets from it; `size` is the
+ *  extent. */
+export type BoxKey = "baseline" | "min" | "center" | "max" | "size";
 
 /**
- * Coefficients of a facet on the unknowns `(baseline, size)`, parameterized by
+ * Coefficients of a box key on the unknowns `(baseline, size)`, parameterized by
  * the shape's `minCoeff` — the offset of its local min-edge from the baseline in
  * size-units (upward bar `0`, downward bar `-1`, centered shape `-0.5`):
  *
@@ -34,10 +35,10 @@ export type Facet = "baseline" | "min" | "center" | "max" | "size";
  * exactly the `minCoeff=0` case — baseline ≡ min, the upward-bar assumption that
  * forced the real origin off-ledger into `transform.translate`. Letting
  * `minCoeff` vary makes the origin a first-class unknown and baseline a normal
- * facet.
+ * box key.
  */
-const coeffs = (facet: Facet, minCoeff: number): [number, number] => {
-  switch (facet) {
+const coeffs = (key: BoxKey, minCoeff: number): [number, number] => {
+  switch (key) {
     case "baseline":
       return [1, 0];
     case "size":
@@ -54,46 +55,46 @@ const coeffs = (facet: Facet, minCoeff: number): [number, number] => {
 const asMono = (v: M.Monotonic | number): M.Monotonic =>
   typeof v === "number" ? M.linear(0, v) : v;
 
-/** A facet equation that contradicts the already-solved system. */
+/** A box-key equation that contradicts the already-solved system. */
 export interface BoxConflict {
-  facet: Facet;
+  key: BoxKey;
   asserted: number;
   implied: number;
 }
 
 /**
  * A node's per-axis box: a 2-unknown linear system in `(baseline, size)` whose
- * facet values are σ-affine `Monotonic`s. Two independent facets determine the
+ * key values are σ-affine `Monotonic`s. Two independent keys determine the
  * box; a consistent third is checked, a contradictory third reported (mirrors
  * `BBox`'s named-conflict contract). Reads evaluate at a given σ.
  */
 export class SolverBox {
-  private eqs: { facet: Facet; value: M.Monotonic }[] = [];
+  private eqs: { key: BoxKey; value: M.Monotonic }[] = [];
   private sol?: [M.Monotonic, M.Monotonic]; // (baseline, size)
 
   constructor(public readonly minCoeff = 0) {}
 
-  /** Add a facet equation (σ-affine, or a constant number). Returns a conflict
+  /** Add a box-key equation (σ-affine, or a constant number). Returns a conflict
    *  descriptor when inconsistent with the determined system, else undefined. */
   add(
-    facet: Facet,
+    key: BoxKey,
     value: M.Monotonic | number,
     tolerance = 1e-6
   ): BoxConflict | undefined {
     const mono = asMono(value);
     if (this.sol) {
-      const implied = this.facetMono(facet)!;
+      const implied = this.keyMono(key)!;
       if (!this.monoEqual(implied, mono, tolerance))
-        return { facet, asserted: mono.run(0), implied: implied.run(0) };
+        return { key, asserted: mono.run(0), implied: implied.run(0) };
       return undefined;
     }
-    const existing = this.eqs.find((e) => e.facet === facet);
+    const existing = this.eqs.find((e) => e.key === key);
     if (existing) {
       if (!this.monoEqual(existing.value, mono, tolerance))
-        return { facet, asserted: mono.run(0), implied: existing.value.run(0) };
+        return { key, asserted: mono.run(0), implied: existing.value.run(0) };
       return undefined;
     }
-    this.eqs.push({ facet, value: mono });
+    this.eqs.push({ key, value: mono });
     if (this.eqs.length === 2) this.solve();
     return undefined;
   }
@@ -108,11 +109,11 @@ export class SolverBox {
 
   private solve(): void {
     const [e1, e2] = this.eqs;
-    const [a0, a1] = coeffs(e1.facet, this.minCoeff);
-    const [b0, b1] = coeffs(e2.facet, this.minCoeff);
+    const [a0, a1] = coeffs(e1.key, this.minCoeff);
+    const [b0, b1] = coeffs(e2.key, this.minCoeff);
     const det = a0 * b1 - a1 * b0;
     if (Math.abs(det) < 1e-12)
-      throw new Error("dependent facets — system underdetermined");
+      throw new Error("dependent keys — system underdetermined");
     // (baseline, size) = M⁻¹ · (e1, e2), as σ-affine Monotonics.
     const baseline = M.add(
       M.smul(b1 / det, e1.value),
@@ -122,19 +123,19 @@ export class SolverBox {
     this.sol = [baseline, size];
   }
 
-  /** A facet as a σ-affine claim: from the solve when determined, else a direct
+  /** A box key as a σ-affine claim: from the solve when determined, else a direct
    *  pin, else undefined. */
-  facetMono(facet: Facet): M.Monotonic | undefined {
+  keyMono(key: BoxKey): M.Monotonic | undefined {
     if (this.sol) {
-      const [c0, c1] = coeffs(facet, this.minCoeff);
+      const [c0, c1] = coeffs(key, this.minCoeff);
       return M.add(M.smul(c0, this.sol[0]), M.smul(c1, this.sol[1]));
     }
-    return this.eqs.find((e) => e.facet === facet)?.value;
+    return this.eqs.find((e) => e.key === key)?.value;
   }
 
-  /** A facet evaluated at scale factor `sigma` (default 0 → the intercept). */
-  read(facet: Facet, sigma = 0): number | undefined {
-    return this.facetMono(facet)?.run(sigma);
+  /** A box key evaluated at scale factor `sigma` (default 0 → the intercept). */
+  read(key: BoxKey, sigma = 0): number | undefined {
+    return this.keyMono(key)?.run(sigma);
   }
 
   get solved(): boolean {
@@ -178,8 +179,8 @@ export class AxisScope {
     return this._sigma;
   }
 
-  /** A node's facet as a concrete screen value at the resolved σ. */
-  read(id: string, facet: Facet): number | undefined {
-    return this.boxes.get(id)?.read(facet, this._sigma ?? 0);
+  /** A node's box key as a concrete screen value at the resolved σ. */
+  read(id: string, key: BoxKey): number | undefined {
+    return this.boxes.get(id)?.read(key, this._sigma ?? 0);
   }
 }

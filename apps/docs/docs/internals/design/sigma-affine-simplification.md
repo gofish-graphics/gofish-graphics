@@ -26,7 +26,7 @@ coordinate of the node's local data-0. Three things currently share the word
 "origin" and must be kept distinct:
 
 - **alignment** is a _constraint_: equations between baselines
-  (`baseline_A = baseline_B`), or between other facets for other anchors;
+  (`baseline_A = baseline_B`), or between other anchors for other alignments;
 - **placement** (`free | determined | conflict`) is the _abstract value_: is
   the baseline subsystem under-determined / solvable / inconsistent — all that
   bottom-up space resolution can know, since pixels don't exist yet;
@@ -201,14 +201,14 @@ the `max → min − size` rewrite in `classifyAxisFacts`
 
 ### The rank-2 design
 
-1. **Facet facts.** Facts reference `(node, facet)` with
-   facet ∈ {min, center, max, size, baseline}:
-   `pin(node, facet, value, owner)` and
-   `relate(from(node, facet), to(node, facet), gap, owner)`. The
-   anchor→facet mapping (`BOX_ANCHOR`) stays in lowering, but _no numeric
-   pre-evaluation happens there_ — offsets move into the solver. `edge-pin`
-   and the `spannedSize` callback are deleted; span's two edges are ordinary
-   `min`/`max` facet pins.
+1. **Anchor facts.** Facts reference `(node, anchor)` with
+   anchor ∈ {min, center, max, baseline} (plus a size equation):
+   `pin(node, anchor, value, owner)` and
+   `relate(from(node, anchor), to(node, anchor), gap, owner)`. The
+   align-anchor→box-anchor mapping (`BOX_ANCHOR`) stays in lowering, but _no
+   numeric pre-evaluation happens there_ — offsets move into the solver.
+   `edge-pin` and the `spannedSize` callback are deleted; span's two edges are
+   ordinary `min`/`max` anchor pins.
 2. **Per-node cells with two-tier authority.** Each (node, axis) gets a `BBox`
    (`constraints/bbox.ts` — the existing 2-unknown cell with named-owner
    conflicts). Constraint-owned equations are _strong_; the node's self-layout
@@ -246,11 +246,24 @@ the `max → min − size` rewrite in `classifyAxisFacts`
 
 ### Landing sequence (shadow-first, same discipline as the ledger)
 
-- **5a.** Emit facet-facts _alongside_ the current program; run the rank-2
+- **5a.** Emit anchor-facts _alongside_ the current program; run the rank-2
   solve in shadow and assert it reproduces the rank-1 result across all
-  stories (extend `GOFISH_SOLVER_CHECK`). No behavior.
+  stories (extend `GOFISH_SOLVER_CHECK`). No behavior. **Landed:** the lowerer
+  emits both programs, `constraints/rank2Placement.ts` runs the two-phase solve
+  and compares final `(min, size)` per (node, axis) against the shipped
+  positions, and `tests/scripts/capture-sweep.ts` renders every story with the
+  flag injected to collect any `[solver-check]`/`[bbox-conflict]` divergence.
 - **5b.** Flip the commit path to the rank-2 solve. Pixel gate.
 - **5c.** Delete the rank-1 path and the span side-channel.
+
+**Running the sweep.** With the workspace installed (`pnpm install`; the harness
+aliases `gofish-graphics` to `src/`, so source edits render live without a
+rebuild), run `pnpm --filter @gofish/tests capture-sweep`. It injects
+`window.GOFISH_SOLVER_CHECK = 1` into every story, captures the browser
+console, and exits non-zero listing each story that logged a `[solver-check]`
+(rank-2 vs rank-1 placement divergence) or `[bbox-conflict]` (ledger
+over-determination) line. A clean run is the 5a gate. Pass a substring to scope
+to one story (`pnpm --filter @gofish/tests capture-sweep bar`).
 
 ### Non-goals, held explicitly
 
@@ -278,7 +291,7 @@ the `max → min − size` rewrite in `classifyAxisFacts`
 ## Stage 6 — σ into the same system (the #39 endgame)
 
 Fold the σ resolution into the same linear system, per scope. The two hooks
-already exist: `BBox` facet values are already σ-affine `Monotonic`s (the
+already exist: `BBox` key values are already σ-affine `Monotonic`s (the
 "unified-propagation stage 1" note in `bbox.ts` — every caller just happens to
 pass constants today), and `AxisScope`/`SolverBox` (`solver/index.ts`) is the
 validated Phase-0 model.
@@ -307,7 +320,7 @@ inherits**:
 axis): a registry of member cells; the **frame equation**
 `content(σ) = allocated` solved once by `Monotonic.inverse`; the scope's
 posScale and σ are _views_ of the solved system (the Stage-4 `AxisScale`
-record becomes exactly this view: σ = slope, `map` = anchored min facet +
+record becomes exactly this view: σ = slope, `map` = anchored `min` anchor +
 pixel min; the intercept is `posScale(0)`, derived, never stored).
 
 **The dual slope is transitional debt, eliminated here — not a keeper.**
@@ -378,7 +391,7 @@ still has two independent slopes after Stage 6, that is a bug in Stage 6.
 ### Debuggability requirement
 
 Every scope must be dumpable as printable equations (`Monotonic.print` per
-facet, one line per member cell, frame equation last) behind a debug flag —
+box key, one line per member cell, frame equation last) behind a debug flag —
 the printable-equations bar the σ-affine model was chosen for.
 
 - Gate: shadow-clean per covered mode before each flip; pixel equality at
