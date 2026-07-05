@@ -19,6 +19,7 @@ import { bake } from "./coordinateTransforms/bake";
 import { lowerToDisplayList } from "./displayList/lower";
 import { paintSVG } from "./displayList/paintSVG";
 import type { ToPixel } from "./_node";
+import type { FlipScope } from "./_displayObject";
 import type { Size } from "./dims";
 import {
   continuousInterval,
@@ -250,20 +251,25 @@ export async function layout(
   const niceUnderlyingSpaceX = child._underlyingSpace![0];
   const niceUnderlyingSpaceY = child._underlyingSpace![1];
 
-  // y-UP scope decision (issue #143/#16). The y axis is "inverted" — origin at
-  // the bottom, values increasing upward — exactly when it carries a CONTINUOUS
-  // scale: a chart's value axis, or any low-level spec with datum-positioned or
-  // baseline-magnitude y (box-and-whisker, hand-drawn axes). An ORDINAL or
-  // UNDEFINED y (a category axis, a free-space diagram, an icicle/mosaic) stays
-  // SVG-native y-DOWN so it reads top→bottom. This is the semantic rule that
-  // replaces the old "is this a chart()?" structural heuristic: a vertical bar
-  // chart flips because its value axis is continuous, a horizontal bar chart
-  // does NOT (its y is the ordinal category axis, which should read top-down),
-  // and a continuous low-level spec flips without needing an explicit `yUp`. A
-  // `coord` (polar/clock) subtree keeps its existing y-up handling (the right
-  // convention there is still open). `yUp` (from options) is an explicit
-  // override on top. See the `subtreeHasCoord`/`isCONTINUOUS` callers.
-  const effYUp = yUp || subtreeHasContinuousY(child) || subtreeHasCoord(child);
+  // y-orientation is a PER-SCOPE property resolved at bake time (issue #629): the
+  // bake walk opens a y-up mirror at each topmost continuous-y node and mirrors
+  // about its own placed band, so a continuous chart grows up while an ordinal-y
+  // neighbor (a heatmap beside a bar chart) stays y-down — no single global root
+  // decision. The scope opens at the plot CONTENT (the chrome wrappers are
+  // `_scopeTransparent`), so a chart's chrome (legend column, axis titles) is NOT
+  // a member of the scope: its INTERIOR renders in the ambient frame (glyphs,
+  // legend row order, colorbar direction), while its BOX is placed by the plot's
+  // frame — the bake box-mirrors `_ambientYDown` chrome about the plot's flip
+  // scope (a parent's orientation places a child's box, never re-interprets its
+  // interior). Two layout-time orientation bits fall out:
+  //  - `chromeYUp`: the AMBIENT orientation the chrome INTERIOR builders read
+  //    (legend swatch order, colorbar value direction, axis-title rotation) —
+  //    y-down unless the explicit global `options.yUp` flips the whole canvas.
+  //  - `contentFlipsY`: whether the plot content will mirror (continuous root y,
+  //    or the global override) — the abstract frame the chrome BOX constraints
+  //    are authored against (legend top-alignment side). See #629/#143/#16.
+  const chromeYUp = yUp;
+  const contentFlipsY = yUp || isCONTINUOUS(niceUnderlyingSpaceY);
 
   // Reference to the content node whose extent defines the final canvas
   // (`finalW`/`finalH` via the `finalDim` readback below). Both the title pass
@@ -301,7 +307,7 @@ export async function layout(
       yTitle,
       anchors: titleAnchors,
       plotNode,
-      yUp: effYUp,
+      yUp: chromeYUp,
       sides: resolveAxisSides(axes),
     });
     if (contexts?.session) child.setRenderSession(contexts.session);
@@ -327,15 +333,17 @@ export async function layout(
     (isCategoricalScale(unitScale) && unitScale.color.size > 0) ||
     isContinuousColorScale(unitScale);
   if (hasLegend && unitScale) {
-    // The legend entries should read top→bottom. Under the y-up chart flip that
-    // needs `reverse` (a y-spread lays out bottom→top); in y-down free space the
-    // natural order already reads top→bottom. Pass the effective orientation
-    // (`effYUp`, computed above from the root y space) so the swatch column
-    // reverses only when y-up. See issue #143/#16.
+    // The legend entries should read top→bottom. The swatch column is chrome
+    // (`_ambientYDown`, #629): its INTERIOR renders in the ambient frame, where a
+    // `Spread({dir:"y"})` already reads top→bottom — no `reverse` unless the
+    // whole canvas is forced y-up by `options.yUp` (`chromeYUp`). Its BOX aligns
+    // against the plot's abstract frame (`contentFlipsY`) and is box-mirrored by
+    // the bake when the plot flips, landing top-aligned on screen. #143/#16/#629.
     child = await elaborateLegend(
       child,
       unitScale as CategoricalScale | ContinuousColorScale,
-      effYUp
+      chromeYUp,
+      contentFlipsY
     );
     legendAdded = true;
     if (contexts?.session) child.setRenderSession(contexts.session);
@@ -487,6 +495,18 @@ export async function layout(
   const finalW = finalDim(0, w);
   const finalH = finalDim(1, h);
 
+  // Stamp the ROOT plot content with the canvas y-flip frame (issue #629), when
+  // it will mirror (`contentFlipsY`). The bake walk opens the y-up scope at
+  // `contentNode` (the plot, inside any scope-transparent title/legend chrome)
+  // and mirrors about THIS frame — the canvas `[0, finalH]`, exactly what the old
+  // global flip used (`data.height`) — and box-mirrors the chrome siblings about
+  // the same frame. finalH is only known here, and the canvas origin (0) is NOT
+  // recoverable from the node's placed bbox (a shrink-to-fit pin can offset it),
+  // so stamp it authoritatively rather than have the bake re-derive it. A scope
+  // that opens BELOW the canvas frame (a facet cell, a mixed-dashboard subtree)
+  // is not `contentNode`, carries no stamp, and mirrors about its own band. #629.
+  if (contentFlipsY) contentNode._rootFlipScope = { baseY: 0, height: finalH };
+
   // Measured overhangs off the OUTERMOST wrapper (`child`), from its laid-out
   // extent. Anything seated beyond the content box is reserved by its placed
   // extent minus the content box; `render()` then sizes the SVG around them.
@@ -522,7 +542,7 @@ export async function layout(
   return {
     underlyingSpaceX: niceUnderlyingSpaceX,
     underlyingSpaceY: niceUnderlyingSpaceY,
-    yUp: effYUp,
+    yUp,
     posScales,
     child,
     width: finalW,
@@ -857,54 +877,6 @@ export async function gofishSave(
 
 const PADDING = 40;
 
-/**
- * Finds the translation from the top-level coord node.
- * Checks the node itself first, then its immediate children.
- * Returns the coord node's transform.translate values, or null if not found.
- */
-/** True if `node` or any descendant satisfies `pred`. Shared depth-first walk
- *  behind the y-up triggers below. */
-const subtreeHas = (
-  node: GoFishNode,
-  pred: (n: GoFishNode) => boolean
-): boolean => {
-  if (pred(node)) return true;
-  const kids = node.children as (GoFishNode | unknown)[] | undefined;
-  if (kids)
-    for (const k of kids)
-      if (k instanceof GoFishNode && subtreeHas(k, pred)) return true;
-  return false;
-};
-
-/** True if `node` or any descendant is a `coord` node (polar/clock/wavy). A
- *  coordinate system currently renders y-up regardless of its y-space kind, so
- *  the root flips when one is present even nested inside free-space
- *  `gofish([...])`/`.layer()`. This is the ONE remaining structural y-up trigger:
- *  cartesian y-up is now decided semantically from the root y space
- *  (`isCONTINUOUS`), but the right convention for polar/coord is still open, so
- *  its legacy behavior is preserved here. See issue #143/#16. */
-export const subtreeHasCoord = (node: GoFishNode): boolean =>
-  subtreeHas(node, (n) => n.type === "coord");
-
-/** True if `node` or ANY descendant has a CONTINUOUS y underlying space — i.e.
- *  somewhere in the tree y is a real position/magnitude scale (a value axis, a
- *  datum-positioned mark, a swarm's distribution), not an ordinal/undefined
- *  category band. This is the y-up trigger (issue #143/#16): the rule is "a
- *  cartesian scope with a continuous y position is inverted", so the presence of
- *  ANY such scope flips the (currently global) root frame. Checking the whole
- *  subtree — not just the root y — is what keeps a faceted scatter or a violin
- *  swarm upright: their root y is the ordinal facet/category axis, but the
- *  scatter/distribution NESTED inside is continuous, and that inner scope is what
- *  wants y-up. An all-ordinal chart (heatmap, horizontal bar, strip plot) has no
- *  continuous y anywhere and stays SVG-native y-down (reads top→bottom). A true
- *  per-scope coordinate transform (the follow-up) will localize this so a mixed
- *  composition can flip only the continuous scopes; today it is one global flip. */
-export const subtreeHasContinuousY = (node: GoFishNode): boolean =>
-  subtreeHas(node, (n) => {
-    const sy = n._underlyingSpace?.[1];
-    return sy !== undefined && isCONTINUOUS(sy);
-  });
-
 export const render = (
   {
     width,
@@ -971,25 +943,24 @@ export const render = (
   // <g> translate, so it needn't be pixel-snapped — a fractional width is
   // harmless (legend overhangs are fractional text widths).
   // Two-pass render: lower the baked scenegraph into the display-list IR, then
-  // paint each item. Items are final absolute pixels. The default frame is
-  // SVG-native y-DOWN (top-left origin): a vertical list reads top→bottom and
-  // `toPixel` only offsets by the gutter reserves. A `chart()` renders y-UP
-  // (`yUp` threaded from the builder): the root mirrors y about the canvas
-  // height — bars grow up, the y-axis increases upward — reproducing the old
-  // global flip. See issue #143/#16. (A true y-up coordinate transform — the
-  // follow-up — will make this composable per-subtree instead of root-global.)
-  // `yUp` is the resolved decision threaded from `layout()` (`LayoutData.yUp`,
-  // computed from the root y space), not a raw option — see `subtreeHasCoord`.
-  const toPixel: ToPixel = yUp
-    ? ([gx, gy]) => [gx + leftReserve, height + topReserve - gy]
-    : ([gx, gy]) => [gx + leftReserve, gy + topReserve];
-  const session = child.getRenderSession();
-  session.toPixel = toPixel;
-  // Declare the root orientation next to the map (issue #629): the flip bit is
-  // now carried, not probed. Boundary swaps that only translate (coord, offset)
-  // preserve parity, so they inherit this unchanged.
-  session.flipsY = yUp;
-  const paintBaked = () => lowerToDisplayList(child).map(paintSVG);
+  // paint each item. Items are final absolute pixels. The ambient frame is
+  // SVG-native y-DOWN (top-left origin): the base map only offsets by the gutter
+  // reserves, so a vertical list reads top→bottom. Orientation is now a PER-SCOPE
+  // property (issue #629): the bake walk tags each draw entry with the placed
+  // y-band it renders in (`d.flip`), and `toPixelFor` mirrors that entry's y
+  // about its own band — so a continuous-y chart grows up while an ordinal-y
+  // neighbor stays y-down. `options.yUp` still forces a GLOBAL y-up ambient
+  // (mirror about the whole canvas height), threaded as `ambientFlip`.
+  const baseDown: ToPixel = ([gx, gy]) => [gx + leftReserve, gy + topReserve];
+  const toPixelFor = (flip?: FlipScope): ToPixel =>
+    flip === undefined
+      ? baseDown
+      : ([gx, gy]) => baseDown([gx, 2 * flip.baseY + flip.height - gy]);
+  const ambientFlip: FlipScope | undefined = yUp
+    ? { baseY: 0, height }
+    : undefined;
+  const paintBaked = () =>
+    lowerToDisplayList(child, toPixelFor, ambientFlip).map(paintSVG);
   return (
     <svg
       width={

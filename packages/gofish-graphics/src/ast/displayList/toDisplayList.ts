@@ -28,6 +28,7 @@
 
 import type { DisplayList } from "gofish-ir";
 import type { ToPixel } from "../_node";
+import type { FlipScope } from "../_displayObject";
 import { runLayout, type GoFishRenderOptions } from "../gofish";
 import { GoFishNode } from "../_node";
 import { lowerToDisplayList } from "./lower";
@@ -63,30 +64,25 @@ export async function toDisplayList(
     h: topReserve + data.height + bottomReserve,
   };
 
-  // Default frame is SVG-native y-DOWN (top-left origin): a vertical list reads
-  // top→bottom and this map only offsets by the gutter reserves. A CONTINUOUS-y
-  // root (a chart's value axis, box-and-whisker, hand-drawn axes) or a `coord`
-  // scope renders y-UP: mirror y about the canvas height — bars grow up, the
-  // y-axis increases upward — reproducing the old global flip. That decision is
-  // made in `layout()` from the root y space and threaded here as `data.yUp`.
-  // See issue #143/#16.
-  const effYUp = data.yUp;
-  const toPixel: ToPixel = effYUp
-    ? ([gx, gy]) => [gx + leftReserve, data.height + topReserve - gy]
-    : ([gx, gy]) => [gx + leftReserve, gy + topReserve];
-
-  // Thread `toPixel` to every `lower` body (and the boundary operators that call
-  // `flattenLayout` internally) via the shared render session. `flipsY` declares
-  // the orientation alongside the map (issue #629) — translate-only boundary
-  // swaps (coord, offset) preserve parity and inherit it unchanged.
-  const session = data.child.getRenderSession();
-  session.toPixel = toPixel;
-  session.flipsY = effYUp;
+  // Ambient frame is SVG-native y-DOWN (top-left origin): the base map only
+  // offsets by the gutter reserves. Orientation is a PER-SCOPE property resolved
+  // at bake time (issue #629): each draw entry carries the placed y-band it draws
+  // in (`d.flip`) and `toPixelFor` mirrors its y about that band, so a continuous
+  // chart grows up while an ordinal-y neighbor stays y-down. `options.yUp` (via
+  // `data.yUp`) forces a GLOBAL y-up ambient (mirror about the whole canvas).
+  const baseDown: ToPixel = ([gx, gy]) => [gx + leftReserve, gy + topReserve];
+  const toPixelFor = (flip?: FlipScope): ToPixel =>
+    flip === undefined
+      ? baseDown
+      : ([gx, gy]) => baseDown([gx, 2 * flip.baseY + flip.height - gy]);
+  const ambientFlip: FlipScope | undefined = data.yUp
+    ? { baseY: 0, height: data.height }
+    : undefined;
 
   return {
     irVersion: 0,
     ir: "gofish-display-list",
     viewport,
-    items: lowerToDisplayList(data.child),
+    items: lowerToDisplayList(data.child, toPixelFor, ambientFlip),
   };
 }

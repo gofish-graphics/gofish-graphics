@@ -253,6 +253,42 @@ export class GoFishNode {
   public children: GoFishAST[];
   public intrinsicDims?: Dimensions;
   public transform?: Transform;
+  /** The pixel size this node was ALLOCATED by its parent (the `size` handed to
+   *  `layout()`) — the extent of its coordinate frame, which for a continuous
+   *  axis is the posScale's pixel range (canvas height for the root, cell height
+   *  for a facet). The y-up flip scope (#629) mirrors about this, NOT the content
+   *  bbox (`intrinsicDims.size`, which shrinks to the tallest bar). An UNSIZED
+   *  (NaN) axis leaves it undefined. */
+  public _allocatedSize?: Size;
+  /** This node and its subtree are CHROME that seats in the AMBIENT y-down frame,
+   *  NOT in the plot's y-up flip scope (issue #629). Set by the chrome-elaboration
+   *  passes (axis titles, the legend swatch column, the colorbar) on the shapes
+   *  they synthesize: those describe the plot from the outside and read top→bottom
+   *  regardless of whether the plot's value axis grows upward. The bake walk resets
+   *  the active flip scope to ambient when it enters such a subtree, so a titled /
+   *  legended y-up chart flips only its DATA marks (and their in-plot labels),
+   *  while the legend column and rotated axis titles stay y-down. The plot content
+   *  itself is NOT flagged, so it still flips. Only `options.yUp` (a global y-up
+   *  ambient) overrides — see the ambient seed in `render`. */
+  public _ambientYDown?: boolean;
+  /** This node UNIONS a continuous y up but does not ESTABLISH it — a chrome
+   *  wrapper (the axis-title / legend layer) that seats the plot content plus its
+   *  chrome siblings (issue #629). It is scope-TRANSPARENT for the y-up flip: the
+   *  bake walk does NOT open a scope here (its bbox includes the chrome, so it is
+   *  the wrong mirror band), but descends to the plot content it wraps — whose
+   *  frame is the canvas `finalH` — which opens the scope. Set by the chrome
+   *  elaboration passes. Distinct from `_ambientYDown` (which resets to y-down);
+   *  a scope-transparent node's CONTENT child still flips. */
+  public _scopeTransparent?: boolean;
+  /** The authoritative canvas y-flip frame for the ROOT plot content (issue
+   *  #629): `{ baseY: 0, height: finalH }`, stamped by `layout()` on `contentNode`
+   *  once `finalH = contentNode.dims.size` is known. This is the exact frame the
+   *  old global flip mirrored about (`toDisplayList`'s `data.height`) — the canvas
+   *  origin, NOT the node's placed bbox min, which a shrink-to-fit pin can offset
+   *  from 0. The bake walk uses it when the root content opens the flip scope; a
+   *  scope opening deeper (a facet cell) has no stamp and mirrors about its own
+   *  allocated band. `{baseY, height}` mirrors `FlipScope` in `_displayObject`. */
+  public _rootFlipScope?: { baseY: number; height: number };
   /** Persistent per-axis bbox ledger (#39 stage 2). Records the facet equations
    *  that determine this node's box, so it mirrors the authoritative
    *  `(intrinsicDims, transform)`: `layout()` seeds the self-layout size (+ a
@@ -757,6 +793,7 @@ export class GoFishNode {
     // Axes are no longer drawn here: they are elaborated into ordinary shapes +
     // constraints by `elaborateAxes` (src/ast/axes/elaborate.tsx) before layout,
     // so the layout engine has no axis-specific budget/baseline machinery.
+    this._allocatedSize = size; // frame extent for the y-up flip scope (#629)
     const { intrinsicDims, transform, renderData } = this._layout(
       this.shared,
       size,

@@ -654,9 +654,11 @@ const Y_TITLE_NAME = "__yAxisTitle";
 /** The x-axis title: horizontal text below the plot. The customization seam
  *  (like `legendColumn` / `tickMark`) — a future public API can override it. */
 export function xAxisTitle(text: string): GoFishNode {
-  return Text({ text, fontSize: TITLE_FONT_SIZE, fill: TITLE_COLOR }).name(
+  const t = Text({ text, fontSize: TITLE_FONT_SIZE, fill: TITLE_COLOR }).name(
     X_TITLE_NAME
   );
+  t._ambientYDown = true; // chrome: reads y-down, never in the plot flip scope (#629)
+  return t;
 }
 
 /** The y-axis title, reading bottom-to-top (facing inward) in the left gutter.
@@ -666,12 +668,14 @@ export function xAxisTitle(text: string): GoFishNode {
  *  top-to-bottom, facing outward. See issue #143/#16. Customization seam, like
  *  `xAxisTitle`. */
 export function yAxisTitle(text: string, yUp = true): GoFishNode {
-  return Text({
+  const t = Text({
     text,
     fontSize: TITLE_FONT_SIZE,
     fill: TITLE_COLOR,
     rotate: yUp ? 90 : -90,
   }).name(Y_TITLE_NAME);
+  t._ambientYDown = true; // chrome: reads y-down, never in the plot flip scope (#629)
+  return t;
 }
 
 /**
@@ -766,6 +770,11 @@ export async function elaborateAxisTitles(
         // … and seat it past the FULL content bbox on the same edge as the
         // axis: title BEFORE the content seats it on the start edge, AFTER on
         // the end edge (so it clears the tick/label rows and tracks `side`).
+        // This is authored in the shared ABSTRACT frame — the same side as the
+        // axis labels. When the plot mirrors (y-up), the bake box-mirrors the
+        // title (an `_ambientYDown` chrome sibling) about the plot's flip
+        // scope, so it lands on the same VISUAL edge as the flipped labels;
+        // its interior (glyphs, rotation) stays ambient. See bake.ts. #629
         cs.push(
           Constraint.distribute(
             { dir: "y", spacing: TITLE_CONTENT_GAP },
@@ -797,6 +806,13 @@ export async function elaborateAxisTitles(
       return cs;
     });
 
+    // The title wrapper only UNIONS the plot's continuous y up (to keep the space
+    // valid for nicing); it is not itself the σ-scope. Mark it scope-transparent
+    // so the y-up flip (#629) opens at the plot CONTENT it wraps — whose frame is
+    // the canvas `finalH` — not at this wrapper (whose bbox includes the title,
+    // which would over-size the mirror band). The titles themselves are
+    // `_ambientYDown`, so they stay y-down regardless.
+    root._scopeTransparent = true;
     return root;
   });
 }
