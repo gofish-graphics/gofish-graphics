@@ -39,8 +39,8 @@ import * as Monotonic from "../../util/monotonic";
 import type { GoFishAST } from "../_ast";
 import { Size } from "../dims";
 import {
-  CONTINUOUS,
   POSITION,
+  SIZE,
   UNDEFINED,
   UnderlyingSpace,
   continuousInterval,
@@ -130,7 +130,7 @@ export function scaleBaselineMagnitude(
   scale: number
 ): UnderlyingSpace {
   return isBaselineMagnitude(space) && scale !== 1
-    ? CONTINUOUS(Monotonic.smul(scale, space.width), "free", space.measure)
+    ? SIZE(Monotonic.smul(scale, space.width), space.measure)
     : space;
 }
 

@@ -255,11 +255,14 @@ distinction into the _type_. A first cut collapsed them to a single overloaded
 `origin: number | "free" | "impossible"` scalar, but that conflated the layout
 fact with the data fact (a baseline magnitude vs a data axis anchored at 0 —
 which build no posScale vs a posScale). Keeping the layout fact _derived from_
-`dataDomain` keeps them distinct while storing only one field. The
-`SIZE`/`POSITION`/`DIFFERENCE` constructors survive as thin builders over a
-single `anchor` argument (`number | "free" | "impossible"` — the number is the
-domain min, not a zero point), and each fixes `dataDomain`, from which placement
-falls out:
+`dataDomain` keeps them distinct while storing only one field. There is no
+scalar "anchor" builder type either — a second spelling of the same three-way
+split would just be `Placement` with a payload again. The three placement cases
+ARE the three named constructors (`POSITION` anchored, `SIZE` free,
+`DIFFERENCE` conflict), plus `anchorAt(space, min)` for re-anchoring an
+existing space at a data coordinate (the domain min, not a zero point) while
+preserving its σ-affine width. Each constructor fixes `dataDomain`, from which
+placement falls out:
 
 - a former `SIZE` (`rect({ h: "count" })`) has `dataDomain: undefined` → placement `free`;
 - a former `POSITION([a, b])` has `dataDomain: [a, b]` → placement `determined` (at `a`);

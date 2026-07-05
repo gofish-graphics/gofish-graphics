@@ -14,7 +14,7 @@ import {
   isPOSITION,
   isDIFFERENCE,
   isBaselineMagnitude,
-  placementOf,
+  anchorAt,
   spacePlacement,
   type CONTINUOUS_TYPE,
   type UnderlyingSpace,
@@ -100,15 +100,23 @@ console.log(
   "# space: the abstract placement lattice is total over origin (Phase A)"
 );
 {
-  // placementOf maps each of the three anchor states to a bare placement.
-  ok('anchor "free" → placement free', placementOf("free") === "free");
+  // The three placement cases ARE the three named constructors; anchorAt
+  // re-anchors while preserving the σ-affine width (the position operator's
+  // construction — a free width with slope must not collapse to a constant).
+  const freeSlope = SIZE(M.linear(10, 0)) as CONTINUOUS_TYPE; // width 10·σ
+  const anchored = anchorAt(freeSlope, 1955);
   ok(
-    'anchor "impossible" → placement conflict',
-    placementOf("impossible") === "conflict"
+    "anchorAt(free, 1955) → placement determined",
+    spacePlacement(anchored) === "determined"
   );
   ok(
-    "anchor <number> → placement determined (data coordinate lives in dataDomain)",
-    placementOf(1955) === "determined"
+    "anchorAt domain min is the anchor coordinate",
+    JSON.stringify(anchored.dataDomain) ===
+      JSON.stringify(interval(1955, 1955 + freeSlope.width.run(1)))
+  );
+  ok(
+    "anchorAt preserves the σ-affine width (slope not baked at σ=1)",
+    anchored.width.run(2) === 20
   );
 
   // Constructors carry dataDomain; placement is derived from its shape.

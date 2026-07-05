@@ -3,7 +3,7 @@ import { GoFishNode } from "../_node";
 import { Size, translateString } from "../dims";
 import { getMeasure, getValue, isValue, MaybeValue } from "../data";
 import {
-  CONTINUOUS,
+  anchorAt,
   continuousInterval,
   isCONTINUOUS,
   UNDEFINED,
@@ -25,15 +25,13 @@ const offsetSpace = (
   const value = isValue(offset) ? getValue(offset) : offset;
   if (value === undefined) return space;
 
-  // An anchored space offsets from its domain min (≡ the old placement `at`); a
-  // free / difference space anchors at `value` itself.
+  // An anchored space offsets from its domain min; a free / difference space
+  // anchors at `value` itself. Width stays σ-affine — see anchorAt.
   const iv = continuousInterval(space);
-  const anchor = iv !== undefined ? iv.min + value : value;
-  return CONTINUOUS(
-    space.width,
-    anchor,
-    space.measure ?? getMeasure(offset),
-    space.coordinateTransform
+  return anchorAt(
+    space,
+    iv !== undefined ? iv.min + value : value,
+    space.measure ?? getMeasure(offset)
   );
 };
 

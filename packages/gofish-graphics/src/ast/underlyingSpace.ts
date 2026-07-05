@@ -38,10 +38,10 @@ export type UnderlyingSpaceKind = "continuous" | "ordinal" | "undefined";
  * The subtlety #586's first cut got wrong: a baseline magnitude (`"free"`) is
  * NOT the same as a data axis anchored at 0 (`anchor: 0`) — the former builds no
  * posScale and forgets measures, the latter does the opposite. Conflating them
- * via `anchor === 0` silently dropped the unit-clash guard and over-niced; the
- * named `"free"`/`"impossible"` states keep them apart. A former DIFFERENCE
- * width `w` is `linear(w, 0)`; a former POSITION `[a,b]` is
- * `width = linear(b-a, 0), anchor = a`.
+ * via "anchored at 0" silently dropped the unit-clash guard and over-niced; the
+ * distinct `undefined`/`"delta"` domain states keep them apart. A former
+ * DIFFERENCE width `w` is `linear(w, 0)` with domain `"delta"`; a former
+ * POSITION `[a,b]` is `width = linear(b-a, 0)` with domain `[a,b]`.
  *
  * The stored fields are just `width` + `dataDomain` (+ measure, etc.). The
  * abstract PLACEMENT ({@link Placement}) is a DERIVED VIEW of `dataDomain`'s
@@ -76,33 +76,6 @@ export type Placement = "free" | "determined" | "conflict";
  *  or `undefined` for a baseline magnitude (no data axis at all). This is the
  *  sole placement carrier: {@link spacePlacement} reads its shape. */
 export type DataDomain = Interval | "delta" | undefined;
-
-/** The convenient builder form of the placement + dataDomain: a numeric DATA
- *  coordinate (the domain min — anchored, NOT a zero point), `"free"`
- *  (magnitude), or `"impossible"` (difference). Constructors take this; the
- *  stored field is `dataDomain`, from which placement is derived. */
-export type Anchor = number | "free" | "impossible";
-
-/** Derive the abstract {@link Placement} from the builder {@link Anchor}. */
-export const placementOf = (anchor: Anchor): Placement =>
-  anchor === "free"
-    ? "free"
-    : anchor === "impossible"
-      ? "conflict"
-      : "determined";
-
-/** Derive the {@link DataDomain} from the builder {@link Anchor} + width:
- *  numeric → `[anchor, anchor + width.run(1)]`; `"impossible"` → `"delta"`;
- *  `"free"` → `undefined`. */
-export const dataDomainOf = (
-  anchor: Anchor,
-  width: Monotonic.Monotonic
-): DataDomain =>
-  typeof anchor === "number"
-    ? interval(anchor, anchor + width.run(1))
-    : anchor === "impossible"
-      ? "delta"
-      : undefined;
 
 /** Read the abstract {@link Placement} off a stored CONTINUOUS space. Placement
  *  is not stored: it is a view of `dataDomain`'s shape (`undefined → "free"`,
@@ -151,15 +124,20 @@ export type UNDEFINED_TYPE = {
 
 export type UnderlyingSpace = CONTINUOUS_TYPE | ORDINAL_TYPE | UNDEFINED_TYPE;
 
+/** Low-level constructor: takes the stored {@link DataDomain} directly. There
+ *  is no scalar "anchor" builder type — the three placement cases ARE the three
+ *  named constructors ({@link POSITION} anchored, {@link SIZE} free,
+ *  {@link DIFFERENCE} conflict), plus {@link anchorAt} for re-anchoring an
+ *  existing space at a data coordinate. */
 export const CONTINUOUS = (
   width: Monotonic.Monotonic,
-  anchor: Anchor,
+  dataDomain: DataDomain,
   measure?: Measure,
   coordinateTransform?: CoordinateTransform
 ): CONTINUOUS_TYPE => ({
   kind: "continuous",
   width,
-  dataDomain: dataDomainOf(anchor, width),
+  dataDomain,
   measure,
   coordinateTransform,
 });
@@ -205,7 +183,7 @@ export const POSITION = (
 ): UnderlyingSpace =>
   CONTINUOUS(
     Monotonic.linear(domain.max - domain.min, 0),
-    domain.min,
+    domain,
     measure,
     coordinateTransform
   );
@@ -216,7 +194,7 @@ export const isPOSITION = (space: UnderlyingSpace): space is CONTINUOUS_TYPE =>
  *  fact (`dataDomain === "delta"`), NOT on placement, so a future `conflict`
  *  placement that still has a real data domain doesn't render delta ticks. */
 export const DIFFERENCE = (width: number, measure?: Measure): UnderlyingSpace =>
-  CONTINUOUS(Monotonic.linear(width, 0), "impossible", measure);
+  CONTINUOUS(Monotonic.linear(width, 0), "delta", measure);
 export const isDIFFERENCE = (
   space: UnderlyingSpace
 ): space is CONTINUOUS_TYPE =>
@@ -226,7 +204,25 @@ export const isDIFFERENCE = (
 export const SIZE = (
   domain: Monotonic.Monotonic,
   measure?: Measure
-): UnderlyingSpace => CONTINUOUS(domain, "free", measure);
+): UnderlyingSpace => CONTINUOUS(domain, undefined, measure);
+
+/** Re-anchor a continuous space at data coordinate `min`, preserving its
+ *  σ-affine `width`: the result's domain is `[min, min + width.run(1)]`. This
+ *  is the one construction the named constructors can't express — anchoring a
+ *  free (or difference) extent without flattening its width to a constant, or
+ *  shifting an anchored one (the `position` operator does both). `measure`
+ *  defaults to the space's own. */
+export const anchorAt = (
+  space: CONTINUOUS_TYPE,
+  min: number,
+  measure?: Measure
+): CONTINUOUS_TYPE =>
+  CONTINUOUS(
+    space.width,
+    interval(min, min + space.width.run(1)),
+    measure ?? space.measure,
+    space.coordinateTransform
+  );
 
 /** Has a baseline (a place it hangs from): a baseline magnitude or an anchored
  *  coordinate, but NOT a difference ({@link spacePlacement} === "conflict"). The

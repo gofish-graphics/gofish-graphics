@@ -3,10 +3,10 @@
 // </gofish-wiki>
 
 import {
-  CONTINUOUS,
   DIFFERENCE,
   ORDINAL,
   POSITION,
+  SIZE,
   UNDEFINED,
   isCONTINUOUS,
   isORDINAL,
@@ -83,9 +83,8 @@ export function unionChildSpaces(
     nonUndefined.length === conts.length &&
     conts.every((s) => spacePlacement(s) === "free")
   ) {
-    return CONTINUOUS(
+    return SIZE(
       Monotonic.max(...conts.map((s) => s.width)),
-      "free",
       forgetAllMeasures(conts.map((s) => s.measure))
     );
   }
