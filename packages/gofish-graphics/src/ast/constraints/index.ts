@@ -19,7 +19,6 @@ import {
   isZOrderConstraint,
 } from "./zorder";
 import { createNestConstraint } from "./nest";
-import { createGridConstraint, isGridConstraint } from "./grid";
 import { spanDatumInterval } from "./span";
 import { isPositionInterval } from "./position";
 import type { AlignConstraint, AlignOptions } from "./align";
@@ -27,7 +26,7 @@ import type { DistributeConstraint, DistributeOptions } from "./distribute";
 import type { PositionConstraint, PositionOptions } from "./position";
 import type { ZAboveConstraint, ZBelowConstraint } from "./zorder";
 import type { NestConstraint, NestOptions } from "./nest";
-import type { GridConstraint, GridOptions } from "./grid";
+import type { GridConstraint } from "./grid";
 import { type ConstraintPosScales, type ConstraintRef } from "./shared";
 import { solvePlacementConstraints } from "./placementSolver";
 
@@ -51,7 +50,10 @@ export type {
   ZOrderConstraint,
 } from "./zorder";
 export type { NestConstraint, NestOptions } from "./nest";
-export type { GridConstraint, GridOptions } from "./grid";
+// `GridConstraint` stays in the ConstraintSpec union, but grid is not part of
+// the public authoring surface: it is `table`'s private elaboration target
+// (`createGridConstraint` in ./grid, used by table.tsx). No `Constraint.grid`.
+export type { GridConstraint } from "./grid";
 export { isZOrderConstraint } from "./zorder";
 export { isNestConstraint, nestedSpace } from "./nest";
 export { isGridConstraint, gridSpaces, gridCellSize } from "./grid";
@@ -96,9 +98,6 @@ export const Constraint = {
     children: [ConstraintRef, ConstraintRef]
   ): NestConstraint {
     return createNestConstraint(options, children);
-  },
-  grid(options: GridOptions, children: ConstraintRef[]): GridConstraint {
-    return createGridConstraint(options, children);
   },
 };
 

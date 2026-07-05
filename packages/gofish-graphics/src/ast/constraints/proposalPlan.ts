@@ -281,6 +281,24 @@ export function selectGridConstraint(
     }
     selected = constraint;
   }
+  // A grid is a whole-layer layout mode, not a composable constraint: it owns
+  // both track partitions and bypasses the space/size fold, while placement
+  // still applies every sibling constraint — so a grid mixed with any other
+  // positioning constraint silently half-applies (its facts never enter the
+  // space fold). Reject non-z-order siblings; z-order (zAbove/zBelow) is
+  // render-time paint order and composes. This lifts when grids become track
+  // equations (Stage 6e, design/sigma-affine-simplification.md).
+  if (selected !== undefined) {
+    for (const constraint of constraints) {
+      if (constraint.type === "grid" || isZOrderConstraint(constraint)) {
+        continue;
+      }
+      throw new Error(
+        `Constraint.grid cannot be combined with a '${constraint.type}' constraint on the same layer. ` +
+          `Put the grid in its own layer, or nest layers, so each layout mode owns its own scope.`
+      );
+    }
+  }
   return selected;
 }
 

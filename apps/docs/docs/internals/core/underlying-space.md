@@ -416,8 +416,16 @@ out first. The bottom-up space pass applies only the inside-out portion via
 `applyNestLayoutProposal` does the corresponding layout-time arithmetic on the
 derived axes.
 Grid is also selected through the proposal plan (`selectGridConstraint`):
-because a grid owns both track partitions for a layer, more than one grid
-constraint is a proposal conflict rather than a declaration-order choice.
+because a grid owns both track partitions for a layer — and bypasses the
+space/size fold entirely — it is a whole-layer layout mode, not a composable
+constraint. `selectGridConstraint` therefore enforces two exclusivity rules
+(it is the one site both the space pass and the layout pass flow through): more
+than one grid constraint is a proposal conflict rather than a declaration-order
+choice, and a grid mixed with any non-z-order constraint (align / distribute /
+position / nest) throws — that sibling would be applied by placement but never
+enter the space fold, so it would silently half-apply. z-order constraints
+(zAbove / zBelow) are render-time paint order and compose freely alongside a
+grid. Grid has no public factory; it is `table`'s private elaboration target.
 The same proposal plan marks datum-valued `position` targets
 (`buildPositionTargetDims`) so the layer does not also forward the consumed
 data→pixel scale to that child axis; literal pixel pins are not marked because

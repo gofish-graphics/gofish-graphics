@@ -628,20 +628,51 @@ console.log("# constraint confluence: grid proposal ownership");
     selectGridConstraint([grid2]) === grid2
   );
 
-  const throws = (constraints: GridConstraint[]): boolean => {
+  const throwsWith = (
+    constraints: Constraint[],
+    fragment: string
+  ): boolean => {
     try {
       selectGridConstraint(constraints);
       return false;
     } catch (error) {
-      return (
-        error instanceof Error &&
-        error.message.includes("Constraint.grid proposal conflict")
-      );
+      return error instanceof Error && error.message.includes(fragment);
     }
   };
   ok(
     "duplicate grid proposal ownership throws in either order",
-    throws([grid2, grid1]) && throws([grid1, grid2])
+    throwsWith([grid2, grid1], "Constraint.grid proposal conflict") &&
+      throwsWith([grid1, grid2], "Constraint.grid proposal conflict")
+  );
+
+  // grid mixed with any non-z-order constraint half-applies (placement sees it,
+  // the space/size fold does not), so selectGridConstraint rejects it.
+  const alignMix: AlignConstraint = {
+    type: "align",
+    y: "middle",
+    children: [A, B],
+  };
+  ok(
+    "grid mixed with align throws in either order",
+    throwsWith(
+      [grid2, alignMix],
+      "Constraint.grid cannot be combined with a 'align' constraint"
+    ) &&
+      throwsWith(
+        [alignMix, grid2],
+        "Constraint.grid cannot be combined with a 'align' constraint"
+      )
+  );
+
+  // z-order (zAbove/zBelow) is render-time paint order and composes with grid.
+  const zAboveMix: ZAboveConstraint = {
+    type: "zAbove",
+    children: [A, B],
+  };
+  ok(
+    "grid alongside a z-order constraint is allowed",
+    selectGridConstraint([grid2, zAboveMix]) === grid2 &&
+      selectGridConstraint([zAboveMix, grid2]) === grid2
   );
 }
 
