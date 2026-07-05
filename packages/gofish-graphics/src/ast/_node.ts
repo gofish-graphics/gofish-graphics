@@ -89,6 +89,13 @@ export type RenderSession = {
   /** Set by the lower emit driver (`lowerToDisplayList`) for the duration of a
    *  lowering walk: the y-up→y-down pixel mapping every `lower` body uses. */
   toPixel?: ToPixel;
+  /** Declared y-flip orientation of the active `toPixel`, set at every site that
+   *  sets `toPixel` (the root in `render()`/`toDisplayList`, the `coord` boundary
+   *  swap). `true` when the map mirrors y (an active y-up scope). Orientation-
+   *  dependent lower bodies (text rotation, value labels) read this DECLARED bit
+   *  instead of probing the map numerically (`toPixelFlipsY`), which stays as a
+   *  dev-mode cross-check. See issue #143/#16/#629. */
+  flipsY?: boolean;
 };
 
 export type ScaleFactorFunction = Monotonic.Monotonic;

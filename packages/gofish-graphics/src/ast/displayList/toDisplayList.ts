@@ -76,8 +76,12 @@ export async function toDisplayList(
     : ([gx, gy]) => [gx + leftReserve, gy + topReserve];
 
   // Thread `toPixel` to every `lower` body (and the boundary operators that call
-  // `flattenLayout` internally) via the shared render session.
-  data.child.getRenderSession().toPixel = toPixel;
+  // `flattenLayout` internally) via the shared render session. `flipsY` declares
+  // the orientation alongside the map (issue #629) — translate-only boundary
+  // swaps (coord, offset) preserve parity and inherit it unchanged.
+  const session = data.child.getRenderSession();
+  session.toPixel = toPixel;
+  session.flipsY = effYUp;
 
   return {
     irVersion: 0,

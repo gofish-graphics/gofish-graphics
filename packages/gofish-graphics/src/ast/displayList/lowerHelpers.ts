@@ -14,6 +14,7 @@ import type { GoFishAST } from "../_ast";
 import type { CoordinateTransform } from "../coordinateTransforms/coord";
 import { displayTranslate, type Transform } from "../dims";
 import { type Path, type Point, pathToSVGPath } from "../../path";
+import { envFlag } from "../../util";
 
 /**
  * The display-list `role` of a lowered item, derived from whether it is
@@ -89,9 +90,27 @@ export const rectItemFromBox = (
 /** True when `toPixel` mirrors the y axis (pixel-y decreases as GoFish-y
  *  increases) — i.e. an active `yUp` chart scope. Lets orientation-dependent
  *  shapes (text rotation) pick the right sign by reading the flip out of
- *  `toPixel` rather than carrying a separate flag (issue #143/#16). */
+ *  `toPixel` rather than carrying a separate flag (issue #143/#16). Retained as
+ *  the dev-mode cross-check for the DECLARED bit (see {@link declaredFlipsY}). */
 export const toPixelFlipsY = (toPixel: ToPixel): boolean =>
   toPixel([0, 1])[1] < toPixel([0, 0])[1];
+
+/** The node's DECLARED y-flip orientation — read off the render session
+ *  (`session.flipsY`), set at every `toPixel` boundary. Replaces the numeric
+ *  probe {@link toPixelFlipsY} at the orientation-dependent lower bodies (text
+ *  rotation, value labels); under `GOFISH_FLIP_CHECK` it asserts the declared
+ *  bit agrees with the probe. See issue #143/#16/#629. */
+export const declaredFlipsY = (node: GoFishNode, toPixel: ToPixel): boolean => {
+  const declared = node.getRenderSession().flipsY ?? false;
+  if (envFlag("GOFISH_FLIP_CHECK")) {
+    const probed = toPixelFlipsY(toPixel);
+    if (declared !== probed)
+      console.warn(
+        `[flip-check] ${node.type}: declared flipsY=${declared} but probe=${probed}`
+      );
+  }
+  return declared;
+};
 
 /** Assemble a `Style` from resolved presentation values, dropping undefined
  *  keys (and a zero/undefined stroke-width, which the legacy render omitted). */

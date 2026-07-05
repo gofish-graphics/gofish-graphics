@@ -983,7 +983,12 @@ export const render = (
   const toPixel: ToPixel = yUp
     ? ([gx, gy]) => [gx + leftReserve, height + topReserve - gy]
     : ([gx, gy]) => [gx + leftReserve, gy + topReserve];
-  child.getRenderSession().toPixel = toPixel;
+  const session = child.getRenderSession();
+  session.toPixel = toPixel;
+  // Declare the root orientation next to the map (issue #629): the flip bit is
+  // now carried, not probed. Boundary swaps that only translate (coord, offset)
+  // preserve parity, so they inherit this unchanged.
+  session.flipsY = yUp;
   const paintBaked = () => lowerToDisplayList(child).map(paintSVG);
   return (
     <svg

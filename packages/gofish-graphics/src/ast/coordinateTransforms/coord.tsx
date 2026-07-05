@@ -427,6 +427,10 @@ export const coord = createNodeOperator(
           const items: DisplayList.DisplayItem[] = [];
 
           // Content: warp each flattened child through the coord transform.
+          // `contentToPixel` only composes a translate onto `outer`, so it
+          // preserves the incoming y-parity — declare `flipsY` unchanged
+          // (issue #629; coord self-normalization is a Stage-1 concern).
+          const outerFlipsY = session.flipsY;
           session.toPixel = contentToPixel;
           try {
             for (const child of children) {
@@ -438,6 +442,7 @@ export const coord = createNodeOperator(
             }
           } finally {
             session.toPixel = outer;
+            session.flipsY = outerFlipsY;
           }
 
           // Grid lines (rare; grid defaults off). Lines port faithfully; the
