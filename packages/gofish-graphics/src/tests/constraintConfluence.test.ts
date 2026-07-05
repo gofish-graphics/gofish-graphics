@@ -47,6 +47,7 @@ import {
   selectGridConstraint,
 } from "../ast/constraints/proposalPlan";
 import { discretePosition, value } from "../ast/data";
+import { pxOf, type AxisMap } from "../ast/domain";
 import { POSITION, SIZE, UNDEFINED } from "../ast/underlyingSpace";
 import { interval } from "../util/interval";
 
@@ -717,10 +718,11 @@ console.log("# constraint confluence: position scale ownership planning");
 
 console.log("# constraint confluence: child posScale forwarding");
 {
-  const baseX = (v: number) => v + 1;
-  const baseY = (v: number) => v + 2;
-  const effectiveX = (v: number) => v * 10;
-  const effectiveY = (v: number) => v * 20;
+  // AxisMaps standing in for the former closures: pxOf(map, v) reproduces them.
+  const baseX: AxisMap = { sigma: 1, domainMin: 0, pxMin: 1 }; // v + 1
+  const baseY: AxisMap = { sigma: 1, domainMin: 0, pxMin: 2 }; // v + 2
+  const effectiveX: AxisMap = { sigma: 10, domainMin: 0, pxMin: 0 }; // v * 10
+  const effectiveY: AxisMap = { sigma: 20, domainMin: 0, pxMin: 0 }; // v * 20
   const positionSpace = POSITION(interval(0, 10));
 
   const noOwnedAxisPlan = buildPositionScalePlan(
@@ -746,7 +748,7 @@ console.log("# constraint confluence: child posScale forwarding");
     ownedAxisPlan.ownsAxis[0] === true &&
       ownedAxisPlan.ownsAxis[1] === false &&
       ownedAxisPlan.effectivePosScales[0] === baseX &&
-      ownedAxisPlan.effectivePosScales[1]?.(5) === 100
+      pxOf(ownedAxisPlan.effectivePosScales[1]!, 5) === 100
   );
 
   const unowned = childPosScalesFor(
@@ -807,7 +809,11 @@ console.log("# constraint confluence: raw placement coordinates");
   ok(
     "datum placement coordinate elaborates through posScale before raw facts",
     compilePlacementCoordinate(value(5).offset(3), undefined) === undefined &&
-      compilePlacementCoordinate(value(5).offset(3), (v) => v * 10) === 53
+      compilePlacementCoordinate(value(5).offset(3), {
+        sigma: 10,
+        domainMin: 0,
+        pxMin: 0,
+      }) === 53
   );
   ok(
     "discrete placement coordinate resolves from containing axis size",
@@ -1097,8 +1103,8 @@ console.log("# constraint confluence: interval vs point compose bail");
 
 console.log("# constraint confluence: child scale factor planning");
 {
-  const inheritedX = (v: number) => v + 1;
-  const inheritedY = (v: number) => v + 2;
+  const inheritedX: AxisMap = { sigma: 1, domainMin: 0, pxMin: 1 }; // v + 1
+  const inheritedY: AxisMap = { sigma: 1, domainMin: 0, pxMin: 2 }; // v + 2
   const positionSpace = POSITION(interval(0, 10));
   const sizeSpace = SIZE(Monotonic.linear(20, 0));
 
@@ -1113,7 +1119,7 @@ console.log("# constraint confluence: child scale factor planning");
   );
   ok(
     "self-scaled POSITION axis builds local posScale",
-    selfScaled.basePosScales[0]?.(5) === 50 &&
+    pxOf(selfScaled.basePosScales[0]!, 5) === 50 &&
       selfScaled.basePosScales[1] === inheritedY
   );
   ok(

@@ -57,7 +57,7 @@ async function leafThetaSizes(child: any): Promise<number[]> {
   root.resolveAliases();
   root.resolveUnderlyingSpace();
   root.resolveEmbedding();
-  root.layout([400, 400], [undefined, undefined], [undefined, undefined]);
+  root.layout([400, 400], [undefined, undefined]);
   const out: number[] = [];
   const walk = (n: any) => {
     if (n.type === "rect") out.push(n.intrinsicDims?.[0]?.size ?? NaN);

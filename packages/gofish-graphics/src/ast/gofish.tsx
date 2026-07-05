@@ -14,7 +14,12 @@ import {
   GoFishNode,
   type RenderSession,
 } from "./_node";
-import { posScaleFromSpace } from "./domain";
+import {
+  posScaleFromSpace,
+  axisScale,
+  type AxisMap,
+  type AxisScale,
+} from "./domain";
 import { bake } from "./coordinateTransforms/bake";
 import { lowerToDisplayList } from "./displayList/lower";
 import { paintSVG } from "./displayList/paintSVG";
@@ -156,10 +161,7 @@ export async function layout(
   underlyingSpaceX: UnderlyingSpace;
   underlyingSpaceY: UnderlyingSpace;
   yUp: boolean;
-  posScales: [
-    ((pos: number) => number) | undefined,
-    ((pos: number) => number) | undefined,
-  ];
+  scales: Size<AxisScale | undefined>;
   child: GoFishNode;
   width: number;
   height: number;
@@ -368,11 +370,8 @@ export async function layout(
   const layoutW = w ?? (needsCanvas(niceUnderlyingSpaceX) ? canvasW : UNSIZED);
   const layoutH = h ?? (needsCanvas(niceUnderlyingSpaceY) ? canvasH : UNSIZED);
 
-  // An anchored CONTINUOUS root builds a posScale over its data interval.
-  const posScales: [
-    ((pos: number) => number) | undefined,
-    ((pos: number) => number) | undefined,
-  ] = [
+  // An anchored CONTINUOUS root builds a data→pixel map over its data interval.
+  const posScales: Size<AxisMap | undefined> = [
     posScaleFromSpace(niceUnderlyingSpaceX, canvasW),
     posScaleFromSpace(niceUnderlyingSpaceY, canvasH),
   ];
@@ -433,8 +432,12 @@ export async function layout(
         const info = axisInfo[axis]!;
         if (info.kind === "position") {
           const offset = (info.canvas - shared * info.range) / 2; // center slack
-          const min = info.min;
-          posScales[axis] = (pos: number) => (pos - min) * shared + offset;
+          // Same affine map as `(pos − min)·shared + offset`, intercept explicit.
+          posScales[axis] = {
+            sigma: shared,
+            domainMin: info.min,
+            pxMin: offset,
+          };
         } else {
           rootScaleFactors[axis] = shared;
         }
@@ -454,7 +457,15 @@ export async function layout(
   // tree, before layout/render consume the flag. See _node.resolveEmbedding.
   child.resolveEmbedding();
 
-  child.layout([layoutW, layoutH], rootScaleFactors, posScales);
+  // Merge the two half-channels into the single per-axis scale carrier handed
+  // to layout: σ (size slope) from `rootScaleFactors`, the anchored map from
+  // `posScales`. They are mutually exclusive per axis at the root.
+  const rootScales: Size<AxisScale | undefined> = [
+    axisScale(rootScaleFactors[0], posScales[0]),
+    axisScale(rootScaleFactors[1], posScales[1]),
+  ];
+
+  child.layout([layoutW, layoutH], rootScales);
   // Root placement anchor. A GIVEN dimension keeps the baseline-anchored canvas
   // box [0, given]; content seated outside it (axis labels below 0, ticks above
   // `given`) is reserved as the per-side overhangs below. A SHRINK-TO-FIT
@@ -523,7 +534,7 @@ export async function layout(
     underlyingSpaceX: niceUnderlyingSpaceX,
     underlyingSpaceY: niceUnderlyingSpaceY,
     yUp: effYUp,
-    posScales,
+    scales: rootScales,
     child,
     width: finalW,
     height: finalH,
@@ -572,10 +583,7 @@ type LayoutData = {
   underlyingSpaceY: UnderlyingSpace;
   /** Whether the root renders y-UP (continuous y / coord scope). See #143/#16. */
   yUp: boolean;
-  posScales: [
-    ((pos: number) => number) | undefined,
-    ((pos: number) => number) | undefined,
-  ];
+  scales: Size<AxisScale | undefined>;
   child: GoFishNode;
   width: number;
   height: number;

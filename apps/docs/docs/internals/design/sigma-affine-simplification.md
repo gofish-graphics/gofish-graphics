@@ -310,6 +310,20 @@ posScale and σ are _views_ of the solved system (the Stage-4 `AxisScale`
 record becomes exactly this view: σ = slope, `map` = anchored min facet +
 pixel min; the intercept is `posScale(0)`, derived, never stored).
 
+**The dual slope is transitional debt, eliminated here — not a keeper.**
+Stage 4's `AxisScale.map` carries its own slope because today σ is solved in
+the four+ places above against four different pixel budgets, so a mark can
+read size-σ and position-slope from different extents on one axis (nicing
+asymmetry, spacing's slope-vs-secant, sub-budget scopes vs an inherited map).
+Stage 6's invariant is **one slope per σ-scope, by construction**: the frame
+equation solves σ once at the scope root and the posScale is a derived view
+of the same solve, so within a scope the two cannot disagree. The divergences
+that remain must then become what they really are — two scopes on one axis
+(keyed by measure: the multi-scale/dual-axis design), or explicit non-data
+pixels (spacing as a piecewise gap, not a secant that papers over it).
+`AxisScale` collapses back to a single-slope view when 6b/6c land; if it
+still has two independent slopes after Stage 6, that is a bug in Stage 6.
+
 ### Sub-stages, each gated
 
 - **6a — observe.** Extend `solver/shadow.ts` coverage to the modes it skips:

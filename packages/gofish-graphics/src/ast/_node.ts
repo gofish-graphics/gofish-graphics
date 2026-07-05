@@ -59,6 +59,7 @@ import {
   UnderlyingSpace,
 } from "./underlyingSpace";
 import { toJSON, interval } from "../util/interval";
+import type { AxisScale } from "./domain";
 import { envFlag } from "../util";
 import { nice } from "d3-array";
 import type { ScaleContext } from "./gofish";
@@ -143,17 +144,17 @@ export type Placeable = {
   pinAnchor?: (axis: FancyDirection, value: number, anchor: Anchor) => void;
 };
 
-// `scaleFactors` is the σ (pixels-per-data-unit) handed down per axis. A node
-// MUST NOT mutate this array: to establish a local scale for its descendants
-// (the `shared` scoping annotation, below) it copies into a fresh array and
-// passes that down — never writing back to the parent's, so a solved σ can't
-// leak to the node's siblings (see spread.tsx / layer.tsx).
+// `scales` is the per-axis data→pixel affine scale handed down (the single
+// {@link AxisScale} carrier: `sigma` = pixels-per-data-unit for size, `map` =
+// the anchored data→pixel map). A node MUST NOT mutate this array: to establish
+// a local scale for its descendants (the `shared` scoping annotation, below) it
+// copies into a fresh array and passes that down — never writing back to the
+// parent's, so a solved σ can't leak to the node's siblings (see layer.tsx).
 export type Layout = (
   shared: Size<boolean>,
   size: Size,
-  scaleFactors: Size<number | undefined>,
+  scales: Size<AxisScale | undefined>,
   children: GoFishAST[],
-  posScales: Size<((pos: number) => number) | undefined>,
   node: GoFishNode
 ) => { intrinsicDims: FancyDims; transform: FancyTransform; renderData?: any };
 
@@ -264,7 +265,7 @@ export class GoFishNode {
    *  σ from its own box and hands it to descendants via a fresh array — claim
    *  hoisting, #549); `false` (default) = pass-through, inheriting σ from above.
    *  It is NOT a mutation flag — no node writes back to the parent's
-   *  `scaleFactors`. Currently set only by `spread`/`stack` (`sharedScale`). */
+   *  `scales`. Currently set only by `spread`/`stack` (`sharedScale`). */
   public shared: Size<boolean>;
   public renderData?: any;
   public coordinateTransform?: CoordinateTransform;
@@ -743,20 +744,15 @@ export class GoFishNode {
     });
   }
 
-  public layout(
-    size: Size,
-    scaleFactors: Size<number | undefined>,
-    posScales: Size<((pos: number) => number) | undefined>
-  ): Placeable {
+  public layout(size: Size, scales: Size<AxisScale | undefined>): Placeable {
     // Axes are no longer drawn here: they are elaborated into ordinary shapes +
     // constraints by `elaborateAxes` (src/ast/axes/elaborate.tsx) before layout,
     // so the layout engine has no axis-specific budget/baseline machinery.
     const { intrinsicDims, transform, renderData } = this._layout(
       this.shared,
       size,
-      scaleFactors,
+      scales,
       this.children,
-      posScales,
       this
     );
 
