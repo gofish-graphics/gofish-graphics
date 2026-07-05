@@ -1,20 +1,20 @@
 /**
  * capture-sweep.ts
  *
- * Solver shadow sweep (#39 stage 5a): render EVERY story headlessly with
+ * Solver shadow sweep (#39 stage 5): render EVERY story headlessly with
  * `GOFISH_SOLVER_CHECK` injected into the page, and surface any solver-shadow
- * divergence the render logs. It answers "does the rank-2 placement solve
- * reproduce the shipped rank-1 result on every story?" — the gate for flipping
- * the commit path (5b).
+ * divergence the render logs. The rank-2 placement solve is now the shipped
+ * commit path (stages 5b/5c), so the placement `[solver-check]` shadow is
+ * retired; this sweep now watches the remaining shadows — chiefly the `_node.ts`
+ * ledger `[bbox-conflict]` over-determination check.
  *
  * The harness aliases `gofish-graphics` to `src/`, so it renders the library
  * live from source — no rebuild needed (run `pnpm install` first on a fresh
  * worktree). An init script sets `window.GOFISH_SOLVER_CHECK = 1` before any
  * story module loads, so `envFlag("GOFISH_SOLVER_CHECK")` is true and the
- * shadow checks (`constraints/rank2Placement.ts`, `_node.ts` bbox-conflict) run.
- * Each story's browser console is captured; any `[solver-check]` (rank-2 vs
- * rank-1 placement divergence) or `[bbox-conflict]` (ledger over-determination)
- * line is collected and reported per story.
+ * remaining shadow checks run. Each story's browser console is captured; any
+ * `[solver-check]` (a scale-root / σ shadow divergence) or `[bbox-conflict]`
+ * (ledger over-determination) line is collected and reported per story.
  *
  * Usage:
  *   tsx scripts/capture-sweep.ts            # whole suite
@@ -180,9 +180,7 @@ async function main() {
   }
 
   if (reports.length === 0) {
-    console.log(
-      `\n  Clean: every rendered story reproduced the rank-1 result.`
-    );
+    console.log(`\n  Clean: no story logged a solver-shadow divergence.`);
   }
 
   // Non-zero when any story diverged so this can gate the 5a landing.

@@ -253,8 +253,19 @@ the `max → min − size` rewrite in `classifyAxisFacts`
   and compares final `(min, size)` per (node, axis) against the shipped
   positions, and `tests/scripts/capture-sweep.ts` renders every story with the
   flag injected to collect any `[solver-check]`/`[bbox-conflict]` divergence.
-- **5b.** Flip the commit path to the rank-2 solve. Pixel gate.
-- **5c.** Delete the rank-1 path and the span side-channel.
+- **5b.** Flip the commit path to the rank-2 solve. Pixel gate. **Landed:**
+  `solvePlacementConstraints` now solves each `(node, axis)` box from the anchor
+  program (cell closure → difference graph → single write-back: size-strong →
+  `setExtent`, position-only → `pinAnchor`); the shadow inverted to check the
+  old rank-1 result against the shipped rank-2 one, and the sweep stayed clean.
+- **5c.** Delete the rank-1 path and the span side-channel. **Landed:**
+  `span.ts` (`collectSpanExtents`/`SpanExtent`/`lowerSpanEdgePins`) and
+  `rank2Placement.ts` are gone; the interval form's edges are ordinary strong
+  anchor pins emitted by `position.ts`; `spanDatumInterval` folded into
+  `position.ts`; the `edge-pin` fact kind, the rank-1 `PlacementProgram`, the
+  `spannedSize` lowerer callback + `anchorOffset` branch, and
+  `PlacementOwnershipPlan.spanPinned` are deleted. `differenceGraph.ts` is the
+  only graph and the rank-2 solve is the only solve.
 
 **Running the sweep.** With the workspace installed (`pnpm install`; the harness
 aliases `gofish-graphics` to `src/`, so source edits render live without a

@@ -8,7 +8,6 @@ import {
   getValueOffset,
   isDiscretePosition,
   isValue,
-  type MaybeValue,
   type PositionValue,
 } from "../data";
 import type { AlignConstraint } from "./align";
@@ -22,11 +21,9 @@ import { lowerNestPlacement } from "./nest";
 import { PlacementProgramLowerer } from "./placementProgramLowerer";
 import type { PositionConstraint } from "./position";
 import { isPositionInterval, lowerPositionPlacement } from "./position";
-import type { SpanExtent } from "./span";
-import { collectSpanExtents, lowerSpanEdgePins } from "./span";
 import { axisIndex, type Axis, type ConstraintPosScales } from "./shared";
 import { pxOf, type AxisMap } from "../domain";
-import type { AnchorProgram, PlacementProgram } from "./placementFacts";
+import type { AnchorProgram } from "./placementFacts";
 
 export type PlacementConstraint =
   | AlignConstraint
@@ -36,11 +33,9 @@ export type PlacementConstraint =
   | GridConstraint;
 
 export interface LoweredPlacement {
-  program: PlacementProgram;
-  /** The rank-2 anchor program (#39 stage 5a), emitted alongside `program` for
-   *  the shadow solve. Not consumed by the shipped solver. */
+  /** The anchor program (#39 stage 5): facts that name a node anchor without a
+   *  pre-evaluated `min` offset, consumed by the rank-2 solve. */
   anchorProgram: AnchorProgram;
-  spanExtents: SpanExtent[];
 }
 
 /** A raw placement-system coordinate after datum values have been elaborated
@@ -80,7 +75,6 @@ class PlacementOwnershipPlan {
   private readonly authoritative = new Set<string>();
   private readonly initiallyPlaced = new Set<string>();
   private readonly positionPinned = new Set<string>();
-  private readonly spanPinned = new Set<string>();
   private readonly sizes: [number, number];
 
   constructor(
@@ -103,21 +97,13 @@ class PlacementOwnershipPlan {
     }
   }
 
-  noteSpanExtent(extent: SpanExtent): void {
-    this.spanPinned.add(placementKey(extent.axis, extent.name));
-  }
-
   isInitiallyPlaced(axis: Axis, name: string): boolean {
     return this.initiallyPlaced.has(placementKey(axis, name));
   }
 
   isPinned(axis: Axis, name: string): boolean {
     const key = placementKey(axis, name);
-    return (
-      this.initiallyPlaced.has(key) ||
-      this.positionPinned.has(key) ||
-      this.spanPinned.has(key)
-    );
+    return this.initiallyPlaced.has(key) || this.positionPinned.has(key);
   }
 
   shouldPinSelfPlacement(axis: 0 | 1, name: string): boolean {
@@ -141,16 +127,22 @@ class PlacementOwnershipPlan {
     for (const axis of POSITION_AXES) {
       const coordinate = constraint[axis];
       if (coordinate === undefined) continue;
-      // Interval axes are pinned via their edge-pin extent (noteSpanExtent), not
-      // as a single point pin here.
-      if (isPositionInterval(coordinate)) continue;
       const idx = axisIndex(axis);
-      const value = resolveCoordinate(
-        coordinate,
-        posScales?.[idx],
-        this.sizes[idx]
-      );
-      if (value === undefined) continue;
+      // An interval pins BOTH edges — mark its children pinned when the edges
+      // resolve (an align sources such a spanned target). A point pins one
+      // anchor.
+      if (isPositionInterval(coordinate)) {
+        const min = resolveCoordinate(coordinate[0], posScales?.[idx]);
+        const max = resolveCoordinate(coordinate[1], posScales?.[idx]);
+        if (min === undefined || max === undefined) continue;
+      } else {
+        const value = resolveCoordinate(
+          coordinate,
+          posScales?.[idx],
+          this.sizes[idx]
+        );
+        if (value === undefined) continue;
+      }
       for (const child of constraint.children) {
         this.positionPinned.add(placementKey(axis, child.name));
       }
@@ -171,35 +163,7 @@ export function lowerPlacementConstraints(
     sizes
   );
 
-  // Interval-form `position` axes lower to edge pins (min/max edges determine
-  // the extent); their point-form axes lower via `lowerPositionPlacement` below.
-  const spanEdgePins = constraints.flatMap((constraint, constraintIndex) =>
-    constraint.type === "position"
-      ? lowerSpanEdgePins(
-          constraint,
-          targets,
-          `position[${constraintIndex}]`,
-          (axis, coordinate) =>
-            resolveCoordinate(coordinate, posScales?.[axisIndex(axis)])
-        )
-      : []
-  );
-  const spanExtents = collectSpanExtents(spanEdgePins);
-  const spanExtentByKey = new Map(
-    spanExtents.map((extent) => [
-      placementKey(extent.axis, extent.name),
-      extent,
-    ])
-  );
-  for (const extent of spanExtents) {
-    ownership.noteSpanExtent(extent);
-  }
-
-  const lowerer = new PlacementProgramLowerer(
-    targets,
-    (axis, name) => spanExtentByKey.get(placementKey(axis, name))?.size
-  );
-  for (const claim of spanEdgePins) lowerer.addFact(claim.fact);
+  const lowerer = new PlacementProgramLowerer(targets);
   const resolveAxisCoordinate = (axis: Axis, coordinate: PositionValue) => {
     const idx = axisIndex(axis);
     return resolveCoordinate(coordinate, posScales?.[idx], sizes[idx]);
@@ -227,8 +191,8 @@ export function lowerPlacementConstraints(
     const owner = `${constraint.type}[${constraintIndex}]`;
 
     if (constraint.type === "position") {
-      // Point axes emit a single pin here; interval axes were already lowered to
-      // edge pins above (lowerPositionPlacement skips them).
+      // Point axes emit a single pin; interval axes emit both edges (strong
+      // start/end pins) that cell closure resolves into a size.
       lowerPositionPlacement(constraint, owner, {
         emitter: lowerer,
         targets,
@@ -265,9 +229,5 @@ export function lowerPlacementConstraints(
     lowerGridPlacement(constraint, owner, sizes, lowerer);
   });
 
-  return {
-    program: lowerer.program,
-    anchorProgram: lowerer.anchorProgram,
-    spanExtents,
-  };
+  return { anchorProgram: lowerer.anchorProgram };
 }

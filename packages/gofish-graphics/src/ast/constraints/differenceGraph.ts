@@ -10,15 +10,14 @@ import type {
 } from "./placementFacts";
 
 /**
- * The relational placement half of the solver, shared by the shipped rank-1
- * `solveAxis` (`placementSolver.ts`) and the rank-2 shadow
- * (`rank2Placement.ts`). Everything here works on `start`(min)-anchored
+ * The relational (difference-graph) half of the placement solver
+ * (`placementSolver.ts`). Everything here works on `start`(min)-anchored
  * difference constraints: an {@link AxisProblem} of pins, relations, and
  * participants over one axis, solved by BFS components + pin offsets +
- * distribute/normalized origin fallbacks. It is anchor-agnostic — both callers
- * reduce their facts to `min` positions BEFORE handing them here (rank-1
- * pre-evaluates at lowering; rank-2 substitutes offsets post-closure), so the
- * graph itself never sees an anchor.
+ * distribute/normalized origin fallbacks. It is anchor-agnostic — the rank-2
+ * solve reduces each fact to a `min` position (substituting anchor offsets from
+ * the closed cell sizes) BEFORE handing it here, so the graph itself never sees
+ * an anchor.
  */
 
 export interface PlacementConflict {
