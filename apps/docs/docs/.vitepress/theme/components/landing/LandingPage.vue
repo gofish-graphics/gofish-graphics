@@ -290,7 +290,7 @@ onBeforeUnmount(() => {
           <h1 id="hero-h" class="rise" style="animation-delay: 0ms">GoFish</h1>
           <p class="subtitle rise" style="animation-delay: 90ms">
             an open-source visualization library for
-            Python&nbsp;and&nbsp;JavaScript
+            JavaScript&nbsp;and&nbsp;Python
           </p>
           <div class="rise" style="animation-delay: 180ms">
             <CtaBlock />
