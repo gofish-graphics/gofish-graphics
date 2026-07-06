@@ -94,6 +94,14 @@ If your prop should be a position offset (mean rather than sum), see the
 own; `createMark` could grow a `"pos"` channel the same way if a future shape
 needs one.
 
+Color channels additionally accept a `when(...)` **state channel**
+(`src/interaction/states.ts` — a conditional value driven by interaction
+predicates, e.g. hover or a brush selector). The channel loop unwraps it
+before any inference runs: the pipeline only ever sees the `.else` fallback
+(so layout stays signal-free), and the conditional cases are stamped on the
+produced node as `__gfStates` for the interaction runtime's paint-time style
+patches. See `notes/design/interaction.md`.
+
 `inferSize` and `inferPos` are two instantiations of one numeric-inference
 factory, `inferNumeric(agg)` — they differ only in the aggregation (`sumBy`
 vs `meanBy`, imported through lodash's per-helper entrypoints so this path is

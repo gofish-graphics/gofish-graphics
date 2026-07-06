@@ -559,6 +559,13 @@ export type GoFishRenderOptions = {
    * this composable per-subtree instead of root-global.
    */
   yUp?: boolean;
+  /**
+   * Interaction runtime (see src/interaction/). When present, the render pass
+   * publishes each lowered frame to it, threads its Tier-0 style `patch` into
+   * paint, and attaches its delegated event listeners to the produced <svg>.
+   * Absent (the static path), rendering is byte-identical to before.
+   */
+  interaction?: import("../interaction/runtime").InteractionRuntime;
 };
 
 /** Extra options for the SVG-export terminals (`toSVG` / `toSVGElement` / `save`). */
@@ -669,7 +676,8 @@ export async function runLayout(
 function renderLayout(
   data: LayoutData,
   svgPadding: number,
-  defs?: JSX.Element[]
+  defs?: JSX.Element[],
+  interaction?: import("../interaction/runtime").InteractionRuntime
 ): JSX.Element {
   return render(
     {
@@ -677,6 +685,10 @@ function renderLayout(
       height: data.height,
       svgPadding,
       defs,
+      interaction,
+      posScales: data.posScales,
+      underlyingSpaceX: data.underlyingSpaceX,
+      underlyingSpaceY: data.underlyingSpaceY,
       // The resolved y-up decision (root y space), computed in `layout()`.
       yUp: data.yUp,
       rightOverhang: data.rightOverhang,
@@ -696,21 +708,40 @@ export const gofish = (
 ) => {
   const svgPadding = options.padding ?? PADDING;
 
+  // Re-rendering into the same container (the interaction layer's Tier-2
+  // scheduler does this per spec change) must dispose the previous reactive
+  // root first, or roots and DOM accumulate. One render per container is
+  // unaffected.
+  (
+    container as HTMLElement & { __gofishDispose?: () => void }
+  ).__gofishDispose?.();
+
   const [layoutData] = createResource(() => runLayout(options, child));
 
   // Render to the provided container
-  solidRender(() => {
+  const dispose = solidRender(() => {
     // used to handle async rendering of derived data
     return (
       <Suspense fallback={<div>Loading...</div>}>
         {(() => {
           const data = layoutData();
           if (!data) return null;
-          return renderLayout(data, svgPadding, options.defs);
+          return renderLayout(
+            data,
+            svgPadding,
+            options.defs,
+            options.interaction
+          );
         })()}
       </Suspense>
     );
   }, container);
+  (
+    container as HTMLElement & { __gofishDispose?: () => void }
+  ).__gofishDispose = () => {
+    dispose();
+    container.innerHTML = "";
+  };
   return container;
 };
 
@@ -918,6 +949,10 @@ export const render = (
     bottomOverhang = 0,
     svgPadding,
     yUp = false,
+    interaction,
+    posScales,
+    underlyingSpaceX,
+    underlyingSpaceY,
   }: {
     width: number;
     height: number;
@@ -930,6 +965,13 @@ export const render = (
     bottomOverhang?: number;
     svgPadding?: number;
     yUp?: boolean;
+    interaction?: import("../interaction/runtime").InteractionRuntime;
+    posScales?: [
+      ((pos: number) => number) | undefined,
+      ((pos: number) => number) | undefined,
+    ];
+    underlyingSpaceX?: UnderlyingSpace;
+    underlyingSpaceY?: UnderlyingSpace;
   },
   child: GoFishNode
 ): JSX.Element => {
@@ -984,9 +1026,36 @@ export const render = (
     ? ([gx, gy]) => [gx + leftReserve, height + topReserve - gy]
     : ([gx, gy]) => [gx + leftReserve, gy + topReserve];
   child.getRenderSession().toPixel = toPixel;
-  const paintBaked = () => lowerToDisplayList(child).map(paintSVG);
+  const paintCtx = interaction ? { patch: interaction.patch } : undefined;
+  // Continuous data domains for interaction anchors (clamping, selectors).
+  const continuousDomain = (
+    us?: UnderlyingSpace
+  ): [number, number] | undefined =>
+    us?.kind === "continuous" &&
+    us.dataDomain !== undefined &&
+    us.dataDomain !== "delta"
+      ? [us.dataDomain.min, us.dataDomain.max]
+      : undefined;
+  const paintBaked = () => {
+    const items = lowerToDisplayList(child);
+    // Publish the frame (id-keyed maps, instrument re-binding) before paint so
+    // the very first patch reads see current state.
+    interaction?.publishFrame({
+      items,
+      root: child,
+      toPixel,
+      posScales,
+      domains: {
+        x: continuousDomain(underlyingSpaceX),
+        y: continuousDomain(underlyingSpaceY),
+      },
+      size: { width, height },
+    });
+    return items.map((item) => paintSVG(item, paintCtx));
+  };
   return (
     <svg
+      ref={(el: SVGSVGElement) => interaction?.attachSVG(el)}
       width={
         leftReserve + width + rightOverhang + reserve(rightContentOverhang)
       }
@@ -997,6 +1066,7 @@ export const render = (
         <defs>{defs}</defs>
       </Show>
       {paintBaked()}
+      {interaction?.renderOverlays()}
     </svg>
   );
 };

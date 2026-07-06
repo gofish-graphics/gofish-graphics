@@ -282,6 +282,13 @@ export class GoFishNode {
   // false    = explicitly suppressed via axes: override (blocks children)
   // undefined = not involved
   public axis: { x?: boolean; y?: boolean } = {};
+  /** The scales this node's `layout()` ran with, recorded for the interaction
+   *  layer (data↔pixel anchor conversion). See notes/design/interaction.md. */
+  public _resolvedScales?: {
+    size: Size;
+    scaleFactors: Size<number | undefined>;
+    posScales: Size<((pos: number) => number) | undefined>;
+  };
   public _axisOverride?: { x?: boolean; y?: boolean };
   /** Explicit key→node map for ordinal axis label positioning. Set by
    * operators (e.g. table) whose domain keys differ from children's .key. */
@@ -747,6 +754,11 @@ export class GoFishNode {
     scaleFactors: Size<number | undefined>,
     posScales: Size<((pos: number) => number) | undefined>
   ): Placeable {
+    // Record the scales this node was laid out with. Position scales are
+    // otherwise transient layout arguments; the interaction layer needs them
+    // after layout to convert anchor values between data and pixel space
+    // (see notes/design/interaction.md). Zero-cost for the static path.
+    this._resolvedScales = { size, scaleFactors, posScales };
     // Axes are no longer drawn here: they are elaborated into ordinary shapes +
     // constraints by `elaborateAxes` (src/ast/axes/elaborate.tsx) before layout,
     // so the layout engine has no axis-specific budget/baseline machinery.
@@ -1141,9 +1153,18 @@ export class GoFishNode {
       [],
       this
     );
+    // Stamp the emitting node's uid as the item id (hit-testing / keyed
+    // reactivity hooks — the IR field predates this and was unpopulated).
+    // Boundary nodes re-walk children through the children's own
+    // INTERNAL_lower, so descendants keep their own ids; `??=` preserves any
+    // id a lower body sets itself.
+    for (const item of items) item.id ??= this.uid;
     if (this._label && this.intrinsicDims) {
       const labelItems = lowerLabelItems(this, transform, toPixel);
-      if (labelItems.length) return [...items, ...labelItems];
+      if (labelItems.length) {
+        for (const item of labelItems) item.id ??= this.uid;
+        return [...items, ...labelItems];
+      }
     }
     return items;
   }
@@ -1185,6 +1206,7 @@ export class GoFishNode {
       colorConfig,
       padding,
       yUp,
+      interaction,
     }: {
       w?: number;
       h?: number;
@@ -1198,6 +1220,7 @@ export class GoFishNode {
       colorConfig?: ColorConfig;
       padding?: number;
       yUp?: boolean;
+      interaction?: import("../interaction/runtime").InteractionRuntime;
     }
   ) {
     return gofish(
@@ -1215,6 +1238,7 @@ export class GoFishNode {
         colorConfig,
         padding,
         yUp,
+        interaction,
       },
       this
     );

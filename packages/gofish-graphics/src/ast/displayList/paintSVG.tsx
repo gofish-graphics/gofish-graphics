@@ -20,6 +20,19 @@ import type { DisplayList } from "gofish-ir";
 
 type Style = DisplayList.Style | undefined;
 
+/**
+ * Optional interaction context (Tier-0 states). `patch(item)` returns a style
+ * override for the item, or undefined. It is read inside the JSX below, so
+ * patches that read signals re-run Solid's per-attribute effects — style-only
+ * interaction (hover, brush highlighting) never re-lowers or re-lays-out.
+ * When absent (the static path), output is byte-identical to before.
+ */
+export type PaintContext = {
+  patch?: (
+    item: DisplayList.DisplayItem
+  ) => Partial<DisplayList.Style> | undefined;
+};
+
 /** Deterministic id counter for composite/mask defs — same scheme as gofish-ir's
  *  string backend so the two backends agree on id shape. A module-level counter
  *  (Math.random is non-reproducible); ids only need to be unique within a single
@@ -43,7 +56,19 @@ const styleProps = (style: Style) =>
     style: cssStyle(style),
   }) as const;
 
-export function paintSVG(item: DisplayList.DisplayItem): JSX.Element {
+export function paintSVG(
+  item: DisplayList.DisplayItem,
+  ctx?: PaintContext
+): JSX.Element {
+  // Effective style: the item's baked style merged with the interaction
+  // patch. Called inside JSX attribute/spread positions so Solid tracks any
+  // signals the patch reads. `data-gf-id` (the hit-testing hook) is emitted
+  // only when an interaction context exists, keeping static output identical.
+  const style = (): Style => {
+    const p = ctx?.patch?.(item);
+    return p ? { ...(item.style ?? {}), ...p } : item.style;
+  };
+  const gfId = ctx ? item.id : undefined;
   switch (item.kind) {
     case "rect":
       return (
@@ -54,7 +79,8 @@ export function paintSVG(item: DisplayList.DisplayItem): JSX.Element {
           height={item.h}
           rx={item.rx}
           ry={item.ry}
-          {...styleProps(item.style)}
+          data-gf-id={gfId}
+          {...styleProps(style())}
         />
       );
     case "ellipse":
@@ -64,16 +90,18 @@ export function paintSVG(item: DisplayList.DisplayItem): JSX.Element {
           cy={item.cy}
           rx={item.rx}
           ry={item.ry}
-          {...styleProps(item.style)}
+          data-gf-id={gfId}
+          {...styleProps(style())}
         />
       );
     case "path":
-      return <path d={item.d} {...styleProps(item.style)} />;
+      return <path d={item.d} data-gf-id={gfId} {...styleProps(style())} />;
     case "text":
       return (
         <text
           x={item.x}
           y={item.y}
+          data-gf-id={gfId}
           font-size={
             item.fontSize !== undefined ? `${item.fontSize}px` : undefined
           }
@@ -89,7 +117,7 @@ export function paintSVG(item: DisplayList.DisplayItem): JSX.Element {
               ? `rotate(${item.rotate} ${item.x} ${item.y})`
               : undefined
           }
-          {...styleProps(item.style)}
+          {...styleProps(style())}
         >
           {item.text}
         </text>
@@ -102,10 +130,11 @@ export function paintSVG(item: DisplayList.DisplayItem): JSX.Element {
           width={item.w}
           height={item.h}
           href={item.href}
+          data-gf-id={gfId}
           preserveAspectRatio={
             item.preserveAspectRatio as JSX.ImageSVGAttributes<SVGImageElement>["preserveAspectRatio"]
           }
-          {...styleProps(item.style)}
+          {...styleProps(style())}
         />
       );
     case "group": {
@@ -116,7 +145,7 @@ export function paintSVG(item: DisplayList.DisplayItem): JSX.Element {
       if (t.scale) parts.push(`scale(${t.scale[0]} ${t.scale[1]})`);
       return (
         <g transform={parts.length ? parts.join(" ") : undefined}>
-          {item.children.map(paintSVG)}
+          {item.children.map((c) => paintSVG(c, ctx))}
         </g>
       );
     }
@@ -149,8 +178,8 @@ export function paintSVG(item: DisplayList.DisplayItem): JSX.Element {
       return (
         <>
           <defs>
-            <g id={sourceId}>{item.source.map(paintSVG)}</g>
-            <g id={destinationId}>{item.dest.map(paintSVG)}</g>
+            <g id={sourceId}>{item.source.map((c) => paintSVG(c, ctx))}</g>
+            <g id={destinationId}>{item.dest.map((c) => paintSVG(c, ctx))}</g>
             <filter
               id={filterId}
               x={x}
@@ -196,8 +225,10 @@ export function paintSVG(item: DisplayList.DisplayItem): JSX.Element {
       return (
         <>
           <defs>
-            <g id={sourceId}>{item.mask.map(paintSVG)}</g>
-            <g id={destinationId}>{item.content.map(paintSVG)}</g>
+            <g id={sourceId}>{item.mask.map((c) => paintSVG(c, ctx))}</g>
+            <g id={destinationId}>
+              {item.content.map((c) => paintSVG(c, ctx))}
+            </g>
             <mask
               id={maskId}
               maskUnits="userSpaceOnUse"

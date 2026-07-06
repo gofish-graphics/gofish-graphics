@@ -12,6 +12,7 @@ import { rect as generatedRect } from "../shapes/rect";
 import { Ellipse } from "../shapes/ellipse";
 import { Mark, Operator } from "../types";
 import type { NameableMark } from "../withGoFish";
+import { isStateChannel, type StateChannel } from "../../interaction/states";
 import type { LabelAccessor, LabelOptions } from "../labels/labelPlacement";
 import {
   resolveMarkResult,
@@ -194,7 +195,7 @@ export function circle<T extends Record<string, any>>({
   label,
 }: {
   r?: number;
-  fill?: string | keyof T;
+  fill?: string | keyof T | StateChannel;
   stroke?: string;
   strokeWidth?: number;
   debug?: boolean;
@@ -203,6 +204,14 @@ export function circle<T extends Record<string, any>>({
   name(layerName: string | Token): Mark<T>;
   label(accessor: LabelAccessor, options?: LabelOptions): Mark<T>;
 } {
+  // `when(...)` state channel: the pipeline renders the static fallback; the
+  // conditional cases are stamped on the node for the interaction runtime
+  // (same treatment as createMark's channel loop — see withGoFish.ts).
+  let fillStates: Record<string, StateChannel> | undefined;
+  if (isStateChannel(fill)) {
+    fillStates = { fill };
+    fill = fill.fallback as string | keyof T | undefined;
+  }
   const base: Mark<T> = async (
     d: T,
     key?: string | number,
@@ -229,6 +238,7 @@ export function circle<T extends Record<string, any>>({
       label,
     }).name(key?.toString() ?? "");
     (node as any).datum = d;
+    if (fillStates) (node as any).__gfStates = fillStates;
     return node;
   };
   const result = nameableMark(base);

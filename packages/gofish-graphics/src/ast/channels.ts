@@ -16,6 +16,7 @@ import {
   type LiteralValue,
   type Measure,
 } from "./data";
+import type { StateChannel } from "../interaction/states";
 
 export type ChannelType = "size" | "pos" | "color" | "raw";
 
@@ -71,6 +72,10 @@ export type DeriveMarkProps<
                 | (keyof T & string)
                 | ((d: T) => string)
                 | Value<string>
+                // `when(...)` conditional channel (Tier-0 interaction state);
+                // the pipeline renders its `.else` fallback. See
+                // src/interaction/states.ts.
+                | StateChannel
                 | undefined
             : Channels[K] extends "raw" | { type: "raw" }
               ?

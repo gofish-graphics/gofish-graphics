@@ -239,17 +239,43 @@ const toPixel: ToPixel = yUp
   ? ([gx, gy]) => [gx + leftReserve, height + topReserve - gy]
   : ([gx, gy]) => [gx + leftReserve, gy + topReserve];
 child.getRenderSession().toPixel = toPixel;
-const paintBaked = () => lowerToDisplayList(child).map(paintSVG);
+const paintBaked = () => {
+  const items = lowerToDisplayList(child);
+  interaction?.publishFrame({ items, root: child, toPixel, … });
+  return items.map((item) => paintSVG(item, paintCtx));
+};
 return (
-  <svg width={…} height={…} xmlns="http://www.w3.org/2000/svg">
+  <svg ref={(el) => interaction?.attachSVG(el)} width={…} height={…}>
     <Show when={defs}><defs>{defs}</defs></Show>
     {paintBaked()}
+    {interaction?.renderOverlays()}
   </svg>
 );
 ```
 
 The SVG-export terminals (`toSVG`/`toSVGElement`/`save`) run the same lower→paint
 pipeline against a throwaway container and serialize the result.
+
+### Interaction hooks (prototype)
+
+When a chart is rendered with `.interact(...)` (see `src/interaction/` and
+`notes/design/interaction.md`), `render()` threads an `InteractionRuntime` through
+three seams — all no-ops on the static path, which stays byte-identical:
+
+- **frame publication** — the lowered `items` (plus the recorded `toPixel`, root
+  `posScales`, and continuous data domains) are published to the runtime before
+  paint, so instruments re-bind to the fresh tree each frame (node uids are minted
+  per resolve);
+- **paint context** — `paintSVG(item, ctx)` takes an optional context whose
+  `patch(item)` returns a per-item style override. The patch is read _inside_ the
+  JSX attribute/spread positions, so a patch that reads Solid signals re-runs only
+  the affected attribute effects — style-only interaction (hover, brush-linked
+  highlighting) repaints nothing and re-lays-out nothing. With a context present,
+  items also emit `data-gf-id` (the display-list `id`, stamped from the emitting
+  node's uid in `INTERNAL_lower`) for delegated hit-testing;
+- **overlays** — instruments paint their own geometry (a brush rect, a threshold
+  rule) as reactive JSX appended after the chart's items, in pixel space, so
+  dragging an instrument never re-runs the pipeline.
 
 ## `toDisplayList`: stopping at the IR
 

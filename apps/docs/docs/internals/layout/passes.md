@@ -358,6 +358,13 @@ This is where the actual positioning and sizing happens. Each node's `layout` fu
 
 It applies layout algorithms (stacking, positioning, etc.), calculates intrinsic dimensions for each node, and handles nested layouts and complex arrangements.
 
+As its first act, `GoFishNode.layout()` records the `size` / `scaleFactors` /
+`posScales` it was invoked with on the node (`_resolvedScales`). Position scales
+are otherwise transient layout arguments; the interaction layer reads the
+recorded ones after layout to convert anchor values between data and pixel
+space — inverting recorded forward maps rather than re-deriving scales (see
+`notes/design/interaction.md`). The static path never reads them back.
+
 **Inferring an omitted `w`/`h`.** The chart-level `w` and `h` are optional. An
 omitted dimension is resolved per axis from that axis's root underlying space:
 

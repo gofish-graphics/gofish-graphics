@@ -33,6 +33,8 @@ import {
   type MarkKind,
 } from "./marks/createOperator";
 import { isValue } from "./data";
+import { isStateChannel } from "../interaction/states";
+import type { StateChannel } from "../interaction/states";
 import { KNOWN_ALIAS_KEYS } from "./dims";
 import { Mark } from "./types";
 import type { ConstraintSpec, ConstraintRef } from "./constraints";
@@ -583,10 +585,19 @@ function buildCreatedMark(
     // per-row array — used by expand-kind marks. Unannotated props (which
     // is everything when channels is omitted/empty) pass through.
     const shapeProps: Record<string, any> = {};
+    // `when(...)` state channels: the pipeline renders the static fallback;
+    // the conditional cases are stamped on the produced node (`__gfStates`)
+    // for the interaction runtime's paint-time patches. Collected here so the
+    // loop below only ever sees plain channel values.
+    let stateChannels: Record<string, StateChannel> | undefined;
     for (const propName of Object.keys(markOpts)) {
       if (propName === "debug") continue;
       const channelSpec = channels[propName];
-      const markValue = markOpts[propName];
+      let markValue = markOpts[propName];
+      if (isStateChannel(markValue)) {
+        (stateChannels ??= {})[propName] = markValue;
+        markValue = markValue.fallback;
+      }
 
       let channelType =
         typeof channelSpec === "string" ? channelSpec : channelSpec?.type;
@@ -634,12 +645,14 @@ function buildCreatedMark(
         const node = result[i];
         node.name(key?.toString() ?? "");
         (node as any).datum = data[i] ?? d;
+        if (stateChannels) (node as any).__gfStates = stateChannels;
       }
       return result as unknown as GoFishNode;
     }
     const node = result as GoFishNode;
     node.name(key?.toString() ?? "");
     (node as any).datum = d;
+    if (stateChannels) (node as any).__gfStates = stateChannels;
     node.scope();
     // Mark as a component for string-name search bounding. Distinct from
     // _isScope so future operators that scope (for token reasons) don't

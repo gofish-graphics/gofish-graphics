@@ -7,6 +7,8 @@ import { Frame } from "../graphicalOperators/frame";
 import { layer as Layer } from "../graphicalOperators/layer";
 import { GoFishRef, visibleNodes } from "../_ref";
 import { ref } from "../shapes/ref";
+import type { Instrument } from "../../interaction/types";
+import { InteractionRuntime } from "../../interaction/runtime";
 
 /**
  * Sentinel chart-data for an empty `Chart()` scope used inside `.layer(...)`:
@@ -201,6 +203,8 @@ export class ChartBuilder<TInput, TOutput = TInput> {
   private readonly nodeZOrder?: number;
   private readonly connector?: Mark<GoFishRef[]>;
   private readonly nodeName?: string;
+  /** Instruments attached via `.interact(...)` — see src/interaction/. */
+  private readonly instruments?: Instrument[];
 
   constructor(
     data: TInput,
@@ -210,7 +214,8 @@ export class ChartBuilder<TInput, TOutput = TInput> {
     layerContext: LayerContext = {},
     nodeZOrder?: number,
     connector?: Mark<GoFishRef[]>,
-    nodeName?: string
+    nodeName?: string,
+    instruments?: Instrument[]
   ) {
     this.data = data;
     this.options = options;
@@ -220,6 +225,7 @@ export class ChartBuilder<TInput, TOutput = TInput> {
     this.nodeZOrder = nodeZOrder;
     this.connector = connector;
     this.nodeName = nodeName;
+    this.instruments = instruments;
   }
 
   // flow accumulates operators and returns a new builder for chaining
@@ -272,7 +278,8 @@ export class ChartBuilder<TInput, TOutput = TInput> {
       this.layerContext,
       this.nodeZOrder,
       this.connector,
-      this.nodeName
+      this.nodeName,
+      this.instruments
     );
   }
 
@@ -286,7 +293,8 @@ export class ChartBuilder<TInput, TOutput = TInput> {
       this.layerContext,
       this.nodeZOrder,
       this.connector,
-      this.nodeName
+      this.nodeName,
+      this.instruments
     );
   }
 
@@ -305,7 +313,8 @@ export class ChartBuilder<TInput, TOutput = TInput> {
       this.layerContext,
       this.nodeZOrder,
       this.connector,
-      layerName
+      layerName,
+      this.instruments
     );
   }
 
@@ -334,7 +343,8 @@ export class ChartBuilder<TInput, TOutput = TInput> {
       this.layerContext,
       this.nodeZOrder,
       connector,
-      this.nodeName
+      this.nodeName,
+      this.instruments
     );
   }
 
@@ -349,6 +359,28 @@ export class ChartBuilder<TInput, TOutput = TInput> {
    */
   layer(child: ChartBuilder<any, any>): LayerBuilder {
     return new LayerBuilder([this, child]);
+  }
+
+  /**
+   * Attach interaction instruments (hover(), threshold(), brush(), …) to this
+   * chart. The render terminal creates an InteractionRuntime, registers the
+   * instruments, and threads it through the render pass — event delegation,
+   * frame publication, and Tier-0 style patches. Charts without `.interact()`
+   * render exactly as before (the static path pays nothing).
+   * See notes/design/interaction.md.
+   */
+  interact(...instruments: Instrument[]): ChartBuilder<TInput, TOutput> {
+    return new ChartBuilder(
+      this.data,
+      this.options,
+      this.operators,
+      this.finalMark,
+      this.layerContext,
+      this.nodeZOrder,
+      this.connector,
+      this.nodeName,
+      [...(this.instruments ?? []), ...instruments]
+    );
   }
 
   /** True when this builder is an empty `Chart()` scope (its data defers to the
@@ -368,7 +400,8 @@ export class ChartBuilder<TInput, TOutput = TInput> {
       this.layerContext,
       this.nodeZOrder,
       this.connector,
-      this.nodeName
+      this.nodeName,
+      this.instruments
     );
   }
 
@@ -551,7 +584,8 @@ export class ChartBuilder<TInput, TOutput = TInput> {
       layerContext,
       this.nodeZOrder,
       this.connector,
-      this.nodeName
+      this.nodeName,
+      this.instruments
     );
   }
 
@@ -564,7 +598,8 @@ export class ChartBuilder<TInput, TOutput = TInput> {
       this.layerContext,
       value,
       this.connector,
-      this.nodeName
+      this.nodeName,
+      this.instruments
     );
   }
 
@@ -614,8 +649,25 @@ export class ChartBuilder<TInput, TOutput = TInput> {
     container: Parameters<GoFishNode["render"]>[0],
     options: Omit<Parameters<GoFishNode["render"]>[1], "axes">
   ): Promise<ReturnType<GoFishNode["render"]>> {
-    const { node, options: opts } = await this.resolveForRender(options);
-    return node.render(container, opts);
+    if (!this.instruments?.length) {
+      const { node, options: opts } = await this.resolveForRender(options);
+      return node.render(container, opts);
+    }
+    // Interactive path: one runtime for the chart's lifetime; the re-render
+    // thunk re-runs the FULL resolve (the pipeline is tree-consuming — the
+    // immutable builder rebuilds a fresh tree, and derive()/thunks re-read
+    // any params) and renders into the same container, which disposes the
+    // previous reactive root (see gofish()). Instruments re-bind to the
+    // fresh tree via frame publication.
+    const runtime = new InteractionRuntime();
+    runtime.register(...this.instruments);
+    const doRender = async () => {
+      const { node, options: opts } = await this.resolveForRender(options);
+      (opts as Record<string, unknown>).interaction = runtime;
+      return node.render(container, opts);
+    };
+    runtime.setRerender(doRender);
+    return doRender();
   }
 
   /** Resolve and render to a standalone SVG markup string. */
