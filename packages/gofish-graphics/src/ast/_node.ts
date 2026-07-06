@@ -57,13 +57,11 @@ import {
   isUNDEFINED,
   continuousInterval,
   spacePlacement,
-  CONTINUOUS_TYPE,
   UnderlyingSpace,
 } from "./underlyingSpace";
-import { toJSON, interval } from "../util/interval";
+import { toJSON } from "../util/interval";
 import type { AxisScale } from "./domain";
 import { envFlag } from "../util";
-import { nice } from "d3-array";
 import type { ScaleContext } from "./gofish";
 import type { TokenContext } from "./tokenContext";
 import { isToken, Token } from "./createName";
@@ -284,6 +282,22 @@ export class GoFishNode {
   // false    = explicitly suppressed via axes: override (blocks children)
   // undefined = not involved
   public axis: { x?: boolean; y?: boolean } = {};
+  /** Persistent per-dim record that THIS node renders an axis (issue #659).
+   *  Unlike `axis` — a work flag consumed and CLEARED by axis elaboration —
+   *  this stamp survives to layout time, so a σ-scope solve can ask "does any
+   *  node in my scope render an axis on this dim?" (`scopeRendersAxis`). That
+   *  demand bit is what gates nicing: nicing is a presentation adjustment
+   *  whose demand comes from axis views, so a scope nices its POSITION domain
+   *  iff some node in the scope draws that dim's axis. Stamped by
+   *  `resolveAxes` wherever it sets an owning (`true`) flag. */
+  public axisDemand: [boolean, boolean] = [false, false];
+  /** Per-dim marker that this node roots its OWN σ-scope on the dim (a
+   *  self-scaled region: explicit pixel size absorbing a baseline space). Set
+   *  by `layer`'s space resolution alongside its stash; read by
+   *  `scopeRendersAxis` to stop the demand walk — an inner self-scaled
+   *  region's axis demand is served by its own solve, not the enclosing
+   *  scope's. */
+  public selfScaledDims: [boolean, boolean] = [false, false];
   public _axisOverride?: { x?: boolean; y?: boolean };
   /** Explicit key→node map for ordinal axis label positioning. Set by
    * operators (e.g. table) whose domain keys differ from children's .key. */
@@ -686,6 +700,7 @@ export class GoFishNode {
       if (override !== undefined) {
         if (dim === 0) this.axis.x = override === false ? false : true;
         else this.axis.y = override === false ? false : true;
+        if (override !== false) this.axisDemand[dim] = true;
         next.add(dim); // claim regardless — false blocks children too
       } else if (
         enabled.has(dim) &&
@@ -700,6 +715,7 @@ export class GoFishNode {
       ) {
         if (dim === 0) this.axis.x = true;
         else this.axis.y = true;
+        this.axisDemand[dim] = true;
         next.add(dim);
       }
     }
@@ -709,39 +725,48 @@ export class GoFishNode {
   }
 
   /**
-   * Walk tree after resolveAxes; apply d3.nice() to every POSITION domain
-   * so layout and ticks use rounded bounds. Applied to all nodes (not just
-   * axis-bearing ones) so that passthrough nodes like layer inherit the same
-   * niced domain that gofish.tsx uses for posScale computation.
+   * Demand-driven nicing (issue #659): does any axis rendered in this scope's
+   * SPACE-FLOW REGION view this scope's `dim` domain? A scope nices its
+   * anchored POSITION domain iff this returns true — nicing is a presentation
+   * adjustment whose demand comes from axis views; axis-less content stays at
+   * the honest raw scale, and when an axis IS drawn, content and ticks share
+   * the one niced domain.
+   *
+   * The region is the maximal tree neighborhood over which the dim's space
+   * flows freely — every axis inside it is a view of the same underlying
+   * domain, so a stamp anywhere in it is demand for every scope in it. It is
+   * bounded by the two constructs that cut space flow:
+   *   - a self-scaled stash (`selfScaledDims`) — the stashed dim reports
+   *     UNDEFINED upward, so an ancestor's axis cannot be describing it (and,
+   *     descending, a deeper stash roots its own region);
+   *   - a coord boundary — a coord remaps its subtree into its own space
+   *     (and never nices), so axes inside and outside view different spaces.
+   * Concretely: walk UP from the scope root while flow is uncut (an inner
+   * shared/datum-position scope under an axis-drawing root inherits the
+   * root's demand — its space is what bubbled up into the domain that axis
+   * draws), then scan that region root's subtree for stamps, stopping at
+   * deeper stashes/coords. Reads the persistent `axisDemand` stamps, which
+   * survive axis elaboration (the `axis` work flags do not).
    */
-  public resolveNiceDomains(): void {
-    // Coord-transform nodes and their descendants have domains that map into
-    // the coordinate system's fixed space (e.g. stacked counts → [0, 2π]).
-    // Rounding those domains breaks the mapping, so stop here entirely.
-    if (this.type === "coord") {
-      return;
+  public scopeRendersAxis(dim: 0 | 1): boolean {
+    let region: GoFishNode = this;
+    while (
+      !region.selfScaledDims[dim] &&
+      region.parent !== undefined &&
+      region.parent.type !== "coord"
+    ) {
+      region = region.parent;
     }
+    return region.walkAxisDemand(dim, true);
+  }
 
-    if (this._underlyingSpace) {
-      for (const dim of [0, 1] as (0 | 1)[]) {
-        const space = this._underlyingSpace[dim];
-        if (isPOSITION(space)) {
-          const iv = continuousInterval(space)!;
-          const [niceMin, niceMax] = nice(iv.min, iv.max, 10);
-          // Nicing changes the DATA domain (and the width derived from it);
-          // placement is a derived view of dataDomain, so the niced interval
-          // keeps it "determined" without a separate write.
-          (space as CONTINUOUS_TYPE).dataDomain = interval(niceMin, niceMax);
-          (space as CONTINUOUS_TYPE).width = Monotonic.linear(
-            niceMax - niceMin,
-            0
-          );
-        }
-      }
-    }
-    this.children.forEach((c) => {
-      if (c instanceof GoFishNode) c.resolveNiceDomains();
-    });
+  private walkAxisDemand(dim: 0 | 1, isScopeRoot: boolean): boolean {
+    if (this.type === "coord") return false;
+    if (!isScopeRoot && this.selfScaledDims[dim]) return false;
+    if (this.axisDemand[dim]) return true;
+    return this.children.some(
+      (c) => c instanceof GoFishNode && c.walkAxisDemand(dim, false)
+    );
   }
 
   public layout(size: Size, scales: Size<AxisScale | undefined>): Placeable {

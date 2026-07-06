@@ -7,6 +7,7 @@ import { interval, Interval } from "../util/interval";
 import { CoordinateTransform } from "./coordinateTransforms/coord";
 import * as Monotonic from "../util/monotonic";
 import type { Measure } from "./data";
+import { nice as d3Nice } from "d3-array";
 
 export type UnderlyingSpaceKind = "continuous" | "ordinal" | "undefined";
 
@@ -25,7 +26,8 @@ export type UnderlyingSpaceKind = "continuous" | "ordinal" | "undefined";
  *     with a parent `transform.scale`, and is never niced.
  *   - `anchor: number` — ANCHORED (the old `POSITION`): the position IS assigned.
  *     The number is the DOMAIN MIN — the data-space coordinate of the extent's
- *     low edge (which may be 0!), NOT a zero point. Builds a posScale, is niced,
+ *     low edge (which may be 0!), NOT a zero point. Builds a posScale, is niced
+ *     per σ-scope when an axis views it ({@link niceContinuous}, issue #659),
  *     renders an absolute axis over `[anchor, anchor + width.run(1)]`. Measures
  *     unify as TYPES (THROW on a clash) — a count axis must not silently merge
  *     with millimeters.
@@ -189,6 +191,43 @@ export const POSITION = (
   );
 export const isPOSITION = (space: UnderlyingSpace): space is CONTINUOUS_TYPE =>
   continuousInterval(space) !== undefined;
+
+/** Nice an anchored POSITION space's data domain (issue #659). Returns a copy
+ *  with the `[min, max]` domain rounded to d3-nice bounds (count 10, matching
+ *  the axis tick nicing) and the `width` Monotonic recomputed from the niced
+ *  interval, so a scope solved with the niced space sizes content, maps
+ *  positions, and — via the same domain — ticks the axis all off ONE rounded
+ *  domain.
+ *
+ *  This is THE nicing operation. It is applied per σ-scope AT the scope's solve
+ *  (the render root, a self-scaled region, a shared-scale scope, a datum-position
+ *  scale), never as a pre-layout tree walk — so a domain that only reaches a
+ *  scope through a stash cannot escape it (the original #659 bug), and a subtree
+ *  that is not a scope root never nices its own subset (it inherits the scope's
+ *  σ). It is DEMAND-DRIVEN: each solve site gates the call on
+ *  `GoFishNode.scopeRendersAxis` — a scope nices its POSITION domain iff some
+ *  node in its space-flow region renders an axis on the dim. Nicing is a
+ *  presentation adjustment whose demand comes from axis views; axis-less
+ *  content stays at the honest raw scale, and when an axis IS drawn, content
+ *  and ticks share the one niced domain. A baseline magnitude, difference,
+ *  ordinal, or undefined space is returned UNCHANGED: nicing applies only to
+ *  anchored POSITION domains — never SIZE magnitudes, never deltas. A coord
+ *  scope must NOT nice (its domain maps into a fixed coordinate range), so the
+ *  coord boundary never calls this. */
+export const niceContinuous = <T extends UnderlyingSpace | undefined>(
+  space: T
+): T => {
+  if (space === undefined) return space;
+  const iv = continuousInterval(space);
+  if (iv === undefined) return space;
+  const [niceMin, niceMax] = d3Nice(iv.min, iv.max, 10);
+  return CONTINUOUS(
+    Monotonic.linear(niceMax - niceMin, 0),
+    interval(niceMin, niceMax),
+    (space as CONTINUOUS_TYPE).measure,
+    (space as CONTINUOUS_TYPE).coordinateTransform
+  ) as T;
+};
 
 /** UNANCHORED continuous space (old DIFFERENCE) — delta axis. Keys on the DATA
  *  fact (`dataDomain === "delta"`), NOT on placement, so a future `conflict`

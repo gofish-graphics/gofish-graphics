@@ -71,11 +71,13 @@ export type AxisMap = { sigma: number; domainMin: number; pxMin: number };
  *  old `scaleFactor`); `map` is the anchored map of the axis's POSITION scope
  *  (the old `posScale`), and `map.sigma` is that scope's σ. Both are registry-
  *  solved — no site fabricates either — so when both are present and `sigma ≠
- *  map.sigma` the axis genuinely carries two scopes (e.g. a marginal panel whose
- *  ticks map the NICED domain while its bars size the UN-niced total, or a
- *  sub-budget layer scaling size against a local extent and position against an
- *  inherited one). Each half is read by the channel it belongs to: magnitudes
- *  read `sigma`, anchored positions read `map`. */
+ *  map.sigma` the axis genuinely carries two scopes (e.g. a sub-budget layer
+ *  scaling size against a local extent and position against an inherited map).
+ *  Each half is read by the channel it belongs to: magnitudes read `sigma`,
+ *  anchored positions read `map`. (A niced-ticks-vs-raw-bars split is NOT a
+ *  sanctioned case: since issue #659, nicing is a per-scope operation applied
+ *  at the scope's solve, so a scope's map and σ read one domain by
+ *  construction.) */
 export type AxisScale = { sigma?: number; map?: AxisMap };
 
 /** Evaluate an anchored map at a data value. */

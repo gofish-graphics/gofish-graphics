@@ -187,7 +187,8 @@ This is one of the most important passes. It determines the **underlying space**
 - **`CONTINUOUS`**: one data-driven extent, a `width` Monotonic in σ plus an
   `origin`:
   - `origin: number` — **POSITION**: anchored at a data coordinate (e.g.
-    `x: value(5)`); builds a position scale, niced, absolute axis.
+    `x: value(5)`); builds a position scale (niced per σ-scope at the scope's
+    solve, when an axis views the scope — issue #659), absolute axis.
   - `origin: "free"` — **SIZE**: a baseline magnitude, sized but unplaced (e.g.
     `h: "value"` with no min); no position scale.
   - `origin: "impossible"` — **DIFFERENCE**: unanchorable, only differences are
@@ -237,22 +238,25 @@ if (!isValue(dims[0].min) && !isValue(dims[0].size)) {
 **Location**: `src/ast/gofish.tsx` (`layout()`), `src/ast/axes/elaborate.tsx`
 
 If the chart-level `axes` option enables a dimension, `resolveAxes` walks the
-tree top-down flagging which node _owns_ an axis on each dimension,
-`resolveNiceDomains` rounds POSITION domains to tick-friendly bounds, and then
+tree top-down flagging which node _owns_ an axis on each dimension (and leaving
+persistent `axisDemand` stamps — the demand bits that later gate per-scope
+domain nicing at the σ-scope solves, issue #659), and then
 `elaborateAxes` **rewrites the tree**: each axis-owning node is wrapped in
 `Layer` tiers containing ordinary `rect`/`text`/`spread` axis shapes wired with
 `align`/`distribute`/`position` constraints. Axes are not a privileged node
 type and there is no axis-specific code later in the pipeline — after this
 pass they are just nodes. Because the rewrite inserts new nodes and moves
 keys onto wrappers, the affected resolution passes (color, names, labels,
-underlying space, nice domains) rerun on the new tree.
+underlying space) rerun on the new tree. Domain nicing is not a tree pass at
+all: each σ-scope nices its own POSITION domain at its solve, if some node in
+its space-flow region renders that dim's axis.
 
 See [Axes](/internals/frontend/axes) for the full elaboration story (the
 two-tier structure, origin pins, negative-space gutters, and the
 continuous/difference/ordinal kinds).
 
-**Axis-title elaboration** follows the axis block (after the nice-space capture)
-and runs _before_ the legend. The title _text_ for each dim is read off the
+**Axis-title elaboration** follows the axis block (after the root's demand-niced
+space capture) and runs _before_ the legend. The title _text_ for each dim is read off the
 **resolved space's `measure`** (`resolveAxisTitles` over `spaceMeasure(rootSpace)`)
 — a continuous axis names itself by its unit, an ordinal axis by its grouping
 field — falling back to the syntactic `axisFields` hint (mark/operator field

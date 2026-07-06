@@ -826,7 +826,8 @@ console.log("# constraint confluence: child posScale forwarding");
     [false, false],
     [positionSpace, positionSpace],
     [100, 200],
-    [undefined, undefined]
+    [undefined, undefined],
+    [false, false]
   );
   ok(
     "position scale plan does not synthesize local scales without owned axes",
@@ -838,7 +839,8 @@ console.log("# constraint confluence: child posScale forwarding");
     [true, false],
     [positionSpace, positionSpace],
     [100, 200],
-    [baseX, undefined]
+    [baseX, undefined],
+    [false, false]
   );
   ok(
     "position scale plan preserves base scales and falls back locally when owned",
@@ -1232,6 +1234,7 @@ console.log("# constraint confluence: child scale factor planning");
     [inheritedX, inheritedY],
     undefined,
     [false, false],
+    [false, false],
     new ScopeRegistry(),
     "test"
   );
@@ -1262,6 +1265,7 @@ console.log("# constraint confluence: child scale factor planning");
     [inheritedX, inheritedY],
     { sizeDomain: [Monotonic.linear(10, 0), Monotonic.linear(0, 10)] },
     [false, false],
+    [false, false],
     new ScopeRegistry(),
     "test"
   );
@@ -1285,6 +1289,7 @@ console.log("# constraint confluence: child scale factor planning");
     [inheritedX, inheritedY],
     { sizeDomain: [Monotonic.linear(10, 0), Monotonic.linear(0, 10)] },
     [false, false],
+    [false, false],
     new ScopeRegistry(),
     "test"
   );
@@ -1307,6 +1312,7 @@ console.log("# constraint confluence: child scale factor planning");
     [inheritedX, inheritedY],
     { sizeDomain: [Monotonic.linear(10, 0), undefined] },
     [true, false],
+    [false, false],
     new ScopeRegistry(),
     "test"
   );
