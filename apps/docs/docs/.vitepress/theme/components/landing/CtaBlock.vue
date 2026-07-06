@@ -15,10 +15,12 @@ const apiHref = computed(() => `/${docsLang.value}/api/core/chart`);
 
 // The computed text is SSR-safe; clipboard/document access is confined to the
 // click handler below.
+// Point at the nightly / dev builds — the stable release lags well behind
+// active development while GoFish is pre-1.0.
 const installCmd = computed(() =>
   docsLang.value === "python"
-    ? "pip install gofish-graphics"
-    : "npm install gofish-graphics"
+    ? "pip install --pre gofish-graphics"
+    : "npm install gofish-graphics@nightly"
 );
 const copied = ref(false);
 let copiedTimer: ReturnType<typeof setTimeout> | undefined;
