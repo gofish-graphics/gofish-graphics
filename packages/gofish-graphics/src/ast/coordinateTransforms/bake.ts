@@ -8,7 +8,11 @@ import { mirrorY } from "../_displayObject";
 import type { Transform } from "../dims";
 import { GoFishNode } from "../_node";
 import { isZOrderConstraint } from "../constraints/zorder";
-import { topoSortByZOrder, type PaintItem } from "../paintOrder";
+import {
+  flattenForZOrder,
+  topoSortByZOrder,
+  type PaintItem,
+} from "../paintOrder";
 import { isCONTINUOUS } from "../underlyingSpace";
 
 /** The node's parent-frame translate as the bake should compose it, via the
@@ -170,17 +174,6 @@ const declaredYUp = (node: GoFishAST): boolean => {
   return sy !== undefined && isCONTINUOUS(sy);
 };
 
-/** The placed y-band `[baseY, baseY+height]` a node's flip scope mirrors about,
- *  in its own local frame. `height` is the node's ALLOCATED y size — its
- *  coordinate-frame pixel extent (the posScale range: cell height in a facet,
- *  glyph height for a nested chart). `baseY` is the frame ORIGIN — the node's
- *  local (0,0) in absolute coords (`composedTy`). The ROOT plot content does NOT
- *  use this: it carries an authoritative `_rootFlipScope` = the canvas frame
- *  `[0, finalH]` stamped by `layout()` (where `finalH = contentNode.dims.size` is
- *  known), which is the exact frame the old global flip mirrored about — see
- *  `walk`. `scopeBox` is for scopes that open BELOW the canvas frame (a facet
- *  cell, a `coord`), which mirror about their own allocated band. Falls back to
- *  the content bbox extent when the axis is UNSIZED (allocated NaN). */
 /** The node's CONTENT bbox band `[baseY, baseY+height]` in its own local frame,
  *  read off `intrinsicDims[1]` (the `min` offset + `size`), finite-guarded (an
  *  unsized axis → 0). The band starts at `composedTy + min` — content seated at a
@@ -196,6 +189,17 @@ const contentBboxBand = (node: GoFishAST, composedTy: number): FlipScope => {
   return { baseY: composedTy + min, height: size };
 };
 
+/** The placed y-band `[baseY, baseY+height]` a node's flip scope mirrors about,
+ *  in its own local frame. `height` is the node's ALLOCATED y size — its
+ *  coordinate-frame pixel extent (the posScale range: cell height in a facet,
+ *  glyph height for a nested chart). `baseY` is the frame ORIGIN — the node's
+ *  local (0,0) in absolute coords (`composedTy`). The ROOT plot content does NOT
+ *  use this: it carries an authoritative `_rootFlipScope` = the canvas frame
+ *  `[0, finalH]` stamped by `layout()` (where `finalH = contentNode.dims.size` is
+ *  known), which is the exact frame the old global flip mirrored about — see
+ *  `walk`. `scopeBox` is for scopes that open BELOW the canvas frame (a facet
+ *  cell, a `coord`), which mirror about their own allocated band. Falls back to
+ *  the content bbox extent when the axis is UNSIZED (allocated NaN). */
 const scopeBox = (node: GoFishAST, composedTy: number): FlipScope => {
   const gn = node instanceof GoFishNode ? node : undefined;
   const alloc = gn?._allocatedSize?.[1];
@@ -231,6 +235,11 @@ const resolveNodeFlip = (
   if (incomingFlip !== undefined) return incomingFlip;
   if (node instanceof GoFishNode && node._ambientYDown === true)
     return undefined;
+  // A `coord` opens its own scope (it fixes its own orientation convention).
+  // This `type === "coord"` string dispatch is a stopgap: the deeper fix is for
+  // `coord` to DECLARE its own orientation (a node bit / its own y underlying
+  // space) so `declaredYUp` subsumes it — a follow-up to #629, gated on the open
+  // polar/coord orientation redesign (#662).
   const isCoord = (node as { type?: string }).type === "coord";
   const scopeTransparent =
     node instanceof GoFishNode && node._scopeTransparent === true;
@@ -241,61 +250,10 @@ const resolveNodeFlip = (
 };
 
 /** A z-order paint unit plus the flip scope active at its PARENT in the real
- *  tree (issue #629). See {@link hoistWithScope}. */
-type ScopedPaintItem = PaintItem & { incomingFlip: FlipScope | undefined };
-
-/** Flatten a layer's children for z-order EXACTLY as {@link flattenForZOrder}
- *  (same units, order, `accTranslate` — so `topoSortByZOrder` is unaffected) but
- *  additionally CARRY the flip scope through each hoisted-through plain layer, so
- *  a unit hoisted out from under a continuous-y (or `coord`) layer still lowers
- *  under that layer's scope. Without this, hoisting drops the intermediate
- *  layer's scope decision and the unit renders in the parent's (wrong) frame —
- *  i.e. adding a zOrder constraint would silently change orientation (#629). For
- *  a single-orientation chart the carried flip equals the parent's (the hoisted
- *  layers all inherit the active scope), so paint output is unchanged. */
-const hoistWithScope = (
-  children: GoFishAST[],
-  baseTy: number,
-  baseFlip: FlipScope | undefined
-): ScopedPaintItem[] => {
-  const out: ScopedPaintItem[] = [];
-  let order = 0;
-  const rec = (
-    cs: GoFishAST[],
-    accTx: number,
-    accTy: number,
-    incomingFlip: FlipScope | undefined
-  ): void => {
-    for (const child of cs) {
-      if (
-        child instanceof GoFishNode &&
-        !child._isComponent &&
-        child.type === "layer"
-      ) {
-        const childTx = child.projectedTranslate(0) ?? 0;
-        const childTy = child.projectedTranslate(1) ?? 0;
-        // The hoisted-through layer may itself open/inherit a scope; resolve it
-        // and carry it into the layer's children so they lower under it.
-        const childFlip = resolveNodeFlip(
-          child,
-          baseTy + accTy + childTy,
-          incomingFlip
-        );
-        rec(child.children, accTx + childTx, accTy + childTy, childFlip);
-      } else {
-        out.push({
-          node: child,
-          accTranslate: [accTx, accTy],
-          defaultOrder: order++,
-          defaultZ: child instanceof GoFishNode ? child.getZOrder() : 0,
-          incomingFlip,
-        });
-      }
-    }
-  };
-  rec(children, 0, 0, baseFlip);
-  return out;
-};
+ *  tree (issue #629): {@link flattenForZOrder}'s `payload` carries the flip scope
+ *  through each hoisted-through plain layer, so a unit hoisted out from under a
+ *  continuous-y (or `coord`) layer still lowers under that layer's scope. */
+type ScopedPaintItem = PaintItem<FlipScope | undefined>;
 
 /**
  * Flatten a resolved scenegraph into an ordered list of `DisplayObject`s.
@@ -400,11 +358,16 @@ export const bake = (
       // Resolve z WITHIN this layer over its component-granular flattened
       // subtree (the same units the legacy layer render topo-sorted), then
       // descend into each unit — components keep their internal order.
-      // `hoistWithScope` carries the flip scope through each hoisted-through
-      // plain layer so a unit lowers under the SAME scope it would without the
-      // constraint (issue #629): the z-order hoist must never change orientation.
+      // `flattenForZOrder`'s `fold` carries the flip scope through each
+      // hoisted-through plain layer so a unit lowers under the SAME scope it
+      // would without the constraint (issue #629): the z-order hoist must never
+      // change orientation.
       const sorted = topoSortByZOrder<ScopedPaintItem>(
-        hoistWithScope(children, composedTranslate[1], nodeFlip),
+        flattenForZOrder<FlipScope | undefined>(children, {
+          seed: nodeFlip,
+          onHoist: (incomingFlip, layer, _accTx, accTy) =>
+            resolveNodeFlip(layer, composedTranslate[1] + accTy, incomingFlip),
+        }),
         zConstraints,
         {
           node: (it) => it.node,
@@ -420,7 +383,7 @@ export const bake = (
             composedTranslate[1] + unit.accTranslate[1],
           ],
           composedScale,
-          unit.incomingFlip
+          unit.payload
         );
       }
       return;

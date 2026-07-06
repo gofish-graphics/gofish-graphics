@@ -9,7 +9,8 @@
  */
 
 import type { DisplayList } from "gofish-ir";
-import type { GoFishNode, ToPixel } from "../_node";
+import type { GoFishNode, RenderSession, ToPixel } from "../_node";
+import type { FlipScope } from "../_displayObject";
 import type { GoFishAST } from "../_ast";
 import type { CoordinateTransform } from "../coordinateTransforms/coord";
 import { displayTranslate, type Transform } from "../dims";
@@ -93,16 +94,17 @@ export const rectItemFromBox = (
  *  shapes (text rotation) pick the right sign by reading the flip out of
  *  `toPixel` rather than carrying a separate flag (issue #143/#16). Retained as
  *  the dev-mode cross-check for the DECLARED bit (see {@link declaredFlipsY}). */
-export const toPixelFlipsY = (toPixel: ToPixel): boolean =>
+const toPixelFlipsY = (toPixel: ToPixel): boolean =>
   toPixel([0, 1])[1] < toPixel([0, 0])[1];
 
-/** The node's DECLARED y-flip orientation — read off the render session
- *  (`session.flipsY`), set at every `toPixel` boundary. Replaces the numeric
- *  probe {@link toPixelFlipsY} at the orientation-dependent lower bodies (text
- *  rotation, value labels); under `GOFISH_FLIP_CHECK` it asserts the declared
- *  bit agrees with the probe. See issue #143/#16/#629. */
+/** The node's DECLARED y-flip orientation — derived from the active flip scope on
+ *  the render session (`session.flip !== undefined`), installed at every
+ *  `toPixel` boundary. Replaces the numeric probe {@link toPixelFlipsY} at the
+ *  orientation-dependent lower bodies (text rotation, value labels); under
+ *  `GOFISH_FLIP_CHECK` it asserts the declared bit agrees with the probe. See
+ *  issue #143/#16/#629. */
 export const declaredFlipsY = (node: GoFishNode, toPixel: ToPixel): boolean => {
-  const declared = node.getRenderSession().flipsY ?? false;
+  const declared = node.getRenderSession().flip !== undefined;
   if (envFlag("GOFISH_FLIP_CHECK")) {
     const probed = toPixelFlipsY(toPixel);
     if (declared !== probed)
@@ -163,6 +165,19 @@ export const valueLabelItems = (
   ];
 };
 
+/** Install a baked entry's flip scope onto the render session (issue #629): set
+ *  the active scope and derive its `toPixel` via the published per-scope factory
+ *  (`session.toPixelFor`), so the entry lowers under its own scope's map. Shared
+ *  by the root lower driver (`lowerToDisplayList`) and the boundary re-bake
+ *  (`lowerChildrenOffset`) so the two install sites can't drift. */
+export const installFlip = (
+  session: RenderSession,
+  flip: FlipScope | undefined
+): void => {
+  session.toPixel = session.toPixelFor!(flip);
+  session.flip = flip;
+};
+
 /** Run `run` with the render session's `toPixel` swapped to `next`, restoring it
  *  afterward — the boundary-lowering primitive (a boundary maps its subtree into
  *  a shifted/warped pixel frame for the duration of the child walk). */
@@ -216,9 +231,12 @@ export const lowerChildrenOffset = (
   // installed) — preserving the pre-#629 output exactly (e.g. `cut` = `mask` over
   // an `offset`ed image). Detect it by probing whether `toPixel` agrees with
   // `toPixelFor(session.flip)` at two points (an affine map is fixed by two).
+  // Build the probe map ONCE (memoized in `toPixelFor`); it is also the entry map
+  // reused for any baked descendant whose scope equals `session.flip`.
+  const outerFlip = session.flip;
+  const expected = toPixelFor ? toPixelFor(outerFlip) : undefined;
   const inAmbientFrame = (): boolean => {
-    if (!toPixelFor) return false;
-    const expected = toPixelFor(session.flip);
+    if (!expected) return false;
     const a0 = outerToPixel([0, 0]);
     const e0 = expected([0, 0]);
     const a1 = outerToPixel([1, 1]);
@@ -238,21 +256,16 @@ export const lowerChildrenOffset = (
       )
     );
   }
-  const outerFlipsY = session.flipsY;
-  const outerFlip = session.flip;
   const items: DisplayList.DisplayItem[] = [];
   try {
     for (const child of node.children as GoFishAST[]) {
       for (const d of bake(child, undefined, [tx + dx, ty + dy], outerFlip)) {
-        session.toPixel = toPixelFor(d.flip);
-        session.flipsY = d.flip !== undefined;
-        session.flip = d.flip;
+        installFlip(session, d.flip);
         items.push(...d.node.INTERNAL_lower(coordinateTransform, d.transform));
       }
     }
   } finally {
     session.toPixel = outerToPixel;
-    session.flipsY = outerFlipsY;
     session.flip = outerFlip;
   }
   return items;

@@ -148,9 +148,10 @@ The decision is one rule, `resolveNodeFlip(node, composedTy, incomingFlip)`:
 Two places had to run this **same** rule so a subtree's orientation is stable no matter how
 it is wrapped:
 
-- **The z-order hoist.** `hoistWithScope` flattens a layer's children for z-order exactly as
-  `flattenForZOrder` but _carries the flip scope through each hoisted-through plain layer_, so
-  adding a `zAbove` / `zBelow` constraint can never change which scope a subtree lowers under.
+- **The z-order hoist.** The z-order flatten is `flattenForZOrder` with a `fold` payload that
+  _carries the flip scope through each hoisted-through plain layer_, so adding a `zAbove` /
+  `zBelow` constraint can never change which scope a subtree lowers under. (One walk, not a
+  forked copy — the fold is threaded through the single `paintOrder.ts` helper.)
 - **Bake boundaries.** A boundary whose own y space is UNDEFINED (`enclose` / `arrow` /
   `connect`) would otherwise lower its whole subtree under a single (y-down) map. Instead its
   child descent (`lowerChildrenOffset`) **re-runs `bake`** on each child — seeded with the

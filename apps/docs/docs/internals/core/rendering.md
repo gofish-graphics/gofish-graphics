@@ -300,10 +300,12 @@ return (
 );
 ```
 
-The lower driver (`lowerToDisplayList`) sets `session.toPixel = toPixelFor(d.flip)`
-and the declared `session.flipsY` just before lowering each baked entry — so a
-continuous-y subtree mirrors within its own band while an ordinal-y neighbor stays
-y-down, all sharing one flat display list.
+The lower driver (`lowerToDisplayList`) installs each baked entry's scope
+(`session.flip = d.flip` and `session.toPixel = toPixelFor(d.flip)`, via the shared
+`installFlip` helper) just before lowering it — so a continuous-y subtree mirrors
+within its own band while an ordinal-y neighbor stays y-down, all sharing one flat
+display list. The declared orientation is derived from `session.flip !== undefined`
+(`declaredFlipsY`), not a separate stored bit.
 
 The SVG-export terminals (`toSVG`/`toSVGElement`/`save`) run the same lower→paint
 pipeline against a throwaway container and serialize the result.
