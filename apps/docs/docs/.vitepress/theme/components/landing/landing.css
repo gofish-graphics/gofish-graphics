@@ -312,7 +312,7 @@ html.landing-page .DocSearch-Button {
   top: 50%;
   z-index: 6;
   /* rest the stamp against the "h" at the wordmark's end, shallow tilt */
-  transform: translate(-18%, -64%) rotate(27deg);
+  transform: translate(-16%, -64%) rotate(27deg);
   font-family: "Spline Sans", sans-serif;
   font-weight: 800;
   font-size: clamp(0.8rem, 1.4vw, 1.05rem);
