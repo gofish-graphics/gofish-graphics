@@ -14,7 +14,6 @@ import {
   FancyDims,
   Interval,
   Size,
-  translateString,
 } from "../dims";
 import { flattenLayout } from "./bake";
 import * as IntervalLib from "../../util/interval";

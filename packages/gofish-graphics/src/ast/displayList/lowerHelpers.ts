@@ -10,8 +10,8 @@
 
 import type { DisplayList } from "gofish-ir";
 import type { GoFishNode, ToPixel } from "../_node";
-import type { GoFishAST } from "../_ast";
 import type { CoordinateTransform } from "../coordinateTransforms/coord";
+import { bakeChildren } from "../coordinateTransforms/bake";
 import { displayTranslate, type Transform } from "../dims";
 import { type Path, type Point, pathToSVGPath } from "../../path";
 
@@ -161,9 +161,13 @@ export const withToPixel = <T>(
   }
 };
 
-/** Lower a boundary's children under its own translate (the legacy
- *  `<g transform>`), plus an optional extra `(dx, dy)` shift — the shared body of
- *  the simple translate-only boundaries (offset, enclose, arrow). */
+/** Lower a translate-only boundary's children at BAKED ABSOLUTE coordinates,
+ *  plus an optional extra `(dx, dy)` shift — the shared body of the simple
+ *  translate-only boundaries (offset, enclose). #39 stage 6d: instead of
+ *  composing the boundary's translate into a child-local `toPixel` closure, the
+ *  subtree is flattened to absolute-transform display objects (seeded at the
+ *  boundary's own absolute translate) and each is lowered at that transform —
+ *  the same mechanism the root bake uses. */
 export const lowerChildrenOffset = (
   node: GoFishNode,
   transform: Transform | undefined,
@@ -172,11 +176,7 @@ export const lowerChildrenOffset = (
   dy = 0
 ): DisplayList.DisplayItem[] => {
   const [tx, ty] = displayTranslate(transform);
-  const outer = node.getRenderSession().toPixel!;
-  const composed: ToPixel = ([cx, cy]) => outer([tx + dx + cx, ty + dy + cy]);
-  return withToPixel(node, composed, () =>
-    (node.children as GoFishAST[]).flatMap((c) =>
-      c.INTERNAL_lower(coordinateTransform)
-    )
+  return bakeChildren(node, [tx + dx, ty + dy]).flatMap((d) =>
+    d.node.INTERNAL_lower(coordinateTransform, d.transform)
   );
 };

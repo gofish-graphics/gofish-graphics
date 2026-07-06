@@ -12,13 +12,7 @@ import type { HierarchyNode, HierarchyRectangularNode } from "d3-hierarchy";
 import { GoFishNode, Placeable } from "../_node";
 import { GoFishAST } from "../_ast";
 import { createNodeOperator } from "../withGoFish";
-import {
-  FancyDims,
-  Size,
-  Direction,
-  elaborateDims,
-  translateString,
-} from "../dims";
+import { FancyDims, Size, Direction, elaborateDims } from "../dims";
 import { getMeasure, getValue, isValue, MaybeValue } from "../data";
 import { computeAesthetic, computeSize } from "../../util";
 import { posFn, pxOf } from "../domain";

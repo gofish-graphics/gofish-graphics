@@ -412,11 +412,43 @@ on one axis is the sanctioned multi-scale reading.
   rather than flowing a `Monotonic` claim to the scope boundary. Making cells
   carry `Monotonic` claims (so evaluation defers to the boundary) is the larger
   6e-adjacent change and was held to keep the carrier landing pixel-clean.
-- **6d — translate retirement (#39 stage 3-D).** Render consumes baked
-  absolute coordinates through the `displayTranslate`/`translateString`
-  chokepoints (`dims.ts:268-294` was written to make this a one-function
-  change); the per-container `<g translate>` wrappers collapse. Expect benign
-  DOM reshuffles — this is precisely the pixel-not-DOM gate case.
+- **6d — translate retirement (#39 stage 3-D). Landed.** The per-container
+  translate-composition closures collapse: a pure translate-only bake boundary
+  (`box`/`frame`, `offset`, `enclose`) no longer composes its translate into a
+  child-local `toPixel` closure and lower its children parent-relative. Instead
+  it flattens its own subtree via the new `bakeChildren` (the root bake's
+  z-ordered children-flatten, factored out of `bake`) seeded at its absolute
+  translate, and lowers each descendant at its baked absolute transform
+  (`INTERNAL_lower(coord, d.transform)`) — the identical mechanism the root bake
+  already uses, so the two paths can't drift. The non-identity `scale` exception
+  stays a `group` wrapper (a flat list can't fold scale). The dead
+  `translateString` chokepoint (`dims.ts`) — every legacy `<g transform>` render
+  had already migrated to the display-list `toPixel` fold, leaving it imported
+  but never called — is deleted along with its four dead imports. `displayTranslate`
+  stays: it is the read of a baked absolute transform that the space-remap boundary
+  (`coord`'s `contentToPixel`) and the self-drawers (`connect`/`arrow`) apply to
+  their own geometry — those are NOT pure translate-only containers, so they keep
+  composing (the documented exception).
+
+  **No `transform.translate` write was retired.** Render/lower already reads the
+  ledger projection (`projectedTranslate`/`_displayTransform`), never the raw
+  written field; the surviving raw writes (`_pinAnchor`'s under-determined-axis
+  fallback, the `layout()` seed) feed `_projectTranslate`'s fallback, which
+  `ref`s and constraints also read — so none is render-only, and the
+  `translate === undefined` "parent may place me" sentinel is untouched.
+
+  **Gate — pixel, not DOM.** The zero-pixel gate is a new `capture-pixels`
+  script (`tests/scripts/capture-pixels.ts`): render every story to PNG at HEAD
+  and at the base ref in the SAME local Chromium, pixelmatch at threshold 0.
+  Result: **260/260 stories, 0 pixels moved.** Because the display-list path had
+  already inlined translate composition into coordinates (no `<g translate>`
+  wrappers survived for these boundaries — only the `scale` group), collapsing
+  the closures is byte-identical in the normalized DOM too: `capture-diff` and
+  `capture-sweep` (solver shadow) both report **260/260 identical / clean**. The
+  anticipated "benign DOM reshuffle" did not materialize — the reshuffle was
+  spent by the earlier `_render`→display-list migration, so 6d is pixel- AND
+  DOM-neutral.
+
 - **6e — grid as tracks.** A grid scope introduces `numCols + numRows` track
   cells; each cell(i, j) gets equations `cell.min = track.min` and
   `cell.size = track.size` per axis. Equal-flex is "all track sizes equal +

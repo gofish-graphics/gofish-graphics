@@ -1,7 +1,7 @@
 import { computeAesthetic } from "../../util";
 import { posFn } from "../domain";
 import { GoFishNode } from "../_node";
-import { Size, translateString } from "../dims";
+import { Size } from "../dims";
 import { getMeasure, getValue, isValue, MaybeValue } from "../data";
 import {
   anchorAt,

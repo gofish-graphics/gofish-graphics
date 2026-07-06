@@ -118,6 +118,17 @@ which the render entry maps over directly.
   descends into each unit, so a component keeps its internal order. Transforms still
   compose all the way to the leaves; only the _ordering_ is per-layer.
 
+**`bakeChildren` — the same flatten, reused by boundaries.** `bake`'s per-transparent-layer
+children-flatten (the z-order resolution + transform composition) is factored into an
+exported `bakeChildren(node, translate, scale)`. A pure translate-only boundary
+(`box`/`frame`, `offset`, `enclose`) calls it on its _own_ subtree, seeded at the
+boundary's absolute translate, and lowers each returned entry at its baked absolute
+transform. This is stage 6d of [#39](https://github.com/gofish-graphics/gofish-graphics/issues/39):
+a translate-only boundary no longer composes its translate into a `toPixel` closure and
+lower its children parent-relative — it bakes them to absolute coordinates through the
+exact z-order-preserving path the root uses, so the two mechanisms can't drift. Only a
+non-identity `scale` (which a flat list can't fold) still needs a `group` wrapper.
+
 This root bake is the first step toward a serializable [display
 list](/internals/core/rendering) (the render IR): once each draw entry is a
 self-contained primitive rather than a `{ node, transform }` back-reference, the flat
