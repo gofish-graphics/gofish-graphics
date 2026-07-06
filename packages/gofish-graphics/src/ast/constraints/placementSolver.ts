@@ -228,14 +228,16 @@ export function solvePlacementConstraints(
   targets: Map<string, Placeable>,
   sizes: [number, number],
   posScales?: ConstraintPosScales,
-  gridTracks?: [TrackLayout, TrackLayout]
+  gridTracks?: [TrackLayout, TrackLayout],
+  dataPositioned?: [Set<string>, Set<string>]
 ): PlacementConflict[] {
   const lowered = lowerPlacementConstraints(
     constraints,
     targets,
     sizes,
     posScales,
-    gridTracks
+    gridTracks,
+    dataPositioned
   );
 
   const solved = [

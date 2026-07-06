@@ -541,26 +541,42 @@ needs the aligned system to appear at a particular place must say so explicitly
 with a placement constraint.
 
 That normalization is also what keeps data-positioned children safe. A faceted
-scatter panel over `[1955, 2010]`, whose `placement` is `determined`, should not
-be pulled to `posScale(0)` (data-zero, far below 1955). So the placement solver
-reads `Placeable.placementOn(dir)`: **a target whose subtree already commits a
-data position (`placement` `determined`/`conflict`) on a posScale axis, with a
-non-`middle` anchor, is left alone** — `align` shares the frame (it still unions
-the children's `dataDomain`) but supplies no baseline. When alignment does write
-an anchor relation, it asks
+scatter panel over `[1955, 2010]`, anchored to the shared y data scale, should
+not be pulled to `posScale(0)` (data-zero, far below 1955). So `align` leaves it
+alone: **a target anchored to a data (POSITION) scope on a posScale axis, with a
+non-`middle` anchor, is not moved** — `align` shares the frame (it still unions
+the children's `dataDomain`) but supplies no baseline. Its baseline is already
+`posScale(0)` of the shared scope, so all such panels co-locate by construction.
+
+**The guard asks the solver, not the space pass (Stage 6f).** This is the
+blindingly-obvious final form the whole design arc was reaching for. The question
+"is this target already positioned?" is answered by the placement solve's own
+authority record — the `PlacementOwnershipPlan` — through one predicate,
+`isDataPositioned(axis, name)`. The fact it reads (which children are anchored to
+a POSITION scope on each axis) is a pure **data/scope** fact — a child's
+`dataDomain` is present on that axis — collected _once_ at the layer boundary and
+handed to the solve as an explicit ownership input. The constraint path no longer
+reconstructs the space pass's `free`/`determined`/`conflict` lattice by calling a
+`placementOn` method on the target mid-lowering; there is no layout fact derived
+from the space pass in the guards anymore. (`spacePlacement` still computes that
+lattice for the space folds themselves — the `union`/`middle`/anchored decisions —
+which is where a determinacy read belongs.)
+
+When alignment does write an anchor relation, it asks
 `Placeable.localAnchor(axis, anchor)` for the anchor's coordinate in the
 target's local box. `GoFishNode.localAnchor()` derives that from the node's
 intrinsic dimensions (including baseline/min/center/max), so relation solving
 can handle asymmetric boxes such as text and negative bars without relying on
 the display transform.
 
-Because placement is first-class, this is the _whole_ mechanism — no flag, no
-scoping. (Historically the same effect needed a `guardDataPositioned` flag on
-spread/scatter aligns plus a per-axis `fromSize` boolean reconstructed from the
-pre-fold child spaces in the layer; the flag was a _proxy_ for the placement
-fact, and the reconstruction read it indirectly. Both are gone — the per-child
-placement read is strictly more general, handling a mix of positioned and free
-children that the old all-or-nothing axis guard could not.) See
+Because the fact is a single scope-membership input to the solve, this is the
+_whole_ mechanism — no flag, no scoping. (Historically the same effect needed a
+`guardDataPositioned` flag on spread/scatter aligns plus a per-axis `fromSize`
+boolean reconstructed from the pre-fold child spaces in the layer; then a
+`placementOn` method reconstructing the placement lattice per target during
+lowering. All are gone — the ownership plan's per-child scope-membership read is
+strictly more general, handling a mix of positioned and free children that the
+old all-or-nothing axis guard could not.) See
 [the spec](/internals/design/size-difference-unification) for the
 "space as abstract interpretation" framing this falls out of.
 

@@ -75,15 +75,18 @@ class PlacementOwnershipPlan {
   private readonly authoritative = new Set<string>();
   private readonly initiallyPlaced = new Set<string>();
   private readonly positionPinned = new Set<string>();
+  private readonly dataPositionedSet: [Set<string>, Set<string>];
   private readonly sizes: [number, number];
 
   constructor(
     targets: Map<string, Placeable>,
     constraints: PlacementConstraint[],
     posScales: ConstraintPosScales | undefined,
-    sizes: [number, number]
+    sizes: [number, number],
+    dataPositioned?: [Set<string>, Set<string>]
   ) {
     this.sizes = sizes;
+    this.dataPositionedSet = dataPositioned ?? [new Set(), new Set()];
     for (const [name, target] of targets) {
       for (const axis of AXIS_INDICES) {
         if (target.dims[axis].min !== undefined)
@@ -104,6 +107,16 @@ class PlacementOwnershipPlan {
   isPinned(axis: Axis, name: string): boolean {
     const key = placementKey(axis, name);
     return this.initiallyPlaced.has(key) || this.positionPinned.has(key);
+  }
+
+  /** Whether this (node, axis) is anchored to a data (POSITION) scope — its
+   *  baseline is fixed at `posScale(0)` by the shared map, so `align` must leave
+   *  it where its own scale puts it (a scatter facet panel). Collected at the
+   *  layer boundary (a SPACE/scope fact) and handed in; the ownership plan is the
+   *  single authority the align guard consults, in place of the retired
+   *  space-pass `placementOn` reconstruction (Stage 6f). */
+  isDataPositioned(axis: 0 | 1, name: string): boolean {
+    return this.dataPositionedSet[axis].has(name);
   }
 
   shouldPinSelfPlacement(axis: 0 | 1, name: string): boolean {
@@ -155,7 +168,8 @@ export function lowerPlacementConstraints(
   targets: Map<string, Placeable>,
   sizes: [number, number],
   posScales?: ConstraintPosScales,
-  gridTracks?: [TrackLayout, TrackLayout]
+  gridTracks?: [TrackLayout, TrackLayout],
+  dataPositioned?: [Set<string>, Set<string>]
 ): LoweredPlacement {
   // A `position` pin on a grid cell overrides that cell's track centering on the
   // pinned axis (the authoritative-pin pattern) — collect which (cell, axis) a
@@ -175,7 +189,8 @@ export function lowerPlacementConstraints(
     targets,
     constraints,
     posScales,
-    sizes
+    sizes,
+    dataPositioned
   );
 
   const lowerer = new PlacementProgramLowerer(targets);
@@ -185,6 +200,7 @@ export function lowerPlacementConstraints(
   };
   const isInitiallyPlaced = ownership.isInitiallyPlaced.bind(ownership);
   const isPinned = ownership.isPinned.bind(ownership);
+  const isDataPositioned = ownership.isDataPositioned.bind(ownership);
 
   // A node that self-placed during its own layout is a hard boundary condition,
   // except where an authoritative position constraint explicitly owns the axis.
@@ -223,6 +239,7 @@ export function lowerPlacementConstraints(
         targets,
         posScales,
         isPinned,
+        isDataPositioned,
       });
       return;
     }

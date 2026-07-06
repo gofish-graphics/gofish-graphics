@@ -494,12 +494,39 @@ on one axis is the sanctioned multi-scale reading.
   cells carry intrinsic waffle-size claims, now content-sizes its tracks (facets
   pack to content instead of stretching to equal box-division).
 
-- **6f — determinacy from rank.** The Stage-1 `spacePlacement` view retires:
-  free/determined/conflict is read off the scope system's baseline-subsystem
-  rank/consistency. Space resolution keeps only data facts
-  (`width`, `dataDomain`, `measure`). The align transfer functions become
-  transfer functions _of the solver's abstract domain_, closing the
-  "guards should be blindingly obvious" thread.
+- **6f — the guards ask the solver. Landed.** The last layout guard that
+  reconstructed a fact from the space pass retires. `align`'s "is this target
+  already positioned?" no longer calls a `Placeable.placementOn(dir)` method that
+  rebuilt the `free`/`determined`/`conflict` lattice from the target's
+  `dataDomain` mid-lowering. Instead the placement solve's own authority record —
+  the `PlacementOwnershipPlan` — answers it, through one predicate
+  `isDataPositioned(axis, name)`. The fact it reads (which children are anchored
+  to a POSITION scope on each axis) is a pure **data/scope** fact — a child's
+  `dataDomain` present on that axis — collected _once_ at the layer boundary
+  (`layer.tsx`, where the child spaces already live) and handed to the solve as an
+  explicit ownership input alongside `initiallyPlaced`/`positionPinned`. So the
+  constraint path no longer consults `spacePlacement` at all (the debug printer
+  and the space folds still do, which is where a determinacy read belongs), and
+  `placementOn` is deleted from the `Placeable` contract and `GoFishNode`.
+
+  **What "determinacy from rank" meant vs. what shipped.** The plan framed this
+  as reading free/determined/conflict off the placement subsystem's rank. The
+  corpus forensics (376 guarded cells across every faceted/stacked story) showed
+  the load-bearing targets — faceted scatter/stacked panels — carry **no strong
+  pin and no self-placement** (`dims.min` undefined); their determinacy comes
+  entirely from an **anchored posScale** (a SIZE/scope fact), which the placement
+  rank cannot see. So a literal "rank of the placement subsystem" reading would
+  have called them _free_ and moved them — a behavior change. The realized form
+  keeps the same fact but sources it honestly (scope membership, a data fact),
+  routing it through the ownership plan so the guard's _input_ is the solver's
+  authority record rather than a late reconstruction. Behavior-preserving:
+  the new path fires on exactly the same 376 cells; full suite + solver-shadow
+  sweep (260/260 clean) + pixel gate all green.
+
+  This closes the "guards should be blindingly obvious" thread that started the
+  whole design arc: space resolution now keeps only data facts (`width`,
+  `dataDomain`, `measure`), and every layout guard reads the placement solve's
+  ownership plan, not the space pass.
 
 ### Open design questions (resolve during 6, tracked now)
 
@@ -547,6 +574,37 @@ Stages 0–3 are each a small PR and can land this week in any order. Stage 4 is
 the enabling refactor and should land alone, with nothing else in the diff.
 Stage 5 consumes 4. Stage 6 consumes 4+5 and subsumes the leftovers of 2
 (span's internal machinery) and 3 (grid's bypasses).
+
+**Status (per stage):**
+
+| Stage                                   | Status                                                 |
+| --------------------------------------- | ------------------------------------------------------ |
+| 0 — docs / vocabulary                   | **landed**                                             |
+| 1 — placement lattice                   | **landed**                                             |
+| 2 — span → position                     | **landed**                                             |
+| 3 — grid cliff                          | **landed**                                             |
+| 4 — one scale carrier                   | **landed**                                             |
+| 5 — rank-2 placement (5a/5b/5c)         | **landed**                                             |
+| 6a — observe (shadow coverage)          | **landed**                                             |
+| 6b — one solve site (scope registry)    | **landed**                                             |
+| 6c — one slope per σ-scope              | **landed** (carrier + sole producer; residue deferred) |
+| 6d — translate retirement               | **landed**                                             |
+| 6e — grid as tracks                     | **landed**                                             |
+| 6f — the guards ask the solver          | **landed**                                             |
+| #659 — self-scaled stash escapes nicing | **next** (own stage, post-6f)                          |
+
+The whole staged plan (0–6f) is landed. The one remaining known dual-slope is
+#659 — a self-scaled marginal panel whose stashed count space sidesteps the
+nicing applied to the shared axis domain, so its ticks and bars read two slopes
+of the _same_ space. That is a
+genuine stash-escape (not the sanctioned panel-local-SIZE-vs-shared-POSITION
+multi-scale) and is scheduled as its own stage after 6f. The three other
+two-scope-on-one-axis stories the 6c inventory flagged (Faceted Chart/Default,
+Labels/LabelOnSpread, Layered Bars and Area/HoistedVarietySpread) are **not**
+#659 variants: each carries one shared POSITION scope (the y map) plus several
+panel-local SIZE scopes solved by the spread/stack `sharedScale` machinery, but
+the marks consume the inherited POSITION σ — the local SIZE σ is computed and not
+consumed, so there is no rendered dual slope and no correctness issue.
 
 Wiki obligation: most touched files carry the `@wiki Underlying Space`
 backlink — `underlying-space.md` must be updated in the same change for every

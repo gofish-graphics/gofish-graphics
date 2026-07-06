@@ -1430,12 +1430,16 @@ console.log("# constraint confluence: self-placement and override");
     ["A", makePlaceable()],
     ["B", makePlaceable()],
   ]);
-  targets.get("A")!.placementOn = () => "determined";
+  // A is anchored to the x data scale (Stage 6f: the data-positioned fact now
+  // arrives as an explicit ownership input, not a `placementOn` method on the
+  // target). align must leave A where its own scale puts it.
   solvePlacementConstraints(
     [{ type: "align", x: "baseline", children: [A, B] }],
     targets,
     [300, 200],
-    [(value) => value * 10 - 200, undefined]
+    [(value) => value * 10 - 200, undefined],
+    undefined,
+    [new Set(["A"]), new Set()]
   );
   ok(
     "posScale align leaves determined continuous placement alone and normalizes free sibling",

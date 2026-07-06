@@ -17,6 +17,7 @@ import {
   UNDEFINED,
   UnderlyingSpace,
   hasBaseline,
+  isCONTINUOUS,
   isUNDEFINED,
 } from "../underlyingSpace";
 import { computeSize, foldFinite } from "../../util";
@@ -440,12 +441,40 @@ export const layer = createNodeOperatorSequential(
                 )
               : undefined;
 
+            // Which (constrained child, axis) is anchored to a data scale — its
+            // baseline is fixed at `posScale(0)` by the shared map, so `align`
+            // leaves it where its own scale puts it (a scatter facet panel).
+            // This is the SPACE/scope fact that used to be reconstructed inside
+            // the align guard via a `placementOn` method on the target; Stage 6f
+            // collects it ONCE here, at the layer boundary, reading the pure DATA
+            // fact (`dataDomain` present on a continuous axis) and hands it to the
+            // placement solve's ownership plan — the constraint path no longer
+            // consults the space pass's free/determined/conflict lattice.
+            const dataPositioned: [Set<string>, Set<string>] = [
+              new Set(),
+              new Set(),
+            ];
+            for (const [name, cp] of nameToPlaceable) {
+              const childSpace = (cp as GoFishNode)._underlyingSpace;
+              if (childSpace === undefined) continue;
+              for (const axis of [0, 1] as const) {
+                const s = childSpace[axis];
+                if (
+                  s !== undefined &&
+                  isCONTINUOUS(s) &&
+                  s.dataDomain !== undefined
+                )
+                  dataPositioned[axis].add(name);
+              }
+            }
+
             applyConstraints(
               node.constraints,
               nameToPlaceable,
               size,
               effectivePosScales,
-              gridTracks
+              gridTracks,
+              dataPositioned
             );
 
             // Place any child the constraints left unplaced at the layer's

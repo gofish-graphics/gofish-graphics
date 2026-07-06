@@ -241,13 +241,17 @@ export function collectPositionDomains(constraints: ConstraintSpec[]): {
  * @param nameToPlaceable - Map from child name to its Placeable
  * @param sizes - The layer's box size `[w, h]`, used by grid placement
  * @param posScales - Per-axis data→pixel scales for `position` constraints
+ * @param dataPositioned - Per-axis sets of child names anchored to a data scale
+ *   (baseline fixed at `posScale(0)`); `align` leaves these where their own scale
+ *   puts them. The space/scope fact that replaced the `placementOn` guard read.
  */
 export function applyConstraints(
   constraints: ConstraintSpec[],
   nameToPlaceable: Map<string, Placeable>,
   sizes: [number, number],
   posScales?: ConstraintPosScales,
-  gridTracks?: [TrackLayout, TrackLayout]
+  gridTracks?: [TrackLayout, TrackLayout],
+  dataPositioned?: [Set<string>, Set<string>]
 ): void {
   const placement = constraints.filter(
     (
@@ -280,7 +284,8 @@ export function applyConstraints(
     nameToPlaceable,
     sizes,
     posScales,
-    gridTracks
+    gridTracks,
+    dataPositioned
   );
 
   if (prePlaced) {
