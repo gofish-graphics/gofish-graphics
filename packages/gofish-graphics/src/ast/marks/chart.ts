@@ -12,7 +12,11 @@ import { rect as generatedRect } from "../shapes/rect";
 import { Ellipse } from "../shapes/ellipse";
 import { Mark, Operator } from "../types";
 import type { NameableMark } from "../withGoFish";
-import { isStateChannel, type StateChannel } from "../../interaction/states";
+import {
+  isStateChannel,
+  registerStateChannelInstruments,
+  type StateChannel,
+} from "../../interaction/states";
 import type { LabelAccessor, LabelOptions } from "../labels/labelPlacement";
 import {
   resolveMarkResult,
@@ -208,8 +212,10 @@ export function circle<T extends Record<string, any>>({
   // conditional cases are stamped on the node for the interaction runtime
   // (same treatment as createMark's channel loop — see withGoFish.ts).
   let fillStates: Record<string, StateChannel> | undefined;
+  let fillChannel: StateChannel | undefined;
   if (isStateChannel(fill)) {
     fillStates = { fill };
+    fillChannel = fill;
     fill = fill.fallback as string | keyof T | undefined;
   }
   const base: Mark<T> = async (
@@ -218,6 +224,9 @@ export function circle<T extends Record<string, any>>({
     _layerContext?: LayerContext
   ) => {
     if (debug) console.log("circle", key, d);
+    // Fluent surface: tagged selectors auto-register their instrument (the
+    // mark body runs during resolve, under the ambient context).
+    if (fillChannel) registerStateChannelInstruments(fillChannel);
     // scatter passes an array of items; unwrap to first element for field lookup
     const datum: Record<string, any> = Array.isArray(d) ? (d as any[])[0] : d;
     const resolvedFill =

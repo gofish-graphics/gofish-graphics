@@ -41,6 +41,10 @@ import {
 import { interval } from "../../util/interval";
 import { createMark } from "../withGoFish";
 import { attachCut } from "../graphicalOperators/cut";
+import { attachTransformModifiers } from "../marks/createOperator";
+import type { Mark } from "../types";
+import { drawWithTransform } from "../../interaction/marks/brushRect";
+import type { SpanSpec } from "../../interaction/inputs";
 import type { DisplayList } from "gofish-ir";
 import {
   lowerStyle,
@@ -480,5 +484,29 @@ const baseRect = createMark(
   "rect"
 );
 
+/** `.drawWith(drag().span())`: lift this rect from LAYOUT-owned to
+ *  INSTRUMENT-owned geometry (a brush) — see interaction/marks/brushRect.ts.
+ *  Attached as a transform modifier like `.cut()`; the rect's authored
+ *  fill/stroke style the brush overlay. The zero-footprint placeholder
+ *  factory is injected here to avoid a static import cycle
+ *  (rect → brushRect → rect). */
+const attachDrawWith = <M,>(mark: M, opts: Record<string, unknown>): M => {
+  if (typeof mark !== "function") return mark;
+  return attachTransformModifiers(mark as object, [
+    {
+      name: "drawWith",
+      transform: (_m, span) =>
+        drawWithTransform(
+          {
+            fill: opts?.fill as string | undefined,
+            stroke: opts?.stroke as string | undefined,
+          },
+          span as SpanSpec,
+          () => Rect({ w: 0, h: 0, fill: "transparent", strokeWidth: 0 })
+        ) as unknown as Mark<any>,
+    },
+  ]) as M;
+};
+
 export const rect: typeof baseRect = ((opts: any) =>
-  attachCut(baseRect(opts))) as typeof baseRect;
+  attachDrawWith(attachCut(baseRect(opts)), opts ?? {})) as typeof baseRect;

@@ -188,13 +188,68 @@ chart(lakes)
 Low-level composition remains available (`bind(d.current.y, h.y)` etc.) for authoring
 new instruments.
 
-## Toward a fluent surface (post-M6 brainstorm)
+## Toward a fluent surface (A+B+C IMPLEMENTED; D deferred)
 
-The M1–M6 prototype surface is Meros idioms transplanted — hoisted instrument
-variables, free-floating `bind()` calls, `b.anchors.x` property paths — which
-cuts against the grain of the v3 builder (and against the GoFish paper's own
-hoisting critique; `Ref`/`.name()` exists precisely to avoid pulling nodes out
-of the spec). Organizing principle for the native redesign:
+**Status: directions A, B, and C are implemented and verified** — all six
+stories migrated (`stories/interaction/`), zero hoisted instruments, and the
+`.interact()` clause survives only in its `.constrain()`-shaped role (C) and
+for overlay readouts. The mechanism behind A is the **ambient
+interactive-resolve context** (`resolveContext.ts`): the render terminal
+installs the chart's runtime around resolve; live values register on read
+(`wheel()` in a `derive()`), tagged selectors register at `when(...)` unwrap
+(`hovered()`), interactive marks register on invocation
+(`rule().drag("y").name("cut")`) — so a chart where nothing registers renders
+down the static path untouched (`capture-diff`-verified). Cross-references
+are NAME-DEFERRED selectors (`above("cut", of)`, `inside("b")`) resolved
+against the runtime's instrument registry at patch time, which also gives
+forward references for free. Known seam: the ambient context is a module
+variable, so concurrent resolves interleaving at await points could
+cross-register (documented in `resolveContext.ts`).
+
+**Absorption round (post-A+B+C):** how much of the instrument layer was
+accidental syntax vs the essential ownership shift? Almost all of it was
+accidental. Implemented:
+
+- **`live(...)` — the third value kind, completed.** Any color or raw channel
+  of a REGULAR mark accepts a live accessor; the pipeline renders (and
+  measures) its resolve-time value, and the runtime re-evaluates it in the
+  Tier-0 paint patch (patches now carry text CONTENT as well as style — the
+  box keeps its resolve-time measure, the inherent live-text caveat). The
+  accessor receives the runtime's `refs`, so readouts reach named instruments
+  without closures: `text({ x, y, text: live((refs) => …) })`. This absorbs
+  `overlayText` (now deprecated) into the regular `text()` mark.
+- **`rect().drawWith(drag().span())` — a brush IS a rect mark.** `.drawWith`
+  is a transform modifier on the regular rect (the `.cut()` mechanism): it
+  lifts the mark from LAYOUT-owned to INSTRUMENT-owned geometry — the one
+  irreducible difference, per the writability rule (interactive geometry must
+  not affect layout/domains). The rect's authored fill/stroke style the
+  overlay; `.multi()` multiplies; `.name()` names the instrument. The brush's
+  selector fields are now INFERRED from the chart's own x/y encodings
+  (frame.axisFields — Meros' "selector derived from encodings"), so it needs
+  no configuration at all.
+- **Scheduler fix found en route:** hidden tabs throttle rAF to zero, freezing
+  Tier-2 re-renders under headless drivers; `invalidate()` now falls back to a
+  timeout when `document.visibilityState !== "visible"`.
+
+**The `.interact()` residue** (the "escape hatch" question): after absorption,
+five of six stories have NO `.interact()` clause at all — states and live
+readouts live in value position, the threshold and brush in mark position,
+params self-register on read. The single remaining use (M4) contains exactly
+one `Bind.snap(...)` declaration: a cross-cutting relation between two named
+things, which is precisely `.constrain()`'s shape — and nobody calls
+`.constrain()` an escape hatch. The lesson: the escape-hatch smell came from
+IMPERATIVE content (instrument construction, readout closures) that belonged
+in value/mark position but lacked syntax; each absorption drained it. The
+horizon question is whether `.interact()` and `.constrain()` eventually merge
+into one relation clause (static relations solved at layout, interactive ones
+at event time) — the full "bindings are constraints" thesis.
+
+The original diagnosis: the M1–M6 prototype surface was Meros idioms
+transplanted — hoisted instrument variables, free-floating `bind()` calls,
+`b.anchors.x` property paths — which cuts against the grain of the v3 builder
+(and against the GoFish paper's own hoisting critique; `Ref`/`.name()` exists
+precisely to avoid pulling nodes out of the spec). Organizing principle for
+the native redesign:
 
 > **Interaction enters the spec wherever a value already goes.** GoFish
 > channels take aesthetic literals or data values (`v()`); add a third kind —
@@ -225,15 +280,33 @@ Bind.limit(refs.plot.y, refs.cut.y)])`, exactly parallel to
   anchors plus chart chrome (`plot`, `domain`, `bands`) — which deletes the
   `xBands()` plumbing, since the chart owns its band structure. `createName()`
   Tokens give typed handles where strings are too loose.
-- **D. `technique()` mirrors `chart()`** — the technique-AUTHOR api:
-  `technique(drag()).flow(span(), limit(plot()), snap(bands())).mark(rect(…))
-.select(interval())`. chart() flows data into marks; technique() flows input
-  into marks. Same grammar, different source.
+- **D. The technique-AUTHOR api — deferred, and NOT a `chart()` mirror.** A
+  `technique().flow(...)` builder is seductive symmetry but mirrors the wrong
+  thing twice. (1) Wrong semantics: `.flow()` is order-sensitive; bindings
+  are an unordered CONSTRAINT SET (limits meet by intersection; `limit + snap`
+  must not differ from `snap + limit`) — GoFish already splits ordered
+  `.flow()` from unordered `.constrain()`, and relations belong on the
+  constraint side. The genuinely staged part of a technique
+  (input → geometry → selector) is exactly what B's mark modifiers express.
+  (2) Wrong precedent: GoFish's reuse mechanism for chart authors is plain
+  functions (the paper's `Balloon`), and for library authors it is factories
+  (`createMark`/`createOperator`) — so the eventual api is
+  `createTechnique(...)` in the factory idiom, with `_isComponent`-style name
+  scoping so internal marks (a threshold's grab band) don't leak into the
+  chart's layer registry. Extract it AFTER writing the next several
+  techniques (lasso, crosshair, pan/zoom, data-writeback) as plain functions
+  over A–C — the paper's §7.3 lesson: distill grammar from a gallery, don't
+  legislate it from four examples. Until then, a technique is a function
+  returning named marks + Bind declarations + selectors — already a
+  first-class value for any design-space-enumeration story (which operates on
+  the algebra, not on builder syntax).
 - **E. Technique verbs** (`.brush({ x: "bands" })`) only ever as documented
   sugar compiled to A–C (as `barY` is to stack+rect) — as a primary surface
   they reintroduce the fixed typology both papers argue against.
 
-Target rendering of the snap-brush story:
+The snap-brush story as SHIPPED (the brush stays a technique-as-function per
+the D discussion, declared spec-scoped in the callback; `rect().drawWith(
+drag().span())` as a mark-position brush is the next B increment):
 
 ```ts
 chart(seafood, { axes: true })
@@ -241,11 +314,13 @@ chart(seafood, { axes: true })
   .mark(
     rect({
       h: "count",
-      fill: when(intersects("b"), "#d62728").else("#6b9bd1"),
+      fill: when(intersectsX("b"), "#d62728").else("#6b9bd1"),
     }).name("bars")
   )
-  .layer(chart().mark(rect().drawWith(drag().span()).name("b")))
-  .interact((refs) => [Bind.snap(refs.bars.bands.x, refs.b.x)]);
+  .interact((refs) => {
+    const b = brush({ name: "b", x: "x", y: "y" });
+    return [b, Bind.snap(refs.bands("bars").x, b.anchors.x)];
+  });
 ```
 
 Open problems before committing: forward references (a channel `when` naming a

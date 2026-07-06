@@ -16,7 +16,7 @@
  */
 import { createSignal, type Accessor } from "solid-js";
 import { bind, type RangeAnchor } from "../bindings";
-import { drag } from "../inputs";
+import { drag, type DragInput } from "../inputs";
 import { frameConversions, type FrameConversions } from "../frameScales";
 import type {
   Instrument,
@@ -33,9 +33,17 @@ export interface Extent2D {
 }
 
 export interface BrushOptions {
-  /** Field names (or accessors) the selector tests datums against. */
-  x: string | ((d: unknown) => number);
-  y: string | ((d: unknown) => number);
+  /** Registry name for deferred selectors (`inside("b")`) and `refs`. */
+  name?: string;
+  /** Field names (or accessors) the selector tests datums against. When
+   *  omitted, they are INFERRED from the chart's own x/y encodings
+   *  (frame.axisFields) — Meros' "selector derived from encodings". */
+  x?: string | ((d: unknown) => number);
+  y?: string | ((d: unknown) => number);
+  /** Drive the geometry with a caller-provided drag (`.drawWith(drag()
+   *  .span())` passes its drag through here). A default plot-area hit region
+   *  is installed if the drag has none. */
+  drag?: DragInput;
   /**
    * Multiply the brush: each new drag starts another instance instead of
    * replacing the previous one (Meros' `multi: true` — anchors lift to a set
@@ -75,20 +83,27 @@ export interface BrushInstrument extends Instrument {
 }
 
 const fieldOf = (
-  f: string | ((d: unknown) => number)
+  f: string | ((d: unknown) => number) | undefined,
+  inferred: () => string | undefined
 ): ((d: unknown) => number) => {
-  const of =
-    typeof f === "string"
-      ? (d: unknown) => Number((d as Record<string, unknown>)?.[f])
-      : f;
+  const of = (d: unknown): number => {
+    if (typeof f === "function") return f(d);
+    const field = typeof f === "string" ? f : inferred();
+    return field !== undefined
+      ? Number((d as Record<string, unknown>)?.[field])
+      : NaN;
+  };
   // Marks driven by scatter/spread carry their datum as a (often 1-element)
   // group array; test the first element in that case.
   return (d: unknown) => of(Array.isArray(d) ? d[0] : d);
 };
 
-export function brush(options: BrushOptions): BrushInstrument {
-  const ofX = fieldOf(options.x);
-  const ofY = fieldOf(options.y);
+export function brush(options: BrushOptions = {}): BrushInstrument {
+  // Accessors resolve lazily so omitted fields can come from the chart's own
+  // encodings, which arrive with the first published frame.
+  let axisFields: { x?: string; y?: string } | undefined;
+  const ofX = fieldOf(options.x, () => axisFields?.x);
+  const ofY = fieldOf(options.y, () => axisFields?.y);
 
   const [extent, setExtent] = createSignal<Extent2D | undefined>(undefined);
   const [committed, setCommitted] = createSignal<Extent2D | undefined>(
@@ -128,14 +143,16 @@ export function brush(options: BrushOptions): BrushInstrument {
     yRange
   );
 
-  const d = drag({
-    hitTest: (pt: SvgPoint) =>
-      conv !== undefined &&
-      pt.x >= conv.contentPx.x[0] &&
-      pt.x <= conv.contentPx.x[1] &&
-      pt.y >= conv.contentPx.y[0] &&
-      pt.y <= conv.contentPx.y[1],
-  });
+  const plotAreaHit = (pt: SvgPoint): boolean =>
+    conv !== undefined &&
+    pt.x >= conv.contentPx.x[0] &&
+    pt.x <= conv.contentPx.x[1] &&
+    pt.y >= conv.contentPx.y[0] &&
+    pt.y <= conv.contentPx.y[1];
+  // Use the caller's drag when given (`.drawWith(drag().span())`), installing
+  // the plot-area hit region as its default; otherwise construct our own.
+  const d = options.drag ?? drag({ hitTest: plotAreaHit });
+  if (options.drag) options.drag.__setDefaultHitTest(plotAreaHit);
 
   const sorted = (a: number, b: number): [number, number] =>
     a <= b ? [a, b] : [b, a];
@@ -175,7 +192,8 @@ export function brush(options: BrushOptions): BrushInstrument {
         ? item.cx
         : undefined;
 
-  return {
+  const instrument: BrushInstrument = {
+    name: options.name,
     extent,
     committed,
     inside: insideAny,
@@ -193,6 +211,7 @@ export function brush(options: BrushOptions): BrushInstrument {
 
     onFrame(frame: InteractionFrame) {
       conv = frameConversions(frame);
+      axisFields = frame.axisFields;
     },
 
     onEvent(type, event, hit, pt) {
@@ -258,4 +277,10 @@ export function brush(options: BrushOptions): BrushInstrument {
       );
     },
   };
+  // Tag selectors with their owner so `when(...)` unwrapping auto-registers.
+  for (const key of ["inside", "insideCommitted", "intersectsX"] as const) {
+    (instrument[key] as { __gfInstrument?: object }).__gfInstrument =
+      instrument;
+  }
+  return instrument;
 }

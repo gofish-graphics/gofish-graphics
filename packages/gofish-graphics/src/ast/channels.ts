@@ -17,6 +17,7 @@ import {
   type Measure,
 } from "./data";
 import type { StateChannel } from "../interaction/states";
+import type { LiveValue } from "../interaction/live";
 
 export type ChannelType = "size" | "pos" | "color" | "raw";
 
@@ -76,11 +77,16 @@ export type DeriveMarkProps<
                 // the pipeline renders its `.else` fallback. See
                 // src/interaction/states.ts.
                 | StateChannel
+                // `live(...)` reactive value (Tier-0 paint patch).
+                | LiveValue
                 | undefined
             : Channels[K] extends "raw" | { type: "raw" }
               ?
                   | string
                   | number
+                  // `live(...)` reactive content (Tier-0 paint patch); the
+                  // pipeline measures the resolve-time value.
+                  | LiveValue
                   | (keyof T & string)
                   | ((d: T) => string | number)
                   | Value<string | number>

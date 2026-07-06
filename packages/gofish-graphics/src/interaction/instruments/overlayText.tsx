@@ -1,7 +1,10 @@
 /**
- * overlayText() — a reactive text readout in the overlay layer. The M3
- * stand-in for binding a text mark to an instrument anchor (e.g. a mean
- * readout attached to a brush, cf. Meros Fig. 4 D).
+ * overlayText() — a reactive text readout in the overlay layer.
+ *
+ * @deprecated Absorbed into the regular `text()` mark with a `live(...)`
+ * content value: `text({ x, y, text: live((refs) => ...) })` — positioned by
+ * the ordinary mark machinery and patched at Tier 0. This helper remains for
+ * pixel-anchored overlay text that must not participate in layout at all.
  */
 import type { Accessor } from "solid-js";
 import type { Instrument } from "../types";

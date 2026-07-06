@@ -8,7 +8,60 @@ import { layer as Layer } from "../graphicalOperators/layer";
 import { GoFishRef, visibleNodes } from "../_ref";
 import { ref } from "../shapes/ref";
 import type { Instrument } from "../../interaction/types";
-import { InteractionRuntime } from "../../interaction/runtime";
+import {
+  InteractionRuntime,
+  type InteractCallback,
+} from "../../interaction/runtime";
+import { withInteractiveResolve } from "../../interaction/resolveContext";
+
+/** What `.interact()` accepts: instruments (manual registration) and/or a
+ *  refs-callback returning instruments + Bind declarations. */
+export type InteractSpec = Instrument | InteractCallback;
+
+/**
+ * Shared interactive render terminal (ChartBuilder + LayerBuilder). Always
+ * resolves under the ambient interactive context so the FLUENT surface can
+ * register during resolve — `when(...)` channels, live params read in
+ * `derive()`, interactive marks. If nothing registered and no callbacks were
+ * given, renders down the static path untouched (the runtime object is the
+ * only cost). Otherwise wires the Tier-2 rerender thunk and threads the
+ * runtime through render.
+ */
+async function renderWithInteraction(
+  resolveForRender: () => Promise<{
+    node: GoFishNode;
+    options: Record<string, unknown>;
+  }>,
+  container: HTMLElement,
+  specs: InteractSpec[] | undefined
+): Promise<HTMLElement> {
+  const runtime = new InteractionRuntime();
+  const callbacks: InteractCallback[] = [];
+  for (const spec of specs ?? []) {
+    if (typeof spec === "function") callbacks.push(spec);
+    else runtime.register(spec);
+  }
+  let first = true;
+  const doRender = async (): Promise<HTMLElement> => {
+    const { node, options } = await withInteractiveResolve(runtime, () =>
+      resolveForRender()
+    );
+    if (first) {
+      first = false;
+      // After resolve (named instruments exist), before paint (so callback-
+      // registered instruments draw in the first frame). Bind anchors read
+      // the current frame lazily, so executing before the first frame is
+      // sound.
+      runtime.runInteractCallbacks(callbacks);
+    }
+    if (runtime.hasWork()) {
+      (options as Record<string, unknown>).interaction = runtime;
+    }
+    return node.render(container, options) as HTMLElement;
+  };
+  runtime.setRerender(doRender);
+  return doRender();
+}
 
 /**
  * Sentinel chart-data for an empty `Chart()` scope used inside `.layer(...)`:
@@ -105,6 +158,11 @@ function registerLayerNode(node: GoFishNode, layerContext: LayerContext): void {
     }
     layerContext[layerName].nodes.push(node);
     layerContext[layerName].data.push((node as { datum?: unknown }).datum);
+    // Durable trace for the interaction layer: `refs.bands("name")` maps a
+    // layer name to its CURRENT frame's nodes by walking the resolved tree
+    // for this stamp (the registration marker below is consumed one-shot, so
+    // it can't serve). Inert on the static path.
+    (node as { __gfLayerName?: string }).__gfLayerName = layerName;
     // One-shot — repeat resolves (e.g. embedded Layer renders) would
     // otherwise re-push the same node.
     (node as { __layerRegistration?: string }).__layerRegistration = undefined;
@@ -203,8 +261,9 @@ export class ChartBuilder<TInput, TOutput = TInput> {
   private readonly nodeZOrder?: number;
   private readonly connector?: Mark<GoFishRef[]>;
   private readonly nodeName?: string;
-  /** Instruments attached via `.interact(...)` — see src/interaction/. */
-  private readonly instruments?: Instrument[];
+  /** Interact specs attached via `.interact(...)` — instruments and/or
+   *  refs-callbacks. See src/interaction/. */
+  private readonly instruments?: InteractSpec[];
 
   constructor(
     data: TInput,
@@ -215,7 +274,7 @@ export class ChartBuilder<TInput, TOutput = TInput> {
     nodeZOrder?: number,
     connector?: Mark<GoFishRef[]>,
     nodeName?: string,
-    instruments?: Instrument[]
+    instruments?: InteractSpec[]
   ) {
     this.data = data;
     this.options = options;
@@ -362,14 +421,16 @@ export class ChartBuilder<TInput, TOutput = TInput> {
   }
 
   /**
-   * Attach interaction instruments (hover(), threshold(), brush(), …) to this
-   * chart. The render terminal creates an InteractionRuntime, registers the
-   * instruments, and threads it through the render pass — event delegation,
-   * frame publication, and Tier-0 style patches. Charts without `.interact()`
-   * render exactly as before (the static path pays nothing).
-   * See notes/design/interaction.md.
+   * Attach interaction to this chart: instruments (manual registration,
+   * e.g. an `overlayText` readout) and/or a refs-callback declaring
+   * spec-scoped instruments + Bind relations — the `.constrain()`-shaped
+   * form: `.interact((refs) => [Bind.snap(refs.bands("bars").x, b.anchors.x)])`.
+   * Most interaction never needs this clause at all: `when(...)` channels,
+   * live params, and interactive marks register themselves during resolve.
+   * Charts with no interaction render exactly as before.
+   * See notes/design/interaction.md, "Toward a fluent surface".
    */
-  interact(...instruments: Instrument[]): ChartBuilder<TInput, TOutput> {
+  interact(...specs: InteractSpec[]): ChartBuilder<TInput, TOutput> {
     return new ChartBuilder(
       this.data,
       this.options,
@@ -379,8 +440,14 @@ export class ChartBuilder<TInput, TOutput = TInput> {
       this.nodeZOrder,
       this.connector,
       this.nodeName,
-      [...(this.instruments ?? []), ...instruments]
+      [...(this.instruments ?? []), ...specs]
     );
+  }
+
+  /** The interact specs this builder carries (read by `LayerBuilder` so a
+   *  tier's `.interact()` survives `.layer()` chaining). */
+  getInteractSpecs(): InteractSpec[] {
+    return this.instruments ?? [];
   }
 
   /** True when this builder is an empty `Chart()` scope (its data defers to the
@@ -644,30 +711,23 @@ export class ChartBuilder<TInput, TOutput = TInput> {
     };
   }
 
-  // render calls resolve and then renders
+  // render calls resolve and then renders. Resolution always runs under the
+  // ambient interactive context so the fluent surface (when() channels, live
+  // params, interactive marks) can register during resolve; a chart where
+  // nothing registers renders down the static path untouched.
   async render(
     container: Parameters<GoFishNode["render"]>[0],
     options: Omit<Parameters<GoFishNode["render"]>[1], "axes">
   ): Promise<ReturnType<GoFishNode["render"]>> {
-    if (!this.instruments?.length) {
-      const { node, options: opts } = await this.resolveForRender(options);
-      return node.render(container, opts);
-    }
-    // Interactive path: one runtime for the chart's lifetime; the re-render
-    // thunk re-runs the FULL resolve (the pipeline is tree-consuming — the
-    // immutable builder rebuilds a fresh tree, and derive()/thunks re-read
-    // any params) and renders into the same container, which disposes the
-    // previous reactive root (see gofish()). Instruments re-bind to the
-    // fresh tree via frame publication.
-    const runtime = new InteractionRuntime();
-    runtime.register(...this.instruments);
-    const doRender = async () => {
-      const { node, options: opts } = await this.resolveForRender(options);
-      (opts as Record<string, unknown>).interaction = runtime;
-      return node.render(container, opts);
-    };
-    runtime.setRerender(doRender);
-    return doRender();
+    return renderWithInteraction(
+      () =>
+        this.resolveForRender(options) as Promise<{
+          node: GoFishNode;
+          options: Record<string, unknown>;
+        }>,
+      container,
+      this.instruments
+    );
   }
 
   /** Resolve and render to a standalone SVG markup string. */
@@ -740,11 +800,19 @@ export function chart<T>(
  * registrations land before the next tier's `selectAll`.
  */
 export class LayerBuilder {
-  constructor(private readonly tiers: ChartBuilder<any, any>[]) {}
+  constructor(
+    private readonly tiers: ChartBuilder<any, any>[],
+    private readonly interactSpecs: InteractSpec[] = []
+  ) {}
 
   /** Stack another tier; an empty `Chart()` scope inherits these marks. */
   layer(child: ChartBuilder<any, any>): LayerBuilder {
-    return new LayerBuilder([...this.tiers, child]);
+    return new LayerBuilder([...this.tiers, child], this.interactSpecs);
+  }
+
+  /** Attach interaction (same semantics as `ChartBuilder.interact`). */
+  interact(...specs: InteractSpec[]): LayerBuilder {
+    return new LayerBuilder(this.tiers, [...this.interactSpecs, ...specs]);
   }
 
   // Bind empty-scope tiers to the previous tier's marks: name the producer's
@@ -821,8 +889,20 @@ export class LayerBuilder {
     container: Parameters<GoFishNode["render"]>[0],
     options: Parameters<GoFishNode["render"]>[1]
   ): Promise<ReturnType<GoFishNode["render"]>> {
-    const { node, options: opts } = await this.resolveForRender(options ?? {});
-    return node.render(container, opts);
+    // A tier's own `.interact()` specs survive `.layer()` chaining.
+    const specs = [
+      ...this.tiers.flatMap((t) => t.getInteractSpecs()),
+      ...this.interactSpecs,
+    ];
+    return renderWithInteraction(
+      () =>
+        this.resolveForRender(options ?? {}) as Promise<{
+          node: GoFishNode;
+          options: Record<string, unknown>;
+        }>,
+      container,
+      specs
+    );
   }
 
   async toSVG(

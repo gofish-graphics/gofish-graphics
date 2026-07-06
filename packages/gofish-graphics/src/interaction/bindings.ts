@@ -226,6 +226,50 @@ export function bind(
   );
 }
 
+/* ---- declarative Bind specs (the `.interact((refs) => [...])` form) ---- */
+
+/**
+ * A binding DECLARATION — the fluent surface's counterpart of a
+ * `ConstraintSpec`. `.interact((refs) => [Bind.snap(...), ...])` returns
+ * these; the runtime executes them once after the first resolve. Like
+ * `Constraint.*`, the array is an UNORDERED relation set: limits meet by
+ * intersection, so declaration order carries no meaning (this is why bindings
+ * mirror `.constrain()` rather than `.flow()`).
+ */
+export interface BindSpec {
+  __gfBind: { src: Anchor; dst: Anchor; opts?: BindOptions };
+}
+
+export const isBindSpec = (v: unknown): v is BindSpec =>
+  typeof v === "object" && v !== null && "__gfBind" in v;
+
+export const Bind = {
+  /** Range → scalar/range Limit (clamp / interval intersection). */
+  limit: (src: RangeAnchor, dst: Anchor): BindSpec => ({
+    __gfBind: { src, dst },
+  }),
+  /** Scalar → scalar Equate (source drives target). */
+  equate: (
+    src: ScalarAnchor,
+    dst: ScalarAnchor,
+    opts?: BindOptions
+  ): BindSpec => ({
+    __gfBind: { src, dst, opts },
+  }),
+  /** Set → scalar/range Match with the nearest spatial-join policy. */
+  snap: (
+    src: SetAnchor,
+    dst: Anchor,
+    opts?: Omit<BindOptions, "by">
+  ): BindSpec => ({
+    __gfBind: { src, dst, opts: { ...opts, by: "nearest" } },
+  }),
+};
+
+/** Execute a declaration through the algebra (relation inferred from types). */
+export const executeBind = (spec: BindSpec): Unsubscribe =>
+  bind(spec.__gfBind.src, spec.__gfBind.dst, spec.__gfBind.opts);
+
 /** Build an inverse of an affine function by sampling (all GoFish position
  *  scales and `toPixel` legs are affine; anchors invert the RECORDED forward
  *  maps, never re-derived ones). */

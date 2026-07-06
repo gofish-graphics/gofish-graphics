@@ -19,9 +19,20 @@ import {
   type ScalarAnchor,
   type SetAnchor,
 } from "../interaction/bindings";
-import { when, isStateChannel } from "../interaction/states";
+import {
+  when,
+  isStateChannel,
+  above,
+  isDeferredSelector,
+  registerStateChannelInstruments,
+} from "../interaction/states";
 import { from } from "../interaction/dataRef";
-import { iscale } from "../interaction/params";
+import { iscale, wheel } from "../interaction/params";
+import { Bind, isBindSpec, executeBind } from "../interaction/bindings";
+import {
+  withInteractiveResolve,
+  ambientRegistrar,
+} from "../interaction/resolveContext";
 
 let passed = 0;
 let failed = 0;
@@ -253,6 +264,78 @@ console.log("dataRef");
   ok("filter", kept.count() === 2);
   ok("mean", kept.mean((d) => d.v)() === 20);
   ok("empty mean is undefined", from([]).mean((d: never) => 0)() === undefined);
+}
+
+console.log("fluent surface: ambient resolve context");
+await (async () => {
+  const seen: object[] = [];
+  const registrar = { register: (...i: object[]) => void seen.push(...i) };
+  await withInteractiveResolve(registrar, async () => {
+    ok("registrar visible during resolve", ambientRegistrar() === registrar);
+    // A live wheel param registers its input instrument on read.
+    const bins = wheel({ range: [3, 40], initial: 12, round: true });
+    ok("live read returns initial", bins() === 12);
+    bins();
+    ok("read registered the input instrument", seen.length === 2);
+    // (Dedupe happens in the runtime's register; the registrar here is raw.)
+  });
+  ok("context restored after resolve", ambientRegistrar() === undefined);
+
+  // when(...) unwrap registers tagged selectors.
+  const fakeInstrument = { onEvent: () => {} };
+  const tagged = Object.assign(() => true, { __gfInstrument: fakeInstrument });
+  const sc = when(tagged, "red").else("grey");
+  const seen2: object[] = [];
+  await withInteractiveResolve(
+    { register: (...i: object[]) => void seen2.push(...i) },
+    async () => registerStateChannelInstruments(sc)
+  );
+  ok("tagged selector registers its instrument", seen2[0] === fakeInstrument);
+  // Outside resolve: no-op, no throw.
+  registerStateChannelInstruments(sc);
+  ok("unwrap outside resolve is inert", seen2.length === 1);
+})();
+
+console.log("fluent surface: deferred selectors + Bind specs");
+{
+  const def = above("cut", (d) => Number(d));
+  ok("above() is deferred", isDeferredSelector(def));
+  ok(
+    "deferred carries name/kind",
+    def.__gfSelector.name === "cut" && def.__gfSelector.kind === "above"
+  );
+
+  const spec = Bind.snap(
+    { kind: "set", member: "range", entries: () => new Map() },
+    { kind: "range", get: () => [0, 1] as [number, number], set: () => {} }
+  );
+  ok("Bind.snap is a spec", isBindSpec(spec));
+  ok("snap forces nearest policy", spec.__gfBind.opts?.by === "nearest");
+  // Executing the declaration goes through the algebra (match wraps setter).
+  let written: [number, number] | undefined;
+  const dst = {
+    kind: "range" as const,
+    get: () => [0, 0] as [number, number],
+    set: (v: [number, number]) => {
+      written = v;
+    },
+  };
+  executeBind(
+    Bind.snap(
+      {
+        kind: "set",
+        member: "range",
+        entries: () => new Map([["a", [0, 10] as [number, number]]]),
+      },
+      dst
+    )
+  );
+  dst.set([3, 24]);
+  ok(
+    "executed snap snaps writes",
+    written?.[0] === 0 && written?.[1] === 10,
+    JSON.stringify(written)
+  );
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

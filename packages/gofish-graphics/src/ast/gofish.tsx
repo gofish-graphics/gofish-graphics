@@ -677,7 +677,8 @@ function renderLayout(
   data: LayoutData,
   svgPadding: number,
   defs?: JSX.Element[],
-  interaction?: import("../interaction/runtime").InteractionRuntime
+  interaction?: import("../interaction/runtime").InteractionRuntime,
+  axisFields?: { x?: string; y?: string }
 ): JSX.Element {
   return render(
     {
@@ -686,6 +687,7 @@ function renderLayout(
       svgPadding,
       defs,
       interaction,
+      axisFields,
       posScales: data.posScales,
       underlyingSpaceX: data.underlyingSpaceX,
       underlyingSpaceY: data.underlyingSpaceY,
@@ -730,7 +732,8 @@ export const gofish = (
             data,
             svgPadding,
             options.defs,
-            options.interaction
+            options.interaction,
+            options.axisFields
           );
         })()}
       </Suspense>
@@ -950,6 +953,7 @@ export const render = (
     svgPadding,
     yUp = false,
     interaction,
+    axisFields,
     posScales,
     underlyingSpaceX,
     underlyingSpaceY,
@@ -966,6 +970,7 @@ export const render = (
     svgPadding?: number;
     yUp?: boolean;
     interaction?: import("../interaction/runtime").InteractionRuntime;
+    axisFields?: { x?: string; y?: string };
     posScales?: [
       ((pos: number) => number) | undefined,
       ((pos: number) => number) | undefined,
@@ -1050,6 +1055,7 @@ export const render = (
         y: continuousDomain(underlyingSpaceY),
       },
       size: { width, height },
+      axisFields,
     });
     return items.map((item) => paintSVG(item, paintCtx));
   };

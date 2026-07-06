@@ -1,17 +1,19 @@
 /**
- * M3 — brush with selectors + DataRef (notes/design/interaction.md).
+ * M3 — brush with selectors + live readout (notes/design/interaction.md).
  *
- * The Meros walkthrough brush on the GoFish substrate: dragging over a
- * scatter draws a brush rect (Tier-1 overlay), whose interval selector drives
- * linked highlighting live (`during` gating via `brush.inside`), while a mean
- * readout — a DataRef memo chain filtered by the COMMITTED selector — updates
- * only when the drag ends (`onEnd` gating via `brush.insideCommitted`).
+ * Absorbed surface: the brush IS a rect mark lifted to instrument-owned
+ * geometry by `.drawWith(drag().span())` (its selector fields come from the
+ * chart's own x/y encodings — no config); the readout IS a text mark whose
+ * content is a `live(...)` value (Tier-0 content patch — the box keeps its
+ * resolve-time measure). No `.interact()` clause anywhere: interaction
+ * enters in mark position and value position only.
  */
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
 import { catchLocationsArray } from "../../src/data/catch";
-import { chart, scatter, circle } from "../../src/lib";
-import { brush, from, overlayText, when } from "../../src/interaction";
+import { chart, scatter, circle, rect, text } from "../../src/lib";
+import { drag, inside, live, when } from "../../src/interaction";
+import type { BrushInstrument } from "../../src/interaction";
 
 const meta: Meta = {
   title: "Interaction/Brush Scatter",
@@ -24,32 +26,39 @@ export default meta;
 
 type Args = { w: number; h: number };
 
+/** Mean of the committed selection — reaches the named brush through `refs`
+ *  (undefined at resolve time, so the fallback string is what gets measured). */
+const meanReadout = live((refs) => {
+  const b = refs?.instrument("b") as BrushInstrument | undefined;
+  if (!b?.committed()) return "brush to select points";
+  const selected = catchLocationsArray.filter((d) => b.insideCommitted(d));
+  if (selected.length === 0) return "brush to select points";
+  const mean = selected.reduce((sum, d) => sum + d.y, 0) / selected.length;
+  return `mean y of selection: ${mean.toFixed(1)}`;
+});
+
 export const Default: StoryObj<Args> = {
   args: { w: 400, h: 400 },
   render: (args: Args) => {
     const container = initializeContainer();
 
-    const b = brush({ x: "x", y: "y" });
-    const selectedMeanY = from(catchLocationsArray)
-      .filter((d) => b.insideCommitted(d))
-      .mean((d) => d.y);
-    const readout = overlayText({
-      x: 70,
-      y: 24,
-      text: () => {
-        const m = selectedMeanY();
-        return m === undefined
-          ? "brush to select points"
-          : `mean y of selection: ${m.toFixed(1)}`;
-      },
-    });
+    // Transform modifiers (.cut, .drawWith) are untyped on marks for now —
+    // typing lands with the createTechnique() factory work.
+    const brushMark = (
+      rect({ fill: "rgba(105, 140, 190, 0.15)", stroke: "#5b7ba6" }) as any
+    )
+      .drawWith(drag().span())
+      .name("b");
 
     chart(catchLocationsArray, { axes: true })
       .flow(scatter({ by: "lake", x: "x", y: "y" }))
-      .mark(
-        circle({ r: 6, fill: when(b.inside, "#d62728").else("#9db7d8") })
+      .mark(circle({ r: 6, fill: when(inside("b"), "#d62728").else("#9db7d8") }))
+      .layer(chart(null).mark(brushMark))
+      .layer(
+        chart(null).mark(
+          text({ x: 20, y: 390, text: meanReadout, fill: "#333" })
+        )
       )
-      .interact(b, readout)
       .render(container, {
         w: args.w,
         h: args.h,

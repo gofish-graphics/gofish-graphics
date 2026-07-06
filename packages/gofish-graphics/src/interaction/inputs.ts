@@ -11,6 +11,14 @@ import { createSignal, type Accessor } from "solid-js";
 import type { ScalarAnchor } from "./bindings";
 import type { Instrument, SvgPoint } from "./types";
 
+/** The span of a drag as a declarative geometry binding: "this mark's box is
+ *  the drag's start→current extent" — Meros' `drag({ span: rect() })`,
+ *  read from the mark side (`rect().drawWith(drag().span())`). */
+export interface SpanSpec {
+  kind: "span";
+  drag: DragInput;
+}
+
 export interface DragInput extends Instrument {
   /** Scalar anchors (svg-local px). Push on pointer events while dragging. */
   x: ScalarAnchor;
@@ -19,6 +27,12 @@ export interface DragInput extends Instrument {
   active: Accessor<boolean>;
   /** Last pointer position (reactive), if any. */
   current: Accessor<SvgPoint | undefined>;
+  /** The drag's start→current extent, as a geometry-binding spec for
+   *  `.drawWith(...)`. */
+  span(): SpanSpec;
+  /** Internal: instruments consuming a user-provided drag install their
+   *  default hit region here IF the author didn't give one. */
+  __setDefaultHitTest(fn: (pt: SvgPoint) => boolean): void;
 }
 
 export interface DragOptions {
@@ -35,6 +49,9 @@ export function drag(options: DragOptions = {}): DragInput {
   const [current, setCurrent] = createSignal<SvgPoint | undefined>(undefined);
   const xSubs = new Set<(v: number) => void>();
   const ySubs = new Set<(v: number) => void>();
+  // Mutable copy so a consuming instrument can install its default hit
+  // region when the author gave none (see DragInput.__setDefaultHitTest).
+  const opts: DragOptions = { ...options };
 
   const push = (pt: SvgPoint): void => {
     setCurrent(pt);
@@ -52,15 +69,19 @@ export function drag(options: DragOptions = {}): DragInput {
       },
     }) satisfies ScalarAnchor;
 
-  return {
+  const input: DragInput = {
     x: anchor(xSubs, "x"),
     y: anchor(ySubs, "y"),
     active,
     current,
+    span: () => ({ kind: "span", drag: input }),
+    __setDefaultHitTest(fn) {
+      opts.hitTest ??= fn;
+    },
     onEvent(type, event, _hit, pt) {
       if (!pt) return;
       if (type === "pointerdown") {
-        if (options.hitTest && !options.hitTest(pt)) return;
+        if (opts.hitTest && !opts.hitTest(pt)) return;
         setActive(true);
         // Keep receiving moves outside the svg while the button is held.
         const svg = event.currentTarget as SVGSVGElement | null;
@@ -82,4 +103,5 @@ export function drag(options: DragOptions = {}): DragInput {
       }
     },
   };
+  return input;
 }

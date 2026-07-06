@@ -33,8 +33,13 @@ import {
   type MarkKind,
 } from "./marks/createOperator";
 import { isValue } from "./data";
-import { isStateChannel } from "../interaction/states";
+import {
+  isStateChannel,
+  registerStateChannelInstruments,
+} from "../interaction/states";
 import type { StateChannel } from "../interaction/states";
+import { isLive, type LiveValue } from "../interaction/live";
+import { ambientRegistrar } from "../interaction/resolveContext";
 import { KNOWN_ALIAS_KEYS } from "./dims";
 import { Mark } from "./types";
 import type { ConstraintSpec, ConstraintRef } from "./constraints";
@@ -590,13 +595,25 @@ function buildCreatedMark(
     // for the interaction runtime's paint-time patches. Collected here so the
     // loop below only ever sees plain channel values.
     let stateChannels: Record<string, StateChannel> | undefined;
+    // `live(...)` channels: the pipeline renders (and measures) the accessor's
+    // resolve-time value; the runtime re-evaluates it in the paint patch.
+    let liveChannels: Record<string, LiveValue> | undefined;
     for (const propName of Object.keys(markOpts)) {
       if (propName === "debug") continue;
       const channelSpec = channels[propName];
       let markValue = markOpts[propName];
       if (isStateChannel(markValue)) {
         (stateChannels ??= {})[propName] = markValue;
+        // Fluent surface: selectors tagged with their owning instrument
+        // auto-register it here (during resolve, under the ambient context).
+        registerStateChannelInstruments(markValue);
         markValue = markValue.fallback;
+      } else if (isLive(markValue)) {
+        (liveChannels ??= {})[propName] = markValue;
+        // Activate the runtime even when nothing else is interactive (the
+        // marker is identity-stable, so re-resolves dedupe).
+        ambientRegistrar()?.register(markValue.__gfLiveMarker);
+        markValue = markValue();
       }
 
       let channelType =
@@ -646,6 +663,7 @@ function buildCreatedMark(
         node.name(key?.toString() ?? "");
         (node as any).datum = data[i] ?? d;
         if (stateChannels) (node as any).__gfStates = stateChannels;
+        if (liveChannels) (node as any).__gfLive = liveChannels;
       }
       return result as unknown as GoFishNode;
     }
@@ -653,6 +671,7 @@ function buildCreatedMark(
     node.name(key?.toString() ?? "");
     (node as any).datum = d;
     if (stateChannels) (node as any).__gfStates = stateChannels;
+    if (liveChannels) (node as any).__gfLive = liveChannels;
     node.scope();
     // Mark as a component for string-name search bounding. Distinct from
     // _isScope so future operators that scope (for token reasons) don't

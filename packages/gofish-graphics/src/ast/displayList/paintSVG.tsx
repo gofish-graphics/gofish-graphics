@@ -119,7 +119,12 @@ export function paintSVG(
           }
           {...styleProps(style())}
         >
-          {item.text}
+          {
+            // Live text: the patch may override CONTENT (the box keeps its
+            // resolve-time measure). Reactive: patch reads signals.
+            (ctx?.patch?.(item) as { text?: string } | undefined)?.text ??
+              item.text
+          }
         </text>
       );
     case "image":

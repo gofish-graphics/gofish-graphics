@@ -25,10 +25,16 @@ import type {
 } from "../types";
 
 export interface ThresholdOptions {
+  /** Registry name for deferred selectors (`above("cut")`) and `refs`. */
+  name?: string;
   /** Initial threshold value, in data space. */
   at: number;
-  /** Datum → comparable value (e.g. `(d) => sumBy(d, "count")`). */
-  of: (datum: unknown) => number;
+  /** Datum → comparable value (e.g. `(d) => sumBy(d, "count")`). Optional
+   *  when consumers use name-deferred selectors (`above("cut", of)`), which
+   *  carry their own accessor. */
+  of?: (datum: unknown) => number;
+  /** False renders a static (non-grabbable) reference line. Default true. */
+  draggable?: boolean;
   stroke?: string;
   strokeWidth?: number;
 }
@@ -80,6 +86,7 @@ export function threshold(options: ThresholdOptions): ThresholdInstrument {
   // being active (grabbing starts within GRAB_RADIUS of the line).
   const d = drag({
     hitTest: (pt: SvgPoint) =>
+      options.draggable !== false &&
       dataToPx !== undefined &&
       Math.abs(pt.y - dataToPx(value())) < GRAB_RADIUS,
   });
@@ -87,10 +94,11 @@ export function threshold(options: ThresholdOptions): ThresholdInstrument {
 
   const [ready, setReady] = createSignal(false);
 
-  return {
+  const instrument: ThresholdInstrument = {
+    name: options.name,
     value,
-    above: (datum) => options.of(datum) > value(),
-    below: (datum) => options.of(datum) <= value(),
+    above: (datum) => (options.of ? options.of(datum) > value() : false),
+    below: (datum) => (options.of ? options.of(datum) <= value() : false),
 
     onFrame(frame: InteractionFrame) {
       const posScaleY = frame.posScales?.[1];
@@ -139,4 +147,10 @@ export function threshold(options: ThresholdOptions): ThresholdInstrument {
       );
     },
   };
+  // Tag selectors with their owner so `when(...)` unwrapping auto-registers.
+  for (const key of ["above", "below"] as const) {
+    (instrument[key] as { __gfInstrument?: object }).__gfInstrument =
+      instrument;
+  }
+  return instrument;
 }

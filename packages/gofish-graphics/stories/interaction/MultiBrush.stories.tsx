@@ -1,16 +1,17 @@
 /**
  * M5 — multi-brush (notes/design/interaction.md).
  *
- * `multi: true` multiplies the brush: each new drag creates another instance
- * (an instance-creation event in the temporal algebra), the selector becomes
- * the compound OR over all instances, and the readout counts selections and
- * selected points live through a DataRef. Escape clears all instances.
+ * Absorbed surface: the multiplied brush is a rect mark —
+ * `.drawWith(drag().span()).multi()` — and the readout is a text mark with
+ * live content. No `.interact()` clause; each new drag is an
+ * instance-creation event, the selector is the compound OR, Escape clears.
  */
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
 import { catchLocationsArray } from "../../src/data/catch";
-import { chart, scatter, circle } from "../../src/lib";
-import { brush, from, overlayText, when } from "../../src/interaction";
+import { chart, scatter, circle, rect, text } from "../../src/lib";
+import { drag, inside, live, when } from "../../src/interaction";
+import type { BrushInstrument } from "../../src/interaction";
 
 const meta: Meta = {
   title: "Interaction/Multi Brush",
@@ -23,26 +24,38 @@ export default meta;
 
 type Args = { w: number; h: number };
 
+const countReadout = live((refs) => {
+  const b = refs?.instrument("b") as BrushInstrument | undefined;
+  const n = b?.instances().length ?? 0;
+  const k = b
+    ? catchLocationsArray.filter((d) => b.inside(d)).length
+    : 0;
+  return `${n} selection${n === 1 ? "" : "s"} · ${k} point${
+    k === 1 ? "" : "s"
+  } (Esc clears)`;
+});
+
 export const Default: StoryObj<Args> = {
   args: { w: 400, h: 400 },
   render: (args: Args) => {
     const container = initializeContainer();
 
-    const b = brush({ x: "x", y: "y", multi: true });
-    const selected = from(catchLocationsArray).filter((d) => b.inside(d));
-    const readout = overlayText({
-      x: 70,
-      y: 24,
-      text: () =>
-        `${b.instances().length} selection${
-          b.instances().length === 1 ? "" : "s"
-        } · ${selected.count()} point${selected.count() === 1 ? "" : "s"} (Esc clears)`,
-    });
+    const brushMark = (
+      rect({ fill: "rgba(105, 140, 190, 0.15)", stroke: "#5b7ba6" }) as any
+    )
+      .drawWith(drag().span())
+      .multi()
+      .name("b");
 
     chart(catchLocationsArray, { axes: true })
       .flow(scatter({ by: "lake", x: "x", y: "y" }))
-      .mark(circle({ r: 6, fill: when(b.inside, "#d62728").else("#9db7d8") }))
-      .interact(b, readout)
+      .mark(circle({ r: 6, fill: when(inside("b"), "#d62728").else("#9db7d8") }))
+      .layer(chart(null).mark(brushMark))
+      .layer(
+        chart(null).mark(
+          text({ x: 20, y: 390, text: countReadout, fill: "#333" })
+        )
+      )
       .render(container, {
         w: args.w,
         h: args.h,

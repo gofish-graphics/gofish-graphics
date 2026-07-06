@@ -12,8 +12,10 @@ import type { JSX } from "solid-js";
 import type { DisplayList } from "gofish-ir";
 import type { GoFishNode, ToPixel } from "../ast/_node";
 
-/** A style override applied to one display item at paint time (Tier 0). */
-export type ItemPatch = Partial<DisplayList.Style>;
+/** A paint-time override for one display item (Tier 0): style channels plus
+ *  text CONTENT (live text readouts patch content without re-layout; the box
+ *  keeps its resolve-time measure). */
+export type ItemPatch = Partial<DisplayList.Style> & { text?: string };
 
 /**
  * A per-item predicate backing a `when(...)` state. `datum` is the mark's
@@ -59,6 +61,11 @@ export interface InteractionFrame {
   };
   /** Root content size in gofish space (pre-gutter). */
   size?: { width: number; height: number };
+  /** The chart's inferred axis field names (x/y encodings). Instruments use
+   *  these to derive selector accessors from the chart's own encodings —
+   *  Meros' "selector inferred from encodings", so a brush needs no x/y
+   *  config of its own. */
+  axisFields?: { x?: string; y?: string };
 }
 
 /** A resolved hit under the pointer. */
@@ -89,12 +96,20 @@ export interface SpecInvalidator {
   invalidate(): void;
 }
 
+/** A selector carrying its owning instrument, so unwrapping a `when(...)`
+ *  channel during resolve auto-registers the instrument (the fluent surface's
+ *  replacement for passing instruments to `.interact()`). */
+export type TaggedSelector = StatePredicate & { __gfInstrument?: unknown };
+
 /**
  * An instrument packages input handling + (optionally) overlay shapes +
  * selectors. Plain object — composed by library functions, not a class
  * hierarchy.
  */
 export interface Instrument {
+  /** Registry name, referenced by deferred selectors (`above("cut")`) and
+   *  `refs` in the `.interact()` callback. Mirrors the `.name()` idiom. */
+  name?: string;
   /** Called once when the instrument is registered with a runtime. Used by
    *  parameter bindings to reach the Tier-2 scheduler. */
   attach?(runtime: SpecInvalidator): void;
