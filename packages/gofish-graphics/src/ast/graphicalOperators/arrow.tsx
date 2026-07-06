@@ -135,6 +135,11 @@ export const arrow = createNodeOperator(
           const [tx, ty] = displayTranslate(transform);
           const session = node.getRenderSession();
           const outer = session.toPixel!;
+          // LIMITATION (#657, a #629 follow-up): the arrow body + head map
+          // through this single `toPixel`, so an arrow spanning two DIFFERENT
+          // orientation scopes (a y-up bar to a y-down heatmap cell) mirrors one
+          // endpoint incorrectly. Per-endpoint scopes need a mid-curve
+          // reconciliation; deferred. Single-scope arrows are correct.
           const composed: ToPixel = ([cx, cy]) => outer([tx + cx, ty + cy]);
           const px = (x: number, y: number) => composed([x, y]).join(",");
 

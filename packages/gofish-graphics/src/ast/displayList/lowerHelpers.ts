@@ -15,6 +15,7 @@ import type { CoordinateTransform } from "../coordinateTransforms/coord";
 import { displayTranslate, type Transform } from "../dims";
 import { type Path, type Point, pathToSVGPath } from "../../path";
 import { envFlag } from "../../util";
+import { bake } from "../coordinateTransforms/bake";
 
 /**
  * The display-list `role` of a lowered item, derived from whether it is
@@ -182,7 +183,18 @@ export const withToPixel = <T>(
 
 /** Lower a boundary's children under its own translate (the legacy
  *  `<g transform>`), plus an optional extra `(dx, dy)` shift — the shared body of
- *  the simple translate-only boundaries (offset, enclose, arrow). */
+ *  the simple translate-only boundaries (offset, enclose, arrow).
+ *
+ *  Scope-aware (issue #629): rather than lower the whole subtree under the
+ *  boundary's SINGLE `toPixel`, it re-runs the bake scope walk on each child —
+ *  seeded with the boundary's absolute translate and its own flip scope
+ *  (`session.flip`) — and lowers each leaf under that leaf's OWN scope's map.
+ *  This runs the SAME logic as the root flatten, so a continuous-y subtree inside
+ *  an UNDEFINED-y boundary (`enclose` / `arrow` / `connect`, whose own y space is
+ *  UNDEFINED and so declares no flip) still opens its own y-up scope and flips —
+ *  the regression versus the old global flip. Single-orientation content inherits
+ *  the boundary's flip (`resolveNodeFlip` only opens when none is active) and
+ *  lowers byte-identically to the previous single-map descent. */
 export const lowerChildrenOffset = (
   node: GoFishNode,
   transform: Transform | undefined,
@@ -191,11 +203,57 @@ export const lowerChildrenOffset = (
   dy = 0
 ): DisplayList.DisplayItem[] => {
   const [tx, ty] = displayTranslate(transform);
-  const outer = node.getRenderSession().toPixel!;
-  const composed: ToPixel = ([cx, cy]) => outer([tx + dx + cx, ty + dy + cy]);
-  return withToPixel(node, composed, () =>
-    (node.children as GoFishAST[]).flatMap((c) =>
-      c.INTERNAL_lower(coordinateTransform)
-    )
-  );
+  const session = node.getRenderSession();
+  const toPixelFor = session.toPixelFor;
+  const outerToPixel = session.toPixel!;
+  // The scope-aware re-bake maps each leaf through `toPixelFor(leafScope)`, which
+  // is built from the AMBIENT base (viewport reserves only). That is only valid
+  // when the active `toPixel` IS still that ambient map — i.e. we're not inside a
+  // compositor (`mask`/`over`/`box`) that has remapped `toPixel` to a bbox-local
+  // frame (its children render relative to a filter region, not the viewport). In
+  // that case the scope factory's coordinates don't apply, so fall back to the
+  // single-map descent (which composes onto whatever `toPixel` the compositor
+  // installed) — preserving the pre-#629 output exactly (e.g. `cut` = `mask` over
+  // an `offset`ed image). Detect it by probing whether `toPixel` agrees with
+  // `toPixelFor(session.flip)` at two points (an affine map is fixed by two).
+  const inAmbientFrame = (): boolean => {
+    if (!toPixelFor) return false;
+    const expected = toPixelFor(session.flip);
+    const a0 = outerToPixel([0, 0]);
+    const e0 = expected([0, 0]);
+    const a1 = outerToPixel([1, 1]);
+    const e1 = expected([1, 1]);
+    return (
+      a0[0] === e0[0] && a0[1] === e0[1] && a1[0] === e1[0] && a1[1] === e1[1]
+    );
+  };
+  // Fallback: no scope factory published, OR a compositor remapped `toPixel`
+  // (see above) — single-map descent, preserving the pre-#629 behavior exactly.
+  if (!toPixelFor || !inAmbientFrame()) {
+    const composed: ToPixel = ([cx, cy]) =>
+      outerToPixel([tx + dx + cx, ty + dy + cy]);
+    return withToPixel(node, composed, () =>
+      (node.children as GoFishAST[]).flatMap((c) =>
+        c.INTERNAL_lower(coordinateTransform)
+      )
+    );
+  }
+  const outerFlipsY = session.flipsY;
+  const outerFlip = session.flip;
+  const items: DisplayList.DisplayItem[] = [];
+  try {
+    for (const child of node.children as GoFishAST[]) {
+      for (const d of bake(child, undefined, [tx + dx, ty + dy], outerFlip)) {
+        session.toPixel = toPixelFor(d.flip);
+        session.flipsY = d.flip !== undefined;
+        session.flip = d.flip;
+        items.push(...d.node.INTERNAL_lower(coordinateTransform, d.transform));
+      }
+    }
+  } finally {
+    session.toPixel = outerToPixel;
+    session.flipsY = outerFlipsY;
+    session.flip = outerFlip;
+  }
+  return items;
 };

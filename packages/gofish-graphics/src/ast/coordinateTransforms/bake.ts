@@ -4,10 +4,11 @@
 
 import type { GoFishAST } from "../_ast";
 import type { DisplayObject, FlipScope } from "../_displayObject";
+import { mirrorY } from "../_displayObject";
 import type { Transform } from "../dims";
 import { GoFishNode } from "../_node";
 import { isZOrderConstraint } from "../constraints/zorder";
-import { flattenForZOrder, topoSortByZOrder } from "../paintOrder";
+import { topoSortByZOrder, type PaintItem } from "../paintOrder";
 import { isCONTINUOUS } from "../underlyingSpace";
 
 /** The node's parent-frame translate as the bake should compose it, via the
@@ -180,14 +181,120 @@ const declaredYUp = (node: GoFishAST): boolean => {
  *  `walk`. `scopeBox` is for scopes that open BELOW the canvas frame (a facet
  *  cell, a `coord`), which mirror about their own allocated band. Falls back to
  *  the content bbox extent when the axis is UNSIZED (allocated NaN). */
+/** The node's CONTENT bbox band `[baseY, baseY+height]` in its own local frame,
+ *  read off `intrinsicDims[1]` (the `min` offset + `size`), finite-guarded (an
+ *  unsized axis → 0). The band starts at `composedTy + min` — content seated at a
+ *  nonzero local `min` (bars with negative values below the baseline, a
+ *  datum-positioned min offset from local 0) must mirror about the band it
+ *  actually occupies, not `[composedTy, composedTy+size]`. Shared by `scopeBox`'s
+ *  unsized fallback AND the chrome box-mirror so the two mirrors never disagree. */
+const contentBboxBand = (node: GoFishAST, composedTy: number): FlipScope => {
+  const dim = node instanceof GoFishNode ? node.intrinsicDims?.[1] : undefined;
+  const min = dim?.min !== undefined && Number.isFinite(dim.min) ? dim.min : 0;
+  const size =
+    dim?.size !== undefined && Number.isFinite(dim.size) ? dim.size : 0;
+  return { baseY: composedTy + min, height: size };
+};
+
 const scopeBox = (node: GoFishAST, composedTy: number): FlipScope => {
   const gn = node instanceof GoFishNode ? node : undefined;
   const alloc = gn?._allocatedSize?.[1];
-  const height =
-    alloc !== undefined && Number.isFinite(alloc)
-      ? alloc
-      : (gn?.intrinsicDims?.[1]?.size ?? 0);
-  return { baseY: composedTy, height };
+  // Allocated (coordinate-frame) extent: the band origin IS the frame origin
+  // (`composedTy`). Unsized axis → fall back to the content bbox band, which
+  // honors the bbox `min` (see `contentBboxBand`).
+  return alloc !== undefined && Number.isFinite(alloc)
+    ? { baseY: composedTy, height: alloc }
+    : contentBboxBand(node, composedTy);
+};
+
+/** The single scope-decision rule (issue #629): the flip scope a node LOWERS
+ *  UNDER, given the flip active at its parent (`incomingFlip`, already
+ *  ambient-adjusted by the caller). A node OPENS a new scope — about its own
+ *  placed band (`scopeBox`), or the authoritative `_rootFlipScope` for root
+ *  content — iff none is active yet (`incomingFlip === undefined`) and its own y
+ *  is CONTINUOUS (`declaredYUp`) or it is a `coord` (which fixes its own
+ *  convention). Otherwise it INHERITS `incomingFlip`: a nested continuous node or
+ *  a nested `coord` sees the scope already active and does NOT re-open it — the
+ *  inherit-when-active rule that prevents a double flip (and places a nested
+ *  `coord`'s BOX in its parent's frame while its own transform keeps the interior
+ *  angular sense). A `_scopeTransparent` wrapper never opens (its bbox includes
+ *  the chrome — the wrong band); an `_ambientYDown` chrome node never opens (its
+ *  interior renders ambient). Extracted so the MAIN flatten and the z-order hoist
+ *  run the SAME logic — one walk, not two — so adding a zOrder constraint (or
+ *  wrapping in a bake boundary) can never change which scope a subtree lowers
+ *  under. */
+const resolveNodeFlip = (
+  node: GoFishAST,
+  composedTy: number,
+  incomingFlip: FlipScope | undefined
+): FlipScope | undefined => {
+  if (incomingFlip !== undefined) return incomingFlip;
+  if (node instanceof GoFishNode && node._ambientYDown === true)
+    return undefined;
+  const isCoord = (node as { type?: string }).type === "coord";
+  const scopeTransparent =
+    node instanceof GoFishNode && node._scopeTransparent === true;
+  if (!(isCoord || (declaredYUp(node) && !scopeTransparent))) return undefined;
+  const rootScope =
+    node instanceof GoFishNode ? node._rootFlipScope : undefined;
+  return rootScope ?? scopeBox(node, composedTy);
+};
+
+/** A z-order paint unit plus the flip scope active at its PARENT in the real
+ *  tree (issue #629). See {@link hoistWithScope}. */
+type ScopedPaintItem = PaintItem & { incomingFlip: FlipScope | undefined };
+
+/** Flatten a layer's children for z-order EXACTLY as {@link flattenForZOrder}
+ *  (same units, order, `accTranslate` — so `topoSortByZOrder` is unaffected) but
+ *  additionally CARRY the flip scope through each hoisted-through plain layer, so
+ *  a unit hoisted out from under a continuous-y (or `coord`) layer still lowers
+ *  under that layer's scope. Without this, hoisting drops the intermediate
+ *  layer's scope decision and the unit renders in the parent's (wrong) frame —
+ *  i.e. adding a zOrder constraint would silently change orientation (#629). For
+ *  a single-orientation chart the carried flip equals the parent's (the hoisted
+ *  layers all inherit the active scope), so paint output is unchanged. */
+const hoistWithScope = (
+  children: GoFishAST[],
+  baseTy: number,
+  baseFlip: FlipScope | undefined
+): ScopedPaintItem[] => {
+  const out: ScopedPaintItem[] = [];
+  let order = 0;
+  const rec = (
+    cs: GoFishAST[],
+    accTx: number,
+    accTy: number,
+    incomingFlip: FlipScope | undefined
+  ): void => {
+    for (const child of cs) {
+      if (
+        child instanceof GoFishNode &&
+        !child._isComponent &&
+        child.type === "layer"
+      ) {
+        const childTx = child.projectedTranslate(0) ?? 0;
+        const childTy = child.projectedTranslate(1) ?? 0;
+        // The hoisted-through layer may itself open/inherit a scope; resolve it
+        // and carry it into the layer's children so they lower under it.
+        const childFlip = resolveNodeFlip(
+          child,
+          baseTy + accTy + childTy,
+          incomingFlip
+        );
+        rec(child.children, accTx + childTx, accTy + childTy, childFlip);
+      } else {
+        out.push({
+          node: child,
+          accTranslate: [accTx, accTy],
+          defaultOrder: order++,
+          defaultZ: child instanceof GoFishNode ? child.getZOrder() : 0,
+          incomingFlip,
+        });
+      }
+    }
+  };
+  rec(children, 0, 0, baseFlip);
+  return out;
 };
 
 /**
@@ -202,27 +309,24 @@ const scopeBox = (node: GoFishAST, composedTy: number): FlipScope => {
  * resolving each layer's own order and only then descending preserves the
  * legacy interleaving. Transforms still compose all the way to the leaves.
  */
-/** The flip scope the CHROME SIBLINGS of a wrapped plot are box-placed by: the
- *  `_rootFlipScope` stamped on the plot content inside a `_scopeTransparent`
- *  chrome wrapper (looking through nested transparent wrappers — the legend
- *  wrapper wraps the title wrapper wraps the plot). Undefined when the plot
- *  doesn't mirror (ordinal/undefined root y — the stamp is conditional). */
-const findChromeFrame = (node: GoFishAST): FlipScope | undefined => {
-  if (!(node instanceof GoFishNode)) return undefined;
-  for (const c of node.children) {
-    if (!(c instanceof GoFishNode)) continue;
-    if (c._rootFlipScope) return c._rootFlipScope;
-    if (c._scopeTransparent) {
-      const s = findChromeFrame(c);
-      if (s) return s;
-    }
-  }
-  return undefined;
-};
-
+/**
+ * @param ambientFlip   the ambient seed (`options.yUp`) read by `_ambientYDown`
+ *                      chrome nodes; also the default initial scope.
+ * @param startTransform the absolute translate the walk starts from — `[0,0]` for
+ *                      the root bake; a BAKE BOUNDARY re-bakes a child subtree
+ *                      seeded with the boundary's own absolute translate, so the
+ *                      resulting `FlipScope` bands (and leaf transforms) are in
+ *                      the same absolute frame the boundary's `toPixel` consumes.
+ * @param startFlip     the flip scope active at the walk root — the boundary's own
+ *                      scope, so its descendants INHERIT it unless they open their
+ *                      own (a continuous-y subtree inside an UNDEFINED-y boundary
+ *                      like `enclose`/`arrow`/`connect` still flips; #629).
+ */
 export const bake = (
   root: GoFishAST,
-  ambientFlip?: FlipScope
+  ambientFlip?: FlipScope,
+  startTransform: [number, number] = [0, 0],
+  startFlip: FlipScope | undefined = ambientFlip
 ): DisplayObject[] => {
   const items: DisplayObject[] = [];
 
@@ -230,8 +334,7 @@ export const bake = (
     node: GoFishAST,
     transform: [number, number],
     scale: [number, number],
-    flip: FlipScope | undefined,
-    chromeFrame: FlipScope | undefined
+    flip: FlipScope | undefined
   ): void => {
     const [ownTx, ownTy] = bakeTranslate(node);
     const composedTranslate: [number, number] = [
@@ -256,60 +359,28 @@ export const bake = (
     // INSIDE the canvas-wide flip (`flip` active) and keeps it — the whole canvas
     // flips uniformly, as the old global flip did.
     const ambient = node instanceof GoFishNode && node._ambientYDown === true;
+    // The chrome placement frame is stamped directly on this node by `layout()`
+    // (`_chromeFrame`) — no walk-time search through the transparent wrappers.
+    const chromeFrame =
+      node instanceof GoFishNode ? node._chromeFrame : undefined;
     if (ambient && flip === undefined && chromeFrame !== undefined) {
-      const dim =
-        node instanceof GoFishNode ? node.intrinsicDims?.[1] : undefined;
-      const boxTop =
-        composedTranslate[1] +
-        (dim?.min !== undefined && Number.isFinite(dim.min) ? dim.min : 0);
-      const boxH =
-        dim?.size !== undefined && Number.isFinite(dim.size) ? dim.size : 0;
-      // Mirror the box [boxTop, boxTop+boxH] about the frame's band:
-      // y ↦ 2·baseY + height − y, applied to the box as a whole.
+      // Mirror the chrome's content box `[band.baseY, band.baseY+band.height]`
+      // about the plot's frame band: y ↦ 2·baseY + height − y, applied to the
+      // box as a whole (`contentBboxBand` is the SAME band `scopeBox` mirrors
+      // about in its unsized fallback — the two must not disagree).
+      const band = contentBboxBand(node, composedTranslate[1]);
+      // The whole box mirrors about the frame: its new top edge is the mirror of
+      // its old bottom edge; shift by (newTop − oldTop) = mirrorY(bottom) − top.
       composedTranslate[1] +=
-        2 * chromeFrame.baseY + chromeFrame.height - 2 * boxTop - boxH;
+        mirrorY(chromeFrame, band.baseY + band.height) - band.baseY;
     }
+    // y-orientation scope (issue #629) — the single rule (`resolveNodeFlip`): a
+    // node opens a y-up flip scope about its own placed band iff none is active
+    // and its own y is CONTINUOUS or it is a `coord`; otherwise it inherits the
+    // active scope (no double flip). An `_ambientYDown` chrome node reads the
+    // ambient seed (`ambientFlip`), so it flips only under a global `options.yUp`.
     const incomingFlip = ambient ? ambientFlip : flip;
-
-    // y-orientation scope (issue #629). A node opens a y-up flip scope — about its
-    // OWN placed band (`scopeBox`) — iff its own resolved y is CONTINUOUS
-    // (`declaredYUp`) or it is a `coord` (polar/clock, which fixes its own
-    // convention). The scope only opens when none is active yet
-    // (`incomingFlip === undefined`): a nested continuous node or a `coord` inside
-    // an existing scope INHERITS it — the XOR no-op that prevents a double flip,
-    // and what places a nested `coord`'s BOX in its parent's frame (a flower's
-    // petals stay pinned to their bar tops; a pie glyph keeps its scatter
-    // position) while `coord`'s own transform keeps its interior angular sense. A
-    // `coord` at top level opens its own band, so a standalone pie reads y-up.
-    // Chrome wrappers (`_scopeTransparent`) union the plot's continuous y but are
-    // not the σ-scope; chrome itself (`ambient`) never opens one.
-    const isCoord = (node as { type?: string }).type === "coord";
-    const scopeTransparent =
-      node instanceof GoFishNode && node._scopeTransparent === true;
-    const opensScope =
-      incomingFlip === undefined &&
-      !ambient &&
-      (isCoord || (declaredYUp(node) && !scopeTransparent));
-    // The ROOT plot content mirrors about the authoritative canvas frame
-    // `[0, finalH]` (`_rootFlipScope`, stamped by `layout()` when the content
-    // mirrors) — the exact frame the old global flip used, and NOT recoverable
-    // from the node's own bbox (which the pin can offset from the canvas origin).
-    // A scope opening BELOW the canvas frame (a facet cell, a mixed-dashboard
-    // subtree) has no stamp and mirrors about its own band.
-    const rootScope =
-      node instanceof GoFishNode ? node._rootFlipScope : undefined;
-    const nodeFlip: FlipScope | undefined = opensScope
-      ? (rootScope ?? scopeBox(node, composedTranslate[1]))
-      : incomingFlip;
-
-    // Chrome siblings below a transparent wrapper are box-placed by the plot's
-    // frame; once consumed (or once we're inside real content) it doesn't
-    // propagate further.
-    const childChromeFrame = ambient
-      ? undefined
-      : scopeTransparent
-        ? (findChromeFrame(node) ?? chromeFrame)
-        : chromeFrame;
+    const nodeFlip = resolveNodeFlip(node, composedTranslate[1], incomingFlip);
 
     if (!isTransparent(node)) {
       items.push({
@@ -329,8 +400,11 @@ export const bake = (
       // Resolve z WITHIN this layer over its component-granular flattened
       // subtree (the same units the legacy layer render topo-sorted), then
       // descend into each unit — components keep their internal order.
-      const sorted = topoSortByZOrder(
-        flattenForZOrder(children),
+      // `hoistWithScope` carries the flip scope through each hoisted-through
+      // plain layer so a unit lowers under the SAME scope it would without the
+      // constraint (issue #629): the z-order hoist must never change orientation.
+      const sorted = topoSortByZOrder<ScopedPaintItem>(
+        hoistWithScope(children, composedTranslate[1], nodeFlip),
         zConstraints,
         {
           node: (it) => it.node,
@@ -346,8 +420,7 @@ export const bake = (
             composedTranslate[1] + unit.accTranslate[1],
           ],
           composedScale,
-          nodeFlip,
-          childChromeFrame
+          unit.incomingFlip
         );
       }
       return;
@@ -358,10 +431,10 @@ export const bake = (
       .map((child, index) => ({ child, index }))
       .sort((a, b) => zOf(a.child) - zOf(b.child) || a.index - b.index);
     for (const { child } of ordered) {
-      walk(child, composedTranslate, composedScale, nodeFlip, childChromeFrame);
+      walk(child, composedTranslate, composedScale, nodeFlip);
     }
   };
 
-  walk(root, [0, 0], [1, 1], ambientFlip, undefined);
+  walk(root, startTransform, [1, 1], startFlip);
   return items;
 };

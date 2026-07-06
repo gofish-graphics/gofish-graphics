@@ -11,6 +11,14 @@ import type { Transform } from "./dims";
  */
 export type FlipScope = { baseY: number; height: number };
 
+/** Mirror a GoFish-space y about a flip scope's band: `gy ↦ 2·baseY + height − gy`
+ *  (issue #629). The single source of the per-scope mirror formula — used by the
+ *  `toPixelFor` maps (render / `toDisplayList` via `makeToPixelFor`) and by the
+ *  bake chrome box-mirror, so the SVG paint path and the display-list export path
+ *  can never diverge. */
+export const mirrorY = (flip: FlipScope, gy: number): number =>
+  2 * flip.baseY + flip.height - gy;
+
 /**
  * A node in GoFish's rendering IR.
  *

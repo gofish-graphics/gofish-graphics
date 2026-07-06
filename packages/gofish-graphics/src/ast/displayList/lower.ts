@@ -16,7 +16,24 @@
 import type { DisplayList } from "gofish-ir";
 import type { GoFishNode, ToPixel } from "../_node";
 import type { FlipScope } from "../_displayObject";
+import { mirrorY } from "../_displayObject";
 import { bake } from "../coordinateTransforms/bake";
+
+/**
+ * Build the per-scope `toPixel` factory (issue #629) shared by every render
+ * terminal. Given the ambient y-DOWN base map (`baseDown`, gutter reserves
+ * only), returns `flip → ToPixel`: `undefined` passes through y-down; a
+ * `FlipScope` mirrors y about its band (`mirrorY`) before the base offset. The
+ * SVG paint path (`render`), the display-list export (`toDisplayList`), and the
+ * bake chrome box-mirror all read the mirror formula from this one place, so the
+ * paint and export paths cannot diverge.
+ */
+export const makeToPixelFor =
+  (baseDown: ToPixel) =>
+  (flip?: FlipScope): ToPixel =>
+    flip === undefined
+      ? baseDown
+      : ([gx, gy]) => baseDown([gx, mirrorY(flip, gy)]);
 
 /**
  * Drive the lower emit (issue #629). Each baked draw entry carries its
@@ -33,9 +50,13 @@ export const lowerToDisplayList = (
   ambientFlip?: FlipScope
 ): DisplayList.DisplayItem[] => {
   const session = root.getRenderSession();
+  // Publish the scope factory so a bake boundary can re-lower its child subtree
+  // through the same scope walk and install each descendant scope's own map (#629).
+  session.toPixelFor = toPixelFor;
   return bake(root, ambientFlip).flatMap((d) => {
     session.toPixel = toPixelFor(d.flip);
     session.flipsY = d.flip !== undefined;
+    session.flip = d.flip;
     return d.node.INTERNAL_lower(undefined, d.transform);
   });
 };

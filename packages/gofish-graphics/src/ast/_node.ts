@@ -63,6 +63,7 @@ import { envFlag } from "../util";
 import { nice } from "d3-array";
 import type { ScaleContext } from "./gofish";
 import type { TokenContext } from "./tokenContext";
+import type { FlipScope } from "./_displayObject";
 import { isToken, Token } from "./createName";
 import type { ConstraintSpec, ConstraintRef } from "./constraints";
 import { collectConstraintRefs } from "./constraints";
@@ -96,6 +97,17 @@ export type RenderSession = {
    *  instead of probing the map numerically (`toPixelFlipsY`), which stays as a
    *  dev-mode cross-check. See issue #143/#16/#629. */
   flipsY?: boolean;
+  /** The per-scope `toPixel` factory (issue #629): `flip → ToPixel`, built once by
+   *  the render terminal from the viewport. A BAKE BOUNDARY reads it to re-lower
+   *  its child subtree through the scope walk (`bake`) and install each descendant
+   *  scope's own map — so a continuous-y subtree inside an UNDEFINED-y boundary
+   *  (`enclose`/`arrow`/`connect`) still flips, instead of inheriting the
+   *  boundary's single (y-down) map. Set by `lowerToDisplayList`. */
+  toPixelFor?: (flip?: FlipScope) => ToPixel;
+  /** The flip scope of the draw entry currently being lowered (issue #629) — the
+   *  boundary's own scope, seeded into its child re-bake so descendants inherit it
+   *  unless they open their own. Set by `lowerToDisplayList` per baked entry. */
+  flip?: FlipScope;
 };
 
 export type ScaleFactorFunction = Monotonic.Monotonic;
@@ -289,6 +301,15 @@ export class GoFishNode {
    *  scope opening deeper (a facet cell) has no stamp and mirrors about its own
    *  allocated band. `{baseY, height}` mirrors `FlipScope` in `_displayObject`. */
   public _rootFlipScope?: { baseY: number; height: number };
+  /** The plot's flip frame a chrome subtree's BOX is mirrored about (issue #629).
+   *  Stamped by `layout()` on each OUTERMOST `_ambientYDown` chrome node (axis
+   *  title, legend column, colorbar) — the same value as the plot content's
+   *  `_rootFlipScope` — so the bake reads it directly (`node._chromeFrame`)
+   *  instead of searching up through the scope-transparent wrappers on every
+   *  visit. Only set when the plot mirrors (`contentFlipsY`); a chrome subtree
+   *  with no frame passes through unmirrored. `{baseY, height}` mirrors
+   *  `FlipScope`. */
+  public _chromeFrame?: { baseY: number; height: number };
   /** Persistent per-axis bbox ledger (#39 stage 2). Records the facet equations
    *  that determine this node's box, so it mirrors the authoritative
    *  `(intrinsicDims, transform)`: `layout()` seeds the self-layout size (+ a

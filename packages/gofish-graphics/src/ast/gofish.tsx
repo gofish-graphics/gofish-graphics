@@ -16,7 +16,7 @@ import {
 } from "./_node";
 import { posScaleFromSpace } from "./domain";
 import { bake } from "./coordinateTransforms/bake";
-import { lowerToDisplayList } from "./displayList/lower";
+import { lowerToDisplayList, makeToPixelFor } from "./displayList/lower";
 import { paintSVG } from "./displayList/paintSVG";
 import type { ToPixel } from "./_node";
 import type { FlipScope } from "./_displayObject";
@@ -505,7 +505,39 @@ export async function layout(
   // so stamp it authoritatively rather than have the bake re-derive it. A scope
   // that opens BELOW the canvas frame (a facet cell, a mixed-dashboard subtree)
   // is not `contentNode`, carries no stamp, and mirrors about its own band. #629.
-  if (contentFlipsY) contentNode._rootFlipScope = { baseY: 0, height: finalH };
+  // Stamp UNCONDITIONALLY every layout (set to undefined when the content does
+  // not mirror) so no stale frame from a prior layout of the same node tree
+  // survives an option/data change — a re-layout that turns `contentFlipsY`
+  // false must clear the previous `{baseY, height}`, or the bake would mirror
+  // about a dead frame (#629, stale-scope finding).
+  contentNode._rootFlipScope = contentFlipsY
+    ? { baseY: 0, height: finalH }
+    : undefined;
+
+  // Stamp the chrome placement frame (issue #629) directly on each OUTERMOST
+  // `_ambientYDown` chrome subtree (axis titles, legend column, colorbar), so the
+  // bake reads `node._chromeFrame` instead of searching up through the
+  // scope-transparent wrappers on every visit. The frame is the plot content's
+  // flip scope; the bake box-mirrors a chrome box about it (its interior still
+  // renders ambient). Only when the plot mirrors — otherwise chrome passes
+  // through unchanged, and a re-layout that turns `contentFlipsY` false stamps
+  // nothing (the chrome subtrees are freshly rebuilt by the elaboration passes
+  // each layout, so no stale frame survives). The walk stops at `contentNode`
+  // (never descends into the plot) and at the outermost ambient node of each
+  // chrome subtree (its descendants render ambient — a second mirror would
+  // double-flip). #629 chrome-frame finding.
+  if (contentFlipsY) {
+    const frame = contentNode._rootFlipScope!;
+    const stampChrome = (n: GoFishNode): void => {
+      if (n === contentNode) return;
+      if (n._ambientYDown === true) {
+        n._chromeFrame = frame;
+        return;
+      }
+      for (const c of n.children) if (c instanceof GoFishNode) stampChrome(c);
+    };
+    stampChrome(child);
+  }
 
   // Measured overhangs off the OUTERMOST wrapper (`child`), from its laid-out
   // extent. Anything seated beyond the content box is reserved by its placed
@@ -952,10 +984,7 @@ export const render = (
   // neighbor stays y-down. `options.yUp` still forces a GLOBAL y-up ambient
   // (mirror about the whole canvas height), threaded as `ambientFlip`.
   const baseDown: ToPixel = ([gx, gy]) => [gx + leftReserve, gy + topReserve];
-  const toPixelFor = (flip?: FlipScope): ToPixel =>
-    flip === undefined
-      ? baseDown
-      : ([gx, gy]) => baseDown([gx, 2 * flip.baseY + flip.height - gy]);
+  const toPixelFor = makeToPixelFor(baseDown);
   const ambientFlip: FlipScope | undefined = yUp
     ? { baseY: 0, height }
     : undefined;

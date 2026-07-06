@@ -31,7 +31,7 @@ import type { ToPixel } from "../_node";
 import type { FlipScope } from "../_displayObject";
 import { runLayout, type GoFishRenderOptions } from "../gofish";
 import { GoFishNode } from "../_node";
-import { lowerToDisplayList } from "./lower";
+import { lowerToDisplayList, makeToPixelFor } from "./lower";
 
 const PADDING = 40;
 const EDGE_GAP = 8;
@@ -71,10 +71,7 @@ export async function toDisplayList(
   // chart grows up while an ordinal-y neighbor stays y-down. `options.yUp` (via
   // `data.yUp`) forces a GLOBAL y-up ambient (mirror about the whole canvas).
   const baseDown: ToPixel = ([gx, gy]) => [gx + leftReserve, gy + topReserve];
-  const toPixelFor = (flip?: FlipScope): ToPixel =>
-    flip === undefined
-      ? baseDown
-      : ([gx, gy]) => baseDown([gx, 2 * flip.baseY + flip.height - gy]);
+  const toPixelFor = makeToPixelFor(baseDown);
   const ambientFlip: FlipScope | undefined = data.yUp
     ? { baseY: 0, height: data.height }
     : undefined;
