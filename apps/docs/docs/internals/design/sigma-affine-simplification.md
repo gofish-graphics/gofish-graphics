@@ -334,19 +334,43 @@ posScale and σ are _views_ of the solved system (the Stage-4 `AxisScale`
 record becomes exactly this view: σ = slope, `map` = anchored `min` anchor +
 pixel min; the intercept is `posScale(0)`, derived, never stored).
 
-**The dual slope is transitional debt, eliminated here — not a keeper.**
-Stage 4's `AxisScale.map` carries its own slope because today σ is solved in
-the four+ places above against four different pixel budgets, so a mark can
-read size-σ and position-slope from different extents on one axis (nicing
+**The dual slope was transitional debt — discharged in 6c as two scopes, not
+independent state.** Stage 4's `AxisScale.map` carried its own slope because σ was
+solved in the four+ places above against four different pixel budgets, so a mark
+could read size-σ and position-slope from different extents on one axis (nicing
 asymmetry, spacing's slope-vs-secant, sub-budget scopes vs an inherited map).
 Stage 6's invariant is **one slope per σ-scope, by construction**: the frame
 equation solves σ once at the scope root and the posScale is a derived view
-of the same solve, so within a scope the two cannot disagree. The divergences
-that remain must then become what they really are — two scopes on one axis
-(keyed by measure: the multi-scale/dual-axis design), or explicit non-data
-pixels (spacing as a piecewise gap, not a secant that papers over it).
-`AxisScale` collapses back to a single-slope view when 6b/6c land; if it
-still has two independent slopes after Stage 6, that is a bug in Stage 6.
+of the same solve, so within a scope the two cannot disagree. After 6c that holds
+everywhere the carrier flows — the scope registry is the **sole producer** of
+every slope, so neither `sigma` nor `map.sigma` is ever a free number. The
+remaining divergences became what they really are:
+
+- **Nicing asymmetry (case 1) resolves to two scopes (case 3).** The corpus
+  (`GOFISH_DUMP_SCOPES` + the 6b shadow) shows the only anchored-vs-size
+  disagreement is a marginal panel whose ticks map the _niced_ axis domain
+  (`[0,44]→[0,80]`, σ=1.818, the POSITION scope) while its bars size the
+  _un-niced_ stacked total (`45σ=80`, σ=1.778, the SIZE scope). These are two
+  distinct scopes on one axis, each read by its own channel (ticks read the map,
+  bars read σ) — exactly the sub-budget-vs-inherited shape, so case 1 needs no
+  separate machinery.
+- **Spacing / non-data pixels (case 2)** are already the Monotonic intercept in
+  the frame equation (`width.inverse(allocated)`), so the per-segment slope is the
+  scope σ, not a secant. No change needed.
+- **Sub-budget vs inherited (case 3)** is a SIZE scope (the panel's local budget)
+  and a POSITION scope (a shared ancestor map) coexisting on one axis. The
+  `AxisScale`'s two halves are precisely these two scope views; each is a single
+  registry-solved σ.
+
+So `AxisScale` is a **two-scope view**, not a slope with a redundant twin. Every
+`map` comes from `computePosScale` via `solvePosition` (or the equal-measure
+recentering), every `sigma` from `solveSize`; there is **no independent slope**
+after Stage 6. The two former fabrication sites are closed: a coord boundary's
+POSITION-only axis no longer hands down a scope-less `σ = 1` (it carries no size σ),
+and the #582 recentering is a named `recenterEqualMeasure` operation on the
+registry (so the dump shows the final σ). If a carrier ever shows two _independent_
+slopes — a slope not traceable to a registry scope — that is a bug; two _scopes_
+on one axis is the sanctioned multi-scale reading.
 
 ### Sub-stages, each gated
 
@@ -369,10 +393,25 @@ still has two independent slopes after Stage 6, that is a bug in Stage 6.
   equation per scope. The sweep (`capture-sweep`) stayed clean and the
   coord/confluence tests (flat ≡ nested σ) pass, confirming goTree/polar render
   identically.
-- **6c — σ-affine claims flow.** Marks/folds contribute width `Monotonic`s
-  into cells instead of pre-multiplied numbers; evaluation defers to the
-  scope boundary; the "evaluate at σ, hand concrete sizes down" double
-  bookkeeping (`computeSize`'s scaleFactor path) collapses. Pixel gate.
+- **6c — one slope per σ-scope, by construction.** **Landed (carrier + sole
+  producer):** the scope registry is now the ONLY producer of every slope, so the
+  `AxisScale`'s two halves (`sigma` = SIZE scope σ, `map.sigma` = POSITION scope σ)
+  are each a registry-solved scope view — never independent state. The two former
+  fabrication sites were closed: a coord boundary's POSITION-only axis dropped its
+  scope-less `σ = 1` placeholder (pixel-identical — no consumer read it), and the
+  #582 equal-measure recentering moved off `gofish.tsx` into a named
+  `ScopeRegistry.recenterEqualMeasure` operation (so `GOFISH_DUMP_SCOPES` records
+  the FINAL σ). The pre-change inventory (dump + a temporary `[solver-check]`
+  dual-slope shadow driven to zero across the 260-story sweep) confirmed the only
+  surviving anchored-vs-size disagreements are legitimate two-scope cases (nicing
+  and sub-budget), each half consumed by its own channel. **Deferred (residue,
+  acceptable per the plan):** the "evaluate at σ, hand concrete sizes down" double
+  bookkeeping still stands — `computeSize`'s `scaleFactor` path (`rect`, `layer`,
+  `treemap`), the `size × σ` pre-multiply in `petal`/`ellipse`, and distribute's
+  `scaleFactor` callbacks all still evaluate a width at a known σ at the consumer
+  rather than flowing a `Monotonic` claim to the scope boundary. Making cells
+  carry `Monotonic` claims (so evaluation defers to the boundary) is the larger
+  6e-adjacent change and was held to keep the carrier landing pixel-clean.
 - **6d — translate retirement (#39 stage 3-D).** Render consumes baked
   absolute coordinates through the `displayTranslate`/`translateString`
   chokepoints (`dims.ts:268-294` was written to make this a one-function

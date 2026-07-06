@@ -203,14 +203,19 @@ export const coord = createNodeOperator(
           const fitAxis = (
             axis: 0 | 1,
             budget: number
-          ): [number, AxisMap | undefined] => {
+          ): [number | undefined, AxisMap | undefined] => {
             // An anchored (data POSITION) axis: the coord's own
             // `resolveUnderlyingSpace` already unioned the children's POSITION
             // spaces into `spaceRef.current` — reuse it and map onto [0, budget].
+            // This is a POSITION scope only: it has no SIZE scope, so it carries
+            // NO σ (Stage 6c: never fabricate an independent size slope — the map's
+            // own slope IS the scope's σ). A data-bound size on this axis reads the
+            // map difference; a plain-number size bypasses both. The former `1`
+            // placeholder was a fabricated size σ with no scope behind it.
             const resolved = spaceRef.current?.[axis];
             if (resolved !== undefined && isPOSITION(resolved)) {
               return [
-                1,
+                undefined,
                 scopes.solvePosition(
                   { kind: "coord", rootKey: node.key ?? node.type, axis },
                   resolved,

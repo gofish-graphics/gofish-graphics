@@ -55,17 +55,27 @@ export const unifyContinuousDomains = (
 
 /** One continuous axis's data→pixel affine map, with the intercept explicit
  *  instead of closed over a function: `px(d) = pxMin + sigma·(d − domainMin)`.
- *  `sigma` is the map's own slope (px per data unit); it need NOT equal an
- *  {@link AxisScale}'s top-level `sigma` — a sub-budget layer can scale a mark's
- *  size and its data position against different pixel extents. Evaluated by
- *  {@link pxOf}; the old `posScale(0)` intercept is `pxOf(map, 0)`. */
+ *  `sigma` is the map's own slope (px per data unit). By construction it is the
+ *  σ of a POSITION σ-scope: every `AxisMap` is produced by {@link computePosScale}
+ *  through the scope registry (`solvePosition`) or its equal-measure recentering,
+ *  so `sigma` is never a free-floating number — it is a scope's solved slope.
+ *  Evaluated by {@link pxOf}; the old `posScale(0)` intercept is `pxOf(map, 0)`. */
 export type AxisMap = { sigma: number; domainMin: number; pxMin: number };
 
 /** One axis's data→pixel affine scale — the single carrier that replaced the
  *  parallel `scaleFactors` (slope-only) and `posScales` (whole map) channels.
- *  `sigma` is px per data unit for UNANCHORED size consumers (the old
- *  `scaleFactor`); `map` is the anchored data→pixel map (the old `posScale`),
- *  present iff the axis is anchored. */
+ *
+ *  The two halves are the read-off of up to TWO σ-scopes on this axis, NOT two
+ *  independent slopes (Stage 6c — see the σ-affine plan). `sigma` is the σ of the
+ *  axis's SIZE scope (px per data unit for unanchored magnitude consumers, the
+ *  old `scaleFactor`); `map` is the anchored map of the axis's POSITION scope
+ *  (the old `posScale`), and `map.sigma` is that scope's σ. Both are registry-
+ *  solved — no site fabricates either — so when both are present and `sigma ≠
+ *  map.sigma` the axis genuinely carries two scopes (e.g. a marginal panel whose
+ *  ticks map the NICED domain while its bars size the UN-niced total, or a
+ *  sub-budget layer scaling size against a local extent and position against an
+ *  inherited one). Each half is read by the channel it belongs to: magnitudes
+ *  read `sigma`, anchored positions read `map`. */
 export type AxisScale = { sigma?: number; map?: AxisMap };
 
 /** Evaluate an anchored map at a data value. */
@@ -80,9 +90,11 @@ export const posFn = (
 ): ((d: number) => number) | undefined =>
   map === undefined ? undefined : (d) => pxOf(map, d);
 
-/** Assemble one axis's {@link AxisScale} from its σ (size slope) and anchored
- *  map, collapsing "neither present" to `undefined` so a bare axis stays
- *  undefined (not an empty record). */
+/** Assemble one axis's {@link AxisScale} from its SIZE-scope σ and its
+ *  POSITION-scope `map`, collapsing "neither present" to `undefined` so a bare
+ *  axis stays undefined (not an empty record). Both arguments are registry-
+ *  solved slopes (see {@link AxisScale}); this only bundles the two scope views
+ *  the axis carries — it never derives a slope. */
 export const axisScale = (
   sigma: number | undefined,
   map: AxisMap | undefined

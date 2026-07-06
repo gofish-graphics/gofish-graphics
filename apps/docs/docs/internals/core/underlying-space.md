@@ -123,11 +123,26 @@ scale. `map` is the _whole_ anchored map, with the intercept explicit as data
 rather than closed over a function: `px(d) = pxMin + sigma·(d − domainMin)`,
 evaluated by `pxOf` (the old `posScale(0)` intercept is `pxOf(map, 0)`). So
 "anchored" shows up operationally as "has a `map`"; "unanchored" as "has only a
-`sigma`." `map` carries its own slope, which need not equal the top-level
-`sigma` — a sub-budget layer scales a mark's size and its data position against
-different pixel extents. This single record replaced the former two parallel
+`sigma`." This single record replaced the former two parallel
 channels (`scaleFactors` = slope-only, `posScales` = whole map) in Stage 4 of
 [the σ-affine plan](/internals/design/sigma-affine-simplification).
+
+**One slope per σ-scope, and the two-scope carrier.** The carrier's two slopes —
+its `sigma` and its `map.sigma` — are not independent numbers. Each is the σ of a
+distinct σ-scope solved once by the scope registry (below):
+`sigma` is the axis's **SIZE** scope (what a magnitude is scaled by), `map.sigma`
+is the axis's **POSITION** scope (what an anchored coordinate is mapped by). No
+site fabricates either — every `map` comes from `computePosScale` through
+`solvePosition` (or the equal-measure recentering), every `sigma` from
+`solveSize` (Stage 6c). Within any one scope there is therefore exactly one slope,
+by construction. When both halves are present and `sigma ≠ map.sigma`, the axis
+genuinely carries **two scopes**, and each half is read by the channel it belongs
+to — magnitudes read `sigma`, anchored positions read `map`. That happens when a
+marginal panel's ticks map the _niced_ axis domain while its bars size the
+_un-niced_ stacked total (a nicing split), or when a sub-budget layer scales size
+against a local extent but position against an inherited one (a sub-budget vs
+inherited split). Both are two honest scopes on one axis — the multi-scale reading
+of the same equation — not a slope with a redundant, drifting twin.
 
 ## Why an explicit IR
 
@@ -732,6 +747,20 @@ re-rooting σ on the angular axis):
 That the root and shared scopes on one axis print the same σ is Stage 6's
 invariant made visible: **one slope per σ-scope, by construction**, because the
 frame equation is solved once and the posScale is a derived view of that solve.
+
+Stage 6c makes the registry the _sole_ producer of every slope, so that "by
+construction" holds everywhere the carrier flows. Two former exceptions closed:
+a coord boundary's POSITION axis used to hand down a fabricated `σ = 1` alongside
+its map (a scope-less slope that no consumer read) — it now carries no size σ at
+all, since a POSITION-only axis has no SIZE scope; and the #582 equal-measure
+recentering (equating x and y when they share a unit of measure) used to rewrite
+the root's σ inline in `gofish.tsx`, off the registry's books. It is now a named
+`recenterEqualMeasure` operation _on_ the registry, so the dump records the FINAL
+σ (a `recenter` entry per axis) rather than the pre-recentering root σ. With both
+closed, the only way a carrier shows two different slopes on one axis is the
+legitimate **two-scope** case above (a SIZE scope and a POSITION scope, e.g. a
+marginal panel's niced ticks vs its un-niced bar total) — each half still a single
+registry-solved scope σ, never independent state.
 
 ## Scales generalize flex factors
 

@@ -33,7 +33,22 @@ export type ScopeKind =
   | "self-scaled"
   | "constraint-budget"
   | "shared"
-  | "coord";
+  | "coord"
+  | "recenter";
+
+/** One axis's contribution to the #582 equal-measure recentering: either an
+ *  anchored POSITION axis (its data interval and canvas) or a bare SIZE axis
+ *  (just its σ). `unitPx` is the axis's pixels-per-data-unit before recentering
+ *  — the quantity the two axes must agree on when they share a measure. */
+export type EqualMeasureAxis =
+  | {
+      kind: "position";
+      unitPx: number;
+      min: number;
+      range: number;
+      canvas: number;
+    }
+  | { kind: "size"; unitPx: number };
 
 /** Identity of the scope being solved — its root node label and the axis. */
 export interface ScopeMeta {
@@ -121,6 +136,61 @@ export class ScopeRegistry {
       });
     }
     return map;
+  }
+
+  /**
+   * The #582 equal-measure recentering, modeled as a named post-solve scope
+   * operation (Stage 6c). When x and y carry the SAME unit of measure, "1 unit
+   * on x" and "1 unit on y" are the same quantity, so their data→pixel scales
+   * must be EQUAL — a circle stays circular. The two axes' independently-solved
+   * scopes are therefore collapsed into ONE shared σ (the binding, smaller
+   * `unitPx`); the other axis takes slack, centered by convention. A POSITION
+   * axis writes back a recentered anchored map; a SIZE axis writes back its σ
+   * (content stays origin-anchored — SIZE-slack centering is deferred).
+   *
+   * This is the ONE place a post-solve σ adjustment happens, so it lives on the
+   * registry (not inlined in `gofish.tsx`): every slope a render produces is now
+   * registry-sourced, and `GOFISH_DUMP_SCOPES` records the FINAL σ (a `recenter`
+   * entry per axis) rather than the pre-recentering root σ. Mutates `posScales`
+   * / `rootScaleFactors` in place; a no-op unless both axes have a continuous
+   * scale to equate.
+   */
+  recenterEqualMeasure(
+    rootKey: string,
+    axisInfo: [EqualMeasureAxis | undefined, EqualMeasureAxis | undefined],
+    posScales: (AxisMap | undefined)[],
+    rootScaleFactors: (number | undefined)[]
+  ): void {
+    const [ax, ay] = axisInfo;
+    if (ax === undefined || ay === undefined) return;
+    const shared = Math.min(ax.unitPx, ay.unitPx); // binding axis wins
+    for (const axis of [0, 1] as const) {
+      const info = axisInfo[axis]!;
+      if (info.kind === "position") {
+        const offset = (info.canvas - shared * info.range) / 2; // center slack
+        // Same affine map as `(pos − min)·shared + offset`, intercept explicit.
+        posScales[axis] = {
+          sigma: shared,
+          domainMin: info.min,
+          pxMin: offset,
+        };
+      } else {
+        rootScaleFactors[axis] = shared;
+      }
+      if (dumpEnabled())
+        this.entries.push({
+          kind: "recenter",
+          rootKey,
+          axis,
+          allocated: info.kind === "position" ? info.canvas : NaN,
+          frame:
+            info.kind === "position"
+              ? `[${info.min},${info.min + info.range}]→center(σ=${shared})`
+              : `σ:=min(x,y)`,
+          sigma: shared,
+          hasMap: info.kind === "position",
+        });
+    }
   }
 
   /** Print one line per scope: root kind/key, axis, allocated px, the frame
