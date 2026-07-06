@@ -108,8 +108,10 @@ continuous y position scale — never by wrapper geometry. Three things fall out
   the scope) actually flip. The title/legend _wrapper_ layers are marked
   `_scopeTransparent`: they do not open the scope themselves (their bbox includes the
   chrome, the wrong mirror band); they descend to the plot content they wrap, which
-  opens it about the canvas frame — and the bake finds the chrome's placement frame
-  through them (`findChromeFrame`). A plot that doesn't mirror has no frame, and its
+  opens it about the canvas frame. The chrome's placement frame is stamped directly on
+  each outermost `_ambientYDown` chrome subtree by `layout()` (as `_chromeFrame`, the
+  plot content's flip scope), so the bake reads it off the node rather than searching up
+  through the wrappers on every visit. A plot that doesn't mirror has no frame, and its
   chrome passes through untouched (a heatmap keeps its top-side axis title).
 
 - **`coord`** (polar/clock) opens a scope about its own box when none is active
@@ -119,9 +121,15 @@ continuous y position scale — never by wrapper geometry. Three things fall out
   space and inside a y-up scatter. A parent's orientation places the coord's _box_; it
   never re-interprets its interior.
 
-Nesting is idempotent by construction (`mirror = incomingFlipsY XOR declaredYUp`): a
-continuous scope inside a continuous scope sees the flip already active and inherits it
-— no double flip.
+Nesting is idempotent by construction — **the first scope on a root-to-leaf path wins,
+and every descendant inherits it**. A node opens a scope only in the ambient y-down
+frame (`incomingFlip === undefined`); once a scope is active, a nested continuous node
+(or a nested `coord`) simply inherits the active band instead of opening a second one.
+Ordinal/undefined nodes declare nothing either way. So a continuous scope inside a
+continuous scope sees the flip already active and inherits it — no double flip, no
+cancellation. (This is an inherit rule, **not** an XOR: an XOR would re-mirror or cancel
+on nesting, which the code never does — see `opensScope` in `bake.ts`, gated on
+`incomingFlip === undefined`.)
 
 > **Caveat (count-as-magnitude).** A unit visualization that encodes a quantity as a
 > _count of ordinal units_ (a unit column chart: `spread`-ing one dot per row) has no

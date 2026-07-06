@@ -27,15 +27,8 @@ const miniChart = (bars: number[], key: string) =>
     )
   );
 
+// Regression repro (#629): not gallery-tagged — a test-like orientation check.
 export const NestedCharts: StoryObj = {
-  tags: ["gallery"],
-  parameters: {
-    gallery: {
-      title: "Nested Charts (No Double Flip)",
-      description:
-        "Small multiples where the outer arrangement and each inner mini bar chart both carry a continuous y axis: y-up nests idempotently, so every inner chart grows upward instead of mirroring twice and rendering upside down.",
-    },
-  },
   render: () => {
     const container = initializeContainer();
     spreadX(
@@ -76,15 +69,8 @@ const barsBeside = () =>
     )
   );
 
+// Regression repro (#629): not gallery-tagged — a test-like orientation check.
 export const PolarInChart: StoryObj = {
-  tags: ["gallery"],
-  parameters: {
-    gallery: {
-      title: "Polar Inside a Chart",
-      description:
-        "A polar pie placed next to a continuous-y bar chart in one free-space canvas: the bars grow upward (y-up) while the pie keeps its own clockwise-from-top orientation, unchanged from how it renders standalone.",
-    },
-  },
   render: () => {
     const container = initializeContainer();
     spreadX({ spacing: 80, alignment: "middle" }, [barsBeside(), pie()]).render(

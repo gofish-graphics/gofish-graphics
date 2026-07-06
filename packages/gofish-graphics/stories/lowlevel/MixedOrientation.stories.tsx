@@ -69,15 +69,8 @@ const treeChart = () => {
   );
 };
 
+// Regression repro (#629): not gallery-tagged — a test-like orientation check.
 export const Default: StoryObj = {
-  tags: ["gallery"],
-  parameters: {
-    gallery: {
-      title: "Mixed-Orientation Dashboard",
-      description:
-        "A continuous-y bar chart, an ordinal heatmap, and a node-link tree side by side in one free-space layout: the bar chart grows upward (y-up) while the heatmap and tree read top-to-bottom (y-down), each subtree keeping its own orientation.",
-    },
-  },
   render: () => {
     const container = initializeContainer();
     spreadX(
