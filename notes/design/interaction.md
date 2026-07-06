@@ -244,6 +244,66 @@ horizon question is whether `.interact()` and `.constrain()` eventually merge
 into one relation clause (static relations solved at layout, interactive ones
 at event time) — the full "bindings are constraints" thesis.
 
+## The `.constrain()`/`.interact()` merge (explored, not yet built)
+
+**The observation:** GoFish's constraint vocabulary already IS the binding
+algebra — `align` = scalar Equate, `nest` = Limit (containment is interval
+limiting), `span` = range Equate, `position` = Equate-to-literal — while
+`distribute`/`grid` are SET-level relations Meros lacks, and Match/Offset are
+the relations interaction adds. One vocabulary, two execution regimes, and
+the regime is inferable by the algebra's own move:
+
+> **Relation from anchor types; regime from anchor ownership.** All endpoints
+> layout-owned → placement solver, once, at layout time. Any endpoint
+> instrument-owned/param/data → maintained at event time via the binding
+> lowering, re-established per frame. Direction at event time is FORCED by
+> ownership (layout-owned = read-only = source-only; two live endpoints =
+> bidirectional shared-state equate) — the structural resolution of Meros
+> hole #10.
+
+Mixed relations get two-phase semantics: initialize the instrument at first
+frame; maintain instrument-ward thereafter (a threshold aligned to a bar's
+top re-attaches after Tier-2 re-binning). Surface: one `.constrain()` clause
+accepting the union vocabulary (Constraint.\* + snap/offset), partitioned by
+ownership; `.interact()` aliases then retires.
+
+**Constraints as techniques** (each existing constraint + one live endpoint):
+
+- `align` → linked brushing across views (bidirectional equate, one
+  declaration); benchmark lines tracking live values; with a temporal
+  qualifier (`until: drag` — the one-writer rule DEMANDS it) → tear-off
+  reference lines. Detachable relations as algebra, not hacks.
+- `nest` → what brushes already hand-code (plot confinement), plus
+  drill-down brushing (`nest(brushCoarse, brushFine)`) and per-facet handle
+  confinement — Meros Fig. 7C/D as one nest inside a faceted flow.
+- `distribute` → gang-dragged quantile handles; two draggable endpoints + k
+  distributed rules + a param = interactive equal-width binning.
+- `span` → the threshold overlay hand-codes `span({x:"all"})` today; the
+  merge makes instrument ARTICULATION constraint-specified compositions of
+  ordinary shapes.
+- `grid` → self-arranging multi-instrument collections (query-pointer
+  small multiples, Meros Fig. 1).
+- `zAbove` → hover-to-front focus policies (needs a Tier-0 z patch).
+
+Converse gift: per-frame re-establishment gives constraints a life across
+Tier-2 rebuilds and ACROSS CHARTS (alignment maintained under data change) —
+today's solver lives inside one layout run.
+
+**Hard parts:** (1) `distribute`/`grid` at event time need multi-writer set
+semantics (a gang = one composite anchor with a joint setter) — pointing at
+the endgame of invoking the placement solver itself at event time over the
+small live constraint system: one solver, two invocation times; (2) temporal
+qualifiers (`until`/`while`) must enter the relation vocabulary deliberately
+(the teon story, resurfacing where it belongs); (3) small paint-tier
+extensions (z-order patching). Staging: accept align/nest/span/position specs
+with live endpoints in the interact lowering (they map to existing
+equate/limit) → unify refs → partition `.constrain()` by ownership → retire
+`.interact()`.
+
+Paper-level compression: GoFish's operators ARRANGE geometry, its constraints
+RELATE geometry, and interaction is the same relations with a live endpoint —
+Meros' algebra is the typing discipline of GoFish's constraint system.
+
 The original diagnosis: the M1–M6 prototype surface was Meros idioms
 transplanted — hoisted instrument variables, free-floating `bind()` calls,
 `b.anchors.x` property paths — which cuts against the grain of the v3 builder
