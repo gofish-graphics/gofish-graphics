@@ -2,6 +2,11 @@
 import { onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { docsLang } from "../../docsLang";
 import CtaBlock from "./CtaBlock.vue";
+import { data as pkgData } from "../../../data/version.data.js";
+
+// Current release line, read from packages/gofish-graphics/package.json at
+// build time (see version.data.js) — shown on the hero version tag.
+const VERSION = pkgData.version;
 
 // Large static SVG / HTML chunks live in sibling fragment files imported as raw
 // strings and rendered with v-html, so the 400KB of inline chart art never goes
@@ -287,6 +292,21 @@ onBeforeUnmount(() => {
         <div class="hero-cards" v-html="heroCards"></div>
 
         <div class="inner">
+          <!-- alpha status: an inked rubber stamp; the release line rides a
+               taped paper tag (reusing the same masking tape as the specimen
+               cards). Kept as real text so it is announced to screen readers;
+               only the tape itself is decorative. -->
+          <span class="hero-stamp rise" style="animation-delay: 240ms"
+            >alpha</span
+          >
+          <span class="hero-version rise" style="animation-delay: 300ms">
+            <span
+              class="tape"
+              style="left: calc(50% - 30px); top: -12px; --tape-angle: -4deg"
+              aria-hidden="true"
+            ></span>
+            v{{ VERSION }}
+          </span>
           <h1 id="hero-h" class="rise" style="animation-delay: 0ms">GoFish</h1>
           <p class="subtitle rise" style="animation-delay: 90ms">
             an open-source visualization library for
