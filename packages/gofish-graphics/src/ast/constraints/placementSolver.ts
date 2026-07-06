@@ -8,6 +8,7 @@ import {
   lowerPlacementConstraints,
   type PlacementConstraint,
 } from "./placementLowering";
+import type { TrackLayout } from "./grid";
 import {
   axisIndex,
   type AlignAnchor,
@@ -226,13 +227,15 @@ export function solvePlacementConstraints(
   constraints: PlacementConstraint[],
   targets: Map<string, Placeable>,
   sizes: [number, number],
-  posScales?: ConstraintPosScales
+  posScales?: ConstraintPosScales,
+  gridTracks?: [TrackLayout, TrackLayout]
 ): PlacementConflict[] {
   const lowered = lowerPlacementConstraints(
     constraints,
     targets,
     sizes,
-    posScales
+    posScales,
+    gridTracks
   );
 
   const solved = [

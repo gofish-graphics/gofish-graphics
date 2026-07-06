@@ -26,7 +26,6 @@ import { pxOf } from "../domain";
 import { localAnchorPoint } from "../dims";
 import type { ConstraintSpec, ConstraintPosScales } from "../constraints";
 import { distributePlacementAnchors } from "../constraints/distribute";
-import { gridCellSize } from "../constraints/grid";
 import { isCONTINUOUS, type UnderlyingSpace } from "../underlyingSpace";
 
 /** Whether the solver shadow assertions run. Off (and zero-cost) in prod, so the
@@ -172,16 +171,16 @@ interface GridLike {
 }
 
 /**
- * Check the `grid` composition — cells centered in equal flex tracks
- * (`grid.ts`). The grid pins each cell's center at
- * `column·(cellW+sx)+cellW/2`, `row·(cellH+sy)+cellH/2` in layer-local space
- * (`gridCellPlacements`); the equal-track structure is therefore an
- * ORIGIN-INDEPENDENT invariant on the placed centers: two cells in adjacent
- * columns of one row have x-centers `cellW+sx` apart, two in adjacent rows of
- * one column have y-centers `cellH+sy` apart — validated against `gridCellSize`
- * (the same `sliceExtent` the layer proposes). Differences cancel the unknown
- * layer origin, so no absolute frame is needed. Cell EXTENT is deliberately not
- * asserted: a cell may keep its own size and only consume the center pin.
+ * Check the `grid` composition — cells centered in their (column, row) tracks
+ * (`grid.ts`). Stage 6e: tracks are content-sized under the unified max rule, so
+ * the gap between two adjacent cells is no longer a uniform `cellExtent+spacing`
+ * — it is `extent(col)/2 + spacing + extent(col+1)/2`, where a track's extent is
+ * the max laid-out size of its cells (a cell that fills equals the extent; a
+ * smaller claim cell is centered, and the column's widest cell pins the extent).
+ * Recovering the track extents from the placed cell sizes and asserting the
+ * center-to-center gaps is the ORIGIN-INDEPENDENT invariant (differences cancel
+ * the unknown layer origin). Cell EXTENT is deliberately not asserted; a cell
+ * whose center is overridden by a `position` pin is skipped on that axis.
  */
 export function shadowCheckGrid(
   constraint: GridLike,
@@ -189,34 +188,53 @@ export function shadowCheckGrid(
   layerSize: [number, number]
 ): void {
   if (!enabled() || constraint.type !== "grid") return;
-  const [cellW, cellH] = gridCellSize(
-    constraint as Parameters<typeof gridCellSize>[0],
-    layerSize
-  );
+  void layerSize;
   const numCols = constraint.numCols;
+  const numRows = Math.ceil(constraint.children.length / numCols);
+  const targetOf = (i: number): Placeable | undefined =>
+    targetByName.get(constraint.children[i]?.name);
   const centerOf = (i: number, idx: 0 | 1): number | undefined => {
-    const t = targetByName.get(constraint.children[i]?.name);
+    const t = targetOf(i);
     return t ? anchorCoord(t, idx, "middle") : undefined;
+  };
+  const sizeOf = (i: number, idx: 0 | 1): number | undefined => {
+    const t = targetOf(i);
+    const s = t?.dims[idx].size;
+    return s === undefined ? undefined : Math.abs(s);
+  };
+  // A track's extent is the max laid-out cell size across the track.
+  const colExtent = (col: number): number => {
+    let m = 0;
+    for (let row = 0; row < numRows; row++)
+      m = Math.max(m, sizeOf(row * numCols + col, 0) ?? 0);
+    return m;
+  };
+  const rowExtent = (row: number): number => {
+    let m = 0;
+    for (let col = 0; col < numCols; col++)
+      m = Math.max(m, sizeOf(row * numCols + col, 1) ?? 0);
+    return m;
   };
   for (let i = 0; i < constraint.children.length; i++) {
     const col = i % numCols;
-    const row = Math.floor(i / numCols);
-    // Adjacent column in the same row → x-centers `cellW + xSpacing` apart.
+    // Adjacent column in the same row → centers half-extents + spacing apart.
     if (col + 1 < numCols && i + 1 < constraint.children.length) {
       const a = centerOf(i, 0);
       const b = centerOf(i + 1, 0);
       if (a !== undefined && b !== undefined) {
-        const gap = cellW + constraint.xSpacing;
+        const gap =
+          colExtent(col) / 2 + constraint.xSpacing + colExtent(col + 1) / 2;
         if (Math.abs(b - a - gap) > 1e-6) report(`grid.col`, b - a, gap);
       }
     }
-    // Adjacent row in the same column → y-centers `cellH + ySpacing` apart.
-    void row;
+    // Adjacent row in the same column → centers half-extents + spacing apart.
+    const row = Math.floor(i / numCols);
     if (i + numCols < constraint.children.length) {
       const a = centerOf(i, 1);
       const b = centerOf(i + numCols, 1);
       if (a !== undefined && b !== undefined) {
-        const gap = cellH + constraint.ySpacing;
+        const gap =
+          rowExtent(row) / 2 + constraint.ySpacing + rowExtent(row + 1) / 2;
         if (Math.abs(b - a - gap) > 1e-6) report(`grid.row`, b - a, gap);
       }
     }

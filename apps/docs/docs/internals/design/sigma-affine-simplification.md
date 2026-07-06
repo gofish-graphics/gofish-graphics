@@ -348,12 +348,16 @@ remaining divergences became what they really are:
 
 - **Nicing asymmetry (case 1) resolves to two scopes (case 3).** The corpus
   (`GOFISH_DUMP_SCOPES` + the 6b shadow) shows the only anchored-vs-size
-  disagreement is a marginal panel whose ticks map the _niced_ axis domain
-  (`[0,44]→[0,80]`, σ=1.818, the POSITION scope) while its bars size the
-  _un-niced_ stacked total (`45σ=80`, σ=1.778, the SIZE scope). These are two
-  distinct scopes on one axis, each read by its own channel (ticks read the map,
-  bars read σ) — exactly the sub-budget-vs-inherited shape, so case 1 needs no
-  separate machinery.
+  disagreement is a marginal panel whose count axis is a **self-scaled region**:
+  it carries an explicit pixel size, so it stashes its own space and builds a
+  LOCAL scale against its own box (`buildChildScalePlan` step 2). That stashed
+  space **escapes the nicing** applied to the shared/outer axis domain (#659), so
+  the panel's own count scale (`45σ=80`, σ=1.778, the SIZE scope) and the shared
+  niced map read by the ticks (`[0,44]→[0,80]`, σ=1.818, the POSITION scope) are
+  two distinct scopes, each consumed by its own channel — exactly the
+  self-scaled-vs-inherited shape, so case 1 needs no separate machinery. (It is
+  NOT one axis whose ticks are niced and whose bars are un-niced; it is the
+  self-scaled stash sidestepping nicing entirely.)
 - **Spacing / non-data pixels (case 2)** are already the Monotonic intercept in
   the frame equation (`width.inverse(allocated)`), so the per-segment slope is the
   scope σ, not a secant. No change needed.
@@ -449,16 +453,47 @@ on one axis is the sanctioned multi-scale reading.
   spent by the earlier `_render`→display-list migration, so 6d is pixel- AND
   DOM-neutral.
 
-- **6e — grid as tracks.** A grid scope introduces `numCols + numRows` track
-  cells; each cell(i, j) gets equations `cell.min = track.min` and
-  `cell.size = track.size` per axis. Equal-flex is "all track sizes equal +
-  Σ tracks + gaps = W" (today's `sliceExtent`, as equations); content-sized
-  tracks are `track.size ≥ max(cell claims)` — note `max` leaves the linear
-  fragment (piecewise claims; see the `monoEqual` two-point-probe caveat in
-  `bbox.ts`), so this lands as an iterate-or-piecewise extension, and is the
-  point where `table` gains content-sized tracks. The Stage-3 layer bypasses
-  (space-fold early return, cell-budget special case, mixing throw) delete;
-  `gridSpaces`' ORDINAL axes contribution stays but composes.
+- **6e — grid as tracks. Landed.** A grid resolves its tracks under the ONE
+  unified sizing rule — the same (max, +) fold every other operator uses:
+
+  ```
+  track claim = Monotonic.max(claims of the cells in that track)
+  grid claim  = Monotonic.add(track claims) + gaps          (the σ-frame LHS)
+  ```
+
+  A claim-less (fill) cell contributes nothing, so an all-fill grid has no track
+  claims and the leftover (allocated − gaps) splits equally — bit-identical to
+  the former `sliceExtent` box-division. Content-sized tracks emerge
+  automatically when cells carry claims (a track sizes to its widest cell; fill
+  tracks share the remainder). `max` and `add` are BOTH closed over the convex
+  piecewise-linear (max, +) algebra — the composed claim stays a `Monotonic`, so
+  when every track is claimed with a σ-dependent claim the grid claim inverts
+  against the allocated size through the scope registry exactly like any other
+  frame equation (the common all-constant, fixed-px case is σ-independent and
+  reads back its intercept). Because piecewise claims now flow into cells, the
+  `monoEqual` two-point probe in `bbox.ts` was upgraded to `Monotonic.approxEqual`
+  — structural (compare at 0, 1, and every pairwise breakpoint) for piecewise
+  operands, the same cheap two-point line probe for the all-linear common case.
+
+  **Design choice — pre-resolution, not tracks-in-the-graph.** Tracks are
+  resolved by `resolveGridTracks` (the sizing budget for fill cells) and, for
+  placement, by `gridTracksFromSizes` from the ACTUAL laid-out cell sizes, so the
+  cell-center pins match the real geometry and the solver shadow cannot drift
+  from what rendered. This reuses the rank-2 placement solver as-is (cells pin to
+  their track-intersection centers) — the equations are identical to naming each
+  track a cell in the difference graph, but lighter. The Stage-3 layer bypasses
+  are deleted (space-fold early return, the whole-layer cell-budget special case,
+  the mixing throw); grid now GENUINELY composes — its per-track claim
+  participates in the fold and its cell pins solve jointly with align / position
+  / z-order (a `position` pin on a cell overrides its track centering, the
+  authoritative-pin pattern). `gridSpaces`' ORDINAL track axes stay for axis
+  rendering (a categorical axis can't also be a SIZE magnitude), composing
+  through the same return path rather than an early exit. The at-most-one-grid
+  rule and `__grid_cell_i` naming stay. **Gate:** all-fill tables pixel-identical
+  (heatmaps unchanged); one intended mover — the Titanic facet unit grid, whose
+  cells carry intrinsic waffle-size claims, now content-sizes its tracks (facets
+  pack to content instead of stretching to equal box-division).
+
 - **6f — determinacy from rank.** The Stage-1 `spacePlacement` view retires:
   free/determined/conflict is read off the scope system's baseline-subsystem
   rank/consistency. Space resolution keeps only data facts
@@ -477,8 +512,13 @@ on one axis is the sanctioned multi-scale reading.
   scope registry is keyed that way from the start.
 - **Where scope state lives:** on the render session (like `toPixel`) vs a
   map keyed by scope-root uid; must survive resume/re-layout.
-- **Piecewise claims:** `max`-composition (6e) and any future clamp break the
-  two-point `monoEqual` probe; decide the claim representation before 6e.
+- **Piecewise claims (resolved in 6e):** `max`-composition keeps claims in the
+  convex piecewise-linear (max, +) algebra (both `max` and `add` are closed over
+  it), so the representation is unchanged — the only fix needed was the equality
+  probe: `monoEqual` now delegates to `Monotonic.approxEqual`, which compares
+  piecewise operands structurally (at 0, 1, and every breakpoint) and keeps the
+  cheap two-point line probe for the all-linear case. A future non-monotone clamp
+  would still need more.
 
 ### Debuggability requirement
 

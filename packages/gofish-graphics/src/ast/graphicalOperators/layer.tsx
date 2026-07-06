@@ -13,7 +13,12 @@ import {
   FancyDims,
   displayTranslate,
 } from "../dims";
-import { UNDEFINED, UnderlyingSpace, hasBaseline } from "../underlyingSpace";
+import {
+  UNDEFINED,
+  UnderlyingSpace,
+  hasBaseline,
+  isUNDEFINED,
+} from "../underlyingSpace";
 import { computeSize, foldFinite } from "../../util";
 import { axisScale } from "../domain";
 import { CoordinateTransform } from "../coordinateTransforms/coord";
@@ -25,7 +30,9 @@ import {
   applyConstraints,
   collectPositionDomains,
   gridSpaces,
-  gridCellSize,
+  resolveGridTracks,
+  gridCellSizeByName,
+  gridTracksFromSizes,
   type ConstraintSpec,
   type ZOrderConstraint,
 } from "../constraints";
@@ -128,11 +135,15 @@ export const layer = createNodeOperatorSequential(
           _shared: Size<boolean>,
           constraints
         ) => {
-          // A grid constraint makes this layer a grid: its axes are categorical
-          // (ORDINAL over columns / rows) and the cells fill flex tracks (sized
-          // in `layout`). It's exclusive — no union/nest/position fold applies.
+          // A grid constraint makes this layer a grid. Stage 6e: the grid no
+          // longer bypasses the fold — it participates. Its categorical track
+          // axes (ORDINAL over columns / rows, for axis rendering) are composed
+          // in at the END of this function, overriding the covered axes, while
+          // any sibling constraint (align / position) still contributes to the
+          // fold below. Its size claim (Σ max-of-cell-claims + gaps) is consumed
+          // at layout time by `resolveGridTracks`, not reported as the axis space
+          // — a categorical axis cannot also be a SIZE magnitude.
           const gridC = selectGridConstraint(constraints ?? []);
-          if (gridC !== undefined) return gridSpaces(gridC, _childNodes);
 
           // Nest space fold: only INSIDE_OUT edges (`dir: 'in'`) derive a
           // space — `outer = inner + 2·padding` when inner is SIZE — so a
@@ -181,6 +192,19 @@ export const layer = createNodeOperatorSequential(
             }
           }
 
+          // Grid track axes compose LAST, overriding the covered axes with the
+          // categorical ORDINAL space (columns on x, rows on y) that axis
+          // rendering consumes — the grid's contribution to the fold. A pure
+          // grid therefore reports exactly `gridSpaces` (as before); a grid mixed
+          // with a sibling constraint keeps that sibling's fold on any axis the
+          // grid leaves UNDEFINED (no keys).
+          if (gridC !== undefined) {
+            const gridAxes = gridSpaces(gridC, _childNodes);
+            for (const axis of [0, 1] as const) {
+              if (!isUNDEFINED(gridAxes[axis])) resolved[axis] = gridAxes[axis];
+            }
+          }
+
           // Stash the absorbed anchored extent and report UNDEFINED upward for
           // any dim with an explicit pixel size — self-scaling region; see
           // selfScaledSpaces above. (last write wins — may run more than once.)
@@ -219,11 +243,26 @@ export const layer = createNodeOperatorSequential(
               size[1],
           ];
 
-          // Grid budget: a grid layer is exclusively cells (table elaboration),
-          // and every cell fills its flex track — so all children get the equal
-          // track size (box-division); the placement solver then centers them.
+          // Grid budget (Stage 6e): resolve the tracks under the unified max rule
+          // from the cells' pre-layout size claims — each track sizes to the max
+          // claim of its cells, fill tracks split the leftover equally. This
+          // sizes only the FILL cells (a claim cell keeps its own size); the
+          // authoritative PLACEMENT tracks are recomputed from the actual
+          // laid-out cell sizes after the child loop (`gridTracksFromSizes`), so
+          // cell centers pin to the real geometry.
           const gridC = selectGridConstraint(node.constraints);
-          const gridCell = gridC ? gridCellSize(gridC, size) : undefined;
+          const gridCellByName = gridC
+            ? gridCellSizeByName(
+                gridC,
+                resolveGridTracks(
+                  gridC,
+                  node.children,
+                  size,
+                  getScopeRegistry(node.tryGetRenderSession()),
+                  node.key ?? node.type
+                )
+              )
+            : undefined;
 
           // Build the LOCAL scale for each self-scaled (stashed) dim against our
           // own pixel box — see selfScaledSpaces above. The recipe (cf. the
@@ -336,7 +375,12 @@ export const layer = createNodeOperatorSequential(
             // proposal, so nest composes with — and wins on its derived axes
             // over — any budget slice.
             const layoutSize = applyNestLayoutProposal(
-              childLayoutSizeProposal(childName, size, gridCell, sliceByName),
+              childLayoutSizeProposal(
+                childName,
+                size,
+                gridCellByName,
+                sliceByName
+              ),
               layoutPlan.nestPlan?.byDerived.get(i),
               childPlaceables
             );
@@ -379,11 +423,29 @@ export const layer = createNodeOperatorSequential(
             // Compose and solve placement constraints as one per-axis relational
             // problem. Declaration order does not choose an anchor; unanchored
             // components receive a deterministic weak origin.
+            // Placement tracks from the ACTUAL laid-out cell sizes (Stage 6e):
+            // each track's extent is the max of its cells' real geometry, so the
+            // cell-center pins match what rendered (and the solver shadow agrees).
+            const gridTracks = gridC
+              ? gridTracksFromSizes(
+                  gridC,
+                  childPlaceables.map((cp) =>
+                    cp
+                      ? ([
+                          Math.abs(cp.dims[0].size ?? 0),
+                          Math.abs(cp.dims[1].size ?? 0),
+                        ] as [number, number])
+                      : undefined
+                  )
+                )
+              : undefined;
+
             applyConstraints(
               node.constraints,
               nameToPlaceable,
               size,
-              effectivePosScales
+              effectivePosScales,
+              gridTracks
             );
 
             // Place any child the constraints left unplaced at the layer's

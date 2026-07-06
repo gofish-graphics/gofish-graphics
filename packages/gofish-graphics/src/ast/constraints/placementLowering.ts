@@ -14,7 +14,7 @@ import type { AlignConstraint } from "./align";
 import { lowerAlignPlacement } from "./align";
 import type { DistributeConstraint } from "./distribute";
 import { lowerDistributePlacement } from "./distribute";
-import type { GridConstraint } from "./grid";
+import type { GridConstraint, TrackLayout } from "./grid";
 import { lowerGridPlacement } from "./grid";
 import type { NestConstraint } from "./nest";
 import { lowerNestPlacement } from "./nest";
@@ -154,8 +154,23 @@ export function lowerPlacementConstraints(
   constraints: PlacementConstraint[],
   targets: Map<string, Placeable>,
   sizes: [number, number],
-  posScales?: ConstraintPosScales
+  posScales?: ConstraintPosScales,
+  gridTracks?: [TrackLayout, TrackLayout]
 ): LoweredPlacement {
+  // A `position` pin on a grid cell overrides that cell's track centering on the
+  // pinned axis (the authoritative-pin pattern) — collect which (cell, axis) a
+  // position constraint owns so the grid skips its center pin there.
+  const pinnedByPosition = new Map<string, Set<0 | 1>>();
+  for (const constraint of constraints) {
+    if (constraint.type !== "position") continue;
+    for (const ref of constraint.children) {
+      if (!ref) continue;
+      const axes = pinnedByPosition.get(ref.name) ?? new Set<0 | 1>();
+      if (constraint.x !== undefined) axes.add(0);
+      if (constraint.y !== undefined) axes.add(1);
+      if (axes.size > 0) pinnedByPosition.set(ref.name, axes);
+    }
+  }
   const ownership = new PlacementOwnershipPlan(
     targets,
     constraints,
@@ -226,7 +241,14 @@ export function lowerPlacementConstraints(
       return;
     }
 
-    lowerGridPlacement(constraint, owner, sizes, lowerer);
+    lowerGridPlacement(
+      constraint,
+      owner,
+      sizes,
+      lowerer,
+      gridTracks,
+      pinnedByPosition
+    );
   });
 
   return { anchorProgram: lowerer.anchorProgram };

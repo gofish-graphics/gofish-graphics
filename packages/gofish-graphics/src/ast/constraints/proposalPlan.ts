@@ -131,7 +131,8 @@ export function buildDistributeSliceMap(
 /** Choose the concrete size proposed to one child in a layer.
  *
  * Priority is explicit and single-owner:
- *   1. grid: owns the whole layer proposal, so every child gets the cell size;
+ *   1. grid: each cell is proposed ITS (column, row) track's extent (Stage 6e —
+ *      resolved by the unified max rule in `resolveGridTracks`), keyed by name;
  *   2. distribute: owns only the named child axes it sliced;
  *   3. default layer box: unconstrained/fill proposal is the full layer size.
  *
@@ -140,10 +141,16 @@ export function buildDistributeSliceMap(
 export function childLayoutSizeProposal(
   childName: string | undefined,
   layerSize: Size,
-  gridCell: Size | undefined,
+  gridCellByName: Map<string, Size> | undefined,
   sliceByName: Map<string, Size> | undefined
 ): Size {
-  if (gridCell !== undefined) return gridCell;
+  if (
+    gridCellByName !== undefined &&
+    childName !== undefined &&
+    gridCellByName.has(childName)
+  ) {
+    return gridCellByName.get(childName)!;
+  }
   if (
     sliceByName === undefined ||
     childName === undefined ||
@@ -283,10 +290,16 @@ export function buildChildScalePlan(
   };
 }
 
-/** A grid owns the whole two-axis proposal scope for its layer. Multiple grids
- * would otherwise be source-order-sensitive because space resolution and
- * proposal sizing can only choose one track partition while placement would see
- * all pins. */
+/** Select the layer's single grid constraint, if any.
+ *
+ * A grid resolves its tracks under the unified max rule (`resolveGridTracks`)
+ * and now GENUINELY COMPOSES with sibling constraints (Stage 6e): its per-track
+ * claim participates in sizing, and its cell-center pins solve jointly with any
+ * align/position/z-order on the same layer. The Stage-3 containment throw (which
+ * rejected any non-z-order sibling because the grid used to bypass the space and
+ * size folds) is therefore gone. The at-most-one-grid rule stays: two track
+ * partitions on one layer would be source-order-sensitive, so it is still an
+ * error. */
 export function selectGridConstraint(
   constraints: readonly ConstraintSpec[]
 ): GridConstraint | undefined {
@@ -299,24 +312,6 @@ export function selectGridConstraint(
       );
     }
     selected = constraint;
-  }
-  // A grid is a whole-layer layout mode, not a composable constraint: it owns
-  // both track partitions and bypasses the space/size fold, while placement
-  // still applies every sibling constraint — so a grid mixed with any other
-  // positioning constraint silently half-applies (its facts never enter the
-  // space fold). Reject non-z-order siblings; z-order (zAbove/zBelow) is
-  // render-time paint order and composes. This lifts when grids become track
-  // equations (Stage 6e, design/sigma-affine-simplification.md).
-  if (selected !== undefined) {
-    for (const constraint of constraints) {
-      if (constraint.type === "grid" || isZOrderConstraint(constraint)) {
-        continue;
-      }
-      throw new Error(
-        `Constraint.grid cannot be combined with a '${constraint.type}' constraint on the same layer. ` +
-          `Put the grid in its own layer, or nest layers, so each layout mode owns its own scope.`
-      );
-    }
   }
   return selected;
 }

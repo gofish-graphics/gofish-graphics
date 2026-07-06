@@ -34,6 +34,7 @@ export type ScopeKind =
   | "constraint-budget"
   | "shared"
   | "coord"
+  | "grid"
   | "recenter";
 
 /** One axis's contribution to the #582 equal-measure recentering: either an

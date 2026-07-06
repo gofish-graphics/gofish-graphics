@@ -25,7 +25,7 @@ import type { DistributeConstraint, DistributeOptions } from "./distribute";
 import type { PositionConstraint, PositionOptions } from "./position";
 import type { ZAboveConstraint, ZBelowConstraint } from "./zorder";
 import type { NestConstraint, NestOptions } from "./nest";
-import type { GridConstraint } from "./grid";
+import type { GridConstraint, TrackLayout } from "./grid";
 import {
   isPlacedOn,
   type ConstraintPosScales,
@@ -60,7 +60,14 @@ export type { NestConstraint, NestOptions } from "./nest";
 export type { GridConstraint } from "./grid";
 export { isZOrderConstraint } from "./zorder";
 export { isNestConstraint, nestedSpace } from "./nest";
-export { isGridConstraint, gridSpaces, gridCellSize } from "./grid";
+export {
+  isGridConstraint,
+  gridSpaces,
+  resolveGridTracks,
+  gridCellSizeByName,
+  gridTracksFromSizes,
+  type TrackLayout,
+} from "./grid";
 export { getPositioningConstraintRefs } from "./proposalPlan";
 export { BBox } from "./bbox";
 
@@ -239,7 +246,8 @@ export function applyConstraints(
   constraints: ConstraintSpec[],
   nameToPlaceable: Map<string, Placeable>,
   sizes: [number, number],
-  posScales?: ConstraintPosScales
+  posScales?: ConstraintPosScales,
+  gridTracks?: [TrackLayout, TrackLayout]
 ): void {
   const placement = constraints.filter(
     (
@@ -267,7 +275,13 @@ export function applyConstraints(
       )
     : undefined;
 
-  solvePlacementConstraints(placement, nameToPlaceable, sizes, posScales);
+  solvePlacementConstraints(
+    placement,
+    nameToPlaceable,
+    sizes,
+    posScales,
+    gridTracks
+  );
 
   if (prePlaced) {
     for (const constraint of placement) {

@@ -425,8 +425,8 @@ constraint overrides: union child spaces, apply `transform.scale` to free
 magnitudes, and merge datum-valued position/span domains with constraint
 measures taking precedence.
 `childLayoutSizeProposal` is the final per-child proposal priority before nest:
-grid cell size, else distribute slice for that named child, else the full layer
-box.
+the cell's own track extent (grid), else distribute slice for that named child,
+else the full layer box.
 `buildLayerConstraintLayoutPlan` packages the per-layer execution plan — which
 children skip baseline placement, nest source-before-derived order, and
 datum-position target axes — so the layer executes deterministic artifacts
@@ -439,17 +439,37 @@ out first. The bottom-up space pass applies only the inside-out portion via
 `applyNestSpacePlan`; once the source has concrete dimensions,
 `applyNestLayoutProposal` does the corresponding layout-time arithmetic on the
 derived axes.
-Grid is also selected through the proposal plan (`selectGridConstraint`):
-because a grid owns both track partitions for a layer — and bypasses the
-space/size fold entirely — it is a whole-layer layout mode, not a composable
-constraint. `selectGridConstraint` therefore enforces two exclusivity rules
-(it is the one site both the space pass and the layout pass flow through): more
-than one grid constraint is a proposal conflict rather than a declaration-order
-choice, and a grid mixed with any non-z-order constraint (align / distribute /
-position / nest) throws — that sibling would be applied by placement but never
-enter the space fold, so it would silently half-apply. z-order constraints
-(zAbove / zBelow) are render-time paint order and compose freely alongside a
-grid. Grid has no public factory; it is `table`'s private elaboration target.
+Grid is a **track equation** under the same unified sizing rule, not a separate
+layout regime (Stage 6e). Per axis, `resolveGridTracks` sets
+
+```
+track claim = Monotonic.max(claims of the cells in that track)      (max, +)
+grid claim  = Monotonic.add(track claims) + gaps                    (the σ-frame)
+```
+
+A claim-less ("fill") cell contributes nothing, so an all-fill grid has no track
+claims and the tracks split the leftover (allocated − gaps) equally — bit-for-bit
+the former `sliceExtent` box-division. Content-sized tracks emerge automatically
+when cells carry size claims: a track sizes to its widest cell, and fill tracks
+share whatever the claimed tracks leave. When every track carries a σ-dependent
+claim (no fill to absorb the slack), the grid claim is inverted against the
+allocated size by the same scope registry that solves any other frame equation.
+Because a categorical track axis cannot simultaneously be a SIZE magnitude, the
+grid's _reported_ space stays ORDINAL over the columns/rows (`gridSpaces`, for
+axis rendering) while the size claim is consumed at layout time by the track
+resolution. The layout budget sizes fill cells to their track extent; the
+authoritative **placement tracks** are recomputed from the actual laid-out cell
+sizes (`gridTracksFromSizes`) so each cell pins to the real geometry — one source
+the placement and the solver shadow both read, so they cannot drift.
+
+The grid now **genuinely composes** with sibling constraints: its per-track claim
+participates in the fold and its cell-center pins solve jointly with any align /
+position / z-order on the same layer (a `position` pin on a cell overrides its
+track centering — the authoritative-pin pattern). The Stage-3 containment throw
+is gone. `selectGridConstraint` keeps the one remaining rule: at most one grid
+per layer (two track partitions would be source-order-sensitive) is still a
+proposal conflict. Grid has no public factory; it is `table`'s private
+elaboration target.
 The same proposal plan marks datum-valued `position` targets
 (`buildPositionTargetDims`) so the layer does not also forward the consumed
 data→pixel scale to that child axis; literal pixel pins are not marked because
