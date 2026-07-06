@@ -297,19 +297,27 @@ html.landing-page .DocSearch-Button {
   margin: 26px auto 0;
 }
 
-/* ---- alpha stamp + version tag (flank the wordmark) ---- */
-/* Inked rubber stamp: oxblood, rotated, edges eroded by a noise mask so it
-   reads as hand-stamped rather than printed. */
+/* ---- alpha stamp (on the wordmark) + version tag (under the install chip) ---- */
+/* The wordmark shrinks to its text so the stamp can anchor to its right end. */
+.landing .hero h1.wordmark {
+  display: inline-block;
+  position: relative;
+  overflow: visible;
+}
+/* Inked rubber stamp slapped over the right end of "GoFish" at 45°: oxblood,
+   edges eroded by a noise mask so it reads as pressed ink rather than printed. */
 .landing .hero-stamp {
   position: absolute;
-  top: -0.5em;
-  right: 3%;
+  left: 100%;
+  top: 50%;
   z-index: 6;
+  /* pull back over the last letters, then tilt 45° */
+  transform: translate(-46%, -52%) rotate(-45deg);
   font-family: "Spline Sans", sans-serif;
   font-weight: 800;
-  font-size: clamp(0.82rem, 1.5vw, 1.12rem);
-  letter-spacing: 0.22em;
-  text-indent: 0.22em; /* balance the trailing letter-spacing */
+  font-size: clamp(0.8rem, 1.4vw, 1.05rem);
+  letter-spacing: 0.2em;
+  text-indent: 0.2em; /* balance the trailing letter-spacing */
   text-transform: uppercase;
   color: #b23a2e;
   padding: 0.26em 0.5em 0.22em;
@@ -317,22 +325,23 @@ html.landing-page .DocSearch-Button {
   border-radius: 4px;
   /* faint inner rule — the double frame reads as a stamp, not a chip */
   box-shadow: inset 0 0 0 1px rgba(178, 58, 46, 0.4);
-  transform: rotate(-8deg);
   opacity: 0.85;
   mix-blend-mode: multiply;
   pointer-events: none;
+  white-space: nowrap;
   -webkit-mask: var(--stamp-erode);
   mask: var(--stamp-erode);
   /* chew the edges/fill with two noise scales so the ink looks pressed, not printed */
   --stamp-erode: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='e'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.45 0.5' numOctaves='3' seed='7' stitchTiles='stitch'/%3E%3CfeColorMatrix type='matrix' values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 -1.1 0.98'/%3E%3CfeComponentTransfer%3E%3CfeFuncA type='discrete' tableValues='1 1 1 1 1 0 1 0 1'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23e)'/%3E%3C/svg%3E");
 }
 
-/* Release line on a small paper tag, held by a strip of the same masking tape
-   as the specimen cards. */
+/* Release line on a small paper tag, centered under the install chip and held
+   by a strip of the same masking tape as the specimen cards. */
 .landing .hero-version {
-  position: absolute;
-  top: 2em;
-  left: 2%;
+  display: block;
+  width: fit-content;
+  margin: 18px auto 0;
+  position: relative;
   z-index: 6;
   font-family: "Spline Sans Mono", monospace;
   font-size: clamp(0.68rem, 1.15vw, 0.88rem);
@@ -340,7 +349,7 @@ html.landing-page .DocSearch-Button {
   background: #fffdf7;
   padding: 7px 12px 6px;
   border-radius: 4px;
-  transform: rotate(4deg);
+  transform: rotate(-2.5deg);
   box-shadow:
     0 1px 2px var(--shadow-warm),
     2px 4px 12px var(--shadow-warm);
@@ -349,14 +358,7 @@ html.landing-page .DocSearch-Button {
 
 @media (max-width: 560px) {
   .landing .hero-stamp {
-    top: -0.3em;
-    right: 1%;
-    font-size: 0.72rem;
-  }
-  .landing .hero-version {
-    top: 0.4em;
-    left: 1%;
-    font-size: 0.62rem;
+    font-size: 0.68rem;
   }
 }
 .landing .cta-row {
