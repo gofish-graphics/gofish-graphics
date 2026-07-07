@@ -35,7 +35,11 @@ import {
   type UnderlyingSpace,
 } from "./underlyingSpace";
 import { shadowCheckScaleRoot } from "./solver/shadow";
-import { elaborateAxes, elaborateAxisTitles } from "./axes/elaborate";
+import {
+  elaborateAxes,
+  elaborateAxisTitles,
+  X_TITLE_NAME,
+} from "./axes/elaborate";
 import { elaborateLegend, legendOverhang } from "./legends/elaborate";
 
 export type CategoricalScale = {
@@ -80,22 +84,27 @@ export const isContinuousColorScale = (
   s: Scale | undefined
 ): s is ContinuousColorScale => s !== undefined && "scaleFn" in s;
 export type AxesOptions = boolean | { x?: AxisOptions; y?: AxisOptions };
-/** `side` (issue #143/#16): which frame edge the axis seats on — `"start"`
- *  (default: the near/origin side — bottom in y-up, top in y-down) or `"end"`
- *  (the far side — top in y-up, bottom in y-down). Frame-relative, matching the
- *  start/end vocabulary of alignment/distribute. */
+/** `side` (issue #143/#16): which frame edge the axis seats on — `"start"` (the
+ *  near/origin side — top for a y-DOWN frame, bottom for y-UP) or `"end"` (the
+ *  far side). Frame-relative, matching the start/end vocabulary of
+ *  alignment/distribute. When OMITTED, a continuous/difference X-axis defaults to
+ *  the visual BOTTOM regardless of the frame's flip (see `axisSide` in
+ *  `elaborate.tsx`); an explicit `side` overrides that with the literal
+ *  frame-relative seating. */
 export type AxisOptions =
   | boolean
   | { title?: string | false; side?: "start" | "end" };
 
-/** Per-dim axis `side`, defaulting to `"start"` (the existing seating). */
+/** Per-dim axis `side` AS AUTHORED — `undefined` where the caller did not specify
+ *  one, so the elaboration can tell an explicit `"start"` (literal frame-relative
+ *  seating) apart from the default (a continuous x-axis defaults to the bottom). */
 export function resolveAxisSides(
   axes: AxesOptions | undefined
-): ["start" | "end", "start" | "end"] {
-  const sideOf = (o: AxisOptions | undefined): "start" | "end" =>
-    o && typeof o === "object" && o.side === "end" ? "end" : "start";
+): ["start" | "end" | undefined, "start" | "end" | undefined] {
+  const sideOf = (o: AxisOptions | undefined): "start" | "end" | undefined =>
+    o && typeof o === "object" ? o.side : undefined;
   if (axes && typeof axes === "object") return [sideOf(axes.x), sideOf(axes.y)];
-  return ["start", "start"];
+  return [undefined, undefined];
 }
 
 // Fallback extent for an omitted `w`/`h` on a POSITION or data-driven SIZE axis,
@@ -130,6 +139,29 @@ function resolveAxisTitles(
     yTitle: yTitleOpt === false ? undefined : (yTitleOpt ?? axisFields?.y),
   };
 }
+
+/** True if `node` or any descendant satisfies `pred`. Shared depth-first walk
+ *  behind the whole-subtree y-up triggers below. */
+const subtreeHas = (
+  node: GoFishNode,
+  pred: (n: GoFishNode) => boolean
+): boolean => {
+  if (pred(node)) return true;
+  const kids = node.children as (GoFishNode | unknown)[] | undefined;
+  if (kids)
+    for (const k of kids)
+      if (k instanceof GoFishNode && subtreeHas(k, pred)) return true;
+  return false;
+};
+
+/** True if `node` or any descendant is a `coord` node (polar/clock/wavy). A
+ *  coordinate system flips its own scope (`resolveNodeFlip` in bake), so the
+ *  chart-level chrome must follow it to the visual edge even when the root y is
+ *  UNDEFINED (a pie's `count` has no cartesian y). The right convention for
+ *  polar/coord is still open (#662); until then the presence of one anywhere is a
+ *  chrome-mirror trigger, exactly as the pre-#629 global flip treated it. */
+const subtreeHasCoord = (node: GoFishNode): boolean =>
+  subtreeHas(node, (n) => (n as { type?: string }).type === "coord");
 
 export async function layout(
   {
@@ -232,7 +264,7 @@ export async function layout(
     // handled axis flags; the new subtree is then re-resolved below. A flag the
     // pass doesn't handle (e.g. an UNDEFINED space) is inert — nothing else
     // consumes `node.axis`.
-    const elaborated = await elaborateAxes(child, resolveAxisSides(axes));
+    const elaborated = await elaborateAxes(child, resolveAxisSides(axes), yUp);
     titleAnchors = elaborated.titleAnchors;
     if (elaborated.changed) {
       child = elaborated.node;
@@ -263,15 +295,49 @@ export async function layout(
   // legend row order, colorbar direction), while its BOX is placed by the plot's
   // frame — the bake box-mirrors `_ambientYDown` chrome about the plot's flip
   // scope (a parent's orientation places a child's box, never re-interprets its
-  // interior). Two layout-time orientation bits fall out:
+  // interior). Three layout-time orientation bits fall out:
   //  - `chromeYUp`: the AMBIENT orientation the chrome INTERIOR builders read
   //    (legend swatch order, colorbar value direction, axis-title rotation) —
   //    y-down unless the explicit global `options.yUp` flips the whole canvas.
-  //  - `contentFlipsY`: whether the plot content will mirror (continuous root y,
-  //    or the global override) — the abstract frame the chrome BOX constraints
-  //    are authored against (legend top-alignment side). See #629/#143/#16.
+  //  - `rootFlipsWhole`: whether the ROOT content node itself opens ONE canvas-
+  //    wide flip scope that its whole subtree inherits (mirrors about `[0, finalH]`)
+  //    — a continuous root y (a plain bar/line chart) or the global override. It
+  //    stays NARROW: a per-scope opener BELOW the root (a `coord`, a continuous
+  //    subtree inside an UNDEFINED-root free-space mix, or a facet cell) mirrors
+  //    about its OWN band, never this canvas frame, and an ORDINAL root does NOT
+  //    flip as a whole (a faceted scatter keeps its panels in natural order; its
+  //    shared continuous axis is instead defaulted to the bottom edge, see the
+  //    axis-side note below). This gates the `_rootFlipScope` stamp. #629.
+  //  - `chromeFlipsY`: whether the ROOT frame the chrome annotates mirrors about
+  //    the canvas — so a chart's chrome (y-title, legend column, colorbar, and an
+  //    ordinal-x title) box-mirrors to the same VISUAL edge as the flipped
+  //    content. It is `rootFlipsWhole` PLUS a `coord` at the root: a pie/clock has
+  //    an UNDEFINED root y (no cartesian flip) but its `coord` opens its own scope
+  //    that fills the canvas, so its chrome must still follow. It deliberately does
+  //    NOT fire on a continuous DESCENDANT under an ordinal/undefined root (a
+  //    faceted stack, a unit chart): that content flips per-scope BELOW the root,
+  //    the root chrome frame does not mirror, and a chart-level title that
+  //    mirrored there would split from its (unflipped) axis. The chart-level
+  //    CONTINUOUS x-axis is the one exception, handled by seating it (and its
+  //    title) on the far edge directly — see the axis-side note. This gates the
+  //    `_chromeFrame` stamp and the legend's abstract frame. See #629/#143/#16.
   const chromeYUp = yUp;
-  const contentFlipsY = yUp || isCONTINUOUS(niceUnderlyingSpaceY);
+  const rootFlipsWhole = yUp || isCONTINUOUS(niceUnderlyingSpaceY);
+  const chromeFlipsY = rootFlipsWhole || subtreeHasCoord(child);
+  //  - `xTitleSeatsFar`: a CONTINUOUS x-axis whose frame does NOT flip at all
+  //    (`!chromeFlipsY` — an ordinal cross y AND no `coord`: a horizontal bar, a
+  //    faceted stack). `elaborateAxes` seats such a line on the FAR edge directly
+  //    (no mirror), so its title is authored to match and its box-mirror is
+  //    suppressed below — the two stay together at the visual bottom instead of the
+  //    title lifting above. A `coord` chart (a pie) is EXCLUDED: its frame flips via
+  //    the coord scope, so its x-axis and title mirror like any flipped frame. Only
+  //    the DEFAULT (unspecified) side seats far — an explicit `side` is honored
+  //    literally, matching the axis line.
+  const xSideOpt = resolveAxisSides(axes)[0];
+  const xTitleSeatsFar =
+    xSideOpt === undefined &&
+    isCONTINUOUS(niceUnderlyingSpaceX) &&
+    !chromeFlipsY;
 
   // Reference to the content node whose extent defines the final canvas
   // (`finalW`/`finalH` via the `finalDim` readback below). Both the title pass
@@ -304,13 +370,31 @@ export async function layout(
   };
   const { xTitle, yTitle } = resolveAxisTitles(axes, measureFields);
   if (xTitle !== undefined || yTitle !== undefined) {
+    // The x-axis title is authored at the SAME abstract side as its axis LINE, so
+    // the two stay together and land at the same visual edge (#143/#16/#629):
+    //  - `xTitleSeatsFar` (a DEFAULT continuous x over a non-flipping frame — a
+    //    horizontal bar, a faceted stack): `elaborateAxes` seated the line on the
+    //    far "end" edge directly, so the title matches and its box-mirror is
+    //    suppressed (see the chrome-frame stamp) — else it would lift above the
+    //    line. `titleSides[0] = "end"`.
+    //  - default continuous x on a FLIPPING frame (a scatter, a `coord` pie): the
+    //    line is authored "start" and mirrors to the bottom, so the title rides
+    //    along on "start". `titleSides[0] = "start"`.
+    //  - an EXPLICIT `side`, or an ordinal x: honored literally (`baseSides[0]`,
+    //    defaulting to "start"), mirroring with the content like any chrome.
+    // The y-title (left gutter) is untouched — the vertical flip never moves it.
+    const baseSides = resolveAxisSides(axes);
+    const titleSides: ["start" | "end", "start" | "end"] = [
+      xTitleSeatsFar ? "end" : (baseSides[0] ?? "start"),
+      baseSides[1] ?? "start",
+    ];
     child = await elaborateAxisTitles(child, {
       xTitle,
       yTitle,
       anchors: titleAnchors,
       plotNode,
       yUp: chromeYUp,
-      sides: resolveAxisSides(axes),
+      sides: titleSides,
     });
     if (contexts?.session) child.setRenderSession(contexts.session);
     // The title pass introduces `ref()` stand-ins (to the axis line / plot) that
@@ -339,13 +423,13 @@ export async function layout(
     // (`_ambientYDown`, #629): its INTERIOR renders in the ambient frame, where a
     // `Spread({dir:"y"})` already reads top→bottom — no `reverse` unless the
     // whole canvas is forced y-up by `options.yUp` (`chromeYUp`). Its BOX aligns
-    // against the plot's abstract frame (`contentFlipsY`) and is box-mirrored by
+    // against the plot's abstract frame (`chromeFlipsY`) and is box-mirrored by
     // the bake when the plot flips, landing top-aligned on screen. #143/#16/#629.
     child = await elaborateLegend(
       child,
       unitScale as CategoricalScale | ContinuousColorScale,
       chromeYUp,
-      contentFlipsY
+      chromeFlipsY
     );
     legendAdded = true;
     if (contexts?.session) child.setRenderSession(contexts.session);
@@ -506,42 +590,56 @@ export async function layout(
   const finalW = finalDim(0, w);
   const finalH = finalDim(1, h);
 
+  // The canvas y-flip frame (issue #629): the whole-plot band `[0, finalH]` the
+  // old global flip mirrored about (`data.height`). finalH is only known here,
+  // and the canvas origin (0) is NOT recoverable from a node's placed bbox (a
+  // shrink-to-fit pin can offset it), so it is stamped authoritatively rather
+  // than re-derived by the bake. Feeds both the root-content scope stamp below
+  // and the chrome frame.
+  const canvasFrame: FlipScope = { baseY: 0, height: finalH };
+
   // Stamp the ROOT plot content with the canvas y-flip frame (issue #629), when
-  // it will mirror (`contentFlipsY`). The bake walk opens the y-up scope at
-  // `contentNode` (the plot, inside any scope-transparent title/legend chrome)
-  // and mirrors about THIS frame — the canvas `[0, finalH]`, exactly what the old
-  // global flip used (`data.height`) — and box-mirrors the chrome siblings about
-  // the same frame. finalH is only known here, and the canvas origin (0) is NOT
-  // recoverable from the node's placed bbox (a shrink-to-fit pin can offset it),
-  // so stamp it authoritatively rather than have the bake re-derive it. A scope
-  // that opens BELOW the canvas frame (a facet cell, a mixed-dashboard subtree)
-  // is not `contentNode`, carries no stamp, and mirrors about its own band. #629.
-  // Stamp UNCONDITIONALLY every layout (set to undefined when the content does
-  // not mirror) so no stale frame from a prior layout of the same node tree
-  // survives an option/data change — a re-layout that turns `contentFlipsY`
-  // false must clear the previous `{baseY, height}`, or the bake would mirror
-  // about a dead frame (#629, stale-scope finding).
-  contentNode._rootFlipScope = contentFlipsY
-    ? { baseY: 0, height: finalH }
-    : undefined;
+  // the root plot flips as a WHOLE (`rootFlipsWhole`). The bake walk opens the
+  // y-up scope at `contentNode` (the plot, inside any scope-transparent
+  // title/legend chrome) and mirrors about THIS frame; the whole subtree inherits
+  // it (no double flip). The bake honors this stamp even for an ordinal root y (a
+  // faceted-by-y chart) — an explicit whole-plot decision overriding the per-node
+  // `declaredYUp` rule. A scope that opens BELOW the canvas frame (a `coord`, a
+  // continuous subtree inside an UNDEFINED-root free-space mix) is not
+  // `contentNode`, carries no stamp, and mirrors about its own placed band. Stamp
+  // UNCONDITIONALLY every layout (undefined when the root does not flip whole) so
+  // no stale frame from a prior layout of the same node tree survives an
+  // option/data change — a re-layout that turns `rootFlipsWhole` false must clear
+  // the previous `{baseY, height}`, or the bake would mirror about a dead frame
+  // (#629, stale-scope finding).
+  contentNode._rootFlipScope = rootFlipsWhole ? canvasFrame : undefined;
 
   // Stamp the chrome placement frame (issue #629) directly on each OUTERMOST
   // `_ambientYDown` chrome subtree (axis titles, legend column, colorbar), so the
   // bake reads `node._chromeFrame` instead of searching up through the
-  // scope-transparent wrappers on every visit. The frame is the plot content's
-  // flip scope; the bake box-mirrors a chrome box about it (its interior still
-  // renders ambient). Only when the plot mirrors — otherwise chrome passes
-  // through unchanged, and a re-layout that turns `contentFlipsY` false stamps
-  // nothing (the chrome subtrees are freshly rebuilt by the elaboration passes
-  // each layout, so no stale frame survives). The walk stops at `contentNode`
-  // (never descends into the plot) and at the outermost ambient node of each
-  // chrome subtree (its descendants render ambient — a second mirror would
-  // double-flip). #629 chrome-frame finding.
-  if (contentFlipsY) {
-    const frame = contentNode._rootFlipScope!;
+  // scope-transparent wrappers on every visit. The frame is the WHOLE-plot canvas
+  // band: the chart-level chrome spans the whole plot, so it mirrors about the
+  // canvas even when the content flips per-scope BELOW the root (a `coord`'s own
+  // scope) — which is why the gate is the whole-subtree `chromeFlipsY`, not the
+  // narrower root-only `rootFlipsWhole`. The bake box-mirrors a chrome box about it (its interior
+  // still renders ambient). Only when the plot mirrors somewhere — otherwise
+  // chrome passes through unchanged, and a re-layout that turns `chromeFlipsY`
+  // false stamps nothing (the chrome subtrees are freshly rebuilt by the
+  // elaboration passes each layout, so no stale frame survives). The walk stops
+  // at `contentNode` (never descends into the plot) and at the outermost ambient
+  // node of each chrome subtree (its descendants render ambient — a second mirror
+  // would double-flip). #629 chrome-frame finding.
+  if (chromeFlipsY) {
+    const frame = canvasFrame;
     const stampChrome = (n: GoFishNode): void => {
       if (n === contentNode) return;
       if (n._ambientYDown === true) {
+        // Suppress the box-mirror for a far-seated continuous x-axis title
+        // (`xTitleSeatsFar`): `elaborateAxes` already placed its line on the far
+        // edge directly and the title was authored to match (see `titleSides`), so
+        // mirroring it here would lift it back above the line. Every other chrome
+        // node (y-title, legend, colorbar) still mirrors.
+        if (n._name === X_TITLE_NAME && xTitleSeatsFar) return;
         n._chromeFrame = frame;
         return;
       }

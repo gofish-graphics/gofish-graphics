@@ -16,6 +16,7 @@ import {
   isPOSITION,
   isORDINAL,
   isDIFFERENCE,
+  isCONTINUOUS,
   continuousInterval,
   type CONTINUOUS_TYPE,
   type UnderlyingSpace,
@@ -426,7 +427,9 @@ function collectKeyMap(node: GoFishNode): Record<string, GoFishNode> {
  */
 function elaborationsFor(
   node: GoFishNode,
-  sides: ["start" | "end", "start" | "end"]
+  sides: ["start" | "end" | undefined, "start" | "end" | undefined],
+  yUp: boolean,
+  underCoord: boolean
 ): {
   constrained: AxisElaboration[];
   refBased: AxisElaboration[];
@@ -471,6 +474,23 @@ function elaborationsFor(
     undefined,
   ];
   const owned: [boolean, boolean] = [false, false];
+  // A continuous/difference X-axis with NO explicit `side` renders at the visual
+  // BOTTOM by default (#143/#16/#629). It sits at its cross (y) axis's low edge;
+  // which abstract edge that is depends on whether this owner's frame y-flips —
+  // CONTINUOUS cross y (a scatter's value axis), a global `yUp`, or a `coord`
+  // ancestor (a polar plot) all mirror the frame, so the near "start" edge lands
+  // at the bottom; otherwise (a horizontal bar's ordinal category y, a faceted
+  // stack's ordinal facet y) the far "end" edge is the bottom. An EXPLICIT `side`
+  // is honored literally (frame-relative: `start`=near, `end`=far) — it is the
+  // override, so a caller can still force the far edge. The Y-axis (dim 1) keeps
+  // its `start` (left) default; the vertical flip never moves it horizontally.
+  const axisSide = (dim: 0 | 1): "start" | "end" => {
+    const userSide = sides[dim];
+    if (dim !== 0) return userSide ?? "start";
+    if (userSide !== undefined) return userSide;
+    const crossFlips = yUp || underCoord || isCONTINUOUS(space[cross(dim)]);
+    return crossFlips ? "start" : "end";
+  };
   for (const dim of [0, 1] as (0 | 1)[]) {
     if (!owns(dim)) continue;
     const s = space[dim];
@@ -482,17 +502,27 @@ function elaborationsFor(
         nices[dim]!,
         prefix,
         crossFloor,
-        sides[dim]
+        axisSide(dim)
       );
       constrained.push(e);
       anchors[dim] = e.anchor;
     } else if (isDIFFERENCE(s)) {
-      const e = elaborateDifferenceAxis(dim, s, prefix, crossFloor, sides[dim]);
+      const e = elaborateDifferenceAxis(
+        dim,
+        s,
+        prefix,
+        crossFloor,
+        axisSide(dim)
+      );
       constrained.push(e);
       anchors[dim] = e.anchor;
     } else if (isORDINAL(s)) {
       keyMap ??= collectKeyMap(node);
-      refBased.push(elaborateOrdinalAxis(dim, s, keyMap, prefix, sides[dim]));
+      // Ordinal axes keep the `start` default (they follow the content's own flip
+      // like a category row); only continuous axes default to the bottom.
+      refBased.push(
+        elaborateOrdinalAxis(dim, s, keyMap, prefix, sides[dim] ?? "start")
+      );
     } else {
       continue;
     }
@@ -530,7 +560,12 @@ function elaborationsFor(
  */
 export async function elaborateAxes(
   node: GoFishNode,
-  sides: ["start" | "end", "start" | "end"] = ["start", "start"]
+  sides: ["start" | "end" | undefined, "start" | "end" | undefined] = [
+    undefined,
+    undefined,
+  ],
+  yUp = false,
+  underCoord = false
 ): Promise<{
   node: GoFishNode;
   changed: boolean;
@@ -541,11 +576,16 @@ export async function elaborateAxes(
     undefined,
     undefined,
   ];
+  // A `coord` (polar/clock) fixes its own frame orientation, so any axis inside
+  // it flips with the coord rather than seating on the far edge directly. Track
+  // whether we are under one so `axisSide` keeps the near/"start" seating there.
+  const childUnderCoord =
+    underCoord || (node as { type?: string }).type === "coord";
   // Bottom-up: replace each child with its elaborated form.
   for (let i = 0; i < node.children.length; i++) {
     const child = node.children[i];
     if (child instanceof GoFishNode) {
-      const res = await elaborateAxes(child, sides);
+      const res = await elaborateAxes(child, sides, yUp, childUnderCoord);
       if (res.changed) changed = true;
       // A child's anchor fills a dim slot we haven't claimed yet.
       for (const dim of [0, 1] as (0 | 1)[]) {
@@ -562,7 +602,9 @@ export async function elaborateAxes(
 
   const { constrained, refBased, anchors, owned } = elaborationsFor(
     node,
-    sides
+    sides,
+    yUp,
+    childUnderCoord
   );
   // Any dim this node owns an axis on is claimed — its own anchor replaces
   // whatever bubbled up from children, INCLUDING replacing it with undefined
@@ -648,7 +690,7 @@ const TITLE_CONTENT_GAP = 8; // gap between a title and the full content bbox
 const TITLE_CONTENT_NAME = "__titleContent";
 const X_TITLE_ANCHOR_NAME = "__xTitleAnchor";
 const Y_TITLE_ANCHOR_NAME = "__yTitleAnchor";
-const X_TITLE_NAME = "__xAxisTitle";
+export const X_TITLE_NAME = "__xAxisTitle";
 const Y_TITLE_NAME = "__yAxisTitle";
 
 /** The x-axis title: horizontal text below the plot. The customization seam

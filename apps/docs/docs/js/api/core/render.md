@@ -70,12 +70,14 @@ axes: { x: { title: false }, y: true }         // suppress the inferred x title
 axes: { x: { side: "end" } }                   // seat the x-axis on the far edge
 ```
 
-Each per-axis object also accepts `side: "start" | "end"` (default `"start"`).
-The side is **frame-relative**: `"start"` is the near/origin edge (bottom in a
-y-up chart, top in y-down free space) and `"end"` is the far edge. Use
-`{ x: { side: "end" } }` to put a category x-axis at the bottom of an
-upward-filling free-space chart (e.g. a unit/waffle column chart). It currently
-applies to ordinal (category) axes.
+Each per-axis object also accepts `side: "start" | "end"`. By default a
+**continuous/quantitative x-axis renders at the visual bottom** (and a continuous
+y-axis at the left), whichever edge that is once the frame's y-orientation is
+resolved — so a scatter, a horizontal bar, and a faceted small-multiple all place
+their value axis at the bottom without any option. An explicit `side` overrides
+that with the literal **frame-relative** seating: `"start"` is the near/origin edge
+(top in a y-down frame, bottom in y-up) and `"end"` is the far edge — e.g.
+`{ x: { side: "end" } }` forces the x-axis onto the opposite edge from the default.
 
 `axes` is most naturally a `chart()`/`chart()` option (e.g.
 `gf.chart(data, { axes: true })`); it is also accepted directly on `.render()`, as
