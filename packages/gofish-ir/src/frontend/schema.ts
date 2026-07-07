@@ -316,6 +316,7 @@ export type CombinatorMarkType =
   | "group"
   | "table"
   | "layer"
+  | "enclose"
   | "arrow"
   | "connect"
   | "treemap"
@@ -585,6 +586,7 @@ export const COMBINATOR_MARK_TYPES: readonly CombinatorMarkType[] = [
   "group",
   "table",
   "layer",
+  "enclose",
   "arrow",
   "connect",
   "treemap",

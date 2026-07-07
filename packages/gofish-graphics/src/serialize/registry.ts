@@ -50,6 +50,7 @@ import { group } from "../ast/graphicalOperators/group";
 import { table } from "../ast/graphicalOperators/table";
 import { arrow } from "../ast/graphicalOperators/arrow";
 import { connect } from "../ast/graphicalOperators/connect";
+import { enclose } from "../ast/graphicalOperators/enclose";
 import {
   treemap as treemapOperator,
   Treemap,
@@ -118,6 +119,10 @@ export const COMBINATOR_FACTORIES: Record<
   group: (opts, marks) => (group as any)(opts, marks) as unknown as Mark<any>,
   table: (opts, marks) => (table as any)(opts, marks) as unknown as Mark<any>,
   layer: (opts, marks) => (layer as any)(opts, marks) as unknown as Mark<any>,
+  // A graphical wrapping operator (padding/rx/ry border) — combinator-only,
+  // like layer but with no `.constrain`; opts ride in `options`.
+  enclose: (opts, marks) =>
+    (enclose as any)(opts, marks) as unknown as Mark<any>,
   arrow: (opts, marks) => (arrow as any)(opts, marks) as unknown as Mark<any>,
   connect: (opts, marks) =>
     (connect as any)(opts, marks) as unknown as Mark<any>,
