@@ -16,13 +16,14 @@ covers:
   - packages/gofish-graphics/src/ast/constraints/distribute.ts
   - packages/gofish-graphics/src/ast/constraints/align.ts
   - packages/gofish-graphics/src/ast/constraints/placementSolver.ts
+  - packages/gofish-graphics/src/ast/constraints/differenceGraph.ts
   - packages/gofish-graphics/src/ast/constraints/placementLowering.ts
   - packages/gofish-graphics/src/ast/constraints/placementProgramLowerer.ts
   - packages/gofish-graphics/src/ast/constraints/placementFacts.ts
+  - packages/gofish-graphics/src/ast/constraints/position.ts
   - packages/gofish-graphics/src/ast/constraints/nest.ts
   - packages/gofish-graphics/src/ast/constraints/nestPlan.ts
   - packages/gofish-graphics/src/ast/constraints/grid.ts
-  - packages/gofish-graphics/src/ast/constraints/span.ts
   - packages/gofish-graphics/src/ast/constraints/bbox.ts
 ---
 
@@ -358,12 +359,13 @@ composes its targets' spaces into the layer's claim on that axis:
   layer enforces both at constraint-collection time (see [[size-claims]]).
 
 - The **interval form** of `Constraint.position` (`{ x: [min, max] }`, lowered
-  by `constraints/span.ts`) is the second size-setting constraint: pin BOTH
+  by `constraints/position.ts` to two strong edge pins — a `start` pin at `min`
+  and an `end` pin at `max`) is the second size-setting constraint: pin BOTH
   edges of a target on an axis and the **size falls out** — the relation
   `place()`'s position-only protocol cannot express. It is built on the
   **linear-system bbox** (`constraints/bbox.ts`, #39): a per-axis 2-unknown
-  system in `(min, size)` where each facet (`min`/`max`/`center`/`size`) is one
-  equation; two independent facets are rank 2, so the rest are inferred (two
+  system in `(min, size)` where each box key (`min`/`max`/`center`/`size`) is one
+  equation; two independent keys are rank 2, so the rest are inferred (two
   edges ⇒ a size), and a third, dependent write is a structured
   over-determination report rather than a silent last-writer-wins. An interval's
   datum endpoints feed the axis's POSITION domain via `collectPositionDomains`
@@ -443,51 +445,54 @@ axis. Child scale forwarding itself is the same plan (`childPosScalesFor`):
 unowned axes forward inherited/base scales, while owned axes forward the layer's
 effective scale only to non-target children whose own space is POSITION.
 
-After sizing, the layer emits placement constraints into a per-axis weighted
-relation problem (`constraints/placementSolver.ts`). The raw fact datatype for
-this pass lives in `constraints/placementFacts.ts`: anchor expressions, strong
-pins, relations, edge pins, and participant facts. Named constraints first lower
-to an inspectable `PlacementProgram`
-(`axes: [PlacementFact[], PlacementFact[]]`); solving consumes that program
-rather than mutating solver state during lowering. Constraint-specific placement
-lowerers live with their constraints: `align.ts`, `distribute.ts`,
-`position.ts`, `span.ts`, `nest.ts`, and `grid.ts` own their policy choices,
-while `placementLowering.ts` orchestrates those lowerers and
-`placementProgramLowerer.ts` resolves anchor offsets and emits raw program
-facts. The solver then owns graph solving and writing solved positions back to
-placeables.
-During lowering, `PlacementOwnershipPlan` records pre-existing placements,
-authoritative position overrides, and axes claimed by position/span facts so
-legacy read-vs-write policy is explicit data rather than scattered set checks.
-Span lowers to two explicit edge claims per target axis: an `edge-pin` for
-`min` and an `edge-pin` for `max`. Those edge claims are folded into
-`SpanExtent` metadata (`size = max - min`) for writeback, while the pure edge
-facts themselves go into the inspectable `PlacementProgram`. During solving,
-`edge-pin(min)` is a strong pin on the target's solved `min`; `edge-pin(max)`
-pins that same `min` through the derived span size (`max - size`). Known-size
-children contribute their intrinsic size. With sizes known, every anchor facet
-reduces to `min + offset`: `start`, `middle`, `end`, and `baseline` are just
-different offsets. `position`, `align`, `distribute`, `nest`, and `grid` then
-emit pins or weighted relations over target `min` values; the solver propagates
-connected components and commits spanned axes with `setExtent` and ordinary
-solved axes with a `min` placement. The placement-coordinate compiler preserves
-the
-literal/datum distinction until raw facts are emitted: literals are pixels,
-while datum coordinates elaborate through the already-solved data→pixel scale
-plus any post-scale offset. This keeps the unified constraint semantics without
-a generic dense linear solver: strong facts win, relation cycles are checked for
-contradiction, and components without an absolute pin are normalized so the
-minimum solved coordinate in that component is `0`. Ordered `distribute`
-components are the exception: their directed chain source is a deterministic
-sequence origin, so negative spacing remains authored overlap instead of being
-erased by min-normalization. If a graphic needs a floating component to appear
-at a particular absolute coordinate, that placement must be explicit.
+After sizing, the layer emits placement constraints into a per-axis **rank-2
+solve** (`constraints/placementSolver.ts`) that resolves each `(node, axis)`
+box `(min, size)` — not just a single `min` unknown. The fact datatype lives in
+`constraints/placementFacts.ts`: the **anchor program**
+(`axes: [AnchorFact[], AnchorFact[]]`) of anchor pins, anchor relations, and
+participants. A fact names a node anchor (`start`/`middle`/`end`/`baseline`)
+directly, with **no numeric offset pre-evaluated at lowering-time** — the offset
+from `min` is derived later, in the solver, once sizes are known. Named
+constraints first lower to this inspectable program; solving consumes it rather
+than mutating solver state during lowering. Constraint-specific lowerers live
+with their constraints: `align.ts`, `distribute.ts`, `position.ts`, `nest.ts`,
+and `grid.ts` own their policy choices, while `placementLowering.ts`
+orchestrates them and `placementProgramLowerer.ts` emits anchor facts (guarding
+only that the target exists). During lowering, `PlacementOwnershipPlan` records
+pre-existing placements, authoritative position overrides, and axes claimed by
+position facts (a point pin or an interval's edges) so legacy read-vs-write
+policy is explicit data rather than scattered set checks.
+
+The solve is two phases per axis. **Cell closure** feeds each node's STRONG
+anchor pins into a per-axis linear-system bbox (`constraints/bbox.ts`): two
+independent edges are rank 2, so the size falls out (the interval/span case) —
+this is where a target's size is determined, with the node's own weak layout
+size the default when no strong equation reaches it. A bbox over-determination
+(two conflicting intervals on one target) is a named-owner conflict naming both
+owners. Then the **difference graph** (`constraints/differenceGraph.ts`): with
+sizes known, every anchor reduces to `min + offset` — `start`/`baseline` at 0,
+`middle` at `size/2`, `end` at `size` for a size-strong cell (read off the
+closed box), else the node's local-frame anchor offset. `position`, `align`,
+`distribute`, `nest`, and `grid` pins/relations over those reduced `min` values
+go through BFS components + pin offsets + distribute/normalized-origin
+fallbacks. Every solved cell writes back through **one path**: a size-strong
+cell sets its extent (`setExtent({min, max})`), a position-only cell pins its
+`min` anchor — replacing the old three-way branch and the size side-channel.
+
+The placement-coordinate compiler preserves the literal/datum distinction until
+facts are emitted: literals are pixels, while datum coordinates elaborate
+through the already-solved data→pixel scale plus any post-scale offset. This
+keeps the unified constraint semantics without a generic dense linear solver:
+strong facts win, relation cycles are checked for contradiction, and components
+without an absolute pin are normalized so the minimum solved coordinate in that
+component is `0`. Ordered `distribute` components are the exception: their
+directed chain source is a deterministic sequence origin, so negative spacing
+remains authored overlap instead of being erased by min-normalization. If a
+graphic needs a floating component to appear at a particular absolute
+coordinate, that placement must be explicit.
 The legacy per-constraint apply helpers have been retired from the constraint
 path; spread, scatter, table, axes, and hand-written constraints all lower to
-the same solver entrypoint. Span edge claims are still pre-validated with the
-bbox helper so duplicate edge claims collapse and contradictory spans report a
-span-specific conflict, but the resulting edge pins participate in the same
-relation solve as placement. An incompatible same-solve interval + point
+the same solver entrypoint. An incompatible same-solve interval + point
 `position` on the same target/axis reports an over-determined placement instead
 of letting one silently yield to the other.
 

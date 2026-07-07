@@ -1,15 +1,23 @@
+// <gofish-wiki> AUTO-GENERATED — see covers: in the essay; run `pnpm --filter docs sync-backlinks`
+// @wiki Underlying Space — /internals/core/underlying-space
+// </gofish-wiki>
+
 import {
+  getValue,
   isDiscretePosition,
+  isValue,
   type MaybeValue,
   type PositionValue,
 } from "../data";
+import * as Interval from "../../util/interval";
 import type { PlacementFactEmitter } from "./placementFacts";
 import type { AlignAnchor, Axis, ConstraintRef } from "./shared";
 
-/** The **interval** form of a position coordinate: pin the target's min edge at
- *  `[0]` and its max edge at `[1]`, letting the two edges DETERMINE the size
- *  (#39/#546). Endpoints are pixel literals or datums (`value(n)`), never
- *  discrete positions. Lowers to the edge-pin + extent path (see `span.ts`). */
+/** The **interval** form of a position coordinate: pin the target's `start`
+ *  (min) edge at `[0]` and its `end` (max) edge at `[1]`, letting the two edges
+ *  DETERMINE the size (#39/#546). Both edges lower to ordinary strong anchor
+ *  pins, so the rank-2 cell closure resolves the size (`max − min`). Endpoints
+ *  are pixel literals or datums (`value(n)`), never discrete positions. */
 export type PositionInterval = [MaybeValue<number>, MaybeValue<number>];
 
 /** Distinguish a position coordinate's interval form (a two-element array) from
@@ -49,7 +57,7 @@ export interface PositionOptions {
    *
    *  Interim: once #39's linsys ledger ({@link BBox}) becomes the node's actual
    *  dimension state, per-equation ownership subsumes this — a pin would simply
-   *  own the position facet, and a second writer would be a named conflict
+   *  own the position anchor, and a second writer would be a named conflict
    *  rather than a silent no-op needing a per-call opt-out. */
   override?: boolean;
 }
@@ -104,6 +112,19 @@ export const createPositionConstraint = (
   };
 };
 
+/** Each endpoint contributes its datum value to the axis's POSITION domain
+ *  (parallel to point coordinates in `collectPositionDomains`), so the layer
+ *  builds a posScale that covers the spanned range. Literal-pixel endpoints are
+ *  not data and don't contribute. */
+export function spanDatumInterval(
+  span: PositionInterval | undefined
+): Interval.Interval | undefined {
+  if (span === undefined) return undefined;
+  const vals = span.filter(isValue).map((v) => getValue(v)!);
+  if (vals.length === 0) return undefined;
+  return Interval.interval(Math.min(...vals), Math.max(...vals));
+}
+
 export function lowerPositionPlacement(
   constraint: PositionConstraint,
   owner: string,
@@ -126,8 +147,33 @@ export function lowerPositionPlacement(
     axis: Axis,
     coordinate: PositionValue | PositionInterval | undefined
   ) => {
-    // Interval coordinates lower to edge pins (span.ts), not a single point pin.
-    if (coordinate === undefined || isPositionInterval(coordinate)) return;
+    if (coordinate === undefined) return;
+    // Interval form: pin BOTH edges (start=min, end=max) as strong anchor pins.
+    // Two edges are rank 2, so cell closure determines the size — the extent
+    // that a size-setting range needs, which a single point pin cannot express.
+    // Not gated by `isInitiallyPlaced`: an interval authoritatively sets the
+    // target's extent (as `setExtent` does), overriding a self-placed layout.
+    if (isPositionInterval(coordinate)) {
+      const min = resolveCoordinate(axis, coordinate[0]);
+      const max = resolveCoordinate(axis, coordinate[1]);
+      if (min === undefined || max === undefined) return;
+      for (const child of constraint.children) {
+        if (!targets.get(child.name)) continue;
+        emitter.pin({
+          axis,
+          target: { name: child.name, anchor: "start" },
+          value: min,
+          owner,
+        });
+        emitter.pin({
+          axis,
+          target: { name: child.name, anchor: "end" },
+          value: max,
+          owner,
+        });
+      }
+      return;
+    }
     const value = resolveCoordinate(axis, coordinate);
     if (value === undefined) return;
     for (const child of constraint.children) {

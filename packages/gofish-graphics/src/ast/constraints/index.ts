@@ -19,8 +19,7 @@ import {
   isZOrderConstraint,
 } from "./zorder";
 import { createNestConstraint } from "./nest";
-import { spanDatumInterval } from "./span";
-import { isPositionInterval } from "./position";
+import { isPositionInterval, spanDatumInterval } from "./position";
 import type { AlignConstraint, AlignOptions } from "./align";
 import type { DistributeConstraint, DistributeOptions } from "./distribute";
 import type { PositionConstraint, PositionOptions } from "./position";
