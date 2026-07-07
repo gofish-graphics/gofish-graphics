@@ -19,6 +19,7 @@ import type { Placeable } from "../_node";
 import { axisIndex, isPlacedOn, type Axis } from "../constraints/shared";
 import { getValue, isValue, type MaybeValue } from "../data";
 import { computeAesthetic, envFlag } from "../../util";
+import { pxOf } from "../domain";
 import { localAnchorPoint } from "../dims";
 import type { ConstraintSpec, ConstraintPosScales } from "../constraints";
 import { isCONTINUOUS, type UnderlyingSpace } from "../underlyingSpace";
@@ -210,7 +211,7 @@ interface PositionLike {
 export function shadowCheckPosition(
   constraint: PositionLike,
   targets: Placeable[],
-  posScales: (((v: number) => number) | undefined)[] | undefined
+  posScales: ConstraintPosScales | undefined
 ): void {
   if (!enabled() || constraint.type !== "position") return;
   // Across all 189 stories this covers 5753 datum→position mappings with zero
@@ -222,8 +223,9 @@ export function shadowCheckPosition(
   for (const [axis, coord] of axes) {
     if (coord === undefined || !isValue(coord)) continue; // datum only
     const idx = axisIndex(axis);
-    const scale = posScales?.[idx];
-    if (scale === undefined) continue; // datum w/o scale is an engine no-op
+    const map = posScales?.[idx];
+    if (map === undefined) continue; // datum w/o scale is an engine no-op
+    const scale = (v: number) => pxOf(map, v);
     const d = getValue(coord)!;
 
     // 1. POSITION scale must be affine (origin + σ·data).

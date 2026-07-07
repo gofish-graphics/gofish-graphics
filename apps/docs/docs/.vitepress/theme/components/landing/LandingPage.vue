@@ -287,13 +287,21 @@ onBeforeUnmount(() => {
         <div class="hero-cards" v-html="heroCards"></div>
 
         <div class="inner">
-          <h1 id="hero-h" class="rise" style="animation-delay: 0ms">GoFish</h1>
+          <!-- The wordmark carries an inked "alpha" rubber stamp slapped over
+               its right end at an angle. Kept as real text so it is announced to
+               screen readers. The release-line tag lives under the install chip
+               (CtaBlock, version prop). -->
+          <h1 id="hero-h" class="wordmark rise" style="animation-delay: 0ms">
+            GoFish<span class="hero-stamp" style="animation-delay: 240ms"
+              >alpha</span
+            >
+          </h1>
           <p class="subtitle rise" style="animation-delay: 90ms">
             an open-source visualization library for
-            Python&nbsp;and&nbsp;JavaScript
+            JavaScript&nbsp;and&nbsp;Python
           </p>
           <div class="rise" style="animation-delay: 180ms">
-            <CtaBlock />
+            <CtaBlock version />
           </div>
         </div>
       </section>

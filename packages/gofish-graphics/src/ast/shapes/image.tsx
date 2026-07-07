@@ -1,5 +1,6 @@
 import * as Monotonic from "../../util/monotonic";
 import { computeAesthetic } from "../../util";
+import { posFn, pxOf } from "../domain";
 import { interval } from "../../util/interval";
 import { GoFishNode } from "../_node";
 import { getMeasure, getValue, isAesthetic, isValue } from "../data";
@@ -284,16 +285,16 @@ export const Image = ({
 
         return [resolveAxis(0, xPos), resolveAxis(1, yPos)];
       },
-      layout: (shared, size, scaleFactors, children, posScales) => {
+      layout: (shared, size, scales, children) => {
         // For data-bound (Value-wrapped) dims, map from data units to pixels via
-        // posScale when available — this keeps image sizing consistent with
-        // rect's data-driven sizing. For literal-number dims, treat as pixels.
+        // the anchored map when available — this keeps image sizing consistent
+        // with rect's data-driven sizing. For literal-number dims, treat as pixels.
         const pixelSize = (dim: 0 | 1): number | undefined => {
           const raw = dims[dim].size;
           if (isValue(raw)) {
             const dataSize = getValue(raw)!;
-            const scale = posScales?.[dim];
-            return scale ? scale(dataSize) - scale(0) : dataSize;
+            const map = scales?.[dim]?.map;
+            return map ? pxOf(map, dataSize) - pxOf(map, 0) : dataSize;
           }
           return raw;
         };
@@ -307,11 +308,19 @@ export const Image = ({
         );
 
         const positionX =
-          computeAesthetic(dims[0].center, posScales?.[0]!, undefined) ??
-          computeAesthetic(dims[0].min, posScales?.[0]!, undefined);
+          computeAesthetic(
+            dims[0].center,
+            posFn(scales?.[0]?.map)!,
+            undefined
+          ) ??
+          computeAesthetic(dims[0].min, posFn(scales?.[0]?.map)!, undefined);
         const positionY =
-          computeAesthetic(dims[1].center, posScales?.[1]!, undefined) ??
-          computeAesthetic(dims[1].min, posScales?.[1]!, undefined);
+          computeAesthetic(
+            dims[1].center,
+            posFn(scales?.[1]?.map)!,
+            undefined
+          ) ??
+          computeAesthetic(dims[1].min, posFn(scales?.[1]?.map)!, undefined);
 
         return {
           intrinsicDims: [

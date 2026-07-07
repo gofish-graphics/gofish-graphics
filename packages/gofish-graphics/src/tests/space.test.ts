@@ -14,8 +14,8 @@ import {
   isPOSITION,
   isDIFFERENCE,
   isBaselineMagnitude,
-  placementOf,
-  originOf,
+  anchorAt,
+  spacePlacement,
   type CONTINUOUS_TYPE,
   type UnderlyingSpace,
 } from "../ast/underlyingSpace";
@@ -80,7 +80,7 @@ console.log("# space: baseline magnitude vs data axis anchored at 0");
   ok(
     "...and the forgotten composition is itself a baseline magnitude",
     composed !== undefined && isBaselineMagnitude(composed),
-    composed && `placement=${JSON.stringify((composed as any).placement)}`
+    composed && `dataDomain=${JSON.stringify((composed as any).dataDomain)}`
   );
 }
 
@@ -100,22 +100,26 @@ console.log(
   "# space: the abstract placement lattice is total over origin (Phase A)"
 );
 {
-  // placementOf maps each of the three origin states.
+  // The three placement cases ARE the three named constructors; anchorAt
+  // re-anchors while preserving the σ-affine width (the position operator's
+  // construction — a free width with slope must not collapse to a constant).
+  const freeSlope = SIZE(M.linear(10, 0)) as CONTINUOUS_TYPE; // width 10·σ
+  const anchored = anchorAt(freeSlope, 1955);
   ok(
-    'origin "free" → placement free',
-    placementOf("free").tag === "free"
+    "anchorAt(free, 1955) → placement determined",
+    spacePlacement(anchored) === "determined"
   );
   ok(
-    'origin "impossible" → placement conflict',
-    placementOf("impossible").tag === "conflict"
+    "anchorAt domain min is the anchor coordinate",
+    JSON.stringify(anchored.dataDomain) ===
+      JSON.stringify(interval(1955, 1955 + freeSlope.width.run(1)))
   );
-  const det = placementOf(1955);
   ok(
-    "origin <number> → placement determined at that DATA coordinate",
-    det.tag === "determined" && det.at === 1955
+    "anchorAt preserves the σ-affine width (slope not baked at σ=1)",
+    anchored.width.run(2) === 20
   );
 
-  // Constructors carry placement + dataDomain; originOf round-trips placement.
+  // Constructors carry dataDomain; placement is derived from its shape.
   const cases: [string, CONTINUOUS_TYPE, string, unknown][] = [
     ["SIZE", SIZE(M.linear(10, 0)) as CONTINUOUS_TYPE, "free", undefined],
     [
@@ -128,17 +132,12 @@ console.log(
   ];
   for (const [label, sp, expectedTag, expectedDomain] of cases) {
     ok(
-      `${label} carries placement.tag === "${expectedTag}"`,
-      sp.placement.tag === expectedTag
+      `${label} derives placement === "${expectedTag}"`,
+      spacePlacement(sp) === expectedTag
     );
     ok(
       `${label} carries the expected dataDomain`,
       JSON.stringify(sp.dataDomain) === JSON.stringify(expectedDomain)
-    );
-    ok(
-      `${label}: placementOf(originOf(sp)) round-trips placement`,
-      JSON.stringify(placementOf(originOf(sp))) ===
-        JSON.stringify(sp.placement)
     );
   }
 }

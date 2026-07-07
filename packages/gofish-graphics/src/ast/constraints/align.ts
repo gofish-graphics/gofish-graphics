@@ -85,7 +85,7 @@ function isDataPositionedAlignTarget(
     typeof target?.placementOn === "function"
       ? target.placementOn(axis)
       : undefined;
-  return placement !== undefined && placement.tag !== "free";
+  return placement !== undefined && placement !== "free";
 }
 
 export function lowerAlignPlacement(

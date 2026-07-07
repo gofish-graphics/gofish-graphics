@@ -1,9 +1,11 @@
 import { computeAesthetic } from "../../util";
+import { posFn } from "../domain";
 import { GoFishNode } from "../_node";
 import { Size, translateString } from "../dims";
 import { getMeasure, getValue, isValue, MaybeValue } from "../data";
 import {
-  CONTINUOUS,
+  anchorAt,
+  continuousInterval,
   isCONTINUOUS,
   UNDEFINED,
   UnderlyingSpace,
@@ -24,13 +26,13 @@ const offsetSpace = (
   const value = isValue(offset) ? getValue(offset) : offset;
   if (value === undefined) return space;
 
-  const origin =
-    space.placement.tag === "determined" ? space.placement.at + value : value;
-  return CONTINUOUS(
-    space.width,
-    origin,
-    space.measure ?? getMeasure(offset),
-    space.coordinateTransform
+  // An anchored space offsets from its domain min; a free / difference space
+  // anchors at `value` itself. Width stays σ-affine — see anchorAt.
+  const iv = continuousInterval(space);
+  return anchorAt(
+    space,
+    iv !== undefined ? iv.min + value : value,
+    space.measure ?? getMeasure(offset)
   );
 };
 
@@ -50,13 +52,13 @@ export const positionNode = (
           offsetSpace(child[1], options.y),
         ];
       },
-      layout: (shared, size, scaleFactors, children, posScales, _node) => {
+      layout: (shared, size, scales, children) => {
         if (children.length !== 1) {
           throw new Error("Position operator expects exactly one child");
         }
 
         const child = children[0];
-        const childPlaceable = child.layout(size, scaleFactors, posScales);
+        const childPlaceable = child.layout(size, scales);
 
         if (childPlaceable.dims[0].min === undefined) {
           childPlaceable.place("x", 0, "baseline");
@@ -68,11 +70,11 @@ export const positionNode = (
         const offsetX =
           options.x === undefined
             ? undefined
-            : (computeAesthetic(options.x, posScales[0]!, 0) ?? 0);
+            : (computeAesthetic(options.x, posFn(scales[0]?.map)!, 0) ?? 0);
         const offsetY =
           options.y === undefined
             ? undefined
-            : (computeAesthetic(options.y, posScales[1]!, 0) ?? 0);
+            : (computeAesthetic(options.y, posFn(scales[1]?.map)!, 0) ?? 0);
 
         return {
           intrinsicDims: [

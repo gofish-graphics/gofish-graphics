@@ -264,7 +264,7 @@ export default defineConfig({
   appearance: false,
   title: "GoFish Graphics",
   description:
-    "GoFish is an open-source visualization library for Python and JavaScript.",
+    "GoFish is an open-source visualization library for JavaScript and Python.",
   // Per-page social-preview tags (title / description / url / image). Only the
   // truly invariant tags (og:type, og:site_name, twitter:card) live in `head`
   // below; everything page-specific is set here so a shared deep link previews
@@ -281,7 +281,7 @@ export default defineConfig({
     const description =
       pageData.description ||
       pageData.frontmatter.description ||
-      "GoFish is an open-source visualization library for Python and JavaScript.";
+      "GoFish is an open-source visualization library for JavaScript and Python.";
 
     // Social-preview image: each example page previews with its OWN branded chart
     // card (so a shared /js/examples/<id> link unfurls as the chart); every other
@@ -322,12 +322,12 @@ export default defineConfig({
     // through to the saved preference — harmless. The same script also adds the
     // `landing-page` class on the home route so the desk/navbar styling paints
     // immediately on direct loads instead of flashing a stock white docs page.
-    // NOTE: the 'python' fallback literal must match DEFAULT_LANG in
+    // NOTE: the 'js' fallback literal must match DEFAULT_LANG in
     // theme/docsLang.ts (this inline script can't import it).
     [
       "script",
       {},
-      `(function(){try{var p=location.pathname,l;if(p.indexOf('/python/')===0){l='python';}else if(p.indexOf('/js/')===0){l='js';}else{var s=localStorage.getItem('gofish-docs-lang');l=(s==='python'||s==='js')?s:'python';}document.documentElement.setAttribute('data-docs-lang',l);if(p==='/'||p==='/index.html'){document.documentElement.classList.add('landing-page');}}catch(e){}})();`,
+      `(function(){try{var p=location.pathname,l;if(p.indexOf('/python/')===0){l='python';}else if(p.indexOf('/js/')===0){l='js';}else{var s=localStorage.getItem('gofish-docs-lang');l=(s==='python'||s==='js')?s:'js';}document.documentElement.setAttribute('data-docs-lang',l);if(p==='/'||p==='/index.html'){document.documentElement.classList.add('landing-page');}}catch(e){}})();`,
     ],
     ["link", { rel: "preconnect", href: "https://fonts.googleapis.com" }],
     [

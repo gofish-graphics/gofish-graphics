@@ -21,17 +21,17 @@ import type { NestConstraint } from "./nest";
 import { lowerNestPlacement } from "./nest";
 import { PlacementProgramLowerer } from "./placementProgramLowerer";
 import type { PositionConstraint } from "./position";
-import { lowerPositionPlacement } from "./position";
-import type { SpanConstraint, SpanExtent } from "./span";
+import { isPositionInterval, lowerPositionPlacement } from "./position";
+import type { SpanExtent } from "./span";
 import { collectSpanExtents, lowerSpanEdgePins } from "./span";
 import { axisIndex, type Axis, type ConstraintPosScales } from "./shared";
+import { pxOf, type AxisMap } from "../domain";
 import type { PlacementProgram } from "./placementFacts";
 
 export type PlacementConstraint =
   | AlignConstraint
   | DistributeConstraint
   | PositionConstraint
-  | SpanConstraint
   | NestConstraint
   | GridConstraint;
 
@@ -53,7 +53,7 @@ const placementKey = (axis: Axis, name: string): string => `${axis}:${name}`;
 
 export function compilePlacementCoordinate(
   coordinate: PositionValue,
-  scale: ((value: number) => number) | undefined,
+  scale: AxisMap | undefined,
   axisSize?: number
 ): PlacementCoordinate {
   if (isDiscretePosition(coordinate)) {
@@ -62,12 +62,12 @@ export function compilePlacementCoordinate(
   }
   if (!isValue(coordinate)) return coordinate;
   if (scale === undefined) return undefined;
-  return scale(getValue(coordinate)!) + getValueOffset(coordinate);
+  return pxOf(scale, getValue(coordinate)!) + getValueOffset(coordinate);
 }
 
 function resolveCoordinate(
   coordinate: PositionValue,
-  scale: ((value: number) => number) | undefined,
+  scale: AxisMap | undefined,
   axisSize?: number
 ): number | undefined {
   return compilePlacementCoordinate(coordinate, scale, axisSize);
@@ -138,6 +138,9 @@ class PlacementOwnershipPlan {
     for (const axis of POSITION_AXES) {
       const coordinate = constraint[axis];
       if (coordinate === undefined) continue;
+      // Interval axes are pinned via their edge-pin extent (noteSpanExtent), not
+      // as a single point pin here.
+      if (isPositionInterval(coordinate)) continue;
       const idx = axisIndex(axis);
       const value = resolveCoordinate(
         coordinate,
@@ -165,12 +168,14 @@ export function lowerPlacementConstraints(
     sizes
   );
 
+  // Interval-form `position` axes lower to edge pins (min/max edges determine
+  // the extent); their point-form axes lower via `lowerPositionPlacement` below.
   const spanEdgePins = constraints.flatMap((constraint, constraintIndex) =>
-    constraint.type === "span"
+    constraint.type === "position"
       ? lowerSpanEdgePins(
           constraint,
           targets,
-          `span[${constraintIndex}]`,
+          `position[${constraintIndex}]`,
           (axis, coordinate) =>
             resolveCoordinate(coordinate, posScales?.[axisIndex(axis)])
         )
@@ -218,9 +223,9 @@ export function lowerPlacementConstraints(
   constraints.forEach((constraint, constraintIndex) => {
     const owner = `${constraint.type}[${constraintIndex}]`;
 
-    if (constraint.type === "span") return;
-
     if (constraint.type === "position") {
+      // Point axes emit a single pin here; interval axes were already lowered to
+      // edge pins above (lowerPositionPlacement skips them).
       lowerPositionPlacement(constraint, owner, {
         emitter: lowerer,
         targets,

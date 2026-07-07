@@ -11,7 +11,7 @@ export type DocsLang = "js" | "python";
 // and the reader has expressed no saved preference. The pre-paint inline script
 // in config.mts hardcodes this same literal (it can't import this module) — keep
 // the two in sync.
-export const DEFAULT_LANG: DocsLang = "python";
+export const DEFAULT_LANG: DocsLang = "js";
 
 const STORAGE_KEY = "gofish-docs-lang";
 const ATTR = "data-docs-lang";

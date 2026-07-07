@@ -16,6 +16,7 @@ import {
 } from "../dims";
 import { UNDEFINED, UnderlyingSpace, hasBaseline } from "../underlyingSpace";
 import { computeSize, foldFinite } from "../../util";
+import { axisScale } from "../domain";
 import { CoordinateTransform } from "../coordinateTransforms/coord";
 import { coord } from "../coordinateTransforms/coord";
 import { createNodeOperatorSequential } from "../withGoFish";
@@ -29,7 +30,7 @@ import {
   type ConstraintSpec,
   type ZOrderConstraint,
 } from "../constraints";
-import { childNameKey } from "../constraints/shared";
+import { childNameKey, type ConstraintPosScales } from "../constraints/shared";
 import {
   applyNestLayoutProposal,
   applyNestSpacePlan,
@@ -198,11 +199,25 @@ export const layer = createNodeOperatorSequential(
           }
           return resolved;
         },
-        layout: (shared, size, scaleFactors, children, posScales, node) => {
+        layout: (shared, size, scales, children, node) => {
+          // Split the incoming single-carrier scale into its two half-channels
+          // for the proposal planning below: σ (size slope) feeds sizing and the
+          // child σ forwarding; the anchored map feeds `position` constraints and
+          // per-child map forwarding. They recombine per child at `child.layout`.
+          const inheritedScaleFactors: Size<number | undefined> = [
+            scales?.[0]?.sigma,
+            scales?.[1]?.sigma,
+          ];
+          const inheritedPosScales: ConstraintPosScales = [
+            scales?.[0]?.map,
+            scales?.[1]?.map,
+          ];
           // Compute size using dims (w and h) before passing to children
           size = [
-            computeSize(dims[0].size, scaleFactors?.[0]!, size[0]) ?? size[0],
-            computeSize(dims[1].size, scaleFactors?.[1]!, size[1]) ?? size[1],
+            computeSize(dims[0].size, inheritedScaleFactors[0]!, size[0]) ??
+              size[0],
+            computeSize(dims[1].size, inheritedScaleFactors[1]!, size[1]) ??
+              size[1],
           ];
 
           // Grid budget: a grid layer is exclusively cells (table elaboration),
@@ -223,14 +238,14 @@ export const layer = createNodeOperatorSequential(
           // `basePosScales` is reused below as the floor for `effectivePosScales`
           // and the per-child forwarding (`childScalesFor`), so the override
           // applies regardless of `ownsPositionAxis`. `childScaleFactors` is a
-          // fresh array — never mutate the parent's `scaleFactors` (unlike
+          // fresh array — never mutate the parent's inherited σ (unlike
           // spread, which mutates intentionally for sibling sharing).
           const childScalePlan = buildChildScalePlan(
             selfScaledSpaces,
             node._underlyingSpace,
             size,
-            scaleFactors,
-            posScales,
+            inheritedScaleFactors,
+            inheritedPosScales,
             constraintBudget,
             shared
           );
@@ -322,17 +337,21 @@ export const layer = createNodeOperatorSequential(
               layoutPlan.nestPlan?.byDerived.get(i),
               childPlaceables
             );
-            const childPlaceable = child.layout(
-              layoutSize,
-              childScaleFactors,
-              childPosScalesFor(
-                (children[i] as GoFishNode)._underlyingSpace,
-                targetDims,
-                ownsAxis,
-                basePosScales,
-                effectivePosScales
-              )
+            // Recombine the two forwarding decisions into the single carrier: σ
+            // forwards uniformly (childScaleFactors), the anchored map forwards
+            // per child (childPosScalesFor — stripped where a constraint consumed
+            // the scale). A stripped map keeps the child's σ.
+            const childMaps = childPosScalesFor(
+              (children[i] as GoFishNode)._underlyingSpace,
+              targetDims,
+              ownsAxis,
+              basePosScales,
+              effectivePosScales
             );
+            const childPlaceable = child.layout(layoutSize, [
+              axisScale(childScaleFactors[0], childMaps[0]),
+              axisScale(childScaleFactors[1], childMaps[1]),
+            ]);
             if (!childName || !layoutPlan.constrainedNames.has(childName)) {
               childPlaceable.place("x", 0, "baseline");
               childPlaceable.place("y", 0, "baseline");

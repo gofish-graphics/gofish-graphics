@@ -32,7 +32,7 @@ import {
   continuousInterval,
   type CONTINUOUS_TYPE,
 } from "../underlyingSpace";
-import { posScaleFromSpace } from "../domain";
+import { posScaleFromSpace, axisScale, type AxisMap } from "../domain";
 import * as Monotonic from "../../util/monotonic";
 import { createNodeOperator } from "../withGoFish";
 import { computeTransformedBoundingBox } from "./coordUtils";
@@ -162,7 +162,7 @@ export const coord = createNodeOperator(
           spaceRef.current = result;
           return result;
         },
-        layout: (shared, size, scaleFactors, children, posScales) => {
+        layout: (shared, size, scales, children) => {
           /* TODO: need correct scale factors */
           // TODO: only works for polar-family transforms right now
           const [origW, origH] = size;
@@ -188,15 +188,15 @@ export const coord = createNodeOperator(
           // fits content to the canvas (gofish.tsx) — here the budget plays the
           // role of the canvas. A baseline-magnitude (data SIZE) axis scales by
           // budget/total via `width.inverse(budget)` so the children fill the
-          // ring; an anchored (data POSITION) axis maps onto [0, budget] via a
-          // posScale. Only DATA-bound channels consume these — a plain number
-          // bypasses both scaleFactor and posScale (see `computeAesthetic`) — so
+          // ring; an anchored (data POSITION) axis maps onto [0, budget] via an
+          // anchored map. Only DATA-bound channels consume the scale — a plain
+          // number bypasses both σ and the map (see `computeAesthetic`) — so
           // hand-sized (radian/pixel) stories are unchanged. This is what lets a
           // mark say `thetaSize: datum(count)` and have the ring auto-fit.
           const fitAxis = (
             axis: 0 | 1,
             budget: number
-          ): [number, ((p: number) => number) | undefined] => {
+          ): [number, AxisMap | undefined] => {
             // An anchored (data POSITION) axis: the coord's own
             // `resolveUnderlyingSpace` already unioned the children's POSITION
             // spaces into `spaceRef.current` — reuse it and map onto [0, budget].
@@ -220,7 +220,7 @@ export const coord = createNodeOperator(
           const [sfX, psX] = fitAxis(0, angularBudget);
           const [sfY, psY] = fitAxis(1, outerR - innerR);
           const childPlaceables = children.map((child) =>
-            child.layout(size, [sfX, sfY], [psX, psY])
+            child.layout(size, [axisScale(sfX, psX), axisScale(sfY, psY)])
           );
           childPlaceables.forEach((c) => {
             c.place("x", 0, "baseline");

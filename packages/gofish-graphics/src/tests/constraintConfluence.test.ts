@@ -23,10 +23,7 @@ import {
   relationFact,
 } from "../ast/constraints/placementFacts";
 import type { PositionConstraint } from "../ast/constraints/position";
-import {
-  lowerSpanEdgePins,
-  type SpanConstraint,
-} from "../ast/constraints/span";
+import { lowerSpanEdgePins } from "../ast/constraints/span";
 import type { ZAboveConstraint } from "../ast/constraints/zorder";
 import type { Anchor, Dimensions, FancyDirection } from "../ast/dims";
 import { elaborateDirection, localAnchorPoint } from "../ast/dims";
@@ -35,7 +32,10 @@ import {
   applyNestSpacePlan,
   buildNestPlan,
 } from "../ast/constraints/nestPlan";
-import { resolveLayerBaseSpaces } from "../ast/constraints/compose";
+import {
+  composeConstraintSpaces,
+  resolveLayerBaseSpaces,
+} from "../ast/constraints/compose";
 import {
   buildChildScalePlan,
   buildDistributeSliceMap,
@@ -47,6 +47,7 @@ import {
   selectGridConstraint,
 } from "../ast/constraints/proposalPlan";
 import { discretePosition, value } from "../ast/data";
+import { pxOf, type AxisMap } from "../ast/domain";
 import { POSITION, SIZE, UNDEFINED } from "../ast/underlyingSpace";
 import { interval } from "../util/interval";
 
@@ -54,7 +55,6 @@ type Constraint =
   | AlignConstraint
   | DistributeConstraint
   | PositionConstraint
-  | SpanConstraint
   | NestConstraint
   | GridConstraint;
 type Geometry = Record<string, { min?: number; center?: number; max?: number }>;
@@ -208,9 +208,16 @@ const distributeWithSpacing = (
   spacing,
 });
 
-const span = (name: string, min: number, max: number): SpanConstraint => ({
-  type: "span",
+// The interval form of `position`, replacing the retired `Constraint.span`.
+const span = (
+  name: string,
+  min: number,
+  max: number
+): PositionConstraint => ({
+  type: "position",
   x: [min, max],
+  anchor: "middle",
+  override: false,
   children: [child(name)],
 });
 
@@ -622,20 +629,51 @@ console.log("# constraint confluence: grid proposal ownership");
     selectGridConstraint([grid2]) === grid2
   );
 
-  const throws = (constraints: GridConstraint[]): boolean => {
+  const throwsWith = (
+    constraints: Constraint[],
+    fragment: string
+  ): boolean => {
     try {
       selectGridConstraint(constraints);
       return false;
     } catch (error) {
-      return (
-        error instanceof Error &&
-        error.message.includes("Constraint.grid proposal conflict")
-      );
+      return error instanceof Error && error.message.includes(fragment);
     }
   };
   ok(
     "duplicate grid proposal ownership throws in either order",
-    throws([grid2, grid1]) && throws([grid1, grid2])
+    throwsWith([grid2, grid1], "Constraint.grid proposal conflict") &&
+      throwsWith([grid1, grid2], "Constraint.grid proposal conflict")
+  );
+
+  // grid mixed with any non-z-order constraint half-applies (placement sees it,
+  // the space/size fold does not), so selectGridConstraint rejects it.
+  const alignMix: AlignConstraint = {
+    type: "align",
+    y: "middle",
+    children: [A, B],
+  };
+  ok(
+    "grid mixed with align throws in either order",
+    throwsWith(
+      [grid2, alignMix],
+      "Constraint.grid cannot be combined with a 'align' constraint"
+    ) &&
+      throwsWith(
+        [alignMix, grid2],
+        "Constraint.grid cannot be combined with a 'align' constraint"
+      )
+  );
+
+  // z-order (zAbove/zBelow) is render-time paint order and composes with grid.
+  const zAboveMix: ZAboveConstraint = {
+    type: "zAbove",
+    children: [A, B],
+  };
+  ok(
+    "grid alongside a z-order constraint is allowed",
+    selectGridConstraint([grid2, zAboveMix]) === grid2 &&
+      selectGridConstraint([zAboveMix, grid2]) === grid2
   );
 }
 
@@ -680,10 +718,11 @@ console.log("# constraint confluence: position scale ownership planning");
 
 console.log("# constraint confluence: child posScale forwarding");
 {
-  const baseX = (v: number) => v + 1;
-  const baseY = (v: number) => v + 2;
-  const effectiveX = (v: number) => v * 10;
-  const effectiveY = (v: number) => v * 20;
+  // AxisMaps standing in for the former closures: pxOf(map, v) reproduces them.
+  const baseX: AxisMap = { sigma: 1, domainMin: 0, pxMin: 1 }; // v + 1
+  const baseY: AxisMap = { sigma: 1, domainMin: 0, pxMin: 2 }; // v + 2
+  const effectiveX: AxisMap = { sigma: 10, domainMin: 0, pxMin: 0 }; // v * 10
+  const effectiveY: AxisMap = { sigma: 20, domainMin: 0, pxMin: 0 }; // v * 20
   const positionSpace = POSITION(interval(0, 10));
 
   const noOwnedAxisPlan = buildPositionScalePlan(
@@ -709,7 +748,7 @@ console.log("# constraint confluence: child posScale forwarding");
     ownedAxisPlan.ownsAxis[0] === true &&
       ownedAxisPlan.ownsAxis[1] === false &&
       ownedAxisPlan.effectivePosScales[0] === baseX &&
-      ownedAxisPlan.effectivePosScales[1]?.(5) === 100
+      pxOf(ownedAxisPlan.effectivePosScales[1]!, 5) === 100
   );
 
   const unowned = childPosScalesFor(
@@ -770,7 +809,11 @@ console.log("# constraint confluence: raw placement coordinates");
   ok(
     "datum placement coordinate elaborates through posScale before raw facts",
     compilePlacementCoordinate(value(5).offset(3), undefined) === undefined &&
-      compilePlacementCoordinate(value(5).offset(3), (v) => v * 10) === 53
+      compilePlacementCoordinate(value(5).offset(3), {
+        sigma: 10,
+        domainMin: 0,
+        pxMin: 0,
+      }) === 53
   );
   ok(
     "discrete placement coordinate resolves from containing axis size",
@@ -956,12 +999,112 @@ console.log("# constraint confluence: placement constraint lowering");
       spanEdgeFacts[1].fact.edge === "max" &&
       !("target" in spanEdgeFacts[1].fact)
   );
+
+  // A single position constraint carrying a POINT on one axis and an INTERVAL on
+  // the other: the interval axis lowers to an edge-pin extent, the point axis to
+  // a single pin. Both forms coexist on one constraint.
+  const mixed: PositionConstraint = {
+    type: "position",
+    x: 12,
+    y: [10, 30],
+    anchor: "middle",
+    override: false,
+    children: [child("C")],
+  };
+  const loweredMixed = lowerPlacementConstraints(
+    [mixed],
+    targets("C"),
+    [300, 200]
+  );
+  ok(
+    "interval+point on one constraint: interval axis yields a span extent",
+    loweredMixed.spanExtents.some(
+      (extent) =>
+        extent.axis === "y" && extent.name === "C" && extent.size === 20
+    ) && !loweredMixed.spanExtents.some((extent) => extent.axis === "x")
+  );
+  ok(
+    "interval+point on one constraint: point axis yields a single pin",
+    loweredMixed.program.axes[0].some(
+      (fact) => fact.type === "pin" && fact.expr.node === "C"
+    )
+  );
+}
+
+console.log("# constraint confluence: interval position + align");
+{
+  // An interval position on x (sizes A) plus an align on x (overlays B onto A's
+  // center) must be declaration-order-independent — the interval and align feed
+  // the same relational solve.
+  const spanA = span("A", 10, 30);
+  const alignAB: AlignConstraint = {
+    type: "align",
+    x: "middle",
+    children: [A, B],
+  };
+  expectConfluent(
+    "interval-position/align",
+    solve([spanA, alignAB], ["A", "B"]),
+    solve([alignAB, spanA], ["A", "B"]),
+    {
+      A: { min: 10, center: 20, max: 30 },
+      B: { min: 15, center: 20, max: 25 },
+    }
+  );
+}
+
+console.log("# constraint confluence: interval vs point compose bail");
+{
+  // compose treats an interval position as span-like (it composes alongside a
+  // distribute), but a constraint carrying ANY point coordinate bails to the
+  // layer's default union — conservatively, even when it also carries an
+  // interval on the other axis.
+  const childNodes = [
+    { _name: "A", key: "A" },
+    { _name: "B", key: "B" },
+  ] as unknown as Parameters<typeof composeConstraintSpaces>[1];
+  const childSpaces: Parameters<typeof composeConstraintSpaces>[2] = [
+    [SIZE(Monotonic.linear(10, 0)), UNDEFINED],
+    [SIZE(Monotonic.linear(10, 0)), UNDEFINED],
+  ];
+  const distAB = distribute(["A", "B"]);
+  const pureInterval: PositionConstraint = {
+    type: "position",
+    y: [value(0), value(10)],
+    anchor: "middle",
+    override: false,
+    children: [A],
+  };
+  const pointPlusInterval: PositionConstraint = {
+    type: "position",
+    x: value(5),
+    y: [value(0), value(10)],
+    anchor: "middle",
+    override: false,
+    children: [A],
+  };
+  ok(
+    "pure-interval position composes with a distribute (span-like)",
+    composeConstraintSpaces(
+      [distAB, pureInterval],
+      childNodes,
+      childSpaces
+    ) !== undefined
+  );
+  ok(
+    "point+interval position bails composition (conservatively point-form)",
+    composeConstraintSpaces(
+      [distAB, pointPlusInterval],
+      childNodes,
+      childSpaces
+    ) === undefined
+  );
 }
 
 console.log("# constraint confluence: child scale factor planning");
 {
-  const inheritedX = (v: number) => v + 1;
-  const inheritedY = (v: number) => v + 2;
+  const inheritedX: AxisMap = { sigma: 1, domainMin: 0, pxMin: 1 }; // v + 1
+  const inheritedY: AxisMap = { sigma: 1, domainMin: 0, pxMin: 2 }; // v + 2
   const positionSpace = POSITION(interval(0, 10));
   const sizeSpace = SIZE(Monotonic.linear(20, 0));
 
@@ -976,7 +1119,7 @@ console.log("# constraint confluence: child scale factor planning");
   );
   ok(
     "self-scaled POSITION axis builds local posScale",
-    selfScaled.basePosScales[0]?.(5) === 50 &&
+    pxOf(selfScaled.basePosScales[0]!, 5) === 50 &&
       selfScaled.basePosScales[1] === inheritedY
   );
   ok(
@@ -1163,7 +1306,7 @@ console.log("# constraint confluence: self-placement and override");
     ["A", makePlaceable()],
     ["B", makePlaceable()],
   ]);
-  targets.get("A")!.placementOn = () => ({ tag: "determined", at: 0 });
+  targets.get("A")!.placementOn = () => "determined";
   solvePlacementConstraints(
     [{ type: "align", x: "baseline", children: [A, B] }],
     targets,
@@ -1245,7 +1388,7 @@ console.log("# constraint confluence: contradictions are diagnosed");
 
   const spanA10_30 = span("A", 10, 30);
   const spanA10_40 = span("A", 10, 40);
-  const spanThrows = (constraints: SpanConstraint[]): boolean => {
+  const spanThrows = (constraints: PositionConstraint[]): boolean => {
     try {
       solvePlacementConstraints(
         constraints,
@@ -1267,7 +1410,7 @@ console.log("# constraint confluence: contradictions are diagnosed");
   );
 
   const spanPositionThrows = (
-    constraints: (SpanConstraint | PositionConstraint)[]
+    constraints: PositionConstraint[]
   ): boolean => {
     try {
       solvePlacementConstraints(
