@@ -13,12 +13,16 @@ import { combine, byDepth, mount } from "./_shared";
 // hand-tuned Sunburst/RadialNodes in ../Tree.stories.tsx.
 //
 // POLAR LIMITATIONS (no hacks here — flagged for follow-up):
-//  - Angular spacing is a fixed per-level constant; it does NOT shrink with the
-//    number of nodes at a depth, so deep/wide trees overflow the 2π budget and
-//    wedges wrap. GoTree's polar layout allocates angle by subtree leaf-count;
-//    gofish-gotree has no angular auto-fit yet.
-//  - polar() takes no options: InnerRadius, Direction, CentralAngle, and the
-//    PolarAxis θ/r swap from the dsl are not expressible.
+//  - Angular spacing is a fixed per-level constant for POINT nodes; it does NOT
+//    shrink with the number of nodes at a depth, so deep/wide trees overflow the
+//    2π budget and wedges wrap. GoTree's polar layout allocates angle by subtree
+//    leaf-count. Wedge (rect) nodes now auto-fit via thetaSize since #622; this
+//    point/circle-node gap is tracked in #627 (data-position workaround shown in
+//    RadialDeep.stories.tsx).
+//  - polar() now takes options — { innerRadius, centralAngle, startAngle,
+//    direction, center } since #620 — so InnerRadius, Direction and CentralAngle
+//    are now expressible via polar({ ... }) since #620 (not yet applied here).
+//    The PolarAxis θ/r swap from the dsl is still NOT expressible.
 const meta: Meta = { title: "GoTree / Gallery / RadialTree" };
 export default meta;
 

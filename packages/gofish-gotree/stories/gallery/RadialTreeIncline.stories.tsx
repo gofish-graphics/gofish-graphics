@@ -25,13 +25,17 @@ import { combine, byDepth, mount } from "./_shared";
 //    Y.Root Margin "0.2"); gofish-gotree has no margin-as-fraction-of-width, so
 //    the angular/radial parent offsets are fixed per-level constants, not
 //    proportional to subtree width. The slant is approximated, not measured.
-//  - Angular spacing is a fixed per-level constant; it does NOT shrink with the
-//    number of nodes at a depth, so deep/wide trees overflow the 2π budget and
-//    wedges wrap. GoTree allocates angle by subtree leaf-count
-//    (SubtreeWidth: "adaptive"); gofish-gotree has no angular auto-fit yet.
-//  - polar() takes no options: InnerRadius, Direction, CentralAngle and a θ/r
-//    swap (PolarAxis) are not expressible. bottom-up Mode and LinkWidth
-//    "adaptive" are likewise not modeled.
+//  - Angular spacing is a fixed per-level constant for POINT nodes; it does NOT
+//    shrink with the number of nodes at a depth, so deep/wide trees overflow the
+//    2π budget and wedges wrap. GoTree allocates angle by subtree leaf-count
+//    (SubtreeWidth: "adaptive"). Wedge (rect) nodes now auto-fit via thetaSize
+//    since #622; this point/circle-node gap is tracked in #627 (data-position
+//    workaround shown in RadialDeep.stories.tsx).
+//  - polar() now takes options — { innerRadius, centralAngle, startAngle,
+//    direction, center } since #620 — so InnerRadius, Direction and CentralAngle
+//    are now expressible via polar({ ... }) since #620 (not yet applied here).
+//    The θ/r swap (PolarAxis) is still NOT expressible. bottom-up Mode and
+//    LinkWidth "adaptive" are likewise not modeled.
 const meta: Meta = { title: "GoTree / Gallery / RadialTreeIncline" };
 export default meta;
 

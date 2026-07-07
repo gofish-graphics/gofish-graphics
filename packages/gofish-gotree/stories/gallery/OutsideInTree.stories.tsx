@@ -33,13 +33,19 @@ import { combine, byDepth, mount } from "./_shared";
 //    the literal nest mapping render — but then it is a sunburst, not the
 //    circle node-link the dsl's Node=circle calls for.
 //  - Link=curve is not supported; links render as straight segments
-//    ({interpolation:"linear"}) which in polar appear as chords, not arcs.
-//  - No angular auto-fit: angular spacing is a fixed per-level constant and
-//    does NOT shrink with the node count at a depth, so wide levels overflow
-//    the 2π budget and wedges wrap. GoTree allocates angle by subtree
-//    leaf-count; gofish-gotree has no angular auto-fit yet.
-//  - polar() takes no options: InnerRadius (0), Direction (clockwise),
-//    CentralAngle, StartAngle, and the PolarAxis θ/r swap are not expressible.
+//    ({interpolation:"linear"}) which in polar appear as chords, not arcs (the
+//    route→curve link API lands in draft PR #637).
+//  - No angular auto-fit for POINT nodes: angular spacing is a fixed per-level
+//    constant and does NOT shrink with the node count at a depth, so wide levels
+//    overflow the 2π budget and wedges wrap. GoTree allocates angle by subtree
+//    leaf-count. Wedge (rect) nodes now auto-fit via thetaSize since #622; this
+//    point/circle-node gap is tracked in #627 (data-position workaround shown in
+//    RadialDeep.stories.tsx).
+//  - polar() now takes options — { innerRadius, centralAngle, startAngle,
+//    direction, center } since #620 — so InnerRadius (0), Direction (clockwise),
+//    CentralAngle and StartAngle are now expressible via polar({ ... }) since
+//    #620 (not yet applied here). The PolarAxis θ/r swap is still NOT
+//    expressible.
 const meta: Meta = { title: "GoTree / Gallery / outside-in-tree" };
 export default meta;
 

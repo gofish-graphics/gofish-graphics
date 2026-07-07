@@ -21,13 +21,17 @@ import { combine, byDepth, mount, sampleTree } from "./_shared";
 // Siblings distribute angularly (θ spacing in radians) on a shared radius.
 //
 // POLAR LIMITATIONS (no hacks — flagged):
-//  - polar() takes NO options. The dsl's polar defaults (InnerRadius,
-//    Direction, CentralAngle, PolarAxis θ/r assignment) are not expressible;
-//    x is hard-wired to θ∈[0,2π] and y to r.
-//  - NO angular auto-fit. Sibling θ spacing is a fixed per-level constant; it
-//    does not shrink with node count, so wide groups can overflow the 2π
-//    budget and wrap. GoTree allocates θ by subtree leaf-count; gofish-gotree
-//    has no equivalent yet.
+//  - polar() now takes options — { innerRadius, centralAngle, startAngle,
+//    direction, center } since #620 — so the dsl's InnerRadius, Direction and
+//    CentralAngle are now expressible via polar({ ... }) since #620 (not yet
+//    applied here). The PolarAxis θ/r assignment (swap) is still NOT
+//    expressible; x stays hard-wired to θ∈[0,2π] and y to r.
+//  - No angular auto-fit for POINT nodes. Sibling θ spacing is a fixed per-level
+//    constant; it does not shrink with node count, so wide groups can overflow
+//    the 2π budget and wrap. GoTree allocates θ by subtree leaf-count. Wedge
+//    (rect) nodes now auto-fit via thetaSize since #622; this point/circle-node
+//    gap is tracked in #627 (data-position workaround shown in
+//    RadialDeep.stories.tsx).
 //  - `nest` on θ (an embedded/periodic dimension) is geometrically odd: nest's
 //    padding is a flat radian pad, not a true wedge inset, and enclosure is
 //    only "visible" because parents are hand-sized bigger than children. With

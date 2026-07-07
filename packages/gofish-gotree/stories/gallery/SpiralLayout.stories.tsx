@@ -22,14 +22,16 @@ import { initializeContainer } from "../helper";
 // RadialNodes / RadialTree siblings for the same θ/r decomposition.
 //
 // NOTES — polar gaps (no hacks; flagged for follow-up):
-//  - polar() takes NO options: GoTree's spiral knobs are not expressible here —
-//    no InnerRadius (spiral start radius), Direction (CW/CCW winding), or
-//    CentralAngle. (A θ/r axis swap is also not expressible.)
+//  - InnerRadius (spiral start radius), Direction (CW/CCW winding), and
+//    CentralAngle are now expressible via polar({ ... }) since #620 — not yet
+//    applied here. Only the θ/r axis swap remains inexpressible.
 //  - No angular auto-fit: θ spacing is a fixed per-step constant, so the total
 //    angle is (#steps × spacing) and freely exceeds 2π — the spiral wraps past
 //    a full turn. For a spiral this overflow is partly intended, but it is
 //    uncontrolled (GoTree allocates angle adaptively by subtree leaf count;
 //    SubtreeWidth/Height "adaptive" from the dsl has no gofish-gotree analog).
+//    For point/circle-node layouts this gap is tracked in #627 (a data-position
+//    approach is demonstrated in RadialDeep.stories.tsx).
 //  - Combined θ+r distribution on the SAME relation is what yields the spiral,
 //    but the per-step r and θ increments are independent constants rather than
 //    a single Archimedean-spiral parameterization, so the pitch is only roughly

@@ -22,13 +22,18 @@ import { combine, byDepth, mount } from "./_shared";
 // ─── POLAR GAPS (no hacks; flagged for follow-up) ──────────────────────────────
 //  1. nest on θ (x) is the "embedded dimension" hard case. nest grows the parent's
 //     angular width to enclose its child group (+pad), so the angular bbox
-//     ACCUMULATES up the tree. With no angular auto-fit, that overflows the 2π
-//     budget for any non-tiny tree → wedges wrap / overlap. GoTree's polar layout
-//     allocates angle by subtree leaf-count; gofish-gotree has none, so spacing is
-//     a fixed per-level constant that does not shrink with node count.
-//  2. polar() takes no options: the dsl's InnerRadius, Direction, CentralAngle and
-//     the PolarAxis θ/r swap are not expressible. Mode=bottom-up is also not
-//     expressible (placement is always parent-out here).
+//     ACCUMULATES up the tree. With no angular auto-fit for these point-like
+//     (hidden zero-size) nodes, that overflows the 2π budget for any non-tiny
+//     tree → wedges wrap / overlap. GoTree's polar layout allocates angle by
+//     subtree leaf-count. Wedge (rect) nodes now auto-fit via thetaSize since
+//     #622; this point-node gap is tracked in #627, so spacing stays a fixed
+//     per-level constant that does not shrink with node count (data-position
+//     workaround shown in RadialDeep.stories.tsx).
+//  2. polar() now takes options — { innerRadius, centralAngle, startAngle,
+//     direction, center } since #620 — so the dsl's InnerRadius, Direction and
+//     CentralAngle are now expressible via polar({ ... }) since #620 (not yet
+//     applied here). The PolarAxis θ/r swap is still NOT expressible. Mode=bottom-up
+//     is also not expressible (placement is always parent-out here).
 //  3. Link=straight → {interpolation:"linear"}; segments curve under the polar
 //     transform, which is expected (a straight cartesian edge maps to a polar arc).
 //  4. With nest-θ active the parent is no longer a true point, so parentChild-r

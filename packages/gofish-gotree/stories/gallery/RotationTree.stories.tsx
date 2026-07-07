@@ -35,16 +35,20 @@ import { combine, byDepth, mount } from "./_shared";
 //    the node factory sizes circles by depth and the layout relies on the θ
 //    offsets; the genuine root-center-vs-outer-ring radial separation of the
 //    reference is NOT expressible.
-//  - Link=arccurve is NOT supported. There is no arc/curve link interpolation,
-//    so links fall back to {interpolation:"linear"}. Under polar() a straight
-//    cartesian segment between two (θ,r) endpoints still bows, but it does NOT
-//    reproduce GoTree's controlled arccurve with ArcDirection=bottom, so the
-//    characteristic uniform swirl of the reference is only approximated.
+//  - Link=arccurve is NOT supported. There is no arc/curve link interpolation
+//    yet (draft PR #637's route→curve registry is where the curved-link API
+//    lands), so links fall back to {interpolation:"linear"}. Under polar() a
+//    straight cartesian segment between two (θ,r) endpoints still bows, but it
+//    does NOT reproduce GoTree's controlled arccurve with ArcDirection=bottom,
+//    so the characteristic uniform swirl of the reference is only approximated.
 //  - NO angular auto-fit. Sibling/parent angular spacing is a fixed per-level
 //    constant, NOT derived from subtree leaf-count the way GoTree fills 2π
-//    exactly. A wider/deeper tree overflows the 2π budget and wraps.
-//  - polar() takes NO options: InnerRadius, Direction, CentralAngle, and the
-//    PolarAxis θ/r swap from the dsl are not expressible.
+//    exactly. A wider/deeper tree overflows the 2π budget and wraps. For
+//    point/circle-node layouts this gap remains, tracked in #627 (a
+//    data-position approach is demonstrated in RadialDeep.stories.tsx).
+//  - InnerRadius, Direction, CentralAngle are now expressible via polar({ ... })
+//    since #620 — not yet applied here. Only the PolarAxis θ/r swap from the dsl
+//    remains inexpressible (polar() has no transposed variant).
 //  - LinkWidth=adaptive / Thickness=static(2) is not expressible on the link
 //    mark beyond a single fixed strokeWidth.
 const meta: Meta = { title: "GoTree / Gallery / RotationTree" };

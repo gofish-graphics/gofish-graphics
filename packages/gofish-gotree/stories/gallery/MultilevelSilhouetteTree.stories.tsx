@@ -29,10 +29,14 @@ import { initializeContainer } from "../helper";
 //    separate layout from this node-link reading and is not reproduced here.
 //  - Angular spacing is a FIXED per-level constant: it does not shrink with the
 //    number of nodes at a depth, so deep/wide trees overflow the 2π budget and
-//    wedges wrap. GoTree's polar layout allocates angle by subtree leaf-count;
-//    gofish-gotree has no angular auto-fit.
-//  - polar() takes no options: InnerRadius, Direction, CentralAngle, and the
-//    PolarAxis θ/r swap from the dsl are not expressible (no transposed
+//    wedges wrap. GoTree's polar layout allocates angle by subtree leaf-count.
+//    Wedge (rect) nodes now auto-fit via thetaSize since #622; these are point
+//    (circle) nodes, whose angular auto-fit gap is tracked in #627 (data-position
+//    workaround demonstrated in RadialDeep.stories.tsx).
+//  - polar() now takes options — { innerRadius, centralAngle, startAngle,
+//    direction, center } since #620 — so InnerRadius, Direction and CentralAngle
+//    are now expressible via polar({ ... }) since #620 (not yet applied here).
+//    The PolarAxis θ/r swap from the dsl is still NOT expressible (no transposed
 //    variant).
 
 const meta: Meta = {

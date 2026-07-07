@@ -39,15 +39,15 @@ import { initializeContainer } from "../helper";
 //     N_leaves · leafTheta = 2π.
 //
 // NOTES — polar features in the dsl that gofish's polar() CANNOT express
-// (no options, no hacks; flagged, not faked):
-//  - InnerRadius:0 (the reference has a SOLID center disc, no hole) is NOT
-//    achievable — observe the hollow center. polar()'s first parentChild
-//    distribute step starts the root band at r = bandHeight, not r = 0, and
-//    polar() has no inner-radius origin knob to pin the root to the center, so
-//    the root renders as a thin ring around a hole instead of a filled disc.
-//  - Direction / StartAngle / CentralAngle: polar() is fixed-orientation, fixed
-//    start angle, fixed full-2π sweep. The dsl's clockwise / start-angle /
-//    sub-2π knobs are not expressible.
+// (flagged, not faked):
+//  - InnerRadius:0 (the reference has a SOLID center disc, no hole): now
+//    expressible via polar({ innerRadius }) since #620 — not yet applied here.
+//    As drawn, polar()'s first parentChild distribute step starts the root band
+//    at r = bandHeight, not r = 0, so the root renders as a thin ring around a
+//    hole instead of a filled disc — observe the hollow center.
+//  - Direction / StartAngle / CentralAngle: now expressible via
+//    polar({ direction, startAngle, centralAngle }) since #620 — not yet applied
+//    here (the dsl's clockwise / start-angle / sub-2π knobs).
 //  - PolarAxis (θ/r axis swap) is not expressible.
 //  - Link:hidden → link:"none" here (correct for a filled-wedge sector chart);
 //    polar links only support {interpolation:"linear"|"none"}, never arcs.
