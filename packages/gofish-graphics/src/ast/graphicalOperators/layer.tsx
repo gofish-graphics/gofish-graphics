@@ -14,7 +14,14 @@ import {
   FancyDims,
   displayTranslate,
 } from "../dims";
-import { UNDEFINED, UnderlyingSpace, hasBaseline } from "../underlyingSpace";
+import {
+  SIZE,
+  UNDEFINED,
+  UnderlyingSpace,
+  hasBaseline,
+} from "../underlyingSpace";
+import { getMeasure, getValue, isValue } from "../data";
+import * as Monotonic from "../../util/monotonic";
 import { computeSize, foldFinite } from "../../util";
 import { axisScale } from "../domain";
 import { CoordinateTransform } from "../coordinateTransforms/coord";
@@ -65,6 +72,10 @@ export const layer = createNodeOperatorSequential(
           coord?: CoordinateTransform;
           transform?: { scale?: { x?: number; y?: number } };
           box?: boolean;
+          /** Space-filling spine (from `stack({ normalize: true })`): make this
+           *  axis a local self-scaling scope so its stacked children fill it.
+           *  Set by `spread`, not user-facing. */
+          __normalizeAxis?: 0 | 1;
         } & FancyDims)
       | GoFishAST[],
     maybeChildren?: GoFishAST[]
@@ -188,7 +199,44 @@ export const layer = createNodeOperatorSequential(
           selfScaledSpaces[0] = undefined;
           selfScaledSpaces[1] = undefined;
           for (const axis of [0, 1] as const) {
-            if (dims[axis].size === undefined) continue;
+            // SPACE-FILLING SPINE (#20 — nested mosaic). `normalize` is pure
+            // LAYOUT — the data is never mutated (children stack their RAW
+            // `count`). This makes the stacking axis a LOCAL self-scaling scope
+            // so the raw glue fold [0, Σ] fills its box (the conditional
+            // proportion), and reports UNDEFINED upward so a nested conditional
+            // axis never leaks its [0,1] into an ancestor/sibling scale. Stash
+            // the glue fold as a baseline MAGNITUDE (SIZE), not the anchored
+            // POSITION it returns: a POSITION stash builds only a posScale, but a
+            // NESTED stack's own `w`/`h` SIZE claim needs a SCALE FACTOR
+            // (extent/Σ) to fill too.
+            const composed = resolved[axis];
+            if (
+              (options as { __normalizeAxis?: 0 | 1 }).__normalizeAxis ===
+                axis &&
+              hasBaseline(composed)
+            ) {
+              selfScaledSpaces[axis] = SIZE(composed.width, composed.measure);
+              resolved[axis] = UNDEFINED;
+              continue;
+            }
+            const dsize = dims[axis].size;
+            if (dsize === undefined) continue;
+            // DATA-DRIVEN operator extent (#4/#20 — nested mosaic). Report a
+            // SIZE claim UPWARD so the ENCLOSING shared scale solves this
+            // operator's pixel extent: the operator is a *leaf* in its
+            // ancestor's scale scope, exactly like a leaf rect with `w:"count"`.
+            // Its subtree is then a fresh scale scope, resolved against the
+            // solved box in `layout` via computeSize. (A LITERAL pixel size
+            // below stays a self-scaling region — a fixed box with its own
+            // units, e.g. a marginal histogram, which must NOT pollute the
+            // ancestor's data domain.)
+            if (isValue(dsize)) {
+              resolved[axis] = SIZE(
+                Monotonic.linear(getValue(dsize)!, 0),
+                getMeasure(dsize)
+              );
+              continue;
+            }
             const sp = resolved[axis];
             // Stash anything with a baseline (an anchored POSITION or a "free"
             // magnitude); a difference / ORDINAL is left untouched (no stash).

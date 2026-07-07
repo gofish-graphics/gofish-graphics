@@ -25,17 +25,18 @@ spread({ dir, ... }, [m1, m2, ...])
 
 ## Parameters
 
-| Option        | Type                                         | Default      | Description                                                                                                                                                                |
-| ------------- | -------------------------------------------- | ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `by`          | `string`                                     | —            | Field to partition by; omit for per-item spread                                                                                                                            |
-| `dir`         | `"x" \| "y"`                                 | —            | **Required.** Layout axis                                                                                                                                                  |
-| `spacing`     | `number`                                     | `8`          | Gap between children. Ignored when `glue: true`                                                                                                                            |
-| `alignment`   | `"start" \| "middle" \| "end" \| "baseline"` | `"baseline"` | Alignment along the off-axis                                                                                                                                               |
-| `mode`        | `"edge" \| "center"`                         | `"edge"`     | Whether `spacing` is measured edge-to-edge or center-to-center                                                                                                             |
-| `reverse`     | `boolean`                                    | `false`      | Reverse children order along `dir`                                                                                                                                         |
-| `sharedScale` | `boolean`                                    | `false`      | Share scale across all children                                                                                                                                            |
-| `glue`        | `boolean`                                    | `false`      | Glue children together: collapse data-driven sizes into a single positional axis at this level (the underlying-space kind becomes POSITION). [`stack`](./stack) sets this. |
-| `w`, `h`      | `number \| string`                           | —            | Fixed dimension, or field name to encode size from data                                                                                                                    |
+| Option        | Type                                         | Default      | Description                                                                                                                                                                                                                                                                                          |
+| ------------- | -------------------------------------------- | ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `by`          | `string`                                     | —            | Field to partition by; omit for per-item spread                                                                                                                                                                                                                                                      |
+| `dir`         | `"x" \| "y"`                                 | —            | **Required.** Layout axis                                                                                                                                                                                                                                                                            |
+| `spacing`     | `number`                                     | `8`          | Gap between children. Ignored when `glue: true`                                                                                                                                                                                                                                                      |
+| `alignment`   | `"start" \| "middle" \| "end" \| "baseline"` | `"baseline"` | Alignment along the off-axis                                                                                                                                                                                                                                                                         |
+| `mode`        | `"edge" \| "center"`                         | `"edge"`     | Whether `spacing` is measured edge-to-edge or center-to-center                                                                                                                                                                                                                                       |
+| `reverse`     | `boolean`                                    | `false`      | Reverse children order along `dir`                                                                                                                                                                                                                                                                   |
+| `sharedScale` | `boolean`                                    | `false`      | Share scale across all children                                                                                                                                                                                                                                                                      |
+| `glue`        | `boolean`                                    | `false`      | Glue children together: collapse data-driven sizes into a single positional axis at this level (the underlying-space kind becomes POSITION). [`stack`](./stack) sets this.                                                                                                                           |
+| `normalize`   | `boolean`                                    | `false`      | Space-filling spine: make the layout axis fill the extent in proportion to child size (the mosaic/marimekko conditional axis). Pure layout — data is not mutated, so a cross-axis `w`/`h` size still reads the raw marginal sum. See [Space-filling spines](#space-filling-spines-mosaic-marimekko). |
+| `w`, `h`      | `number \| string`                           | —            | Fixed dimension, or field name to encode size from data                                                                                                                                                                                                                                              |
 
 ## Examples
 
@@ -134,3 +135,41 @@ Use `spread({ spacing: 0 })` if you want children touching but with each
 child still treated as its own thing (e.g. discrete-theta polar charts).
 Use `stack(...)` if you want a stacked-bar feel (continuous position axis
 running through the stack).
+
+## Space-filling spines (mosaic / marimekko)
+
+`normalize: true` turns a stack into a **space-filling spine**: its segments
+fill the whole extent in proportion to their size, so the axis reads as a local
+0–100% conditional distribution. It is pure layout — the data is never mutated,
+so the same field can drive both a cross-axis marginal size and the normalized
+fill.
+
+That is exactly a mosaic. Nest two stacks on alternating axes: the outer sizes
+each column by its raw total (`w: "count"` — the marginal), the inner
+`normalize`s to fill each column's height by share (the conditional). Both come
+off one raw field — no per-cell aggregation or precomputed totals:
+
+```ts
+chart(passengers, { axes: true })
+  .flow(
+    // columns by class — width ∝ each class's count (marginal)
+    stack({ by: "pclass", dir: "x" }),
+    // survival share within each column (conditional), filling height
+    stack({ by: "survived", dir: "y", w: "count", normalize: true })
+  )
+  .mark(rect({ h: "count", fill: "survived" }))
+  .render(container, { w: 400, h: 300 });
+```
+
+::: gofish example:titanic-survival-mosaic hidden
+:::
+
+`normalize` composes to any depth: a third alternating level gives a nested
+mosaic (`class → sex → survived`). Because each level's stacking axis is a local
+scope and the count is read raw everywhere, the marginal × conditional × … area
+factorization holds all the way down.
+
+::: warning
+Inner conditional axes are local scopes, so they don't yet render 0–1 tick
+labels — only the outermost marginal axis is labeled.
+:::
