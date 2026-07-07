@@ -37,24 +37,28 @@ import { initializeContainer } from "../helper";
 // Because nest sums leaf widths up the tree and leaves tile exactly, the total
 // angular extent equals the 2π budget: N_leaves * leafTheta = 2π.
 //
-// NOTES — dsl features that gofish's polar() CANNOT express (flagged, not faked;
-// polar() takes NO options):
+// NOTES — dsl features that gofish's polar() CANNOT express (flagged, not faked):
 //  - PolarAxis: x-axis — the dsl pins the angular axis to screen-x with the
 //    center on the right (PolarCenter:right), giving the reference its
-//    "solid root half-disc on the left, rings fanning right" look. polar()
-//    has fixed orientation and a fixed center; this re-orientation is NOT
+//    "solid root half-disc on the left, rings fanning right" look. polar() has
+//    no transposed variant, and PolarCenter is a polar-space anchor that
+//    polar()'s screen-offset `center` does not cover; this re-orientation is NOT
 //    expressible. A θ/r axis swap would map x→r, y→θ, which
 //    inverts our decomposition (nest would grow radius, distribute would
 //    spin angle) and destroys the concentric-ring structure — so polar() is
 //    the closer match and is what's used here. The cost is orientation: we
 //    get a full upright disc, not the right-centered half-disc of the
 //    reference.
-//  - PolarCenter: right — no center-placement knob; the disc is centered.
-//  - InnerRadius: there is no inner-radius origin knob, so the root band
-//    starts at r = bandHeight (a small hollow center), not at r = 0.
+//  - PolarCenter: right — a polar-space anchor (pole at the shape's right),
+//    which polar()'s screen-offset `center` (added #620) does not cover; the
+//    disc stays centered.
+//  - InnerRadius: now expressible via polar({ innerRadius }) since #620 — not
+//    yet applied here; the root band still starts at r = bandHeight (a small
+//    hollow center), not at r = 0.
 //  - Link:curve — links are not drawn for filled sector wedges (link:"none"
 //    is correct here); polar links only support {interpolation:"linear"|"none"},
-//    never curved arcs, so the dsl's curve links are not representable anyway.
+//    never curved arcs (draft PR #637's route→curve registry is where curved
+//    links land), so the dsl's curve links are not representable anyway.
 //  - Thickness:static 2 maps to the wedge stroke width.
 //  - Angular AUTO-FIT (#618): leaves carry a unit thetaSize weight, nest-θ sums
 //    them up the tree, and the coord fits the total to the circle — so the disc

@@ -22,21 +22,29 @@ import { combine, byDepth, mount } from "./_shared";
 //
 // NOTES — polar limitations (no hacks; flagged for follow-up):
 //  - Links: the dsl asks for "curve" links with depth-driven width
-//    (LinkWidth=depth). Curved link interpolation isn't implemented, so this
-//    falls back to fixed-width {interpolation:"linear"}. Under polar() the
+//    (LinkWidth=depth). Curved link interpolation isn't wired through the coord
+//    transform yet, so this falls back to fixed-width {interpolation:"linear"}
+//    (the route→curve link API lands in draft PR #637). Under polar() the
 //    straight segments still bow into arcs through the coord transform, but they
 //    are NOT the dsl's authored curves and ignore LinkWidth/Thickness=depth.
-//  - NO angular auto-fit: sibling θ spacing is a fixed per-level constant, it
-//    does NOT shrink with the number of nodes at a depth. GoTree allocates angle
-//    by subtree leaf-count; here center-mode distribute places sibling-subtree
-//    *centers* a fixed angle apart regardless of how wide each subtree is, so a
-//    genuinely deep/wide tree overflows the 2π budget — subtrees overlap and the
-//    outer rings wrap. The tree below is kept modest so the structure stays
-//    legible; the limitation is intrinsic, not a tuning issue.
-//  - polar() takes NO options: InnerRadius 0, Direction "clockwise",
-//    CentralAngle 1, PolarCenter "bottom", StartAngle 0 and the PolarAxis y-axis
-//    swap from the dsl are not expressible. polar() always puts r=0 at the canvas
-//    center and sweeps θ counter-clockwise over the full 0..2π.
+//  - No angular auto-fit for POINT nodes: sibling θ spacing is a fixed per-level
+//    constant, it does NOT shrink with the number of nodes at a depth. GoTree
+//    allocates angle by subtree leaf-count; here center-mode distribute places
+//    sibling-subtree *centers* a fixed angle apart regardless of how wide each
+//    subtree is, so a genuinely deep/wide tree overflows the 2π budget —
+//    subtrees overlap and the outer rings wrap. Wedge (rect) nodes now auto-fit
+//    angularly via thetaSize since #622; the gap for point/circle nodes like
+//    these is tracked in #627, and its data-position workaround (leaf-slot box
+//    packing in the data pass) is demonstrated in RadialDeep.stories.tsx. The
+//    tree below is kept modest so the structure stays legible.
+//  - polar() now takes options — { innerRadius, centralAngle, startAngle,
+//    direction, center } since #620 — so InnerRadius 0, Direction "clockwise",
+//    CentralAngle 1 and StartAngle 0 are now expressible via polar({ ... })
+//    since #620 (not yet applied here). Still NOT expressible: the PolarAxis
+//    y-axis (θ/r) swap from the dsl, and PolarCenter "bottom" — a polar-space
+//    anchor, which polar's screen-offset `center` does not cover. Absent those,
+//    polar() puts r=0 at the canvas center and sweeps θ counter-clockwise over
+//    the full 0..2π.
 const meta: Meta = { title: "GoTree / Gallery / deep-tree" };
 export default meta;
 

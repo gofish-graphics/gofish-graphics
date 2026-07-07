@@ -5,6 +5,7 @@
 import { GoFishNode } from "./_node";
 import type { GoFishAST } from "./_ast";
 import { isToken } from "./createName";
+import { isZOrderConstraint } from "./constraints/zorder";
 import type { ZOrderConstraint } from "./constraints/zorder";
 
 /**
@@ -114,6 +115,80 @@ export function flattenForZOrder<P = undefined>(
       }
     }
   }
+}
+
+/** A child of a transparent layer, in resolved paint order, paired with the
+ *  translate accumulated across any transparent ancestors hoisted over it (0,0
+ *  for a plain-index-ordered child) and the caller's folded `payload` (the seed
+ *  for a plain child; see {@link flattenForZOrder}). Both the root `bake` and
+ *  the coord-local `flattenLayout` recurse into these in order, adding
+ *  `accTranslate` to the transform they compose down. */
+export type PaintChild<P = undefined> = {
+  node: GoFishAST;
+  accTranslate: [number, number];
+  payload: P;
+};
+
+/**
+ * Resolve the draw order of a layer's children — the ONE rule shared by the
+ * root `bake`'s `walk` and the coord-local `flattenLayout`, so z-order is
+ * honored identically inside and outside a coordinate transform.
+ *
+ * If the layer carries `zAbove`/`zBelow` constraints, order its
+ * component-granular flattened subtree topologically (hoisting nested plain
+ * layers, accumulating their translate). Otherwise paint children in
+ * `(local zOrder, index)` order. z-order is LOCAL to this layer either way.
+ *
+ * A caller may thread a `fold` payload down through each hoisted-through plain
+ * layer (see {@link flattenForZOrder}): the root `bake` carries the y-flip
+ * scope this way so a z-order hoist can never change a subtree's orientation
+ * (#629). Plain (un-hoisted) children carry the seed. The coord-local
+ * `flattenLayout` passes no fold — a `coord` fixes its own orientation
+ * convention, so no flip scope threads through its interior.
+ */
+export function orderChildrenForPaint<P = undefined>(
+  node: GoFishAST,
+  fold?: {
+    /** The payload active at this layer (each plain child's payload). */
+    seed: P;
+    /** Re-derive the payload under a hoisted-through plain layer. */
+    onHoist: (payload: P, layer: GoFishNode, accTx: number, accTy: number) => P;
+  }
+): PaintChild<P>[] {
+  if (!("children" in node) || !node.children) return [];
+  const children = node.children;
+  const zConstraints = (
+    (node instanceof GoFishNode ? node.constraints : undefined) ?? []
+  ).filter(isZOrderConstraint);
+
+  if (zConstraints.length > 0) {
+    // Resolve z WITHIN this layer over its component-granular flattened
+    // subtree (the same units the legacy layer render topo-sorted).
+    return topoSortByZOrder(flattenForZOrder<P>(children, fold), zConstraints, {
+      node: (it) => it.node,
+      z: (it) => it.defaultZ,
+      order: (it) => it.defaultOrder,
+    }).map((unit) => ({
+      node: unit.node,
+      accTranslate: unit.accTranslate,
+      payload: unit.payload,
+    }));
+  }
+
+  // Plain layer: paint children in (local zOrder, index) order.
+  return children
+    .map((child, index) => ({ child, index }))
+    .sort(
+      (a, b) =>
+        (a.child instanceof GoFishNode ? a.child.getZOrder() : 0) -
+          (b.child instanceof GoFishNode ? b.child.getZOrder() : 0) ||
+        a.index - b.index
+    )
+    .map(({ child }) => ({
+      node: child,
+      accTranslate: [0, 0] as [number, number],
+      payload: fold?.seed as P,
+    }));
 }
 
 /** The resolved string name of a node (`.name("…")`), or undefined for an

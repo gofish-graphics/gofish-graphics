@@ -34,22 +34,25 @@ import { combine, byDepth, mount } from "./_shared";
 //     ring out) to realize them.
 //
 // ── NOTES — dsl features GoFish's polar() CANNOT express ──
-//    (no options, no hacks; flagged, not faked):
+//    (flagged, not faked):
 //  - PolarAxis: x-axis (the θ/r axis swap) is NOT expressible: polar() has no
 //    transposed variant — it always maps x→θ, y→r ([r·sinθ, r·cosθ]). So the
 //    PolarAxis choice can't be honored; I use polar().
-//  - PolarCenter: right and the partial (≈270°) sweep of the reference are not
-//    expressible — polar() always fills the full 2π disc, centered, fixed start
-//    angle. This port renders a FULL concentric-ring disc, not the reference's
-//    off-center partial fan.
+//  - PolarCenter: right is not expressible — the dsl's PolarCenter is a
+//    polar-space anchor (place the pole at the shape's "right"), which polar()'s
+//    screen-offset `center` does not cover. The partial (≈270°) sweep IS now
+//    expressible via polar({ startAngle, centralAngle }) since #620 — not yet
+//    applied here; this port renders a FULL concentric-ring disc, not the
+//    reference's off-center partial fan.
 //  - RootHeight: rdepth — radius-driven-by-depth is not a knob; concentric rings
 //    are realized via distribute-r (see MAPPING divergence above).
 //  - Thickness: static / StaticThickness 2 — there is no per-node static-pixel
 //    radial-thickness knob under polar (thickness is the emY band height in
 //    r-units). I approximate thin rings with a small band height + a radial gap.
-//  - InnerRadius / Direction / StartAngle / CentralAngle: polar() takes NO
-//    options, so the hollow-center inner radius, CW/CCW direction, start angle,
-//    and sub-2π central angle are all unavailable.
+//  - InnerRadius / Direction / StartAngle / CentralAngle: now expressible via
+//    polar({ innerRadius, direction, startAngle, centralAngle }) since #620 —
+//    not yet applied here (the hollow-center inner radius, CW/CCW direction,
+//    start angle, and sub-2π central angle).
 //  - Angular AUTO-FIT (#618): leaves carry a unit thetaSize weight, nest-θ grows
 //    parents to their children's arc, and the coord fits the summed weights to
 //    the circle — so the rings close for any tree with no hand-set leafTheta.

@@ -31,7 +31,9 @@ import { storyToPath } from "./path-mapping.js";
 const TESTS_DIR = join(import.meta.dirname, "..");
 const HARNESS_DIR = join(TESTS_DIR, "harness");
 const OUT_DIR = join(TESTS_DIR, "tmp/iterate");
-const VITE_PORT = 3002; // distinct from capture-js-dom (3001) so both can run
+// Distinct from capture-js-dom (3001) so both can run; CAPTURE_ONE_PORT lets
+// several capture-one loops run concurrently (each on its own port).
+const VITE_PORT = Number(process.env.CAPTURE_ONE_PORT) || 3002;
 
 function startViteServer(): ChildProcess {
   return spawn(
