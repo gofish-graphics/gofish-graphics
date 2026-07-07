@@ -63,6 +63,74 @@ you read a signal — not on any flag:
 The same input can drive both regimes in one chart: read it in a `live()` fill
 for a cheap recolor _and_ in a `derive()` to re-shape the data.
 
+## Components, not just charts
+
+The reactive layer is not tied to the `chart()` builder. It works just as well
+for **components** — low-level compositions built from raw shapes and graphical
+operators (`rect`, `text`, `stackX`, `layer`, …) with no data binding. The same
+read-location rule applies.
+
+Render a component with the low-level terminal, `GoFish(container, options,
+child)`. The `child` can be a node **or a thunk** — `() => node` — and the thunk
+form is what makes a component reactive:
+
+```ts
+import { GoFish, spreadX, rect, live, wheel, timer } from "gofish-graphics";
+
+const n = wheel({ range: [1, 8], initial: 3, round: true });
+const t = timer({ interval: 500 });
+
+// A thunk: reading n() here (outside live) makes it a pipeline dependency, so a
+// scroll re-runs the whole component and re-lays-out.
+GoFish(container, { w: 460, h: 260 }, () => {
+  const count = n();
+  return spreadX(
+    { spacing: 16 },
+    Array.from({ length: count }, (_, i) =>
+      rect({
+        w: 48,
+        h: 70 + i * 18,
+        fill: live(() => (t() % 2 === 0 ? "#6b9bd1" : "#3a6ea5")),
+      })
+    )
+  );
+});
+```
+
+Why a thunk? A raw node is built once and cannot re-evaluate its spec, so a
+component needs a thunk the scheduler can re-invoke — exactly the role the
+`chart()` builder's rebuild plays. Read a `signal()`/`wheel()`/`timer()` outside
+`live()` in the thunk and each change re-runs it; a `pointer()` read inside a
+`live()` needs the thunk too, because hit-testing is wired only when the runtime
+is attached (which happens once an input registers during the thunk's resolve).
+
+**Paint-only usage needs no thunk — and no runtime.** A `live()` channel patches
+at paint whether or not a runtime exists, so a plain node works:
+
+```ts
+import { createSignal } from "solid-js";
+import { GoFish, rect, live } from "gofish-graphics";
+
+const [hot, setHot] = createSignal(false);
+
+// A plain NODE (not a thunk). No InteractionRuntime is created and no event
+// listeners are attached, yet the live() fill still patches when `hot` changes —
+// even over a RAW Solid signal, since paint reactivity is runtime-independent.
+GoFish(
+  container,
+  { w: 120, h: 80 },
+  rect({
+    w: 40,
+    h: 40,
+    fill: live(() => (hot() ? "#d62728" : "#6b9bd1")),
+  })
+);
+```
+
+A component mark carries no datum of its own (there is no data binding). For the
+reference-equality hover trick (`live((d) => d === p.datum())`), give each mark a
+datum by _invoking_ it with an object: `rect({ … })(box)`.
+
 ## Inputs
 
 Import the inputs and `live` from `gofish-graphics`:

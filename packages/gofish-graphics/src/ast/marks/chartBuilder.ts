@@ -7,40 +7,11 @@ import { Frame } from "../graphicalOperators/frame";
 import { layer as Layer } from "../graphicalOperators/layer";
 import { GoFishRef, visibleNodes } from "../_ref";
 import { ref } from "../shapes/ref";
-import { InteractionRuntime } from "../../interaction/runtime";
-import { withInteractiveResolve } from "../../interaction/resolveContext";
-
-/**
- * Shared interactive render terminal (ChartBuilder + LayerBuilder). Always
- * resolves under the ambient interactive context so the reactive surface can
- * register during resolve — a `live()` channel, or a library input read in a
- * `derive()`. If nothing registered, renders down the static path untouched
- * (the runtime object is the only cost). Otherwise wires the rerender thunk
- * and threads the runtime through render so `data-gf-id` hooks are emitted and
- * delegated events are attached.
- */
-async function renderWithInteraction<O extends Record<string, unknown>>(
-  resolveForRender: () => Promise<{
-    node: GoFishNode;
-    options: O;
-  }>,
-  container: HTMLElement
-): Promise<HTMLElement> {
-  const runtime = new InteractionRuntime();
-  const doRender = async (): Promise<HTMLElement> => {
-    // Reset per-resolve dependency flags before reads re-register inputs.
-    runtime.beginResolve();
-    const { node, options } = await withInteractiveResolve(runtime, () =>
-      resolveForRender()
-    );
-    if (runtime.hasWork()) {
-      (options as Record<string, unknown>).interaction = runtime;
-    }
-    return node.render(container, options) as HTMLElement;
-  };
-  runtime.setRerender(doRender);
-  return doRender();
-}
+// The shared interactive render terminal now lives in the interaction layer
+// (renderTerminal.ts) so the low-level `gofish()` terminal can reach it too —
+// component thunks get the same two-regime treatment as ChartBuilder/
+// LayerBuilder.render. See its doc-comment for the machinery.
+import { renderWithInteraction } from "../../interaction/renderTerminal";
 
 /**
  * Sentinel chart-data for an empty `Chart()` scope used inside `.layer(...)`:

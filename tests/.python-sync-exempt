@@ -156,3 +156,6 @@ packages/gofish-graphics/stories/interaction/HoverHighlight.stories.tsx
 packages/gofish-graphics/stories/interaction/SemanticZoomHistogram.stories.tsx
 packages/gofish-graphics/stories/interaction/DraggableThreshold.stories.tsx
 packages/gofish-graphics/stories/interaction/TimerPulse.stories.tsx
+packages/gofish-graphics/stories/interaction/ComponentPaintOnly.stories.tsx
+packages/gofish-graphics/stories/interaction/ComponentLayoutReactive.stories.tsx
+packages/gofish-graphics/stories/interaction/ComponentPointer.stories.tsx

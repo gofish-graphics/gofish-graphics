@@ -25,6 +25,7 @@ import { bake } from "./coordinateTransforms/bake";
 import { lowerToDisplayList } from "./displayList/lower";
 import { paintSVG } from "./displayList/paintSVG";
 import type { InteractionRuntime } from "../interaction/runtime";
+import { renderWithInteraction } from "../interaction/renderTerminal";
 import type { ToPixel } from "./_node";
 import type { Size } from "./dims";
 import {
@@ -730,8 +731,30 @@ function renderLayout(
 export const gofish = (
   container: HTMLElement,
   options: GoFishRenderOptions,
-  child: GoFishNode | Promise<GoFishNode>
-) => {
+  child:
+    | GoFishNode
+    | Promise<GoFishNode>
+    | (() => GoFishNode | Promise<GoFishNode>)
+): HTMLElement | Promise<HTMLElement> => {
+  // Component thunk (`() => node`): a raw shape/operator composition — no
+  // `chart()` builder, no data binding — that we give the full reactive
+  // treatment. A raw node is built once and can't re-evaluate its spec, so
+  // component-level PIPELINE reactivity (a `signal()`/`wheel()` read outside
+  // `live()`) needs a thunk the scheduler can re-invoke; and a `pointer()` read
+  // in a `live()` needs the runtime installed for `data-gf-id` hit-testing. Both
+  // fall out of routing the thunk through the same terminal the chart builders
+  // use — a fresh InteractionRuntime, resolve under the ambient context, thread
+  // the runtime only if something registered. A PLAIN node keeps today's exact
+  // static behavior below (a `live()` channel on a plain node still patches at
+  // paint — that's runtime-independent — it just gets no runtime/hit-testing).
+  if (typeof child === "function") {
+    const thunk = child as () => GoFishNode | Promise<GoFishNode>;
+    return renderWithInteraction(
+      async () => ({ node: await thunk(), options: { ...options } }),
+      container
+    );
+  }
+
   const svgPadding = options.padding ?? PADDING;
 
   type GofishState = {

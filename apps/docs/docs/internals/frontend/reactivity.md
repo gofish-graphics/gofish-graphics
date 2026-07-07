@@ -12,6 +12,7 @@ covers:
   - packages/gofish-graphics/src/interaction/resolveContext.ts
   - packages/gofish-graphics/src/interaction/frameScales.ts
   - packages/gofish-graphics/src/interaction/runtime.ts
+  - packages/gofish-graphics/src/interaction/renderTerminal.ts
 ---
 
 # Reactivity: signals beside a synchronous pipeline
@@ -59,7 +60,7 @@ terminal installs an **ambient context** around resolve and lets inputs announce
 themselves on read.
 
 `resolveContext.ts` holds a single module-level variable (the current
-`AmbientRegistrar`). The render terminal (`chartBuilder.ts`,
+`AmbientRegistrar`). The **render terminal** (`renderTerminal.ts`,
 `renderWithInteraction`) wraps resolution in `withInteractiveResolve(runtime,
 fn)`, which sets the variable for the duration of the resolve and restores it
 after. Every library input's accessor, when read, does:
@@ -93,6 +94,41 @@ to a non-interactive build.
 > `derive` RPC) could cross-register. Registration sites are synchronous
 > spec-evaluation code in practice; a scoped-storage mechanism can replace the
 > module var if async marks ever make the race real.
+
+## One terminal, three callers — including components
+
+`renderWithInteraction` (in `renderTerminal.ts`) is the single place a resolve is
+run under the ambient context. It is regime- and pipeline-agnostic: given a
+`resolveForRender` thunk that yields a `{ node, options }` pair and a container,
+it creates a fresh `InteractionRuntime`, calls `beginResolve()`, evaluates the
+thunk under `withInteractiveResolve`, threads `options.interaction = runtime`
+**iff** `hasWork()`, and wires `setRerender` to re-invoke the whole resolve into
+the same container. Three callers share it:
+
+- `ChartBuilder.render` and `LayerBuilder.render` — the v3 chart pipeline. Their
+  `resolveForRender` runs domain inference + layout over the builder's spec.
+- the low-level `gofish()` terminal (`gofish.tsx`) when handed a **component
+  thunk** — `gofish(container, opts, () => node)`, a raw shape/operator
+  composition with no `chart()` builder and no data binding.
+
+The component case is what proves the reactive layer is not tied to the chart
+pipeline. Paint reactivity already is: a `live()` channel bakes its per-item
+thunk at lower time and `paintSVG` calls it regardless of any runtime, so a plain
+`gofish(container, opts, node)` over a raw node patches `live()` fills with **no
+runtime at all** (no `data-gf-id`, no listeners — Solid tracks the thunk's reads
+directly at paint). The **pipeline** tier and **event inputs** are what need the
+runtime, and both are unlocked by the _thunk_: a raw node is built once and cannot
+re-evaluate its spec, so a `signal()`/`wheel()` read outside `live()` needs a
+thunk the scheduler can re-invoke, and a `pointer()` read inside `live()` needs
+the runtime installed for `data-gf-id` hit-testing (its resolve-time evaluation
+registers the input under the ambient context, flipping `hasWork()` true). The
+thunk plays exactly the role the chart builder's immutable rebuild plays.
+
+`renderTerminal.ts` lives in the interaction layer (not `marks/chartBuilder.ts`)
+so `gofish.tsx` can reach it without importing the chart-builder module — the
+dependency runs one-way (`gofish.tsx` → `interaction/`), never into `marks/`. The
+only node coupling is the `.render(container, options)` call, kept as a type-only
+import.
 
 ## The paint mechanism: thunks in a display-item side table
 
@@ -143,8 +179,9 @@ layout pipeline:
    In a hidden tab (where browsers throttle rAF to zero) it falls back to a
    timeout so headless drivers and backgrounded views don't freeze. The
    re-render thunk (`setRerender`, wired by the render terminal) rebuilds the
-   whole tree through the immutable builder and renders into the _same_
-   container — hence the container-dispose hook below.
+   whole tree — through the immutable builder for a chart, or by re-invoking the
+   component thunk for a low-level `gofish(container, opts, () => node)` — and
+   renders into the _same_ container — hence the container-dispose hook below.
 2. **Delegated event dispatch.** `attachSVG` puts one listener per event type
    (`pointermove/down/up/leave`, `wheel`) on the root `<svg>` and fans each event
    out to every registered input, with a `data-gf-id` hit-test resolving the

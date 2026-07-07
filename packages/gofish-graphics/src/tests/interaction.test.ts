@@ -15,12 +15,30 @@ import { settle, nextTick } from "./interactionDomSetup";
 // Pure (.ts, no JSX) internals — safe to run through tsx directly.
 import { InteractionRuntime } from "../interaction/runtime";
 import { invertAffine, frameConversions } from "../interaction/frameScales";
+// A RAW Solid signal (not a gofish input) — the component paint-only case proves
+// paint reactivity is runtime-independent. dist externalizes solid-js (peer dep),
+// so this resolves to the SAME solid instance the built backend tracks.
+import { createSignal } from "solid-js";
 // The built library: rendering goes through the solid-compiled SVG backend.
 // @ts-ignore -- dist may not exist at typecheck time; the test script builds first.
 import * as GoFish from "../../dist/index.js";
 
-const { chart, spread, rect, derive, live, pointer, drag, wheel, timer, signal } =
-  GoFish as any;
+const {
+  chart,
+  spread,
+  rect,
+  derive,
+  live,
+  pointer,
+  drag,
+  wheel,
+  timer,
+  signal,
+  // The low-level render terminal (`gofish as GoFish`) + a v1 operator, for the
+  // component-level (no chart(), no data) reactive cases.
+  GoFish: gofish,
+  spreadX,
+} = GoFish as any;
 
 declare const process: { exit(code: number): never };
 
@@ -603,6 +621,135 @@ async function main() {
       "bars plus the annotation rule are present",
       container.querySelectorAll("rect").length === 4,
       String(container.querySelectorAll("rect").length)
+    );
+  }
+
+  /* ---------------- component-level reactivity (no chart()) -------------- */
+  console.log("\ncomponent thunk: pipeline tier + live coexist");
+  {
+    // A low-level component rendered through the THUNK form of the terminal:
+    // gofish(container, opts, () => node). A signal() read INSIDE the thunk
+    // (outside live) drives layout; a signal read only in live() patches paint.
+    const container = makeContainer();
+    let thunkRuns = 0;
+    const n = signal(2); // spec read → pipeline dependency
+    const fillSig = signal("#00f"); // read only in live() → paint patch
+    await gofish(container, { w: 240, h: 120 }, () => {
+      thunkRuns++;
+      const count = n();
+      return spreadX(
+        { spacing: 6 },
+        Array.from({ length: count }, () =>
+          rect({ w: 24, h: 60, fill: live(() => fillSig()) })
+        )
+      );
+    });
+    await settle();
+    const rects = () => Array.from(container.querySelectorAll("rect"));
+    ok("thunk ran once initially", thunkRuns === 1, `runs=${thunkRuns}`);
+    ok("initial box count from signal", rects().length === 2, String(rects().length));
+    ok(
+      "initial live fill is resolve-time value",
+      rects().every((r) => r.getAttribute("fill") === "#00f")
+    );
+
+    // A spec-read signal write → exactly one coalesced re-render; layout reflows.
+    n.set(4);
+    await settle();
+    ok("signal write re-ran the thunk once", thunkRuns === 2, `runs=${thunkRuns}`);
+    ok("layout reflowed to new box count", rects().length === 4, String(rects().length));
+
+    // A live-only signal write patches paint with ZERO thunk re-runs.
+    fillSig.set("#f00");
+    await nextTick();
+    ok(
+      "live fill patched the DOM attribute",
+      rects().every((r) => r.getAttribute("fill") === "#f00"),
+      rects().map((r) => r.getAttribute("fill")).join(",")
+    );
+    ok("live paint patch caused zero re-runs", thunkRuns === 2, `runs=${thunkRuns}`);
+  }
+
+  console.log("\ncomponent plain node: live over a RAW solid signal, no runtime");
+  {
+    // A plain-NODE component (an operator wrapping a live rect) — NOT a thunk —
+    // over a raw Solid createSignal. No InteractionRuntime is created, so no
+    // data-gf-id is emitted; yet the raw signal still patches paint (paint
+    // reactivity is runtime-independent).
+    const container = makeContainer();
+    const [c, setC] = createSignal("#00f");
+    // spreadX(...) resolves to a Promise<node> (not a function), so the terminal
+    // takes the STATIC path — a bare v1 mark would look like a thunk.
+    await gofish(
+      container,
+      { w: 120, h: 80 },
+      spreadX({ spacing: 0 }, [rect({ w: 40, h: 40, fill: live(() => c()) })])
+    );
+    await settle();
+    const rects = () => Array.from(container.querySelectorAll("rect"));
+    ok("plain-node component rendered a rect", rects().length === 1);
+    ok(
+      "no runtime attached → no data-gf-id",
+      container.querySelectorAll("[data-gf-id]").length === 0,
+      String(container.querySelectorAll("[data-gf-id]").length)
+    );
+    ok(
+      "raw solid signal initial value painted",
+      rects()[0]?.getAttribute("fill") === "#00f"
+    );
+    setC("#f00");
+    await nextTick();
+    ok(
+      "raw solid signal patches paint with no runtime",
+      rects()[0]?.getAttribute("fill") === "#f00",
+      rects()[0]?.getAttribute("fill") ?? "null"
+    );
+  }
+
+  console.log("\ncomponent thunk: container takeover disposal");
+  {
+    const container = makeContainer();
+    let firstRuns = 0;
+    const a = signal(2);
+    await gofish(container, { w: 200, h: 100 }, () => {
+      firstRuns++;
+      a(); // spec dependency of the FIRST component
+      return spreadX(
+        { spacing: 4 },
+        Array.from({ length: 2 }, () => rect({ w: 20, h: 30, fill: "#00f" }))
+      );
+    });
+    await settle();
+    ok("first thunk render → one svg", container.querySelectorAll("svg").length === 1);
+    const runsBeforeTakeover = firstRuns;
+
+    // A DIFFERENT thunk-rendered component takes over the same container.
+    await gofish(container, { w: 200, h: 100 }, () =>
+      spreadX(
+        { spacing: 4 },
+        Array.from({ length: 3 }, () => rect({ w: 20, h: 30, fill: "#0a0" }))
+      )
+    );
+    await settle();
+    ok(
+      "takeover leaves exactly one svg",
+      container.querySelectorAll("svg").length === 1,
+      String(container.querySelectorAll("svg").length)
+    );
+    ok(
+      "takeover shows the new component's boxes",
+      container.querySelectorAll("rect").length === 3,
+      String(container.querySelectorAll("rect").length)
+    );
+
+    // The old component's runtime was disposed, so its spec signal no longer
+    // invalidates anything — its thunk must not re-run.
+    a.set(9);
+    await settle();
+    ok(
+      "disposed component's signal no longer re-runs it",
+      firstRuns === runsBeforeTakeover,
+      `runs=${firstRuns}`
     );
   }
 
