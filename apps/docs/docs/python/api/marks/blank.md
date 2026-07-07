@@ -2,7 +2,7 @@
 
 An invisible mark. `blank` takes up space and can be positioned and named like
 any other mark, but draws nothing. It is the positioning **guide** that
-[`line`](/python/api/marks/line) and [`area`](/python/api/marks/area) trace.
+[`line`](/python/api/marks/line) and [`ribbon`](/python/api/marks/ribbon) trace.
 
 ::: gofish example:area-chart hidden
 :::
@@ -14,7 +14,7 @@ layer([
     chart(lake_totals)
         .flow(spread(by="lake", dir="x", spacing=64))
         .mark(blank(h="count").name("points")),
-    chart(selectAll("points")).mark(area(opacity=0.8)),
+    chart(selectAll("points")).mark(ribbon(opacity=0.8)),
 ]).render(w=500, h=300, axes=True)
 ```
 
@@ -37,7 +37,7 @@ Returns a `Mark` for use in [`.mark()`](/python/api/core/mark).
 A `blank` lets you run a full layout — `spread`, `stack`, `scatter` — and capture
 the **positions** without drawing anything. Name the result with `.name(...)`,
 then have another chart [`selectAll()`](/python/api/core/chart#cross-chart-references)
-it and draw a [`line`](/python/api/marks/line), [`area`](/python/api/marks/area),
+it and draw a [`line`](/python/api/marks/line), [`ribbon`](/python/api/marks/ribbon),
 or other mark through those positions.
 
 ```python

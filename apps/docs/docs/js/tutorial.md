@@ -471,7 +471,7 @@ gf.layer({ axes: true }, [
   gf
     .chart(gf.selectAll("bars"))
     .flow(gf.group({ by: "datum.species" }))
-    .mark(gf.area({ opacity: 0.8 })),
+    .mark(gf.ribbon({ opacity: 0.8 })),
 ]).render(root, {
   w: 500,
   h: 300,
@@ -487,12 +487,12 @@ To add some ribbons, we first created a `Layer` so we can add the ribbons as a s
 we name the marks in the first layer using `.name("bars")` and `selectAll` those marks in the second
 layer. `selectAll("bars")` hands us one [`ref`](/js/api/marks/ref) per bar; we group them by species
 using `gf.group({ by: "datum.species" })` — note the `datum.` path, since the selected stream is refs,
-not raw records — and finally draw an `area` mark for each group.
+not raw records — and finally draw an `ribbon` mark for each group.
 
 <!-- First, we've added a `layer` operator that lets us layer on multiple elements in the same space.
 We create the bars with the first `chart` and use `.name("bars")` on the mark to give them a name so we can refer
 to them later. Then we use `gf.selectAll("bars")` in a second chart to reference those bars. Finally,
-we use `gf.group({ by: "datum.species" })` to group by species and `gf.area()` to connect the bars horizontally. -->
+we use `gf.group({ by: "datum.species" })` to group by species and `gf.ribbon()` to connect the bars horizontally. -->
 
 To make this look more like a traditional ribbon chart, all we have to do is change the spacing of
 the `spread` operator.
@@ -512,7 +512,7 @@ gf.layer({ axes: true }, [
   gf
     .chart(gf.selectAll("bars"))
     .flow(gf.group({ by: "datum.species" }))
-    .mark(gf.area({ opacity: 0.8 })),
+    .mark(gf.ribbon({ opacity: 0.8 })),
 ]).render(root, {
   w: 500,
   h: 300,
@@ -577,7 +577,7 @@ gf.layer({ coord: gf.clock(), axes: true }, [
   gf
     .chart(gf.selectAll("bars"))
     .flow(gf.group({ by: "datum.species" }))
-    .mark(gf.area({ opacity: 0.8 })),
+    .mark(gf.ribbon({ opacity: 0.8 })),
 ]).render(root, {
   w: 500,
   h: 300,

@@ -22,17 +22,17 @@ layer([
 ## Signature
 
 ```python
-line(stroke=None, strokeWidth=None, opacity=None, interpolation=None) -> Mark
+line(stroke=None, strokeWidth=None, opacity=None, curve=None) -> Mark
 ```
 
 ## Parameters
 
-| Parameter       | Type    | Description                                        |
-| --------------- | ------- | -------------------------------------------------- |
-| `stroke`        | `str`   | Line color                                         |
-| `strokeWidth`   | `int`   | Line width in pixels                               |
-| `opacity`       | `float` | Opacity, `0`–`1`                                   |
-| `interpolation` | `str`   | Curve interpolation, e.g. `"linear"`, `"monotone"` |
+| Parameter     | Type          | Description                                                             |
+| ------------- | ------------- | ----------------------------------------------------------------------- |
+| `stroke`      | `str`         | Line color                                                              |
+| `strokeWidth` | `int`         | Line width in pixels                                                    |
+| `opacity`     | `float`       | Opacity, `0`–`1`                                                        |
+| `curve`       | `str \| dict` | Path shape; default `"auto"`, which auto-smooths continuous line charts |
 
 Returns a `Mark` for use in [`.mark()`](/python/api/core/mark).
 

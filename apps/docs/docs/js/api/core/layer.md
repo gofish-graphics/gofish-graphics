@@ -29,7 +29,7 @@ gf.chart(seafood, { axes: true })
     gf
       .chart() // empty scope = the previous tier's marks
       .flow(gf.group({ by: "species" }))
-      .mark(gf.area({ opacity: 0.8 }))
+      .mark(gf.ribbon({ opacity: 0.8 }))
   )
   .render(root, { w: 400, h: 320 });
 ```

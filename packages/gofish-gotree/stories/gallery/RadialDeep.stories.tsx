@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/html";
-import { ellipse, connect, Layer, Frame, polar } from "gofish-graphics";
+import { ellipse, line, Layer, Frame, polar } from "gofish-graphics";
 import { initializeContainer } from "../helper";
 import { flareVis, type FlareNode } from "./_flareVis";
 
@@ -33,9 +33,9 @@ import { flareVis, type FlareNode } from "./_flareVis";
 //   real fields/scales (so the DSL can express them) is future work.
 //
 //   Links: the dsl asks for `curve` links; curve interpolation is unimplemented
-//   (tracked for PR #637). `interpolation:"bezier"` was tried first, but under
+//   (tracked for PR #637). `curve:"bezier"` was tried first, but under
 //   the polar transform its control-point resampling winds the parent→child
-//   segments into wild spirals, so we fall back to `interpolation:"linear"`.
+//   segments into wild spirals, so we fall back to `curve:"straight"`.
 //   Linear segments resample cleanly into the (near-)radial spokes seen here;
 //   the reference's gentle curve is therefore drawn straight. Link thickness
 //   tapers by depth (dsl Thickness=depth, Min 1 / Max 9): thick near the root,
@@ -170,10 +170,9 @@ const links = placed
     const parent = byPath.get(p.parentPath!)!;
     const src: [number, number] =
       parent.depth === 0 ? [p.theta, 0] : [parent.theta, parent.r];
-    return connect(
+    return line(
       {
-        mode: "center",
-        interpolation: "linear",
+        curve: "straight",
         fill: "none",
         stroke: "#5f6b7a",
         strokeWidth: linkWidth(parent.depth),

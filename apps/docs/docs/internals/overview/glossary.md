@@ -12,7 +12,7 @@ land.
 
 - **AST / `GoFishNode`** — the tree a chart compiles to. Every mark and operator is a
   node. See [Architecture Overview](/internals/overview/architecture).
-- **Mark** — a node with an appearance: `rect`, `ellipse`, `line`, `area`, `text`.
+- **Mark** — a node with an appearance: `rect`, `ellipse`, `line`, `ribbon`, `text`.
 - **Operator** — a node that arranges children but draws nothing itself: `stackX`,
   `spread`, `layer`, `coord`, …
 - **Underlying space** — what a dimension _is_: a position, a size, ordinal, or

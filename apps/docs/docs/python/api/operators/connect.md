@@ -1,13 +1,31 @@
-# connect
+# line / ribbon connector (combinator form)
 
-Draws a connector (line) between each consecutive pair of children. Used for
+Draws a connector between each consecutive pair of children. Used for
 linking elements that have already been placed by another layer or
 constraint — most commonly inside a [nested-tier](/internals/design/principles)
 layout where the inner tier places the shapes and the outer tier draws the
 connections.
 
+::: tip Renamed from `connect`
+The low-level `connect` / `connect_x` / `connect_y` operators (and the
+capitalized `Connect(...)`) **have been removed**. The connector primitive is now
+spelled as the _combinator form_ of the [`line`](/python/api/marks/line) mark
+(center) and the [`ribbon`](/python/api/marks/ribbon) mark (edge band): you pass
+an explicit list of `ref(...)` children as the first positional argument.
+
+| Removed                                         | Replacement                                                    |
+| ----------------------------------------------- | -------------------------------------------------------------- |
+| `connect([ref("a"), ref("b")], ...)`            | `line([ref("a"), ref("b")], ...)`                              |
+| `Connect([...], ...)`                           | `line([...], ...)`                                             |
+| `connect_x(...)` / `connect_y(...)` (edge band) | `ribbon([...], dir="x")` / `ribbon([...], dir="y")`            |
+| `interpolation="linear" \| "bezier"`            | `curve="straight" \| "bezier"` (see [Path curve](#path-curve)) |
+
+This page is still served at `operators/connect` so existing cross-links keep
+working.
+:::
+
 ```python
-from gofish import layer, connect, rect, ref, Constraint
+from gofish import layer, line, rect, ref, Constraint
 
 layer([
     layer([
@@ -17,7 +35,7 @@ layer([
         Constraint.distribute([a, b], dir="x", spacing=80),
         Constraint.align([a, b], y="middle"),
     ]),
-    connect(
+    line(
         [ref("a"), ref("b")],
         stroke="black",
         strokeWidth=2,
@@ -30,20 +48,25 @@ layer([
 ## Signature
 
 ```python
-connect(children, *, source=None, target=None,
-        stroke=None, strokeWidth=None, fill=None, opacity=None,
-        mixBlendMode=None, interpolation=None,
-        # for non-anchor (edge) mode:
-        direction=None, mode=None) -> Mark
+# center connector
+line(children, *, source=None, target=None,
+     stroke=None, strokeWidth=None, fill=None, opacity=None,
+     mixBlendMode=None, curve=None,
+     # for non-anchor (edge) mode:
+     direction=None, mode=None) -> Mark
+
+# edge band
+ribbon(children, *, dir=None, ...) -> Mark
 ```
 
-`Connect` is the capitalized alias for the same factory. The children are
-usually [`ref(...)`](/python/api/selection/ref) calls that point at named
-elements placed by an earlier tier.
+The children are usually [`ref(...)`](/python/api/selection/ref) calls that point
+at named elements placed by an earlier tier. Passing an explicit children list
+(rather than letting the mark take refs from a `selectAll(...)` upstream) is what
+makes this the _combinator_ form.
 
 ## Anchor mode (recommended)
 
-When `source` or `target` is provided, `connect` runs a straight line between
+When `source` or `target` is provided, `line` runs a straight line between
 the _anchored points_ on each consecutive pair of children's bounding boxes —
 ignoring `direction` and `mode`. The anchor is a normalized fraction of the
 bbox: `[0, 0]` = bottom-left, `[1, 1]` = top-right, `[0.5, 0.5]` = center.
@@ -77,22 +100,23 @@ Where `start` → `0`, `middle` → `0.5`, `end` → `1`.
 
 ```python
 # Both anchors: literal line between two corners
-connect([ref("a"), ref("b")], source="end", target="start")
+line([ref("a"), ref("b")], source="end", target="start")
 
 # One anchor: target endpoint is clamped onto B's bbox
-connect([ref("A"), ref("B")], source=["end", "middle"])
+line([ref("A"), ref("B")], source=["end", "middle"])
 # -> straight horizontal line from A's right-middle to B's left edge at the same y
 
 # Center-to-center is the most common: just use "middle"
-connect([ref("A"), ref("B")], source="middle", target="middle")
+line([ref("A"), ref("B")], source="middle", target="middle")
 ```
 
 ## Edge mode (no anchors)
 
-When neither `source` nor `target` is given, `connect` falls back to
+When neither `source` nor `target` is given, `line` falls back to
 edge mode: it routes between the children's facing edges along
-`direction`. This is the legacy path; most diagrams should prefer anchor
-mode.
+`direction`. For an edge _band_ between the children, use
+[`ribbon`](/python/api/marks/ribbon) instead. This is the legacy path; most
+diagrams should prefer anchor mode.
 
 | Option      | Type                                         | Default  | Description                           |
 | ----------- | -------------------------------------------- | -------- | ------------------------------------- |
@@ -101,20 +125,39 @@ mode.
 
 ## Visual props
 
-| Option          | Type                       | Default                                                   | Description                                                                                                             |
-| --------------- | -------------------------- | --------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| `stroke`        | `str`                      | `fill`                                                    | Stroke color                                                                                                            |
-| `strokeWidth`   | `float`                    | `0`                                                       | Stroke width                                                                                                            |
-| `fill`          | `str` \| `Value`           | `"black"`                                                 | Fill (for closed paths; channel-bindable)                                                                               |
-| `opacity`       | `float`                    | `1`                                                       | Element opacity                                                                                                         |
-| `mixBlendMode`  | `"multiply"` \| `"normal"` | `"multiply"` in edge mode / `"normal"` in `mode="center"` | Blend mode of the rendered path. Override to `"normal"` for opaque strokes that don't darken under colored backgrounds. |
-| `interpolation` | `"linear"` \| `"bezier"`   | `"linear"`                                                | Path interpolation between consecutive children                                                                         |
+| Option         | Type                          | Default                                                   | Description                                                                                                             |
+| -------------- | ----------------------------- | --------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `stroke`       | `str`                         | `fill`                                                    | Stroke color                                                                                                            |
+| `strokeWidth`  | `float`                       | `0`                                                       | Stroke width                                                                                                            |
+| `fill`         | `str` \| `Value`              | `"black"`                                                 | Fill (for closed paths; channel-bindable)                                                                               |
+| `opacity`      | `float`                       | `1`                                                       | Element opacity                                                                                                         |
+| `mixBlendMode` | `"multiply"` \| `"normal"`    | `"multiply"` in edge mode / `"normal"` in `mode="center"` | Blend mode of the rendered path. Override to `"normal"` for opaque strokes that don't darken under colored backgrounds. |
+| `curve`        | see [Path curve](#path-curve) | `"auto"`                                                  | Shape of the path between consecutive children (replaces the removed `interpolation`)                                   |
+
+## Path curve
+
+The `curve` option replaces the old `interpolation` / `route` options with a
+single knob controlling the shape of the path drawn between consecutive children:
+
+| Value                       | Description                                           |
+| --------------------------- | ----------------------------------------------------- |
+| `"auto"` (default)          | Picks a sensible curve for the connector              |
+| `"straight"` / `straight()` | Straight segments between points (the old `"linear"`) |
+| `"bezier"` / `bezier()`     | Smooth Bézier curve through the points                |
+| `orthogonal()`              | Right-angled (elbow) routing                          |
+| `arc(direction=...)`        | Circular arc; `direction` chooses the bow side        |
+| `perfect_arrows(bow=...)`   | perfect-arrows routing with a `bow` amount            |
+
+```python
+line([ref("A"), ref("B")], source="middle", curve="bezier")
+line([ref("A"), ref("B")], source="middle", curve=arc(direction="clockwise"))
+```
 
 ## Examples
 
 ```python
 # Center-to-center, opaque
-connect(
+line(
     [ref("A"), ref("B")],
     stroke="#774e32",
     strokeWidth=3,
@@ -123,29 +166,33 @@ connect(
 )
 
 # Bottom-to-top vertical link (e.g. ceiling -> hanging weight)
-connect(
+line(
     [ref("ceiling"), ref("weight")],
     source=["middle", "start"],
     target=["middle", "end"],
 )
 
 # One-sided clamp: A's right-middle straight across to B
-connect([ref("A"), ref("B")], source=["end", "middle"])
+line([ref("A"), ref("B")], source=["end", "middle"])
 
 # Multi-stop polyline: each consecutive pair gets its own segment
-connect([ref("A"), ref("B"), ref("C")], source="middle")
+line([ref("A"), ref("B"), ref("C")], source="middle")
+
+# Edge band between two shapes
+ribbon([ref("A"), ref("B")], dir="x")
 ```
 
 ## Notes
 
-- This is the **low-level layout operator**, distinct from the builder method
+- This is the **low-level combinator form** of the `line` / `ribbon` marks,
+  distinct from the builder method
   [`ChartBuilder.connect()`](/python/api/core/connect). The builder
   `.connect(line())` is the canonical spelling for simple line/area charts: it
-  threads a ref-consuming _mark_ through a chart's own marks. This operator
+  threads a ref-consuming _mark_ through a chart's own marks. This combinator form
   connects explicitly-listed `ref(...)` children inside a layout — reach for it
   only for cross-chart or hand-placed diagrams.
-- The high-level [`line`](/python/api/marks/line) and
-  [`area`](/python/api/marks/area) marks are thin wrappers over `connect`: they
+- The same [`line`](/python/api/marks/line) and
+  [`ribbon`](/python/api/marks/ribbon) marks also work in _selection_ form: they
   take the array of refs from [`selectAll(...)`](/python/api/selection/ref) and
   connect them. To re-partition a selection before connecting (e.g. one area per
   species), run it through a path-aware operator first —

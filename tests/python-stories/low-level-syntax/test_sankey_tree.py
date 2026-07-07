@@ -6,7 +6,7 @@ hierarchical tokens, and `connect` ribbons link each source to its target by
 `ref`. The bar tiers and the ribbons all live in one `layer`.
 """
 
-from gofish import layer, spread, stack, connect, rect, ref
+from gofish import layer, spread, stack, ribbon, rect, ref
 from python_stories.data import TITANIC, COLORS
 from python_stories._lowlevel_helpers import group_by, sum_by
 
@@ -139,35 +139,38 @@ def story_default():
     ribbons = []
     for cls, items in by_class.items():
         ribbons.append(
-            connect(
+            ribbon(
                 [ref(f"{cls}-src"), ref(f"{cls}-tgt")],
-                direction="x",
+                dir="x",
                 fill=_CLASS_COLOR[cls],
-                interpolation="bezier",
+                curve="bezier",
                 opacity=0.7,
+                mixBlendMode="multiply",
             )
         )
         for sex, s_items in group_by(items, "sex").items():
             ribbons.append(
-                connect(
+                ribbon(
                     [ref(f"{cls}-{sex}-src"), ref(f"{cls}-{sex}-tgt")],
-                    direction="x",
+                    dir="x",
                     fill=_sex_color(sex),
-                    interpolation="bezier",
+                    curve="bezier",
                     opacity=0.7,
+                    mixBlendMode="multiply",
                 )
             )
             for survived, sv_items in group_by(s_items, "survived").items():
                 ribbons.append(
-                    connect(
+                    ribbon(
                         [
                             ref(f"{cls}-{sex}-{survived}-src"),
                             ref(f"{cls}-{sex}-{survived}-tgt"),
                         ],
-                        direction="x",
+                        dir="x",
                         fill=_tgt_color(sex, survived),
-                        interpolation="bezier",
+                        curve="bezier",
                         opacity=0.7,
+                        mixBlendMode="multiply",
                     )
                 )
 

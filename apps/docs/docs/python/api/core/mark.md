@@ -36,7 +36,7 @@ Returns a new `ChartBuilder` with the mark set.
 | [circle](/python/api/marks/circle)   | A circle per item               |
 | [ellipse](/python/api/marks/ellipse) | An ellipse per item             |
 | [line](/python/api/marks/line)       | A line through the items        |
-| [area](/python/api/marks/area)       | A filled area through the items |
+| [ribbon](/python/api/marks/ribbon)   | A filled area through the items |
 | [blank](/python/api/marks/blank)     | An invisible positioning guide  |
 
 ## Encoding channels

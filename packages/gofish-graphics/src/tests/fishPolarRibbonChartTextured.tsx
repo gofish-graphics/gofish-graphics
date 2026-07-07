@@ -11,14 +11,13 @@ import { color, color6 } from "../color";
 import { seafood } from "../data/catch";
 import _ from "lodash";
 import { layer } from "../ast/graphicalOperators/layer";
-import { connect } from "../ast/graphicalOperators/connect";
 import { ref } from "../ast/shapes/ref";
 import { coord } from "../ast/coordinateTransforms/coord";
 import { polar_DEPRECATED } from "../ast/coordinateTransforms/polar_DEPRECATED";
 import { polar } from "../ast/coordinateTransforms/polar";
 import { stackX } from "../ast/graphicalOperators/stackX";
 import { stackY } from "../ast/graphicalOperators/stackY";
-import { connectX } from "../ast/graphicalOperators/connectX";
+import { ribbon } from "../lib";
 import { frame } from "../ast/graphicalOperators/frame";
 // import { fishData } from "../data/fish";
 
@@ -231,8 +230,8 @@ export const testFishPolarRibbonChartTextured = (
       ..._(seafood)
         .groupBy("species")
         .map((items, species) =>
-          connectX(
-            { opacity: 0.8, stroke: "black", strokeWidth: 3 },
+          ribbon(
+            { dir: "x", opacity: 0.8, stroke: "black", strokeWidth: 3, mixBlendMode: "multiply" },
             items.map((d) => ref(`${d.lake}-${d.species}`))
           )
         )

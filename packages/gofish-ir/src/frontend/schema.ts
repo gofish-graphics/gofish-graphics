@@ -299,7 +299,7 @@ export type LeafMarkType =
   | "rect"
   | "circle"
   | "line"
-  | "area"
+  | "ribbon"
   | "blank"
   | "ellipse"
   | "petal"
@@ -318,7 +318,12 @@ export type CombinatorMarkType =
   | "layer"
   | "enclose"
   | "arrow"
-  | "connect"
+  // `line`/`ribbon` are derived marks with a low-level combinator form
+  // (children = the refs/marks to connect) — the drop-in for the removed
+  // `connect`. They are ALSO leaf marks (bag/pairwise forms); the
+  // `__combinator` flag disambiguates.
+  | "line"
+  | "ribbon"
   | "treemap"
   | "over"
   | "inside"
@@ -568,7 +573,7 @@ export const LEAF_MARK_TYPES: readonly LeafMarkType[] = [
   "rect",
   "circle",
   "line",
-  "area",
+  "ribbon",
   "blank",
   "ellipse",
   "petal",
@@ -588,7 +593,8 @@ export const COMBINATOR_MARK_TYPES: readonly CombinatorMarkType[] = [
   "layer",
   "enclose",
   "arrow",
-  "connect",
+  "line",
+  "ribbon",
   "treemap",
   "over",
   "inside",

@@ -1,4 +1,5 @@
 import { Path, transformPath } from "../../path";
+import { convertPointsToBezierCurves } from "../../adaptive-resampling";
 import { GoFishAST } from "../_ast";
 import { GoFishNode, type ToPixel } from "../_node";
 import { resolveColorChannel } from "../../color";
@@ -20,8 +21,19 @@ import { pairs } from "../../util";
 import { linear } from "../coordinateTransforms/linear";
 import { MaybeValue } from "../data";
 import { Domain, axisScale } from "../domain";
-import { UNDEFINED, UnderlyingSpace } from "../underlyingSpace";
+import {
+  UNDEFINED,
+  UnderlyingSpace,
+  isPOSITION,
+  isPositioningSpace,
+} from "../underlyingSpace";
 import { createNodeOperator } from "../withGoFish";
+import {
+  resolveCurve,
+  centerPoint,
+  isSequenceCurve,
+  type Curve,
+} from "./routers";
 
 // Per-axis bbox anchor. A literal number is the raw fraction in [0, 1]; the
 // keywords map to {start: 0, middle: 0.5, end: 1}. GoFish is y-up, so
@@ -60,7 +72,7 @@ export const connect = createNodeOperator(
     {
       direction,
       fill,
-      interpolation,
+      curve,
       stroke,
       strokeWidth,
       opacity,
@@ -72,7 +84,13 @@ export const connect = createNodeOperator(
       // Optional in anchor mode (source/target), where it is ignored.
       direction?: FancyDirection;
       fill?: MaybeValue<string>;
-      interpolation?: "linear" | "bezier";
+      // The single screen-space path-shaping key. A curve value from a factory
+      // (`straight()`, `bezier()`, `orthogonal()`, `arc({ direction })`,
+      // `perfectArrows({ bow })`, …) or a bare name (`"straight"` | `"bezier"`).
+      // Center ("line") mode resolves it through the curve registry; edge
+      // ("ribbon") mode only honors `straight` (linear band) vs `bezier`
+      // (S-curve band). Defaults to `"straight"` when omitted.
+      curve?: Curve;
       stroke?: string;
       strokeWidth?: number;
       opacity?: number;
@@ -100,7 +118,8 @@ export const connect = createNodeOperator(
     const resolvedTarget =
       target !== undefined ? resolveAnchor(target) : undefined;
     const dir = elaborateDirection(direction ?? 0);
-    interpolation = interpolation ?? "linear";
+    const curveNameOf = (c: Curve | undefined): string | undefined =>
+      c === undefined ? undefined : typeof c === "string" ? c : c.type;
 
     return new GoFishNode(
       {
@@ -137,6 +156,72 @@ export const connect = createNodeOperator(
             ])
           );
           const bboxPairs = pairs(childPlaceables.map((child) => child.dims));
+
+          // Resolve the curve. An omitted/`"auto"` curve detects whether the
+          // connected points share a homogeneous *continuous* space on the
+          // connection axis (i.e. they are samples of a continuous variable):
+          // if so we smooth with a centripetal Catmull-Rom spline; otherwise we
+          // fall back to the always-drawable discrete connector (line→straight,
+          // ribbon→bezier). Connecting two arbitrary points is therefore always
+          // valid — it just isn't smoothed. Explicit curves always win.
+          //
+          // The children carry the space because `resolveNames` runs before the
+          // underlying-space pass, so a `ref` already proxies its target's space
+          // (falling back to ORDINAL ⇒ discrete when unresolved).
+          const isAuto = curve === undefined || curveNameOf(curve) === "auto";
+          let resolvedCurve: Curve;
+          if (!isAuto) {
+            resolvedCurve = curve as Curve;
+          } else {
+            const axis = dir as 0 | 1;
+            // The connection-axis *positioning* space lives on whatever placed
+            // the connected marks: the mark itself (a data-bound
+            // `ellipse({ x: value(…) })` reports POSITION) or an ancestor (a
+            // `circle`/`blank` placed by `scatter` — the scatter reports
+            // POSITION). So walk up from each mark to the nearest ancestor whose
+            // connection-axis space is a *positioning* kind (POSITION = data
+            // axis, ORDINAL = category axis), skipping the mark's own SIZE
+            // (its extent, e.g. a circle's radius) and UNDEFINED.
+            const connectionSpaceOf = (
+              c: GoFishAST
+            ): UnderlyingSpace | undefined => {
+              let node: any = (c as any).targetNode ?? c;
+              while (node) {
+                const s = node.resolveUnderlyingSpace?.()?.[axis];
+                // Stop at the nearest *positioning* space — an ORDINAL ancestor
+                // must win over a continuous grandparent (a grouped layout is
+                // discrete even inside a continuous frame), so we can't skip it.
+                if (s !== undefined && isPositioningSpace(s)) return s;
+                node = node.parent;
+              }
+              return undefined;
+            };
+            const homogeneousContinuous =
+              children.length >= 2 &&
+              children.every((c) => {
+                const s = connectionSpaceOf(c);
+                return s !== undefined && isPOSITION(s);
+              });
+            // A *homogeneous continuous* connection axis (the points are samples
+            // of one continuous variable — a line chart, or a stacked area /
+            // streamgraph over a continuous x) smooths with centripetal
+            // Catmull-Rom, for BOTH lines and ribbons: a stacked area should
+            // curve like its line-chart sibling. Otherwise we draw the mode's
+            // "linear" connector: a *line* (center) is a straight polyline
+            // between the points; a *ribbon* (edge) is a bezier band between
+            // discrete regions (bezier is to a band what a straight segment is
+            // to a line — the honest discrete-region connector). Explicit curves
+            // always win over this default.
+            resolvedCurve = homogeneousContinuous
+              ? "catmullRom"
+              : mode === "center"
+                ? "straight"
+                : "bezier";
+          }
+          const resolvedCurveName = curveNameOf(resolvedCurve);
+          // Edge ("ribbon") mode: bezier = S-curve band (discrete regions),
+          // catmullRom = smoothed band over a continuous axis, else linear band.
+          const edgeBezier = resolvedCurveName === "bezier";
 
           // Anchor mode: connect normalized points on each endpoint's bbox.
           if (hasAnchors) {
@@ -237,63 +322,86 @@ export const connect = createNodeOperator(
             }
           }
 
-          if (dir === 0) {
-            if (interpolation === "linear") {
-              if (mode === "center") {
-                for (const [b0, b1] of bboxPairs) {
-                  const midX = (b0[0].max! + b1[0].min!) / 2;
-                  const midY = (b0[1].max! + b1[1].min!) / 2;
-                  paths.push([
-                    {
-                      type: "line",
-                      points: [
-                        [
-                          (b0[0].min! + b0[0].max!) / 2,
-                          (b0[1].min! + b0[1].max!) / 2,
-                        ],
-                        [
-                          (b1[0].min! + b1[0].max!) / 2,
-                          (b1[1].min! + b1[1].max!) / 2,
-                        ],
-                      ],
-                    },
-                  ]);
-                }
-              } else {
-                for (const [b0, b1] of bboxPairs) {
-                  paths.push([
-                    {
-                      type: "line",
-                      points: [
-                        [b0[0].max!, b0[1].min!],
-                        [b1[0].min!, b1[1].min!],
-                      ],
-                    },
-                    {
-                      type: "line",
-                      points: [
-                        [b1[0].min!, b1[1].min!],
-                        [b1[0].min!, b1[1].max!],
-                      ],
-                    },
-                    {
-                      type: "line",
-                      points: [
-                        [b1[0].min!, b1[1].max!],
-                        [b0[0].max!, b0[1].max!],
-                      ],
-                    },
-                    {
-                      type: "line",
-                      points: [
-                        [b0[0].max!, b0[1].max!],
-                        [b0[0].max!, b0[1].min!],
-                      ],
-                    },
-                  ]);
-                }
+          // `catmullRom` is a *sequence* curve — it threads the whole run of
+          // points as one centripetal spline (d3's `.curve(curveCatmullRom)`),
+          // bypassing the pairwise router loop. A line (center) threads its
+          // centers; a ribbon (edge) threads BOTH facing boundaries of the band
+          // — forward along the near edge, a cap across, back along the far edge
+          // — so a continuous stacked area curves like its line-chart sibling.
+          const mainAxis = dir as 0 | 1;
+          const edgePoint = (
+            main: number,
+            cross: number
+          ): [number, number] => {
+            const p: [number, number] = [0, 0];
+            p[mainAxis] = main;
+            p[1 - mainAxis] = cross;
+            return p;
+          };
+          if (isSequenceCurve(resolvedCurveName)) {
+            if (mode === "center") {
+              const centers = childPlaceables.map((c) => centerPoint(c.dims));
+              paths.push(convertPointsToBezierCurves(centers));
+            } else {
+              const near: [number, number][] = [];
+              const far: [number, number][] = [];
+              for (const c of childPlaceables) {
+                const b = c.dims;
+                const main = (b[mainAxis].min! + b[mainAxis].max!) / 2;
+                near.push(edgePoint(main, b[1 - mainAxis].min!));
+                far.push(edgePoint(main, b[1 - mainAxis].max!));
               }
-            } else if (interpolation === "bezier") {
+              const farRev = far.slice().reverse();
+              paths.push([
+                ...convertPointsToBezierCurves(near),
+                { type: "line", points: [near[near.length - 1], farRev[0]] },
+                ...convertPointsToBezierCurves(farRev),
+                { type: "line", points: [farRev[farRev.length - 1], near[0]] },
+              ]);
+            }
+          } else if (mode === "center") {
+            const { router, options: routeOpts } = resolveCurve(resolvedCurve);
+            for (const [b0, b1] of bboxPairs) {
+              paths.push(
+                router(b0, b1, { dir: dir as 0 | 1, opts: routeOpts })
+              );
+            }
+          } else if (dir === 0) {
+            // Edge ("ribbon") mode: a filled quad between the facing edges.
+            if (!edgeBezier) {
+              for (const [b0, b1] of bboxPairs) {
+                paths.push([
+                  {
+                    type: "line",
+                    points: [
+                      [b0[0].max!, b0[1].min!],
+                      [b1[0].min!, b1[1].min!],
+                    ],
+                  },
+                  {
+                    type: "line",
+                    points: [
+                      [b1[0].min!, b1[1].min!],
+                      [b1[0].min!, b1[1].max!],
+                    ],
+                  },
+                  {
+                    type: "line",
+                    points: [
+                      [b1[0].min!, b1[1].max!],
+                      [b0[0].max!, b0[1].max!],
+                    ],
+                  },
+                  {
+                    type: "line",
+                    points: [
+                      [b0[0].max!, b0[1].max!],
+                      [b0[0].max!, b0[1].min!],
+                    ],
+                  },
+                ]);
+              }
+            } else {
               for (const [b0, b1] of bboxPairs) {
                 const midX = (b0[0].max! + b1[0].min!) / 2;
                 paths.push([
@@ -329,112 +437,72 @@ export const connect = createNodeOperator(
               }
             }
           } else {
-            if (interpolation === "linear") {
-              if (mode === "center") {
-                for (const [b0, b1] of bboxPairs) {
-                  paths.push([
-                    {
-                      type: "line",
-                      points: [
-                        [
-                          (b0[0].min! + b0[0].max!) / 2,
-                          (b0[1].min! + b0[1].max!) / 2,
-                        ],
-                        [
-                          (b1[0].min! + b1[0].max!) / 2,
-                          (b1[1].min! + b1[1].max!) / 2,
-                        ],
-                      ],
-                    },
-                  ]);
-                }
-              } else {
-                for (const [b0, b1] of bboxPairs) {
-                  paths.push([
-                    {
-                      type: "line",
-                      points: [
-                        [b0[0].min!, b0[1].max!],
-                        [b1[0].min!, b1[1].min!],
-                      ],
-                    },
-                    {
-                      type: "line",
-                      points: [
-                        [b1[0].min!, b1[1].min!],
-                        [b1[0].max!, b1[1].min!],
-                      ],
-                    },
-                    {
-                      type: "line",
-                      points: [
-                        [b1[0].max!, b1[1].min!],
-                        [b0[0].max!, b0[1].max!],
-                      ],
-                    },
-                    {
-                      type: "line",
-                      points: [
-                        [b0[0].max!, b0[1].max!],
-                        [b0[0].min!, b0[1].max!],
-                      ],
-                    },
-                  ]);
-                }
+            if (!edgeBezier) {
+              for (const [b0, b1] of bboxPairs) {
+                paths.push([
+                  {
+                    type: "line",
+                    points: [
+                      [b0[0].min!, b0[1].max!],
+                      [b1[0].min!, b1[1].min!],
+                    ],
+                  },
+                  {
+                    type: "line",
+                    points: [
+                      [b1[0].min!, b1[1].min!],
+                      [b1[0].max!, b1[1].min!],
+                    ],
+                  },
+                  {
+                    type: "line",
+                    points: [
+                      [b1[0].max!, b1[1].min!],
+                      [b0[0].max!, b0[1].max!],
+                    ],
+                  },
+                  {
+                    type: "line",
+                    points: [
+                      [b0[0].max!, b0[1].max!],
+                      [b0[0].min!, b0[1].max!],
+                    ],
+                  },
+                ]);
               }
-            } else if (interpolation === "bezier") {
-              if (mode === "center") {
-                for (const [b0, b1] of bboxPairs) {
-                  paths.push([
-                    {
-                      type: "line",
-                      points: [
-                        [
-                          (b0[0].min! + b0[0].max!) / 2,
-                          (b0[1].min! + b0[1].max!) / 2,
-                        ],
-                        [
-                          (b1[0].min! + b1[0].max!) / 2,
-                          (b1[1].min! + b1[1].max!) / 2,
-                        ],
-                      ],
-                    },
-                  ]);
-                }
-              } else {
-                for (const [b0, b1] of bboxPairs) {
-                  const midY = (b0[1].max! + b1[1].min!) / 2;
-                  paths.push([
-                    {
-                      type: "bezier",
-                      start: [b0[0].min!, b0[1].max!],
-                      control1: [b0[0].min!, midY],
-                      control2: [b1[0].min!, midY],
-                      end: [b1[0].min!, b1[1].min!],
-                    },
-                    {
-                      type: "line",
-                      points: [
-                        [b1[0].min!, b1[1].min!],
-                        [b1[0].max!, b1[1].min!],
-                      ],
-                    },
-                    {
-                      type: "bezier",
-                      start: [b1[0].max!, b1[1].min!],
-                      control1: [b1[0].max!, midY],
-                      control2: [b0[0].max!, midY],
-                      end: [b0[0].max!, b0[1].max!],
-                    },
-                    {
-                      type: "line",
-                      points: [
-                        [b0[0].max!, b0[1].max!],
-                        [b0[0].min!, b0[1].max!],
-                      ],
-                    },
-                  ]);
-                }
+            } else {
+              for (const [b0, b1] of bboxPairs) {
+                const midY = (b0[1].max! + b1[1].min!) / 2;
+                paths.push([
+                  {
+                    type: "bezier",
+                    start: [b0[0].min!, b0[1].max!],
+                    control1: [b0[0].min!, midY],
+                    control2: [b1[0].min!, midY],
+                    end: [b1[0].min!, b1[1].min!],
+                  },
+                  {
+                    type: "line",
+                    points: [
+                      [b1[0].min!, b1[1].min!],
+                      [b1[0].max!, b1[1].min!],
+                    ],
+                  },
+                  {
+                    type: "bezier",
+                    start: [b1[0].max!, b1[1].min!],
+                    control1: [b1[0].max!, midY],
+                    control2: [b0[0].max!, midY],
+                    end: [b0[0].max!, b0[1].max!],
+                  },
+                  {
+                    type: "line",
+                    points: [
+                      [b0[0].max!, b0[1].max!],
+                      [b0[0].min!, b0[1].max!],
+                    ],
+                  },
+                ]);
               }
             }
           }
@@ -546,8 +614,9 @@ export const connect = createNodeOperator(
             stroke: stroke ?? resolvedFill ?? "black",
             strokeWidth: strokeWidth ?? 0,
             opacity: opacity ?? 1,
-            mixBlendMode:
-              mixBlendMode ?? (mode === "center" ? "normal" : "multiply"),
+            // Normal by default for both modes; a ribbon that wants overlaps to
+            // darken opts into `mixBlendMode: "multiply"` explicitly.
+            mixBlendMode: mixBlendMode ?? "normal",
           });
 
           return (renderData.paths as Path[]).map((path) => {

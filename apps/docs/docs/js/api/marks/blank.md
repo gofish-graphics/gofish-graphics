@@ -1,6 +1,6 @@
 # blank
 
-Creates invisible positioning guides. Use blank when you need to define positions for other marks (like `line` or `area`) without rendering visible shapes.
+Creates invisible positioning guides. Use blank when you need to define positions for other marks (like `line` or `ribbon`) without rendering visible shapes.
 
 ::: gofish
 

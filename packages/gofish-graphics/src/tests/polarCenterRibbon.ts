@@ -14,7 +14,7 @@ import { linear } from "../ast/coordinateTransforms/linear";
 import _ from "lodash";
 import { layer } from "../ast/graphicalOperators/layer";
 import { ref } from "../ast/shapes/ref";
-import { connect } from "../ast/graphicalOperators/connect";
+import { ribbon } from "../lib";
 const data = [
   { category: "A", group: "x", value: 0.1 },
   { category: "A", group: "y", value: 0.6 },
@@ -88,12 +88,13 @@ export const testPolarCenterRibbon = (size: { width: number; height: number }) =
         ..._(data)
           .groupBy("group")
           .map((items, group) =>
-            connect(
+            ribbon(
               {
-                direction: "y",
+                dir: "y",
                 fill: colorScale[group as keyof typeof colorScale],
-                interpolation: "bezier",
+                curve: "bezier",
                 opacity: 0.5,
+                mixBlendMode: "multiply",
               },
               items.map((d) => ref(`${d.category}-${d.group}`))
             )

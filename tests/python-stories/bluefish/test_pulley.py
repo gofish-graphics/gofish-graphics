@@ -17,8 +17,8 @@ Exercises four features added in this PR's Python wrapper port:
 from gofish import (
     Constraint,
     circle,
-    connect,
     createName,
+    line,
     layer,
     mark,
     polygon,
@@ -173,12 +173,12 @@ def story_pulley():
                 # Declared after tier 1 so their ref()s resolve against
                 # placed shapes. `z_order(-1)` keeps the unmentioned ropes
                 # behind their circles by default.
-                connect(
+                line(
                     [ref(ceiling), ref(B)], target="middle", **ROPE_OPTS
                 )
                 .name("ropeSupport")
                 .z_order(-1),
-                connect(
+                line(
                     [ref(B), ref(A)],
                     source=["start", "middle"],
                     target="middle",
@@ -186,7 +186,7 @@ def story_pulley():
                 )
                 .name("ropeX")
                 .z_order(-1),
-                connect(
+                line(
                     [ref(B), ref(C)],
                     source=["end", "middle"],
                     target=["start", "middle"],
@@ -194,28 +194,28 @@ def story_pulley():
                 )
                 .name("ropeY")
                 .z_order(-1),
-                connect(
+                line(
                     [ref(ceiling), ref(C)],
                     target=["end", "middle"],
                     **ROPE_OPTS,
                 )
                 .name("ropeZ")
                 .z_order(-1),
-                connect(
+                line(
                     [ref(A), ref(w1)],
                     source=["start", "middle"],
                     **ROPE_OPTS,
                 )
                 .name("ropeP")
                 .z_order(-1),
-                connect(
+                line(
                     [ref(A), ref(w2)],
                     source=["end", "middle"],
                     **ROPE_OPTS,
                 )
                 .name("ropeQ")
                 .z_order(-1),
-                connect(
+                line(
                     [ref(C), ref(w2)], source="middle", **ROPE_OPTS
                 )
                 .name("ropeS")

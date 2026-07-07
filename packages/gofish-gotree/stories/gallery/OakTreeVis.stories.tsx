@@ -52,7 +52,7 @@ import { combine, byDepth, mount } from "./_shared";
 //     x→θ default, so plain polar() is the closer match here; a θ/r swap would
 //     map the radial sibling-stagger onto θ and lose the spiral.)
 //  4. Link=curveStepBefore (orthogonal step links) is NOT supported →
-//     {interpolation:"linear"} (the route→curve link API lands in draft PR #637).
+//     {curve:"straight"} (the route→curve link API lands in draft PR #637).
 //     The reference's right-angle "step" corners therefore render as straight
 //     segments, which bow into arcs under the polar transform (a straight
 //     cartesian edge maps to a polar arc).
@@ -72,7 +72,7 @@ export const OakTreeVis: StoryObj = {
       {
         node,
         // curveStepBefore unsupported → linear (see GAP 4).
-        link: { interpolation: "linear", stroke: "#90a4ae", strokeWidth: 2 },
+        link: { curve: "straight", stroke: "#90a4ae", strokeWidth: 2 },
         parentChild: combine({
           // θ: parent angularly centered over its subtree's span (dsl within/align).
           x: { kind: "align", alignment: "middle" },

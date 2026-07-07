@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/html";
-import { ellipse, connect, Layer, Frame, polar } from "gofish-graphics";
+import { ellipse, line, Layer, Frame, polar } from "gofish-graphics";
 import { initializeContainer } from "../helper";
 import { flareVis, type FlareNode } from "./_flareVis";
 
@@ -33,7 +33,7 @@ import { flareVis, type FlareNode } from "./_flareVis";
 //
 //   THE SWIRL-LINK TRICK. The dsl asks for arccurve links (ArcDirection
 //   bottom); curved-link interpolation is unimplemented (tracked for PR #637).
-//   But under coord(polar()), connect's `interpolation:"linear"` interpolates
+//   But under coord(polar()), connect's `curve:"straight"` interpolates
 //   in (θ, r) space and ADAPTIVELY RESAMPLES the segment (adaptive-resampling.ts
 //   subdivides on the transform's curvature), so a straight (θ,r) segment
 //   renders as a smooth screen curve. We exploit that twice:
@@ -168,10 +168,9 @@ const links = placed
       // CENTER → hub: spiral swirl. Center anchor carries the child's angle
       // plus a constant lag so linear resampling winds it into a pinwheel arc.
       return [
-        connect(
+        line(
           {
-            mode: "center",
-            interpolation: "linear",
+            curve: "straight",
             fill: "none",
             stroke: LINK_STROKE,
             strokeWidth: LINK_WIDTH,
@@ -184,10 +183,9 @@ const links = placed
     // a mid anchor pushed just outside RING_R.
     const midTheta = (parent.theta + p.theta) / 2;
     return [
-      connect(
+      line(
         {
-          mode: "center",
-          interpolation: "linear",
+          curve: "straight",
           fill: "none",
           stroke: LINK_STROKE,
           strokeWidth: LINK_WIDTH,

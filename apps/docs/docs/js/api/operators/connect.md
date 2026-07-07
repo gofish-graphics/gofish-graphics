@@ -1,10 +1,28 @@
-# connect
+# line / ribbon connector (combinator form)
 
-Draws a connector (line) between each consecutive pair of children. Used for
+Draws a connector between each consecutive pair of children. Used for
 linking elements that have already been placed by another layer or
 constraint — most commonly inside a [nested-tier](/internals/design/principles)
 layout where the inner tier places the shapes and the outer tier draws the
 connections.
+
+::: tip Renamed from `connect`
+The low-level `connect` / `connectX` / `connectY` operators (and the v2
+`gf.Connect(...)`) **have been removed**. The connector primitive is now spelled
+as the _combinator form_ of the [`line`](/js/api/marks/line) mark (center) and
+the [`ribbon`](/js/api/marks/ribbon) mark (edge band): you pass an explicit array
+of `ref(...)` children as the second argument.
+
+| Removed                                       | Replacement                                                     |
+| --------------------------------------------- | --------------------------------------------------------------- |
+| `connect({ ... }, [ref("a"), ref("b")])`      | `line({ ... }, [ref("a"), ref("b")])`                           |
+| `gf.Connect({ ... }, [...])`                  | `gf.line({ ... }, [...])`                                       |
+| `connectX(...)` / `connectY(...)` (edge band) | `ribbon({ dir: "x" }, [...])` / `ribbon({ dir: "y" }, [...])`   |
+| `interpolation: "linear" \| "bezier"`         | `curve: "straight" \| "bezier"` (see [Path curve](#path-curve)) |
+
+This page is still served at `operators/connect` so existing cross-links keep
+working.
+:::
 
 ::: gofish
 
@@ -19,7 +37,7 @@ gf.layer([
       gf.Constraint.distribute({ dir: "x", spacing: 80 }, [a, b]),
       gf.Constraint.align({ y: "middle" }, [a, b]),
     ]),
-  gf.Connect(
+  gf.line(
     {
       stroke: "black",
       strokeWidth: 2,
@@ -36,21 +54,27 @@ gf.layer([
 ## Signature
 
 ```ts
-connect({
+// center connector
+line({
   source?, target?,
   stroke?, strokeWidth?, fill?, opacity?, mixBlendMode?,
-  interpolation?,
-  // for non-anchor mode:
+  curve?,
+  // for non-anchor (edge) mode:
   direction?, mode?,
 }, [child1, child2, ...])
+
+// edge band
+ribbon({ dir?, ... }, [child1, child2, ...])
 ```
 
-`Connect` is the v2 alias for the same factory. The children are usually
-`ref(...)` calls that point at named elements placed by an earlier tier.
+The children are usually `ref(...)` calls that point at named elements placed by
+an earlier tier. Passing an explicit children array (rather than letting the mark
+take refs from a `selectAll(...)` upstream) is what makes this the _combinator_
+form.
 
 ## Anchor mode (recommended)
 
-When `source` or `target` is provided, `connect` runs a straight line between
+When `source` or `target` is provided, `line` runs a straight line between
 the _anchored points_ on each consecutive pair of children's bounding boxes —
 ignoring `direction` and `mode`. The anchor is a normalized fraction of the
 bbox: `[0, 0]` = bottom-left, `[1, 1]` = top-right, `[0.5, 0.5]` = center.
@@ -88,22 +112,23 @@ Where `start` → `0`, `middle` → `0.5`, `end` → `1`.
 
 ```ts
 // Both anchors: literal line between two corners
-Connect({ source: "end", target: "start" }, [ref("a"), ref("b")]);
+line({ source: "end", target: "start" }, [ref("a"), ref("b")]);
 
 // One anchor: target endpoint is clamped onto B's bbox
-Connect({ source: ["end", "middle"] }, [ref("A"), ref("B")]);
+line({ source: ["end", "middle"] }, [ref("A"), ref("B")]);
 // → straight horizontal line from A's right-middle to B's left edge at the same y
 
 // Center-to-center is the most common: just use "middle"
-Connect({ source: "middle", target: "middle" }, [ref("A"), ref("B")]);
+line({ source: "middle", target: "middle" }, [ref("A"), ref("B")]);
 ```
 
 ## Edge mode (no anchors)
 
-When neither `source` nor `target` is given, `connect` falls back to
+When neither `source` nor `target` is given, `line` falls back to
 edge mode: it routes between the children's facing edges along
-`direction`. This is the legacy path; most diagrams should prefer anchor
-mode.
+`direction`. For an edge _band_ between the children, use
+[`ribbon`](/js/api/marks/ribbon) instead. This is the legacy path; most
+diagrams should prefer anchor mode.
 
 | Option      | Type                                   | Default  | Description                           |
 | ----------- | -------------------------------------- | -------- | ------------------------------------- |
@@ -112,20 +137,42 @@ mode.
 
 ## Visual props
 
-| Option          | Type                     | Default                                                    | Description                                                                                                             |
-| --------------- | ------------------------ | ---------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| `stroke`        | `string`                 | `fill`                                                     | Stroke color                                                                                                            |
-| `strokeWidth`   | `number`                 | `0`                                                        | Stroke width                                                                                                            |
-| `fill`          | `MaybeValue<string>`     | `"black"`                                                  | Fill (for closed paths; channel-bindable)                                                                               |
-| `opacity`       | `number`                 | `1`                                                        | Element opacity                                                                                                         |
-| `mixBlendMode`  | `"multiply" \| "normal"` | `"multiply"` in edge mode / `"normal"` in `mode: "center"` | Blend mode of the rendered path. Override to `"normal"` for opaque strokes that don't darken under colored backgrounds. |
-| `interpolation` | `"linear" \| "bezier"`   | `"linear"`                                                 | Path interpolation between consecutive children                                                                         |
+| Option         | Type                          | Default                                                    | Description                                                                                                             |
+| -------------- | ----------------------------- | ---------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `stroke`       | `string`                      | `fill`                                                     | Stroke color                                                                                                            |
+| `strokeWidth`  | `number`                      | `0`                                                        | Stroke width                                                                                                            |
+| `fill`         | `MaybeValue<string>`          | `"black"`                                                  | Fill (for closed paths; channel-bindable)                                                                               |
+| `opacity`      | `number`                      | `1`                                                        | Element opacity                                                                                                         |
+| `mixBlendMode` | `"multiply" \| "normal"`      | `"multiply"` in edge mode / `"normal"` in `mode: "center"` | Blend mode of the rendered path. Override to `"normal"` for opaque strokes that don't darken under colored backgrounds. |
+| `curve`        | see [Path curve](#path-curve) | `"auto"`                                                   | Shape of the path between consecutive children (replaces the removed `interpolation`)                                   |
+
+## Path curve
+
+The `curve` option replaces the old `interpolation` / `route` options with a
+single knob controlling the shape of the path drawn between consecutive children:
+
+| Value                       | Description                                           |
+| --------------------------- | ----------------------------------------------------- |
+| `"auto"` (default)          | Picks a sensible curve for the connector              |
+| `"straight"` / `straight()` | Straight segments between points (the old `"linear"`) |
+| `"bezier"` / `bezier()`     | Smooth Bézier curve through the points                |
+| `orthogonal()`              | Right-angled (elbow) routing                          |
+| `arc({ direction })`        | Circular arc; `direction` chooses the bow side        |
+| `perfectArrows({ bow })`    | perfect-arrows routing with a `bow` amount            |
+
+```ts
+line({ source: "middle", curve: "bezier" }, [ref("A"), ref("B")]);
+line({ source: "middle", curve: gf.arc({ direction: "clockwise" }) }, [
+  ref("A"),
+  ref("B"),
+]);
+```
 
 ## Examples
 
 ```ts
 // Center-to-center, opaque
-Connect(
+line(
   {
     stroke: "#774e32",
     strokeWidth: 3,
@@ -136,26 +183,30 @@ Connect(
 );
 
 // Bottom-to-top vertical link (e.g. ceiling → hanging weight)
-Connect({ source: ["middle", "start"], target: ["middle", "end"] }, [
+line({ source: ["middle", "start"], target: ["middle", "end"] }, [
   ref("ceiling"),
   ref("weight"),
 ]);
 
 // One-sided clamp: A's right-middle straight across to B
-Connect({ source: ["end", "middle"] }, [ref("A"), ref("B")]);
+line({ source: ["end", "middle"] }, [ref("A"), ref("B")]);
 
 // Multi-stop polyline: each consecutive pair gets its own segment
-Connect({ source: "middle" }, [ref("A"), ref("B"), ref("C")]);
+line({ source: "middle" }, [ref("A"), ref("B"), ref("C")]);
+
+// Edge band between two shapes
+ribbon({ dir: "x" }, [ref("A"), ref("B")]);
 ```
 
 ## Notes
 
-- This is the **low-level layout operator**, distinct from the v3 builder method
+- This is the **low-level combinator form** of the `line` / `ribbon` marks,
+  distinct from the v3 builder method
   [`ChartBuilder.connect()`](/js/api/core/connect). The builder `.connect(line())`
   is sugar that threads a ref-consuming _mark_ through a chart's own marks; this
-  operator connects explicitly-listed `ref(...)` children inside a layout.
-- The high-level [`line`](/js/api/marks/line) and [`area`](/js/api/marks/area)
-  marks are thin wrappers over `connect`: they take the array of refs from
+  combinator form connects explicitly-listed `ref(...)` children inside a layout.
+- The same [`line`](/js/api/marks/line) and [`ribbon`](/js/api/marks/ribbon)
+  marks also work in _selection_ form: they take the array of refs from
   [`selectAll(...)`](/js/api/selection/ref) and connect them. To re-partition
   a selection before connecting (e.g. one area per species), run it through a
   path-aware operator first — `group({ by: "datum.species" })`; see

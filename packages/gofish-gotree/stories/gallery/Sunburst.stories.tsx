@@ -50,7 +50,7 @@ import { initializeContainer } from "../helper";
 //    drawn the disc starts at the same angle and the budget is the full 2π.
 //  - PolarAxis: y-axis (the θ/r axis swap from the dsl) is not expressible.
 //  - Link:curve — links are not drawn for a filled-wedge sunburst (link:"none"
-//    is correct here); polar links only support {interpolation:"linear"|"none"},
+//    is correct here); polar links only support {curve:"straight"|"none"},
 //    never curved arcs (draft PR #637's route→curve registry is where curved
 //    links land).
 //  - Angular AUTO-FIT (#618): leaves carry a unit `thetaSize` weight; the coord

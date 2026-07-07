@@ -324,7 +324,7 @@ export class ChartBuilder<TInput, TOutput = TInput> {
   }
 
   /**
-   * Overlay a connector mark (e.g. `line()`, `area()`) under the nodes this
+   * Overlay a connector mark (e.g. `line()`, `ribbon()`) under the nodes this
    * chart's mark produces — sugar for the two-chart layer([...]) + selectAll
    * pattern. If the mark has a string `.name(...)`, its registered nodes are
    * the targets (exactly the manual selectAll(name) semantics); otherwise the
@@ -355,7 +355,7 @@ export class ChartBuilder<TInput, TOutput = TInput> {
   /**
    * Stack another tier over this one. `child` is its own `Chart(...)` pipeline;
    * an empty `Chart()` scope (no data) inherits *this* tier's marks (so
-   * `.layer(Chart().flow(group({by})).mark(area()))` connects what you just
+   * `.layer(Chart().flow(group({by})).mark(ribbon()))` connects what you just
    * drew), while `Chart(table)` drives the tier from another dataset (resolve
    * back into the chart with `resolve(..., { from: selectAll(...) })`). Returns
    * a `LayerBuilder` so tiers keep chaining: `.layer(a).layer(b)`. Sugar for the

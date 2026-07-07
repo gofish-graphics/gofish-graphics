@@ -9,8 +9,16 @@ export type Alignment = "start" | "middle" | "end" | "baseline";
  * `sibling` receives the full children list. Users can pass any function with
  * this shape — the `spread()` and `nest()` helpers (re-exported from
  * `gofish-gotree`) are ergonomic conveniences but not the only option.
+ *
+ * The optional `growthDir` tag records the axis along which the combiner
+ * separates parent from child (its distribute/spread direction). Links read it
+ * to bend/curve along the tree's actual growth axis; it's absent when the axis
+ * is ambiguous (e.g. a diagonal cascade that distributes on both axes) or when
+ * the combiner is a user-supplied plain function.
  */
-export type Combiner = (children: any[]) => any;
+export type Combiner = ((children: any[]) => any) & {
+  growthDir?: "x" | "y";
+};
 
 /**
  * A depth-indexed combiner: picks a `Combiner` based on the depth of the subtree
@@ -35,7 +43,10 @@ export type HierarchyDatum = {
 export type NodeFactory = (datum: HierarchyDatum) => Mark<any>;
 
 export type LinkOptions = {
-  interpolation?: "linear" | "bezier" | "orthogonal" | "arc";
+  // Screen-space path shape for the link (GoTree's `Link` element). Maps to a
+  // GoFish `curve` of the same name (GoTree's "straight" link → `straight`,
+  // "curve" → `bezier`).
+  curve?: "straight" | "bezier" | "orthogonal" | "arc";
   stroke?: string;
   strokeWidth?: number;
   opacity?: number;

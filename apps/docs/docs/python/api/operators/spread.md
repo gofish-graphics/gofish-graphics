@@ -104,7 +104,7 @@ So a ribbon chart reads:
 ```python
 chart(selectAll("bars")) \
     .flow(group(by="datum.species")) \
-    .mark(area(opacity=0.8))         # channel → raw record, no prefix
+    .mark(ribbon(opacity=0.8))         # channel → raw record, no prefix
 ```
 
 Do **not** "consistency-refactor" channels into `datum.count` — a channel like

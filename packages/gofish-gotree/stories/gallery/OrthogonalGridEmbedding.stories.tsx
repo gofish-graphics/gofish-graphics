@@ -24,7 +24,7 @@ import { combine, byDepth, mount } from "./_shared";
 //  - Orthogonal links: the dsl's Link is "orthogonal" (right-angle elbow
 //    connectors — in the reference, a radial spoke from the parent meeting a
 //    short tangential stub at each child). The link renderer has no orthogonal
-//    mode, so links fall back to {interpolation:"linear"} (straight segments;
+//    mode, so links fall back to {curve:"straight"} (straight segments;
 //    the route→curve link API lands in draft PR #637). Under polar() even those
 //    straight segments bow along arcs, so the crisp grid look of the reference
 //    is lost.
@@ -51,7 +51,7 @@ export const OrthogonalGridEmbedding: StoryObj = {
       {
         node,
         // Orthogonal links unsupported → linear fallback (see NOTES).
-        link: { interpolation: "linear", stroke: "#90a4ae", strokeWidth: 1.5 },
+        link: { curve: "straight", stroke: "#90a4ae", strokeWidth: 1.5 },
         parentChild: combine({
           // θ: parent centered over its subtree's angular span.
           x: { kind: "align", alignment: "middle" },

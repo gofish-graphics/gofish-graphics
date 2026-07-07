@@ -56,7 +56,7 @@ import { initializeContainer } from "../helper";
 //    yet applied here; the root band still starts at r = bandHeight (a small
 //    hollow center), not at r = 0.
 //  - Link:curve — links are not drawn for filled sector wedges (link:"none"
-//    is correct here); polar links only support {interpolation:"linear"|"none"},
+//    is correct here); polar links only support {curve:"straight"|"none"},
 //    never curved arcs (draft PR #637's route→curve registry is where curved
 //    links land), so the dsl's curve links are not representable anyway.
 //  - Thickness:static 2 maps to the wedge stroke width.
