@@ -357,7 +357,10 @@ remaining divergences became what they really are:
   two distinct scopes, each consumed by its own channel — exactly the
   self-scaled-vs-inherited shape, so case 1 needs no separate machinery. (It is
   NOT one axis whose ticks are niced and whose bars are un-niced; it is the
-  self-scaled stash sidestepping nicing entirely.)
+  self-scaled stash sidestepping nicing entirely.) This stash-escape was
+  subsequently closed by the #659 stage below: nicing is now a per-scope,
+  demand-driven operation applied at the solve, so a scope's map and σ read one
+  domain by construction.
 - **Spacing / non-data pixels (case 2)** are already the Monotonic intercept in
   the frame equation (`width.inverse(allocated)`), so the per-segment slope is the
   scope σ, not a secant. No change needed.
@@ -528,6 +531,38 @@ on one axis is the sanctioned multi-scale reading.
   `dataDomain`, `measure`), and every layout guard reads the placement solve's
   ownership plan, not the space pass.
 
+- **#659 — nicing on the scope, demand-driven. Landed.** The pre-layout
+  `resolveNiceDomains` tree walk (which mutated every node's POSITION domain in
+  place, and which the self-scaled stash escaped) is **deleted**. Nicing is now
+  one pure function, `niceContinuous` (`underlyingSpace.ts`), applied per
+  σ-scope at the scope's solve: the render root (`gofish.tsx`), the self-scaled
+  stash and the shared-scale step (`buildChildScalePlan`), and the layer-local
+  datum-position scale (`buildPositionScalePlan`). POSITION domains only —
+  never SIZE magnitudes, never deltas — and a coord scope never nices
+  (unchanged exemption; `fitAxis` never calls it). Per the semantics settled on
+  the issue (**scale resolution is per-scope; axis rendering is per-node — an
+  axis is a view of a scope**), nicing is **demand-driven**: a scope nices iff
+  at least one node in its space-flow region renders an axis on the dim.
+  `resolveAxes` leaves persistent `axisDemand` stamps (the `axis` work flags
+  are cleared by elaboration); `GoFishNode.scopeRendersAxis` walks the region —
+  up while neither a self-scaled stash (`selfScaledDims`) nor a coord boundary
+  cuts the space flow, then across the region subtree stopping at deeper
+  stashes/coords — so an inner shared scope under an axis-drawing root inherits
+  the root's demand, while a stashed panel (whose space never reached that
+  axis) does not. Result on the exemplar: the marginal histogram's panel count
+  scopes collapse to ONE σ each — the self-scaled map `[0,44]→[0,80]` and the
+  shared width solve `44σ = 80` now agree at σ = 1.8182 on the raw domain
+  (the panels draw no count axis, so no nicing demand) — pixel-identical, with
+  the orphan dual solve gone. Corpus enumeration (`capture-diff` over all 260
+  stories): the only movers are two `axes`-permutation stories whose bar
+  chart suppresses the y axis (`{ x: true, y: false }` and
+  `{ x: false, y: false }`) — their anchored y domain was previously niced by
+  the walk despite drawing no y axis (the old gate niced for ANY truthy `axes`
+  value), and now stays honestly raw, which also makes `{ x: false, y: false }`
+  render identically to `axes: false`. Everything else — including every
+  axis-less chart and every axis-drawing chart — is pixel-identical. Full
+  suite + solver-shadow sweep (260/260) clean.
+
 ### Open design questions (resolve during 6, tracked now)
 
 - **Authority model (#583):** Stage 5's weak/strong tiers may need a third
@@ -577,28 +612,27 @@ Stage 5 consumes 4. Stage 6 consumes 4+5 and subsumes the leftovers of 2
 
 **Status (per stage):**
 
-| Stage                                   | Status                                                 |
-| --------------------------------------- | ------------------------------------------------------ |
-| 0 — docs / vocabulary                   | **landed**                                             |
-| 1 — placement lattice                   | **landed**                                             |
-| 2 — span → position                     | **landed**                                             |
-| 3 — grid cliff                          | **landed**                                             |
-| 4 — one scale carrier                   | **landed**                                             |
-| 5 — rank-2 placement (5a/5b/5c)         | **landed**                                             |
-| 6a — observe (shadow coverage)          | **landed**                                             |
-| 6b — one solve site (scope registry)    | **landed**                                             |
-| 6c — one slope per σ-scope              | **landed** (carrier + sole producer; residue deferred) |
-| 6d — translate retirement               | **landed**                                             |
-| 6e — grid as tracks                     | **landed**                                             |
-| 6f — the guards ask the solver          | **landed**                                             |
-| #659 — self-scaled stash escapes nicing | **next** (own stage, post-6f)                          |
+| Stage                                      | Status                                                 |
+| ------------------------------------------ | ------------------------------------------------------ |
+| 0 — docs / vocabulary                      | **landed**                                             |
+| 1 — placement lattice                      | **landed**                                             |
+| 2 — span → position                        | **landed**                                             |
+| 3 — grid cliff                             | **landed**                                             |
+| 4 — one scale carrier                      | **landed**                                             |
+| 5 — rank-2 placement (5a/5b/5c)            | **landed**                                             |
+| 6a — observe (shadow coverage)             | **landed**                                             |
+| 6b — one solve site (scope registry)       | **landed**                                             |
+| 6c — one slope per σ-scope                 | **landed** (carrier + sole producer; residue deferred) |
+| 6d — translate retirement                  | **landed**                                             |
+| 6e — grid as tracks                        | **landed**                                             |
+| 6f — the guards ask the solver             | **landed**                                             |
+| #659 — nicing on the scope (demand-driven) | **landed**                                             |
 
-The whole staged plan (0–6f) is landed. The one remaining known dual-slope is
-#659 — a self-scaled marginal panel whose stashed count space sidesteps the
-nicing applied to the shared axis domain, so its ticks and bars read two slopes
-of the _same_ space. That is a
-genuine stash-escape (not the sanctioned panel-local-SIZE-vs-shared-POSITION
-multi-scale) and is scheduled as its own stage after 6f. The three other
+The whole staged plan (0–6f, plus the #659 nicing stage) is landed. The last
+known dual-slope — a self-scaled marginal panel whose stashed count space
+sidestepped nicing, so its ticks and bars read two slopes of the _same_ space —
+is closed by the #659 stage above: nicing lives on the scope, demand-driven,
+and the panel's two solves agree on one σ by construction. The three other
 two-scope-on-one-axis stories the 6c inventory flagged (Faceted Chart/Default,
 Labels/LabelOnSpread, Layered Bars and Area/HoistedVarietySpread) are **not**
 #659 variants: each carries one shared POSITION scope (the y map) plus several

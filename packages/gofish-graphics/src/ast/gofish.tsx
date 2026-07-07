@@ -25,6 +25,7 @@ import {
   hasBaseline,
   isBaselineMagnitude,
   isCONTINUOUS,
+  niceContinuous,
   spaceMeasure,
   type UnderlyingSpace,
 } from "./underlyingSpace";
@@ -220,7 +221,6 @@ export async function layout(
       if (axes.y !== false) enabled.add(1);
     }
     child.resolveAxes(new Set(), enabled);
-    child.resolveNiceDomains();
 
     // Axis elaboration: turn inferred axes into ordinary shapes + constraints.
     // Wraps axis-owning content in a Layer with tick/label shapes and clears the
@@ -237,16 +237,33 @@ export async function layout(
       child.resolveLabels();
       // The rewrite inserted new nodes (wrappers + axis shapes) and moved keys
       // onto wrappers; `resolveUnderlyingSpace` memoizes, so clear every node's
-      // cached space and recompute the whole tree from scratch before re-nicing.
+      // cached space and recompute the whole tree from scratch.
       child.clearUnderlyingSpace();
       child.resolveUnderlyingSpace();
-      child.resolveNiceDomains();
     }
   }
 
-  // Use (possibly nice-rounded) underlying spaces for posScales
-  const niceUnderlyingSpaceX = child._underlyingSpace![0];
-  const niceUnderlyingSpaceY = child._underlyingSpace![1];
+  // The ROOT σ-scope's spaces, demand-niced (issue #659): nicing is per-scope,
+  // applied AT the scope's solve (there is no pre-layout tree walk), and it is
+  // DEMAND-DRIVEN — the root scope nices a POSITION domain iff some node in it
+  // renders that dim's axis (`scopeRendersAxis` reads the persistent stamps
+  // `resolveAxes` left; with axes off no stamp exists, so axis-less content
+  // stays at the honest raw scale). When an axis IS drawn, every root consumer
+  // below — the posScale, the baseline-magnitude size solve, the equal-measure
+  // recentering, `needsCanvas` — reads this one niced domain, the same domain
+  // the tick elaboration niced, so content and ticks agree by construction.
+  // Each nested scope root (self-scaled region, shared-scale scope) applies the
+  // same rule at its own solve; a coord scope never nices.
+  const rootAxisDemand: [boolean, boolean] = [
+    child.scopeRendersAxis(0),
+    child.scopeRendersAxis(1),
+  ];
+  const niceUnderlyingSpaceX = rootAxisDemand[0]
+    ? niceContinuous(child._underlyingSpace![0])
+    : child._underlyingSpace![0];
+  const niceUnderlyingSpaceY = rootAxisDemand[1]
+    ? niceContinuous(child._underlyingSpace![1])
+    : child._underlyingSpace![1];
 
   // y-UP scope decision (issue #143/#16). The y axis is "inverted" — origin at
   // the bottom, values increasing upward — exactly when it carries a CONTINUOUS

@@ -138,11 +138,14 @@ site fabricates either — every `map` comes from `computePosScale` through
 by construction. When both halves are present and `sigma ≠ map.sigma`, the axis
 genuinely carries **two scopes**, and each half is read by the channel it belongs
 to — magnitudes read `sigma`, anchored positions read `map`. That happens when a
-marginal panel's ticks map the _niced_ axis domain while its bars size the
-_un-niced_ stacked total (a nicing split), or when a sub-budget layer scales size
-against a local extent but position against an inherited one (a sub-budget vs
-inherited split). Both are two honest scopes on one axis — the multi-scale reading
-of the same equation — not a slope with a redundant, drifting twin.
+sub-budget layer scales size against a local extent but positions against an
+inherited map (a sub-budget vs inherited split) — two honest scopes on one axis,
+the multi-scale reading of the same equation, not a slope with a redundant,
+drifting twin. A niced-ticks-vs-raw-content split is _not_ a sanctioned case:
+that was the #659 bug (a self-scaled panel's stashed domain escaping the old
+pre-layout nice walk), and since nicing moved onto the scope solve
+([below](#nicing-is-a-scope-operation-applied-on-demand)) a scope's map and σ
+read one domain by construction.
 
 ## Why an explicit IR
 
@@ -795,8 +798,58 @@ the root's σ inline in `gofish.tsx`, off the registry's books. It is now a name
 σ (a `recenter` entry per axis) rather than the pre-recentering root σ. With both
 closed, the only way a carrier shows two different slopes on one axis is the
 legitimate **two-scope** case above (a SIZE scope and a POSITION scope, e.g. a
-marginal panel's niced ticks vs its un-niced bar total) — each half still a single
-registry-solved scope σ, never independent state.
+sub-budget panel's local size scale vs an inherited position map) — each half
+still a single registry-solved scope σ, never independent state.
+
+### Nicing is a scope operation, applied on demand
+
+Domain rounding — `d3.nice` stretching `[0, 44]` to `[0, 45]` so ticks land on
+round numbers — used to be a **pre-layout tree walk** (`resolveNiceDomains`)
+that mutated every node's POSITION domain in place. That per-node formulation
+had two failure modes (issue #659): a self-scaled region's stashed space never
+got walked, so a marginal panel's bars sized the _raw_ domain while its niced
+width solved an orphan scope (two slopes for one space — a genuine dual-slope
+bug, not the sanctioned two-scope case); and any node could in principle nice
+its own _subset_ of a shared domain differently from the union.
+
+The settled semantics, recorded on #659: **scale resolution is per-scope; axis
+rendering is per-node. An axis is a view of a scope, drawn at whatever node
+wants one.** Nicing is therefore an operation on the _scope's_ domain — applied
+once, at the scope's solve, so every consumer in the scope (content sizes, the
+position map, axis ticks) reads the same rounded domain. `niceContinuous`
+(`underlyingSpace.ts`) is the one nicing function; the non-coord scope roots
+apply it at their solve sites — the render root (`gofish.tsx`), the self-scaled
+stash and the shared-scale step (`buildChildScalePlan`), and the layer-local
+datum-position scale (`buildPositionScalePlan`). It touches only anchored
+POSITION domains — never SIZE magnitudes, never deltas — and a **coord scope
+never nices** (its domains map into a fixed coordinate range; rounding them
+would break the mapping).
+
+And it is **demand-driven**: a scope nices its POSITION domain **iff at least
+one node in the scope renders an axis on that dim**. Nicing is a presentation
+adjustment whose demand comes from axis views — with no axis there is no tick
+grid to round for, so axis-less content stays at the honest raw scale; with an
+axis, content and ticks share the one niced domain, which is the contract.
+Mechanically, `resolveAxes` leaves a persistent `axisDemand` stamp on every
+axis-owning node (the `axis` work flags are consumed and cleared by
+elaboration; the stamps survive to layout), and each solve site asks
+`GoFishNode.scopeRendersAxis(dim)`: a walk over the scope's **space-flow
+region** — up from the scope root while neither a self-scaled stash nor a coord
+boundary cuts the flow, then across that region's subtree, stopping at deeper
+stashes and coords. The region is exactly the neighborhood whose axes all view
+the same underlying domain (an inner shared scope under an axis-drawing root
+inherits the root's demand, because its space is what bubbled up into the
+domain that axis draws; a stashed panel does not, because its space never
+reached the ancestor's axis). Tick elaboration nices node-locally with the same
+`d3.nice`, applied to the axis-owning node's domain — the same union domain
+that bubbled to the scope root — so elaboration and the solve cannot disagree.
+
+The facet corollaries fall out of the one rule: shared-scale facets all render
+the parent scope's identical niced axis, and free-scale facets are their own
+scope roots and nice per-panel — iff they draw their own axis. The marginal
+histogram's panels draw no count axis, so their scopes stay raw and the panel's
+map and σ agree on the raw domain; give a panel a count axis and its one scope
+nices once, keeping bars and ticks consistent by construction.
 
 ## Scales generalize flex factors
 
@@ -882,7 +935,14 @@ The rule lives in `layer`'s resolver and layout
   scale factor on that dim — definitionally, since the inherited scale is in
   the parent's foreign units. If the size can't be resolved (NaN), the locals
   are left undefined and the dim degrades to the inherited path rather than
-  producing NaN scales.
+  producing NaN scales. The stashed domain participates in demand-driven
+  nicing exactly like the root's
+  ([above](#nicing-is-a-scope-operation-applied-on-demand), issue #659): if
+  the region renders an axis on the dim, the stash is niced at this solve, so
+  the local map, the local σ, and the ticks read one rounded domain; if not,
+  it stays raw. (Before #659 the stash escaped the pre-layout nice walk
+  entirely — the panel's content sized the raw domain while a niced width
+  solved an orphan scope.)
 
 Note that a histogram's count axis is **anchored, not origin-less**, at the
 frame boundary. Under start/end/baseline alignment, `resolveAlignmentSpace`

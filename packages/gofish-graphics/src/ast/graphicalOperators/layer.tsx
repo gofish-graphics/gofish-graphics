@@ -209,8 +209,13 @@ export const layer = createNodeOperatorSequential(
           // Stash the absorbed anchored extent and report UNDEFINED upward for
           // any dim with an explicit pixel size — self-scaling region; see
           // selfScaledSpaces above. (last write wins — may run more than once.)
+          // `node.selfScaledDims` mirrors the stash for the axis-demand walk
+          // (issue #659): a stashed dim roots its own σ-scope, so an enclosing
+          // scope's nicing-demand walk must not descend past it.
           selfScaledSpaces[0] = undefined;
           selfScaledSpaces[1] = undefined;
+          node.selfScaledDims[0] = false;
+          node.selfScaledDims[1] = false;
           for (const axis of [0, 1] as const) {
             if (dims[axis].size === undefined) continue;
             const sp = resolved[axis];
@@ -218,6 +223,7 @@ export const layer = createNodeOperatorSequential(
             // magnitude); a difference / ORDINAL is left untouched (no stash).
             if (hasBaseline(sp)) {
               selfScaledSpaces[axis] = sp;
+              node.selfScaledDims[axis] = true;
               resolved[axis] = UNDEFINED;
             }
           }
@@ -279,6 +285,14 @@ export const layer = createNodeOperatorSequential(
           // applies regardless of `ownsPositionAxis`. `childScaleFactors` is a
           // fresh array — never mutate the parent's inherited σ (unlike
           // spread, which mutates intentionally for sibling sharing).
+          // Demand-driven nicing (issue #659): any scope this layer roots
+          // (self-scaled stash, shared-scale, datum-position) nices its
+          // POSITION domain only if some node in the scope renders an axis on
+          // that dim — read off the persistent axis-demand stamps.
+          const axisDemand: Size<boolean> = [
+            node.scopeRendersAxis(0),
+            node.scopeRendersAxis(1),
+          ];
           const childScalePlan = buildChildScalePlan(
             selfScaledSpaces,
             node._underlyingSpace,
@@ -287,6 +301,7 @@ export const layer = createNodeOperatorSequential(
             inheritedPosScales,
             constraintBudget,
             shared,
+            axisDemand,
             // Stage 6b: derive every scale this layer roots through the render's
             // one σ-scope registry (shared with the root and coord boundaries).
             getScopeRegistry(node.tryGetRenderSession()),
@@ -348,7 +363,8 @@ export const layer = createNodeOperatorSequential(
             ownsAxis,
             space,
             size,
-            basePosScales
+            basePosScales,
+            axisDemand
           );
           const effectivePosScales = positionScalePlan.effectivePosScales;
 

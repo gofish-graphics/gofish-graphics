@@ -9,6 +9,7 @@ import {
   isBaselineMagnitude,
   isCONTINUOUS,
   isPOSITION,
+  niceContinuous,
   type UnderlyingSpace,
 } from "../underlyingSpace";
 import { allocateSlices } from "./folds";
@@ -198,6 +199,12 @@ export function buildChildScalePlan(
   inheritedPosScales: ConstraintPosScales,
   constraintBudget: ScaleBudget | undefined,
   shared: Size<boolean>,
+  // Demand-driven nicing (issue #659): per-dim "some node in this scope renders
+  // an axis" (`GoFishNode.scopeRendersAxis`). A scope this plan roots nices its
+  // anchored POSITION domain iff the dim's demand is true — nicing is a
+  // presentation adjustment whose demand comes from axis views, so axis-less
+  // content stays at the honest raw scale.
+  axisDemand: Size<boolean>,
   // Stage 6b: the ONE σ-solve site. Every scale this plan roots is derived
   // through the registry (so `GOFISH_DUMP_SCOPES` sees it and the numbers have a
   // single source); `rootKey` labels the owning layer node in the dump.
@@ -215,8 +222,24 @@ export function buildChildScalePlan(
   const budgetFailures: ChildScalePlan["budgetFailures"] = [];
   const sharedScaleChecks: ChildScalePlan["sharedScaleChecks"] = [];
 
+  // Nice each axis-demanded self-scaled stash up front (issue #659): a
+  // self-scaled region is a σ-scope root, so when its scope renders an axis on
+  // the dim, its anchored POSITION domain is niced AT this solve — the same
+  // operation the render root applies. The original bug was precisely that this
+  // stash sidestepped the (now-deleted) pre-layout nice walk, so the panel's
+  // content sized against the RAW domain while a niced width solved an orphan
+  // scope. Nicing here (or, without axis demand, leaving the raw domain here)
+  // makes the ONE scope's domain the single source, consumed by both the
+  // position map (`solvePosition`) and any size solve; `niceContinuous` is
+  // identity on a baseline magnitude (SIZE is never niced). The shared step
+  // below reads the stash again, so transform a local copy.
+  const nicedSelfScaled: Size<UnderlyingSpace | undefined> = [
+    axisDemand[0] ? niceContinuous(selfScaledSpaces[0]) : selfScaledSpaces[0],
+    axisDemand[1] ? niceContinuous(selfScaledSpaces[1]) : selfScaledSpaces[1],
+  ];
+
   for (const axis of [0, 1] as const) {
-    const stashed = selfScaledSpaces[axis];
+    const stashed = nicedSelfScaled[axis];
     if (stashed === undefined || !Number.isFinite(layerSize[axis])) continue;
     if (isPOSITION(stashed)) {
       basePosScales[axis] =
@@ -268,7 +291,16 @@ export function buildChildScalePlan(
 
   for (const axis of [0, 1] as const) {
     if (!shared[axis] || !Number.isFinite(layerSize[axis])) continue;
-    const sp = selfScaledSpaces[axis] ?? layerSpace?.[axis];
+    // A shared-scale scope root: when the scope renders an axis on this dim,
+    // nice its anchored POSITION domain at the solve (issue #659), so the SIZE
+    // σ it derives agrees with the niced position map. The self-scaled stash is
+    // already demand-niced above; the layer's own space is transformed here
+    // (identity on a baseline magnitude or without axis demand).
+    const sp =
+      nicedSelfScaled[axis] ??
+      (axisDemand[axis]
+        ? niceContinuous(layerSpace?.[axis])
+        : layerSpace?.[axis]);
     if (sp === undefined) continue;
     const sf = isCONTINUOUS(sp)
       ? (scopes.solveSize(
@@ -359,15 +391,23 @@ export function buildPositionScalePlan(
   ownsAxis: [boolean, boolean],
   layerSpace: Size<UnderlyingSpace> | undefined,
   layerSize: Size,
-  basePosScales: ConstraintPosScales
+  basePosScales: ConstraintPosScales,
+  // Demand-driven nicing (issue #659): nice the local domain only when the
+  // scope renders an axis on that dim, so datum positions land on the same
+  // rounded scale as the ticks — and stay at the honest raw scale otherwise.
+  axisDemand: Size<boolean>
 ): PositionScalePlan {
   const ownsPositionAxis = ownsAxis[0] || ownsAxis[1];
+  // A layer that owns a datum-position axis roots a local POSITION scope for
+  // it; the domain is niced at this solve iff the dim has axis demand.
+  const localSpace = (axis: 0 | 1): UnderlyingSpace | undefined =>
+    axisDemand[axis] ? niceContinuous(layerSpace?.[axis]) : layerSpace?.[axis];
   return {
     ownsAxis,
     effectivePosScales: ownsPositionAxis
       ? [
-          basePosScales[0] ?? posScaleFromSpace(layerSpace?.[0], layerSize[0]),
-          basePosScales[1] ?? posScaleFromSpace(layerSpace?.[1], layerSize[1]),
+          basePosScales[0] ?? posScaleFromSpace(localSpace(0), layerSize[0]),
+          basePosScales[1] ?? posScaleFromSpace(localSpace(1), layerSize[1]),
         ]
       : [basePosScales[0], basePosScales[1]],
   };
