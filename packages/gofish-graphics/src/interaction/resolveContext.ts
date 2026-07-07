@@ -17,8 +17,9 @@
  * The `inLiveEval` flag distinguishes the two read regimes: a read while a
  * `live()` channel is being evaluated at resolve time wires the input into
  * event dispatch but does NOT mark it a pipeline dependency (paint re-runs it
- * reactively). Any other read during resolve marks the input `usedInSpec`, so
- * its writes schedule a full re-run.
+ * reactively). Any other read during resolve adds the ambient runtime to the
+ * input's `specRuntimes` set, so its writes schedule a full re-run of every
+ * chart that read it.
  *
  * Caveat: the context is a module variable, so two charts resolving
  * CONCURRENTLY (interleaving at await points, e.g. a Python derive RPC) could
@@ -26,10 +27,14 @@
  * practice; a scoped-storage mechanism can replace this if async marks make
  * the race real.
  */
-import type { InputPrimitive } from "./types";
+import type { InputPrimitive, SpecInvalidator } from "./types";
 
-/** The registration surface library inputs see. */
-export interface AmbientRegistrar {
+/** The registration surface library inputs see. It is also a
+ *  {@link SpecInvalidator}: a spec-read (outside `live()`) adds THIS registrar
+ *  to the input's `specRuntimes` set, so the input can invalidate every chart
+ *  that depends on it — not just the last one attached. The runtime is the
+ *  registrar, so `registerInput` and `invalidate` are the same object. */
+export interface AmbientRegistrar extends SpecInvalidator {
   registerInput(input: InputPrimitive): void;
 }
 

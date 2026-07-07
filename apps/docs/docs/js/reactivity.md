@@ -79,7 +79,7 @@ a chart's resolve attaches the input to that chart and wires up its events.
 ```ts
 const p = pointer();
 p.pos(); // { x, y } in svg pixels, or undefined when off the chart
-p.dataPos(); // { x?, y? } in data coordinates (needs a continuous axis)
+p.dataPos(); // { x?, y? } in data coordinates; per-axis
 p.datum(); // the datum of the mark under the pointer (hit-test)
 p.down(); // true while the primary button is held over the chart
 ```
@@ -96,8 +96,13 @@ d.originData(); // origin in data coordinates
 d.currentData(); // current in data coordinates
 ```
 
-The data-space variants (`originData`, `currentData`) convert pixels back to data
-values using the chart's scales. See the [caveat below](#data-space-reads-need-an-attached-input).
+The data-space variants (`dataPos`, `originData`, `currentData`) convert pixels
+back to data values using the chart's scales, **per axis**: each returns
+`{ x?, y? }` where an axis is present only when it carries a continuous position
+scale — an ordinal/band axis (e.g. a category axis) has no data coordinate, so
+that axis comes back `undefined`. The whole result is `undefined` only when no
+axis converts (or the pointer is off the chart). See the
+[caveat below](#data-space-reads-need-an-attached-input).
 
 ### `wheel(options)`
 
@@ -126,6 +131,10 @@ t.start(); // resume
 ```
 
 Useful for animation and for exercising both regimes deterministically.
+
+A `timer()` is **not** tied to any chart's lifetime: it runs until you call
+`.stop()`. Re-rendering a chart (or replacing it in its container) does not stop
+a timer you started, so stop it yourself when you no longer need it.
 
 ### `signal(init)`
 

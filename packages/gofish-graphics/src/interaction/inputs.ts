@@ -25,9 +25,17 @@ function makeTrack(input: InputPrimitive): () => void {
     const reg = ambientRegistrar();
     if (!reg) return;
     reg.registerInput(input);
-    // A read outside a `live()` channel makes the input a pipeline dependency.
-    if (!inLiveEval()) input.usedInSpec = true;
+    // A read outside a `live()` channel makes the input a pipeline dependency
+    // OF THIS CHART. The registrar is the chart's runtime (a SpecInvalidator),
+    // so add it to the input's set — an input read in two charts' specs
+    // accumulates both, and a write invalidates both.
+    if (!inLiveEval()) input.specRuntimes.add(reg);
   };
+}
+
+/** Invalidate every chart that reads `input` in its spec (its `specRuntimes`). */
+function invalidateSpecReaders(input: InputPrimitive): void {
+  for (const rt of input.specRuntimes) rt.invalidate();
 }
 
 const clamp = (v: number, lo: number, hi: number): number =>
@@ -54,7 +62,7 @@ export function pointer(): Pointer {
   let runtime: InteractionRuntime | undefined;
 
   const input: InputPrimitive = {
-    usedInSpec: false,
+    specRuntimes: new Set(),
     attach(rt) {
       runtime = rt;
     },
@@ -71,10 +79,15 @@ export function pointer(): Pointer {
       } else if (type === "pointerleave") {
         setPos(undefined);
         setDatum(undefined);
+        // No pointer capture on the plain pointer input, so a button release
+        // outside the svg is unobservable — treat leave-while-down as a
+        // release, or `down()` would stay stuck true forever after a
+        // press → drag-out → release-outside.
+        setDown(false);
       } else {
         return;
       }
-      if (input.usedInSpec) runtime?.invalidate();
+      invalidateSpecReaders(input);
     },
   };
   const track = makeTrack(input);
@@ -94,13 +107,32 @@ export function pointer(): Pointer {
     },
     dataPos() {
       track();
-      const p = pos();
-      if (!p) return undefined;
-      const conv = runtime?.getConversions();
-      if (!conv) return undefined;
-      return { x: conv.pxToData[0](p.x), y: conv.pxToData[1](p.y) };
+      return pxToData(runtime, pos());
     },
   };
+}
+
+/**
+ * Convert an svg-px point to per-axis data coords through the last-attached
+ * chart's recorded frame conversions. Each axis is OPTIONAL: a leg exists only
+ * where that axis has a continuous position scale, so an ordinal/band axis (or
+ * a degenerate zero-size axis, whose leg is dropped rather than throwing) comes
+ * back `undefined` for that axis. Returns `undefined` overall only when NO axis
+ * converts (or the point is off the chart). Data-space conversions bind to the
+ * MOST RECENTLY attached chart — sharing one pointer/drag across charts is a
+ * known limitation (plan Open Question 1).
+ */
+function pxToData(
+  runtime: InteractionRuntime | undefined,
+  p: SvgPoint | undefined
+): { x?: number; y?: number } | undefined {
+  if (!p) return undefined;
+  const conv = runtime?.getConversions();
+  if (!conv) return undefined;
+  const x = conv.pxToData[0]?.(p.x);
+  const y = conv.pxToData[1]?.(p.y);
+  if (x === undefined && y === undefined) return undefined;
+  return { x, y };
 }
 
 /* -------------------------------- drag ---------------------------------- */
@@ -133,7 +165,7 @@ export function drag(options: DragOptions = {}): Drag {
   let runtime: InteractionRuntime | undefined;
 
   const input: InputPrimitive = {
-    usedInSpec: false,
+    specRuntimes: new Set(),
     attach(rt) {
       runtime = rt;
     },
@@ -163,19 +195,14 @@ export function drag(options: DragOptions = {}): Drag {
       } else {
         return;
       }
-      if (input.usedInSpec) runtime?.invalidate();
+      invalidateSpecReaders(input);
     },
   };
   const track = makeTrack(input);
 
   const toData = (
     p: SvgPoint | undefined
-  ): { x?: number; y?: number } | undefined => {
-    if (!p) return undefined;
-    const conv = runtime?.getConversions();
-    if (!conv) return undefined;
-    return { x: conv.pxToData[0](p.x), y: conv.pxToData[1](p.y) };
-  };
+  ): { x?: number; y?: number } | undefined => pxToData(runtime, p);
 
   return {
     active() {
@@ -255,7 +282,7 @@ export function wheel(options: WheelOptions): Wheel {
   let runtime: InteractionRuntime | undefined;
 
   const input: InputPrimitive = {
-    usedInSpec: false,
+    specRuntimes: new Set(),
     attach(rt) {
       runtime = rt;
     },
@@ -267,7 +294,7 @@ export function wheel(options: WheelOptions): Wheel {
       const next = scale(accum);
       if (next !== value()) {
         setValue(next);
-        if (input.usedInSpec) runtime?.invalidate();
+        invalidateSpecReaders(input);
       }
     },
   };
@@ -282,7 +309,7 @@ export function wheel(options: WheelOptions): Wheel {
     accum = invert(nv);
     if (nv !== value()) {
       setValue(nv);
-      if (input.usedInSpec) runtime?.invalidate();
+      invalidateSpecReaders(input);
     }
   };
   return acc;
@@ -314,7 +341,7 @@ export function timer(options: TimerOptions = {}): Timer {
   let runtime: InteractionRuntime | undefined;
 
   const input: InputPrimitive = {
-    usedInSpec: false,
+    specRuntimes: new Set(),
     attach(rt) {
       runtime = rt;
     },
@@ -325,7 +352,7 @@ export function timer(options: TimerOptions = {}): Timer {
     if (handle !== undefined) return;
     handle = setInterval(() => {
       setTick((t) => t + 1);
-      if (input.usedInSpec) runtime?.invalidate();
+      invalidateSpecReaders(input);
     }, interval);
   };
   const stop = (): void => {
@@ -366,7 +393,7 @@ export function signal<T>(init: T): Signal<T> {
   let runtime: InteractionRuntime | undefined;
 
   const input: InputPrimitive = {
-    usedInSpec: false,
+    specRuntimes: new Set(),
     attach(rt) {
       runtime = rt;
     },
@@ -379,7 +406,7 @@ export function signal<T>(init: T): Signal<T> {
   }) as Signal<T>;
   acc.set = (v: T) => {
     setValue(() => v);
-    if (input.usedInSpec) runtime?.invalidate();
+    invalidateSpecReaders(input);
   };
   return acc;
 }

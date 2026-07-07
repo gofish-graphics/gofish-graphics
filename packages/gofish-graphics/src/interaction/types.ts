@@ -74,10 +74,14 @@ export interface SpecInvalidator {
  * `usedInSpec` decides the execution regime (see resolveContext.ts).
  */
 export interface InputPrimitive {
-  /** True when the input was read during resolve OUTSIDE a `live()` channel —
-   *  i.e. it is a pipeline dependency and its writes must schedule a re-run.
-   *  Reset by the runtime at the start of every resolve. */
-  usedInSpec: boolean;
+  /** The set of runtimes for which this input is a pipeline dependency — i.e.
+   *  the charts that read it during resolve OUTSIDE a `live()` channel. A write
+   *  must invalidate every one (an input read in two charts' specs invalidates
+   *  BOTH). Each runtime deletes itself from this set at the start of its own
+   *  resolve (so a chart's re-resolve doesn't drop another chart's dependency)
+   *  and re-adds itself if the read recurs; a disposed runtime removes itself.
+   *  Replaces the former single-runtime `usedInSpec` boolean. */
+  specRuntimes: Set<SpecInvalidator>;
   /** Called once when the input is first registered with a runtime. Used to
    *  reach the scheduler (invalidate) and frame conversions. */
   attach?(runtime: import("./runtime").InteractionRuntime): void;

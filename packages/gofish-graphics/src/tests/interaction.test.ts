@@ -48,6 +48,11 @@ function makeContainer(): HTMLElement {
   return c;
 }
 
+/** A real wall-clock delay (ms) — for timer tests that must let a genuine
+ *  `setInterval` interval elapse, unlike `settle`'s zero-ms macrotasks. */
+const realDelay = (ms: number): Promise<void> =>
+  new Promise((resolve) => setTimeout(resolve, ms));
+
 async function main() {
   /* --------------------------- scheduler --------------------------- */
   console.log("\nscheduler");
@@ -131,6 +136,51 @@ async function main() {
         toPixel: ([gx, gy]) => [gx, gy],
         size: { width: 10, height: 10 },
       }) === undefined
+    );
+
+    // Per-axis legs: only the axis with a posScale AND a continuous domain
+    // gets a leg. Here x is ordinal (no posScale/domain), y is continuous.
+    const perAxis = frameConversions({
+      items: [],
+      root: {} as any,
+      toPixel: ([gx, gy]) => [gx, 300 - gy],
+      posScales: [undefined, (d) => d * 3],
+      domains: { y: [0, 100] },
+      size: { width: 300, height: 300 },
+    });
+    ok("per-axis conversions built (y only)", perAxis !== undefined);
+    if (perAxis) {
+      ok("ordinal x has no leg", perAxis.pxToData[0] === undefined);
+      ok("continuous y has a leg", typeof perAxis.pxToData[1] === "function");
+      ok(
+        "y round-trips",
+        Math.abs(perAxis.pxToData[1]!(perAxis.dataToPx[1]!(20)) - 20) < 1e-9
+      );
+    }
+
+    // A degenerate (zero-slope) leg is DROPPED, not thrown — a zero-size axis
+    // must not fail the whole render from inside publishFrame.
+    let degenThrew = false;
+    let degen: ReturnType<typeof frameConversions> | undefined;
+    try {
+      degen = frameConversions({
+        items: [],
+        root: {} as any,
+        // y collapses to a constant → zero-slope y leg.
+        toPixel: ([gx]) => [gx, 42],
+        posScales: [(d) => d * 3, (d) => d * 3],
+        domains: { x: [0, 100], y: [0, 100] },
+        size: { width: 300, height: 300 },
+      });
+    } catch {
+      degenThrew = true;
+    }
+    ok("degenerate leg does not throw", !degenThrew);
+    ok(
+      "degenerate y leg dropped, x leg kept",
+      degen !== undefined &&
+        degen.pxToData[1] === undefined &&
+        typeof degen.pxToData[0] === "function"
     );
   }
 
@@ -268,6 +318,52 @@ async function main() {
     );
   }
 
+  console.log("\nshared input across two charts");
+  {
+    // One signal() read in TWO charts' derive() must invalidate BOTH on set()
+    // (regression: a single-runtime input only re-ran the last-attached chart).
+    const containerA = makeContainer();
+    const containerB = makeContainer();
+    let resolvesA = 0;
+    let resolvesB = 0;
+    const shared = signal(1);
+    await chart(data, { axes: false })
+      .flow(
+        derive((rows: any) => {
+          resolvesA++;
+          shared();
+          return rows;
+        }),
+        spread({ by: "cat", dir: "x" })
+      )
+      .mark(rect({ h: "count", fill: "#00f" }))
+      .render(containerA, { w: 200, h: 120 });
+    await chart(data, { axes: false })
+      .flow(
+        derive((rows: any) => {
+          resolvesB++;
+          shared();
+          return rows;
+        }),
+        spread({ by: "cat", dir: "x" })
+      )
+      .mark(rect({ h: "count", fill: "#0a0" }))
+      .render(containerB, { w: 200, h: 120 });
+    await settle();
+    ok(
+      "both charts resolved once initially",
+      resolvesA === 1 && resolvesB === 1,
+      `A=${resolvesA} B=${resolvesB}`
+    );
+    shared.set(2);
+    await settle();
+    ok(
+      "one set() re-runs BOTH charts that read the shared signal",
+      resolvesA === 2 && resolvesB === 2,
+      `A=${resolvesA} B=${resolvesB}`
+    );
+  }
+
   /* ----------------------- usedInSpec reset ------------------------ */
   console.log("\nusedInSpec reset");
   {
@@ -394,13 +490,80 @@ async function main() {
   {
     const t = timer({ interval: 5 });
     ok("timer starts at 0 (lazy)", t() === 0);
-    await settle(6); // > a few intervals
-    const ticked = t();
-    ok("timer advances after intervals", ticked > 0, `ticks=${ticked}`);
+    // Wall-clock robust: wait a real span several intervals long, then assert
+    // it advanced (a fixed count of setTimeout(0) macrotasks is flaky because
+    // each is ~0ms, so the 5ms interval may never elapse under `settle`).
+    await realDelay(30);
+    const first = t();
+    ok("timer advances after a real interval", first >= 1, `ticks=${first}`);
+    await realDelay(30);
+    const second = t();
+    ok("timer ticks are monotonic", second >= first, `${first} → ${second}`);
     t.stop();
     const afterStop = t();
-    await settle(6);
-    ok("timer.stop halts ticking", t() === afterStop, `${afterStop} → ${t()}`);
+    await realDelay(30);
+    ok(
+      "timer.stop halts ticking",
+      t() === afterStop,
+      `${afterStop} → ${t()}`
+    );
+  }
+
+  console.log("\ntimer regimes (live vs derive)");
+  {
+    // Live-only timer read: paint pulses, ZERO pipeline re-runs.
+    const liveContainer = makeContainer();
+    let liveResolves = 0;
+    const tLive = timer({ interval: 5 });
+    await chart(data, { axes: false })
+      .flow(
+        derive((rows: any) => {
+          liveResolves++;
+          return rows;
+        }),
+        spread({ by: "cat", dir: "x" })
+      )
+      .mark(rect({ h: "count", fill: live(() => (tLive() % 2 ? "#f00" : "#00f")) }))
+      .render(liveContainer, { w: 200, h: 120 });
+    await settle();
+    ok("live timer: initial resolve", liveResolves === 1, `resolves=${liveResolves}`);
+    await realDelay(30);
+    await settle();
+    ok(
+      "live-only timer read causes no pipeline re-runs",
+      liveResolves === 1,
+      `resolves=${liveResolves}`
+    );
+    tLive.stop();
+
+    // Timer read in derive(): the pipeline re-runs as ticks accrue.
+    const specContainer = makeContainer();
+    let specResolves = 0;
+    // A longer interval than `settle`'s zero-ms macrotasks so no tick lands
+    // before we capture the baseline (5ms would already re-run during settle).
+    const tSpec = timer({ interval: 40 });
+    await chart(data, { axes: false })
+      .flow(
+        derive((rows: any) => {
+          specResolves++;
+          tSpec(); // spec read → pipeline dependency
+          return rows;
+        }),
+        spread({ by: "cat", dir: "x" })
+      )
+      .mark(rect({ h: "count", fill: "#00f" }))
+      .render(specContainer, { w: 200, h: 120 });
+    await settle();
+    const baseline = specResolves;
+    ok("spec timer: initial resolve", baseline >= 1, `resolves=${baseline}`);
+    await realDelay(150);
+    await settle();
+    ok(
+      "timer read in derive re-runs the pipeline as it ticks",
+      specResolves > baseline,
+      `resolves=${specResolves}`
+    );
+    tSpec.stop();
   }
 
   /* ------------------------ container dispose ---------------------- */

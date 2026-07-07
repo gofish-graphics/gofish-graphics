@@ -23,28 +23,59 @@ export function invertAffine(f: (t: number) => number): (y: number) => number {
 }
 
 export interface FrameConversions {
-  /** data → screen px, per axis (x, y). */
-  dataToPx: [(d: number) => number, (d: number) => number];
-  /** screen px → data, per axis (x, y). */
-  pxToData: [(px: number) => number, (px: number) => number];
+  /** data → screen px, per axis (x, y). Per-axis OPTIONAL: a leg is present
+   *  only where the axis carries a continuous position scale. */
+  dataToPx: [
+    ((d: number) => number) | undefined,
+    ((d: number) => number) | undefined,
+  ];
+  /** screen px → data, per axis (x, y). Per-axis OPTIONAL — see `dataToPx`. */
+  pxToData: [
+    ((px: number) => number) | undefined,
+    ((px: number) => number) | undefined,
+  ];
   /** The content box in screen px (x and y pixel extents, min ≤ max). */
   contentPx: { x: [number, number]; y: [number, number] };
   /** Continuous data domains per axis, when the axis has one. */
   domains: { x?: [number, number]; y?: [number, number] };
 }
 
+/** Build the data↔px leg for one axis. Present only when the axis has BOTH a
+ *  recorded position scale AND a continuous data domain — an ordinal/band axis
+ *  has no meaningful data coordinate to invert into. A degenerate leg (a
+ *  non-finite or zero-slope map, e.g. a zero-size axis) is dropped rather than
+ *  throwing, so it never fails the whole render from inside `publishFrame`. */
+function axisLeg(
+  axis: 0 | 1,
+  ps: ((pos: number) => number) | undefined,
+  domain: [number, number] | undefined,
+  toPixel: NonNullable<InteractionFrame["toPixel"]>
+):
+  | { dataToPx: (d: number) => number; pxToData: (px: number) => number }
+  | undefined {
+  if (!ps || !domain) return undefined;
+  const dataToPx =
+    axis === 0
+      ? (d: number) => toPixel([ps(d), 0])[0]
+      : (d: number) => toPixel([0, ps(d)])[1];
+  // Sample the affine slope; bail (no throw) on a degenerate map.
+  const a = dataToPx(0);
+  const slope = dataToPx(1) - a;
+  if (!Number.isFinite(slope) || slope === 0) return undefined;
+  return { dataToPx, pxToData: (px: number) => (px - a) / slope };
+}
+
 /** Build conversions for the axes whose position scales exist. Returns
- *  undefined when the frame lacks the recorded maps (no continuous axes). */
+ *  undefined when NO axis converts (no continuous axes at all). */
 export function frameConversions(
   frame: InteractionFrame
 ): FrameConversions | undefined {
   const toPixel = frame.toPixel;
-  const psX = frame.posScales?.[0];
-  const psY = frame.posScales?.[1];
-  if (!toPixel || !frame.size || (!psX && !psY)) return undefined;
+  if (!toPixel || !frame.size) return undefined;
 
-  const dataToPxX = (d: number) => toPixel([psX ? psX(d) : d, 0])[0];
-  const dataToPxY = (d: number) => toPixel([0, psY ? psY(d) : d])[1];
+  const legX = axisLeg(0, frame.posScales?.[0], frame.domains?.x, toPixel);
+  const legY = axisLeg(1, frame.posScales?.[1], frame.domains?.y, toPixel);
+  if (!legX && !legY) return undefined;
 
   const px0 = toPixel([0, 0]);
   const px1 = toPixel([frame.size.width, frame.size.height]);
@@ -52,8 +83,8 @@ export function frameConversions(
     a <= b ? [a, b] : [b, a];
 
   return {
-    dataToPx: [dataToPxX, dataToPxY],
-    pxToData: [invertAffine(dataToPxX), invertAffine(dataToPxY)],
+    dataToPx: [legX?.dataToPx, legY?.dataToPx],
+    pxToData: [legX?.pxToData, legY?.pxToData],
     contentPx: {
       x: sorted(px0[0], px1[0]),
       y: sorted(px0[1], px1[1]),

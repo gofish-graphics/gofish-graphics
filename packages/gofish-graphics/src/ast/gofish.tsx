@@ -734,12 +734,29 @@ export const gofish = (
 ) => {
   const svgPadding = options.padding ?? PADDING;
 
-  // Re-rendering into the same container (the interaction scheduler does this
-  // per spec change) must dispose the previous reactive root first, or roots
-  // and DOM accumulate. One render per container is unaffected.
-  (
-    container as HTMLElement & { __gofishDispose?: () => void }
-  ).__gofishDispose?.();
+  type GofishState = {
+    dispose: () => void;
+    runtime?: InteractionRuntime;
+  };
+  const stateHost = container as HTMLElement & { __gofishState?: GofishState };
+
+  // Re-rendering into the same container must always dispose the previous Solid
+  // root, or roots and DOM accumulate. TWO cases enter here with a prior state:
+  //  1. A Tier-2 re-render of the SAME chart (the interaction scheduler, per
+  //     spec change) — SAME runtime. Dispose only the old Solid root; the
+  //     runtime is reused and must survive (disposing it would clear its
+  //     rerenderFn/inputs and kill interactivity after one frame).
+  //  2. A DIFFERENT chart taking over this container — dispose the old Solid
+  //     root AND the old runtime, so a still-live input (e.g. a running timer
+  //     the previous chart never stopped) stops zombie-invalidating a dead
+  //     chart whose container is now someone else's.
+  const prev = stateHost.__gofishState;
+  if (prev) {
+    prev.dispose();
+    if (prev.runtime && prev.runtime !== options.interaction) {
+      prev.runtime.dispose();
+    }
+  }
 
   const [layoutData] = createResource(() => runLayout(options, child));
 
@@ -761,11 +778,12 @@ export const gofish = (
       </Suspense>
     );
   }, container);
-  (
-    container as HTMLElement & { __gofishDispose?: () => void }
-  ).__gofishDispose = () => {
-    dispose();
-    container.innerHTML = "";
+  stateHost.__gofishState = {
+    dispose: () => {
+      dispose();
+      container.innerHTML = "";
+    },
+    runtime: options.interaction,
   };
   return container;
 };
