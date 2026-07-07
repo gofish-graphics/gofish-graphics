@@ -236,12 +236,19 @@ const reportConflict = (type: string, dir: 0 | 1, c: BBoxConflict): void => {
  *  auto-claims on that dim. Ordinal owners record `"o:<keys>"` instead. */
 const AXIS_CLAIM_OPAQUE = "continuous";
 
+
 export class GoFishNode {
   public readonly uid: string;
   private static uidCounter = 0;
   public type: string;
   public args?: any;
   public key?: string;
+  /** The node's `key` was assigned POSITIONALLY (an auto-index from an operator
+   *  with no `by`), not from a data grouping or an explicit user `key`. An
+   *  ordinal built entirely from synthetic keys is `anonymous` — a layout-only
+   *  spread that renders no axis. Set in `createOperator`; read when folding the
+   *  distribute ordinal (see `compose` / `distributeSpaceFold`). */
+  public _syntheticKey?: boolean;
   public _name?: string | Token;
   public _isScope: boolean = false;
   /**
@@ -758,19 +765,41 @@ export class GoFishNode {
       const override =
         dim === 0 ? this._axisOverride?.x : this._axisOverride?.y;
       if (override !== undefined) {
-        if (dim === 0) this.axis.x = override === false ? false : true;
-        else this.axis.y = override === false ? false : true;
-        next.set(dim, AXIS_CLAIM_OPAQUE); // claim regardless — false blocks children too
+        // An explicit `axes:{x/y:...}` override. `false` always suppresses. A
+        // `true`, though, must not DUPLICATE an axis an ancestor already renders
+        // for the SAME ordinal grouping: under the recursive-axis model an
+        // enclosing facet cell auto-claims this node's ordinal (nesting), so an
+        // inner `axes:{x:true}` on the same grouping would draw a redundant
+        // second label row. Suppress the duplicate (but still block descendants).
+        const s = space?.[dim];
+        const mySig =
+          s && isORDINAL(s) && !s.anonymous
+            ? "o:" + JSON.stringify(s.domain ?? [])
+            : undefined;
+        const dupOrdinal =
+          override !== false && mySig !== undefined && claimed.get(dim) === mySig;
+        const show = override !== false && !dupOrdinal;
+        if (dim === 0) this.axis.x = show;
+        else this.axis.y = show;
+        next.set(dim, mySig ?? AXIS_CLAIM_OPAQUE); // claim regardless — false blocks children too
       } else if (enabled.has(dim) && space && !isUNDEFINED(space[dim])) {
         // A baseline magnitude ("free") owns no guide yet — only an anchored
         // (POSITION), unanchored (DIFFERENCE), or ORDINAL axis does.
         const s = space[dim];
         const prior = claimed.get(dim);
         let sig: string | undefined;
-        if (isORDINAL(s)) {
+        if (isORDINAL(s) && !s.anonymous) {
           // Ordinal axes nest: claim unless this exact grouping is already
           // claimed by an ancestor (same keys → a duplicate of the same axis) or
           // a continuous/override owner holds the dim (opaque).
+          //
+          // An `anonymous` ordinal (its keys are positional — see
+          // `ORDINAL_TYPE.anonymous` / `_syntheticKey`) is a `spread` with no
+          // `by` — unit dots packed along a dimension for layout only. It carries
+          // no grouping identity, so it renders no guide: it neither claims nor
+          // labels an axis. An explicitly-KEYED spread (the low-level `key:`
+          // idiom) is NOT anonymous and keeps its axis — its semantic
+          // keys are a real category axis even without a `by`-derived measure.
           const mySig = "o:" + JSON.stringify(s.domain ?? []);
           if (
             prior === undefined ||

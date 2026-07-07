@@ -400,7 +400,17 @@ function elaborateOrdinalAxis(
  */
 function collectKeyMap(node: GoFishNode): Record<string, GoFishNode> {
   const out: Record<string, GoFishNode> = {};
-  const walk = (n: GoFishNode) => {
+  // BREADTH-first so the SHALLOWEST node with a given key wins — the grouping
+  // bands this axis labels sit at one consistent (shallow) depth, while the
+  // per-datum mark nodes below them carry bare positional keys ("0","1",…) that
+  // COLLIDE with ordinal keys (e.g. cylinder values "3".."8", pclass "1".."3").
+  // A pre-order DFS would let a deep datum key inside an EARLY sibling band beat
+  // the real (later-sibling) band — collapsing every label past the first onto
+  // one slot. Level-order makes "shallower wins" hold globally, not just within
+  // a subtree, so the bands always claim their keys before any datum node.
+  const queue: GoFishNode[] = [node];
+  while (queue.length > 0) {
+    const n = queue.shift()!;
     if (n._ordinalKeyMap) {
       for (const k of Object.keys(n._ordinalKeyMap)) {
         if (!(k in out)) out[k] = n._ordinalKeyMap[k];
@@ -408,10 +418,9 @@ function collectKeyMap(node: GoFishNode): Record<string, GoFishNode> {
     }
     if (n.key !== undefined && !(n.key in out)) out[n.key] = n;
     n.children.forEach((c) => {
-      if (c instanceof GoFishNode) walk(c);
+      if (c instanceof GoFishNode) queue.push(c);
     });
-  };
-  walk(node);
+  }
   return out;
 }
 

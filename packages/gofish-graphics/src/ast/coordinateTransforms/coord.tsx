@@ -68,14 +68,17 @@ const unionOrdinal = (
 ): UnderlyingSpace => {
   const keys = new Set<string>();
   const measures: (Measure | undefined)[] = [];
+  // Anonymous only if EVERY contributing ordinal is anonymous.
+  let anonymous = true;
   for (const child of children) {
     const s = child[axis];
     if (isORDINAL(s) && s.domain) {
       s.domain.forEach((k) => keys.add(k));
       measures.push(s.measure);
+      if (!s.anonymous) anonymous = false;
     }
   }
-  return ORDINAL(Array.from(keys), forgetAllMeasures(measures));
+  return ORDINAL(Array.from(keys), forgetAllMeasures(measures), anonymous);
 };
 
 export const coord = createNodeOperator(

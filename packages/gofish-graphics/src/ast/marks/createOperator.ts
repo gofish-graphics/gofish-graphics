@@ -858,7 +858,15 @@ export function createOperator<Datum, Options extends Record<string, any>>(
               layerContext
             );
             const keyStr = currentKey?.toString() ?? "";
-            for (const node of leafNodes) node.setKey(keyStr);
+            // Positional key when this operator did NOT group by a data field
+            // (an identity split — a `spread` with no `by`): the key is a bare
+            // index, so any ordinal folded from it is `anonymous` (renders no
+            // axis). A `by` grouping yields data-value keys (semantic).
+            const synthetic = (opts as any).by === undefined;
+            for (const node of leafNodes) {
+              node.setKey(keyStr);
+              node._syntheticKey = synthetic;
+            }
             // Record the (string) field this operator grouped by, so a later
             // `resolve(..., { from })` can match against it without the user
             // restating the key. The innermost grouping wins (`??=`); a function
