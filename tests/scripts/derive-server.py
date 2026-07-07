@@ -284,6 +284,11 @@ class DeriveHandler(BaseHTTPRequestHandler):
                     "charts": child_payloads,
                     "options": {**(builder.options or {}), **options},
                     "deriveIds": derive_ids,
+                    # Only the fluent `chart(...).layer(...)` chain is the v3
+                    # builder (JS reconstructs it through its own LayerBuilder).
+                    # The array form `layer([c1, c2])` is the low-level
+                    # combinator, mirroring JS `layer([...])`.
+                    "builder": getattr(builder, "_builder_chain", False),
                 }
                 # `.constrain(...)` constraints relating the named children.
                 layer_constraints = getattr(builder, "_constraints", None)

@@ -1,12 +1,12 @@
 import * as Monotonic from "../../util/monotonic";
 import { resolveColorChannel } from "../../color";
 import { computeAesthetic } from "../../util";
+import { posFn } from "../domain";
 import { interval } from "../../util/interval";
 import { GoFishNode } from "../_node";
 import {
   getMeasure,
   getValue,
-  inferEmbedded,
   isAesthetic,
   isValue,
   MaybeValue,
@@ -15,6 +15,7 @@ import {
   Dimensions,
   displayTranslate,
   elaborateDims,
+  extractAliasCandidates,
   FancyDims,
   Transform,
 } from "../dims";
@@ -26,6 +27,13 @@ import {
   UNDEFINED,
 } from "../underlyingSpace";
 import { createMark } from "../withGoFish";
+import type { DisplayList } from "gofish-ir";
+import {
+  declaredFlipsY,
+  lowerStyle,
+  rectItemFromBox,
+  roleFor,
+} from "../displayList/lowerHelpers";
 type TextDimensions = {
   width: number;
   height: number;
@@ -157,7 +165,6 @@ const resolveTextLayout = (
 
 export const Text = ({
   key,
-  name,
   text: textContent,
   fill = "black",
   stroke,
@@ -170,7 +177,6 @@ export const Text = ({
   ...fancyDims
 }: {
   key?: string;
-  name?: string;
   text: MaybeValue<string | number>;
   fill?: MaybeValue<string>;
   stroke?: MaybeValue<string>;
@@ -184,19 +190,18 @@ export const Text = ({
    *  bottom-to-top with glyph tops facing left. */
   rotate?: number;
 } & FancyDims<MaybeValue<number>>) => {
-  const dims = elaborateDims(fancyDims).map(inferEmbedded);
+  // `embedded` is authored by the resolveEmbedding pass — see rect.tsx.
+  const dims = elaborateDims(fancyDims);
 
   const textAnchor = "start";
   const dominantBaseline = "auto";
 
-  return new GoFishNode(
+  const node = new GoFishNode(
     {
-      name,
       key,
       type: "text",
       args: {
         key,
-        name,
         text: textContent,
         fill,
         stroke,
@@ -244,7 +249,7 @@ export const Text = ({
 
         return [resolveAxis(0, xPos), resolveAxis(1, yPos)];
       },
-      layout: (shared, size, scaleFactors, children, posScales) => {
+      layout: (shared, size, scales, children) => {
         const finalText = isValue(textContent)
           ? getValue(textContent)
           : textContent;
@@ -273,11 +278,19 @@ export const Text = ({
           : relRaw;
 
         const positionX =
-          computeAesthetic(dims[0].center, posScales?.[0]!, undefined) ??
-          computeAesthetic(dims[0].min, posScales?.[0]!, undefined);
+          computeAesthetic(
+            dims[0].center,
+            posFn(scales?.[0]?.map)!,
+            undefined
+          ) ??
+          computeAesthetic(dims[0].min, posFn(scales?.[0]?.map)!, undefined);
         const positionY =
-          computeAesthetic(dims[1].center, posScales?.[1]!, undefined) ??
-          computeAesthetic(dims[1].min, posScales?.[1]!, undefined);
+          computeAesthetic(
+            dims[1].center,
+            posFn(scales?.[1]?.map)!,
+            undefined
+          ) ??
+          computeAesthetic(dims[1].min, posFn(scales?.[1]?.map)!, undefined);
 
         return {
           intrinsicDims: [
@@ -298,112 +311,113 @@ export const Text = ({
           renderData: { layout },
         };
       },
-      render: (
-        {
-          intrinsicDims,
-          transform,
-          renderData,
-        }: {
-          intrinsicDims?: Dimensions;
-          transform?: Transform;
-          renderData?: { layout?: TextLayout };
-        },
+      // IR lowering — mirror of `render`. The anchor maps through `toPixel`.
+      // Rotation sign is flip-AGNOSTIC: in a `yUp` chart scope `toPixel` mirrors
+      // y, which negates a screen-space rotate (`-rotate`); in y-down free space
+      // there is no mirror, so the rotate passes through (`+rotate`). We read the
+      // flip out of `toPixel` via `toPixelFlipsY` (issue #143/#16). Unrotated →
+      // upright text either way.
+      lower: (
+        { transform, renderData, toPixel, intrinsicDims },
         _children,
         node
-      ) => {
+      ): DisplayList.DisplayItem[] => {
         const finalText = isValue(textContent)
           ? getValue(textContent)
           : textContent;
+        const text = finalText == null ? "" : String(finalText);
 
+        const flips = declaredFlipsY(node, toPixel);
         const [anchorX, anchorY] = displayTranslate(transform);
+        const [px, py0] = toPixel([anchorX, anchorY]);
+        // Text's vertical box is asymmetric about the baseline (ascent ≠ descent
+        // for `auto`). Under the y-up flip that asymmetry resolves correctly; in
+        // y-down free space the SVG baseline must shift by (minY + maxY) so the
+        // glyphs fill the un-mirrored layout box (zero for a symmetric `central`
+        // baseline, and zero under the flip → charts stay byte-identical). The
+        // rotated case carries its footprint in the rotate transform. #143/#16.
+        const baselineShift =
+          flips || rotate
+            ? 0
+            : 2 * (intrinsicDims?.[1]?.min ?? 0) +
+              (intrinsicDims?.[1]?.size ?? 0);
+        const py = py0 + baselineShift;
 
         const unitScale = node.getRenderSession().scaleContext?.unit;
         const resolvedFill = resolveColorChannel(fill, unitScale);
         const resolvedStroke = resolveColorChannel(stroke, unitScale);
 
-        const layout =
-          renderData?.layout ??
-          resolveTextLayout(
-            finalText == null ? "" : String(finalText),
-            fontSize,
-            fontFamily,
-            textAnchor,
-            dominantBaseline
-          );
+        const items: DisplayList.DisplayItem[] = [];
 
-        const bboxStroke = "#ff00aa";
-        const bboxStrokeWidth = 1;
-        const bboxDash = "4 3";
-        const showDebugBoundingBox = debugBoundingBox;
+        // Debug bbox (rare): the true rotated footprint, dashed.
+        if (debugBoundingBox) {
+          const layout =
+            (renderData as { layout?: TextLayout })?.layout ??
+            resolveTextLayout(
+              text,
+              fontSize,
+              fontFamily,
+              textAnchor,
+              dominantBaseline
+            );
+          const relRaw = {
+            minX: layout.bbox.minX - layout.anchor.x,
+            minY: layout.bbox.minY - layout.anchor.y,
+            maxX: layout.bbox.maxX - layout.anchor.x,
+            maxY: layout.bbox.maxY - layout.anchor.y,
+          };
+          const relRot = rotate ? rotateRelBBox(relRaw, rotate) : relRaw;
+          if (Number.isFinite(relRot.minX) && Number.isFinite(relRot.minY)) {
+            items.push(
+              rectItemFromBox(
+                anchorX + relRot.minX,
+                anchorX + relRot.maxX,
+                anchorY + relRot.minY,
+                anchorY + relRot.maxY,
+                toPixel,
+                {
+                  role: "overlay",
+                  style: lowerStyle({
+                    fill: "none",
+                    stroke: "#ff00aa",
+                    strokeWidth: 1,
+                    strokeDasharray: "4 3",
+                  }),
+                }
+              )
+            );
+          }
+        }
 
-        // Debug rect shows the TRUE (rotated) footprint, so route the relative
-        // box through the same rotation the layout pass used.
-        const relRaw = {
-          minX: layout.bbox.minX - layout.anchor.x,
-          minY: layout.bbox.minY - layout.anchor.y,
-          maxX: layout.bbox.maxX - layout.anchor.x,
-          maxY: layout.bbox.maxY - layout.anchor.y,
+        const textItem: DisplayList.TextItem = {
+          kind: "text",
+          x: px,
+          y: py,
+          text,
+          fontSize,
+          fontFamily,
+          textAnchor: textAnchor as DisplayList.TextItem["textAnchor"],
+          dominantBaseline:
+            dominantBaseline as DisplayList.TextItem["dominantBaseline"],
+          role: roleFor(node.datum),
+          datum: node.datum,
+          style: lowerStyle({
+            fill: resolvedFill,
+            stroke: resolvedStroke,
+            strokeWidth: strokeWidth ?? 0,
+            filter,
+          }),
         };
-        const relRot = rotate ? rotateRelBBox(relRaw, rotate) : relRaw;
-        const minXRel = relRot.minX;
-        const maxXRel = relRot.maxX;
-        const minYRel = relRot.minY;
-        const maxYRel = relRot.maxY;
-
-        const bbox =
-          showDebugBoundingBox &&
-          Number.isFinite(minXRel) &&
-          Number.isFinite(minYRel) ? (
-            <rect
-              transform="scale(1, -1)"
-              x={anchorX + minXRel}
-              y={-(anchorY + maxYRel)}
-              width={maxXRel - minXRel}
-              height={maxYRel - minYRel}
-              fill="none"
-              stroke={bboxStroke}
-              stroke-width={bboxStrokeWidth}
-              stroke-dasharray={bboxDash}
-              pointer-events="none"
-            />
-          ) : null;
-
-        // Unrotated: byte-identical markup to before (capture-diff must not
-        // see unrotated text move). Rotated: scale(1,-1) flips glyph space into
-        // the y-up world orientation, rotate(θ) is then the SAME matrix as
-        // rotateRelBBox (so render and the measured bbox agree), and translate
-        // moves the anchor to the placed position — emitted x/y are 0 because
-        // the translate already carries the placement.
-        const textTransform = rotate
-          ? `translate(${anchorX}, ${anchorY}) rotate(${rotate}) scale(1, -1)`
-          : "scale(1, -1)";
-        const textX = rotate ? 0 : anchorX;
-        const textY = rotate ? 0 : -anchorY;
-
-        return (
-          <>
-            {bbox}
-            <text
-              transform={textTransform}
-              x={textX}
-              y={textY}
-              fill={resolvedFill}
-              stroke={resolvedStroke}
-              stroke-width={strokeWidth ?? 0}
-              filter={filter}
-              font-size={`${fontSize}px`}
-              font-family={fontFamily}
-              text-anchor={textAnchor}
-              dominant-baseline={dominantBaseline}
-            >
-              {finalText}
-            </text>
-          </>
-        );
+        if (rotate) textItem.rotate = flips ? -rotate : rotate;
+        items.push(textItem);
+        return items;
       },
     },
     []
   );
+  // Stash alias-keyed dims (theta/r/…) for the resolveAliases pass.
+  node._pendingAliases = extractAliasCandidates(fancyDims);
+  return node;
 };
 
 export const text = createMark(

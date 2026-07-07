@@ -19,7 +19,8 @@ This document explains the order and mechanics of layout and render passes in th
 The GoFish rendering pipeline transforms a declarative chart specification into a rendered SVG visualization through a series of well-defined passes. The process can be divided into two main phases:
 
 1. **Layout Phase**: Computes positions, sizes, and spatial relationships
-2. **Render Phase**: Generates SVG elements from the laid-out tree
+2. **Render Phase**: Lowers the laid-out tree into a flat display-list IR, then
+   paints that IR with a backend (SVG today)
 
 ## Entry Point: The `gofish()` Function
 
@@ -144,6 +145,26 @@ inferSizeDomains: (shared, children) => {
 ```
 
 The `computeIntrinsicSize()` function returns a `Monotonic` function that maps from data values to pixel sizes. This is used later during layout to determine how much space each element needs.
+
+### Pass 5.5: Coordinate-Space Alias Resolution
+
+**Location**: `src/ast/gofish.tsx` (`child.resolveAliases()`), `src/ast/_node.ts`
+(`resolveAliases`)
+
+A coordinate transform may declare **axis-name aliases** for the marks inside it —
+`polar()`/`clock()` expose `{ x: "theta", y: "r" }`, so a mark can be authored with
+`theta`/`r` (positions) and `thetaSize`/`rSize` (extents) instead of `x`/`y`/`w`/`h`.
+`resolveAliases` is a top-down pass (run before underlying space, which reads the
+resolved dims) that walks the tree carrying the **active alias scope**: it rebinds the
+scope at every `coord` node that declares aliases (a nested coord rebinds for its
+subtree), resolves each mark's stashed `_pendingAliases` into the canonical `x/y/w/h`
+facets of its `dims`, and **throws** if an alias is used outside any declaring coord or
+names an alias the enclosing coord doesn't declare (hygiene). Like the later embedding
+pass it mutates the shared `args.dims` element in place so the captured layout/space
+closures observe the resolution. The operator `dir` accepts the angular/radial aliases
+too (`elaborateDirection` maps `theta`→0, `r`→1 generically, since `dir` is baked at
+operator construction before its coord exists). See
+[Authoring Coordinate Transforms](/internals/layout/coordinate-transforms).
 
 ### Pass 6: Underlying Space Resolution
 
@@ -305,6 +326,30 @@ const posScales = [
 
 For `POSITION` spaces, this creates linear scales that map from data values to pixel coordinates. These scales are used during layout to position elements.
 
+### Pass 8.5: Embedding Resolution
+
+**Location**: `src/ast/gofish.tsx` (`child.resolveEmbedding()`), `src/ast/_node.ts`
+(`resolveEmbedding`)
+
+`resolveEmbedding` is the **sole author** of each dim's `embedded` flag — the
+flag the shape renders switch on for point (0 embedded axes) / line (1) / area
+(2). It runs top-down after underlying space resolves and before layout, and
+mutates the shared `args.dims` element in place (like `resolveAliases`) so the
+captured render closure observes it. Explicit `emX`/`emY` (and `connect`'s
+`embed()`) lock the flag to `true` and are never recomputed.
+
+A dim embeds iff its size is a data value or unsized (`baseEmbedded`, `data.ts`)
+AND — the **Route B** measure gate, only inside a coordinate space — its size's
+measure matches the dim's own _position_ measure (`min`/`center`/`max`). A size
+in a measure _foreign_ to where the mark sits (a scatter bubble's area ≠ its
+position units) stays ink: a flat point at the mapped center, not a swept wedge.
+The discriminator is mark-local because a polar coord forgets its axis measure;
+a positioned mark's own position measure is the axis measure it sits on. This
+consumes the measure provenance #534 carried to mark channels. The revocation is
+coord-scoped, so Cartesian behavior matches the former construction-time
+inference. (Route A — relational, measure-free embedding — is not yet
+implemented; tracked under #618.)
+
 ### Pass 9: Layout Calculation
 
 **Location**: `src/ast/gofish.tsx:208`
@@ -336,7 +381,15 @@ omitted dimension is resolved per axis from that axis's root underlying space:
 
 `layout()` therefore distinguishes the concrete `canvasW`/`canvasH` (used to build
 the position scales and root scale factors) from the `layoutW`/`layoutH` it hands
-to `child.layout` (where a shrink-to-fit axis is left unsized). After layout it
+to `child.layout` (where a shrink-to-fit axis is left unsized). **Shared-measure
+equal scale** (#582) adds one reconciliation step here, after the per-axis scales
+are built and before `child.layout`: when `spaceMeasure(x) === spaceMeasure(y)`
+(the two axes are the same unit), each axis's pixels-per-data-unit — a POSITION
+domain's `canvas / range` or a baseline-magnitude σ — is equated to the binding
+`min(...)` so one data unit measures the same on both axes (circles stay circular,
+maps stay undistorted); the binding axis fills, the other gets a recentered
+posScale. It is type equality, not a knob, and a single-coordinate-space coupling
+— it does not reach sizes solved in separate nested operator scopes. After layout it
 reads the chart's _final_ extent back off the root via `child.dims[i].size`, so an
 unsized axis still yields a concrete SVG size (e.g. a no-width bar chart gets
 default-width bars and a width of `n·barWidth + spacing`). A user-supplied
@@ -453,6 +506,14 @@ at a target coordinate. _Which_ anchor depends on whether the axis is sized:
   the authoritative override — it rebuilds the axis ledger so the pin lands regardless
   — and for an unplaced root it matches what `place(…, "min")` would have done.
 
+Constraint placement works in anchor coordinates, not just node origins. The
+`Placeable` protocol in `_node.ts` exposes `localAnchor(axis, anchor)` so the
+placement solver can turn `start`/`middle`/`end`/`baseline` relations into
+equations over a node's absolute `min`. `GoFishNode.localAnchor()` reads the
+node's intrinsic dimensions in its own local frame, which keeps baseline and
+asymmetric-box alignment independent from whatever display transform is later
+projected for rendering.
+
 ### Pass 11: Ordinal Scale Building
 
 **Location**: `src/ast/gofish.tsx:216-223`
@@ -480,11 +541,17 @@ For `ORDINAL` spaces, this builds scales that map category keys to pixel positio
 
 ## Render Phase
 
-After layout completes, the render phase generates SVG elements.
+After layout completes, the render phase turns the laid-out tree into pixels in
+**two passes**: **lower** (walk the baked scenegraph, emit a flat display-list IR of
+positioned primitives in absolute pixels) and **paint** (a single backend turns that
+IR into output — SVG today). There is no per-shape SVG emission in between: each
+shape/operator owns a `lower()` method that describes _itself_ as display-list items,
+and one backend paints the whole list. The full as-built model is
+[Rendering](/internals/core/rendering); this section covers how `render()` drives it.
 
 ### Entry Point: The `render()` Function
 
-**Location**: `src/ast/gofish.tsx:346-842`
+**Location**: `src/ast/gofish.tsx` (`render()`)
 
 The render function is called from `gofish()` after layout data is available:
 
@@ -496,6 +563,8 @@ return render(
     svgPadding,
     defs,
     rightOverhang: data.rightOverhang,
+    rightContentOverhang: data.rightContentOverhang,
+    topOverhang: data.topOverhang,
     leftOverhang: data.leftOverhang,
     bottomOverhang: data.bottomOverhang,
   },
@@ -505,20 +574,11 @@ return render(
 
 `render()` no longer takes `axes`/`axisFields` or the scale/space context — all
 the chrome is in the laid-out tree by now, so render only needs the computed
-extent and the measured per-side overhangs to size the SVG.
+extent and the measured per-side overhangs to size the SVG. It computes the gutter
+reserves, builds the `toPixel` coordinate map (below), lowers the baked tree, and
+paints each item into an `<svg>`.
 
-### Render Pass 1: Context Restoration
-
-**Location**: `src/ast/gofish.tsx:378-379`
-
-```typescript
-scaleContext = scaleContextParam;
-keyContext = keyContextParam;
-```
-
-The global contexts are restored so that render functions can access them.
-
-### Render Pass 2: Chrome Reservation
+### Render Pass 1: Chrome Reservation
 
 **Location**: `src/ast/gofish.tsx` (`render()`)
 
@@ -572,141 +632,103 @@ gated `rightOverhang` term; everything else flows through `rightContentOverhang`
 and `reserve()`. This is the one place a chart-chrome flag still influences
 sizing — kept deliberately, because the distinction is semantic, not geometric.
 
-### Render Pass 3: SVG Container Creation
+### Render Pass 2: SVG Container Creation
 
 **Location**: `src/ast/gofish.tsx` (`render()`)
 
 ```typescript
 <svg
-  width={leftReserve + width + rightOverhang + pad}
-  height={pad + height + bottomReserve}
+  width={leftReserve + width + rightOverhang + reserve(rightContentOverhang)}
+  height={topReserve + height + bottomReserve}
   xmlns="http://www.w3.org/2000/svg"
 >
 ```
 
 The SVG container is sized to the content (`width`/`height`, read off the
-pre-chrome content node in layout) plus the measured reserves on each side.
+pre-chrome content node in layout) plus the measured reserves on each side. There is
+**no inner flip `<g>`** — the y-flip is folded into `toPixel` (next pass), so the
+display-list items paint directly under the `<svg>`.
 
-### Render Pass 4: Coordinate Transform
+### Render Pass 3: The Coordinate Fold (`toPixel`)
 
 **Location**: `src/ast/gofish.tsx` (`render()`)
 
-```typescript
-<g transform={`scale(1, -1) translate(${leftReserve}, ${-(height + pad)})`}>
-```
-
-The coordinate system is flipped (Y-axis inverted) to match mathematical
-conventions, and the chart is shifted right by `leftReserve` (the left gutter)
-and down by the top `pad`.
-
-### Render Pass 5: Node Tree Rendering
-
-**Location**: `src/ast/gofish.tsx:419-421`
+SVG is **y-down** (top-left origin); a continuous-y chart wants **y-up** (bars grow
+upward). The old renderer reconciled the two with two stacked SVG transforms — a
+per-shape `scale(1,-1)` and a root flip `<g transform="scale(1,-1) translate(…)">`.
+Both are folded into an affine map on the render session, but the map is now decided
+**per scope** rather than globally (issue #629): the bake walk tags each baked draw
+entry with the placed y-band it draws in (its `FlipScope`), and the lower driver builds
+that entry's `toPixel` from it:
 
 ```typescript
-<Show when={transform} keyed fallback={child.INTERNAL_render()}>
-  <g transform={transform ?? ""}>{child.INTERNAL_render()}</g>
-</Show>
+const baseDown: ToPixel = ([gx, gy]) => [gx + leftReserve, gy + topReserve];
+const toPixelFor = (flip?: FlipScope): ToPixel =>
+  flip === undefined
+    ? baseDown // ambient y-down
+    : ([gx, gy]) => baseDown([gx, 2 * flip.baseY + flip.height - gy]); // y-up
 ```
 
-The node tree is rendered recursively via `INTERNAL_render()`.
+A continuous-y subtree mirrors _y_ about its own band; an ordinal-y neighbor (a heatmap
+beside a bar chart) keeps the ambient y-down map. The **root plot content** mirrors about
+the canvas frame `[0, finalH]` stamped on `contentNode._rootFlipScope` here in
+`layout()` (where `finalH` is known) — the exact frame the old global flip used, so a
+single cohesive chart is pixel-identical; a mixed free-space dashboard flips only its
+continuous subtrees, each about its own band. Chrome (axis titles, legend, colorbar) is
+stamped `_ambientYDown`: the bake box-mirrors its BOX about the plot's frame (so it
+seats beside the flipped plot exactly as before) while its INTERIOR renders y-down —
+legend rows read top→bottom with no `reverse`. Because the flip and the gutter offset live in
+`toPixel`, the lower pass produces items already in **final absolute pixels** — no outer
+flip group, no per-shape transform. `toPixel` is affine, so straight paths stay straight
+(a warped path just maps each control point through it). See
+[Rendering](/internals/core/rendering) for the full per-scope mechanism.
 
-**Implementation**: `src/ast/_node.ts:315-332`
+### Render Pass 4: Lowering the Baked Tree
+
+**Location**: `src/ast/gofish.tsx` (`render()`), `src/ast/displayList/lower.ts`
 
 ```typescript
-public INTERNAL_render(
-  coordinateTransform?: CoordinateTransform
-): JSX.Element {
-  return this._render(
-    {
-      intrinsicDims: this.intrinsicDims,
-      transform: this.transform,
-      renderData: this.renderData,
-      coordinateTransform: coordinateTransform,
-    },
-    this.children.map((child) =>
-      child.INTERNAL_render(
-        this.type !== "box" ? coordinateTransform : undefined
-      )
-    )
-  );
-}
+const paintBaked = () => lowerToDisplayList(child).map(paintSVG);
 ```
 
-### Render Pass 6: Shape-Specific Rendering
-
-Each shape type has its own render function. For rectangles, this is in:
-
-**Location**: `src/ast/shapes/rect.tsx:251-449`
-
-The rect render function handles three cases based on which dimensions are data-driven:
-
-#### Case 1: Both Dimensions Aesthetic (Point-like)
-
-**Location**: `src/ast/shapes/rect.tsx:298-322`
-
-When neither dimension is embedded (data-driven), the rect is rendered as a transformed point:
+`lowerToDisplayList(child)` bakes the resolved tree into a globally z-ordered list of
+`{ node, transform }` entries (see
+[Flattening the Scenegraph](/internals/layout/coord-flattening)) and lets each entry
+lower itself via `INTERNAL_lower(coordTransform?, transformOverride?)`:
 
 ```typescript
-if (!isXEmbedded && !isYEmbedded) {
-  const center: [number, number] = [
-    (displayDims[0].min ?? 0) + (displayDims[0].size ?? 0) / 2,
-    (displayDims[1].min ?? 0) + (displayDims[1].size ?? 0) / 2,
-  ];
-  const [transformedX, transformedY] = space.transform(center);
-  // ... render rect at transformed position
-}
+export const lowerToDisplayList = (root) =>
+  bake(root).flatMap((d) => d.node.INTERNAL_lower(undefined, d.transform));
 ```
 
-#### Case 2: One Dimension Data-Driven (Line-like)
+The display list is the **concatenation of every node's `DisplayItem[]` fragment**.
+Unlike the old `INTERNAL_render`, `INTERNAL_lower` does not pre-recurse children: a
+node reaching it is either a leaf or a **bake boundary** (`coord`, `box`, `connect`,
+`arrow`, `enclose`, the compositors) that re-walks its own subtree with its absolute
+transform composed in. A node with no `lower()` throws.
 
-**Location**: `src/ast/shapes/rect.tsx:325-399`
+### Render Pass 5: Per-Shape Lowering and Painting
 
-When one dimension is embedded (e.g., bar height in a bar chart), the rect is rendered as a line or path:
+Each shape/operator owns a `lower(ctx) → DisplayItem[]` — the extension point that
+replaced `_render`. It receives `{ intrinsicDims, transform, renderData,
+coordinateTransform, toPixel }` and returns this node's fragment of the display list:
+an axis-aligned rect lowers to a `rect` item; a bar in a non-linear (e.g. polar)
+coordinate space lowers to a warped `path` item (its points mapped through both the
+coordinate transform and `toPixel`); text lowers to a `text` item; and so on. The
+"draw-rect vs draw-path" decision a rect used to make at render time is decided once,
+during lowering. Shared helpers live in `src/ast/displayList/lowerHelpers.ts`
+(`pathToPixelSVG`, `rectItemFromBox`, `lowerStyle`).
 
-```typescript
-if (isXEmbedded !== isYEmbedded) {
-  const dataAxis = isXEmbedded ? 0 : 1;
-  const aestheticAxis = isXEmbedded ? 1 : 0;
-  const thickness = displayDims[aestheticAxis].size ?? 0;
+A single backend then paints each item. `paintSVG`
+(`src/ast/displayList/paintSVG.tsx`) emits SolidJS JSX for the live path; its
+pure-string sibling `displayListToSVG` (in `gofish-ir`) emits markup with no DOM. Both
+consume the **same** list and a cross-check test keeps them in lockstep. Because items
+are in final absolute pixels, painting is verbatim — a `rect` item becomes
+`<rect x y width height …/>`. See [Rendering](/internals/core/rendering) for the IR's
+item kinds (`rect`/`ellipse`/`path`/`text`/`image`/`group`/`composite`/`mask`) and the
+`toDisplayList({ w, h })` terminal that stops at the IR for non-SVG consumers.
 
-  // For linear spaces, render as simple rect
-  if (space.type === "linear") {
-    // ... render rect with data-driven dimension
-  } else {
-    // For non-linear spaces, render as path
-    const linePath = path([...], { subdivision: 1000 });
-    const transformed = transformPath(linePath, space);
-    return <path d={pathToSVGPath(transformed)} ... />;
-  }
-}
-```
-
-**Example**: In a vertical bar chart:
-
-- X-axis is aesthetic (spread by `spread()` operator)
-- Y-axis is data-driven (`h: "value"`)
-- Each bar is rendered as a rectangle with fixed width and data-driven height
-
-#### Case 3: Both Dimensions Data-Driven (Area-like)
-
-**Location**: `src/ast/shapes/rect.tsx:401-449`
-
-When both dimensions are embedded, the rect is rendered as an area:
-
-```typescript
-// If we're in a linear space, render as a rect element
-if (space.type === "linear") {
-  // ... render rect
-} else {
-  // For non-linear spaces, render as transformed path
-  const corners = path([...], { closed: true, subdivision: 1000 });
-  const transformed = transformPath(corners, space);
-  return <path d={pathToSVGPath(transformed)} ... />;
-}
-```
-
-### Render Pass 7: Axis Rendering (removed)
+### Render Pass 6: Axis Rendering (removed)
 
 The bespoke axis-rendering pass that used to live here (hand-written SVG for
 continuous/ordinal axes, ~400 lines of `gofish.tsx`) was **deleted**. Axes are
@@ -714,9 +736,9 @@ now elaborated into ordinary GoFish nodes during layout (see Pass 7: Axis
 Elaboration and [Axes](/internals/frontend/axes)), so they render through the
 normal node-tree pass above with no special casing. Axis **titles** were the
 last artifact still drawn here; they too are now elaborated during layout
-(see Render Pass 2), so nothing axis-related is drawn directly at render time.
+(see Render Pass 1), so nothing axis-related is drawn directly at render time.
 
-### Render Pass 8: Legend Rendering (removed)
+### Render Pass 7: Legend Rendering (removed)
 
 The bespoke legend-rendering pass that used to live here (a `<For>` over
 `scaleContext.unit.color` hand-placing swatches behind a fixed `LEGEND_MARGIN`)
@@ -772,21 +794,26 @@ This creates:
 
 ### Step 3: Render Pass
 
-1. **Rect Rendering**: Each bar is rendered using Case 2 (one dimension data-driven):
+1. **Lower**: each bar's `lower()` emits a single `rect` display-list item — a
+   linear-space, one-dimension-data-driven bar lowers to an axis-aligned rectangle in
+   absolute pixels (its y-up box mapped through `toPixel`):
 
    ```typescript
    // X is aesthetic (positioned by spread), Y is data-driven
-   const baseX = displayDims[0].min ?? 0;
-   const baseY = 0; // Baseline
+   const gxMin = displayDims[0].min ?? 0;
    const width = displayDims[0].size ?? 0; // Inferred by spread
    const height = displayDims[1].size ?? 0; // From data
-
-   return <rect x={baseX} y={-baseY - height} width={width} height={height} ... />;
+   // rectItemFromBox maps the y-up box through toPixel → { kind: "rect", x, y, w, h }
+   return [
+     rectItemFromBox(gxMin, gxMin + width, 0, height, toPixel, { style }),
+   ];
    ```
 
 2. **Axes**: already part of the node tree (elaborated during layout), so
-   the category labels, the y tick marks, and the axis titles all render in
-   step 1 with everything else — nothing axis-related is drawn separately
+   the category labels, the y tick marks, and the axis titles lower alongside the
+   bars — nothing axis-related is drawn separately.
+3. **Paint**: `paintSVG` turns each `rect` item into `<rect x y width height …/>`;
+   the whole list paints directly under the `<svg>` with no flip group.
 
 ## Debug Support
 
@@ -813,7 +840,7 @@ if (debug) {
 1. **Layout is separate from rendering**: All spatial calculations happen in the layout phase
 2. **Underlying space determines scale types**: The underlying space resolution pass is critical for determining how to scale and render
 3. **Keys enable axis labeling**: The key resolution pass enables ordinal axes to find and position category labels
-4. **Rendering adapts to coordinate spaces**: The rect render function adapts its rendering strategy based on which dimensions are data-driven and what coordinate transform is active
+4. **Rendering adapts to coordinate spaces**: each shape's `lower()` adapts what display-list item it emits (an axis-aligned `rect` vs a warped `path`) based on which dimensions are data-driven and what coordinate transform is active
 5. **Contexts flow through passes**: The three session contexts (scope, scale, key) are populated during layout and used during rendering
 
 ## Code References Summary

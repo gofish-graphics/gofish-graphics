@@ -7,7 +7,7 @@
  * zero-cost and silent when off, so production behavior is unchanged.
  *
  * Phase-1 coverage = PLACEMENT COMPOSITION before data→size: given each child's
- * engine-computed size, does the solver's facet machinery reproduce the engine's
+ * engine-computed size, does the solver's box-key machinery reproduce the engine's
  * absolute positions? Start with the `distribute` constraint (the composition
  * `spread`/`stack`/`scatter` all elaborate to), edge mode, no pre-placed anchor —
  * the stacked/edge-spread core. Other modes/anchors are skipped (not yet
@@ -19,6 +19,7 @@ import type { Placeable } from "../_node";
 import { axisIndex, isPlacedOn, type Axis } from "../constraints/shared";
 import { getValue, isValue, type MaybeValue } from "../data";
 import { computeAesthetic, envFlag } from "../../util";
+import { pxOf } from "../domain";
 import { localAnchorPoint } from "../dims";
 import type { ConstraintSpec, ConstraintPosScales } from "../constraints";
 import { isCONTINUOUS, type UnderlyingSpace } from "../underlyingSpace";
@@ -52,9 +53,9 @@ interface DistributeLike {
  * Check the edge-distribute CONTIGUITY invariant the engine enforces on its
  * output: consecutive targets satisfy `child[i+1].min == child[i].max + spacing`.
  * This is anchor-agnostic — which child anchored the walk only sets the absolute
- * offset, not the spacing relation — which matters because the shadow runs AFTER
- * `applyDistribute`, by which point every target is placed (so the pre-placement
- * anchor distinction is gone).
+ * offset, not the spacing relation — which matters because the shadow runs after
+ * the placement solver, by which point every target is placed (so the
+ * pre-placement anchor distinction is gone).
  *
  * The solver expresses it as an origin chain: seed the first target at its real
  * position (boundary condition), then predict each subsequent child's `min` via
@@ -104,7 +105,7 @@ export function shadowCheckDistribute(
     if (i > 0 && Math.abs(solverMin - engineMin) > 1e-6) {
       report(`distribute.edge dir=${constraint.dir}`, solverMin, engineMin);
     }
-    prevMax = box.facetMono("max");
+    prevMax = box.keyMono("max");
   }
 }
 
@@ -116,9 +117,9 @@ interface AlignLike {
 }
 
 /**
- * The coordinate `align` lands at a target's `anchor`, via the solver's facet
- * model. `start`/`middle`/`end` are box facets (min/center/max) — computed
- * through a `SolverBox` from the engine's (min, size), validating the facet
+ * The coordinate `align` lands at a target's `anchor`, via the solver's box-key
+ * model. `start`/`middle`/`end` are box keys (min/center/max) — computed
+ * through a `SolverBox` from the engine's (min, size), validating the box-key
  * arithmetic. `baseline` is the box's ORIGIN — the intercept — which is the
  * placed translate, not a function of (min, size) alone (a negative bar's origin
  * is its max, not its min), so read it directly.
@@ -133,11 +134,10 @@ function anchorCoord(
   const min = t.dims[idx].min;
   const size = t.dims[idx].size;
   if (min === undefined || size === undefined) return undefined;
-  // start/middle/end are the box facets — the same single derivation every other
+  // start/middle/end are the box keys — the same single derivation every other
   // anchor read uses (negative-size safe).
-  const facet =
-    anchor === "start" ? "min" : anchor === "end" ? "max" : "center";
-  return localAnchorPoint(facet, min, size);
+  const key = anchor === "start" ? "min" : anchor === "end" ? "max" : "center";
+  return localAnchorPoint(key, min, size);
 }
 
 /**
@@ -149,9 +149,9 @@ function anchorCoord(
  * is left untouched (it may define or differ from the baseline), and align
  * leaves a self-positioned child unplaced (it skips a target whose own
  * `placement` is already determined, so it stays unplaced). Both are detected
- * via `prePlaced` (captured before `applyAlign`) + a post-check that the rest
- * are now placed; heterogeneous per-child anchor arrays are skipped (no single
- * shared line).
+ * via `prePlaced` (captured before the placement solver) + a post-check that the
+ * rest are now placed; heterogeneous per-child anchor arrays are skipped (no
+ * single shared line).
  */
 export function shadowCheckAlign(
   constraint: AlignLike,
@@ -204,13 +204,13 @@ interface PositionLike {
  *   1. the posScale is actually affine — probe it at d, d+1, d+2 and assert equal
  *      slopes (the POSITION-frame assumption the solver is built on);
  *   2. the target's anchor landed at `scale(datum)` (placement correctness, read
- *      through the same `anchorCoord` facet model).
+ *      through the same `anchorCoord` box-key model).
  * Literal (non-datum) coords are pure pixel pins (no data→position), skipped here.
  */
 export function shadowCheckPosition(
   constraint: PositionLike,
   targets: Placeable[],
-  posScales: (((v: number) => number) | undefined)[] | undefined
+  posScales: ConstraintPosScales | undefined
 ): void {
   if (!enabled() || constraint.type !== "position") return;
   // Across all 189 stories this covers 5753 datum→position mappings with zero
@@ -222,8 +222,9 @@ export function shadowCheckPosition(
   for (const [axis, coord] of axes) {
     if (coord === undefined || !isValue(coord)) continue; // datum only
     const idx = axisIndex(axis);
-    const scale = posScales?.[idx];
-    if (scale === undefined) continue; // datum w/o scale is an engine no-op
+    const map = posScales?.[idx];
+    if (map === undefined) continue; // datum w/o scale is an engine no-op
+    const scale = (v: number) => pxOf(map, v);
     const d = getValue(coord)!;
 
     // 1. POSITION scale must be affine (origin + σ·data).

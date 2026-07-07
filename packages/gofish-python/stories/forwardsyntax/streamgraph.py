@@ -1,6 +1,6 @@
 """Forward Syntax V3/Streamgraph — mirrors Streamgraph.stories.tsx"""
 
-from gofish import Layer, chart, spread, stack, blank, selectAll, area, group
+from gofish import layer, chart, spread, stack, blank, selectAll, area, group
 from stories.data.seafood import seafood
 
 TITLE = "Forward Syntax V3/Streamgraph"
@@ -15,5 +15,5 @@ def default(w=400, h=400):
         )
         .mark(blank(h="count", fill="species").name("bars"))
     )
-    overlay = chart(selectAll("bars")).flow(group(by="datum.species")).mark(area(opacity=0.8))
-    return Layer([bars, overlay])
+    overlay = chart(selectAll("bars")).flow(group(by="species")).mark(area(opacity=0.8))
+    return layer([bars, overlay])

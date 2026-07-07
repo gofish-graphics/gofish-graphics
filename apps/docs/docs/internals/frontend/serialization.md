@@ -55,16 +55,16 @@ releases.
 JavaScript:
 
 ```ts
-import { Chart, spread, rect, Serialize } from "gofish-graphics";
+import { chart, spread, rect, Serialize } from "gofish-graphics";
 import { Frontend } from "gofish-ir";
 
-const chart = Chart(data)
+const c = chart(data)
   .flow(spread({ by: "lake", dir: "x" }))
   .mark(rect({ h: "count" }));
 
 // Three call shapes, all returning Promise<FrontendIRDocument>:
-const doc = await chart.toJSON(); // method on ChartBuilder
-const doc2 = await Serialize.toJSON(chart); // standalone function
+const doc = await c.toJSON(); // method on ChartBuilder
+const doc2 = await Serialize.toJSON(c); // standalone function
 const doc3 = await Serialize.toJSONLayer(opts, [a, b]); // for Layer combinators
 const doc4 = await Serialize.toJSONRawMark(mark, opts); // for bare marks
 ```
@@ -115,13 +115,20 @@ The root types mirror the v3 fluent builder shapes:
 - `RawMarkIR` — `{ type: "raw-mark", mark, options? }`
 
 `data` is either `{type: "inline", rows}`, `{type: "select", layer}`, or
-`{type: "external", id?}`. Operators are a flat list (`derive`, `spread`,
-`stack`, `group`, `scatter`, `table`, `log`). Marks are a tree — leaves
+`{type: "external", id?}`. Operators are a flat list (`derive`, `resolve`,
+`join`, `spread`, `stack`, `group`, `scatter`, `table`, `log`) — note `join`
+inlines its right-hand table as JSON rows, so unlike `derive` it round-trips
+without a bridge. Marks are a tree — leaves
 (`rect`, `circle`, `line`, `area`, `blank`, `ellipse`, `petal`, `text`,
 `image`, `polygon`, plus the Python-bridge `mark-fn`), combinators (with
 `__combinator: true` and a `children` array — `layer`, `spread`, `stack`,
 `arrow`, `connect`, `treemap`, and the Porter-Duff family), refs, or the
 two self-discriminating wrapper marks `offset` and `cut` (below).
+
+Operators and marks may also carry `translate: {x?, y?}`. This is canonical
+frontend IR, not a Python-only bridge sentinel: it records the structural
+`.translate({x?, y?})` modifier and the JS deserializer reapplies it as a
+runtime chain.
 
 `offset` — `{ type: "offset", x?, y?, children: [<node>] }` — wraps a single
 child and shifts it by `(x, y)` render-pixels without moving the bounds it
@@ -150,6 +157,14 @@ with `zOrder(-1)`. When the chart's mark carries a string `.name(...)`, the
 targets are that registered layer (the manual `selectAll(name)` semantics);
 otherwise the produced nodes are tagged directly with a resolve-time Symbol
 marker — no name exists to mint or leak, so the JSON stays the user's spelling.
+
+A chart's **coordinate transform** rides the IR as a small spec the deserializer
+maps back to the JS factory by `type` — e.g. `{ type: "polar", innerRadius,
+centralAngle, startAngle, direction, center }`. `fromJSON.ts` reconstructs it by
+calling `polar(coordSpec)` / `clock(coordSpec)` and passing the whole spec
+through (the factory ignores the `type` key), so a parameterized polar/clock —
+donut hole, partial fan, start angle — round-trips without per-option plumbing.
+The parity render harness (`tests/harness/main.ts`) rebuilds it the same way.
 
 Channel values (`h`, `w`, `fill`, …) accept bare primitives (the
 shorthand path) or one of three explicit tagged objects:

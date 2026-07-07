@@ -29,6 +29,7 @@ interface Example {
   code: string;
   datasetCode?: string;
   npmDeps?: Record<string, string>;
+  noLiveEditor?: boolean;
 }
 
 const byId = storyData.byId as Record<string, Example>;
@@ -77,7 +78,7 @@ const codeOptions = computed(() => {
           one-file and two-file shapes are separate static branches.
         -->
         <GoFishLive
-          v-if="example.datasetCode"
+          v-if="!example.noLiveEditor && example.datasetCode"
           :key="example.id"
           template="vanilla-ts"
           :codeOptions="codeOptions"
@@ -95,7 +96,7 @@ const codeOptions = computed(() => {
           </div>
         </GoFishLive>
         <GoFishLive
-          v-else
+          v-else-if="!example.noLiveEditor"
           :key="example.id"
           template="vanilla-ts"
           :codeOptions="codeOptions"
@@ -109,6 +110,16 @@ const codeOptions = computed(() => {
             <pre>{{ example.code }}</pre>
           </div>
         </GoFishLive>
+        <div v-else class="playground-no-editor">
+          <p>
+            The live editor isn't available for this example yet —
+            <code>gofish-gotree</code> is not published to npm, so the
+            in-browser editor can't resolve it. The code below renders the chart
+            shown on the
+            <a :href="`/js/examples/${example.id}.html`">example page</a>.
+          </p>
+          <pre>{{ example.code }}</pre>
+        </div>
       </template>
       <div v-else-if="id" class="playground-missing">
         <h1>Example not found</h1>
@@ -155,6 +166,17 @@ const codeOptions = computed(() => {
 .playground-loading {
   color: var(--vp-c-text-2);
   padding: 2rem 0;
+}
+.playground-no-editor p {
+  color: var(--vp-c-text-2);
+  margin-bottom: 1rem;
+}
+.playground-no-editor pre {
+  background: var(--vp-c-bg-soft);
+  border-radius: 8px;
+  padding: 1rem;
+  overflow: auto;
+  font-size: 13px;
 }
 
 /*

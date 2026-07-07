@@ -7,7 +7,10 @@ import { loadStoryExamples } from "./storyExamples.ts";
 
 export default {
   // Re-run the loader when any story file changes during dev.
-  watch: ["../../../../../packages/gofish-graphics/stories/**/*.stories.tsx"],
+  watch: [
+    "../../../../../packages/gofish-graphics/stories/**/*.stories.tsx",
+    "../../../../../packages/gofish-gotree/stories/**/*.stories.tsx",
+  ],
   load() {
     const examples = loadStoryExamples();
     const byId = Object.fromEntries(examples.map((ex) => [ex.id, ex]));

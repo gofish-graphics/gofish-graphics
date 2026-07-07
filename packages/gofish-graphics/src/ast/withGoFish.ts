@@ -29,13 +29,17 @@ import {
 import {
   withMarkKind,
   nameableMark,
+  type TranslateModifierOptions,
   type MarkKind,
+  type ZOrderValue,
 } from "./marks/createOperator";
 import { isValue } from "./data";
+import { KNOWN_ALIAS_KEYS } from "./dims";
 import { Mark } from "./types";
 import type { ConstraintSpec, ConstraintRef } from "./constraints";
 import type { LabelAccessor, LabelOptions } from "./labels/labelPlacement";
 import type { Token } from "./createName";
+import { attachTerminals } from "./marks/terminals";
 
 /**
  * Options for rendering a GoFish node
@@ -98,6 +102,9 @@ export interface PromiseWithRender<T> extends Promise<T> {
     filename: string,
     options?: Parameters<GoFishNode["save"]>[1]
   ): Promise<void>;
+  toDisplayList(
+    options?: Parameters<GoFishNode["toDisplayList"]>[0]
+  ): ReturnType<GoFishNode["toDisplayList"]>;
   name(name: string | Token): PromiseWithRender<T>;
   label(accessor: LabelAccessor, options?: LabelOptions): PromiseWithRender<T>;
   setKey(key: string): PromiseWithRender<T>;
@@ -128,57 +135,17 @@ function isChartBuilder(value: any): value is ChartBuilder<any, any> {
  * This allows calling .render(), .name(), .setKey(), .setShared() on promises.
  */
 export function addRenderMethod<T>(promise: Promise<T>): PromiseWithRender<T> {
-  // Add the render method directly to the promise object
-  // In JavaScript, you can add properties to any object, including Promises
-  (promise as any).render = function (
-    container: HTMLElement,
-    options: RenderOptions
-  ): HTMLElement | Promise<HTMLElement> {
-    return promise.then((result) => {
-      // Check if the result has a render method (like GoFishNode)
-      if (hasRenderMethod(result)) {
-        return result.render(container, options);
-      }
-      throw new Error(
-        "Cannot call render on this result. Only GoFishNode instances have a render method."
-      );
-    });
-  };
-
-  // SVG-export terminals, mirroring `.render()` above.
-  (promise as any).toSVG = function (
-    options?: Parameters<GoFishNode["toSVG"]>[0]
-  ): Promise<string> {
-    return promise.then((result) => {
-      if (hasRenderMethod(result)) return result.toSVG(options);
-      throw new Error(
-        "Cannot call toSVG on this result. Only GoFishNode instances support export."
-      );
-    });
-  };
-
-  (promise as any).toSVGElement = function (
-    options?: Parameters<GoFishNode["toSVGElement"]>[0]
-  ): Promise<SVGSVGElement> {
-    return promise.then((result) => {
-      if (hasRenderMethod(result)) return result.toSVGElement(options);
-      throw new Error(
-        "Cannot call toSVGElement on this result. Only GoFishNode instances support export."
-      );
-    });
-  };
-
-  (promise as any).save = function (
-    filename: string,
-    options?: Parameters<GoFishNode["save"]>[1]
-  ): Promise<void> {
-    return promise.then((result) => {
-      if (hasRenderMethod(result)) return result.save(filename, options);
-      throw new Error(
-        "Cannot call save on this result. Only GoFishNode instances support export."
-      );
-    });
-  };
+  // Export terminals (render / toSVG / toSVGElement / save / toDisplayList) come
+  // from the shared registry, so adding one touches a single list. The promise
+  // resolves to a node directly; a non-GoFishNode result is unexportable.
+  // See terminals.ts.
+  attachTerminals(promise, async () => {
+    const result = await promise;
+    if (hasRenderMethod(result)) return result;
+    throw new Error(
+      "Cannot call an export terminal on this result. Only GoFishNode instances support export."
+    );
+  });
 
   // Add chainable methods that return new PromiseWithRender
   (promise as any).name = function (
@@ -484,6 +451,8 @@ export function createNodeOperatorSequential<T extends Record<string, any>, R>(
 export type NameableMark<T> = Mark<T> & {
   name(layerName: string | Token): NameableMark<T>;
   label(accessor: LabelAccessor, options?: LabelOptions): NameableMark<T>;
+  zOrder(value: ZOrderValue<T>): NameableMark<T>;
+  translate(opts: TranslateModifierOptions): NameableMark<T>;
   render(
     container: Parameters<GoFishNode["render"]>[0],
     options: Parameters<GoFishNode["render"]>[1]
@@ -496,6 +465,9 @@ export type NameableMark<T> = Mark<T> & {
     filename: string,
     options?: Parameters<GoFishNode["save"]>[1]
   ): Promise<void>;
+  toDisplayList(
+    options?: Parameters<GoFishNode["toDisplayList"]>[0]
+  ): ReturnType<GoFishNode["toDisplayList"]>;
 };
 
 /**
@@ -575,103 +547,120 @@ export function createMark(
   const kind: MarkKind = cfg?.kind ?? "per-item";
   const serializeConfig: { type: string; shape?: (o: any) => any } | undefined =
     typeof serialize === "string" ? { type: serialize } : serialize;
-  return (markOpts: Record<string, any>) => {
-    const baseMark: Mark<any> = async (
-      input,
-      keyParam?: string | number,
-      _layerContext?: LayerContext
-    ) => {
-      // Unwrap input: handles T, T[], or { item, key } patterns
-      let d: any, key: number | string | undefined;
-      if (typeof input === "object" && input !== null && "item" in input) {
-        d = (input as any).item;
-        key = (input as any).key;
-      } else {
-        d = input;
-        key = keyParam;
-      }
+  return (markOpts: Record<string, any>) =>
+    buildCreatedMark(shapeFn, channels, serializeConfig, kind, markOpts);
+}
 
-      if (markOpts.debug) {
-        console.log("mark", key, d);
-      }
-
-      const data = Array.isArray(d) ? d : [d];
-
-      // Build shape props by encoding each channel. The plain string spec
-      // ("size"/"pos"/"color"/"raw") aggregates over `data` and produces a
-      // single value. The object form `{type, entry: true}` produces a
-      // per-row array — used by expand-kind marks. Unannotated props (which
-      // is everything when channels is omitted/empty) pass through.
-      const shapeProps: Record<string, any> = {};
-      for (const propName of Object.keys(markOpts)) {
-        if (propName === "debug") continue;
-        const channelSpec = channels[propName];
-        const markValue = markOpts[propName];
-
-        const channelType =
-          typeof channelSpec === "string" ? channelSpec : channelSpec?.type;
-        const isEntry =
-          typeof channelSpec === "object" && channelSpec?.entry === true;
-
-        if (isValue(markValue)) {
-          // Already a Value wrapper (e.g. v(...)) — pass through directly
-          shapeProps[propName] = markValue;
-        } else if (isEntry && channelType === "size") {
-          shapeProps[propName] = inferEntrySize(markValue, data);
-        } else if (channelType === "size") {
-          shapeProps[propName] = inferSize(markValue, data);
-        } else if (channelType === "pos") {
-          shapeProps[propName] = inferPos(markValue, data);
-        } else if (channelType === "color") {
-          shapeProps[propName] = inferColor(markValue, data);
-        } else if (channelType === "raw") {
-          // `inferRaw` is async so that callable accessors may return a
-          // Promise — used by the Python wrapper to bridge `text(text=
-          // lambda d: ...)` through the derive-server RPC.
-          shapeProps[propName] = await inferRaw(markValue, data);
-        } else {
-          shapeProps[propName] = markValue;
-        }
-      }
-
-      // For expand-kind marks, hand the data array to shapeFn so it can
-      // build N output nodes 1:1 with input rows. shapeFn may be async.
-      const result = await shapeFn(
-        shapeProps,
-        kind === "expand" ? data : undefined
-      );
-      if (Array.isArray(result)) {
-        // Expand path: stamp each slice with its own datum.
-        for (let i = 0; i < result.length; i++) {
-          const node = result[i];
-          node.name(key?.toString() ?? "");
-          (node as any).datum = data[i] ?? d;
-        }
-        return result as unknown as GoFishNode;
-      }
-      const node = result as GoFishNode;
-      node.name(key?.toString() ?? "");
-      (node as any).datum = d;
-      node.scope();
-      // Mark as a component for string-name search bounding. Distinct from
-      // _isScope so future operators that scope (for token reasons) don't
-      // silently break ref("name") lookups across them.
-      node._isComponent = true;
-      return node;
-    };
-    withMarkKind(baseMark, kind);
-
-    // Tag with IR-serialization metadata for the frontend-IR emitter.
-    if (serializeConfig) {
-      const payload = serializeConfig.shape
-        ? serializeConfig.shape(markOpts)
-        : markOpts;
-      (baseMark as any).__serialize = {
-        type: serializeConfig.type,
-        opts: payload,
-      };
+function buildCreatedMark(
+  shapeFn: any,
+  channels: Record<string, any>,
+  serializeConfig: { type: string; shape?: (o: any) => any } | undefined,
+  kind: MarkKind,
+  markOpts: Record<string, any>
+): any {
+  const baseMark: Mark<any> = async (
+    input,
+    keyParam?: string | number,
+    _layerContext?: LayerContext
+  ) => {
+    // Unwrap input: handles T, T[], or { item, key } patterns
+    let d: any, key: number | string | undefined;
+    if (typeof input === "object" && input !== null && "item" in input) {
+      d = (input as any).item;
+      key = (input as any).key;
+    } else {
+      d = input;
+      key = keyParam;
     }
 
-    return nameableMark(baseMark);
+    if (markOpts.debug) {
+      console.log("mark", key, d);
+    }
+
+    const data = Array.isArray(d) ? d : [d];
+
+    // Build shape props by encoding each channel. The plain string spec
+    // ("size"/"pos"/"color"/"raw") aggregates over `data` and produces a
+    // single value. The object form `{type, entry: true}` produces a
+    // per-row array — used by expand-kind marks. Unannotated props (which
+    // is everything when channels is omitted/empty) pass through.
+    const shapeProps: Record<string, any> = {};
+    for (const propName of Object.keys(markOpts)) {
+      if (propName === "debug") continue;
+      const channelSpec = channels[propName];
+      const markValue = markOpts[propName];
+
+      let channelType =
+        typeof channelSpec === "string" ? channelSpec : channelSpec?.type;
+      // Coordinate-space axis aliases aren't declared channels, but they carry
+      // the same value semantics as the canonical dims they resolve to: a
+      // `<name>Size` alias is a SIZE channel, a position alias (theta/r) a POS
+      // channel. Infer that here so `rSize: "field"` aggregates like `h: "field"`
+      // before the resolveAliases pass moves the value onto the dims.
+      if (channelType === undefined && KNOWN_ALIAS_KEYS.has(propName)) {
+        channelType = propName.endsWith("Size") ? "size" : "pos";
+      }
+      const isEntry =
+        typeof channelSpec === "object" && channelSpec?.entry === true;
+
+      if (isValue(markValue)) {
+        // Already a Value wrapper (e.g. v(...)) — pass through directly
+        shapeProps[propName] = markValue;
+      } else if (isEntry && channelType === "size") {
+        shapeProps[propName] = inferEntrySize(markValue, data);
+      } else if (channelType === "size") {
+        shapeProps[propName] = inferSize(markValue, data);
+      } else if (channelType === "pos") {
+        shapeProps[propName] = inferPos(markValue, data);
+      } else if (channelType === "color") {
+        shapeProps[propName] = inferColor(markValue, data);
+      } else if (channelType === "raw") {
+        // `inferRaw` is async so that callable accessors may return a
+        // Promise — used by the Python wrapper to bridge `text(text=
+        // lambda d: ...)` through the derive-server RPC.
+        shapeProps[propName] = await inferRaw(markValue, data);
+      } else {
+        shapeProps[propName] = markValue;
+      }
+    }
+
+    // For expand-kind marks, hand the data array to shapeFn so it can
+    // build N output nodes 1:1 with input rows. shapeFn may be async.
+    const result = await shapeFn(
+      shapeProps,
+      kind === "expand" ? data : undefined
+    );
+    if (Array.isArray(result)) {
+      // Expand path: stamp each slice with its own datum.
+      for (let i = 0; i < result.length; i++) {
+        const node = result[i];
+        node.name(key?.toString() ?? "");
+        (node as any).datum = data[i] ?? d;
+      }
+      return result as unknown as GoFishNode;
+    }
+    const node = result as GoFishNode;
+    node.name(key?.toString() ?? "");
+    (node as any).datum = d;
+    node.scope();
+    // Mark as a component for string-name search bounding. Distinct from
+    // _isScope so future operators that scope (for token reasons) don't
+    // silently break ref("name") lookups across them.
+    node._isComponent = true;
+    return node;
   };
+  withMarkKind(baseMark, kind);
+
+  // Tag with IR-serialization metadata for the frontend-IR emitter.
+  if (serializeConfig) {
+    const payload = serializeConfig.shape
+      ? serializeConfig.shape(markOpts)
+      : markOpts;
+    (baseMark as any).__serialize = {
+      type: serializeConfig.type,
+      opts: payload,
+    };
+  }
+
+  return nameableMark(baseMark);
 }

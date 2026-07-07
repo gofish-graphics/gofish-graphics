@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/html";
-import { Chart, spread, stack, rect } from "../src/lib";
+import { chart, spread, stack, rect } from "../src/lib";
 import { seafood } from "../src/data/catch";
 import * as publicApi from "../src/lib";
 
@@ -15,7 +15,7 @@ export default meta;
 type Args = { w: number; h: number };
 
 const DOCS_GROUPED_BAR_CODE = `
-Chart(seafood, { axes: true })
+chart(seafood, { axes: true })
   .flow(
     spread({ by: "lake",  dir: "x" }),
     stack({ by: "species",  dir: "x", label: false })
@@ -28,7 +28,7 @@ Chart(seafood, { axes: true })
 `;
 
 type ChartApi = {
-  Chart: typeof Chart;
+  chart: typeof chart;
   spread: typeof spread;
   stack: typeof stack;
   rect: typeof rect;
@@ -48,7 +48,7 @@ const runDocsLikeSnippet = (
     "root",
     "w",
     "h",
-    "Chart",
+    "chart",
     "spread",
     "stack",
     "rect",
@@ -58,14 +58,14 @@ const runDocsLikeSnippet = (
     root: HTMLElement,
     w: number,
     h: number,
-    chartFn: typeof Chart,
+    chartFn: typeof chart,
     spreadFn: typeof spread,
     stackFn: typeof stack,
     rectFn: typeof rect,
     seafoodData: typeof seafood
   ) => void;
 
-  fn(root, w, h, api.Chart, api.spread, api.stack, api.rect, seafood);
+  fn(root, w, h, api.chart, api.spread, api.stack, api.rect, seafood);
   return root;
 };
 
@@ -74,7 +74,7 @@ const runDirectStorybookVersion = (container: HTMLElement, w: number, h: number)
   root.style.margin = "8px";
   container.appendChild(root);
 
-  Chart(seafood, { axes: true })
+  chart(seafood, { axes: true })
     .flow(
       spread({ by: "lake",  dir: "x" }),
       stack({ by: "species",  dir: "x" })
@@ -142,14 +142,14 @@ export const GroupedBarDocsParity: StoryObj<Args> = {
     runDirectStorybookVersion(directMount, args.w, args.h);
     runDocsLikeSnippet(
       docsLikeSourceMount,
-      { Chart, spread, stack, rect },
+      { chart, spread, stack, rect },
       args.w,
       args.h
     );
     runDocsLikeSnippet(
       docsLikePublicMount,
       {
-        Chart: publicApi.Chart as typeof Chart,
+        chart: publicApi.chart as typeof chart,
         spread: publicApi.spread as typeof spread,
         stack: publicApi.stack as typeof stack,
         rect: publicApi.rect as typeof rect,

@@ -2,3 +2,6 @@
 /docs/.vitepress/cache/
 /docs/.vitepress/dist/
 /docs/internals/api/
+# Generated at docs build by `pnpm --filter @gofish/tests capture-gallery`
+# (predocs:build) — gallery thumbnails, branded OG cards, and the dims manifest.
+/docs/public/gallery/

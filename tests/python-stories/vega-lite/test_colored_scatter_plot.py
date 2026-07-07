@@ -2,7 +2,7 @@
 
 import pandas as pd
 
-from gofish import Layer, chart, scatter, circle
+from gofish import layer, chart, scatter, circle
 
 # vega_datasets' Python package predates penguins.json; pull the same
 # file the JS storybook loads via vega-datasets.
@@ -44,6 +44,6 @@ def story_default():
     ]
 
     return (
-        Layer(charts),
+        layer(charts),
         {"w": 300, "h": 300, "axes": True},
     )

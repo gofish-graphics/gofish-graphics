@@ -5,20 +5,17 @@ GoFish is a JavaScript library for making bespoke graphics.
 ## 1. Install GoFish
 
 ```bash
-npm install gofish-graphics
-```
-
-::: tip Recommended while GoFish is pre-1.0: use the nightly build
-GoFish is moving fast, and the published stable release lags well behind active
-development. While the library is in early development we recommend early
-adopters install the **nightly** build to get the latest features and fixes:
-
-```bash
 npm install gofish-graphics@nightly
 ```
 
-Nightlies are published whenever `main` changes. Pin a specific one with
-`gofish-graphics@<version>` once you find a build you like.
+::: tip Why the nightly build?
+GoFish is moving fast, and the published stable release lags well behind active
+development. While the library is in early development we recommend early
+adopters install the **nightly** build (shown above) to get the latest features
+and fixes. Nightlies are published whenever `main` changes; pin a specific one
+with `gofish-graphics@<version>` once you find a build you like.
+
+Prefer the stable release? Install it with `npm install gofish-graphics`.
 :::
 
 ## 2. Create a chart!
@@ -38,7 +35,7 @@ const alphabet = [
   { letter: "I", frequency: 52 },
 ];
 
-gf.Chart(alphabet)
+gf.chart(alphabet)
   .flow(gf.spread({ by: "letter", dir: "x" }))
   .mark(gf.rect({ h: "frequency" }))
   .render(root, {
@@ -65,7 +62,7 @@ const alphabet = [
 
 const root = document.createElement("div");
 
-Chart(seafood, { axes: true })
+chart(seafood, { axes: true })
   .flow(spread({ by: "letter", dir: "x" }))
   .mark(rect({ h: "frequency" }))
   .render(root, {
@@ -82,14 +79,14 @@ Make sure to create or select a DOM element to render your chart to!
 
 ## 3. Anatomy of a GoFish specification
 
-A basic GoFish spec has four pieces: `Chart`, `flow`, `mark`, and `render`.
+A basic GoFish spec has four pieces: `chart`, `flow`, `mark`, and `render`.
 
-### `Chart`: Data
+### `chart`: Data
 
-The `Chart` function is how you start your specification. It's where you put your data.
+The `chart` function is how you start your specification. It's where you put your data.
 
 ```ts
-Chart(alphabet);
+chart(alphabet);
 ```
 
 ### `flow`: Graphical Operators
@@ -144,7 +141,7 @@ We use the `spreadX` operator to spread out rectangles horizontally. It also mak
 ### Rendering
 
 ```ts
-Chart(alphabet, { axes: true }).render(root, { w: 500, h: 300 });
+chart(alphabet, { axes: true }).render(root, { w: 500, h: 300 });
 ```
 
 The `render` method draws our chart to the screen! We give it a DOM container to render into (`root`
@@ -160,14 +157,14 @@ live editor below!
 ::: gofish-live {template=vanilla-ts rtl lightTheme=aquaBlue darkTheme=atomDark previewHeight=400 coderHeight=400}
 
 ```ts index.ts
-import { Chart, spread, rect } from "gofish-graphics";
+import { chart, spread, rect } from "gofish-graphics";
 import { alphabet } from "./dataset";
 
 const root = document.getElementById("app");
 
 // - Try changing `dir` to `y` and use `rect`'s `w` channel instead of `h`.
 // - What happens when you map both `w` and `h` to "frequency"?
-Chart(alphabet, { axes: true })
+chart(alphabet, { axes: true })
   .flow(spread({ by: "letter", dir: "x" }))
   .mark(rect({ h: "frequency" }))
   .render(root, {

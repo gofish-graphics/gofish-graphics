@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
 import { seafood } from "../../src/data/catch";
-import { Chart, spread, rect, scatter, circle } from "../../src/lib";
+import { chart, spread, rect, scatter, circle } from "../../src/lib";
 import { drivingShifts } from "../../src/data/drivingShifts";
 
 const meta: Meta = {
@@ -24,10 +24,10 @@ export const Default: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    Chart(seafood, { axes: true })
+    chart(seafood, { axes: true })
       .flow(spread({ by: "lake", dir: "x", spacing: 15 }))
       .mark((data) =>
-        Chart(data)
+        chart(data)
           .flow(spread({ by: "species", dir: "x", spacing: 2,  axes: {x: true, y: false} }))
           .mark(rect({ h: "count", w: 20 }))
       )
@@ -45,10 +45,10 @@ export const FacetedScatterDriving: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    Chart(drivingShifts, { axes: true })
+    chart(drivingShifts, { axes: true })
       .flow(spread({ by: "side", dir: "x", spacing: 50 }))
       .mark((data) =>
-        Chart(data)
+        chart(data)
           .flow(scatter({ x: "year", y: "miles", axes: {x: true, y: false} }))
           .mark(circle({ r: 3, fill: "#4682b4" }))
       )
@@ -73,10 +73,10 @@ export const FacetedScatterY: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    Chart(drivingShifts, { axes: true })
+    chart(drivingShifts, { axes: true })
       .flow(spread({ by: "side", dir: "y", spacing: 50 }))
       .mark((data) =>
-        Chart(data)
+        chart(data)
           .flow(scatter({ x: "year", y: "gas", axes: {x: false, y: true} }))
           .mark(circle({ r: 3, fill: "#e07b39" }))
       )

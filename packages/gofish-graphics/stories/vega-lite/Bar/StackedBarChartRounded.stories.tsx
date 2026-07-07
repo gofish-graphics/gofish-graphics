@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../../helper";
-import { Chart, spread, stack, rect, derive, palette } from "../../../src/lib";
+import { chart, spread, stack, rect, derive, palette } from "../../../src/lib";
 import { groupBy } from "lodash";
 import data from "vega-datasets";
 
@@ -22,7 +22,7 @@ const MONTHS = [
 ];
 
 const meta: Meta = {
-  title: "Vega-Lite/Stacked Bar Chart (Rounded Corners)",
+  title: "Vega-Lite/Stacked Bar chart (Rounded Corners)",
   argTypes: {
     w: { control: { type: "number", min: 100, max: 1000, step: 10 } },
     h: { control: { type: "number", min: 100, max: 1000, step: 10 } },
@@ -44,7 +44,7 @@ export const Default: StoryObj<Args> = {
     // of each bar segment. GoFish's `rx`/`ry` applies the same radius to all four
     // corners of every bar.
     // arguably this should be done with some kind of clip path or something.
-    Chart(context.loaded.weather as any[], { axes: true,
+    chart(context.loaded.weather as any[], { axes: true,
       color: palette({ sun: "#e7ba52", fog: "#dfdfdf", drizzle: "#79a1d5", rain: "#1f77b4", snow: "#9467bd" }),
     })
       .flow(

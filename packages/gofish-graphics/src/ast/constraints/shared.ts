@@ -1,30 +1,27 @@
 import { GoFishNode, type Placeable } from "../_node";
 import { GoFishRef } from "../_ref";
 import type { GoFishAST } from "../_ast";
+import type { AxisMap } from "../domain";
 import { isToken } from "../createName";
 
 export type Axis = "x" | "y";
 export type Alignment = "start" | "middle" | "end";
 /** Anchor for align/position constraints. The bbox anchors (`Alignment`) place
  *  a target by its extent; `"baseline"` places the target's own ORIGIN (its
- *  local coordinate 0) at the value. When no sibling is pre-placed the fallback
- *  is the axis origin — the scale's zero (`posScale(0)`) on a scaled axis, the
- *  layer origin on a pixel-pure one — so `align({y: "baseline"})` on a
- *  pixel-pure axis means "stay where you were laid out", regardless of how far
- *  the target's bbox extends past its origin (e.g. axis labels hanging below
- *  a chart's zero line). */
+ *  local coordinate 0) at the value. `align` itself only emits relations
+ *  between anchors; if no explicit placement fixes the related component, the
+ *  solver normalizes that floating component so its minimum coordinate is 0. */
 export type AlignAnchor = Alignment | "baseline";
 
 /** Lightweight handle for referencing a named child inside .constrain() */
 export type ConstraintRef = { readonly name: string };
 
-/** Per-axis data→pixel position scales, as built by `layer.tsx` and consumed
+/** Per-axis data→pixel position maps, as built by `layer.tsx` and consumed
  *  by `Constraint.position` (a literal coordinate is a raw pixel; a `datum`
- *  coordinate is mapped through the matching scale). */
-export type ConstraintPosScales = [
-  ((value: number) => number) | undefined,
-  ((value: number) => number) | undefined,
-];
+ *  coordinate is mapped through the matching map via `pxOf`). An entry is
+ *  `undefined` exactly when the axis is unanchored — the position half of the
+ *  single {@link AxisScale} carrier. */
+export type ConstraintPosScales = [AxisMap | undefined, AxisMap | undefined];
 
 /** Convert axis name to dimension index (0 = x, 1 = y) */
 export const axisIndex = (axis: Axis): 0 | 1 => (axis === "x" ? 0 : 1);

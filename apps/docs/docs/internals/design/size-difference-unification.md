@@ -134,6 +134,6 @@ explicit.
 - The genuinely-constant case (#508 `CONSTANT`, `linear(0, w)` — fixed pixels
   that don't scale) is still spelled `UNDEFINED`. It is a real third role,
   distinct from `origin: null` (which still scales with σ).
-- The `alignFallbackBaseline` still uses `posScale(0)` rather than
-  `posScale(origin)`; with `origin` now explicit, an origin-aware fallback
-  could retire the last copy of the data-positioned guard entirely.
+- The placement solver's align fallback still uses `posScale(0)` rather than
+  `posScale(origin)`; with `origin` now explicit, an origin-aware fallback could
+  retire the last copy of the data-positioned guard entirely.

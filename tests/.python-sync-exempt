@@ -43,6 +43,10 @@ packages/gofish-graphics/stories/DocsContextRegression.stories.tsx
 
 # Forward syntax stories needing unsupported features
 packages/gofish-graphics/stories/forwardsyntax/Bar/BarWithLabels.stories.tsx
+# LabeledChart uses a JS-side function-mark that composes resolved node refs
+# with fresh text — the refs can't cross the Python derive RPC, so it can't be
+# expressed with a Python mark-fn. (Ribbon/Layered and NodeLink ARE ported.)
+packages/gofish-graphics/stories/forwardsyntax/LabeledChart.stories.tsx
 packages/gofish-graphics/stories/forwardsyntax/Bar/BarTemplate.stories.tsx
 
 # Forward syntax stories needing mark-as-function or nested chart
@@ -57,6 +61,17 @@ packages/gofish-graphics/stories/forwardsyntax/FacetedChart.stories.tsx
 # JS ref nodes, so it can neither embed `d[0]` nor project `d[0].datum`.
 # Tracked by #591 (bridge selectAll-label / ref-datum mark-fns to Python).
 packages/gofish-graphics/stories/lowlevel/FlowerChart.stories.tsx
+
+# Atom unit-visualization replications (stories/atom/) that build a per-group
+# *nested chart* inside a mark-as-function (`.mark((d) => chart(d).flow(...)...)`)
+# to wrap each unit grid. The Python mark-fn runs over the RPC bridge and
+# receives plain JSON rows, not a builder it can re-`chart()`, so these can't be
+# expressed as a Python mark-fn — same blocker as FacetedChart. (The pure-spec
+# atom stories TitanicFacet, TitanicUnitDots, and Mosaic ARE ported.)
+packages/gofish-graphics/stories/atom/UnitColumnChart.stories.tsx
+packages/gofish-graphics/stories/atom/UnitHistogram.stories.tsx
+packages/gofish-graphics/stories/atom/Violin.stories.tsx
+packages/gofish-graphics/stories/atom/UnitMosaic.stories.tsx
 
 # Forward syntax stories needing coord transforms other than clock
 # (clock is now supported)
@@ -104,3 +119,26 @@ packages/gofish-graphics/stories/lowlevel/Constraints.stories.tsx::SpreadY_Spaci
 packages/gofish-graphics/stories/lowlevel/Constraints.stories.tsx::SpreadX_Spacing_AlignEnd
 packages/gofish-graphics/stories/lowlevel/Constraints.stories.tsx::SpreadX_CenterToCenter
 packages/gofish-graphics/stories/lowlevel/Constraints.stories.tsx::SpreadY_Reversed
+
+# ---------------------------------------------------------------------------
+# gofish-gotree (the GoTree tree-DSL package) — exempt from Python parity.
+#
+# These stories ARE captured by the JS visual-diff harness (tests/harness/
+# stories-runner.ts globs gofish-gotree/stories too), so they are tracked for
+# visual regressions. They are NOT mirrored to Python: gofish-gotree is a
+# JS-only package with no Python wrapper, so there is nothing to byte-match.
+#
+# No per-file entries are needed below: this checker (both delta mode and
+# `--all`) hard-filters JS stories to `packages/gofish-graphics/stories/`
+# (see walkJsStories + the gitDiff filters in check-python-sync.ts), so it
+# never walks the gofish-gotree package. If parity coverage is ever extended
+# to gofish-gotree, list its stories here.
+
+# LayeredBarsAndArea stays exempt: it drives a data-driven paint order with
+# `area(...).zOrder(d => …)` and reorders the area selection with a `derive`
+# callback. Both are JS functions that can't cross the derive RPC, and the
+# `.zOrder(fn)` form is omitted from the IR (like a function `.label`), so a
+# Python port can't reproduce — let alone byte-match — the paint ordering that
+# raises the emphasized sites above the gray ones. Revisit once the highlight /
+# `emphasize` API (#641) gives this a serializable, declarative spelling.
+packages/gofish-graphics/stories/vega-lite/Bar/LayeredBarsAndArea.stories.tsx

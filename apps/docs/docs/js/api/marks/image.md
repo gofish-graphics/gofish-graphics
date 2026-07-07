@@ -6,7 +6,7 @@ glyphs, or any artwork you want to place and size like a native mark.
 ::: gofish
 
 ```js
-gf.Chart([{ label: "badge" }])
+gf.chart([{ label: "badge" }])
   .mark(
     gf.image({
       href: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='96' height='64'%3E%3Crect width='96' height='64' rx='8' fill='%234e79a7'/%3E%3Ccircle cx='48' cy='32' r='18' fill='white'/%3E%3C/svg%3E",
@@ -22,21 +22,20 @@ gf.Chart([{ label: "badge" }])
 ## Signature
 
 ```ts
-image({ href, w?, h?, x?, y?, opacity?, filter?, preserveAspectRatio?, name? })
+image({ href, w?, h?, x?, y?, opacity?, filter?, preserveAspectRatio? })
 ```
 
 ## Parameters
 
-| Option                | Type               | Description                                                    |
-| --------------------- | ------------------ | -------------------------------------------------------------- |
-| `href`                | `string`           | Image source — a URL, asset import, or `data:` URI (required)  |
-| `w`                   | `number \| string` | Width — number for fixed pixels, field name to encode data     |
-| `h`                   | `number \| string` | Height — number for fixed pixels, field name to encode data    |
-| `x`, `y`              | `number \| string` | Explicit position accessors                                    |
-| `opacity`             | `number`           | Opacity, `0`–`1`                                               |
-| `filter`              | `string`           | SVG filter reference applied to the image                      |
-| `preserveAspectRatio` | `string`           | SVG `preserveAspectRatio` value (default `"xMidYMid meet"`)    |
-| `name`                | `string`           | Layer name for use with [`selectAll()`](/js/api/selection/ref) |
+| Option                | Type               | Description                                                   |
+| --------------------- | ------------------ | ------------------------------------------------------------- |
+| `href`                | `string`           | Image source — a URL, asset import, or `data:` URI (required) |
+| `w`                   | `number \| string` | Width — number for fixed pixels, field name to encode data    |
+| `h`                   | `number \| string` | Height — number for fixed pixels, field name to encode data   |
+| `x`, `y`              | `number \| string` | Explicit position accessors                                   |
+| `opacity`             | `number`           | Opacity, `0`–`1`                                              |
+| `filter`              | `string`           | SVG filter reference applied to the image                     |
+| `preserveAspectRatio` | `string`           | SVG `preserveAspectRatio` value (default `"xMidYMid meet"`)   |
 
 ## Sizing
 

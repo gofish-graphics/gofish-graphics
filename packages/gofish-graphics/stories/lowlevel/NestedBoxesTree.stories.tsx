@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
-import { Layer, Constraint, StackY, rect, text } from "../../src/lib";
+import { layer, Constraint, StackY, rect, text } from "../../src/lib";
 
 // A tree visualization built purely from Constraint.nest.
 // Each subtree is a Layer of [outerRect, innerStack] with a nest constraint
@@ -53,7 +53,7 @@ const leafFill = "#fff3e0";
 // also wrap their children in a containing rect via Constraint.nest.
 function buildSubtree(node: TreeNode, depth: number): any {
   // The labeled "header" block: a small rect with the node's name centered.
-  const header = Layer({ w: 96, h: 22 }, [
+  const header = layer({ w: 96, h: 22 }, [
     rect({
       w: 96,
       h: 22,
@@ -83,7 +83,7 @@ function buildSubtree(node: TreeNode, depth: number): any {
   ]);
 
   // Wrap the inner stack in a containing rect.
-  return Layer([
+  return layer([
     rect({
       rx: 6,
       fill: "#fafbfd",

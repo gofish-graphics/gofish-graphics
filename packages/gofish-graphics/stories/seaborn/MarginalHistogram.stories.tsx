@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
-import { Chart, scatter, circle, rect, derive, bin, layer, Constraint } from "../../src/lib";
+import { chart, scatter, circle, rect, derive, bin, layer, Constraint } from "../../src/lib";
 import { penguins } from "../../src/data/penguins";
 
 // Mirrors seaborn's jointplot:
@@ -44,7 +44,7 @@ export const Default: StoryObj<Args> = {
       .map((d, i) => ({ ...d, id: i }));
 
     (async () => {
-      const sc = await Chart(data)
+      const sc = await chart(data)
         .flow(
           scatter({ by: "id", x: "Beak Length (mm)", y: "Beak Depth (mm)" } as any)
         )
@@ -52,7 +52,7 @@ export const Default: StoryObj<Args> = {
         .resolve();
       sc.name("scatter");
 
-      const topHist = await Chart(data, { h: 80 })
+      const topHist = await chart(data, { h: 80 })
         .flow(
           derive(bin("Beak Length (mm)")),
           scatter({ xMin: "start", xMax: "end" } as any)
@@ -61,7 +61,7 @@ export const Default: StoryObj<Args> = {
         .resolve();
       topHist.name("topHist");
 
-      const rightHist = await Chart(data, { w: 80 })
+      const rightHist = await chart(data, { w: 80 })
         .flow(
           derive(bin("Beak Depth (mm)")),
           scatter({ yMin: "start", yMax: "end" } as any)

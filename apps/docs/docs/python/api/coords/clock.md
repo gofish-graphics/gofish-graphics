@@ -17,12 +17,21 @@ chart(seafood, coord=clock()) \
 ## Signature
 
 ```python
-clock() -> Coord
+clock(
+    inner_radius: float | None = None,
+    central_angle: float | None = None,
+    start_angle: float | None = None,
+    direction: int | None = None,
+    center: tuple[float, float] | None = None,
+) -> Coord
 ```
 
 ## Parameters
 
-None. The clock transform has no configuration options.
+`clock()` is a [`polar()`](/python/api/coords/polar) preset and accepts the same
+options — `inner_radius`, `central_angle`, `start_angle`, `direction`, `center` —
+but with clock-face defaults (0° at 12 o'clock, clockwise). See
+[polar's Parameters](/python/api/coords/polar#parameters).
 
 ## Usage
 
@@ -57,9 +66,9 @@ chart(data, coord=clock()) \
     .flow(stack(by="category", dir="x")) \
     .mark(rect(w="value", fill="category"))
 
-# Donut chart (with inner radius)
-chart(data, coord=clock()) \
-    .flow(stack(by="category", dir="x", y=50, h=50)) \
+# Donut chart (hollow center via inner radius)
+chart(data, coord=clock(inner_radius=0.6)) \
+    .flow(stack(by="category", dir="x")) \
     .mark(rect(w="value", fill="category"))
 
 # Rose chart (radial bar chart)

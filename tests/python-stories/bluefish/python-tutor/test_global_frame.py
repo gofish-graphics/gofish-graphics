@@ -16,5 +16,5 @@ def story_global_frame():
                 {"variable": "x", "value": "5"},
             ],
         ),
-        {"w": 320, "h": 400},
+        {},
     )

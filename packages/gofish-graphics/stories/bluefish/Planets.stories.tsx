@@ -60,9 +60,11 @@ export const PlanetsWithLabelAbove: StoryObj<Args> = {
           }).name(planet.name)
         )
       ),
+      // y-down free space: first child renders on top, so label-first puts the
+      // label ABOVE the planet (issue #143/#16).
       spread({ dir: "y", spacing: 60, alignment: "middle" }, [
-        ref("Mercury"),
         text({ text: "Mercury" }),
+        ref("Mercury"),
       ]),
     ]).render(container, {});
 
@@ -86,9 +88,10 @@ export const PlanetsWithLabelBelow: StoryObj<Args> = {
           }).name(planet.name)
         )
       ),
+      // y-down free space: label-second puts the label BELOW the planet.
       spread({ dir: "y", spacing: 60, alignment: "middle" }, [
-        text({ text: "Mercury" }),
         ref("Mercury"),
+        text({ text: "Mercury" }),
       ]),
     ]).render(container, {});
 
@@ -112,9 +115,10 @@ export const PlanetsWithLabelAboveNoSpacing: StoryObj<Args> = {
           }).name(planet.name)
         )
       ),
+      // y-down: label-first → label ABOVE the planet (issue #143/#16).
       spread({ dir: "y", spacing: 0, alignment: "middle" }, [
-        ref("Mercury"),
         text({ text: "Mercury", debugBoundingBox: true }),
+        ref("Mercury"),
       ]),
     ]).render(container, {});
 
@@ -138,9 +142,10 @@ export const PlanetsWithLabelBelowNoSpacing: StoryObj<Args> = {
           }).name(planet.name)
         )
       ),
+      // y-down: label-second → label BELOW the planet.
       spread({ dir: "y", spacing: 0, alignment: "middle" }, [
-        text({ text: "Mercury", debugBoundingBox: true }),
         ref("Mercury"),
+        text({ text: "Mercury", debugBoundingBox: true }),
       ]),
     ]).render(container, {});
 

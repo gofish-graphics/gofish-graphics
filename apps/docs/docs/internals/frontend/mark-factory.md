@@ -96,7 +96,8 @@ needs one.
 
 `inferSize` and `inferPos` are two instantiations of one numeric-inference
 factory, `inferNumeric(agg)` — they differ only in the aggregation (`sumBy`
-vs `meanBy`). Both take an optional third argument, a resolved `Measure`: a
+vs `meanBy`, imported through lodash's per-helper entrypoints so this path is
+safe under native ESM). Both take an optional third argument, a resolved `Measure`: a
 string/`field()` accessor's produced value is tagged with its unit-of-measure
 so the underlying-space layer can unify scales per measure (see
 [Underlying Space](/internals/core/underlying-space)). When the caller doesn't
@@ -127,16 +128,26 @@ Walking `withGoFish.ts:431-477`:
    - `"color"` channel → `inferColor(markValue, data)`. If the string matches
      a field in the first datum, wrap it as a `Value` so the color scale
      picks it up; otherwise treat the string as a literal color.
+   - **Coordinate-space axis aliases** (`theta`/`r`/`thetaSize`/`rSize`, the
+     `KNOWN_ALIAS_KEYS`) aren't declared channels, but carry the same value
+     semantics as the canonical dims they resolve to, so `createMark` infers
+     their channel by suffix: a `<name>Size` alias aggregates as a `"size"`
+     channel (`inferSize`), a position alias (`theta`/`r`) as a `"pos"` channel
+     (`inferPos`). This happens here, before the [alias-resolution
+     pass](/internals/layout/passes#pass-5-5-coordinate-space-alias-resolution)
+     moves the resolved value onto the canonical `x/y/w/h` facet — so
+     `rSize: "field"` aggregates exactly like `h: "field"`. The `__axisFields`
+     hint (used to infer axis titles) also falls back to the alias field names.
    - Anything else → pass through.
 4. **Call the low-level shape.** The encoded shape props go into `shapeFn`,
    producing the `GoFishNode`.
 5. **Tag the node** with `name = key` and `datum = d` so downstream
    coordinators (`ref` / `selectAll`, label placement) can find it back.
 
-## `.name()` and `.label()`
+## `.name()`, `.label()`, `.zOrder()`, and `.translate()`
 
-`createMark` returns a `NameableMark`, which is the base mark plus two
-chainable methods:
+`createMark` returns a `NameableMark`, which is the base mark plus chainable
+methods:
 
 - `mark.name("layerName")` — registers each produced node into the chart's
   layer context so `selectAll("layerName")` can pull the array of refs (or
@@ -147,26 +158,46 @@ chainable methods:
   name without parsing the `__serialize` tag.
 - `mark.label(accessor, options?)` — calls `node.label(...)` on every produced
   node, deferring label placement to the layout phase.
+- `mark.zOrder(value)` — sets each produced node's paint-order hint, where
+  `value: ZOrderValue<T> = number | ((datum: T) => number)`. A callback is
+  evaluated against the per-instance datum, so paint order can be data-driven
+  (e.g. raise one category over the rest) without splitting the mark into
+  separately-named layers; the [bake pass](/internals/layout/coord-flattening)
+  orders each layer's children by `(zOrder, index)`. The constant form
+  round-trips through the IR; a callback is dropped from the emitted IR (like a
+  function `.label` accessor).
+- `mark.translate({ x?, y? })` — wraps the produced node in a structural
+  translation node. This is deliberately not equivalent to merging `x`/`y` into
+  the mark's own options: a mark or operator may already give `x`/`y`
+  domain-specific channel meanings.
 
-Both wrap the base mark in a new closure rather than mutating it, so naming
-or labeling one mark never affects another.
+These methods wrap or rebuild the base mark rather than mutating it, so naming,
+labeling, or positioning one mark never affects another.
 
 These methods are not hand-rolled here. `createMark` calls `nameableMark`,
 which is one application of the shared **modifier factory** in
 `createOperator.ts`: a `createModifier({ name, apply, tag? })` config plus
-`attachModifiers(base, configs)`. `apply` mutates each produced node (once per
-node — every slice for an expand mark like `cut`); `tag` stamps metadata on the
+`attachModifiers(base, configs)`. `apply(node, layerContext, datum, ...args)`
+mutates each produced node (once per node — every slice for an expand mark like
+`cut`) and receives the per-instance datum, so a modifier like `.zOrder` can
+derive a value from the data; `tag` stamps metadata on the
 wrapped mark function once (propagating the `__serialize` tag and stashing the
 layer name — a mark no longer carries an axis-field tag, since axis titles now
 derive from each node's resolved space `measure`).
 `attachModifiers` wires the set onto the base and
-adds a top-level `.render()`, re-decorating each method's result with the same
-set so chains stay extensible and the mark-kind tag rides along. `.name()`
+adds the export terminals (`render` / `toSVG` / `toSVGElement` / `save` /
+`toDisplayList`) from the shared `terminals.ts` registry, re-decorating each
+method's result with the same set so chains stay extensible and the mark-kind tag
+rides along. `.name()`
 defers its layer registration via a `__layerRegistration` tag collected in a
 single post-resolve DFS walk (`collectLayerRegistrations`), so registry order
 follows parent-iteration order, not async-completion order. The same factory
 backs `makeConstrainableMark` (which adds `.constrain()`) and the combinator
 marks — one wiring, not three copies.
+
+`.translate()` is structural: `attachModifiers` maps the base mark to a new mark
+whose produced node is wrapped by a translation node. This keeps the modifier
+independent from the wrapped mark's channel grammar.
 
 ## Adding a new mark
 
@@ -231,7 +262,10 @@ GoFish's twist is that a mark also produces a node in a layout AST rather
 than a render directly, and the channel set is smaller (`size`, `pos`,
 `color`) — Encodable's vega-lite-flavored channel taxonomy is richer.
 [The Operator Factory](/internals/frontend/operator-factory) extends the same pattern
-to layout operators (split + per-partition application).
+to layout operators (split + per-partition application). Operator channels add
+one layout-only wrinkle: entry-position channels may opt into categorical
+`discrete` placement, which produces layout slots rather than datum-scaled
+positions.
 
 ## Pointers
 

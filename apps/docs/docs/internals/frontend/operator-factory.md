@@ -5,6 +5,7 @@ order: 30
 status: draft
 covers:
   - packages/gofish-graphics/src/ast/marks/createOperator.ts
+  - packages/gofish-graphics/src/ast/marks/terminals.ts
 ---
 
 # `createOperator`: turning a layout into a frontend operator
@@ -59,6 +60,13 @@ multiplicity.
 `createOperator` produces both forms from one config. Disambiguation is by
 arg shape: a second positional argument means combinator form; no second
 arg means operator form.
+
+Both forms also get the standard structural `.translate({ x?, y? })` modifier.
+It wraps the operator's produced node instead of merging `x`/`y` into the
+operator's own options. That distinction matters for operators like `scatter`:
+`scatter({ by: "lake", x: "lake" }).translate({ y: 50 })` keeps `x: "lake"` as
+scatter's discrete placement encoding, while `y: 50` belongs to the outer
+translation wrapper.
 
 ## 2. The split → fmap → combine shape
 
@@ -116,11 +124,24 @@ Walking `createOperator.ts:391-415`:
 
 1. **Split** — `cfg.split(opts, d)` partitions the input into a
    `Map<key, subdata>`. (Some operators, like `table`, also return `keys` —
-   row/column labels that get merged into the layout opts.)
+   row/column labels that get merged into the layout opts.) Each array leaf is
+   then re-tagged with `d`'s measure provenance (`copyMeasureProvenance`): a
+   leaf is a fresh sub-array that wouldn't otherwise inherit the
+   `MEASURE_PROVENANCE` symbol, so without this a _mark_ channel applied per
+   leaf would lose a transform's measure (e.g. a bin's `start`/`end`/`size`) and
+   fall back to the literal field name — see [underlying
+   space](/internals/core/underlying-space) and #534.
 2. **fmap** — for each `(key, subdata)` entry, call the user's mark with
    that subdata and a parent-prefixed key (`${key}-${i}`). The result is
    resolved to a `GoFishNode`. `node.setKey(...)` makes downstream
-   coordinators able to look it back up.
+   coordinators able to look it back up. When `by` is a string, each produced
+   leaf is also stamped with `__splitBy` recording that field — the innermost
+   grouping wins (a `??=`-style guard means an already-stamped node keeps its
+   value). This is what lets a later `resolve(cols, { from })` infer its match
+   key for free: it reads `__splitBy` off the resolved node to learn which
+   field that node was grouped by (`scatter({ by: "id" })` ⇒ join on `id`),
+   so the user need not restate the key. A function `by` has no field name to
+   record, so `resolve` errors there unless given an explicit `key`.
 3. **Apply channels** — `applyChannels` runs `inferSize` / `inferPos` /
    `inferColor` on annotated opts. For an entry-flagged channel
    (`{type, entry: true}`), the inference runs once per split entry,
@@ -163,15 +184,18 @@ channels: {
 }
 ```
 
-| spec                            | what it does                                                        |
-| ------------------------------- | ------------------------------------------------------------------- |
-| `"size"` / `"pos"` / `"color"`  | aggregate over all of `d`, produce one value (single number/string) |
-| `{ type: "size", entry: true }` | run once per split entry, collect into array (one value per child)  |
-| user passed an array            | already final form — pass through unchanged                         |
+| spec                                           | what it does                                                                         |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------ |
+| `"size"` / `"pos"` / `"color"`                 | aggregate over all of `d`, produce one value (single number/string)                  |
+| `{ type: "size", entry: true }`                | run once per split entry, collect into array (one value per child)                   |
+| `{ type: "pos", entry: true, discrete: true }` | for nonnumeric categorical fields, emit evenly spaced discrete placement coordinates |
+| user passed an array                           | already final form — pass through unchanged                                          |
 
 `scatter` uses `entry: true` for `x`/`y`/`xMin`/`xMax`/`yMin`/`yMax` so a
 field name like `x: "miles"` becomes a per-group mean position
-(`src/ast/graphicalOperators/scatter.tsx:336`).
+(`src/ast/graphicalOperators/scatter.tsx:336`). Its point channels also set
+`discrete: true`, so a grouped nonnumeric field such as `x: "lake"` becomes a
+slot coordinate instead of an invalid numeric mean.
 
 ## 6. Adding a new operator: a worked example
 
@@ -214,6 +238,11 @@ If your operator needs to feed extra data (like `colKeys`/`rowKeys`) into
 the layout opts, return the wrapped `{entries, keys}` form from `split`
 instead of a bare Map — see `table.tsx:228` for an example.
 
+Operators created with `createOperator` automatically support
+`.translate({ x?, y? })`. You do not implement this per operator; the factory
+composes the ordinary split/channel/combine pipeline with a structural
+translation wrapper around the produced node.
+
 ## 7. The relationship with `createMark`
 
 The two factories are siblings:
@@ -233,6 +262,34 @@ stashes the passed name on the returned mark function via `stashLayerName`
 (defined in `chartBuilder.ts`, called by the `name` modifier's `tag` hook), so
 [`ChartBuilder.connect()`](/js/api/core/connect) can detect a user-chained name
 without parsing the `__serialize` tag.
+
+A modifier's `apply(node, layerContext, datum, ...args)` receives the
+**per-instance datum** the mark was called with — the same value the shape
+factory saw — so a modifier can produce a _data-driven_ value rather than a
+constant. `nameModifier` / `labelModifier` / `constrainModifier` ignore it, but
+`zOrderModifier` uses it: `.zOrder(value)` takes a `ZOrderValue<T> = number |
+((datum: T) => number)` and, when handed a callback, evaluates it against this
+datum to set each produced node's paint-order hint. That is what lets paint
+order be data-driven (e.g. raise one category over the rest) without splitting a
+mark into separately-named layers — the callback runs once per replicated
+instance, and the [bake pass](/internals/layout/coord-flattening) already orders
+each layer's children by `(zOrder, index)`. A constant hint round-trips through
+the IR; a callback can't be serialized, so its `tag` hook drops it from the
+emitted IR (the same as a function `.label` accessor).
+
+The **export terminals** — `render`, `toSVG`, `toSVGElement`, `save`,
+`toDisplayList` — are the dual of modifiers: where a modifier mutates the
+produced node and returns a chainable mark, a terminal _resolves_ the surface to
+a final `GoFishNode` and calls through to that node's method, ending the chain.
+They live in their own registry (`terminals.ts`): a `TERMINALS` list plus
+`attachTerminals(target, resolveNode)`, where each surface supplies only its own
+node-resolution strategy (a combinator mark resolves by calling itself with
+`undefined`; a `withGoFish` promise resolves by awaiting). Both `attachModifiers`
+here and `addRenderMethod` in `withGoFish.ts` call `attachTerminals`, so the set
+of terminals is defined once — adding one (as `toDisplayList` was) touches a
+single list and lands on every surface at once, instead of being hand-rolled per
+surface (which previously left `toDisplayList` off the combinator surface
+entirely).
 
 A second flavor, `attachTransformModifiers`, handles methods that map a mark to
 a _different_ mark rather than mutating its nodes — e.g. `image(...).cut(opts)`

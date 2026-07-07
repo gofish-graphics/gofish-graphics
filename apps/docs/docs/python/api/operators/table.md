@@ -16,7 +16,7 @@ const data = days.flatMap((day, di) =>
   }))
 );
 
-gf.Chart(data, { color: gf.gradient(["#ffffcc", "#fd8d3c", "#bd0026"]) })
+gf.chart(data, { color: gf.gradient(["#ffffcc", "#fd8d3c", "#bd0026"]) })
   .flow(gf.table({ by: { x: "hour", y: "day" }, spacing: 4 }))
   .mark(gf.rect({ fill: "value" }))
   .render(root, { w: 500, h: 300, axes: true });

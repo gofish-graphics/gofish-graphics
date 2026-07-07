@@ -51,8 +51,8 @@ dropped into a bigger graphic without sharing — or polluting — the surroundi
 axes with its own units.
 
 This is what makes composed layouts like a marginal histogram work. The count
-histograms are sized to a fixed pixel band (`Chart(data, { h: 80 })` /
-`Chart(data, { w: 80 })`) and laid out alongside a center scatter; because each
+histograms are sized to a fixed pixel band (`chart(data, { h: 80 })` /
+`chart(data, { w: 80 })`) and laid out alongside a center scatter; because each
 histogram absorbs its own count scale, only the scatter's data units drive the
 shared x/y axes.
 
@@ -67,10 +67,20 @@ axes: false                                    // no axes (the default)
 axes: { x: true, y: false }                    // x only
 axes: { x: { title: "Year" }, y: true }        // custom x title, inferred y title
 axes: { x: { title: false }, y: true }         // suppress the inferred x title
+axes: { x: { side: "end" } }                   // seat the x-axis on the far edge
 ```
 
-`axes` is most naturally a `chart()`/`Chart()` option (e.g.
-`gf.Chart(data, { axes: true })`); it is also accepted directly on `.render()`, as
+Each per-axis object also accepts `side: "start" | "end"`. By default a
+**continuous/quantitative x-axis renders at the visual bottom** (and a continuous
+y-axis at the left), whichever edge that is once the frame's y-orientation is
+resolved — so a scatter, a horizontal bar, and a faceted small-multiple all place
+their value axis at the bottom without any option. An explicit `side` overrides
+that with the literal **frame-relative** seating: `"start"` is the near/origin edge
+(top in a y-down frame, bottom in y-up) and `"end"` is the far edge — e.g.
+`{ x: { side: "end" } }` forces the x-axis onto the opposite edge from the default.
+
+`axes` is most naturally a `chart()`/`chart()` option (e.g.
+`gf.chart(data, { axes: true })`); it is also accepted directly on `.render()`, as
 the examples below show.
 
 ### Axes with inferred titles
@@ -81,7 +91,7 @@ field that dimension encodes — `lake` on x, `count` on y here.
 ::: gofish
 
 ```js
-gf.Chart(seafood)
+gf.chart(seafood)
   .flow(gf.spread({ by: "lake", dir: "x" }))
   .mark(gf.rect({ h: "count" }))
   .render(root, { w: 400, h: 250, axes: true });
@@ -94,7 +104,7 @@ gf.Chart(seafood)
 ::: gofish
 
 ```js
-gf.Chart(seafood)
+gf.chart(seafood)
   .flow(gf.spread({ by: "lake", dir: "x" }))
   .mark(gf.rect({ h: "count" }))
   .render(root, { w: 400, h: 250, axes: { x: true } });
@@ -107,7 +117,7 @@ gf.Chart(seafood)
 ::: gofish
 
 ```js
-gf.Chart(seafood)
+gf.chart(seafood)
   .flow(gf.spread({ by: "lake", dir: "x" }))
   .mark(gf.rect({ h: "count" }))
   .render(root, {
@@ -124,7 +134,7 @@ gf.Chart(seafood)
 ::: gofish
 
 ```js
-gf.Chart(seafood)
+gf.chart(seafood)
   .flow(gf.spread({ by: "lake", dir: "x" }))
   .mark(gf.rect({ h: "count" }))
   .render(root, {

@@ -29,7 +29,7 @@ def _unit_row(rows):
         ],
         dir="x",
         spacing=0.5,
-        alignment="end",
+        alignment="start",
     )
 
 
@@ -44,7 +44,7 @@ def _sex_block(sex_rows, class_rows):
         [_unit_row(chunk) for chunk in reversed(chunks)],
         dir="y",
         spacing=0.5,
-        alignment="end",
+        alignment="start",
     )
 
 

@@ -4,7 +4,6 @@ import { MaybeValue } from "../data";
 
 // Type definition for props
 type StackProps = {
-  name?: string;
   key?: string;
   dir: "x" | "y";
   alignment?: "start" | "middle" | "end";

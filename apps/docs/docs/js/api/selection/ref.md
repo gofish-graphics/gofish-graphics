@@ -5,7 +5,7 @@
 - **Inline in a layout** — `arrow(ref("a"), ref("b"))`, `ref(token).row[2]` — it
   resolves at layout time against the name tree, hygienically scoped (see
   [scoping](#hygienic-scoping)). This is the [`ref`](/js/api/marks/ref) mark.
-- **As chart data** — `Chart(ref("maxBar")).mark(text(...))` — it resolves at
+- **As chart data** — `chart(ref("maxBar")).mark(text(...))` — it resolves at
   build time against the named-layer registry and stands in for the one node
   registered under that name.
 
@@ -27,16 +27,16 @@ const lakeTotals = Object.entries(_.groupBy(seafood, "lake")).map(
   })
 );
 
-gf.Layer([
+gf.layer([
   // Step 1: name the mark
   gf
-    .Chart(lakeTotals)
+    .chart(lakeTotals)
     .flow(gf.spread({ by: "lake", dir: "x" }))
     .mark(gf.rect({ h: "count" }).name("bars")),
 
   // Step 2: selectAll those nodes as data for a connector
   gf
-    .Chart(gf.selectAll("bars"))
+    .chart(gf.selectAll("bars"))
     .mark(gf.line({ stroke: "coral", strokeWidth: 2 })),
 ]).render(root, { w: 400, h: 250, axes: true });
 ```
@@ -70,9 +70,9 @@ When you pass `ref(name)` as chart data it must resolve to **exactly one** node:
   reference refuses to silently pick one.
 
 ```ts
-gf.Layer([
+gf.layer([
   gf
-    .Chart(data)
+    .chart(data)
     .flow(/* ... */)
     .mark(gf.rect({ h: "total" }).name("kpi")),
   gf.text({ text: "peak" }).name("label"),
@@ -138,7 +138,7 @@ may arrive later; for now use a named layer + `selectAll` as data.)
 of refs and read placed geometry off them, so feed them `selectAll`:
 
 ```ts
-gf.Chart(gf.selectAll("points")).mark(gf.line({ stroke: "black" }));
+gf.chart(gf.selectAll("points")).mark(gf.line({ stroke: "black" }));
 ```
 
 When the connector traces a chart's _own_ marks, the builder method
@@ -151,7 +151,7 @@ After `selectAll`, the stream items are refs, not raw records. Operators' `by`
 option is path-aware (lodash `_.get`), so re-encode by the **datum path**:
 
 ```ts
-gf.Chart(gf.selectAll("bars"))
+gf.chart(gf.selectAll("bars"))
   .flow(gf.group({ by: "datum.species" })) // not "species"
   .mark(gf.area({ opacity: 0.8 }));
 ```
@@ -186,5 +186,40 @@ resolve to `undefined`.
 
 ::: info JavaScript only
 `pluck` is exported from the JS package (`gofish-graphics`). The Python wrapper
+does not expose it yet.
+:::
+
+## `project(source, path)` — the single value at a path {#project}
+
+`project` is the **collapsing** counterpart to `pluck`: it returns the one value
+at a path **when the bag agrees on it** (the same homogeneity collapse `by`
+performs), and `undefined` otherwise. Where `pluck(ref, "site")` gives you the
+whole multiset `["Morris"]`, `project(ref, "site")` gives you `"Morris"`
+directly — no indexing.
+
+```ts
+import { project } from "gofish-graphics";
+
+project(ref, "site"); // → "Morris"  (undefined if the bag disagrees on "site")
+```
+
+Reach for `project` to read a field off the datum a mark is bound to — for
+example inside a [`.zOrder(d => …)`](/js/api/core/mark#modifiers) callback, where
+`d` is the bag of refs flowing into the mark:
+
+```ts
+const isEmphasized = (site: unknown) =>
+  site === "Morris" || site === "Grand Rapids";
+
+area({ opacity: 0.7 }).zOrder((d) =>
+  isEmphasized(project(d, "site")) ? 1 : 0
+);
+```
+
+`source` accepts the same inputs as `pluck` (a `ref`, a row array, or a single
+row).
+
+::: info JavaScript only
+`project` is exported from the JS package (`gofish-graphics`). The Python wrapper
 does not expose it yet.
 :::

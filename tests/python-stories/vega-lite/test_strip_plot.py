@@ -17,10 +17,12 @@ def story_default():
     return (
         chart(cars)
         .flow(
-            derive(lambda d: sorted(d, key=lambda r: r["cylinders"], reverse=True)),
+            # Ascending so cylinders read 3 at the top → 8 at the bottom in y-down.
+            derive(lambda d: sorted(d, key=lambda r: r["cylinders"])),
             spread(by="cylinders", dir="y"),
             scatter(x="horsepower"),
         )
         .mark(rect(w=1, h=10, fill="rgb(31, 119, 180)", opacity=0.7)),
-        {"w": 400, "h": 300, "axes": True},
+        # Horsepower (continuous) x-axis at the bottom (y-end).
+        {"w": 400, "h": 300, "axes": {"x": {"side": "end"}, "y": True}},
     )

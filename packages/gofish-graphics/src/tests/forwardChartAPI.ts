@@ -1,5 +1,5 @@
 import { mix } from "spectral.js";
-import { Chart } from "../lib";
+import { chart } from "../lib";
 import { seafood } from "../data/catch";
 import { color6_old, For, groupBy, rect, spreadX, stackX, stackY, v } from "../lib";
 import _ from "lodash";
@@ -96,7 +96,7 @@ export const chartRectBF = () =>
   );
 
 export const chartBar = () => {
-  return Chart(seafood)
+  return chart(seafood)
     .rect({ w: 32, h: "count", fill: "species" })
     .spreadX("lake", { spacing: 2, sharedScale: true })
     .TEST_render();
@@ -117,7 +117,7 @@ Chart
 */
 
 /* 
-Chart(catchData)
+chart(catchData)
   .stackX("lake", { spacing: 2, sharedScale: true })
   .rect({ w: 32, h: "count", fill: "species" });
 */
@@ -128,7 +128,7 @@ Mark.rect(catchData, { w: 32, h: "count", fill: "species" })
 */
 
 export const chartStackedBar = () => {
-  return Chart(seafood)
+  return chart(seafood)
     .rect({ w: 32, h: "count", fill: "species" })
     .spreadY("species", { spacing: 2 })
     .spreadX("lake", { spacing: 8, sharedScale: true })
@@ -136,7 +136,7 @@ export const chartStackedBar = () => {
 };
 
 export const chartGroupedBar = () => {
-  return Chart(seafood)
+  return chart(seafood)
     .rect({ w: 8, h: "count", fill: "species" })
     .spreadX("species", { spacing: 2 })
     .spreadX("lake", { spacing: 4, sharedScale: true })
@@ -144,7 +144,7 @@ export const chartGroupedBar = () => {
 };
 
 export const chartFacetedBar = () => {
-  return Chart(seafood)
+  return chart(seafood)
     .rect({ w: 32, h: "count", fill: "species" })
     .spreadX("lake", { spacing: 2 })
     .spreadY("species", { spacing: 8, sharedScale: true })
@@ -152,7 +152,7 @@ export const chartFacetedBar = () => {
 };
 
 export const chartFacetedBarHorizontal = () => {
-  return Chart(seafood)
+  return chart(seafood)
     .rect({ w: 8, h: "count", fill: "species" })
     .spreadX("lake", { spacing: 2 })
     .spreadX("species", { spacing: 8, sharedScale: true })
@@ -163,7 +163,7 @@ export const chartFacetedBarHorizontal = () => {
 // I basically want a grouped bar chart where the bars are made of up of squares
 export const chartSquares = () => {
   return (
-    Chart(seafood)
+    chart(seafood)
       .rect({ w: 8, h: 8, fill: "species" })
       .spreadX("uid", { spacing: 2 })
       .transform((d) =>

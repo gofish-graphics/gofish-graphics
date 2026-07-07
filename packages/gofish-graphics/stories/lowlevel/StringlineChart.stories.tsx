@@ -28,7 +28,6 @@ export const Default: StoryObj<Args> = {
     layer({}, [
       spreadY(
         {
-          reverse: true,
           spacing: 8,
           alignment: "start",
         },

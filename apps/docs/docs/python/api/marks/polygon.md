@@ -43,7 +43,7 @@ constraint.
 ## Coordinates
 
 Points are interpreted in the local coordinate system of whatever places the
-polygon — typically a `Layer` or a constraint. The polygon's bounding box is
+polygon — typically a `layer` or a constraint. The polygon's bounding box is
 the axis-aligned extent of its points; the parent placement system translates
 the whole polygon to position it.
 

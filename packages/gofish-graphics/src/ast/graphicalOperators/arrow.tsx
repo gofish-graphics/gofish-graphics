@@ -1,8 +1,10 @@
-import { Show } from "solid-js";
 import { GoFishAST } from "../_ast";
-import { GoFishNode } from "../_node";
-import { Size, translateString } from "../dims";
+import { GoFishNode, type ToPixel } from "../_node";
+import { Size, displayTranslate } from "../dims";
+import type { DisplayList } from "gofish-ir";
+import { lowerStyle, withToPixel } from "../displayList/lowerHelpers";
 import { UNDEFINED, UnderlyingSpace } from "../underlyingSpace";
+import { axisScale } from "../domain";
 import { createNodeOperator } from "../withGoFish";
 import { type ArrowOptions, getBoxToBoxArrow } from "perfect-arrows";
 import { bbox, union } from "../../util/bbox";
@@ -54,7 +56,7 @@ export const arrow = createNodeOperator(
           _childSpaces: Size<UnderlyingSpace>[],
           _childNodes: GoFishAST[]
         ) => [UNDEFINED, UNDEFINED],
-        layout: (shared, size, scaleFactors, layoutChildren) => {
+        layout: (shared, size, scales, layoutChildren) => {
           if (layoutChildren.length < 2) {
             return {
               intrinsicDims: [
@@ -66,8 +68,13 @@ export const arrow = createNodeOperator(
             };
           }
 
+          // Forward σ (size slope) but not the anchored map: arrow anchors to
+          // its endpoints' bboxes, not to data position.
           const childPlaceables = layoutChildren.map((child) =>
-            child.layout(size, scaleFactors, [undefined, undefined])
+            child.layout(size, [
+              axisScale(scales?.[0]?.sigma, undefined),
+              axisScale(scales?.[1]?.sigma, undefined),
+            ])
           );
           const fromDims = childPlaceables[0].dims;
           const toDims = childPlaceables[1].dims;
@@ -119,42 +126,84 @@ export const arrow = createNodeOperator(
             },
           };
         },
-        render: ({ transform, renderData }, childrenElements) => {
+        // IR lowering — mirror of render. The arrow's parts live under the
+        // node's translate (no local flip), so each point is offset by that
+        // translate and pushed through `toPixel`. The arrowhead's
+        // `translate(ex,ey) rotate(θ)` is baked into the emitted points.
+        lower: (
+          { transform, renderData, coordinateTransform },
+          _children,
+          node
+        ): DisplayList.DisplayItem[] => {
           const data = renderData!;
-          const endAngleDeg = data.ae * (180 / Math.PI);
-          const sw = props.strokeWidth;
-          const headPoints = [
+          const sw = props.strokeWidth ?? 0;
+          const endAngle = data.ae; // radians
+          const [tx, ty] = displayTranslate(transform);
+          const session = node.getRenderSession();
+          const outer = session.toPixel!;
+          // LIMITATION (#657, a #629 follow-up): the arrow body + head map
+          // through this single `toPixel`, so an arrow spanning two DIFFERENT
+          // orientation scopes (a y-up bar to a y-down heatmap cell) mirrors one
+          // endpoint incorrectly. Per-endpoint scopes need a mid-curve
+          // reconciliation; deferred. Single-scope arrows are correct.
+          const composed: ToPixel = ([cx, cy]) => outer([tx + cx, ty + cy]);
+          const px = (x: number, y: number) => composed([x, y]).join(",");
+
+          const stroke = props.stroke;
+          const items: DisplayList.DisplayItem[] = [];
+
+          if (props.start) {
+            const [cx, cy] = composed([data.sx, data.sy]);
+            items.push({
+              kind: "ellipse",
+              cx,
+              cy,
+              rx: (4 / 3) * sw,
+              ry: (4 / 3) * sw,
+              role: "overlay",
+              style: lowerStyle({ fill: stroke }),
+            });
+          }
+
+          // Quadratic body M sx,sy Q cx,cy ex,ey.
+          items.push({
+            kind: "path",
+            d: `M${px(data.sx, data.sy)} Q${px(data.cx, data.cy)} ${px(data.ex, data.ey)}`,
+            role: "overlay",
+            style: lowerStyle({ fill: "none", stroke, strokeWidth: sw }),
+          });
+
+          // Arrowhead: rotate each head point by the end angle, translate to
+          // (ex, ey), then map. SVG `rotate(θ)` = [[cosθ,-sinθ],[sinθ,cosθ]].
+          const cos = Math.cos(endAngle);
+          const sin = Math.sin(endAngle);
+          const head = [
             [0, -2],
             [4, 0],
             [0, 2],
           ]
             .map(([x, y]) => [x * sw, y * sw])
-            .map((p) => p.join(","))
-            .join(" ");
-          return (
-            <g transform={translateString(transform)}>
-              <Show when={props.start} fallback={<></>}>
-                <circle
-                  cx={data.sx}
-                  cy={data.sy}
-                  r={(4 / 3) * sw}
-                  fill={props.stroke}
-                />
-              </Show>
-              <path
-                d={`M${data.sx},${data.sy} Q${data.cx},${data.cy} ${data.ex},${data.ey}`}
-                fill="none"
-                stroke={props.stroke}
-                stroke-width={sw}
-              />
-              <polygon
-                points={headPoints}
-                transform={`translate(${data.ex},${data.ey}) rotate(${endAngleDeg})`}
-                fill={props.stroke}
-              />
-              {childrenElements}
-            </g>
+            .map(([x, y]) => [
+              data.ex + (x * cos - y * sin),
+              data.ey + (x * sin + y * cos),
+            ])
+            .map(([x, y]) => px(x, y));
+          items.push({
+            kind: "path",
+            d: `M${head[0]} L${head[1]} L${head[2]} Z`,
+            role: "overlay",
+            style: lowerStyle({ fill: stroke }),
+          });
+
+          // Children lower under the same translate.
+          items.push(
+            ...withToPixel(node, composed, () =>
+              node.children.flatMap((c) =>
+                c.INTERNAL_lower(coordinateTransform)
+              )
+            )
           );
+          return items;
         },
       },
       children

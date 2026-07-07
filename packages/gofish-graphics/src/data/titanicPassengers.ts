@@ -17,7 +17,7 @@ import raw from "./titanicPassengers.json";
 const rowsRaw = raw as unknown;
 const rowsList: Record<string, string>[] = Array.isArray(rowsRaw)
   ? (rowsRaw as Record<string, string>[])
-  : (rowsRaw as { default?: Record<string, string>[] }).default ?? [];
+  : ((rowsRaw as { default?: Record<string, string>[] }).default ?? []);
 
 /** Tier weights when CSV has no numeric `fare`. */
 const TIER_FARE: Record<string, number> = {
@@ -52,9 +52,7 @@ export type TitanicPassenger = {
   age?: string;
 };
 
-function parsePassengers(
-  rows: Record<string, string>[]
-): TitanicPassenger[] {
+function parsePassengers(rows: Record<string, string>[]): TitanicPassenger[] {
   const out: TitanicPassenger[] = [];
   for (const r of rows) {
     const clsRaw = (r.class ?? r.Class ?? "").trim();
@@ -75,10 +73,11 @@ function parsePassengers(
 
     const fareCell = r.fare ?? r.Fare;
     const fareNum =
-      fareCell !== undefined && fareCell !== ""
-        ? Number(fareCell)
-        : Number.NaN;
-    const fare = Number.isFinite(fareNum) && fareNum >= 0 ? fareNum : TIER_FARE[cls] ?? 1;
+      fareCell !== undefined && fareCell !== "" ? Number(fareCell) : Number.NaN;
+    const fare =
+      Number.isFinite(fareNum) && fareNum >= 0
+        ? fareNum
+        : (TIER_FARE[cls] ?? 1);
 
     const surv = (r.survived ?? r.Survived ?? "").toString().trim();
     const st = (r.survived_text ?? r.survivedText ?? "").toString().trim();
@@ -93,7 +92,9 @@ function parsePassengers(
 
     const sex = (r.sex ?? r.Sex ?? "").trim();
     const age = (r.age ?? r.Age ?? "").trim() || undefined;
-    const aliveRaw = (r.alive ?? r.Alive ?? surv ?? st).toString().toLowerCase();
+    const aliveRaw = (r.alive ?? r.Alive ?? surv ?? st)
+      .toString()
+      .toLowerCase();
 
     out.push({
       survived: lived,

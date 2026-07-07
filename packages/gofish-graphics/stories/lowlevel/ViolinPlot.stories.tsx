@@ -34,7 +34,7 @@ export const Default: StoryObj<Args> = {
           stackY(
             { alignment: "middle" },
             For(density, (d) =>
-              rect({ y: d.x / 40, w: d.y * 100000, h: 0, fill: v(species) }).name(
+              rect({ y: -d.x / 40, w: d.y * 100000, h: 0, fill: v(species) }).name(
                 `${species}-${d.x}`
               )
             )

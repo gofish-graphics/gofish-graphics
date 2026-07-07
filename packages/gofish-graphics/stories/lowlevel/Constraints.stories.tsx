@@ -154,9 +154,9 @@ export const SpreadY_AlignEnd: StoryObj<Args> = {
  * Three rects of different widths, stacked vertically, center-aligned.
  *
  * Both spread-middle and constraint align-middle fall back to box-center
- * (size/2) when no child is placed (since #543). This story still pins one
- * child to the canvas center so the two panels share an explicit, obvious
- * baseline, but the pin is illustrative rather than required for equivalence.
+ * (size/2) when no child is placed (since #543). Neither panel pins an absolute
+ * x position; both compare the same freely-translated system after layout
+ * normalization.
  */
 export const SpreadY_AlignMiddle: StoryObj<Args> = {
   args: { w: 300, h: 300 },
@@ -173,18 +173,7 @@ export const SpreadY_AlignMiddle: StoryObj<Args> = {
         );
       },
       (container, storyArgs) => {
-        layer([
-          // Pin one child to the canvas center so align({ dir: "x", alignment: "middle" })
-          // and spread(... alignment: "middle") share the same baseline.
-          rect({
-            x: storyArgs.w / 2 - 80 / 2,
-            w: 80,
-            h: 40,
-            fill: "#e63946",
-          }).name("a"),
-          rect({ w: 120, h: 40, fill: "#457b9d" }).name("b"),
-          rect({ w: 60, h: 40, fill: "#2a9d8f" }).name("c"),
-        ])
+        layer(makeYRects())
           .constrain(({ a, b, c }) => [
             Constraint.align({ x: "middle" }, [a, b, c]),
             Constraint.distribute({ dir: "y" }, [a, b, c]),

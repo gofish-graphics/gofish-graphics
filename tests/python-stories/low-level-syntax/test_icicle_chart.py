@@ -31,7 +31,6 @@ def story_simplified():
                         for cls, items in by_class.items()
                     ],
                     dir="y",
-                    reverse=True,
                     alignment="middle",
                 ),
             ],
@@ -58,7 +57,6 @@ def story_default():
             ],
             dir="y",
             w=40,
-            reverse=True,
             alignment="middle",
         )
 
@@ -80,7 +78,6 @@ def story_default():
                 for sex, s_items in group_by(items, "sex").items()
             ],
             dir="y",
-            reverse=True,
             alignment="middle",
         )
 
@@ -100,7 +97,6 @@ def story_default():
                 stack(
                     [_class_band(cls, items) for cls, items in by_class.items()],
                     dir="y",
-                    reverse=True,
                     alignment="middle",
                 ),
             ],

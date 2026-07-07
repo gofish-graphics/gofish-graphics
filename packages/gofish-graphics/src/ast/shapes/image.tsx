@@ -1,18 +1,14 @@
 import * as Monotonic from "../../util/monotonic";
 import { computeAesthetic } from "../../util";
+import { posFn, pxOf } from "../domain";
 import { interval } from "../../util/interval";
 import { GoFishNode } from "../_node";
-import {
-  getMeasure,
-  getValue,
-  inferEmbedded,
-  isAesthetic,
-  isValue,
-} from "../data";
+import { getMeasure, getValue, isAesthetic, isValue } from "../data";
 import {
   Dimensions,
   displayTranslate,
   elaborateDims,
+  extractAliasCandidates,
   FancyDims,
   Transform,
 } from "../dims";
@@ -25,6 +21,8 @@ import {
 } from "../underlyingSpace";
 import { createMark } from "../withGoFish";
 import { attachCut } from "../graphicalOperators/cut";
+import type { DisplayList } from "gofish-ir";
+import { lowerStyle, pixelBox, roleFor } from "../displayList/lowerHelpers";
 
 type ImageDimensions = {
   width: number;
@@ -226,7 +224,6 @@ const resolveRenderedDimensions = (
 
 export const Image = ({
   key,
-  name,
   href,
   filter,
   opacity,
@@ -234,22 +231,20 @@ export const Image = ({
   ...fancyDims
 }: {
   key?: string;
-  name?: string;
   href: string;
   filter?: string;
   opacity?: number;
   preserveAspectRatio?: string;
 } & FancyDims<number>) => {
-  const dims = elaborateDims(fancyDims).map(inferEmbedded);
+  // `embedded` is authored by the resolveEmbedding pass — see rect.tsx.
+  const dims = elaborateDims(fancyDims);
 
-  return new GoFishNode(
+  const node = new GoFishNode(
     {
-      name,
       key,
       type: "image",
       args: {
         key,
-        name,
         href,
         filter,
         opacity,
@@ -290,16 +285,16 @@ export const Image = ({
 
         return [resolveAxis(0, xPos), resolveAxis(1, yPos)];
       },
-      layout: (shared, size, scaleFactors, children, posScales) => {
+      layout: (shared, size, scales, children) => {
         // For data-bound (Value-wrapped) dims, map from data units to pixels via
-        // posScale when available — this keeps image sizing consistent with
-        // rect's data-driven sizing. For literal-number dims, treat as pixels.
+        // the anchored map when available — this keeps image sizing consistent
+        // with rect's data-driven sizing. For literal-number dims, treat as pixels.
         const pixelSize = (dim: 0 | 1): number | undefined => {
           const raw = dims[dim].size;
           if (isValue(raw)) {
             const dataSize = getValue(raw)!;
-            const scale = posScales?.[dim];
-            return scale ? scale(dataSize) - scale(0) : dataSize;
+            const map = scales?.[dim]?.map;
+            return map ? pxOf(map, dataSize) - pxOf(map, 0) : dataSize;
           }
           return raw;
         };
@@ -313,11 +308,19 @@ export const Image = ({
         );
 
         const positionX =
-          computeAesthetic(dims[0].center, posScales?.[0]!, undefined) ??
-          computeAesthetic(dims[0].min, posScales?.[0]!, undefined);
+          computeAesthetic(
+            dims[0].center,
+            posFn(scales?.[0]?.map)!,
+            undefined
+          ) ??
+          computeAesthetic(dims[0].min, posFn(scales?.[0]?.map)!, undefined);
         const positionY =
-          computeAesthetic(dims[1].center, posScales?.[1]!, undefined) ??
-          computeAesthetic(dims[1].min, posScales?.[1]!, undefined);
+          computeAesthetic(
+            dims[1].center,
+            posFn(scales?.[1]?.map)!,
+            undefined
+          ) ??
+          computeAesthetic(dims[1].min, posFn(scales?.[1]?.map)!, undefined);
 
         return {
           intrinsicDims: [
@@ -337,36 +340,49 @@ export const Image = ({
           },
         };
       },
-      render: ({
-        intrinsicDims,
-        transform,
-      }: {
-        intrinsicDims?: Dimensions;
-        transform?: Transform;
-      }) => {
+      // IR lowering — structural mirror of `render`. Flip-AGNOSTIC: the box
+      // spans x `[x, x+width]`, y `[y, y+height]`; map both diagonal corners
+      // through `toPixel` and take the component-wise min for the SVG top-left.
+      // Correct under y-down free space and the `yUp` chart scope alike — where
+      // `toPixel` un-mirrors, the top-left is `(x, y+height)`; in y-down it is
+      // `(x, y)` (issue #143/#16).
+      lower: (
+        { intrinsicDims, transform, toPixel },
+        _children,
+        node
+      ): DisplayList.DisplayItem[] => {
         const [tx, ty] = displayTranslate(transform);
         const x = tx + (intrinsicDims?.[0]?.min ?? 0);
         const y = ty + (intrinsicDims?.[1]?.min ?? 0);
         const width = intrinsicDims?.[0]?.size ?? 0;
         const height = intrinsicDims?.[1]?.size ?? 0;
 
-        return (
-          <image
-            transform="scale(1, -1)"
-            x={x}
-            y={-y - height}
-            width={Math.abs(width)}
-            height={Math.abs(height)}
-            href={href}
-            preserveAspectRatio={preserveAspectRatio as any}
-            filter={filter}
-            opacity={opacity}
-          />
+        const { x: px, y: py } = pixelBox(
+          [x, y],
+          [x + width, y + height],
+          toPixel
         );
+        const style = lowerStyle({ opacity, filter });
+        const item: DisplayList.ImageItem = {
+          kind: "image",
+          x: px,
+          y: py,
+          w: Math.abs(width),
+          h: Math.abs(height),
+          href,
+          preserveAspectRatio,
+          datum: node.datum,
+          role: roleFor(node.datum),
+        };
+        if (Object.keys(style).length > 0) item.style = style;
+        return [item];
       },
     },
     []
   );
+  // Stash alias-keyed dims (theta/r/…) for the resolveAliases pass.
+  node._pendingAliases = extractAliasCandidates(fancyDims);
+  return node;
 };
 
 const rawImage = createMark(Image, {}, "image");

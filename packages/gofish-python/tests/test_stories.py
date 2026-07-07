@@ -151,7 +151,7 @@ class TestVegaLite:
 
 
 # ---------------------------------------------------------------------------
-# Layer stories — unblocked now that Layer is implemented
+# layer stories — unblocked now that layer is implemented
 # ---------------------------------------------------------------------------
 
 class TestLayerStories:

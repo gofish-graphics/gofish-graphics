@@ -1,8 +1,10 @@
 import type { JSX } from "solid-js";
 import chroma from "chroma-js";
 import { luv } from "culori";
-import type { GoFishNode } from "../_node";
+import type { DisplayList } from "gofish-ir";
+import type { GoFishNode, ToPixel } from "../_node";
 import { displayTranslate, type Transform } from "../dims";
+import { declaredFlipsY } from "../displayList/lowerHelpers";
 import { getValue, type MaybeValue } from "../data";
 import { resolveColorChannel } from "../../color";
 import {
@@ -70,10 +72,26 @@ function autoLabelColor(node: GoFishNode, position: LabelPosition): string {
   }
 }
 
-export function renderLabelJSX(
+/** The resolved geometry + style of a node's label, shared by the JSX renderer
+ *  and the IR lowering so the two never drift. `(ax, ay)` is the anchor point in
+ *  GoFish y-up display coordinates. */
+type LabelLayout = {
+  labelText: string;
+  ax: number;
+  ay: number;
+  labelColor: string;
+  textAnchor: "start" | "middle" | "end";
+  /** Label rotation as authored (degrees). */
+  rotate: number | undefined;
+  fontSize: number;
+};
+
+const LABEL_FONT_FAMILY = "source-sans-pro, sans-serif";
+
+function computeLabel(
   node: GoFishNode,
   transformOverride?: Transform
-): JSX.Element | null {
+): LabelLayout | null {
   if (!node._label || !node.intrinsicDims) return null;
   const datum = node.datum;
   if (datum === undefined) return null;
@@ -110,27 +128,47 @@ export function renderLabelJSX(
   const cx = tx + w / 2;
   const cy = ty + h / 2;
 
-  const labelColor = node._label.color ?? autoLabelColor(node, position);
-  const textAnchor = getLabelTextAnchor(position);
+  return {
+    labelText,
+    ax: cx + offset.x,
+    ay: cy + offset.y,
+    labelColor: node._label.color ?? autoLabelColor(node, position),
+    textAnchor: getLabelTextAnchor(position),
+    rotate: node._label.rotate,
+    fontSize: node._label.fontSize ?? 11,
+  };
+}
 
-  const rotate = node._label.rotate;
-  const transform = rotate
-    ? `rotate(${-rotate},${cx + offset.x},${cy + offset.y}) scale(1,-1)`
-    : "scale(1,-1)";
+/**
+ * Lower a node's label to a display-list `TextItem` (role `overlay`). Mirrors
+ * {@link renderLabelJSX}: the anchor is mapped to a final pixel via `toPixel`.
+ * Rotation sign is flip-AGNOSTIC: in a `yUp` chart scope `toPixel` mirrors y,
+ * which negates the authored `rotate(-rotate)` into a screen `+rotate`; in
+ * y-down free space there is no mirror, so it stays `-rotate`. Read out of
+ * `toPixel` via `toPixelFlipsY` (issue #143/#16).
+ */
+export function lowerLabelItems(
+  node: GoFishNode,
+  transformOverride: Transform | undefined,
+  toPixel: ToPixel
+): DisplayList.DisplayItem[] {
+  const l = computeLabel(node, transformOverride);
+  if (!l) return [];
 
-  return (
-    <text
-      transform={transform}
-      x={cx + offset.x}
-      y={-(cy + offset.y)}
-      fill={labelColor}
-      font-size={`${node._label.fontSize ?? 11}px`}
-      font-family={"source-sans-pro, sans-serif"}
-      text-anchor={textAnchor}
-      dominant-baseline="central"
-      pointer-events="none"
-    >
-      {labelText}
-    </text>
-  );
+  const [x, y] = toPixel([l.ax, l.ay]);
+  const item: DisplayList.TextItem = {
+    kind: "text",
+    x,
+    y,
+    text: l.labelText,
+    fontSize: l.fontSize,
+    fontFamily: LABEL_FONT_FAMILY,
+    textAnchor: l.textAnchor as DisplayList.TextItem["textAnchor"],
+    dominantBaseline: "central",
+    role: "overlay",
+    style: { fill: l.labelColor },
+  };
+  if (l.rotate)
+    item.rotate = declaredFlipsY(node, toPixel) ? l.rotate : -l.rotate;
+  return [item];
 }

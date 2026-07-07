@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
-import { Chart, scatter, rect, spread, derive } from "../../src/lib";
+import { chart, scatter, rect, spread, derive } from "../../src/lib";
 import data from "vega-datasets";
 
 // Mirrors: https://vega.github.io/vega-lite/examples/tick_strip.html
@@ -33,10 +33,11 @@ export const Default: StoryObj<Args> = {
         cylinders: Math.round(d.Cylinders),
       }));
 
-    Chart(cars, { axes: true })
+    chart(cars, { axes: { x: { side: "end" }, y: true } })
       .flow(
-        derive((d) => [...d].sort((a, b) => b.cylinders - a.cylinders)),
-        spread({ by: "cylinders",  dir: "y" }),
+        // Ascending so cylinders read 3 at the top → 8 at the bottom in y-down.
+        derive((d) => [...d].sort((a, b) => a.cylinders - b.cylinders)),
+        spread({ by: "cylinders", dir: "y" }),
         scatter({ x: "horsepower" })
       )
       .mark(

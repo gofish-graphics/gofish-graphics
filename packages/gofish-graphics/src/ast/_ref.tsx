@@ -19,18 +19,21 @@ import {
   Size,
   Transform,
 } from "./dims";
-import { Domain } from "./domain";
+import { Domain, type AxisScale } from "./domain";
 import { GoFishNode } from "./_node";
 import { GoFishAST } from "./_ast";
 import { MaybeValue } from "./data";
 import { ORDINAL, POSITION, UnderlyingSpace } from "./underlyingSpace";
 import type { RenderSession } from "./_node";
+import type { DisplayList } from "gofish-ir";
+type DisplayListItem = DisplayList.DisplayItem;
 import { isToken, Token } from "./createName";
 
 /* TODO: resolveMeasures and layout feel pretty similar... */
 
 export type Placeable = {
   dims: Dimensions;
+  localAnchor?: (axis: FancyDirection, anchor: Anchor) => number | undefined;
   place: (axis: FancyDirection, value: number, anchor?: Anchor) => void;
 };
 
@@ -109,10 +112,17 @@ export class GoFishRef {
    *
    * This is intentionally the *uncollapsed* bag: `sumBy(ref.datum, "count")`
    * aggregates over the rows. Field access with homogeneity collapse (so
-   * `by: "datum.lake"` resolves to a scalar when the rows agree) lives in
+   * `by: "lake"` resolves to a scalar when the rows agree) lives in
    * `projectPath` / `pluck` (see datumProjection.ts), not here. */
   public get datum(): any {
     return (this.directNode ?? this.selectedNode)?.datum;
+  }
+
+  /** The node this ref points at (the direct node before layout, else the
+   *  resolved selection). Lets build-time consumers (e.g. the `resolve`
+   *  operator) read node-level metadata such as `__splitBy`. */
+  public get targetNode(): GoFishNode | undefined {
+    return this.directNode ?? this.selectedNode;
   }
 
   /** Chainable: name this ref so a layer constraint can reference it (mirrors
@@ -266,11 +276,7 @@ export class GoFishRef {
     return measurement;
   }
 
-  public layout(
-    size: Size,
-    scaleFactors: Size<number | undefined>,
-    _posScales?: Size<((pos: number) => number) | undefined>
-  ): Placeable {
+  public layout(size: Size, _scales?: Size<AxisScale | undefined>): Placeable {
     if (!this.selectedNode) {
       throw new Error("Selected node not found");
     }
@@ -333,6 +339,18 @@ export class GoFishRef {
     return this.transform?.translate?.[dir];
   }
 
+  public localAnchor(axis: FancyDirection, anchor: Anchor): number | undefined {
+    const dir = elaborateDirection(axis);
+    const intrinsic = this.intrinsicDims?.[dir];
+    if (intrinsic?.min === undefined) return undefined;
+    if (
+      (anchor === "center" || anchor === "max") &&
+      intrinsic.size === undefined
+    )
+      return undefined;
+    return localAnchorPoint(anchor, intrinsic.min, intrinsic.size ?? 0);
+  }
+
   public place(
     axis: FancyDirection,
     value: number,
@@ -359,8 +377,22 @@ export class GoFishRef {
       value - localAnchorPoint(anchor, localMin ?? 0, size ?? 0);
   }
 
-  public INTERNAL_render(): JSX.Element {
-    return <></>;
+  /** Authoritative placement counterpart to `GoFishNode.pinAnchor`. A ref has no
+   *  bbox ledger, so overriding means directly replacing its computed translate. */
+  public pinAnchor(axis: FancyDirection, value: number, anchor: Anchor): void {
+    const dir = elaborateDirection(axis);
+    const intrinsic = this.intrinsicDims?.[dir];
+    this.transform ??= { translate: [undefined, undefined] };
+    this.transform.translate ??= [undefined, undefined];
+    this.transform.translate[dir] =
+      value -
+      localAnchorPoint(anchor, intrinsic?.min ?? 0, intrinsic?.size ?? 0);
+  }
+
+  /** Refs are placement stand-ins; they draw nothing, so they lower to no
+   *  display-list items. */
+  public INTERNAL_lower(): DisplayListItem[] {
+    return [];
   }
 
   public setRenderSession(session: RenderSession): void {

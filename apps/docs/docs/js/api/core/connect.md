@@ -5,6 +5,11 @@ sugar for the two-layer `selectAll` recipe: it positions the chart's marks, then
 threads a [`line`](/js/api/marks/line) or [`area`](/js/api/marks/area) through
 exactly those nodes, painted underneath.
 
+> For anything beyond a single connector mark — grouping the marks into bands, or
+> driving a second tier from another table — reach for the more general
+> [`.layer()`](/js/api/core/layer), which gives the next tier a full
+> `.flow().mark()` pipeline. `.connect(m)` is the one-mark shorthand.
+
 ::: gofish
 
 ```js
@@ -14,7 +19,7 @@ const locations = Object.entries(lakeLocations).map(([lake, { x, y }]) => ({
   y,
 }));
 
-gf.Chart(locations, { axes: true })
+gf.chart(locations, { axes: true })
   .flow(gf.scatter({ by: "lake", x: "x", y: "y" }))
   .mark(gf.circle())
   .connect(gf.line({ stroke: "steelblue", strokeWidth: 2 }))
@@ -42,7 +47,7 @@ Returns a new `ChartBuilder` — `connect` is immutable.
 `.connect()` is exactly the manual two-layer form. This:
 
 ```ts
-Chart(data, { axes: true })
+chart(data, { axes: true })
   .flow(scatter({ by: "lake", x: "x", y: "y" }))
   .mark(circle())
   .connect(line());
@@ -52,10 +57,10 @@ desugars to:
 
 ```ts
 layer([
-  Chart(data)
+  chart(data)
     .flow(scatter({ by: "lake", x: "x", y: "y" }))
     .mark(circle().name("pts")),
-  Chart(selectAll("pts")).mark(line()).zOrder(-1),
+  chart(selectAll("pts")).mark(line()).zOrder(-1),
 ]);
 ```
 

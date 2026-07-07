@@ -21,6 +21,7 @@ import {
 } from "../dims";
 import { getMeasure, getValue, isValue, MaybeValue } from "../data";
 import { computeAesthetic, computeSize } from "../../util";
+import { posFn, pxOf } from "../domain";
 import {
   POSITION,
   SIZE,
@@ -42,7 +43,6 @@ type TreemapTile =
 type TreemapSort = "asc" | "desc" | "none";
 
 type TreemapProps = {
-  name?: string;
   key?: string;
   paddingInner?: number;
   paddingOuter?: number;
@@ -93,7 +93,6 @@ function resolveWeightFromChild(
 export const Treemap = createNodeOperator(
   (opts: TreemapProps, children: GoFishAST[]) => {
     const {
-      name,
       key,
       paddingInner = 0,
       paddingOuter = 0,
@@ -114,7 +113,6 @@ export const Treemap = createNodeOperator(
         type: "treemap",
         args: {
           key,
-          name,
           paddingInner,
           paddingOuter,
           round,
@@ -126,7 +124,6 @@ export const Treemap = createNodeOperator(
           dims,
         },
         key,
-        name,
         shared: [false, false],
         resolveUnderlyingSpace: (): Size<UnderlyingSpace> => {
           // Mirror Spread's explicit-size handling (spread.tsx:123-131): when a
@@ -143,15 +140,15 @@ export const Treemap = createNodeOperator(
               : POSITION(interval(0, 1));
           return [axisSpace(0), axisSpace(1)];
         },
-        layout: (_shared, size, scaleFactors, childAsts, posScales, node) => {
+        layout: (_shared, size, scales, childAsts, node) => {
           const xPos = computeAesthetic(
             dims[0].min,
-            posScales?.[0]!,
+            posFn(scales?.[0]?.map)!,
             undefined
           );
           const yPos = computeAesthetic(
             dims[1].min,
-            posScales?.[1]!,
+            posFn(scales?.[1]?.map)!,
             undefined
           );
 
@@ -184,21 +181,21 @@ export const Treemap = createNodeOperator(
             if (!isValue(declared)) {
               return computeSize(
                 declared,
-                scaleFactors?.[dir] ?? 1,
+                scales?.[dir]?.sigma ?? 1,
                 size[dir]
               ) as number;
             }
             const v = getValue(declared)!;
-            const posScale = posScales?.[dir];
-            if (posScale) return posScale(v) - posScale(0);
-            const sf = scaleFactors?.[dir] ?? localScaleFactor(dir) ?? 1;
+            const map = scales?.[dir]?.map;
+            if (map) return pxOf(map, v) - pxOf(map, 0);
+            const sf = scales?.[dir]?.sigma ?? localScaleFactor(dir) ?? 1;
             return v * sf;
           };
 
           const resolvedSize: Size = [resolveAxisSize(0), resolveAxisSize(1)];
 
-          const sfX = scaleFactors?.[0] ?? localScaleFactor(0) ?? 1;
-          const sfY = scaleFactors?.[1] ?? localScaleFactor(1) ?? 1;
+          const sfX = scales?.[0]?.sigma ?? localScaleFactor(0) ?? 1;
+          const sfY = scales?.[1]?.sigma ?? localScaleFactor(1) ?? 1;
 
           const session = node.getRenderSession();
           const scaleContext = session.scaleContext;
@@ -290,7 +287,7 @@ export const Treemap = createNodeOperator(
                 lh = side;
               }
             }
-            const placeable = child.layout([lw, lh], scaleFactors, posScales);
+            const placeable = child.layout([lw, lh], scales);
             placeable.place(0, x0 + w / 2, "center");
             const cy = flipY ? resolvedSize[1] - (y0 + h / 2) : y0 + h / 2;
             placeable.place(1, cy, "center");
@@ -321,11 +318,6 @@ export const Treemap = createNodeOperator(
             },
           };
         },
-        render: ({ transform }, renderedChildren) => {
-          return (
-            <g transform={translateString(transform)}>{renderedChildren}</g>
-          );
-        },
       },
       children
     );
@@ -335,7 +327,7 @@ export const Treemap = createNodeOperator(
 export const treemap = createOperator<any, TreemapProps>(
   (props: TreemapProps, children: GoFishAST[]) => Treemap(props, children),
   {
-    split: ({ name }, d) => new Map(d.map((r, i) => [i, r])),
+    split: (_opts, d) => new Map(d.map((r, i) => [i, r])),
     channels: {
       w: "size",
       h: "size",

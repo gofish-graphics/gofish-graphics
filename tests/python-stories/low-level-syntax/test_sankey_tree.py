@@ -48,6 +48,7 @@ def story_default():
                     dir="y",
                     spacing=0,
                     alignment="middle",
+                    reverse=True,
                 ).name(f"{cls}-{sex}-tgt"),
                 # target: the survival bars spread apart
                 spread(
@@ -62,6 +63,7 @@ def story_default():
                     w=40,
                     spacing=_INTERNAL_SPACING * 4,
                     alignment="middle",
+                    reverse=True,
                 ),
             ],
             dir="x",
@@ -85,6 +87,7 @@ def story_default():
                     dir="y",
                     spacing=0,
                     alignment="middle",
+                    reverse=True,
                 ).name(f"{cls}-tgt"),
                 # target: each sex expands into its own survival sub-tree
                 spread(
@@ -96,6 +99,7 @@ def story_default():
                     h=sum_by(items, "count") / 10,
                     spacing=_INTERNAL_SPACING * 2,
                     alignment="middle",
+                    reverse=True,
                 ),
             ],
             dir="x",
@@ -116,12 +120,14 @@ def story_default():
                 dir="y",
                 spacing=0,
                 alignment="middle",
+                reverse=True,
             ),
             spread(
                 [_class_node(cls, items) for cls, items in by_class.items()],
                 dir="y",
                 spacing=_INTERNAL_SPACING,
                 alignment="middle",
+                reverse=True,
             ),
         ],
         dir="x",

@@ -36,21 +36,57 @@
 // pin) is not yet modeled; the distribute claim wins on a shared axis for now.
 
 import * as Monotonic from "../../util/monotonic";
-import { GoFishNode } from "../_node";
-import { GoFishAST } from "../_ast";
+import type { GoFishAST } from "../_ast";
 import { Size } from "../dims";
 import {
+  POSITION,
+  SIZE,
   UNDEFINED,
   UnderlyingSpace,
+  continuousInterval,
   isBaselineMagnitude,
   isUNDEFINED,
+  spaceMeasure,
 } from "../underlyingSpace";
 import { unionChildSpaces } from "../graphicalOperators/alignment";
 import { type ConstraintSpec } from ".";
+import * as Interval from "../../util/interval";
+import type { Measure } from "../data";
 import { distributeSpaceFold, type DistributeConstraint } from "./distribute";
 import { alignSpaceFold, type AlignConstraint } from "./align";
-import type { SpanConstraint } from "./span";
-import { axisIndex, buildNameIndex, type AlignAnchor } from "./shared";
+import { isPositionInterval, type PositionConstraint } from "./position";
+type AlignAnchor = "start" | "middle" | "end" | "baseline";
+
+/** A position constraint whose coordinates are *purely* interval form (at least
+ *  one interval axis, no point axis). This is span's old regime: it size-sets
+ *  its axis without blocking composition. A position carrying any *point*
+ *  coordinate is conservatively NOT span-like — it bails composition to the
+ *  layer's default union (the distribute-relative-to-a-pin solve is deferred). */
+const isPureIntervalPosition = (c: ConstraintSpec): c is PositionConstraint =>
+  c.type === "position" &&
+  (c.x === undefined || isPositionInterval(c.x)) &&
+  (c.y === undefined || isPositionInterval(c.y)) &&
+  (isPositionInterval(c.x) || isPositionInterval(c.y));
+
+const axisIndex = (axis: "x" | "y"): 0 | 1 => (axis === "x" ? 0 : 1);
+
+const childNameKey = (node: GoFishAST): string | undefined => {
+  if (typeof node !== "object" || node === null || !("_name" in node)) {
+    return undefined;
+  }
+  const name = node._name;
+  if (name === undefined) return undefined;
+  return typeof name === "string" ? name : name.__tag;
+};
+
+const buildNameIndex = (childNodes: GoFishAST[]): Map<string, number> => {
+  const m = new Map<string, number>();
+  for (let i = 0; i < childNodes.length; i++) {
+    const name = childNameKey(childNodes[i]);
+    if (name !== undefined && !m.has(name)) m.set(name, i);
+  }
+  return m;
+};
 
 /** One distribute's slice of the layout budget: equal shares of the axis size
  *  among its covered children (consumed by `layer.tsx`'s `layout`). */
@@ -79,6 +115,73 @@ export type ComposedSpaces = {
   budget: ComposeBudget;
 };
 
+export type PositionDomains = {
+  x?: Interval.Interval;
+  y?: Interval.Interval;
+  xMeasure?: Measure;
+  yMeasure?: Measure;
+};
+
+/** Apply a layer transform scale to baseline magnitudes produced by the default
+ * child-space union. Anchored POSITION and DIFFERENCE axes keep their own data
+ * domains; only free extents scale symbolically. */
+export function scaleBaselineMagnitude(
+  space: UnderlyingSpace,
+  scale: number
+): UnderlyingSpace {
+  return isBaselineMagnitude(space) && scale !== 1
+    ? SIZE(Monotonic.smul(scale, space.width), space.measure)
+    : space;
+}
+
+/** Resolve a layer's default per-axis space before composed constraint-space
+ * overrides: union child spaces, apply transform.scale to free magnitudes, and
+ * merge datum position/span domains into POSITION space. */
+export function resolveLayerAxisSpace(
+  childSpaces: Size<UnderlyingSpace>[],
+  axis: 0 | 1,
+  scale: number,
+  positionDomain: Interval.Interval | undefined,
+  positionMeasure: Measure | undefined
+): UnderlyingSpace {
+  const base = scaleBaselineMagnitude(
+    unionChildSpaces(childSpaces, axis),
+    scale
+  );
+  if (positionDomain === undefined) return base;
+  const baseIv = continuousInterval(base);
+  const merged = baseIv
+    ? Interval.unionAll(baseIv, positionDomain)
+    : positionDomain;
+  // The position/span constraints' OWN measure is the authoritative unit for
+  // this axis's data domain (they define it); it wins, falling back to the
+  // children's POSITION measure when the constraints are untagged.
+  return POSITION(merged, positionMeasure ?? spaceMeasure(base));
+}
+
+export function resolveLayerBaseSpaces(
+  childSpaces: Size<UnderlyingSpace>[],
+  transformScale: Size,
+  positionDomains: PositionDomains
+): Size<UnderlyingSpace> {
+  return [
+    resolveLayerAxisSpace(
+      childSpaces,
+      0,
+      transformScale[0],
+      positionDomains.x,
+      positionDomains.xMeasure
+    ),
+    resolveLayerAxisSpace(
+      childSpaces,
+      1,
+      transformScale[1],
+      positionDomains.y,
+      positionDomains.yMeasure
+    ),
+  ];
+}
+
 /** Build a per-axis Size carrying `space` on `axis` and UNDEFINED elsewhere, so
  *  a single space can be fed to `unionChildSpaces` as a pseudo-child. */
 const axisSize = (
@@ -98,34 +201,37 @@ export function composeConstraintSpaces(
   const aligns = constraints.filter(
     (c): c is AlignConstraint => c.type === "align"
   );
-  // `span` (the size-setting interval constraint, #39/#546) establishes its
-  // axis's extent like a distribute does — its datum range already feeds the
-  // layer's POSITION domain via `collectPositionDomains`, so it needs no fold
-  // here, but its PRESENCE means this is NOT a pure overlay: the cross-axis
-  // align fold (SIZE→POSITION) must still run (e.g. a histogram = span on x,
-  // align on y; the align fold is what makes the count axis).
-  const spans = constraints.filter(
-    (c): c is SpanConstraint => c.type === "span"
-  );
-  // Compose only layers that are PURELY distributes + aligns + spans. A
-  // `position` pin (or z-order) puts the layer in a different regime — the
-  // distribute-relative-to-a-pin solve is deferred (layout-synthesis.md) — so
-  // leave it to the layer's default union, which already merges position
-  // data domains.
+  // An interval-form `position` (the size-setting range form, #39/#546)
+  // establishes its axis's extent like a distribute does — its datum range
+  // already feeds the layer's POSITION domain via `collectPositionDomains`, so
+  // it needs no fold here, but its PRESENCE means this is NOT a pure overlay:
+  // the cross-axis align fold (SIZE→POSITION) must still run (e.g. a histogram =
+  // interval position on x, align on y; the align fold is what makes the count
+  // axis).
+  const spans = constraints.filter(isPureIntervalPosition);
+  // Compose only layers that are PURELY distributes + aligns + interval
+  // positions. A *point* position pin (or z-order) puts the layer in a different
+  // regime — the distribute-relative-to-a-pin solve is deferred
+  // (layout-synthesis.md) — so leave it to the layer's default union, which
+  // already merges position data domains. A position mixing a point on one axis
+  // with an interval on the other is conservatively point-form: not span-like,
+  // so it bails here too.
   if (distributes.length + aligns.length + spans.length !== constraints.length)
     return undefined;
-  // No series and no span → a pure overlay. Align-only composition WOULD fold
-  // (alignSpaceFold converts SIZE→POSITION), but for a pure overlay that
-  // conversion only changes the layer's reported space (e.g. a legend's), so
-  // defer it: fall to the default union. (A span on the other axis makes it not
-  // an overlay, so the align fold runs.)
+  // No series and no interval position → a pure overlay. Align-only composition
+  // WOULD fold (alignSpaceFold converts SIZE→POSITION), but for a pure overlay
+  // that conversion only changes the layer's reported space (e.g. a legend's),
+  // so defer it: fall to the default union. (An interval position on the other
+  // axis makes it not an overlay, so the align fold runs.)
   if (distributes.length === 0 && spans.length === 0) return undefined;
 
   const indexByName = buildNameIndex(childNodes);
-  const keyOf = (i: number): string | undefined =>
-    childNodes[i] instanceof GoFishNode
-      ? (childNodes[i] as GoFishNode).key
+  const keyOf = (i: number): string | undefined => {
+    const node = childNodes[i];
+    return typeof node === "object" && node !== null && "key" in node
+      ? (node.key as string | undefined)
       : undefined;
+  };
   const idxOf = (refs: { name: string }[]): number[] | undefined => {
     const out = refs.map((r) => indexByName.get(r.name));
     return out.every((i): i is number => i !== undefined) ? out : undefined;
@@ -171,12 +277,13 @@ export function composeConstraintSpaces(
     }
   }
 
-  // A span COVERS its children on the axis it sizes (it sets their extent
-  // directly via `applySpan`, and their datum range already feeds the POSITION
-  // domain through `collectPositionDomains`). It contributes no fold here, but
-  // its children must be marked covered so the per-axis loop below does not also
-  // fold their raw extent in as an overlay sibling (double-counting) when a
-  // distribute/align shares the same axis.
+  // An interval position COVERS its children on the axis it sizes. Its datum
+  // range already feeds the POSITION domain through `collectPositionDomains`,
+  // and the placement solver later turns the resolved pixel endpoints into the
+  // target's extent. It contributes no fold here, but its children must be
+  // marked covered so the per-axis loop below does not also fold their raw
+  // extent in as an overlay sibling (double-counting) when a distribute/align
+  // shares the same axis.
   const spanCover: [Set<number>, Set<number>] = [new Set(), new Set()];
   for (const s of spans) {
     const idx = idxOf(s.children);

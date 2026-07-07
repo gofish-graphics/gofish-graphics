@@ -9,9 +9,9 @@ of refs, and the line reads placed geometry off them.
 :::
 
 ```python
-from gofish import Layer, chart, scatter, blank, selectAll, line
+from gofish import layer, chart, scatter, blank, selectAll, line
 
-Layer([
+layer([
     chart(catch_locations)
         .flow(scatter(by="lake", x="x", y="y"))
         .mark(blank().name("points")),
@@ -44,7 +44,7 @@ A line needs points to connect. The idiomatic recipe:
    names the layer with `.name("points")`.
 2. A second chart selects that layer — `chart(selectAll("points"))` — and draws
    a `line()` through it.
-3. `Layer([...])` composes the two.
+3. `layer([...])` composes the two.
 
 This separation lets the same positioned points back both a line and, say,
 circles drawn on top.
@@ -61,7 +61,7 @@ chart(data).flow(
 ```
 
 See [`.connect()`](/python/api/core/connect) for the full semantics; the
-explicit `Layer([...])` + `selectAll` form connects _another_ chart's marks.
+explicit `layer([...])` + `selectAll` form connects _another_ chart's marks.
 
 ## Examples
 

@@ -5,7 +5,7 @@ Creates a `ChartBuilder`. This is the entry point for every GoFish chart.
 ::: gofish
 
 ```js
-gf.Chart(seafood, { axes: true })
+gf.chart(seafood, { axes: true })
   .flow(gf.spread({ by: "lake", dir: "x" }))
   .mark(gf.rect({ h: "count" }))
   .render(root, { w: 400, h: 250 });
@@ -17,7 +17,15 @@ gf.Chart(seafood, { axes: true })
 
 ```ts
 chart(data, options?)
+chart(options?) // empty scope — data inherited from context
 ```
+
+Calling `chart()` (or `chart(options)`) with **no data** creates an _empty
+scope_ that inherits its data from the enclosing context: the incoming partition
+when used directly as a [`.mark(...)`](/js/api/core/mark), or the previous tier's
+marks inside [`.layer(...)`](/js/api/core/layer). Chart data is always an array
+or a [`selectAll`](/js/api/selection/ref) reference, so a lone options object is
+never mistaken for data.
 
 ## Parameters
 
@@ -57,6 +65,38 @@ to show the axis with no title. Manual `axis: true/false` overrides on individua
 operators within the chart are still respected when `axes: true`. See
 [render › Axes](/js/api/core/render#axes) for live examples.
 
+## Equal scale from a shared measure
+
+By default each axis resolves its data→pixel scale independently — `x` against
+the width, `y` against the height — so a circle in data space becomes an ellipse.
+That is correct when the axes are different quantities. But when **x and y are
+the same unit of measure**, "1 unit on x" and "1 unit on y" are the _same_
+quantity, so their scales must be equal — a circle stays circular, a 45° line
+looks 45°. The way maps, geometric data, and correlation plots need.
+
+GoFish does this from the **measure**, not a knob: tag both channels with the
+same measure via `field(name, measure)` (or `datum(value, measure)`) and the
+shared scale follows.
+
+```ts
+chart(data)
+  .flow(scatter({ x: field("x", "plane"), y: field("y", "plane") }))
+  .mark(circle({ r: 4 }))
+  .render(container, { w: 640, h: 380 }); // a true circle, not an ellipse
+```
+
+This is the same rule the `circle` mark already obeys one level down:
+`circle({ r })` lowers to a `w` and `h` driven by one value, which share a
+measure and therefore one scale factor — so a circle can never distort into an
+ellipse. Equal scale at the chart level is exactly that, lifted to x and y.
+
+The binding (more constrained) axis fills its dimension; the other is centered in
+the leftover space. It applies to axes that carry a data-driven scale (a position
+scale over a data domain, or a data-driven size); an axis with nothing to scale
+(a category axis) leaves it a no-op. Tagging the two axes the same is a unit
+claim — `bill_length` and `bill_depth` (both mm, but _different_ measures) stay
+independent, while `predicted` vs `actual` (both `"price"`) share a scale.
+
 ## Example
 
 ```ts
@@ -77,7 +117,7 @@ chartBuilder.zOrder(value: number): ChartBuilder
 Children with the same z-order keep their original array order. The default z-order is `0`.
 
 ```ts
-Layer([
+layer([
   chart(data)
     .flow(scatter({ by: "x", y: "y" }))
     .mark(line())

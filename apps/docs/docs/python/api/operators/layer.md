@@ -52,8 +52,8 @@ layer([
 ])
 ```
 
-`.z_order()` is available on every `Mark`. The capitalized
-[`Layer`](/python/api/core/chart) (which overlays whole charts) exposes the
+`.z_order()` is available on every `Mark`. The chart-composing form of
+[`layer`](/python/api/core/chart) (which overlays whole charts) exposes the
 same control on a `ChartBuilder` as `.zOrder()`.
 
 ## Notes
@@ -61,8 +61,8 @@ same control on a `ChartBuilder` as `.zOrder()`.
 - This is the **low-level combinator-form** `layer`, which wraps an explicit list
   of marks and renders directly. To overlay whole charts — for example to draw
   one chart's marks on top of another and relate them with cross-chart
-  constraints — use the capitalized [`Layer([chart1, chart2])`](/python/api/core/chart)
-  builder, which composes `ChartBuilder` instances and accepts `.constrain(...)`.
+  constraints — use the chart-composing form [`layer([chart1, chart2])`](/python/api/core/chart),
+  which composes `ChartBuilder` instances and accepts `.constrain(...)`.
 - Naming a child (`rect(...).name("a")`) makes it addressable from a
   `.constrain(...)` callback and from a sibling
   [`connect`](/python/api/operators/connect) drawn over the same layer.

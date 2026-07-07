@@ -1,101 +1,86 @@
-import type { Anchor } from "../dims";
-import type { Placeable } from "../_node";
-import { isValue, MaybeValue } from "../data";
-import { computeAesthetic } from "../../util";
-import { placeAtAnchor } from "./align";
+// <gofish-wiki> AUTO-GENERATED — see covers: in the essay; run `pnpm --filter docs sync-backlinks`
+// @wiki Underlying Space — /internals/core/underlying-space
+// </gofish-wiki>
+
 import {
-  AlignAnchor,
-  Axis,
-  ConstraintPosScales,
-  ConstraintRef,
-  axisIndex,
-} from "./shared";
+  getValue,
+  isDiscretePosition,
+  isValue,
+  type MaybeValue,
+  type PositionValue,
+} from "../data";
+import * as Interval from "../../util/interval";
+import type { PlacementFactEmitter } from "./placementFacts";
+import type { AlignAnchor, Axis, ConstraintRef } from "./shared";
 
-/** The align-vocabulary anchor (`start`/`middle`/`end`/`baseline`) as the box
- *  anchor a node pins to (`min`/`center`/`max`/`baseline`). The same mapping
- *  `placeAtAnchor` applies for the write-once path. */
-const toBoxAnchor: Record<AlignAnchor, Anchor> = {
-  start: "min",
-  middle: "center",
-  end: "max",
-  baseline: "baseline",
-};
+/** The **interval** form of a position coordinate: pin the target's `start`
+ *  (min) edge at `[0]` and its `end` (max) edge at `[1]`, letting the two edges
+ *  DETERMINE the size (#39/#546). Both edges lower to ordinary strong anchor
+ *  pins, so the rank-2 cell closure resolves the size (`max − min`). Endpoints
+ *  are pixel literals or datums (`value(n)`), never discrete positions. */
+export type PositionInterval = [MaybeValue<number>, MaybeValue<number>];
 
-/**
- * Place `target` on `axis` so its `anchor` lands at pixel `px`. A `position`
- * constraint is an authoritative pin (one owner per target/axis).
- *
- * Default (`override` false) is exactly `placeAtAnchor` (the write-once
- * `place()`): unchanged behavior for axis / pie / legend pins, including their
- * already-placed targets (a 2nd write is a no-op).
- *
- * With `override` (set by `scatter`, whose `x`/`y` ARE the placement): an
- * already-placed target — one that self-placed during its OWN layout (e.g. a
- * Frame / coord glyph arrives with a translate) — would be stranded by
- * `place()`'s no-op. The pin must win, so OVERRIDE via `pinAnchor`, which lands
- * the anchor at `px` and REBUILDS the ledger (start→min, middle→center,
- * end→max, baseline→origin) — every override goes through the ledger, including
- * `baseline`, so no reader sees a stale self-placement.
- */
-function placePinned(
-  target: Placeable,
-  axis: Axis,
-  px: number,
-  anchor: AlignAnchor,
-  override: boolean
-): void {
-  // Is the target already placed on this axis? Stage 3 (#39): detect it via the
-  // ledger-backed `dims.min`, not the raw `transform.translate` — a node placed
-  // by a pin or self-placing operator now records the ledger and clears the
-  // written translate, so reading translate would miss it.
-  if (!override || target.dims?.[axisIndex(axis)]?.min === undefined) {
-    placeAtAnchor(target, axis, px, anchor);
-    return;
-  }
-  // Authoritative override of a self-placed target: one ledger-recording pin for
-  // every anchor (origin/min/center/max). A single owned facet ⇒ rank-1 pin —
-  // keep the local box, move the translate, rebuilding the ledger so the override
-  // wins over the self-placement.
-  target.pinAnchor!(axis, px, toBoxAnchor[anchor]);
-}
+/** Distinguish a position coordinate's interval form (a two-element array) from
+ *  its point form. Point coordinates (`number` / `Value` / `DiscretePosition`)
+ *  are never arrays, so this test is exact. */
+export const isPositionInterval = (
+  coord: PositionValue | PositionInterval | undefined
+): coord is PositionInterval => Array.isArray(coord);
 
 /**
  * Options for a `position` constraint. Mirrors how you position a shape (or use
- * the `position` operator): give an `x` and/or `y` that is either a **literal**
- * pixel coordinate or a **datum** (`datum(n)` / `value(n)`). A literal is placed
- * as-is; a datum is mapped through the layer's position scale — which the layer
- * derives from the datum coordinates of its `position` constraints (their union
- * is the layer's POSITION domain on that axis). At least one of `x`/`y` is
- * required.
+ * the `position` operator): give an `x` and/or `y` that is either
+ *   - a **point**: a **literal** pixel coordinate or a **datum**
+ *     (`datum(n)` / `value(n)`); a literal is placed as-is, a datum maps
+ *     through the layer's position scale; OR
+ *   - an **interval** `[min, max]`: two edges that pin the target and DETERMINE
+ *     its size (the size-setting range form; each endpoint is a pixel literal
+ *     or a datum, never a discrete position).
+ * The layer derives its POSITION domain from the datum coordinates of its
+ * `position` constraints (point values plus interval endpoints). At least one
+ * of `x`/`y` is required.
  */
 export interface PositionOptions {
-  x?: MaybeValue<number>;
-  y?: MaybeValue<number>;
+  x?: PositionValue | PositionInterval;
+  y?: PositionValue | PositionInterval;
   /** Which anchor of the target lands on the coordinate. Defaults to "middle"
    *  (the target's center sits on the value), matching how `scatter`/`position`
-   *  place marks at their center. `"baseline"` pins the target's origin. */
+   *  place marks at their center. `"baseline"` pins the target's origin.
+   *  Point form only — an interval coordinate pins both edges itself. */
   anchor?: AlignAnchor;
   /** Authoritative pin: also reposition a target that ALREADY self-placed during
    *  its own layout (a Frame / coord glyph arrives with a translate, which makes
    *  the write-once `place()` a no-op). Set by `scatter`, whose `x`/`y` ARE the
    *  child's placement. Off (default) for axis/pie/legend pins, where a
-   *  pre-placed target keeps its position (the write-once no-op).
+   *  pre-placed target keeps its position (the write-once no-op). Point form
+   *  only — an interval coordinate already sets the target's extent.
    *
    *  Interim: once #39's linsys ledger ({@link BBox}) becomes the node's actual
    *  dimension state, per-equation ownership subsumes this — a pin would simply
-   *  own the position facet, and a second writer would be a named conflict
+   *  own the position anchor, and a second writer would be a named conflict
    *  rather than a silent no-op needing a per-call opt-out. */
   override?: boolean;
 }
 
 export interface PositionConstraint {
   type: "position";
-  x?: MaybeValue<number>;
-  y?: MaybeValue<number>;
+  x?: PositionValue | PositionInterval;
+  y?: PositionValue | PositionInterval;
   anchor: AlignAnchor;
   override: boolean;
   children: ConstraintRef[];
 }
+
+const validateInterval = (axis: Axis, interval: PositionInterval): void => {
+  for (const endpoint of interval) {
+    if (isDiscretePosition(endpoint)) {
+      throw new Error(
+        `Constraint.position: interval \`${axis}\` endpoints must be pixel ` +
+          `literals or datums, not discrete positions`
+      );
+    }
+  }
+};
 
 export const createPositionConstraint = (
   { x, y, anchor, override }: PositionOptions,
@@ -104,6 +89,17 @@ export const createPositionConstraint = (
   if (x === undefined && y === undefined) {
     throw new Error(
       "Constraint.position: at least one of `x` or `y` must be specified"
+    );
+  }
+  if (isPositionInterval(x)) validateInterval("x", x);
+  if (isPositionInterval(y)) validateInterval("y", y);
+  // `override` is a point-form no-op-escape: it repositions a self-placed
+  // target. An interval already sets the target's extent, so the combination is
+  // meaningless — reject it rather than silently ignore.
+  if ((override ?? false) && (isPositionInterval(x) || isPositionInterval(y))) {
+    throw new Error(
+      "Constraint.position: `override` applies to point coordinates only, " +
+        "not interval `[min, max]` coordinates"
     );
   }
   return {
@@ -116,53 +112,82 @@ export const createPositionConstraint = (
   };
 };
 
-/** One emitted position equation: the target's `anchor` lands at `value` px on
- *  `axis`. */
-export interface PositionPlacement {
-  target: Placeable;
-  axis: Axis;
-  anchor: AlignAnchor;
-  value: number;
+/** Each endpoint contributes its datum value to the axis's POSITION domain
+ *  (parallel to point coordinates in `collectPositionDomains`), so the layer
+ *  builds a posScale that covers the spanned range. Literal-pixel endpoints are
+ *  not data and don't contribute. */
+export function spanDatumInterval(
+  span: PositionInterval | undefined
+): Interval.Interval | undefined {
+  if (span === undefined) return undefined;
+  const vals = span.filter(isValue).map((v) => getValue(v)!);
+  if (vals.length === 0) return undefined;
+  return Interval.interval(Math.min(...vals), Math.max(...vals));
 }
 
-/**
- * EMIT a `position` constraint as facet-placement equations (#39 facet-equation-
- * emitter form) WITHOUT applying them: for each specified axis, every target's
- * `anchor` lands at the resolved pixel — a literal as-is, a datum mapped through
- * that axis's `posScale`. A datum on a scale-less axis is a no-op (skipped).
- * Pure: it only resolves the coordinate, no placement state read.
- */
-export function emitPosition(
+export function lowerPositionPlacement(
   constraint: PositionConstraint,
-  targets: Placeable[],
-  posScales: ConstraintPosScales | undefined
-): PositionPlacement[] {
-  const out: PositionPlacement[] = [];
-  const emitAxis = (axis: Axis, coord: MaybeValue<number> | undefined) => {
-    if (coord === undefined) return;
-    const scale = posScales?.[axisIndex(axis)];
-    // A datum on an axis with no scale is a no-op; a literal needs no scale.
-    if (isValue(coord) && scale === undefined) return;
-    const px = computeAesthetic(coord, scale!, undefined)!;
-    for (const target of targets)
-      out.push({ target, axis, anchor: constraint.anchor, value: px });
-  };
-  emitAxis("x", constraint.x);
-  emitAxis("y", constraint.y);
-  return out;
-}
-
-/**
- * Commit the emitted position equations: pin each target's anchor at its pixel.
- * `placePinned` carries the authoritative-`override` detail (scatter
- * repositioning a self-placed target). The emit/commit seam is where a per-scope
- * solver slots in (consume {@link emitPosition} instead of pinning here).
- */
-export function applyPosition(
-  constraint: PositionConstraint,
-  targets: Placeable[],
-  posScales: ConstraintPosScales | undefined
+  owner: string,
+  {
+    emitter,
+    targets,
+    isInitiallyPlaced,
+    resolveCoordinate,
+  }: {
+    emitter: PlacementFactEmitter;
+    targets: Map<string, unknown>;
+    isInitiallyPlaced: (axis: Axis, name: string) => boolean;
+    resolveCoordinate: (
+      axis: Axis,
+      coordinate: PositionValue
+    ) => number | undefined;
+  }
 ): void {
-  for (const p of emitPosition(constraint, targets, posScales))
-    placePinned(p.target, p.axis, p.value, p.anchor, constraint.override);
+  const emit = (
+    axis: Axis,
+    coordinate: PositionValue | PositionInterval | undefined
+  ) => {
+    if (coordinate === undefined) return;
+    // Interval form: pin BOTH edges (start=min, end=max) as strong anchor pins.
+    // Two edges are rank 2, so cell closure determines the size — the extent
+    // that a size-setting range needs, which a single point pin cannot express.
+    // Not gated by `isInitiallyPlaced`: an interval authoritatively sets the
+    // target's extent (as `setExtent` does), overriding a self-placed layout.
+    if (isPositionInterval(coordinate)) {
+      const min = resolveCoordinate(axis, coordinate[0]);
+      const max = resolveCoordinate(axis, coordinate[1]);
+      if (min === undefined || max === undefined) return;
+      for (const child of constraint.children) {
+        if (!targets.get(child.name)) continue;
+        emitter.pin({
+          axis,
+          target: { name: child.name, anchor: "start" },
+          value: min,
+          owner,
+        });
+        emitter.pin({
+          axis,
+          target: { name: child.name, anchor: "end" },
+          value: max,
+          owner,
+        });
+      }
+      return;
+    }
+    const value = resolveCoordinate(axis, coordinate);
+    if (value === undefined) return;
+    for (const child of constraint.children) {
+      const target = targets.get(child.name);
+      if (!target) continue;
+      if (isInitiallyPlaced(axis, child.name) && !constraint.override) continue;
+      emitter.pin({
+        axis,
+        target: { name: child.name, anchor: constraint.anchor },
+        value,
+        owner,
+      });
+    }
+  };
+  emit("x", constraint.x);
+  emit("y", constraint.y);
 }

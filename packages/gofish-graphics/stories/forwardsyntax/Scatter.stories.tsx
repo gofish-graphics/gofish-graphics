@@ -1,11 +1,14 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
-import { catchLocationsArray, seafood, catchLocations } from "../../src/data/catch";
+import {
+  catchLocationsArray,
+  catchDataWithLocations,
+  seafood,
+} from "../../src/data/catch";
 import { drivingShifts } from "../../src/data/drivingShifts";
-import { Chart, line, rect, stack } from "../../src/lib";
+import { chart, line, rect, stack, join } from "../../src/lib";
 import { circle, scatter } from "../../src/lib";
 import { clock } from "../../src/ast/coordinateTransforms/clock";
-import _ from "lodash";
 
 const meta: Meta = {
   title: "Forward Syntax V3/Scatter",
@@ -27,7 +30,7 @@ export const Basic: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    Chart(catchLocationsArray, { axes: true })
+    chart(catchLocationsArray, { axes: true })
       .flow(scatter({ by: "lake",  x: "x", y: "y" }))
       .mark(circle({ r: 5 }))
       .render(container, {
@@ -52,7 +55,7 @@ export const Connected: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    Chart(drivingShifts, { axes: true })
+    chart(drivingShifts, { axes: true })
       .flow(scatter({ by: "year", x: "miles", y: "gas" }))
       .mark(circle({ r: 4, fill: "white", stroke: "black", strokeWidth: 2 }))
       .connect(line({ stroke: "black", strokeWidth: 2 }))
@@ -78,24 +81,41 @@ export const WithPieGlyphs: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    const scatterData = _(seafood)
-      .groupBy("lake")
-      .map((lakeData, lake) => ({
-        lake,
-        x: catchLocations[lake as keyof typeof catchLocations].x,
-        y: catchLocations[lake as keyof typeof catchLocations].y,
-        collection: lakeData.map((item) => ({
-          species: item.species,
-          count: item.count,
-        })),
-      }))
-      .value();
-
-    Chart(scatterData, { axes: true })
+    chart(catchLocationsArray, { axes: true })
       .flow(scatter({ by: "lake",  x: "x", y: "y" }))
-      .mark((data) =>
-        Chart(data[0].collection, { coord: clock() })
-          .flow(stack({ by: "species",  dir: "x", /* h: "count" */ h: 20 }))
+      // The glyph chart leaves off its data: as a nested mark it inherits its
+      // parent partition (the lake's row), joins in that lake's catch rows, and
+      // draws them as a polar pie — no `(data) => chart(data, ...)` callback.
+      .mark(
+        chart({ coord: clock() })
+          .flow(
+            join(seafood, { on: "lake" }),
+            stack({ by: "species",  dir: "x", /* h: "count" */ h: 20 })
+          )
+          .mark(rect({ w: "count", fill: "species" }))
+      )
+      .render(container, {
+        w: args.w,
+        h: args.h,
+      });
+
+    return container;
+  },
+};
+
+// Same pie-glyph chart from a single *denormalized* table: `catchDataWithLocations`
+// stamps each lake's x/y onto every catch row, so the scatter partition already
+// carries each glyph's rows — the nested chart inherits them directly, no join.
+export const WithPieGlyphsDenormalized: StoryObj<Args> = {
+  args: { w: 400, h: 400 },
+  render: (args: Args) => {
+    const container = initializeContainer();
+
+    chart(catchDataWithLocations, { axes: true })
+      .flow(scatter({ by: "lake", x: "x", y: "y" }))
+      .mark(
+        chart({ coord: clock() })
+          .flow(stack({ by: "species", dir: "x", h: 20 }))
           .mark(rect({ w: "count", fill: "species" }))
       )
       .render(container, {

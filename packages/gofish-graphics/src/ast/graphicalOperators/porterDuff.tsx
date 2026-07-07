@@ -1,8 +1,9 @@
-import type { JSX } from "solid-js";
+import type { DisplayList } from "gofish-ir";
 import { GoFishAST } from "../_ast";
 import { GoFishNode } from "../_node";
-import type { Placeable } from "../_node";
-import { Size, translateString } from "../dims";
+import type { Placeable, ToPixel } from "../_node";
+import { Size, displayTranslate } from "../dims";
+import { pixelBox } from "../displayList/lowerHelpers";
 import { UnderlyingSpace } from "../underlyingSpace";
 import { createNodeOperator } from "../withGoFish";
 import { unionChildSpaces } from "./alignment";
@@ -24,89 +25,6 @@ const maxChildBounds = (children: Placeable[]) => {
   const minY = Math.min(...children.map((child) => child.dims[1].min ?? 0));
   const maxY = Math.max(...children.map((child) => child.dims[1].max ?? 0));
   return { minX, maxX, minY, maxY };
-};
-
-const renderComposite = (
-  node: GoFishNode,
-  children: JSX.Element[],
-  intrinsicDims: GoFishNode["intrinsicDims"],
-  operator: CompositeOperator,
-  blendMode: BlendMode
-) => {
-  const uid = `pd-${node.uid}`;
-  const sourceId = `${uid}-source`;
-  const destinationId = `${uid}-destination`;
-  const filterId = `${uid}-filter`;
-
-  const minX = intrinsicDims?.[0]?.min ?? 0;
-  const minY = intrinsicDims?.[1]?.min ?? 0;
-  const width = intrinsicDims?.[0]?.size ?? 0;
-  const height = intrinsicDims?.[1]?.size ?? 0;
-
-  const tail =
-    operator === "in" ? (
-      <>
-        <feBlend
-          in="compositeResult"
-          in2="graySource"
-          mode={blendMode as "multiply" | "screen"}
-          result="blendedIntersect"
-        />
-        <feComposite
-          in="blendedIntersect"
-          in2="compositeResult"
-          operator="in"
-        />
-      </>
-    ) : operator === "over" || operator === "atop" ? (
-      <feBlend
-        in="compositeResult"
-        in2="graySource"
-        mode={blendMode as "multiply" | "screen"}
-      />
-    ) : null;
-
-  return (
-    <>
-      <defs>
-        <g id={sourceId}>{children[0]}</g>
-        <g id={destinationId}>{children[1]}</g>
-        <filter
-          id={filterId}
-          x={minX}
-          y={minY}
-          width={width}
-          height={height}
-          filterUnits="userSpaceOnUse"
-          color-interpolation-filters="sRGB"
-        >
-          <feImage href={`#${sourceId}`} result="sourceImage" />
-          <feColorMatrix
-            in="sourceImage"
-            type="saturate"
-            values="0"
-            result="graySource"
-          />
-          <feImage href={`#${destinationId}`} result="destination" />
-          <feComposite
-            in="destination"
-            in2="graySource"
-            operator={operator}
-            result="compositeResult"
-          />
-          {tail}
-        </filter>
-      </defs>
-      <rect
-        x={minX}
-        y={minY}
-        width={width}
-        height={height}
-        fill="transparent"
-        filter={`url(#${filterId})`}
-      />
-    </>
-  );
 };
 
 const createCompositeRelation = (type: string, operator: CompositeOperator) =>
@@ -134,18 +52,11 @@ const createCompositeRelation = (type: string, operator: CompositeOperator) =>
             children: Size<UnderlyingSpace>[],
             _childNodes: GoFishAST[]
           ) => [unionChildSpaces(children, 0), unionChildSpaces(children, 1)],
-          layout: (
-            _shared,
-            size,
-            scaleFactors,
-            layoutChildren,
-            posScales,
-            _node
-          ) => {
+          layout: (_shared, size, scales, layoutChildren) => {
             requireTwoChildren(layoutChildren);
 
             const childPlaceables = layoutChildren.map((child) =>
-              child.layout(size, scaleFactors, posScales)
+              child.layout(size, scales)
             );
             childPlaceables.forEach((child) => {
               child.place("x", 0, "baseline");
@@ -178,19 +89,67 @@ const createCompositeRelation = (type: string, operator: CompositeOperator) =>
               transform: { translate: [undefined, undefined] },
             };
           },
-          render: ({ intrinsicDims, transform }, renderedChildren, node) => {
-            requireTwoChildren(renderedChildren);
-            return (
-              <g transform={translateString(transform)}>
-                {renderComposite(
-                  node,
-                  renderedChildren,
-                  intrinsicDims,
-                  operator,
-                  blendMode
-                )}
-              </g>
+          // IR lowering — mirror of `render`. A composite is a bake boundary,
+          // so its children are NOT pre-lowered: we re-walk the two subtrees
+          // ourselves, offset by the node's baked translate (the legacy
+          // `<g transform>`), and emit one CompositeItem. source = first child
+          // (`#…-source`), dest = second (`#…-destination`), matching
+          // `renderComposite`'s feImage wiring.
+          lower: (
+            { intrinsicDims, transform, coordinateTransform },
+            _children,
+            node
+          ): DisplayList.DisplayItem[] => {
+            const [tx, ty] = displayTranslate(transform);
+            const session = node.getRenderSession();
+            const outer = session.toPixel!;
+
+            const minX = intrinsicDims?.[0]?.min ?? 0;
+            const minY = intrinsicDims?.[1]?.min ?? 0;
+            const width = intrinsicDims?.[0]?.size ?? 0;
+            const height = intrinsicDims?.[1]?.size ?? 0;
+            // Pixel bbox top-left, flip-AGNOSTIC (see `pixelBox`): under the
+            // y-up flip the top edge is `gyMax`, in y-down free space it is
+            // `gyMin` — the component-wise min picks the right one (issue #143/#16).
+            const { x: bx, y: by } = pixelBox(
+              [tx + minX, ty + minY],
+              [tx + minX + width, ty + minY + height],
+              outer
             );
+
+            // The two layers are lowered RELATIVE to the bbox pixel origin, not
+            // at absolute pixels. The SVG backend places each layer in a
+            // `<feImage>` whose subregion is the filter region (the bbox), and
+            // browsers offset a referenced `<feImage>` element BY that region
+            // origin — so an absolute-positioned child would double-count it.
+            // Legacy `renderComposite` sidestepped this by keeping children in
+            // the compositor's local frame (min ≈ 0) with the filter at that
+            // same min; we reproduce that by subtracting the bbox origin.
+            const composed: ToPixel = ([cx, cy]) => {
+              const [ax, ay] = outer([tx + cx, ty + cy]);
+              return [ax - bx, ay - by];
+            };
+
+            session.toPixel = composed;
+            let source: DisplayList.DisplayItem[];
+            let dest: DisplayList.DisplayItem[];
+            try {
+              source = node.children[0].INTERNAL_lower(coordinateTransform);
+              dest = node.children[1].INTERNAL_lower(coordinateTransform);
+            } finally {
+              session.toPixel = outer;
+            }
+
+            return [
+              {
+                kind: "composite",
+                operator,
+                blendMode,
+                bbox: { x: bx, y: by, w: width, h: height },
+                source,
+                dest,
+              },
+            ];
           },
         },
         children
@@ -265,18 +224,11 @@ export const mask = createNodeOperator(
           children: Size<UnderlyingSpace>[],
           _childNodes: GoFishAST[]
         ) => [unionChildSpaces(children, 0), unionChildSpaces(children, 1)],
-        layout: (
-          _shared,
-          size,
-          scaleFactors,
-          layoutChildren,
-          posScales,
-          _node
-        ) => {
+        layout: (_shared, size, scales, layoutChildren) => {
           requireTwoChildren(layoutChildren);
 
           const childPlaceables = layoutChildren.map((child) =>
-            child.layout(size, scaleFactors, posScales)
+            child.layout(size, scales)
           );
           childPlaceables.forEach((child) => {
             child.place("x", 0, "baseline");
@@ -308,30 +260,50 @@ export const mask = createNodeOperator(
             transform: { translate: [undefined, undefined] },
           };
         },
-        render: ({ transform }, renderedChildren, node) => {
-          requireTwoChildren(renderedChildren);
+        // IR lowering — mirror of `render`. A mask is a bake boundary, so we
+        // re-walk both subtrees offset by the node's baked translate (the
+        // legacy `<g transform>`) and emit one MaskItem. mask = first child
+        // (the clip region, `#…-source`), content = second child
+        // (`#…-destination`), matching the render's mask/use wiring.
+        lower: (
+          { intrinsicDims, transform, coordinateTransform },
+          _children,
+          node
+        ): DisplayList.DisplayItem[] => {
+          const [tx, ty] = displayTranslate(transform);
+          const session = node.getRenderSession();
+          const outer = session.toPixel!;
+          const composed: ToPixel = ([cx, cy]) => outer([tx + cx, ty + cy]);
 
-          const uid = `pd-mask-${node.uid}`;
-          const sourceId = `${uid}-source`;
-          const destinationId = `${uid}-destination`;
-          const maskId = `${uid}-mask`;
+          session.toPixel = composed;
+          let maskItems: DisplayList.DisplayItem[];
+          let content: DisplayList.DisplayItem[];
+          try {
+            maskItems = node.children[0].INTERNAL_lower(coordinateTransform);
+            content = node.children[1].INTERNAL_lower(coordinateTransform);
+          } finally {
+            session.toPixel = outer;
+          }
 
-          return (
-            <g transform={translateString(transform)}>
-              <defs>
-                <g id={sourceId}>{renderedChildren[0]}</g>
-                <g id={destinationId}>{renderedChildren[1]}</g>
-                <mask
-                  id={maskId}
-                  maskUnits="userSpaceOnUse"
-                  maskContentUnits="userSpaceOnUse"
-                >
-                  <use href={`#${sourceId}`} />
-                </mask>
-              </defs>
-              <use href={`#${destinationId}`} mask={`url(#${maskId})`} />
-            </g>
+          const minX = intrinsicDims?.[0]?.min ?? 0;
+          const minY = intrinsicDims?.[1]?.min ?? 0;
+          const width = intrinsicDims?.[0]?.size ?? 0;
+          const height = intrinsicDims?.[1]?.size ?? 0;
+          // Flip-agnostic bbox top-left — see `pixelBox` / the compositor (#143/#16).
+          const { x: bx, y: by } = pixelBox(
+            [tx + minX, ty + minY],
+            [tx + minX + width, ty + minY + height],
+            outer
           );
+
+          return [
+            {
+              kind: "mask",
+              bbox: { x: bx, y: by, w: width, h: height },
+              mask: maskItems,
+              content,
+            },
+          ];
         },
       },
       children

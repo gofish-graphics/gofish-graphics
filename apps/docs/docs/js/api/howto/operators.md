@@ -43,7 +43,7 @@ const segments = [
   { category: "C", value: 20 },
 ];
 
-gf.Chart(segments)
+gf.chart(segments)
   .flow(gf.spread({ by: "category", dir: "y", spacing: 1 }))
   .mark(gf.rect({ h: "value", fill: "category" }))
   .render(root, { w: 100, h: 200, axes: true });
@@ -64,7 +64,7 @@ const segments = [
   { category: "C", value: 20 },
 ];
 
-gf.Chart(segments)
+gf.chart(segments)
   .flow(gf.stack({ by: "category", dir: "y" }))
   .mark(gf.rect({ h: "value", fill: "category" }))
   .render(root, { w: 100, h: 200, axes: true });

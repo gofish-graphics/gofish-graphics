@@ -69,7 +69,7 @@ export const testSankeyIcicle = () =>
   frame([
     spread({ dir: "x", spacing: layerSpacing, alignment: "middle" }, [
       stackY(
-        { reverse: true, alignment: "middle" },
+        { alignment: "middle" },
         _(titanic)
           .groupBy("class")
           .map((items, cls) =>
@@ -83,7 +83,7 @@ export const testSankeyIcicle = () =>
           .value()
       ),
       spreadY(
-        { reverse: true, spacing: internalSpacing, alignment: "middle" },
+        { spacing: internalSpacing, alignment: "middle" },
         _(titanic)
           .groupBy("class")
           .map((items, cls) =>
@@ -92,7 +92,6 @@ export const testSankeyIcicle = () =>
                 stackY(
                   {
                     name: `${cls}-tgt`,
-                    reverse: true,
                     alignment: "middle",
                   },
                   _(items)
@@ -110,7 +109,6 @@ export const testSankeyIcicle = () =>
                 spreadY(
                   {
                     h: _(items).sumBy("count") / 10,
-                    reverse: true,
                     spacing: internalSpacing * 2,
                     alignment: "middle",
                   },
@@ -125,7 +123,6 @@ export const testSankeyIcicle = () =>
                           stackY(
                             {
                               name: `${cls}-${sex}-tgt`,
-                              reverse: true,
                               alignment: "middle",
                             },
                             _(items)
@@ -156,7 +153,6 @@ export const testSankeyIcicle = () =>
                           spreadY(
                             {
                               w: 40,
-                              reverse: true,
                               spacing: internalSpacing * 4,
                               alignment: "middle",
                             },

@@ -1,4 +1,5 @@
 import { sumBy, v, Connect } from "../../lib";
+import chunk from "lodash/chunk";
 import { GoFishNode } from "../_node";
 import type { Value } from "../data";
 import { GoFishRef } from "../_ref";
@@ -19,8 +20,10 @@ import {
   createModifier,
   nameModifier,
   labelModifier,
+  zOrderModifier,
   LayerContext,
 } from "./createOperator";
+import type { ZOrderValue } from "./createOperator";
 import { layer as Layer } from "../graphicalOperators/layer";
 import {
   // `over` stays internal (not re-exported from lib) — it backs the
@@ -38,9 +41,15 @@ export type { Mark, Operator };
 export { generatedRect as rect };
 export type { LayerContext };
 
-import { ChartBuilder, chart } from "./chartBuilder";
+import {
+  ChartBuilder,
+  LayerBuilder,
+  chart,
+  resolveRefData,
+} from "./chartBuilder";
 import type { ChartOptions } from "./chartBuilder";
-export { ChartBuilder, chart };
+import { projectPath } from "../datumProjection";
+export { ChartBuilder, LayerBuilder, chart };
 export type { ChartOptions };
 
 /* Data Transformation Operators */
@@ -70,7 +79,7 @@ export const repeat = <T, K extends keyof T>(
   return Array.from({ length: d[field] as unknown as number }, () => d);
 };
 
-export { chunk } from "lodash";
+export { chunk };
 
 export const normalize = <T, K extends keyof T>(
   data: T[],
@@ -101,6 +110,128 @@ export function log<T>(label?: string): Operator<T, T> {
   (op as any).__serialize = {
     type: "log",
     opts: label !== undefined ? { label } : {},
+  };
+  return op;
+}
+
+/**
+ * Resolve reference columns into the drawn nodes they name. For each row,
+ * each listed column's value is matched against the keyed nodes of `from`
+ * (a `selectAll(...)` of a prior layer) and replaced *in place* with the
+ * matching ref — a many-to-one dereference (no fan-out, grain preserved).
+ * The match key defaults to the field the `from` nodes were grouped by
+ * (`scatter({ by: "id" })` ⇒ match on `id`); pass `key` to override, e.g.
+ * when the producer used a function `by` (no field name to infer).
+ *
+ * Drives node-link / labeling: `.layer(edges).flow(resolve(["source",
+ * "target"], { from: selectAll("nodes") })).mark(line({ from, to }))`.
+ */
+export function resolve(
+  cols: string[],
+  opts: { from: GoFishRef; key?: string }
+): Operator<any[], any[]> {
+  const op: Operator<any[], any[]> = async (mark: Mark<any[]>) => {
+    return (async (
+      rows: any[],
+      key?: string | number,
+      layerContext?: LayerContext
+    ) => {
+      const resolved = resolveRefData(opts.from, layerContext ?? {});
+      const refs = Array.isArray(resolved) ? resolved : [resolved];
+      const matchField = (r: GoFishRef): string => {
+        const field = opts.key ?? (r.targetNode as any)?.__splitBy;
+        if (typeof field !== "string") {
+          throw new Error(
+            `resolve: cannot infer the match key for from=${JSON.stringify(
+              opts.from.selection
+            )} — its nodes were not grouped by a named field (a function \`by\`?). ` +
+              `Pass an explicit { key: "<field>" }.`
+          );
+        }
+        return field;
+      };
+      const byKey = new Map<unknown, GoFishRef>();
+      for (const r of refs) byKey.set(projectPath(r.datum, matchField(r)), r);
+
+      const out = rows.map((row) => {
+        const next: Record<string, any> = { ...row };
+        for (const c of cols) {
+          const matched = byKey.get(row[c]);
+          if (matched === undefined) {
+            throw new Error(
+              `resolve: no node in ${JSON.stringify(
+                opts.from.selection
+              )} matches ${JSON.stringify(row[c])} for column "${c}".`
+            );
+          }
+          next[c] = matched;
+        }
+        return next;
+      });
+      return mark(out, key, layerContext);
+    }) as Mark<any[]>;
+  };
+  (op as any).__serialize = {
+    type: "resolve",
+    opts: {
+      cols,
+      // `from` is a selectAll(layerName); serialize the layer name it selects.
+      ...(typeof opts.from.selection === "string"
+        ? { from: opts.from.selection }
+        : {}),
+      ...(opts.key !== undefined ? { key: opts.key } : {}),
+    },
+  };
+  return op;
+}
+
+/**
+ * Equi-join the incoming rows against another data table on a shared key — a
+ * one-to-many left join (SQL `JOIN ... USING (on)`, pandas/polars
+ * `.merge(right, on=...)`, dplyr `left_join(right, by = on)`). For each
+ * incoming row, every `right` row whose `on` value matches contributes one
+ * output row of the merged columns `{ ...left, ...right }`; incoming rows with
+ * no match drop out (inner-join semantics on the match, fan-out on the right).
+ *
+ * Unlike `resolve` (which dereferences columns into *drawn nodes* of a prior
+ * layer), `join` relates two plain data tables, so the `right` table is
+ * inlined into the IR and round-trips as JSON.
+ *
+ * Pairs with a nested chart that inherits its parent's partition: e.g. scatter
+ * lakes by location, then in each glyph
+ * `chart(data).flow(join(seafood, { on: "lake" }), stack(...))` pulls in that
+ * lake's catch rows.
+ */
+export function join<
+  L extends Record<string, any>,
+  R extends Record<string, any>,
+>(right: R[], opts: { on: string }): Operator<L[], (L & R)[]> {
+  const op: Operator<L[], (L & R)[]> = async (mark: Mark<(L & R)[]>) => {
+    return (async (
+      left: L[],
+      key?: string | number,
+      layerContext?: LayerContext
+    ) => {
+      const leftRows = Array.isArray(left) ? left : left == null ? [] : [left];
+      const rightByKey = new Map<unknown, R[]>();
+      for (const r of right) {
+        const k = r[opts.on];
+        const bucket = rightByKey.get(k);
+        if (bucket) bucket.push(r);
+        else rightByKey.set(k, [r]);
+      }
+      const joined: (L & R)[] = [];
+      for (const l of leftRows) {
+        for (const r of rightByKey.get(l[opts.on]) ?? []) {
+          joined.push({ ...l, ...r });
+        }
+      }
+      return mark(joined, key, layerContext);
+    }) as Mark<L[]>;
+  };
+  (op as any).__serialize = {
+    type: "join",
+    opts: { on: opts.on, right },
   };
   return op;
 }
@@ -178,13 +309,27 @@ export function selectAll(
   };
 }
 
-// line() mark connects data points using center-to-center mode
+// line() mark connects data points using center-to-center mode.
+// Two forms:
+//  - bag form: `line()` over a `GoFishRef[]` (e.g. `selectAll(...)`) — one
+//    polyline through all the refs.
+//  - pairwise form: `line({ from, to })` over rows whose `from`/`to` columns
+//    hold refs (after `resolve(...)`) — one segment per row (node-link edges).
 export function line(options?: {
   stroke?: string;
   strokeWidth?: number;
   opacity?: number;
   interpolation?: "linear" | "bezier";
-}): Mark<GoFishRef[]> {
+  from?: string;
+  to?: string;
+}): NameableMark<any> {
+  if (options?.from !== undefined && options?.to !== undefined) {
+    return pairwiseConnect("line", options, {
+      mode: "center",
+      strokeWidth: options.strokeWidth ?? 1,
+      interpolation: options.interpolation ?? "linear",
+    });
+  }
   const mark: Mark<GoFishRef[]> = async (
     d: GoFishRef[],
     _key?: string | number,
@@ -203,8 +348,71 @@ export function line(options?: {
       d
     );
   };
-  (mark as any).__serialize = { type: "line", opts: options ?? {} };
-  return mark;
+  const result = nameableMark(mark);
+  (result as any).__serialize = { type: "line", opts: options ?? {} };
+  return result;
+}
+
+// Shared pairwise (per-row) connector: each row carries two ref-valued columns
+// (`from`/`to`, populated by `resolve(...)`); emit one Connect per row and
+// stack them in a Layer. Backs the `{ from, to }` form of `line`/`area`.
+function pairwiseConnect(
+  irType: "line" | "area",
+  options: {
+    stroke?: string;
+    strokeWidth?: number;
+    opacity?: number;
+    interpolation?: "linear" | "bezier";
+    mixBlendMode?: "normal" | "multiply";
+    dir?: "x" | "y";
+    from?: string;
+    to?: string;
+  },
+  connectOpts: {
+    mode: "center" | "edge";
+    strokeWidth: number;
+    interpolation: "linear" | "bezier";
+  }
+): NameableMark<any> {
+  const from = options.from as string;
+  const to = options.to as string;
+  const mark: Mark<any[]> = async (
+    rows: any[],
+    _key?: string | number,
+    _layerContext?: LayerContext
+  ) => {
+    const segments = await Promise.all(
+      rows.map(async (row) => {
+        const a = row[from];
+        const b = row[to];
+        if (!(a instanceof GoFishRef) || !(b instanceof GoFishRef)) {
+          throw new Error(
+            `${irType}({ from: "${from}", to: "${to}" }): columns "${from}"/"${to}" ` +
+              `must hold node refs — run resolve(["${from}", "${to}"], ` +
+              `{ from: selectAll(...) }) in the flow first.`
+          );
+        }
+        const node = await Connect(
+          {
+            direction: options.dir ?? 0,
+            mode: connectOpts.mode,
+            stroke: options.stroke,
+            strokeWidth: connectOpts.strokeWidth,
+            opacity: options.opacity,
+            interpolation: connectOpts.interpolation,
+            mixBlendMode: options.mixBlendMode,
+          },
+          [a, b]
+        );
+        (node as any).datum = row;
+        return node;
+      })
+    );
+    return Layer({}, segments);
+  };
+  const result = nameableMark(mark);
+  (result as any).__serialize = { type: irType, opts: options };
+  return result;
 }
 
 // area() mark connects data points using edge-to-edge mode
@@ -215,7 +423,16 @@ export function area(options?: {
   mixBlendMode?: "normal" | "multiply";
   dir?: "x" | "y";
   interpolation?: "linear" | "bezier";
-}): Mark<GoFishRef[]> {
+  from?: string;
+  to?: string;
+}): NameableMark<any> {
+  if (options?.from !== undefined && options?.to !== undefined) {
+    return pairwiseConnect("area", options, {
+      mode: "edge",
+      strokeWidth: options.strokeWidth ?? 0,
+      interpolation: options.interpolation ?? "bezier",
+    });
+  }
   const mark: Mark<GoFishRef[]> = async (
     d: GoFishRef[],
     _key?: string | number,
@@ -235,8 +452,9 @@ export function area(options?: {
       d
     );
   };
-  (mark as any).__serialize = { type: "area", opts: options ?? {} };
-  return mark;
+  const result = nameableMark(mark);
+  (result as any).__serialize = { type: "area", opts: options ?? {} };
+  return result;
 }
 
 // blank() mark creates invisible guides for positioning
@@ -302,6 +520,7 @@ type PdOptions = { blendMode?: BlendMode };
 export type ConstrainableMark<T> = Mark<T> & {
   name(layerName: string | Token): ConstrainableMark<T>;
   label(accessor: LabelAccessor, options?: LabelOptions): ConstrainableMark<T>;
+  zOrder(value: ZOrderValue<T>): ConstrainableMark<T>;
   constrain(
     fn: (refs: Record<string, ConstraintRef>) => ConstraintSpec[]
   ): ConstrainableMark<T>;
@@ -329,7 +548,7 @@ const constrainModifier = createModifier<
   [fn: (refs: Record<string, ConstraintRef>) => ConstraintSpec[]]
 >({
   name: "constrain",
-  apply: (node, _layerContext, fn) => {
+  apply: (node, _layerContext, _datum, fn) => {
     node.constrain(fn);
   },
 });
@@ -339,6 +558,7 @@ function makeConstrainableMark<T>(base: Mark<T>): ConstrainableMark<T> {
     nameModifier,
     labelModifier,
     constrainModifier,
+    zOrderModifier,
   ]) as unknown as ConstrainableMark<T>;
 }
 
@@ -363,17 +583,31 @@ export function layer<T>(
 ): ConstrainableMark<T> {
   const opts = Array.isArray(marksOrOpts) ? {} : marksOrOpts;
   const marks = (Array.isArray(marksOrOpts) ? marksOrOpts : maybeMarks) ?? [];
-  const base: Mark<T> = async (d, key, layerContext) => {
-    // Share one layerContext across all children so that ref(name)/
-    // selectAll(name) in one child can find a sibling's .name(name)
-    // registration. Inherit from the caller when present (nested-layer case),
-    // else create a fresh context (top-level .render() case). Resolve
-    // sequentially so a child referencing a name sees registrations from
-    // earlier siblings.
-    const sharedContext = layerContext ?? {};
+  const base: Mark<T> = async (d, key, _layerContext) => {
+    // A layer establishes its OWN local name context: `.name(...)` registrations
+    // and the `ref(name)`/`selectAll(name)` that read them are scoped to *this*
+    // layer's children. We deliberately do NOT inherit the enclosing
+    // `_layerContext` — otherwise a layer nested inside an operator (e.g. one
+    // `layer([bars, area])` per `spread` cell) would share a single context
+    // across every cell, so each cell's `selectAll("bars")` would match every
+    // other cell's bars too (and reference siblings not yet laid out). Names are
+    // local to their layer, mirroring `LayerBuilder.resolve`. Resolve
+    // sequentially so a child referencing a name sees earlier siblings'
+    // registrations.
+    const sharedContext: LayerContext = {};
     const resolved: GoFishNode[] = [];
     for (const m of marks) {
-      const result = typeof m === "function" ? m(d, key, sharedContext) : m;
+      // A nested empty-scope `chart()` child inherits this layer's incoming
+      // partition datum (issue #243), exactly as `.mark(chart())` does — so
+      // `layer([chart().flow(...).mark(...), chart(selectAll(...)).mark(...)])`
+      // can be a mark without a `(d) => …` callback. A child with its own data
+      // (e.g. `chart(selectAll(...))`) is left untouched.
+      const child =
+        m instanceof ChartBuilder && m.usesPreviousLayerMarks()
+          ? m.withData(d)
+          : m;
+      const result =
+        typeof child === "function" ? child(d, key, sharedContext) : child;
       resolved.push(await resolveMarkResult(result, sharedContext));
     }
     const node = await Layer(opts, resolved);

@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
 import { seafood, catchLocations } from "../../src/data/catch";
 import {
-  Chart,
+  chart,
   scatter,
   spread,
   rect,
@@ -58,14 +58,14 @@ export const Default: StoryObj<Args> = {
     layer([
       // Stems: one thin green bar per lake, planted at the lake's x location,
       // height = total catch (one chart, so all stems share the height scale).
-      Chart(stemData)
+      chart(stemData)
         .flow(scatter({ by: "lake", x: "x" }))
         .mark(rect({ w: 4, h: "count", fill: color.green[5] }).name("stems")),
       // Flowers: each stem's label. `selectAll("stems")` yields one ref per
       // lake (its datum is that lake's species rows); stack a polar petal fan
       // on top of the stem.
-      Chart(selectAll("stems"))
-        .flow(group({ by: "datum.lake" }))
+      chart(selectAll("stems"))
+        .flow(group({ by: "lake" }))
         .mark(((d: any[]) =>
           spread({ dir: "y", alignment: "middle", spacing: -FLOWER_RADIUS }, [
             d[0],

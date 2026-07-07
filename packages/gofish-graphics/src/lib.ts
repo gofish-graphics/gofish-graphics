@@ -3,6 +3,11 @@
 // </gofish-wiki>
 
 // Main library exports
+import groupBy from "lodash/groupBy";
+import meanBy from "lodash/meanBy";
+import orderBy from "lodash/orderBy";
+import sumBy from "lodash/sumBy";
+
 export * from "./color";
 export * from "./path";
 export * from "./util";
@@ -29,7 +34,6 @@ export { linear } from "./ast/coordinateTransforms/linear";
 export { polar } from "./ast/coordinateTransforms/polar";
 export { clock } from "./ast/coordinateTransforms/clock";
 export { polar_DEPRECATED } from "./ast/coordinateTransforms/polar_DEPRECATED";
-export { polarTransposed } from "./ast/coordinateTransforms/polarTransposed";
 export { arcLengthPolar } from "./ast/coordinateTransforms/arcLengthPolar";
 export { bipolar } from "./ast/coordinateTransforms/bipolar";
 export { wavy } from "./ast/coordinateTransforms/wavy";
@@ -48,6 +52,9 @@ export {
 } from "./ast/gofish";
 export type { GoFishRenderOptions, GoFishExportOptions } from "./ast/gofish";
 
+// Display-list (render-IR) export
+export { toDisplayList } from "./ast/displayList/toDisplayList";
+
 // Name / scope primitives
 export { createName } from "./ast/createName";
 export type { Token } from "./ast/createName";
@@ -57,18 +64,21 @@ export { createMark } from "./ast/withGoFish";
 // Data
 export { For } from "./ast/iterators/for";
 // export { groupBy } from "./ast/iterators/groupBy";
-export { groupBy, sumBy, orderBy, meanBy } from "lodash";
+export { groupBy, sumBy, orderBy, meanBy };
 export { bin } from "./ast/transforms";
 
 // Shapes
 export { ref } from "./ast/shapes/ref";
 
 // Datum projection — `pluck(ref, "species")` returns the full set of distinct
-// values for a field across a selected node's rows ("every possible value"),
-// the un-collapsed sibling of the `by: "datum.field"` homogeneity collapse.
-// (`projectPath`/`splitKeyFn` stay module-internal — operators import them from
-// ./ast/datumProjection directly.)
-export { pluck } from "./ast/datumProjection";
+// values for a field across a selected node's rows ("every possible value");
+// `project(ref, "species")` is its collapsing sibling — the single value when
+// the rows agree on the field (the same homogeneity collapse `by: "field"`
+// performs), else `undefined`. Use `project` to read a field off the datum a
+// mark is bound to (e.g. in a `.zOrder(d => …)` callback) without indexing the
+// `pluck` multiset. (`splitKeyFn` stays module-internal — operators import it
+// from ./ast/datumProjection directly.)
+export { pluck, projectPath as project } from "./ast/datumProjection";
 
 // Constraints
 export { Constraint } from "./ast/constraints";
@@ -133,8 +143,10 @@ export { image } from "./ast/shapes/image";
 
 /* Chart Syntax */
 export {
-  chart as Chart,
+  chart,
   derive,
+  resolve,
+  join,
   rect,
   circle,
   selectAll,

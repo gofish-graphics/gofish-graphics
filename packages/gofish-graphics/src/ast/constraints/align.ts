@@ -3,16 +3,16 @@
 // </gofish-wiki>
 
 import type { Placeable } from "../_node";
-import {
+import type {
   AlignAnchor,
   Axis,
-  ConstraintRef,
   ConstraintPosScales,
-  axisIndex,
-  isPlacedOn,
+  ConstraintRef,
 } from "./shared";
+import { axisIndex } from "./shared";
 import type { UnderlyingSpace } from "../underlyingSpace";
 import { resolveAlignmentSpace } from "../graphicalOperators/alignment";
+import type { PlacementFactEmitter } from "./placementFacts";
 
 /**
  * PROTOTYPE (issue #475): the align constraint's *space-resolution*
@@ -64,198 +64,104 @@ export const createAlignConstraint = (
   return { type: "align", x, y, children };
 };
 
-/** Per-axis environment threaded to the shared fallback: the layer's box size
- *  on this axis and the axis's data→pixel position scale (if any).
- *  `alignFallbackBaseline` dispatches on which of these the axis carries — a
- *  posScale picks the scale origin, otherwise the box edge. */
-export interface AlignAxisEnv {
-  size: number;
-  posScale: ((v: number) => number) | undefined;
+function normalizedAnchors(spec: AlignAxisSpec, count: number): AlignAnchor[] {
+  if (!Array.isArray(spec)) return new Array<AlignAnchor>(count).fill(spec);
+  if (spec.length !== count) {
+    throw new Error(
+      `Constraint.align: anchor array length ${spec.length} must match number of children ${count}`
+    );
+  }
+  return spec;
 }
 
-/** Read the coordinate of `target` along axis `idx` at anchor `a`. */
-const anchorValue = (target: Placeable, idx: 0 | 1, a: AlignAnchor): number =>
-  a === "start"
-    ? target.dims[idx].min!
-    : a === "middle"
-      ? target.dims[idx].center!
-      : a === "baseline"
-        ? // The target's origin: the ledger-projected translate (#39 stage 3 —
-          // survives retiring the written translate). Polymorphic across the
-          // union (a ref's projection is its computed transform), so no
-          // `instanceof`/raw-field fallback; 0 for an unplaced intrinsic-only box.
-          (target.projectedTranslate?.(idx) ?? 0)
-        : target.dims[idx].max!;
-
-/** Place `target` on `axis` so its anchor `a` lands at `value`. */
-export const placeAtAnchor = (
-  target: Placeable,
-  axis: Axis,
-  value: number,
-  a: AlignAnchor
-): void => {
-  if (a === "start") target.place(axis, value);
-  else if (a === "middle") target.place(axis, value, "center");
-  else if (a === "baseline") target.place(axis, value, "baseline");
-  else target.place(axis, value, "max");
-};
-
-/**
- * Where the enforced alignment coordinate (the "baseline") comes from when a
- * sibling *is* already placed. This `readPlaced` reader is the one remaining
- * per-callsite difference between the two align callsites (and is out of scope
- * for #552): the constraint path reads the target's real extent / origin (so a
- * `"baseline"` anchor takes its actual `transform.translate`); spread pins a
- * `"baseline"` anchor to 0 and tolerates missing extents. The no-sibling
- * fallback is now SHARED and space-kind-dispatched (see
- * `alignFallbackBaseline`), so it is no longer part of this policy.
- */
-export interface AlignBaselinePolicy {
-  readPlaced: (target: Placeable, idx: 0 | 1, anchor: AlignAnchor) => number;
-}
-
-/** Fallback alignment baseline when no sibling is pre-placed on the axis.
- *  Dispatches on the axis's underlying-space kind, not the call site: a
- *  posScale-carrying (POSITION) axis falls back to the scale origin
- *  `posScale(0)` (bars hang from the zero line); a pixel-pure axis falls back
- *  to the layer-box edge for the anchor (axis titles and chrome pin to the
- *  box). `middle` is box-center either way: it resolves to DIFFERENCE space —
- *  an extent with no anchored origin — so a scale origin is meaningless for it.
- *  The `middle` and `end` box edges are finite-guarded: an unsized axis hands
- *  NaN down, and the fallback must stay 0 there, not inject NaN translates (a
- *  `size/2` center would otherwise become NaN and poison every placed
- *  descendant — e.g. a legend column laid out on an unsized canvas). */
-export const alignFallbackBaseline = (
+function isDataPositionedAlignTarget(
+  target: Placeable | undefined,
   anchor: AlignAnchor,
-  size: number,
-  posScale: ((v: number) => number) | undefined
-): number => {
-  if (anchor === "middle") return Number.isFinite(size) ? size / 2 : 0;
-  if (posScale) return posScale(0);
-  if (anchor === "end") return Number.isFinite(size) ? size : 0;
-  return 0; // start | baseline → layer origin
-};
-
-/** One emitted alignment equation: the target's `anchor` lands at `value` (the
- *  shared baseline). */
-export interface AlignPlacement {
-  target: Placeable;
-  anchor: AlignAnchor;
-  value: number;
-}
-
-/**
- * EMIT the alignment as facet-placement equations (#39 facet-equation-emitter
- * form) WITHOUT applying them: every not-already-placed target gets its `anchor`
- * pinned to one shared baseline, read at its own anchor. The baseline is the
- * first already-placed target's anchor (via `policy.readPlaced`), else the shared
- * space-kind-dispatched `alignFallbackBaseline`; already-placed targets are left
- * untouched. Pure (reads only pre-existing geometry).
- */
-export function emitAlignTargets(
-  targets: Placeable[],
-  axis: Axis,
-  anchors: AlignAnchor[],
-  policy: AlignBaselinePolicy,
-  env: AlignAxisEnv
-): AlignPlacement[] {
-  const idx = axisIndex(axis);
-
-  let baseline: number | undefined;
-  for (let i = 0; i < targets.length; i++) {
-    if (isPlacedOn(targets[i], idx)) {
-      baseline = policy.readPlaced(targets[i], idx, anchors[i]);
-      break;
-    }
-  }
-  // Note: the fallback keys on `anchors[0]` (the first child's anchor), not the
-  // per-child anchor — preserved from the original `as[0]` indexing.
-  if (baseline === undefined)
-    baseline = alignFallbackBaseline(anchors[0], env.size, env.posScale);
-
-  const out: AlignPlacement[] = [];
-  for (let i = 0; i < targets.length; i++) {
-    if (isPlacedOn(targets[i], idx)) continue;
-    // Leave a self-positioned child alone: if its subtree already commits a data
-    // position (placement `determined`/`conflict`) on a posScale axis, it places
-    // itself via the shared scale — pinning it to the `posScale(0)` fallback
-    // would fling a non-zero-origin axis off-canvas (faceted scatter panels over
-    // [1955,2010]). `middle` still centers (box-relative, no scale origin). This
-    // is the principled replacement for the data-positioned guard: the per-child
-    // placement IS the signal, so it needs no `guardDataPositioned` scoping
-    // (chrome reads as `undefined` / `free` and still gets the baseline).
-    const placement = targets[i].placementOn?.(idx);
-    if (
-      anchors[i] !== "middle" &&
-      env.posScale !== undefined &&
-      placement !== undefined &&
-      placement.tag !== "free"
-    )
-      continue;
-    out.push({ target: targets[i], anchor: anchors[i], value: baseline });
-  }
-  return out;
-}
-
-/**
- * Commit the emitted alignment equations: pin each target's anchor at the shared
- * baseline. The single placement walk shared by the `align` constraint and
- * spread's cross-axis alignment — only the `readPlaced` reader differs (see
- * `AlignBaselinePolicy`). The emit/commit seam is where a per-scope solver slots
- * in (consume {@link emitAlignTargets} instead of pinning here).
- */
-export function alignTargets(
-  targets: Placeable[],
-  axis: Axis,
-  anchors: AlignAnchor[],
-  policy: AlignBaselinePolicy,
-  env: AlignAxisEnv
-): void {
-  for (const p of emitAlignTargets(targets, axis, anchors, policy, env))
-    placeAtAnchor(p.target, axis, p.value, p.anchor);
-}
-
-function applyAlignAxis(
-  axis: Axis,
-  spec: AlignAxisSpec,
-  targets: Placeable[],
-  env: AlignAxisEnv
-): void {
-  // Normalize to a per-child anchor array.
-  let anchors: AlignAnchor[];
-  if (Array.isArray(spec)) {
-    if (spec.length !== targets.length) {
-      throw new Error(
-        `Constraint.align: anchor array length ${spec.length} must match number of children ${targets.length}`
-      );
-    }
-    anchors = spec;
-  } else {
-    anchors = new Array<AlignAnchor>(targets.length).fill(spec);
-  }
-
-  // Read a placed sibling's real extent/origin; with no placed sibling, the
-  // shared space-kind fallback decides (scale origin on a scaled axis, box edge
-  // on a pixel-pure one).
-  alignTargets(targets, axis, anchors, { readPlaced: anchorValue }, env);
-}
-
-export function applyAlign(
-  constraint: AlignConstraint,
-  targets: Placeable[],
-  sizes: [number, number],
+  axis: 0 | 1,
   posScales: ConstraintPosScales | undefined
+): boolean {
+  if (anchor === "middle" || posScales?.[axis] === undefined) return false;
+  const placement =
+    typeof target?.placementOn === "function"
+      ? target.placementOn(axis)
+      : undefined;
+  return placement !== undefined && placement !== "free";
+}
+
+export function lowerAlignPlacement(
+  constraint: AlignConstraint,
+  owner: string,
+  {
+    emitter,
+    targets,
+    posScales,
+    isPinned,
+  }: {
+    emitter: PlacementFactEmitter;
+    targets: Map<string, Placeable>;
+    posScales: ConstraintPosScales | undefined;
+    isPinned: (axis: Axis, name: string) => boolean;
+  }
 ): void {
-  if (constraint.x !== undefined) {
-    applyAlignAxis("x", constraint.x, targets, {
-      size: sizes[0],
-      posScale: posScales?.[0],
+  const emit = (axis: Axis, spec: AlignAxisSpec | undefined) => {
+    if (spec === undefined) return;
+    const children = constraint.children.filter((child) =>
+      targets.has(child.name)
+    );
+    if (children.length === 0) return;
+    const anchors = normalizedAnchors(spec, children.length);
+
+    const entries = children.map((child, index) => ({
+      child,
+      anchor: anchors[index],
+    }));
+    const idx = axisIndex(axis);
+
+    // Preserve legacy align's two-phase semantics:
+    // 1. the first already-placed target can define the shared baseline;
+    // 2. already-placed or data-positioned targets are not themselves moved.
+    //
+    // Keeping these separate matters for chart+legend layers: the chart may
+    // be the baseline source while the legend is the only target align
+    // writes. Faceted scatter panels, where every panel is already
+    // data-positioned, still contribute no write targets.
+    const source = entries.find(({ child }) => isPinned(axis, child.name));
+    const movable = entries.filter(({ child, anchor }) => {
+      if (isPinned(axis, child.name)) return false;
+      const target = targets.get(child.name);
+      return !isDataPositionedAlignTarget(target, anchor, idx, posScales);
     });
-  }
-  if (constraint.y !== undefined) {
-    applyAlignAxis("y", constraint.y, targets, {
-      size: sizes[1],
-      posScale: posScales?.[1],
+    if (movable.length === 0) return;
+
+    if (source) {
+      for (const target of movable) {
+        emitter.relate({
+          axis,
+          from: { name: source.child.name, anchor: source.anchor },
+          to: { name: target.child.name, anchor: target.anchor },
+          gap: 0,
+          owner,
+        });
+      }
+      return;
+    }
+
+    const aligned = movable;
+    for (let i = 1; i < aligned.length; i++) {
+      emitter.relate({
+        axis,
+        from: { name: aligned[0].child.name, anchor: aligned[0].anchor },
+        to: { name: aligned[i].child.name, anchor: aligned[i].anchor },
+        gap: 0,
+        owner,
+      });
+    }
+    emitter.include({
+      axis,
+      name: aligned[0].child.name,
+      owner,
     });
-  }
+  };
+  emit("x", constraint.x);
+  emit("y", constraint.y);
 }

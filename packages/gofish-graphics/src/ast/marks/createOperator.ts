@@ -39,10 +39,16 @@ import {
   stashLayerName,
 } from "./chartBuilder";
 import { inferSize, inferPos, inferColor, resolveMeasure } from "../channels";
+import { discretePosition, copyMeasureProvenance } from "../data";
 import type { Measure } from "../data";
 import type { MaybeValue, Value } from "../data";
 import type { LabelAccessor, LabelOptions } from "../labels/labelPlacement";
 import type { NameableMark } from "../withGoFish";
+import {
+  positionNode,
+  type PositionNodeOptions,
+} from "../graphicalOperators/positionNode";
+import { attachTerminals } from "./terminals";
 
 // Re-exports for callers that previously got these from createOperator.
 export type { LayerContext } from "./chartBuilder";
@@ -133,9 +139,10 @@ export async function applyMark<T>(
  * and the mark-kind tag + IR-serialize metadata ride along.
  *
  * `createModifier` captures that shape as a config; `attachModifiers` wires a
- * set of them (plus a top-level `.render()`) onto a base mark. This is the one
- * system behind `nameableMark` (here), `createMark` (withGoFish.ts), and
- * `makeConstrainableMark` (chart.ts) — replacing three hand-rolled copies.
+ * set of them (plus the export terminals from `terminals.ts`) onto a base mark.
+ * This is the one system behind `nameableMark` (here), `createMark`
+ * (withGoFish.ts), and `makeConstrainableMark` (chart.ts) — replacing three
+ * hand-rolled copies.
  * ------------------------------------------------------------------------ */
 
 /**
@@ -147,13 +154,21 @@ export async function applyMark<T>(
 export type ModifierConfig<Args extends any[] = any[]> = {
   /** Method name exposed on the mark, e.g. "name" | "label" | "constrain". */
   name: string;
+  /** `datum` is the per-instance data the mark was called with (the same value
+   *  the shape factory saw). Modifiers that don't need it ignore it; `.zOrder`
+   *  uses it to resolve a per-datum paint-order callback. */
   apply: (
     node: GoFishNode,
     layerContext: LayerContext | undefined,
+    datum: unknown,
     ...args: Args
   ) => void;
   tag?: (wrapped: Mark<any>, base: Mark<any>, ...args: Args) => void;
 };
+
+/** A paint-order hint: a constant, or a callback resolved per-instance against
+ *  the datum the mark is bound to. */
+export type ZOrderValue<T = any> = number | ((datum: T) => number);
 
 /** Register a modifier. Identity at runtime; the value is the typed config. */
 export function createModifier<Args extends any[]>(
@@ -161,6 +176,8 @@ export function createModifier<Args extends any[]>(
 ): ModifierConfig<Args> {
   return cfg;
 }
+
+export type TranslateModifierOptions = PositionNodeOptions;
 
 /**
  * Copy `from`'s `__serialize` tag onto `to`, letting the modifier merge its own
@@ -201,11 +218,11 @@ function modifierMethod(
         const nodes = await Promise.all(
           raw.map((r) => resolveMarkResult(r, layerContext))
         );
-        for (const node of nodes) cfg.apply(node, layerContext, ...args);
+        for (const node of nodes) cfg.apply(node, layerContext, d, ...args);
         return nodes as unknown as GoFishNode;
       }
       const node = await resolveMarkResult(raw, layerContext);
-      cfg.apply(node, layerContext, ...args);
+      cfg.apply(node, layerContext, d, ...args);
       return node;
     };
     // Preserve the kind tag so applyMark dispatches correctly through the
@@ -214,6 +231,23 @@ function modifierMethod(
     cfg.tag?.(wrapped, base, ...args);
     return redecorate(wrapped);
   };
+}
+
+export function translateMark<T>(
+  base: Mark<T>,
+  opts: TranslateModifierOptions
+): Mark<T> {
+  const wrapped: Mark<T> = async (
+    d: T,
+    key?: string | number,
+    layerContext?: LayerContext
+  ) => {
+    const raw = await (base as any)(d, key, layerContext);
+    const node = await resolveMarkResult(raw, layerContext);
+    return positionNode(opts, [node]);
+  };
+  withMarkKind(wrapped, getMarkKind(base));
+  return nameableMark(wrapped) as Mark<T>;
 }
 
 /**
@@ -233,45 +267,18 @@ export function attachModifiers<T>(
       configurable: true,
     });
   }
-  Object.defineProperty(base, "render", {
-    value: async (
-      container: Parameters<GoFishNode["render"]>[0],
-      options: Parameters<GoFishNode["render"]>[1]
-    ) => {
-      const node = await resolveMarkResult((base as any)(undefined));
-      return node.render(container, options);
-    },
+  Object.defineProperty(base, "translate", {
+    value: (opts: TranslateModifierOptions) => translateMark(base, opts),
     writable: true,
     configurable: true,
   });
-  // SVG-export terminals, mirroring `.render()` above.
-  Object.defineProperty(base, "toSVG", {
-    value: async (options?: Parameters<GoFishNode["toSVG"]>[0]) => {
-      const node = await resolveMarkResult((base as any)(undefined));
-      return node.toSVG(options);
-    },
-    writable: true,
-    configurable: true,
-  });
-  Object.defineProperty(base, "toSVGElement", {
-    value: async (options?: Parameters<GoFishNode["toSVGElement"]>[0]) => {
-      const node = await resolveMarkResult((base as any)(undefined));
-      return node.toSVGElement(options);
-    },
-    writable: true,
-    configurable: true,
-  });
-  Object.defineProperty(base, "save", {
-    value: async (
-      filename: string,
-      options?: Parameters<GoFishNode["save"]>[1]
-    ) => {
-      const node = await resolveMarkResult((base as any)(undefined));
-      return node.save(filename, options);
-    },
-    writable: true,
-    configurable: true,
-  });
+  // Export terminals (render / toSVG / toSVGElement / save / toDisplayList) come
+  // from the shared registry, so adding one touches a single list. A mark
+  // resolves to a node by calling it with `undefined`. See terminals.ts.
+  attachTerminals(
+    base,
+    () => resolveMarkResult((base as any)(undefined)) as Promise<GoFishNode>
+  );
   return base;
 }
 
@@ -285,7 +292,7 @@ export function attachModifiers<T>(
  */
 export const nameModifier = createModifier<[layerName: string | symbol]>({
   name: "name",
-  apply: (node, layerContext, layerName) => {
+  apply: (node, layerContext, _datum, layerName) => {
     node.name(layerName as any);
     if (layerContext && typeof layerName === "string" && layerName) {
       (node as { __layerRegistration?: string }).__layerRegistration =
@@ -309,7 +316,7 @@ export const labelModifier = createModifier<
   [accessor: LabelAccessor, options?: LabelOptions]
 >({
   name: "label",
-  apply: (node, _layerContext, accessor, options) => {
+  apply: (node, _layerContext, _datum, accessor, options) => {
     node.label(accessor, options);
   },
   tag: (wrapped, base, accessor, options) => {
@@ -338,13 +345,37 @@ export const labelModifier = createModifier<
 });
 
 /**
- * Attach chainable .name() and .label() to a mark, registering it into the
- * layer context when named so that ref(...)/selectAll(...) can find it back.
+ * `.zOrder(value)` — sets the node's paint-order hint. `value` is either a
+ * constant or a callback resolved per-instance against the datum the mark is
+ * bound to, so paint order can be data-driven (e.g. raise one category over
+ * the rest) without splitting the mark into separately-named layers. The hint
+ * is consumed by the bake pass's per-layer `(zOrder, index)` sort.
+ */
+export const zOrderModifier = createModifier<[value: ZOrderValue]>({
+  name: "zOrder",
+  apply: (node, _layerContext, datum, value) => {
+    node.zOrder(typeof value === "function" ? value(datum) : value);
+  },
+  tag: (wrapped, base, value) => {
+    // A constant hint round-trips; a callback can't be JSON-serialized, so it
+    // is dropped from the emitted IR (the rest of the tag still propagates),
+    // mirroring `.label(fn)`.
+    propagateSerialize(base, wrapped, (tag) => {
+      if (typeof value === "number") tag.zOrder = value;
+    });
+  },
+});
+
+/**
+ * Attach chainable .name(), .label(), and .zOrder() to a mark, registering it
+ * into the layer context when named so that ref(...)/selectAll(...) can find
+ * it back.
  */
 export function nameableMark<T>(base: Mark<T>): NameableMark<T> {
   return attachModifiers(base, [
     nameModifier,
     labelModifier,
+    zOrderModifier,
   ]) as NameableMark<T>;
 }
 
@@ -374,7 +405,7 @@ export function attachTransformModifiers<M extends object>(
       configurable: true,
     });
   }
-  for (const methodName of ["name", "label"] as const) {
+  for (const methodName of ["name", "label", "translate"] as const) {
     const original = m[methodName];
     if (typeof original === "function") {
       Object.defineProperty(m, methodName, {
@@ -419,7 +450,9 @@ export type ChannelType = "size" | "pos" | "color";
  * operator (traversal) form; in the combinator form they act as the aggregate
  * form for whatever data the combinator was called with.
  */
-export type ChannelSpec = ChannelType | { type: ChannelType; entry?: boolean };
+export type ChannelSpec =
+  | ChannelType
+  | { type: ChannelType; entry?: boolean; discrete?: boolean };
 
 export type ChannelAnnotations<Options> = Partial<
   Record<keyof Options, ChannelSpec>
@@ -523,12 +556,41 @@ export type OperatorConfig<Datum, Options> = {
 };
 
 export type DualModeOperator<Datum, Options> = {
-  (opts: Options): Operator<Datum[], Datum[]>;
+  (opts: Options): TranslatableOperator<Datum[], Datum[]>;
   (
     opts: Options,
     marks: (Mark<Datum> | GoFishRef)[] | Promise<(Mark<Datum> | GoFishRef)[]>
   ): NameableMark<Datum>;
 };
+
+export type TranslatableOperator<T, U> = Operator<T, U> & {
+  translate(opts: TranslateModifierOptions): TranslatableOperator<T, U>;
+};
+
+function attachTranslateOption<T extends object>(
+  target: T,
+  translate: (opts: TranslateModifierOptions) => T
+): T {
+  Object.defineProperty(target, "translate", {
+    value: (opts: TranslateModifierOptions) => translate(opts),
+    writable: true,
+    configurable: true,
+  });
+  return target;
+}
+
+function translateOperator<T, U>(
+  operator: Operator<T, U>,
+  opts: TranslateModifierOptions
+): TranslatableOperator<T, U> {
+  const translated: Operator<T, U> = async (mark) => {
+    const arranged = await operator(mark);
+    return translateMark(arranged, opts) as Mark<T>;
+  };
+  return attachTranslateOption(translated, (next) =>
+    translateOperator(translated, next)
+  ) as TranslatableOperator<T, U>;
+}
 
 /**
  * Run a single channel inference over a data slice. `measure` is the channel's
@@ -547,6 +609,19 @@ function runChannel(
   if (type === "pos") return inferPos(val, data, measure);
   if (type === "color") return inferColor(val, data);
   return val;
+}
+
+function isNonNumericEntryField(
+  accessor: unknown,
+  data: Record<string, unknown>[]
+): accessor is string {
+  if (typeof accessor !== "string") return false;
+  return data.some((row) => {
+    const value = row?.[accessor];
+    return (
+      value !== undefined && value !== null && !Number.isFinite(Number(value))
+    );
+  });
 }
 
 /**
@@ -580,6 +655,7 @@ function applyChannels<Options extends Record<string, any>>(
     if (Array.isArray(val)) continue;
     const type: ChannelType = typeof spec === "string" ? spec : spec.type;
     const perEntry = typeof spec === "object" && spec.entry === true;
+    const discrete = typeof spec === "object" && spec.discrete === true;
     // The measure is loop-invariant across split entries (it depends only on
     // the accessor and `wholeData`'s provenance, not on which items a given
     // entry holds), so resolve it once per channel. Only size/pos consume it;
@@ -589,6 +665,16 @@ function applyChannels<Options extends Record<string, any>>(
         ? resolveMeasure(wholeData, val)
         : undefined;
     if (perEntry && entries !== undefined) {
+      if (
+        type === "pos" &&
+        discrete &&
+        isNonNumericEntryField(val, wholeData)
+      ) {
+        out[key] = [...entries.keys()].map((_, i) =>
+          discretePosition(i, entries.size)
+        );
+        continue;
+      }
       // Value aggregation uses each entry's items; the measure comes from
       // `wholeData` (the binned array still carries the symbol — each per-entry
       // slice does not).
@@ -646,7 +732,7 @@ export function createOperator<Datum, Options extends Record<string, any>>(
   layout: LayoutFn<Options>,
   cfg: OperatorConfig<Datum, Options>
 ): DualModeOperator<Datum, Options> {
-  function dual(opts: Options): Operator<Datum[], Datum[]>;
+  function dual(opts: Options): TranslatableOperator<Datum[], Datum[]>;
   function dual(
     opts: Options,
     marks: (Mark<Datum> | GoFishRef)[] | Promise<(Mark<Datum> | GoFishRef)[]>
@@ -654,7 +740,7 @@ export function createOperator<Datum, Options extends Record<string, any>>(
   function dual(
     opts: Options,
     marks?: (Mark<Datum> | GoFishRef)[] | Promise<(Mark<Datum> | GoFishRef)[]>
-  ): Operator<Datum[], Datum[]> | NameableMark<Datum> {
+  ): TranslatableOperator<Datum[], Datum[]> | NameableMark<Datum> {
     if (marks !== undefined) {
       // Combinator form: apply each mark to the same data d, then layout.
       const base: Mark<Datum> = async (
@@ -743,6 +829,15 @@ export function createOperator<Datum, Options extends Record<string, any>>(
         const entries =
           splitResult instanceof Map ? splitResult : splitResult.entries;
         const keys = splitResult instanceof Map ? undefined : splitResult.keys;
+        // Split leaves are fresh sub-arrays (groupBy/filter/slice) that don't
+        // inherit `d`'s measure-provenance symbol. Re-tag each array leaf so a
+        // MARK channel applied per leaf (createMark → inferSize/inferPos with no
+        // precomputed measure) reads the source measure off its own data — e.g.
+        // a bin's `start`/`end`/`size` resolve to the source field's units, not
+        // the literal field name, matching the operator-channel path (#534).
+        for (const leaf of entries.values()) {
+          if (Array.isArray(leaf)) copyMeasureProvenance(leaf, d);
+        }
         // Route each leaf through applyMark so expand-kind marks (e.g. `cut`)
         // can return arrays that we flatten across leaves. Per-item marks
         // keep the legacy "one call per leaf" semantics — applyMark wraps
@@ -764,6 +859,18 @@ export function createOperator<Datum, Options extends Record<string, any>>(
             );
             const keyStr = currentKey?.toString() ?? "";
             for (const node of leafNodes) node.setKey(keyStr);
+            // Record the (string) field this operator grouped by, so a later
+            // `resolve(..., { from })` can match against it without the user
+            // restating the key. The innermost grouping wins (`??=`); a function
+            // `by` has no field name to record, so resolve errors there unless
+            // given an explicit `key`.
+            if (typeof (opts as any).by === "string") {
+              for (const node of leafNodes) {
+                if ((node as any).__splitBy === undefined) {
+                  (node as any).__splitBy = (opts as any).by;
+                }
+              }
+            }
             return leafNodes;
           })
         );
@@ -797,7 +904,9 @@ export function createOperator<Datum, Options extends Record<string, any>>(
         opts: payload,
       };
     }
-    return operator;
+    return attachTranslateOption(operator, (translateOpts) =>
+      translateOperator(operator, translateOpts)
+    ) as TranslatableOperator<Datum[], Datum[]>;
   }
   return dual as DualModeOperator<Datum, Options>;
 }

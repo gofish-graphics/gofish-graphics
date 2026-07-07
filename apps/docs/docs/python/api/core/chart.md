@@ -17,7 +17,13 @@ chart(seafood, axes=True).flow(spread(by="lake", dir="x")).mark(
 
 ```python
 chart(data, **options) -> ChartBuilder
+chart(**options) -> ChartBuilder  # empty scope — data inherited from context
 ```
+
+Calling `chart()` (or `chart(**options)`) with **no data** creates an _empty
+scope_ that inherits its data from the enclosing context: the incoming partition
+when used directly as a [`.mark(...)`](/python/api/core/mark), or the previous
+tier's marks inside [`.layer(...)`](/python/api/core/layer).
 
 ## Parameters
 
@@ -47,7 +53,7 @@ is a `chart()` option.
 
 ## Axes
 
-`axes` is a `chart()` option (mirroring the JS `Chart(data, { axes: true })`).
+`axes` is a `chart()` option (mirroring the JS `chart(data, { axes: true })`).
 It accepts a bool, a per-dimension dict, or per-dimension title control:
 
 ```python
@@ -56,7 +62,17 @@ chart(data, axes=False)                       # no axes
 chart(data, axes={"x": True, "y": False})     # x only
 chart(data, axes={"x": {"title": "Year"}, "y": True})   # custom x title
 chart(data, axes={"x": {"title": False}, "y": True})    # suppress inferred x title
+chart(data, axes={"x": {"side": "end"}})                # x-axis on the far edge
 ```
+
+Each per-axis dict also accepts `"side": "start" | "end"`. By default a
+**continuous/quantitative x-axis renders at the visual bottom** (and a continuous
+y-axis at the left) once the frame's y-orientation is resolved — so a scatter, a
+horizontal bar, and a faceted small-multiple all place their value axis at the
+bottom with no option. An explicit `"side"` overrides that with the literal
+**frame-relative** seating: `"start"` is the near/origin edge (top in a y-down
+frame, bottom in y-up), `"end"` the far edge — e.g. `{"x": {"side": "end"}}`
+forces the x-axis onto the opposite edge from the default.
 
 For polar charts, combine with `coord` (and `padding` for label room):
 
@@ -70,6 +86,29 @@ Per-operator overrides use the same shape on
 ```python
 chart(data, axes=True).flow(spread(by="species", dir="x", axes={"x": True, "y": False}))
 ```
+
+## Equal scale from a shared measure
+
+By default each axis resolves its data→pixel scale independently, so a circle in
+data space becomes an ellipse. But when **x and y are the same unit of measure**,
+their scales must be equal — a circle stays circular. GoFish does this from the
+**measure**, not a knob: tag both channels with the same measure via
+`field(name, measure)` and the shared scale follows.
+
+```python
+(
+    chart(data)
+    .flow(scatter(x=field("x", "plane"), y=field("y", "plane")))
+    .mark(circle(r=4))
+    .render(w=640, h=380)  # a true circle, not an ellipse
+)
+```
+
+This is the same rule the `circle` mark obeys one level down: `circle(r=...)`
+lowers to a `w` and `h` that share a measure, so it can never distort. The
+binding axis fills its dimension; the other centers in the leftover space.
+Tagging the two axes the same is a unit claim — different measures (e.g.
+`bill_length` vs `bill_depth`, both mm) stay independent.
 
 ## The builder
 
@@ -111,7 +150,7 @@ scoping, and connector use — see [`ref` / `selectAll`](/python/api/selection/r
 ## Naming a chart: `.name()`
 
 A **chart-level** `.name()` — distinct from naming a mark — tags the whole
-chart so a sibling `Layer([...]).constrain(...)` callback can reference it by
+chart so a sibling `layer([...]).constrain(...)` callback can reference it by
 that name (mirrors JS `chart.resolve().name(...)`). The constrain lambda's
 parameter names match the charts' `.name()` strings:
 
@@ -119,7 +158,7 @@ parameter names match the charts' `.name()` strings:
 sc = chart(data).flow(scatter(x="x", y="y")).mark(circle(r=3)).name("scatter")
 top = chart(data, h=80).flow(...).mark(rect(h="count")).name("topHist")
 
-Layer([sc, top]).constrain(lambda scatter, topHist: [
+layer([sc, top]).constrain(lambda scatter, topHist: [
     Constraint.align([scatter], x="baseline", y="baseline"),
     Constraint.position([topHist], y=410, anchor="start"),
 ])

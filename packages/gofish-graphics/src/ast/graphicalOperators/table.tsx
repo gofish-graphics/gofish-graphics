@@ -3,7 +3,7 @@ import { GoFishAST } from "../_ast";
 import { createNodeOperator } from "../withGoFish";
 import { createOperator } from "../marks/createOperator";
 import { layer } from "./layer";
-import { Constraint } from "../constraints";
+import { createGridConstraint } from "../constraints/grid";
 import { childNameKey } from "../constraints/shared";
 
 /**
@@ -15,7 +15,6 @@ import { childNameKey } from "../constraints/shared";
 export const Table = createNodeOperator(
   async (
     {
-      name,
       key,
       numCols: numColsOpt,
       spacing = 0,
@@ -23,7 +22,6 @@ export const Table = createNodeOperator(
       rowKeys,
       axisMeasures,
     }: {
-      name?: string;
       key?: string;
       numCols?: number;
       spacing?: number | [number, number];
@@ -52,7 +50,9 @@ export const Table = createNodeOperator(
 
     const node = (await layer(children)) as GoFishNode;
     node.constrain((ref) => [
-      Constraint.grid(
+      // grid is table's private elaboration target — not part of the public
+      // `Constraint` factory (see constraints/index.ts).
+      createGridConstraint(
         {
           numCols,
           spacing,
@@ -80,7 +80,6 @@ export const Table = createNodeOperator(
     node._ordinalKeyMap = keyMap;
 
     if (key !== undefined) node.key = key;
-    if (name !== undefined) node._name = name;
     return node;
   }
 );

@@ -6,7 +6,7 @@ annotations, node names in diagrams, and axis titles.
 ::: gofish
 
 ```js
-gf.Chart([{ label: "GoFish" }])
+gf.chart([{ label: "GoFish" }])
   .mark(gf.text({ text: "label", fontSize: 28, fill: "steelblue" }))
   .render(root, { w: 240, h: 80 });
 ```
@@ -46,10 +46,10 @@ text({ text, fill = "black", stroke?, strokeWidth = 0, fontSize = 12,
 
 // Value labels: layer text totals on top of bars
 layer([
-  Chart(seafood)
+  chart(seafood)
     .flow(spread({ by: "lake", dir: "x" }))
     .mark(rect({ h: "count" }).name("bars")),
-  Chart(selectAll("bars"))
+  chart(selectAll("bars"))
     .flow(group({ by: "datum.lake" }))
     .mark((d) =>
       spread({ dir: "y", alignment: "middle", spacing: 10 }, [

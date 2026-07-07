@@ -20,9 +20,9 @@ Think of `selectAll` as the DOM's `querySelectorAll` (always a collection) and
 :::
 
 ```python
-from gofish import Layer, chart, scatter, blank, selectAll, line
+from gofish import layer, chart, scatter, blank, selectAll, line
 
-Layer([
+layer([
     # Step 1: name the mark
     chart(catch_locations)
         .flow(scatter(by="lake", x="x", y="y"))

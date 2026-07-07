@@ -9,7 +9,7 @@ Call `.label(field)` on any mark to display a data field as text.
 ::: gofish
 
 ```js
-gf.Chart(seafood, { axes: true })
+gf.chart(seafood, { axes: true })
   .flow(gf.spread({ by: "lake", dir: "x" }))
   .mark(gf.rect({ h: "count" }).label("count"))
   .render(root, { w: 400, h: 250 });
@@ -24,7 +24,7 @@ Labels use a `side-edge-align` position system.
 ::: gofish
 
 ```js
-gf.Chart(seafood, { axes: true })
+gf.chart(seafood, { axes: true })
   .flow(
     gf.spread({ by: "lake", dir: "x" }),
     gf.stack({ by: "species", dir: "y" })
@@ -92,7 +92,7 @@ const heatData = ["Mon", "Tue", "Wed", "Thu", "Fri"].flatMap((day, di) =>
   }))
 );
 
-gf.Chart(heatData, { color: gf.gradient(["#e0f3ff", "#08519c"]), axes: true })
+gf.chart(heatData, { color: gf.gradient(["#e0f3ff", "#08519c"]), axes: true })
   .flow(gf.table("hour", "day", { spacing: 4 }))
   .mark(
     gf
@@ -111,7 +111,7 @@ Use the `rotate` option for angled labels. Positive values rotate clockwise.
 ::: gofish
 
 ```js
-gf.Chart(seafood, { axes: true })
+gf.chart(seafood, { axes: true })
   .flow(gf.spread({ by: "lake", dir: "x" }))
   .mark(
     gf

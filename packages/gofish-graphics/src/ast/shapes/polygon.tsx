@@ -1,9 +1,15 @@
 import { GoFishNode } from "../_node";
 import { GoFishAST } from "../_ast";
-import { CoordinateTransform } from "../coordinateTransforms/coord";
 import { Dimensions, displayTranslate, Size, Transform } from "../dims";
 import { UNDEFINED, UnderlyingSpace } from "../underlyingSpace";
 import { createMark } from "../withGoFish";
+import { path } from "../../path";
+import type { DisplayList } from "gofish-ir";
+import {
+  lowerStyle,
+  pathToPixelSVG,
+  roleFor,
+} from "../displayList/lowerHelpers";
 
 /**
  * A closed polygon defined by explicit local-coordinate points (GoFish-native
@@ -11,13 +17,11 @@ import { createMark } from "../withGoFish";
  * system places it via `transform.translate`.
  */
 export const Polygon = ({
-  name,
   fill = "black",
   stroke = fill,
   strokeWidth = 0,
   points,
 }: {
-  name?: string;
   fill?: string;
   stroke?: string;
   strokeWidth?: number;
@@ -39,7 +43,6 @@ export const Polygon = ({
 
   return new GoFishNode(
     {
-      name,
       type: "polygon",
       resolveUnderlyingSpace: (
         _children: Size<UnderlyingSpace>[],
@@ -59,25 +62,35 @@ export const Polygon = ({
         // translate is set by the parent's constraint placement.
         transform: { translate: [undefined, undefined] },
       }),
-      render: ({
-        transform,
-      }: {
-        intrinsicDims?: Dimensions;
-        transform?: Transform;
-        coordinateTransform?: CoordinateTransform;
-      }) => {
+      // IR lowering — structural mirror of `render`. The legacy
+      // `transform="scale(1,-1)"` with each point emitted as `(x+tx, -(y+ty))`
+      // folds into `toPixel`: a local point (x,y) is the y-up display point
+      // (x+tx, y+ty), which `toPixel` maps to y-down pixels. Build the closed
+      // line-segment path and serialize through `pathToPixelSVG`.
+      lower: (
+        { transform, toPixel },
+        _children,
+        node
+      ): DisplayList.DisplayItem[] => {
         const [tx, ty] = displayTranslate(transform);
-        // GoFish is y-up; emit under scale(1, -1) like rect.tsx.
-        const pts = points.map(([x, y]) => `${x + tx},${-(y + ty)}`).join(" ");
-        return (
-          <polygon
-            transform="scale(1, -1)"
-            points={pts}
-            fill={fill}
-            stroke={stroke ?? fill ?? "black"}
-            stroke-width={strokeWidth ?? 0}
-          />
-        );
+        const displayPoints: [number, number][] = points.map(([x, y]) => [
+          x + tx,
+          y + ty,
+        ]);
+        const poly = path(displayPoints, { closed: true });
+        return [
+          {
+            kind: "path",
+            d: pathToPixelSVG(poly, toPixel),
+            datum: node.datum,
+            role: roleFor(node.datum),
+            style: lowerStyle({
+              fill,
+              stroke: stroke ?? fill ?? "black",
+              strokeWidth: strokeWidth ?? 0,
+            }),
+          },
+        ];
       },
     },
     []

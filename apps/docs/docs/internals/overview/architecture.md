@@ -52,11 +52,32 @@ the continuous space's `origin` state: a `SIZE` (free) dimension resolves throug
 monotonic machinery, a `POSITION` (anchored) dimension through position scales. Bounding boxes
 ([the bbox model](/internals/core/bbox)) are the common currency.
 
-**3 · Placement & render.** Final absolute positions are assigned, and each node emits
-SVG. Rendering is reactive — it runs through **SolidJS** — so a chart can update without
-a full rebuild. The [`coord` operator](/internals/layout/coord-flattening) is the
-notable special case: it flattens its subtree into a flat, absolutely-positioned list
-before applying its coordinate transform.
+**3 · Placement & render.** Final absolute positions are assigned, then the tree is
+turned into pixels in two sub-passes: **lower** — walk the baked scenegraph and emit a
+flat [display list](/internals/core/rendering) of positioned primitives in absolute
+pixels — and **paint** — a single backend turns that IR into output (SVG today). No
+shape emits SVG itself; each owns a `lower()` that describes it as a backend-agnostic
+display-list item. The live SVG backend is reactive — it runs through **SolidJS** — so
+a chart can update without a full rebuild. The
+[`coord` operator](/internals/layout/coord-flattening) is the notable special case: it
+flattens its subtree into a flat, absolutely-positioned list before applying its
+coordinate transform. A coordinate transform is parameterized
+(`polar()`/`clock()` take `innerRadius`/`centralAngle`/`startAngle`/…) and may declare
+**axis-name aliases** (`theta`/`r`); a small top-down pass before layout resolves those
+aliases into the canonical `x`/`y`/`w`/`h` facets (see
+[Pass 5.5](/internals/layout/passes#pass-5-5-coordinate-space-alias-resolution)).
+A second top-down pass, `resolveEmbedding` (a `GoFishNode` method wired into the
+pipeline before layout), authors each dim's `embedded` flag — whether a coord
+warps that axis's extent into an arc/wedge (point/line/area) — gating a mark's
+own size on whether its measure matches the axis it sits in (see
+[Pass 8.5](/internals/layout/passes#pass-8-5-embedding-resolution)).
+
+The placement pass treats every real node as a `Placeable`: it can expose its
+dimensions, accept final placement pins, report whether an axis is already
+data-positioned, and answer where a local anchor (`min`, `center`, `max`, or
+`baseline`) sits inside its own box. That `localAnchor` method is what lets the
+constraint solver express alignment and distribution as equations over sibling
+boxes rather than as order-sensitive imperative writes.
 
 **Chrome is just more tree.** Axes, legends, and axis titles are not privileged
 render-time fixtures. Before layout, elaboration passes rewrite each of them into

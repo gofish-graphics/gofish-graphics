@@ -45,7 +45,7 @@ def story_planets_with_label_above():
         layer([
             _planet_row(),
             spread(
-                [ref("Mercury"), text(text="Mercury")],
+                [text(text="Mercury"), ref("Mercury")],
                 dir="y",
                 spacing=60,
                 alignment="middle",
@@ -60,7 +60,7 @@ def story_planets_with_label_below():
         layer([
             _planet_row(),
             spread(
-                [text(text="Mercury"), ref("Mercury")],
+                [ref("Mercury"), text(text="Mercury")],
                 dir="y",
                 spacing=60,
                 alignment="middle",
@@ -75,7 +75,7 @@ def story_planets_with_label_above_no_spacing():
         layer([
             _planet_row(),
             spread(
-                [ref("Mercury"), text(text="Mercury", debugBoundingBox=True)],
+                [text(text="Mercury", debugBoundingBox=True), ref("Mercury")],
                 dir="y",
                 spacing=0,
                 alignment="middle",
@@ -90,7 +90,7 @@ def story_planets_with_label_below_no_spacing():
         layer([
             _planet_row(),
             spread(
-                [text(text="Mercury", debugBoundingBox=True), ref("Mercury")],
+                [ref("Mercury"), text(text="Mercury", debugBoundingBox=True)],
                 dir="y",
                 spacing=0,
                 alignment="middle",

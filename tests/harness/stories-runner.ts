@@ -4,11 +4,21 @@
  * in the same page (no navigation between stories).
  */
 
-// Import all story modules eagerly so they're available synchronously after page load
-const storyModules = import.meta.glob(
-  "../../packages/gofish-graphics/stories/**/*.stories.tsx",
-  { eager: true }
-) as Record<string, any>;
+// Import all story modules eagerly so they're available synchronously after page
+// load. Both workspace packages with stories are scanned: gofish-graphics and the
+// gofish-gotree tree-DSL package (the latter compiles its SolidJS source directly
+// via the relative `../../src` import in its stories, so no built dist is needed).
+const storyModules = {
+  ...import.meta.glob(
+    "../../packages/gofish-graphics/stories/**/*.stories.tsx",
+    {
+      eager: true,
+    }
+  ),
+  ...import.meta.glob("../../packages/gofish-gotree/stories/**/*.stories.tsx", {
+    eager: true,
+  }),
+} as Record<string, any>;
 
 interface StoryInfo {
   id: string;

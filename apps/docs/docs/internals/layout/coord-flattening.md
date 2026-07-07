@@ -7,6 +7,7 @@ status: draft
 covers:
   - packages/gofish-graphics/src/ast/coordinateTransforms/coord.tsx
   - packages/gofish-graphics/src/ast/coordinateTransforms/bake.ts
+  - packages/gofish-graphics/src/ast/paintOrder.ts
 ---
 
 # Flattening the Scenegraph
@@ -82,11 +83,113 @@ Two design notes from the source worth knowing:
   layout pass, then calls `flattenLayout` inside `render` to produce the flat list it
   actually draws, applying the coordinate transform to each flattened leaf.
 
+## The root bake — flattening the _whole_ tree
+
+`flattenLayout` is the **coord-local** flattener: `coord` calls it on its own
+subtree. There is also a **root** flattener, `bake`, in the same file, which is what
+render now consumes for the _entire_ chart (replacing the old nested `<g transform>`
+recursion). `bake` flattens the whole scenegraph into one ordered list of
+`DisplayObject`s — each a `{ node, transform }` draw entry at an absolute transform —
+which the render entry maps over directly.
+
+`bake` differs from `flattenLayout` in two ways:
+
+- **Boundaries.** A node whose render is _not_ reducible to "translate its independent
+  children" is a **bake boundary**: it emits a single `DisplayObject` and renders its
+  own subtree internally. These are the space-remappers (`coord`), the compositors
+  (`over` / `atop` / `in` / `out` / `xor` / `mask`), and the cross-child self-drawers
+  (`connect` / `arrow` / `enclose` / `box`), plus any label-bearing node. So `coord`
+  stays a boundary — `bake` never recurses _through_ a coordinate transform (which
+  would compose a single global translate across a space remap); `coord` keeps doing
+  its own coord-local `flattenLayout` inside. The bake is **boundary-recursive**. (The
+  boundary set is a string set today; replacing it with a node-declared flag is tracked
+  in [#75](https://github.com/gofish-graphics/gofish-graphics/issues/75).)
+- **Draw order.** Paint order is resolved **hierarchically** — per transparent layer,
+  over its component-granular children — exactly as the legacy `layer` render did, NOT
+  by one global sort. This is load-bearing: a `zOrder(-1)` (or a `zAbove` / `zBelow`
+  constraint) is **local** to its layer — it orders a child behind its _siblings_, not
+  behind the whole chart. A global flatten would regroup, e.g., all connectors before
+  all marks across sibling layers (the pulley diagram and the connected-scatter line
+  both broke this way, [#607](https://github.com/gofish-graphics/gofish-graphics/issues/607)).
+  So at each transparent layer `bake` orders its children with the same
+  `paintOrder.ts` helpers `layer` uses — `flattenForZOrder` (which keeps components
+  whole and hoists only plain nested layers) then a `(zOrder, index)` sort or a
+  `topoSortByZOrder` over its own `zAbove` / `zBelow` constraints — and only then
+  descends into each unit, so a component keeps its internal order. Transforms still
+  compose all the way to the leaves; only the _ordering_ is per-layer.
+
+This root bake is the first step toward a serializable [display
+list](/internals/core/rendering) (the render IR): once each draw entry is a
+self-contained primitive rather than a `{ node, transform }` back-reference, the flat
+list _is_ the display list.
+
+## Tagging each entry with its flip scope (#629)
+
+The bake also decides **y-orientation per subtree** (issue #629). `bake(root, ambientFlip)`
+carries a `FlipScope` — the placed y-band `{ baseY, height }` a draw entry mirrors about —
+down the walk, and stamps it on each emitted `DisplayObject` as `d.flip`. The lower driver
+builds that entry's `toPixel` from it (`toPixelFor(d.flip)`), so a continuous-y chart grows
+up while an ordinal-y neighbor stays y-down — see [Rendering](/internals/core/rendering) for
+the map itself.
+
+The decision is one rule, `resolveNodeFlip(node, composedTy, incomingFlip)`:
+
+- If a scope is already active (`incomingFlip !== undefined`), **inherit** it. The first
+  scope on a root-to-leaf path wins; descendants never re-open (no double flip).
+- Otherwise a node **opens** a scope about its own placed band (`scopeBox`, or the
+  authoritative `contentNode._rootFlipScope` for the root plot) iff its own resolved y is
+  CONTINUOUS (`declaredYUp`) or it is a `coord`. An ORDINAL / UNDEFINED node declares
+  nothing.
+- `_scopeTransparent` chrome wrappers never open (their bbox is the wrong band); an
+  `_ambientYDown` chrome subtree renders in the ambient frame and is **box-mirrored** about
+  the plot's frame — stamped directly on the chrome nodes by `layout()` as `_chromeFrame`
+  (no walk-time search).
+
+Two places had to run this **same** rule so a subtree's orientation is stable no matter how
+it is wrapped:
+
+- **The z-order hoist.** The z-order flatten is `flattenForZOrder` with a `fold` payload that
+  _carries the flip scope through each hoisted-through plain layer_, so adding a `zAbove` /
+  `zBelow` constraint can never change which scope a subtree lowers under. (One walk, not a
+  forked copy — the fold is threaded through the single `paintOrder.ts` helper.)
+- **Bake boundaries.** A boundary whose own y space is UNDEFINED (`enclose` / `arrow` /
+  `connect`) would otherwise lower its whole subtree under a single (y-down) map. Instead its
+  child descent (`lowerChildrenOffset`) **re-runs `bake`** on each child — seeded with the
+  boundary's absolute translate (`startTransform`) and its own flip scope (`startFlip`) — and
+  lowers each leaf under that leaf's own scope's `toPixel`. So a continuous-y bar chart inside
+  an `enclose` still flips, while an ordinal neighbor beside it stays y-down. Single-orientation
+  content inherits the boundary's flip and lowers byte-identically to the old single-map descent.
+  (A connector spanning _two different_ scopes is a known gap —
+  [#657](https://github.com/gofish-graphics/gofish-graphics/issues/657).)
+
+## Fitting the subtree to the coordinate budget
+
+`coord.layout` is a **scale scope**, exactly like the root fits content to the
+canvas (gofish.tsx) — here the angular/radial budget plays the canvas role. Its
+`fitAxis(axis, budget)` reads the subtree's resolved space on that axis and
+returns a `(scaleFactor, posScale)` to hand each child: a baseline-magnitude
+(data SIZE) axis scales by `width.inverse(budget)` so the children fill the ring;
+an anchored (data POSITION) axis maps onto `[0, budget]` via a posScale. Only
+DATA-bound channels consume these — a plain number bypasses both (see
+`computeAesthetic`) — so a hand-sized (radian/pixel) mark is unaffected, while a
+mark that says `thetaSize: datum(count)` auto-fits. Because the coord is the
+single σ-scale-root, an intermediate `distribute`/`nest` under it must NOT
+re-root (it propagates the inherited σ — see the scale-root scoping gate in
+`buildChildScalePlan`); this is what makes a flat distribute confluent with any
+nested grouping of the same data-driven children (see
+[Layout & Render Passes](/internals/layout/passes)).
+
 ## Current limitations
 
 `flattenLayout` is still evolving. The source carries TODOs, and the surrounding
-`coord` layout currently hard-codes assumptions that only hold for the polar case
-(for example, the layout size is rewritten to `[2π, radius]`). The `connect`-as-leaf
+`coord` layout still carries some polar-specific assumptions. The angular extent is no
+longer the bare `2π` literal it once was: `coord.layout` reads the **angular budget**
+from the transform's `domain[0].size` (so `polar({ centralAngle })` gives a partial fan)
+and insets the radial range by the transform's **`innerRadius`** (a donut hole as a
+fraction of the outer radius), building an `effectiveTransform` that shifts `r` by the
+inner radius; the axis/grid renderers read the same budget instead of `2π`. What remains
+polar-shaped is the assumption that axis 0 is angular and axis 1 radial. The
+`connect`-as-leaf
 rule is explicitly called a hack: `connect` is excluded from flattening so it can keep
 rendering in coordinate space, where a cleaner design would have `connect` emit a child
 path mark instead. Treat this page as describing the _intended_ model — expect the

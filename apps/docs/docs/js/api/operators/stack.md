@@ -7,7 +7,7 @@ positional axis at this level. Used for stacked bar charts.
 ::: gofish
 
 ```js
-gf.Chart(seafood, { axes: true })
+gf.chart(seafood, { axes: true })
   .flow(
     gf.spread({ by: "lake", dir: "x" }),
     gf.stack({ by: "species", dir: "y" })

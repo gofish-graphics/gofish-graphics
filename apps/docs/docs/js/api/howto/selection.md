@@ -16,18 +16,18 @@ ref and throws if the layer matched zero or more than one node.
 ## Basic pattern
 
 ```ts
-Layer([
+layer([
   // Chart 1: create marks and name them
-  Chart(data)
+  chart(data)
     .flow(spread({ by: "category", dir: "x" }))
     .mark(rect({ h: "value" }).name("bars")),
 
   // Chart 2: selectAll those marks as data for a connector
-  Chart(selectAll("bars")).mark(line()),
+  chart(selectAll("bars")).mark(line()),
 ]);
 ```
 
-The `Layer` function renders both charts in the same coordinate space, allowing
+The `layer` function renders both charts in the same coordinate space, allowing
 the second chart to overlay the first.
 
 ## Example: Connected scatterplot
@@ -38,9 +38,9 @@ refs directly and read placed geometry off them, so feed them `selectAll`:
 ::: gofish
 
 ```js
-gf.Layer([
+gf.layer([
   gf
-    .Chart(drivingShifts)
+    .chart(drivingShifts)
     .flow(gf.scatter({ by: "year", x: "miles", y: "gas" }))
     .mark(
       gf
@@ -48,7 +48,7 @@ gf.Layer([
         .name("points")
     ),
   gf
-    .Chart(gf.selectAll("points"))
+    .chart(gf.selectAll("points"))
     .mark(gf.line({ stroke: "black", strokeWidth: 2 })),
 ]).render(root, { w: 400, h: 250, axes: true });
 ```
@@ -71,13 +71,13 @@ const locations = Object.entries(lakeLocations).map(([lake, { x, y }]) => ({
   y,
 }));
 
-gf.Layer([
+gf.layer([
   gf
-    .Chart(locations)
+    .chart(locations)
     .flow(gf.scatter({ by: "lake", x: "x", y: "y" }))
     .mark(gf.blank().name("points")),
   gf
-    .Chart(gf.selectAll("points"))
+    .chart(gf.selectAll("points"))
     .mark(gf.line({ stroke: "steelblue", strokeWidth: 2 })),
 ]).render(root, { w: 400, h: 250, axes: true });
 ```
@@ -95,9 +95,9 @@ Because the selected stream is now refs (not raw records), you re-encode by the
 ::: gofish
 
 ```js
-gf.Layer([
+gf.layer([
   gf
-    .Chart(seafood)
+    .chart(seafood)
     .flow(
       gf.spread({ by: "lake", dir: "x", spacing: 64 }),
       gf.derive((d) => _.orderBy(d, "count", "desc")),
@@ -105,7 +105,7 @@ gf.Layer([
     )
     .mark(gf.rect({ h: "count", fill: "species" }).name("bars")),
   gf
-    .Chart(gf.selectAll("bars"))
+    .chart(gf.selectAll("bars"))
     .flow(gf.group({ by: "datum.species" }))
     .mark(gf.area({ opacity: 0.8 })),
 ]).render(root, { w: 500, h: 300, axes: true });
@@ -129,8 +129,8 @@ handy for diagrammatic annotations. It throws if the layer matched more than one
 node, which catches mistakes early.
 
 ```ts
-Layer([
-  Chart(data).flow(/* ... */).mark(blank().name("origin")),
+layer([
+  chart(data).flow(/* ... */).mark(blank().name("origin")),
   text({ text: "start" }).name("label"),
   // ref("origin") returns one ref; errors if "origin" matched 0 or >1 nodes
   Connect({ source: "middle" }, [ref("label"), ref("origin")]),

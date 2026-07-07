@@ -38,7 +38,6 @@ const unwrapLodashArray = function <T>(value: T[] | Collection<T>): T[] {
 export const Spread = createNodeOperator(
   async (
     {
-      name,
       key,
       dir,
       spacing = 8,
@@ -51,7 +50,6 @@ export const Spread = createNodeOperator(
       axisMeasures,
       ...fancyDims
     }: {
-      name?: string;
       key?: string;
       dir: FancyDirection;
       spacing?: number;
@@ -95,8 +93,8 @@ export const Spread = createNodeOperator(
       const refs = names.map((n) => ref[n] ?? { name: n });
       // The cross-axis align: it shares the frame (unions the children's domain)
       // and, for free children (bars), commits a baseline. A self-positioned
-      // child (a scatter facet) is left alone by `align` automatically — it reads
-      // the child's abstract placement (see `emitAlignTargets`), so no guard flag.
+      // child (a scatter facet) is left alone by `align` automatically — the
+      // placement solver reads the child's abstract placement, so no guard flag.
       return [
         Constraint.align({ [alignAxis]: alignment }, refs),
         Constraint.distribute(
@@ -115,7 +113,6 @@ export const Spread = createNodeOperator(
       ];
     });
 
-    if (name !== undefined) node._name = name;
     // `sharedScale` is a scale-scope annotation (claim hoisting, #549): the node
     // solves σ locally and shares it with descendants. The layer honors this in
     // `layout` (it self-solves per axis when `shared`, into a fresh array).

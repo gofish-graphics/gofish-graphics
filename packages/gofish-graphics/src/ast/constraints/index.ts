@@ -1,38 +1,33 @@
 import type { GoFishAST } from "../_ast";
 import { GoFishNode, type Placeable } from "../_node";
 import { isToken, type Token } from "../createName";
-import { getMeasure, getValue, isValue, type Measure } from "../data";
+import {
+  getMeasure,
+  getValue,
+  isValue,
+  type MaybeValue,
+  type Measure,
+} from "../data";
 import { mergeMeasures } from "../underlyingSpace";
 import * as Interval from "../../util/interval";
-import { applyAlign, createAlignConstraint } from "./align";
-import { applyDistribute, createDistributeConstraint } from "./distribute";
-import { shadowCheckConstraint, solverCheckEnabled } from "../solver/shadow";
-import { applyPosition, createPositionConstraint } from "./position";
+import { createAlignConstraint } from "./align";
+import { createDistributeConstraint } from "./distribute";
+import { createPositionConstraint } from "./position";
 import {
   createZAboveConstraint,
   createZBelowConstraint,
   isZOrderConstraint,
 } from "./zorder";
-import { applyNest, createNestConstraint, isNestConstraint } from "./nest";
-import { applyGrid, createGridConstraint, isGridConstraint } from "./grid";
-import {
-  applySpan,
-  createSpanConstraint,
-  isSpanConstraint,
-  spanDatumInterval,
-} from "./span";
+import { createNestConstraint } from "./nest";
+import { isPositionInterval, spanDatumInterval } from "./position";
 import type { AlignConstraint, AlignOptions } from "./align";
 import type { DistributeConstraint, DistributeOptions } from "./distribute";
 import type { PositionConstraint, PositionOptions } from "./position";
 import type { ZAboveConstraint, ZBelowConstraint } from "./zorder";
 import type { NestConstraint, NestOptions } from "./nest";
-import type { GridConstraint, GridOptions } from "./grid";
-import type { SpanConstraint, SpanOptions } from "./span";
-import {
-  isPlacedOn,
-  type ConstraintPosScales,
-  type ConstraintRef,
-} from "./shared";
+import type { GridConstraint } from "./grid";
+import { type ConstraintPosScales, type ConstraintRef } from "./shared";
+import { solvePlacementConstraints } from "./placementSolver";
 
 export type {
   Axis,
@@ -42,19 +37,26 @@ export type {
 } from "./shared";
 export type { AlignConstraint, AlignOptions } from "./align";
 export type { DistributeConstraint, DistributeOptions } from "./distribute";
-export type { PositionConstraint, PositionOptions } from "./position";
+export type {
+  PositionConstraint,
+  PositionInterval,
+  PositionOptions,
+} from "./position";
+export { isPositionInterval } from "./position";
 export type {
   ZAboveConstraint,
   ZBelowConstraint,
   ZOrderConstraint,
 } from "./zorder";
 export type { NestConstraint, NestOptions } from "./nest";
-export type { GridConstraint, GridOptions } from "./grid";
-export type { SpanConstraint, SpanOptions } from "./span";
+// `GridConstraint` stays in the ConstraintSpec union, but grid is not part of
+// the public authoring surface: it is `table`'s private elaboration target
+// (`createGridConstraint` in ./grid, used by table.tsx). No `Constraint.grid`.
+export type { GridConstraint } from "./grid";
 export { isZOrderConstraint } from "./zorder";
 export { isNestConstraint, nestedSpace } from "./nest";
 export { isGridConstraint, gridSpaces, gridCellSize } from "./grid";
-export { isSpanConstraint } from "./span";
+export { getPositioningConstraintRefs } from "./proposalPlan";
 export { BBox } from "./bbox";
 
 export type ConstraintSpec =
@@ -64,8 +66,7 @@ export type ConstraintSpec =
   | ZAboveConstraint
   | ZBelowConstraint
   | NestConstraint
-  | GridConstraint
-  | SpanConstraint;
+  | GridConstraint;
 
 // --- Factory ---
 
@@ -96,12 +97,6 @@ export const Constraint = {
     children: [ConstraintRef, ConstraintRef]
   ): NestConstraint {
     return createNestConstraint(options, children);
-  },
-  grid(options: GridOptions, children: ConstraintRef[]): GridConstraint {
-    return createGridConstraint(options, children);
-  },
-  span(options: SpanOptions, children: ConstraintRef[]): SpanConstraint {
-    return createSpanConstraint(options, children);
   },
 };
 
@@ -143,48 +138,25 @@ export function collectConstraintRefs(
 }
 
 /**
- * The set of names referenced by *positioning* constraints (`align` /
- * `distribute` / `nest`). Used by `layer.tsx` to compute `constrainedNames`,
- * which controls phase-1 baseline-placement skipping. z-order constraints don't
- * position, so they must be excluded.
- *
- * `nest` is special: only the inner child (`children[1]`) skips baseline
- * placement. The outer child (`children[0]`) is left in the set so phase-1
- * places it at baseline — `applyNest` reads outer's placed position to
- * center inner inside it.
- */
-export function getPositioningConstraintRefs(
-  constraints: ConstraintSpec[]
-): Set<string> {
-  const names = new Set<string>();
-  for (const c of constraints) {
-    if (isZOrderConstraint(c)) continue;
-    if (isNestConstraint(c)) {
-      names.add(c.children[1].name);
-      continue;
-    }
-    // grid: every cell is placed by `applyGrid`, so all skip phase-1 baseline.
-    for (const ref of c.children) if (ref) names.add(ref.name);
-  }
-  return names;
-}
-
-/**
  * Fold the *datum* coordinates of any `position` constraints into a per-axis
  * data interval. This is the constraint system's *fragment* of underlying-space
  * resolution: a `Constraint.position({ y: datum(v) })` declares that its target
  * lives at data value `v`, so the union of those values is the layer's POSITION
- * domain on that axis. Literal (raw-pixel) coordinates are *not* data and don't
- * contribute. The layer's `resolveUnderlyingSpace` merges this with the
- * children's spaces (see `layer.tsx`).
+ * domain on that axis. An interval coordinate (`{ x: [a, b] }`) contributes its
+ * whole datum range `interval(min(a,b), max(a,b))`. Literal (raw-pixel)
+ * coordinates and endpoints are *not* data and don't contribute. The layer's
+ * `resolveUnderlyingSpace` merges this with the children's spaces (see
+ * `layer.tsx`).
  *
  * Measure (Stage-1 guard): a datum coordinate's `measure` is folded per axis
  * with {@link mergeMeasures} (equal measures unify; two *different* defined
  * measures throw — a unit conflict among a layer's own position constraints).
- * The layer's `resolveAxis` then treats this as the axis's unit, PREFERRING it
- * over the children's POSITION measure (falling back to the children only for
- * untagged literal-pixel coords) — restoring the unit tag the scatter reduction
- * dropped, without strict-unifying against a self-scaling child's leaked unit.
+ * An interval's two endpoints unify their measures the same way (an interval in
+ * mixed units is a conflict). The layer's `resolveAxis` then treats this as the
+ * axis's unit, PREFERRING it over the children's POSITION measure (falling back
+ * to the children only for untagged literal-pixel coords) — restoring the unit
+ * tag the scatter reduction dropped, without strict-unifying against a
+ * self-scaling child's leaked unit.
  */
 export function collectPositionDomains(constraints: ConstraintSpec[]): {
   x?: Interval.Interval;
@@ -196,69 +168,66 @@ export function collectPositionDomains(constraints: ConstraintSpec[]): {
   let y: Interval.Interval | undefined;
   let xMeasure: Measure | undefined;
   let yMeasure: Measure | undefined;
-  const fold = (
-    acc: Interval.Interval | undefined,
+  const pointInterval = (
     coord: PositionConstraint["x"]
   ): Interval.Interval | undefined => {
-    if (!isValue(coord)) return acc;
-    const n = getValue(coord);
-    const iv = Interval.interval(n, n);
-    return acc ? Interval.unionAll(acc, iv) : iv;
+    if (!isValue(coord)) return undefined;
+    const n = getValue(coord as MaybeValue<number>);
+    return Interval.interval(n, n);
   };
   const unionIv = (
     acc: Interval.Interval | undefined,
     iv: Interval.Interval | undefined
   ) => (iv === undefined ? acc : acc ? Interval.unionAll(acc, iv) : iv);
-  // A datum endpoint's measure; literals carry none. `[min,max]` span endpoints
-  // unify their two measures the same way (a span in mixed units is a conflict).
+  // A point datum's measure; literals carry none. An interval's `[min,max]`
+  // endpoints unify their two measures the same way (mixed units are a conflict).
   const coordMeasure = (
     coord: PositionConstraint["x"] | undefined
-  ): Measure | undefined =>
-    coord === undefined ? undefined : getMeasure(coord);
-  const spanMeasure = (
-    span: SpanConstraint["x"] | undefined
-  ): Measure | undefined =>
-    span === undefined
+  ): Measure | undefined => {
+    if (coord === undefined) return undefined;
+    return isPositionInterval(coord)
+      ? mergeMeasures(
+          getMeasure(coord[0]),
+          getMeasure(coord[1]),
+          "position interval endpoints"
+        )
+      : getMeasure(coord);
+  };
+  const coordInterval = (
+    coord: PositionConstraint["x"] | undefined
+  ): Interval.Interval | undefined =>
+    coord === undefined
       ? undefined
-      : mergeMeasures(
-          getMeasure(span[0]),
-          getMeasure(span[1]),
-          "span endpoints"
-        );
+      : isPositionInterval(coord)
+        ? spanDatumInterval(coord)
+        : pointInterval(coord);
   for (const c of constraints) {
-    if (c.type === "position") {
-      x = fold(x, c.x);
-      y = fold(y, c.y);
-      xMeasure = mergeMeasures(
-        xMeasure,
-        coordMeasure(c.x),
-        "position constraints"
-      );
-      yMeasure = mergeMeasures(
-        yMeasure,
-        coordMeasure(c.y),
-        "position constraints"
-      );
-    } else if (isSpanConstraint(c)) {
-      // A span's two endpoints contribute their data range to the axis domain,
-      // so the layer builds a posScale covering the spanned interval.
-      x = unionIv(x, spanDatumInterval(c.x));
-      y = unionIv(y, spanDatumInterval(c.y));
-      xMeasure = mergeMeasures(xMeasure, spanMeasure(c.x), "span constraints");
-      yMeasure = mergeMeasures(yMeasure, spanMeasure(c.y), "span constraints");
-    }
+    if (c.type !== "position") continue;
+    x = unionIv(x, coordInterval(c.x));
+    y = unionIv(y, coordInterval(c.y));
+    xMeasure = mergeMeasures(
+      xMeasure,
+      coordMeasure(c.x),
+      "position constraints"
+    );
+    yMeasure = mergeMeasures(
+      yMeasure,
+      coordMeasure(c.y),
+      "position constraints"
+    );
   }
   return { x, y, xMeasure, yMeasure };
 }
 
 /**
- * Apply *positioning* constraints to a set of placeables. z-order constraints
- * are skipped here — they are resolved at render time, not layout time.
+ * Apply a layer's constraints as one relational placement problem. An
+ * interval-form `position` contributes extent facts to the same solve, so
+ * declaration order cannot choose whether size or position wins. z-order
+ * constraints are resolved separately at render time.
  *
- * @param constraints - The constraint specs to apply in order
+ * @param constraints - The constraint specs to compose
  * @param nameToPlaceable - Map from child name to its Placeable
- * @param sizes - The layer's box size `[w, h]`, used to derive an unanchored
- *   `align`'s fallback baseline (layer-box edge) per axis
+ * @param sizes - The layer's box size `[w, h]`, used by grid placement
  * @param posScales - Per-axis data→pixel scales for `position` constraints
  */
 export function applyConstraints(
@@ -267,45 +236,15 @@ export function applyConstraints(
   sizes: [number, number],
   posScales?: ConstraintPosScales
 ): void {
-  for (const constraint of constraints) {
-    if (isZOrderConstraint(constraint)) continue;
-
-    if (isNestConstraint(constraint)) {
-      const outer = nameToPlaceable.get(constraint.children[0].name);
-      const inner = nameToPlaceable.get(constraint.children[1].name);
-      if (outer && inner) applyNest(constraint, outer, inner);
-      continue;
-    }
-
-    if (isGridConstraint(constraint)) {
-      applyGrid(constraint, nameToPlaceable, sizes);
-      continue;
-    }
-
-    const targets = constraint.children
-      .map((ref) => nameToPlaceable.get(ref.name))
-      .filter((p): p is Placeable => p !== undefined);
-
-    if (targets.length === 0) continue;
-
-    // Solver shadow (#39, disposable observe→assert): snapshot each target's
-    // per-axis placement BEFORE the constraint runs — only when the check is on,
-    // so production pays nothing. The single hook below dispatches/no-ops.
-    const prePlaced = solverCheckEnabled()
-      ? targets.map(
-          (t) => [isPlacedOn(t, 0), isPlacedOn(t, 1)] as [boolean, boolean]
-        )
-      : undefined;
-
-    if (constraint.type === "align") {
-      applyAlign(constraint, targets, sizes, posScales);
-    } else if (constraint.type === "position") {
-      applyPosition(constraint, targets, posScales);
-    } else if (isSpanConstraint(constraint)) {
-      applySpan(constraint, targets, posScales);
-    } else {
-      applyDistribute(constraint, targets);
-    }
-    shadowCheckConstraint(constraint, targets, posScales, prePlaced);
-  }
+  const placement = constraints.filter(
+    (
+      constraint
+    ): constraint is
+      | AlignConstraint
+      | DistributeConstraint
+      | PositionConstraint
+      | NestConstraint
+      | GridConstraint => !isZOrderConstraint(constraint)
+  );
+  solvePlacementConstraints(placement, nameToPlaceable, sizes, posScales);
 }

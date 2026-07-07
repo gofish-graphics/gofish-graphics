@@ -30,17 +30,21 @@ export const Default: StoryObj = {
   render: () => {
     const container = initializeContainer();
     spreadY(
-      { reverse: true, spacing: 4, alignment: "start" },
+      // The class axis is ORDINAL, so it stays y-down (reads top→bottom) — the
+      // first class (First) is at the top and Crew at the bottom natively (#629).
+      { spacing: 4, alignment: "start" },
       For(groupBy(titanic, "class"), (items, cls) =>
         spreadX(
           { key: cls, h: _(items).sumBy("count") / 10, spacing: 2, alignment: "middle" },
           For(groupBy(items, "sex"), (sItems, sex) =>
             stackY(
               {
-                reverse: true,
                 w: (_(sItems).sumBy("count") / _(items).sumBy("count")) * 100,
                 alignment: "middle",
                 sharedScale: true,
+                // y-down: reverse so the colored (survived) part stacks ABOVE
+                // the gray (did-not-survive) part.
+                reverse: true,
               },
               For(groupBy(sItems, "survived"), (items, survived) =>
                 rect({

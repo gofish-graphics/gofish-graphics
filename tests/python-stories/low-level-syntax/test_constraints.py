@@ -5,6 +5,9 @@ Ports the seven single-chart stories: the six that demonstrate
 pixel-pure `end` fallback canary, #552). The eight side-by-side equivalence
 stories (`SpreadY_*`, `SpreadX_*`) use a multi-panel DOM scaffold that
 doesn't fit the single-chart parity harness — those are per-export exempt.
+`SpreadY_AlignMiddle` specifically now compares two freely translated systems
+after layout normalization instead of pinning a child to the canvas center; that
+change remains covered by the JS side-by-side story and the confluence tests.
 """
 
 from gofish import Constraint, datum, layer, rect, spread, wavy
