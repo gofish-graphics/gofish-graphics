@@ -7,6 +7,7 @@ covers:
   - packages/gofish-graphics/src/interaction/index.ts
   - packages/gofish-graphics/src/interaction/types.ts
   - packages/gofish-graphics/src/interaction/live.ts
+  - packages/gofish-graphics/src/interaction/liveSlots.ts
   - packages/gofish-graphics/src/interaction/inputs.ts
   - packages/gofish-graphics/src/interaction/resolveContext.ts
   - packages/gofish-graphics/src/interaction/frameScales.ts
