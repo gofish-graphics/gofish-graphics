@@ -1,3 +1,7 @@
+// <gofish-wiki> AUTO-GENERATED — see covers: in the essay; run `pnpm --filter docs sync-backlinks`
+// @wiki Reactivity — /internals/frontend/reactivity
+// </gofish-wiki>
+
 /**
  * Ambient interactive-resolve context — the discovery mechanism behind the
  * reactive surface.

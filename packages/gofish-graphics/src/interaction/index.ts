@@ -1,3 +1,7 @@
+// <gofish-wiki> AUTO-GENERATED — see covers: in the essay; run `pnpm --filter docs sync-backlinks`
+// @wiki Reactivity — /internals/frontend/reactivity
+// </gofish-wiki>
+
 /**
  * GoFish reactive interaction layer — signals live OUTSIDE the layout
  * pipeline (which stays synchronous and signal-free); the read LOCATION of an

@@ -1,3 +1,7 @@
+// <gofish-wiki> AUTO-GENERATED — see covers: in the essay; run `pnpm --filter docs sync-backlinks`
+// @wiki Reactivity — /internals/frontend/reactivity
+// </gofish-wiki>
+
 /**
  * Frame-recorded coordinate conversions: data ↔ screen px, per axis, built by
  * composing the RECORDED forward maps from a published frame (root posScales +

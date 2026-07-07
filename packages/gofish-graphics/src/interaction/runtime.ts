@@ -1,3 +1,7 @@
+// <gofish-wiki> AUTO-GENERATED — see covers: in the essay; run `pnpm --filter docs sync-backlinks`
+// @wiki Reactivity — /internals/frontend/reactivity
+// </gofish-wiki>
+
 /**
  * InteractionRuntime — owns the interaction side of a rendered chart. It has
  * exactly three jobs and never touches the layout pipeline:

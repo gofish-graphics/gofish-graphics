@@ -1,3 +1,7 @@
+// <gofish-wiki> AUTO-GENERATED — see covers: in the essay; run `pnpm --filter docs sync-backlinks`
+// @wiki Reactivity — /internals/frontend/reactivity
+// </gofish-wiki>
+
 /**
  * live() — a reactive channel value (the third value kind: aesthetic literal |
  * data accessor | live). An ordinary accessor callback `(d) => v` is evaluated
