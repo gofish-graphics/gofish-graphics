@@ -427,6 +427,10 @@ export const coord = createNodeOperator(
           const items: DisplayList.DisplayItem[] = [];
 
           // Content: warp each flattened child through the coord transform.
+          // `contentToPixel` only composes a translate onto `outer`, so it
+          // preserves the incoming y-parity — the active flip scope
+          // (`session.flip`) is unchanged (issue #629; coord self-normalization
+          // is a Stage-1 concern).
           session.toPixel = contentToPixel;
           try {
             for (const child of children) {

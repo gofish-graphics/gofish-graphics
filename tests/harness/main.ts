@@ -42,6 +42,7 @@ import {
   Constraint,
   ref,
   arrow,
+  enclose,
   // Region-compositing combinators. PR #404's Stage-2 rename (#196/#202)
   // renamed the public Porter-Duff exports to Figma-inspired names:
   //   inside → intersect, xor → exclude, out → subtract, atop → paint.
@@ -90,6 +91,9 @@ const COMBINATOR_FACTORIES: Record<
   group: (opts, marks) => group(opts, marks) as unknown as Mark<any>,
   table: (opts, marks) => table(opts, marks) as unknown as Mark<any>,
   layer: (opts, marks) => layer(opts, marks) as unknown as Mark<any>,
+  // Graphical wrapping operator (padding/rx/ry border), combinator-only like
+  // layer; opts ride in `options`. Mirrors registry.ts's COMBINATOR_FACTORIES.
+  enclose: (opts, marks) => enclose(opts, marks) as unknown as Mark<any>,
   arrow: (opts, marks) => arrow(opts, marks) as unknown as Mark<any>,
   // line/ribbon low-level combinator form (replaces the removed connect).
   line: (opts, marks) => line(opts, marks) as unknown as Mark<any>,

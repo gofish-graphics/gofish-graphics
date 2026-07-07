@@ -65,11 +65,14 @@ chart(data, axes={"x": {"title": False}, "y": True})    # suppress inferred x ti
 chart(data, axes={"x": {"side": "end"}})                # x-axis on the far edge
 ```
 
-Each per-axis dict also accepts `"side": "start" | "end"` (default `"start"`).
-The side is **frame-relative**: `"start"` is the near/origin edge (bottom in a
-y-up chart, top in y-down free space), `"end"` the far edge — e.g.
-`{"x": {"side": "end"}}` puts a category x-axis at the bottom of an
-upward-filling unit/waffle chart. Currently applies to ordinal (category) axes.
+Each per-axis dict also accepts `"side": "start" | "end"`. By default a
+**continuous/quantitative x-axis renders at the visual bottom** (and a continuous
+y-axis at the left) once the frame's y-orientation is resolved — so a scatter, a
+horizontal bar, and a faceted small-multiple all place their value axis at the
+bottom with no option. An explicit `"side"` overrides that with the literal
+**frame-relative** seating: `"start"` is the near/origin edge (top in a y-down
+frame, bottom in y-up), `"end"` the far edge — e.g. `{"x": {"side": "end"}}`
+forces the x-axis onto the opposite edge from the default.
 
 For polar charts, combine with `coord` (and `padding` for label room):
 

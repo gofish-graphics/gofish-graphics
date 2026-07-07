@@ -49,6 +49,7 @@ import { scatter } from "../ast/graphicalOperators/scatter";
 import { group } from "../ast/graphicalOperators/group";
 import { table } from "../ast/graphicalOperators/table";
 import { arrow } from "../ast/graphicalOperators/arrow";
+import { enclose } from "../ast/graphicalOperators/enclose";
 import {
   treemap as treemapOperator,
   Treemap,
@@ -117,6 +118,10 @@ export const COMBINATOR_FACTORIES: Record<
   group: (opts, marks) => (group as any)(opts, marks) as unknown as Mark<any>,
   table: (opts, marks) => (table as any)(opts, marks) as unknown as Mark<any>,
   layer: (opts, marks) => (layer as any)(opts, marks) as unknown as Mark<any>,
+  // A graphical wrapping operator (padding/rx/ry border) — combinator-only,
+  // like layer but with no `.constrain`; opts ride in `options`.
+  enclose: (opts, marks) =>
+    (enclose as any)(opts, marks) as unknown as Mark<any>,
   arrow: (opts, marks) => (arrow as any)(opts, marks) as unknown as Mark<any>,
   // `line`/`ribbon` are derived marks (createDerivedMark) whose `(opts, marks)`
   // overload is the low-level combinator form (the drop-in for the removed

@@ -63,19 +63,37 @@ axis line.
 
 ### Which side the axis seats on
 
-By default that gutter is the **near/start** edge (the smaller cross-coordinate),
-which renders at the bottom in a y-up chart and the top in y-down free space. The
-public `axes: { x: { side: "start" | "end" } }` option (issue #143/#16,
-frame-relative) flips an axis to the far/end edge instead — so a category x-axis
-can sit at the bottom of an upward-filling y-down chart. The per-dim
-`side` is threaded `elaborateAxes → elaborationsFor → elaborate{Continuous,
-Difference,Ordinal}Axis`, and each seating decision reads it: `gutterConstraints`
-flips the `innerAlign` edge and the `distribute`/standoff order, `tickMark` swaps
-the label/tick order so the tick still faces the content, the ordinal label row
-flips its `distribute([label, content])` pair, and the axis **titles** follow
-their axis to the same edge (`elaborateAxisTitles` takes the same `sides`).
-Default `"start"` reproduces the original seating exactly (continuous charts stay
-byte-identical).
+Each axis seats in a gutter on one cross-edge. The **default** target is the
+CONVENTIONAL edge — a continuous/difference **x-axis renders at the visual
+bottom**, a continuous y-axis at the left — regardless of whether the frame
+y-flips (issue #143/#16/#629). `axisSide` (in `elaborationsFor`) turns that target
+into the abstract `start`/`end` edge to author against: when the cross frame
+mirrors (a CONTINUOUS cross y, a global `yUp`, or a `coord` ancestor — tracked by
+the `underCoord` flag threaded down `elaborateAxes`), the near `"start"` edge lands
+at the bottom, so keep it; otherwise (a horizontal bar's ordinal category y, a
+faceted stack's ordinal facet y) the far `"end"` edge is the bottom. This is what
+puts a horizontal bar's and a faceted small-multiple's value axis at the bottom
+with no option — the pre-#629 behavior left them stranded at the top.
+
+The public `axes: { x: { side: "start" | "end" } }` option is the **override**:
+when specified it is honored **literally** (frame-relative: `"start"`=near,
+`"end"`=far), bypassing the bottom-default so a caller can force the opposite edge.
+`resolveAxisSides` returns `undefined` for an unspecified side precisely so the
+elaboration can tell an explicit `"start"` apart from the default. The per-dim
+side is threaded `elaborateAxes → elaborationsFor → elaborate{Continuous,
+Difference,Ordinal}Axis`, and each seating decision reads the resolved edge:
+`gutterConstraints` flips the `innerAlign` edge and the `distribute`/standoff
+order, `tickMark` swaps the label/tick order so the tick still faces the content,
+the ordinal label row flips its `distribute([label, content])` pair, and the axis
+**titles** follow their axis to the same edge (see below).
+
+Ordinal axes keep the plain `"start"` default (they flip with the content like a
+category row, not to a fixed edge). Chart-level **axis titles** are chrome
+(`elaborateAxisTitles`), so they reach the bottom by a different mechanism than the
+content-embedded line — a box-mirror about the canvas when the frame flips, or a
+direct far-edge seating (with the mirror suppressed) when it does not. `gofish.tsx`
+computes the title's `sides` and the mirror-suppression (`xTitleSeatsFar`) to match
+wherever `axisSide` put the line, so the two always land together.
 
 The wrapper inherits the wrapped node's `key` and `_name`, so faceting and
 external refs keep resolving to it. After the rewrite, the whole tree's underlying

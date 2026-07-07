@@ -522,12 +522,12 @@ export class ChartBuilder<TInput, TOutput = TInput> {
       result = await Layer({}, [node, connectFrame]);
     }
 
-    // y-up is no longer a chart-vs-not flag: the root render decides it
-    // semantically from the resolved y space (a CONTINUOUS value axis flips,
-    // an ORDINAL category axis does not), so a vertical bar chart flips while a
-    // horizontal one reads top-down — and a chart composed inside a
-    // `gofish([...])`/`.layer()` gets the same treatment for free. See
-    // `subtreeHasCoord`/`isCONTINUOUS` in gofish.tsx and issue #143/#16.
+    // y-up is no longer a chart-vs-not flag: orientation is a PER-SCOPE property
+    // resolved at bake time (issue #629). Each topmost continuous-y node (a value
+    // axis) is mirrored about its own placed band, while an ordinal category axis
+    // stays y-down — so a vertical bar chart flips, a horizontal one reads
+    // top-down, and a chart composed inside a `gofish([...])`/`.layer()` gets the
+    // same per-scope treatment for free. See `bake`'s `declaredYUp` and #629.
 
     if (this.nodeZOrder !== undefined) {
       result.zOrder(this.nodeZOrder);

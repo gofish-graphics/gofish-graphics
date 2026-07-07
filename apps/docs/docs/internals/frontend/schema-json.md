@@ -516,6 +516,7 @@ for the API.
             "group",
             "table",
             "layer",
+            "enclose",
             "arrow",
             "line",
             "ribbon",
