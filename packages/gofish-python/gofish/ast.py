@@ -902,12 +902,22 @@ _PREVIOUS_LAYER_MARKS = object()
 
 
 def _wire_layer_tier(producer, consumer, auto_idx):
-    """Wire a `.layer()` step. If `consumer` is an empty `chart()` scope, name
-    `producer`'s mark (auto unless already named) and bind the consumer's data to
-    `selectAll(thatName)`. Returns the (possibly updated) producer and consumer.
+    """Wire a `.layer()` step. A bare `Mark` tier (a component-level annotation
+    overlay) passes through untouched — it is never a producer for an empty
+    `chart()` scope, and never a `selectAll` consumer. Otherwise, if `consumer`
+    is an empty `chart()` scope, name `producer`'s mark (auto unless already
+    named) and bind the consumer's data to `selectAll(thatName)`. Returns the
+    (possibly updated) producer and consumer.
     """
+    if not isinstance(consumer, ChartBuilder):
+        return producer, consumer
     if not consumer._uses_previous_marks():
         return producer, consumer
+    if not isinstance(producer, ChartBuilder):
+        raise ValueError(
+            ".layer(chart()) with an empty scope can't inherit from a bare mark "
+            "tier — give the previous tier a chart with a .mark() to draw from."
+        )
     producer, name = producer._ensure_named_mark(f"__gofish_layer_{auto_idx}")
     consumer = consumer._with_data(selectAll(name))
     return producer, consumer
@@ -1025,14 +1035,21 @@ class ChartBuilder:
         new_builder._connect = mark
         return new_builder
 
-    def layer(self, child: "ChartBuilder") -> "LayerBuilder":
-        """Stack another tier over this one. ``child`` is its own ``chart(...)``
-        pipeline; an empty ``chart()`` scope (no data) inherits *this* tier's
-        marks (so ``.layer(chart().flow(group(by=...)).mark(area()))`` connects
-        what you just drew), while ``chart(table)`` drives the tier from another
-        dataset (resolve back into the chart with
-        ``resolve(..., from_=selectAll(...))``). Returns a ``LayerBuilder`` so
-        tiers keep chaining: ``.layer(a).layer(b)``. Mirrors the JS ``.layer()``.
+    def layer(self, child: Union["ChartBuilder", "Mark"]) -> "LayerBuilder":
+        """Stack another tier over this one. ``child`` is usually its own
+        ``chart(...)`` pipeline; an empty ``chart()`` scope (no data) inherits
+        *this* tier's marks (so ``.layer(chart().flow(group(by=...)).mark(area()))``
+        connects what you just drew), while ``chart(table)`` drives the tier from
+        another dataset (resolve back into the chart with
+        ``resolve(..., from_=selectAll(...))``).
+
+        ``child`` may instead be a bare ``Mark`` (e.g. ``text(...)``,
+        ``rect(...)``) — a *component-level annotation tier*: a datumless overlay
+        (threshold rule, caption, ...) with no data pipeline of its own,
+        serialized as a ``{type: "raw-mark", mark: ...}`` tier.
+
+        Returns a ``LayerBuilder`` so tiers keep chaining: ``.layer(a).layer(b)``.
+        Mirrors the JS ``.layer()``.
         """
         producer, consumer = _wire_layer_tier(self, child, 0)
         return LayerBuilder([producer, consumer], builder_chain=True)
@@ -2346,6 +2363,8 @@ def petal(
 def text(
     text: Optional[Any] = None,
     fill: Optional[str] = None,
+    x: Optional[Union[int, str]] = None,
+    y: Optional[Union[int, str]] = None,
     fontSize: Optional[Union[int, str]] = None,
     fontWeight: Optional[Union[int, str]] = None,
     fontFamily: Optional[str] = None,
@@ -2362,6 +2381,8 @@ def text(
             tree, registers the callable, and prepends a derive step that
             populates an auto-generated field per row.
         fill: Text color.
+        x, y: Position (e.g. for a caption in a `.layer(text(...))` annotation
+            tier).
         fontSize / fontWeight / fontFamily: Typography.
         debugBoundingBox: Draw the text's bounding box (for layout debug).
         label: Auto-value-label flag (different from text content).
@@ -2376,6 +2397,8 @@ def text(
     for k, value in [
         ("text", text),
         ("fill", fill),
+        ("x", x),
+        ("y", y),
         ("fontSize", fontSize),
         ("fontWeight", fontWeight),
         ("fontFamily", fontFamily),
@@ -2706,9 +2729,10 @@ class LayerBuilder:
         # False and renders without those inferred titles.
         self._builder_chain = builder_chain
 
-    def layer(self, child: ChartBuilder) -> "LayerBuilder":
+    def layer(self, child: Union[ChartBuilder, "Mark"]) -> "LayerBuilder":
         """Stack another tier; an empty ``chart()`` scope inherits the marks of
-        the immediately preceding tier (see ``ChartBuilder.layer``)."""
+        the immediately preceding tier, and a bare ``Mark`` is a component-level
+        annotation tier (see ``ChartBuilder.layer``)."""
         producer, consumer = _wire_layer_tier(
             self.children[-1], child, len(self.children) - 1
         )
@@ -2808,8 +2832,20 @@ class LayerBuilder:
         import pandas as pd
         import pyarrow as pa
 
-        def _serialize_child_data(child: ChartBuilder) -> str:
-            """Serialize a child chart's data to base64 Arrow bytes."""
+        def _empty_arrow() -> str:
+            schema = pa.schema([pa.field("_placeholder", pa.int32())])
+            table = pa.Table.from_arrays([], schema=schema)
+            sink = pa.BufferOutputStream()
+            with pa.ipc.new_stream(sink, schema) as writer:
+                writer.write_table(table)
+            return base64.b64encode(sink.getvalue().to_pybytes()).decode("ascii")
+
+        def _serialize_child_data(child) -> str:
+            """Serialize a child tier's data to base64 Arrow bytes. A bare
+            `Mark` annotation tier has no data pipeline, so it gets an empty
+            placeholder table."""
+            if not isinstance(child, ChartBuilder):
+                return _empty_arrow()
             if isinstance(child.data, _RefProxy):
                 schema = pa.schema([pa.field("_placeholder", pa.int32())])
                 table = pa.Table.from_arrays([], schema=schema)
@@ -2840,8 +2876,13 @@ class LayerBuilder:
         derive_functions: dict = {}
         for i, child in enumerate(self.children):
             arrow_dict[str(i)] = _serialize_child_data(child)
-            for op in _collect_derive_operators(child.operators):
-                derive_functions[op.lambda_id] = op.fn
+            if isinstance(child, ChartBuilder):
+                for op in _collect_derive_operators(child.operators):
+                    derive_functions[op.lambda_id] = op.fn
+            else:
+                # Mark annotation tier: register its accessor lambdas.
+                for lambda_id, rows_fn in _collect_mark_lambdas(child):
+                    derive_functions[lambda_id] = rows_fn
 
         arrow_data = json.dumps(arrow_dict)
         spec = self.to_ir()

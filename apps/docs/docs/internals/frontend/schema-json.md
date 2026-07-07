@@ -174,8 +174,16 @@ for the API.
         },
         "charts": {
           "type": "array",
+          "description": "Layer tiers. Each is a ChartIR; the v3 chart(...).layer(mark) builder chain may also include a RawMarkIR tier (a component-level, datumless annotation overlay).",
           "items": {
-            "$ref": "#/$defs/ChartIR"
+            "oneOf": [
+              {
+                "$ref": "#/$defs/ChartIR"
+              },
+              {
+                "$ref": "#/$defs/RawMarkIR"
+              }
+            ]
           }
         },
         "options": {

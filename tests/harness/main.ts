@@ -858,8 +858,13 @@ function renderChart(spec: HarnessSpec) {
         const { w, h, axes, debug, ...layerOptsRaw } = layerAll;
         const layerOpts = resolveOptions(layerOptsRaw);
 
-        const childCharts = spec.charts.map((c) =>
-          buildChartFromSpec(c, spec.deriveServerUrl, resolveToken)
+        // A tier is a chart (ChartBuilder) or a component-level annotation
+        // (raw-mark → a Mark). Build each accordingly; the builder chain stacks
+        // them via `.layer()`, which accepts either.
+        const childCharts = spec.charts.map((c: any) =>
+          c && c.type === "raw-mark"
+            ? mapMark(c.mark, spec.deriveServerUrl, resolveToken)
+            : buildChartFromSpec(c, spec.deriveServerUrl, resolveToken)
         );
 
         if (spec.constraints && spec.constraints.length > 0) {

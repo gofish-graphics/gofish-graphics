@@ -585,6 +585,27 @@ async function main() {
     );
   }
 
+  /* ------------------- .layer(mark) annotation tier ---------------- */
+  console.log("\nlayer(mark) annotation tier");
+  {
+    const container = makeContainer();
+    // A bare rect passed to .layer(...) is a component-level annotation tier
+    // (a datumless overlay). It should resolve and render over the bars — no
+    // empty-data chart() scope needed.
+    await chart(data, { axes: false })
+      .flow(spread({ by: "cat", dir: "x" }))
+      .mark(rect({ h: "count", fill: "#00f" }))
+      .layer(rect({ y: 4, h: 3, w: 180, fill: "#333" }))
+      .render(container, { w: 200, h: 120 });
+    await settle();
+    ok("one svg rendered", container.querySelectorAll("svg").length === 1);
+    ok(
+      "bars plus the annotation rule are present",
+      container.querySelectorAll("rect").length === 4,
+      String(container.querySelectorAll("rect").length)
+    );
+  }
+
   console.log(`\n${passed} passed, ${failed} failed`);
   if (failed > 0) process.exit(1);
 }

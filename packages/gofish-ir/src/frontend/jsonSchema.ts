@@ -101,7 +101,14 @@ export const FRONTEND_IR_JSON_SCHEMA = {
       required: ["type", "charts"],
       properties: {
         type: { const: "layer" },
-        charts: { type: "array", items: { $ref: "#/$defs/ChartIR" } },
+        charts: {
+          type: "array",
+          description:
+            "Layer tiers. Each is a ChartIR; the v3 chart(...).layer(mark) builder chain may also include a RawMarkIR tier (a component-level, datumless annotation overlay).",
+          items: {
+            oneOf: [{ $ref: "#/$defs/ChartIR" }, { $ref: "#/$defs/RawMarkIR" }],
+          },
+        },
         options: { type: "object" },
         constraints: {
           type: "array",

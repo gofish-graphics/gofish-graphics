@@ -387,15 +387,22 @@ export class ChartBuilder<TInput, TOutput = TInput> {
   }
 
   /**
-   * Stack another tier over this one. `child` is its own `Chart(...)` pipeline;
-   * an empty `Chart()` scope (no data) inherits *this* tier's marks (so
+   * Stack another tier over this one. `child` is usually its own `Chart(...)`
+   * pipeline; an empty `Chart()` scope (no data) inherits *this* tier's marks (so
    * `.layer(Chart().flow(group({by})).mark(area()))` connects what you just
    * drew), while `Chart(table)` drives the tier from another dataset (resolve
-   * back into the chart with `resolve(..., { from: selectAll(...) })`). Returns
-   * a `LayerBuilder` so tiers keep chaining: `.layer(a).layer(b)`. Sugar for the
-   * manual `layer([this, child])` + `selectAll` wiring.
+   * back into the chart with `resolve(..., { from: selectAll(...) })`).
+   *
+   * `child` may instead be a bare `Mark` (e.g. `text({...})`, `rect({...})`) — a
+   * *component-level annotation tier*: a datumless overlay resolved against the
+   * shared layer context (so a `.name(...)`-tagged annotation still registers)
+   * with no data pipeline of its own. Use it for threshold rules, captions, and
+   * other chrome that doesn't map over data.
+   *
+   * Returns a `LayerBuilder` so tiers keep chaining: `.layer(a).layer(b)`. Sugar
+   * for the manual `layer([this, child])` + `selectAll` wiring.
    */
-  layer(child: ChartBuilder<any, any>): LayerBuilder {
+  layer(child: LayerTier): LayerBuilder {
     return new LayerBuilder([this, child]);
   }
 
@@ -768,30 +775,70 @@ function isChartOptions(x: unknown): x is ChartOptions {
 }
 
 /**
- * A stack of chart tiers built by chaining `.layer(...)`. Each tier is a full
- * `Chart(...)` pipeline; a tier whose data is an empty `Chart()` scope inherits
+ * A tier in a `.layer(...)` chain. Usually a full `Chart(...)` pipeline, but a
+ * bare `Mark` (or an already-resolved `GoFishNode`) is a *mark tier* — a
+ * component-level, datumless annotation overlay.
+ */
+export type LayerTier = ChartBuilder<any, any> | Mark<any> | GoFishNode;
+
+/**
+ * A stack of chart tiers built by chaining `.layer(...)`. Most tiers are full
+ * `Chart(...)` pipelines; a tier whose data is an empty `Chart()` scope inherits
  * the previous tier's marks (wired here as `selectAll(autoName)` against the
- * previous tier's auto-named mark). Renders as the manual `layer([...])` form:
- * tiers share one `layerContext` and resolve in order, so each tier's name
- * registrations land before the next tier's `selectAll`.
+ * previous tier's auto-named mark). A bare `Mark` tier is a component-level
+ * annotation: it passes through untouched (never a producer for an empty
+ * `Chart()` scope, never a `selectAll` consumer) and resolves via
+ * `resolveMarkResult`. Renders as the manual `layer([...])` form: tiers share
+ * one `layerContext` and resolve in order, so each tier's name registrations
+ * land before the next tier's `selectAll`.
  */
 export class LayerBuilder {
-  constructor(private readonly tiers: ChartBuilder<any, any>[]) {}
+  constructor(private readonly tiers: LayerTier[]) {}
 
-  /** Stack another tier; an empty `Chart()` scope inherits these marks. */
-  layer(child: ChartBuilder<any, any>): LayerBuilder {
+  /** Stack another tier; an empty `Chart()` scope inherits these marks, and a
+   *  bare `Mark` is a component-level annotation tier. */
+  layer(child: LayerTier): LayerBuilder {
     return new LayerBuilder([...this.tiers, child]);
+  }
+
+  /** The root tier is always a `ChartBuilder` (`.layer` is a method on one), but
+   *  IR deserialization also constructs `LayerBuilder`s, so assert it. */
+  private rootChart(): ChartBuilder<any, any> {
+    const first = this.tiers[0];
+    if (!(first instanceof ChartBuilder)) {
+      throw new Error(
+        "the first .layer(...) tier must be a chart(...) pipeline (a builder " +
+          "chain starts on a ChartBuilder); a bare mark tier can't be the root."
+      );
+    }
+    return first;
   }
 
   // Bind empty-scope tiers to the previous tier's marks: name the producer's
   // mark (auto unless already named) and point the consumer at selectAll(name).
-  private wireTiers(): ChartBuilder<any, any>[] {
-    const out: ChartBuilder<any, any>[] = [];
+  // Mark tiers pass through untouched.
+  private wireTiers(): LayerTier[] {
+    const out: LayerTier[] = [];
     let prevName: string | undefined;
+    let prevWasMarkTier = false;
     let autoIdx = 0;
     for (let i = 0; i < this.tiers.length; i++) {
       let tier = this.tiers[i];
+      // A mark tier (bare Mark / GoFishNode) is a component-level annotation:
+      // pass it through, and it's never a producer for an empty `Chart()` scope.
+      if (!(tier instanceof ChartBuilder)) {
+        out.push(tier);
+        prevWasMarkTier = true;
+        prevName = undefined;
+        continue;
+      }
       if (tier.usesPreviousLayerMarks()) {
+        if (prevWasMarkTier) {
+          throw new Error(
+            ".layer(Chart()) with an empty scope can't inherit from a bare mark " +
+              "tier — give the previous tier a chart with a .mark() to draw from."
+          );
+        }
         if (prevName === undefined) {
           throw new Error(
             ".layer(Chart()) with an empty scope has no previous tier to draw " +
@@ -803,12 +850,13 @@ export class LayerBuilder {
         );
       }
       const next = this.tiers[i + 1];
-      if (next !== undefined && next.usesPreviousLayerMarks()) {
+      if (next instanceof ChartBuilder && next.usesPreviousLayerMarks()) {
         const named = tier.ensureNamedMark(`__gofish_layer_${autoIdx}`);
         if (named.name === `__gofish_layer_${autoIdx}`) autoIdx++;
         tier = named.builder;
         prevName = named.name;
       }
+      prevWasMarkTier = false;
       out.push(tier);
     }
     return out;
@@ -821,10 +869,18 @@ export class LayerBuilder {
     // Sequential so each tier's name registrations are visible to the next
     // tier's selectAll (mirrors the manual `layer([...])` resolution order).
     for (const tier of tiers) {
-      nodes.push(await tier.withLayerContext(sharedContext).resolve());
+      if (tier instanceof ChartBuilder) {
+        nodes.push(await tier.withLayerContext(sharedContext).resolve());
+      } else {
+        // Mark tier: resolve the bare mark against the shared layer context so
+        // a `.name(...)`-tagged annotation still registers. `resolveMarkResult`
+        // invokes a Mark function with an undefined datum (component-level
+        // semantics) and passes a GoFishNode through unchanged.
+        nodes.push(await resolveMarkResult(tier as any, sharedContext));
+      }
     }
     const result = await Layer({}, nodes);
-    const { colorConfig } = this.tiers[0].renderMeta();
+    const { colorConfig } = this.rootChart().renderMeta();
     if (colorConfig) {
       (result as any).colorConfig = colorConfig;
     }
@@ -835,7 +891,7 @@ export class LayerBuilder {
     options: T
   ): Promise<{ node: GoFishNode; options: T & Record<string, unknown> }> {
     const node = await this.resolve();
-    const meta = this.tiers[0].renderMeta();
+    const meta = this.rootChart().renderMeta();
     // Thread axes/color/axisFields from the root tier so a `.layer()` chart
     // titles its axes (e.g. an x "lake" title from the root `spread`). The
     // Python parity harness mirrors this off the first child chart so both
