@@ -7,6 +7,40 @@ import { Frame } from "../graphicalOperators/frame";
 import { layer as Layer } from "../graphicalOperators/layer";
 import { GoFishRef, visibleNodes } from "../_ref";
 import { ref } from "../shapes/ref";
+import { InteractionRuntime } from "../../interaction/runtime";
+import { withInteractiveResolve } from "../../interaction/resolveContext";
+
+/**
+ * Shared interactive render terminal (ChartBuilder + LayerBuilder). Always
+ * resolves under the ambient interactive context so the reactive surface can
+ * register during resolve — a `live()` channel, or a library input read in a
+ * `derive()`. If nothing registered, renders down the static path untouched
+ * (the runtime object is the only cost). Otherwise wires the rerender thunk
+ * and threads the runtime through render so `data-gf-id` hooks are emitted and
+ * delegated events are attached.
+ */
+async function renderWithInteraction(
+  resolveForRender: () => Promise<{
+    node: GoFishNode;
+    options: Record<string, unknown>;
+  }>,
+  container: HTMLElement
+): Promise<HTMLElement> {
+  const runtime = new InteractionRuntime();
+  const doRender = async (): Promise<HTMLElement> => {
+    // Reset per-resolve dependency flags before reads re-register inputs.
+    runtime.beginResolve();
+    const { node, options } = await withInteractiveResolve(runtime, () =>
+      resolveForRender()
+    );
+    if (runtime.hasWork()) {
+      options.interaction = runtime;
+    }
+    return node.render(container, options) as HTMLElement;
+  };
+  runtime.setRerender(doRender);
+  return doRender();
+}
 
 /**
  * Sentinel chart-data for an empty `Chart()` scope used inside `.layer(...)`:
@@ -623,13 +657,22 @@ export class ChartBuilder<TInput, TOutput = TInput> {
     };
   }
 
-  // render calls resolve and then renders
+  // render calls resolve and then renders. Resolution always runs under the
+  // ambient interactive context so the reactive surface (live() channels, input
+  // reads in derive()) can register during resolve; a chart where nothing
+  // registers renders down the static path untouched.
   async render(
     container: Parameters<GoFishNode["render"]>[0],
     options: Omit<Parameters<GoFishNode["render"]>[1], "axes">
   ): Promise<ReturnType<GoFishNode["render"]>> {
-    const { node, options: opts } = await this.resolveForRender(options);
-    return node.render(container, opts);
+    return renderWithInteraction(
+      () =>
+        this.resolveForRender(options) as Promise<{
+          node: GoFishNode;
+          options: Record<string, unknown>;
+        }>,
+      container
+    );
   }
 
   /** Resolve and render to a standalone SVG markup string. */
@@ -818,8 +861,14 @@ export class LayerBuilder {
     container: Parameters<GoFishNode["render"]>[0],
     options: Parameters<GoFishNode["render"]>[1]
   ): Promise<ReturnType<GoFishNode["render"]>> {
-    const { node, options: opts } = await this.resolveForRender(options ?? {});
-    return node.render(container, opts);
+    return renderWithInteraction(
+      () =>
+        this.resolveForRender(options ?? {}) as Promise<{
+          node: GoFishNode;
+          options: Record<string, unknown>;
+        }>,
+      container
+    );
   }
 
   async toSVG(

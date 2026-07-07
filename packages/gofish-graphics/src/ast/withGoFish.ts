@@ -34,6 +34,9 @@ import {
   type ZOrderValue,
 } from "./marks/createOperator";
 import { isValue } from "./data";
+import { untrack } from "solid-js";
+import { isLive, type LiveValue } from "../interaction/live";
+import { runInLiveEval } from "../interaction/resolveContext";
 import { KNOWN_ALIAS_KEYS } from "./dims";
 import { Mark } from "./types";
 import type { ConstraintSpec, ConstraintRef } from "./constraints";
@@ -585,10 +588,22 @@ function buildCreatedMark(
     // per-row array — used by expand-kind marks. Unannotated props (which
     // is everything when channels is omitted/empty) pass through.
     const shapeProps: Record<string, any> = {};
+    // `live(...)` channels: the pipeline renders (and measures) the accessor's
+    // resolve-time value; the paint layer re-evaluates it reactively per frame
+    // via the datum-bound thunk baked at lower time.
+    let liveChannels: Record<string, LiveValue> | undefined;
     for (const propName of Object.keys(markOpts)) {
       if (propName === "debug") continue;
       const channelSpec = channels[propName];
-      const markValue = markOpts[propName];
+      let markValue = markOpts[propName];
+      if (isLive(markValue)) {
+        (liveChannels ??= {})[propName] = markValue;
+        // Evaluate untracked + under the inLiveEval flag for the resolve-time
+        // value: reads of library inputs wire event dispatch but do NOT become
+        // pipeline dependencies (they re-run at paint, not at resolve).
+        const accessor = markValue;
+        markValue = untrack(() => runInLiveEval(() => accessor(d)));
+      }
 
       let channelType =
         typeof channelSpec === "string" ? channelSpec : channelSpec?.type;
@@ -636,12 +651,14 @@ function buildCreatedMark(
         const node = result[i];
         node.name(key?.toString() ?? "");
         (node as any).datum = data[i] ?? d;
+        if (liveChannels) (node as any).__gfLive = liveChannels;
       }
       return result as unknown as GoFishNode;
     }
     const node = result as GoFishNode;
     node.name(key?.toString() ?? "");
     (node as any).datum = d;
+    if (liveChannels) (node as any).__gfLive = liveChannels;
     node.scope();
     // Mark as a component for string-name search bounding. Distinct from
     // _isScope so future operators that scope (for token reasons) don't

@@ -16,6 +16,7 @@ import {
   type LiteralValue,
   type Measure,
 } from "./data";
+import type { LiveValue } from "../interaction/live";
 
 export type ChannelType = "size" | "pos" | "color" | "raw";
 
@@ -71,6 +72,9 @@ export type DeriveMarkProps<
                 | (keyof T & string)
                 | ((d: T) => string)
                 | Value<string>
+                // `live(...)` reactive color (paint patch; returns a literal
+                // color — see src/interaction/live.ts).
+                | LiveValue
                 | undefined
             : Channels[K] extends "raw" | { type: "raw" }
               ?
@@ -79,6 +83,9 @@ export type DeriveMarkProps<
                   | (keyof T & string)
                   | ((d: T) => string | number)
                   | Value<string | number>
+                  // `live(...)` reactive content (paint patch; the pipeline
+                  // measures the resolve-time value).
+                  | LiveValue
                   | undefined
               : ShapeProps[K]
     : ShapeProps[K];

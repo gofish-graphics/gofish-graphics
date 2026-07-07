@@ -193,3 +193,18 @@ export type {
   LabelOptions,
   LabelAccessor,
 } from "./ast/labels/labelPlacement";
+
+// Reactive interaction layer (JS-only; no Python/IR bridge). Signals live
+// OUTSIDE the layout pipeline — see src/interaction/ and the reactivity docs.
+export { live, pointer, drag, wheel, timer, signal } from "./interaction";
+export type {
+  LiveValue,
+  Pointer,
+  Drag,
+  DragOptions,
+  Wheel,
+  WheelOptions,
+  Timer,
+  TimerOptions,
+  Signal,
+} from "./interaction";

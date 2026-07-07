@@ -34,6 +34,8 @@ import type {
 import { toDisplayList } from "./displayList/toDisplayList";
 import type { DisplayList } from "gofish-ir";
 import { lowerLabelItems } from "./labels/renderLabel";
+import { setLiveSlots } from "../interaction/liveSlots";
+import type { LiveValue } from "../interaction/live";
 import { GoFishRef } from "./_ref";
 import { GoFishAST } from "./_ast";
 import { CoordinateTransform } from "./coordinateTransforms/coord";
@@ -1140,9 +1142,33 @@ export class GoFishNode {
       [],
       this
     );
+    // Stamp the emitting node's uid as the item id (hit-testing hook — the IR
+    // field predates this and was unpopulated). Boundary nodes re-walk children
+    // through the children's own INTERNAL_lower, so descendants keep their own
+    // ids; `??=` preserves any id a lower body sets itself. Zero-cost otherwise.
+    for (const item of items) item.id ??= this.uid;
+    // Live channels (a `live()` value): bake a datum-bound thunk per channel
+    // into the paint-time side table so paint re-evaluates it reactively. The
+    // thunks are held OUTSIDE the display item (WeakMap) so the item stays pure
+    // data for serialization / normalized-DOM captures.
+    const liveChannels = (
+      this as unknown as { __gfLive?: Record<string, LiveValue> }
+    ).__gfLive;
+    if (liveChannels) {
+      const datum = (this as unknown as { datum?: unknown }).datum;
+      const slots: Record<string, () => unknown> = {};
+      for (const channel in liveChannels) {
+        const accessor = liveChannels[channel];
+        slots[channel] = () => accessor(datum);
+      }
+      for (const item of items) setLiveSlots(item, slots);
+    }
     if (this._label && this.intrinsicDims) {
       const labelItems = lowerLabelItems(this, transform, toPixel);
-      if (labelItems.length) return [...items, ...labelItems];
+      if (labelItems.length) {
+        for (const item of labelItems) item.id ??= this.uid;
+        return [...items, ...labelItems];
+      }
     }
     return items;
   }
@@ -1184,6 +1210,7 @@ export class GoFishNode {
       colorConfig,
       padding,
       yUp,
+      interaction,
     }: {
       w?: number;
       h?: number;
@@ -1197,6 +1224,7 @@ export class GoFishNode {
       colorConfig?: ColorConfig;
       padding?: number;
       yUp?: boolean;
+      interaction?: import("../interaction/runtime").InteractionRuntime;
     }
   ) {
     return gofish(
@@ -1214,6 +1242,7 @@ export class GoFishNode {
         colorConfig,
         padding,
         yUp,
+        interaction,
       },
       this
     );

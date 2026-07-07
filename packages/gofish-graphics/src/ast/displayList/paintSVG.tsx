@@ -17,8 +17,19 @@
 
 import type { JSX } from "solid-js";
 import type { DisplayList } from "gofish-ir";
+import { getLiveSlots } from "../../interaction/liveSlots";
 
 type Style = DisplayList.Style | undefined;
+
+/**
+ * Optional paint context. Its ONLY job is `data-gf-id` emission: the hit-test
+ * hook is stamped only when an interaction runtime is active, so the static
+ * path stays byte-identical. Paint-time reactivity is carried separately by
+ * the per-item `liveSlots` side table, not by this context.
+ */
+export type PaintContext = {
+  interactive?: boolean;
+};
 
 /** Deterministic id counter for composite/mask defs — same scheme as gofish-ir's
  *  string backend so the two backends agree on id shape. A module-level counter
@@ -43,7 +54,27 @@ const styleProps = (style: Style) =>
     style: cssStyle(style),
   }) as const;
 
-export function paintSVG(item: DisplayList.DisplayItem): JSX.Element {
+export function paintSVG(
+  item: DisplayList.DisplayItem,
+  ctx?: PaintContext
+): JSX.Element {
+  // Live channels (a `live()` value baked at lower time): per-attribute
+  // reactive thunks, looked up from the module-level side table. Read inside
+  // JSX attribute positions so Solid tracks any signals the thunk reads and
+  // patches only that attribute — style-only interaction never re-lowers or
+  // re-lays-out. When absent (the static path), output is byte-identical.
+  const live = getLiveSlots(item);
+  const style = (): Style => {
+    if (!live) return item.style;
+    let merged: Record<string, unknown> | undefined;
+    for (const channel in live) {
+      if (channel === "text") continue;
+      (merged ??= { ...(item.style ?? {}) })[channel] = live[channel]();
+    }
+    return (merged as Style) ?? item.style;
+  };
+  // `data-gf-id` is the hit-testing hook, emitted only when a runtime is active.
+  const gfId = ctx?.interactive ? item.id : undefined;
   switch (item.kind) {
     case "rect":
       return (
@@ -54,7 +85,8 @@ export function paintSVG(item: DisplayList.DisplayItem): JSX.Element {
           height={item.h}
           rx={item.rx}
           ry={item.ry}
-          {...styleProps(item.style)}
+          data-gf-id={gfId}
+          {...styleProps(style())}
         />
       );
     case "ellipse":
@@ -64,16 +96,18 @@ export function paintSVG(item: DisplayList.DisplayItem): JSX.Element {
           cy={item.cy}
           rx={item.rx}
           ry={item.ry}
-          {...styleProps(item.style)}
+          data-gf-id={gfId}
+          {...styleProps(style())}
         />
       );
     case "path":
-      return <path d={item.d} {...styleProps(item.style)} />;
+      return <path d={item.d} data-gf-id={gfId} {...styleProps(style())} />;
     case "text":
       return (
         <text
           x={item.x}
           y={item.y}
+          data-gf-id={gfId}
           font-size={
             item.fontSize !== undefined ? `${item.fontSize}px` : undefined
           }
@@ -89,9 +123,13 @@ export function paintSVG(item: DisplayList.DisplayItem): JSX.Element {
               ? `rotate(${item.rotate} ${item.x} ${item.y})`
               : undefined
           }
-          {...styleProps(item.style)}
+          {...styleProps(style())}
         >
-          {item.text}
+          {
+            // Live text: the "text" slot overrides CONTENT reactively (the box
+            // keeps its resolve-time measure).
+            live?.text ? String(live.text()) : item.text
+          }
         </text>
       );
     case "image":
@@ -102,10 +140,11 @@ export function paintSVG(item: DisplayList.DisplayItem): JSX.Element {
           width={item.w}
           height={item.h}
           href={item.href}
+          data-gf-id={gfId}
           preserveAspectRatio={
             item.preserveAspectRatio as JSX.ImageSVGAttributes<SVGImageElement>["preserveAspectRatio"]
           }
-          {...styleProps(item.style)}
+          {...styleProps(style())}
         />
       );
     case "group": {
@@ -116,7 +155,7 @@ export function paintSVG(item: DisplayList.DisplayItem): JSX.Element {
       if (t.scale) parts.push(`scale(${t.scale[0]} ${t.scale[1]})`);
       return (
         <g transform={parts.length ? parts.join(" ") : undefined}>
-          {item.children.map(paintSVG)}
+          {item.children.map((c) => paintSVG(c, ctx))}
         </g>
       );
     }
@@ -149,8 +188,8 @@ export function paintSVG(item: DisplayList.DisplayItem): JSX.Element {
       return (
         <>
           <defs>
-            <g id={sourceId}>{item.source.map(paintSVG)}</g>
-            <g id={destinationId}>{item.dest.map(paintSVG)}</g>
+            <g id={sourceId}>{item.source.map((c) => paintSVG(c, ctx))}</g>
+            <g id={destinationId}>{item.dest.map((c) => paintSVG(c, ctx))}</g>
             <filter
               id={filterId}
               x={x}
@@ -196,8 +235,10 @@ export function paintSVG(item: DisplayList.DisplayItem): JSX.Element {
       return (
         <>
           <defs>
-            <g id={sourceId}>{item.mask.map(paintSVG)}</g>
-            <g id={destinationId}>{item.content.map(paintSVG)}</g>
+            <g id={sourceId}>{item.mask.map((c) => paintSVG(c, ctx))}</g>
+            <g id={destinationId}>
+              {item.content.map((c) => paintSVG(c, ctx))}
+            </g>
             <mask
               id={maskId}
               maskUnits="userSpaceOnUse"

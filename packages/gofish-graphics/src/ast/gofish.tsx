@@ -17,12 +17,14 @@ import {
 import {
   posScaleFromSpace,
   axisScale,
+  posFn,
   type AxisMap,
   type AxisScale,
 } from "./domain";
 import { bake } from "./coordinateTransforms/bake";
 import { lowerToDisplayList } from "./displayList/lower";
 import { paintSVG } from "./displayList/paintSVG";
+import type { InteractionRuntime } from "../interaction/runtime";
 import type { ToPixel } from "./_node";
 import type { Size } from "./dims";
 import {
@@ -570,6 +572,13 @@ export type GoFishRenderOptions = {
    * this composable per-subtree instead of root-global.
    */
   yUp?: boolean;
+  /**
+   * Interaction runtime (see src/interaction/). When present, the render pass
+   * publishes each lowered frame to it, emits `data-gf-id` hit-test hooks, and
+   * attaches its delegated event listeners to the produced <svg>. Absent (the
+   * static path), rendering is byte-identical to before.
+   */
+  interaction?: InteractionRuntime;
 };
 
 /** Extra options for the SVG-export terminals (`toSVG` / `toSVGElement` / `save`). */
@@ -673,11 +682,24 @@ export async function runLayout(
   }
 }
 
+/** Continuous data domain of an axis's underlying space, for interaction
+ *  anchors (clamping, selectors). Undefined for ordinal / difference / bare
+ *  magnitude axes. */
+const continuousDomain = (
+  us?: UnderlyingSpace
+): [number, number] | undefined =>
+  us?.kind === "continuous" &&
+  us.dataDomain !== undefined &&
+  us.dataDomain !== "delta"
+    ? [us.dataDomain.min, us.dataDomain.max]
+    : undefined;
+
 /** Build the `<svg>` JSX element from already-computed layout data. */
 function renderLayout(
   data: LayoutData,
   svgPadding: number,
-  defs?: JSX.Element[]
+  defs?: JSX.Element[],
+  interaction?: InteractionRuntime
 ): JSX.Element {
   return render(
     {
@@ -692,6 +714,14 @@ function renderLayout(
       topOverhang: data.topOverhang,
       leftOverhang: data.leftOverhang,
       bottomOverhang: data.bottomOverhang,
+      interaction,
+      // Root data → gofish-space maps, read off the recorded root scales for
+      // the interaction layer's data↔px conversions (frameConversions).
+      posScales: [posFn(data.scales[0]?.map), posFn(data.scales[1]?.map)],
+      domains: {
+        x: continuousDomain(data.underlyingSpaceX),
+        y: continuousDomain(data.underlyingSpaceY),
+      },
     },
     data.child
   );
@@ -704,21 +734,39 @@ export const gofish = (
 ) => {
   const svgPadding = options.padding ?? PADDING;
 
+  // Re-rendering into the same container (the interaction scheduler does this
+  // per spec change) must dispose the previous reactive root first, or roots
+  // and DOM accumulate. One render per container is unaffected.
+  (
+    container as HTMLElement & { __gofishDispose?: () => void }
+  ).__gofishDispose?.();
+
   const [layoutData] = createResource(() => runLayout(options, child));
 
   // Render to the provided container
-  solidRender(() => {
+  const dispose = solidRender(() => {
     // used to handle async rendering of derived data
     return (
       <Suspense fallback={<div>Loading...</div>}>
         {(() => {
           const data = layoutData();
           if (!data) return null;
-          return renderLayout(data, svgPadding, options.defs);
+          return renderLayout(
+            data,
+            svgPadding,
+            options.defs,
+            options.interaction
+          );
         })()}
       </Suspense>
     );
   }, container);
+  (
+    container as HTMLElement & { __gofishDispose?: () => void }
+  ).__gofishDispose = () => {
+    dispose();
+    container.innerHTML = "";
+  };
   return container;
 };
 
@@ -926,6 +974,9 @@ export const render = (
     bottomOverhang = 0,
     svgPadding,
     yUp = false,
+    interaction,
+    posScales,
+    domains,
   }: {
     width: number;
     height: number;
@@ -938,6 +989,12 @@ export const render = (
     bottomOverhang?: number;
     svgPadding?: number;
     yUp?: boolean;
+    interaction?: InteractionRuntime;
+    posScales?: [
+      ((pos: number) => number) | undefined,
+      ((pos: number) => number) | undefined,
+    ];
+    domains?: { x?: [number, number]; y?: [number, number] };
   },
   child: GoFishNode
 ): JSX.Element => {
@@ -992,9 +1049,24 @@ export const render = (
     ? ([gx, gy]) => [gx + leftReserve, height + topReserve - gy]
     : ([gx, gy]) => [gx + leftReserve, gy + topReserve];
   child.getRenderSession().toPixel = toPixel;
-  const paintBaked = () => lowerToDisplayList(child).map(paintSVG);
+  const paintCtx = interaction ? { interactive: true } : undefined;
+  const paintBaked = () => {
+    const items = lowerToDisplayList(child);
+    // Publish the frame (id-keyed hit-test map + data-space conversions) before
+    // paint so the first hit-test / dataPos reads see the current frame.
+    interaction?.publishFrame({
+      items,
+      root: child,
+      toPixel,
+      posScales,
+      domains,
+      size: { width, height },
+    });
+    return items.map((item) => paintSVG(item, paintCtx));
+  };
   return (
     <svg
+      ref={(el: SVGSVGElement) => interaction?.attachSVG(el)}
       width={
         leftReserve + width + rightOverhang + reserve(rightContentOverhang)
       }
