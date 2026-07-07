@@ -25,8 +25,10 @@ import {
   createModifier,
   nameModifier,
   labelModifier,
+  zOrderModifier,
   LayerContext,
 } from "./createOperator";
+import type { ZOrderValue } from "./createOperator";
 import { layer as Layer } from "../graphicalOperators/layer";
 import {
   // `over` stays internal (not re-exported from lib) — it backs the
@@ -188,6 +190,57 @@ export function resolve(
   return op;
 }
 
+/**
+ * Equi-join the incoming rows against another data table on a shared key — a
+ * one-to-many left join (SQL `JOIN ... USING (on)`, pandas/polars
+ * `.merge(right, on=...)`, dplyr `left_join(right, by = on)`). For each
+ * incoming row, every `right` row whose `on` value matches contributes one
+ * output row of the merged columns `{ ...left, ...right }`; incoming rows with
+ * no match drop out (inner-join semantics on the match, fan-out on the right).
+ *
+ * Unlike `resolve` (which dereferences columns into *drawn nodes* of a prior
+ * layer), `join` relates two plain data tables, so the `right` table is
+ * inlined into the IR and round-trips as JSON.
+ *
+ * Pairs with a nested chart that inherits its parent's partition: e.g. scatter
+ * lakes by location, then in each glyph
+ * `chart(data).flow(join(seafood, { on: "lake" }), stack(...))` pulls in that
+ * lake's catch rows.
+ */
+export function join<
+  L extends Record<string, any>,
+  R extends Record<string, any>,
+>(right: R[], opts: { on: string }): Operator<L[], (L & R)[]> {
+  const op: Operator<L[], (L & R)[]> = async (mark: Mark<(L & R)[]>) => {
+    return (async (
+      left: L[],
+      key?: string | number,
+      layerContext?: LayerContext
+    ) => {
+      const leftRows = Array.isArray(left) ? left : left == null ? [] : [left];
+      const rightByKey = new Map<unknown, R[]>();
+      for (const r of right) {
+        const k = r[opts.on];
+        const bucket = rightByKey.get(k);
+        if (bucket) bucket.push(r);
+        else rightByKey.set(k, [r]);
+      }
+      const joined: (L & R)[] = [];
+      for (const l of leftRows) {
+        for (const r of rightByKey.get(l[opts.on]) ?? []) {
+          joined.push({ ...l, ...r });
+        }
+      }
+      return mark(joined, key, layerContext);
+    }) as Mark<L[]>;
+  };
+  (op as any).__serialize = {
+    type: "join",
+    opts: { on: opts.on, right },
+  };
+  return op;
+}
+
 /* END Data Transformation Operators */
 
 export function circle<T extends Record<string, any>>({
@@ -316,14 +369,16 @@ export function createDerivedMark<O extends DerivedMarkOptions>(
         );
         return Layer({}, segments);
       };
-      (mark as any).__serialize = { type, opts };
-      return mark;
+      const result = nameableMark(mark);
+      (result as any).__serialize = { type, opts };
+      return result;
     }
 
     // Bag form: applied to a `GoFishRef[]` (e.g. `selectAll(...)`).
     const mark: Mark<GoFishRef[]> = async (d: GoFishRef[]) => produce(opts, d);
-    (mark as any).__serialize = { type, opts };
-    return mark;
+    const result = nameableMark(mark);
+    (result as any).__serialize = { type, opts };
+    return result;
   }
   return derived;
 }
@@ -470,6 +525,7 @@ type PdOptions = { blendMode?: BlendMode };
 export type ConstrainableMark<T> = Mark<T> & {
   name(layerName: string | Token): ConstrainableMark<T>;
   label(accessor: LabelAccessor, options?: LabelOptions): ConstrainableMark<T>;
+  zOrder(value: ZOrderValue<T>): ConstrainableMark<T>;
   constrain(
     fn: (refs: Record<string, ConstraintRef>) => ConstraintSpec[]
   ): ConstrainableMark<T>;
@@ -497,7 +553,7 @@ const constrainModifier = createModifier<
   [fn: (refs: Record<string, ConstraintRef>) => ConstraintSpec[]]
 >({
   name: "constrain",
-  apply: (node, _layerContext, fn) => {
+  apply: (node, _layerContext, _datum, fn) => {
     node.constrain(fn);
   },
 });
@@ -507,6 +563,7 @@ function makeConstrainableMark<T>(base: Mark<T>): ConstrainableMark<T> {
     nameModifier,
     labelModifier,
     constrainModifier,
+    zOrderModifier,
   ]) as unknown as ConstrainableMark<T>;
 }
 
@@ -531,17 +588,31 @@ export function layer<T>(
 ): ConstrainableMark<T> {
   const opts = Array.isArray(marksOrOpts) ? {} : marksOrOpts;
   const marks = (Array.isArray(marksOrOpts) ? marksOrOpts : maybeMarks) ?? [];
-  const base: Mark<T> = async (d, key, layerContext) => {
-    // Share one layerContext across all children so that ref(name)/
-    // selectAll(name) in one child can find a sibling's .name(name)
-    // registration. Inherit from the caller when present (nested-layer case),
-    // else create a fresh context (top-level .render() case). Resolve
-    // sequentially so a child referencing a name sees registrations from
-    // earlier siblings.
-    const sharedContext = layerContext ?? {};
+  const base: Mark<T> = async (d, key, _layerContext) => {
+    // A layer establishes its OWN local name context: `.name(...)` registrations
+    // and the `ref(name)`/`selectAll(name)` that read them are scoped to *this*
+    // layer's children. We deliberately do NOT inherit the enclosing
+    // `_layerContext` — otherwise a layer nested inside an operator (e.g. one
+    // `layer([bars, area])` per `spread` cell) would share a single context
+    // across every cell, so each cell's `selectAll("bars")` would match every
+    // other cell's bars too (and reference siblings not yet laid out). Names are
+    // local to their layer, mirroring `LayerBuilder.resolve`. Resolve
+    // sequentially so a child referencing a name sees earlier siblings'
+    // registrations.
+    const sharedContext: LayerContext = {};
     const resolved: GoFishNode[] = [];
     for (const m of marks) {
-      const result = typeof m === "function" ? m(d, key, sharedContext) : m;
+      // A nested empty-scope `chart()` child inherits this layer's incoming
+      // partition datum (issue #243), exactly as `.mark(chart())` does — so
+      // `layer([chart().flow(...).mark(...), chart(selectAll(...)).mark(...)])`
+      // can be a mark without a `(d) => …` callback. A child with its own data
+      // (e.g. `chart(selectAll(...))`) is left untouched.
+      const child =
+        m instanceof ChartBuilder && m.usesPreviousLayerMarks()
+          ? m.withData(d)
+          : m;
+      const result =
+        typeof child === "function" ? child(d, key, sharedContext) : child;
       resolved.push(await resolveMarkResult(result, sharedContext));
     }
     const node = await Layer(opts, resolved);

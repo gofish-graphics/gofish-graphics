@@ -90,12 +90,12 @@ export const Petal = ({
 
         return [resolveAxis(0), resolveAxis(1)];
       },
-      layout: (shared, size, scaleFactors, children) => {
+      layout: (shared, size, scales, children) => {
         const w = isValue(dims[0].size)
-          ? getValue(dims[0].size!) * scaleFactors[0]!
+          ? getValue(dims[0].size!) * scales[0]?.sigma!
           : (dims[0].size ?? size[0]);
         const h = isValue(dims[1].size)
-          ? getValue(dims[1].size!) * scaleFactors[1]!
+          ? getValue(dims[1].size!) * scales[1]?.sigma!
           : (dims[1].size ?? size[1]);
 
         return {

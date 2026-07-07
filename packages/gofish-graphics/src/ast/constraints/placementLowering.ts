@@ -8,7 +8,6 @@ import {
   getValueOffset,
   isDiscretePosition,
   isValue,
-  type MaybeValue,
   type PositionValue,
 } from "../data";
 import type { AlignConstraint } from "./align";
@@ -21,23 +20,22 @@ import type { NestConstraint } from "./nest";
 import { lowerNestPlacement } from "./nest";
 import { PlacementProgramLowerer } from "./placementProgramLowerer";
 import type { PositionConstraint } from "./position";
-import { lowerPositionPlacement } from "./position";
-import type { SpanConstraint, SpanExtent } from "./span";
-import { collectSpanExtents, lowerSpanEdgePins } from "./span";
+import { isPositionInterval, lowerPositionPlacement } from "./position";
 import { axisIndex, type Axis, type ConstraintPosScales } from "./shared";
-import type { PlacementProgram } from "./placementFacts";
+import { pxOf, type AxisMap } from "../domain";
+import type { AnchorProgram } from "./placementFacts";
 
 export type PlacementConstraint =
   | AlignConstraint
   | DistributeConstraint
   | PositionConstraint
-  | SpanConstraint
   | NestConstraint
   | GridConstraint;
 
 export interface LoweredPlacement {
-  program: PlacementProgram;
-  spanExtents: SpanExtent[];
+  /** The anchor program (#39 stage 5): facts that name a node anchor without a
+   *  pre-evaluated `min` offset, consumed by the rank-2 solve. */
+  anchorProgram: AnchorProgram;
 }
 
 /** A raw placement-system coordinate after datum values have been elaborated
@@ -53,7 +51,7 @@ const placementKey = (axis: Axis, name: string): string => `${axis}:${name}`;
 
 export function compilePlacementCoordinate(
   coordinate: PositionValue,
-  scale: ((value: number) => number) | undefined,
+  scale: AxisMap | undefined,
   axisSize?: number
 ): PlacementCoordinate {
   if (isDiscretePosition(coordinate)) {
@@ -62,12 +60,12 @@ export function compilePlacementCoordinate(
   }
   if (!isValue(coordinate)) return coordinate;
   if (scale === undefined) return undefined;
-  return scale(getValue(coordinate)!) + getValueOffset(coordinate);
+  return pxOf(scale, getValue(coordinate)!) + getValueOffset(coordinate);
 }
 
 function resolveCoordinate(
   coordinate: PositionValue,
-  scale: ((value: number) => number) | undefined,
+  scale: AxisMap | undefined,
   axisSize?: number
 ): number | undefined {
   return compilePlacementCoordinate(coordinate, scale, axisSize);
@@ -77,7 +75,6 @@ class PlacementOwnershipPlan {
   private readonly authoritative = new Set<string>();
   private readonly initiallyPlaced = new Set<string>();
   private readonly positionPinned = new Set<string>();
-  private readonly spanPinned = new Set<string>();
   private readonly sizes: [number, number];
 
   constructor(
@@ -100,21 +97,13 @@ class PlacementOwnershipPlan {
     }
   }
 
-  noteSpanExtent(extent: SpanExtent): void {
-    this.spanPinned.add(placementKey(extent.axis, extent.name));
-  }
-
   isInitiallyPlaced(axis: Axis, name: string): boolean {
     return this.initiallyPlaced.has(placementKey(axis, name));
   }
 
   isPinned(axis: Axis, name: string): boolean {
     const key = placementKey(axis, name);
-    return (
-      this.initiallyPlaced.has(key) ||
-      this.positionPinned.has(key) ||
-      this.spanPinned.has(key)
-    );
+    return this.initiallyPlaced.has(key) || this.positionPinned.has(key);
   }
 
   shouldPinSelfPlacement(axis: 0 | 1, name: string): boolean {
@@ -139,12 +128,21 @@ class PlacementOwnershipPlan {
       const coordinate = constraint[axis];
       if (coordinate === undefined) continue;
       const idx = axisIndex(axis);
-      const value = resolveCoordinate(
-        coordinate,
-        posScales?.[idx],
-        this.sizes[idx]
-      );
-      if (value === undefined) continue;
+      // An interval pins BOTH edges — mark its children pinned when the edges
+      // resolve (an align sources such a spanned target). A point pins one
+      // anchor.
+      if (isPositionInterval(coordinate)) {
+        const min = resolveCoordinate(coordinate[0], posScales?.[idx]);
+        const max = resolveCoordinate(coordinate[1], posScales?.[idx]);
+        if (min === undefined || max === undefined) continue;
+      } else {
+        const value = resolveCoordinate(
+          coordinate,
+          posScales?.[idx],
+          this.sizes[idx]
+        );
+        if (value === undefined) continue;
+      }
       for (const child of constraint.children) {
         this.positionPinned.add(placementKey(axis, child.name));
       }
@@ -165,33 +163,7 @@ export function lowerPlacementConstraints(
     sizes
   );
 
-  const spanEdgePins = constraints.flatMap((constraint, constraintIndex) =>
-    constraint.type === "span"
-      ? lowerSpanEdgePins(
-          constraint,
-          targets,
-          `span[${constraintIndex}]`,
-          (axis, coordinate) =>
-            resolveCoordinate(coordinate, posScales?.[axisIndex(axis)])
-        )
-      : []
-  );
-  const spanExtents = collectSpanExtents(spanEdgePins);
-  const spanExtentByKey = new Map(
-    spanExtents.map((extent) => [
-      placementKey(extent.axis, extent.name),
-      extent,
-    ])
-  );
-  for (const extent of spanExtents) {
-    ownership.noteSpanExtent(extent);
-  }
-
-  const lowerer = new PlacementProgramLowerer(
-    targets,
-    (axis, name) => spanExtentByKey.get(placementKey(axis, name))?.size
-  );
-  for (const claim of spanEdgePins) lowerer.addFact(claim.fact);
+  const lowerer = new PlacementProgramLowerer(targets);
   const resolveAxisCoordinate = (axis: Axis, coordinate: PositionValue) => {
     const idx = axisIndex(axis);
     return resolveCoordinate(coordinate, posScales?.[idx], sizes[idx]);
@@ -218,9 +190,9 @@ export function lowerPlacementConstraints(
   constraints.forEach((constraint, constraintIndex) => {
     const owner = `${constraint.type}[${constraintIndex}]`;
 
-    if (constraint.type === "span") return;
-
     if (constraint.type === "position") {
+      // Point axes emit a single pin; interval axes emit both edges (strong
+      // start/end pins) that cell closure resolves into a size.
       lowerPositionPlacement(constraint, owner, {
         emitter: lowerer,
         targets,
@@ -257,5 +229,5 @@ export function lowerPlacementConstraints(
     lowerGridPlacement(constraint, owner, sizes, lowerer);
   });
 
-  return { program: lowerer.program, spanExtents };
+  return { anchorProgram: lowerer.anchorProgram };
 }

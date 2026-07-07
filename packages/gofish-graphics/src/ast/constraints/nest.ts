@@ -2,11 +2,7 @@
 // @wiki Underlying Space — /internals/core/underlying-space
 // </gofish-wiki>
 
-import {
-  CONTINUOUS,
-  UnderlyingSpace,
-  isBaselineMagnitude,
-} from "../underlyingSpace";
+import { SIZE, UnderlyingSpace, isBaselineMagnitude } from "../underlyingSpace";
 import * as Monotonic from "../../util/monotonic";
 import type { ConstraintRef } from "./shared";
 import type { PlacementFactEmitter } from "./placementFacts";
@@ -121,9 +117,8 @@ export function nestedSpace(
   // parent spread's auto-fit solves a scale factor against it); data-positioned
   // or origin-less content keeps `outer`.
   if (isBaselineMagnitude(innerSpace)) {
-    return CONTINUOUS(
+    return SIZE(
       Monotonic.adds(innerSpace.width, 2 * padding),
-      "free",
       innerSpace.measure
     );
   }

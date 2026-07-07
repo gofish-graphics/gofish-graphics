@@ -962,12 +962,14 @@ class ChartBuilder:
         Set the mark for the chart.
 
         Args:
-            mark: A `Mark` (rect/circle/line/...) **or** a callable
-                `(data) -> ChartBuilder` — the mark-as-function pattern. The
-                callable receives the per-group data slice (after the
-                pipeline operators run on the JS side) and returns a new
-                ChartBuilder for that slice. Mirrors JS storybook spelling
-                `.mark((data) => Chart(data[0].collection, ...).flow(...).mark(...))`.
+            mark: A `Mark` (rect/circle/line/...), a nested `ChartBuilder`, or a
+                callable `(data) -> ChartBuilder`. A nested ChartBuilder is the
+                preferred spelling for a per-group sub-chart (issue #243): an
+                empty-scope child (``chart()`` / ``chart(coord=...)``) inherits
+                the incoming partition datum, replacing the
+                ``.mark(lambda data: chart(data, ...).flow(...).mark(...))``
+                callback. A callable receives the per-group data slice and
+                returns a ChartBuilder for that slice (the older spelling).
 
         Returns:
             New ChartBuilder with mark set
@@ -975,9 +977,19 @@ class ChartBuilder:
         new_builder = ChartBuilder(
             self.data, self.options, self.operators, z_order=self._z_order
         )
+        # A nested ChartBuilder becomes a mark-fn that binds the incoming
+        # partition datum (empty scope) or draws as-is — reusing the same
+        # lambda_id / derive-server path as an explicit callback.
+        if isinstance(mark, ChartBuilder):
+            child = mark
+            new_builder._mark = _MarkFn(
+                (lambda data: child._with_data(data))
+                if child._uses_previous_marks()
+                else (lambda data: child)
+            )
         # Wrap callables in `_MarkFn` so the IR carries a stable lambda_id
         # the derive-server can register and the harness can RPC into.
-        if not isinstance(mark, Mark) and callable(mark):
+        elif not isinstance(mark, Mark) and callable(mark):
             new_builder._mark = _MarkFn(mark)
         else:
             new_builder._mark = mark
@@ -1691,6 +1703,46 @@ def resolve(cols: List[str], *, from_: Any, key: Optional[str] = None) -> Operat
     if key is not None:
         op_kwargs["key"] = key
     return Operator("resolve", **op_kwargs)
+
+
+def join(right: Any, *, on: str) -> Operator:
+    """One-to-many equi-join of the incoming rows against another table.
+
+    For each incoming (left) row, every ``right`` row whose ``on`` value matches
+    contributes one merged output row (``{**left, **right}``); incoming rows with
+    no match drop out. This is the relational join of two data tables — SQL
+    ``JOIN ... USING (on)``, pandas/polars ``left.merge(right, on=...)``, dplyr
+    ``left_join(right, by = on)``.
+
+    Unlike :func:`resolve` (which dereferences columns into drawn nodes of a
+    prior layer), ``join`` relates two plain tables, so ``right`` is inlined into
+    the IR as JSON rows and round-trips without a bridge.
+
+    Pairs with a nested chart that inherits its parent partition::
+
+        chart(catch_locations).flow(scatter(by="lake", x="x", y="y")).mark(
+            lambda data: chart(data, coord=clock())
+            .flow(join(SEAFOOD, on="lake"), stack(by="species", dir="x", h=20))
+            .mark(rect(w="count", fill="species"))
+        )
+
+    Args:
+        right: The right-hand table — a list of row dicts or a pandas DataFrame.
+        on: Shared key field matched between the incoming rows and ``right``.
+
+    Returns:
+        Operator object — IR ``{type: "join", on, right}``.
+    """
+    try:
+        import pandas as pd
+
+        if isinstance(right, pd.DataFrame):
+            right_rows: List[Any] = right.to_dict(orient="records")
+        else:
+            right_rows = list(right)
+    except ImportError:
+        right_rows = list(right)
+    return Operator("join", on=on, right=right_rows)
 
 
 def scatter(

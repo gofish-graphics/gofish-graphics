@@ -71,11 +71,14 @@ export { bin } from "./ast/transforms";
 export { ref } from "./ast/shapes/ref";
 
 // Datum projection — `pluck(ref, "species")` returns the full set of distinct
-// values for a field across a selected node's rows ("every possible value"),
-// the un-collapsed sibling of the `by: "field"` homogeneity collapse.
-// (`projectPath`/`splitKeyFn` stay module-internal — operators import them from
-// ./ast/datumProjection directly.)
-export { pluck } from "./ast/datumProjection";
+// values for a field across a selected node's rows ("every possible value");
+// `project(ref, "species")` is its collapsing sibling — the single value when
+// the rows agree on the field (the same homogeneity collapse `by: "field"`
+// performs), else `undefined`. Use `project` to read a field off the datum a
+// mark is bound to (e.g. in a `.zOrder(d => …)` callback) without indexing the
+// `pluck` multiset. (`splitKeyFn` stays module-internal — operators import it
+// from ./ast/datumProjection directly.)
+export { pluck, projectPath as project } from "./ast/datumProjection";
 
 // Constraints
 export { Constraint } from "./ast/constraints";
@@ -149,6 +152,7 @@ export {
   chart,
   derive,
   resolve,
+  join,
   rect,
   circle,
   selectAll,

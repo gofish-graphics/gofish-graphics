@@ -22,6 +22,7 @@ import {
   log as logOp,
   derive,
   resolve,
+  join,
   rect,
   circle,
   line,
@@ -419,6 +420,10 @@ function mapOperator(
           from: selectAll(opts.from as string),
           key: opts.key as string | undefined,
         })
+      );
+    case "join":
+      return applyTranslate(
+        join(opts.right as any[], { on: opts.on as string })
       );
     case "scatter":
       return applyTranslate(scatter(opts as any));

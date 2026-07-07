@@ -2,8 +2,8 @@
  * Unit tests for the per-axis linear-system bbox ledger (#39).
  * Run: `tsx src/tests/bbox.test.ts` (wired into `pnpm test` as `test:bbox`).
  *
- * The bbox is a 2-unknown system in (min, size): each facet (min/max/center/
- * size) is one equation; two independent facets are rank 2 and determine the
+ * The bbox is a 2-unknown system in (min, size): each key (min/max/center/
+ * size) is one equation; two independent keys are rank 2 and determine the
  * rest; a third dependent write is checked for consistency. These tests pin that
  * contract so the ledger can be grown into the node's authoritative dimension
  * state without silent behavior drift.
@@ -30,13 +30,13 @@ const near = (a: number | undefined, b: number) =>
 console.log("# bbox: under-determined (rank < 2)");
 {
   const b = new BBox();
-  ok("empty: all facets undefined", b.read("min") === undefined && !b.solved);
+  ok("empty: all keys undefined", b.read("min") === undefined && !b.solved);
   b.add("min", 10);
-  ok("rank 1: pinned facet readable", b.read("min") === 10);
-  ok("rank 1: other facets undefined", b.read("size") === undefined && !b.solved);
+  ok("rank 1: pinned key readable", b.read("min") === 10);
+  ok("rank 1: other keys undefined", b.read("size") === undefined && !b.solved);
 }
 
-console.log("# bbox: rank 2 solves every facet");
+console.log("# bbox: rank 2 solves every key");
 {
   // min + max → size, center
   const b = new BBox();
@@ -87,23 +87,23 @@ console.log("# bbox: rank 2 solves every facet");
 
 console.log("# bbox: ownership / over-determination");
 {
-  // A consistent repeat of an already-pinned facet is absorbed (no conflict).
+  // A consistent repeat of an already-pinned key is absorbed (no conflict).
   const b = new BBox();
   ok("first min: no conflict", b.add("min", 10, "a") === undefined);
   ok("repeat min same value: no conflict", b.add("min", 10, "b") === undefined);
 }
 {
-  // A contradicting second write to the SAME facet (still rank 1) is a conflict.
+  // A contradicting second write to the SAME key (still rank 1) is a conflict.
   const b = new BBox();
   b.add("min", 10, "a");
   const c = b.add("min", 99, "b");
   ok(
-    "conflicting same-facet write reports owners",
-    c !== undefined && c.facet === "min" && c.owner === "b" && c.priorOwner === "a"
+    "conflicting same-key write reports owners",
+    c !== undefined && c.key === "min" && c.owner === "b" && c.priorOwner === "a"
   );
 }
 {
-  // Rank-2 over-determination: a 3rd facet that disagrees with the solve.
+  // Rank-2 over-determination: a 3rd key that disagrees with the solve.
   const b = new BBox();
   b.add("min", 10, "a");
   b.add("max", 30, "a"); // size now implied = 20
@@ -111,7 +111,7 @@ console.log("# bbox: ownership / over-determination");
   ok(
     "rank-2 over-determination reports asserted vs implied",
     c !== undefined &&
-      c.facet === "size" &&
+      c.key === "size" &&
       near(c.asserted, 99) &&
       near(c.implied, 20)
   );
@@ -121,10 +121,10 @@ console.log("# bbox: ownership / over-determination");
   const b = new BBox();
   b.add("min", 10);
   b.add("max", 30); // size implied = 20, center implied = 20
-  ok("consistent 3rd facet absorbed", b.add("center", 20) === undefined);
+  ok("consistent 3rd key absorbed", b.add("center", 20) === undefined);
 }
 
-console.log("# bbox: σ-affine (Monotonic) facets");
+console.log("# bbox: σ-affine (Monotonic) keys");
 {
   // A σ-valued size + a numeric min → max = min + count·σ (a bar's edge).
   const b = new BBox();
@@ -141,35 +141,35 @@ console.log("# bbox: σ-affine (Monotonic) facets");
   ok("center is σ-affine", near(b.read("center", 2), 110));
 }
 {
-  // A consistent σ-valued 3rd facet is absorbed; a contradicting one conflicts.
+  // A consistent σ-valued 3rd key is absorbed; a contradicting one conflicts.
   const b = new BBox();
   b.add("min", 0);
   b.add("max", Monotonic.linear(10, 0)); // size now implied = 10σ
   ok(
-    "consistent σ 3rd facet absorbed",
+    "consistent σ 3rd key absorbed",
     b.add("size", Monotonic.linear(10, 0)) === undefined
   );
   const c = b.add("size", Monotonic.linear(20, 0)); // 20σ ≠ 10σ
   ok(
-    "contradicting σ facet reports conflict",
-    c !== undefined && c.facet === "size"
+    "contradicting σ key reports conflict",
+    c !== undefined && c.key === "size"
   );
 }
 {
-  // A constant facet still reads back as a plain number via read() (default σ=0).
+  // A constant key still reads back as a plain number via read() (default σ=0).
   const b = new BBox();
   b.add("min", 10);
   b.add("size", 20);
-  ok("constant facets read as numbers", b.read("max") === 30);
+  ok("constant keys read as numbers", b.read("max") === 30);
 }
 
 // `place()` and `setExtent`'s rank-1 pin both place an anchor through
 // `localAnchorPoint`, which DERIVES center/max from (min, size) rather than
-// reading a separately-stored facet. This is what lets an asymmetric box (a
+// reading a separately-stored key. This is what lets an asymmetric box (a
 // stored center ≠ min + size/2, as `position.tsx` can build) place identically
 // through both paths — the #39 stage-2 fix the earlier place()→setExtent reroute
 // got wrong by reading the stored center. On box [min=2, size=10]: center=7,
-// max=12, regardless of any stale stored facet.
+// max=12, regardless of any stale stored key.
 console.log("# localAnchorPoint: center/max are DERIVED from (min, size)");
 {
   ok("min anchor", localAnchorPoint("min", 2, 10) === 2);

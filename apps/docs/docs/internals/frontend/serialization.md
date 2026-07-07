@@ -115,8 +115,10 @@ The root types mirror the v3 fluent builder shapes:
 - `RawMarkIR` — `{ type: "raw-mark", mark, options? }`
 
 `data` is either `{type: "inline", rows}`, `{type: "select", layer}`, or
-`{type: "external", id?}`. Operators are a flat list (`derive`, `spread`,
-`stack`, `group`, `scatter`, `table`, `log`). Marks are a tree — leaves
+`{type: "external", id?}`. Operators are a flat list (`derive`, `resolve`,
+`join`, `spread`, `stack`, `group`, `scatter`, `table`, `log`) — note `join`
+inlines its right-hand table as JSON rows, so unlike `derive` it round-trips
+without a bridge. Marks are a tree — leaves
 (`rect`, `circle`, `blank`, `ellipse`, `petal`, `text`,
 `image`, `polygon`, plus the Python-bridge `mark-fn`), combinators (with
 `__combinator: true` and a `children` array — `layer`, `spread`, `stack`,

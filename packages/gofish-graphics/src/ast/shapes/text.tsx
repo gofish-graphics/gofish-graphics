@@ -1,6 +1,7 @@
 import * as Monotonic from "../../util/monotonic";
 import { resolveColorChannel } from "../../color";
 import { computeAesthetic } from "../../util";
+import { posFn } from "../domain";
 import { interval } from "../../util/interval";
 import { GoFishNode } from "../_node";
 import {
@@ -248,7 +249,7 @@ export const Text = ({
 
         return [resolveAxis(0, xPos), resolveAxis(1, yPos)];
       },
-      layout: (shared, size, scaleFactors, children, posScales) => {
+      layout: (shared, size, scales, children) => {
         const finalText = isValue(textContent)
           ? getValue(textContent)
           : textContent;
@@ -277,11 +278,19 @@ export const Text = ({
           : relRaw;
 
         const positionX =
-          computeAesthetic(dims[0].center, posScales?.[0]!, undefined) ??
-          computeAesthetic(dims[0].min, posScales?.[0]!, undefined);
+          computeAesthetic(
+            dims[0].center,
+            posFn(scales?.[0]?.map)!,
+            undefined
+          ) ??
+          computeAesthetic(dims[0].min, posFn(scales?.[0]?.map)!, undefined);
         const positionY =
-          computeAesthetic(dims[1].center, posScales?.[1]!, undefined) ??
-          computeAesthetic(dims[1].min, posScales?.[1]!, undefined);
+          computeAesthetic(
+            dims[1].center,
+            posFn(scales?.[1]?.map)!,
+            undefined
+          ) ??
+          computeAesthetic(dims[1].min, posFn(scales?.[1]?.map)!, undefined);
 
         return {
           intrinsicDims: [

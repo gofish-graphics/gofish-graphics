@@ -276,13 +276,27 @@ export class ChartBuilder<TInput, TOutput = TInput> {
     );
   }
 
-  // mark stores the mark and returns a new builder for chaining
-  mark(mark: Mark<TOutput>): ChartBuilder<TInput, TOutput> {
+  // mark stores the mark and returns a new builder for chaining. A nested
+  // `ChartBuilder` may be passed directly instead of a `(data) => Chart(...)`
+  // callback (issue #243): an empty-scope child (`chart()` / `chart(options)`)
+  // inherits the incoming partition datum; a child with its own data is drawn
+  // as-is per partition.
+  mark(
+    mark: Mark<TOutput> | ChartBuilder<any, any>
+  ): ChartBuilder<TInput, TOutput> {
+    const finalMark =
+      mark instanceof ChartBuilder
+        ? (((d: TOutput, _key, layerContext) =>
+            (mark.usesPreviousLayerMarks()
+              ? mark.withData(d)
+              : mark
+            ).withLayerContext(layerContext ?? {})) as Mark<TOutput>)
+        : mark;
     return new ChartBuilder(
       this.data,
       this.options,
       this.operators,
-      mark,
+      finalMark,
       this.layerContext,
       this.nodeZOrder,
       this.connector,
@@ -668,15 +682,50 @@ export function chart(
   options?: ChartOptions
 ): ChartBuilder<GoFishRef[], GoFishRef[]>;
 export function chart<T>(data: T, options?: ChartOptions): ChartBuilder<T, T>;
-// Empty scope: `Chart()` (no args) inside `.layer(...)` inherits the previous
-// tier's marks. Distinguished purely by arity — no shape-sniffing of `data`.
-export function chart(): ChartBuilder<any, any>;
+// Empty scope: `Chart()` / `Chart(options)` (no data) inherits its data from the
+// enclosing context — the previous tier's marks inside `.layer(...)`, or the
+// incoming partition datum when used directly as a `.mark(...)` (issue #243).
+export function chart(options?: ChartOptions): ChartBuilder<any, any>;
 export function chart<T>(
-  data?: T,
+  dataOrOptions?: T | ChartOptions,
   options?: ChartOptions
 ): ChartBuilder<any, any> {
-  const resolvedData = arguments.length === 0 ? PREVIOUS_LAYER_MARKS : data;
-  return new ChartBuilder<any, any>(resolvedData, options, [], undefined, {});
+  // Disambiguate `chart(options)` from `chart(data)`: chart data is always an
+  // array or a ref, never a bare options-shaped object, so a lone first arg
+  // whose keys are all ChartOptions keys is options for an empty scope. (No
+  // real call passes a single plain datum object as data.)
+  const emptyScope =
+    arguments.length === 0 ||
+    (options === undefined && isChartOptions(dataOrOptions));
+  const resolvedData = emptyScope ? PREVIOUS_LAYER_MARKS : (dataOrOptions as T);
+  const resolvedOptions = emptyScope
+    ? (dataOrOptions as ChartOptions | undefined)
+    : options;
+  return new ChartBuilder<any, any>(
+    resolvedData,
+    resolvedOptions,
+    [],
+    undefined,
+    {}
+  );
+}
+
+const CHART_OPTION_KEYS = new Set([
+  "w",
+  "h",
+  "coord",
+  "color",
+  "axes",
+  "padding",
+]);
+
+/** True when `x` is an options-shaped object (used to tell `chart(options)`
+ *  from `chart(data)` — see the disambiguation note in `chart`). An empty
+ *  object reads as (empty) options. */
+function isChartOptions(x: unknown): x is ChartOptions {
+  if (x === null || typeof x !== "object") return false;
+  if (Array.isArray(x) || x instanceof GoFishRef) return false;
+  return Object.keys(x).every((k) => CHART_OPTION_KEYS.has(k));
 }
 
 /**

@@ -4,6 +4,7 @@ import { Size, displayTranslate } from "../dims";
 import type { DisplayList } from "gofish-ir";
 import { lowerStyle, withToPixel } from "../displayList/lowerHelpers";
 import { UNDEFINED, UnderlyingSpace } from "../underlyingSpace";
+import { axisScale } from "../domain";
 import { createNodeOperator } from "../withGoFish";
 import { type ArrowOptions, getBoxToBoxArrow } from "perfect-arrows";
 import { bbox, union } from "../../util/bbox";
@@ -55,7 +56,7 @@ export const arrow = createNodeOperator(
           _childSpaces: Size<UnderlyingSpace>[],
           _childNodes: GoFishAST[]
         ) => [UNDEFINED, UNDEFINED],
-        layout: (shared, size, scaleFactors, layoutChildren) => {
+        layout: (shared, size, scales, layoutChildren) => {
           if (layoutChildren.length < 2) {
             return {
               intrinsicDims: [
@@ -67,8 +68,13 @@ export const arrow = createNodeOperator(
             };
           }
 
+          // Forward σ (size slope) but not the anchored map: arrow anchors to
+          // its endpoints' bboxes, not to data position.
           const childPlaceables = layoutChildren.map((child) =>
-            child.layout(size, scaleFactors, [undefined, undefined])
+            child.layout(size, [
+              axisScale(scales?.[0]?.sigma, undefined),
+              axisScale(scales?.[1]?.sigma, undefined),
+            ])
           );
           const fromDims = childPlaceables[0].dims;
           const toDims = childPlaceables[1].dims;

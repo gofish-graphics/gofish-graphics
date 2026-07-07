@@ -19,7 +19,7 @@ import {
   Size,
   Transform,
 } from "./dims";
-import { Domain } from "./domain";
+import { Domain, type AxisScale } from "./domain";
 import { GoFishNode } from "./_node";
 import { GoFishAST } from "./_ast";
 import { MaybeValue } from "./data";
@@ -276,11 +276,7 @@ export class GoFishRef {
     return measurement;
   }
 
-  public layout(
-    size: Size,
-    scaleFactors: Size<number | undefined>,
-    _posScales?: Size<((pos: number) => number) | undefined>
-  ): Placeable {
+  public layout(size: Size, _scales?: Size<AxisScale | undefined>): Placeable {
     if (!this.selectedNode) {
       throw new Error("Selected node not found");
     }

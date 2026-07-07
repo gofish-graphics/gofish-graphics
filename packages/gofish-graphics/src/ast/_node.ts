@@ -53,12 +53,13 @@ import {
   isPOSITION,
   isUNDEFINED,
   continuousInterval,
-  placementOf,
+  spacePlacement,
   CONTINUOUS_TYPE,
   type Placement,
   UnderlyingSpace,
 } from "./underlyingSpace";
 import { toJSON, interval } from "../util/interval";
+import type { AxisScale } from "./domain";
 import { envFlag } from "../util";
 import { nice } from "d3-array";
 import type { ScaleContext } from "./gofish";
@@ -68,9 +69,9 @@ import type { ConstraintSpec, ConstraintRef } from "./constraints";
 import { collectConstraintRefs } from "./constraints";
 import {
   BBox,
-  type BBoxFacet,
+  type BBoxKey,
   type BBoxConflict,
-  type FacetValue,
+  type BBoxValue,
 } from "./constraints/bbox";
 import {
   assignPaletteColor,
@@ -120,19 +121,20 @@ export type Placeable = {
    *  uses this to express every anchor as `absoluteMin + constant`, including
    *  `baseline` for asymmetric boxes such as text and negative bars. */
   localAnchor?: (axis: FancyDirection, anchor: Anchor) => number | undefined;
-  /** This target's abstract {@link Placement} on `dir` (free / determined(at) /
-   *  conflict), or `undefined` for a non-continuous axis. `align` reads it to
-   *  leave self-positioned children alone. Omitted by `ref` stand-ins (→
-   *  `undefined`, so they get the fallback baseline like any chrome). */
+  /** This target's abstract {@link Placement} on `dir` (`"free"` /
+   *  `"determined"` / `"conflict"`), or `undefined` for a non-continuous axis.
+   *  `align` reads it to leave self-positioned children alone. Omitted by `ref`
+   *  stand-ins (→ `undefined`, so they get the fallback baseline like any
+   *  chrome). */
   placementOn?: (dir: Direction) => Placement | undefined;
   place: (axis: FancyDirection, value: number, anchor?: Anchor) => void;
-  /** Write an axis extent from owned bbox facets (the size-setting primitive
+  /** Write an axis extent from owned bbox keys (the size-setting primitive
    *  #39 — `span` and an authoritative `position` pin go through it). Optional
    *  because not every placeable shape implements it (a `ref` stand-in doesn't);
    *  it is only ever invoked on real `GoFishNode` constraint targets. */
   setExtent?: (
     axis: FancyDirection,
-    owned: Partial<Record<BBoxFacet, number>>,
+    owned: Partial<Record<BBoxKey, number>>,
     owner?: string
   ) => void;
   /** Authoritative override pin (#39): land `anchor` at `value`, rebuilding the
@@ -142,17 +144,17 @@ export type Placeable = {
   pinAnchor?: (axis: FancyDirection, value: number, anchor: Anchor) => void;
 };
 
-// `scaleFactors` is the σ (pixels-per-data-unit) handed down per axis. A node
-// MUST NOT mutate this array: to establish a local scale for its descendants
-// (the `shared` scoping annotation, below) it copies into a fresh array and
-// passes that down — never writing back to the parent's, so a solved σ can't
-// leak to the node's siblings (see spread.tsx / layer.tsx).
+// `scales` is the per-axis data→pixel affine scale handed down (the single
+// {@link AxisScale} carrier: `sigma` = pixels-per-data-unit for size, `map` =
+// the anchored data→pixel map). A node MUST NOT mutate this array: to establish
+// a local scale for its descendants (the `shared` scoping annotation, below) it
+// copies into a fresh array and passes that down — never writing back to the
+// parent's, so a solved σ can't leak to the node's siblings (see layer.tsx).
 export type Layout = (
   shared: Size<boolean>,
   size: Size,
-  scaleFactors: Size<number | undefined>,
+  scales: Size<AxisScale | undefined>,
   children: GoFishAST[],
-  posScales: Size<((pos: number) => number) | undefined>,
   node: GoFishNode
 ) => { intrinsicDims: FancyDims; transform: FancyTransform; renderData?: any };
 
@@ -198,21 +200,21 @@ export type ResolveUnderlyingSpace = (
 
 /** Dev gate (#39, placement pass): set `GOFISH_CONFLICT_CHECK=1` to surface
  *  OVER-DETERMINATION the `BBox` ledger detects but the placement commit silently
- *  absorbs — a single owner writing inconsistent facets on an axis (the
+ *  absorbs — a single owner writing inconsistent keys on an axis (the
  *  authority-independent half of "conflicts → named"). Off / zero-cost in prod. */
 const CONFLICT_CHECK = envFlag("GOFISH_CONFLICT_CHECK");
 
 const _conflicts = new Set<string>();
-/** Report a `BBox` over-determination (a facet pinned inconsistent with the
- *  already-determined axis), once per (type, axis, facet). The placement pass's
+/** Report a `BBox` over-determination (a box key pinned inconsistent with the
+ *  already-determined axis), once per (type, axis, key). The placement pass's
  *  "named conflict instead of silent last-writer-wins" — for the single-owner
  *  case; cross-constraint authority is the open fork (#583). */
 const reportConflict = (type: string, dir: 0 | 1, c: BBoxConflict): void => {
-  const key = `${type}|${dir}|${c.facet}`;
+  const key = `${type}|${dir}|${c.key}`;
   if (_conflicts.has(key)) return;
   _conflicts.add(key);
   console.warn(
-    `[bbox-conflict] ${type} axis ${dir} ${c.facet}: asserted=${c.asserted} implied=${c.implied} (owner=${c.owner} prior=${c.priorOwner})`
+    `[bbox-conflict] ${type} axis ${dir} ${c.key}: asserted=${c.asserted} implied=${c.implied} (owner=${c.owner} prior=${c.priorOwner})`
   );
 };
 
@@ -246,12 +248,12 @@ export class GoFishNode {
   public children: GoFishAST[];
   public intrinsicDims?: Dimensions;
   public transform?: Transform;
-  /** Persistent per-axis bbox ledger (#39 stage 2). Records the facet equations
-   *  that determine this node's box, so it mirrors the authoritative
+  /** Persistent per-axis bbox ledger (#39 stage 2). Records the box-key
+   *  equations that determine this node's box, so it mirrors the authoritative
    *  `(intrinsicDims, transform)`: `layout()` seeds the self-layout size (+ a
    *  self-placed absolute min), `_pinAnchor` records the absolute anchor a pin
    *  lands at, and a rank-2 `setExtent` resets the axis to its determining
-   *  facets (overriding the self-layout seed). Lazily created (the hot single
+   *  keys (overriding the self-layout seed). Lazily created (the hot single
    *  pin / `place()` path allocates only on first touch). As of stage 2 the
    *  `dims` getter READS from this ledger wherever an axis is fully solved
    *  (falling back to the `(intrinsicDims, transform)` split otherwise); render
@@ -263,7 +265,7 @@ export class GoFishNode {
    *  σ from its own box and hands it to descendants via a fresh array — claim
    *  hoisting, #549); `false` (default) = pass-through, inheriting σ from above.
    *  It is NOT a mutation flag — no node writes back to the parent's
-   *  `scaleFactors`. Currently set only by `spread`/`stack` (`sharedScale`). */
+   *  `scales`. Currently set only by `spread`/`stack` (`sharedScale`). */
   public shared: Size<boolean>;
   public renderData?: any;
   public coordinateTransform?: CoordinateTransform;
@@ -506,7 +508,7 @@ export class GoFishNode {
    */
   /**
    * Top-down pass that resolves coordinate-space axis aliases (e.g. polar
-   * `theta`/`r`/`thetaSize`/`rSize`) into the canonical `x/y/w/h` facets of each
+   * `theta`/`r`/`thetaSize`/`rSize`) into the canonical `x/y/w/h` channels of each
    * mark's `dims`. Mirrors {@link resolveAxes}: it carries the `active` alias
    * scope downward, rebinding it at every `coord` node that declares aliases
    * (a nested coord rebinds for its subtree).
@@ -544,7 +546,7 @@ export class GoFishNode {
         if (dims) {
           dims[res.axis] = {
             ...dims[res.axis],
-            [res.facet]: value,
+            [res.key]: value,
           };
         }
       }
@@ -726,10 +728,10 @@ export class GoFishNode {
         if (isPOSITION(space)) {
           const iv = continuousInterval(space)!;
           const [niceMin, niceMax] = nice(iv.min, iv.max, 10);
-          // Nicing changes the DATA domain (and the width derived from it) and
-          // re-pins the placement at the niced min — all in lockstep.
+          // Nicing changes the DATA domain (and the width derived from it);
+          // placement is a derived view of dataDomain, so the niced interval
+          // keeps it "determined" without a separate write.
           (space as CONTINUOUS_TYPE).dataDomain = interval(niceMin, niceMax);
-          (space as CONTINUOUS_TYPE).placement = placementOf(niceMin);
           (space as CONTINUOUS_TYPE).width = Monotonic.linear(
             niceMax - niceMin,
             0
@@ -742,20 +744,15 @@ export class GoFishNode {
     });
   }
 
-  public layout(
-    size: Size,
-    scaleFactors: Size<number | undefined>,
-    posScales: Size<((pos: number) => number) | undefined>
-  ): Placeable {
+  public layout(size: Size, scales: Size<AxisScale | undefined>): Placeable {
     // Axes are no longer drawn here: they are elaborated into ordinary shapes +
     // constraints by `elaborateAxes` (src/ast/axes/elaborate.tsx) before layout,
     // so the layout engine has no axis-specific budget/baseline machinery.
     const { intrinsicDims, transform, renderData } = this._layout(
       this.shared,
       size,
-      scaleFactors,
+      scales,
       this.children,
-      posScales,
       this
     );
 
@@ -776,10 +773,11 @@ export class GoFishNode {
       if (id?.size === undefined && id?.min === undefined) continue;
       this._bbox ??= [undefined, undefined];
       const ledger = (this._bbox[dir] ??= new BBox());
-      if (id?.size !== undefined) this._addFacet(ledger, dir, "size", id.size);
+      if (id?.size !== undefined)
+        this._addEquation(ledger, dir, "size", id.size);
       const tr = this.transform?.translate?.[dir];
       if (tr !== undefined && id?.min !== undefined)
-        this._addFacet(ledger, dir, "min", tr + id.min);
+        this._addEquation(ledger, dir, "min", tr + id.min);
       // Stage 3 (#39): the ledger now records the operator's self-placement
       // (`min = translate + localMin`), so retire the redundant written translate
       // — wholesale, at the one wrapper every operator `_layout` flows through,
@@ -816,7 +814,7 @@ export class GoFishNode {
         center: localAnchorPoint("center", min, size),
         max: localAnchorPoint("max", min, size),
         size,
-        // `embedded` is a layout-fold flag, never a ledger facet — read it from
+        // `embedded` is a layout-fold flag, never a ledger key — read it from
         // the local box (see the stage-2 invariants in the essay).
         embedded: this.intrinsicDims?.[dir]?.embedded,
       };
@@ -857,18 +855,18 @@ export class GoFishNode {
       this.transform.translate[dir] = undefined;
   }
 
-  /** Add a facet equation to a per-axis ledger, surfacing any over-determination
+  /** Add a box-key equation to a per-axis ledger, surfacing any over-determination
    *  the `BBox` detects (the placement pass's "named conflict, not silent
    *  last-writer" — single-owner case; observe-only behind GOFISH_CONFLICT_CHECK).
    *  Every ledger write goes through here so no conflict is silently dropped. */
-  private _addFacet(
+  private _addEquation(
     box: BBox,
     dir: Direction,
-    facet: BBoxFacet,
-    value: FacetValue,
+    key: BBoxKey,
+    value: BBoxValue,
     owner?: string
   ): void {
-    const conflict = box.add(facet, value, owner);
+    const conflict = box.add(key, value, owner);
     if (CONFLICT_CHECK && conflict)
       reportConflict(this.type, dir as 0 | 1, conflict);
   }
@@ -894,14 +892,16 @@ export class GoFishNode {
   }
 
   /** This node's abstract {@link Placement} on `dir` (the layout half of its
-   *  underlying space) — `free` (awaiting a position), `determined(at)` (already
-   *  committed to a data coordinate), or `conflict`. `undefined` for a
+   *  underlying space) — `"free"` (awaiting a position), `"determined"` (already
+   *  committed to a data coordinate), or `"conflict"`. `undefined` for a
    *  non-continuous / unresolved axis (chrome). `align` reads it to leave
    *  self-positioned children (a scatter facet) where their own scale puts them
    *  — the principled replacement for the data-positioned guard. */
   public placementOn(dir: Direction): Placement | undefined {
     const sp = this._underlyingSpace?.[dir];
-    return sp !== undefined && isCONTINUOUS(sp) ? sp.placement : undefined;
+    return sp !== undefined && isCONTINUOUS(sp)
+      ? spacePlacement(sp)
+      : undefined;
   }
 
   private get _displayTransform(): Transform | undefined {
@@ -955,16 +955,16 @@ export class GoFishNode {
   }
 
   /**
-   * Write a node's per-axis extent from OWNED bbox facets (min/max/center/size)
+   * Write a node's per-axis extent from OWNED bbox keys (min/max/center/size)
    * — the bbox-backed primitive that `span` and an authoritative `position` pin
-   * share (#39). Two or more owned facets DETERMINE the box (size included — the
+   * share (#39). Two or more owned keys DETERMINE the box (size included — the
    * size-setting case, e.g. span's two edges), so the local box is reset to
-   * `[0, size]` and the translate to the absolute min. A single owned facet is a
+   * `[0, size]` and the translate to the absolute min. A single owned key is a
    * position pin: the size comes from the node's own layout (the second
    * equation), the local box is left intact, and only the translate moves — so
    * the pin OVERRIDES a self-placed translate, which the write-once `place()`
-   * cannot. Anchor facets map start→min, end→max, middle→center; `baseline`
-   * (the origin) is not a bbox facet, so a baseline pin still uses `place()`.
+   * cannot. Anchor keys map start→min, end→max, middle→center; `baseline`
+   * (the origin) is not a bbox key, so a baseline pin still uses `place()`.
    *
    * The rank-2 solve writes through the PERSISTENT per-axis ledger
    * ({@link _bbox}) so it mirrors the node's authoritative geometry — a
@@ -978,41 +978,41 @@ export class GoFishNode {
    */
   public setExtent(
     axis: FancyDirection,
-    owned: Partial<Record<BBoxFacet, number>>,
+    owned: Partial<Record<BBoxKey, number>>,
     owner?: string
   ): void {
     const dir = elaborateDirection(axis);
-    const facets = (
-      Object.entries(owned) as [BBoxFacet, number | undefined][]
-    ).filter((e): e is [BBoxFacet, number] => e[1] !== undefined);
-    if (facets.length === 0) return;
+    const keys = (
+      Object.entries(owned) as [BBoxKey, number | undefined][]
+    ).filter((e): e is [BBoxKey, number] => e[1] !== undefined);
+    if (keys.length === 0) return;
 
     const intrinsic = this.intrinsicDims?.[dir];
-    const sizeOwned = facets.length >= 2;
+    const sizeOwned = keys.length >= 2;
 
     if (!sizeOwned) {
-      // Rank-1 position pin: a single anchor facet lands at its value; the size
+      // Rank-1 position pin: a single anchor key lands at its value; the size
       // is the node's own layout (the second equation). No BBox needed — the
       // anchor's local point is derived directly, the SAME `localAnchorPoint`
       // arithmetic `place()` uses, so the two paths can't diverge (and the hot
       // pin path allocates nothing). The local box is left intact; only the
       // translate moves, so the pin OVERRIDES a self-placed translate.
-      const [facet, value] = facets[0];
-      if (facet === "size") return; // a lone size can't determine a position
-      this._pinAnchor(dir, facet, value);
+      const [key, value] = keys[0];
+      if (key === "size") return; // a lone size can't determine a position
+      this._pinAnchor(dir, key, value);
       return;
     }
 
-    // Rank-2: two+ owned facets DETERMINE the box (size included). This is an
+    // Rank-2: two+ owned keys DETERMINE the box (size included). This is an
     // overriding determination — it discards whatever the node's own layout seed
     // (or an earlier pin) recorded for this axis, exactly as it resets the local
     // frame to [0, size] at the absolute min. So the persistent ledger is RESET
-    // to hold just these facets — and is now the SOLE record of this axis's
+    // to hold just these keys — and is now the SOLE record of this axis's
     // position.
     this._bbox ??= [undefined, undefined];
     const bbox = (this._bbox[dir] = new BBox());
-    for (const [facet, value] of facets)
-      this._addFacet(bbox, dir, facet, value, owner);
+    for (const [key, value] of keys)
+      this._addEquation(bbox, dir, key, value, owner);
     const absMin = bbox.read("min");
     const size = bbox.read("size");
     if (absMin === undefined || size === undefined) return; // under-determined
@@ -1044,7 +1044,7 @@ export class GoFishNode {
   }
 
   /**
-   * Pin one axis so the box's `anchor` facet lands at `value`, deriving the
+   * Pin one axis so the box's `anchor` lands at `value`, deriving the
    * anchor's local point from `(min, size)` via `localAnchorPoint`. The single
    * arithmetic shared by `place()`'s determined branch, `setExtent`'s rank-1
    * position pin, and the public {@link pinAnchor}, so the placement paths can
@@ -1071,11 +1071,11 @@ export class GoFishNode {
     if (override || !this._bbox[dir]) this._bbox[dir] = new BBox();
     const ledger = this._bbox[dir]!;
     if (intrinsic?.size !== undefined)
-      this._addFacet(ledger, dir, "size", intrinsic.size);
+      this._addEquation(ledger, dir, "size", intrinsic.size);
     if (anchor === "baseline") {
-      this._addFacet(ledger, dir, "min", value + (intrinsic?.min ?? 0));
+      this._addEquation(ledger, dir, "min", value + (intrinsic?.min ?? 0));
     } else {
-      this._addFacet(ledger, dir, anchor, value);
+      this._addEquation(ledger, dir, anchor, value);
     }
 
     // Write the pin's translate, then reconcile: on a solved axis the ledger is
@@ -1430,9 +1430,10 @@ export const debugUnderlyingSpaceTree = (
   ): string => {
     const fmt = (s: UnderlyingSpace): string => {
       if (isCONTINUOUS(s)) {
-        return s.placement.tag === "determined"
+        const placement = spacePlacement(s);
+        return placement === "determined"
           ? `position(${toJSON(continuousInterval(s)!)})`
-          : s.placement.tag === "free"
+          : placement === "free"
             ? `size(${s.width.run(1)})`
             : `difference(${s.width.run(1)})`;
       } else if (isORDINAL(s)) {

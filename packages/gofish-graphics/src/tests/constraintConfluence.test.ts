@@ -17,16 +17,10 @@ import {
 } from "../ast/constraints/placementSolver";
 import {
   anchorExpr,
-  edgePinFact,
   participantFact,
-  pinFact,
   relationFact,
 } from "../ast/constraints/placementFacts";
 import type { PositionConstraint } from "../ast/constraints/position";
-import {
-  lowerSpanEdgePins,
-  type SpanConstraint,
-} from "../ast/constraints/span";
 import type { ZAboveConstraint } from "../ast/constraints/zorder";
 import type { Anchor, Dimensions, FancyDirection } from "../ast/dims";
 import { elaborateDirection, localAnchorPoint } from "../ast/dims";
@@ -35,7 +29,10 @@ import {
   applyNestSpacePlan,
   buildNestPlan,
 } from "../ast/constraints/nestPlan";
-import { resolveLayerBaseSpaces } from "../ast/constraints/compose";
+import {
+  composeConstraintSpaces,
+  resolveLayerBaseSpaces,
+} from "../ast/constraints/compose";
 import {
   buildChildScalePlan,
   buildDistributeSliceMap,
@@ -47,6 +44,7 @@ import {
   selectGridConstraint,
 } from "../ast/constraints/proposalPlan";
 import { discretePosition, value } from "../ast/data";
+import { pxOf, type AxisMap } from "../ast/domain";
 import { POSITION, SIZE, UNDEFINED } from "../ast/underlyingSpace";
 import { interval } from "../util/interval";
 
@@ -54,7 +52,6 @@ type Constraint =
   | AlignConstraint
   | DistributeConstraint
   | PositionConstraint
-  | SpanConstraint
   | NestConstraint
   | GridConstraint;
 type Geometry = Record<string, { min?: number; center?: number; max?: number }>;
@@ -208,9 +205,16 @@ const distributeWithSpacing = (
   spacing,
 });
 
-const span = (name: string, min: number, max: number): SpanConstraint => ({
-  type: "span",
+// The interval form of `position`, replacing the retired `Constraint.span`.
+const span = (
+  name: string,
+  min: number,
+  max: number
+): PositionConstraint => ({
+  type: "position",
   x: [min, max],
+  anchor: "middle",
+  override: false,
   children: [child(name)],
 });
 
@@ -622,20 +626,51 @@ console.log("# constraint confluence: grid proposal ownership");
     selectGridConstraint([grid2]) === grid2
   );
 
-  const throws = (constraints: GridConstraint[]): boolean => {
+  const throwsWith = (
+    constraints: Constraint[],
+    fragment: string
+  ): boolean => {
     try {
       selectGridConstraint(constraints);
       return false;
     } catch (error) {
-      return (
-        error instanceof Error &&
-        error.message.includes("Constraint.grid proposal conflict")
-      );
+      return error instanceof Error && error.message.includes(fragment);
     }
   };
   ok(
     "duplicate grid proposal ownership throws in either order",
-    throws([grid2, grid1]) && throws([grid1, grid2])
+    throwsWith([grid2, grid1], "Constraint.grid proposal conflict") &&
+      throwsWith([grid1, grid2], "Constraint.grid proposal conflict")
+  );
+
+  // grid mixed with any non-z-order constraint half-applies (placement sees it,
+  // the space/size fold does not), so selectGridConstraint rejects it.
+  const alignMix: AlignConstraint = {
+    type: "align",
+    y: "middle",
+    children: [A, B],
+  };
+  ok(
+    "grid mixed with align throws in either order",
+    throwsWith(
+      [grid2, alignMix],
+      "Constraint.grid cannot be combined with a 'align' constraint"
+    ) &&
+      throwsWith(
+        [alignMix, grid2],
+        "Constraint.grid cannot be combined with a 'align' constraint"
+      )
+  );
+
+  // z-order (zAbove/zBelow) is render-time paint order and composes with grid.
+  const zAboveMix: ZAboveConstraint = {
+    type: "zAbove",
+    children: [A, B],
+  };
+  ok(
+    "grid alongside a z-order constraint is allowed",
+    selectGridConstraint([grid2, zAboveMix]) === grid2 &&
+      selectGridConstraint([zAboveMix, grid2]) === grid2
   );
 }
 
@@ -680,10 +715,11 @@ console.log("# constraint confluence: position scale ownership planning");
 
 console.log("# constraint confluence: child posScale forwarding");
 {
-  const baseX = (v: number) => v + 1;
-  const baseY = (v: number) => v + 2;
-  const effectiveX = (v: number) => v * 10;
-  const effectiveY = (v: number) => v * 20;
+  // AxisMaps standing in for the former closures: pxOf(map, v) reproduces them.
+  const baseX: AxisMap = { sigma: 1, domainMin: 0, pxMin: 1 }; // v + 1
+  const baseY: AxisMap = { sigma: 1, domainMin: 0, pxMin: 2 }; // v + 2
+  const effectiveX: AxisMap = { sigma: 10, domainMin: 0, pxMin: 0 }; // v * 10
+  const effectiveY: AxisMap = { sigma: 20, domainMin: 0, pxMin: 0 }; // v * 20
   const positionSpace = POSITION(interval(0, 10));
 
   const noOwnedAxisPlan = buildPositionScalePlan(
@@ -709,7 +745,7 @@ console.log("# constraint confluence: child posScale forwarding");
     ownedAxisPlan.ownsAxis[0] === true &&
       ownedAxisPlan.ownsAxis[1] === false &&
       ownedAxisPlan.effectivePosScales[0] === baseX &&
-      ownedAxisPlan.effectivePosScales[1]?.(5) === 100
+      pxOf(ownedAxisPlan.effectivePosScales[1]!, 5) === 100
   );
 
   const unowned = childPosScalesFor(
@@ -770,7 +806,11 @@ console.log("# constraint confluence: raw placement coordinates");
   ok(
     "datum placement coordinate elaborates through posScale before raw facts",
     compilePlacementCoordinate(value(5).offset(3), undefined) === undefined &&
-      compilePlacementCoordinate(value(5).offset(3), (v) => v * 10) === 53
+      compilePlacementCoordinate(value(5).offset(3), {
+        sigma: 10,
+        domainMin: 0,
+        pxMin: 0,
+      }) === 53
   );
   ok(
     "discrete placement coordinate resolves from containing axis size",
@@ -778,34 +818,28 @@ console.log("# constraint confluence: raw placement coordinates");
   );
 }
 
-console.log("# constraint confluence: raw placement fact datatype");
+console.log("# constraint confluence: reduced placement fact datatype");
 {
+  // The difference graph consumes `min`-reduced relation/participant facts (the
+  // solver builds these from the anchor program post-closure).
   const a = anchorExpr("A", "x", "middle");
   const b = anchorExpr("B", "x", "start");
-  const pin = pinFact(a, 42, "test-pin");
   const participant = participantFact("B", "x", "test-participant");
   const relation = relationFact(a, b, 7, "test-relation");
-  const edge = edgePinFact("C", "y", "max", 30, "test-edge");
 
   ok(
-    "placement facts are numeric raw algebra terms",
-    pin.type === "pin" &&
-      typeof pin.value === "number" &&
-      participant.type === "participant" &&
+    "reduced placement facts are numeric raw algebra terms",
+    participant.type === "participant" &&
       participant.name === "B" &&
       relation.type === "relation" &&
-      typeof relation.offset === "number" &&
-      edge.type === "edge-pin" &&
-      typeof edge.value === "number"
+      typeof relation.offset === "number"
   );
   ok(
-    "placement facts retain anchor identity separately from numeric values",
+    "reduced placement facts retain anchor identity separately from values",
     relation.from.anchor === "middle" &&
       relation.to.anchor === "start" &&
       relation.from.node === "A" &&
-      participant.axis === "x" &&
-      edge.name === "C" &&
-      edge.edge === "max"
+      participant.axis === "x"
   );
 }
 
@@ -819,14 +853,14 @@ console.log("# constraint confluence: placement constraint lowering");
     targets("A"),
     [300, 200]
   );
-  const positionFact = loweredPosition.program.axes[0][0];
+  const positionFact = loweredPosition.anchorProgram.axes[0][0];
   ok(
-    "position lowers to an explicit pin fact",
-    positionFact?.type === "pin" &&
+    "position lowers to an anchor pin fact (no pre-evaluated offset)",
+    positionFact?.type === "anchor-pin" &&
       positionFact.owner === "position[0]" &&
-      positionFact.expr.node === "A" &&
-      positionFact.expr.anchor === "start" &&
-      positionFact.value === 15
+      positionFact.node === "A" &&
+      positionFact.anchor === "middle" &&
+      positionFact.value === 20
   );
 
   const loweredDiscretePosition = lowerPlacementConstraints(
@@ -842,14 +876,14 @@ console.log("# constraint confluence: placement constraint lowering");
     targets("A"),
     [300, 200]
   );
-  const discretePositionFact = loweredDiscretePosition.program.axes[0][0];
+  const discretePositionFact = loweredDiscretePosition.anchorProgram.axes[0][0];
   ok(
-    "discrete position lowers to a numeric pin fact",
-    discretePositionFact?.type === "pin" &&
+    "discrete position lowers to a numeric anchor pin fact",
+    discretePositionFact?.type === "anchor-pin" &&
       discretePositionFact.owner === "position[0]" &&
-      discretePositionFact.expr.node === "A" &&
-      discretePositionFact.expr.anchor === "start" &&
-      discretePositionFact.value === 95
+      discretePositionFact.node === "A" &&
+      discretePositionFact.anchor === "middle" &&
+      discretePositionFact.value === 100
   );
 
   const loweredAlign = lowerPlacementConstraints(
@@ -858,17 +892,18 @@ console.log("# constraint confluence: placement constraint lowering");
     [300, 200]
   );
   ok(
-    "align lowers to relation plus participant facts",
-    loweredAlign.program.axes[0].some(
+    "align lowers to anchor-relation plus anchor-participant facts",
+    loweredAlign.anchorProgram.axes[0].some(
       (fact) =>
-        fact.type === "relation" &&
+        fact.type === "anchor-relation" &&
         fact.owner === "align[0]" &&
         fact.from.node === "A" &&
         fact.to.node === "B" &&
-        fact.offset === 0
+        fact.gap === 0
     ) &&
-      loweredAlign.program.axes[0].some(
-        (fact) => fact.type === "participant" && fact.owner === "align[0]"
+      loweredAlign.anchorProgram.axes[0].some(
+        (fact) =>
+          fact.type === "anchor-participant" && fact.owner === "align[0]"
       )
   );
 
@@ -878,20 +913,21 @@ console.log("# constraint confluence: placement constraint lowering");
     [300, 200]
   );
   ok(
-    "distribute lowers to chain relations plus participant facts",
-    loweredDistribute.program.axes[0].filter(
-      (fact) => fact.type === "relation" && fact.owner === "distribute[0]"
+    "distribute lowers to chain anchor-relations plus a participant",
+    loweredDistribute.anchorProgram.axes[0].filter(
+      (fact) =>
+        fact.type === "anchor-relation" && fact.owner === "distribute[0]"
     ).length === 2 &&
-      loweredDistribute.program.axes[0].some(
+      loweredDistribute.anchorProgram.axes[0].some(
         (fact) =>
-          fact.type === "relation" &&
+          fact.type === "anchor-relation" &&
           fact.from.node === "A" &&
           fact.to.node === "B" &&
-          fact.offset === 15
+          fact.gap === 5
       ) &&
-      loweredDistribute.program.axes[0].some(
+      loweredDistribute.anchorProgram.axes[0].some(
         (fact) =>
-          fact.type === "participant" && fact.owner === "distribute[0]"
+          fact.type === "anchor-participant" && fact.owner === "distribute[0]"
       )
   );
 
@@ -901,14 +937,16 @@ console.log("# constraint confluence: placement constraint lowering");
     [300, 200]
   );
   ok(
-    "nest lowers to an explicit center relation fact",
-    loweredNest.program.axes[0].some(
+    "nest lowers to an anchor-relation between centers",
+    loweredNest.anchorProgram.axes[0].some(
       (fact) =>
-        fact.type === "relation" &&
+        fact.type === "anchor-relation" &&
         fact.owner === "nest[0]" &&
         fact.from.node === "A" &&
         fact.to.node === "B" &&
-        fact.offset === 0
+        fact.from.anchor === "middle" &&
+        fact.to.anchor === "middle" &&
+        fact.gap === 0
     )
   );
 
@@ -917,51 +955,172 @@ console.log("# constraint confluence: placement constraint lowering");
     targets("C"),
     [300, 200]
   );
-  const spanFacts = loweredSpan.program.axes[0];
-  const spanExtent = loweredSpan.spanExtents[0];
+  const spanFacts = loweredSpan.anchorProgram.axes[0];
   ok(
-    "span lowering emits explicit edge facts and matching extent metadata",
+    "interval position lowers to strong start/end edge anchor pins",
     spanFacts.some(
       (fact) =>
-        fact.type === "edge-pin" &&
-        fact.name === "C" &&
-        fact.edge === "min" &&
-        fact.value === 10
+        fact.type === "anchor-pin" &&
+        fact.node === "C" &&
+        fact.anchor === "start" &&
+        fact.value === 10 &&
+        fact.owner === "position[0]"
     ) &&
       spanFacts.some(
         (fact) =>
-          fact.type === "edge-pin" &&
-          fact.name === "C" &&
-          fact.edge === "max" &&
-          fact.value === 30
-      ) &&
-      spanExtent?.type === "span-extent" &&
-      spanExtent.name === "C" &&
-      spanExtent.size === 20
+          fact.type === "anchor-pin" &&
+          fact.node === "C" &&
+          fact.anchor === "end" &&
+          fact.value === 30 &&
+          fact.owner === "position[0]"
+      )
   );
 
-  const spanEdgeFacts = lowerSpanEdgePins(
-    span("C", 10, 30),
+  // A single position constraint carrying a POINT on one axis and an INTERVAL on
+  // the other: the interval axis emits two edge pins, the point axis one pin.
+  // Both forms coexist on one constraint.
+  const mixed: PositionConstraint = {
+    type: "position",
+    x: 12,
+    y: [10, 30],
+    anchor: "middle",
+    override: false,
+    children: [child("C")],
+  };
+  const loweredMixed = lowerPlacementConstraints(
+    [mixed],
     targets("C"),
-    "span[0]",
-    (_axis, coordinate) => coordinate as number
+    [300, 200]
   );
   ok(
-    "span's constraint-local lowerer decomposes a span into min/max edge claims",
-    spanEdgeFacts.length === 2 &&
-      spanEdgeFacts[0].fact.type === "edge-pin" &&
-      spanEdgeFacts[0].fact.edge === "min" &&
-      !("target" in spanEdgeFacts[0].fact) &&
-      spanEdgeFacts[1].fact.type === "edge-pin" &&
-      spanEdgeFacts[1].fact.edge === "max" &&
-      !("target" in spanEdgeFacts[1].fact)
+    "interval+point on one constraint: interval axis yields two edge pins",
+    loweredMixed.anchorProgram.axes[1].filter(
+      (fact) =>
+        fact.type === "anchor-pin" &&
+        fact.node === "C" &&
+        (fact.anchor === "start" || fact.anchor === "end")
+    ).length === 2
+  );
+  ok(
+    "interval+point on one constraint: point axis yields a single pin",
+    loweredMixed.anchorProgram.axes[0].some(
+      (fact) =>
+        fact.type === "anchor-pin" &&
+        fact.node === "C" &&
+        fact.anchor === "middle"
+    )
+  );
+}
+
+console.log("# constraint confluence: interval position + align");
+{
+  // An interval position on x (sizes A) plus an align on x (overlays B onto A's
+  // center) must be declaration-order-independent — the interval and align feed
+  // the same relational solve.
+  const spanA = span("A", 10, 30);
+  const alignAB: AlignConstraint = {
+    type: "align",
+    x: "middle",
+    children: [A, B],
+  };
+  expectConfluent(
+    "interval-position/align",
+    solve([spanA, alignAB], ["A", "B"]),
+    solve([alignAB, spanA], ["A", "B"]),
+    {
+      A: { min: 10, center: 20, max: 30 },
+      B: { min: 15, center: 20, max: 25 },
+    }
+  );
+}
+
+console.log("# constraint confluence: interval inside a distribute chain");
+{
+  // An interval sizes A (size-strong cell); a distribute chains B off A. The
+  // interval's extent must survive the chain and B follows it (spacing 5).
+  const spanA = span("A", 10, 30);
+  const distAB = distribute(["A", "B"]);
+  expectConfluent(
+    "interval/distribute chain",
+    solve([spanA, distAB], ["A", "B"]),
+    solve([distAB, spanA], ["A", "B"]),
+    {
+      A: { min: 10, center: 20, max: 30 },
+      B: { min: 35, center: 40, max: 45 },
+    }
+  );
+}
+
+console.log(
+  "# constraint confluence: authoritative override on a size-strong cell"
+);
+{
+  // A size-strong cell (interval determines A's extent) also carries an
+  // authoritative override point pin on its center. The two are compatible —
+  // the override anchors where the interval already places the center — and
+  // declaration order cannot change the result.
+  const spanA = span("A", 10, 30);
+  const overrideCenter = position("A", 20, true);
+  expectConfluent(
+    "interval + authoritative override (compatible)",
+    solve([spanA, overrideCenter], ["A"]),
+    solve([overrideCenter, spanA], ["A"]),
+    { A: { min: 10, center: 20, max: 30 } }
+  );
+}
+
+console.log("# constraint confluence: interval vs point compose bail");
+{
+  // compose treats an interval position as span-like (it composes alongside a
+  // distribute), but a constraint carrying ANY point coordinate bails to the
+  // layer's default union — conservatively, even when it also carries an
+  // interval on the other axis.
+  const childNodes = [
+    { _name: "A", key: "A" },
+    { _name: "B", key: "B" },
+  ] as unknown as Parameters<typeof composeConstraintSpaces>[1];
+  const childSpaces: Parameters<typeof composeConstraintSpaces>[2] = [
+    [SIZE(Monotonic.linear(10, 0)), UNDEFINED],
+    [SIZE(Monotonic.linear(10, 0)), UNDEFINED],
+  ];
+  const distAB = distribute(["A", "B"]);
+  const pureInterval: PositionConstraint = {
+    type: "position",
+    y: [value(0), value(10)],
+    anchor: "middle",
+    override: false,
+    children: [A],
+  };
+  const pointPlusInterval: PositionConstraint = {
+    type: "position",
+    x: value(5),
+    y: [value(0), value(10)],
+    anchor: "middle",
+    override: false,
+    children: [A],
+  };
+  ok(
+    "pure-interval position composes with a distribute (span-like)",
+    composeConstraintSpaces(
+      [distAB, pureInterval],
+      childNodes,
+      childSpaces
+    ) !== undefined
+  );
+  ok(
+    "point+interval position bails composition (conservatively point-form)",
+    composeConstraintSpaces(
+      [distAB, pointPlusInterval],
+      childNodes,
+      childSpaces
+    ) === undefined
   );
 }
 
 console.log("# constraint confluence: child scale factor planning");
 {
-  const inheritedX = (v: number) => v + 1;
-  const inheritedY = (v: number) => v + 2;
+  const inheritedX: AxisMap = { sigma: 1, domainMin: 0, pxMin: 1 }; // v + 1
+  const inheritedY: AxisMap = { sigma: 1, domainMin: 0, pxMin: 2 }; // v + 2
   const positionSpace = POSITION(interval(0, 10));
   const sizeSpace = SIZE(Monotonic.linear(20, 0));
 
@@ -976,7 +1135,7 @@ console.log("# constraint confluence: child scale factor planning");
   );
   ok(
     "self-scaled POSITION axis builds local posScale",
-    selfScaled.basePosScales[0]?.(5) === 50 &&
+    pxOf(selfScaled.basePosScales[0]!, 5) === 50 &&
       selfScaled.basePosScales[1] === inheritedY
   );
   ok(
@@ -1163,7 +1322,7 @@ console.log("# constraint confluence: self-placement and override");
     ["A", makePlaceable()],
     ["B", makePlaceable()],
   ]);
-  targets.get("A")!.placementOn = () => ({ tag: "determined", at: 0 });
+  targets.get("A")!.placementOn = () => "determined";
   solvePlacementConstraints(
     [{ type: "align", x: "baseline", children: [A, B] }],
     targets,
@@ -1245,7 +1404,9 @@ console.log("# constraint confluence: contradictions are diagnosed");
 
   const spanA10_30 = span("A", 10, 30);
   const spanA10_40 = span("A", 10, 40);
-  const spanThrows = (constraints: SpanConstraint[]): boolean => {
+  // Two conflicting intervals over-determine one cell (rank-2 closure). The
+  // named-owner conflict must name BOTH owners so the error is actionable.
+  const spanThrows = (constraints: PositionConstraint[]): boolean => {
     try {
       solvePlacementConstraints(
         constraints,
@@ -1256,18 +1417,20 @@ console.log("# constraint confluence: contradictions are diagnosed");
     } catch (error) {
       return (
         error instanceof Error &&
-        error.message.includes("Constraint span conflict")
+        error.message.includes("Constraint placement conflict") &&
+        error.message.includes("position[0]") &&
+        error.message.includes("position[1]")
       );
     }
   };
   ok(
-    "conflicting spans throw in either declaration order",
+    "conflicting intervals throw naming both owners in either declaration order",
     spanThrows([spanA10_30, spanA10_40]) &&
       spanThrows([spanA10_40, spanA10_30])
   );
 
   const spanPositionThrows = (
-    constraints: (SpanConstraint | PositionConstraint)[]
+    constraints: PositionConstraint[]
   ): boolean => {
     try {
       solvePlacementConstraints(

@@ -139,6 +139,7 @@ export const FRONTEND_IR_JSON_SCHEMA = {
           enum: [
             "derive",
             "resolve",
+            "join",
             "spread",
             "stack",
             "group",
@@ -154,6 +155,8 @@ export const FRONTEND_IR_JSON_SCHEMA = {
         cols: { type: "array", items: { type: "string" } },
         from: { type: "string" },
         key: { type: "string" },
+        on: { type: "string" },
+        right: { type: "array", items: { type: "object" } },
       },
     },
     Translate: {

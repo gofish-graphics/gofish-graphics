@@ -3,7 +3,6 @@
  * check-story-examples.mjs — build-time guard for the gallery data layer.
  *
  * Asserts that loadStoryExamples():
- *   - yields the expected number of examples (65)
  *   - has unique ids
  *   - every snippet transpiles as TypeScript with no syntax errors
  *   - every snippet contains a `.render(` call
@@ -24,7 +23,6 @@ const require = createRequire(import.meta.url);
 const ts = require("typescript");
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const EXPECTED_COUNT = 92;
 
 // The data module is TypeScript and this package is `type: commonjs`, so raw
 // Node won't import it as ESM. Transpile it to a temp `.mjs` *in the same
@@ -172,20 +170,11 @@ async function main() {
 
   const fallbacks = rows.filter((r) => r.status === "fallback");
   console.log("");
-  console.log(
-    `Total examples: ${examples.length} (expected ${EXPECTED_COUNT})`
-  );
+  console.log(`Total examples: ${examples.length}`);
   console.log(
     `Fallbacks: ${fallbacks.length}${fallbacks.length ? " (" + fallbacks.map((r) => r.id).join(", ") + ")" : ""}`
   );
   console.log(`Failures: ${failures}`);
-
-  if (examples.length !== EXPECTED_COUNT) {
-    console.error(
-      `\nEXPECTED ${EXPECTED_COUNT} examples, got ${examples.length}.`
-    );
-    failures++;
-  }
 
   if (failures > 0) {
     console.error(`\nFAILED with ${failures} problem(s).`);

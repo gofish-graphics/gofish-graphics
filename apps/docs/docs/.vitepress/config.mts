@@ -7,6 +7,7 @@ import container from "markdown-it-container";
 import { renderSandbox } from "vitepress-plugin-sandpack";
 import vueJsx from "@vitejs/plugin-vue-jsx";
 import solidPlugin from "vite-plugin-solid";
+import { loadStoryExamples } from "./data/storyExamples";
 import { readdirSync, readFileSync } from "fs";
 import { dirname, join, relative } from "path";
 import { fileURLToPath } from "url";
@@ -46,6 +47,12 @@ const SOLID_DIR = dirname(
 );
 const SOLID_CORE_CLIENT = join(SOLID_DIR, "dist/solid.js");
 const SOLID_WEB_CLIENT = join(SOLID_DIR, "web/dist/web.js");
+
+// Gallery example-page ids (kebab of each gallery story's title). Each such page
+// previews with its own branded 1200×630 OG card at
+// public/gallery/og/<id>.png — generated at docs build (predocs:build), not
+// committed. Other pages fall back to the site card.
+const EXAMPLE_IDS = new Set(loadStoryExamples().map((e) => e.id));
 
 // Build-time manifest of every JS/Python doc route. Exposed via themeConfig so
 // the language toggle knows whether a mirrored page exists before navigating.
@@ -257,12 +264,12 @@ export default defineConfig({
   appearance: false,
   title: "GoFish Graphics",
   description:
-    "GoFish is an open-source visualization library for Python and JavaScript.",
-  // Per-page social-preview tags. The invariant og:image / twitter:card etc.
-  // live in `head` above; here we fill in the title / description / url for the
-  // specific page so a shared deep link previews with that page's own heading
-  // rather than the site default. Pushed onto the page's frontmatter head so
-  // they render into each generated HTML file.
+    "GoFish is an open-source visualization library for JavaScript and Python.",
+  // Per-page social-preview tags (title / description / url / image). Only the
+  // truly invariant tags (og:type, og:site_name, twitter:card) live in `head`
+  // below; everything page-specific is set here so a shared deep link previews
+  // with that page's own heading and image. Pushed onto the page's frontmatter
+  // head so they render into each generated HTML file.
   transformPageData(pageData) {
     const path = pageData.relativePath
       .replace(/(^|\/)index\.md$/, "$1")
@@ -274,14 +281,36 @@ export default defineConfig({
     const description =
       pageData.description ||
       pageData.frontmatter.description ||
-      "GoFish is an open-source visualization library for Python and JavaScript.";
+      "GoFish is an open-source visualization library for JavaScript and Python.";
+
+    // Social-preview image: each example page previews with its OWN branded chart
+    // card (so a shared /js/examples/<id> link unfurls as the chart); every other
+    // page falls back to the site card. Scrapers don't resolve site-relative
+    // paths, so URLs are absolute against the canonical domain.
+    const exId = pageData.params?.id as string | undefined;
+    const image =
+      exId && EXAMPLE_IDS.has(exId)
+        ? {
+            url: `https://gofish.graphics/gallery/og/${exId}.png`,
+            alt: `${pageData.title ?? "GoFish"} — a GoFish example`,
+          }
+        : {
+            url: "https://gofish.graphics/og-image.png",
+            alt: "GoFish — graphics that communicate",
+          };
+
     pageData.frontmatter.head ??= [];
     pageData.frontmatter.head.push(
       ["meta", { property: "og:title", content: title }],
       ["meta", { property: "og:description", content: description }],
       ["meta", { property: "og:url", content: url }],
+      ["meta", { property: "og:image", content: image.url }],
+      ["meta", { property: "og:image:width", content: "1200" }],
+      ["meta", { property: "og:image:height", content: "630" }],
+      ["meta", { property: "og:image:alt", content: image.alt }],
       ["meta", { name: "twitter:title", content: title }],
-      ["meta", { name: "twitter:description", content: description }]
+      ["meta", { name: "twitter:description", content: description }],
+      ["meta", { name: "twitter:image", content: image.url }]
     );
   },
   head: [
@@ -293,12 +322,12 @@ export default defineConfig({
     // through to the saved preference — harmless. The same script also adds the
     // `landing-page` class on the home route so the desk/navbar styling paints
     // immediately on direct loads instead of flashing a stock white docs page.
-    // NOTE: the 'python' fallback literal must match DEFAULT_LANG in
+    // NOTE: the 'js' fallback literal must match DEFAULT_LANG in
     // theme/docsLang.ts (this inline script can't import it).
     [
       "script",
       {},
-      `(function(){try{var p=location.pathname,l;if(p.indexOf('/python/')===0){l='python';}else if(p.indexOf('/js/')===0){l='js';}else{var s=localStorage.getItem('gofish-docs-lang');l=(s==='python'||s==='js')?s:'python';}document.documentElement.setAttribute('data-docs-lang',l);if(p==='/'||p==='/index.html'){document.documentElement.classList.add('landing-page');}}catch(e){}})();`,
+      `(function(){try{var p=location.pathname,l;if(p.indexOf('/python/')===0){l='python';}else if(p.indexOf('/js/')===0){l='js';}else{var s=localStorage.getItem('gofish-docs-lang');l=(s==='python'||s==='js')?s:'js';}document.documentElement.setAttribute('data-docs-lang',l);if(p==='/'||p==='/index.html'){document.documentElement.classList.add('landing-page');}}catch(e){}})();`,
     ],
     ["link", { rel: "preconnect", href: "https://fonts.googleapis.com" }],
     [
@@ -313,35 +342,15 @@ export default defineConfig({
       },
     ],
     ["link", { rel: "icon", href: "/gofish-logo.png" }],
-    // Social-media preview (Open Graph + Twitter cards). These are the
-    // invariant tags; transformPageData below adds the per-page og:title /
-    // og:description / og:url / twitter:title / twitter:description so a link to
-    // any deep page previews with that page's own title. The image URL is
-    // absolute against the canonical domain — scrapers (Facebook / Slack /
-    // Twitter) don't resolve site-relative paths.
+    // Social-media preview (Open Graph + Twitter cards). These are the invariant
+    // tags; transformPageData above adds the per-page og:title / og:description /
+    // og:url / og:image (each example page's own branded chart card, else the site
+    // card) / twitter:title / twitter:description / twitter:image. Image URLs are
+    // absolute against the canonical domain — scrapers (Facebook / Slack / Twitter)
+    // don't resolve site-relative paths.
     ["meta", { property: "og:type", content: "website" }],
     ["meta", { property: "og:site_name", content: "GoFish Graphics" }],
-    [
-      "meta",
-      { property: "og:image", content: "https://gofish.graphics/og-image.png" },
-    ],
-    ["meta", { property: "og:image:width", content: "1200" }],
-    ["meta", { property: "og:image:height", content: "630" }],
-    [
-      "meta",
-      {
-        property: "og:image:alt",
-        content: "GoFish — graphics that communicate",
-      },
-    ],
     ["meta", { name: "twitter:card", content: "summary_large_image" }],
-    [
-      "meta",
-      {
-        name: "twitter:image",
-        content: "https://gofish.graphics/og-image.png",
-      },
-    ],
   ],
   markdown: {
     // KaTeX/MathJax `$…$` and `$$…$$` (markdown-it-mathjax3, VitePress's math dep).
@@ -475,6 +484,7 @@ export default defineConfig({
                 { text: "offset", link: "/js/api/operators/offset" },
                 { text: "derive", link: "/js/api/operators/derive" },
                 { text: "resolve", link: "/js/api/operators/resolve" },
+                { text: "join", link: "/js/api/operators/join" },
                 { text: "log", link: "/js/api/operators/log" },
               ],
             },
@@ -596,6 +606,7 @@ export default defineConfig({
                 { text: "cut", link: "/python/api/operators/cut" },
                 { text: "offset", link: "/python/api/operators/offset" },
                 { text: "resolve", link: "/python/api/operators/resolve" },
+                { text: "join", link: "/python/api/operators/join" },
                 { text: "log", link: "/python/api/operators/log" },
               ],
             },

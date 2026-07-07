@@ -20,7 +20,7 @@ import {
 import { pairs } from "../../util";
 import { linear } from "../coordinateTransforms/linear";
 import { MaybeValue } from "../data";
-import { Domain } from "../domain";
+import { Domain, axisScale } from "../domain";
 import {
   UNDEFINED,
   UnderlyingSpace,
@@ -132,7 +132,7 @@ export const connect = createNodeOperator(
         ) => {
           return [UNDEFINED, UNDEFINED];
         },
-        layout: (shared, size, scaleFactors, children) => {
+        layout: (shared, size, scales, children) => {
           const defaultColor = children[0]?.color ?? "black";
 
           const paths: Path[] = [];
@@ -147,8 +147,13 @@ export const connect = createNodeOperator(
             }
           }
 
+          // Forward σ (size slope) but not the anchored map: connect places
+          // endpoints by their own bboxes, not by data position.
           const childPlaceables = children.map((child) =>
-            child.layout(size, scaleFactors, [undefined, undefined])
+            child.layout(size, [
+              axisScale(scales?.[0]?.sigma, undefined),
+              axisScale(scales?.[1]?.sigma, undefined),
+            ])
           );
           const bboxPairs = pairs(childPlaceables.map((child) => child.dims));
 
