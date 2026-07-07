@@ -24,6 +24,9 @@
     "bench:synthetic": "tsx scripts/bench.ts synthetic",
     "bench:examples-js": "tsx scripts/bench.ts examples-js",
     "bench:examples-py": "tsx scripts/bench.ts examples-py",
+    "bench:ruler": "tsx scripts/ruler.ts",
+    "bench:ruler:build": "tsx scripts/ruler.ts build",
+    "bench:ruler:splice": "tsx scripts/ruler.ts splice",
     "bench:plots": "tsx scripts/bench-plots.ts",
     "review": "tsx scripts/review-server.ts",
     "build:review-site": "tsx scripts/build-review-site.ts"

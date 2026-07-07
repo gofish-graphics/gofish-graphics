@@ -16,7 +16,13 @@ import { countFamilies, nestFamily, type RenderOpts } from "../bench/specs";
 
 type PerfGlobal = {
   enabled: boolean;
-  current: { labels: Record<string, number>; startedAt: number } | null;
+  current: {
+    labels: Record<string, number>;
+    startedAt: number;
+    // Deterministic size counters written by the engine (packages/ agent).
+    // May be absent until that lands — read defensively everywhere.
+    counts?: { nodes: number; displayItems: number };
+  } | null;
 };
 
 const perf = globalThis as { __GOFISH_PERF__?: PerfGlobal };
@@ -27,10 +33,15 @@ const perf = globalThis as { __GOFISH_PERF__?: PerfGlobal };
 perf.__GOFISH_PERF__ = { enabled: true, current: null };
 
 export type BenchSample = {
-  /** Per-pass durations in ms (resolve/axes/solve/lower/paint/fonts). */
+  /** Per-pass durations in ms (resolve/axes/solve/lower/paint/fonts),
+   *  per single render (batch-averaged at small n). */
   labels: Record<string, number>;
-  /** In-page wall-clock around the whole render call, in ms. */
+  /** Per-render wall-clock in ms (batch-averaged at small n). */
   wallMs: number;
+  /** Renders folded into this sample (>1 only for sub-ms points). */
+  batch: number;
+  /** Deterministic size counters from the last render, if the engine emits them. */
+  counts?: { nodes: number; displayItems: number };
 };
 
 declare global {
@@ -67,14 +78,55 @@ window.__runSyntheticBench__ = async (
 
   const renderOpts: RenderOpts = { w: opts?.w ?? 800, h: opts?.h ?? 600 };
 
-  const t0 = performance.now();
-  await spec.render(root, renderOpts);
-  // Let SolidJS flush the paint pass (where `lower`/`paint` are recorded).
-  await new Promise((r) => requestAnimationFrame(r));
-  const wallMs = performance.now() - t0;
+  // One render: paint into `root`, flush SolidJS (the frame where `lower`/`paint`
+  // land), and return its wall time plus the engine's per-pass snapshot.
+  const once = async (): Promise<{
+    labels: Record<string, number>;
+    wallMs: number;
+  }> => {
+    root.innerHTML = "";
+    const t0 = performance.now();
+    await spec.render(root, renderOpts);
+    await new Promise((r) => requestAnimationFrame(r));
+    const wallMs = performance.now() - t0;
+    const labels = { ...(perf.__GOFISH_PERF__?.current?.labels ?? {}) };
+    return { labels, wallMs };
+  };
 
-  const labels = { ...(perf.__GOFISH_PERF__?.current?.labels ?? {}) };
-  return { labels, wallMs };
+  // At small n a render is sub-ms — near the timer floor even under COOP/COEP,
+  // and the low end of the log-log plot is where slope fitting is most sensitive.
+  // Probe once; if fast, fold k = ⌈10/probeMs⌉ renders into one averaged sample.
+  const probe = await once();
+  const batch =
+    probe.wallMs < 5
+      ? Math.max(1, Math.ceil(10 / Math.max(probe.wallMs, 0.01)))
+      : 1;
+
+  if (batch === 1) {
+    return {
+      labels: probe.labels,
+      wallMs: probe.wallMs,
+      batch,
+      counts: perf.__GOFISH_PERF__?.current?.counts,
+    };
+  }
+
+  const acc: Record<string, number> = {};
+  let wallSum = 0;
+  for (let i = 0; i < batch; i++) {
+    const r = await once();
+    wallSum += r.wallMs;
+    for (const [k, v] of Object.entries(r.labels)) acc[k] = (acc[k] ?? 0) + v;
+  }
+  const labels: Record<string, number> = {};
+  for (const [k, v] of Object.entries(acc)) labels[k] = v / batch;
+  return {
+    labels,
+    wallMs: wallSum / batch,
+    batch,
+    // Counts are deterministic — the last render's values stand for the point.
+    counts: perf.__GOFISH_PERF__?.current?.counts,
+  };
 };
 
 window.__BENCH_RUNNER_READY__ = false;

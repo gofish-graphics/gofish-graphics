@@ -36,8 +36,18 @@ import {
   readdirSync,
   existsSync,
 } from "fs";
-import { join, relative } from "path";
+import { join, relative, resolve as resolvePath } from "path";
 import { execSync } from "child_process";
+import { performance } from "node:perf_hooks";
+import { createHash } from "node:crypto";
+import { createRequire } from "node:module";
+import os from "node:os";
+import {
+  serveStatic,
+  loadRulerManifest,
+  geomean,
+  type StaticServer,
+} from "./ruler";
 
 // ---------------------------------------------------------------------------
 // Config
@@ -50,6 +60,8 @@ const PYTHON_STORIES_DIR = join(TESTS_DIR, "python-stories");
 const OUT_DIR = join(TESTS_DIR, "tmp/bench");
 const HARNESS_PORT = 3010;
 const DERIVE_SERVER_PORT = 3011;
+// Second harness (base checkout) for interleaved same-runner A/B (--ab-dir).
+const AB_HARNESS_PORT = 3012;
 
 const PASS_LABELS = [
   "resolve",
@@ -61,16 +73,47 @@ const PASS_LABELS = [
   "fonts",
 ];
 
+// Invariant: the "engine total" EXCLUDES `fonts` (webfont-readiness await, not
+// engine work) so it agrees with bench-report.ts's PASSES; `fonts` is still
+// reported as its own per-pass label.
+const ENGINE_PASS_LABELS = PASS_LABELS.filter((l) => l !== "fonts");
+
 const argv = process.argv.slice(2);
 const QUICK = argv.includes("--quick");
 const filterIdx = argv.indexOf("--filter");
-const FILTER = filterIdx >= 0 ? argv[filterIdx + 1]?.toLowerCase() : undefined;
-const MODE = argv.find((a) => !a.startsWith("--") && a !== FILTER) ?? "all";
+// Parse positionally: exclude the --filter value by index (a filter like `Bar`
+// must not be mistaken for the MODE). Lowercase only for matching.
+const filterValueIdx = filterIdx >= 0 ? filterIdx + 1 : -1;
+const FILTER = filterIdx >= 0 ? argv[filterValueIdx] : undefined;
+const FILTER_LC = FILTER?.toLowerCase();
+const abDirIdx = argv.indexOf("--ab-dir");
+const abOutIdx = argv.indexOf("--ab-out");
+const rulerIdx = argv.indexOf("--ruler");
+// Flag values must not be parsed as the positional MODE.
+const flagValueIdxs = new Set(
+  [filterIdx, abDirIdx, abOutIdx, rulerIdx]
+    .filter((i) => i >= 0)
+    .map((i) => i + 1)
+);
+const MODE =
+  argv.find((a, i) => !a.startsWith("--") && !flagValueIdxs.has(i)) ?? "all";
 
-// Repetitions: a couple of warmups (JIT, font load) then measured runs whose
-// median we keep (medians shrug off the occasional GC/scheduler spike).
-const WARMUP = QUICK ? 0 : 1;
-const MEASURE = QUICK ? 2 : 4;
+// --ruler <dir>: hermetic reference workload measured in the same browser (any
+// mode). --ab-dir <path>: base checkout to interleave HEAD/base against, one
+// sample each alternating within the same loop (synthetic mode). --ab-out:
+// where the base results.json lands.
+const RULER_DIR = rulerIdx >= 0 ? argv[rulerIdx + 1] : undefined;
+const AB_DIR = abDirIdx >= 0 ? argv[abDirIdx + 1] : undefined;
+const AB_OUT =
+  abOutIdx >= 0 ? argv[abOutIdx + 1] : join(OUT_DIR, "results-base.json");
+
+// Sampling discipline: a couple of warmups (JIT, font load), then time-budgeted
+// adaptive measurement — keep sampling until the budget elapses or we hit the
+// sample cap, never fewer than the floor. Medians shrug off GC/scheduler spikes.
+const WARMUP = QUICK ? 1 : 2;
+const MEASURE_BUDGET_MS = QUICK ? 300 : 1500;
+const MEASURE_MIN = QUICK ? 2 : 4;
+const MEASURE_MAX = 20;
 
 // Synthetic sweep. Capped to keep the DOM/paint from OOMing; the per-point
 // ceiling stops a family early once a single render blows past the budget so
@@ -116,27 +159,96 @@ const labelStats = (runs: Labels[]): Record<string, Stat> => {
   return out;
 };
 
+/** Engine total: sum of measured passes EXCLUDING `fonts` (see invariant above). */
 const sumPasses = (labels: Labels): number =>
-  PASS_LABELS.reduce((acc, k) => acc + (labels[k] ?? 0), 0);
+  ENGINE_PASS_LABELS.reduce((acc, k) => acc + (labels[k] ?? 0), 0);
+
+type Counts = { nodes: number; displayItems: number };
+
+/** Ask Chromium to GC between samples (needs --js-flags=--expose-gc); no-op if absent. */
+const gc = async (page: Page): Promise<void> => {
+  try {
+    await page.evaluate(() => (globalThis as any).gc?.());
+  } catch {
+    /* expose-gc not available */
+  }
+};
+
+type SampleOutcome<T> = { ok: true; value: T } | { ok: false };
+
+/**
+ * Warmup, then adaptive measured sampling: keep going until the time budget
+ * elapses or the sample cap is hit, never fewer than the floor. `abortIf`
+ * (synthetic per-render ceiling) breaks immediately, even below the floor.
+ * Returns null if warmup failed (story/point unrenderable).
+ */
+async function sampleLoop<T>(
+  page: Page,
+  runOne: () => Promise<SampleOutcome<T>>,
+  abortIf?: (v: T) => boolean
+): Promise<T[] | null> {
+  for (let i = 0; i < WARMUP; i++) {
+    const w = await runOne();
+    if (!w.ok) return null;
+    await gc(page);
+  }
+  const samples: T[] = [];
+  const start = performance.now();
+  while (
+    samples.length < MEASURE_MIN ||
+    (performance.now() - start < MEASURE_BUDGET_MS &&
+      samples.length < MEASURE_MAX)
+  ) {
+    const r = await runOne();
+    if (!r.ok) break;
+    samples.push(r.value);
+    await gc(page);
+    if (abortIf?.(r.value)) break;
+  }
+  return samples;
+}
+
+/** First 12 hex of sha256 over a file's bytes — a story's longitudinal series
+ *  key. An edit changes the hash and starts a fresh series in the trend. */
+function specHashOf(filePath: string): string | undefined {
+  try {
+    return createHash("sha256")
+      .update(readFileSync(filePath))
+      .digest("hex")
+      .slice(0, 12);
+  } catch {
+    return undefined;
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Server lifecycle
 // ---------------------------------------------------------------------------
 
-function startHarness(): ChildProcess {
+function startHarness(
+  prodBuild: boolean,
+  harnessDir = HARNESS_DIR,
+  port = HARNESS_PORT
+): ChildProcess {
   const proc = spawn(
     "npx",
     [
       "vite",
       "--config",
-      join(HARNESS_DIR, "vite.config.ts"),
+      join(harnessDir, "vite.config.ts"),
       "--port",
-      String(HARNESS_PORT),
+      String(port),
     ],
     {
-      cwd: HARNESS_DIR,
+      cwd: harnessDir,
       stdio: ["ignore", "pipe", "pipe"],
-      env: { ...process.env, NODE_ENV: "development" },
+      env: {
+        ...process.env,
+        NODE_ENV: "development",
+        // Cross-origin isolation for 5µs performance.now(); prod-build alias.
+        GOFISH_BENCH: "1",
+        ...(prodBuild ? { GOFISH_BENCH_PROD: "1" } : {}),
+      },
     }
   );
   proc.stderr?.on("data", (d) => {
@@ -179,8 +291,18 @@ type ExampleResult = {
   id: string;
   title: string;
   name: string;
+  specHash?: string;
   passes: Record<string, Stat>;
   totalMs: Stat;
+  wallMs: Stat; // in-page wall through the rAF flush — catches un-instrumented time
+  counts?: Counts;
+};
+
+type JsStoryInfo = {
+  id: string;
+  title: string;
+  name: string;
+  moduleKey: string;
 };
 
 async function benchExamplesJs(page: Page): Promise<ExampleResult[]> {
@@ -194,12 +316,14 @@ async function benchExamplesJs(page: Page): Promise<ExampleResult[]> {
 
   let stories = (await page.evaluate(() =>
     (window as any).__listStories__()
-  )) as { id: string; title: string; name: string }[];
-  if (FILTER)
+  )) as JsStoryInfo[];
+  // The bench must not benchmark its own dogfooded plot stories.
+  stories = stories.filter((s) => !s.id.startsWith("benchmarks--"));
+  if (FILTER_LC)
     stories = stories.filter(
       (s) =>
-        s.id.includes(FILTER) ||
-        `${s.title}/${s.name}`.toLowerCase().includes(FILTER)
+        s.id.includes(FILTER_LC) ||
+        `${s.title}/${s.name}`.toLowerCase().includes(FILTER_LC)
     );
   if (QUICK) stories = stories.slice(0, 6);
 
@@ -208,36 +332,47 @@ async function benchExamplesJs(page: Page): Promise<ExampleResult[]> {
 
   for (const story of stories) {
     process.stdout.write(`  ${story.title}/${story.name} ... `);
-    const runs: Labels[] = [];
-    let ok = true;
-    for (let i = 0; i < WARMUP + MEASURE; i++) {
+    type Sample = { labels: Labels; wallMs: number; counts?: Counts };
+    const samples = await sampleLoop<Sample>(page, async () => {
       const r = await page.evaluate(async (id) => {
         const w = window as any;
         w.__GOFISH_PERF__ = { enabled: true, current: null };
+        w.__STORY_RENDER_WALL_MS__ = 0;
         const success = await w.__renderStory__(id);
         if (!success)
-          return { ok: false, labels: {} as Record<string, number> };
+          return {
+            ok: false as const,
+            labels: {} as Record<string, number>,
+            wallMs: 0,
+          };
         return {
-          ok: true,
+          ok: true as const,
           labels: { ...(w.__GOFISH_PERF__?.current?.labels ?? {}) },
+          wallMs: (w.__STORY_RENDER_WALL_MS__ as number) ?? 0,
+          counts: w.__GOFISH_PERF__?.current?.counts as Counts | undefined,
         };
       }, story.id);
-      if (!r.ok) {
-        ok = false;
-        break;
-      }
-      if (i >= WARMUP) runs.push(r.labels);
-    }
-    if (!ok || runs.length === 0) {
+      if (!r.ok) return { ok: false };
+      return {
+        ok: true,
+        value: { labels: r.labels, wallMs: r.wallMs, counts: r.counts },
+      };
+    });
+    if (!samples || samples.length === 0) {
       console.log("SKIP");
       continue;
     }
+    // moduleKey is relative to tests/harness; resolve to hash the source file.
+    const specHash = specHashOf(resolvePath(HARNESS_DIR, story.moduleKey));
     results.push({
       id: story.id,
       title: story.title,
       name: story.name,
-      passes: labelStats(runs),
-      totalMs: stat(runs.map(sumPasses)),
+      specHash,
+      passes: labelStats(samples.map((s) => s.labels)),
+      totalMs: stat(samples.map((s) => sumPasses(s.labels))),
+      wallMs: stat(samples.map((s) => s.wallMs)),
+      counts: samples[samples.length - 1].counts,
     });
     console.log(`${results[results.length - 1].totalMs.median.toFixed(2)}ms`);
   }
@@ -294,17 +429,19 @@ function discoverPythonStories(): PythonStory[] {
 
 type PythonResult = {
   path: string;
+  specHash?: string;
   passes: Record<string, Stat>;
   totalMs: Stat; // engine passes only (same JS engine)
   loadMs: Stat; // warm /load: module re-exec + data construct + IR serialize
   e2eMs: Stat; // inject → render-complete (deserialize + derive RPC + engine)
   overheadMs: Stat; // e2e − engine passes: the Python-path tax
+  counts?: Counts;
 };
 
 async function benchExamplesPy(page: Page): Promise<PythonResult[]> {
   let stories = discoverPythonStories();
-  if (FILTER)
-    stories = stories.filter((s) => s.path.toLowerCase().includes(FILTER));
+  if (FILTER_LC)
+    stories = stories.filter((s) => s.path.toLowerCase().includes(FILTER_LC));
   if (QUICK) stories = stories.slice(0, 6);
 
   console.log(`\n[examples-py] ${stories.length} stories\n`);
@@ -343,25 +480,25 @@ async function benchExamplesPy(page: Page): Promise<PythonResult[]> {
     console.log("skipped");
   }
 
-  // Always discard at least one per-story /load so the measured loads run
-  // warm: the first /load of a story re-execs its module and loads/caches its
-  // dataset; subsequent ones reuse the cache. This is what makes loadMs the
-  // steady-state per-call cost rather than a cold first hit.
-  const pyWarmup = Math.max(1, WARMUP);
-
+  // sampleLoop's warmup phase already discards ≥1 per-story /load, so the
+  // measured loads run warm: the first /load of a story re-execs its module and
+  // loads/caches its dataset; subsequent ones reuse the cache. That is what
+  // makes loadMs the steady-state per-call cost rather than a cold first hit.
   const results: PythonResult[] = [];
+
+  type PySample = {
+    labels: Labels;
+    loadMs: number;
+    e2eMs: number;
+    counts?: Counts;
+  };
 
   for (const story of stories) {
     process.stdout.write(`  ${story.path} ... `);
-    const passRuns: Labels[] = [];
-    const loadMs: number[] = [];
-    const e2eMs: number[] = [];
-    const overheadMs: number[] = [];
-    let ok = true;
-
-    for (let i = 0; i < pyWarmup + MEASURE; i++) {
+    const samples = await sampleLoop<PySample>(page, async () => {
       // /load: import the story + serialize IR + register derives (Python work).
-      const tLoad = Date.now();
+      // perf.now() (µs resolution) — the ~6ms quantity is lost under Date.now().
+      const tLoad = performance.now();
       let ir: any;
       try {
         const resp = await fetch(
@@ -376,16 +513,12 @@ async function benchExamplesPy(page: Page): Promise<PythonResult[]> {
             }),
           }
         );
-        if (!resp.ok) {
-          ok = false;
-          break;
-        }
+        if (!resp.ok) return { ok: false };
         ir = await resp.json();
       } catch {
-        ok = false;
-        break;
+        return { ok: false };
       }
-      const loadDelta = Date.now() - tLoad;
+      const loadDelta = performance.now() - tLoad;
 
       // Only the single-chart path is benchmarked here; layer/raw-mark/unsupported
       // are skipped (they don't represent the common per-example case).
@@ -394,8 +527,7 @@ async function benchExamplesPy(page: Page): Promise<PythonResult[]> {
         ir?._kind === "raw-mark" ||
         ir?._kind === "layer-unsupported"
       ) {
-        ok = false;
-        break;
+        return { ok: false };
       }
 
       const deriveServerUrl =
@@ -420,9 +552,11 @@ async function benchExamplesPy(page: Page): Promise<PythonResult[]> {
         w.__GOFISH_RENDER_ERROR__ = null;
         const t0 = performance.now();
         w.__renderChart__(s);
+        // Poll with setTimeout(0), not a fixed 5ms tick — the old quantization
+        // added 0–5ms of slop, the same order as the Python tax being measured.
         const deadline = performance.now() + 30000;
         while (!w.__GOFISH_RENDER_COMPLETE__ && performance.now() < deadline) {
-          await new Promise((res) => setTimeout(res, 5));
+          await new Promise((res) => setTimeout(res, 0));
           if (w.__GOFISH_RENDER_ERROR__) break;
         }
         const wallMs = performance.now() - t0;
@@ -430,32 +564,38 @@ async function benchExamplesPy(page: Page): Promise<PythonResult[]> {
           err: w.__GOFISH_RENDER_ERROR__ as string | null,
           wallMs,
           labels: { ...(w.__GOFISH_PERF__?.current?.labels ?? {}) },
+          counts: w.__GOFISH_PERF__?.current?.counts as Counts | undefined,
         };
       }, spec);
 
-      if (r.err) {
-        ok = false;
-        break;
-      }
-      if (i >= pyWarmup) {
-        passRuns.push(r.labels);
-        loadMs.push(loadDelta);
-        e2eMs.push(r.wallMs);
-        overheadMs.push(Math.max(0, r.wallMs - sumPasses(r.labels)));
-      }
-    }
+      if (r.err) return { ok: false };
+      return {
+        ok: true,
+        value: {
+          labels: r.labels,
+          loadMs: loadDelta,
+          e2eMs: r.wallMs,
+          counts: r.counts,
+        },
+      };
+    });
 
-    if (!ok || passRuns.length === 0) {
+    if (!samples || samples.length === 0) {
       console.log("SKIP");
       continue;
     }
+    const passRuns = samples.map((s) => s.labels);
     results.push({
       path: story.path,
+      specHash: specHashOf(join(TESTS_DIR, story.file)),
       passes: labelStats(passRuns),
       totalMs: stat(passRuns.map(sumPasses)),
-      loadMs: stat(loadMs),
-      e2eMs: stat(e2eMs),
-      overheadMs: stat(overheadMs),
+      loadMs: stat(samples.map((s) => s.loadMs)),
+      e2eMs: stat(samples.map((s) => s.e2eMs)),
+      overheadMs: stat(
+        samples.map((s) => Math.max(0, s.e2eMs - sumPasses(s.labels)))
+      ),
+      counts: samples[samples.length - 1].counts,
     });
     const last = results[results.length - 1];
     console.log(
@@ -475,58 +615,146 @@ type SyntheticPoint = {
   passes: Record<string, Stat>;
   totalMs: Stat;
   wallMs: Stat;
+  batch: number; // renders folded per sample (>1 only for sub-ms points)
+  counts?: Counts;
 };
+
+type SyntheticMeasure = {
+  passes: Record<string, Stat>;
+  totalMs: Stat;
+  wallMs: Stat;
+  batch: number;
+  counts?: Counts;
+};
+
+type SyntheticSample = {
+  labels: Labels;
+  wallMs: number;
+  batch: number;
+  counts?: Counts;
+};
+
+/** One synthetic render on `page` via the harness's __runSyntheticBench__. */
+async function evalSyntheticSample(
+  page: Page,
+  family: string,
+  n: number
+): Promise<SyntheticSample | null> {
+  try {
+    return (await page.evaluate(
+      ([f, k]) => (window as any).__runSyntheticBench__(f, k),
+      [family, n] as [string, number]
+    )) as SyntheticSample;
+  } catch {
+    return null;
+  }
+}
+
+const toSyntheticMeasure = (samples: SyntheticSample[]): SyntheticMeasure => ({
+  passes: labelStats(samples.map((s) => s.labels)),
+  totalMs: stat(samples.map((s) => sumPasses(s.labels))),
+  wallMs: stat(samples.map((s) => s.wallMs)),
+  batch: samples[samples.length - 1].batch,
+  counts: samples[samples.length - 1].counts,
+});
 
 async function runSyntheticPoint(
   page: Page,
   family: string,
   n: number
-): Promise<{
-  passes: Record<string, Stat>;
-  totalMs: Stat;
-  wallMs: Stat;
-} | null> {
-  const passRuns: Labels[] = [];
-  const wall: number[] = [];
-  for (let i = 0; i < WARMUP + MEASURE; i++) {
-    let sample: { labels: Labels; wallMs: number };
-    try {
-      sample = (await page.evaluate(
-        ([f, k]) => (window as any).__runSyntheticBench__(f, k),
-        [family, n] as [string, number]
-      )) as { labels: Labels; wallMs: number };
-    } catch {
-      return null;
-    }
-    if (i >= WARMUP) {
-      passRuns.push(sample.labels);
-      wall.push(sample.wallMs);
-    }
-  }
-  if (passRuns.length === 0) return null;
-  return {
-    passes: labelStats(passRuns),
-    totalMs: stat(passRuns.map(sumPasses)),
-    wallMs: stat(wall),
-  };
+): Promise<SyntheticMeasure | null> {
+  const samples = await sampleLoop<SyntheticSample>(
+    page,
+    async () => {
+      const sample = await evalSyntheticSample(page, family, n);
+      return sample ? { ok: true, value: sample } : { ok: false };
+    },
+    // Per-render ceiling: bail immediately once a single (per-render) wall blows
+    // past the budget, so a giant n doesn't run the full sample floor.
+    (v) => v.wallMs > PER_RENDER_CEILING_MS
+  );
+  if (!samples || samples.length === 0) return null;
+  return toSyntheticMeasure(samples);
 }
 
-async function benchSynthetic(page: Page): Promise<SyntheticPoint[]> {
-  await page.goto(`http://localhost:${HARNESS_PORT}/bench-runner.html`, {
+/**
+ * Interleaved same-runner A/B for one point: warm up both pages, then alternate
+ * ONE HEAD sample and ONE base sample inside a single time-budgeted loop, so any
+ * thermal/scheduler drift hits both engines equally (kills the minutes-apart
+ * drift of benching the two phases separately). Both sides get identical sampling.
+ */
+async function runSyntheticPointAB(
+  headPage: Page,
+  basePage: Page,
+  family: string,
+  n: number
+): Promise<{ head: SyntheticMeasure; base: SyntheticMeasure } | null> {
+  for (let i = 0; i < WARMUP; i++) {
+    const a = await evalSyntheticSample(headPage, family, n);
+    const b = await evalSyntheticSample(basePage, family, n);
+    if (!a || !b) return null;
+    await gc(headPage);
+    await gc(basePage);
+  }
+  const headS: SyntheticSample[] = [];
+  const baseS: SyntheticSample[] = [];
+  const start = performance.now();
+  while (
+    headS.length < MEASURE_MIN ||
+    (performance.now() - start < MEASURE_BUDGET_MS &&
+      headS.length < MEASURE_MAX)
+  ) {
+    const a = await evalSyntheticSample(headPage, family, n);
+    if (!a) break;
+    headS.push(a);
+    await gc(headPage);
+    const b = await evalSyntheticSample(basePage, family, n);
+    if (!b) break;
+    baseS.push(b);
+    await gc(basePage);
+    if (a.wallMs > PER_RENDER_CEILING_MS || b.wallMs > PER_RENDER_CEILING_MS)
+      break;
+  }
+  if (headS.length === 0 || baseS.length === 0) return null;
+  return { head: toSyntheticMeasure(headS), base: toSyntheticMeasure(baseS) };
+}
+
+async function openBenchRunner(page: Page, port: number): Promise<void> {
+  await page.goto(`http://localhost:${port}/bench-runner.html`, {
     waitUntil: "domcontentloaded",
   });
   await page.waitForFunction(
     () => (window as any).__BENCH_RUNNER_READY__ === true,
     { timeout: 30_000 }
   );
+}
+
+/** The (family, n) sweep points, in order — shared by the plain and A/B paths. */
+function syntheticSweep(families: { count: string[]; nest: boolean }): {
+  family: string;
+  n: number;
+}[] {
+  const out: { family: string; n: number }[] = [];
+  const countFamilies = FILTER_LC
+    ? families.count.filter((f) => f.includes(FILTER_LC))
+    : families.count;
+  for (const family of countFamilies)
+    for (const n of COUNT_NS) out.push({ family, n });
+  if (families.nest && (!FILTER_LC || "nest".includes(FILTER_LC)))
+    for (const depth of NEST_DEPTHS) out.push({ family: "nest", n: depth });
+  return out;
+}
+
+async function benchSynthetic(page: Page): Promise<SyntheticPoint[]> {
+  await openBenchRunner(page, HARNESS_PORT);
   const families = (await page.evaluate(() =>
     (window as any).__listSyntheticFamilies__()
   )) as { count: string[]; nest: boolean };
 
   const points: SyntheticPoint[] = [];
 
-  const countFamilies = FILTER
-    ? families.count.filter((f) => f.includes(FILTER))
+  const countFamilies = FILTER_LC
+    ? families.count.filter((f) => f.includes(FILTER_LC))
     : families.count;
 
   for (const family of countFamilies) {
@@ -551,7 +779,7 @@ async function benchSynthetic(page: Page): Promise<SyntheticPoint[]> {
     }
   }
 
-  if (families.nest && (!FILTER || "nest".includes(FILTER))) {
+  if (families.nest && (!FILTER_LC || "nest".includes(FILTER_LC))) {
     console.log(`\n[synthetic] family "nest" (depth sweep)`);
     for (const depth of NEST_DEPTHS) {
       process.stdout.write(`  depth=${depth} ... `);
@@ -570,36 +798,177 @@ async function benchSynthetic(page: Page): Promise<SyntheticPoint[]> {
   return points;
 }
 
+/**
+ * Interleaved same-runner A/B synthetic sweep: HEAD on `headPage` (HARNESS_PORT)
+ * vs base on `basePage` (AB_HARNESS_PORT), alternating one sample each per point.
+ * Both engines see identical specs and identical sampling; the delta is free of
+ * cross-machine variance AND of the thermal drift of benching them minutes apart.
+ */
+async function benchSyntheticAB(
+  headPage: Page,
+  basePage: Page
+): Promise<{ head: SyntheticPoint[]; base: SyntheticPoint[] }> {
+  await openBenchRunner(headPage, HARNESS_PORT);
+  await openBenchRunner(basePage, AB_HARNESS_PORT);
+  const families = (await headPage.evaluate(() =>
+    (window as any).__listSyntheticFamilies__()
+  )) as { count: string[]; nest: boolean };
+
+  const head: SyntheticPoint[] = [];
+  const base: SyntheticPoint[] = [];
+  const stopped = new Set<string>();
+  let curFamily = "";
+  for (const { family, n } of syntheticSweep(families)) {
+    if (stopped.has(family)) continue;
+    if (family !== curFamily) {
+      curFamily = family;
+      console.log(`\n[synthetic A/B] family "${family}"`);
+    }
+    process.stdout.write(`  n=${n} ... `);
+    const r = await runSyntheticPointAB(headPage, basePage, family, n);
+    if (!r) {
+      console.log("ERROR (stopping family)");
+      stopped.add(family);
+      continue;
+    }
+    head.push({ family, n, ...r.head });
+    base.push({ family, n, ...r.base });
+    console.log(
+      `HEAD ${r.head.totalMs.median.toFixed(2)}ms · base ${r.base.totalMs.median.toFixed(2)}ms`
+    );
+    if (
+      r.head.wallMs.median > PER_RENDER_CEILING_MS ||
+      r.base.wallMs.median > PER_RENDER_CEILING_MS
+    )
+      stopped.add(family);
+  }
+  return { head, base };
+}
+
+// ---------------------------------------------------------------------------
+// Ruler leg: the hermetic reference workload, measured in this same browser
+// ---------------------------------------------------------------------------
+
+type RulerMeta = {
+  version: string;
+  // Geomean of the point medians — the run's normalization divisor.
+  factorMs: number;
+  points: { family: string; n: number; wallMs: Stat }[];
+};
+
+async function benchRuler(
+  browser: Browser,
+  dir: string
+): Promise<RulerMeta | null> {
+  let manifest;
+  try {
+    manifest = loadRulerManifest(dir);
+  } catch {
+    console.warn(`[ruler] no manifest.json in ${dir} — skipping ruler leg`);
+    return null;
+  }
+  const srv = await serveStatic(dir);
+  try {
+    const context = await browser.newContext({
+      viewport: { width: 1280, height: 720 },
+    });
+    const page = await context.newPage();
+    await page.goto(`http://localhost:${srv.port}/`, {
+      waitUntil: "domcontentloaded",
+    });
+    await page.waitForFunction(() => (window as any).__RULER_READY__ === true, {
+      timeout: 30_000,
+    });
+    console.log(
+      `\n[ruler] v${manifest.version} (${manifest.points.length} points)`
+    );
+    const points: RulerMeta["points"] = [];
+    for (const pt of manifest.points) {
+      process.stdout.write(`  ${pt.family} n=${pt.n} ... `);
+      const samples = await sampleLoop<number>(page, async () => {
+        try {
+          const r = (await page.evaluate(
+            ([f, n]) => (window as any).__runRulerPoint__(f, n),
+            [pt.family, pt.n] as [string, number]
+          )) as { wallMs: number };
+          return { ok: true, value: r.wallMs };
+        } catch {
+          return { ok: false };
+        }
+      });
+      if (!samples || samples.length === 0) {
+        console.log("SKIP");
+        continue;
+      }
+      const s = stat(samples);
+      points.push({ family: pt.family, n: pt.n, wallMs: s });
+      console.log(`${s.median.toFixed(2)}ms`);
+    }
+    await context.close();
+    const factorMs = geomean(points.map((p) => p.wallMs.median));
+    console.log(`  → ruler factor ${factorMs.toFixed(2)}ms`);
+    return { version: manifest.version, factorMs, points };
+  } finally {
+    await srv.close();
+  }
+}
+
 // ---------------------------------------------------------------------------
 // CSV emission (long format: one row per pass measurement)
 // ---------------------------------------------------------------------------
 
 function toCsv(results: BenchResults): string {
   const rows: string[] = ["mode,group,scale,pass,median_ms,min_ms,p95_ms,runs"];
+  const row = (
+    mode: string,
+    group: string,
+    scale: string,
+    pass: string,
+    s: Stat
+  ) =>
+    rows.push(
+      `${mode},${JSON.stringify(group)},${scale},${pass},${s.median},${s.min},${s.p95},${s.n}`
+    );
   const emit = (
     mode: string,
     group: string,
     scale: string,
     passes: Record<string, Stat>
   ) => {
-    for (const [pass, s] of Object.entries(passes)) {
-      rows.push(
-        `${mode},${JSON.stringify(group)},${scale},${pass},${s.median},${s.min},${s.p95},${s.n}`
-      );
-    }
+    for (const [pass, s] of Object.entries(passes))
+      row(mode, group, scale, pass, s);
   };
-  for (const e of results.examplesJs) emit("examples-js", e.id, "", e.passes);
+  // Counts are deterministic scalars — carried in the median column (min/p95=0).
+  const scalar = (v: number): Stat => ({ median: v, min: v, p95: v, n: 1 });
+  const emitCounts = (
+    mode: string,
+    group: string,
+    scale: string,
+    c: Counts | undefined
+  ) => {
+    if (!c) return;
+    row(mode, group, scale, "nodes", scalar(c.nodes));
+    row(mode, group, scale, "displayItems", scalar(c.displayItems));
+  };
+
+  for (const e of results.examplesJs) {
+    emit("examples-js", e.id, "", e.passes);
+    row("examples-js", e.id, "", "wall", e.wallMs);
+    emitCounts("examples-js", e.id, "", e.counts);
+  }
   for (const p of results.examplesPy) {
     emit("examples-py", p.path, "", p.passes);
-    rows.push(
-      `examples-py-overhead,${JSON.stringify(p.path)},,overhead,${p.overheadMs.median},${p.overheadMs.min},${p.overheadMs.p95},${p.overheadMs.n}`
-    );
-    rows.push(
-      `examples-py-load,${JSON.stringify(p.path)},,load,${p.loadMs.median},${p.loadMs.min},${p.loadMs.p95},${p.loadMs.n}`
-    );
+    row("examples-py-overhead", p.path, "", "overhead", p.overheadMs);
+    row("examples-py-load", p.path, "", "load", p.loadMs);
+    row("examples-py-e2e", p.path, "", "e2e", p.e2eMs);
+    emitCounts("examples-py", p.path, "", p.counts);
   }
-  for (const s of results.synthetic)
+  for (const s of results.synthetic) {
     emit("synthetic", s.family, String(s.n), s.passes);
+    row("synthetic", s.family, String(s.n), "wall", s.wallMs);
+    row("synthetic", s.family, String(s.n), "batch", scalar(s.batch));
+    emitCounts("synthetic", s.family, String(s.n), s.counts);
+  }
   return rows.join("\n") + "\n";
 }
 
@@ -613,10 +982,26 @@ type BenchResults = {
     timestamp: string;
     node: string;
     platform: string;
+    // Hardware/browser provenance: cross-run trend points can't be re-derived
+    // retroactively without it.
+    cpuModel: string;
+    cores: number;
+    chromium: string;
+    playwright: string;
+    // Best-effort Python dep versions; present only when the Python leg ran.
+    pythonDeps?: Record<string, string>;
     quick: boolean;
-    warmup: number;
-    measure: number;
+    // Whether the instrumented production bundle (dist-bench) was benched; false
+    // means the dev-mode source alias (SolidJS dev build) was used as fallback.
+    prodBuild: boolean;
+    sampling: { warmup: number; budgetMs: number; min: number; max: number };
     passLabels: string[];
+    enginePassLabels: string[];
+    // Set on BOTH files when this run was an interleaved same-runner A/B
+    // (--ab-dir): HEAD and base sampled alternately in one loop, not minutes apart.
+    interleaved?: boolean;
+    // The hermetic reference workload measured this run (--ruler), or null.
+    ruler: RulerMeta | null;
   };
   examplesJs: ExampleResult[];
   examplesPy: PythonResult[];
@@ -631,12 +1016,95 @@ function gitSha(): string {
   }
 }
 
+const DIST_BENCH = join(ROOT, "packages/gofish-graphics/dist-bench");
+
+/**
+ * Ensure the instrumented production bundle exists; build it on demand. Returns
+ * true if dist-bench is usable (bench the code users run), false to fall back to
+ * the dev-mode source alias — e.g. the build:bench script doesn't exist yet or
+ * the build failed. We do NOT edit packages/ ourselves.
+ */
+function ensureProdBuild(): boolean {
+  if (existsSync(join(DIST_BENCH, "index.js"))) return true;
+  try {
+    console.log("[prod] building instrumented dist-bench (build:bench) ...");
+    execSync("pnpm --filter gofish-graphics build:bench", {
+      cwd: ROOT,
+      stdio: process.env.DEBUG ? "inherit" : "ignore",
+    });
+    if (existsSync(join(DIST_BENCH, "index.js"))) return true;
+    console.warn(
+      "[prod] build:bench produced no dist-bench/index.js — falling back to dev-mode source alias"
+    );
+    return false;
+  } catch {
+    console.warn(
+      "[prod] `pnpm --filter gofish-graphics build:bench` unavailable or failed — " +
+        "falling back to dev-mode source alias (SolidJS dev build, unminified)"
+    );
+    return false;
+  }
+}
+
+function playwrightVersion(): string {
+  try {
+    const req = createRequire(import.meta.url);
+    return req("playwright/package.json").version ?? "unknown";
+  } catch {
+    return "unknown";
+  }
+}
+
+/** Best-effort Python dep versions via importlib.metadata; swallow failures.
+ *  Single-line (semicolons) so it survives `python3 -c` shell-quoting; matches
+ *  each target against installed distributions modulo `_`/`-` casing. */
+function pythonDeps(): Record<string, string> | undefined {
+  const script =
+    "import importlib.metadata as m, json; " +
+    "d={x.metadata['Name'].lower().replace('-','_'): x.version for x in m.distributions()}; " +
+    "print(json.dumps({p: d.get(p.lower().replace('-','_')) for p in ['pandas','vega_datasets','gofish-graphics']}))";
+  try {
+    const out = execSync(`python3 -c ${JSON.stringify(script)}`, {
+      cwd: ROOT,
+    }).toString();
+    const parsed = JSON.parse(out.trim());
+    const clean: Record<string, string> = {};
+    for (const [k, val] of Object.entries(parsed))
+      if (val) clean[k] = String(val);
+    return Object.keys(clean).length ? clean : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 async function main() {
   const wantJs = MODE === "all" || MODE === "examples-js";
   const wantPy = MODE === "all" || MODE === "examples-py";
   const wantSyn = MODE === "all" || MODE === "synthetic";
 
-  const harnessProc = startHarness();
+  // Bench the instrumented production bundle when available; fall back to the
+  // dev-mode source alias otherwise (recorded in meta.prodBuild).
+  const prodBuild = ensureProdBuild();
+
+  // Interleaved same-runner A/B (synthetic only): spawn a second harness from the
+  // base checkout. The base checkout is a full worktree that must already have
+  // run `pnpm install` + `pnpm --filter gofish-graphics build:bench`. Skip
+  // gracefully if it predates the bench harness.
+  const abBase = AB_DIR && wantSyn ? resolvePath(AB_DIR) : undefined;
+  const abHarnessDir = abBase ? join(abBase, "tests/harness") : undefined;
+  const abActive = !!(
+    abHarnessDir && existsSync(join(abHarnessDir, "bench-runner.html"))
+  );
+  if (abBase && !abActive)
+    console.warn(
+      `[a/b] ${abBase}/tests/harness/bench-runner.html missing — HEAD-only fallback`
+    );
+
+  const harnessProc = startHarness(prodBuild);
+  const abHarnessProc =
+    abActive && abHarnessDir
+      ? startHarness(prodBuild, abHarnessDir, AB_HARNESS_PORT)
+      : null;
   const deriveProc = wantPy ? startDeriveServer() : null;
 
   let browser: Browser | undefined;
@@ -646,22 +1114,45 @@ async function main() {
       timestamp: new Date().toISOString(),
       node: process.version,
       platform: process.platform,
+      cpuModel: os.cpus()[0]?.model ?? "unknown",
+      cores: os.cpus().length,
+      chromium: "unknown", // filled after launch (browser.version())
+      playwright: playwrightVersion(),
+      ...(wantPy ? { pythonDeps: pythonDeps() } : {}),
       quick: QUICK,
-      warmup: WARMUP,
-      measure: MEASURE,
+      prodBuild,
+      sampling: {
+        warmup: WARMUP,
+        budgetMs: MEASURE_BUDGET_MS,
+        min: MEASURE_MIN,
+        max: MEASURE_MAX,
+      },
       passLabels: PASS_LABELS,
+      enginePassLabels: ENGINE_PASS_LABELS,
+      ...(abActive ? { interleaved: true } : {}),
+      ruler: null,
     },
     examplesJs: [],
     examplesPy: [],
     synthetic: [],
   };
+  // Base-checkout results (same schema), written to --ab-out in --ab mode.
+  let baseResults: BenchResults | null = null;
 
   try {
     await waitFor(`http://localhost:${HARNESS_PORT}/stories-runner.html`);
+    if (abHarnessProc)
+      await waitFor(`http://localhost:${AB_HARNESS_PORT}/bench-runner.html`);
     if (deriveProc)
       await waitFor(`http://localhost:${DERIVE_SERVER_PORT}/health`);
 
-    browser = await chromium.launch({ headless: true });
+    // --expose-gc lets us GC between samples (window.gc?.()) to cut cross-sample
+    // GC interference from the measured window.
+    browser = await chromium.launch({
+      headless: true,
+      args: ["--js-flags=--expose-gc"],
+    });
+    results.meta.chromium = browser.version();
     const context = await browser.newContext({
       viewport: { width: 1280, height: 720 },
     });
@@ -670,14 +1161,42 @@ async function main() {
       if (process.env.DEBUG) console.error(`[pageerror] ${e.message}`);
     });
 
-    if (wantSyn) results.synthetic = await benchSynthetic(page);
+    if (wantSyn) {
+      if (abActive && abBase) {
+        const basePage = await context.newPage();
+        basePage.on("pageerror", (e) => {
+          if (process.env.DEBUG) console.error(`[base pageerror] ${e.message}`);
+        });
+        const { head, base } = await benchSyntheticAB(page, basePage);
+        results.synthetic = head;
+        await basePage.close();
+        baseResults = {
+          meta: {
+            ...results.meta,
+            sha: baseSha(abBase),
+            interleaved: true,
+            ruler: null,
+          },
+          examplesJs: [],
+          examplesPy: [],
+          synthetic: base,
+        };
+      } else {
+        results.synthetic = await benchSynthetic(page);
+      }
+    }
     if (wantJs) results.examplesJs = await benchExamplesJs(page);
     if (wantPy) results.examplesPy = await benchExamplesPy(page);
+
+    // Ruler leg (any mode): measure the hermetic reference workload in this same
+    // browser session so the run's factorMs cancels the CI hardware lottery.
+    if (RULER_DIR) results.meta.ruler = await benchRuler(browser, RULER_DIR);
 
     await context.close();
   } finally {
     await browser?.close();
     harnessProc.kill();
+    abHarnessProc?.kill();
     deriveProc?.kill();
   }
 
@@ -687,12 +1206,34 @@ async function main() {
     JSON.stringify(results, null, 2)
   );
   writeFileSync(join(OUT_DIR, "results.csv"), toCsv(results));
+  if (baseResults) {
+    const abOutAbs = resolvePath(AB_OUT);
+    mkdirSync(join(abOutAbs, ".."), { recursive: true });
+    writeFileSync(abOutAbs, JSON.stringify(baseResults, null, 2));
+  }
 
   console.log(`\n=== Benchmark complete ===`);
+  console.log(
+    `  engine: ${prodBuild ? "prod (dist-bench)" : "dev-mode source alias"}`
+  );
   console.log(`  examples-js: ${results.examplesJs.length}`);
   console.log(`  examples-py: ${results.examplesPy.length}`);
   console.log(`  synthetic points: ${results.synthetic.length}`);
+  if (results.meta.ruler)
+    console.log(
+      `  ruler: v${results.meta.ruler.version} factor ${results.meta.ruler.factorMs.toFixed(2)}ms`
+    );
+  if (baseResults) console.log(`  interleaved base → ${resolvePath(AB_OUT)}`);
   console.log(`  → ${join(OUT_DIR, "results.json")}`);
+}
+
+/** HEAD sha of the base checkout (for base results.meta.sha in --ab mode). */
+function baseSha(dir: string): string {
+  try {
+    return execSync("git rev-parse HEAD", { cwd: dir }).toString().trim();
+  } catch {
+    return "unknown";
+  }
 }
 
 main().catch((err) => {

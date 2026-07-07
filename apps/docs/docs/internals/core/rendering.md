@@ -203,6 +203,13 @@ return (
 The SVG-export terminals (`toSVG`/`toSVGElement`/`save`) run the same lower→paint
 pipeline against a throwaway container and serialize the result.
 
+The real `paintBaked` brackets each half with the perf instrumentation
+(`src/ast/perf.ts`): it times `lowerToDisplayList(child)` under the `lower` label,
+records the emitted `items.length` as the `displayItems` count, then times
+`items.map(paintSVG)` under `paint`. Like the layout-pass hooks, this is zero-cost
+when instrumentation is off and dead-code-eliminated from the published build — see
+[Measuring the passes](/internals/layout/passes#measuring-the-passes).
+
 ## `toDisplayList`: stopping at the IR
 
 Outside consumers that are not SVG — a Canvas/WebGPU backend, or a foreign host such

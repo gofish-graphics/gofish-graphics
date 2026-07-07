@@ -1,0 +1,192 @@
+name: Cut Ruler
+
+# Cuts a hermetic "ruler" bundle from a published npm release and anchors it on
+# the append-only `benchmarks` data branch under `ruler/v<X.Y.Z>/`. A ruler is a
+# frozen, self-contained build of `gofish-graphics@<version>` that the main
+# perf-bench run measures against in-session (see perf-bench.yml's --ruler flag),
+# giving every historical bench point a stable cross-run reference independent of
+# runner hardware. Each new ruler also carries `splice.json`: an interleaved
+# old-vs-new measurement (ratio) so the two rulers' scales can be stitched into a
+# single continuous series.
+#
+# Rulers are cut at MINOR (and major) releases only. The `v*.*.0` tag pattern
+# matches exactly those by construction — a patch release (v0.2.1) has a nonzero
+# patch component and never fires this workflow, so patches deliberately do not
+# re-anchor. Discretionary mid-cycle re-anchors use the manual workflow_dispatch
+# with an explicit `version` input.
+#
+# Trigger mechanism note: release.yml pushes the release tag with an admin-owned
+# PAT (RELEASE_TOKEN), NOT the default GITHUB_TOKEN. Pushes made with the default
+# token do not fire other workflows, but a PAT push does — so the `push: tags`
+# trigger below reliably fires after a tagged release. (If that ever changes to a
+# GITHUB_TOKEN push, add a `workflow_call` trigger here and call it from
+# release.yml instead.)
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version to anchor a ruler to (e.g. 0.2.0)"
+        type: string
+        required: true
+  push:
+    tags:
+      - "v*.*.0"
+
+jobs:
+  cut-ruler:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # push the ruler bundle to the benchmarks data branch
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      # Same MS-core-fonts pinning as perf-bench.yml: the splice step renders and
+      # measures both ruler bundles, so text-metric stability matters for the
+      # ratio to be trustworthy.
+      - name: Restore mscorefonts .ttf cache
+        id: msfonts-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/msttcorefonts
+          key: msttcorefonts-v1
+
+      - name: Install MS TrueType core fonts
+        run: |
+          set -euo pipefail
+          DEST=/usr/share/fonts/truetype/msttcorefonts
+          CACHE="$HOME/.cache/msttcorefonts"
+          if [ -d "$CACHE" ] && ls "$CACHE"/*.ttf >/dev/null 2>&1; then
+            sudo mkdir -p "$DEST"
+            sudo cp "$CACHE"/*.ttf "$DEST"/
+          else
+            echo "ttf-mscorefonts-installer msttcorefonts/accepted-mscorefonts-eula select true" | sudo debconf-set-selections
+            sudo apt-get update
+            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends ttf-mscorefonts-installer
+            mkdir -p "$CACHE"
+            cp "$DEST"/*.ttf "$CACHE"/
+          fi
+          sudo fc-cache -f
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install Node dependencies
+        run: pnpm install
+
+      - name: Restore Playwright browser cache
+        id: playwright-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+
+      - name: Install Playwright browsers
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: pnpm --filter @gofish/tests exec playwright install --with-deps chromium
+
+      - name: Save Playwright browser cache
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+
+      - name: Install Playwright system deps
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: pnpm --filter @gofish/tests exec playwright install-deps chromium
+
+      # Fetch the append-only benchmarks data branch (read-only worktree) to look
+      # up the previous ruler and to short-circuit if this version is already
+      # anchored. Absent on the very first run — handled downstream.
+      - name: Fetch benchmarks branch
+        run: |
+          set -euo pipefail
+          if git ls-remote --exit-code origin benchmarks >/dev/null 2>&1; then
+            git fetch origin benchmarks
+            git worktree add --detach /tmp/bench-history FETCH_HEAD
+          else
+            mkdir -p /tmp/bench-history
+            echo "No benchmarks branch yet; starting fresh."
+          fi
+
+      - name: Resolve version + idempotency guard
+        id: ver
+        run: |
+          set -euo pipefail
+          if [ -n "${{ inputs.version }}" ]; then
+            VERSION="${{ inputs.version }}"
+          else
+            VERSION="${GITHUB_REF_NAME}"
+          fi
+          VERSION="${VERSION#v}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Resolved ruler version: $VERSION"
+          if [ -d "/tmp/bench-history/ruler/v$VERSION" ]; then
+            echo "::notice::ruler/v$VERSION already exists on the benchmarks branch — nothing to do."
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build ruler bundle
+        if: steps.ver.outputs.exists == 'false'
+        run: |
+          pnpm --filter @gofish/tests exec tsx scripts/ruler.ts build \
+            "${{ steps.ver.outputs.version }}" --out /tmp/new-ruler
+
+      # Splice against the newest existing ruler (if any) so the two scales can be
+      # stitched. The first-ever ruler has no predecessor — no splice file.
+      - name: Splice against previous ruler
+        if: steps.ver.outputs.exists == 'false'
+        run: |
+          set -euo pipefail
+          PREV=""
+          if [ -d /tmp/bench-history/ruler ]; then
+            PREV=$(ls -1 /tmp/bench-history/ruler/ 2>/dev/null \
+              | sort -V | grep -v "^v${{ steps.ver.outputs.version }}$" | tail -1 || true)
+          fi
+          if [ -n "$PREV" ]; then
+            echo "Splicing against previous ruler: $PREV"
+            pnpm --filter @gofish/tests exec tsx scripts/ruler.ts splice \
+              "/tmp/bench-history/ruler/$PREV" /tmp/new-ruler --out /tmp/new-ruler/splice.json
+          else
+            echo "First ruler — no splice."
+          fi
+
+      # Append-only commit to the benchmarks branch (same bot identity as
+      # perf-bench.yml's append step). Re-fetch and re-guard to lose gracefully to
+      # any concurrent cut of the same version.
+      - name: Commit ruler to benchmarks branch
+        if: steps.ver.outputs.exists == 'false'
+        run: |
+          set -euo pipefail
+          VERSION="${{ steps.ver.outputs.version }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if git ls-remote --exit-code origin benchmarks >/dev/null 2>&1; then
+            git fetch origin benchmarks
+            git worktree add -B benchmarks /tmp/bench-pub origin/benchmarks
+          else
+            git worktree add --orphan -B benchmarks /tmp/bench-pub
+          fi
+          if [ -d "/tmp/bench-pub/ruler/v$VERSION" ]; then
+            echo "::notice::ruler/v$VERSION appeared concurrently — skipping."
+            exit 0
+          fi
+          mkdir -p "/tmp/bench-pub/ruler/v$VERSION"
+          cp -R /tmp/new-ruler/. "/tmp/bench-pub/ruler/v$VERSION/"
+          cd /tmp/bench-pub
+          git add "ruler/v$VERSION"
+          git commit -m "ruler: v$VERSION [skip ci]"
+          git push origin benchmarks

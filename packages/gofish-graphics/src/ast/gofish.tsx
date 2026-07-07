@@ -14,6 +14,7 @@ import {
   type GoFishNode,
   type RenderSession,
 } from "./_node";
+import type { GoFishAST } from "./_ast";
 import { posScaleFromSpace } from "./domain";
 import { bake } from "./coordinateTransforms/bake";
 import { lowerToDisplayList } from "./displayList/lower";
@@ -28,7 +29,13 @@ import {
   type UnderlyingSpace,
 } from "./underlyingSpace";
 import { shadowCheckScaleRoot } from "./solver/shadow";
-import { perfNow, perfAdd, perfBeginRun } from "./perf";
+import {
+  perfNow,
+  perfAdd,
+  perfBeginRun,
+  perfEnabled,
+  perfSetCount,
+} from "./perf";
 import { elaborateAxes, elaborateAxisTitles } from "./axes/elaborate";
 import { elaborateLegend, legendOverhang } from "./legends/elaborate";
 
@@ -417,6 +424,18 @@ export async function layout(
   const __tEmbed = perfNow();
   child.resolveEmbedding();
   perfAdd("embed", perfNow() - __tEmbed);
+
+  // Scene-graph size the solver actually sees (axis/title/legend already
+  // elaborated). Whole walk guarded so the off path pays nothing.
+  if (perfEnabled()) {
+    const countNodes = (node: GoFishAST): number => {
+      let n = 1;
+      const kids = "children" in node ? node.children : [];
+      for (const c of kids) n += countNodes(c);
+      return n;
+    };
+    perfSetCount("nodes", countNodes(child));
+  }
 
   const __tSolve = perfNow();
   child.layout([layoutW, layoutH], rootScaleFactors, posScales);
@@ -885,6 +904,7 @@ export const render = (
     const __tLower = perfNow();
     const items = lowerToDisplayList(child);
     perfAdd("lower", perfNow() - __tLower);
+    perfSetCount("displayItems", items.length);
     const __tPaint = perfNow();
     const painted = items.map(paintSVG);
     perfAdd("paint", perfNow() - __tPaint);

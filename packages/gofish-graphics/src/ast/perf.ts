@@ -1,8 +1,13 @@
+// <gofish-wiki> AUTO-GENERATED — see covers: in the essay; run `pnpm --filter docs sync-backlinks`
+// @wiki Overview — /internals/layout/passes
+// </gofish-wiki>
+
 /**
  * Zero-overhead-when-off performance instrumentation for the render pipeline.
  *
  * The layout/render passes call {@link perfNow} / {@link perfAdd} to record how
- * long each labeled phase takes. Everything is gated on a single global switch
+ * long each labeled phase takes, and {@link perfSetCount} to record scene-graph
+ * size counters (`nodes`, `displayItems`). Everything is gated on a single global switch
  * (`globalThis.__GOFISH_PERF__.enabled`); when it is unset/false the helpers are
  * a boolean check and a no-op — no `performance.now()`, no allocation — so the
  * instrumentation can live permanently on the hot path.
@@ -12,15 +17,23 @@
  * reactive render. So a single render's labels accumulate into a shared
  * `current` bucket that {@link perfBeginRun} resets at the *start* of each
  * `runLayout()`. A driver (the bench harness) times the whole render call for
- * the authoritative wall-clock total, then reads `current.labels` via
- * {@link perfSnapshot} once the render has completed — by which point `lower`
- * and `paint` are already recorded and the next render hasn't reset anything.
+ * the authoritative wall-clock total, then reads `current.labels` (timings) and
+ * `current.counts` (scene-graph sizes) via {@link perfSnapshot} once the render
+ * has completed — by which point `lower` and `paint` are already recorded and
+ * the next render hasn't reset anything. The bench driver reads
+ * `window.__GOFISH_PERF__.current.counts` directly, so that global shape
+ * (`current.counts.nodes`, `current.counts.displayItems`) is the contract.
  *
  * The recognized labels are: `fonts` (webfont readiness await), `resolve`
  * (domain inference / underlying-space resolution), `axes` (axis/title/legend
  * elaboration), `embed` (per-dim embedding-flag authoring, `resolveEmbedding`),
  * `solve` (constraint solve), `lower` (display-list lowering), `paint`
  * (display-item → SVG JSX).
+ *
+ * The recognized counts are: `nodes` (scene-graph nodes in the fully elaborated
+ * tree the solver sees, recorded just before `solve`) and `displayItems` (items
+ * emitted by `lower`). Counts are absolute sizes, set via {@link perfSetCount}
+ * (not accumulated).
  *
  * ## Published build pays nothing
  *
@@ -31,7 +44,10 @@
  * eliminates the global lookups and accumulation entirely — the npm package
  * carries no instrumentation. Dev (`pnpm dev`) and the bench harness (the tests
  * Vite server) leave the constant undefined, so it defaults to `true` and the
- * runtime `enabled` flag governs collection as described above. `typeof` guards
+ * runtime `enabled` flag governs collection as described above. The dedicated
+ * `build:bench` production build (`vite build --mode bench` → `dist-bench/`)
+ * `define`s the constant to `true`, so the instrumentation survives a minified,
+ * production-codegen bundle the bench driver can alias `gofish-graphics` to. `typeof` guards
  * the reference so an undefined token is safe rather than a ReferenceError.
  */
 
@@ -44,11 +60,16 @@ const INSTRUMENTATION_COMPILED_IN: boolean =
     : __GOFISH_PERF_INSTRUMENTATION__;
 
 export type PerfLabels = Record<string, number>;
+export type PerfCounts = Record<string, number>;
 
 export type PerfState = {
   enabled: boolean;
   /** Accumulator for the in-flight render. Reset by {@link perfBeginRun}. */
-  current: { labels: PerfLabels; startedAt: number } | null;
+  current: {
+    labels: PerfLabels;
+    counts: PerfCounts;
+    startedAt: number;
+  } | null;
 };
 
 declare global {
@@ -82,18 +103,32 @@ export const perfAdd = (label: string, deltaMs: number): void => {
   s.current.labels[label] = (s.current.labels[label] ?? 0) + deltaMs;
 };
 
-/** Begin a fresh render: clears the per-pass accumulator. No-op when off. */
+/** Set a scene-graph size counter (absolute, not accumulated). No-op when off. */
+export const perfSetCount = (name: string, value: number): void => {
+  if (!INSTRUMENTATION_COMPILED_IN) return;
+  const s = state();
+  if (!s?.enabled || !s.current) return;
+  s.current.counts[name] = value;
+};
+
+/** Begin a fresh render: clears the per-pass accumulators. No-op when off. */
 export const perfBeginRun = (): void => {
   if (!INSTRUMENTATION_COMPILED_IN) return;
   const s = state();
   if (!s?.enabled) return;
-  s.current = { labels: {}, startedAt: perfNow() };
+  s.current = { labels: {}, counts: {}, startedAt: perfNow() };
 };
 
-/** Snapshot the current render's labels (a shallow copy), or `null` when off. */
-export const perfSnapshot = (): PerfLabels | null => {
+/**
+ * Snapshot the current render's labels and counts (shallow copies), or `null`
+ * when off.
+ */
+export const perfSnapshot = (): {
+  labels: PerfLabels;
+  counts: PerfCounts;
+} | null => {
   if (!INSTRUMENTATION_COMPILED_IN) return null;
   const s = state();
   if (!s?.enabled || !s.current) return null;
-  return { ...s.current.labels };
+  return { labels: { ...s.current.labels }, counts: { ...s.current.counts } };
 };

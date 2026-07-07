@@ -27,6 +27,7 @@ const STORY_IDS = [
   "benchmarks--passbreakdown",
   "benchmarks--ecological",
   "benchmarks--trend",
+  "benchmarks--envelope",
 ];
 
 function startHarness(): ChildProcess {

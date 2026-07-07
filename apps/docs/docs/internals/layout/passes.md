@@ -8,6 +8,7 @@ covers:
   - packages/gofish-graphics/src/ast/gofish.tsx
   - packages/gofish-graphics/src/ast/_node.ts
   - packages/gofish-graphics/src/ast/shapes/rect.tsx
+  - packages/gofish-graphics/src/ast/perf.ts
 ---
 
 # Layout and Render Passes in GoFish Graphics
@@ -825,13 +826,30 @@ resolution = domain inference), `axes` (Pass 7 + title/legend elaboration),
 `lower` (display-list lowering) and `paint` (display-item → SVG), plus `fonts`
 (the webfont-readiness await).
 
+Alongside the per-pass **timings** (`current.labels`), the same run records
+scene-graph **size counters** (`current.counts`) via `perfSetCount(name, value)`:
+`nodes` (the count of nodes in the fully elaborated tree the solver sees,
+walked just before `solve`) and `displayItems` (the number of items `lower`
+emits). Unlike timings these are absolute sizes, not accumulated. The bench
+driver reads the global directly, so the shape `window.__GOFISH_PERF__.current`
+= `{ labels, counts }` — with `counts.nodes` and `counts.displayItems` — is the
+contract; `perfSnapshot()` returns a `{ labels, counts }` copy of the same.
+
 Collection is **off by default and zero-cost when off**: the helpers short-circuit
-on `globalThis.__GOFISH_PERF__?.enabled`, and the published library build replaces
-the compile-time constant `__GOFISH_PERF_INSTRUMENTATION__` with `false` (via
-`vite.config.ts`'s `define`), so the minifier dead-code-eliminates the whole
-subsystem — the npm package ships none of it. The bench harness
+on `globalThis.__GOFISH_PERF__?.enabled`, and the node-count walk is additionally
+guarded by `perfEnabled()` so the off path never traverses the tree. The published
+library build replaces the compile-time constant `__GOFISH_PERF_INSTRUMENTATION__`
+with `false` (via `vite.config.ts`'s `define`), so the minifier dead-code-eliminates
+the whole subsystem — the npm package ships none of it. The bench harness
 (`tests/scripts/bench.ts`) flips the runtime flag on to read per-pass numbers
 for the ecological example suites and the synthetic asymptotics sweeps.
+
+For production-codegen numbers (rather than the Vite dev transform + SolidJS dev
+mode no user runs), the `build:bench` script (`vite build --mode bench`) emits an
+instrumented, minified bundle to `dist-bench/` — identical to the published `dist/`
+build but with `__GOFISH_PERF_INSTRUMENTATION__` defined `true` so the subsystem
+survives. `dist-bench/` is gitignored and excluded from the published package; the
+bench driver aliases `gofish-graphics` to it.
 
 ## Key Takeaways
 

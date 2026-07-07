@@ -36,6 +36,15 @@ on:
           - patch
           - minor
           - major
+    # Ruler coupling: a `minor` or `major` release computes git_tag `vX.Y.0` and
+    # pushes it (see the "Commit, tag, and push" step). That tag matches
+    # cut-ruler.yml's `push: tags: [v*.*.0]` trigger, which anchors a new
+    # hermetic ruler on the benchmarks branch. `patch` produces `vX.Y.Z` with a
+    # nonzero patch and deliberately does NOT re-anchor. The tag is pushed with
+    # RELEASE_TOKEN (an admin PAT), not the default GITHUB_TOKEN — a PAT push
+    # fires other workflows, so cut-ruler reliably runs. Do not switch that push
+    # to GITHUB_TOKEN without giving cut-ruler a `workflow_call` trigger and
+    # invoking it explicitly, or the ruler will silently never be cut.
 
 concurrency:
   group: release
