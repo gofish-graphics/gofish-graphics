@@ -56,17 +56,22 @@ function legendRow(key: any, color: string): GoFishNode {
  * must render last (`reverse`) to land at the top; in y-down free space the
  * natural order already reads top→bottom, so no reverse. See issue #143/#16.
  */
-export function legendColumn(
+export async function legendColumn(
   colorMap: Map<any, string>,
   yUp = true
-): GoFishNode {
+): Promise<GoFishNode> {
   const rows = [...colorMap.entries()].map(([key, color]) =>
     legendRow(key, color)
   );
-  return (Spread as any)(
+  // `Spread` returns a PromiseWithRender — await the real node so the chrome
+  // flag below lands on the tree node, not the promise wrapper.
+  const col = (await (Spread as any)(
     { dir: "y", spacing: ROW_GAP, alignment: "start", reverse: yUp },
     rows
-  ).name(LEGEND_NAME) as GoFishNode;
+  )) as GoFishNode;
+  col.name(LEGEND_NAME);
+  col._ambientYDown = true; // chrome: interior ambient, box placed by the plot frame (#629)
+  return col;
 }
 
 // Colorbar constants.
@@ -196,6 +201,7 @@ export async function legendColorbar(
     return cs;
   });
 
+  root._ambientYDown = true; // chrome: reads y-down, never in the plot flip scope (#629)
   return root.name(LEGEND_NAME);
 }
 
@@ -212,12 +218,21 @@ export async function legendColorbar(
 export async function elaborateLegend(
   node: GoFishNode,
   scale: CategoricalScale | ContinuousColorScale,
-  yUp = true
+  /** Orientation of the AMBIENT frame the legend's INTERIOR renders in (row
+   *  order, colorbar value direction) — y-down unless `options.yUp` forces a
+   *  global y-up ambient. The legend is `_ambientYDown` chrome (#629): its
+   *  interior never flips with the plot. */
+  yUp = true,
+  /** Orientation of the abstract frame the legend's BOX seats in — true when the
+   *  plot content will mirror (continuous root y, or a forced global y-up). The
+   *  align below is authored in that shared frame; the bake then box-mirrors the
+   *  legend about the plot's flip scope so it lands top-aligned on screen. */
+  boxYUp = yUp
 ): Promise<GoFishNode> {
   const legend =
     "scaleFn" in scale
       ? await legendColorbar(scale.scaleFn, scale.domain, yUp)
-      : legendColumn(scale.color, yUp);
+      : await legendColumn(scale.color, yUp);
   return wrapPreservingIdentity(node, async (content) => {
     content.name(CONTENT_NAME);
 
@@ -234,16 +249,21 @@ export async function elaborateLegend(
         g[CONTENT_NAME],
         g[LEGEND_NAME],
       ]),
-      // Top-align the column with the content top. "Top" is the far edge in
-      // y-up (end) but the near edge in y-down (start), so the anchor follows
-      // the render orientation — otherwise a y-down chart (heatmap) seats the
-      // legend at the bottom. See issue #143/#16.
-      Constraint.align({ y: yUp ? "end" : "start" }, [
+      // Top-align the column with the content top. "Top" is the far edge in the
+      // abstract frame of a mirroring plot (end) but the near edge of a y-down
+      // one (start), so the anchor follows the BOX frame (`boxYUp`) — otherwise
+      // a y-down chart (heatmap) seats the legend at the bottom. #143/#16/#629.
+      Constraint.align({ y: boxYUp ? "end" : "start" }, [
         g[CONTENT_NAME],
         g[LEGEND_NAME],
       ]),
     ]);
 
+    // The legend wrapper only UNIONS the plot's continuous y up; it is not the
+    // σ-scope. Mark it scope-transparent so the y-up flip (#629) opens at the plot
+    // CONTENT (frame = canvas `finalH`), not at this wrapper (whose bbox spans the
+    // legend column). The column itself is `_ambientYDown` (stays y-down). #629.
+    root._scopeTransparent = true;
     return root;
   });
 }

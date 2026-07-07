@@ -29,10 +29,10 @@ import {
 import { createMark } from "../withGoFish";
 import type { DisplayList } from "gofish-ir";
 import {
+  declaredFlipsY,
   lowerStyle,
   rectItemFromBox,
   roleFor,
-  toPixelFlipsY,
 } from "../displayList/lowerHelpers";
 type TextDimensions = {
   width: number;
@@ -327,7 +327,7 @@ export const Text = ({
           : textContent;
         const text = finalText == null ? "" : String(finalText);
 
-        const flips = toPixelFlipsY(toPixel);
+        const flips = declaredFlipsY(node, toPixel);
         const [anchorX, anchorY] = displayTranslate(transform);
         const [px, py0] = toPixel([anchorX, anchorY]);
         // Text's vertical box is asymmetric about the baseline (ascent ≠ descent

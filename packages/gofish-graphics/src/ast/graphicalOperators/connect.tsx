@@ -529,6 +529,14 @@ export const connect = createNodeOperator(
 
           // The legacy `<g transform="translate(tx,ty)">` offset, folded into a
           // local pixel map so each path point lands at its absolute pixel.
+          //
+          // LIMITATION (#657, a #629 follow-up): the connector is ONE bake entry
+          // with ONE flip, so every path point — both endpoints — maps through
+          // this single `toPixel`. A connector spanning two DIFFERENT orientation
+          // scopes (e.g. a y-up bar to a y-down heatmap cell) therefore mirrors
+          // one endpoint incorrectly. A clean fix needs per-endpoint scopes plus
+          // a mid-path reconciliation; deferred. Single-scope connectors (the
+          // common case) are correct.
           const [tx, ty] = displayTranslate(transform);
           const offsetToPixel: ToPixel = ([px, py]) =>
             toPixel([px + tx, py + ty]);

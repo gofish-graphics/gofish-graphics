@@ -643,24 +643,35 @@ display-list items paint directly under the `<svg>`.
 
 **Location**: `src/ast/gofish.tsx` (`render()`)
 
-GoFish lays out in a **y-up** frame (mathematical convention); SVG is **y-down**. The
-old renderer reconciled the two with two stacked SVG transforms — a per-shape
-`scale(1,-1)` and a root flip `<g transform="scale(1,-1) translate(…)">`. Both are now
-folded into a single affine map, set once on the render session:
+SVG is **y-down** (top-left origin); a continuous-y chart wants **y-up** (bars grow
+upward). The old renderer reconciled the two with two stacked SVG transforms — a
+per-shape `scale(1,-1)` and a root flip `<g transform="scale(1,-1) translate(…)">`.
+Both are folded into an affine map on the render session, but the map is now decided
+**per scope** rather than globally (issue #629): the bake walk tags each baked draw
+entry with the placed y-band it draws in (its `FlipScope`), and the lower driver builds
+that entry's `toPixel` from it:
 
 ```typescript
-const toPixel: ToPixel = ([gx, gy]) => [
-  gx + leftReserve,
-  height + topReserve - gy,
-];
-child.getRenderSession().toPixel = toPixel;
+const baseDown: ToPixel = ([gx, gy]) => [gx + leftReserve, gy + topReserve];
+const toPixelFor = (flip?: FlipScope): ToPixel =>
+  flip === undefined
+    ? baseDown // ambient y-down
+    : ([gx, gy]) => baseDown([gx, 2 * flip.baseY + flip.height - gy]); // y-up
 ```
 
-A GoFish-space point `(gx, gy)` maps to the SVG pixel
-`(gx + leftReserve, (height + topReserve) − gy)`. Because the flip and the gutter
-offset live here, the lower pass produces items already in **final absolute pixels** —
-no outer flip group, no per-shape transform. `toPixel` is affine, so straight paths
-stay straight (a warped path just maps each control point through it).
+A continuous-y subtree mirrors _y_ about its own band; an ordinal-y neighbor (a heatmap
+beside a bar chart) keeps the ambient y-down map. The **root plot content** mirrors about
+the canvas frame `[0, finalH]` stamped on `contentNode._rootFlipScope` here in
+`layout()` (where `finalH` is known) — the exact frame the old global flip used, so a
+single cohesive chart is pixel-identical; a mixed free-space dashboard flips only its
+continuous subtrees, each about its own band. Chrome (axis titles, legend, colorbar) is
+stamped `_ambientYDown`: the bake box-mirrors its BOX about the plot's frame (so it
+seats beside the flipped plot exactly as before) while its INTERIOR renders y-down —
+legend rows read top→bottom with no `reverse`. Because the flip and the gutter offset live in
+`toPixel`, the lower pass produces items already in **final absolute pixels** — no outer
+flip group, no per-shape transform. `toPixel` is affine, so straight paths stay straight
+(a warped path just maps each control point through it). See
+[Rendering](/internals/core/rendering) for the full per-scope mechanism.
 
 ### Render Pass 4: Lowering the Baked Tree
 
