@@ -202,6 +202,53 @@ delta-maintained (subtract the old value, add the new); min/max cannot
 (removing the max forces a rescan) without an augmented structure, and a
 plain recompute-with-cutoff is likely fine at chart scale.
 
+### Are σ-scope boundaries enough? The structural-change case
+
+Test the model against the hardest common edit: **append one item to a
+`spread`**. Scope-level invalidation handles the _detection_ for free — the
+scope's key includes its data slice, so the containing scope goes red with no
+extra mechanism. But "the scope re-runs" hides three distinct costs, and
+scope granularity alone only bounds the first:
+
+1. **Within the scope: O(n) re-measure for a 1-item edit.** The spread scope
+   re-running means measuring all n+1 children, though n of them are
+   untouched. The fix is not a smarter boundary but _finer keys under it_:
+   per-child measure is itself a query keyed by (child data key, incoming
+   proposal), so unchanged children are O(1) memo hits and only the new child
+   actually measures. This works exactly when children have stable data keys
+   — the same stable-identity prerequisite again, now at item granularity
+   (spec position × data key, the join key `selectAll` already needs).
+
+2. **Downstream of the edit: everything to the right "changes."** With a
+   fixed span, n+1 bands means every band narrows and every sibling moves —
+   no mechanism avoids re-_arranging_ that axis, and the cutoff's job is only
+   to notice the cases where it didn't happen. But most of that "change" is
+   pure translation: an untouched sibling subtree's _interior_ is identical;
+   only its baseline (one number of its affine map) moved. Whether that
+   cheapness is realizable depends on a lowering design choice: if display
+   items bake absolute pixels, a baseline shift dirties the whole subtree's
+   lower+paint; if lowering keeps scope-relative coordinates and expresses
+   the baseline as a group transform (`<g transform>`), a shifted sibling is
+   _one attribute patch_ and its interior never re-lowers. This is the
+   incremental analog of how tidy-tree algorithms (Reingold–Tilford) make
+   insertion cheap — children stored relative to parents with deferred
+   shifts — and it should be a stated requirement on the display-list design
+   before any layout memoization lands. (Prefix-sum positions are a monoid
+   fold, so even the shift computation itself can be O(log n) with an
+   annotated tree, but at chart scale the transform trick is the part that
+   matters.)
+
+3. **Genuinely global fallout.** The new item can extend a domain or change
+   band structure; then the scale moves and the axis honestly re-lays-out.
+   Irreducible — the mechanism's value is that the _interior-point_ case
+   (domain unchanged) cuts off at the waist instead of going global by
+   default.
+
+So: σ-scope boundaries are the right _propagation_ unit, but structural edits
+need two supplements — per-item memo keys inside a scope, and
+translation-absorbing lowering — or the common append case degrades to
+re-running everything to the right of the edit.
+
 ## 4. Options
 
 ### Option A — Solid-ize the pipeline (Compose-style)
@@ -225,6 +272,24 @@ pipeline and fine-grained invalidation falls out of tracking.
   the async-safe version of it. Any consolidation of the manual
   `usedInSpec`/`specRuntimes` bookkeeping into Solid tracking is blocked on
   the same fact.
+- _Does Solid 2.0 unblock this?_ Partially, and it doesn't change the
+  recommendation. Solid 2.0 (in beta, no committed release date) makes async
+  first-class in the reactive graph: async derivations participate in
+  tracking and transitions instead of silently dropping the tracking context,
+  so "resolve as a tracked computation" moves from impossible to plausible.
+  Three caveats keep it from being the plan. First, async tracking works by
+  _re-executing_ the computation as awaited values settle — replay semantics
+  — so an effectful resolve (the `derive` RPC is a network call, names
+  register into contexts) must be idempotent or cached per run before it can
+  live inside one. Second, the prize is small: what tracking would replace is
+  the ~40 lines of ambient-registrar bookkeeping, while the rAF coalescing,
+  event dispatch, and frame publication stay ours either way. Third, and
+  decisive: Option B wants the dependency key to be _ours_ — explicit
+  (stage, scope) keys with bitwise cutoffs we can inspect, test, and
+  serialize — not positions in a framework's opaque dependency graph. Solid
+  2.0 weakens A's blocking fact; it does not weaken B's reasons for existing.
+  Worth revisiting only for the paint-adjacent edges (e.g. letting a live
+  channel await) once 2.0 is stable.
 
 ### Option B — memoized queries over the pure pipeline (salsa-style)
 
