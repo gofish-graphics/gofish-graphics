@@ -142,3 +142,17 @@ packages/gofish-graphics/stories/lowlevel/Constraints.stories.tsx::SpreadY_Rever
 # raises the emphasized sites above the gray ones. Revisit once the highlight /
 # `emphasize` API (#641) gives this a serializable, declarative spelling.
 packages/gofish-graphics/stories/vega-lite/Bar/LayeredBarsAndArea.stories.tsx
+
+# ---------------------------------------------------------------------------
+# Interaction/reactivity stories — exempt from Python parity (JS-only feature).
+#
+# The reactive interaction layer (live()/pointer()/drag()/wheel()/timer()/
+# signal()) is JS-only: signals are Solid closures with no Python/IR bridge, so
+# these specs cannot cross the derive RPC. They exercise pointer/drag/wheel/
+# timer inputs read inside live() (paint patches) and inside derive() (pipeline
+# re-runs) — non-pure-spec by construction. Nothing to byte-match on the Python
+# side; keep exempt.
+packages/gofish-graphics/stories/interaction/HoverHighlight.stories.tsx
+packages/gofish-graphics/stories/interaction/SemanticZoomHistogram.stories.tsx
+packages/gofish-graphics/stories/interaction/DraggableThreshold.stories.tsx
+packages/gofish-graphics/stories/interaction/TimerPulse.stories.tsx
