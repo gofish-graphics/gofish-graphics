@@ -33,6 +33,13 @@ const base = [
   { cat: "d", count: 60 },
 ];
 
+/** The full series GrowingData scrolls a window over. Each point's height is a
+ *  bounded sine of its index so the chart stays legible as the window slides. */
+const SERIES = Array.from({ length: 200 }, (_, k) => ({
+  t: String(k),
+  count: 20 + Math.round(15 * (1 + Math.sin(k / 2))),
+}));
+
 /** regime 0: timer read only inside live() → the fill pulses at paint time,
  *  the layout never re-runs. */
 export const PaintOnly: StoryObj<Args> = {
@@ -69,17 +76,14 @@ export const GrowingData: StoryObj<Args> = {
     const t = timer({ interval: 500 });
     const WINDOW = 20;
 
-    chart(null as never, { axes: true })
+    chart(SERIES, { axes: true })
       .flow(
-        derive(() => {
+        // regime 2: reading t() in derive() makes it a pipeline dependency.
+        // Each tick slides a rolling window over the real series and re-runs the
+        // whole pipeline.
+        derive((rows) => {
           const n = t();
-          // Rolling window of the last WINDOW ticks; height is a bounded sine
-          // of the tick index so the chart stays legible as it scrolls.
-          const start = Math.max(0, n - WINDOW + 1);
-          return Array.from({ length: n - start + 1 }, (_, i) => {
-            const k = start + i;
-            return { t: String(k), count: 20 + Math.round(15 * (1 + Math.sin(k / 2))) };
-          });
+          return rows.slice(Math.max(0, n - WINDOW + 1), n + 1);
         }),
         spread({ by: "t", dir: "x" })
       )

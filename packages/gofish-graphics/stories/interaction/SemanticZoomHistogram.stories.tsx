@@ -32,14 +32,19 @@ export default meta;
 type Args = { w: number; h: number };
 
 const MASS = "Body Mass (g)";
-const masses = penguins
-  .map((p) => p[MASS])
-  .filter((m): m is number => m !== null);
-const [massMin, massMax] = [Math.min(...masses), Math.max(...masses)];
 
-/** Fixed-domain equal-width binning; one row per bin (empty bins kept so the
- *  x band structure stays stable while zooming). */
-function binRows(k: number): { bin: string; count: number }[] {
+/** Fixed-domain equal-width binning over the passed penguin rows; one row per
+ *  bin (empty bins kept so the x band structure stays stable while zooming).
+ *  The min/max bin domain is derived from `rows` — fine here because the rows
+ *  are the constant full dataset flowing through `derive`. */
+function binRows(
+  rows: typeof penguins,
+  k: number
+): { bin: string; count: number }[] {
+  const masses = rows
+    .map((p) => p[MASS])
+    .filter((m): m is number => m !== null);
+  const [massMin, massMax] = [Math.min(...masses), Math.max(...masses)];
   const width = (massMax - massMin) / k;
   const counts = new Array<number>(k).fill(0);
   for (const m of masses) {
@@ -59,24 +64,24 @@ export const Default: StoryObj<Args> = {
 
     const bins = wheel({ range: [3, 40], initial: 12, round: true });
 
-    chart(null as never, { axes: true })
+    chart(penguins, { axes: true })
       .flow(
         // regime 2: reading bins() in derive() makes it a pipeline dependency,
-        // so a wheel tick re-bins and re-runs resolve → layout → paint.
-        derive(() => binRows(bins())),
+        // so a wheel tick re-bins the real rows and re-runs resolve → layout →
+        // paint.
+        derive((rows) => binRows(rows, bins())),
         spread({ by: "bin", dir: "x" })
       )
       .mark(rect({ h: "count" }))
+      // regime 0: a component-level annotation tier — live text content patches
+      // at paint time only.
       .layer(
-        chart(null).mark(
-          text({
-            x: 20,
-            y: 290,
-            // regime 0: live text content patches at paint time only.
-            text: live(() => `bins: ${bins()} (scroll to re-bin)`),
-            fill: "#333",
-          })
-        )
+        text({
+          x: 20,
+          y: 290,
+          text: live(() => `bins: ${bins()} (scroll to re-bin)`),
+          fill: "#333",
+        })
       )
       .render(container, {
         w: args.w,

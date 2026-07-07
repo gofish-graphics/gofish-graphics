@@ -186,21 +186,21 @@ at paint time only.
 ```ts
 const bins = wheel({ range: [3, 40], initial: 12, round: true });
 
-chart(null, { axes: true })
+chart(penguins, { axes: true })
   .flow(
-    derive(() => binRows(bins())), // re-bins on scroll → full re-run
+    derive((rows) => binRows(rows, bins())), // re-bins on scroll → full re-run
     spread({ by: "bin", dir: "x" })
   )
   .mark(rect({ h: "count" }))
+  // A component-level annotation tier — a bare mark; live content patches at
+  // paint time only.
   .layer(
-    chart(null).mark(
-      text({
-        x: 20,
-        y: 290,
-        text: live(() => `bins: ${bins()} (scroll to re-bin)`),
-        fill: "#333",
-      })
-    )
+    text({
+      x: 20,
+      y: 290,
+      text: live(() => `bins: ${bins()} (scroll to re-bin)`),
+      fill: "#333",
+    })
   )
   .render(container, { w: 500, h: 300 });
 ```
@@ -238,10 +238,9 @@ chart(data, { axes: true })
       }),
     })
   )
+  // The threshold rule is a component-level annotation tier (a bare rect).
   .layer(
-    chart([{}]).mark(
-      rect({ y: () => cut(), h: 3, w: 500, fill: "#333" }) // full re-run per frame
-    )
+    rect({ y: () => cut(), h: 3, w: 500, fill: "#333" }) // full re-run per frame
   )
   .render(container, { w: 500, h: 360 });
 ```
@@ -269,10 +268,12 @@ coalesced to one per frame):
 
 ```ts
 const t = timer({ interval: 500 });
+const WINDOW = 20;
 
-chart(null, { axes: true })
+chart(series, { axes: true })
   .flow(
-    derive(() => rollingWindow(t())), // re-derives data every tick
+    // slide a rolling window over the real series each tick → full re-run
+    derive((rows) => rows.slice(Math.max(0, t() - WINDOW + 1), t() + 1)),
     spread({ by: "t", dir: "x" })
   )
   .mark(rect({ h: "count", fill: "#6b9bd1" }))

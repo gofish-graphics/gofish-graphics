@@ -82,18 +82,17 @@ export const Default: StoryObj<Args> = {
           }),
         })
       )
-      // The threshold rule: an ordinary rect whose y reads cut() during resolve
-      // (regime 2 → full re-run per drag frame). y is a data-space count value,
-      // so it aligns with the bars' count scale; w spans the plot in pixels.
+      // The threshold rule: a component-level annotation tier (a bare rect)
+      // whose y reads cut() during resolve (regime 2 → full re-run per drag
+      // frame). y is a data-space count value, so it aligns with the bars' count
+      // scale; w spans the plot in pixels.
       .layer(
-        chart([{}] as never).mark(
-          rect({
-            y: () => cut(),
-            h: 3,
-            w: args.w,
-            fill: "#333",
-          })
-        )
+        rect({
+          y: () => cut(),
+          h: 3,
+          w: args.w,
+          fill: "#333",
+        })
       )
       .render(container, {
         w: args.w,
