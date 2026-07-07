@@ -52,10 +52,11 @@ def story_default():
 
     train_lines = [
         line(
+            # Default curve: the connection (y) axis is the ordinal station
+            # stack, so it resolves to a straight polyline between stops.
             [ref(_dot_name(d)) for d in train_rows],
             dir="y",
             strokeWidth=1,
-            curve="bezier",
         )
         for train_rows in group_by(rows, "Train").values()
     ]

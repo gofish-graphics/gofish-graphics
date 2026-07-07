@@ -197,10 +197,11 @@ def story_default():
 
     color_lines = [
         line(
+            # Default curve: the connection (y) axis is the ordinal rank stack,
+            # so it resolves to straight segments between each year's rank.
             [ref(_dot_name(d)) for d in color_rows],
             dir="y",
             strokeWidth=2,
-            curve="bezier",
         )
         for color_rows in group_by(NEW_CAR_COLORS, "Color").values()
     ]
