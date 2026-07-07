@@ -34,9 +34,7 @@ import {
   type ZOrderValue,
 } from "./marks/createOperator";
 import { isValue } from "./data";
-import { untrack } from "solid-js";
-import { isLive, type LiveValue } from "../interaction/live";
-import { runInLiveEval } from "../interaction/resolveContext";
+import { isLive, evalLiveStatic, type LiveValue } from "../interaction/live";
 import { KNOWN_ALIAS_KEYS } from "./dims";
 import { Mark } from "./types";
 import type { ConstraintSpec, ConstraintRef } from "./constraints";
@@ -598,11 +596,7 @@ function buildCreatedMark(
       let markValue = markOpts[propName];
       if (isLive(markValue)) {
         (liveChannels ??= {})[propName] = markValue;
-        // Evaluate untracked + under the inLiveEval flag for the resolve-time
-        // value: reads of library inputs wire event dispatch but do NOT become
-        // pipeline dependencies (they re-run at paint, not at resolve).
-        const accessor = markValue;
-        markValue = untrack(() => runInLiveEval(() => accessor(d)));
+        markValue = evalLiveStatic(markValue, d);
       }
 
       let channelType =
@@ -650,15 +644,15 @@ function buildCreatedMark(
       for (let i = 0; i < result.length; i++) {
         const node = result[i];
         node.name(key?.toString() ?? "");
-        (node as any).datum = data[i] ?? d;
-        if (liveChannels) (node as any).__gfLive = liveChannels;
+        node.datum = data[i] ?? d;
+        if (liveChannels) node.__gfLive = liveChannels;
       }
       return result as unknown as GoFishNode;
     }
     const node = result as GoFishNode;
     node.name(key?.toString() ?? "");
-    (node as any).datum = d;
-    if (liveChannels) (node as any).__gfLive = liveChannels;
+    node.datum = d;
+    if (liveChannels) node.__gfLive = liveChannels;
     node.scope();
     // Mark as a component for string-name search bounding. Distinct from
     // _isScope so future operators that scope (for token reasons) don't

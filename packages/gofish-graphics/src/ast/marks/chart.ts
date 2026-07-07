@@ -8,9 +8,7 @@ import { type ColorConfig } from "../colorSchemes";
 
 export type { ColorConfig };
 import { inferSize } from "../channels";
-import { untrack } from "solid-js";
-import { isLive, type LiveValue } from "../../interaction/live";
-import { runInLiveEval } from "../../interaction/resolveContext";
+import { isLive, evalLiveStatic, type LiveValue } from "../../interaction/live";
 import { rect as generatedRect } from "../shapes/rect";
 import { Ellipse } from "../shapes/ellipse";
 import { Mark, Operator } from "../types";
@@ -277,10 +275,7 @@ export function circle<T extends Record<string, any>>({
       | undefined;
     if (isLive(fill)) {
       liveFill = fill;
-      const accessor = fill;
-      staticFill = untrack(() => runInLiveEval(() => accessor(d))) as
-        | string
-        | undefined;
+      staticFill = evalLiveStatic(fill, d) as string | undefined;
     }
     const resolvedFill =
       typeof staticFill === "string" && datum && staticFill in datum
@@ -299,8 +294,8 @@ export function circle<T extends Record<string, any>>({
       strokeWidth,
       label,
     }).name(key?.toString() ?? "");
-    (node as any).datum = d;
-    if (liveFill) (node as any).__gfLive = { fill: liveFill };
+    node.datum = d;
+    if (liveFill) node.__gfLive = { fill: liveFill };
     return node;
   };
   const result = nameableMark(base);

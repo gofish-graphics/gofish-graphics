@@ -98,20 +98,13 @@ async function main() {
     const pxToData = invertAffine(dataToPx);
     ok(
       "invertAffine round-trips composed affine legs",
-      Math.abs(pxToData(dataToPx(95)) - 95) < 1e-9
+      pxToData !== undefined && Math.abs(pxToData(dataToPx(95)) - 95) < 1e-9
     );
-    let threw = false;
-    try {
-      invertAffine(() => 3);
-    } catch {
-      threw = true;
-    }
-    ok("degenerate scale rejected", threw);
+    ok("degenerate scale returns undefined", invertAffine(() => 3) === undefined);
 
     // frameConversions over a recorded frame: data → px → data round-trips.
     const conv = frameConversions({
       items: [],
-      root: {} as any,
       toPixel: ([gx, gy]) => [gx + 10, 300 - gy],
       posScales: [(d) => d * 3, (d) => d * 3],
       domains: { x: [0, 100], y: [0, 100] },
@@ -132,7 +125,6 @@ async function main() {
       "frameConversions undefined with no continuous axis",
       frameConversions({
         items: [],
-        root: {} as any,
         toPixel: ([gx, gy]) => [gx, gy],
         size: { width: 10, height: 10 },
       }) === undefined
@@ -142,7 +134,6 @@ async function main() {
     // gets a leg. Here x is ordinal (no posScale/domain), y is continuous.
     const perAxis = frameConversions({
       items: [],
-      root: {} as any,
       toPixel: ([gx, gy]) => [gx, 300 - gy],
       posScales: [undefined, (d) => d * 3],
       domains: { y: [0, 100] },
@@ -165,7 +156,6 @@ async function main() {
     try {
       degen = frameConversions({
         items: [],
-        root: {} as any,
         // y collapses to a constant → zero-slope y leg.
         toPixel: ([gx]) => [gx, 42],
         posScales: [(d) => d * 3, (d) => d * 3],

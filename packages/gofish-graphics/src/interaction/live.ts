@@ -22,6 +22,9 @@
  * resolve-time color scale). See the plan's "Design notes".
  */
 
+import { untrack } from "solid-js";
+import { runInLiveEval } from "./resolveContext";
+
 const LIVE_BRAND = Symbol.for("gofish.liveValue");
 
 export interface LiveValue {
@@ -38,3 +41,13 @@ export function live(accessor: (datum?: unknown) => unknown): LiveValue {
 export const isLive = (v: unknown): v is LiveValue =>
   typeof v === "function" &&
   (v as unknown as Record<symbol, unknown>)[LIVE_BRAND] === true;
+
+/**
+ * Evaluate a `live()` accessor for its resolve-time static value: untracked (so
+ * the input reads inside it wire event dispatch but do NOT become pipeline
+ * dependencies) and under the `inLiveEval` flag (so a read is classified as
+ * paint-time reactivity, not a spec dependency). The pipeline renders and
+ * measures this value; the paint layer re-evaluates the same accessor per frame.
+ */
+export const evalLiveStatic = (accessor: LiveValue, datum: unknown): unknown =>
+  untrack(() => runInLiveEval(() => accessor(datum)));

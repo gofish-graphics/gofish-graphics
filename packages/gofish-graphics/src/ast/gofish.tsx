@@ -1067,20 +1067,19 @@ export const render = (
     ? ([gx, gy]) => [gx + leftReserve, height + topReserve - gy]
     : ([gx, gy]) => [gx + leftReserve, gy + topReserve];
   child.getRenderSession().toPixel = toPixel;
-  const paintCtx = interaction ? { interactive: true } : undefined;
+  const interactive = interaction !== undefined;
   const paintBaked = () => {
     const items = lowerToDisplayList(child);
     // Publish the frame (id-keyed hit-test map + data-space conversions) before
     // paint so the first hit-test / dataPos reads see the current frame.
     interaction?.publishFrame({
       items,
-      root: child,
       toPixel,
       posScales,
       domains,
       size: { width, height },
     });
-    return items.map((item) => paintSVG(item, paintCtx));
+    return items.map((item) => paintSVG(item, interactive));
   };
   return (
     <svg

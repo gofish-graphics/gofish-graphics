@@ -13,17 +13,16 @@
  * because node uids are minted per resolve.
  */
 import type { DisplayList } from "gofish-ir";
-import type { GoFishNode, ToPixel } from "../ast/_node";
+import type { ToPixel } from "../ast/_node";
 
 /**
- * One published layout frame: the lowered items, the resolved root, and the
- * recorded root-level maps the interaction layer converts through. All forward
- * maps are the RECORDED ones from the layout run — inversion samples them
- * (they are affine), never re-derives scales.
+ * One published layout frame: the lowered items and the recorded root-level
+ * maps the interaction layer converts through. All forward maps are the
+ * RECORDED ones from the layout run — inversion samples them (they are affine),
+ * never re-derives scales.
  */
 export interface InteractionFrame {
   items: DisplayList.DisplayItem[];
-  root: GoFishNode;
   /** GoFish-space → screen-px map for this frame (gutters + y-flip). */
   toPixel?: ToPixel;
   /** Root position scales: data → gofish space, per axis. */
@@ -82,6 +81,15 @@ export interface InputPrimitive {
    *  and re-adds itself if the read recurs; a disposed runtime removes itself.
    *  Replaces the former single-runtime `usedInSpec` boolean. */
   specRuntimes: Set<SpecInvalidator>;
+  /** The delegated DOM event types this input consumes. The runtime attaches
+   *  only the union of these across registered inputs, so a wheel/timer/signal-
+   *  only chart never pays pointer-move hit-testing. Omitted/empty = no DOM
+   *  events (timer, signal). */
+  events?: InteractionEventType[];
+  /** Whether this input needs the per-frame hit-test map + data-space
+   *  conversions built (true for pointer and drag). When no registered input
+   *  needs it, `publishFrame` skips the full item walk. */
+  needsFrame?: boolean;
   /** Called once when the input is first registered with a runtime. Used to
    *  reach the scheduler (invalidate) and frame conversions. */
   attach?(runtime: import("./runtime").InteractionRuntime): void;

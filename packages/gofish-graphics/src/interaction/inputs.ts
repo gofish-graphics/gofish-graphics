@@ -63,6 +63,8 @@ export function pointer(): Pointer {
 
   const input: InputPrimitive = {
     specRuntimes: new Set(),
+    events: ["pointermove", "pointerdown", "pointerup", "pointerleave"],
+    needsFrame: true,
     attach(rt) {
       runtime = rt;
     },
@@ -166,6 +168,8 @@ export function drag(options: DragOptions = {}): Drag {
 
   const input: InputPrimitive = {
     specRuntimes: new Set(),
+    events: ["pointerdown", "pointermove", "pointerup"],
+    needsFrame: true,
     attach(rt) {
       runtime = rt;
     },
@@ -279,13 +283,10 @@ export function wheel(options: WheelOptions): Wheel {
 
   const [value, setValue] = createSignal(round ? Math.round(seed) : seed);
   let accum = invert(value());
-  let runtime: InteractionRuntime | undefined;
 
   const input: InputPrimitive = {
     specRuntimes: new Set(),
-    attach(rt) {
-      runtime = rt;
-    },
+    events: ["wheel"],
     onEvent(type, event) {
       if (type !== "wheel") return;
       const we = event as WheelEvent;
@@ -338,13 +339,9 @@ export function timer(options: TimerOptions = {}): Timer {
   const [tick, setTick] = createSignal(0);
   let handle: ReturnType<typeof setInterval> | undefined;
   let autoStarted = false;
-  let runtime: InteractionRuntime | undefined;
 
   const input: InputPrimitive = {
     specRuntimes: new Set(),
-    attach(rt) {
-      runtime = rt;
-    },
   };
   const track = makeTrack(input);
 
@@ -390,13 +387,9 @@ export interface Signal<T> {
  *  `live()` channel it patches paint only). */
 export function signal<T>(init: T): Signal<T> {
   const [value, setValue] = createSignal<T>(init);
-  let runtime: InteractionRuntime | undefined;
 
   const input: InputPrimitive = {
     specRuntimes: new Set(),
-    attach(rt) {
-      runtime = rt;
-    },
   };
   const track = makeTrack(input);
 

@@ -11,14 +11,15 @@
 import type { InteractionFrame } from "./types";
 
 /** Invert an affine function by sampling two points. Used to build px→data
- *  from the recorded data→px legs (both affine). Throws on a degenerate
- *  (constant) map. */
-export function invertAffine(f: (t: number) => number): (y: number) => number {
+ *  from the recorded data→px legs (both affine). Returns `undefined` for a
+ *  degenerate map (non-finite or zero sampled slope) rather than throwing, so a
+ *  zero-size axis is dropped instead of failing the whole render. */
+export function invertAffine(
+  f: (t: number) => number
+): ((y: number) => number) | undefined {
   const a = f(0);
   const slope = f(1) - a;
-  if (slope === 0) {
-    throw new Error("[gofish interaction] cannot invert a degenerate scale");
-  }
+  if (!Number.isFinite(slope) || slope === 0) return undefined;
   return (y: number) => (y - a) / slope;
 }
 
@@ -58,11 +59,11 @@ function axisLeg(
     axis === 0
       ? (d: number) => toPixel([ps(d), 0])[0]
       : (d: number) => toPixel([0, ps(d)])[1];
-  // Sample the affine slope; bail (no throw) on a degenerate map.
-  const a = dataToPx(0);
-  const slope = dataToPx(1) - a;
-  if (!Number.isFinite(slope) || slope === 0) return undefined;
-  return { dataToPx, pxToData: (px: number) => (px - a) / slope };
+  // Sample the affine inverse; a degenerate map (non-finite/zero slope, e.g. a
+  // zero-size axis) comes back undefined and the whole leg is dropped.
+  const pxToData = invertAffine(dataToPx);
+  if (!pxToData) return undefined;
+  return { dataToPx, pxToData };
 }
 
 /** Build conversions for the axes whose position scales exist. Returns

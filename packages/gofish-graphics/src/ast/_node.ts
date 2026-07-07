@@ -239,6 +239,10 @@ export class GoFishNode {
   public _scopeMap?: Map<string, GoFishNode>;
   public parent?: GoFishNode;
   public datum?: any;
+  /** Paint-time reactive channels (a `live()` value per channel), stamped by the
+   *  mark builders at resolve. Baked into the `liveSlots` side table at lower
+   *  time; undefined on the static path. */
+  public __gfLive?: Record<string, LiveValue>;
   // private inferDomains: (childDomains: Size<Domain>[]) => FancySize<Domain | undefined>;
   private _resolveUnderlyingSpace: ResolveUnderlyingSpace;
   public _underlyingSpace?: Size<UnderlyingSpace> = undefined;
@@ -1151,11 +1155,9 @@ export class GoFishNode {
     // into the paint-time side table so paint re-evaluates it reactively. The
     // thunks are held OUTSIDE the display item (WeakMap) so the item stays pure
     // data for serialization / normalized-DOM captures.
-    const liveChannels = (
-      this as unknown as { __gfLive?: Record<string, LiveValue> }
-    ).__gfLive;
+    const liveChannels = this.__gfLive;
     if (liveChannels) {
-      const datum = (this as unknown as { datum?: unknown }).datum;
+      const datum = this.datum;
       const slots: Record<string, () => unknown> = {};
       for (const channel in liveChannels) {
         const accessor = liveChannels[channel];

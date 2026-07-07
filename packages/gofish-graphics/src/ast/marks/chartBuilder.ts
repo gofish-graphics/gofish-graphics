@@ -19,10 +19,10 @@ import { withInteractiveResolve } from "../../interaction/resolveContext";
  * and threads the runtime through render so `data-gf-id` hooks are emitted and
  * delegated events are attached.
  */
-async function renderWithInteraction(
+async function renderWithInteraction<O extends Record<string, unknown>>(
   resolveForRender: () => Promise<{
     node: GoFishNode;
-    options: Record<string, unknown>;
+    options: O;
   }>,
   container: HTMLElement
 ): Promise<HTMLElement> {
@@ -34,7 +34,7 @@ async function renderWithInteraction(
       resolveForRender()
     );
     if (runtime.hasWork()) {
-      options.interaction = runtime;
+      (options as Record<string, unknown>).interaction = runtime;
     }
     return node.render(container, options) as HTMLElement;
   };
@@ -666,11 +666,7 @@ export class ChartBuilder<TInput, TOutput = TInput> {
     options: Omit<Parameters<GoFishNode["render"]>[1], "axes">
   ): Promise<ReturnType<GoFishNode["render"]>> {
     return renderWithInteraction(
-      () =>
-        this.resolveForRender(options) as Promise<{
-          node: GoFishNode;
-          options: Record<string, unknown>;
-        }>,
+      () => this.resolveForRender(options),
       container
     );
   }
@@ -862,11 +858,7 @@ export class LayerBuilder {
     options: Parameters<GoFishNode["render"]>[1]
   ): Promise<ReturnType<GoFishNode["render"]>> {
     return renderWithInteraction(
-      () =>
-        this.resolveForRender(options ?? {}) as Promise<{
-          node: GoFishNode;
-          options: Record<string, unknown>;
-        }>,
+      () => this.resolveForRender(options ?? {}),
       container
     );
   }
