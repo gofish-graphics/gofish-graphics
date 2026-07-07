@@ -59,7 +59,14 @@ export function unionChildSpaces(
     for (const ord of ordinals) {
       if (ord.domain) for (const k of ord.domain) keys.add(k);
     }
-    return ORDINAL(Array.from(keys));
+    // Carry the grouping measure through the union (FORGET on a real clash, as
+    // the magnitude path does) so a category axis keeps naming itself off its
+    // own space — e.g. a `Frame` wrapping a `spread(lake)` preserves "lake".
+    const measure = forgetAllMeasures(ordinals.map((o) => o.measure));
+    // Anonymous only if EVERY unioned ordinal is anonymous — one semantically
+    // keyed child makes the union a real category axis.
+    const anonymous = ordinals.every((o) => o.anonymous);
+    return ORDINAL(Array.from(keys), measure, anonymous);
   }
 
   const axisSpaces = children.map((c) => c[axis]);

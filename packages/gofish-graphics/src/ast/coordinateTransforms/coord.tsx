@@ -32,6 +32,7 @@ import {
   continuousInterval,
   type CONTINUOUS_TYPE,
 } from "../underlyingSpace";
+import type { Measure } from "../data";
 import { posScaleFromSpace, axisScale, type AxisMap } from "../domain";
 import * as Monotonic from "../../util/monotonic";
 import { createNodeOperator } from "../withGoFish";
@@ -55,6 +56,29 @@ export type CoordinateTransform = {
    * Default 0 (filled disc). `coord.layout` insets the radial range by this.
    */
   innerRadius?: number;
+};
+
+/** Union all child ORDINAL spaces on `axis` into one ORDINAL, carrying the
+ *  grouping measure (FORGET on a clash) so a polar category axis names itself
+ *  off its space — the coord-space analogue of `unionChildSpaces`'s ordinal
+ *  fold. (Children are tuples; non-ordinal entries on `axis` are ignored.) */
+const unionOrdinal = (
+  children: Size<UnderlyingSpace>[],
+  axis: 0 | 1
+): UnderlyingSpace => {
+  const keys = new Set<string>();
+  const measures: (Measure | undefined)[] = [];
+  // Anonymous only if EVERY contributing ordinal is anonymous.
+  let anonymous = true;
+  for (const child of children) {
+    const s = child[axis];
+    if (isORDINAL(s) && s.domain) {
+      s.domain.forEach((k) => keys.add(k));
+      measures.push(s.measure);
+      if (!s.anonymous) anonymous = false;
+    }
+  }
+  return ORDINAL(Array.from(keys), forgetAllMeasures(measures), anonymous);
 };
 
 export const coord = createNodeOperator(
@@ -113,15 +137,7 @@ export const coord = createNodeOperator(
             const xMeasure = forgetAllMeasures(xPos.map((s) => s.measure));
             xSpace = POSITION(domain, xMeasure, coordTransform);
           } else if (xChildrenOrdinalSpaces.length > 0) {
-            // Collect and merge domains from all child ordinal spaces
-            const allKeys = new Set<string>();
-            xChildrenOrdinalSpaces.forEach((child) => {
-              const ordinalSpace = child[0];
-              if (isORDINAL(ordinalSpace) && ordinalSpace.domain) {
-                ordinalSpace.domain.forEach((key) => allKeys.add(key));
-              }
-            });
-            xSpace = ORDINAL(Array.from(allKeys));
+            xSpace = unionOrdinal(children, 0);
           }
 
           let ySpace = UNDEFINED;
@@ -147,15 +163,7 @@ export const coord = createNodeOperator(
             const yMeasure = forgetAllMeasures(yPos.map((s) => s.measure));
             ySpace = POSITION(domain, yMeasure, coordTransform);
           } else if (yChildrenOrdinalSpaces.length > 0) {
-            // Collect and merge domains from all child ordinal spaces
-            const allKeys = new Set<string>();
-            yChildrenOrdinalSpaces.forEach((child) => {
-              const ordinalSpace = child[1];
-              if (isORDINAL(ordinalSpace) && ordinalSpace.domain) {
-                ordinalSpace.domain.forEach((key) => allKeys.add(key));
-              }
-            });
-            ySpace = ORDINAL(Array.from(allKeys));
+            ySpace = unionOrdinal(children, 1);
           }
 
           const result: Size<UnderlyingSpace> = [xSpace, ySpace];

@@ -117,13 +117,13 @@ function resolveAxisTitle(
   axisOpt: AxisOptions | undefined
 ): string | false | undefined {
   if (axisOpt === undefined || axisOpt === false) return false;
-  if (axisOpt === true) return undefined; // infer from axisFields
+  if (axisOpt === true) return undefined; // infer from the space measure
   return axisOpt.title;
 }
 
 function resolveAxisTitles(
   axes: AxesOptions | undefined,
-  axisFields?: { x?: string; y?: string }
+  measures?: { x?: string; y?: string }
 ): { xTitle: string | undefined; yTitle: string | undefined } {
   let xTitleOpt: string | false | undefined = false;
   let yTitleOpt: string | false | undefined = false;
@@ -135,8 +135,8 @@ function resolveAxisTitles(
     yTitleOpt = resolveAxisTitle(axes.y);
   }
   return {
-    xTitle: xTitleOpt === false ? undefined : (xTitleOpt ?? axisFields?.x),
-    yTitle: yTitleOpt === false ? undefined : (yTitleOpt ?? axisFields?.y),
+    xTitle: xTitleOpt === false ? undefined : (xTitleOpt ?? measures?.x),
+    yTitle: yTitleOpt === false ? undefined : (yTitleOpt ?? measures?.y),
   };
 }
 
@@ -172,7 +172,6 @@ export async function layout(
     transform,
     debug = false,
     axes = false,
-    axisFields,
     yUp = false,
   }: {
     w?: number;
@@ -183,7 +182,6 @@ export async function layout(
     debug?: boolean;
     defs?: JSX.Element[];
     axes?: AxesOptions;
-    axisFields?: { x?: string; y?: string };
     yUp?: boolean;
   },
   child: GoFishNode | Promise<GoFishNode>,
@@ -228,6 +226,19 @@ export async function layout(
   child.resolveAliases();
   child.resolveUnderlyingSpace();
 
+  // Chart-level axis TITLE measure, captured PRE-elaboration. The root space
+  // here carries the OUTERMOST grouping's measure (the outer operator's fold is
+  // authoritative over its subtree), e.g. a grouped bar's x = "lake". After
+  // axis elaboration inserts the inner (per-facet) ordinal axis nodes, the
+  // re-resolved root unions those up and a finer grouping's measure ("species")
+  // can win — but the chart-level title should name the outermost axis, so we
+  // read it before that. (Nicing changes domains, not measures, so pre/post
+  // agree except for this elaboration bubble-up.)
+  const titleMeasures = {
+    x: spaceMeasure(child._underlyingSpace?.[0]),
+    y: spaceMeasure(child._underlyingSpace?.[1]),
+  };
+
   // The original root content object stays in the tree as the plot after any
   // wrapping below (axis / legend / title elaboration each wrap, never replace,
   // the content). Captured here so the title pass can center on it as the
@@ -256,7 +267,7 @@ export async function layout(
       if (axes.x !== false) enabled.add(0);
       if (axes.y !== false) enabled.add(1);
     }
-    child.resolveAxes(new Set(), enabled);
+    child.resolveAxes(new Map(), enabled);
     child.resolveNiceDomains();
 
     // Axis elaboration: turn inferred axes into ordinary shapes + constraints.
@@ -359,16 +370,11 @@ export async function layout(
   // see the legend column. Title Texts resolve UNDEFINED spaces on both dims, so
   // the wrapper preserves the content's underlying spaces and the nice spaces
   // captured above remain valid. The caller owns the "any title?" guard.
-  // Each axis names itself off its OWN resolved space: a continuous axis by its
-  // measure (unit), an ordinal axis by its grouping-field measure. This is the
-  // post-resolution source of truth — the builder's syntactic `axisFields`
-  // (mark/operator field names) is only a fallback for a space that carries no
-  // measure (e.g. a magnitude whose measures forgot on conflict).
-  const measureFields = {
-    x: spaceMeasure(niceUnderlyingSpaceX) ?? axisFields?.x,
-    y: spaceMeasure(niceUnderlyingSpaceY) ?? axisFields?.y,
-  };
-  const { xTitle, yTitle } = resolveAxisTitles(axes, measureFields);
+  // The title names each axis off its space `measure` (continuous → unit,
+  // ordinal → grouping field), read from `titleMeasures` (the OUTERMOST grouping,
+  // captured pre-elaboration). An axis whose space carries no measure (e.g. a
+  // magnitude whose measures forgot on conflict) simply gets no title.
+  const { xTitle, yTitle } = resolveAxisTitles(axes, titleMeasures);
   if (xTitle !== undefined || yTitle !== undefined) {
     // The x-axis title is authored at the SAME abstract side as its axis LINE, so
     // the two stay together and land at the same visual edge (#143/#16/#629):
@@ -708,7 +714,6 @@ export type GoFishRenderOptions = {
   debug?: boolean;
   defs?: JSX.Element[];
   axes?: AxesOptions;
-  axisFields?: { x?: string; y?: string };
   colorConfig?: ColorConfig;
   padding?: number;
   /**
@@ -767,7 +772,6 @@ export async function runLayout(
     debug = false,
     defs,
     axes = false,
-    axisFields,
     colorConfig,
   } = options;
   // Seed the unit color scale by config kind. A gradient is a continuous
@@ -805,18 +809,7 @@ export async function runLayout(
     }
 
     return await layout(
-      {
-        w,
-        h,
-        x,
-        y,
-        transform,
-        debug,
-        defs,
-        axes,
-        axisFields,
-        yUp: options.yUp,
-      },
+      { w, h, x, y, transform, debug, defs, axes, yUp: options.yUp },
       child,
       contexts
     );

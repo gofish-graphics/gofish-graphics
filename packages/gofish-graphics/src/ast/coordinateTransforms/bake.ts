@@ -7,12 +7,7 @@ import type { DisplayObject, FlipScope } from "../_displayObject";
 import { mirrorY } from "../_displayObject";
 import type { Transform } from "../dims";
 import { GoFishNode } from "../_node";
-import { isZOrderConstraint } from "../constraints/zorder";
-import {
-  flattenForZOrder,
-  topoSortByZOrder,
-  type PaintItem,
-} from "../paintOrder";
+import { orderChildrenForPaint } from "../paintOrder";
 import { isCONTINUOUS } from "../underlyingSpace";
 
 /** The node's parent-frame translate as the bake should compose it, via the
@@ -86,8 +81,17 @@ export const flattenLayout = (
     (node.transform?.scale?.[1] ?? 1) * (scale[1] ?? 1),
   ];
 
-  return node.children.flatMap((child) =>
-    flattenLayout(child, newTransform, newScale)
+  // Resolve draw order the same way the root bake does (z-order LOCAL to this
+  // layer), so `.zOrder(-1)` and `zAbove`/`zBelow` are honored inside a
+  // coordinate transform, not silently dropped (#676). `accTranslate` carries
+  // the translate of any transparent nested layers hoisted over a child by the
+  // z-constraint flatten, matching how the root bake composes it.
+  return orderChildrenForPaint(node).flatMap(({ node: child, accTranslate }) =>
+    flattenLayout(
+      child,
+      [newTransform[0] + accTranslate[0], newTransform[1] + accTranslate[1]],
+      newScale
+    )
   );
 };
 
@@ -152,10 +156,6 @@ const isTransparent = (node: GoFishAST): boolean =>
   node.children.length > 0 &&
   !BAKE_BOUNDARY_TYPES.has((node as { type?: string }).type ?? "") &&
   !(node instanceof GoFishNode && node._label !== undefined);
-
-/** The `_zOrder` hint of a node (0 for a `GoFishRef`). */
-const zOf = (node: GoFishAST): number =>
-  node instanceof GoFishNode ? node.getZOrder() : 0;
 
 /** Does this node DECLARE y-up (issue #629)? A node declares y-up iff its own
  *  resolved y underlying space is CONTINUOUS — a value axis, a datum-positioned
@@ -248,12 +248,6 @@ const resolveNodeFlip = (
     node instanceof GoFishNode ? node._rootFlipScope : undefined;
   return rootScope ?? scopeBox(node, composedTy);
 };
-
-/** A z-order paint unit plus the flip scope active at its PARENT in the real
- *  tree (issue #629): {@link flattenForZOrder}'s `payload` carries the flip scope
- *  through each hoisted-through plain layer, so a unit hoisted out from under a
- *  continuous-y (or `coord`) layer still lowers under that layer's scope. */
-type ScopedPaintItem = PaintItem<FlipScope | undefined>;
 
 /**
  * Flatten a resolved scenegraph into an ordered list of `DisplayObject`s.
@@ -349,52 +343,29 @@ export const bake = (
       return;
     }
 
-    const children = (node as GoFishNode).children;
-    const zConstraints = ((node as GoFishNode).constraints ?? []).filter(
-      isZOrderConstraint
-    );
-
-    if (zConstraints.length > 0) {
-      // Resolve z WITHIN this layer over its component-granular flattened
-      // subtree (the same units the legacy layer render topo-sorted), then
-      // descend into each unit — components keep their internal order.
-      // `flattenForZOrder`'s `fold` carries the flip scope through each
-      // hoisted-through plain layer so a unit lowers under the SAME scope it
-      // would without the constraint (issue #629): the z-order hoist must never
-      // change orientation.
-      const sorted = topoSortByZOrder<ScopedPaintItem>(
-        flattenForZOrder<FlipScope | undefined>(children, {
-          seed: nodeFlip,
-          onHoist: (incomingFlip, layer, _accTx, accTy) =>
-            resolveNodeFlip(layer, composedTranslate[1] + accTy, incomingFlip),
-        }),
-        zConstraints,
-        {
-          node: (it) => it.node,
-          z: (it) => it.defaultZ,
-          order: (it) => it.defaultOrder,
-        }
+    // Resolve this transparent layer's draw order with the shared rule (z-order
+    // LOCAL to the layer, #676), then descend into each unit; `accTranslate`
+    // carries the translate of any transparent ancestors hoisted over a unit.
+    // The fold threads the flip scope through each hoisted-through plain layer
+    // so a unit lowers under the SAME scope it would without the constraint
+    // (issue #629): the z-order hoist must never change orientation. Plain
+    // (un-hoisted) children carry the seed (`nodeFlip`).
+    for (const { node: child, accTranslate, payload } of orderChildrenForPaint<
+      FlipScope | undefined
+    >(node, {
+      seed: nodeFlip,
+      onHoist: (incomingFlip, layer, _accTx, accTy) =>
+        resolveNodeFlip(layer, composedTranslate[1] + accTy, incomingFlip),
+    })) {
+      walk(
+        child,
+        [
+          composedTranslate[0] + accTranslate[0],
+          composedTranslate[1] + accTranslate[1],
+        ],
+        composedScale,
+        payload
       );
-      for (const unit of sorted) {
-        walk(
-          unit.node,
-          [
-            composedTranslate[0] + unit.accTranslate[0],
-            composedTranslate[1] + unit.accTranslate[1],
-          ],
-          composedScale,
-          unit.payload
-        );
-      }
-      return;
-    }
-
-    // Plain layer: paint children in (local zOrder, index) order.
-    const ordered = children
-      .map((child, index) => ({ child, index }))
-      .sort((a, b) => zOf(a.child) - zOf(b.child) || a.index - b.index);
-    for (const { child } of ordered) {
-      walk(child, composedTranslate, composedScale, nodeFlip);
     }
   };
 

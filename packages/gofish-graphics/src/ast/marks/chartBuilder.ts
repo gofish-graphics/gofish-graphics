@@ -408,19 +408,16 @@ export class ChartBuilder<TInput, TOutput = TInput> {
   }
 
   /** The render-time metadata threaded from the root tier: resolved axes/color
-   *  config plus inferred axis titles. `LayerBuilder` uses this so a `.layer()`
-   *  chart titles its axes (e.g. an x "lake" title from the root `spread`); the
-   *  Python parity harness reads the same from the first child chart so both
-   *  languages render the title. */
+   *  config. `LayerBuilder` uses this so a `.layer()` chart inherits the root
+   *  axes/color config. Axis titles are inferred downstream from each resolved
+   *  space's `measure` (see `gofish`), so no field-name hint is threaded here. */
   renderMeta(): {
     axes?: AxesOptions;
     colorConfig?: ColorConfig;
-    axisFields: { x?: string; y?: string };
   } {
     return {
       axes: this.options?.axes,
       colorConfig: this.options?.color,
-      axisFields: this.inferAxisFields(),
     };
   }
 
@@ -582,32 +579,14 @@ export class ChartBuilder<TInput, TOutput = TInput> {
     );
   }
 
-  // Auto-infer axis titles from field encodings on the mark and operators.
-  // Mark fields take priority (they encode measured values, e.g. h: "count");
-  // operator fields fill remaining gaps (grouping/layout, e.g. spread by "lake").
-  private inferAxisFields(): { x?: string; y?: string } {
-    const axisFields: { x?: string; y?: string } = {};
-    const markMeta = (this.finalMark as any)?.__axisFields as
-      | { x?: string; y?: string }
-      | undefined;
-    if (markMeta?.x) axisFields.x ??= markMeta.x;
-    if (markMeta?.y) axisFields.y ??= markMeta.y;
-    for (const op of this.operators) {
-      const meta = (op as any).__axisFields as
-        | { x?: string; y?: string }
-        | undefined;
-      if (meta?.x) axisFields.x ??= meta.x;
-      if (meta?.y) axisFields.y ??= meta.y;
-    }
-    return axisFields;
-  }
-
   // The chart-level options every terminal threads through to the node:
-  // resolved axes/color config plus the inferred axis fields.
+  // resolved axes/color config. Axis titles are inferred downstream from each
+  // resolved space's `measure` (see `gofish`) — both continuous (channel field)
+  // and ordinal (grouping field) spaces carry one — so no field-name hint is
+  // threaded from the builder anymore.
   private async resolveForRender<T extends Record<string, unknown>>(
     options: T
   ): Promise<{ node: GoFishNode; options: T & Record<string, unknown> }> {
-    const axisFields = this.inferAxisFields();
     const node = await this.resolve();
     return {
       node,
@@ -618,7 +597,6 @@ export class ChartBuilder<TInput, TOutput = TInput> {
         ...options,
         axes: this.options?.axes,
         colorConfig: this.options?.color,
-        axisFields,
       },
     };
   }
@@ -797,10 +775,9 @@ export class LayerBuilder {
   ): Promise<{ node: GoFishNode; options: T & Record<string, unknown> }> {
     const node = await this.resolve();
     const meta = this.tiers[0].renderMeta();
-    // Thread axes/color/axisFields from the root tier so a `.layer()` chart
-    // titles its axes (e.g. an x "lake" title from the root `spread`). The
-    // Python parity harness mirrors this off the first child chart so both
-    // languages render the same titles.
+    // Thread axes/color from the root tier so a `.layer()` chart inherits the
+    // root config. Axis titles derive downstream from each resolved space's
+    // `measure`, so no field-name hint is threaded here.
     return {
       node,
       options: {
@@ -809,7 +786,6 @@ export class LayerBuilder {
         ...options,
         axes: (options as any).axes ?? meta.axes,
         colorConfig: meta.colorConfig,
-        axisFields: meta.axisFields,
       },
     };
   }

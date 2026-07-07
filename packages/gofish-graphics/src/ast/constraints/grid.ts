@@ -39,6 +39,10 @@ export interface GridOptions {
   spacing?: number | [number, number];
   colKeys?: string[];
   rowKeys?: string[];
+  /** Grouping fields (table's `by.x`/`by.y`) → the col/row ORDINAL measures, so
+   *  the table axes name themselves off their own spaces. */
+  colMeasure?: string;
+  rowMeasure?: string;
 }
 
 export interface GridConstraint {
@@ -48,6 +52,8 @@ export interface GridConstraint {
   ySpacing: number;
   colKeys?: string[];
   rowKeys?: string[];
+  colMeasure?: string;
+  rowMeasure?: string;
   /** Cells in row-major order (index i → column i % numCols, row ⌊i/numCols⌋). */
   children: ConstraintRef[];
 }
@@ -64,6 +70,8 @@ export const createGridConstraint = (
     ySpacing: Array.isArray(sp) ? sp[1] : sp,
     colKeys: options.colKeys,
     rowKeys: options.rowKeys,
+    colMeasure: options.colMeasure,
+    rowMeasure: options.rowMeasure,
     children,
   };
 };
@@ -154,7 +162,7 @@ export function gridSpaces(
           keyAt(r * c.numCols)
         ).filter((k): k is string => k !== undefined);
   return [
-    colKeys.length > 0 ? ORDINAL(colKeys) : UNDEFINED,
-    rowKeys.length > 0 ? ORDINAL(rowKeys) : UNDEFINED,
+    colKeys.length > 0 ? ORDINAL(colKeys, c.colMeasure) : UNDEFINED,
+    rowKeys.length > 0 ? ORDINAL(rowKeys, c.rowMeasure) : UNDEFINED,
   ];
 }

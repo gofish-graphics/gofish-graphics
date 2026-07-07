@@ -152,11 +152,12 @@ Walking `createOperator.ts:391-415`:
 5. **Inject the grouping measure** — `by` is stripped, but a grouping operator
    needs its field to name the ORDINAL axis it builds. So the resolved per-axis
    grouping field (`cfg.axisFields?.(opts)`, e.g. `{ x: "lake" }`) is passed
-   through to the low-level layout in opts (as `__axisFields`), where the node
+   through to the low-level layout in opts as `axisMeasures`, where the node
    builder stamps it onto the ORDINAL space's `measure` — the discrete analogue
-   of a continuous channel's field becoming its space's measure. (`axisFields`
-   is also the source the chart-builder uses as a fallback hint for axis titles
-   when a space carries no measure — see [layout passes](/internals/layout/passes).)
+   of a continuous channel's field becoming its space's measure. That measure is
+   the sole source for the axis title (a continuous space's unit or an ordinal
+   space's grouping field); there is no longer any field-name title _hint_ or
+   fallback (the former `__axisFields` tag is gone).
 6. **Combine** — call the low-level `layout` with the encoded opts and the
    array of child nodes.
 

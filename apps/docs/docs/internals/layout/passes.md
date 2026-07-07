@@ -40,7 +40,7 @@ const runGofish = async (): Promise<LayoutData> => {
     };
 
     const layoutResult = await layout(
-      { w, h, x, y, transform, debug, defs, axes, axisFields },
+      { w, h, x, y, transform, debug, defs, axes },
       child,
       contexts
     );
@@ -237,7 +237,14 @@ if (!isValue(dims[0].min) && !isValue(dims[0].size)) {
 **Location**: `src/ast/gofish.tsx` (`layout()`), `src/ast/axes/elaborate.tsx`
 
 If the chart-level `axes` option enables a dimension, `resolveAxes` walks the
-tree top-down flagging which node _owns_ an axis on each dimension,
+tree top-down flagging which node _owns_ an axis on each dimension. Ownership
+records a **signature** per claimed dim: a continuous axis claims it opaquely
+(single-owner — the root-most one wins, descendants defer to the chart-level
+scale), but ordinal axes **nest** — a node claims its own ordinal axis even
+under an ancestor ordinal axis, as long as it is a _different_ grouping (a finer
+level). So a grouped or faceted chart renders one ordinal axis per grouping
+level (per facet) — e.g. a `spread(lake)`+`stack(species)` bar gets an outer
+`lake` axis and a per-lake `species` axis. Then
 `resolveNiceDomains` rounds POSITION domains to tick-friendly bounds, and then
 `elaborateAxes` **rewrites the tree**: each axis-owning node is wrapped in
 `Layer` tiers containing ordinary `rect`/`text`/`spread` axis shapes wired with
@@ -251,12 +258,15 @@ See [Axes](/internals/frontend/axes) for the full elaboration story (the
 two-tier structure, origin pins, negative-space gutters, and the
 continuous/difference/ordinal kinds).
 
-**Axis-title elaboration** follows the axis block (after the nice-space capture)
-and runs _before_ the legend. The title _text_ for each dim is read off the
-**resolved space's `measure`** (`resolveAxisTitles` over `spaceMeasure(rootSpace)`)
-— a continuous axis names itself by its unit, an ordinal axis by its grouping
-field — falling back to the syntactic `axisFields` hint (mark/operator field
-names) only when the space carries no measure. `elaborateAxisTitles` then wraps
+**Axis-title elaboration** follows the axis block and runs _before_ the legend.
+The chart-level title _text_ for each dim is read off the **resolved space's
+`measure`** — a continuous axis names itself by its unit, an ordinal axis by its
+grouping field. There is no syntactic field-name fallback: a space with no
+measure simply has no title. The measure is captured **pre-elaboration** (before
+the axis block inserts the inner per-facet ordinal axis nodes, whose finer
+grouping would otherwise bubble up and win the root union), so the chart-level
+title names the OUTERMOST grouping (`lake`, not the inner `species`).
+`elaborateAxisTitles` then wraps
 the chart in one more
 `Layer` carrying up to two title `Text` nodes — the x-title horizontal below the
 plot, the y-title rotated to read bottom-to-top in the left gutter — each
