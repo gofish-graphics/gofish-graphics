@@ -70,8 +70,19 @@ function descend(
 When the recursion reaches a **leaf**, it writes the accumulated transform back onto
 the node and returns it as a one-element list. A node counts as a leaf when it has no
 children — or when it is a `connect` or `box` node, which are deliberately treated as
-opaque (see the caveats below). Internal nodes simply `flatMap` the recursion over
-their children, so the whole tree bottoms out into a single flat array.
+opaque (see the caveats below). Internal nodes `flatMap` the recursion over their
+children, so the whole tree bottoms out into a single flat array.
+
+The recursion does **not** visit children in raw array order — it orders them first
+with the very same paint-order rule the root bake uses (`orderChildrenForPaint` in
+`paintOrder.ts`): a `(zOrder, index)` sort, or a `topoSortByZOrder` over the layer's
+`zAbove` / `zBelow` constraints. This is what makes `zOrder(-1)` (and z constraints)
+take effect **inside** a coordinate transform. It was left out for a long time — the
+coord-local flatten walked children in array order, so a gotree link's `.zOrder(-1)`
+(links-under-nodes) was silently a no-op under `coord: polar()`
+([#676](https://github.com/gofish-graphics/gofish-graphics/issues/676)). Ordering is
+LOCAL to each layer, exactly as in the root bake (below); only the leaf/boundary rules
+differ between the two flatteners.
 
 Two design notes from the source worth knowing:
 
@@ -116,7 +127,10 @@ which the render entry maps over directly.
   whole and hoists only plain nested layers) then a `(zOrder, index)` sort or a
   `topoSortByZOrder` over its own `zAbove` / `zBelow` constraints — and only then
   descends into each unit, so a component keeps its internal order. Transforms still
-  compose all the way to the leaves; only the _ordering_ is per-layer.
+  compose all the way to the leaves; only the _ordering_ is per-layer. This ordering
+  is the shared `orderChildrenForPaint` helper — the coord-local `flattenLayout` calls
+  the exact same function, so draw order is resolved identically inside and outside a
+  coordinate transform (one rule, not two copies).
 
 This root bake is the first step toward a serializable [display
 list](/internals/core/rendering) (the render IR): once each draw entry is a

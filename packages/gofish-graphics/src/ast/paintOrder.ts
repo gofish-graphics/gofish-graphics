@@ -5,6 +5,7 @@
 import { GoFishNode } from "./_node";
 import type { GoFishAST } from "./_ast";
 import { isToken } from "./createName";
+import { isZOrderConstraint } from "./constraints/zorder";
 import type { ZOrderConstraint } from "./constraints/zorder";
 
 /**
@@ -79,6 +80,55 @@ export function flattenForZOrder(children: GoFishAST[]): PaintItem[] {
       }
     }
   }
+}
+
+/** A child of a transparent layer, in resolved paint order, paired with the
+ *  translate accumulated across any transparent ancestors hoisted over it (0,0
+ *  for a plain-index-ordered child). Both the root `bake` and the coord-local
+ *  `flattenLayout` recurse into these in order, adding `accTranslate` to the
+ *  transform they compose down. */
+export type PaintChild = { node: GoFishAST; accTranslate: [number, number] };
+
+/**
+ * Resolve the draw order of a layer's children — the ONE rule shared by the
+ * root `bake`'s `walk` and the coord-local `flattenLayout`, so z-order is
+ * honored identically inside and outside a coordinate transform.
+ *
+ * If the layer carries `zAbove`/`zBelow` constraints, order its
+ * component-granular flattened subtree topologically (hoisting nested plain
+ * layers, accumulating their translate). Otherwise paint children in
+ * `(local zOrder, index)` order. z-order is LOCAL to this layer either way.
+ */
+export function orderChildrenForPaint(node: GoFishAST): PaintChild[] {
+  if (!("children" in node) || !node.children) return [];
+  const children = node.children;
+  const zConstraints = (
+    (node instanceof GoFishNode ? node.constraints : undefined) ?? []
+  ).filter(isZOrderConstraint);
+
+  if (zConstraints.length > 0) {
+    // Resolve z WITHIN this layer over its component-granular flattened
+    // subtree (the same units the legacy layer render topo-sorted).
+    return topoSortByZOrder(flattenForZOrder(children), zConstraints, {
+      node: (it) => it.node,
+      z: (it) => it.defaultZ,
+      order: (it) => it.defaultOrder,
+    }).map((unit) => ({ node: unit.node, accTranslate: unit.accTranslate }));
+  }
+
+  // Plain layer: paint children in (local zOrder, index) order.
+  return children
+    .map((child, index) => ({ child, index }))
+    .sort(
+      (a, b) =>
+        (a.child instanceof GoFishNode ? a.child.getZOrder() : 0) -
+          (b.child instanceof GoFishNode ? b.child.getZOrder() : 0) ||
+        a.index - b.index
+    )
+    .map(({ child }) => ({
+      node: child,
+      accTranslate: [0, 0] as [number, number],
+    }));
 }
 
 /** The resolved string name of a node (`.name("…")`), or undefined for an

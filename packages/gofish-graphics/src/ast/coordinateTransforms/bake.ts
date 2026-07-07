@@ -6,8 +6,7 @@ import type { GoFishAST } from "../_ast";
 import type { DisplayObject } from "../_displayObject";
 import type { Transform } from "../dims";
 import { GoFishNode } from "../_node";
-import { isZOrderConstraint } from "../constraints/zorder";
-import { flattenForZOrder, topoSortByZOrder } from "../paintOrder";
+import { orderChildrenForPaint } from "../paintOrder";
 
 /** The node's parent-frame translate as the bake should compose it, via the
  *  polymorphic `projectedTranslate`: a `GoFishNode` reports the LEDGER projection
@@ -80,8 +79,17 @@ export const flattenLayout = (
     (node.transform?.scale?.[1] ?? 1) * (scale[1] ?? 1),
   ];
 
-  return node.children.flatMap((child) =>
-    flattenLayout(child, newTransform, newScale)
+  // Resolve draw order the same way the root bake does (z-order LOCAL to this
+  // layer), so `.zOrder(-1)` and `zAbove`/`zBelow` are honored inside a
+  // coordinate transform, not silently dropped (#676). `accTranslate` carries
+  // the translate of any transparent nested layers hoisted over a child by the
+  // z-constraint flatten, matching how the root bake composes it.
+  return orderChildrenForPaint(node).flatMap(({ node: child, accTranslate }) =>
+    flattenLayout(
+      child,
+      [newTransform[0] + accTranslate[0], newTransform[1] + accTranslate[1]],
+      newScale
+    )
   );
 };
 
@@ -147,10 +155,6 @@ const isTransparent = (node: GoFishAST): boolean =>
   !BAKE_BOUNDARY_TYPES.has((node as { type?: string }).type ?? "") &&
   !(node instanceof GoFishNode && node._label !== undefined);
 
-/** The `_zOrder` hint of a node (0 for a `GoFishRef`). */
-const zOf = (node: GoFishAST): number =>
-  node instanceof GoFishNode ? node.getZOrder() : 0;
-
 /**
  * Flatten a resolved scenegraph into an ordered list of `DisplayObject`s.
  *
@@ -189,43 +193,18 @@ export const bake = (root: GoFishAST): DisplayObject[] => {
       return;
     }
 
-    const children = (node as GoFishNode).children;
-    const zConstraints = ((node as GoFishNode).constraints ?? []).filter(
-      isZOrderConstraint
-    );
-
-    if (zConstraints.length > 0) {
-      // Resolve z WITHIN this layer over its component-granular flattened
-      // subtree (the same units the legacy layer render topo-sorted), then
-      // descend into each unit — components keep their internal order.
-      const sorted = topoSortByZOrder(
-        flattenForZOrder(children),
-        zConstraints,
-        {
-          node: (it) => it.node,
-          z: (it) => it.defaultZ,
-          order: (it) => it.defaultOrder,
-        }
+    // Resolve this transparent layer's draw order with the shared rule (z-order
+    // LOCAL to the layer), then descend into each unit; `accTranslate` carries
+    // the translate of any transparent ancestors hoisted over a unit.
+    for (const { node: child, accTranslate } of orderChildrenForPaint(node)) {
+      walk(
+        child,
+        [
+          composedTranslate[0] + accTranslate[0],
+          composedTranslate[1] + accTranslate[1],
+        ],
+        composedScale
       );
-      for (const unit of sorted) {
-        walk(
-          unit.node,
-          [
-            composedTranslate[0] + unit.accTranslate[0],
-            composedTranslate[1] + unit.accTranslate[1],
-          ],
-          composedScale
-        );
-      }
-      return;
-    }
-
-    // Plain layer: paint children in (local zOrder, index) order.
-    const ordered = children
-      .map((child, index) => ({ child, index }))
-      .sort((a, b) => zOf(a.child) - zOf(b.child) || a.index - b.index);
-    for (const { child } of ordered) {
-      walk(child, composedTranslate, composedScale);
     }
   };
 
