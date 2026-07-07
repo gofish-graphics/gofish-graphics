@@ -319,6 +319,7 @@ export const FRONTEND_IR_JSON_SCHEMA = {
             "group",
             "table",
             "layer",
+            "enclose",
             "arrow",
             "connect",
             "treemap",

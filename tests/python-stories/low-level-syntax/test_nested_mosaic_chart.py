@@ -52,11 +52,11 @@ def story_default():
         spread(
             [_class_row(cls, items) for cls, items in group_by(TITANIC, "class").items()],
             dir="y",
-            # y-down free space: reverse so the first class (First) reads at the
-            # top and Crew at the bottom.
+            # The class axis is ORDINAL, so it stays y-down (reads top→bottom) —
+            # the first class (First) is at the top and Crew at the bottom
+            # natively (#629), no reverse needed.
             spacing=4,
             alignment="start",
-            reverse=True,
         ),
         {"axes": True},
     )

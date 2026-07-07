@@ -64,14 +64,15 @@ import { envFlag } from "../util";
 import { nice } from "d3-array";
 import type { ScaleContext } from "./gofish";
 import type { TokenContext } from "./tokenContext";
+import type { FlipScope } from "./_displayObject";
 import { isToken, Token } from "./createName";
 import type { ConstraintSpec, ConstraintRef } from "./constraints";
 import { collectConstraintRefs } from "./constraints";
 import {
   BBox,
-  type BBoxFacet,
+  type BBoxKey,
   type BBoxConflict,
-  type FacetValue,
+  type BBoxValue,
 } from "./constraints/bbox";
 import {
   assignPaletteColor,
@@ -90,6 +91,17 @@ export type RenderSession = {
   /** Set by the lower emit driver (`lowerToDisplayList`) for the duration of a
    *  lowering walk: the y-up→y-down pixel mapping every `lower` body uses. */
   toPixel?: ToPixel;
+  /** The per-scope `toPixel` factory (issue #629): `flip → ToPixel`, built once by
+   *  the render terminal from the viewport. A BAKE BOUNDARY reads it to re-lower
+   *  its child subtree through the scope walk (`bake`) and install each descendant
+   *  scope's own map — so a continuous-y subtree inside an UNDEFINED-y boundary
+   *  (`enclose`/`arrow`/`connect`) still flips, instead of inheriting the
+   *  boundary's single (y-down) map. Set by `lowerToDisplayList`. */
+  toPixelFor?: (flip?: FlipScope) => ToPixel;
+  /** The flip scope of the draw entry currently being lowered (issue #629) — the
+   *  boundary's own scope, seeded into its child re-bake so descendants inherit it
+   *  unless they open their own. Set by `lowerToDisplayList` per baked entry. */
+  flip?: FlipScope;
 };
 
 export type ScaleFactorFunction = Monotonic.Monotonic;
@@ -128,13 +140,13 @@ export type Placeable = {
    *  chrome). */
   placementOn?: (dir: Direction) => Placement | undefined;
   place: (axis: FancyDirection, value: number, anchor?: Anchor) => void;
-  /** Write an axis extent from owned bbox facets (the size-setting primitive
+  /** Write an axis extent from owned bbox keys (the size-setting primitive
    *  #39 — `span` and an authoritative `position` pin go through it). Optional
    *  because not every placeable shape implements it (a `ref` stand-in doesn't);
    *  it is only ever invoked on real `GoFishNode` constraint targets. */
   setExtent?: (
     axis: FancyDirection,
-    owned: Partial<Record<BBoxFacet, number>>,
+    owned: Partial<Record<BBoxKey, number>>,
     owner?: string
   ) => void;
   /** Authoritative override pin (#39): land `anchor` at `value`, rebuilding the
@@ -200,21 +212,21 @@ export type ResolveUnderlyingSpace = (
 
 /** Dev gate (#39, placement pass): set `GOFISH_CONFLICT_CHECK=1` to surface
  *  OVER-DETERMINATION the `BBox` ledger detects but the placement commit silently
- *  absorbs — a single owner writing inconsistent facets on an axis (the
+ *  absorbs — a single owner writing inconsistent keys on an axis (the
  *  authority-independent half of "conflicts → named"). Off / zero-cost in prod. */
 const CONFLICT_CHECK = envFlag("GOFISH_CONFLICT_CHECK");
 
 const _conflicts = new Set<string>();
-/** Report a `BBox` over-determination (a facet pinned inconsistent with the
- *  already-determined axis), once per (type, axis, facet). The placement pass's
+/** Report a `BBox` over-determination (a box key pinned inconsistent with the
+ *  already-determined axis), once per (type, axis, key). The placement pass's
  *  "named conflict instead of silent last-writer-wins" — for the single-owner
  *  case; cross-constraint authority is the open fork (#583). */
 const reportConflict = (type: string, dir: 0 | 1, c: BBoxConflict): void => {
-  const key = `${type}|${dir}|${c.facet}`;
+  const key = `${type}|${dir}|${c.key}`;
   if (_conflicts.has(key)) return;
   _conflicts.add(key);
   console.warn(
-    `[bbox-conflict] ${type} axis ${dir} ${c.facet}: asserted=${c.asserted} implied=${c.implied} (owner=${c.owner} prior=${c.priorOwner})`
+    `[bbox-conflict] ${type} axis ${dir} ${c.key}: asserted=${c.asserted} implied=${c.implied} (owner=${c.owner} prior=${c.priorOwner})`
   );
 };
 
@@ -248,12 +260,57 @@ export class GoFishNode {
   public children: GoFishAST[];
   public intrinsicDims?: Dimensions;
   public transform?: Transform;
-  /** Persistent per-axis bbox ledger (#39 stage 2). Records the facet equations
-   *  that determine this node's box, so it mirrors the authoritative
+  /** The pixel size this node was ALLOCATED by its parent (the `size` handed to
+   *  `layout()`) — the extent of its coordinate frame, which for a continuous
+   *  axis is the posScale's pixel range (canvas height for the root, cell height
+   *  for a facet). The y-up flip scope (#629) mirrors about this, NOT the content
+   *  bbox (`intrinsicDims.size`, which shrinks to the tallest bar). An UNSIZED
+   *  (NaN) axis leaves it undefined. */
+  public _allocatedSize?: Size;
+  /** This node and its subtree are CHROME that seats in the AMBIENT y-down frame,
+   *  NOT in the plot's y-up flip scope (issue #629). Set by the chrome-elaboration
+   *  passes (axis titles, the legend swatch column, the colorbar) on the shapes
+   *  they synthesize: those describe the plot from the outside and read top→bottom
+   *  regardless of whether the plot's value axis grows upward. The bake walk resets
+   *  the active flip scope to ambient when it enters such a subtree, so a titled /
+   *  legended y-up chart flips only its DATA marks (and their in-plot labels),
+   *  while the legend column and rotated axis titles stay y-down. The plot content
+   *  itself is NOT flagged, so it still flips. Only `options.yUp` (a global y-up
+   *  ambient) overrides — see the ambient seed in `render`. */
+  public _ambientYDown?: boolean;
+  /** This node UNIONS a continuous y up but does not ESTABLISH it — a chrome
+   *  wrapper (the axis-title / legend layer) that seats the plot content plus its
+   *  chrome siblings (issue #629). It is scope-TRANSPARENT for the y-up flip: the
+   *  bake walk does NOT open a scope here (its bbox includes the chrome, so it is
+   *  the wrong mirror band), but descends to the plot content it wraps — whose
+   *  frame is the canvas `finalH` — which opens the scope. Set by the chrome
+   *  elaboration passes. Distinct from `_ambientYDown` (which resets to y-down);
+   *  a scope-transparent node's CONTENT child still flips. */
+  public _scopeTransparent?: boolean;
+  /** The authoritative canvas y-flip frame for the ROOT plot content (issue
+   *  #629): `{ baseY: 0, height: finalH }`, stamped by `layout()` on `contentNode`
+   *  once `finalH = contentNode.dims.size` is known. This is the exact frame the
+   *  old global flip mirrored about (`toDisplayList`'s `data.height`) — the canvas
+   *  origin, NOT the node's placed bbox min, which a shrink-to-fit pin can offset
+   *  from 0. The bake walk uses it when the root content opens the flip scope; a
+   *  scope opening deeper (a facet cell) has no stamp and mirrors about its own
+   *  allocated band. `{baseY, height}` mirrors `FlipScope` in `_displayObject`. */
+  public _rootFlipScope?: { baseY: number; height: number };
+  /** The plot's flip frame a chrome subtree's BOX is mirrored about (issue #629).
+   *  Stamped by `layout()` on each OUTERMOST `_ambientYDown` chrome node (axis
+   *  title, legend column, colorbar) — the same value as the plot content's
+   *  `_rootFlipScope` — so the bake reads it directly (`node._chromeFrame`)
+   *  instead of searching up through the scope-transparent wrappers on every
+   *  visit. Only set when the plot mirrors (`contentFlipsY`); a chrome subtree
+   *  with no frame passes through unmirrored. `{baseY, height}` mirrors
+   *  `FlipScope`. */
+  public _chromeFrame?: { baseY: number; height: number };
+  /** Persistent per-axis bbox ledger (#39 stage 2). Records the box-key
+   *  equations that determine this node's box, so it mirrors the authoritative
    *  `(intrinsicDims, transform)`: `layout()` seeds the self-layout size (+ a
    *  self-placed absolute min), `_pinAnchor` records the absolute anchor a pin
    *  lands at, and a rank-2 `setExtent` resets the axis to its determining
-   *  facets (overriding the self-layout seed). Lazily created (the hot single
+   *  keys (overriding the self-layout seed). Lazily created (the hot single
    *  pin / `place()` path allocates only on first touch). As of stage 2 the
    *  `dims` getter READS from this ledger wherever an axis is fully solved
    *  (falling back to the `(intrinsicDims, transform)` split otherwise); render
@@ -508,7 +565,7 @@ export class GoFishNode {
    */
   /**
    * Top-down pass that resolves coordinate-space axis aliases (e.g. polar
-   * `theta`/`r`/`thetaSize`/`rSize`) into the canonical `x/y/w/h` facets of each
+   * `theta`/`r`/`thetaSize`/`rSize`) into the canonical `x/y/w/h` channels of each
    * mark's `dims`. Mirrors {@link resolveAxes}: it carries the `active` alias
    * scope downward, rebinding it at every `coord` node that declares aliases
    * (a nested coord rebinds for its subtree).
@@ -546,7 +603,7 @@ export class GoFishNode {
         if (dims) {
           dims[res.axis] = {
             ...dims[res.axis],
-            [res.facet]: value,
+            [res.key]: value,
           };
         }
       }
@@ -748,6 +805,7 @@ export class GoFishNode {
     // Axes are no longer drawn here: they are elaborated into ordinary shapes +
     // constraints by `elaborateAxes` (src/ast/axes/elaborate.tsx) before layout,
     // so the layout engine has no axis-specific budget/baseline machinery.
+    this._allocatedSize = size; // frame extent for the y-up flip scope (#629)
     const { intrinsicDims, transform, renderData } = this._layout(
       this.shared,
       size,
@@ -773,10 +831,11 @@ export class GoFishNode {
       if (id?.size === undefined && id?.min === undefined) continue;
       this._bbox ??= [undefined, undefined];
       const ledger = (this._bbox[dir] ??= new BBox());
-      if (id?.size !== undefined) this._addFacet(ledger, dir, "size", id.size);
+      if (id?.size !== undefined)
+        this._addEquation(ledger, dir, "size", id.size);
       const tr = this.transform?.translate?.[dir];
       if (tr !== undefined && id?.min !== undefined)
-        this._addFacet(ledger, dir, "min", tr + id.min);
+        this._addEquation(ledger, dir, "min", tr + id.min);
       // Stage 3 (#39): the ledger now records the operator's self-placement
       // (`min = translate + localMin`), so retire the redundant written translate
       // — wholesale, at the one wrapper every operator `_layout` flows through,
@@ -813,7 +872,7 @@ export class GoFishNode {
         center: localAnchorPoint("center", min, size),
         max: localAnchorPoint("max", min, size),
         size,
-        // `embedded` is a layout-fold flag, never a ledger facet — read it from
+        // `embedded` is a layout-fold flag, never a ledger key — read it from
         // the local box (see the stage-2 invariants in the essay).
         embedded: this.intrinsicDims?.[dir]?.embedded,
       };
@@ -854,18 +913,18 @@ export class GoFishNode {
       this.transform.translate[dir] = undefined;
   }
 
-  /** Add a facet equation to a per-axis ledger, surfacing any over-determination
+  /** Add a box-key equation to a per-axis ledger, surfacing any over-determination
    *  the `BBox` detects (the placement pass's "named conflict, not silent
    *  last-writer" — single-owner case; observe-only behind GOFISH_CONFLICT_CHECK).
    *  Every ledger write goes through here so no conflict is silently dropped. */
-  private _addFacet(
+  private _addEquation(
     box: BBox,
     dir: Direction,
-    facet: BBoxFacet,
-    value: FacetValue,
+    key: BBoxKey,
+    value: BBoxValue,
     owner?: string
   ): void {
-    const conflict = box.add(facet, value, owner);
+    const conflict = box.add(key, value, owner);
     if (CONFLICT_CHECK && conflict)
       reportConflict(this.type, dir as 0 | 1, conflict);
   }
@@ -954,16 +1013,16 @@ export class GoFishNode {
   }
 
   /**
-   * Write a node's per-axis extent from OWNED bbox facets (min/max/center/size)
+   * Write a node's per-axis extent from OWNED bbox keys (min/max/center/size)
    * — the bbox-backed primitive that `span` and an authoritative `position` pin
-   * share (#39). Two or more owned facets DETERMINE the box (size included — the
+   * share (#39). Two or more owned keys DETERMINE the box (size included — the
    * size-setting case, e.g. span's two edges), so the local box is reset to
-   * `[0, size]` and the translate to the absolute min. A single owned facet is a
+   * `[0, size]` and the translate to the absolute min. A single owned key is a
    * position pin: the size comes from the node's own layout (the second
    * equation), the local box is left intact, and only the translate moves — so
    * the pin OVERRIDES a self-placed translate, which the write-once `place()`
-   * cannot. Anchor facets map start→min, end→max, middle→center; `baseline`
-   * (the origin) is not a bbox facet, so a baseline pin still uses `place()`.
+   * cannot. Anchor keys map start→min, end→max, middle→center; `baseline`
+   * (the origin) is not a bbox key, so a baseline pin still uses `place()`.
    *
    * The rank-2 solve writes through the PERSISTENT per-axis ledger
    * ({@link _bbox}) so it mirrors the node's authoritative geometry — a
@@ -977,41 +1036,41 @@ export class GoFishNode {
    */
   public setExtent(
     axis: FancyDirection,
-    owned: Partial<Record<BBoxFacet, number>>,
+    owned: Partial<Record<BBoxKey, number>>,
     owner?: string
   ): void {
     const dir = elaborateDirection(axis);
-    const facets = (
-      Object.entries(owned) as [BBoxFacet, number | undefined][]
-    ).filter((e): e is [BBoxFacet, number] => e[1] !== undefined);
-    if (facets.length === 0) return;
+    const keys = (
+      Object.entries(owned) as [BBoxKey, number | undefined][]
+    ).filter((e): e is [BBoxKey, number] => e[1] !== undefined);
+    if (keys.length === 0) return;
 
     const intrinsic = this.intrinsicDims?.[dir];
-    const sizeOwned = facets.length >= 2;
+    const sizeOwned = keys.length >= 2;
 
     if (!sizeOwned) {
-      // Rank-1 position pin: a single anchor facet lands at its value; the size
+      // Rank-1 position pin: a single anchor key lands at its value; the size
       // is the node's own layout (the second equation). No BBox needed — the
       // anchor's local point is derived directly, the SAME `localAnchorPoint`
       // arithmetic `place()` uses, so the two paths can't diverge (and the hot
       // pin path allocates nothing). The local box is left intact; only the
       // translate moves, so the pin OVERRIDES a self-placed translate.
-      const [facet, value] = facets[0];
-      if (facet === "size") return; // a lone size can't determine a position
-      this._pinAnchor(dir, facet, value);
+      const [key, value] = keys[0];
+      if (key === "size") return; // a lone size can't determine a position
+      this._pinAnchor(dir, key, value);
       return;
     }
 
-    // Rank-2: two+ owned facets DETERMINE the box (size included). This is an
+    // Rank-2: two+ owned keys DETERMINE the box (size included). This is an
     // overriding determination — it discards whatever the node's own layout seed
     // (or an earlier pin) recorded for this axis, exactly as it resets the local
     // frame to [0, size] at the absolute min. So the persistent ledger is RESET
-    // to hold just these facets — and is now the SOLE record of this axis's
+    // to hold just these keys — and is now the SOLE record of this axis's
     // position.
     this._bbox ??= [undefined, undefined];
     const bbox = (this._bbox[dir] = new BBox());
-    for (const [facet, value] of facets)
-      this._addFacet(bbox, dir, facet, value, owner);
+    for (const [key, value] of keys)
+      this._addEquation(bbox, dir, key, value, owner);
     const absMin = bbox.read("min");
     const size = bbox.read("size");
     if (absMin === undefined || size === undefined) return; // under-determined
@@ -1043,7 +1102,7 @@ export class GoFishNode {
   }
 
   /**
-   * Pin one axis so the box's `anchor` facet lands at `value`, deriving the
+   * Pin one axis so the box's `anchor` lands at `value`, deriving the
    * anchor's local point from `(min, size)` via `localAnchorPoint`. The single
    * arithmetic shared by `place()`'s determined branch, `setExtent`'s rank-1
    * position pin, and the public {@link pinAnchor}, so the placement paths can
@@ -1070,11 +1129,11 @@ export class GoFishNode {
     if (override || !this._bbox[dir]) this._bbox[dir] = new BBox();
     const ledger = this._bbox[dir]!;
     if (intrinsic?.size !== undefined)
-      this._addFacet(ledger, dir, "size", intrinsic.size);
+      this._addEquation(ledger, dir, "size", intrinsic.size);
     if (anchor === "baseline") {
-      this._addFacet(ledger, dir, "min", value + (intrinsic?.min ?? 0));
+      this._addEquation(ledger, dir, "min", value + (intrinsic?.min ?? 0));
     } else {
-      this._addFacet(ledger, dir, anchor, value);
+      this._addEquation(ledger, dir, anchor, value);
     }
 
     // Write the pin's translate, then reconcile: on a solved axis the ledger is

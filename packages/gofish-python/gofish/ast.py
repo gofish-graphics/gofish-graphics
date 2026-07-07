@@ -1381,6 +1381,28 @@ def layer(
     return ConstrainableMark("layer", _children=list(kids), **opts)
 
 
+def enclose(children: List["Mark"], **options: Any) -> "Mark":
+    """Enclose child marks in a bordered rectangle.
+
+    A graphical wrapping operator (combinator-only, like a low-level
+    ``layer([...])`` but it draws a rounded border around its children and has
+    no ``.constrain``). Mirrors the JS ``enclose([...], {padding, rx, ry})``
+    combinator.
+
+    Args:
+        children: The child Marks to wrap.
+        **options: ``padding`` (border inset, default 2), ``rx`` / ``ry``
+            (corner radii, default 2).
+
+    Example::
+
+        enclose([
+            spread([bars, heatmap], dir="x", spacing=40),
+        ], padding=8)
+    """
+    return Mark("enclose", _children=list(children), **options)
+
+
 # Attribute names reserved on `_RefProxy` so they pass through normal
 # Python lookup (Mark fields + methods) rather than being treated as
 # selection-path segments. Hits `__getattr__` ONLY when normal lookup

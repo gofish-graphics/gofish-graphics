@@ -6,6 +6,49 @@ import type { AlignAnchor, Axis } from "./shared";
 
 export type NodeId = string;
 
+// --- Anchor program (#39 stage 5) ----------------------------------------
+// The placement fact form: facts name a node anchor directly
+// (`start`/`middle`/`end`/`baseline`), and the offset from `min` is derived in
+// the solver post-closure (once sizes are known) rather than at lowering time
+// against an already-known size. Consumed by the rank-2 solve in
+// `placementSolver.ts`.
+
+export type AnchorRef = { node: NodeId; anchor: AlignAnchor };
+
+export type AnchorPinFact = {
+  type: "anchor-pin";
+  node: NodeId;
+  axis: Axis;
+  anchor: AlignAnchor;
+  value: number;
+  owner: string;
+};
+
+export type AnchorRelationFact = {
+  type: "anchor-relation";
+  axis: Axis;
+  from: AnchorRef;
+  to: AnchorRef;
+  gap: number;
+  owner: string;
+};
+
+export type AnchorParticipantFact = {
+  type: "anchor-participant";
+  node: NodeId;
+  axis: Axis;
+  owner: string;
+};
+
+export type AnchorFact =
+  | AnchorPinFact
+  | AnchorRelationFact
+  | AnchorParticipantFact;
+
+export type AnchorProgram = { axes: [AnchorFact[], AnchorFact[]] };
+
+export const emptyAnchorProgram = (): AnchorProgram => ({ axes: [[], []] });
+
 /** A concrete anchor on one node axis. Datum coordinates have already been
  *  elaborated through the layer's scale before facts are emitted, so the raw
  *  placement algebra is numeric. */
@@ -41,13 +84,6 @@ export type PlacementPinRequest = {
   owner: string;
 };
 
-export type PlacementPin = {
-  type: "pin";
-  expr: AnchorExpr;
-  value: number;
-  owner: string;
-};
-
 export type PlacementParticipant = {
   type: "participant";
   name: NodeId;
@@ -55,45 +91,24 @@ export type PlacementParticipant = {
   owner: string;
 };
 
+/** A relation reduced to `min`-anchored form: `to.min = from.min + offset`,
+ *  after the solver substitutes each endpoint's anchor offset post-closure. The
+ *  shared difference graph consumes these. */
 export type PlacementRelation = {
   type: "relation";
-  /** `to = from + offset` after anchor offsets are evaluated. */
   from: AnchorExpr;
   to: AnchorExpr;
   offset: number;
   owner: string;
 };
 
-export type PlacementEdge = "min" | "max";
-
-export type PlacementEdgePin = {
-  type: "edge-pin";
-  name: NodeId;
-  axis: Axis;
-  edge: PlacementEdge;
-  value: number;
-  owner: string;
-};
-
-export type PlacementFact =
-  | PlacementPin
-  | PlacementRelation
-  | PlacementEdgePin
-  | PlacementParticipant;
-
-export type PlacementProgram = {
-  axes: [PlacementFact[], PlacementFact[]];
-};
-
+/** The lowering interface: constraints emit anchor pins, relations, and
+ *  participants without pre-evaluating any offset (that is the solver's job). */
 export interface PlacementFactEmitter {
   pin(request: PlacementPinRequest): void;
   include(request: PlacementParticipantRequest): void;
   relate(request: PlacementRelationRequest): void;
 }
-
-export const emptyPlacementProgram = (): PlacementProgram => ({
-  axes: [[], []],
-});
 
 export const anchorExpr = (
   node: NodeId,
@@ -101,26 +116,12 @@ export const anchorExpr = (
   anchor: AlignAnchor
 ): AnchorExpr => ({ node, axis, anchor });
 
-export const pinFact = (
-  expr: AnchorExpr,
-  value: number,
-  owner: string
-): PlacementPin => ({ type: "pin", expr, value, owner });
-
 export const relationFact = (
   from: AnchorExpr,
   to: AnchorExpr,
   offset: number,
   owner: string
 ): PlacementRelation => ({ type: "relation", from, to, offset, owner });
-
-export const edgePinFact = (
-  name: NodeId,
-  axis: Axis,
-  edge: PlacementEdge,
-  value: number,
-  owner: string
-): PlacementEdgePin => ({ type: "edge-pin", name, axis, edge, value, owner });
 
 export const participantFact = (
   name: NodeId,

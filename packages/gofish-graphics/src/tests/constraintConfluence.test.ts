@@ -17,13 +17,10 @@ import {
 } from "../ast/constraints/placementSolver";
 import {
   anchorExpr,
-  edgePinFact,
   participantFact,
-  pinFact,
   relationFact,
 } from "../ast/constraints/placementFacts";
 import type { PositionConstraint } from "../ast/constraints/position";
-import { lowerSpanEdgePins } from "../ast/constraints/span";
 import type { ZAboveConstraint } from "../ast/constraints/zorder";
 import type { Anchor, Dimensions, FancyDirection } from "../ast/dims";
 import { elaborateDirection, localAnchorPoint } from "../ast/dims";
@@ -821,34 +818,28 @@ console.log("# constraint confluence: raw placement coordinates");
   );
 }
 
-console.log("# constraint confluence: raw placement fact datatype");
+console.log("# constraint confluence: reduced placement fact datatype");
 {
+  // The difference graph consumes `min`-reduced relation/participant facts (the
+  // solver builds these from the anchor program post-closure).
   const a = anchorExpr("A", "x", "middle");
   const b = anchorExpr("B", "x", "start");
-  const pin = pinFact(a, 42, "test-pin");
   const participant = participantFact("B", "x", "test-participant");
   const relation = relationFact(a, b, 7, "test-relation");
-  const edge = edgePinFact("C", "y", "max", 30, "test-edge");
 
   ok(
-    "placement facts are numeric raw algebra terms",
-    pin.type === "pin" &&
-      typeof pin.value === "number" &&
-      participant.type === "participant" &&
+    "reduced placement facts are numeric raw algebra terms",
+    participant.type === "participant" &&
       participant.name === "B" &&
       relation.type === "relation" &&
-      typeof relation.offset === "number" &&
-      edge.type === "edge-pin" &&
-      typeof edge.value === "number"
+      typeof relation.offset === "number"
   );
   ok(
-    "placement facts retain anchor identity separately from numeric values",
+    "reduced placement facts retain anchor identity separately from values",
     relation.from.anchor === "middle" &&
       relation.to.anchor === "start" &&
       relation.from.node === "A" &&
-      participant.axis === "x" &&
-      edge.name === "C" &&
-      edge.edge === "max"
+      participant.axis === "x"
   );
 }
 
@@ -862,14 +853,14 @@ console.log("# constraint confluence: placement constraint lowering");
     targets("A"),
     [300, 200]
   );
-  const positionFact = loweredPosition.program.axes[0][0];
+  const positionFact = loweredPosition.anchorProgram.axes[0][0];
   ok(
-    "position lowers to an explicit pin fact",
-    positionFact?.type === "pin" &&
+    "position lowers to an anchor pin fact (no pre-evaluated offset)",
+    positionFact?.type === "anchor-pin" &&
       positionFact.owner === "position[0]" &&
-      positionFact.expr.node === "A" &&
-      positionFact.expr.anchor === "start" &&
-      positionFact.value === 15
+      positionFact.node === "A" &&
+      positionFact.anchor === "middle" &&
+      positionFact.value === 20
   );
 
   const loweredDiscretePosition = lowerPlacementConstraints(
@@ -885,14 +876,14 @@ console.log("# constraint confluence: placement constraint lowering");
     targets("A"),
     [300, 200]
   );
-  const discretePositionFact = loweredDiscretePosition.program.axes[0][0];
+  const discretePositionFact = loweredDiscretePosition.anchorProgram.axes[0][0];
   ok(
-    "discrete position lowers to a numeric pin fact",
-    discretePositionFact?.type === "pin" &&
+    "discrete position lowers to a numeric anchor pin fact",
+    discretePositionFact?.type === "anchor-pin" &&
       discretePositionFact.owner === "position[0]" &&
-      discretePositionFact.expr.node === "A" &&
-      discretePositionFact.expr.anchor === "start" &&
-      discretePositionFact.value === 95
+      discretePositionFact.node === "A" &&
+      discretePositionFact.anchor === "middle" &&
+      discretePositionFact.value === 100
   );
 
   const loweredAlign = lowerPlacementConstraints(
@@ -901,17 +892,18 @@ console.log("# constraint confluence: placement constraint lowering");
     [300, 200]
   );
   ok(
-    "align lowers to relation plus participant facts",
-    loweredAlign.program.axes[0].some(
+    "align lowers to anchor-relation plus anchor-participant facts",
+    loweredAlign.anchorProgram.axes[0].some(
       (fact) =>
-        fact.type === "relation" &&
+        fact.type === "anchor-relation" &&
         fact.owner === "align[0]" &&
         fact.from.node === "A" &&
         fact.to.node === "B" &&
-        fact.offset === 0
+        fact.gap === 0
     ) &&
-      loweredAlign.program.axes[0].some(
-        (fact) => fact.type === "participant" && fact.owner === "align[0]"
+      loweredAlign.anchorProgram.axes[0].some(
+        (fact) =>
+          fact.type === "anchor-participant" && fact.owner === "align[0]"
       )
   );
 
@@ -921,20 +913,21 @@ console.log("# constraint confluence: placement constraint lowering");
     [300, 200]
   );
   ok(
-    "distribute lowers to chain relations plus participant facts",
-    loweredDistribute.program.axes[0].filter(
-      (fact) => fact.type === "relation" && fact.owner === "distribute[0]"
+    "distribute lowers to chain anchor-relations plus a participant",
+    loweredDistribute.anchorProgram.axes[0].filter(
+      (fact) =>
+        fact.type === "anchor-relation" && fact.owner === "distribute[0]"
     ).length === 2 &&
-      loweredDistribute.program.axes[0].some(
+      loweredDistribute.anchorProgram.axes[0].some(
         (fact) =>
-          fact.type === "relation" &&
+          fact.type === "anchor-relation" &&
           fact.from.node === "A" &&
           fact.to.node === "B" &&
-          fact.offset === 15
+          fact.gap === 5
       ) &&
-      loweredDistribute.program.axes[0].some(
+      loweredDistribute.anchorProgram.axes[0].some(
         (fact) =>
-          fact.type === "participant" && fact.owner === "distribute[0]"
+          fact.type === "anchor-participant" && fact.owner === "distribute[0]"
       )
   );
 
@@ -944,14 +937,16 @@ console.log("# constraint confluence: placement constraint lowering");
     [300, 200]
   );
   ok(
-    "nest lowers to an explicit center relation fact",
-    loweredNest.program.axes[0].some(
+    "nest lowers to an anchor-relation between centers",
+    loweredNest.anchorProgram.axes[0].some(
       (fact) =>
-        fact.type === "relation" &&
+        fact.type === "anchor-relation" &&
         fact.owner === "nest[0]" &&
         fact.from.node === "A" &&
         fact.to.node === "B" &&
-        fact.offset === 0
+        fact.from.anchor === "middle" &&
+        fact.to.anchor === "middle" &&
+        fact.gap === 0
     )
   );
 
@@ -960,49 +955,30 @@ console.log("# constraint confluence: placement constraint lowering");
     targets("C"),
     [300, 200]
   );
-  const spanFacts = loweredSpan.program.axes[0];
-  const spanExtent = loweredSpan.spanExtents[0];
+  const spanFacts = loweredSpan.anchorProgram.axes[0];
   ok(
-    "span lowering emits explicit edge facts and matching extent metadata",
+    "interval position lowers to strong start/end edge anchor pins",
     spanFacts.some(
       (fact) =>
-        fact.type === "edge-pin" &&
-        fact.name === "C" &&
-        fact.edge === "min" &&
-        fact.value === 10
+        fact.type === "anchor-pin" &&
+        fact.node === "C" &&
+        fact.anchor === "start" &&
+        fact.value === 10 &&
+        fact.owner === "position[0]"
     ) &&
       spanFacts.some(
         (fact) =>
-          fact.type === "edge-pin" &&
-          fact.name === "C" &&
-          fact.edge === "max" &&
-          fact.value === 30
-      ) &&
-      spanExtent?.type === "span-extent" &&
-      spanExtent.name === "C" &&
-      spanExtent.size === 20
-  );
-
-  const spanEdgeFacts = lowerSpanEdgePins(
-    span("C", 10, 30),
-    targets("C"),
-    "span[0]",
-    (_axis, coordinate) => coordinate as number
-  );
-  ok(
-    "span's constraint-local lowerer decomposes a span into min/max edge claims",
-    spanEdgeFacts.length === 2 &&
-      spanEdgeFacts[0].fact.type === "edge-pin" &&
-      spanEdgeFacts[0].fact.edge === "min" &&
-      !("target" in spanEdgeFacts[0].fact) &&
-      spanEdgeFacts[1].fact.type === "edge-pin" &&
-      spanEdgeFacts[1].fact.edge === "max" &&
-      !("target" in spanEdgeFacts[1].fact)
+          fact.type === "anchor-pin" &&
+          fact.node === "C" &&
+          fact.anchor === "end" &&
+          fact.value === 30 &&
+          fact.owner === "position[0]"
+      )
   );
 
   // A single position constraint carrying a POINT on one axis and an INTERVAL on
-  // the other: the interval axis lowers to an edge-pin extent, the point axis to
-  // a single pin. Both forms coexist on one constraint.
+  // the other: the interval axis emits two edge pins, the point axis one pin.
+  // Both forms coexist on one constraint.
   const mixed: PositionConstraint = {
     type: "position",
     x: 12,
@@ -1017,16 +993,21 @@ console.log("# constraint confluence: placement constraint lowering");
     [300, 200]
   );
   ok(
-    "interval+point on one constraint: interval axis yields a span extent",
-    loweredMixed.spanExtents.some(
-      (extent) =>
-        extent.axis === "y" && extent.name === "C" && extent.size === 20
-    ) && !loweredMixed.spanExtents.some((extent) => extent.axis === "x")
+    "interval+point on one constraint: interval axis yields two edge pins",
+    loweredMixed.anchorProgram.axes[1].filter(
+      (fact) =>
+        fact.type === "anchor-pin" &&
+        fact.node === "C" &&
+        (fact.anchor === "start" || fact.anchor === "end")
+    ).length === 2
   );
   ok(
     "interval+point on one constraint: point axis yields a single pin",
-    loweredMixed.program.axes[0].some(
-      (fact) => fact.type === "pin" && fact.expr.node === "C"
+    loweredMixed.anchorProgram.axes[0].some(
+      (fact) =>
+        fact.type === "anchor-pin" &&
+        fact.node === "C" &&
+        fact.anchor === "middle"
     )
   );
 }
@@ -1050,6 +1031,41 @@ console.log("# constraint confluence: interval position + align");
       A: { min: 10, center: 20, max: 30 },
       B: { min: 15, center: 20, max: 25 },
     }
+  );
+}
+
+console.log("# constraint confluence: interval inside a distribute chain");
+{
+  // An interval sizes A (size-strong cell); a distribute chains B off A. The
+  // interval's extent must survive the chain and B follows it (spacing 5).
+  const spanA = span("A", 10, 30);
+  const distAB = distribute(["A", "B"]);
+  expectConfluent(
+    "interval/distribute chain",
+    solve([spanA, distAB], ["A", "B"]),
+    solve([distAB, spanA], ["A", "B"]),
+    {
+      A: { min: 10, center: 20, max: 30 },
+      B: { min: 35, center: 40, max: 45 },
+    }
+  );
+}
+
+console.log(
+  "# constraint confluence: authoritative override on a size-strong cell"
+);
+{
+  // A size-strong cell (interval determines A's extent) also carries an
+  // authoritative override point pin on its center. The two are compatible —
+  // the override anchors where the interval already places the center — and
+  // declaration order cannot change the result.
+  const spanA = span("A", 10, 30);
+  const overrideCenter = position("A", 20, true);
+  expectConfluent(
+    "interval + authoritative override (compatible)",
+    solve([spanA, overrideCenter], ["A"]),
+    solve([overrideCenter, spanA], ["A"]),
+    { A: { min: 10, center: 20, max: 30 } }
   );
 }
 
@@ -1388,6 +1404,8 @@ console.log("# constraint confluence: contradictions are diagnosed");
 
   const spanA10_30 = span("A", 10, 30);
   const spanA10_40 = span("A", 10, 40);
+  // Two conflicting intervals over-determine one cell (rank-2 closure). The
+  // named-owner conflict must name BOTH owners so the error is actionable.
   const spanThrows = (constraints: PositionConstraint[]): boolean => {
     try {
       solvePlacementConstraints(
@@ -1399,12 +1417,14 @@ console.log("# constraint confluence: contradictions are diagnosed");
     } catch (error) {
       return (
         error instanceof Error &&
-        error.message.includes("Constraint span conflict")
+        error.message.includes("Constraint placement conflict") &&
+        error.message.includes("position[0]") &&
+        error.message.includes("position[1]")
       );
     }
   };
   ok(
-    "conflicting spans throw in either declaration order",
+    "conflicting intervals throw naming both owners in either declaration order",
     spanThrows([spanA10_30, spanA10_40]) &&
       spanThrows([spanA10_40, spanA10_30])
   );
