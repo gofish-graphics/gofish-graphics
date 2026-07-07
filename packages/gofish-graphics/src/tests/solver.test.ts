@@ -55,14 +55,14 @@ console.log("# solver: SolverBox algebra (unknowns = baseline, size)");
     b.solved && near(b.read("size"), 20) && near(b.read("baseline"), 10));
 }
 {
-  // A contradictory third facet is a named conflict, not last-writer-wins.
+  // A contradictory third box key is a named conflict, not last-writer-wins.
   const b = new SolverBox(0);
   b.add("baseline", 0);
   b.add("size", 80);
   const conflict = b.add("max", 999);
-  ok("over-determination reports a conflict", !!conflict && conflict!.facet === "max");
+  ok("over-determination reports a conflict", !!conflict && conflict!.key === "max");
   const consistent = b.add("max", 80);
-  ok("a consistent third facet is absorbed", consistent === undefined);
+  ok("a consistent third box key is absorbed", consistent === undefined);
 }
 
 console.log("# solver: case 1 — single bar (σ from the frame)");
@@ -88,7 +88,7 @@ console.log("# solver: case 2 — stacked bars (origins chain symbolically in σ
     const id = `bar${i}`;
     s.box(id).add("baseline", prevMax);
     s.box(id).add("size", dataSize(v));
-    prevMax = s.box(id).facetMono("max")!;
+    prevMax = s.box(id).keyMono("max")!;
   });
   s.resolveSigma(dataSize(100), 200); // sum 100 fills 200 ⇒ σ=2
   ok("bar0 [0,60]", near(s.read("bar0", "min"), 0) && near(s.read("bar0", "max"), 60));
@@ -108,7 +108,7 @@ console.log("# solver: case 3 — grouped bars (one shared σ across sub-structu
       const id = `${g}${i}`;
       s.box(id).add("baseline", prevMax);
       s.box(id).add("size", dataSize(v));
-      prevMax = s.box(id).facetMono("max")!;
+      prevMax = s.box(id).keyMono("max")!;
     });
   }
   s.resolveSigma(dataSize(80), 160); // tallest total 80 fills 160 ⇒ σ=2
