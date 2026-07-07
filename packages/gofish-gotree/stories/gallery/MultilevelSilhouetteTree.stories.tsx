@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/html";
-import { rect, ellipse, connect, Layer, Frame, polar } from "gofish-graphics";
+import { rect, ellipse, line, Layer, Frame, polar } from "gofish-graphics";
 import { initializeContainer } from "../helper";
 import { flareVis, type FlareNode } from "./_flareVis";
 
@@ -243,9 +243,8 @@ const pt = (theta: number, r: number) =>
   ellipse({ x: theta, y: r, w: 0, h: 0, fill: "none", stroke: "none" });
 
 const linkMark = (l: Link) =>
-  connect(
+  line(
     {
-      mode: "center",
       curve: "straight",
       fill: "none",
       stroke: LINK_STROKE,

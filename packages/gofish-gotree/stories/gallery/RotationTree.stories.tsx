@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/html";
-import { ellipse, connect, Layer, Frame, polar } from "gofish-graphics";
+import { ellipse, line, Layer, Frame, polar } from "gofish-graphics";
 import { initializeContainer } from "../helper";
 import { flareVis, type FlareNode } from "./_flareVis";
 
@@ -168,9 +168,8 @@ const links = placed
       // CENTER → hub: spiral swirl. Center anchor carries the child's angle
       // plus a constant lag so linear resampling winds it into a pinwheel arc.
       return [
-        connect(
+        line(
           {
-            mode: "center",
             curve: "straight",
             fill: "none",
             stroke: LINK_STROKE,
@@ -184,9 +183,8 @@ const links = placed
     // a mid anchor pushed just outside RING_R.
     const midTheta = (parent.theta + p.theta) / 2;
     return [
-      connect(
+      line(
         {
-          mode: "center",
           curve: "straight",
           fill: "none",
           stroke: LINK_STROKE,

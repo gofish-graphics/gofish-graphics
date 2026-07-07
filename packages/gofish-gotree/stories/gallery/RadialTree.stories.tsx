@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/html";
-import { ellipse, connect, Layer, Frame, polar } from "gofish-graphics";
+import { ellipse, line, Layer, Frame, polar } from "gofish-graphics";
 import { initializeContainer } from "../helper";
 import { flareVis, type FlareNode } from "./_flareVis";
 
@@ -153,9 +153,8 @@ const links = placed
     const parent = byPath.get(p.parentPath!)!;
     const src: [number, number] =
       parent.depth === 0 ? [p.theta, 0] : [parent.theta, parent.r];
-    return connect(
+    return line(
       {
-        mode: "center",
         curve: "straight",
         fill: "none",
         stroke: "#5f6b7a",
