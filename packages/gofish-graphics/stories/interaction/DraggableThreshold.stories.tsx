@@ -59,10 +59,16 @@ export const Default: StoryObj<Args> = {
     // Solid code (outside the layout pipeline). `dr` attaches to the runtime
     // via the live read in the bar fill below, so `currentData()` can use the
     // recorded frame scales.
+    //
+    // Clamp the write to the data's own range: an unclamped threshold dragged
+    // past the bars extends the y domain (a rule at count −20 makes the scale
+    // [−20, 100]), so every drag frame would re-derive the very conversions
+    // the drag is reading — a feedback loop that reads as a jarring rescale.
+    const maxCount = Math.max(...data.map((d) => d.count));
     createRoot(() => {
       createEffect(() => {
         const c = dr.currentData();
-        if (c?.y != null) cut.set(c.y);
+        if (c?.y != null) cut.set(Math.min(maxCount, Math.max(0, c.y)));
       });
     });
 

@@ -285,10 +285,15 @@ const cut = signal(60);
 const dr = drag();
 
 // Convert the drag position to data units and write `cut`, in ordinary code.
+// Clamp the write to the data's range: a spec value dragged past the data
+// (say, a rule at count −20) extends the axis domain, so every drag frame
+// would move the very scale the drag is reading — a feedback loop that reads
+// as a jarring rescale.
+const maxCount = Math.max(...data.map((d) => d.count));
 createRoot(() => {
   createEffect(() => {
     const c = dr.currentData();
-    if (c?.y != null) cut.set(c.y);
+    if (c?.y != null) cut.set(Math.min(maxCount, Math.max(0, c.y)));
   });
 });
 

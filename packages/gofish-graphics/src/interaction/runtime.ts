@@ -224,6 +224,19 @@ export class InteractionRuntime implements AmbientRegistrar, SpecInvalidator {
       if (!(event instanceof PointerEvent) && !(event instanceof WheelEvent)) {
         return undefined;
       }
+      // Map client → SVG user space through the inverse screen CTM: the
+      // frame's recorded conversions are in SVG user units, and a plain
+      // bounding-rect subtraction diverges from them the moment the svg is
+      // visually scaled (a CSS transform — e.g. Storybook's preview zoom — or
+      // a future viewBox). Fall back to the subtraction where the CTM isn't
+      // available (headless DOMs).
+      const ctm = svg.getScreenCTM?.();
+      if (ctm && typeof DOMPoint !== "undefined") {
+        const p = new DOMPoint(event.clientX, event.clientY).matrixTransform(
+          ctm.inverse()
+        );
+        return { x: p.x, y: p.y };
+      }
       const box = svg.getBoundingClientRect();
       return { x: event.clientX - box.left, y: event.clientY - box.top };
     };

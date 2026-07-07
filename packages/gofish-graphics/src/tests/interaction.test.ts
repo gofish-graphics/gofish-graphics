@@ -493,6 +493,60 @@ async function main() {
     ok("drag inactive after pointerup", dr.active() === false);
   }
 
+  /* ------------- local point honors a scaled screen CTM ------------- */
+  // When the svg is visually scaled (CSS transform — e.g. Storybook's preview
+  // zoom), client coords must be mapped through the inverse screen CTM or
+  // every coordinate-based input is offset by the scale. happy-dom provides no
+  // real CTM, so mock one on the svg instance (screen = user·2 + (100, 50))
+  // and shim DOMPoint for the duration of the test.
+  console.log("\nlocal point honors a scaled screen CTM");
+  {
+    const container = makeContainer();
+    const dr = drag();
+    await chart(data, { axes: false })
+      .flow(spread({ by: "cat", dir: "x" }))
+      .mark(rect({ h: "count", fill: live(() => (dr.active() ? "#f00" : "#00f")) }))
+      .render(container, { w: 200, h: 120 });
+    await settle();
+    const svg = container.querySelector("svg") as any;
+
+    const g = globalThis as any;
+    const hadDOMPoint = g.DOMPoint !== undefined;
+    if (!hadDOMPoint) {
+      g.DOMPoint = class {
+        constructor(
+          public x = 0,
+          public y = 0
+        ) {}
+        matrixTransform(m: { a: number; b: number; c: number; d: number; e: number; f: number }) {
+          return {
+            x: m.a * this.x + m.c * this.y + m.e,
+            y: m.b * this.x + m.d * this.y + m.f,
+          };
+        }
+      };
+    }
+    svg.getScreenCTM = () => ({
+      inverse: () => ({ a: 0.5, b: 0, c: 0, d: 0.5, e: -50, f: -25 }),
+    });
+    try {
+      const P = (globalThis as any).PointerEvent;
+      svg.dispatchEvent(
+        new P("pointerdown", { clientX: 300, clientY: 250, bubbles: true })
+      );
+      ok(
+        "client coords mapped through the inverse CTM",
+        dr.origin()?.x === 100 && dr.origin()?.y === 100,
+        JSON.stringify(dr.origin())
+      );
+      svg.dispatchEvent(
+        new P("pointerup", { clientX: 300, clientY: 250, bubbles: true })
+      );
+    } finally {
+      if (!hadDOMPoint) delete g.DOMPoint;
+    }
+  }
+
   /* --------------------------- timer ------------------------------- */
   console.log("\ntimer");
   {
