@@ -202,12 +202,16 @@ export const connect = createNodeOperator(
                 const s = connectionSpaceOf(c);
                 return s !== undefined && isPOSITION(s);
               });
-            resolvedCurve =
-              mode === "center"
-                ? homogeneousContinuous
-                  ? "catmullRom"
-                  : "straight"
-                : "bezier";
+            // Only smooth over a genuinely *continuous* connection axis. A
+            // discrete/ordinal (or ambiguous) axis falls back to a straight
+            // segment (center → polyline; edge → linear band). Sankey and other
+            // deliberately-curved ribbons pass an explicit `curve`, so they
+            // never reach this auto branch.
+            resolvedCurve = homogeneousContinuous
+              ? mode === "center"
+                ? "catmullRom"
+                : "bezier"
+              : "straight";
           }
           const resolvedCurveName = curveNameOf(resolvedCurve);
           // Edge ("ribbon") mode supports only straight (linear band) vs bezier
