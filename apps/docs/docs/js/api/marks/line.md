@@ -45,8 +45,10 @@ share a continuous connection axis it smooths them with a centripetal Catmull-Ro
 spline, otherwise it draws a straight polyline.
 
 `curve` accepts the strings `"straight"` or `"bezier"`, or a `CurveSpec` factory:
-`straight()`, `bezier()`, `orthogonal()`, `arc({ direction: "up" | "down" })`, or
-`perfectArrows({ bow })`.
+`straight()`, `bezier()`, `orthogonal({ bend? })`, `arc({ direction: "up" | "down" })`,
+or `perfectArrows({ bow })`. The `orthogonal` elbow bends at the midpoint of the
+connector's `dir` axis; pass `orthogonal({ bend: "auto" })` to infer the bend axis
+from the endpoint geometry instead (for layouts with no single growth axis).
 
 ## Two forms
 

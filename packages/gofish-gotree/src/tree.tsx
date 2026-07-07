@@ -15,7 +15,7 @@ export function tree(spec: GoTreeSpec, data: TreeData): any {
   const filledSpec: GoTreeSpec = { node: DEFAULT_NODE, ...spec };
 
   const nodeTree = renderSubtree(root, filledSpec);
-  const edges = collectEdges(root, filledSpec.link);
+  const edges = collectEdges(root, filledSpec);
 
   // Layer order: nodeTree first so its named marks register before connects
   // try to resolve their refs (matches the sankey pattern); edges come after.

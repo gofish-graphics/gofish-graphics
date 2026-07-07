@@ -26,6 +26,18 @@ const DEFAULT_SIBLING: Combiner = distribute({
   alignment: "start",
 });
 
+// The growth axis of the parent↔child relationship at a given depth — i.e. the
+// direction along which a parent and its children separate. Links read it to
+// bend/curve along the tree's actual growth direction (a vertical tree's
+// orthogonal elbow bends on y, a horizontal one on x). Undefined when the
+// combiner doesn't declare a single axis (a diagonal cascade, or a user-
+// supplied plain function), in which case links fall back to geometry.
+export const growthDirAtDepth = (
+  spec: GoTreeSpec,
+  depth: number
+): "x" | "y" | undefined =>
+  resolve(spec.parentChild ?? DEFAULT_PARENT_CHILD, depth).growthDir;
+
 const nameMark = (mark: any, pathName: string) => {
   if (mark && typeof mark.name === "function") return mark.name(pathName);
   return mark;

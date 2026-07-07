@@ -117,8 +117,12 @@ node: (d) => circle({ r: 4 + d.height * 2, fill: colorByDepth(d.depth) });
 link: { curve: "straight", stroke: "#90a4ae", strokeWidth: 1.5 }
 ```
 
-Currently only `curve: "straight"` is supported. `"bezier"`, `"orthogonal"`,
-and `"arc"` are planned for later milestones.
+`curve` accepts `"straight"` (default), `"bezier"`, `"orthogonal"` (right-angle
+elbows), and `"arc"`. The `orthogonal` and `bezier` links fold along the tree's
+growth axis — the direction its `parentChild` combiner distributes — so a
+vertical tree's elbows bend downward and a horizontal tree's bend sideways. When
+the growth axis is ambiguous (a cascade that distributes on both axes), the
+orthogonal elbow infers its bend from each edge's geometry.
 
 ### `parentChild` and `sibling` — the layout combiners
 

@@ -156,12 +156,24 @@ const bezierRouter: Router = (b0, b1, { dir }) => {
  * Right-angle elbow bending at the main-axis midpoint — GoTree's `orthogonal`
  * link (`ue`): `c0 → [c0cross, mid] → [c1cross, mid] → c1`, as a plain polyline.
  */
-const orthogonalRouter: Router = (b0, b1, { dir }) => {
+const orthogonalRouter: Router = (b0, b1, { dir, opts }) => {
   const c0 = centerPoint(b0);
   const c1 = centerPoint(b1);
-  const mid = (c0[dir] + c1[dir]) / 2;
-  const bend0 = byAxis(dir, mid, c0[1 - dir]);
-  const bend1 = byAxis(dir, mid, c1[1 - dir]);
+  // The elbow bends at the midpoint of the *main* (growth) axis. Normally that
+  // is the caller's declared `dir`. `bend: "auto"` instead infers it from the
+  // geometry — whichever axis separates the two endpoints more — so a connector
+  // tracks the actual growth direction when the caller can't name it (e.g. a
+  // gotree diagonal cascade). Ties prefer the vertical axis (y = 1), matching
+  // the default top-down tree.
+  const axis: 0 | 1 =
+    opts?.bend === "auto"
+      ? Math.abs(c1[0] - c0[0]) > Math.abs(c1[1] - c0[1])
+        ? 0
+        : 1
+      : dir;
+  const mid = (c0[axis] + c1[axis]) / 2;
+  const bend0 = byAxis(axis, mid, c0[1 - axis]);
+  const bend1 = byAxis(axis, mid, c1[1 - axis]);
   return [segment(c0, bend0), segment(bend0, bend1), segment(bend1, c1)];
 };
 
@@ -253,8 +265,16 @@ export const straight = (): CurveSpec => ({ type: "straight" });
 /** Cubic bezier (d3.linkVertical/horizontal convention). */
 export const bezier = (): CurveSpec => ({ type: "bezier" });
 
-/** Right-angle elbow bending at the main-axis midpoint (GoTree orthogonal). */
-export const orthogonal = (): CurveSpec => ({ type: "orthogonal" });
+/**
+ * Right-angle elbow bending at the main-axis midpoint (GoTree orthogonal). The
+ * bend axis is the connector's `dir` by default; pass `{ bend: "auto" }` to
+ * infer it from the endpoint geometry instead (for layouts with no single
+ * declared growth axis, like a diagonal tree cascade).
+ */
+export const orthogonal = (options?: { bend?: "auto" }): CurveSpec => ({
+  type: "orthogonal",
+  ...(options ? { options } : {}),
+});
 
 /** Semicircular arc through both endpoints (GoTree arccurve). */
 export const arc = (options?: { direction?: "up" | "down" }): CurveSpec => ({
