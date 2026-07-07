@@ -202,20 +202,25 @@ export const connect = createNodeOperator(
                 const s = connectionSpaceOf(c);
                 return s !== undefined && isPOSITION(s);
               });
-            // Only smooth over a genuinely *continuous* connection axis. A
-            // discrete/ordinal (or ambiguous) axis falls back to a straight
-            // segment (center → polyline; edge → linear band). Sankey and other
-            // deliberately-curved ribbons pass an explicit `curve`, so they
-            // never reach this auto branch.
+            // A *homogeneous continuous* connection axis (the points are samples
+            // of one continuous variable — a line chart, or a stacked area /
+            // streamgraph over a continuous x) smooths with centripetal
+            // Catmull-Rom, for BOTH lines and ribbons: a stacked area should
+            // curve like its line-chart sibling. Otherwise we draw the mode's
+            // "linear" connector: a *line* (center) is a straight polyline
+            // between the points; a *ribbon* (edge) is a bezier band between
+            // discrete regions (bezier is to a band what a straight segment is
+            // to a line — the honest discrete-region connector). Explicit curves
+            // always win over this default.
             resolvedCurve = homogeneousContinuous
-              ? mode === "center"
-                ? "catmullRom"
-                : "bezier"
-              : "straight";
+              ? "catmullRom"
+              : mode === "center"
+                ? "straight"
+                : "bezier";
           }
           const resolvedCurveName = curveNameOf(resolvedCurve);
-          // Edge ("ribbon") mode supports only straight (linear band) vs bezier
-          // (S-curve band).
+          // Edge ("ribbon") mode: bezier = S-curve band (discrete regions),
+          // catmullRom = smoothed band over a continuous axis, else linear band.
           const edgeBezier = resolvedCurveName === "bezier";
 
           // Anchor mode: connect normalized points on each endpoint's bbox.
@@ -317,23 +322,49 @@ export const connect = createNodeOperator(
             }
           }
 
-          // Center mode = the "line" component. `catmullRom` is a *sequence*
-          // curve — it threads the whole run of centers as one centripetal
-          // spline (d3's `.curve(curveCatmullRom)`), so it bypasses the pairwise
-          // router loop. Every other curve (straight | bezier | orthogonal | arc
-          // | perfectArrows | …) is pairwise: routed per consecutive endpoint.
-          if (mode === "center") {
-            if (isSequenceCurve(resolvedCurveName)) {
+          // `catmullRom` is a *sequence* curve — it threads the whole run of
+          // points as one centripetal spline (d3's `.curve(curveCatmullRom)`),
+          // bypassing the pairwise router loop. A line (center) threads its
+          // centers; a ribbon (edge) threads BOTH facing boundaries of the band
+          // — forward along the near edge, a cap across, back along the far edge
+          // — so a continuous stacked area curves like its line-chart sibling.
+          const mainAxis = dir as 0 | 1;
+          const edgePoint = (
+            main: number,
+            cross: number
+          ): [number, number] => {
+            const p: [number, number] = [0, 0];
+            p[mainAxis] = main;
+            p[1 - mainAxis] = cross;
+            return p;
+          };
+          if (isSequenceCurve(resolvedCurveName)) {
+            if (mode === "center") {
               const centers = childPlaceables.map((c) => centerPoint(c.dims));
               paths.push(convertPointsToBezierCurves(centers));
             } else {
-              const { router, options: routeOpts } =
-                resolveCurve(resolvedCurve);
-              for (const [b0, b1] of bboxPairs) {
-                paths.push(
-                  router(b0, b1, { dir: dir as 0 | 1, opts: routeOpts })
-                );
+              const near: [number, number][] = [];
+              const far: [number, number][] = [];
+              for (const c of childPlaceables) {
+                const b = c.dims;
+                const main = (b[mainAxis].min! + b[mainAxis].max!) / 2;
+                near.push(edgePoint(main, b[1 - mainAxis].min!));
+                far.push(edgePoint(main, b[1 - mainAxis].max!));
               }
+              const farRev = far.slice().reverse();
+              paths.push([
+                ...convertPointsToBezierCurves(near),
+                { type: "line", points: [near[near.length - 1], farRev[0]] },
+                ...convertPointsToBezierCurves(farRev),
+                { type: "line", points: [farRev[farRev.length - 1], near[0]] },
+              ]);
+            }
+          } else if (mode === "center") {
+            const { router, options: routeOpts } = resolveCurve(resolvedCurve);
+            for (const [b0, b1] of bboxPairs) {
+              paths.push(
+                router(b0, b1, { dir: dir as 0 | 1, opts: routeOpts })
+              );
             }
           } else if (dir === 0) {
             // Edge ("ribbon") mode: a filled quad between the facing edges.

@@ -53,7 +53,9 @@ export const Default: StoryObj<Args> = {
       ),
       For(groupBy(caltrainProcessed, "Train"), (d) =>
         line(
-          { dir: "y", strokeWidth: 1, curve: "bezier" },
+          // Default curve: the connection (y) axis is the ordinal station
+          // stack, so it resolves to a straight polyline between stops.
+          { dir: "y", strokeWidth: 1 },
           For(d, (d) => ref(`${d.Train}-${d.Station}-${d.Time}`))
         )
       ),

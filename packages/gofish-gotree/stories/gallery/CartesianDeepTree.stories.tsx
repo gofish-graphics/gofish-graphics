@@ -57,7 +57,7 @@ export const CartesianDeepTree: StoryObj = {
     tree(
       {
         node,
-        link: { curve: "bezier", stroke: "#5f6b7a", strokeWidth: 1.5 },
+        link: { curve: "straight", stroke: "#5f6b7a", strokeWidth: 1.5 },
         parentChild: combine({
           x: { kind: "nest", pad: 0 },
           // order "reverse" puts the parent at HIGH y = the bottom in y-down

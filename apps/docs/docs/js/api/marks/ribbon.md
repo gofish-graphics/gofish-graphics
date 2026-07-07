@@ -38,12 +38,17 @@ ribbon({ stroke?, strokeWidth = 0, opacity?, mixBlendMode = "normal", dir = "x",
 | `opacity`      | `number`                              | Opacity (0–1)                                                       |
 | `mixBlendMode` | `"normal" \| "multiply"`              | Blend mode                                                          |
 | `dir`          | `"x" \| "y"`                          | Direction axis                                                      |
-| `curve`        | `"straight" \| "bezier" \| CurveSpec` | Screen-space band shape; default `"auto"` resolves to a bezier band |
+| `curve`        | `"straight" \| "bezier" \| CurveSpec` | Screen-space band shape; default `"auto"` (see below)               |
 | `from`, `to`   | `string`                              | Pairwise form: column names holding the two endpoint refs           |
 
 `curve` accepts the strings `"straight"` or `"bezier"`, or a `CurveSpec` factory:
 `straight()`, `bezier()`, `orthogonal()`, `arc({ direction: "up" | "down" })`, or
-`perfectArrows({ bow })`. The default `"auto"` resolves to a bezier band.
+`perfectArrows({ bow })`. The default `"auto"` inspects the connection axis: over a
+homogeneous **continuous** axis (a stacked area / streamgraph sampling a continuous
+variable) it smooths the band edges with a centripetal Catmull-Rom spline — matching
+its [`line`](/js/api/marks/line) sibling — and otherwise draws a **bezier** band
+(the band equivalent of a straight line: the honest connector between discrete
+regions, as in a sankey or a categorical ribbon).
 
 Like [`line`](/js/api/marks/line), `ribbon` has a **bag form** (over a `GoFishRef[]`,
 shown below) and a **pairwise form** `ribbon({ from, to })` over rows whose
