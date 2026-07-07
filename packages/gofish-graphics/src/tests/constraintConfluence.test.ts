@@ -8,7 +8,8 @@ import type { Placeable } from "../ast/_node";
 import * as Monotonic from "../util/monotonic";
 import type { AlignConstraint } from "../ast/constraints/align";
 import type { DistributeConstraint } from "../ast/constraints/distribute";
-import type { GridConstraint } from "../ast/constraints/grid";
+import type { GridConstraint, TrackLayout } from "../ast/constraints/grid";
+import { gridCellSizeByName, gridTracksFromSizes } from "../ast/constraints/grid";
 import type { NestConstraint } from "../ast/constraints/nest";
 import {
   compilePlacementCoordinate,
@@ -46,6 +47,7 @@ import {
 import { discretePosition, value } from "../ast/data";
 import { pxOf, type AxisMap } from "../ast/domain";
 import { POSITION, SIZE, UNDEFINED } from "../ast/underlyingSpace";
+import { ScopeRegistry } from "../ast/solver/scopes";
 import { interval } from "../util/interval";
 
 type Constraint =
@@ -408,6 +410,107 @@ console.log("# constraint confluence: nest and grid placement");
   );
 }
 
+console.log("# constraint confluence: grid content-sized tracks (Stage 6e)");
+{
+  // Two columns of DIFFERENT extent (content-sized): col0=40, col1=100,
+  // xSpacing=10 → starts [0, 50]; centers col0=20, col1=50+50=100.
+  const grid: GridConstraint = {
+    type: "grid",
+    numCols: 2,
+    xSpacing: 10,
+    ySpacing: 0,
+    children: [A, B],
+  };
+  const tracks: [TrackLayout, TrackLayout] = [
+    { starts: [0, 50], extents: [40, 100] },
+    { starts: [0], extents: [30] },
+  ];
+
+  // The per-cell budget map hands each cell its own track's extent.
+  const cellSizes = gridCellSizeByName(grid, tracks);
+  ok(
+    "grid cell budget = per-cell track extents",
+    JSON.stringify(cellSizes.get("A")) === "[40,30]" &&
+      JSON.stringify(cellSizes.get("B")) === "[100,30]"
+  );
+
+  const contentTargets = () =>
+    new Map<string, Placeable>([
+      ["A", makePlaceable(40, 30)],
+      ["B", makePlaceable(100, 30)],
+    ]);
+  {
+    const t = contentTargets();
+    solvePlacementConstraints([grid], t, [300, 200], undefined, tracks);
+    ok(
+      "content-sized grid centers each cell in its own track",
+      t.get("A")!.dims[0].center === 20 && t.get("B")!.dims[0].center === 100
+    );
+  }
+
+  // grid + align on a NON-cell child C: C's center is aligned (middle x) to the
+  // grid cell A. The two constraints compose and are order-independent.
+  const alignAC: AlignConstraint = { type: "align", x: "middle", children: [A, C] };
+  const withAlign = (order: Constraint[]) => {
+    const t = contentTargets();
+    t.set("C", makePlaceable(10, 10));
+    solvePlacementConstraints(order, t, [300, 200], undefined, tracks);
+    return {
+      A: t.get("A")!.dims[0].center,
+      C: t.get("C")!.dims[0].center,
+    };
+  };
+  const af = withAlign([grid, alignAC]);
+  const as = withAlign([alignAC, grid]);
+  ok(
+    "grid + align on a non-cell composes, order-independent",
+    JSON.stringify(af) === JSON.stringify(as) && af.A === 20 && af.C === 20
+  );
+
+  // grid + position pin of a CELL: the pin overrides that cell's track
+  // centering on the pinned axis; the other cell keeps its track center.
+  const pinB = position("B", 250);
+  const withPin = (order: Constraint[]) => {
+    const t = contentTargets();
+    solvePlacementConstraints(order, t, [300, 200], undefined, tracks);
+    return { A: t.get("A")!.dims[0].center, B: t.get("B")!.dims[0].center };
+  };
+  const pf = withPin([grid, pinB]);
+  const ps = withPin([pinB, grid]);
+  ok(
+    "position pin on a cell overrides its track centering, order-independent",
+    JSON.stringify(pf) === JSON.stringify(ps) && pf.A === 20 && pf.B === 250
+  );
+
+  // Authoritative placement tracks are recomputed from ACTUAL laid-out cell
+  // sizes: a track sizes to the MAX of its cells (a claim cell wider than a
+  // sibling pins the track; a mixed fill/claim track = the claim). 2 cols × 2
+  // rows, xSpacing=10: col0 max(40,20)=40, col1 max(100,60)=100.
+  const grid2x2: GridConstraint = {
+    type: "grid",
+    numCols: 2,
+    xSpacing: 10,
+    ySpacing: 5,
+    children: [A, B, C, child("D")],
+  };
+  const fromSizes = gridTracksFromSizes(grid2x2, [
+    [40, 30],
+    [100, 30],
+    [20, 12],
+    [60, 8],
+  ]);
+  ok(
+    "placement tracks take the max laid-out size per track",
+    JSON.stringify(fromSizes[0].extents) === "[40,100]" &&
+      JSON.stringify(fromSizes[0].starts) === "[0,50]"
+  );
+  ok(
+    "placement track rows take the max height and cumulate with spacing",
+    JSON.stringify(fromSizes[1].extents) === "[30,12]" &&
+      JSON.stringify(fromSizes[1].starts) === "[0,35]"
+  );
+}
+
 console.log("# constraint confluence: nest size dependency planning");
 {
   const nestAB: NestConstraint = {
@@ -583,15 +686,17 @@ console.log("# constraint confluence: distribute size proposals");
 
   const layerSize: [number, number] = [300, 200];
   const gridCell: [number, number] = [90, 40];
+  const gridCellByName = new Map<string, [number, number]>([["A", gridCell]]);
   const sliceByName = new Map<string, [number, number]>([
     ["A", [100, 200]],
   ]);
   ok(
-    "grid proposal overrides distribute slice",
-    childLayoutSizeProposal("A", layerSize, gridCell, sliceByName) === gridCell
+    "grid cell proposal (its track extent) overrides distribute slice",
+    childLayoutSizeProposal("A", layerSize, gridCellByName, sliceByName) ===
+      gridCell
   );
   ok(
-    "named distribute child receives sliced proposal",
+    "a non-cell named child still receives its distribute slice",
     childLayoutSizeProposal("A", layerSize, undefined, sliceByName) ===
       sliceByName.get("A")
   );
@@ -643,23 +748,18 @@ console.log("# constraint confluence: grid proposal ownership");
       throwsWith([grid1, grid2], "Constraint.grid proposal conflict")
   );
 
-  // grid mixed with any non-z-order constraint half-applies (placement sees it,
-  // the space/size fold does not), so selectGridConstraint rejects it.
+  // Stage 6e: grid now GENUINELY composes with sibling constraints, so
+  // selectGridConstraint no longer throws on a non-z-order sibling — it just
+  // selects the one grid (the mixing is exercised for real at placement below).
   const alignMix: AlignConstraint = {
     type: "align",
     y: "middle",
     children: [A, B],
   };
   ok(
-    "grid mixed with align throws in either order",
-    throwsWith(
-      [grid2, alignMix],
-      "Constraint.grid cannot be combined with a 'align' constraint"
-    ) &&
-      throwsWith(
-        [alignMix, grid2],
-        "Constraint.grid cannot be combined with a 'align' constraint"
-      )
+    "grid alongside an align is allowed (composes) in either order",
+    selectGridConstraint([grid2, alignMix]) === grid2 &&
+      selectGridConstraint([alignMix, grid2]) === grid2
   );
 
   // z-order (zAbove/zBelow) is render-time paint order and composes with grid.
@@ -1131,7 +1231,9 @@ console.log("# constraint confluence: child scale factor planning");
     [2, 3],
     [inheritedX, inheritedY],
     undefined,
-    [false, false]
+    [false, false],
+    new ScopeRegistry(),
+    "test"
   );
   ok(
     "self-scaled POSITION axis builds local posScale",
@@ -1159,7 +1261,9 @@ console.log("# constraint confluence: child scale factor planning");
     [2, 3],
     [inheritedX, inheritedY],
     { sizeDomain: [Monotonic.linear(10, 0), Monotonic.linear(0, 10)] },
-    [false, false]
+    [false, false],
+    new ScopeRegistry(),
+    "test"
   );
   ok(
     "intermediate distribute defers to inherited child scale factor (scale-root scoping)",
@@ -1180,7 +1284,9 @@ console.log("# constraint confluence: child scale factor planning");
     [undefined, undefined],
     [inheritedX, inheritedY],
     { sizeDomain: [Monotonic.linear(10, 0), Monotonic.linear(0, 10)] },
-    [false, false]
+    [false, false],
+    new ScopeRegistry(),
+    "test"
   );
   ok(
     "σ-root distribute re-derives child scale factor from its budget when invertible",
@@ -1200,7 +1306,9 @@ console.log("# constraint confluence: child scale factor planning");
     [2, 3],
     [inheritedX, inheritedY],
     { sizeDomain: [Monotonic.linear(10, 0), undefined] },
-    [true, false]
+    [true, false],
+    new ScopeRegistry(),
+    "test"
   );
   ok(
     "shared scale scope overrides budget scale factor and emits shadow check",
@@ -1322,12 +1430,16 @@ console.log("# constraint confluence: self-placement and override");
     ["A", makePlaceable()],
     ["B", makePlaceable()],
   ]);
-  targets.get("A")!.placementOn = () => "determined";
+  // A is anchored to the x data scale (Stage 6f: the data-positioned fact now
+  // arrives as an explicit ownership input, not a `placementOn` method on the
+  // target). align must leave A where its own scale puts it.
   solvePlacementConstraints(
     [{ type: "align", x: "baseline", children: [A, B] }],
     targets,
     [300, 200],
-    [(value) => value * 10 - 200, undefined]
+    [(value) => value * 10 - 200, undefined],
+    undefined,
+    [new Set(["A"]), new Set()]
   );
   ok(
     "posScale align leaves determined continuous placement alone and normalizes free sibling",

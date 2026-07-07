@@ -14,7 +14,6 @@ import {
   elaborateDirection,
   FancyDirection,
   Size,
-  translateString,
 } from "../dims";
 import { pairs } from "../../util";
 import { linear } from "../coordinateTransforms/linear";

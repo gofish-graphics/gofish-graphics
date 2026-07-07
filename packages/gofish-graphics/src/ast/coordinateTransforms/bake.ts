@@ -163,72 +163,102 @@ const zOf = (node: GoFishAST): number =>
  * resolving each layer's own order and only then descending preserves the
  * legacy interleaving. Transforms still compose all the way to the leaves.
  */
+const walkNode = (
+  items: DisplayObject[],
+  node: GoFishAST,
+  transform: [number, number],
+  scale: [number, number]
+): void => {
+  const [ownTx, ownTy] = bakeTranslate(node);
+  const composedTranslate: [number, number] = [
+    ownTx + transform[0],
+    ownTy + transform[1],
+  ];
+  const composedScale: [number, number] = [
+    (node.transform?.scale?.[0] ?? 1) * scale[0],
+    (node.transform?.scale?.[1] ?? 1) * scale[1],
+  ];
+
+  if (!isTransparent(node)) {
+    items.push({
+      node,
+      transform: { translate: composedTranslate, scale: composedScale },
+    });
+    return;
+  }
+
+  walkChildren(items, node, composedTranslate, composedScale);
+};
+
+/** Flatten a transparent node's CHILDREN into `items` at the parent's already-
+ *  composed absolute `translate`/`scale` — resolving z hierarchically (the
+ *  z-constrained topo-sort, else the (local zOrder, index) order) exactly as
+ *  the root bake does. Shared so a bake boundary can flatten its own subtree to
+ *  absolute coordinates instead of composing its translate into a `toPixel`
+ *  closure (#39 stage 6d). */
+const walkChildren = (
+  items: DisplayObject[],
+  node: GoFishAST,
+  translate: [number, number],
+  scale: [number, number]
+): void => {
+  const children = (node as GoFishNode).children;
+  const zConstraints = ((node as GoFishNode).constraints ?? []).filter(
+    isZOrderConstraint
+  );
+
+  if (zConstraints.length > 0) {
+    // Resolve z WITHIN this layer over its component-granular flattened
+    // subtree (the same units the legacy layer render topo-sorted), then
+    // descend into each unit — components keep their internal order.
+    const sorted = topoSortByZOrder(flattenForZOrder(children), zConstraints, {
+      node: (it) => it.node,
+      z: (it) => it.defaultZ,
+      order: (it) => it.defaultOrder,
+    });
+    for (const unit of sorted) {
+      walkNode(
+        items,
+        unit.node,
+        [
+          translate[0] + unit.accTranslate[0],
+          translate[1] + unit.accTranslate[1],
+        ],
+        scale
+      );
+    }
+    return;
+  }
+
+  // Plain layer: paint children in (local zOrder, index) order.
+  const ordered = children
+    .map((child, index) => ({ child, index }))
+    .sort((a, b) => zOf(a.child) - zOf(b.child) || a.index - b.index);
+  for (const { child } of ordered) {
+    walkNode(items, child, translate, scale);
+  }
+};
+
 export const bake = (root: GoFishAST): DisplayObject[] => {
   const items: DisplayObject[] = [];
+  walkNode(items, root, [0, 0], [1, 1]);
+  return items;
+};
 
-  const walk = (
-    node: GoFishAST,
-    transform: [number, number],
-    scale: [number, number]
-  ): void => {
-    const [ownTx, ownTy] = bakeTranslate(node);
-    const composedTranslate: [number, number] = [
-      ownTx + transform[0],
-      ownTy + transform[1],
-    ];
-    const composedScale: [number, number] = [
-      (node.transform?.scale?.[0] ?? 1) * scale[0],
-      (node.transform?.scale?.[1] ?? 1) * scale[1],
-    ];
-
-    if (!isTransparent(node)) {
-      items.push({
-        node,
-        transform: { translate: composedTranslate, scale: composedScale },
-      });
-      return;
-    }
-
-    const children = (node as GoFishNode).children;
-    const zConstraints = ((node as GoFishNode).constraints ?? []).filter(
-      isZOrderConstraint
-    );
-
-    if (zConstraints.length > 0) {
-      // Resolve z WITHIN this layer over its component-granular flattened
-      // subtree (the same units the legacy layer render topo-sorted), then
-      // descend into each unit — components keep their internal order.
-      const sorted = topoSortByZOrder(
-        flattenForZOrder(children),
-        zConstraints,
-        {
-          node: (it) => it.node,
-          z: (it) => it.defaultZ,
-          order: (it) => it.defaultOrder,
-        }
-      );
-      for (const unit of sorted) {
-        walk(
-          unit.node,
-          [
-            composedTranslate[0] + unit.accTranslate[0],
-            composedTranslate[1] + unit.accTranslate[1],
-          ],
-          composedScale
-        );
-      }
-      return;
-    }
-
-    // Plain layer: paint children in (local zOrder, index) order.
-    const ordered = children
-      .map((child, index) => ({ child, index }))
-      .sort((a, b) => zOf(a.child) - zOf(b.child) || a.index - b.index);
-    for (const { child } of ordered) {
-      walk(child, composedTranslate, composedScale);
-    }
-  };
-
-  walk(root, [0, 0], [1, 1]);
+/**
+ * Flatten a bake boundary's own subtree into absolute-transform `DisplayObject`s,
+ * seeded at the boundary's already-absolute `translate`/`scale`. The boundary
+ * lowers each returned entry at its baked absolute transform (via
+ * `INTERNAL_lower(coord, d.transform)`) — the same mechanism the root bake uses —
+ * so a translate-only boundary needs no per-container `toPixel` closure (#39
+ * stage 6d). z-order is resolved identically to {@link bake}.
+ */
+export const bakeChildren = (
+  node: GoFishAST,
+  translate: [number, number] = [0, 0],
+  scale: [number, number] = [1, 1]
+): DisplayObject[] => {
+  const items: DisplayObject[] = [];
+  walkChildren(items, node, translate, scale);
   return items;
 };

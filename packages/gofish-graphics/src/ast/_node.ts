@@ -6,6 +6,9 @@
 // </gofish-wiki>
 
 import type { JSX } from "solid-js";
+// Type-only (erased) so no runtime cycle with solver/scopes.ts, which imports
+// RenderSession from here.
+import type { ScopeRegistry } from "./solver/scopes";
 import {
   Anchor,
   Dimensions,
@@ -55,7 +58,6 @@ import {
   continuousInterval,
   spacePlacement,
   CONTINUOUS_TYPE,
-  type Placement,
   UnderlyingSpace,
 } from "./underlyingSpace";
 import { toJSON, interval } from "../util/interval";
@@ -90,6 +92,10 @@ export type RenderSession = {
   /** Set by the lower emit driver (`lowerToDisplayList`) for the duration of a
    *  lowering walk: the y-up→y-down pixel mapping every `lower` body uses. */
   toPixel?: ToPixel;
+  /** The σ-scope registry (#39 Stage 6b): the one place σ / posScale is derived,
+   *  shared by every scope root in this render. Created on first use
+   *  (`getScopeRegistry`). */
+  scopes?: ScopeRegistry;
 };
 
 export type ScaleFactorFunction = Monotonic.Monotonic;
@@ -121,12 +127,6 @@ export type Placeable = {
    *  uses this to express every anchor as `absoluteMin + constant`, including
    *  `baseline` for asymmetric boxes such as text and negative bars. */
   localAnchor?: (axis: FancyDirection, anchor: Anchor) => number | undefined;
-  /** This target's abstract {@link Placement} on `dir` (`"free"` /
-   *  `"determined"` / `"conflict"`), or `undefined` for a non-continuous axis.
-   *  `align` reads it to leave self-positioned children alone. Omitted by `ref`
-   *  stand-ins (→ `undefined`, so they get the fallback baseline like any
-   *  chrome). */
-  placementOn?: (dir: Direction) => Placement | undefined;
   place: (axis: FancyDirection, value: number, anchor?: Anchor) => void;
   /** Write an axis extent from owned bbox keys (the size-setting primitive
    *  #39 — `span` and an authoritative `position` pin go through it). Optional
@@ -891,19 +891,6 @@ export class GoFishNode {
     return localAnchorPoint(anchor, intrinsic.min, intrinsic.size ?? 0);
   }
 
-  /** This node's abstract {@link Placement} on `dir` (the layout half of its
-   *  underlying space) — `"free"` (awaiting a position), `"determined"` (already
-   *  committed to a data coordinate), or `"conflict"`. `undefined` for a
-   *  non-continuous / unresolved axis (chrome). `align` reads it to leave
-   *  self-positioned children (a scatter facet) where their own scale puts them
-   *  — the principled replacement for the data-positioned guard. */
-  public placementOn(dir: Direction): Placement | undefined {
-    const sp = this._underlyingSpace?.[dir];
-    return sp !== undefined && isCONTINUOUS(sp)
-      ? spacePlacement(sp)
-      : undefined;
-  }
-
   private get _displayTransform(): Transform | undefined {
     const tx = this._projectTranslate(0);
     const ty = this._projectTranslate(1);
@@ -1168,6 +1155,20 @@ export class GoFishNode {
       return this.parent.getRenderSession();
     }
     throw new Error("Render session not set");
+  }
+
+  /** Non-throwing session lookup for the layout-path σ-scope registry (Stage 6b):
+   *  the full `gofish()` flow always sets a session before layout, but a
+   *  standalone `node.layout(...)` (some coord/confluence tests) has none — then
+   *  the scope solve just uses a throwaway registry with identical arithmetic. */
+  public tryGetRenderSession(): RenderSession | undefined {
+    if (this.renderSession) return this.renderSession;
+    const parent = this.parent as
+      | { tryGetRenderSession?: () => RenderSession | undefined }
+      | undefined;
+    return parent && typeof parent.tryGetRenderSession === "function"
+      ? parent.tryGetRenderSession()
+      : undefined;
   }
 
   public render(
