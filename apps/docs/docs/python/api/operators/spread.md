@@ -22,14 +22,16 @@ spread(*, by=None, dir, **options) -> Operator
 
 ## Parameters
 
-| Parameter   | Type                | Description                                                                                                                                       |
-| ----------- | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `by`        | `str` \| `Callable` | Field, dotted path, or callable to partition by (see [path-aware `by`](#path-aware-by)). Omit to spread per row.                                  |
-| `dir`       | `"x"` \| `"y"`      | **Required.** Axis to lay groups out along.                                                                                                       |
-| `spacing`   | `int`               | Gap between groups in pixels. Ignored when `glue=True`.                                                                                           |
-| `alignment` | `str`               | Cross-axis alignment of the groups.                                                                                                               |
-| `glue`      | `bool`              | Glue children together: collapse data-driven sizes into a single positional axis at this level. [`stack`](/python/api/operators/stack) sets this. |
-| `label`     | `bool`              | Whether to emit an axis label for the partition field.                                                                                            |
+| Parameter   | Type                | Description                                                                                                                                                                                                                                                                                          |
+| ----------- | ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `by`        | `str` \| `Callable` | Field, dotted path, or callable to partition by (see [path-aware `by`](#path-aware-by)). Omit to spread per row.                                                                                                                                                                                     |
+| `dir`       | `"x"` \| `"y"`      | **Required.** Axis to lay groups out along.                                                                                                                                                                                                                                                          |
+| `spacing`   | `int`               | Gap between groups in pixels. Ignored when `glue=True`.                                                                                                                                                                                                                                              |
+| `alignment` | `str`               | Cross-axis alignment of the groups.                                                                                                                                                                                                                                                                  |
+| `glue`      | `bool`              | Glue children together: collapse data-driven sizes into a single positional axis at this level. [`stack`](/python/api/operators/stack) sets this.                                                                                                                                                    |
+| `w`, `h`    | `int` \| `str`      | Fixed pixel size, or a field name sizing this operator's box from data (data-driven operator extent — e.g. a mosaic's column width).                                                                                                                                                                 |
+| `normalize` | `bool`              | Space-filling spine: make the layout axis fill its extent in proportion to child size (the mosaic/marimekko conditional axis). Pure layout — data is not mutated, so a cross-axis `w`/`h` size still reads the raw marginal sum. See [Space-filling spines](#space-filling-spines-mosaic-marimekko). |
+| `label`     | `bool`              | Whether to emit an axis label for the partition field.                                                                                                                                                                                                                                               |
 
 Returns an `Operator` for use inside [`.flow()`](/python/api/core/flow).
 
@@ -111,6 +113,38 @@ Do **not** "consistency-refactor" channels into `datum.count` — a channel like
 `rect(h="count")` reads the bound record directly and is never path-prefixed.
 Only `by` (on `group`/`spread`/`stack`/`scatter`) is path-aware, because only
 `by` sees the selection stream.
+
+## Space-filling spines (mosaic / marimekko) {#space-filling-spines-mosaic-marimekko}
+
+`normalize=True` turns a stack into a **space-filling spine**: its segments fill
+the whole extent in proportion to their size, so the axis reads as a local
+0–100% conditional distribution. It is pure layout — the data is never mutated —
+so the same field can drive both a cross-axis marginal size and the normalized
+fill. Nest two stacks on alternating axes for a mosaic: the outer sizes each
+column by its raw total (`w="count"` — the marginal), the inner `normalize`s to
+fill each column's height by share (the conditional).
+
+```python
+(
+    chart(passengers, axes=True)
+    .flow(
+        # columns by class — width ∝ each class's count (marginal)
+        stack(by="pclass", dir="x"),
+        # survival share within each column (conditional), filling height
+        stack(by="survived", dir="y", w="count", normalize=True),
+    )
+    .mark(rect(h="count", fill="survived"))
+    .render(w=400, h=300)
+)
+```
+
+::: gofish example:titanic-survival-mosaic hidden
+:::
+
+::: warning
+Inner conditional axes are local scopes, so they don't yet render 0–1 tick
+labels — only the outermost marginal axis is labeled.
+:::
 
 ## Notes
 

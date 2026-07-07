@@ -283,6 +283,9 @@ function walkOperator(node: unknown, path: string, ctx: Context): void {
       "mode",
       "reverse",
       "glue",
+      "w",
+      "h",
+      "normalize",
       "axes",
       "translate",
       "origin",
@@ -296,6 +299,9 @@ function walkOperator(node: unknown, path: string, ctx: Context): void {
       "sharedScale",
       "mode",
       "reverse",
+      "w",
+      "h",
+      "normalize",
       "axes",
       "translate",
       "origin",
@@ -375,6 +381,10 @@ function walkOperator(node: unknown, path: string, ctx: Context): void {
       // spread-only stack options (stack operator rejects these via its own
       // knownFields list); optionalField no-ops when the field is absent.
       optionalField(node, "glue", path, ctx, expectBoolean);
+      // Data-driven operator extent (#4/#20) + space-filling spine (mosaic).
+      optionalField(node, "w", path, ctx, walkChannelValue);
+      optionalField(node, "h", path, ctx, walkChannelValue);
+      optionalField(node, "normalize", path, ctx, expectBoolean);
       optionalField(node, "axes", path, ctx, walkAxesOptions);
       break;
     case "group":

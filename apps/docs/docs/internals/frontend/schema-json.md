@@ -251,6 +251,9 @@ for the API.
         "h": {
           "$ref": "#/$defs/ChannelValue"
         },
+        "normalize": {
+          "type": "boolean"
+        },
         "cols": {
           "type": "array",
           "items": {

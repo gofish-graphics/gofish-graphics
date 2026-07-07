@@ -152,6 +152,7 @@ export const FRONTEND_IR_JSON_SCHEMA = {
         translate: { $ref: "#/$defs/Translate" },
         w: { $ref: "#/$defs/ChannelValue" },
         h: { $ref: "#/$defs/ChannelValue" },
+        normalize: { type: "boolean" },
         cols: { type: "array", items: { type: "string" } },
         from: { type: "string" },
         key: { type: "string" },
