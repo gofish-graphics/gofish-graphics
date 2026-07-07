@@ -614,8 +614,9 @@ export const connect = createNodeOperator(
             stroke: stroke ?? resolvedFill ?? "black",
             strokeWidth: strokeWidth ?? 0,
             opacity: opacity ?? 1,
-            mixBlendMode:
-              mixBlendMode ?? (mode === "center" ? "normal" : "multiply"),
+            // Normal by default for both modes; a ribbon that wants overlaps to
+            // darken opts into `mixBlendMode: "multiply"` explicitly.
+            mixBlendMode: mixBlendMode ?? "normal",
           });
 
           return (renderData.paths as Path[]).map((path) => {
