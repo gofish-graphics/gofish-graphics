@@ -20,12 +20,16 @@ export const Table = createNodeOperator(
       spacing = 0,
       colKeys,
       rowKeys,
+      axisMeasures,
     }: {
       key?: string;
       numCols?: number;
       spacing?: number | [number, number];
       colKeys?: string[];
       rowKeys?: string[];
+      /** Resolved grouping fields per axis, injected by createOperator (table's
+       *  `by.x`/`by.y`) → the col/row ORDINAL measures. */
+      axisMeasures?: { x?: string; y?: string };
     },
     children: GoFishAST[]
   ) => {
@@ -49,7 +53,14 @@ export const Table = createNodeOperator(
       // grid is table's private elaboration target — not part of the public
       // `Constraint` factory (see constraints/index.ts).
       createGridConstraint(
-        { numCols, spacing, colKeys, rowKeys },
+        {
+          numCols,
+          spacing,
+          colKeys,
+          rowKeys,
+          colMeasure: axisMeasures?.x,
+          rowMeasure: axisMeasures?.y,
+        },
         cellNames.map((n) => ref[n] ?? { name: n })
       ),
     ]);
