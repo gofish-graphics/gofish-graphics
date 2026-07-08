@@ -36,6 +36,9 @@ import {
   COMBINATOR_MARKS,
   OPERATORS,
   COORDS,
+  MARK_BASE_FIELDS,
+  OPERATOR_BASE_FIELDS,
+  PY_LEAF_BASE_KWARGS,
   resolveFields,
   type FieldGroup,
   type FieldSpec,
@@ -63,9 +66,20 @@ function pyType(f: FieldType): string {
       return "str";
     case "array":
       return "List[Any]";
+    case "union": {
+      // A union of primitive kinds renders as a real Union; anything richer
+      // falls back to Any.
+      const prims = f.options.map((o) => {
+        if (o.kind === "string") return "str";
+        if (o.kind === "number") return "float";
+        if (o.kind === "boolean") return "bool";
+        return null;
+      });
+      if (prims.every(Boolean)) return `Union[${prims.join(", ")}]`;
+      return "Any";
+    }
     case "any":
     case "ref":
-    case "union":
     case "tuple":
     case "object":
     case "record":
@@ -75,6 +89,11 @@ function pyType(f: FieldType): string {
 }
 
 function pySig(name: string, f: FieldSpec): string {
+  // Descriptor-required wire fields are required keyword arguments: missing
+  // them raised a TypeError at construction in the old hand-written wrappers,
+  // and the IR validator only warns for leaf marks — the signature is the
+  // only early failure point.
+  if (f.required) return `${name}: ${pyType(f.type)}`;
   return `${name}: Optional[${pyType(f.type)}] = None`;
 }
 
@@ -220,7 +239,10 @@ parts.push(
 );
 for (const name of GENERATED_LEAF_MARKS) {
   const d = LEAF_MARKS[name];
-  const fields = resolveFields(d);
+  // Every leaf mark also exposes the base kwargs (`label` LabelIR shorthand,
+  // `debug`); a mark's own declared field of the same name wins (rect/circle/
+  // ellipse declare their own `label` flag).
+  const fields = { ...PY_LEAF_BASE_KWARGS, ...resolveFields(d) };
   const openKwargs = OPEN_KWARGS_MARKS.has(name);
   // Render manually (not via renderLeafFactory's half-baked openKwargs path)
   // for full control over the **kwargs merge.
@@ -248,9 +270,12 @@ for (const name of GENERATED_LEAF_MARKS) {
     `            _kw[_k] = _channel(_v)`,
   ];
   if (openKwargs) {
+    // Extras route through _channel too, so a callable accessor on an
+    // undeclared channel (e.g. circle(cx=lambda d: ...)) bridges via the
+    // derive RPC exactly like a declared one.
     bodyLines.push(`    for _k, _v in kwargs.items():`);
     bodyLines.push(`        if _v is not None:`);
-    bodyLines.push(`            _kw[_k] = _v`);
+    bodyLines.push(`            _kw[_k] = _channel(_v)`);
   }
   bodyLines.push(`    return Mark(${pyStr(d.type)}, **_kw)`);
   parts.push(
@@ -301,13 +326,41 @@ const DUAL_FORM_OPERATOR_CORES: Array<[string, string]> = [
 ];
 for (const [opType, fnName] of DUAL_FORM_OPERATOR_CORES) {
   const d = OPERATORS[opType];
-  parts.push(renderOptsCore(fnName, d.fields, d.doc) + "\n");
+  // `debug` (OPERATOR_BASE_FIELDS) is the universal v3-operator escape hatch
+  // (stripped JS-side by FACTORY_ONLY_KEYS) — every core accepts it.
+  parts.push(
+    renderOptsCore(
+      fnName,
+      { ...d.fields, debug: OPERATOR_BASE_FIELDS.debug },
+      d.doc
+    ) + "\n"
+  );
+}
+
+// treemap's combinator form carries combinator-only fields (`key`, the
+// JS-only `value` accessor) on top of the operator's — its own core, from
+// the COMBINATOR_MARKS entry, so Treemap() doesn't reject them.
+{
+  const d = COMBINATOR_MARKS["treemap"];
+  parts.push(
+    renderOptsCore(
+      "_treemap_combinator_opts",
+      { ...resolveFields(d), debug: OPERATOR_BASE_FIELDS.debug },
+      d.doc
+    ) + "\n"
+  );
 }
 
 // line/ribbon: same field list for bag/pairwise/combinator forms.
 for (const name of ["line", "ribbon"]) {
   const d = LEAF_MARKS[name];
-  parts.push(renderOptsCore(`_${name}_opts`, d.fields, d.doc) + "\n");
+  parts.push(
+    renderOptsCore(
+      `_${name}_opts`,
+      { ...d.fields, debug: MARK_BASE_FIELDS.debug },
+      d.doc
+    ) + "\n"
+  );
 }
 
 // layer (marks form): key, transform, box + boxDims.

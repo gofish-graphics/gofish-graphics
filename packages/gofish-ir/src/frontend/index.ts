@@ -3,6 +3,7 @@ export {
   validate,
   type ValidationResult,
   type ValidationError,
+  type ValidationWarning,
 } from "./validate.js";
 export {
   exampleBarChart,
@@ -24,6 +25,7 @@ export {
   COORDS,
   MARK_BASE_FIELDS,
   OPERATOR_BASE_FIELDS,
+  PY_LEAF_BASE_KWARGS,
   boxDims,
   paint,
   ALL_OPERATOR_DESCRIPTORS,

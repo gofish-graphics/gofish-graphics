@@ -101,9 +101,13 @@ const pascalCase = (s: string): string =>
 /**
  * Build one `$def` per operator type (`SpreadOperator`, `TableOperator`, ...)
  * plus the `OperatorIR` discriminated union referencing them. Mirrors
- * `validate.ts`'s `walkOperator`: `additionalProperties: false` (operators
- * are strict-capable — unlike leaf marks), `type`/`translate`/`origin`/`meta`
- * always present as properties.
+ * `validate.ts`'s walkOperator field shapes with `type`/`translate`/`origin`/
+ * `meta`/`debug` always present as properties. `additionalProperties` stays
+ * `true`: the published schema keeps the permissive wire contract (the JS
+ * low-level factories accept passthrough options the v3 IR doesn't model,
+ * e.g. spread/stack `FancyDims` — real producers emit them); strict
+ * unknown-field rejection is validate.ts strict mode's job, not the wire
+ * artifact's.
  */
 function buildOperatorDefs(): Record<string, unknown> {
   const defs: Record<string, unknown> = {};
@@ -117,13 +121,14 @@ function buildOperatorDefs(): Record<string, unknown> {
       ...(descriptor.doc ? { description: descriptor.doc } : {}),
       type: "object",
       required: ["type", ...required],
-      additionalProperties: false,
+      additionalProperties: true,
       properties: {
         type: { const: descriptor.type },
         ...properties,
         translate: { $ref: "#/$defs/Translate" },
         origin: { $ref: "#/$defs/Origin" },
         meta: { $ref: "#/$defs/Meta" },
+        debug: { type: "boolean" },
       },
     };
     refs.push({ $ref: `#/$defs/${defName}` });
@@ -166,6 +171,7 @@ function buildLeafMarkDefs(): Record<string, unknown> {
           items: { $ref: "#/$defs/ConstraintIR" },
         },
         zOrder: { type: "number" },
+        debug: { type: "boolean" },
         translate: { $ref: "#/$defs/Translate" },
       },
     };
@@ -466,6 +472,7 @@ export const FRONTEND_IR_JSON_SCHEMA = {
           items: { $ref: "#/$defs/ConstraintIR" },
         },
         zOrder: { type: "number" },
+        debug: { type: "boolean" },
         translate: { $ref: "#/$defs/Translate" },
       },
     },

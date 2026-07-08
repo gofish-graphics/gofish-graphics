@@ -474,6 +474,9 @@ for the API.
         "zOrder": {
           "type": "number"
         },
+        "debug": {
+          "type": "boolean"
+        },
         "translate": {
           "$ref": "#/$defs/Translate"
         }
@@ -655,7 +658,7 @@ for the API.
       "description": "Opaque user transformation (`derive(fn)`). Function bodies aren't serializable; the IR carries a bridge handle when the Python widget is the producer.",
       "type": "object",
       "required": ["type"],
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "type": {
           "const": "derive"
@@ -679,6 +682,9 @@ for the API.
         },
         "meta": {
           "$ref": "#/$defs/Meta"
+        },
+        "debug": {
+          "type": "boolean"
         }
       }
     },
@@ -686,7 +692,7 @@ for the API.
       "description": "Dereference reference columns into the drawn nodes they name (`resolve(cols, { from, key? })`).",
       "type": "object",
       "required": ["type", "cols"],
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "type": {
           "const": "resolve"
@@ -714,6 +720,9 @@ for the API.
         },
         "meta": {
           "$ref": "#/$defs/Meta"
+        },
+        "debug": {
+          "type": "boolean"
         }
       }
     },
@@ -721,7 +730,7 @@ for the API.
       "description": "One-to-many equi-join of the incoming rows against an inlined `right` table on a shared `on` key.",
       "type": "object",
       "required": ["type", "on", "right"],
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "type": {
           "const": "join"
@@ -746,6 +755,9 @@ for the API.
         },
         "meta": {
           "$ref": "#/$defs/Meta"
+        },
+        "debug": {
+          "type": "boolean"
         }
       }
     },
@@ -753,7 +765,7 @@ for the API.
       "description": "Arrange children along `dir` with spacing, aligning them on the cross axis.",
       "type": "object",
       "required": ["type"],
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "type": {
           "const": "spread"
@@ -804,6 +816,9 @@ for the API.
         },
         "meta": {
           "$ref": "#/$defs/Meta"
+        },
+        "debug": {
+          "type": "boolean"
         }
       }
     },
@@ -811,7 +826,7 @@ for the API.
       "description": "`spread({ glue: true })` under its own wire tag — children glued together (touching, no gaps).",
       "type": "object",
       "required": ["type"],
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "type": {
           "const": "stack"
@@ -823,6 +838,14 @@ for the API.
         "dir": {
           "enum": ["x", "y"],
           "description": "Direction to stack along."
+        },
+        "spacing": {
+          "type": "number",
+          "description": "Forwarded to the underlying spread. Glue semantics force the effective gap to 0; accepted for spread-parity."
+        },
+        "glue": {
+          "type": "boolean",
+          "description": "Spread-parity passthrough; stack always glues regardless."
         },
         "alignment": {
           "type": "string",
@@ -851,6 +874,9 @@ for the API.
         },
         "meta": {
           "$ref": "#/$defs/Meta"
+        },
+        "debug": {
+          "type": "boolean"
         }
       }
     },
@@ -858,7 +884,7 @@ for the API.
       "description": "Partition rows by `by` into a flat `Frame` (no layout beyond grouping).",
       "type": "object",
       "required": ["type", "by"],
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "type": {
           "const": "group"
@@ -875,6 +901,9 @@ for the API.
         },
         "meta": {
           "$ref": "#/$defs/Meta"
+        },
+        "debug": {
+          "type": "boolean"
         }
       }
     },
@@ -882,7 +911,7 @@ for the API.
       "description": "Position each child at an explicit (x, y) point or [min, max] span in data space.",
       "type": "object",
       "required": ["type"],
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "type": {
           "const": "scatter"
@@ -937,6 +966,9 @@ for the API.
         },
         "meta": {
           "$ref": "#/$defs/Meta"
+        },
+        "debug": {
+          "type": "boolean"
         }
       }
     },
@@ -944,7 +976,7 @@ for the API.
       "description": "Arrange cells in a `numCols`-wide grid (or a `{x, y}` keyed grid via `by`).",
       "type": "object",
       "required": ["type", "by"],
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "type": {
           "const": "table"
@@ -996,6 +1028,9 @@ for the API.
         },
         "meta": {
           "$ref": "#/$defs/Meta"
+        },
+        "debug": {
+          "type": "boolean"
         }
       }
     },
@@ -1003,7 +1038,7 @@ for the API.
       "description": "Debug pass-through: logs each row (optionally under `label`) and forwards it unchanged.",
       "type": "object",
       "required": ["type"],
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "type": {
           "const": "log"
@@ -1020,6 +1055,9 @@ for the API.
         },
         "meta": {
           "$ref": "#/$defs/Meta"
+        },
+        "debug": {
+          "type": "boolean"
         }
       }
     },
@@ -1027,7 +1065,7 @@ for the API.
       "description": "d3-hierarchy treemap layout over the flow's rows, fare/weight-proportional.",
       "type": "object",
       "required": ["type"],
-      "additionalProperties": false,
+      "additionalProperties": true,
       "properties": {
         "type": {
           "const": "treemap"
@@ -1086,6 +1124,9 @@ for the API.
         },
         "meta": {
           "$ref": "#/$defs/Meta"
+        },
+        "debug": {
+          "type": "boolean"
         }
       }
     },
@@ -1231,8 +1272,7 @@ for the API.
           "$ref": "#/$defs/LabelIR"
         },
         "debug": {
-          "type": "boolean",
-          "description": "Dev-only console.log flag. Genuinely serializes on the wire today but is stripped before layout (FACTORY_ONLY_KEYS) — carries no rendering meaning."
+          "type": "boolean"
         },
         "name": {
           "type": "string"
@@ -1278,8 +1318,7 @@ for the API.
           "$ref": "#/$defs/LabelIR"
         },
         "debug": {
-          "type": "boolean",
-          "description": "Dev-only console.log flag; stripped before layout (FACTORY_ONLY_KEYS)."
+          "type": "boolean"
         },
         "name": {
           "type": "string"
@@ -1381,8 +1420,7 @@ for the API.
           "$ref": "#/$defs/LabelIR"
         },
         "debug": {
-          "type": "boolean",
-          "description": "Dev-only console.log flag; stripped before layout (FACTORY_ONLY_KEYS)."
+          "type": "boolean"
         },
         "name": {
           "type": "string"
@@ -1477,8 +1515,7 @@ for the API.
           "type": "number"
         },
         "debug": {
-          "type": "boolean",
-          "description": "Dev-only console.log flag; stripped before layout (FACTORY_ONLY_KEYS)."
+          "type": "boolean"
         },
         "name": {
           "type": "string"
@@ -1618,6 +1655,9 @@ for the API.
         "zOrder": {
           "type": "number"
         },
+        "debug": {
+          "type": "boolean"
+        },
         "translate": {
           "$ref": "#/$defs/Translate"
         }
@@ -1708,8 +1748,7 @@ for the API.
           "default": "xMidYMid meet"
         },
         "debug": {
-          "type": "boolean",
-          "description": "Dev-only console.log flag; stripped before layout (FACTORY_ONLY_KEYS)."
+          "type": "boolean"
         },
         "name": {
           "type": "string"
@@ -1769,8 +1808,7 @@ for the API.
           "type": "number"
         },
         "debug": {
-          "type": "boolean",
-          "description": "Dev-only console.log flag; stripped before layout (FACTORY_ONLY_KEYS)."
+          "type": "boolean"
         },
         "name": {
           "type": "string"
@@ -1831,8 +1869,7 @@ for the API.
           "type": "number"
         },
         "debug": {
-          "type": "boolean",
-          "description": "Dev-only console.log flag. Genuinely serializes on the wire today (found while grounding this table) but carries no rendering meaning."
+          "type": "boolean"
         },
         "name": {
           "type": "string"
@@ -1913,6 +1950,9 @@ for the API.
         "zOrder": {
           "type": "number"
         },
+        "debug": {
+          "type": "boolean"
+        },
         "translate": {
           "$ref": "#/$defs/Translate"
         }
@@ -1971,6 +2011,9 @@ for the API.
         "zOrder": {
           "type": "number"
         },
+        "debug": {
+          "type": "boolean"
+        },
         "translate": {
           "$ref": "#/$defs/Translate"
         }
@@ -2002,6 +2045,9 @@ for the API.
         },
         "zOrder": {
           "type": "number"
+        },
+        "debug": {
+          "type": "boolean"
         },
         "translate": {
           "$ref": "#/$defs/Translate"

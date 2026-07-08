@@ -67,6 +67,14 @@ interface TranslatableIR {
   translate?: TranslateIR;
 }
 
+/** Mixin for every operator: fields real producers put on the wire that the
+ *  JS factory strips (`FACTORY_ONLY_KEYS` in createOperator.ts) before
+ *  layout. Mirrors `OPERATOR_BASE_FIELDS` in descriptors.ts. */
+interface OperatorFlagsIR {
+  /** Dev escape hatch (`debug: true`); a no-op for layout. */
+  debug?: boolean;
+}
+
 export interface Origin {
   /** User-supplied name via `.name("bars")` on the v3 fluent builder. */
   name?: string;
@@ -177,7 +185,10 @@ export type OperatorIR =
  * serializable; the IR carries a bridge handle (`lambdaId`) when the
  * Python widget is the producer, and is otherwise empty.
  */
-export interface DeriveOperator extends BaseIRNode, TranslatableIR {
+export interface DeriveOperator
+  extends BaseIRNode,
+    TranslatableIR,
+    OperatorFlagsIR {
   type: "derive";
   lambdaId?: string;
   /** Measure provenance a transform (e.g. `bin`) declares for its output
@@ -196,7 +207,10 @@ export interface DeriveOperator extends BaseIRNode, TranslatableIR {
  * and label anchoring. The match key defaults to the field `from`'s nodes were
  * grouped by; `key` overrides it.
  */
-export interface ResolveOperator extends BaseIRNode, TranslatableIR {
+export interface ResolveOperator
+  extends BaseIRNode,
+    TranslatableIR,
+    OperatorFlagsIR {
   type: "resolve";
   /** Local columns holding references to resolve in place. */
   cols: string[];
@@ -214,7 +228,10 @@ export interface ResolveOperator extends BaseIRNode, TranslatableIR {
  * data tables (contrast `resolve`, which dereferences columns into drawn
  * nodes), so `right` rides in the IR as inline JSON and round-trips.
  */
-export interface JoinOperator extends BaseIRNode, TranslatableIR {
+export interface JoinOperator
+  extends BaseIRNode,
+    TranslatableIR,
+    OperatorFlagsIR {
   type: "join";
   /** Shared key field matched between the incoming rows and `right`. */
   on: string;
@@ -222,7 +239,10 @@ export interface JoinOperator extends BaseIRNode, TranslatableIR {
   right: Record<string, unknown>[];
 }
 
-export interface SpreadOperator extends BaseIRNode, TranslatableIR {
+export interface SpreadOperator
+  extends BaseIRNode,
+    TranslatableIR,
+    OperatorFlagsIR {
   type: "spread";
   by?: string;
   dir?: "x" | "y";
@@ -237,10 +257,19 @@ export interface SpreadOperator extends BaseIRNode, TranslatableIR {
   axes?: AxesOptions;
 }
 
-export interface StackOperator extends BaseIRNode, TranslatableIR {
+export interface StackOperator
+  extends BaseIRNode,
+    TranslatableIR,
+    OperatorFlagsIR {
   type: "stack";
   by?: string;
   dir?: "x" | "y";
+  /** Spread-parity passthrough: the JS `stack` is `Spread({...props, glue:
+   *  true})`, so producers may put spread's options on the wire. Glue
+   *  semantics force the effective gap to 0. */
+  spacing?: number;
+  /** Spread-parity passthrough; stack always glues regardless. */
+  glue?: boolean;
   alignment?: string;
   sharedScale?: boolean;
   mode?: "edge" | "center";
@@ -248,12 +277,18 @@ export interface StackOperator extends BaseIRNode, TranslatableIR {
   axes?: AxesOptions;
 }
 
-export interface GroupOperator extends BaseIRNode, TranslatableIR {
+export interface GroupOperator
+  extends BaseIRNode,
+    TranslatableIR,
+    OperatorFlagsIR {
   type: "group";
   by: string;
 }
 
-export interface ScatterOperator extends BaseIRNode, TranslatableIR {
+export interface ScatterOperator
+  extends BaseIRNode,
+    TranslatableIR,
+    OperatorFlagsIR {
   type: "scatter";
   by?: string;
   x?: ChannelValue;
@@ -282,14 +317,20 @@ export interface ScatterOperator extends BaseIRNode, TranslatableIR {
 export type AxesOptions = boolean | { x?: AxisOptions; y?: AxisOptions };
 export type AxisOptions = boolean | { title?: string | false };
 
-export interface TableOperator extends BaseIRNode, TranslatableIR {
+export interface TableOperator
+  extends BaseIRNode,
+    TranslatableIR,
+    OperatorFlagsIR {
   type: "table";
   by: { x: string; y: string };
   spacing?: number | [number, number];
   numCols?: number;
 }
 
-export interface LogOperator extends BaseIRNode, TranslatableIR {
+export interface LogOperator
+  extends BaseIRNode,
+    TranslatableIR,
+    OperatorFlagsIR {
   type: "log";
   label?: string;
 }
@@ -302,7 +343,10 @@ export interface LogOperator extends BaseIRNode, TranslatableIR {
  * Mirrors JS's `TreemapProps` (`graphicalOperators/treemap.tsx`) minus the
  * JS-only `value` function accessor (not serializable) and `key`.
  */
-export interface TreemapOperator extends BaseIRNode, TranslatableIR {
+export interface TreemapOperator
+  extends BaseIRNode,
+    TranslatableIR,
+    OperatorFlagsIR {
   type: "treemap";
   paddingInner?: number;
   paddingOuter?: number;

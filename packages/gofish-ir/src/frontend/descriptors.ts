@@ -174,11 +174,32 @@ export const MARK_BASE_FIELDS: FieldGroup = group({
   constraints: { type: t.array(t.ref("ConstraintIR")) },
   zOrder: { type: t.number },
   translate: { type: t.ref("TranslateIR") },
+  debug: {
+    type: t.boolean,
+    doc: "Factory-only dev flag; the JS factory strips it (FACTORY_ONLY_KEYS) before layout.",
+  },
+});
+
+/** The base fields the Python generator exposes as leaf-mark kwargs (the
+ *  rest of MARK_BASE_FIELDS ride Mark methods: `.name()`, `.z_order()`,
+ *  `.translate()`, `.constrain()`). `label` here is the LabelIR shorthand
+ *  (`True` / `"field"`); marks that declare their own `label` flag
+ *  (rect/circle/ellipse) keep their entry instead. */
+export const PY_LEAF_BASE_KWARGS: FieldGroup = group({
+  label: {
+    type: t.union(t.boolean, t.string),
+    doc: "Value label: `True` for defaults or a field name (`.label()` shorthand).",
+  },
+  debug: MARK_BASE_FIELDS.debug,
 });
 
 /** Every operator carries these (BaseIRNode + TranslatableIR in schema.ts). */
 export const OPERATOR_BASE_FIELDS: FieldGroup = group({
   translate: { type: t.ref("TranslateIR") },
+  debug: {
+    type: t.boolean,
+    doc: "Universal v3-operator dev escape hatch; stripped by the JS factory (FACTORY_ONLY_KEYS) before layout, but present on the wire when a producer passes it.",
+  },
 });
 
 // ---------------------------------------------------------------------------
@@ -319,6 +340,19 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
     fields: {
       by: { type: t.string, doc: "Field to partition rows by." },
       dir: { type: t.enum("x", "y"), doc: "Direction to stack along." },
+      // Real producers pass spread's options through (the JS `stack` is a
+      // literal `Spread({...props, glue: true})` forward, and stories emit
+      // `stack(spacing=2)`), so the wire accepts them and the validator
+      // type-checks them when present — restoring the shared
+      // spread/stack switch-case behavior the descriptor split dropped.
+      spacing: {
+        type: t.number,
+        doc: "Forwarded to the underlying spread. Glue semantics force the effective gap to 0; accepted for spread-parity.",
+      },
+      glue: {
+        type: t.boolean,
+        doc: "Spread-parity passthrough; stack always glues regardless.",
+      },
       alignment: { type: t.string, default: "baseline" },
       sharedScale: { type: t.boolean, default: false },
       mode: { type: t.enum("edge", "center"), default: "edge" },

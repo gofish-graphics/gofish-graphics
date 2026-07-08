@@ -30,6 +30,8 @@ import {
 } from "./schema.js";
 import {
   LEAF_MARKS,
+  MARK_BASE_FIELDS,
+  OPERATOR_BASE_FIELDS,
   OPERATORS,
   resolveFields,
   type FieldSpec,
@@ -318,6 +320,11 @@ function walkDescriptorFields(
   if (shouldCheckUnknown && (opts.rejectUnknownInStrict ?? true)) {
     const known = [...extraKnownKeys, ...Object.keys(fields)];
     for (const k of Object.keys(node)) {
+      // Double-underscore keys are Python-bridge wire extensions
+      // (__combinator, __datum, __key, __gofish_lambda, ... — see the
+      // serialization essay's "Bridge extensions"), not channels; the
+      // permissive envelope owns them, so they're outside this check.
+      if (k.startsWith("__")) continue;
       if (!known.includes(k)) {
         push(
           `${path}.${k}`,
@@ -372,9 +379,15 @@ function walkFieldType(
       for (const e of probe.errors) push(e.path, e.message);
       return;
     }
-    case "ref":
-      walkRefType(type.name, value, path, ctx);
+    case "ref": {
+      // Same probe indirection as "channel": walkRefType pushes to
+      // ctx.errors unconditionally, but this field's findings must route
+      // through `push` (errors for operators, warnings for leaf marks).
+      const probe: Context = { strict: ctx.strict, errors: [], warnings: [] };
+      walkRefType(type.name, value, path, probe);
+      for (const e of probe.errors) push(e.path, e.message);
       return;
+    }
     case "union": {
       // Valid if ANY branch matches cleanly (no errors raised by that branch).
       for (const branch of type.options) {
@@ -490,7 +503,11 @@ function walkOperator(node: unknown, path: string, ctx: Context): void {
   walkBaseFields(node, path, ctx);
   optionalField(node, "translate", path, ctx, walkTranslate);
   const descriptor = OPERATORS[node.type];
-  const fields = descriptor ? resolveFields(descriptor) : {};
+  // `debug` (OPERATOR_BASE_FIELDS) rides every operator: a factory-only dev
+  // flag JS strips before layout, but real producers put it on the wire.
+  const fields = descriptor
+    ? { ...resolveFields(descriptor), debug: OPERATOR_BASE_FIELDS.debug }
+    : {};
   walkDescriptorFields(node, path, ctx, fields, [
     "type",
     "translate",
@@ -911,7 +928,9 @@ function walkLeafMark(
       node,
       path,
       ctx,
-      fields,
+      // `debug` (MARK_BASE_FIELDS) rides every leaf mark, declared or not —
+      // a factory-only dev flag the JS side strips before layout.
+      { ...fields, debug: MARK_BASE_FIELDS.debug },
       [
         "type",
         "name",

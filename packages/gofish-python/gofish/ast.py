@@ -531,6 +531,7 @@ from ._generated import (  # noqa: E402
     _group_opts,
     _table_opts,
     _treemap_opts,
+    _treemap_combinator_opts,
     _line_opts,
     _ribbon_opts,
     _polar_config,
@@ -1528,7 +1529,11 @@ def Treemap(  # noqa: N802  — match JS storybook spelling
     Mirrors JS `Treemap({valueField, ...}, nodes)` from
     `packages/gofish-graphics/src/ast/graphicalOperators/treemap.tsx:62`.
     """
-    return Mark("treemap", _children=list(children), **_treemap_opts(**options))
+    return Mark(
+        "treemap",
+        _children=list(children),
+        **_treemap_combinator_opts(**options),
+    )
 
 
 # `arrow` and the region-compositing quartet (Porter-Duff-style
@@ -1728,16 +1733,7 @@ def scatter(
     """
     if by is not None:
         options["by"] = by
-    # `debug` is a universal v3-operator escape hatch (createOperator.ts's
-    # `FACTORY_ONLY_KEYS` strips it before layout, generically — not part of
-    # the canonical schema/descriptor, so it can't go through `_scatter_opts`'s
-    # closed signature). Pop it out, route the rest through the core, add it
-    # back.
-    debug = options.pop("debug", None)
-    core_opts = _scatter_opts(**options)
-    if debug is not None:
-        core_opts["debug"] = debug
-    return Operator("scatter", **core_opts)
+    return Operator("scatter", **_scatter_opts(**options))
 
 
 def treemap(**options: Any) -> Operator:

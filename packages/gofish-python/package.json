@@ -5,7 +5,7 @@
   "private": true,
   "scripts": {
     "build:widget": "node build-widget.mjs",
-    "gen": "tsx scripts/generate.ts",
+    "gen": "pnpm --dir ../gofish-ir run build && tsx scripts/generate.ts",
     "test": "uv run pytest"
   },
   "dependencies": {

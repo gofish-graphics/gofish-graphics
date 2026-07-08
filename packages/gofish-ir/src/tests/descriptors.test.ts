@@ -35,14 +35,17 @@ function check(name: string, ok: boolean, detail?: string): void {
   }
 }
 
-const BASE_FIELDS = ["type", "translate", "origin", "meta"] as const;
+// `debug` is OperatorFlagsIR — a shared mixin like TranslatableIR, merged at
+// walk time in validate.ts rather than living in each descriptor entry.
+const BASE_FIELDS = ["type", "translate", "origin", "meta", "debug"] as const;
 
 /**
  * The authored `schema.ts` interface's own keys, per operator, transcribed
  * by hand (once) from the interface declarations — excluding the shared
- * `BaseIRNode`/`TranslatableIR` keys every operator interface extends. This
- * is the "known keys list" half of the agreement check; the other half
- * comes from `resolveFields(OPERATORS[type])` at runtime.
+ * `BaseIRNode`/`TranslatableIR`/`OperatorFlagsIR` keys every operator
+ * interface extends. This is the "known keys list" half of the agreement
+ * check; the other half comes from `resolveFields(OPERATORS[type])` at
+ * runtime.
  */
 const SCHEMA_OPERATOR_KEYS: Record<string, readonly string[]> = {
   derive: ["lambdaId", "provenance"],
@@ -59,7 +62,17 @@ const SCHEMA_OPERATOR_KEYS: Record<string, readonly string[]> = {
     "glue",
     "axes",
   ],
-  stack: ["by", "dir", "alignment", "sharedScale", "mode", "reverse", "axes"],
+  stack: [
+    "by",
+    "dir",
+    "spacing",
+    "glue",
+    "alignment",
+    "sharedScale",
+    "mode",
+    "reverse",
+    "axes",
+  ],
   group: ["by"],
   scatter: [
     "by",
