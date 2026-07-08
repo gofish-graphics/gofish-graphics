@@ -325,17 +325,19 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
         doc: "Stack semantics: children glued, sizes sum; spacing forced to 0.",
       },
       axes: { type: t.ref("AxesOptions") },
-      // Data-driven operator extent (#4/#20) + space-filling spine (mosaic):
-      // the v3 spread operator carries `w`/`h` (field/datum-driven main-axis
-      // sizing) and `normalize` (space-filling spine). `COMBINATOR_MARKS.spread`
-      // also carries `w`/`h` for the low-level Spread combinator's FancyDims.
-      w: ch.num("Data-driven main-axis extent (field/datum-sized children)."),
-      h: ch.num("Data-driven main-axis extent (field/datum-sized children)."),
-      normalize: {
-        type: t.boolean,
-        default: false,
-        doc: "Space-filling spine: children fill the container proportionally (mosaic/marimekko).",
-      },
+      // Data-driven operator extent (#4/#20): the v3 spread operator carries
+      // `w`/`h` (field/datum-driven cross-axis sizing) and `size` (#700 Phase
+      // 2 — per-entry stack-axis extent, field/datum-sized children).
+      // `COMBINATOR_MARKS.spread` also carries `w`/`h` for the low-level
+      // Spread combinator's FancyDims. `size: field(<name>).normalize()`
+      // (a field accessor with a `normalize` pipeline op) is the
+      // space-filling spine (mosaic/marimekko) that replaced the old
+      // `normalize: true` layout flag.
+      w: ch.num("Data-driven cross-axis extent (field/datum-sized children)."),
+      h: ch.num("Data-driven cross-axis extent (field/datum-sized children)."),
+      size: ch.num(
+        "Per-entry stack-axis extent (field/datum-sized children); a field(...).normalize() accessor makes it a space-filling spine."
+      ),
     },
   }),
 
@@ -363,13 +365,11 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
       reverse: { type: t.boolean, default: false },
       axes: { type: t.ref("AxesOptions") },
       // Data-driven extent + space-filling spine — see `spread` above.
-      w: ch.num("Data-driven main-axis extent (field/datum-sized children)."),
-      h: ch.num("Data-driven main-axis extent (field/datum-sized children)."),
-      normalize: {
-        type: t.boolean,
-        default: false,
-        doc: "Space-filling spine: children fill the container proportionally (mosaic/marimekko).",
-      },
+      w: ch.num("Data-driven cross-axis extent (field/datum-sized children)."),
+      h: ch.num("Data-driven cross-axis extent (field/datum-sized children)."),
+      size: ch.num(
+        "Per-entry stack-axis extent (field/datum-sized children); a field(...).normalize() accessor makes it a space-filling spine."
+      ),
     },
   }),
 

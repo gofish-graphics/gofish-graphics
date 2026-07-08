@@ -261,10 +261,12 @@ export interface SpreadOperator
    *  this operator's box, reported as a SIZE claim to the enclosing scale. */
   w?: ChannelValue;
   h?: ChannelValue;
-  /** Space-filling spine: make the layout (`dir`) axis fill its extent in
-   *  proportion to child size — the mosaic/marimekko conditional axis. Pure
-   *  layout; the data is not mutated. */
-  normalize?: boolean;
+  /** Per-entry stack-axis extent (#700 Phase 2): a field name/accessor or
+   *  pixel number sizing each split entry. A `field(name).normalize()`
+   *  accessor (a `FieldAccessor` with a `normalize` pipeline op) replaces
+   *  each entry's size with its share of the window, turning the stack axis
+   *  into a space-filling spine — the mosaic/marimekko conditional axis. */
+  size?: ChannelValue;
   axes?: AxesOptions;
 }
 
@@ -289,10 +291,8 @@ export interface StackOperator
    *  this operator's box, reported as a SIZE claim to the enclosing scale. */
   w?: ChannelValue;
   h?: ChannelValue;
-  /** Space-filling spine: make the layout (`dir`) axis fill its extent in
-   *  proportion to child size — the mosaic/marimekko conditional axis. Pure
-   *  layout; the data is not mutated. */
-  normalize?: boolean;
+  /** Per-entry stack-axis extent (#700 Phase 2) — see SpreadOperator.size. */
+  size?: ChannelValue;
   axes?: AxesOptions;
 }
 

@@ -818,16 +818,15 @@ for the API.
         },
         "w": {
           "$ref": "#/$defs/ChannelValue",
-          "description": "Data-driven main-axis extent (field/datum-sized children)."
+          "description": "Data-driven cross-axis extent (field/datum-sized children)."
         },
         "h": {
           "$ref": "#/$defs/ChannelValue",
-          "description": "Data-driven main-axis extent (field/datum-sized children)."
+          "description": "Data-driven cross-axis extent (field/datum-sized children)."
         },
-        "normalize": {
-          "type": "boolean",
-          "description": "Space-filling spine: children fill the container proportionally (mosaic/marimekko).",
-          "default": false
+        "size": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Per-entry stack-axis extent (field/datum-sized children); a field(...).normalize() accessor makes it a space-filling spine."
         },
         "translate": {
           "$ref": "#/$defs/Translate"
@@ -889,16 +888,15 @@ for the API.
         },
         "w": {
           "$ref": "#/$defs/ChannelValue",
-          "description": "Data-driven main-axis extent (field/datum-sized children)."
+          "description": "Data-driven cross-axis extent (field/datum-sized children)."
         },
         "h": {
           "$ref": "#/$defs/ChannelValue",
-          "description": "Data-driven main-axis extent (field/datum-sized children)."
+          "description": "Data-driven cross-axis extent (field/datum-sized children)."
         },
-        "normalize": {
-          "type": "boolean",
-          "description": "Space-filling spine: children fill the container proportionally (mosaic/marimekko).",
-          "default": false
+        "size": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Per-entry stack-axis extent (field/datum-sized children); a field(...).normalize() accessor makes it a space-filling spine."
         },
         "translate": {
           "$ref": "#/$defs/Translate"
