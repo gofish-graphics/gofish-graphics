@@ -16,7 +16,11 @@
 // `pluck` is the un-collapsed sibling — the full set of distinct values — for
 // when you genuinely want "every possible value" rather than a scalar key.
 import toPath from "lodash/toPath";
+import { bin as d3bin } from "d3-array";
+import sumBy from "lodash/sumBy";
 import { GoFishRef } from "./_ref";
+import { isField, type FieldAccessor } from "./data";
+import { getFieldOps, type FieldOp } from "./fieldExpr";
 
 /** Canonical key for value-equality of (possibly object-valued) field values. */
 function eqKey(v: unknown): string {
@@ -75,24 +79,135 @@ export function projectPath(obj: unknown, path: string): unknown {
 }
 
 /** The `by` selector accepted by the split operators (group/spread/scatter):
- *  a field-path string or a key function over the row. */
-export type SplitBy = string | ((r: any) => unknown);
+ *  a field-path string, a key function over the row, or a `field(...)`
+ *  accessor (possibly carrying a pipeline of domain ops — see
+ *  {@link splitEntries}). */
+export type SplitBy = string | ((r: any) => unknown) | FieldAccessor;
 
 /** Build the grouping key-function for a single split. Exists so that path
  *  parsing happens once per split (closing over the parsed `segments`) rather
  *  than once per row, and so the `typeof by === "function"` dispatch is resolved
  *  once rather than re-checked for every row.
  *
+ *  A `field(...)` accessor grouping-keys off its `.name`, identical to
+ *  passing the bare field-name string — its pipeline ops (if any) are applied
+ *  separately, over the grouped Map, by {@link splitEntries}.
+ *
  *  Projected keys are runtime strings/numbers (or `undefined` for ill-posed
  *  groups, where the bag disagrees on the field); the assertion bridges the
  *  honest `unknown` produced by projection + homogeneity collapse. */
 export function splitKeyFn(by: SplitBy): (r: any) => string | number {
   if (typeof by === "function") return by as (r: any) => string | number;
-  const segments = toPath(by);
+  const path = isField(by) ? by.name : by;
+  const segments = toPath(path);
   return (r: any) => {
     const values = projectValues(r, segments);
     return (values.length === 1 ? values[0] : undefined) as string | number;
   };
+}
+
+/** Numeric-aware, lodash-`orderBy`-compatible-enough key comparator: compares
+ *  as numbers when both keys coerce to finite numbers, else falls back to
+ *  string comparison. Used by `field(...).sort()`'s no-arg (sort-by-key) form. */
+function compareKeys(a: string | number, b: string | number): number {
+  const na = typeof a === "number" ? a : Number(a);
+  const nb = typeof b === "number" ? b : Number(b);
+  if (Number.isFinite(na) && Number.isFinite(nb)) return na - nb;
+  return String(a).localeCompare(String(b));
+}
+
+/** Bin `d` by the numeric field `fieldName`, mirroring `runBin` in
+ *  transforms.ts (d3-array, default 10 thresholds). REPLACES the base
+ *  grouping — entries are keyed by each bin's start (ascending). Empty bins
+ *  are dropped to match `Map.groupBy` semantics (a group with zero rows isn't
+ *  represented as a key there either). */
+function binEntries<T extends Record<string, any>>(
+  fieldName: string,
+  d: T[],
+  thresholds: number | number[] | undefined
+): Map<number, T[]> {
+  const th = thresholds ?? 10;
+  const binnerBase = d3bin<T, number>().value(
+    (row) => row[fieldName] as number
+  );
+  const binner = Array.isArray(th)
+    ? binnerBase.thresholds(th as number[])
+    : binnerBase.thresholds(th as number);
+  const bins = binner(d.filter((row) => row[fieldName] != null));
+  const entries = new Map<number, T[]>();
+  for (const b of bins) {
+    if (b.x0 === undefined || b.length === 0) continue; // drop empty bins
+    entries.set(b.x0, [...b]);
+  }
+  return entries;
+}
+
+/** Reorder `entries`: with `by`, by the SUM of that field over each entry's
+ *  rows; without `by`, by the entry's own group key (numeric-aware). */
+function sortEntries<T>(
+  entries: Map<string | number, T[]>,
+  by: string | undefined,
+  order: "asc" | "desc"
+): Map<string | number, T[]> {
+  const dir = order === "desc" ? -1 : 1;
+  const pairs = [...entries.entries()];
+  if (by !== undefined) {
+    pairs.sort(([, a], [, b]) => dir * (sumBy(a, by) - sumBy(b, by)));
+  } else {
+    pairs.sort(([ka], [kb]) => dir * compareKeys(ka, kb));
+  }
+  return new Map(pairs);
+}
+
+/**
+ * Group `d` by `by` (via {@link splitKeyFn}), then apply any pipeline ops
+ * carried by a `field(...)` accessor (read via `getFieldOps`) IN ORDER:
+ *   - `bin` REPLACES the base grouping (re-groups the raw `d` into bins).
+ *   - `sort` / `reverse` reorder the entries Map.
+ *   - a value-slot op (`sum`/`mean`/`count`/`distinct`) in a `by` slot, or
+ *     `normalize`, throws — those aren't domain ops.
+ * Central helper so spread/group/scatter share one split+ops pipeline —
+ * `by`-string/function callers get plain `Map.groupBy` behavior unchanged
+ * (they carry no ops).
+ */
+export function splitEntries<T>(
+  by: SplitBy,
+  d: T[]
+): Map<string | number, T[]> {
+  let entries: Map<string | number, T[]> = Map.groupBy(d, splitKeyFn(by));
+  const ops: FieldOp[] = getFieldOps(by);
+  for (const op of ops) {
+    switch (op.op) {
+      case "bin": {
+        if (!isField(by)) {
+          throw new Error(
+            "field(...).bin() requires a field(name) accessor as `by`, not a function."
+          );
+        }
+        entries = binEntries(by.name, d, op.thresholds);
+        break;
+      }
+      case "sort":
+        entries = sortEntries(entries, op.by, op.order ?? "asc");
+        break;
+      case "reverse":
+        entries = new Map([...entries.entries()].reverse());
+        break;
+      case "sum":
+      case "mean":
+      case "count":
+      case "distinct":
+        throw new Error(
+          `field(...).${op.op}() is an aggregate op — valid on a value channel ` +
+            `(e.g. rect({ h: field(...).${op.op}() })), not on \`by\`.`
+        );
+      case "normalize":
+        throw new Error(
+          "field(...).normalize() is only supported on an operator's size channel"
+        );
+    }
+  }
+  return entries;
 }
 
 /** The full set of distinct values at `path` ("every possible value"), with no

@@ -8,7 +8,8 @@ import {
   FancyDirection,
 } from "../dims";
 import { Collection } from "lodash";
-import { SplitBy, splitKeyFn } from "../datumProjection";
+import { SplitBy, splitEntries } from "../datumProjection";
+import { isField } from "../data";
 import { GoFishAST } from "../_ast";
 import { createNodeOperator } from "../withGoFish";
 import { Alignment } from "./alignment";
@@ -172,10 +173,17 @@ export const spread = createOperator<any, SpreadOptions>(Spread, {
   // that override lives in createOperator (it dispatches on the mark's kind),
   // not here, so this split stays kind-agnostic.
   split: ({ by }, d) =>
-    by ? Map.groupBy(d, splitKeyFn(by)) : new Map(d.map((r, i) => [i, r])),
+    by ? splitEntries(by, d) : new Map(d.map((r, i) => [i, r])),
   channels: { w: "size", h: "size" },
-  axisFields: ({ by, dir }) =>
-    typeof by === "string" ? (dir === "x" ? { x: by } : { y: by }) : undefined,
+  axisFields: ({ by, dir }) => {
+    const name =
+      typeof by === "string" ? by : isField(by) ? by.name : undefined;
+    return name === undefined
+      ? undefined
+      : dir === "x"
+        ? { x: name }
+        : { y: name };
+  },
   serialize: { type: "spread" },
 });
 

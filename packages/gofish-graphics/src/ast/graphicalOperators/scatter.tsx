@@ -5,7 +5,7 @@ import { FancyDims } from "../dims";
 import { createNodeOperator } from "../withGoFish";
 import { GoFishAST } from "../_ast";
 import { Collection } from "lodash";
-import { SplitBy, splitKeyFn } from "../datumProjection";
+import { SplitBy, splitEntries } from "../datumProjection";
 import { Alignment } from "./alignment";
 import { createOperator } from "../marks/createOperator";
 import { layer } from "./layer";
@@ -173,7 +173,7 @@ export const scatter = createOperator<any, ScatterOptions>(Scatter as any, {
   // When no `by` is given, pass each item through as-is. Items may already be
   // arrays or scalars; downstream marks/channels handle either form.
   split: ({ by }, d) =>
-    by ? Map.groupBy(d, splitKeyFn(by)) : new Map(d.map((r, i) => [i, r])),
+    by ? splitEntries(by, d) : new Map(d.map((r, i) => [i, r])),
   channels: {
     x: { type: "pos", entry: true, discrete: true },
     y: { type: "pos", entry: true, discrete: true },

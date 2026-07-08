@@ -16,6 +16,7 @@ import {
   type LiteralValue,
   type Measure,
 } from "./data";
+import { getFieldOps, normalizeNotSupportedError } from "./fieldExpr";
 import type { LiveValue } from "../interaction/live";
 
 export type ChannelType = "size" | "pos" | "color" | "raw";
@@ -209,6 +210,48 @@ const inferNumeric =
     if (typeof accessor === "number") return accessor;
     if (isLiteral(accessor)) return accessor.value as number;
     const data = Array.isArray(d) ? d : [d];
+    const ops = getFieldOps(accessor);
+    if (ops.length > 0) {
+      for (const op of ops) {
+        if (op.op === "sort" || op.op === "reverse" || op.op === "bin") {
+          throw new Error(
+            `field(...).${op.op}() is a domain (\`by\`) op — it isn't valid on ` +
+              `a value channel (e.g. a size/pos channel like this one).`
+          );
+        }
+        if (op.op === "normalize") throw normalizeNotSupportedError();
+      }
+      const aggOps = ops.filter(
+        (op) =>
+          op.op === "sum" ||
+          op.op === "mean" ||
+          op.op === "count" ||
+          op.op === "distinct"
+      );
+      if (aggOps.length > 1) {
+        throw new Error(
+          `field(...) can only carry one aggregate op; found ` +
+            `${aggOps.map((op) => op.op).join(", ")}.`
+        );
+      }
+      if (aggOps.length === 1) {
+        const fieldName = isField(accessor) ? accessor.name : undefined;
+        const annotation = isField(accessor) ? accessor.measure : undefined;
+        const opName = aggOps[0].op;
+        if (opName === "count") {
+          return value(data.length, annotation ?? "count");
+        }
+        if (opName === "distinct") {
+          const distinctValues = fieldName
+            ? new Set(data.map((r: any) => r?.[fieldName]))
+            : new Set(data.map(accessor as (d: T) => number));
+          return value(distinctValues.size, annotation ?? "count");
+        }
+        const chosenAgg = opName === "sum" ? sumBy : meanBy;
+        const m = measure ?? resolveMeasure(d, accessor);
+        return value(chosenAgg(data, fieldName as any), m);
+      }
+    }
     const m = measure ?? resolveMeasure(d, accessor);
     return value(
       agg(data, (isField(accessor) ? accessor.name : accessor) as any),

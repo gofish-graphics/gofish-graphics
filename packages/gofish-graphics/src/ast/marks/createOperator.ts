@@ -39,7 +39,7 @@ import {
   stashLayerName,
 } from "./chartBuilder";
 import { inferSize, inferPos, inferColor, resolveMeasure } from "../channels";
-import { discretePosition, copyMeasureProvenance } from "../data";
+import { discretePosition, copyMeasureProvenance, isField } from "../data";
 import type { Measure } from "../data";
 import type { MaybeValue, Value } from "../data";
 import type { LabelAccessor, LabelOptions } from "../labels/labelPlacement";
@@ -872,10 +872,16 @@ export function createOperator<Datum, Options extends Record<string, any>>(
             // restating the key. The innermost grouping wins (`??=`); a function
             // `by` has no field name to record, so resolve errors there unless
             // given an explicit `key`.
-            if (typeof (opts as any).by === "string") {
+            const byField =
+              typeof (opts as any).by === "string"
+                ? (opts as any).by
+                : isField((opts as any).by)
+                  ? (opts as any).by.name
+                  : undefined;
+            if (byField !== undefined) {
               for (const node of leafNodes) {
                 if ((node as any).__splitBy === undefined) {
-                  (node as any).__splitBy = (opts as any).by;
+                  (node as any).__splitBy = byField;
                 }
               }
             }
