@@ -174,7 +174,7 @@ function sortEntries<T>(
  * `by`-string/function callers get plain `Map.groupBy` behavior unchanged
  * (they carry no ops).
  */
-export function splitEntries<T>(
+export function splitEntries<T extends Record<string, any>>(
   by: SplitBy,
   d: T[]
 ): Map<string | number, T[]> {
