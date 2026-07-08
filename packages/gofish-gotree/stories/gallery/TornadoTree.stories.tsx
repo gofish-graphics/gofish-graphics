@@ -32,11 +32,13 @@ import { combine, byDepth, mount } from "./_shared";
 //    bottom-up so absolute radii depend on subtree depth, and there is no
 //    radial auto-fit — band thickness/pad are hand-picked constants, not
 //    derived from the disc budget.
-//  - PolarAxis "x-axis" (θ/r swap) is NOT expressible. polar() takes no options
-//    and has no transposed variant, so the dsl's PolarAxis selector cannot be
-//    expressed; θ stays on x, r on y regardless.
-//  - PolarCenter "right", InnerRadius, Direction, CentralAngle: not expressible
-//    (polar() is option-free) — center is fixed at the canvas middle.
+//  - PolarAxis "x-axis" (θ/r swap) is NOT expressible. polar() has no transposed
+//    variant, so the dsl's PolarAxis selector cannot be expressed; θ stays on x,
+//    r on y regardless.
+//  - InnerRadius, Direction, CentralAngle are now expressible via polar({ ... })
+//    since #620 — not yet applied here. PolarCenter "right" remains
+//    inexpressible: it is a polar-space anchor, which polar()'s screen-offset
+//    `center` does not cover — the disc centers on the canvas middle.
 //  - NO ANGULAR AUTO-FIT. θ spacing is a fixed per-level constant; it does not
 //    shrink with node count, so the spiral overflows 2π and WRAPS. Here that
 //    wrap is on-theme (the reference is itself a spiral that winds past 2π),

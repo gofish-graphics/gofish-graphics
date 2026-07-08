@@ -1,6 +1,7 @@
 import * as Monotonic from "../../util/monotonic";
 import { resolveColorChannel } from "../../color";
 import { computeAesthetic } from "../../util";
+import { posFn } from "../domain";
 import { interval } from "../../util/interval";
 import { GoFishNode } from "../_node";
 import {
@@ -27,7 +28,12 @@ import {
 } from "../underlyingSpace";
 import { createMark } from "../withGoFish";
 import type { DisplayList } from "gofish-ir";
-import { lowerStyle, rectItemFromBox } from "../displayList/lowerHelpers";
+import {
+  declaredFlipsY,
+  lowerStyle,
+  rectItemFromBox,
+  roleFor,
+} from "../displayList/lowerHelpers";
 type TextDimensions = {
   width: number;
   height: number;
@@ -159,7 +165,6 @@ const resolveTextLayout = (
 
 export const Text = ({
   key,
-  name,
   text: textContent,
   fill = "black",
   stroke,
@@ -172,7 +177,6 @@ export const Text = ({
   ...fancyDims
 }: {
   key?: string;
-  name?: string;
   text: MaybeValue<string | number>;
   fill?: MaybeValue<string>;
   stroke?: MaybeValue<string>;
@@ -194,12 +198,10 @@ export const Text = ({
 
   const node = new GoFishNode(
     {
-      name,
       key,
       type: "text",
       args: {
         key,
-        name,
         text: textContent,
         fill,
         stroke,
@@ -247,7 +249,7 @@ export const Text = ({
 
         return [resolveAxis(0, xPos), resolveAxis(1, yPos)];
       },
-      layout: (shared, size, scaleFactors, children, posScales) => {
+      layout: (shared, size, scales, children) => {
         const finalText = isValue(textContent)
           ? getValue(textContent)
           : textContent;
@@ -276,11 +278,19 @@ export const Text = ({
           : relRaw;
 
         const positionX =
-          computeAesthetic(dims[0].center, posScales?.[0]!, undefined) ??
-          computeAesthetic(dims[0].min, posScales?.[0]!, undefined);
+          computeAesthetic(
+            dims[0].center,
+            posFn(scales?.[0]?.map)!,
+            undefined
+          ) ??
+          computeAesthetic(dims[0].min, posFn(scales?.[0]?.map)!, undefined);
         const positionY =
-          computeAesthetic(dims[1].center, posScales?.[1]!, undefined) ??
-          computeAesthetic(dims[1].min, posScales?.[1]!, undefined);
+          computeAesthetic(
+            dims[1].center,
+            posFn(scales?.[1]?.map)!,
+            undefined
+          ) ??
+          computeAesthetic(dims[1].min, posFn(scales?.[1]?.map)!, undefined);
 
         return {
           intrinsicDims: [
@@ -301,12 +311,14 @@ export const Text = ({
           renderData: { layout },
         };
       },
-      // IR lowering — mirror of `render`. The anchor maps through `toPixel`; the
-      // legacy `… rotate(rotate) scale(1,-1)` under the root flip nets to a
-      // screen-space rotate of `-rotate` about the pixel anchor (the extra flip
-      // negates the angle — see the rendering essay). Unrotated → upright text.
+      // IR lowering — mirror of `render`. The anchor maps through `toPixel`.
+      // Rotation sign is flip-AGNOSTIC: in a `yUp` chart scope `toPixel` mirrors
+      // y, which negates a screen-space rotate (`-rotate`); in y-down free space
+      // there is no mirror, so the rotate passes through (`+rotate`). We read the
+      // flip out of `toPixel` via `toPixelFlipsY` (issue #143/#16). Unrotated →
+      // upright text either way.
       lower: (
-        { transform, renderData, toPixel },
+        { transform, renderData, toPixel, intrinsicDims },
         _children,
         node
       ): DisplayList.DisplayItem[] => {
@@ -315,8 +327,21 @@ export const Text = ({
           : textContent;
         const text = finalText == null ? "" : String(finalText);
 
+        const flips = declaredFlipsY(node, toPixel);
         const [anchorX, anchorY] = displayTranslate(transform);
-        const [px, py] = toPixel([anchorX, anchorY]);
+        const [px, py0] = toPixel([anchorX, anchorY]);
+        // Text's vertical box is asymmetric about the baseline (ascent ≠ descent
+        // for `auto`). Under the y-up flip that asymmetry resolves correctly; in
+        // y-down free space the SVG baseline must shift by (minY + maxY) so the
+        // glyphs fill the un-mirrored layout box (zero for a symmetric `central`
+        // baseline, and zero under the flip → charts stay byte-identical). The
+        // rotated case carries its footprint in the rotate transform. #143/#16.
+        const baselineShift =
+          flips || rotate
+            ? 0
+            : 2 * (intrinsicDims?.[1]?.min ?? 0) +
+              (intrinsicDims?.[1]?.size ?? 0);
+        const py = py0 + baselineShift;
 
         const unitScale = node.getRenderSession().scaleContext?.unit;
         const resolvedFill = resolveColorChannel(fill, unitScale);
@@ -374,7 +399,7 @@ export const Text = ({
           textAnchor: textAnchor as DisplayList.TextItem["textAnchor"],
           dominantBaseline:
             dominantBaseline as DisplayList.TextItem["dominantBaseline"],
-          role: "node",
+          role: roleFor(node.datum),
           datum: node.datum,
           style: lowerStyle({
             fill: resolvedFill,
@@ -383,7 +408,7 @@ export const Text = ({
             filter,
           }),
         };
-        if (rotate) textItem.rotate = -rotate;
+        if (rotate) textItem.rotate = flips ? -rotate : rotate;
         items.push(textItem);
         return items;
       },

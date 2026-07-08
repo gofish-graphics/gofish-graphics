@@ -18,7 +18,7 @@ import { initializeContainer } from "../helper";
 // left edge (align x "start"). There is no indentation — the dsl encodes
 // depth instead via Element.RootWidth = "rdepth" (reverse depth: the root is
 // the widest bar, leaves the narrowest) plus Color = depth. distribute uses
-// order:"reverse" so y-up places the parent/first-child at the TOP and the
+//  so y-up places the parent/first-child at the TOP and the
 // subtree stacks downward.
 const meta: Meta = {
   title: "GoTree / Gallery / IndentedTree",
@@ -38,7 +38,7 @@ const node = (d: any) =>
 
 const layout = combine({
   x: { kind: "align", alignment: "start" },
-  y: { kind: "distribute", spacing: 4, order: "reverse" },
+  y: { kind: "distribute", spacing: 4 },
 });
 
 export const IndentedTree: StoryObj = {

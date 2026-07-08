@@ -17,7 +17,7 @@ import { initializeContainer } from "../helper";
 //
 // TODO: needs orthogonal links implemented — GoTree's spec asks for
 // "orthogonal" (elbow) links; gofish-gotree only supports straight links, so
-// this uses { interpolation: "linear" }.
+// this uses { curve: "straight" }.
 const node = (d: any) =>
   circle({
     r: 10,
@@ -40,10 +40,10 @@ export const GardenLayout: StoryObj = {
     tree(
       {
         node,
-        link: { interpolation: "linear", stroke: "#90a4ae", strokeWidth: 1.5 },
+        link: { curve: "straight", stroke: "#90a4ae", strokeWidth: 1.5 },
         parentChild: combine({
           x: { kind: "align", alignment: "middle" },
-          y: { kind: "distribute", spacing: 48, order: "reverse" },
+          y: { kind: "distribute", spacing: 48 },
         }),
         sibling: combine({
           x: { kind: "distribute", spacing: 24 },

@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
 import { titanic } from "../../src/data/titanic";
-import { layer, spreadX, spreadY, stackY, rect, For, connectX, ref } from "../../src/lib";
+import { layer, spreadX, spreadY, stackY, rect, For, ribbon, ref } from "../../src/lib";
 import { color6, gray, neutral } from "../../src/color";
 import { groupBy } from "lodash";
 import _ from "lodash";
@@ -34,7 +34,9 @@ export const Default: StoryObj = {
     layer([
       spreadX({ spacing: layerSpacing, alignment: "middle" }, [
         stackY(
-          { spacing: 0, alignment: "middle" },
+          // y-down: reverse every vertical ordering so the tiers read the same
+          // way they did under the old y-up convention. See issue #143/#16.
+          { spacing: 0, alignment: "middle", reverse: true },
           For(groupBy(titanic, "class"), (items, cls) =>
             rect({
               w: 40,
@@ -44,11 +46,11 @@ export const Default: StoryObj = {
           )
         ),
         spreadY(
-          { spacing: internalSpacing, alignment: "middle" },
+          { spacing: internalSpacing, alignment: "middle", reverse: true },
           For(groupBy(titanic, "class"), (items, cls) =>
             spreadX({ spacing: layerSpacing, alignment: "middle" }, [
               stackY(
-                { spacing: 0, alignment: "middle" },
+                { spacing: 0, alignment: "middle", reverse: true },
                 For(groupBy(items, "sex"), (items, sex) =>
                   rect({
                     w: 40,
@@ -62,6 +64,7 @@ export const Default: StoryObj = {
                   h: _(items).sumBy("count") / 10,
                   spacing: internalSpacing * 2,
                   alignment: "middle",
+                  reverse: true,
                 },
                 For(groupBy(items, "sex"), (items, sex) =>
                   spreadX({ spacing: layerSpacing, alignment: "middle" }, [
@@ -69,6 +72,7 @@ export const Default: StoryObj = {
                       {
                         spacing: 0,
                         alignment: "middle",
+                        reverse: true,
                       },
                       For(groupBy(items, "survived"), (survivedItems, survived) =>
                         rect({
@@ -83,6 +87,7 @@ export const Default: StoryObj = {
                         w: 40,
                         spacing: internalSpacing * 4,
                         alignment: "middle",
+                        reverse: true,
                       },
                       For(groupBy(items, "survived"), (survivedItems, survived) => {
                         return rect({
@@ -106,26 +111,31 @@ export const Default: StoryObj = {
         ),
       ]),
       For(groupBy(titanic, "class"), (items, cls) => [
-        connectX(
+        ribbon(
           {
+            dir: "x",
             fill: classColor[cls],
-            interpolation: "bezier",
+            curve: "bezier",
             opacity: 0.7,
+            mixBlendMode: "multiply",
           },
           [ref(`${cls}-src`), ref(`${cls}-tgt`)]
         ),
         For(groupBy(items, "sex"), (sexItems, sex) => [
-          connectX(
+          ribbon(
             {
+              dir: "x",
               fill: sex === "Female" ? color6[4] : color6[5],
-              interpolation: "bezier",
+              curve: "bezier",
               opacity: 0.7,
+              mixBlendMode: "multiply",
             },
             [ref(`${cls}-${sex}-src`), ref(`${cls}-${sex}-tgt`)]
           ),
           For(groupBy(sexItems, "survived"), (survivedItems, survived) =>
-            connectX(
+            ribbon(
               {
+                dir: "x",
                 fill:
                   sex === "Female"
                     ? survived === "No"
@@ -134,8 +144,9 @@ export const Default: StoryObj = {
                     : survived === "No"
                       ? gray
                       : color6[5],
-                interpolation: "bezier",
+                curve: "bezier",
                 opacity: 0.7,
+                mixBlendMode: "multiply",
               },
               [
                 ref(`${cls}-${sex}-${survived}-src`),

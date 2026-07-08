@@ -21,9 +21,8 @@ import { initializeContainer } from "../helper";
 //  - Nodes are fixed-size circles. A circle can't be "unsized" on the nest axis,
 //    so nest-x doesn't grow the parent — it just CENTERS the parent circle over
 //    its subtree span. This matches the reference (all nodes are equal-size dots).
-//  - Links: the dsl asks for "curve" links with depth-driven width. curve link
-//    interpolation is not implemented, so we fall back to a fixed-width linear
-//    link. // TODO: needs curve links implemented (and depth-driven LinkWidth).
+//  - Links: the dsl asks for "curve" links with depth-driven width. We use the
+//    `bezier` route (GoTree's "curve"); depth-driven LinkWidth is still a TODO.
 
 // A deep balanced binary tree (4 levels, 16 leaves) — the "deep" in the title.
 const deepTree = (() => {
@@ -58,11 +57,13 @@ export const CartesianDeepTree: StoryObj = {
     tree(
       {
         node,
-        // TODO: needs curve links implemented — falling back to linear.
-        link: { interpolation: "linear", stroke: "#5f6b7a", strokeWidth: 1.5 },
+        link: { curve: "straight", stroke: "#5f6b7a", strokeWidth: 1.5 },
         parentChild: combine({
           x: { kind: "nest", pad: 0 },
-          y: { kind: "distribute", spacing: 80 },
+          // order "reverse" puts the parent at HIGH y = the bottom in y-down
+          // free space, so the root sits at the bottom and leaves climb upward
+          // (matching the reference). See issue #143/#16.
+          y: { kind: "distribute", spacing: 80, order: "reverse" },
         }),
         sibling: combine({
           x: { kind: "distribute", spacing: 22 },

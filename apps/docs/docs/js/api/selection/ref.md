@@ -77,7 +77,7 @@ gf.layer([
     .mark(gf.rect({ h: "total" }).name("kpi")),
   gf.text({ text: "peak" }).name("label"),
   // ref("kpi") as the connector's target: one ref; throws on 0 or >1 nodes
-  gf.Connect({ source: "middle" }, [gf.ref("label"), gf.ref("kpi")]),
+  gf.line({ source: "middle" }, [gf.ref("label"), gf.ref("kpi")]),
 ]);
 ```
 
@@ -107,7 +107,7 @@ than a bespoke selection object, and this is deliberate:
   so there is nothing new to learn — the ref you get from a selection behaves
   exactly like a ref you wrote by hand inline.
 - **Geometry is decoupled from data.** A ref points at a placed node; you read
-  its placement off the ref (that is how `line`/`area` draw) and its bound datum
+  its placement off the ref (that is how `line`/`ribbon` draw) and its bound datum
   via [`ref.datum`](/js/api/marks/ref#datum). Selecting does not flatten or
   reshape your data.
 - **Batch operations live in `.flow`, not on the noun.** Unlike D3, where the
@@ -134,7 +134,7 @@ may arrive later; for now use a named layer + `selectAll` as data.)
 
 ## Connectors take `selectAll` directly
 
-[`line`](/js/api/marks/line) and [`area`](/js/api/marks/area) consume an array
+[`line`](/js/api/marks/line) and [`ribbon`](/js/api/marks/ribbon) consume an array
 of refs and read placed geometry off them, so feed them `selectAll`:
 
 ```ts
@@ -153,7 +153,7 @@ option is path-aware (lodash `_.get`), so re-encode by the **datum path**:
 ```ts
 gf.chart(gf.selectAll("bars"))
   .flow(gf.group({ by: "datum.species" })) // not "species"
-  .mark(gf.area({ opacity: 0.8 }));
+  .mark(gf.ribbon({ opacity: 0.8 }));
 ```
 
 A `datum.field` path resolves to a scalar **only if every row in the ref's bag
@@ -186,5 +186,40 @@ resolve to `undefined`.
 
 ::: info JavaScript only
 `pluck` is exported from the JS package (`gofish-graphics`). The Python wrapper
+does not expose it yet.
+:::
+
+## `project(source, path)` — the single value at a path {#project}
+
+`project` is the **collapsing** counterpart to `pluck`: it returns the one value
+at a path **when the bag agrees on it** (the same homogeneity collapse `by`
+performs), and `undefined` otherwise. Where `pluck(ref, "site")` gives you the
+whole multiset `["Morris"]`, `project(ref, "site")` gives you `"Morris"`
+directly — no indexing.
+
+```ts
+import { project } from "gofish-graphics";
+
+project(ref, "site"); // → "Morris"  (undefined if the bag disagrees on "site")
+```
+
+Reach for `project` to read a field off the datum a mark is bound to — for
+example inside a [`.zOrder(d => …)`](/js/api/core/mark#modifiers) callback, where
+`d` is the bag of refs flowing into the mark:
+
+```ts
+const isEmphasized = (site: unknown) =>
+  site === "Morris" || site === "Grand Rapids";
+
+area({ opacity: 0.7 }).zOrder((d) =>
+  isEmphasized(project(d, "site")) ? 1 : 0
+);
+```
+
+`source` accepts the same inputs as `pluck` (a `ref`, a row array, or a single
+row).
+
+::: info JavaScript only
+`project` is exported from the JS package (`gofish-graphics`). The Python wrapper
 does not expose it yet.
 :::

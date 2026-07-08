@@ -1,17 +1,15 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
 import { titanic } from "../../src/data/titanic";
-import { spreadY, spreadX, stackY, rect, For, v } from "../../src/lib";
+import { chart, stack, rect } from "../../src/lib";
 import { color6, gray } from "../../src/color";
-import { groupBy } from "lodash";
-import _ from "lodash";
 
 const meta: Meta = {
   title: "Low Level Syntax/Nested Mosaic Chart",
 };
 export default meta;
 
-const classColor = {
+const classColor: Record<string, string> = {
   First: color6[0],
   Second: color6[1],
   Third: color6[2],
@@ -29,32 +27,28 @@ export const Default: StoryObj = {
   },
   render: () => {
     const container = initializeContainer();
-    spreadY(
-      { reverse: true, spacing: 4, alignment: "start" },
-      For(groupBy(titanic, "class"), (items, cls) =>
-        spreadX(
-          { key: cls, h: _(items).sumBy("count") / 10, spacing: 2, alignment: "middle" },
-          For(groupBy(items, "sex"), (sItems, sex) =>
-            stackY(
-              {
-                reverse: true,
-                w: (_(sItems).sumBy("count") / _(items).sumBy("count")) * 100,
-                alignment: "middle",
-                sharedScale: true,
-              },
-              For(groupBy(sItems, "survived"), (items, survived) =>
-                rect({
-                  h: v(_(items).sumBy("count")),
-                  fill: survived === "No" ? gray : classColor[cls],
-                })
-              )
-            )
-          )
-        )
+
+    // Three nested spines, alternating axes (class → sex → survived). Each level
+    // `normalize`s its own stacking axis into a local fill scope (the conditional
+    // proportion), and carries its raw Σcount up the CROSS axis (`w`/`h`) as the
+    // marginal/conditional magnitude. `count` is read raw at every level, so the
+    // marginal × conditional × conditional product composes to any depth.
+    chart(titanic, { axes: true })
+      .flow(
+        stack({ by: "class", dir: "y", normalize: true }),
+        stack({ by: "sex", dir: "x", h: "count", normalize: true }),
+        stack({ by: "survived", dir: "y", w: "count", normalize: true })
       )
-    ).render(container, {
-      axes: true,
-    });
+      .mark(
+        rect({
+          h: "count",
+          fill: (d: any) => (d.survived === "No" ? gray : classColor[d.class]),
+          stroke: "white",
+          strokeWidth: 1,
+        })
+      )
+      .render(container, { w: 500, h: 500 });
+
     return container;
-  }
-}
+  },
+};

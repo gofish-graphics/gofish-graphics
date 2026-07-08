@@ -67,13 +67,24 @@ export const Default: StoryObj<Args> = {
 
     chart(agedPassengers, {
       color: palette(["#2b8cbe", "#ff8408"]),
-      // x = pclass (the violins); y is the dot-row index, so suppress it.
-      axes: { x: true, y: false },
+      // x = pclass (the violins) at the bottom (y-end); y is the dot-row index,
+      // so suppress it.
+      axes: { x: { side: "end" }, y: false },
     })
       .flow(spread({ by: "pclass", dir: "x", spacing: 48, alignment: "middle" }))
       .mark((panel) =>
         chart(panel)
-          .flow(spread({ by: "ageBin", dir: "y", spacing: 1, alignment: "middle" }))
+          // Reverse so age increases UPWARD (youngest bin at the bottom) in
+          // y-down free space — the density silhouette stacks up the age axis.
+          .flow(
+            spread({
+              by: "ageBin",
+              dir: "y",
+              spacing: 1,
+              alignment: "middle",
+              reverse: true,
+            })
+          )
           .mark((bin) =>
             chart(bin)
               .flow(spread({ dir: "x", spacing: 1, alignment: "middle" }))

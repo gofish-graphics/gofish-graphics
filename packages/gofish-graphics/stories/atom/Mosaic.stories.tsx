@@ -1,53 +1,31 @@
 import type { Meta, StoryObj } from "@storybook/html";
-import { groupBy, orderBy } from "lodash";
 import { initializeContainer } from "../helper";
 
-import { chart, derive, normalize, palette, rect, stack } from "../../src/lib";
+import { chart, palette, rect, stack } from "../../src/lib";
 import { titanicPassengers } from "../../src/data/titanicPassengers";
 
 /**
  * Atom replication — `mosaic.json`
  * (https://github.com/intuinno/unit/blob/master/app/data/mosaic.json).
  *
- * Atom layout pipeline:
- *   layout1: gridxy · subgroup groupby `pclass` · aspect `fillY` · size count (shared)
- *   layout2: gridxy · subgroup groupby `survived` · aspect `fillX` · size count
- *   mark: circle · color `survived` · size count
+ * Atom's defining move is `size: { type: "count" }` — every container is sized
+ * by how many records it holds, so the mosaic's cell areas read as the crosstab.
+ * GoFish expresses that directly with data-driven operator extents (#4/#20): the
+ * horizontal `stack` sizes each class column by `w: "count"` (the raw Σ over that
+ * class = the marginal), and the vertical `stack`'s `normalize: true` rescales the
+ * same field so each column fills the height split by survival share (the
+ * conditional). Width = raw Σ, height = normalized fraction, both off one field —
+ * no per-cell aggregation, no precomputed `classTotal`, no `normalize` derive.
  *
- * Atom's defining move here is `size: { type: "count" }` — every container is sized by
- * how many records it holds, so the mosaic's cell *areas* read as the crosstab. Atom's
- * mosaic is single-axis-proportional at each level (`fillY` then `fillX`), and that is
- * exactly the **main-axis** case GoFish's scoped σ solve already handles: we aggregate
- * to one row per (pclass × survived) cell, then drive a horizontal `stack` with a
- * `w: "classTotal"` size-claim so column widths resolve ∝ class size, and a `normalize`d
- * vertical `stack` so each column fills the height split by survival count. A true 2-D
- * mosaic, no `count` operator required.
- *
- * The one piece still missing is the unit/dot-filled rendering (passengers packed into
- * the count-proportional cells); see [`UnitMosaic`](./UnitMosaic.stories.tsx) for that
- * and stories/atom/README.md gap #1 for why it currently needs a hand-built grid.
+ * `count: 1` per passenger is the only prep (until a first-class count-of-records
+ * size lands); the stacks aggregate the raw rows.
  */
 
-type Cell = {
-  pclass: 1 | 2 | 3;
-  survived: 0 | 1;
-  count: number;
-  classTotal: number;
-};
-
-const mosaicCells: Cell[] = orderBy(
-  Object.entries(groupBy(titanicPassengers, "pclass")).flatMap(([pclass, rows]) => {
-    const classTotal = rows.length;
-    return Object.entries(groupBy(rows, "survived")).map(([survived, srows]) => ({
-      pclass: Number(pclass) as 1 | 2 | 3,
-      survived: Number(survived) as 0 | 1,
-      count: srows.length,
-      classTotal,
-    }));
-  }),
-  ["pclass"],
-  ["asc"]
-);
+// `count: 1` per passenger so the stacks aggregate; sorted so every class
+// column stacks survived/died in the same order.
+const passengers = titanicPassengers
+  .map((p) => ({ ...p, count: 1 }))
+  .sort((a, b) => a.pclass - b.pclass || b.survived - a.survived);
 
 const meta: Meta = {
   title: "atom/Mosaic",
@@ -74,16 +52,16 @@ export const Default: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    chart(mosaicCells, { color: palette(["#2b8cbe", "#ff8408"]), axes: true })
+    chart(passengers, { color: palette(["#2b8cbe", "#ff8408"]), axes: true })
       .flow(
-        // columns by class — width resolves ∝ classTotal through the σ solve
-        stack({ by: "pclass", dir: "x", spacing: 2 }),
-        // survival fractions within each class column
-        derive((rows) => normalize(orderBy(rows, ["survived"], ["desc"]), "count")),
-        // stacked segments fill the column height
-        stack({ by: "survived", dir: "y" })
+        // columns by class — width ∝ each class's passenger count (marginal)
+        stack({ by: "pclass", dir: "x" }),
+        // survival share within each class column (conditional), filling height
+        stack({ by: "survived", dir: "y", w: "count", normalize: true })
       )
-      .mark(rect({ w: "classTotal", h: "count", fill: "survived", stroke: "white", strokeWidth: 1 }))
+      .mark(
+        rect({ h: "count", fill: "survived", stroke: "white", strokeWidth: 1 })
+      )
       .render(container, { w: args.w, h: args.h });
 
     return container;

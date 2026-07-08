@@ -16,7 +16,7 @@ import {
   Size,
   Transform,
 } from "../dims";
-import { aesthetic, continuous } from "../domain";
+import { aesthetic, continuous, posFn } from "../domain";
 import { interval } from "../../util/interval";
 import {
   ORDINAL,
@@ -30,11 +30,11 @@ import type { DisplayList } from "gofish-ir";
 import {
   lowerStyle,
   pathToPixelSVG,
+  roleFor,
   valueLabelItems,
 } from "../displayList/lowerHelpers";
 /* TODO: what should default embedding behavior be when all values are aesthetic? */
 export const Ellipse = ({
-  name,
   fill = color6_old[0],
   stroke = fill,
   strokeWidth = 0,
@@ -42,7 +42,6 @@ export const Ellipse = ({
   label,
   ...fancyDims
 }: {
-  name?: string;
   fill?: MaybeValue<string>;
   stroke?: MaybeValue<string>;
   strokeWidth?: number;
@@ -54,7 +53,6 @@ export const Ellipse = ({
   const dims = elaborateDims(fancyDims);
   const node = new GoFishNode(
     {
-      name,
       type: "ellipse",
       // Expose `dims` so resolveAliases / resolveEmbedding can author it in place
       // (same array the closures below capture). See rect.tsx / _node passes.
@@ -105,12 +103,12 @@ export const Ellipse = ({
 
         return [resolveAxis(0, wDomain), resolveAxis(1, hDomain)];
       },
-      layout: (shared, size, scaleFactors, children, posScales) => {
+      layout: (shared, size, scales, children) => {
         let w = isValue(dims[0].size)
-          ? getValue(dims[0].size!) * scaleFactors[0]!
+          ? getValue(dims[0].size!) * scales[0]?.sigma!
           : (dims[0].size ?? size[0]);
         let h = isValue(dims[1].size)
-          ? getValue(dims[1].size!) * scaleFactors[1]!
+          ? getValue(dims[1].size!) * scales[1]?.sigma!
           : (dims[1].size ?? size[1]);
 
         if (aspectRatio !== undefined && aspectRatio > 0) {
@@ -128,8 +126,16 @@ export const Ellipse = ({
           }
         }
 
-        const x = computeAesthetic(dims[0].min, posScales[0]!, undefined);
-        const y = computeAesthetic(dims[1].min, posScales[1]!, undefined);
+        const x = computeAesthetic(
+          dims[0].min,
+          posFn(scales[0]?.map)!,
+          undefined
+        );
+        const y = computeAesthetic(
+          dims[1].min,
+          posFn(scales[1]?.map)!,
+          undefined
+        );
 
         return {
           intrinsicDims: [
@@ -206,7 +212,7 @@ export const Ellipse = ({
             ry,
             style: elementStyle,
             datum: node.datum,
-            role: "node",
+            role: roleFor(node.datum),
           };
         };
 
@@ -276,7 +282,7 @@ export const Ellipse = ({
               kind: "path",
               d: pathToPixelSVG(transformed, toPixel),
               datum: node.datum,
-              role: "node",
+              role: roleFor(node.datum),
               style: lowerStyle({
                 fill: "none",
                 stroke: resolvedStroke,
@@ -322,7 +328,7 @@ export const Ellipse = ({
             kind: "path",
             d: pathToPixelSVG(transformed, toPixel),
             datum: node.datum,
-            role: "node",
+            role: roleFor(node.datum),
             style: lowerStyle({
               fill: resolvedFill,
               stroke: resolvedStroke,

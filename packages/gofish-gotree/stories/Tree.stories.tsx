@@ -85,15 +85,14 @@ export const NodeLink: StoryObj<Args> = {
             stroke: "#1f3a5f",
             strokeWidth: 1,
           }),
-        link: { interpolation: "linear", stroke: "#90a4ae", strokeWidth: 1.5 },
-        // distribute on y → parent first goes at low y; `order: "reverse"`
+        link: { curve: "straight", stroke: "#90a4ae", strokeWidth: 1.5 },
+        // distribute on y → parent first goes at low y; ``
         // flips so parent ends up at HIGH y = top of screen (y-up). Aligned
         // middle on the orthogonal x axis (separate align constraint).
         parentChild: distribute({
           dir: "y",
           spacing: 48,
           alignment: "middle",
-          order: "reverse",
         }),
         sibling: distribute({ dir: "x", spacing: 24, alignment: "start" }),
       },
@@ -133,14 +132,15 @@ export const LabeledFileTree: StoryObj<Args> = {
     tree(
       {
         node: labeledNode,
-        link: { interpolation: "linear", stroke: "#9bb1c4", strokeWidth: 1.5 },
+        link: { curve: "straight", stroke: "#9bb1c4", strokeWidth: 1.5 },
         parentChild: distribute({
           dir: "y",
           spacing: 36,
           alignment: "middle",
-          order: "reverse",
         }),
-        sibling: distribute({ dir: "x", spacing: 12, alignment: "start" }),
+        // Bottom-align siblings (y-down: "end" = bottom) so every leaf lands on
+        // a common bottom row regardless of its depth. See issue #143/#16.
+        sibling: distribute({ dir: "x", spacing: 12, alignment: "end" }),
       },
       fileTreeData
     ).render(container, { w: args.w, h: args.h });
@@ -371,7 +371,7 @@ export const Sunburst: StoryObj<Args> = {
 };
 
 // Cartesian counterpart of Sunburst — an icicle plot. Same spec exactly,
-// minus `coord: polar()` and with `order: "reverse"` on parentChild so root
+// minus `coord: polar()` and with `` on parentChild so root
 // ends up at the top of the screen (y-up: parent at HIGH y → top) instead
 // of at the bottom. Each tree level is a horizontal band; leaves are at
 // the bottom edge.
@@ -394,13 +394,12 @@ export const IciclePlot: StoryObj<Args> = {
       {
         node: icicleNode,
         link: "none",
-        // Same axis decomposition as Sunburst, but order:"reverse" puts
+        // Same axis decomposition as Sunburst, but  puts
         // root at top of screen (HIGH y in y-up). No coord transform.
         parentChild: distribute({
           dir: "y",
           spacing: 0,
           alignment: "middle",
-          order: "reverse",
         }),
         sibling: distribute({
           dir: "x",
@@ -496,7 +495,7 @@ export const RadialNodes: StoryObj<Args> = {
             stroke: "#1f3a5f",
             strokeWidth: 1,
           }),
-        link: { interpolation: "linear", stroke: "#90a4ae", strokeWidth: 1.5 },
+        link: { curve: "straight", stroke: "#90a4ae", strokeWidth: 1.5 },
         // distribute on y forward order: parent at LOW y → r=0 (canvas
         // center), children at HIGH y → outer rings. mode:"center" treats
         // children as points (no bbox accumulation) and reads spacing in

@@ -1,13 +1,19 @@
-import { sumBy, v, Connect } from "../../lib";
+import { sumBy, v, type Curve } from "../../lib";
+import {
+  connect as Connect,
+  type AnchorSpec,
+} from "../graphicalOperators/connect";
 import chunk from "lodash/chunk";
 import { GoFishNode } from "../_node";
-import type { Value } from "../data";
+import type { MaybeValue, Value } from "../data";
 import { GoFishRef } from "../_ref";
+import type { GoFishAST } from "../_ast";
 import type { Token } from "../createName";
 import { type ColorConfig } from "../colorSchemes";
 
 export type { ColorConfig };
 import { inferSize } from "../channels";
+import { isLive, evalLiveStatic, type LiveValue } from "../../interaction/live";
 import { rect as generatedRect } from "../shapes/rect";
 import { Ellipse } from "../shapes/ellipse";
 import { Mark, Operator } from "../types";
@@ -20,8 +26,10 @@ import {
   createModifier,
   nameModifier,
   labelModifier,
+  zOrderModifier,
   LayerContext,
 } from "./createOperator";
+import type { ZOrderValue } from "./createOperator";
 import { layer as Layer } from "../graphicalOperators/layer";
 import {
   // `over` stays internal (not re-exported from lib) — it backs the
@@ -44,10 +52,11 @@ import {
   LayerBuilder,
   chart,
   resolveRefData,
+  PREVIOUS_LAYER_MARKS,
 } from "./chartBuilder";
 import type { ChartOptions } from "./chartBuilder";
 import { projectPath } from "../datumProjection";
-export { ChartBuilder, LayerBuilder, chart };
+export { ChartBuilder, LayerBuilder, chart, PREVIOUS_LAYER_MARKS };
 export type { ChartOptions };
 
 /* Data Transformation Operators */
@@ -183,6 +192,57 @@ export function resolve(
   return op;
 }
 
+/**
+ * Equi-join the incoming rows against another data table on a shared key — a
+ * one-to-many left join (SQL `JOIN ... USING (on)`, pandas/polars
+ * `.merge(right, on=...)`, dplyr `left_join(right, by = on)`). For each
+ * incoming row, every `right` row whose `on` value matches contributes one
+ * output row of the merged columns `{ ...left, ...right }`; incoming rows with
+ * no match drop out (inner-join semantics on the match, fan-out on the right).
+ *
+ * Unlike `resolve` (which dereferences columns into *drawn nodes* of a prior
+ * layer), `join` relates two plain data tables, so the `right` table is
+ * inlined into the IR and round-trips as JSON.
+ *
+ * Pairs with a nested chart that inherits its parent's partition: e.g. scatter
+ * lakes by location, then in each glyph
+ * `chart(data).flow(join(seafood, { on: "lake" }), stack(...))` pulls in that
+ * lake's catch rows.
+ */
+export function join<
+  L extends Record<string, any>,
+  R extends Record<string, any>,
+>(right: R[], opts: { on: string }): Operator<L[], (L & R)[]> {
+  const op: Operator<L[], (L & R)[]> = async (mark: Mark<(L & R)[]>) => {
+    return (async (
+      left: L[],
+      key?: string | number,
+      layerContext?: LayerContext
+    ) => {
+      const leftRows = Array.isArray(left) ? left : left == null ? [] : [left];
+      const rightByKey = new Map<unknown, R[]>();
+      for (const r of right) {
+        const k = r[opts.on];
+        const bucket = rightByKey.get(k);
+        if (bucket) bucket.push(r);
+        else rightByKey.set(k, [r]);
+      }
+      const joined: (L & R)[] = [];
+      for (const l of leftRows) {
+        for (const r of rightByKey.get(l[opts.on]) ?? []) {
+          joined.push({ ...l, ...r });
+        }
+      }
+      return mark(joined, key, layerContext);
+    }) as Mark<L[]>;
+  };
+  (op as any).__serialize = {
+    type: "join",
+    opts: { on: opts.on, right },
+  };
+  return op;
+}
+
 /* END Data Transformation Operators */
 
 export function circle<T extends Record<string, any>>({
@@ -194,7 +254,7 @@ export function circle<T extends Record<string, any>>({
   label,
 }: {
   r?: number;
-  fill?: string | keyof T;
+  fill?: string | keyof T | LiveValue;
   stroke?: string;
   strokeWidth?: number;
   debug?: boolean;
@@ -211,10 +271,22 @@ export function circle<T extends Record<string, any>>({
     if (debug) console.log("circle", key, d);
     // scatter passes an array of items; unwrap to first element for field lookup
     const datum: Record<string, any> = Array.isArray(d) ? (d as any[])[0] : d;
+    // `live(...)` fill: the pipeline renders the resolve-time value (evaluated
+    // untracked so its input reads wire events but aren't pipeline deps); paint
+    // re-evaluates it reactively via the datum-bound thunk baked at lower time.
+    let liveFill: LiveValue | undefined;
+    let staticFill: string | keyof T | undefined = fill as
+      | string
+      | keyof T
+      | undefined;
+    if (isLive(fill)) {
+      liveFill = fill;
+      staticFill = evalLiveStatic(fill, d) as string | undefined;
+    }
     const resolvedFill =
-      typeof fill === "string" && datum && fill in datum
-        ? v(datum[fill as string])
-        : (fill as Value<string> | undefined);
+      typeof staticFill === "string" && datum && staticFill in datum
+        ? v(datum[staticFill as string])
+        : (staticFill as Value<string> | undefined);
     const resolvedStroke =
       typeof stroke === "string" && datum && stroke in datum
         ? v(datum[stroke as string])
@@ -228,7 +300,8 @@ export function circle<T extends Record<string, any>>({
       strokeWidth,
       label,
     }).name(key?.toString() ?? "");
-    (node as any).datum = d;
+    node.datum = d;
+    if (liveFill) node.__gfLive = { fill: liveFill };
     return node;
   };
   const result = nameableMark(base);
@@ -256,150 +329,153 @@ export function selectAll(
   };
 }
 
-// line() mark connects data points using center-to-center mode.
-// Two forms:
-//  - bag form: `line()` over a `GoFishRef[]` (e.g. `selectAll(...)`) — one
-//    polyline through all the refs.
-//  - pairwise form: `line({ from, to })` over rows whose `from`/`to` columns
-//    hold refs (after `resolve(...)`) — one segment per row (node-link edges).
-export function line(options?: {
+// A `DerivedMark` is a mark whose geometry is *derived* from other marks via
+// refs — i.e. a connector. Like `createMark` (leaf shapes) and `createOperator`
+// (relations), this factory yields a value that works in BOTH levels:
+//   - low-level combinator: `line(opts, [ref(a), ref(b)])` → AST node
+//       (the drop-in for the old `connect`/`connectX`/`connectY`)
+//   - chart-builder Mark:    `line(opts)` → a `Mark` consumed by `.connect()` /
+//       `.mark()`, in two shapes —
+//       · bag form      — applied to a `GoFishRef[]` (e.g. `selectAll(...)`),
+//                         one connector through all the refs
+//       · pairwise form — `{ from, to }` over rows with two ref columns, one
+//                         connector per row (node-link edges)
+// `produce(opts, children)` is the only connector-specific part (it builds the
+// underlying `connect` node); the rest is shared dual-form plumbing.
+type DerivedMarkOptions = { from?: string; to?: string };
+
+export function createDerivedMark<O extends DerivedMarkOptions>(
+  type: string,
+  produce: (opts: O, children: GoFishAST[]) => any
+) {
+  function derived(options: O | undefined, children: GoFishAST[]): GoFishNode;
+  function derived(options?: O): Mark<any>;
+  function derived(
+    options?: O,
+    children?: GoFishAST[]
+  ): GoFishNode | Mark<any> {
+    const opts = (options ?? {}) as O;
+
+    // Low-level combinator form: connect the given children directly.
+    if (children !== undefined) {
+      return produce(opts, children) as GoFishNode;
+    }
+
+    // Pairwise `{ from, to }` form: one connector per row.
+    if (opts.from !== undefined && opts.to !== undefined) {
+      const from = opts.from;
+      const to = opts.to;
+      const mark: Mark<any[]> = async (rows: any[]) => {
+        const segments = await Promise.all(
+          rows.map(async (row) => {
+            const a = row[from];
+            const b = row[to];
+            if (!(a instanceof GoFishRef) || !(b instanceof GoFishRef)) {
+              throw new Error(
+                `${type}({ from: "${from}", to: "${to}" }): columns "${from}"/"${to}" ` +
+                  `must hold node refs — run resolve(["${from}", "${to}"], ` +
+                  `{ from: selectAll(...) }) in the flow first.`
+              );
+            }
+            const node = (await produce(opts, [a, b])) as GoFishNode;
+            (node as any).datum = row;
+            return node;
+          })
+        );
+        return Layer({}, segments);
+      };
+      const result = nameableMark(mark);
+      (result as any).__serialize = { type, opts };
+      return result;
+    }
+
+    // Bag form: applied to a `GoFishRef[]` (e.g. `selectAll(...)`).
+    const mark: Mark<GoFishRef[]> = async (d: GoFishRef[]) => produce(opts, d);
+    const result = nameableMark(mark);
+    (result as any).__serialize = { type, opts };
+    return result;
+  }
+  return derived;
+}
+
+export type LineOptions = {
+  fill?: MaybeValue<string>;
   stroke?: string;
   strokeWidth?: number;
   opacity?: number;
-  interpolation?: "linear" | "bezier";
+  mixBlendMode?: "normal" | "multiply";
+  // Screen-space path shape, as a factory call (`straight()`, `bezier()`,
+  // `catmullRom()`, `orthogonal()`, `arc({ direction })`, `perfectArrows({ bow })`,
+  // …) or a bare name (`"straight"` | `"bezier"`). The single path-shaping key.
+  curve?: Curve;
+  dir?: "x" | "y";
+  // Anchor mode: pin each endpoint to a normalized point on its mark's bbox
+  // (Bluefish-style `Line`) instead of the center — for ropes, node-link edges,
+  // etc. When given, the anchor points win over the routed center path.
+  source?: AnchorSpec;
+  target?: AnchorSpec;
   from?: string;
   to?: string;
-}): Mark<any> {
-  if (options?.from !== undefined && options?.to !== undefined) {
-    return pairwiseConnect("line", options, {
+};
+
+// `line` — a center-mode connector (the "line" component): the path between the
+// centers of consecutive marks. `route` picks the shape (straight | bezier |
+// orthogonal | arc | perfectArrows | …).
+export const line = createDerivedMark<LineOptions>("line", (o, children) =>
+  Connect(
+    {
+      direction: o.dir ?? "x",
       mode: "center",
-      strokeWidth: options.strokeWidth ?? 1,
-      interpolation: options.interpolation ?? "linear",
-    });
-  }
-  const mark: Mark<GoFishRef[]> = async (
-    d: GoFishRef[],
-    _key?: string | number,
-    _layerContext?: LayerContext
-  ) => {
-    // `selectAll(...)` resolves to one ref per named node; connect them.
-    return Connect(
-      {
-        direction: 0, // x direction
-        mode: "center",
-        stroke: options?.stroke,
-        strokeWidth: options?.strokeWidth ?? 1,
-        opacity: options?.opacity,
-        interpolation: options?.interpolation ?? "linear",
-      },
-      d
-    );
-  };
-  (mark as any).__serialize = { type: "line", opts: options ?? {} };
-  return mark;
-}
+      fill: o.fill,
+      stroke: o.stroke,
+      strokeWidth: o.strokeWidth ?? 1,
+      opacity: o.opacity,
+      mixBlendMode: o.mixBlendMode,
+      // Omitted ⇒ "auto": connect smooths (catmullRom) when the connected
+      // points share a continuous connection axis, else a straight line.
+      curve: o.curve,
+      source: o.source,
+      target: o.target,
+    },
+    children
+  )
+);
 
-// Shared pairwise (per-row) connector: each row carries two ref-valued columns
-// (`from`/`to`, populated by `resolve(...)`); emit one Connect per row and
-// stack them in a Layer. Backs the `{ from, to }` form of `line`/`area`.
-function pairwiseConnect(
-  irType: "line" | "area",
-  options: {
-    stroke?: string;
-    strokeWidth?: number;
-    opacity?: number;
-    interpolation?: "linear" | "bezier";
-    mixBlendMode?: "normal" | "multiply";
-    dir?: "x" | "y";
-    from?: string;
-    to?: string;
-  },
-  connectOpts: {
-    mode: "center" | "edge";
-    strokeWidth: number;
-    interpolation: "linear" | "bezier";
-  }
-): Mark<any> {
-  const from = options.from as string;
-  const to = options.to as string;
-  const mark: Mark<any[]> = async (
-    rows: any[],
-    _key?: string | number,
-    _layerContext?: LayerContext
-  ) => {
-    const segments = await Promise.all(
-      rows.map(async (row) => {
-        const a = row[from];
-        const b = row[to];
-        if (!(a instanceof GoFishRef) || !(b instanceof GoFishRef)) {
-          throw new Error(
-            `${irType}({ from: "${from}", to: "${to}" }): columns "${from}"/"${to}" ` +
-              `must hold node refs — run resolve(["${from}", "${to}"], ` +
-              `{ from: selectAll(...) }) in the flow first.`
-          );
-        }
-        const node = await Connect(
-          {
-            direction: options.dir ?? 0,
-            mode: connectOpts.mode,
-            stroke: options.stroke,
-            strokeWidth: connectOpts.strokeWidth,
-            opacity: options.opacity,
-            interpolation: connectOpts.interpolation,
-            mixBlendMode: options.mixBlendMode,
-          },
-          [a, b]
-        );
-        (node as any).datum = row;
-        return node;
-      })
-    );
-    return Layer({}, segments);
-  };
-  (mark as any).__serialize = { type: irType, opts: options };
-  return mark;
-}
-
-// area() mark connects data points using edge-to-edge mode
-export function area(options?: {
+export type RibbonOptions = {
+  fill?: MaybeValue<string>;
   stroke?: string;
   strokeWidth?: number;
   opacity?: number;
   mixBlendMode?: "normal" | "multiply";
   dir?: "x" | "y";
-  interpolation?: "linear" | "bezier";
+  // Screen-space path shape for the band edges (`straight()` | `bezier()`).
+  // Edge mode honors straight (linear band) vs bezier (S-curve band).
+  curve?: Curve;
   from?: string;
   to?: string;
-}): Mark<any> {
-  if (options?.from !== undefined && options?.to !== undefined) {
-    return pairwiseConnect("area", options, {
-      mode: "edge",
-      strokeWidth: options.strokeWidth ?? 0,
-      interpolation: options.interpolation ?? "bezier",
-    });
-  }
-  const mark: Mark<GoFishRef[]> = async (
-    d: GoFishRef[],
-    _key?: string | number,
-    _layerContext?: LayerContext
-  ) => {
-    // `selectAll(...)` resolves to one ref per named node; connect them.
-    return Connect(
+};
+
+// `ribbon` — an edge-mode connector: a filled band between the facing edges of
+// consecutive marks (areas, streamgraphs, sankey ribbons).
+export const ribbon = createDerivedMark<RibbonOptions>(
+  "ribbon",
+  (o, children) =>
+    Connect(
       {
-        direction: options?.dir ?? "x",
+        direction: o.dir ?? "x",
         mode: "edge",
-        mixBlendMode: options?.mixBlendMode ?? "normal",
-        stroke: options?.stroke,
-        strokeWidth: options?.strokeWidth ?? 0,
-        opacity: options?.opacity,
-        interpolation: options?.interpolation ?? "bezier",
+        mixBlendMode: o.mixBlendMode ?? "normal",
+        fill: o.fill,
+        stroke: o.stroke,
+        strokeWidth: o.strokeWidth ?? 0,
+        opacity: o.opacity,
+        // Omitted ⇒ "auto": edge mode currently resolves to a bezier band
+        // (continuous-ribbon Catmull-Rom is a follow-on).
+        curve: o.curve,
       },
-      d
-    );
-  };
-  (mark as any).__serialize = { type: "area", opts: options ?? {} };
-  return mark;
-}
+      children
+    )
+);
 
 // blank() mark creates invisible guides for positioning
 export function blank<T extends Record<string, any>>({
@@ -464,6 +540,7 @@ type PdOptions = { blendMode?: BlendMode };
 export type ConstrainableMark<T> = Mark<T> & {
   name(layerName: string | Token): ConstrainableMark<T>;
   label(accessor: LabelAccessor, options?: LabelOptions): ConstrainableMark<T>;
+  zOrder(value: ZOrderValue<T>): ConstrainableMark<T>;
   constrain(
     fn: (refs: Record<string, ConstraintRef>) => ConstraintSpec[]
   ): ConstrainableMark<T>;
@@ -491,7 +568,7 @@ const constrainModifier = createModifier<
   [fn: (refs: Record<string, ConstraintRef>) => ConstraintSpec[]]
 >({
   name: "constrain",
-  apply: (node, _layerContext, fn) => {
+  apply: (node, _layerContext, _datum, fn) => {
     node.constrain(fn);
   },
 });
@@ -501,6 +578,7 @@ function makeConstrainableMark<T>(base: Mark<T>): ConstrainableMark<T> {
     nameModifier,
     labelModifier,
     constrainModifier,
+    zOrderModifier,
   ]) as unknown as ConstrainableMark<T>;
 }
 
@@ -525,17 +603,31 @@ export function layer<T>(
 ): ConstrainableMark<T> {
   const opts = Array.isArray(marksOrOpts) ? {} : marksOrOpts;
   const marks = (Array.isArray(marksOrOpts) ? marksOrOpts : maybeMarks) ?? [];
-  const base: Mark<T> = async (d, key, layerContext) => {
-    // Share one layerContext across all children so that ref(name)/
-    // selectAll(name) in one child can find a sibling's .name(name)
-    // registration. Inherit from the caller when present (nested-layer case),
-    // else create a fresh context (top-level .render() case). Resolve
-    // sequentially so a child referencing a name sees registrations from
-    // earlier siblings.
-    const sharedContext = layerContext ?? {};
+  const base: Mark<T> = async (d, key, _layerContext) => {
+    // A layer establishes its OWN local name context: `.name(...)` registrations
+    // and the `ref(name)`/`selectAll(name)` that read them are scoped to *this*
+    // layer's children. We deliberately do NOT inherit the enclosing
+    // `_layerContext` — otherwise a layer nested inside an operator (e.g. one
+    // `layer([bars, area])` per `spread` cell) would share a single context
+    // across every cell, so each cell's `selectAll("bars")` would match every
+    // other cell's bars too (and reference siblings not yet laid out). Names are
+    // local to their layer, mirroring `LayerBuilder.resolve`. Resolve
+    // sequentially so a child referencing a name sees earlier siblings'
+    // registrations.
+    const sharedContext: LayerContext = {};
     const resolved: GoFishNode[] = [];
     for (const m of marks) {
-      const result = typeof m === "function" ? m(d, key, sharedContext) : m;
+      // A nested empty-scope `chart()` child inherits this layer's incoming
+      // partition datum (issue #243), exactly as `.mark(chart())` does — so
+      // `layer([chart().flow(...).mark(...), chart(selectAll(...)).mark(...)])`
+      // can be a mark without a `(d) => …` callback. A child with its own data
+      // (e.g. `chart(selectAll(...))`) is left untouched.
+      const child =
+        m instanceof ChartBuilder && m.usesPreviousLayerMarks()
+          ? m.withData(d)
+          : m;
+      const result =
+        typeof child === "function" ? child(d, key, sharedContext) : child;
       resolved.push(await resolveMarkResult(result, sharedContext));
     }
     const node = await Layer(opts, resolved);

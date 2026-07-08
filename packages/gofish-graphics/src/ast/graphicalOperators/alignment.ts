@@ -3,10 +3,10 @@
 // </gofish-wiki>
 
 import {
-  CONTINUOUS,
   DIFFERENCE,
   ORDINAL,
   POSITION,
+  SIZE,
   UNDEFINED,
   isCONTINUOUS,
   isORDINAL,
@@ -15,6 +15,7 @@ import {
   mergeAllMeasures,
   forgetAllMeasures,
   spaceMeasure,
+  spacePlacement,
   continuousExtentInterval,
   UnderlyingSpace,
 } from "../underlyingSpace";
@@ -58,7 +59,14 @@ export function unionChildSpaces(
     for (const ord of ordinals) {
       if (ord.domain) for (const k of ord.domain) keys.add(k);
     }
-    return ORDINAL(Array.from(keys));
+    // Carry the grouping measure through the union (FORGET on a real clash, as
+    // the magnitude path does) so a category axis keeps naming itself off its
+    // own space — e.g. a `Frame` wrapping a `spread(lake)` preserves "lake".
+    const measure = forgetAllMeasures(ordinals.map((o) => o.measure));
+    // Anonymous only if EVERY unioned ordinal is anonymous — one semantically
+    // keyed child makes the union a real category axis.
+    const anonymous = ordinals.every((o) => o.anonymous);
+    return ORDINAL(Array.from(keys), measure, anonymous);
   }
 
   const axisSpaces = children.map((c) => c[axis]);
@@ -80,11 +88,10 @@ export function unionChildSpaces(
   // would change geometry. UNDEFINED siblings (fixed-pixel) still never veto.
   if (
     nonUndefined.length === conts.length &&
-    conts.every((s) => s.placement.tag === "free")
+    conts.every((s) => spacePlacement(s) === "free")
   ) {
-    return CONTINUOUS(
+    return SIZE(
       Monotonic.max(...conts.map((s) => s.width)),
-      "free",
       forgetAllMeasures(conts.map((s) => s.measure))
     );
   }
@@ -99,7 +106,7 @@ export function unionChildSpaces(
   let measure: Measure | undefined;
   for (const s of conts) {
     intervals.push(continuousExtentInterval(s));
-    if (s.placement.tag === "determined") hasAnchored = true;
+    if (spacePlacement(s) === "determined") hasAnchored = true;
     measure = mergeMeasures(measure, s.measure, "overlay union");
   }
   const union = Interval.unionAll(...intervals);
@@ -124,7 +131,7 @@ export function resolveAlignmentSpace(
   // conflict — that's how a histogram's count axis carries a "count" tag
   // forward; mixed/positioned children unify measures as TYPES (throw on a real
   // clash).
-  const allBaseline = conts.every((s) => s.placement.tag === "free");
+  const allBaseline = conts.every((s) => spacePlacement(s) === "free");
   const measure = allBaseline
     ? forgetAllMeasures(conts.map(spaceMeasure))
     : mergeAllMeasures(conts.map(spaceMeasure), "alignment");
@@ -133,7 +140,8 @@ export function resolveAlignmentSpace(
   // unanchored ("conflict") child can't be re-anchored by alignment (it is
   // absorbing). Either way the result is unanchored.
   const drop =
-    alignment === "middle" || conts.some((s) => s.placement.tag === "conflict");
+    alignment === "middle" ||
+    conts.some((s) => spacePlacement(s) === "conflict");
 
   const union = Interval.unionAll(...conts.map(continuousExtentInterval));
 

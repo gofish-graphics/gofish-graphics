@@ -2,60 +2,31 @@
 
 import pandas as pd
 
-from gofish import chart, stack, derive, rect, normalize, palette
+from gofish import chart, stack, rect, palette
 
 
-def _mosaic_cells():
+def _passengers():
     passengers = pd.read_json(
         "packages/gofish-graphics/src/data/titanicPassengers.json"
     ).to_dict("records")
-
-    # group by pclass (ascending), then by survived (encounter order) — mirrors
-    # the JS `groupBy(...).flatMap(...)` + `orderBy(["pclass"], ["asc"])`.
-    by_class: dict = {}
+    # `count: 1` per passenger so the stacks aggregate; sorted so every class
+    # column stacks survived/died in the same order (pclass asc, survived desc)
+    # — mirrors the JS `.map(count: 1).sort(...)`.
     for p in passengers:
-        by_class.setdefault(p["pclass"], []).append(p)
-
-    cells = []
-    for pclass in sorted(by_class):
-        rows = by_class[pclass]
-        class_total = len(rows)
-        by_surv: dict = {}
-        for r in rows:
-            by_surv.setdefault(r["survived"], []).append(r)
-        for survived, srows in by_surv.items():
-            cells.append(
-                {
-                    "pclass": pclass,
-                    "survived": survived,
-                    "count": len(srows),
-                    "classTotal": class_total,
-                }
-            )
-    return cells
+        p["count"] = 1
+    passengers.sort(key=lambda r: (r["pclass"], -r["survived"]))
+    return passengers
 
 
 def story_default():
     return (
-        chart(_mosaic_cells(), color=palette(["#2b8cbe", "#ff8408"]), axes=True)
+        chart(_passengers(), color=palette(["#2b8cbe", "#ff8408"]), axes=True)
         .flow(
-            stack(by="pclass", dir="x", spacing=2),
-            derive(
-                lambda rows: normalize(
-                    sorted(rows, key=lambda r: r["survived"], reverse=True),
-                    "count",
-                )
-            ),
-            stack(by="survived", dir="y"),
+            # columns by class — width ∝ each class's passenger count (marginal)
+            stack(by="pclass", dir="x"),
+            # survival share within each class column (conditional), fills height
+            stack(by="survived", dir="y", w="count", normalize=True),
         )
-        .mark(
-            rect(
-                w="classTotal",
-                h="count",
-                fill="survived",
-                stroke="white",
-                strokeWidth=1,
-            )
-        ),
+        .mark(rect(h="count", fill="survived", stroke="white", strokeWidth=1)),
         {"w": 520, "h": 420},
     )

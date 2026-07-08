@@ -34,6 +34,8 @@ import type {
 import { toDisplayList } from "./displayList/toDisplayList";
 import type { DisplayList } from "gofish-ir";
 import { lowerLabelItems } from "./labels/renderLabel";
+import { setLiveSlots } from "../interaction/liveSlots";
+import type { LiveValue } from "../interaction/live";
 import { GoFishRef } from "./_ref";
 import { GoFishAST } from "./_ast";
 import { CoordinateTransform } from "./coordinateTransforms/coord";
@@ -53,24 +55,26 @@ import {
   isPOSITION,
   isUNDEFINED,
   continuousInterval,
-  placementOf,
+  spacePlacement,
   CONTINUOUS_TYPE,
   type Placement,
   UnderlyingSpace,
 } from "./underlyingSpace";
 import { toJSON, interval } from "../util/interval";
+import type { AxisScale } from "./domain";
 import { envFlag } from "../util";
 import { nice } from "d3-array";
 import type { ScaleContext } from "./gofish";
 import type { TokenContext } from "./tokenContext";
+import type { FlipScope } from "./_displayObject";
 import { isToken, Token } from "./createName";
 import type { ConstraintSpec, ConstraintRef } from "./constraints";
 import { collectConstraintRefs } from "./constraints";
 import {
   BBox,
-  type BBoxFacet,
+  type BBoxKey,
   type BBoxConflict,
-  type FacetValue,
+  type BBoxValue,
 } from "./constraints/bbox";
 import {
   assignPaletteColor,
@@ -89,6 +93,17 @@ export type RenderSession = {
   /** Set by the lower emit driver (`lowerToDisplayList`) for the duration of a
    *  lowering walk: the y-up→y-down pixel mapping every `lower` body uses. */
   toPixel?: ToPixel;
+  /** The per-scope `toPixel` factory (issue #629): `flip → ToPixel`, built once by
+   *  the render terminal from the viewport. A BAKE BOUNDARY reads it to re-lower
+   *  its child subtree through the scope walk (`bake`) and install each descendant
+   *  scope's own map — so a continuous-y subtree inside an UNDEFINED-y boundary
+   *  (`enclose`/`arrow`/`connect`) still flips, instead of inheriting the
+   *  boundary's single (y-down) map. Set by `lowerToDisplayList`. */
+  toPixelFor?: (flip?: FlipScope) => ToPixel;
+  /** The flip scope of the draw entry currently being lowered (issue #629) — the
+   *  boundary's own scope, seeded into its child re-bake so descendants inherit it
+   *  unless they open their own. Set by `lowerToDisplayList` per baked entry. */
+  flip?: FlipScope;
 };
 
 export type ScaleFactorFunction = Monotonic.Monotonic;
@@ -120,19 +135,20 @@ export type Placeable = {
    *  uses this to express every anchor as `absoluteMin + constant`, including
    *  `baseline` for asymmetric boxes such as text and negative bars. */
   localAnchor?: (axis: FancyDirection, anchor: Anchor) => number | undefined;
-  /** This target's abstract {@link Placement} on `dir` (free / determined(at) /
-   *  conflict), or `undefined` for a non-continuous axis. `align` reads it to
-   *  leave self-positioned children alone. Omitted by `ref` stand-ins (→
-   *  `undefined`, so they get the fallback baseline like any chrome). */
+  /** This target's abstract {@link Placement} on `dir` (`"free"` /
+   *  `"determined"` / `"conflict"`), or `undefined` for a non-continuous axis.
+   *  `align` reads it to leave self-positioned children alone. Omitted by `ref`
+   *  stand-ins (→ `undefined`, so they get the fallback baseline like any
+   *  chrome). */
   placementOn?: (dir: Direction) => Placement | undefined;
   place: (axis: FancyDirection, value: number, anchor?: Anchor) => void;
-  /** Write an axis extent from owned bbox facets (the size-setting primitive
+  /** Write an axis extent from owned bbox keys (the size-setting primitive
    *  #39 — `span` and an authoritative `position` pin go through it). Optional
    *  because not every placeable shape implements it (a `ref` stand-in doesn't);
    *  it is only ever invoked on real `GoFishNode` constraint targets. */
   setExtent?: (
     axis: FancyDirection,
-    owned: Partial<Record<BBoxFacet, number>>,
+    owned: Partial<Record<BBoxKey, number>>,
     owner?: string
   ) => void;
   /** Authoritative override pin (#39): land `anchor` at `value`, rebuilding the
@@ -142,17 +158,17 @@ export type Placeable = {
   pinAnchor?: (axis: FancyDirection, value: number, anchor: Anchor) => void;
 };
 
-// `scaleFactors` is the σ (pixels-per-data-unit) handed down per axis. A node
-// MUST NOT mutate this array: to establish a local scale for its descendants
-// (the `shared` scoping annotation, below) it copies into a fresh array and
-// passes that down — never writing back to the parent's, so a solved σ can't
-// leak to the node's siblings (see spread.tsx / layer.tsx).
+// `scales` is the per-axis data→pixel affine scale handed down (the single
+// {@link AxisScale} carrier: `sigma` = pixels-per-data-unit for size, `map` =
+// the anchored data→pixel map). A node MUST NOT mutate this array: to establish
+// a local scale for its descendants (the `shared` scoping annotation, below) it
+// copies into a fresh array and passes that down — never writing back to the
+// parent's, so a solved σ can't leak to the node's siblings (see layer.tsx).
 export type Layout = (
   shared: Size<boolean>,
   size: Size,
-  scaleFactors: Size<number | undefined>,
+  scales: Size<AxisScale | undefined>,
   children: GoFishAST[],
-  posScales: Size<((pos: number) => number) | undefined>,
   node: GoFishNode
 ) => { intrinsicDims: FancyDims; transform: FancyTransform; renderData?: any };
 
@@ -198,23 +214,29 @@ export type ResolveUnderlyingSpace = (
 
 /** Dev gate (#39, placement pass): set `GOFISH_CONFLICT_CHECK=1` to surface
  *  OVER-DETERMINATION the `BBox` ledger detects but the placement commit silently
- *  absorbs — a single owner writing inconsistent facets on an axis (the
+ *  absorbs — a single owner writing inconsistent keys on an axis (the
  *  authority-independent half of "conflicts → named"). Off / zero-cost in prod. */
 const CONFLICT_CHECK = envFlag("GOFISH_CONFLICT_CHECK");
 
 const _conflicts = new Set<string>();
-/** Report a `BBox` over-determination (a facet pinned inconsistent with the
- *  already-determined axis), once per (type, axis, facet). The placement pass's
+/** Report a `BBox` over-determination (a box key pinned inconsistent with the
+ *  already-determined axis), once per (type, axis, key). The placement pass's
  *  "named conflict instead of silent last-writer-wins" — for the single-owner
  *  case; cross-constraint authority is the open fork (#583). */
 const reportConflict = (type: string, dir: 0 | 1, c: BBoxConflict): void => {
-  const key = `${type}|${dir}|${c.facet}`;
+  const key = `${type}|${dir}|${c.key}`;
   if (_conflicts.has(key)) return;
   _conflicts.add(key);
   console.warn(
-    `[bbox-conflict] ${type} axis ${dir} ${c.facet}: asserted=${c.asserted} implied=${c.implied} (owner=${c.owner} prior=${c.priorOwner})`
+    `[bbox-conflict] ${type} axis ${dir} ${c.key}: asserted=${c.asserted} implied=${c.implied} (owner=${c.owner} prior=${c.priorOwner})`
   );
 };
+
+/** Axis-claim signature for a dimension owned by a continuous axis or an
+ *  explicit `axes:` override — opaque because (unlike an ordinal's keys) it
+ *  carries no grouping identity to nest against, so it blocks descendant
+ *  auto-claims on that dim. Ordinal owners record `"o:<keys>"` instead. */
+const AXIS_CLAIM_OPAQUE = "continuous";
 
 export class GoFishNode {
   public readonly uid: string;
@@ -222,6 +244,12 @@ export class GoFishNode {
   public type: string;
   public args?: any;
   public key?: string;
+  /** The node's `key` was assigned POSITIONALLY (an auto-index from an operator
+   *  with no `by`), not from a data grouping or an explicit user `key`. An
+   *  ordinal built entirely from synthetic keys is `anonymous` — a layout-only
+   *  spread that renders no axis. Set in `createOperator`; read when folding the
+   *  distribute ordinal (see `compose` / `distributeSpaceFold`). */
+  public _syntheticKey?: boolean;
   public _name?: string | Token;
   public _isScope: boolean = false;
   /**
@@ -235,9 +263,24 @@ export class GoFishNode {
   public _scopeMap?: Map<string, GoFishNode>;
   public parent?: GoFishNode;
   public datum?: any;
+  /** Paint-time reactive channels (a `live()` value per channel), stamped by the
+   *  mark builders at resolve. Baked into the `liveSlots` side table at lower
+   *  time; undefined on the static path. */
+  public __gfLive?: Record<string, LiveValue>;
   // private inferDomains: (childDomains: Size<Domain>[]) => FancySize<Domain | undefined>;
   private _resolveUnderlyingSpace: ResolveUnderlyingSpace;
   public _underlyingSpace?: Size<UnderlyingSpace> = undefined;
+  /** The per-axis space a self-scaling scope (a `normalize` spine, a nested
+   *  stack's data-driven extent) resolves LOCALLY but reports as UNDEFINED
+   *  upward — see `selfScaledSpaces` in layer.tsx. Distinct from
+   *  `_underlyingSpace` precisely so an ancestor's scale-union ignores this axis
+   *  while orientation still sees its true kind: a self-scaled CONTINUOUS y is
+   *  still continuous, so the bake walk must open a y-up flip scope over it
+   *  (`declaredYUp`), exactly as it would for a reported continuous y. #629/#20. */
+  public _selfScaledSpace?: [
+    UnderlyingSpace | undefined,
+    UnderlyingSpace | undefined,
+  ] = undefined;
   private _layout: Layout;
   /** Per-primitive IR lowering (see {@link Lower}). Optional during the
    *  render→lower migration; once every factory supplies one, `_render` is
@@ -246,12 +289,57 @@ export class GoFishNode {
   public children: GoFishAST[];
   public intrinsicDims?: Dimensions;
   public transform?: Transform;
-  /** Persistent per-axis bbox ledger (#39 stage 2). Records the facet equations
-   *  that determine this node's box, so it mirrors the authoritative
+  /** The pixel size this node was ALLOCATED by its parent (the `size` handed to
+   *  `layout()`) — the extent of its coordinate frame, which for a continuous
+   *  axis is the posScale's pixel range (canvas height for the root, cell height
+   *  for a facet). The y-up flip scope (#629) mirrors about this, NOT the content
+   *  bbox (`intrinsicDims.size`, which shrinks to the tallest bar). An UNSIZED
+   *  (NaN) axis leaves it undefined. */
+  public _allocatedSize?: Size;
+  /** This node and its subtree are CHROME that seats in the AMBIENT y-down frame,
+   *  NOT in the plot's y-up flip scope (issue #629). Set by the chrome-elaboration
+   *  passes (axis titles, the legend swatch column, the colorbar) on the shapes
+   *  they synthesize: those describe the plot from the outside and read top→bottom
+   *  regardless of whether the plot's value axis grows upward. The bake walk resets
+   *  the active flip scope to ambient when it enters such a subtree, so a titled /
+   *  legended y-up chart flips only its DATA marks (and their in-plot labels),
+   *  while the legend column and rotated axis titles stay y-down. The plot content
+   *  itself is NOT flagged, so it still flips. Only `options.yUp` (a global y-up
+   *  ambient) overrides — see the ambient seed in `render`. */
+  public _ambientYDown?: boolean;
+  /** This node UNIONS a continuous y up but does not ESTABLISH it — a chrome
+   *  wrapper (the axis-title / legend layer) that seats the plot content plus its
+   *  chrome siblings (issue #629). It is scope-TRANSPARENT for the y-up flip: the
+   *  bake walk does NOT open a scope here (its bbox includes the chrome, so it is
+   *  the wrong mirror band), but descends to the plot content it wraps — whose
+   *  frame is the canvas `finalH` — which opens the scope. Set by the chrome
+   *  elaboration passes. Distinct from `_ambientYDown` (which resets to y-down);
+   *  a scope-transparent node's CONTENT child still flips. */
+  public _scopeTransparent?: boolean;
+  /** The authoritative canvas y-flip frame for the ROOT plot content (issue
+   *  #629): `{ baseY: 0, height: finalH }`, stamped by `layout()` on `contentNode`
+   *  once `finalH = contentNode.dims.size` is known. This is the exact frame the
+   *  old global flip mirrored about (`toDisplayList`'s `data.height`) — the canvas
+   *  origin, NOT the node's placed bbox min, which a shrink-to-fit pin can offset
+   *  from 0. The bake walk uses it when the root content opens the flip scope; a
+   *  scope opening deeper (a facet cell) has no stamp and mirrors about its own
+   *  allocated band. `{baseY, height}` mirrors `FlipScope` in `_displayObject`. */
+  public _rootFlipScope?: { baseY: number; height: number };
+  /** The plot's flip frame a chrome subtree's BOX is mirrored about (issue #629).
+   *  Stamped by `layout()` on each OUTERMOST `_ambientYDown` chrome node (axis
+   *  title, legend column, colorbar) — the same value as the plot content's
+   *  `_rootFlipScope` — so the bake reads it directly (`node._chromeFrame`)
+   *  instead of searching up through the scope-transparent wrappers on every
+   *  visit. Only set when the plot mirrors (`contentFlipsY`); a chrome subtree
+   *  with no frame passes through unmirrored. `{baseY, height}` mirrors
+   *  `FlipScope`. */
+  public _chromeFrame?: { baseY: number; height: number };
+  /** Persistent per-axis bbox ledger (#39 stage 2). Records the box-key
+   *  equations that determine this node's box, so it mirrors the authoritative
    *  `(intrinsicDims, transform)`: `layout()` seeds the self-layout size (+ a
    *  self-placed absolute min), `_pinAnchor` records the absolute anchor a pin
    *  lands at, and a rank-2 `setExtent` resets the axis to its determining
-   *  facets (overriding the self-layout seed). Lazily created (the hot single
+   *  keys (overriding the self-layout seed). Lazily created (the hot single
    *  pin / `place()` path allocates only on first touch). As of stage 2 the
    *  `dims` getter READS from this ledger wherever an axis is fully solved
    *  (falling back to the `(intrinsicDims, transform)` split otherwise); render
@@ -263,7 +351,7 @@ export class GoFishNode {
    *  σ from its own box and hands it to descendants via a fresh array — claim
    *  hoisting, #549); `false` (default) = pass-through, inheriting σ from above.
    *  It is NOT a mutation flag — no node writes back to the parent's
-   *  `scaleFactors`. Currently set only by `spread`/`stack` (`sharedScale`). */
+   *  `scales`. Currently set only by `spread`/`stack` (`sharedScale`). */
   public shared: Size<boolean>;
   public renderData?: any;
   public coordinateTransform?: CoordinateTransform;
@@ -307,7 +395,6 @@ export class GoFishNode {
   public _aliases?: { x?: string; y?: string };
   constructor(
     {
-      name,
       key,
       type,
       args,
@@ -318,7 +405,6 @@ export class GoFishNode {
       shared = [false, false],
       color,
     }: {
-      name?: string;
       key?: string;
       type: string;
       args?: any;
@@ -341,7 +427,6 @@ export class GoFishNode {
     children.forEach((child) => {
       child.parent = this;
     });
-    this._name = name;
     this.key = key;
     this.type = type;
     this.args = args;
@@ -505,11 +590,19 @@ export class GoFishNode {
 
   /**
    * Top-down walk that marks which nodes should render axes.
-   * `claimed` tracks dimensions already claimed by an ancestor.
+   *
+   * `claimed` maps each dimension an ancestor already owns to a SIGNATURE of
+   * what claimed it: an ordinal axis records `"o:<keys>"`, a continuous axis (or
+   * an explicit override) records {@link AXIS_CLAIM_OPAQUE}. The signature lets
+   * ordinal axes NEST — a node claims its own ordinal axis even under an ancestor
+   * ordinal, as long as it's a DIFFERENT grouping (a finer level), so a
+   * grouped/faceted chart renders one ordinal axis per grouping level (per
+   * facet). Continuous axes stay single-owner (root-most wins): a descendant
+   * continuous axis on an already-claimed dim defers to the chart-level scale.
    */
   /**
    * Top-down pass that resolves coordinate-space axis aliases (e.g. polar
-   * `theta`/`r`/`thetaSize`/`rSize`) into the canonical `x/y/w/h` facets of each
+   * `theta`/`r`/`thetaSize`/`rSize`) into the canonical `x/y/w/h` channels of each
    * mark's `dims`. Mirrors {@link resolveAxes}: it carries the `active` alias
    * scope downward, rebinding it at every `coord` node that declares aliases
    * (a nested coord rebinds for its subtree).
@@ -547,7 +640,7 @@ export class GoFishNode {
         if (dims) {
           dims[res.axis] = {
             ...dims[res.axis],
-            [res.facet]: value,
+            [res.key]: value,
           };
         }
       }
@@ -623,7 +716,7 @@ export class GoFishNode {
   }
 
   public resolveAxes(
-    claimed: Set<0 | 1> = new Set(),
+    claimed: Map<0 | 1, string> = new Map(),
     enabled: Set<0 | 1> = new Set([0, 1])
   ): void {
     // Note: a `layer` is treated like any other node below — it claims the
@@ -659,7 +752,10 @@ export class GoFishNode {
       if (polarAxisX !== undefined) (this as any)._polarAxisX = polarAxisX;
       if (polarAxisY !== undefined) (this as any)._polarAxisY = polarAxisY;
 
-      const allClaimed = new Set<0 | 1>([0, 1]);
+      const allClaimed = new Map<0 | 1, string>([
+        [0, AXIS_CLAIM_OPAQUE],
+        [1, AXIS_CLAIM_OPAQUE],
+      ]);
       this.children.forEach((c) => {
         if (c instanceof GoFishNode) c.resolveAxes(allClaimed, enabled);
       });
@@ -679,29 +775,64 @@ export class GoFishNode {
       return;
     }
 
-    const next = new Set(claimed);
+    const next = new Map(claimed);
     const space = this._underlyingSpace;
     for (const dim of [0, 1] as (0 | 1)[]) {
       const override =
         dim === 0 ? this._axisOverride?.x : this._axisOverride?.y;
       if (override !== undefined) {
-        if (dim === 0) this.axis.x = override === false ? false : true;
-        else this.axis.y = override === false ? false : true;
-        next.add(dim); // claim regardless — false blocks children too
-      } else if (
-        enabled.has(dim) &&
-        !claimed.has(dim) &&
-        space &&
-        !isUNDEFINED(space[dim]) &&
+        // An explicit `axes:{x/y:...}` override. `false` always suppresses. A
+        // `true`, though, must not DUPLICATE an axis an ancestor already renders
+        // for the SAME ordinal grouping: under the recursive-axis model an
+        // enclosing facet cell auto-claims this node's ordinal (nesting), so an
+        // inner `axes:{x:true}` on the same grouping would draw a redundant
+        // second label row. Suppress the duplicate (but still block descendants).
+        const s = space?.[dim];
+        const mySig =
+          s && isORDINAL(s) && !s.anonymous
+            ? "o:" + JSON.stringify(s.domain ?? [])
+            : undefined;
+        const dupOrdinal =
+          override !== false &&
+          mySig !== undefined &&
+          claimed.get(dim) === mySig;
+        const show = override !== false && !dupOrdinal;
+        if (dim === 0) this.axis.x = show;
+        else this.axis.y = show;
+        next.set(dim, mySig ?? AXIS_CLAIM_OPAQUE); // claim regardless — false blocks children too
+      } else if (enabled.has(dim) && space && !isUNDEFINED(space[dim])) {
         // A baseline magnitude ("free") owns no guide yet — only an anchored
         // (POSITION), unanchored (DIFFERENCE), or ORDINAL axis does.
-        (isPOSITION(space[dim]) ||
-          isDIFFERENCE(space[dim]) ||
-          isORDINAL(space[dim]))
-      ) {
-        if (dim === 0) this.axis.x = true;
-        else this.axis.y = true;
-        next.add(dim);
+        const s = space[dim];
+        const prior = claimed.get(dim);
+        let sig: string | undefined;
+        if (isORDINAL(s) && !s.anonymous) {
+          // Ordinal axes nest: claim unless this exact grouping is already
+          // claimed by an ancestor (same keys → a duplicate of the same axis) or
+          // a continuous/override owner holds the dim (opaque).
+          //
+          // An `anonymous` ordinal (its keys are positional — see
+          // `ORDINAL_TYPE.anonymous` / `_syntheticKey`) is a `spread` with no
+          // `by` — unit dots packed along a dimension for layout only. It carries
+          // no grouping identity, so it renders no guide: it neither claims nor
+          // labels an axis. An explicitly-KEYED spread (the low-level `key:`
+          // idiom) is NOT anonymous and keeps its axis — its semantic
+          // keys are a real category axis even without a `by`-derived measure.
+          const mySig = "o:" + JSON.stringify(s.domain ?? []);
+          if (
+            prior === undefined ||
+            (prior.startsWith("o:") && prior !== mySig)
+          )
+            sig = mySig;
+        } else if (isPOSITION(s) || isDIFFERENCE(s)) {
+          // Continuous: single-owner — only the root-most unclaimed dim claims.
+          if (prior === undefined) sig = AXIS_CLAIM_OPAQUE;
+        }
+        if (sig !== undefined) {
+          if (dim === 0) this.axis.x = true;
+          else this.axis.y = true;
+          next.set(dim, sig);
+        }
       }
     }
     this.children.forEach((c) => {
@@ -729,10 +860,10 @@ export class GoFishNode {
         if (isPOSITION(space)) {
           const iv = continuousInterval(space)!;
           const [niceMin, niceMax] = nice(iv.min, iv.max, 10);
-          // Nicing changes the DATA domain (and the width derived from it) and
-          // re-pins the placement at the niced min — all in lockstep.
+          // Nicing changes the DATA domain (and the width derived from it);
+          // placement is a derived view of dataDomain, so the niced interval
+          // keeps it "determined" without a separate write.
           (space as CONTINUOUS_TYPE).dataDomain = interval(niceMin, niceMax);
-          (space as CONTINUOUS_TYPE).placement = placementOf(niceMin);
           (space as CONTINUOUS_TYPE).width = Monotonic.linear(
             niceMax - niceMin,
             0
@@ -745,20 +876,16 @@ export class GoFishNode {
     });
   }
 
-  public layout(
-    size: Size,
-    scaleFactors: Size<number | undefined>,
-    posScales: Size<((pos: number) => number) | undefined>
-  ): Placeable {
+  public layout(size: Size, scales: Size<AxisScale | undefined>): Placeable {
     // Axes are no longer drawn here: they are elaborated into ordinary shapes +
     // constraints by `elaborateAxes` (src/ast/axes/elaborate.tsx) before layout,
     // so the layout engine has no axis-specific budget/baseline machinery.
+    this._allocatedSize = size; // frame extent for the y-up flip scope (#629)
     const { intrinsicDims, transform, renderData } = this._layout(
       this.shared,
       size,
-      scaleFactors,
+      scales,
       this.children,
-      posScales,
       this
     );
 
@@ -779,10 +906,11 @@ export class GoFishNode {
       if (id?.size === undefined && id?.min === undefined) continue;
       this._bbox ??= [undefined, undefined];
       const ledger = (this._bbox[dir] ??= new BBox());
-      if (id?.size !== undefined) this._addFacet(ledger, dir, "size", id.size);
+      if (id?.size !== undefined)
+        this._addEquation(ledger, dir, "size", id.size);
       const tr = this.transform?.translate?.[dir];
       if (tr !== undefined && id?.min !== undefined)
-        this._addFacet(ledger, dir, "min", tr + id.min);
+        this._addEquation(ledger, dir, "min", tr + id.min);
       // Stage 3 (#39): the ledger now records the operator's self-placement
       // (`min = translate + localMin`), so retire the redundant written translate
       // — wholesale, at the one wrapper every operator `_layout` flows through,
@@ -819,7 +947,7 @@ export class GoFishNode {
         center: localAnchorPoint("center", min, size),
         max: localAnchorPoint("max", min, size),
         size,
-        // `embedded` is a layout-fold flag, never a ledger facet — read it from
+        // `embedded` is a layout-fold flag, never a ledger key — read it from
         // the local box (see the stage-2 invariants in the essay).
         embedded: this.intrinsicDims?.[dir]?.embedded,
       };
@@ -860,18 +988,18 @@ export class GoFishNode {
       this.transform.translate[dir] = undefined;
   }
 
-  /** Add a facet equation to a per-axis ledger, surfacing any over-determination
+  /** Add a box-key equation to a per-axis ledger, surfacing any over-determination
    *  the `BBox` detects (the placement pass's "named conflict, not silent
    *  last-writer" — single-owner case; observe-only behind GOFISH_CONFLICT_CHECK).
    *  Every ledger write goes through here so no conflict is silently dropped. */
-  private _addFacet(
+  private _addEquation(
     box: BBox,
     dir: Direction,
-    facet: BBoxFacet,
-    value: FacetValue,
+    key: BBoxKey,
+    value: BBoxValue,
     owner?: string
   ): void {
-    const conflict = box.add(facet, value, owner);
+    const conflict = box.add(key, value, owner);
     if (CONFLICT_CHECK && conflict)
       reportConflict(this.type, dir as 0 | 1, conflict);
   }
@@ -897,14 +1025,16 @@ export class GoFishNode {
   }
 
   /** This node's abstract {@link Placement} on `dir` (the layout half of its
-   *  underlying space) — `free` (awaiting a position), `determined(at)` (already
-   *  committed to a data coordinate), or `conflict`. `undefined` for a
+   *  underlying space) — `"free"` (awaiting a position), `"determined"` (already
+   *  committed to a data coordinate), or `"conflict"`. `undefined` for a
    *  non-continuous / unresolved axis (chrome). `align` reads it to leave
    *  self-positioned children (a scatter facet) where their own scale puts them
    *  — the principled replacement for the data-positioned guard. */
   public placementOn(dir: Direction): Placement | undefined {
     const sp = this._underlyingSpace?.[dir];
-    return sp !== undefined && isCONTINUOUS(sp) ? sp.placement : undefined;
+    return sp !== undefined && isCONTINUOUS(sp)
+      ? spacePlacement(sp)
+      : undefined;
   }
 
   private get _displayTransform(): Transform | undefined {
@@ -958,16 +1088,16 @@ export class GoFishNode {
   }
 
   /**
-   * Write a node's per-axis extent from OWNED bbox facets (min/max/center/size)
+   * Write a node's per-axis extent from OWNED bbox keys (min/max/center/size)
    * — the bbox-backed primitive that `span` and an authoritative `position` pin
-   * share (#39). Two or more owned facets DETERMINE the box (size included — the
+   * share (#39). Two or more owned keys DETERMINE the box (size included — the
    * size-setting case, e.g. span's two edges), so the local box is reset to
-   * `[0, size]` and the translate to the absolute min. A single owned facet is a
+   * `[0, size]` and the translate to the absolute min. A single owned key is a
    * position pin: the size comes from the node's own layout (the second
    * equation), the local box is left intact, and only the translate moves — so
    * the pin OVERRIDES a self-placed translate, which the write-once `place()`
-   * cannot. Anchor facets map start→min, end→max, middle→center; `baseline`
-   * (the origin) is not a bbox facet, so a baseline pin still uses `place()`.
+   * cannot. Anchor keys map start→min, end→max, middle→center; `baseline`
+   * (the origin) is not a bbox key, so a baseline pin still uses `place()`.
    *
    * The rank-2 solve writes through the PERSISTENT per-axis ledger
    * ({@link _bbox}) so it mirrors the node's authoritative geometry — a
@@ -981,41 +1111,41 @@ export class GoFishNode {
    */
   public setExtent(
     axis: FancyDirection,
-    owned: Partial<Record<BBoxFacet, number>>,
+    owned: Partial<Record<BBoxKey, number>>,
     owner?: string
   ): void {
     const dir = elaborateDirection(axis);
-    const facets = (
-      Object.entries(owned) as [BBoxFacet, number | undefined][]
-    ).filter((e): e is [BBoxFacet, number] => e[1] !== undefined);
-    if (facets.length === 0) return;
+    const keys = (
+      Object.entries(owned) as [BBoxKey, number | undefined][]
+    ).filter((e): e is [BBoxKey, number] => e[1] !== undefined);
+    if (keys.length === 0) return;
 
     const intrinsic = this.intrinsicDims?.[dir];
-    const sizeOwned = facets.length >= 2;
+    const sizeOwned = keys.length >= 2;
 
     if (!sizeOwned) {
-      // Rank-1 position pin: a single anchor facet lands at its value; the size
+      // Rank-1 position pin: a single anchor key lands at its value; the size
       // is the node's own layout (the second equation). No BBox needed — the
       // anchor's local point is derived directly, the SAME `localAnchorPoint`
       // arithmetic `place()` uses, so the two paths can't diverge (and the hot
       // pin path allocates nothing). The local box is left intact; only the
       // translate moves, so the pin OVERRIDES a self-placed translate.
-      const [facet, value] = facets[0];
-      if (facet === "size") return; // a lone size can't determine a position
-      this._pinAnchor(dir, facet, value);
+      const [key, value] = keys[0];
+      if (key === "size") return; // a lone size can't determine a position
+      this._pinAnchor(dir, key, value);
       return;
     }
 
-    // Rank-2: two+ owned facets DETERMINE the box (size included). This is an
+    // Rank-2: two+ owned keys DETERMINE the box (size included). This is an
     // overriding determination — it discards whatever the node's own layout seed
     // (or an earlier pin) recorded for this axis, exactly as it resets the local
     // frame to [0, size] at the absolute min. So the persistent ledger is RESET
-    // to hold just these facets — and is now the SOLE record of this axis's
+    // to hold just these keys — and is now the SOLE record of this axis's
     // position.
     this._bbox ??= [undefined, undefined];
     const bbox = (this._bbox[dir] = new BBox());
-    for (const [facet, value] of facets)
-      this._addFacet(bbox, dir, facet, value, owner);
+    for (const [key, value] of keys)
+      this._addEquation(bbox, dir, key, value, owner);
     const absMin = bbox.read("min");
     const size = bbox.read("size");
     if (absMin === undefined || size === undefined) return; // under-determined
@@ -1047,7 +1177,7 @@ export class GoFishNode {
   }
 
   /**
-   * Pin one axis so the box's `anchor` facet lands at `value`, deriving the
+   * Pin one axis so the box's `anchor` lands at `value`, deriving the
    * anchor's local point from `(min, size)` via `localAnchorPoint`. The single
    * arithmetic shared by `place()`'s determined branch, `setExtent`'s rank-1
    * position pin, and the public {@link pinAnchor}, so the placement paths can
@@ -1074,11 +1204,11 @@ export class GoFishNode {
     if (override || !this._bbox[dir]) this._bbox[dir] = new BBox();
     const ledger = this._bbox[dir]!;
     if (intrinsic?.size !== undefined)
-      this._addFacet(ledger, dir, "size", intrinsic.size);
+      this._addEquation(ledger, dir, "size", intrinsic.size);
     if (anchor === "baseline") {
-      this._addFacet(ledger, dir, "min", value + (intrinsic?.min ?? 0));
+      this._addEquation(ledger, dir, "min", value + (intrinsic?.min ?? 0));
     } else {
-      this._addFacet(ledger, dir, anchor, value);
+      this._addEquation(ledger, dir, anchor, value);
     }
 
     // Write the pin's translate, then reconcile: on a solved axis the ledger is
@@ -1144,9 +1274,31 @@ export class GoFishNode {
       [],
       this
     );
+    // Stamp the emitting node's uid as the item id (hit-testing hook — the IR
+    // field predates this and was unpopulated). Boundary nodes re-walk children
+    // through the children's own INTERNAL_lower, so descendants keep their own
+    // ids; `??=` preserves any id a lower body sets itself. Zero-cost otherwise.
+    for (const item of items) item.id ??= this.uid;
+    // Live channels (a `live()` value): bake a datum-bound thunk per channel
+    // into the paint-time side table so paint re-evaluates it reactively. The
+    // thunks are held OUTSIDE the display item (WeakMap) so the item stays pure
+    // data for serialization / normalized-DOM captures.
+    const liveChannels = this.__gfLive;
+    if (liveChannels) {
+      const datum = this.datum;
+      const slots: Record<string, () => unknown> = {};
+      for (const channel in liveChannels) {
+        const accessor = liveChannels[channel];
+        slots[channel] = () => accessor(datum);
+      }
+      for (const item of items) setLiveSlots(item, slots);
+    }
     if (this._label && this.intrinsicDims) {
       const labelItems = lowerLabelItems(this, transform, toPixel);
-      if (labelItems.length) return [...items, ...labelItems];
+      if (labelItems.length) {
+        for (const item of labelItems) item.id ??= this.uid;
+        return [...items, ...labelItems];
+      }
     }
     return items;
   }
@@ -1184,9 +1336,10 @@ export class GoFishNode {
       debug = false,
       defs,
       axes = false,
-      axisFields,
       colorConfig,
       padding,
+      yUp,
+      interaction,
     }: {
       w?: number;
       h?: number;
@@ -1196,9 +1349,10 @@ export class GoFishNode {
       debug?: boolean;
       defs?: JSX.Element[];
       axes?: AxesOptions;
-      axisFields?: { x?: string; y?: string };
       colorConfig?: ColorConfig;
       padding?: number;
+      yUp?: boolean;
+      interaction?: import("../interaction/runtime").InteractionRuntime;
     }
   ) {
     return gofish(
@@ -1212,9 +1366,10 @@ export class GoFishNode {
         debug,
         defs,
         axes,
-        axisFields,
         colorConfig,
         padding,
+        yUp,
+        interaction,
       },
       this
     );
@@ -1430,9 +1585,10 @@ export const debugUnderlyingSpaceTree = (
   ): string => {
     const fmt = (s: UnderlyingSpace): string => {
       if (isCONTINUOUS(s)) {
-        return s.placement.tag === "determined"
+        const placement = spacePlacement(s);
+        return placement === "determined"
           ? `position(${toJSON(continuousInterval(s)!)})`
-          : s.placement.tag === "free"
+          : placement === "free"
             ? `size(${s.width.run(1)})`
             : `difference(${s.width.run(1)})`;
       } else if (isORDINAL(s)) {

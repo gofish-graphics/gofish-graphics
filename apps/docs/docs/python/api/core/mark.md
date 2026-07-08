@@ -22,9 +22,9 @@ ChartBuilder.mark(mark) -> ChartBuilder
 
 ## Parameters
 
-| Parameter | Type               | Description                                                   |
-| --------- | ------------------ | ------------------------------------------------------------- |
-| `mark`    | `Mark` \| callable | A mark factory result, or a `(data) -> ChartBuilder` function |
+| Parameter | Type                                 | Description                                                                                 |
+| --------- | ------------------------------------ | ------------------------------------------------------------------------------------------- |
+| `mark`    | `Mark` \| `ChartBuilder` \| callable | A mark factory result, a nested `chart(...)` drawn per group, or a `(data) -> ChartBuilder` |
 
 Returns a new `ChartBuilder` with the mark set.
 
@@ -36,7 +36,7 @@ Returns a new `ChartBuilder` with the mark set.
 | [circle](/python/api/marks/circle)   | A circle per item               |
 | [ellipse](/python/api/marks/ellipse) | An ellipse per item             |
 | [line](/python/api/marks/line)       | A line through the items        |
-| [area](/python/api/marks/area)       | A filled area through the items |
+| [ribbon](/python/api/marks/ribbon)   | A filled area through the items |
 | [blank](/python/api/marks/blank)     | An invisible positioning guide  |
 
 ## Encoding channels
@@ -58,14 +58,25 @@ Call `.name("layerName")` on a mark so another chart can reference it with
 chart(data).flow(scatter(by="lake", x="x", y="y")).mark(blank().name("points"))
 ```
 
-## The mark-as-function pattern
+## Nested chart as a mark
 
-`mark()` also accepts a function `(data) -> ChartBuilder`. The function receives
-each group's data slice and returns a nested chart, letting you build custom
-glyphs:
+`mark()` also accepts a whole nested `chart(...)` — one sub-chart drawn per group
+(a pie glyph per scatter point, a small multiple per facet). Leave the nested
+chart's **data off** and it inherits the incoming partition (the group's rows),
+so you don't thread the data through a callback:
 
 ```python
-chart(seafood).flow(spread(by="lake", dir="x")).mark(
-    lambda group: chart(group).flow(stack(by="species", dir="y")).mark(rect(h="count"))
+chart(catch_locations).flow(scatter(by="lake", x="x", y="y")).mark(
+    chart(coord=clock())  # no data -> inherits this lake's partition
+    .flow(stack(by="species", dir="x", h=20))
+    .mark(rect(w="count", fill="species"))
 )
 ```
+
+A no-data `chart()` / `chart(**options)` is an **empty scope**: as a `mark(...)`
+it binds the incoming group, and inside [`.layer(...)`](/python/api/core/layer)
+it binds the previous tier's marks.
+
+The older callback form `mark(lambda data: chart(data, ...).flow(...).mark(...))`
+still works and is equivalent — the function receives each group's data slice and
+returns a nested chart.

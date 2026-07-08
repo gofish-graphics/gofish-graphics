@@ -63,7 +63,7 @@ See [How to pick a layout operator](/js/api/howto/operators) for guidance on cho
 - `rect()` — rectangles (bars)
 - `circle()` — circles
 - `line()` — connecting line
-- `area()` — filled area
+- `ribbon()` — filled area
 
 Mark options can use fixed values or reference data fields:
 

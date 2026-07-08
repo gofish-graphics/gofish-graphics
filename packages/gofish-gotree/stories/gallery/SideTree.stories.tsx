@@ -25,13 +25,18 @@ import { combine, byDepth, mount } from "./_shared";
 // accumulate. Same convention as RadialTree / RadialNodes / Sunburst.
 //
 // POLAR LIMITATIONS (no hacks here — flagged for follow-up):
-//  - polar() takes no options, so the dsl's StartAngle 0.17 (and any
-//    InnerRadius / Direction / CentralAngle) cannot be expressed; the tree
-//    starts at the default angle instead of being rotated ~0.17 rad.
-//  - No angular auto-fit: θ spacing is a fixed per-level constant, it does not
-//    shrink with node count, so wide/deep trees can overflow the 2π budget and
-//    wrap. GoTree's "adaptive" SubtreeWidth/Height allocate space by subtree
-//    size; gofish-gotree has no equivalent yet, so spacings are hand-tuned.
+//  - polar() now takes options — { innerRadius, centralAngle, startAngle,
+//    direction, center } since #620 — so the dsl's StartAngle 0.17 (and any
+//    InnerRadius / Direction / CentralAngle) are now expressible via
+//    polar({ startAngle: 0.17, ... }) since #620 (not yet applied here); the
+//    tree still starts at the default angle instead of being rotated ~0.17 rad.
+//  - No angular auto-fit for POINT nodes: θ spacing is a fixed per-level
+//    constant, it does not shrink with node count, so wide/deep trees can
+//    overflow the 2π budget and wrap. GoTree's "adaptive" SubtreeWidth/Height
+//    allocate space by subtree size. Wedge (rect) nodes now auto-fit via
+//    thetaSize since #622; this point/circle-node gap is tracked in #627
+//    (data-position workaround shown in RadialDeep.stories.tsx), so spacings
+//    here are hand-tuned.
 //  - The dsl's bottom-up Mode and per-relation Margins (0.01/0.07/0.94) are
 //    not modeled — only the relation→constraint-kind mapping is ported.
 const meta: Meta = { title: "GoTree / Gallery / SideTree" };
@@ -45,7 +50,7 @@ export const SideTree: StoryObj = {
     mount(
       {
         node,
-        link: { interpolation: "linear", stroke: "#607d8b", strokeWidth: 1.5 },
+        link: { curve: "straight", stroke: "#607d8b", strokeWidth: 1.5 },
         // parentChild = (distribute θ, distribute r): child leans away in angle
         // and steps outward in radius from its parent.
         parentChild: combine({
@@ -53,7 +58,6 @@ export const SideTree: StoryObj = {
             kind: "distribute",
             spacing: 0.5,
             mode: "center",
-            order: "reverse",
           },
           y: { kind: "distribute", spacing: 70, mode: "center" },
         }),

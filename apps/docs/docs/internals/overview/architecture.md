@@ -19,7 +19,7 @@ GoFish is **declarative**: you never tell it to draw — you describe _what_ the
 and the engine works out the rest. That description is an **abstract syntax tree** of
 `GoFishNode`s. Two kinds of node make up the tree:
 
-- **Marks** — the things you can see: `rect`, `ellipse`, `line`, `area`, `text`.
+- **Marks** — the things you can see: `rect`, `ellipse`, `line`, `ribbon`, `text`.
 - **Graphical operators** — composition: `stackX`, `spread`, `layer`, `connect`,
   `coord`, and so on. An operator arranges its children; it has no appearance of its own.
 
@@ -83,10 +83,14 @@ boxes rather than as order-sensitive imperative writes.
 render-time fixtures. Before layout, elaboration passes rewrite each of them into
 ordinary marks and constraints — `Layer`-wrapped `Rect`/`Text` nodes seated by
 `align`/`distribute`/`position` — so chrome flows through the same three passes
-as the data marks. Each axis names itself off its own resolved underlying
-space's **measure** (a continuous axis by its unit, an ordinal axis by its
-grouping field), so an axis title is derived from the data model, not a
-syntactic hint. The orchestrator (`gofish.tsx`) then sizes the SVG off the
+as the data marks. **Axes are recursive**: every node can render its own
+resolved underlying-space type as an axis, so a nested grouping (a grouped or
+faceted chart) renders one ordinal axis per level — an outer `lake` axis and a
+per-facet `species` axis — each living at its own tree node, the way faceting
+already nests. Each axis names itself off its own space's **measure** (a
+continuous axis by its unit, an ordinal axis by its grouping field), so an axis
+title is derived from the data model, not a syntactic hint. The orchestrator
+(`gofish.tsx`) then sizes the SVG off the
 laid-out tree's **measured extent on all four sides** — the legend's overhang
 past the content, the axis/title gutters past the origin, and any content a
 constraint seated beyond the canvas (a marginal histogram's bands above and to

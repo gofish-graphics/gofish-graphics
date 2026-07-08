@@ -400,15 +400,20 @@ export const NormalizedStackedBarWithLabels: StoryObj<Args> = {
 
     chart(
       context.loaded.population.filter((row: any) => row.year === 2000) as any[],
-      { color: palette({ Female: "#675193", Male: "#ca8861" }), axes: true }
+      {
+        color: palette({ Female: "#675193", Male: "#ca8861" }),
+        // Keep the continuous proportion x-axis at the bottom (y-end).
+        axes: { x: { side: "end" }, y: true },
+      }
     )
       .flow(
         // Decode the sex field to a readable string
         derive((d: any[]) =>
           d.map((row) => ({ ...row, sex: row.sex === 1 ? "Male" : "Female" }))
         ),
-        // One row per age group, stacked horizontally
-        spread({ by: "age",  dir: "y", reverse: true, spacing: 2 }),
+        // One row per age group; y-down reads top→bottom, so age 0 lands at the
+        // top (matching the Vega-Lite reference).
+        spread({ by: "age", dir: "y", spacing: 2 }),
         // Normalize within each age group so bars span 0→1
         derive((d: any[]) =>
           d.map((row) => ({

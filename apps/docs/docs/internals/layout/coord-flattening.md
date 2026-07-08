@@ -70,8 +70,19 @@ function descend(
 When the recursion reaches a **leaf**, it writes the accumulated transform back onto
 the node and returns it as a one-element list. A node counts as a leaf when it has no
 children — or when it is a `connect` or `box` node, which are deliberately treated as
-opaque (see the caveats below). Internal nodes simply `flatMap` the recursion over
-their children, so the whole tree bottoms out into a single flat array.
+opaque (see the caveats below). Internal nodes `flatMap` the recursion over their
+children, so the whole tree bottoms out into a single flat array.
+
+The recursion does **not** visit children in raw array order — it orders them first
+with the very same paint-order rule the root bake uses (`orderChildrenForPaint` in
+`paintOrder.ts`): a `(zOrder, index)` sort, or a `topoSortByZOrder` over the layer's
+`zAbove` / `zBelow` constraints. This is what makes `zOrder(-1)` (and z constraints)
+take effect **inside** a coordinate transform. It was left out for a long time — the
+coord-local flatten walked children in array order, so a gotree link's `.zOrder(-1)`
+(links-under-nodes) was silently a no-op under `coord: polar()`
+([#676](https://github.com/gofish-graphics/gofish-graphics/issues/676)). Ordering is
+LOCAL to each layer, exactly as in the root bake (below); only the leaf/boundary rules
+differ between the two flatteners.
 
 Two design notes from the source worth knowing:
 
@@ -116,12 +127,54 @@ which the render entry maps over directly.
   whole and hoists only plain nested layers) then a `(zOrder, index)` sort or a
   `topoSortByZOrder` over its own `zAbove` / `zBelow` constraints — and only then
   descends into each unit, so a component keeps its internal order. Transforms still
-  compose all the way to the leaves; only the _ordering_ is per-layer.
+  compose all the way to the leaves; only the _ordering_ is per-layer. This ordering
+  is the shared `orderChildrenForPaint` helper — the coord-local `flattenLayout` calls
+  the exact same function, so draw order is resolved identically inside and outside a
+  coordinate transform (one rule, not two copies).
 
 This root bake is the first step toward a serializable [display
 list](/internals/core/rendering) (the render IR): once each draw entry is a
 self-contained primitive rather than a `{ node, transform }` back-reference, the flat
 list _is_ the display list.
+
+## Tagging each entry with its flip scope (#629)
+
+The bake also decides **y-orientation per subtree** (issue #629). `bake(root, ambientFlip)`
+carries a `FlipScope` — the placed y-band `{ baseY, height }` a draw entry mirrors about —
+down the walk, and stamps it on each emitted `DisplayObject` as `d.flip`. The lower driver
+builds that entry's `toPixel` from it (`toPixelFor(d.flip)`), so a continuous-y chart grows
+up while an ordinal-y neighbor stays y-down — see [Rendering](/internals/core/rendering) for
+the map itself.
+
+The decision is one rule, `resolveNodeFlip(node, composedTy, incomingFlip)`:
+
+- If a scope is already active (`incomingFlip !== undefined`), **inherit** it. The first
+  scope on a root-to-leaf path wins; descendants never re-open (no double flip).
+- Otherwise a node **opens** a scope about its own placed band (`scopeBox`, or the
+  authoritative `contentNode._rootFlipScope` for the root plot) iff its own resolved y is
+  CONTINUOUS (`declaredYUp`) or it is a `coord`. An ORDINAL / UNDEFINED node declares
+  nothing.
+- `_scopeTransparent` chrome wrappers never open (their bbox is the wrong band); an
+  `_ambientYDown` chrome subtree renders in the ambient frame and is **box-mirrored** about
+  the plot's frame — stamped directly on the chrome nodes by `layout()` as `_chromeFrame`
+  (no walk-time search).
+
+Two places had to run this **same** rule so a subtree's orientation is stable no matter how
+it is wrapped:
+
+- **The z-order hoist.** The z-order flatten is `flattenForZOrder` with a `fold` payload that
+  _carries the flip scope through each hoisted-through plain layer_, so adding a `zAbove` /
+  `zBelow` constraint can never change which scope a subtree lowers under. (One walk, not a
+  forked copy — the fold is threaded through the single `paintOrder.ts` helper.)
+- **Bake boundaries.** A boundary whose own y space is UNDEFINED (`enclose` / `arrow` /
+  `connect`) would otherwise lower its whole subtree under a single (y-down) map. Instead its
+  child descent (`lowerChildrenOffset`) **re-runs `bake`** on each child — seeded with the
+  boundary's absolute translate (`startTransform`) and its own flip scope (`startFlip`) — and
+  lowers each leaf under that leaf's own scope's `toPixel`. So a continuous-y bar chart inside
+  an `enclose` still flips, while an ordinal neighbor beside it stays y-down. Single-orientation
+  content inherits the boundary's flip and lowers byte-identically to the old single-map descent.
+  (A connector spanning _two different_ scopes is a known gap —
+  [#657](https://github.com/gofish-graphics/gofish-graphics/issues/657).)
 
 ## Fitting the subtree to the coordinate budget
 

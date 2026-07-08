@@ -50,11 +50,11 @@ export const extractAliasCandidates = <T>(
   return out;
 };
 
-/** How an alias key resolves onto a node's `dims`: which axis, and which facet
+/** How an alias key resolves onto a node's `dims`: which axis, and which box key
  * (position aliases set `min` like x/y; `<name>Size` aliases set `size` like w/h). */
-export type AliasResolution = { axis: Direction; facet: "min" | "size" };
+export type AliasResolution = { axis: Direction; key: "min" | "size" };
 
-/** Build the alias→(axis, facet) resolution map for a coord scope from the
+/** Build the alias→(axis, key) resolution map for a coord scope from the
  * transform's declared position aliases (e.g. `{ x: "theta", y: "r" }`). */
 export const buildAliasMap = (aliases: {
   x?: string;
@@ -62,12 +62,12 @@ export const buildAliasMap = (aliases: {
 }): Record<string, AliasResolution> => {
   const map: Record<string, AliasResolution> = {};
   if (aliases.x) {
-    map[aliases.x] = { axis: 0, facet: "min" };
-    map[`${aliases.x}Size`] = { axis: 0, facet: "size" };
+    map[aliases.x] = { axis: 0, key: "min" };
+    map[`${aliases.x}Size`] = { axis: 0, key: "size" };
   }
   if (aliases.y) {
-    map[aliases.y] = { axis: 1, facet: "min" };
-    map[`${aliases.y}Size`] = { axis: 1, facet: "size" };
+    map[aliases.y] = { axis: 1, key: "min" };
+    map[`${aliases.y}Size`] = { axis: 1, key: "size" };
   }
   return map;
 };
@@ -150,7 +150,7 @@ export type Anchor = "min" | "max" | "center" | "baseline";
  * The single derivation of an anchor's coordinate on a box anchored at `start`
  * with signed extent `size`: `min → start`, `center → start + |size|/2`,
  * `max → start + |size|`, `baseline → 0` (the origin). center/max are DERIVED
- * here, never read from a separately-stored facet — so every site that needs them
+ * here, never read from a separately-stored anchor — so every site that needs them
  * agrees: the two placement paths (`place()` / `setExtent`'s rank-1 pin), the
  * `dims` getters (GoFishNode + GoFishRef), and `displayDims`. That removed the
  * asymmetric-box divergence that reverted the earlier `place()→setExtent` reroute
@@ -245,9 +245,9 @@ export type FancyTransform = { translate?: FancyPosition; scale?: FancySize };
  * Combine a node's local box (`intrinsicDims`) with its `transform.translate`
  * into absolute per-axis display dims, DERIVING center/max from `(min, size)`
  * (the same relation as {@link localAnchorPoint} / the `dims` getter). Mirrors
- * the getter but with `?? 0` fallbacks — an unplaced/unsized facet reads 0,
+ * the getter but with `?? 0` fallbacks — an unplaced/unsized anchor reads 0,
  * which is what a shape `_render` wants for drawing. Shapes share this instead
- * of each re-deriving center/max from a separately-stored facet.
+ * of each re-deriving center/max from a separately-stored anchor.
  */
 export const displayDims = (
   intrinsicDims: Dimensions | undefined,
@@ -296,10 +296,10 @@ export const translateString = (transform?: {
 /**
  * The `dims` getter body shared by {@link GoFishNode} and {@link GoFishRef}:
  * combine a node's local box (`intrinsicDims`) with its `transform.translate`
- * into absolute per-axis dims, returning `undefined` facets for "not yet placed
+ * into absolute per-axis dims, returning `undefined` anchors for "not yet placed
  * / not yet sized" so callers can distinguish that from "at 0". center/max are
  * DERIVED from the placed `(min, size)` via {@link localAnchorPoint} — never read
- * from a separately-stored facet, and only once the box is both placed AND sized.
+ * from a separately-stored anchor, and only once the box is both placed AND sized.
  *
  * This is the `undefined`-preserving sibling of {@link displayDims}: same
  * derivation, but `displayDims` substitutes `?? 0` because a shape `_render`

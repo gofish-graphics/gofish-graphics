@@ -84,7 +84,7 @@ selection object, and this is deliberate:
   there is nothing new to learn — the ref you get from a selection behaves
   exactly like a ref you wrote by hand inline.
 - **Geometry is decoupled from data.** A ref points at a placed node; you read
-  its placement off the ref (that is how `line` / `area` draw) and its bound
+  its placement off the ref (that is how `line` / `ribbon` draw) and its bound
   datum via the ref's `datum`. Selecting does not flatten or reshape your data.
 - **Batch operations live in `.flow`, not on the noun.** Unlike D3, where the
   selection object owns `.data()`, `.attr()`, `.filter()`, etc., GoFish keeps a
@@ -109,7 +109,7 @@ may arrive later; for now use a named layer + `selectAll` as data.)
 
 ## Connectors take `selectAll` directly
 
-[`line`](/python/api/marks/line) and [`area`](/python/api/marks/area) consume a
+[`line`](/python/api/marks/line) and [`ribbon`](/python/api/marks/ribbon) consume a
 list of refs and read placed geometry off them, so feed them `selectAll`:
 
 ```python
@@ -128,7 +128,7 @@ option is path-aware, so re-encode by the **datum path**:
 ```python
 chart(selectAll("bars")) \
     .flow(group(by="datum.species")) \
-    .mark(area(opacity=0.8))
+    .mark(ribbon(opacity=0.8))
 ```
 
 A `datum.field` path resolves to a scalar **only if every row in the ref's bag

@@ -17,8 +17,8 @@ Exercises four features added in this PR's Python wrapper port:
 from gofish import (
     Constraint,
     circle,
-    connect,
     createName,
+    line,
     layer,
     mark,
     polygon,
@@ -63,13 +63,14 @@ def weight(width: float, height: float, label: str):
     return layer(
         [
             polygon(
-                # GoFish y-up: full-width bottom edge at y=0, inset top edge
-                # at y=height.
+                # y-down free space (issue #143/#16): the inset top edge is at
+                # y=0, the full-width bottom edge at y=height — a weight wider
+                # at the bottom.
                 points=[
-                    [0, 0],
-                    [width, 0],
-                    [width - 10, height],
-                    [10, height],
+                    [10, 0],
+                    [width - 10, 0],
+                    [width, height],
+                    [0, height],
                 ],
                 fill="#545454",
                 stroke="#545454",
@@ -125,16 +126,17 @@ def story_pulley():
                         # by half a wheel), C.start on B.end.
                         Constraint.align([A, B], x=["middle", "start"]),
                         Constraint.align([B, C], x=["end", "start"]),
-                        # Vertical placement (GoFish is y-up; pair order
-                        # flipped vs Bluefish).
+                        # Vertical placement: y-down free space matches
+                        # Bluefish's ttb order (ceiling on top, pulleys below,
+                        # weights at the bottom) — #143/#16.
                         Constraint.distribute(
-                            [B, ceiling], dir="y", spacing=40, mode="edge"
+                            [ceiling, B], dir="y", spacing=40, mode="edge"
                         ),
                         Constraint.distribute(
-                            [A, B], dir="y", spacing=30, mode="edge"
+                            [B, A], dir="y", spacing=30, mode="edge"
                         ),
                         Constraint.distribute(
-                            [C, B], dir="y", spacing=50, mode="edge"
+                            [B, C], dir="y", spacing=50, mode="edge"
                         ),
                         # Ceiling centered over the cluster.
                         Constraint.align([B, ceiling], x="middle"),
@@ -142,7 +144,7 @@ def story_pulley():
                         # its inset trapezoid top sits under the rope source
                         # points.
                         Constraint.distribute(
-                            [w2, C], dir="y", spacing=50, mode="edge"
+                            [C, w2], dir="y", spacing=50, mode="edge"
                         ),
                         Constraint.distribute(
                             [A, w2], dir="x", spacing=-20, mode="edge"
@@ -156,27 +158,27 @@ def story_pulley():
                         Constraint.distribute(
                             [Alabel, A], dir="x", spacing=1, mode="edge"
                         ),
-                        Constraint.align([A, Alabel], y="end"),
+                        Constraint.align([A, Alabel], y="start"),
                         Constraint.distribute(
                             [B, Blabel], dir="x", spacing=1, mode="edge"
                         ),
-                        Constraint.align([B, Blabel], y="end"),
+                        Constraint.align([B, Blabel], y="start"),
                         Constraint.distribute(
                             [C, Clabel], dir="x", spacing=1, mode="edge"
                         ),
-                        Constraint.align([C, Clabel], y="start"),
+                        Constraint.align([C, Clabel], y="end"),
                     ]
                 ),
                 # ── tier 2: rope segments — read the placed shapes ──────────
                 # Declared after tier 1 so their ref()s resolve against
                 # placed shapes. `z_order(-1)` keeps the unmentioned ropes
                 # behind their circles by default.
-                connect(
+                line(
                     [ref(ceiling), ref(B)], target="middle", **ROPE_OPTS
                 )
                 .name("ropeSupport")
                 .z_order(-1),
-                connect(
+                line(
                     [ref(B), ref(A)],
                     source=["start", "middle"],
                     target="middle",
@@ -184,7 +186,7 @@ def story_pulley():
                 )
                 .name("ropeX")
                 .z_order(-1),
-                connect(
+                line(
                     [ref(B), ref(C)],
                     source=["end", "middle"],
                     target=["start", "middle"],
@@ -192,28 +194,28 @@ def story_pulley():
                 )
                 .name("ropeY")
                 .z_order(-1),
-                connect(
+                line(
                     [ref(ceiling), ref(C)],
                     target=["end", "middle"],
                     **ROPE_OPTS,
                 )
                 .name("ropeZ")
                 .z_order(-1),
-                connect(
+                line(
                     [ref(A), ref(w1)],
                     source=["start", "middle"],
                     **ROPE_OPTS,
                 )
                 .name("ropeP")
                 .z_order(-1),
-                connect(
+                line(
                     [ref(A), ref(w2)],
                     source=["end", "middle"],
                     **ROPE_OPTS,
                 )
                 .name("ropeQ")
                 .z_order(-1),
-                connect(
+                line(
                     [ref(C), ref(w2)], source="middle", **ROPE_OPTS
                 )
                 .name("ropeS")

@@ -3,259 +3,223 @@
 // </gofish-wiki>
 
 import type { Placeable } from "../_node";
+import { BBox } from "./bbox";
 import {
   lowerPlacementConstraints,
   type PlacementConstraint,
 } from "./placementLowering";
-import type { SpanExtent } from "./span";
-import { type Axis, type ConstraintPosScales } from "./shared";
-import type {
-  NodeId,
-  PlacementFact,
-  PlacementParticipant,
-  PlacementRelation,
+import {
+  axisIndex,
+  type AlignAnchor,
+  type Axis,
+  type ConstraintPosScales,
+} from "./shared";
+import {
+  anchorExpr,
+  participantFact,
+  relationFact,
+  type AnchorFact,
+  type NodeId,
 } from "./placementFacts";
+import { anchorOffset } from "./placementProgramLowerer";
+import {
+  axisName,
+  solveAxisProblem,
+  type AxisProblem,
+  type PlacementConflict,
+  type PlacementPinClaim,
+} from "./differenceGraph";
 
 export {
   compilePlacementCoordinate,
   lowerPlacementConstraints,
 } from "./placementLowering";
+export type { PlacementConflict } from "./differenceGraph";
 
-export interface PlacementConflict {
-  axis: Axis;
-  owner: string;
-  priorOwner: string;
-  asserted: number;
-  implied: number;
-}
+/**
+ * The rank-2 placement solve (#39 stage 5): resolve each (node, axis) box
+ * `(min, size)` from the ANCHOR program — facts that name a node anchor without
+ * a pre-evaluated `min` offset — in two phases:
+ *
+ *   1. Cell closure. A per-node {@link BBox} fed the node's STRONG anchor pins
+ *      (constraint-owned; not the weak `self-placement` seed). A cell that
+ *      reaches rank 2 — an interval/span target's two edges — has its size
+ *      determined and its local frame resets to `[0, size]`; every other cell
+ *      takes its weak layout size. This is exactly `setExtent`'s two-tier reset,
+ *      made explicit.
+ *   2. Difference graph. With sizes known, every anchor reduces to `min + offset`
+ *      via the same {@link anchorOffset} arithmetic — moved from lowering-time to
+ *      post-closure — and the reduced pins/relations go through the shared
+ *      {@link solveAxisProblem} (BFS components, pin offsets, distribute/normalized
+ *      origins), unchanged.
+ *
+ * Every solved cell writes back through one path: a size-strong cell sets its
+ * extent (`setExtent`), a position-only cell pins its `min` anchor.
+ */
 
-type PlacementPinClaim = {
-  node: NodeId;
-  value: number;
-  owner: string;
+/** A solved (node, axis) box: absolute `min`, `size`, and whether the size was
+ *  rank-2 determined by strong pins (so the write-back sets the extent). */
+export type SolvedCell = {
+  min: number;
+  size: number | undefined;
+  sizeStrong: boolean;
+  /** Owner of the strong size equations, for the extent write-back. */
+  sizeOwner?: string;
 };
 
-type AxisProblem = {
-  relations: PlacementRelation[];
-  pins: PlacementPinClaim[];
-  participantFacts: PlacementParticipant[];
-  participants: Set<NodeId>;
-};
-
-type RelationEdge = {
-  node: NodeId;
-  delta: number;
-  owner: string;
-};
-
-type RelationComponents = {
-  relative: Map<NodeId, number>;
-  componentOf: Map<NodeId, number>;
-  components: NodeId[][];
+/**
+ * Cell closure for one axis. Each node's STRONG anchor pins seed a {@link BBox};
+ * a cell that reaches rank 2 (an interval/span target's two edges) yields a
+ * determined size with the owner of its equations. The `self-placement` seed is
+ * weak and never contributes, and `baseline` is not a size-determining box key.
+ * A BBox over-determination (e.g. two conflicting intervals on one target)
+ * surfaces as a named {@link PlacementConflict}.
+ */
+function closeSizes(
+  axis: Axis,
+  pins: AnchorFact[]
+): {
+  sizes: Map<NodeId, number>;
+  owners: Map<NodeId, string>;
   conflicts: PlacementConflict[];
-};
-
-const TOLERANCE = 1e-6;
-
-const axisName = (axis: 0 | 1): Axis => (axis === 0 ? "x" : "y");
-const placementKey = (axis: Axis, name: string): string => `${axis}:${name}`;
-const spanExtentKey = (extent: SpanExtent): string =>
-  placementKey(extent.axis, extent.name);
-
-function indexSpanExtents(extents: SpanExtent[]): Map<string, SpanExtent> {
-  const byKey = new Map<string, SpanExtent>();
-  for (const extent of extents) byKey.set(spanExtentKey(extent), extent);
-  return byKey;
-}
-
-function classifyAxisFacts(
-  facts: PlacementFact[],
-  spanExtents: Map<string, SpanExtent>
-): AxisProblem {
-  const relations: PlacementRelation[] = [];
-  const pins: PlacementPinClaim[] = [];
-  const participantFacts: PlacementParticipant[] = [];
-  const participants = new Set<NodeId>();
-
-  for (const fact of facts) {
-    if (fact.type === "pin") {
-      participants.add(fact.expr.node);
-      pins.push({ node: fact.expr.node, value: fact.value, owner: fact.owner });
-      continue;
+} {
+  const boxes = new Map<NodeId, BBox>();
+  const boxOwner = new Map<NodeId, string>();
+  const conflicts: PlacementConflict[] = [];
+  for (const fact of pins) {
+    if (fact.type !== "anchor-pin") continue;
+    if (fact.owner === "self-placement") continue; // weak seed, not a strong fact
+    if (fact.anchor === "baseline") continue; // baseline is not a size box key
+    // start→min, middle→center, end→max — the same edge classification
+    // `anchorOffset` applies (a non-canonical value falls to the same branch).
+    const boxKey =
+      fact.anchor === "start"
+        ? "min"
+        : fact.anchor === "middle"
+          ? "center"
+          : "max";
+    let box = boxes.get(fact.node);
+    if (!box) {
+      boxes.set(fact.node, (box = new BBox()));
+      boxOwner.set(fact.node, fact.owner);
     }
-
-    if (fact.type === "relation") {
-      participants.add(fact.from.node);
-      participants.add(fact.to.node);
-      relations.push(fact);
-      continue;
-    }
-
-    if (fact.type === "participant") {
-      participants.add(fact.name);
-      participantFacts.push(fact);
-      continue;
-    }
-
-    participants.add(fact.name);
-
-    if (fact.edge === "min") {
-      pins.push({ node: fact.name, value: fact.value, owner: fact.owner });
-      continue;
-    }
-
-    const span = spanExtents.get(placementKey(fact.axis, fact.name));
-    if (span) {
-      pins.push({
-        node: fact.name,
-        value: fact.value - span.size,
-        owner: fact.owner,
+    const conflict = box.add(boxKey, fact.value, fact.owner);
+    if (conflict) {
+      conflicts.push({
+        axis,
+        owner: conflict.owner ?? fact.owner,
+        priorOwner: conflict.priorOwner ?? boxOwner.get(fact.node) ?? "cell",
+        asserted: conflict.asserted,
+        implied: conflict.implied,
       });
     }
+  }
+  const sizes = new Map<NodeId, number>();
+  const owners = new Map<NodeId, string>();
+  for (const [node, box] of boxes) {
+    if (!box.solved) continue;
+    const size = box.read("size");
+    if (size !== undefined) {
+      sizes.set(node, size);
+      owners.set(node, boxOwner.get(node)!);
+    }
+  }
+  return { sizes, owners, conflicts };
+}
+
+/** Reduce one axis's anchor facts to a `min`-anchored {@link AxisProblem}, using
+ *  the closed sizes to substitute each anchor's offset from `min`. */
+function reduceToAxisProblem(
+  axis: Axis,
+  facts: AnchorFact[],
+  strongSizes: Map<NodeId, number>,
+  targets: Map<string, Placeable>
+): AxisProblem {
+  const relations: AxisProblem["relations"] = [];
+  const pins: PlacementPinClaim[] = [];
+  const participantFacts: AxisProblem["participantFacts"] = [];
+  const participants = new Set<NodeId>();
+
+  const resolveOffset = (
+    node: NodeId,
+    anchor: AlignAnchor
+  ): number | undefined => {
+    // A size-strong (interval/span) cell's local frame is `[0, size]`, so its
+    // anchor offsets read straight off the closed size — the substitution that
+    // was the `spannedSize` branch of `anchorOffset`, now that sizes are known.
+    const strong = strongSizes.get(node);
+    if (strong !== undefined) {
+      if (anchor === "start" || anchor === "baseline") return 0;
+      return anchor === "middle" ? Math.abs(strong) / 2 : Math.abs(strong);
+    }
+    const target = targets.get(node);
+    if (!target) return undefined;
+    return anchorOffset(target, axis, anchor);
+  };
+
+  for (const fact of facts) {
+    if (fact.type === "anchor-pin") {
+      const offset = resolveOffset(fact.node, fact.anchor);
+      if (offset === undefined) continue;
+      participants.add(fact.node);
+      pins.push({
+        node: fact.node,
+        value: fact.value - offset,
+        owner: fact.owner,
+      });
+      continue;
+    }
+    if (fact.type === "anchor-relation") {
+      const fromOffset = resolveOffset(fact.from.node, fact.from.anchor);
+      const toOffset = resolveOffset(fact.to.node, fact.to.anchor);
+      if (fromOffset === undefined || toOffset === undefined) continue;
+      participants.add(fact.from.node);
+      participants.add(fact.to.node);
+      relations.push(
+        relationFact(
+          anchorExpr(fact.from.node, axis, "start"),
+          anchorExpr(fact.to.node, axis, "start"),
+          fromOffset + fact.gap - toOffset,
+          fact.owner
+        )
+      );
+      continue;
+    }
+    // anchor-participant
+    participants.add(fact.node);
+    participantFacts.push(participantFact(fact.node, axis, fact.owner));
   }
 
   return { relations, pins, participantFacts, participants };
 }
 
-function buildRelationGraph(
-  relations: PlacementRelation[]
-): Map<NodeId, RelationEdge[]> {
-  const adjacency = new Map<NodeId, RelationEdge[]>();
-  const addEdge = (from: NodeId, to: NodeId, delta: number, owner: string) => {
-    const list = adjacency.get(from) ?? [];
-    list.push({ node: to, delta, owner });
-    adjacency.set(from, list);
-  };
-
-  for (const relation of relations) {
-    addEdge(
-      relation.from.node,
-      relation.to.node,
-      relation.offset,
-      relation.owner
-    );
-    addEdge(
-      relation.to.node,
-      relation.from.node,
-      -relation.offset,
-      relation.owner
-    );
-  }
-
-  return adjacency;
-}
-
-function solveRelationComponents(
+/** Solve one axis's anchor program into `(min, size)` per node, plus any cell or
+ *  graph over-determination conflicts. */
+function solveRank2Axis(
   axis: Axis,
-  problem: AxisProblem
-): RelationComponents {
-  const adjacency = buildRelationGraph(problem.relations);
-  const relative = new Map<NodeId, number>();
-  const componentOf = new Map<NodeId, number>();
-  const components: NodeId[][] = [];
-  const conflicts: PlacementConflict[] = [];
+  facts: AnchorFact[],
+  targets: Map<string, Placeable>
+): { cells: Map<NodeId, SolvedCell>; conflicts: PlacementConflict[] } {
+  const { sizes, owners, conflicts: sizeConflicts } = closeSizes(axis, facts);
+  const problem = reduceToAxisProblem(axis, facts, sizes, targets);
+  const { positions, conflicts: graphConflicts } = solveAxisProblem(
+    axis,
+    problem
+  );
 
-  for (const start of [...problem.participants].sort()) {
-    if (relative.has(start)) continue;
-    const component = components.length;
-    const nodes: NodeId[] = [];
-    const queue: NodeId[] = [start];
-    relative.set(start, 0);
-    componentOf.set(start, component);
-    while (queue.length > 0) {
-      const current = queue.shift()!;
-      nodes.push(current);
-      for (const edge of adjacency.get(current) ?? []) {
-        const expected = relative.get(current)! + edge.delta;
-        const prior = relative.get(edge.node);
-        if (prior === undefined) {
-          relative.set(edge.node, expected);
-          componentOf.set(edge.node, component);
-          queue.push(edge.node);
-        } else if (Math.abs(prior - expected) > TOLERANCE) {
-          conflicts.push({
-            axis,
-            owner: edge.owner,
-            priorOwner: "relation graph",
-            asserted: expected,
-            implied: prior,
-          });
-        }
-      }
-    }
-    components.push(nodes);
-  }
-
-  return { relative, componentOf, components, conflicts };
-}
-
-function solveAxis(
-  axis: Axis,
-  facts: PlacementFact[],
-  spanExtents: Map<string, SpanExtent>
-): { positions: Map<NodeId, number>; conflicts: PlacementConflict[] } {
-  const problem = classifyAxisFacts(facts, spanExtents);
-  const { relative, componentOf, components, conflicts } =
-    solveRelationComponents(axis, problem);
-
-  const offsets = new Map<number, { value: number; owner: string }>();
-  const applyPin = (node: NodeId, value: number, owner: string) => {
-    const component = componentOf.get(node);
-    const rel = relative.get(node);
-    if (component === undefined || rel === undefined) return;
-    const assertedOffset = value - rel;
-    const prior = offsets.get(component);
-    if (prior === undefined) {
-      offsets.set(component, { value: assertedOffset, owner });
-    } else if (Math.abs(prior.value - assertedOffset) > TOLERANCE) {
-      conflicts.push({
-        axis,
-        owner,
-        priorOwner: prior.owner,
-        asserted: value,
-        implied: rel + prior.value,
-      });
-    }
-  };
-  for (const pin of problem.pins) applyPin(pin.node, pin.value, pin.owner);
-
-  const distributeOriginFor = (component: number): NodeId | undefined => {
-    const outgoing = new Set<NodeId>();
-    const incoming = new Set<NodeId>();
-    for (const relation of problem.relations) {
-      if (!relation.owner.startsWith("distribute[")) continue;
-      if (componentOf.get(relation.from.node) !== component) continue;
-      outgoing.add(relation.from.node);
-      incoming.add(relation.to.node);
-    }
-    return [...outgoing].filter((node) => !incoming.has(node)).sort()[0];
-  };
-
-  for (let component = 0; component < components.length; component++) {
-    if (offsets.has(component)) continue;
-    const origin = distributeOriginFor(component);
-    if (origin !== undefined) {
-      offsets.set(component, {
-        value: -(relative.get(origin) ?? 0),
-        owner: "sequence-origin",
-      });
-      continue;
-    }
-    const min = Math.min(
-      ...components[component].map((node) => relative.get(node) ?? 0)
-    );
-    offsets.set(component, {
-      value: -min,
-      owner: "normalized-origin",
+  const idx = axisIndex(axis);
+  const cells = new Map<NodeId, SolvedCell>();
+  for (const [node, min] of positions) {
+    const strong = sizes.get(node);
+    const size = strong ?? targets.get(node)?.dims[idx].size;
+    cells.set(node, {
+      min,
+      size,
+      sizeStrong: strong !== undefined,
+      sizeOwner: owners.get(node),
     });
   }
-
-  const positions = new Map<NodeId, number>();
-  for (const [node, rel] of relative) {
-    const component = componentOf.get(node)!;
-    positions.set(node, rel + offsets.get(component)!.value);
-  }
-  return { positions, conflicts };
+  return { cells, conflicts: [...sizeConflicts, ...graphConflicts] };
 }
 
 export function solvePlacementConstraints(
@@ -270,13 +234,12 @@ export function solvePlacementConstraints(
     sizes,
     posScales
   );
-  const spanExtentByKey = indexSpanExtents(lowered.spanExtents);
 
-  const results = [
-    solveAxis("x", lowered.program.axes[0], spanExtentByKey),
-    solveAxis("y", lowered.program.axes[1], spanExtentByKey),
+  const solved = [
+    solveRank2Axis("x", lowered.anchorProgram.axes[0], targets),
+    solveRank2Axis("y", lowered.anchorProgram.axes[1], targets),
   ] as const;
-  const conflicts = results.flatMap((result) => result.conflicts);
+  const conflicts = solved.flatMap((result) => result.conflicts);
   if (conflicts.length > 0) {
     const conflict = conflicts[0];
     throw new Error(
@@ -286,17 +249,23 @@ export function solvePlacementConstraints(
     );
   }
 
-  results.forEach((result, axisIndexValue) => {
+  // Single write-back per solved cell (replaces the three-way branch): a
+  // size-strong cell (rank-2 determined) sets its extent; a position-only cell
+  // pins its `min` anchor.
+  solved.forEach((result, axisIndexValue) => {
     const axis = axisIndexValue as 0 | 1;
     const axisLabel = axisName(axis);
-    for (const [name, min] of result.positions) {
+    for (const [name, cell] of result.cells) {
       const target = targets.get(name);
       if (!target) continue;
-      const span = spanExtentByKey.get(placementKey(axisLabel, name));
-      if (span && target.setExtent) {
-        target.setExtent(axisLabel, { min, max: min + span.size }, span.owner);
-      } else if (target.pinAnchor) target.pinAnchor(axis, min, "min");
-      else target.place(axis, min, "min");
+      if (cell.sizeStrong && cell.size !== undefined && target.setExtent) {
+        target.setExtent(
+          axisLabel,
+          { min: cell.min, max: cell.min + cell.size },
+          cell.sizeOwner
+        );
+      } else if (target.pinAnchor) target.pinAnchor(axis, cell.min, "min");
+      else target.place(axis, cell.min, "min");
     }
   });
   return conflicts;

@@ -41,7 +41,7 @@ const runGofish = async (): Promise<LayoutData> => {
     };
 
     const layoutResult = await layout(
-      { w, h, x, y, transform, debug, defs, axes, axisFields },
+      { w, h, x, y, transform, debug, defs, axes },
       child,
       contexts
     );
@@ -238,7 +238,14 @@ if (!isValue(dims[0].min) && !isValue(dims[0].size)) {
 **Location**: `src/ast/gofish.tsx` (`layout()`), `src/ast/axes/elaborate.tsx`
 
 If the chart-level `axes` option enables a dimension, `resolveAxes` walks the
-tree top-down flagging which node _owns_ an axis on each dimension,
+tree top-down flagging which node _owns_ an axis on each dimension. Ownership
+records a **signature** per claimed dim: a continuous axis claims it opaquely
+(single-owner — the root-most one wins, descendants defer to the chart-level
+scale), but ordinal axes **nest** — a node claims its own ordinal axis even
+under an ancestor ordinal axis, as long as it is a _different_ grouping (a finer
+level). So a grouped or faceted chart renders one ordinal axis per grouping
+level (per facet) — e.g. a `spread(lake)`+`stack(species)` bar gets an outer
+`lake` axis and a per-lake `species` axis. Then
 `resolveNiceDomains` rounds POSITION domains to tick-friendly bounds, and then
 `elaborateAxes` **rewrites the tree**: each axis-owning node is wrapped in
 `Layer` tiers containing ordinary `rect`/`text`/`spread` axis shapes wired with
@@ -252,12 +259,15 @@ See [Axes](/internals/frontend/axes) for the full elaboration story (the
 two-tier structure, origin pins, negative-space gutters, and the
 continuous/difference/ordinal kinds).
 
-**Axis-title elaboration** follows the axis block (after the nice-space capture)
-and runs _before_ the legend. The title _text_ for each dim is read off the
-**resolved space's `measure`** (`resolveAxisTitles` over `spaceMeasure(rootSpace)`)
-— a continuous axis names itself by its unit, an ordinal axis by its grouping
-field — falling back to the syntactic `axisFields` hint (mark/operator field
-names) only when the space carries no measure. `elaborateAxisTitles` then wraps
+**Axis-title elaboration** follows the axis block and runs _before_ the legend.
+The chart-level title _text_ for each dim is read off the **resolved space's
+`measure`** — a continuous axis names itself by its unit, an ordinal axis by its
+grouping field. There is no syntactic field-name fallback: a space with no
+measure simply has no title. The measure is captured **pre-elaboration** (before
+the axis block inserts the inner per-facet ordinal axis nodes, whose finer
+grouping would otherwise bubble up and win the root union), so the chart-level
+title names the OUTERMOST grouping (`lake`, not the inner `species`).
+`elaborateAxisTitles` then wraps
 the chart in one more
 `Layer` carrying up to two title `Text` nodes — the x-title horizontal below the
 plot, the y-title rotated to read bottom-to-top in the left gutter — each
@@ -644,24 +654,35 @@ display-list items paint directly under the `<svg>`.
 
 **Location**: `src/ast/gofish.tsx` (`render()`)
 
-GoFish lays out in a **y-up** frame (mathematical convention); SVG is **y-down**. The
-old renderer reconciled the two with two stacked SVG transforms — a per-shape
-`scale(1,-1)` and a root flip `<g transform="scale(1,-1) translate(…)">`. Both are now
-folded into a single affine map, set once on the render session:
+SVG is **y-down** (top-left origin); a continuous-y chart wants **y-up** (bars grow
+upward). The old renderer reconciled the two with two stacked SVG transforms — a
+per-shape `scale(1,-1)` and a root flip `<g transform="scale(1,-1) translate(…)">`.
+Both are folded into an affine map on the render session, but the map is now decided
+**per scope** rather than globally (issue #629): the bake walk tags each baked draw
+entry with the placed y-band it draws in (its `FlipScope`), and the lower driver builds
+that entry's `toPixel` from it:
 
 ```typescript
-const toPixel: ToPixel = ([gx, gy]) => [
-  gx + leftReserve,
-  height + topReserve - gy,
-];
-child.getRenderSession().toPixel = toPixel;
+const baseDown: ToPixel = ([gx, gy]) => [gx + leftReserve, gy + topReserve];
+const toPixelFor = (flip?: FlipScope): ToPixel =>
+  flip === undefined
+    ? baseDown // ambient y-down
+    : ([gx, gy]) => baseDown([gx, 2 * flip.baseY + flip.height - gy]); // y-up
 ```
 
-A GoFish-space point `(gx, gy)` maps to the SVG pixel
-`(gx + leftReserve, (height + topReserve) − gy)`. Because the flip and the gutter
-offset live here, the lower pass produces items already in **final absolute pixels** —
-no outer flip group, no per-shape transform. `toPixel` is affine, so straight paths
-stay straight (a warped path just maps each control point through it).
+A continuous-y subtree mirrors _y_ about its own band; an ordinal-y neighbor (a heatmap
+beside a bar chart) keeps the ambient y-down map. The **root plot content** mirrors about
+the canvas frame `[0, finalH]` stamped on `contentNode._rootFlipScope` here in
+`layout()` (where `finalH` is known) — the exact frame the old global flip used, so a
+single cohesive chart is pixel-identical; a mixed free-space dashboard flips only its
+continuous subtrees, each about its own band. Chrome (axis titles, legend, colorbar) is
+stamped `_ambientYDown`: the bake box-mirrors its BOX about the plot's frame (so it
+seats beside the flipped plot exactly as before) while its INTERIOR renders y-down —
+legend rows read top→bottom with no `reverse`. Because the flip and the gutter offset live in
+`toPixel`, the lower pass produces items already in **final absolute pixels** — no outer
+flip group, no per-shape transform. `toPixel` is affine, so straight paths stay straight
+(a warped path just maps each control point through it). See
+[Rendering](/internals/core/rendering) for the full per-scope mechanism.
 
 ### Render Pass 4: Lowering the Baked Tree
 
@@ -707,6 +728,22 @@ are in final absolute pixels, painting is verbatim — a `rect` item becomes
 `<rect x y width height …/>`. See [Rendering](/internals/core/rendering) for the IR's
 item kinds (`rect`/`ellipse`/`path`/`text`/`image`/`group`/`composite`/`mask`) and the
 `toDisplayList({ w, h })` terminal that stops at the IR for non-SVG consumers.
+
+### Render Pass 5.5: Interaction hooks (when reactive)
+
+The [reactive layer](/internals/frontend/reactivity) adds a few hooks to this
+phase that are inert on the static path. The render terminal
+(`chartBuilder.ts`) always resolves under an **ambient interaction context**, so
+a `live()` channel or a library input read inside `derive()` can register during
+resolve; if nothing registers, rendering proceeds untouched. When something does,
+`INTERNAL_lower` (`_node.ts`) stamps each emitted item's `id` (the node's uid, for
+`data-gf-id` hit-testing) and — for a `live()` channel carried on the node as
+`__gfLive` — bakes a datum-bound thunk into a per-item side table (`liveSlots.ts`)
+that `paintSVG` re-evaluates reactively. `render()` (`gofish.tsx`) then publishes
+the lowered frame (items + recorded `posScales`/`toPixel`) to the runtime before
+paint and attaches delegated event listeners to the `<svg>`. See
+[Rendering](/internals/core/rendering#the-interaction-hooks-in-paint) for the
+paint side.
 
 ### Render Pass 6: Axis Rendering (removed)
 

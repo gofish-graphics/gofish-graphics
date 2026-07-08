@@ -28,6 +28,7 @@ const {
   text,
   layer,
   derive,
+  join,
   log,
   v,
   field,
@@ -149,6 +150,43 @@ async function main() {
     check(
       "derive operator has no function body in IR",
       !("fn" in (ops[0] as any))
+    );
+  }
+
+  // -------------------------------------------------------------------------
+  // Join operator inlines its right table and round-trips (unlike derive,
+  // a join has no opaque function body — the right table is plain JSON).
+  // -------------------------------------------------------------------------
+  {
+    const right = [
+      { k: "a", v: 1 },
+      { k: "a", v: 2 },
+      { k: "b", v: 3 },
+    ];
+    const c = chart([{ k: "a" }, { k: "b" }])
+      .flow(join(right, { on: "k" }))
+      .mark(circle({ r: 3 }));
+    const doc = await c.toJSON();
+    validateDoc(doc, "join chart");
+    const ops = (doc.root as Frontend.ChartIR).operators!;
+    check("join operator emits as type: join", ops[0].type === "join");
+    check("join operator emits `on`", (ops[0] as any).on === "k");
+    check(
+      "join operator inlines `right` table as JSON",
+      JSON.stringify((ops[0] as any).right) === JSON.stringify(right)
+    );
+    // fromJSON rebuilds the join via the registry (site 2a) and re-emits it.
+    const rebuilt = Serialize.buildChart(
+      doc.root,
+      [{ k: "a" }, { k: "b" }],
+      undefined,
+      Serialize.makeTokenResolver()
+    );
+    const doc2 = await rebuilt.toJSON();
+    const ops2 = (doc2.root as Frontend.ChartIR).operators!;
+    check(
+      "round-trip preserves join op",
+      JSON.stringify(ops2[0]) === JSON.stringify(ops[0])
     );
   }
 

@@ -3,7 +3,7 @@ import { initializeContainer } from "../helper";
 import {
   Layer,
   Constraint,
-  Connect,
+  line,
   createMark,
   createName,
   rect,
@@ -32,9 +32,8 @@ type Args = { w: number; h: number };
 
 const r = 25;
 const w2jut = 10;
-// Connect's default mix-blend-mode is "multiply" — that turns the brown stroke
-// translucent over the gray pulleys. Override to "normal" so the ropes are
-// solid/opaque, matching the Bluefish reference.
+// Keep mix-blend-mode "normal" (line's default) so the brown ropes stay
+// solid/opaque over the gray pulleys, matching the Bluefish reference.
 const rope = {
   stroke: "#774e32",
   strokeWidth: 3,
@@ -65,12 +64,13 @@ const Weight = createMark(
   }) =>
     Layer([
       polygon({
-        // GoFish y-up: full-width bottom edge at y=0, inset top edge at y=height.
+        // y-down free space (issue #143/#16): the inset top edge is at y=0, the
+        // full-width bottom edge at y=height — a weight wider at the bottom.
         points: [
-          [0, 0],
-          [width, 0],
-          [width - 10, height],
-          [10, height],
+          [10, 0],
+          [width - 10, 0],
+          [width, height],
+          [0, height],
         ],
         fill: "#545454",
         stroke: "#545454",
@@ -129,10 +129,11 @@ export const Pulley: StoryObj<Args> = {
         Constraint.align({ x: ["middle", "start"] }, [c.A, c.B]),
         Constraint.align({ x: ["end", "start"] }, [c.B, c.C]),
 
-        // vertical placement (GoFish is y-up; pair order flipped vs Bluefish)
-        Constraint.distribute({ dir: "y", spacing: 40, mode: "edge" }, [c.B, c.ceiling]),
-        Constraint.distribute({ dir: "y", spacing: 30, mode: "edge" }, [c.A, c.B]),
-        Constraint.distribute({ dir: "y", spacing: 50, mode: "edge" }, [c.C, c.B]),
+        // vertical placement: y-down free space matches Bluefish's ttb order
+        // (ceiling on top, pulleys below, weights at the bottom) — #143/#16.
+        Constraint.distribute({ dir: "y", spacing: 40, mode: "edge" }, [c.ceiling, c.B]),
+        Constraint.distribute({ dir: "y", spacing: 30, mode: "edge" }, [c.B, c.A]),
+        Constraint.distribute({ dir: "y", spacing: 50, mode: "edge" }, [c.B, c.C]),
 
         // ceiling centered over the cluster (substitute for Bluefish <Group>)
         Constraint.align({ x: "middle" }, [c.B, c.ceiling]),
@@ -140,7 +141,7 @@ export const Pulley: StoryObj<Args> = {
         // weights (negative spacing offsets each weight so its inset trapezoid
         // top sits under the rope source points — not natural anchor points,
         // so these stay as `distribute`)
-        Constraint.distribute({ dir: "y", spacing: 50, mode: "edge" }, [c.w2, c.C]),
+        Constraint.distribute({ dir: "y", spacing: 50, mode: "edge" }, [c.C, c.w2]),
         Constraint.distribute({ dir: "x", spacing: -20, mode: "edge" }, [c.A, c.w2]),
         Constraint.distribute({ dir: "x", spacing: -15, mode: "edge" }, [c.w1, c.A]),
         Constraint.align({ y: "middle" }, [c.w2, c.w1]),
@@ -149,9 +150,9 @@ export const Pulley: StoryObj<Args> = {
         // one side and y-anchors to one corner of the wheel.
         ...(
           [
-            { pulley: c.A, label: c.Alabel, side: "left", y: "end" },
-            { pulley: c.B, label: c.Blabel, side: "right", y: "end" },
-            { pulley: c.C, label: c.Clabel, side: "right", y: "start" },
+            { pulley: c.A, label: c.Alabel, side: "left", y: "start" },
+            { pulley: c.B, label: c.Blabel, side: "right", y: "start" },
+            { pulley: c.C, label: c.Clabel, side: "right", y: "end" },
           ] as const
         ).flatMap(({ pulley, label, side, y }) => [
           Constraint.distribute(
@@ -167,31 +168,31 @@ export const Pulley: StoryObj<Args> = {
       // zOrder(-1): painted behind tier 1, so the wheels draw over rope ends.
       // `ropeSupport` is the unlabeled support rope from the ceiling to B; the
       // rest are named after the dimension letter (x/y/z/p/q/s) they carry.
-      Connect({ ...rope, target: "middle" }, [ref(ceiling), ref(B)])
+      line({ ...rope, target: "middle" }, [ref(ceiling), ref(B)])
         .name("ropeSupport")
         .zOrder(-1),
-      Connect({ ...rope, source: ["start", "middle"], target: "middle" }, [
+      line({ ...rope, source: ["start", "middle"], target: "middle" }, [
         ref(B),
         ref(A),
       ])
         .name("ropeX")
         .zOrder(-1),
-      Connect(
+      line(
         { ...rope, source: ["end", "middle"], target: ["start", "middle"] },
         [ref(B), ref(C)]
       )
         .name("ropeY")
         .zOrder(-1),
-      Connect({ ...rope, target: ["end", "middle"] }, [ref(ceiling), ref(C)])
+      line({ ...rope, target: ["end", "middle"] }, [ref(ceiling), ref(C)])
         .name("ropeZ")
         .zOrder(-1),
-      Connect({ ...rope, source: ["start", "middle"] }, [ref(A), ref(w1)])
+      line({ ...rope, source: ["start", "middle"] }, [ref(A), ref(w1)])
         .name("ropeP")
         .zOrder(-1),
-      Connect({ ...rope, source: ["end", "middle"] }, [ref(A), ref(w2)])
+      line({ ...rope, source: ["end", "middle"] }, [ref(A), ref(w2)])
         .name("ropeQ")
         .zOrder(-1),
-      Connect({ ...rope, source: "middle" }, [ref(C), ref(w2)])
+      line({ ...rope, source: "middle" }, [ref(C), ref(w2)])
         .name("ropeS")
         .zOrder(-1),
 

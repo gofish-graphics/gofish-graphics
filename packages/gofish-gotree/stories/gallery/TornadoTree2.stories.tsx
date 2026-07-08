@@ -79,9 +79,11 @@ export const TornadoTree2: StoryObj = {
 };
 
 // NOTES (polar gaps — no hacks, only combine + coord + node factory):
-//  - polar() takes NO options, so dsl knobs PolarCenter:"left", InnerRadius,
-//    Direction, CentralAngle are NOT expressible — the spiral always centers on
-//    the canvas, not offset left as in the reference.
+//  - InnerRadius, Direction, CentralAngle are now expressible via polar({ ... })
+//    since #620 — not yet applied here. PolarCenter:"left" remains
+//    inexpressible: it is a polar-space anchor, which polar()'s screen-offset
+//    `center` does not cover — the spiral centers on the canvas, not offset left
+//    as in the reference.
 //  - PolarAxis:"x-axis" requests a θ/r axis swap, but gofish polar() has no
 //    transposed variant, so it is not expressible; the brief mapping (x→θ, y→r)
 //    is used directly.

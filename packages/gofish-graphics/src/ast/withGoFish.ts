@@ -31,13 +31,16 @@ import {
   nameableMark,
   type TranslateModifierOptions,
   type MarkKind,
+  type ZOrderValue,
 } from "./marks/createOperator";
 import { isValue } from "./data";
+import { isLive, evalLiveStatic, type LiveValue } from "../interaction/live";
 import { KNOWN_ALIAS_KEYS } from "./dims";
 import { Mark } from "./types";
 import type { ConstraintSpec, ConstraintRef } from "./constraints";
 import type { LabelAccessor, LabelOptions } from "./labels/labelPlacement";
 import type { Token } from "./createName";
+import { attachTerminals } from "./marks/terminals";
 
 /**
  * Options for rendering a GoFish node
@@ -100,6 +103,9 @@ export interface PromiseWithRender<T> extends Promise<T> {
     filename: string,
     options?: Parameters<GoFishNode["save"]>[1]
   ): Promise<void>;
+  toDisplayList(
+    options?: Parameters<GoFishNode["toDisplayList"]>[0]
+  ): ReturnType<GoFishNode["toDisplayList"]>;
   name(name: string | Token): PromiseWithRender<T>;
   label(accessor: LabelAccessor, options?: LabelOptions): PromiseWithRender<T>;
   setKey(key: string): PromiseWithRender<T>;
@@ -130,57 +136,17 @@ function isChartBuilder(value: any): value is ChartBuilder<any, any> {
  * This allows calling .render(), .name(), .setKey(), .setShared() on promises.
  */
 export function addRenderMethod<T>(promise: Promise<T>): PromiseWithRender<T> {
-  // Add the render method directly to the promise object
-  // In JavaScript, you can add properties to any object, including Promises
-  (promise as any).render = function (
-    container: HTMLElement,
-    options: RenderOptions
-  ): HTMLElement | Promise<HTMLElement> {
-    return promise.then((result) => {
-      // Check if the result has a render method (like GoFishNode)
-      if (hasRenderMethod(result)) {
-        return result.render(container, options);
-      }
-      throw new Error(
-        "Cannot call render on this result. Only GoFishNode instances have a render method."
-      );
-    });
-  };
-
-  // SVG-export terminals, mirroring `.render()` above.
-  (promise as any).toSVG = function (
-    options?: Parameters<GoFishNode["toSVG"]>[0]
-  ): Promise<string> {
-    return promise.then((result) => {
-      if (hasRenderMethod(result)) return result.toSVG(options);
-      throw new Error(
-        "Cannot call toSVG on this result. Only GoFishNode instances support export."
-      );
-    });
-  };
-
-  (promise as any).toSVGElement = function (
-    options?: Parameters<GoFishNode["toSVGElement"]>[0]
-  ): Promise<SVGSVGElement> {
-    return promise.then((result) => {
-      if (hasRenderMethod(result)) return result.toSVGElement(options);
-      throw new Error(
-        "Cannot call toSVGElement on this result. Only GoFishNode instances support export."
-      );
-    });
-  };
-
-  (promise as any).save = function (
-    filename: string,
-    options?: Parameters<GoFishNode["save"]>[1]
-  ): Promise<void> {
-    return promise.then((result) => {
-      if (hasRenderMethod(result)) return result.save(filename, options);
-      throw new Error(
-        "Cannot call save on this result. Only GoFishNode instances support export."
-      );
-    });
-  };
+  // Export terminals (render / toSVG / toSVGElement / save / toDisplayList) come
+  // from the shared registry, so adding one touches a single list. The promise
+  // resolves to a node directly; a non-GoFishNode result is unexportable.
+  // See terminals.ts.
+  attachTerminals(promise, async () => {
+    const result = await promise;
+    if (hasRenderMethod(result)) return result;
+    throw new Error(
+      "Cannot call an export terminal on this result. Only GoFishNode instances support export."
+    );
+  });
 
   // Add chainable methods that return new PromiseWithRender
   (promise as any).name = function (
@@ -486,6 +452,7 @@ export function createNodeOperatorSequential<T extends Record<string, any>, R>(
 export type NameableMark<T> = Mark<T> & {
   name(layerName: string | Token): NameableMark<T>;
   label(accessor: LabelAccessor, options?: LabelOptions): NameableMark<T>;
+  zOrder(value: ZOrderValue<T>): NameableMark<T>;
   translate(opts: TranslateModifierOptions): NameableMark<T>;
   render(
     container: Parameters<GoFishNode["render"]>[0],
@@ -499,6 +466,9 @@ export type NameableMark<T> = Mark<T> & {
     filename: string,
     options?: Parameters<GoFishNode["save"]>[1]
   ): Promise<void>;
+  toDisplayList(
+    options?: Parameters<GoFishNode["toDisplayList"]>[0]
+  ): ReturnType<GoFishNode["toDisplayList"]>;
 };
 
 /**
@@ -616,10 +586,18 @@ function buildCreatedMark(
     // per-row array — used by expand-kind marks. Unannotated props (which
     // is everything when channels is omitted/empty) pass through.
     const shapeProps: Record<string, any> = {};
+    // `live(...)` channels: the pipeline renders (and measures) the accessor's
+    // resolve-time value; the paint layer re-evaluates it reactively per frame
+    // via the datum-bound thunk baked at lower time.
+    let liveChannels: Record<string, LiveValue> | undefined;
     for (const propName of Object.keys(markOpts)) {
       if (propName === "debug") continue;
       const channelSpec = channels[propName];
-      const markValue = markOpts[propName];
+      let markValue = markOpts[propName];
+      if (isLive(markValue)) {
+        (liveChannels ??= {})[propName] = markValue;
+        markValue = evalLiveStatic(markValue, d);
+      }
 
       let channelType =
         typeof channelSpec === "string" ? channelSpec : channelSpec?.type;
@@ -666,13 +644,15 @@ function buildCreatedMark(
       for (let i = 0; i < result.length; i++) {
         const node = result[i];
         node.name(key?.toString() ?? "");
-        (node as any).datum = data[i] ?? d;
+        node.datum = data[i] ?? d;
+        if (liveChannels) node.__gfLive = liveChannels;
       }
       return result as unknown as GoFishNode;
     }
     const node = result as GoFishNode;
     node.name(key?.toString() ?? "");
-    (node as any).datum = d;
+    node.datum = d;
+    if (liveChannels) node.__gfLive = liveChannels;
     node.scope();
     // Mark as a component for string-name search bounding. Distinct from
     // _isScope so future operators that scope (for token reasons) don't
@@ -681,21 +661,6 @@ function buildCreatedMark(
     return node;
   };
   withMarkKind(baseMark, kind);
-
-  // Infer axis field names from string-valued size/pos channels
-  const axisFields: { x?: string; y?: string } = {};
-  if (typeof markOpts.w === "string") axisFields.x = markOpts.w;
-  else if (typeof markOpts.x === "string") axisFields.x = markOpts.x;
-  else if (typeof markOpts.thetaSize === "string")
-    axisFields.x = markOpts.thetaSize;
-  else if (typeof markOpts.theta === "string") axisFields.x = markOpts.theta;
-  if (typeof markOpts.h === "string") axisFields.y = markOpts.h;
-  else if (typeof markOpts.y === "string") axisFields.y = markOpts.y;
-  else if (typeof markOpts.rSize === "string") axisFields.y = markOpts.rSize;
-  else if (typeof markOpts.r === "string") axisFields.y = markOpts.r;
-  if (axisFields.x || axisFields.y) {
-    (baseMark as any).__axisFields = axisFields;
-  }
 
   // Tag with IR-serialization metadata for the frontend-IR emitter.
   if (serializeConfig) {

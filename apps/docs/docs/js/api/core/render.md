@@ -67,7 +67,17 @@ axes: false                                    // no axes (the default)
 axes: { x: true, y: false }                    // x only
 axes: { x: { title: "Year" }, y: true }        // custom x title, inferred y title
 axes: { x: { title: false }, y: true }         // suppress the inferred x title
+axes: { x: { side: "end" } }                   // seat the x-axis on the far edge
 ```
+
+Each per-axis object also accepts `side: "start" | "end"`. By default a
+**continuous/quantitative x-axis renders at the visual bottom** (and a continuous
+y-axis at the left), whichever edge that is once the frame's y-orientation is
+resolved — so a scatter, a horizontal bar, and a faceted small-multiple all place
+their value axis at the bottom without any option. An explicit `side` overrides
+that with the literal **frame-relative** seating: `"start"` is the near/origin edge
+(top in a y-down frame, bottom in y-up) and `"end"` is the far edge — e.g.
+`{ x: { side: "end" } }` forces the x-axis onto the opposite edge from the default.
 
 `axes` is most naturally a `chart()`/`chart()` option (e.g.
 `gf.chart(data, { axes: true })`); it is also accepted directly on `.render()`, as

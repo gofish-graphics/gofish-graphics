@@ -50,11 +50,14 @@ export const Cheops: StoryObj = {
       mode: "bottomUp",
       parentChild: combine({
         x: { kind: "nest", pad: 0 },
-        y: { kind: "distribute", spacing: 2, order: "reverse" },
+        y: { kind: "distribute", spacing: 2 },
       }),
       sibling: combine({
         x: { kind: "distribute", spacing: -8 },
-        y: { kind: "align", alignment: "end" },
+        // Align siblings to the TOP of their bands so same-depth nodes share a
+        // row. In y-down free space the top is the near edge → "start" (was
+        // "end", which assumed y-up and dropped shallower nodes). See #143/#16.
+        y: { kind: "align", alignment: "start" },
       }),
     }),
 };

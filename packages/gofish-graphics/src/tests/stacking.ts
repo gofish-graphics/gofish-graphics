@@ -12,7 +12,6 @@ import { seafood } from "../data/catch";
 import _ from "lodash";
 import { spreadX } from "../ast/graphicalOperators/spreadX";
 import { frame } from "../ast/graphicalOperators/frame";
-import { connectX } from "../ast/graphicalOperators/connectX";
 import { ref } from "../ast/shapes/ref";
 import { mix } from "spectral.js";
 import { enclose } from "../ast/graphicalOperators/enclose";
@@ -30,9 +29,9 @@ export const testStacking = (size: { width: number; height: number }) =>
     frame([
       enclose({}, [
         spreadX({ spacing: 64, sharedScale: true, alignment: "middle" }, [
-          rect({ name: "1", w: 32, h: 32 }),
-          rect({ name: "2", w: 32, h: 64 }),
-          rect({ name: "3", w: 32, h: 40 }),
+          rect({ w: 32, h: 32 }).name("1"),
+          rect({ w: 32, h: 64 }).name("2"),
+          rect({ w: 32, h: 40 }).name("3"),
           // rect({ w: 32, h: 32 }),
           // rect({ w: 32, h: 32 }),
         ]),

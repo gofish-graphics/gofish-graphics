@@ -154,13 +154,25 @@ check(
 );
 
 check(
-  "layer with non-chart child is rejected",
-  !validate({
+  "layer with a raw-mark child accepts (component-level annotation tier)",
+  validate({
     irVersion: 0,
     ir: "gofish-frontend",
     root: {
       type: "layer",
       charts: [{ type: "raw-mark", mark: { type: "rect" } }],
+    },
+  } as unknown as FrontendIRDocument).valid
+);
+
+check(
+  "layer with a non-chart, non-raw-mark child is rejected",
+  !validate({
+    irVersion: 0,
+    ir: "gofish-frontend",
+    root: {
+      type: "layer",
+      charts: [{ type: "data", foo: 1 }],
     },
   } as unknown as FrontendIRDocument).valid
 );

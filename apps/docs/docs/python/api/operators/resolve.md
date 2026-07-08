@@ -9,7 +9,7 @@ something the chart can draw.
 
 Pair it with [`.layer(table)`](/python/api/core/layer) to drive a tier from a
 second table, and with [`line(from_=, to=)`](/python/api/marks/line) (node-link
-edges) or [`area(from_=, to=)`](/python/api/marks/area).
+edges) or [`ribbon(from_=, to=)`](/python/api/marks/ribbon).
 
 ## Node-link edges
 

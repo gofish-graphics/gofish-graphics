@@ -37,7 +37,7 @@ const classColor = {
 
 export const testNestedMosaic = () =>
   stackY(
-    { reverse: true, spacing: 4, alignment: "middle" },
+    { spacing: 4, alignment: "middle" },
     // TODO: I could probably make the width be uniform flexible basically
     _(titanic)
       .groupBy("class")
@@ -59,7 +59,6 @@ export const testNestedMosaic = () =>
                     w:
                       (_(sItems).sumBy("count") / _(items).sumBy("count")) *
                       100,
-                    reverse: true,
                     spacing: 0,
                     alignment: "middle",
                     sharedScale: true,

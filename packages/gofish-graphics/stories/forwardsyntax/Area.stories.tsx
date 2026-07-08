@@ -3,7 +3,7 @@ import { initializeContainer } from "../helper";
 import { seafood } from "../../src/data/catch";
 import { streamgraphData } from "../../src/data/streamgraphData";
 import { chart, spread, blank, stack, layer, selectAll } from "../../src/lib";
-import { area, group } from "../../src/lib";
+import { ribbon, group } from "../../src/lib";
 
 const meta: Meta = {
   title: "Forward Syntax V3/Area",
@@ -39,7 +39,7 @@ export const Basic: StoryObj<Args> = {
     chart(seafood, { axes: true })
       .flow(spread({ by: "lake", dir: "x", spacing: args.w / (lakes - 1) }))
       .mark(blank({ h: "count" }))
-      .connect(area({ opacity: 0.8 }))
+      .connect(ribbon({ opacity: 0.8 }))
       .render(container, {
         w: args.w,
         h: args.h,
@@ -70,7 +70,7 @@ export const Stacked: StoryObj<Args> = {
         .mark(blank({ h: "count", fill: "species" }).name("bars")),
       chart(selectAll("bars"))
         .flow(group({ by: "species" }))
-        .mark(area({ opacity: 0.8 })),
+        .mark(ribbon({ opacity: 0.8 })),
     ]).render(container, {
       w: args.w,
       h: args.h,
@@ -98,7 +98,7 @@ export const Layered: StoryObj<Args> = {
         .mark(blank({ h: "y", fill: "c" }).name("points")),
       chart(selectAll("points"))
         .flow(group({ by: "c" }))
-        .mark(area({ opacity: 0.7 })),
+        .mark(ribbon({ opacity: 0.7 })),
     ]).render(container, {
       w: 500,
       h: 300,

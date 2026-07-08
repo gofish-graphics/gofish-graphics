@@ -6,7 +6,7 @@ hierarchical tokens, and `connect` ribbons link each source to its target by
 `ref`. The bar tiers and the ribbons all live in one `layer`.
 """
 
-from gofish import layer, spread, stack, connect, rect, ref
+from gofish import layer, spread, stack, ribbon, rect, ref
 from python_stories.data import TITANIC, COLORS
 from python_stories._lowlevel_helpers import group_by, sum_by
 
@@ -48,6 +48,7 @@ def story_default():
                     dir="y",
                     spacing=0,
                     alignment="middle",
+                    reverse=True,
                 ).name(f"{cls}-{sex}-tgt"),
                 # target: the survival bars spread apart
                 spread(
@@ -62,6 +63,7 @@ def story_default():
                     w=40,
                     spacing=_INTERNAL_SPACING * 4,
                     alignment="middle",
+                    reverse=True,
                 ),
             ],
             dir="x",
@@ -85,6 +87,7 @@ def story_default():
                     dir="y",
                     spacing=0,
                     alignment="middle",
+                    reverse=True,
                 ).name(f"{cls}-tgt"),
                 # target: each sex expands into its own survival sub-tree
                 spread(
@@ -96,6 +99,7 @@ def story_default():
                     h=sum_by(items, "count") / 10,
                     spacing=_INTERNAL_SPACING * 2,
                     alignment="middle",
+                    reverse=True,
                 ),
             ],
             dir="x",
@@ -116,12 +120,14 @@ def story_default():
                 dir="y",
                 spacing=0,
                 alignment="middle",
+                reverse=True,
             ),
             spread(
                 [_class_node(cls, items) for cls, items in by_class.items()],
                 dir="y",
                 spacing=_INTERNAL_SPACING,
                 alignment="middle",
+                reverse=True,
             ),
         ],
         dir="x",
@@ -133,35 +139,38 @@ def story_default():
     ribbons = []
     for cls, items in by_class.items():
         ribbons.append(
-            connect(
+            ribbon(
                 [ref(f"{cls}-src"), ref(f"{cls}-tgt")],
-                direction="x",
+                dir="x",
                 fill=_CLASS_COLOR[cls],
-                interpolation="bezier",
+                curve="bezier",
                 opacity=0.7,
+                mixBlendMode="multiply",
             )
         )
         for sex, s_items in group_by(items, "sex").items():
             ribbons.append(
-                connect(
+                ribbon(
                     [ref(f"{cls}-{sex}-src"), ref(f"{cls}-{sex}-tgt")],
-                    direction="x",
+                    dir="x",
                     fill=_sex_color(sex),
-                    interpolation="bezier",
+                    curve="bezier",
                     opacity=0.7,
+                    mixBlendMode="multiply",
                 )
             )
             for survived, sv_items in group_by(s_items, "survived").items():
                 ribbons.append(
-                    connect(
+                    ribbon(
                         [
                             ref(f"{cls}-{sex}-{survived}-src"),
                             ref(f"{cls}-{sex}-{survived}-tgt"),
                         ],
-                        direction="x",
+                        dir="x",
                         fill=_tgt_color(sex, survived),
-                        interpolation="bezier",
+                        curve="bezier",
                         opacity=0.7,
+                        mixBlendMode="multiply",
                     )
                 )
 

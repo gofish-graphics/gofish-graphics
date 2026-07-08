@@ -5,6 +5,7 @@ order: 30
 status: draft
 covers:
   - packages/gofish-graphics/src/ast/marks/createOperator.ts
+  - packages/gofish-graphics/src/ast/marks/terminals.ts
 ---
 
 # `createOperator`: turning a layout into a frontend operator
@@ -151,11 +152,12 @@ Walking `createOperator.ts:391-415`:
 5. **Inject the grouping measure** — `by` is stripped, but a grouping operator
    needs its field to name the ORDINAL axis it builds. So the resolved per-axis
    grouping field (`cfg.axisFields?.(opts)`, e.g. `{ x: "lake" }`) is passed
-   through to the low-level layout in opts (as `__axisFields`), where the node
+   through to the low-level layout in opts as `axisMeasures`, where the node
    builder stamps it onto the ORDINAL space's `measure` — the discrete analogue
-   of a continuous channel's field becoming its space's measure. (`axisFields`
-   is also the source the chart-builder uses as a fallback hint for axis titles
-   when a space carries no measure — see [layout passes](/internals/layout/passes).)
+   of a continuous channel's field becoming its space's measure. That measure is
+   the sole source for the axis title (a continuous space's unit or an ordinal
+   space's grouping field); there is no longer any field-name title _hint_ or
+   fallback (the former `__axisFields` tag is gone).
 6. **Combine** — call the low-level `layout` with the encoded opts and the
    array of child nodes.
 
@@ -260,6 +262,34 @@ stashes the passed name on the returned mark function via `stashLayerName`
 (defined in `chartBuilder.ts`, called by the `name` modifier's `tag` hook), so
 [`ChartBuilder.connect()`](/js/api/core/connect) can detect a user-chained name
 without parsing the `__serialize` tag.
+
+A modifier's `apply(node, layerContext, datum, ...args)` receives the
+**per-instance datum** the mark was called with — the same value the shape
+factory saw — so a modifier can produce a _data-driven_ value rather than a
+constant. `nameModifier` / `labelModifier` / `constrainModifier` ignore it, but
+`zOrderModifier` uses it: `.zOrder(value)` takes a `ZOrderValue<T> = number |
+((datum: T) => number)` and, when handed a callback, evaluates it against this
+datum to set each produced node's paint-order hint. That is what lets paint
+order be data-driven (e.g. raise one category over the rest) without splitting a
+mark into separately-named layers — the callback runs once per replicated
+instance, and the [bake pass](/internals/layout/coord-flattening) already orders
+each layer's children by `(zOrder, index)`. A constant hint round-trips through
+the IR; a callback can't be serialized, so its `tag` hook drops it from the
+emitted IR (the same as a function `.label` accessor).
+
+The **export terminals** — `render`, `toSVG`, `toSVGElement`, `save`,
+`toDisplayList` — are the dual of modifiers: where a modifier mutates the
+produced node and returns a chainable mark, a terminal _resolves_ the surface to
+a final `GoFishNode` and calls through to that node's method, ending the chain.
+They live in their own registry (`terminals.ts`): a `TERMINALS` list plus
+`attachTerminals(target, resolveNode)`, where each surface supplies only its own
+node-resolution strategy (a combinator mark resolves by calling itself with
+`undefined`; a `withGoFish` promise resolves by awaiting). Both `attachModifiers`
+here and `addRenderMethod` in `withGoFish.ts` call `attachTerminals`, so the set
+of terminals is defined once — adding one (as `toDisplayList` was) touches a
+single list and lands on every surface at once, instead of being hand-rolled per
+surface (which previously left `toDisplayList` off the combinator surface
+entirely).
 
 A second flavor, `attachTransformModifiers`, handles methods that map a mark to
 a _different_ mark rather than mutating its nodes — e.g. `image(...).cut(opts)`

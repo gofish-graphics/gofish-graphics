@@ -71,11 +71,14 @@ export { bin } from "./ast/transforms";
 export { ref } from "./ast/shapes/ref";
 
 // Datum projection — `pluck(ref, "species")` returns the full set of distinct
-// values for a field across a selected node's rows ("every possible value"),
-// the un-collapsed sibling of the `by: "field"` homogeneity collapse.
-// (`projectPath`/`splitKeyFn` stay module-internal — operators import them from
-// ./ast/datumProjection directly.)
-export { pluck } from "./ast/datumProjection";
+// values for a field across a selected node's rows ("every possible value");
+// `project(ref, "species")` is its collapsing sibling — the single value when
+// the rows agree on the field (the same homogeneity collapse `by: "field"`
+// performs), else `undefined`. Use `project` to read a field off the datum a
+// mark is bound to (e.g. in a `.zOrder(d => …)` callback) without indexing the
+// `pluck` multiset. (`splitKeyFn` stays module-internal — operators import it
+// from ./ast/datumProjection directly.)
+export { pluck, projectPath as project } from "./ast/datumProjection";
 
 // Constraints
 export { Constraint } from "./ast/constraints";
@@ -100,16 +103,22 @@ export { Scatter, scatter } from "./ast/graphicalOperators/scatter";
 export { spreadX, spreadX as SpreadX } from "./ast/graphicalOperators/spreadX";
 export { spreadY, spreadY as SpreadY } from "./ast/graphicalOperators/spreadY";
 export { layer as Layer } from "./ast/graphicalOperators/layer";
-export { connect, connect as Connect } from "./ast/graphicalOperators/connect";
+export {
+  registerRoute,
+  getRoute,
+  hasRoute,
+  resolveCurve,
+  straight,
+  bezier,
+  orthogonal,
+  arc,
+  perfectArrows,
+  type Router,
+  type RouteContext,
+  type Curve,
+  type CurveSpec,
+} from "./ast/graphicalOperators/routers";
 export { treemap, Treemap } from "./ast/graphicalOperators/treemap";
-export {
-  connectX,
-  connectX as ConnectX,
-} from "./ast/graphicalOperators/connectX";
-export {
-  connectY,
-  connectY as ConnectY,
-} from "./ast/graphicalOperators/connectY";
 export { enclose, enclose as Enclose } from "./ast/graphicalOperators/enclose";
 export { Frame, Frame as frame } from "./ast/graphicalOperators/frame";
 export { group } from "./ast/graphicalOperators/group";
@@ -143,12 +152,14 @@ export {
   chart,
   derive,
   resolve,
+  join,
   rect,
   circle,
   selectAll,
   line,
   blank,
-  area,
+  ribbon,
+  createDerivedMark,
   normalize,
   repeat,
   log,
@@ -163,6 +174,11 @@ export {
   // the package's public entry instead of deep-importing internals. The
   // deserializer's registry.ts maps the "over" wire type to this same factory.
   over,
+  // `PREVIOUS_LAYER_MARKS` is NOT public API — users spell "inherit the
+  // previous tier's marks" as an empty `chart()` scope. Re-exported only so
+  // the IR test harness can map the `{type: "previous-tier"}` DataIR variant
+  // to this same sentinel without deep-importing internals (mirrors `over`).
+  PREVIOUS_LAYER_MARKS,
 } from "./ast/marks/chart";
 export type { ConstrainableMark } from "./ast/marks/chart";
 export type {
@@ -189,3 +205,18 @@ export type {
   LabelOptions,
   LabelAccessor,
 } from "./ast/labels/labelPlacement";
+
+// Reactive interaction layer (JS-only; no Python/IR bridge). Signals live
+// OUTSIDE the layout pipeline — see src/interaction/ and the reactivity docs.
+export { live, pointer, drag, wheel, timer, signal } from "./interaction";
+export type {
+  LiveValue,
+  Pointer,
+  Drag,
+  DragOptions,
+  Wheel,
+  WheelOptions,
+  Timer,
+  TimerOptions,
+  Signal,
+} from "./interaction";

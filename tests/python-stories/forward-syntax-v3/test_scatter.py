@@ -1,26 +1,21 @@
 """Equivalent of Scatter.stories.tsx — Forward Syntax V3/Scatter."""
 
-from collections import defaultdict
-
 from gofish import (
     chart,
     circle,
     clock,
+    join,
     line,
     rect,
     scatter,
     stack,
 )
 from python_stories.data import (
+    CATCH_DATA_WITH_LOCATIONS,
     CATCH_LOCATIONS_ARRAY,
     DRIVING_SHIFTS,
     SEAFOOD,
 )
-
-
-# JS Scatter.stories.tsx imports `catchLocations` (a dict by lake name)
-# alongside `catchLocationsArray`. Reconstruct it here.
-CATCH_LOCATIONS = {row["lake"]: row for row in CATCH_LOCATIONS_ARRAY}
 
 
 def story_basic():
@@ -33,39 +28,35 @@ def story_basic():
 
 
 def story_with_pie_glyphs():
-    # Group seafood by lake. For each lake, build a row with the lake's
-    # x/y and a `collection` of {species, count} per species. Matches the
-    # JS storybook's lodash `.groupBy("lake").map(...)`.
-    by_lake: dict = defaultdict(list)
-    for row in SEAFOOD:
-        by_lake[row["lake"]].append(row)
-    scatter_data = [
-        {
-            "lake": lake,
-            "x": CATCH_LOCATIONS[lake]["x"],
-            "y": CATCH_LOCATIONS[lake]["y"],
-            "collection": [
-                {"species": item["species"], "count": item["count"]}
-                for item in items
-            ],
-        }
-        for lake, items in by_lake.items()
-    ]
+    # The glyph chart leaves off its data: as a nested mark it inherits its
+    # parent partition (the lake's row), joins in that lake's catch rows, and
+    # draws them as a polar pie — no `lambda data: chart(data, ...)` callback.
+    # Mirrors JS storybook's `.mark(chart({coord: clock()}).flow(...))`.
+    return (
+        chart(CATCH_LOCATIONS_ARRAY)
+        .flow(scatter(by="lake", x="x", y="y"))
+        .mark(
+            chart(coord=clock())
+            .flow(join(SEAFOOD, on="lake"), stack(by="species", dir="x", h=20))
+            .mark(rect(w="count", fill="species"))
+        ),
+        {"w": 400, "h": 400, "axes": True},
+    )
 
-    # Mark-as-function: each per-lake group becomes its own polar
-    # `stack`-by-species chart. Mirrors JS storybook's
-    # `.mark((data) => Chart(data[0].collection, {coord: clock()}).flow(...))`.
-    def _pie_glyph(data):
-        return (
-            chart(data[0]["collection"], coord=clock())
+
+def story_with_pie_glyphs_denormalized():
+    # Same pie-glyph chart from a single denormalized table: each catch row
+    # already carries its lake's x/y, so the scatter partition holds each
+    # glyph's rows — the nested chart inherits them directly, no join. Mirrors
+    # JS `Scatter.stories.tsx::WithPieGlyphsDenormalized`.
+    return (
+        chart(CATCH_DATA_WITH_LOCATIONS)
+        .flow(scatter(by="lake", x="x", y="y"))
+        .mark(
+            chart(coord=clock())
             .flow(stack(by="species", dir="x", h=20))
             .mark(rect(w="count", fill="species"))
-        )
-
-    return (
-        chart(scatter_data)
-        .flow(scatter(by="lake", x="x", y="y"))
-        .mark(_pie_glyph),
+        ),
         {"w": 400, "h": 400, "axes": True},
     )
 

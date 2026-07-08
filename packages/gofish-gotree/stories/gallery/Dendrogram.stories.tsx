@@ -12,7 +12,7 @@ import { initializeContainer } from "../helper";
 // Mapping (include→nest, juxtapose/flatten→distribute, within/align→align):
 //   parentChild = combine({ x: nest  (parent box grows to span its subtree),
 //                           y: distribute (parent stacked above its subtree) })
-//                 order:"reverse" on y puts the root at the TOP (y-up); leaves
+//                  on y puts the root at the TOP (y-up); leaves
 //                 fall to the bottom (mode=bottom-up).
 //   sibling     = combine({ x: distribute (siblings laid out flat side-by-side),
 //                           y: align (siblings share a baseline) })
@@ -25,7 +25,7 @@ import { initializeContainer } from "../helper";
 // "start". Verified against ref/dendrogram.png (leaves sit on the baseline).
 //
 // TODO: needs step/orthogonal (curveStepAfter) links implemented — using
-//       {interpolation:"linear"} yields straight diagonal edges instead of the
+//       {curve:"straight"} yields straight diagonal edges instead of the
 //       reference's right-angle brackets.
 // NOTE: node="hidden" → render a zero-area transparent rect so the tree still
 //       has a node to position the links against.
@@ -92,13 +92,13 @@ export const Dendrogram: StoryObj = {
         // the hidden nodes carry no visible color, so honor it on the links —
         // each link colored by its target node's depth.
         link: (_src: any, tgt: any) => ({
-          interpolation: "linear",
+          curve: "straight",
           stroke: byDepth()(tgt),
           strokeWidth: 1.5,
         }),
         parentChild: combine({
           x: { kind: "nest", pad: 0 },
-          y: { kind: "distribute", spacing: 70, order: "reverse" },
+          y: { kind: "distribute", spacing: 70 },
         }),
         sibling: combine({
           x: { kind: "distribute", spacing: 22 },

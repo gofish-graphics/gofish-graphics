@@ -39,7 +39,7 @@ a _different_ chart's marks or when you need a custom paint order.
 
 ## Example: Connected scatterplot
 
-[`line`](/python/api/marks/line) and [`area`](/python/api/marks/area) take an
+[`line`](/python/api/marks/line) and [`ribbon`](/python/api/marks/ribbon) take an
 array of refs directly and read placed geometry off them, so feed them
 `selectAll`:
 
@@ -101,7 +101,7 @@ layer([
         .mark(rect(h="count", fill="species").name("bars")),
     chart(selectAll("bars"))
         .flow(group(by="datum.species"))
-        .mark(area(opacity=0.8)),
+        .mark(ribbon(opacity=0.8)),
 ]).render(w=500, h=300, axes=True)
 ```
 
@@ -147,9 +147,9 @@ Each ref:
 
 ## Common use cases
 
-| Goal                | Pattern                                                                              |
-| ------------------- | ------------------------------------------------------------------------------------ |
-| Line through points | `circle().name("points")` → `selectAll("points")` + `line()`                         |
-| Area under line     | `blank().name("points")` → `selectAll("points")` + `area()`                          |
-| Ribbon / stream     | `rect().name("bars")` → `selectAll("bars")` + `group(by="datum.species")` + `area()` |
-| Single annotation   | Name one mark → `chart(ref("name"))` borrows that one node                           |
+| Goal                | Pattern                                                                                |
+| ------------------- | -------------------------------------------------------------------------------------- |
+| Line through points | `circle().name("points")` → `selectAll("points")` + `line()`                           |
+| Area under line     | `blank().name("points")` → `selectAll("points")` + `ribbon()`                          |
+| Ribbon / stream     | `rect().name("bars")` → `selectAll("bars")` + `group(by="datum.species")` + `ribbon()` |
+| Single annotation   | Name one mark → `chart(ref("name"))` borrows that one node                             |

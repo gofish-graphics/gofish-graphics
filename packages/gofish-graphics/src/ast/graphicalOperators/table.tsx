@@ -3,7 +3,7 @@ import { GoFishAST } from "../_ast";
 import { createNodeOperator } from "../withGoFish";
 import { createOperator } from "../marks/createOperator";
 import { layer } from "./layer";
-import { Constraint } from "../constraints";
+import { createGridConstraint } from "../constraints/grid";
 import { childNameKey } from "../constraints/shared";
 
 /**
@@ -15,19 +15,21 @@ import { childNameKey } from "../constraints/shared";
 export const Table = createNodeOperator(
   async (
     {
-      name,
       key,
       numCols: numColsOpt,
       spacing = 0,
       colKeys,
       rowKeys,
+      axisMeasures,
     }: {
-      name?: string;
       key?: string;
       numCols?: number;
       spacing?: number | [number, number];
       colKeys?: string[];
       rowKeys?: string[];
+      /** Resolved grouping fields per axis, injected by createOperator (table's
+       *  `by.x`/`by.y`) → the col/row ORDINAL measures. */
+      axisMeasures?: { x?: string; y?: string };
     },
     children: GoFishAST[]
   ) => {
@@ -48,8 +50,17 @@ export const Table = createNodeOperator(
 
     const node = (await layer(children)) as GoFishNode;
     node.constrain((ref) => [
-      Constraint.grid(
-        { numCols, spacing, colKeys, rowKeys },
+      // grid is table's private elaboration target — not part of the public
+      // `Constraint` factory (see constraints/index.ts).
+      createGridConstraint(
+        {
+          numCols,
+          spacing,
+          colKeys,
+          rowKeys,
+          colMeasure: axisMeasures?.x,
+          rowMeasure: axisMeasures?.y,
+        },
         cellNames.map((n) => ref[n] ?? { name: n })
       ),
     ]);
@@ -69,7 +80,6 @@ export const Table = createNodeOperator(
     node._ordinalKeyMap = keyMap;
 
     if (key !== undefined) node.key = key;
-    if (name !== undefined) node._name = name;
     return node;
   }
 );

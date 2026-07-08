@@ -59,10 +59,17 @@ root = Layer([ content.name("__legendContent"), legendColumn(colorMap) ])
 
 `legendColumn` is a `Spread({ dir: "y" })` of one row per color-map entry. Each
 `legendRow` is a `Spread({ dir: "x" })` of a 10×10 `Rect` swatch and a 10px gray
-`Text` label. The column uses `Spread`'s `reverse: true`: `Spread({ dir: "y" })`
-lays children bottom→top in y-up coordinates (the first child gets the smallest
-y), so the first color-map entry has to render _last_ in the spread to end up at
-the top — matching the old bespoke order, which placed entry 0 at the top.
+`Text` label. The column entries always read top→bottom, but how the spread gets
+there depends on the render orientation (issue #143/#16). It takes
+`reverse: yUp`: under the y-UP chart flip a `Spread({ dir: "y" })` lays children
+bottom→top (the first child gets the smallest y), so the first color-map entry
+must render _last_ to land at the top; in y-DOWN free space the natural order
+already reads top→bottom, so no reverse. A continuous (gradient) colorbar is
+likewise orientation-aware — it is built in fixed y-up logical coordinates (band
+0 at the base, domain max at the top), and for a y-down render it flips which
+value each band/tick shows (and the tick pixel via `valueToBarY`) so a sequential
+scale still reads max-at-top either way, without disturbing the band-overlap
+seam logic.
 
 ### The three constraints
 
@@ -79,8 +86,11 @@ the first one places the anchor the other two read:
    overhang.
 2. `distribute({ dir: "x", spacing: 20 }, [content, column])` — seats the column
    just right of the content's **full** bounding box, including its axis labels.
-3. `align({ y: "end" }, [content, column])` — top-aligns the column with the
-   content top (in y-up coordinates, `end` is the top).
+3. `align({ y: yUp ? "end" : "start" }, [content, column])` — top-aligns the
+   column with the content top. "Top" is the far edge in y-up (`end`) but the
+   near edge in y-down free space (`start`), so the anchor follows the render
+   orientation; otherwise a y-down chart (e.g. a heatmap) seats its legend at the
+   bottom (issue #143/#16).
 
 The wrapper inherits the wrapped node's `key` and `_name` (moved off the content
 via the identity dance), so faceting, refs, and `selectAll` keep resolving to the

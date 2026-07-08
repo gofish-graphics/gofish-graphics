@@ -27,7 +27,7 @@ const H = combine({
 // V: parent above subtree, children in a column (spread y, centered x).
 const V = combine({
   x: { kind: "align", alignment: "middle" },
-  y: { kind: "distribute", spacing: S, order: "reverse" },
+  y: { kind: "distribute", spacing: S },
 });
 
 export const HVDrawing: StoryObj = {
@@ -44,7 +44,7 @@ export const HVDrawing: StoryObj = {
     tree(
       {
         node,
-        link: { interpolation: "linear", stroke: "#90a4ae", strokeWidth: 1.5 },
+        link: { curve: "straight", stroke: "#90a4ae", strokeWidth: 1.5 },
         mode: "bottomUp",
         // Both relations alternate in sync (resolved at the same node depth).
         parentChild: alternate([H, V]),

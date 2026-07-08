@@ -17,6 +17,15 @@ landed where it did is recorded.
 The module also re-exports a few lodash data helpers (`groupBy`, `sumBy`,
 `orderBy`, `meanBy`) for convenience; those are implemented with per-helper
 entrypoint imports so the public surface is stable in native ESM runtimes.
+Alongside them it exports two datum-projection helpers for reading fields off a
+selection's refs: `pluck(source, path)` returns the **un-collapsed** multiset of
+distinct values at a path ("every value here"), while `project(source, path)`
+(the public name for the internal `projectPath`) is its **collapsing**
+counterpart — the single value when the row-bag agrees on the field (the same
+homogeneity collapse `by:` performs), else `undefined`. Reach for `project` to
+read a field off the datum a mark is bound to (e.g. inside a `.zOrder(d => …)`
+callback) without indexing `pluck(...)[0]`; reach for `pluck` when the field is
+genuinely multi-valued in the bag.
 
 A naming note before anything else: internally, these surfaces were "v1",
 "v2", and "v3", and a lot of code still uses those names. The wiki has
@@ -33,9 +42,22 @@ the casing convention unambiguous (capital `Layer`, for instance, still
 exports, but only as the capitalized-surface combinator, distinct from the
 fluent builder's `.layer()` method). The fluent surface also carries the
 operators used inside `.flow(...)` — `spread`, `stack`, `scatter`, `group`,
-`derive`, and `resolve` (the last dereferences reference columns into drawn
-node refs, driving the ribbon / node-link / labeling patterns via
-`.layer()` + `resolve`).
+`derive`, `resolve`, and `join` (`resolve` dereferences reference columns into
+drawn node refs, driving the ribbon / node-link / labeling patterns via
+`.layer()` + `resolve`; `join` is a one-to-many equi-join relating two data
+tables on a shared key).
+
+Connectors are no longer a surface of their own. The standalone `connect` /
+`connectX` / `connectY` operators (and the capitalized `Connect`) were removed;
+a connector is now the _combinator form_ of an ordinary mark — `line` (center)
+or `ribbon` (edge band, formerly the `area` mark) — invoked with an explicit
+array of `ref(...)` children. The shape of the drawn path is a single `curve`
+key, backed by the pluggable router registry that `lib.ts` re-exports from
+`ast/graphicalOperators/routers` (`registerRoute` / `getRoute` / `resolveCurve`
+and the built-in `straight` / `bezier` / `orthogonal` / `arc` / `perfectArrows`
+routers). `curve: "auto"` smooths automatically on continuous axes — see
+[Underlying Space](/internals/core/underlying-space) for the positioning-space
+test that decides this.
 
 ## Planned contents
 

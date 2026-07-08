@@ -43,7 +43,9 @@ export const elmTuple = createMark(
           ),
     ]).constrain(({ box, label, val }) => [
       Constraint.align({ x: "middle", y: "middle" }, [val, box]),
-      Constraint.align({ x: "start", y: "end" }, [label, box]),
+      // y-down free space: "start" is the top edge — keep the index label in
+      // the top-left of the cell (issue #143/#16).
+      Constraint.align({ x: "start", y: "start" }, [label, box]),
     ]);
   }
 );

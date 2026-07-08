@@ -32,7 +32,8 @@ import {
   continuousInterval,
   type CONTINUOUS_TYPE,
 } from "../underlyingSpace";
-import { posScaleFromSpace } from "../domain";
+import type { Measure } from "../data";
+import { posScaleFromSpace, axisScale, type AxisMap } from "../domain";
 import * as Monotonic from "../../util/monotonic";
 import { createNodeOperator } from "../withGoFish";
 import { computeTransformedBoundingBox } from "./coordUtils";
@@ -57,11 +58,33 @@ export type CoordinateTransform = {
   innerRadius?: number;
 };
 
+/** Union all child ORDINAL spaces on `axis` into one ORDINAL, carrying the
+ *  grouping measure (FORGET on a clash) so a polar category axis names itself
+ *  off its space — the coord-space analogue of `unionChildSpaces`'s ordinal
+ *  fold. (Children are tuples; non-ordinal entries on `axis` are ignored.) */
+const unionOrdinal = (
+  children: Size<UnderlyingSpace>[],
+  axis: 0 | 1
+): UnderlyingSpace => {
+  const keys = new Set<string>();
+  const measures: (Measure | undefined)[] = [];
+  // Anonymous only if EVERY contributing ordinal is anonymous.
+  let anonymous = true;
+  for (const child of children) {
+    const s = child[axis];
+    if (isORDINAL(s) && s.domain) {
+      s.domain.forEach((k) => keys.add(k));
+      measures.push(s.measure);
+      if (!s.anonymous) anonymous = false;
+    }
+  }
+  return ORDINAL(Array.from(keys), forgetAllMeasures(measures), anonymous);
+};
+
 export const coord = createNodeOperator(
   (
     {
       key,
-      name,
       transform: coordTransform,
       grid = false,
       axes,
@@ -69,7 +92,6 @@ export const coord = createNodeOperator(
       ...fancyDims
     }: {
       key?: string;
-      name?: string;
       transform: CoordinateTransform;
       grid?: boolean;
       axes?: AxesOptions;
@@ -86,7 +108,6 @@ export const coord = createNodeOperator(
       {
         type: "coord",
         key,
-        name,
         resolveUnderlyingSpace: (
           children: Size<UnderlyingSpace>[],
           _childNodes: GoFishAST[]
@@ -116,15 +137,7 @@ export const coord = createNodeOperator(
             const xMeasure = forgetAllMeasures(xPos.map((s) => s.measure));
             xSpace = POSITION(domain, xMeasure, coordTransform);
           } else if (xChildrenOrdinalSpaces.length > 0) {
-            // Collect and merge domains from all child ordinal spaces
-            const allKeys = new Set<string>();
-            xChildrenOrdinalSpaces.forEach((child) => {
-              const ordinalSpace = child[0];
-              if (isORDINAL(ordinalSpace) && ordinalSpace.domain) {
-                ordinalSpace.domain.forEach((key) => allKeys.add(key));
-              }
-            });
-            xSpace = ORDINAL(Array.from(allKeys));
+            xSpace = unionOrdinal(children, 0);
           }
 
           let ySpace = UNDEFINED;
@@ -150,22 +163,14 @@ export const coord = createNodeOperator(
             const yMeasure = forgetAllMeasures(yPos.map((s) => s.measure));
             ySpace = POSITION(domain, yMeasure, coordTransform);
           } else if (yChildrenOrdinalSpaces.length > 0) {
-            // Collect and merge domains from all child ordinal spaces
-            const allKeys = new Set<string>();
-            yChildrenOrdinalSpaces.forEach((child) => {
-              const ordinalSpace = child[1];
-              if (isORDINAL(ordinalSpace) && ordinalSpace.domain) {
-                ordinalSpace.domain.forEach((key) => allKeys.add(key));
-              }
-            });
-            ySpace = ORDINAL(Array.from(allKeys));
+            ySpace = unionOrdinal(children, 1);
           }
 
           const result: Size<UnderlyingSpace> = [xSpace, ySpace];
           spaceRef.current = result;
           return result;
         },
-        layout: (shared, size, scaleFactors, children, posScales) => {
+        layout: (shared, size, scales, children) => {
           /* TODO: need correct scale factors */
           // TODO: only works for polar-family transforms right now
           const [origW, origH] = size;
@@ -191,15 +196,15 @@ export const coord = createNodeOperator(
           // fits content to the canvas (gofish.tsx) — here the budget plays the
           // role of the canvas. A baseline-magnitude (data SIZE) axis scales by
           // budget/total via `width.inverse(budget)` so the children fill the
-          // ring; an anchored (data POSITION) axis maps onto [0, budget] via a
-          // posScale. Only DATA-bound channels consume these — a plain number
-          // bypasses both scaleFactor and posScale (see `computeAesthetic`) — so
+          // ring; an anchored (data POSITION) axis maps onto [0, budget] via an
+          // anchored map. Only DATA-bound channels consume the scale — a plain
+          // number bypasses both σ and the map (see `computeAesthetic`) — so
           // hand-sized (radian/pixel) stories are unchanged. This is what lets a
           // mark say `thetaSize: datum(count)` and have the ring auto-fit.
           const fitAxis = (
             axis: 0 | 1,
             budget: number
-          ): [number, ((p: number) => number) | undefined] => {
+          ): [number, AxisMap | undefined] => {
             // An anchored (data POSITION) axis: the coord's own
             // `resolveUnderlyingSpace` already unioned the children's POSITION
             // spaces into `spaceRef.current` — reuse it and map onto [0, budget].
@@ -223,7 +228,7 @@ export const coord = createNodeOperator(
           const [sfX, psX] = fitAxis(0, angularBudget);
           const [sfY, psY] = fitAxis(1, outerR - innerR);
           const childPlaceables = children.map((child) =>
-            child.layout(size, [sfX, sfY], [psX, psY])
+            child.layout(size, [axisScale(sfX, psX), axisScale(sfY, psY)])
           );
           childPlaceables.forEach((c) => {
             c.place("x", 0, "baseline");
@@ -430,6 +435,10 @@ export const coord = createNodeOperator(
           const items: DisplayList.DisplayItem[] = [];
 
           // Content: warp each flattened child through the coord transform.
+          // `contentToPixel` only composes a translate onto `outer`, so it
+          // preserves the incoming y-parity — the active flip scope
+          // (`session.flip`) is unchanged (issue #629; coord self-normalization
+          // is a Stage-1 concern).
           session.toPixel = contentToPixel;
           try {
             for (const child of children) {

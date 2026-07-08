@@ -39,7 +39,7 @@ export const Jewelry: StoryObj = {
   render: () =>
     mount({
       node,
-      link: { interpolation: "linear", stroke: "#6baed6", strokeWidth: 2 },
+      link: { curve: "straight", stroke: "#6baed6", strokeWidth: 2 },
       parentChild: combine({
         x: { kind: "nest", pad: 6 },
         y: { kind: "align", alignment: "middle" },

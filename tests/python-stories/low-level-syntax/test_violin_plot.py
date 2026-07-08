@@ -13,7 +13,7 @@ JS baseline — that divergence is expected and evaluated via the parity diff.
 import numpy as np
 from scipy.stats import gaussian_kde
 
-from gofish import layer, spread, stack, connect, rect, ref, datum
+from gofish import layer, spread, stack, ribbon, rect, ref, datum
 from python_stories.data import PENGUINS
 from python_stories._lowlevel_helpers import group_by
 
@@ -40,16 +40,16 @@ def story_default():
                 stack(
                     [
                         rect(
-                            y=x / 40, w=y * 100000, h=0, fill=datum(species)
+                            y=-x / 40, w=y * 100000, h=0, fill=datum(species)
                         ).name(name)
                         for (x, y), name in zip(points, names)
                     ],
                     dir="y",
                     alignment="middle",
                 ),
-                connect(
+                ribbon(
                     [ref(name) for name in names],
-                    direction="y",
+                    dir="y",
                     opacity=1,
                     mixBlendMode="normal",
                 ),

@@ -17,7 +17,15 @@ gf.chart(seafood, { axes: true })
 
 ```ts
 chart(data, options?)
+chart(options?) // empty scope — data inherited from context
 ```
+
+Calling `chart()` (or `chart(options)`) with **no data** creates an _empty
+scope_ that inherits its data from the enclosing context: the incoming partition
+when used directly as a [`.mark(...)`](/js/api/core/mark), or the previous tier's
+marks inside [`.layer(...)`](/js/api/core/layer). Chart data is always an array
+or a [`selectAll`](/js/api/selection/ref) reference, so a lone options object is
+never mistaken for data.
 
 ## Parameters
 

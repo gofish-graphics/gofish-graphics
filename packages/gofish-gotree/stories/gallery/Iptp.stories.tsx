@@ -37,13 +37,15 @@ export const Iptp: StoryObj = {
         link: "none",
         parentChild: combine({
           x: { kind: "distribute", spacing: 6 },
-          // order:"reverse" puts the parent at HIGH y (top of screen, y-up) so the
+          //  puts the parent at HIGH y (top of screen, y-up) so the
           // root sits above its subtree — matching the reference's root-at-top.
-          y: { kind: "distribute", spacing: 6, order: "reverse" },
+          y: { kind: "distribute", spacing: 6 },
         }),
         sibling: combine({
           x: { kind: "distribute", spacing: 6 },
-          y: { kind: "align", alignment: "end" },
+          // Align siblings to the TOP of their bands (y-down free space: "start"
+          // = near/top edge) so same-depth nodes share a row. See #143/#16.
+          y: { kind: "align", alignment: "start" },
         }),
       },
       sampleTree

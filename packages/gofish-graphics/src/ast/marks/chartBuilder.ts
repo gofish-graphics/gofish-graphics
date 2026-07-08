@@ -7,6 +7,11 @@ import { Frame } from "../graphicalOperators/frame";
 import { layer as Layer } from "../graphicalOperators/layer";
 import { GoFishRef, visibleNodes } from "../_ref";
 import { ref } from "../shapes/ref";
+// The shared interactive render terminal now lives in the interaction layer
+// (renderTerminal.ts) so the low-level `gofish()` terminal can reach it too —
+// component thunks get the same two-regime treatment as ChartBuilder/
+// LayerBuilder.render. See its doc-comment for the machinery.
+import { renderWithInteraction } from "../../interaction/renderTerminal";
 
 /**
  * Sentinel chart-data for an empty `Chart()` scope used inside `.layer(...)`:
@@ -276,13 +281,27 @@ export class ChartBuilder<TInput, TOutput = TInput> {
     );
   }
 
-  // mark stores the mark and returns a new builder for chaining
-  mark(mark: Mark<TOutput>): ChartBuilder<TInput, TOutput> {
+  // mark stores the mark and returns a new builder for chaining. A nested
+  // `ChartBuilder` may be passed directly instead of a `(data) => Chart(...)`
+  // callback (issue #243): an empty-scope child (`chart()` / `chart(options)`)
+  // inherits the incoming partition datum; a child with its own data is drawn
+  // as-is per partition.
+  mark(
+    mark: Mark<TOutput> | ChartBuilder<any, any>
+  ): ChartBuilder<TInput, TOutput> {
+    const finalMark =
+      mark instanceof ChartBuilder
+        ? (((d: TOutput, _key, layerContext) =>
+            (mark.usesPreviousLayerMarks()
+              ? mark.withData(d)
+              : mark
+            ).withLayerContext(layerContext ?? {})) as Mark<TOutput>)
+        : mark;
     return new ChartBuilder(
       this.data,
       this.options,
       this.operators,
-      mark,
+      finalMark,
       this.layerContext,
       this.nodeZOrder,
       this.connector,
@@ -310,7 +329,7 @@ export class ChartBuilder<TInput, TOutput = TInput> {
   }
 
   /**
-   * Overlay a connector mark (e.g. `line()`, `area()`) under the nodes this
+   * Overlay a connector mark (e.g. `line()`, `ribbon()`) under the nodes this
    * chart's mark produces — sugar for the two-chart layer([...]) + selectAll
    * pattern. If the mark has a string `.name(...)`, its registered nodes are
    * the targets (exactly the manual selectAll(name) semantics); otherwise the
@@ -339,15 +358,22 @@ export class ChartBuilder<TInput, TOutput = TInput> {
   }
 
   /**
-   * Stack another tier over this one. `child` is its own `Chart(...)` pipeline;
-   * an empty `Chart()` scope (no data) inherits *this* tier's marks (so
-   * `.layer(Chart().flow(group({by})).mark(area()))` connects what you just
+   * Stack another tier over this one. `child` is usually its own `Chart(...)`
+   * pipeline; an empty `Chart()` scope (no data) inherits *this* tier's marks (so
+   * `.layer(Chart().flow(group({by})).mark(ribbon()))` connects what you just
    * drew), while `Chart(table)` drives the tier from another dataset (resolve
-   * back into the chart with `resolve(..., { from: selectAll(...) })`). Returns
-   * a `LayerBuilder` so tiers keep chaining: `.layer(a).layer(b)`. Sugar for the
-   * manual `layer([this, child])` + `selectAll` wiring.
+   * back into the chart with `resolve(..., { from: selectAll(...) })`).
+   *
+   * `child` may instead be a bare `Mark` (e.g. `text({...})`, `rect({...})`) — a
+   * *component-level annotation tier*: a datumless overlay resolved against the
+   * shared layer context (so a `.name(...)`-tagged annotation still registers)
+   * with no data pipeline of its own. Use it for threshold rules, captions, and
+   * other chrome that doesn't map over data.
+   *
+   * Returns a `LayerBuilder` so tiers keep chaining: `.layer(a).layer(b)`. Sugar
+   * for the manual `layer([this, child])` + `selectAll` wiring.
    */
-  layer(child: ChartBuilder<any, any>): LayerBuilder {
+  layer(child: LayerTier): LayerBuilder {
     return new LayerBuilder([this, child]);
   }
 
@@ -394,19 +420,16 @@ export class ChartBuilder<TInput, TOutput = TInput> {
   }
 
   /** The render-time metadata threaded from the root tier: resolved axes/color
-   *  config plus inferred axis titles. `LayerBuilder` uses this so a `.layer()`
-   *  chart titles its axes (e.g. an x "lake" title from the root `spread`); the
-   *  Python parity harness reads the same from the first child chart so both
-   *  languages render the title. */
+   *  config. `LayerBuilder` uses this so a `.layer()` chart inherits the root
+   *  axes/color config. Axis titles are inferred downstream from each resolved
+   *  space's `measure` (see `gofish`), so no field-name hint is threaded here. */
   renderMeta(): {
     axes?: AxesOptions;
     colorConfig?: ColorConfig;
-    axisFields: { x?: string; y?: string };
   } {
     return {
       axes: this.options?.axes,
       colorConfig: this.options?.color,
-      axisFields: this.inferAxisFields(),
     };
   }
 
@@ -508,6 +531,13 @@ export class ChartBuilder<TInput, TOutput = TInput> {
       result = await Layer({}, [node, connectFrame]);
     }
 
+    // y-up is no longer a chart-vs-not flag: orientation is a PER-SCOPE property
+    // resolved at bake time (issue #629). Each topmost continuous-y node (a value
+    // axis) is mirrored about its own placed band, while an ordinal category axis
+    // stays y-down — so a vertical bar chart flips, a horizontal one reads
+    // top-down, and a chart composed inside a `gofish([...])`/`.layer()` gets the
+    // same per-scope treatment for free. See `bake`'s `declaredYUp` and #629.
+
     if (this.nodeZOrder !== undefined) {
       result.zOrder(this.nodeZOrder);
     }
@@ -561,51 +591,40 @@ export class ChartBuilder<TInput, TOutput = TInput> {
     );
   }
 
-  // Auto-infer axis titles from field encodings on the mark and operators.
-  // Mark fields take priority (they encode measured values, e.g. h: "count");
-  // operator fields fill remaining gaps (grouping/layout, e.g. spread by "lake").
-  private inferAxisFields(): { x?: string; y?: string } {
-    const axisFields: { x?: string; y?: string } = {};
-    const markMeta = (this.finalMark as any)?.__axisFields as
-      | { x?: string; y?: string }
-      | undefined;
-    if (markMeta?.x) axisFields.x ??= markMeta.x;
-    if (markMeta?.y) axisFields.y ??= markMeta.y;
-    for (const op of this.operators) {
-      const meta = (op as any).__axisFields as
-        | { x?: string; y?: string }
-        | undefined;
-      if (meta?.x) axisFields.x ??= meta.x;
-      if (meta?.y) axisFields.y ??= meta.y;
-    }
-    return axisFields;
-  }
-
   // The chart-level options every terminal threads through to the node:
-  // resolved axes/color config plus the inferred axis fields.
+  // resolved axes/color config. Axis titles are inferred downstream from each
+  // resolved space's `measure` (see `gofish`) — both continuous (channel field)
+  // and ordinal (grouping field) spaces carry one — so no field-name hint is
+  // threaded from the builder anymore.
   private async resolveForRender<T extends Record<string, unknown>>(
     options: T
   ): Promise<{ node: GoFishNode; options: T & Record<string, unknown> }> {
-    const axisFields = this.inferAxisFields();
     const node = await this.resolve();
     return {
       node,
       options: {
+        // y-up is decided by the root render from the resolved y space (a
+        // CONTINUOUS value axis flips, an ORDINAL category axis reads
+        // top-down) — not forced here. See issue #143/#16.
         ...options,
         axes: this.options?.axes,
         colorConfig: this.options?.color,
-        axisFields,
       },
     };
   }
 
-  // render calls resolve and then renders
+  // render calls resolve and then renders. Resolution always runs under the
+  // ambient interactive context so the reactive surface (live() channels, input
+  // reads in derive()) can register during resolve; a chart where nothing
+  // registers renders down the static path untouched.
   async render(
     container: Parameters<GoFishNode["render"]>[0],
     options: Omit<Parameters<GoFishNode["render"]>[1], "axes">
   ): Promise<ReturnType<GoFishNode["render"]>> {
-    const { node, options: opts } = await this.resolveForRender(options);
-    return node.render(container, opts);
+    return renderWithInteraction(
+      () => this.resolveForRender(options),
+      container
+    );
   }
 
   /** Resolve and render to a standalone SVG markup string. */
@@ -658,42 +677,117 @@ export function chart(
   options?: ChartOptions
 ): ChartBuilder<GoFishRef[], GoFishRef[]>;
 export function chart<T>(data: T, options?: ChartOptions): ChartBuilder<T, T>;
-// Empty scope: `Chart()` (no args) inside `.layer(...)` inherits the previous
-// tier's marks. Distinguished purely by arity — no shape-sniffing of `data`.
-export function chart(): ChartBuilder<any, any>;
+// Empty scope: `Chart()` / `Chart(options)` (no data) inherits its data from the
+// enclosing context — the previous tier's marks inside `.layer(...)`, or the
+// incoming partition datum when used directly as a `.mark(...)` (issue #243).
+export function chart(options?: ChartOptions): ChartBuilder<any, any>;
 export function chart<T>(
-  data?: T,
+  dataOrOptions?: T | ChartOptions,
   options?: ChartOptions
 ): ChartBuilder<any, any> {
-  const resolvedData = arguments.length === 0 ? PREVIOUS_LAYER_MARKS : data;
-  return new ChartBuilder<any, any>(resolvedData, options, [], undefined, {});
+  // Disambiguate `chart(options)` from `chart(data)`: chart data is always an
+  // array or a ref, never a bare options-shaped object, so a lone first arg
+  // whose keys are all ChartOptions keys is options for an empty scope. (No
+  // real call passes a single plain datum object as data.)
+  const emptyScope =
+    arguments.length === 0 ||
+    (options === undefined && isChartOptions(dataOrOptions));
+  const resolvedData = emptyScope ? PREVIOUS_LAYER_MARKS : (dataOrOptions as T);
+  const resolvedOptions = emptyScope
+    ? (dataOrOptions as ChartOptions | undefined)
+    : options;
+  return new ChartBuilder<any, any>(
+    resolvedData,
+    resolvedOptions,
+    [],
+    undefined,
+    {}
+  );
+}
+
+const CHART_OPTION_KEYS = new Set([
+  "w",
+  "h",
+  "coord",
+  "color",
+  "axes",
+  "padding",
+]);
+
+/** True when `x` is an options-shaped object (used to tell `chart(options)`
+ *  from `chart(data)` — see the disambiguation note in `chart`). An empty
+ *  object reads as (empty) options. */
+function isChartOptions(x: unknown): x is ChartOptions {
+  if (x === null || typeof x !== "object") return false;
+  if (Array.isArray(x) || x instanceof GoFishRef) return false;
+  return Object.keys(x).every((k) => CHART_OPTION_KEYS.has(k));
 }
 
 /**
- * A stack of chart tiers built by chaining `.layer(...)`. Each tier is a full
- * `Chart(...)` pipeline; a tier whose data is an empty `Chart()` scope inherits
+ * A tier in a `.layer(...)` chain. Usually a full `Chart(...)` pipeline, but a
+ * bare `Mark` (or an already-resolved `GoFishNode`) is a *mark tier* — a
+ * component-level, datumless annotation overlay.
+ */
+export type LayerTier = ChartBuilder<any, any> | Mark<any> | GoFishNode;
+
+/**
+ * A stack of chart tiers built by chaining `.layer(...)`. Most tiers are full
+ * `Chart(...)` pipelines; a tier whose data is an empty `Chart()` scope inherits
  * the previous tier's marks (wired here as `selectAll(autoName)` against the
- * previous tier's auto-named mark). Renders as the manual `layer([...])` form:
- * tiers share one `layerContext` and resolve in order, so each tier's name
- * registrations land before the next tier's `selectAll`.
+ * previous tier's auto-named mark). A bare `Mark` tier is a component-level
+ * annotation: it passes through untouched (never a producer for an empty
+ * `Chart()` scope, never a `selectAll` consumer) and resolves via
+ * `resolveMarkResult`. Renders as the manual `layer([...])` form: tiers share
+ * one `layerContext` and resolve in order, so each tier's name registrations
+ * land before the next tier's `selectAll`.
  */
 export class LayerBuilder {
-  constructor(private readonly tiers: ChartBuilder<any, any>[]) {}
+  constructor(private readonly tiers: LayerTier[]) {}
 
-  /** Stack another tier; an empty `Chart()` scope inherits these marks. */
-  layer(child: ChartBuilder<any, any>): LayerBuilder {
+  /** Stack another tier; an empty `Chart()` scope inherits these marks, and a
+   *  bare `Mark` is a component-level annotation tier. */
+  layer(child: LayerTier): LayerBuilder {
     return new LayerBuilder([...this.tiers, child]);
+  }
+
+  /** The root tier is always a `ChartBuilder` (`.layer` is a method on one), but
+   *  IR deserialization also constructs `LayerBuilder`s, so assert it. */
+  private rootChart(): ChartBuilder<any, any> {
+    const first = this.tiers[0];
+    if (!(first instanceof ChartBuilder)) {
+      throw new Error(
+        "the first .layer(...) tier must be a chart(...) pipeline (a builder " +
+          "chain starts on a ChartBuilder); a bare mark tier can't be the root."
+      );
+    }
+    return first;
   }
 
   // Bind empty-scope tiers to the previous tier's marks: name the producer's
   // mark (auto unless already named) and point the consumer at selectAll(name).
-  private wireTiers(): ChartBuilder<any, any>[] {
-    const out: ChartBuilder<any, any>[] = [];
+  // Mark tiers pass through untouched.
+  private wireTiers(): LayerTier[] {
+    const out: LayerTier[] = [];
     let prevName: string | undefined;
+    let prevWasMarkTier = false;
     let autoIdx = 0;
     for (let i = 0; i < this.tiers.length; i++) {
       let tier = this.tiers[i];
+      // A mark tier (bare Mark / GoFishNode) is a component-level annotation:
+      // pass it through, and it's never a producer for an empty `Chart()` scope.
+      if (!(tier instanceof ChartBuilder)) {
+        out.push(tier);
+        prevWasMarkTier = true;
+        prevName = undefined;
+        continue;
+      }
       if (tier.usesPreviousLayerMarks()) {
+        if (prevWasMarkTier) {
+          throw new Error(
+            ".layer(Chart()) with an empty scope can't inherit from a bare mark " +
+              "tier — give the previous tier a chart with a .mark() to draw from."
+          );
+        }
         if (prevName === undefined) {
           throw new Error(
             ".layer(Chart()) with an empty scope has no previous tier to draw " +
@@ -705,12 +799,13 @@ export class LayerBuilder {
         );
       }
       const next = this.tiers[i + 1];
-      if (next !== undefined && next.usesPreviousLayerMarks()) {
+      if (next instanceof ChartBuilder && next.usesPreviousLayerMarks()) {
         const named = tier.ensureNamedMark(`__gofish_layer_${autoIdx}`);
         if (named.name === `__gofish_layer_${autoIdx}`) autoIdx++;
         tier = named.builder;
         prevName = named.name;
       }
+      prevWasMarkTier = false;
       out.push(tier);
     }
     return out;
@@ -723,10 +818,18 @@ export class LayerBuilder {
     // Sequential so each tier's name registrations are visible to the next
     // tier's selectAll (mirrors the manual `layer([...])` resolution order).
     for (const tier of tiers) {
-      nodes.push(await tier.withLayerContext(sharedContext).resolve());
+      if (tier instanceof ChartBuilder) {
+        nodes.push(await tier.withLayerContext(sharedContext).resolve());
+      } else {
+        // Mark tier: resolve the bare mark against the shared layer context so
+        // a `.name(...)`-tagged annotation still registers. `resolveMarkResult`
+        // invokes a Mark function with an undefined datum (component-level
+        // semantics) and passes a GoFishNode through unchanged.
+        nodes.push(await resolveMarkResult(tier as any, sharedContext));
+      }
     }
     const result = await Layer({}, nodes);
-    const { colorConfig } = this.tiers[0].renderMeta();
+    const { colorConfig } = this.rootChart().renderMeta();
     if (colorConfig) {
       (result as any).colorConfig = colorConfig;
     }
@@ -737,18 +840,18 @@ export class LayerBuilder {
     options: T
   ): Promise<{ node: GoFishNode; options: T & Record<string, unknown> }> {
     const node = await this.resolve();
-    const meta = this.tiers[0].renderMeta();
-    // Thread axes/color/axisFields from the root tier so a `.layer()` chart
-    // titles its axes (e.g. an x "lake" title from the root `spread`). The
-    // Python parity harness mirrors this off the first child chart so both
-    // languages render the same titles.
+    const meta = this.rootChart().renderMeta();
+    // Thread axes/color from the root tier so a `.layer()` chart inherits the
+    // root config. Axis titles derive downstream from each resolved space's
+    // `measure`, so no field-name hint is threaded here.
     return {
       node,
       options: {
+        // y-up is decided by the root render from the resolved y space — see
+        // the sibling resolveForRender and issue #143/#16.
         ...options,
         axes: (options as any).axes ?? meta.axes,
         colorConfig: meta.colorConfig,
-        axisFields: meta.axisFields,
       },
     };
   }
@@ -757,8 +860,10 @@ export class LayerBuilder {
     container: Parameters<GoFishNode["render"]>[0],
     options: Parameters<GoFishNode["render"]>[1]
   ): Promise<ReturnType<GoFishNode["render"]>> {
-    const { node, options: opts } = await this.resolveForRender(options ?? {});
-    return node.render(container, opts);
+    return renderWithInteraction(
+      () => this.resolveForRender(options ?? {}),
+      container
+    );
   }
 
   async toSVG(

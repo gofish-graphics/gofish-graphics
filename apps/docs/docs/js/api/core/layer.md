@@ -29,7 +29,7 @@ gf.chart(seafood, { axes: true })
     gf
       .chart() // empty scope = the previous tier's marks
       .flow(gf.group({ by: "species" }))
-      .mark(gf.area({ opacity: 0.8 }))
+      .mark(gf.ribbon({ opacity: 0.8 }))
   )
   .render(root, { w: 400, h: 320 });
 ```
@@ -72,17 +72,44 @@ gf.chart(nodes)
 
 :::
 
+## Annotation — a bare mark tier
+
+Pass a bare mark (`text(...)`, `rect(...)`, …) instead of a `chart(...)` to add a
+**component-level annotation tier**: a datumless overlay — a threshold rule, a
+caption — with no data pipeline of its own. Its accessor channels ignore the
+datum, so use plain values or closures over your own signals.
+
+::: gofish
+
+```js
+const sales = [
+  { quarter: "Q1", revenue: 30 },
+  { quarter: "Q2", revenue: 80 },
+  { quarter: "Q3", revenue: 55 },
+  { quarter: "Q4", revenue: 72 },
+];
+
+gf.chart(sales, { axes: true })
+  .flow(gf.spread({ by: "quarter", dir: "x" }))
+  .mark(gf.rect({ h: "revenue", fill: "#6b9bd1" }))
+  .layer(gf.rect({ y: gf.datum(60), h: 3, w: 400, fill: "#333" })) // threshold rule (revenue units)
+  .layer(gf.text({ x: 20, y: 24, text: "target: 60", fill: "#333" })) // caption
+  .render(root, { w: 400, h: 300 });
+```
+
+:::
+
 ## Signature
 
 ```ts
-.layer(child: ChartBuilder): LayerBuilder
+.layer(child: ChartBuilder | Mark): LayerBuilder
 ```
 
 ## Parameters
 
-| Parameter | Type           | Description                                                                                                                                                                                                   |
-| --------- | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `child`   | `ChartBuilder` | The next tier's `chart(...)` pipeline. An empty `chart()` scope inherits the previous tier's marks; `chart(table)` drives it from another dataset (resolve back with [`resolve`](/js/api/operators/resolve)). |
+| Parameter | Type                   | Description                                                                                                                                                                                                                                                                                                  |
+| --------- | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `child`   | `ChartBuilder \| Mark` | The next tier. A `chart(...)` pipeline stacks a data-driven tier — an empty `chart()` scope inherits the previous tier's marks; `chart(table)` drives it from another dataset (resolve back with [`resolve`](/js/api/operators/resolve)). A bare `Mark` is a component-level annotation overlay (datumless). |
 
 Returns a `LayerBuilder` — chain `.layer(...)` again for more tiers, then `.render()`.
 

@@ -356,9 +356,10 @@ def story_croissant_stack():
     return (
         layer([bands, axis]).constrain(
             lambda bands, axis, **_: [
-                # Axis row centered under the bands (both W wide).
+                # Axis row centered under the bands (both W wide). y-down free
+                # space: bands-first renders on top, axis below (issue #143/#16).
                 Constraint.align([bands, axis], x="middle"),
-                Constraint.distribute([axis, bands], dir="y", spacing=12),
+                Constraint.distribute([bands, axis], dir="y", spacing=12),
             ]
         ),
         {"axes": False},

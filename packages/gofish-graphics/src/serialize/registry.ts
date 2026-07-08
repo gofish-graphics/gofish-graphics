@@ -18,12 +18,13 @@
 // module-load. Importing directly from each source module keeps the
 // dependency graph acyclic.
 import {
-  area,
+  ribbon,
   paint,
   blank,
   circle,
   derive,
   resolve as resolveOp,
+  join as joinOp,
   selectAll,
   intersect,
   layer,
@@ -48,7 +49,7 @@ import { scatter } from "../ast/graphicalOperators/scatter";
 import { group } from "../ast/graphicalOperators/group";
 import { table } from "../ast/graphicalOperators/table";
 import { arrow } from "../ast/graphicalOperators/arrow";
-import { connect } from "../ast/graphicalOperators/connect";
+import { enclose } from "../ast/graphicalOperators/enclose";
 import {
   treemap as treemapOperator,
   Treemap,
@@ -117,9 +118,16 @@ export const COMBINATOR_FACTORIES: Record<
   group: (opts, marks) => (group as any)(opts, marks) as unknown as Mark<any>,
   table: (opts, marks) => (table as any)(opts, marks) as unknown as Mark<any>,
   layer: (opts, marks) => (layer as any)(opts, marks) as unknown as Mark<any>,
+  // A graphical wrapping operator (padding/rx/ry border) — combinator-only,
+  // like layer but with no `.constrain`; opts ride in `options`.
+  enclose: (opts, marks) =>
+    (enclose as any)(opts, marks) as unknown as Mark<any>,
   arrow: (opts, marks) => (arrow as any)(opts, marks) as unknown as Mark<any>,
-  connect: (opts, marks) =>
-    (connect as any)(opts, marks) as unknown as Mark<any>,
+  // `line`/`ribbon` are derived marks (createDerivedMark) whose `(opts, marks)`
+  // overload is the low-level combinator form (the drop-in for the removed
+  // `connect`/`connectX`/`connectY`). It builds the internal connect node.
+  line: (opts, marks) => (line as any)(opts, marks) as unknown as Mark<any>,
+  ribbon: (opts, marks) => (ribbon as any)(opts, marks) as unknown as Mark<any>,
   treemap: (opts, marks) =>
     (Treemap as any)(opts, marks) as unknown as Mark<any>,
   // Keys are the IR wire types (unchanged); values are the renamed
@@ -194,6 +202,7 @@ export const OPERATOR_MAP: Record<
       key: opts.key as string | undefined,
     });
   },
+  join: (opts) => joinOp(opts.right as any[], { on: opts.on as string }),
   spread: (opts) => spread(opts as any),
   stack: (opts) => stack(opts as any),
   group: (opts) => group(opts as any),
@@ -213,7 +222,7 @@ export const MARK_MAP: Record<
   rect: (opts) => rect(opts),
   circle: (opts) => circle(opts),
   line: (opts) => line(opts),
-  area: (opts) => area(opts),
+  ribbon: (opts) => ribbon(opts),
   blank: (opts) => blank(opts),
   ellipse: (opts) => ellipse(opts),
   petal: (opts) => petal(opts),

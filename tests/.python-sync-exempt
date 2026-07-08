@@ -5,11 +5,19 @@
 
 # Low-level API stories (v1/v2)
 # Ported to tests/python-stories/low-level-syntax/ (#433): BalloonChart,
-# IcicleChart, NestedMosaicChart, NestedWaffleChart, SankeyTree,
+# IcicleChart, NestedWaffleChart, SankeyTree,
 # StringlineChart, Whisker — all byte-identical to the JS baseline. The ports
 # map the v1 directional operators to combinator-form spread/stack/connect,
 # frame→layer, and add the polar/wavy coord transforms to the Python wrapper +
 # IR bridge.
+#
+# NestedMosaicChart was ported under #433, but the story was rewritten (#675) to
+# the fluent `chart().flow(stack(normalize=True)...)` pipeline with a 2-D
+# function fill (`survived == "No" ? gray : classColor[class]`). A function
+# channel can't cross the derive RPC, so it is now exempt — the pure-spec
+# `normalize` mosaics (atom/Mosaic and Forward Syntax Mosaic Chart) ARE ported
+# and byte-parity-validated.
+packages/gofish-graphics/stories/lowlevel/NestedMosaicChart.stories.tsx
 #
 # ViolinPlot is ported too (tests/python-stories/low-level-syntax/
 # test_violin_plot.py) but stays exempt: the JS story uses `fast-kde`'s
@@ -140,3 +148,29 @@ packages/gofish-graphics/stories/lowlevel/Constraints.stories.tsx::SpreadY_Rever
 # (see walkJsStories + the gitDiff filters in check-python-sync.ts), so it
 # never walks the gofish-gotree package. If parity coverage is ever extended
 # to gofish-gotree, list its stories here.
+
+# LayeredBarsAndArea stays exempt: it drives a data-driven paint order with
+# `area(...).zOrder(d => …)` and reorders the area selection with a `derive`
+# callback. Both are JS functions that can't cross the derive RPC, and the
+# `.zOrder(fn)` form is omitted from the IR (like a function `.label`), so a
+# Python port can't reproduce — let alone byte-match — the paint ordering that
+# raises the emphasized sites above the gray ones. Revisit once the highlight /
+# `emphasize` API (#641) gives this a serializable, declarative spelling.
+packages/gofish-graphics/stories/vega-lite/Bar/LayeredBarsAndArea.stories.tsx
+
+# ---------------------------------------------------------------------------
+# Interaction/reactivity stories — exempt from Python parity (JS-only feature).
+#
+# The reactive interaction layer (live()/pointer()/drag()/wheel()/timer()/
+# signal()) is JS-only: signals are Solid closures with no Python/IR bridge, so
+# these specs cannot cross the derive RPC. They exercise pointer/drag/wheel/
+# timer inputs read inside live() (paint patches) and inside derive() (pipeline
+# re-runs) — non-pure-spec by construction. Nothing to byte-match on the Python
+# side; keep exempt.
+packages/gofish-graphics/stories/interaction/HoverHighlight.stories.tsx
+packages/gofish-graphics/stories/interaction/SemanticZoomHistogram.stories.tsx
+packages/gofish-graphics/stories/interaction/DraggableThreshold.stories.tsx
+packages/gofish-graphics/stories/interaction/TimerPulse.stories.tsx
+packages/gofish-graphics/stories/interaction/ComponentPaintOnly.stories.tsx
+packages/gofish-graphics/stories/interaction/ComponentLayoutReactive.stories.tsx
+packages/gofish-graphics/stories/interaction/ComponentPointer.stories.tsx

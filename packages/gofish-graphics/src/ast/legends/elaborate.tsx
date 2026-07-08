@@ -51,18 +51,27 @@ function legendRow(key: any, color: string): GoFishNode {
 }
 
 /**
- * The swatch column. `reverse: true` because `Spread({dir:"y"})` lays children
- * bottom→top in y-up coordinates, so the first color-map entry must render last
- * (at the top), matching the bespoke legend.
+ * The swatch column. Entries read top→bottom. Under the y-up chart flip a
+ * `Spread({dir:"y"})` lays children bottom→top, so the first color-map entry
+ * must render last (`reverse`) to land at the top; in y-down free space the
+ * natural order already reads top→bottom, so no reverse. See issue #143/#16.
  */
-export function legendColumn(colorMap: Map<any, string>): GoFishNode {
+export async function legendColumn(
+  colorMap: Map<any, string>,
+  yUp = true
+): Promise<GoFishNode> {
   const rows = [...colorMap.entries()].map(([key, color]) =>
     legendRow(key, color)
   );
-  return (Spread as any)(
-    { dir: "y", spacing: ROW_GAP, alignment: "start", reverse: true },
+  // `Spread` returns a PromiseWithRender — await the real node so the chrome
+  // flag below lands on the tree node, not the promise wrapper.
+  const col = (await (Spread as any)(
+    { dir: "y", spacing: ROW_GAP, alignment: "start", reverse: yUp },
     rows
-  ).name(LEGEND_NAME) as GoFishNode;
+  )) as GoFishNode;
+  col.name(LEGEND_NAME);
+  col._ambientYDown = true; // chrome: interior ambient, box placed by the plot frame (#629)
+  return col;
 }
 
 // Colorbar constants.
@@ -89,19 +98,32 @@ const BAR_LABEL_GAP = 4; // gap between a tick mark and its label
  */
 export async function legendColorbar(
   scaleFn: (v: number) => string,
-  domain: [number, number]
+  domain: [number, number],
+  yUp = true
 ): Promise<GoFishNode> {
   const [min, max] = domain;
   const bandH = BAR_HEIGHT / BAND_COUNT;
+  // The bar is laid out in fixed y-up logical coordinates (band 0 at the base,
+  // domain max at the top). The PHYSICAL layout never changes — what flips for a
+  // y-down render is which value each slot shows and where the ticks land — so
+  // the band-overlap seam logic below stays intact (a pure coordinate mirror
+  // would invert the overlap and reopen seams). In y-up the slot at height `y`
+  // shows value `min + y/BAR_HEIGHT·range`; in y-down it shows the mirror, so the
+  // domain max still reads at the top of the (now unflipped) bar. See #143/#16.
   const valueToPx = (v: number) =>
     (max === min ? 0 : (v - min) / (max - min)) * BAR_HEIGHT;
+  // Pixel height (from the band-0 base) at which value `v`'s color/tick belongs.
+  const valueToBarY = (v: number) =>
+    yUp ? valueToPx(v) : BAR_HEIGHT - valueToPx(v);
 
   const bandName = (i: number) => `__cbBand${i}`;
   const tickName = (i: number) => `__cbTick${i}`;
   const labelName = (i: number) => `__cbLabel${i}`;
 
   const bands = Array.from({ length: BAND_COUNT }, (_, i) => {
-    const value = min + ((i + 0.5) / BAND_COUNT) * (max - min);
+    // Slot `i` sits at height `i·bandH`; the value shown there mirrors when y-down.
+    const frac = (yUp ? i + 0.5 : BAND_COUNT - i - 0.5) / BAND_COUNT;
+    const value = min + frac * (max - min);
     return Rect({
       w: BAR_WIDTH,
       h: bandH + BAND_OVERLAP,
@@ -159,7 +181,7 @@ export async function legendColorbar(
     // separate position constraints so the label can sit start-aligned in x
     // while staying middle-aligned in y (one shared anchor can't do both).
     tickValues.forEach((v, i) => {
-      const cy = valueToPx(v);
+      const cy = valueToBarY(v);
       cs.push(
         Constraint.position(
           { x: BAR_WIDTH + TICK_MARK_LEN / 2, y: cy, anchor: "middle" },
@@ -179,6 +201,7 @@ export async function legendColorbar(
     return cs;
   });
 
+  root._ambientYDown = true; // chrome: reads y-down, never in the plot flip scope (#629)
   return root.name(LEGEND_NAME);
 }
 
@@ -194,12 +217,22 @@ export async function legendColorbar(
  */
 export async function elaborateLegend(
   node: GoFishNode,
-  scale: CategoricalScale | ContinuousColorScale
+  scale: CategoricalScale | ContinuousColorScale,
+  /** Orientation of the AMBIENT frame the legend's INTERIOR renders in (row
+   *  order, colorbar value direction) — y-down unless `options.yUp` forces a
+   *  global y-up ambient. The legend is `_ambientYDown` chrome (#629): its
+   *  interior never flips with the plot. */
+  yUp = true,
+  /** Orientation of the abstract frame the legend's BOX seats in — true when the
+   *  plot content will mirror (continuous root y, or a forced global y-up). The
+   *  align below is authored in that shared frame; the bake then box-mirrors the
+   *  legend about the plot's flip scope so it lands top-aligned on screen. */
+  boxYUp = yUp
 ): Promise<GoFishNode> {
   const legend =
     "scaleFn" in scale
-      ? await legendColorbar(scale.scaleFn, scale.domain)
-      : legendColumn(scale.color);
+      ? await legendColorbar(scale.scaleFn, scale.domain, yUp)
+      : await legendColumn(scale.color, yUp);
   return wrapPreservingIdentity(node, async (content) => {
     content.name(CONTENT_NAME);
 
@@ -216,10 +249,21 @@ export async function elaborateLegend(
         g[CONTENT_NAME],
         g[LEGEND_NAME],
       ]),
-      // Top-align the column with the content top (y-up: end = top).
-      Constraint.align({ y: "end" }, [g[CONTENT_NAME], g[LEGEND_NAME]]),
+      // Top-align the column with the content top. "Top" is the far edge in the
+      // abstract frame of a mirroring plot (end) but the near edge of a y-down
+      // one (start), so the anchor follows the BOX frame (`boxYUp`) — otherwise
+      // a y-down chart (heatmap) seats the legend at the bottom. #143/#16/#629.
+      Constraint.align({ y: boxYUp ? "end" : "start" }, [
+        g[CONTENT_NAME],
+        g[LEGEND_NAME],
+      ]),
     ]);
 
+    // The legend wrapper only UNIONS the plot's continuous y up; it is not the
+    // σ-scope. Mark it scope-transparent so the y-up flip (#629) opens at the plot
+    // CONTENT (frame = canvas `finalH`), not at this wrapper (whose bbox spans the
+    // legend column). The column itself is `_ambientYDown` (stays y-down). #629.
+    root._scopeTransparent = true;
     return root;
   });
 }

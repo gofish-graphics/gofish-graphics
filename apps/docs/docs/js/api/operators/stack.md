@@ -38,6 +38,10 @@ path-aware option (`"field"`, `"datum.field"` after a
 children plus a continuous data axis, use `spread({ spacing: N })` —
 `spread`'s "data-driven SIZE composition" mode is the natural fit there.
 
+Set `normalize: true` to make a stack a **space-filling spine** — its segments
+fill the extent in proportion to their size (the mosaic/marimekko conditional
+axis). See [`spread` → Space-filling spines](/js/api/operators/spread#space-filling-spines-mosaic-marimekko).
+
 ## Example
 
 ```ts

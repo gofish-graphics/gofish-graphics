@@ -144,7 +144,20 @@ Walking `withGoFish.ts:431-477`:
 5. **Tag the node** with `name = key` and `datum = d` so downstream
    coordinators (`ref` / `selectAll`, label placement) can find it back.
 
-## `.name()`, `.label()`, and `.translate()`
+### `live()` channels
+
+A `color` or `raw` channel value may be a `live(...)` reactive callback (the
+[reactivity layer](/internals/frontend/reactivity)); `channels.ts` widens those
+two channel unions to accept a `LiveValue`. When the channel loop sees one, it
+does two things: it evaluates the callback **once, untracked and under the
+`inLiveEval` flag**, to get the resolve-time value the pipeline measures and
+infers scales with (so its input reads wire event dispatch but do _not_ become
+pipeline dependencies), and it stashes the raw callback on the produced node as
+`__gfLive[channel]`. Lowering (`_node.ts`) later bakes that callback, bound to the
+node's datum, into the paint-time side table so paint re-evaluates it reactively.
+`circle` (in `marks/chart.ts`) gives its `fill` the same live-only treatment.
+
+## `.name()`, `.label()`, `.zOrder()`, and `.translate()`
 
 `createMark` returns a `NameableMark`, which is the base mark plus chainable
 methods:
@@ -158,6 +171,14 @@ methods:
   name without parsing the `__serialize` tag.
 - `mark.label(accessor, options?)` — calls `node.label(...)` on every produced
   node, deferring label placement to the layout phase.
+- `mark.zOrder(value)` — sets each produced node's paint-order hint, where
+  `value: ZOrderValue<T> = number | ((datum: T) => number)`. A callback is
+  evaluated against the per-instance datum, so paint order can be data-driven
+  (e.g. raise one category over the rest) without splitting the mark into
+  separately-named layers; the [bake pass](/internals/layout/coord-flattening)
+  orders each layer's children by `(zOrder, index)`. The constant form
+  round-trips through the IR; a callback is dropped from the emitted IR (like a
+  function `.label` accessor).
 - `mark.translate({ x?, y? })` — wraps the produced node in a structural
   translation node. This is deliberately not equivalent to merging `x`/`y` into
   the mark's own options: a mark or operator may already give `x`/`y`
@@ -169,12 +190,18 @@ labeling, or positioning one mark never affects another.
 These methods are not hand-rolled here. `createMark` calls `nameableMark`,
 which is one application of the shared **modifier factory** in
 `createOperator.ts`: a `createModifier({ name, apply, tag? })` config plus
-`attachModifiers(base, configs)`. `apply` mutates each produced node (once per
-node — every slice for an expand mark like `cut`); `tag` stamps metadata on the
-wrapped mark function once (propagating the `__serialize`/`__axisFields` tags
-and stashing the layer name). `attachModifiers` wires the set onto the base and
-adds a top-level `.render()`, re-decorating each method's result with the same
-set so chains stay extensible and the mark-kind tag rides along. `.name()`
+`attachModifiers(base, configs)`. `apply(node, layerContext, datum, ...args)`
+mutates each produced node (once per node — every slice for an expand mark like
+`cut`) and receives the per-instance datum, so a modifier like `.zOrder` can
+derive a value from the data; `tag` stamps metadata on the
+wrapped mark function once (propagating the `__serialize` tag and stashing the
+layer name — a mark no longer carries an axis-field tag, since axis titles now
+derive from each node's resolved space `measure`).
+`attachModifiers` wires the set onto the base and
+adds the export terminals (`render` / `toSVG` / `toSVGElement` / `save` /
+`toDisplayList`) from the shared `terminals.ts` registry, re-decorating each
+method's result with the same set so chains stay extensible and the mark-kind tag
+rides along. `.name()`
 defers its layer registration via a `__layerRegistration` tag collected in a
 single post-resolve DFS walk (`collectLayerRegistrations`), so registry order
 follows parent-iteration order, not async-completion order. The same factory

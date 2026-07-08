@@ -22,10 +22,11 @@ import {
   log as logOp,
   derive,
   resolve,
+  join,
   rect,
   circle,
   line,
-  area,
+  ribbon,
   blank,
   ellipse,
   petal,
@@ -41,7 +42,7 @@ import {
   Constraint,
   ref,
   arrow,
-  connect,
+  enclose,
   // Region-compositing combinators. PR #404's Stage-2 rename (#196/#202)
   // renamed the public Porter-Duff exports to Figma-inspired names:
   //   inside → intersect, xor → exclude, out → subtract, atop → paint.
@@ -66,6 +67,7 @@ import {
   createName,
   Treemap,
   setMeasureProvenance,
+  PREVIOUS_LAYER_MARKS,
   type ChartBuilder,
   type MeasureProvenance,
   type Operator,
@@ -90,8 +92,13 @@ const COMBINATOR_FACTORIES: Record<
   group: (opts, marks) => group(opts, marks) as unknown as Mark<any>,
   table: (opts, marks) => table(opts, marks) as unknown as Mark<any>,
   layer: (opts, marks) => layer(opts, marks) as unknown as Mark<any>,
+  // Graphical wrapping operator (padding/rx/ry border), combinator-only like
+  // layer; opts ride in `options`. Mirrors registry.ts's COMBINATOR_FACTORIES.
+  enclose: (opts, marks) => enclose(opts, marks) as unknown as Mark<any>,
   arrow: (opts, marks) => arrow(opts, marks) as unknown as Mark<any>,
-  connect: (opts, marks) => connect(opts, marks) as unknown as Mark<any>,
+  // line/ribbon low-level combinator form (replaces the removed connect).
+  line: (opts, marks) => line(opts, marks) as unknown as Mark<any>,
+  ribbon: (opts, marks) => ribbon(opts, marks) as unknown as Mark<any>,
   treemap: (opts, marks) => Treemap(opts, marks) as unknown as Mark<any>,
   // Keys are the IR wire types (UNCHANGED — the serializer never renamed
   // them); values are the renamed (#196/#202) combinator factories. Mirrors
@@ -117,7 +124,7 @@ const COMBINATOR_FACTORIES: Record<
 type SelectDataSpec = Extract<Frontend.DataIR, { type: "select" }>;
 
 interface ChartHarnessSpec {
-  data: Record<string, any>[] | SelectDataSpec | null;
+  data: Record<string, any>[] | Frontend.DataIR | null;
   operators: OperatorSpec[];
   mark: MarkSpec;
   options: Record<string, any>;
@@ -419,6 +426,10 @@ function mapOperator(
           key: opts.key as string | undefined,
         })
       );
+    case "join":
+      return applyTranslate(
+        join(opts.right as any[], { on: opts.on as string })
+      );
     case "scatter":
       return applyTranslate(scatter(opts as any));
     case "table":
@@ -437,7 +448,7 @@ const MARK_MAP: Record<string, (opts: Record<string, any>) => Mark<any>> = {
   rect: (opts) => rect(opts),
   circle: (opts) => circle(opts),
   line: (opts) => line(opts),
-  area: (opts) => area(opts),
+  ribbon: (opts) => ribbon(opts),
   blank: (opts) => blank(opts),
   ellipse: (opts) => ellipse(opts),
   petal: (opts) => petal(opts),
@@ -785,6 +796,9 @@ function buildChartFromSpec(
   //   - { type: "inline", rows: [...] } → use the rows directly
   //   - { type: "select", layer: name, mode } → resolve against the layer
   //     registry: mode "all" → selectAll(layer), otherwise → ref(layer)
+  //   - { type: "previous-tier" } → empty chart() scope inside a .layer(...)
+  //     builder chain; maps to PREVIOUS_LAYER_MARKS so LayerBuilder's own
+  //     wireTiers() does the auto-naming/selectAll wiring JS-side
   //   - null / array (legacy) → treat as bare rows
   let chartData: any = chartSpec.data;
   if (chartData && typeof chartData === "object" && !Array.isArray(chartData)) {
@@ -793,6 +807,8 @@ function buildChartFromSpec(
       chartData = sel.mode === "all" ? selectAll(sel.layer) : ref(sel.layer);
     } else if ((chartData as any).type === "inline") {
       chartData = (chartData as any).rows;
+    } else if ((chartData as any).type === "previous-tier") {
+      chartData = PREVIOUS_LAYER_MARKS;
     }
   }
 
@@ -853,8 +869,13 @@ function renderChart(spec: HarnessSpec) {
         const { w, h, axes, debug, ...layerOptsRaw } = layerAll;
         const layerOpts = resolveOptions(layerOptsRaw);
 
-        const childCharts = spec.charts.map((c) =>
-          buildChartFromSpec(c, spec.deriveServerUrl, resolveToken)
+        // A tier is a chart (ChartBuilder) or a component-level annotation
+        // (raw-mark → a Mark). Build each accordingly; the builder chain stacks
+        // them via `.layer()`, which accepts either.
+        const childCharts = spec.charts.map((c: any) =>
+          c && c.type === "raw-mark"
+            ? mapMark(c.mark, spec.deriveServerUrl, resolveToken)
+            : buildChartFromSpec(c, spec.deriveServerUrl, resolveToken)
         );
 
         if (spec.constraints && spec.constraints.length > 0) {
