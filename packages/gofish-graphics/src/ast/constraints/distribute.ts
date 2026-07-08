@@ -225,7 +225,7 @@ export function distributeSpaceFold(
 
   if (dataDriven) return SIZE(composeSize(), childMeasure);
   if (namedKeys.length > 0)
-      return ORDINAL(namedKeys, opts.measure, opts.anonymous);
+    return ORDINAL(namedKeys, opts.measure, opts.anonymous);
   if (allSize) return SIZE(composeSize(), childMeasure);
   if (allPosition)
     return POSITION(Interval.interval(0, sumWidths()), childMeasure);

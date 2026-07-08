@@ -31,15 +31,15 @@ ribbon({ stroke?, strokeWidth = 0, opacity?, mixBlendMode = "normal", dir = "x",
 
 ## Parameters
 
-| Option         | Type                                  | Description                                                         |
-| -------------- | ------------------------------------- | ------------------------------------------------------------------- |
-| `stroke`       | `string`                              | Stroke color                                                        |
-| `strokeWidth`  | `number`                              | Stroke width                                                        |
-| `opacity`      | `number`                              | Opacity (0–1)                                                       |
-| `mixBlendMode` | `"normal" \| "multiply"`              | Blend mode                                                          |
-| `dir`          | `"x" \| "y"`                          | Direction axis                                                      |
-| `curve`        | `"straight" \| "bezier" \| CurveSpec` | Screen-space band shape; default `"auto"` (see below)               |
-| `from`, `to`   | `string`                              | Pairwise form: column names holding the two endpoint refs           |
+| Option         | Type                                  | Description                                               |
+| -------------- | ------------------------------------- | --------------------------------------------------------- |
+| `stroke`       | `string`                              | Stroke color                                              |
+| `strokeWidth`  | `number`                              | Stroke width                                              |
+| `opacity`      | `number`                              | Opacity (0–1)                                             |
+| `mixBlendMode` | `"normal" \| "multiply"`              | Blend mode                                                |
+| `dir`          | `"x" \| "y"`                          | Direction axis                                            |
+| `curve`        | `"straight" \| "bezier" \| CurveSpec` | Screen-space band shape; default `"auto"` (see below)     |
+| `from`, `to`   | `string`                              | Pairwise form: column names holding the two endpoint refs |
 
 `curve` accepts the strings `"straight"` or `"bezier"`, or a `CurveSpec` factory:
 `straight()`, `bezier()`, `orthogonal()`, `arc({ direction: "up" | "down" })`, or

@@ -238,7 +238,6 @@ const reportConflict = (type: string, dir: 0 | 1, c: BBoxConflict): void => {
  *  auto-claims on that dim. Ordinal owners record `"o:<keys>"` instead. */
 const AXIS_CLAIM_OPAQUE = "continuous";
 
-
 export class GoFishNode {
   public readonly uid: string;
   private static uidCounter = 0;
@@ -794,7 +793,9 @@ export class GoFishNode {
             ? "o:" + JSON.stringify(s.domain ?? [])
             : undefined;
         const dupOrdinal =
-          override !== false && mySig !== undefined && claimed.get(dim) === mySig;
+          override !== false &&
+          mySig !== undefined &&
+          claimed.get(dim) === mySig;
         const show = override !== false && !dupOrdinal;
         if (dim === 0) this.axis.x = show;
         else this.axis.y = show;

@@ -329,10 +329,7 @@ export const connect = createNodeOperator(
           // — forward along the near edge, a cap across, back along the far edge
           // — so a continuous stacked area curves like its line-chart sibling.
           const mainAxis = dir as 0 | 1;
-          const edgePoint = (
-            main: number,
-            cross: number
-          ): [number, number] => {
+          const edgePoint = (main: number, cross: number): [number, number] => {
             const p: [number, number] = [0, 0];
             p[mainAxis] = main;
             p[1 - mainAxis] = cross;

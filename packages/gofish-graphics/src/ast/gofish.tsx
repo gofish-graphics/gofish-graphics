@@ -14,6 +14,7 @@ import {
   GoFishNode,
   type RenderSession,
 } from "./_node";
+import type { GoFishAST } from "./_ast";
 import {
   posScaleFromSpace,
   axisScale,
@@ -38,6 +39,13 @@ import {
   type UnderlyingSpace,
 } from "./underlyingSpace";
 import { shadowCheckScaleRoot } from "./solver/shadow";
+import {
+  perfNow,
+  perfAdd,
+  perfBeginRun,
+  perfEnabled,
+  perfSetCount,
+} from "./perf";
 import {
   elaborateAxes,
   elaborateAxisTitles,
@@ -222,6 +230,7 @@ export async function layout(
   // const sizeThatFitsAST = domainAST.sizeThatFits();
   // const layoutAST = sizeThatFitsAST.layout();
   // return render({ width, height, transform }, layoutAST);
+  const __tResolve = perfNow();
   child.resolveColorScale();
   child.resolveNames();
   child.resolveLabels();
@@ -229,6 +238,7 @@ export async function layout(
   // space inference reads the dims. Top-down + scope-bounded (see resolveAliases).
   child.resolveAliases();
   child.resolveUnderlyingSpace();
+  perfAdd("resolve", perfNow() - __tResolve);
 
   // Chart-level axis TITLE measure, captured PRE-elaboration. The root space
   // here carries the OUTERMOST grouping's measure (the outer operator's fold is
@@ -258,6 +268,7 @@ export async function layout(
   ];
 
   // Node-based axis pipeline: mark axis nodes and apply nice-rounding in-place
+  const __tAxes = perfNow();
   if (axes) {
     // Which dims the chart-level `axes` option enables. `true` → both. For an
     // `{ x?, y? }` object, a dim is enabled unless it is explicitly `false` —
@@ -445,6 +456,7 @@ export async function layout(
     if (contexts?.session) child.setRenderSession(contexts.session);
     child.resolveUnderlyingSpace(); // memoized: computes only the new nodes
   }
+  perfAdd("axes", perfNow() - __tAxes);
 
   if (debug) {
     console.log("🌳 Underlying Space Tree:");
@@ -557,7 +569,21 @@ export async function layout(
   // space has resolved each coord axis's measure — Route B reads it to keep a
   // foreign-measure size flat. Runs on the final (axis/title/legend-elaborated)
   // tree, before layout/render consume the flag. See _node.resolveEmbedding.
+  const __tEmbed = perfNow();
   child.resolveEmbedding();
+  perfAdd("embed", perfNow() - __tEmbed);
+
+  // Scene-graph size the solver actually sees (axis/title/legend already
+  // elaborated). Whole walk guarded so the off path pays nothing.
+  if (perfEnabled()) {
+    const countNodes = (node: GoFishAST): number => {
+      let n = 1;
+      const kids = "children" in node ? node.children : [];
+      for (const c of kids) n += countNodes(c);
+      return n;
+    };
+    perfSetCount("nodes", countNodes(child));
+  }
 
   // Merge the two half-channels into the single per-axis scale carrier handed
   // to layout: σ (size slope) from `rootScaleFactors`, the anchored map from
@@ -567,7 +593,9 @@ export async function layout(
     axisScale(rootScaleFactors[1], posScales[1]),
   ];
 
+  const __tSolve = perfNow();
   child.layout([layoutW, layoutH], rootScales);
+  perfAdd("solve", perfNow() - __tSolve);
   // Root placement anchor. A GIVEN dimension keeps the baseline-anchored canvas
   // box [0, given]; content seated outside it (axis labels below 0, ticks above
   // `given`) is reserved as the per-side overhangs below. A SHRINK-TO-FIT
@@ -812,6 +840,10 @@ export async function runLayout(
           : { color: new Map(), colorConfig },
     },
   };
+  // Reset the per-pass accumulator at the start of every render so the bench
+  // harness reads a clean slate (the `lower`/`paint` passes land later, during
+  // SolidJS's reactive render — see perf.ts). No-op when instrumentation is off.
+  perfBeginRun();
   try {
     const contexts = { session };
 
@@ -825,7 +857,9 @@ export async function runLayout(
     // this isn't a full guarantee — but it's a strict improvement
     // for any consumer using <link>-loaded webfonts.
     if (typeof document !== "undefined" && document.fonts?.ready) {
+      const __tFonts = perfNow();
       await document.fonts.ready;
+      perfAdd("fonts", perfNow() - __tFonts);
     }
 
     return await layout(
@@ -1214,11 +1248,16 @@ export const render = (
   // (`rootFlipsWhole`, mirroring the `_rootFlipScope` stamp). Using `ambientFlip`
   // (yUp only) here would report y-down for a continuous-y chart that paints
   // y-up, inverting drags. #629.
-  const rootFlip: FlipScope | undefined = rootFlipsWhole ? canvasFlip : undefined;
+  const rootFlip: FlipScope | undefined = rootFlipsWhole
+    ? canvasFlip
+    : undefined;
   const rootToPixel = toPixelFor(rootFlip);
   const interactive = interaction !== undefined;
   const paintBaked = () => {
+    const __tLower = perfNow();
     const items = lowerToDisplayList(child, toPixelFor, ambientFlip);
+    perfAdd("lower", perfNow() - __tLower);
+    perfSetCount("displayItems", items.length);
     // Publish the frame (id-keyed hit-test map + data-space conversions) before
     // paint so the first hit-test / dataPos reads see the current frame.
     interaction?.publishFrame({
@@ -1228,7 +1267,10 @@ export const render = (
       domains,
       size: { width, height },
     });
-    return items.map((item) => paintSVG(item, interactive));
+    const __tPaint = perfNow();
+    const painted = items.map((item) => paintSVG(item, interactive));
+    perfAdd("paint", perfNow() - __tPaint);
+    return painted;
   };
   return (
     <svg

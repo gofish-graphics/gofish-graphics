@@ -33,6 +33,7 @@
     "start": "vite",
     "dev": "vite",
     "build": "vite build",
+    "build:bench": "vite build --mode bench",
     "serve": "vite preview",
     "prepublishOnly": "pnpm run build",
     "fetch-titanic-passengers": "node scripts/fetch-titanic-passengers.mjs",

@@ -76,6 +76,9 @@ declare global {
     __renderStory__: (id: string) => Promise<boolean>;
     __STORY_RENDER_DONE__: boolean;
     __STORY_RENDER_ERROR__: string | null;
+    // Wall time from render start through the rAF flush, EXCLUDING the trailing
+    // settle setTimeout — the bench reads this as the un-instrumented engine time.
+    __STORY_RENDER_WALL_MS__: number;
     __STORIES_RUNNER_READY__: boolean;
     __STORIES_RUNNER_ERROR__: string | null;
   }
@@ -120,6 +123,7 @@ window.__renderStory__ = async (id: string): Promise<boolean> => {
     // await their own data loaders inside. Await unconditionally — `await`
     // on a non-Promise is a no-op, so sync renders are unaffected.
     // (Font-readiness gating lives inside gofish itself now.)
+    const t0 = performance.now();
     const element = await story.render(args, context);
 
     if (element instanceof HTMLElement) {
@@ -128,6 +132,9 @@ window.__renderStory__ = async (id: string): Promise<boolean> => {
 
     // Wait a frame for SolidJS to flush
     await new Promise((resolve) => requestAnimationFrame(resolve));
+    // Wall clock stops at the rAF flush — the 100ms settle below is capture
+    // stabilization, not engine work, so it stays out of the measured time.
+    window.__STORY_RENDER_WALL_MS__ = performance.now() - t0;
     // Small extra settle for async renders
     await new Promise((resolve) => setTimeout(resolve, 100));
 
@@ -142,6 +149,7 @@ window.__renderStory__ = async (id: string): Promise<boolean> => {
 
 window.__STORY_RENDER_DONE__ = false;
 window.__STORY_RENDER_ERROR__ = null;
+window.__STORY_RENDER_WALL_MS__ = 0;
 window.__STORIES_RUNNER_READY__ = false;
 window.__STORIES_RUNNER_ERROR__ = null;
 

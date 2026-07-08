@@ -111,6 +111,10 @@ A few systems thread through every pass rather than belonging to one:
   mappings from one plane to another, applied during render.
 - **Names & scoping.** Marks can be `name`d and referenced across charts via `ref(name)` (one node) or `selectAll(name)` (many);
   scoping is deliberately hygienic.
+- **Perf instrumentation.** Each pass (and the paint path) is bracketed with the
+  `src/ast/perf.ts` hooks that record per-pass timings and scene-graph size counters
+  for benchmarking — zero-cost when off and dead-code-eliminated from the published
+  build (see [Measuring the passes](/internals/layout/passes#measuring-the-passes)).
 
 ## Where to go next
 

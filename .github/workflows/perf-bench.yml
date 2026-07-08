@@ -1,0 +1,265 @@
+name: Performance Benchmark
+
+# Records layout-engine performance: per-pass timings, ecologically-valid
+# end-to-end timing of every example on both the JS and Python paths, and
+# synthetic asymptotics sweeps. Record-only — it never fails the build (shared
+# CI runners are too noisy to gate on).
+#
+# On PRs it does a Penrose-style same-runner pairwise comparison: it benchmarks
+# the base commit in the SAME job on the SAME runner via a single INTERLEAVED
+# synthetic pass (HEAD/base samples alternated per point), so the base→PR delta
+# is free of cross-machine hardware variance. The PR leg is synthetic-only — no
+# Python, no ecological corpus — to keep it cheap (~2× synthetic cost). On main
+# it runs the full corpus, measures against the current hermetic ruler bundle
+# (see cut-ruler.yml), and appends the run to the append-only `benchmarks` data
+# branch, which feeds the (necessarily cross-run, coarse) trend plots.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "packages/gofish-graphics/**"
+      - "packages/gofish-python/**"
+      - "tests/**"
+      - ".github/workflows/perf-bench.yml"
+  pull_request:
+    # Narrow: only the engine, its bench harness/specs, and the bench/ruler
+    # scripts — not every parity-story edit under tests/**.
+    paths:
+      - "packages/gofish-graphics/**"
+      - "tests/bench/**"
+      - "tests/harness/**"
+      - "tests/scripts/bench*.ts"
+      - "tests/scripts/ruler.ts"
+      - ".github/workflows/perf-bench.yml"
+  workflow_dispatch:
+
+jobs:
+  bench:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # push to the benchmarks data branch on main
+      pull-requests: write # post the delta comment
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      # Same MS-core-fonts pinning as the visual-tests job: keeps text
+      # measurement (and therefore layout timing) stable across runs rather
+      # than drifting on fontconfig fallbacks. See visual-tests.yml for the
+      # full rationale on caching the .ttf files directly.
+      - name: Restore mscorefonts .ttf cache
+        id: msfonts-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/msttcorefonts
+          key: msttcorefonts-v1
+
+      - name: Install MS TrueType core fonts
+        run: |
+          set -euo pipefail
+          DEST=/usr/share/fonts/truetype/msttcorefonts
+          CACHE="$HOME/.cache/msttcorefonts"
+          if [ -d "$CACHE" ] && ls "$CACHE"/*.ttf >/dev/null 2>&1; then
+            sudo mkdir -p "$DEST"
+            sudo cp "$CACHE"/*.ttf "$DEST"/
+          else
+            echo "ttf-mscorefonts-installer msttcorefonts/accepted-mscorefonts-eula select true" | sudo debconf-set-selections
+            sudo apt-get update
+            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends ttf-mscorefonts-installer
+            mkdir -p "$CACHE"
+            cp "$DEST"/*.ttf "$CACHE"/
+          fi
+          sudo fc-cache -f
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: pnpm
+
+      # Python is only exercised by the ecological examples-py leg, which runs on
+      # main pushes and manual dispatch — never on PRs (synthetic-only there).
+      - name: Setup Python
+        if: github.event_name != 'pull_request'
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: packages/gofish-python/pyproject.toml
+
+      - name: Install Node dependencies
+        run: pnpm install
+
+      - name: Install Python dependencies
+        if: github.event_name != 'pull_request'
+        run: pip install -e packages/gofish-python vega_datasets scipy
+
+      - name: Build gofish-graphics
+        run: pnpm --filter gofish-graphics build
+
+      - name: Restore Playwright browser cache
+        id: playwright-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+
+      - name: Install Playwright browsers
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: pnpm --filter @gofish/tests exec playwright install --with-deps chromium
+
+      - name: Save Playwright browser cache
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+
+      - name: Install Playwright system deps
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: pnpm --filter @gofish/tests exec playwright install-deps chromium
+
+      # Fetch the append-only benchmarks data branch (history + main baseline).
+      # Absent on the very first run — handled gracefully downstream.
+      - name: Fetch benchmarks history
+        run: |
+          if git ls-remote --exit-code origin benchmarks >/dev/null 2>&1; then
+            git fetch origin benchmarks
+            git worktree add --detach /tmp/bench-history FETCH_HEAD
+          else
+            mkdir -p /tmp/bench-history
+            echo "No benchmarks branch yet; starting fresh."
+          fi
+
+      # Penrose-style same-runner pairwise (PR only): prepare the base checkout
+      # FIRST — worktree at main-tip (the PR checkout is the merge ref, so
+      # main-tip is the consistent comparand), pnpm install, and the bench engine
+      # build — so the interleaved pass below can spawn a second harness from it
+      # and alternate HEAD/base samples per point. Best-effort: a base that
+      # predates the bench tooling (or fails to build) leaves `ready` unset, and
+      # the pass falls back to HEAD-only. `set -e` aborts before `ready=true` on
+      # any failure, so continue-on-error can't produce a half-built base.
+      - name: Prepare base worktree on the same runner (PR only)
+        id: base
+        if: github.event_name == 'pull_request'
+        continue-on-error: true
+        run: |
+          set -e
+          git fetch --no-tags --depth=1 origin main
+          BASE_SHA=$(git rev-parse FETCH_HEAD)
+          echo "Base commit: $BASE_SHA"
+          git worktree add /tmp/base-bench "$BASE_SHA"
+          if [ ! -f /tmp/base-bench/tests/scripts/bench.ts ]; then
+            echo "Base predates the bench tooling — HEAD-only comparison."
+            exit 0
+          fi
+          cd /tmp/base-bench
+          pnpm install
+          # gofish-ir has no prepare script, so a fresh worktree install leaves
+          # its dist/ missing — and gofish-graphics imports it.
+          pnpm --filter gofish-ir build
+          pnpm --filter gofish-graphics build:bench
+          echo "ready=true" >> "$GITHUB_OUTPUT"
+          echo "Base worktree ready for interleaved A/B."
+
+      # PR leg: a single interleaved synthetic pass. bench.ts spawns the base
+      # harness from --ab-dir and interleaves HEAD/base samples, writing the base
+      # results to --ab-out (which bench-report.ts picks up via --base below).
+      - name: Run benchmarks — interleaved synthetic A/B (PR only)
+        if: github.event_name == 'pull_request'
+        run: |
+          if [ "${{ steps.base.outputs.ready }}" = "true" ]; then
+            pnpm --filter @gofish/tests exec tsx scripts/bench.ts synthetic \
+              --ab-dir /tmp/base-bench --ab-out /tmp/base-results.json
+          else
+            echo "No base worktree — running HEAD-only synthetic."
+            pnpm --filter @gofish/tests exec tsx scripts/bench.ts synthetic
+          fi
+
+      # main / manual leg: full corpus (default mode `all` = examples-js +
+      # examples-py + synthetic). Measure against the latest hermetic ruler
+      # bundle on the benchmarks branch if one exists (bootstrap-tolerant: none
+      # yet → no flag). `all` is passed explicitly so the --ruler value isn't
+      # mistaken for the positional mode arg.
+      - name: Run benchmarks — full record (main push / manual)
+        if: github.event_name != 'pull_request'
+        run: |
+          set -euo pipefail
+          RULER_ARG=""
+          if [ -d /tmp/bench-history/ruler ]; then
+            LATEST=$(ls -1 /tmp/bench-history/ruler/ 2>/dev/null | sort -V | tail -1 || true)
+            if [ -n "$LATEST" ]; then
+              RULER_ARG="--ruler /tmp/bench-history/ruler/$LATEST"
+              echo "Measuring against ruler: $LATEST"
+            fi
+          fi
+          pnpm --filter @gofish/tests exec tsx scripts/bench.ts all $RULER_ARG
+
+      - name: Build trend history + PR comment
+        run: |
+          BASE_ARG=""
+          if [ -f /tmp/base-results.json ]; then
+            BASE_ARG="--base /tmp/base-results.json"
+          fi
+          pnpm --filter @gofish/tests exec tsx scripts/bench-report.ts \
+            --history-dir /tmp/bench-history $BASE_ARG
+
+      - name: Render dogfooded plots
+        run: pnpm --filter @gofish/tests bench:plots
+
+      - name: Upload benchmark artifact
+        uses: actions/upload-artifact@v5
+        with:
+          name: bench-results
+          path: |
+            tests/tmp/bench/results.json
+            tests/tmp/bench/results.csv
+            tests/tmp/bench/history.json
+            tests/tmp/bench/plots/
+
+      # PR: upsert a single sticky comment with the deltas. Record-only.
+      - name: Post benchmark comment
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const fs = require('fs');
+            const marker = '<!-- gofish-perf-bench -->';
+            const body = fs.readFileSync('tests/tmp/bench/comment.md', 'utf8');
+            const { owner, repo } = context.repo;
+            const issue_number = context.payload.pull_request.number;
+            const comments = await github.rest.issues.listComments({ owner, repo, issue_number });
+            const existing = comments.data.find((c) => c.body && c.body.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body });
+            } else {
+              await github.rest.issues.createComment({ owner, repo, issue_number, body });
+            }
+
+      # main: append this run to the append-only benchmarks branch.
+      - name: Append run to benchmarks branch (main push only)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          set -euo pipefail
+          SHA=$(git rev-parse HEAD)
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if git ls-remote --exit-code origin benchmarks >/dev/null 2>&1; then
+            git fetch origin benchmarks
+            git worktree add -B benchmarks /tmp/bench-pub origin/benchmarks
+          else
+            git worktree add --orphan -B benchmarks /tmp/bench-pub
+          fi
+          mkdir -p /tmp/bench-pub/results
+          cp tests/tmp/bench/results.json "/tmp/bench-pub/results/$SHA.json"
+          cd /tmp/bench-pub
+          git add "results/$SHA.json"
+          git commit -m "bench: $SHA [skip ci]"
+          git push origin benchmarks

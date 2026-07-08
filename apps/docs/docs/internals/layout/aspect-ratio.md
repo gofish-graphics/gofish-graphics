@@ -30,7 +30,7 @@ Two distinct mechanisms sit nearby and must not be confused — only the first i
   [design: what may set a size](/internals/design/size-claims#aspect-ratio-three-candidate-homes-open)
   (option 3), implemented at the root scope in `gofish.tsx` (see
   [the layout passes](/internals/layout/passes)): `spaceMeasure(x) ===
-  spaceMeasure(y)` triggers `min(...)` + centering of the slack axis. It is a
+spaceMeasure(y)` triggers `min(...)` + centering of the slack axis. It is a
   single-coordinate-space coupling and does not reach sizes solved in separate
   nested operator scopes (e.g. a packed unit mosaic).
 

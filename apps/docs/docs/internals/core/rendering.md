@@ -310,6 +310,14 @@ display list. The declared orientation is derived from `session.flip !== undefin
 The SVG-export terminals (`toSVG`/`toSVGElement`/`save`) run the same lower→paint
 pipeline against a throwaway container and serialize the result.
 
+The real `paintBaked` brackets each half with the perf instrumentation
+(`src/ast/perf.ts`): it times `lowerToDisplayList(child, toPixelFor, ambientFlip)`
+under the `lower` label, records the emitted `items.length` as the `displayItems`
+count, then times `items.map((item) => paintSVG(item, interactive))` under `paint`.
+Like the layout-pass hooks, this is zero-cost when instrumentation is off and
+dead-code-eliminated from the published build — see
+[Measuring the passes](/internals/layout/passes#measuring-the-passes).
+
 ### The interaction hooks in paint
 
 The [reactive layer](/internals/frontend/reactivity) threads an optional

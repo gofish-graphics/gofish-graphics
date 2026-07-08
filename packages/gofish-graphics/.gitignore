@@ -1,0 +1,2 @@
+# Instrumented bench build (vite build --mode bench); never published (see `files`).
+dist-bench
