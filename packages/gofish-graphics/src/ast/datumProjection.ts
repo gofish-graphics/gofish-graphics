@@ -1,3 +1,7 @@
+// <gofish-wiki> AUTO-GENERATED — see covers: in the essay; run `pnpm --filter docs sync-backlinks`
+// @wiki Underlying Space — /internals/core/underlying-space
+// </gofish-wiki>
+
 // Datum-path projection: field access that lifts over a node's row collection.
 //
 // A selected node's `datum` is the *bag of rows* that flowed into it (the

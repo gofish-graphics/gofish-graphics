@@ -96,8 +96,8 @@ From `src/ast/graphicalOperators/spread.tsx:430`:
 ```ts
 export const spread = createOperator<any, SpreadOptions>(Spread, {
   split: ({ by }, d) =>
-    by ? Map.groupBy(d, (r: any) => r[by]) : new Map(d.map((r, i) => [i, r])),
-  channels: { w: "size", h: "size" },
+    by ? splitEntries(by, d) : new Map(d.map((r, i) => [i, r])),
+  channels: { w: "size", h: "size", size: { type: "size", entry: true } },
 });
 ```
 
@@ -108,7 +108,15 @@ Three pieces:
    children along an axis. This is the **combine** step.
 2. **`split(opts, d)`** — partition `d` into an ordered `Map<key, subdata>`.
    Insertion order matters (it determines layout order). When `by` is omitted,
-   each item becomes its own one-element group.
+   each item becomes its own one-element group. `spread`/`stack`/`group`/
+   `scatter` all delegate to the shared `splitEntries` helper
+   (`datumProjection.ts`, #700) rather than a bare `Map.groupBy`: it groups by
+   `by` first (a `field(...)` accessor groups by its `.name`, identically to a
+   bare string), then applies any pipeline ops the accessor carries — see
+   [Field expressions](/internals/core/underlying-space#field-expressions-a-pipeline-orthogonal-to-channel-aggregation)
+   for the domain-op (`sort`/`reverse`/`bin`) semantics. `by`-string/function
+   callers are unaffected — they carry no ops, so `splitEntries` reduces to
+   the old `Map.groupBy` behavior.
 3. **`channels`** (optional) — per-opt data-aware encodings. Same idea as
    `createMark`'s channels: `w: "size"` means the user can pass a field name,
    and the factory will apply `inferSize` before handing opts to `Spread`.
@@ -134,14 +142,15 @@ Walking `createOperator.ts:391-415`:
 2. **fmap** — for each `(key, subdata)` entry, call the user's mark with
    that subdata and a parent-prefixed key (`${key}-${i}`). The result is
    resolved to a `GoFishNode`. `node.setKey(...)` makes downstream
-   coordinators able to look it back up. When `by` is a string, each produced
-   leaf is also stamped with `__splitBy` recording that field — the innermost
-   grouping wins (a `??=`-style guard means an already-stamped node keeps its
-   value). This is what lets a later `resolve(cols, { from })` infer its match
-   key for free: it reads `__splitBy` off the resolved node to learn which
-   field that node was grouped by (`scatter({ by: "id" })` ⇒ join on `id`),
-   so the user need not restate the key. A function `by` has no field name to
-   record, so `resolve` errors there unless given an explicit `key`.
+   coordinators able to look it back up. When `by` is a string **or a
+   `field(...)` accessor** (its `.name`), each produced leaf is also stamped
+   with `__splitBy` recording that field — the innermost grouping wins (a
+   `??=`-style guard means an already-stamped node keeps its value). This is
+   what lets a later `resolve(cols, { from })` infer its match key for free:
+   it reads `__splitBy` off the resolved node to learn which field that node
+   was grouped by (`scatter({ by: "id" })` ⇒ join on `id`), so the user need
+   not restate the key. A function `by` has no field name to record, so
+   `resolve` errors there unless given an explicit `key`.
 3. **Apply channels** — `applyChannels` runs `inferSize` / `inferPos` /
    `inferColor` on annotated opts. For an entry-flagged channel
    (`{type, entry: true}`), the inference runs once per split entry,
@@ -196,6 +205,25 @@ field name like `x: "miles"` becomes a per-group mean position
 (`src/ast/graphicalOperators/scatter.tsx:336`). Its point channels also set
 `discrete: true`, so a grouped nonnumeric field such as `x: "lake"` becomes a
 slot coordinate instead of an invalid numeric mean.
+
+**Windowed `normalize()` on an entry-flagged `size` channel.** `spread`/
+`stack` declare `size: { type: "size", entry: true }` (#700 Phase 2) — a
+per-entry stack-axis extent, one value per split entry, that `Spread` wraps
+each child in its own sized `layer` with (see [Underlying
+Space](/internals/core/underlying-space#space-filling-spines-normalize-self-scales-a-stacking-axis)
+for the layout side). When that channel's value carries a `field(...)
+.normalize()` op (checked via `hasNormalizeOp`), `applyChannels` takes a
+different path than plain per-entry inference: it splits the pipeline at
+`normalize` (`splitAtNormalize`, `fieldExpr.ts`) and runs only the PRE
+expression through the ordinary per-entry channel evaluation — one raw value
+per split entry, exactly as any size accessor would produce — then hands
+that whole array to `applyEntryNormalize`, which replaces it with each
+entry's share of their sum. The **window** `applyEntryNormalize` shares over
+is exactly the operator's own split entries, which is why this lives in
+`createOperator.ts` rather than in `fieldExpr.ts` itself: only the factory
+knows what "this operator's entries" means. `channels.ts` gains no knowledge
+of `normalize` from this — it's `applyChannels` and `fieldExpr.ts` splitting
+the responsibility, not a third aggregation mode bolted onto `inferSize`.
 
 ## 6. Adding a new operator: a worked example
 

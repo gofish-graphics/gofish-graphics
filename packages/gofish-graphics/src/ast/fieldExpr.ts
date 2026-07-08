@@ -1,3 +1,7 @@
+// <gofish-wiki> AUTO-GENERATED — see covers: in the essay; run `pnpm --filter docs sync-backlinks`
+// @wiki Underlying Space — /internals/core/underlying-space
+// </gofish-wiki>
+
 // Field-expression pipeline syntax (#700 Phase 1): `field("name")` returns a
 // chainable expression — like a Polars column expression — where each method
 // appends one op to an ordered pipeline. Order matters: `.bin().sort()` bins

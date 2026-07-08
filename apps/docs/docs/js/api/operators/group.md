@@ -10,9 +10,9 @@ group({ by });
 
 ## Parameters
 
-| Option | Type                         | Description                                                        |
-| ------ | ---------------------------- | ------------------------------------------------------------------ |
-| `by`   | `string \| (item) => string` | **Required.** Field, lodash path, or accessor function to group by |
+| Option | Type                                      | Description                                                                                                                                     |
+| ------ | ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `by`   | `string \| FieldExpr \| (item) => string` | **Required.** Field, lodash path, [`field(...)`](/js/api/operators/spread#field-expression-pipeline) accessor, or accessor function to group by |
 
 ## Example
 
