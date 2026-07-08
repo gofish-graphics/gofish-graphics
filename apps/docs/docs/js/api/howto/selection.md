@@ -133,7 +133,7 @@ layer([
   chart(data).flow(/* ... */).mark(blank().name("origin")),
   text({ text: "start" }).name("label"),
   // ref("origin") returns one ref; errors if "origin" matched 0 or >1 nodes
-  Connect({ source: "middle" }, [ref("label"), ref("origin")]),
+  line({ source: "middle" }, [ref("label"), ref("origin")]),
 ]);
 ```
 
