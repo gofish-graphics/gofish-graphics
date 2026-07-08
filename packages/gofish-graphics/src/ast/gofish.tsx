@@ -195,6 +195,7 @@ export async function layout(
   underlyingSpaceX: UnderlyingSpace;
   underlyingSpaceY: UnderlyingSpace;
   yUp: boolean;
+  rootFlipsWhole: boolean;
   scales: Size<AxisScale | undefined>;
   child: GoFishNode;
   width: number;
