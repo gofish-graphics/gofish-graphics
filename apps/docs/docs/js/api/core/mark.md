@@ -10,9 +10,9 @@ Sets the visual mark used to render each data group.
 
 ## Parameters
 
-| Parameter | Type                     | Description                                                                          |
-| --------- | ------------------------ | ------------------------------------------------------------------------------------ |
-| `mark`    | `Mark` \| `ChartBuilder` | A mark (e.g. `rect()`, `line()`, `area()`), or a nested `chart(...)` drawn per group |
+| Parameter | Type                     | Description                                                                            |
+| --------- | ------------------------ | ------------------------------------------------------------------------------------- |
+| `mark`    | `Mark` \| `ChartBuilder` | A mark (e.g. `rect()`, `line()`, `ribbon()`), or a nested `chart(...)` drawn per group |
 
 ## Example
 

@@ -194,8 +194,10 @@ which is one application of the shared **modifier factory** in
 mutates each produced node (once per node — every slice for an expand mark like
 `cut`) and receives the per-instance datum, so a modifier like `.zOrder` can
 derive a value from the data; `tag` stamps metadata on the
-wrapped mark function once (propagating the `__serialize`/`__axisFields` tags
-and stashing the layer name). `attachModifiers` wires the set onto the base and
+wrapped mark function once (propagating the `__serialize` tag and stashing the
+layer name — a mark no longer carries an axis-field tag, since axis titles now
+derive from each node's resolved space `measure`).
+`attachModifiers` wires the set onto the base and
 adds the export terminals (`render` / `toSVG` / `toSVGElement` / `save` /
 `toDisplayList`) from the shared `terminals.ts` registry, re-decorating each
 method's result with the same set so chains stay extensible and the mark-kind tag

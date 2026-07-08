@@ -196,7 +196,12 @@ class DeriveHandler(BaseHTTPRequestHandler):
                         mark_ids,
                     )
                 child_ir = child.to_ir()
-                if isinstance(child.data, _RefProxy):
+                if isinstance(child.data, _RefProxy) or child._uses_previous_marks():
+                    # `_RefProxy` (ref/selectAll) → {"type": "select", ...};
+                    # an empty `chart()` scope inside a `.layer(...)` chain →
+                    # {"type": "previous-tier"} (JS's LayerBuilder derives the
+                    # auto-name/selectAll wiring from that marker — see
+                    # ChartBuilder.to_ir / _PREVIOUS_LAYER_MARKS in ast.py).
                     child_data = child_ir["data"]
                 else:
                     raw = child.data

@@ -190,6 +190,11 @@ async function main() {
   let failed = 0;
   let skipped = 0;
   const failures: { story: string; errors: string }[] = [];
+  // Leaf-mark channel warnings (unknown/mistyped fields the validator
+  // deliberately does NOT fail on during the descriptor rollout). Collected
+  // and printed so the "silently dropped channel" signal is visible; the
+  // warn→strict flip depends on this staying empty across the corpus.
+  const warnings: { story: string; warnings: string }[] = [];
 
   for (const story of stories) {
     const label = `${story.path}`;
@@ -222,6 +227,12 @@ async function main() {
       );
     }
     const result = Frontend.validate(doc, { strict: false });
+    if (result.warnings?.length) {
+      warnings.push({
+        story: label,
+        warnings: JSON.stringify(result.warnings).slice(0, 300),
+      });
+    }
     if (result.valid) {
       passed += 1;
       if (process.env.DEBUG) console.log(`  ok   ${label}`);
@@ -238,6 +249,14 @@ async function main() {
   console.log(
     `\n${passed} passed, ${failed} failed, ${skipped} skipped (out of ${stories.length})`
   );
+  if (warnings.length > 0) {
+    console.log(`\nLeaf-mark channel warnings (${warnings.length} stories):`);
+    for (const w of warnings.slice(0, 20)) {
+      console.log(`  WARN ${w.story}: ${w.warnings}`);
+    }
+  } else {
+    console.log("No leaf-mark channel warnings.");
+  }
   if (failures.length > 0) {
     console.error("\nValidation failures:");
     for (const f of failures.slice(0, 10)) {

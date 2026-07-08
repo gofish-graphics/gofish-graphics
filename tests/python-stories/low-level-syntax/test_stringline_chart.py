@@ -7,7 +7,7 @@ the lines are `connect`s over `ref`s to those names (the Pulley cross-tier
 pattern), all wrapped in one `layer`.
 """
 
-from gofish import layer, spread, connect, rect, ellipse, ref, datum
+from gofish import layer, spread, line, rect, ellipse, ref, datum
 from python_stories.data import CALTRAIN, CALTRAIN_STOP_ORDER
 from python_stories._lowlevel_helpers import group_by, order_by
 
@@ -51,11 +51,12 @@ def story_default():
     )
 
     train_lines = [
-        connect(
+        line(
+            # Default curve: the connection (y) axis is the ordinal station
+            # stack, so it resolves to a straight polyline between stops.
             [ref(_dot_name(d)) for d in train_rows],
-            direction="y",
+            dir="y",
             strokeWidth=1,
-            mode="center",
         )
         for train_rows in group_by(rows, "Train").values()
     ]

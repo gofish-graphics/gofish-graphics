@@ -1,6 +1,6 @@
 import _ from "lodash";
 import {
-  connectY,
+  line,
   For,
   layer,
   groupBy,
@@ -32,7 +32,7 @@ const boxAndWhisker = ({
   return layer({}, [
     rect({ w: 8, h: 1, y: v(min), fill: "gray" }).name(minName),
     rect({ w: 8, h: 1, y: v(max), fill: "gray" }).name(maxName),
-    connectY({ mode: "center", strokeWidth: 1 }, [
+    line({ dir: "y", strokeWidth: 1, curve: "bezier" }, [
       ref(minName),
       ref(maxName),
     ]),

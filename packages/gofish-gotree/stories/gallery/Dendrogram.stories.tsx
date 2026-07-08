@@ -25,7 +25,7 @@ import { initializeContainer } from "../helper";
 // "start". Verified against ref/dendrogram.png (leaves sit on the baseline).
 //
 // TODO: needs step/orthogonal (curveStepAfter) links implemented — using
-//       {interpolation:"linear"} yields straight diagonal edges instead of the
+//       {curve:"straight"} yields straight diagonal edges instead of the
 //       reference's right-angle brackets.
 // NOTE: node="hidden" → render a zero-area transparent rect so the tree still
 //       has a node to position the links against.
@@ -92,7 +92,7 @@ export const Dendrogram: StoryObj = {
         // the hidden nodes carry no visible color, so honor it on the links —
         // each link colored by its target node's depth.
         link: (_src: any, tgt: any) => ({
-          interpolation: "linear",
+          curve: "straight",
           stroke: byDepth()(tgt),
           strokeWidth: 1.5,
         }),

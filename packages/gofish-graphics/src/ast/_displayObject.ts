@@ -2,6 +2,24 @@ import type { GoFishAST } from "./_ast";
 import type { Transform } from "./dims";
 
 /**
+ * A y-orientation scope (issue #629): the placed y-band a draw entry's pixels
+ * are mirrored within. `baseY` is the band's top edge and `height` its extent,
+ * both in the ROOT y-down frame (absolute, pre-flip). A draw entry carrying a
+ * `flip` renders y-UP — its content is mirrored about `[baseY, baseY+height]`
+ * (`gy → 2·baseY + height − gy`) — reproducing, per-scope, the old global flip
+ * about the canvas height. Absent = the ambient y-DOWN frame (top-left origin).
+ */
+export type FlipScope = { baseY: number; height: number };
+
+/** Mirror a GoFish-space y about a flip scope's band: `gy ↦ 2·baseY + height − gy`
+ *  (issue #629). The single source of the per-scope mirror formula — used by the
+ *  `toPixelFor` maps (render / `toDisplayList` via `makeToPixelFor`) and by the
+ *  bake chrome box-mirror, so the SVG paint path and the display-list export path
+ *  can never diverge. */
+export const mirrorY = (flip: FlipScope, gy: number): number =>
+  2 * flip.baseY + flip.height - gy;
+
+/**
  * A node in GoFish's rendering IR.
  *
  * The bake pass ({@link flattenLayout} in `coordinateTransforms/bake.ts`)
@@ -23,4 +41,8 @@ import type { Transform } from "./dims";
 export type DisplayObject = {
   node: GoFishAST;
   transform: Transform;
+  /** The y-orientation scope this entry draws in (issue #629). Set by the bake
+   *  walk at the topmost continuous-y node / each `coord`; `undefined` = ambient
+   *  y-down. The lower driver builds this entry's `toPixel` from it. */
+  flip?: FlipScope;
 };

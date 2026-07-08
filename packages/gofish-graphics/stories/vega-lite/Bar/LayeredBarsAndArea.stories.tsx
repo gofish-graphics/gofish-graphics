@@ -7,7 +7,7 @@ import {
   group,
   derive,
   rect,
-  area,
+  ribbon,
   layer,
   selectAll,
   palette,
@@ -55,7 +55,7 @@ export const Default: StoryObj<Args> = {
         // top of the gray ones (z = 0). `project` reads the site off the bag of
         // refs the area is bound to (homogeneous, since we grouped by site).
         .mark(
-          area({ opacity: 0.7 }).zOrder((d) =>
+          ribbon({ opacity: 0.7 }).zOrder((d) =>
             isEmphasized(project(d, "site")) ? 1 : 0
           )
         ),
@@ -89,7 +89,7 @@ export const TwoSites: StoryObj<Args> = {
         .mark(rect({ h: "yield", fill: "site" }).name("bars")),
       chart(selectAll("bars"))
         .flow(group({ by: "variety" }), group({ by: "site" }))
-        .mark(area({ opacity: 0.7 })),
+        .mark(ribbon({ opacity: 0.7 })),
     ]).render(container, { w: args.w, h: args.h, axes: true });
 
     return container;
@@ -137,7 +137,7 @@ export const HoistedVarietySpread: StoryObj<Args> = {
           chart(selectAll("bars"))
             .flow(group({ by: "site" }))
             .mark(
-              area({ opacity: 0.7 }).zOrder((a) =>
+              ribbon({ opacity: 0.7 }).zOrder((a) =>
                 isEmphasized(project(a, "site")) ? 1 : 0
               )
             ),

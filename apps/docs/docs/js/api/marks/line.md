@@ -27,18 +27,28 @@ gf.layer([
 ## Signature
 
 ```ts
-line({ stroke?, strokeWidth = 1, opacity?, interpolation = "linear", from?, to? })
+line({ stroke?, strokeWidth = 1, opacity?, curve = "auto", from?, to? })
 ```
 
 ## Parameters
 
-| Option          | Type                   | Description                                               |
-| --------------- | ---------------------- | --------------------------------------------------------- |
-| `stroke`        | `string`               | Line color                                                |
-| `strokeWidth`   | `number`               | Line thickness                                            |
-| `opacity`       | `number`               | Opacity (0–1)                                             |
-| `interpolation` | `"linear" \| "bezier"` | Line interpolation                                        |
-| `from`, `to`    | `string`               | Pairwise form: column names holding the two endpoint refs |
+| Option        | Type                                  | Description                                                                                                         |
+| ------------- | ------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `stroke`      | `string`                              | Line color                                                                                                          |
+| `strokeWidth` | `number`                              | Line thickness                                                                                                      |
+| `opacity`     | `number`                              | Opacity (0–1)                                                                                                       |
+| `curve`       | `"straight" \| "bezier" \| CurveSpec` | Screen-space path shape; default `"auto"` auto-smooths continuous line charts with a centripetal Catmull-Rom spline |
+| `from`, `to`  | `string`                              | Pairwise form: column names holding the two endpoint refs                                                           |
+
+When `curve` is omitted (`"auto"`), `line` inspects the connected points: if they
+share a continuous connection axis it smooths them with a centripetal Catmull-Rom
+spline, otherwise it draws a straight polyline.
+
+`curve` accepts the strings `"straight"` or `"bezier"`, or a `CurveSpec` factory:
+`straight()`, `bezier()`, `orthogonal({ bend? })`, `arc({ direction: "up" | "down" })`,
+or `perfectArrows({ bow })`. The `orthogonal` elbow bends at the midpoint of the
+connector's `dir` axis; pass `orthogonal({ bend: "auto" })` to infer the bend axis
+from the endpoint geometry instead (for layouts with no single growth axis).
 
 ## Two forms
 

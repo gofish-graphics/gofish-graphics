@@ -197,7 +197,7 @@ function resampleLineSegment(
  * This function handles the conversion for a single segment's resampled points,
  * preserving boundaries by only smoothing within the point set.
  */
-function convertPointsToBezierCurves(points: Point[]): PathSegment[] {
+export function convertPointsToBezierCurves(points: Point[]): PathSegment[] {
   const segments: PathSegment[] = [];
 
   if (points.length === 0) {

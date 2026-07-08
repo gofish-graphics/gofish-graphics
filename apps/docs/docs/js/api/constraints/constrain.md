@@ -300,7 +300,7 @@ Layer([
     PulleyCircle({ r: 25 }).name(A),
     PulleyCircle({ r: 25 }).name(B),
   ]).constrain(/* … */),
-  Connect({ ... }, [ref(A), ref(B)]).name("rope"),
+  line({ ... }, [ref(A), ref(B)]).name("rope"),
 ]).constrain((c) => [
   Constraint.zAbove(c.rope, c.A),  // rope paints over A …
   Constraint.zBelow(c.rope, c.B),  // … but is covered by B

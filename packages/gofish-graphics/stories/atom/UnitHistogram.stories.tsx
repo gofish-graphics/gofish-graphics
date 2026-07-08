@@ -66,7 +66,12 @@ export const Default: StoryObj<Args> = {
       .flow(spread({ by: "pclass", dir: "x", spacing: 40, alignment: "end" }))
       .mark((panel) =>
         chart(panel)
-          .flow(spread({ by: "ageBin", dir: "x", spacing: 6, alignment: "end" }))
+          .flow(
+            // Age bins in ascending order along x — `spread` lays groups out in
+            // data-appearance order, so sort by the bin key first (as the strip
+            // plot sorts before its categorical spread).
+            derive((rows) => orderBy(rows, ["ageBin"], ["asc"])),
+            spread({ by: "ageBin", dir: "x", spacing: 6, alignment: "end" }))
           .mark((bin) =>
             chart(bin)
               .flow(

@@ -1,8 +1,13 @@
-import { sumBy, v, Connect } from "../../lib";
+import { sumBy, v, type Curve } from "../../lib";
+import {
+  connect as Connect,
+  type AnchorSpec,
+} from "../graphicalOperators/connect";
 import chunk from "lodash/chunk";
 import { GoFishNode } from "../_node";
-import type { Value } from "../data";
+import type { MaybeValue, Value } from "../data";
 import { GoFishRef } from "../_ref";
+import type { GoFishAST } from "../_ast";
 import type { Token } from "../createName";
 import { type ColorConfig } from "../colorSchemes";
 
@@ -47,10 +52,11 @@ import {
   LayerBuilder,
   chart,
   resolveRefData,
+  PREVIOUS_LAYER_MARKS,
 } from "./chartBuilder";
 import type { ChartOptions } from "./chartBuilder";
 import { projectPath } from "../datumProjection";
-export { ChartBuilder, LayerBuilder, chart };
+export { ChartBuilder, LayerBuilder, chart, PREVIOUS_LAYER_MARKS };
 export type { ChartOptions };
 
 /* Data Transformation Operators */
@@ -323,153 +329,153 @@ export function selectAll(
   };
 }
 
-// line() mark connects data points using center-to-center mode.
-// Two forms:
-//  - bag form: `line()` over a `GoFishRef[]` (e.g. `selectAll(...)`) — one
-//    polyline through all the refs.
-//  - pairwise form: `line({ from, to })` over rows whose `from`/`to` columns
-//    hold refs (after `resolve(...)`) — one segment per row (node-link edges).
-export function line(options?: {
+// A `DerivedMark` is a mark whose geometry is *derived* from other marks via
+// refs — i.e. a connector. Like `createMark` (leaf shapes) and `createOperator`
+// (relations), this factory yields a value that works in BOTH levels:
+//   - low-level combinator: `line(opts, [ref(a), ref(b)])` → AST node
+//       (the drop-in for the old `connect`/`connectX`/`connectY`)
+//   - chart-builder Mark:    `line(opts)` → a `Mark` consumed by `.connect()` /
+//       `.mark()`, in two shapes —
+//       · bag form      — applied to a `GoFishRef[]` (e.g. `selectAll(...)`),
+//                         one connector through all the refs
+//       · pairwise form — `{ from, to }` over rows with two ref columns, one
+//                         connector per row (node-link edges)
+// `produce(opts, children)` is the only connector-specific part (it builds the
+// underlying `connect` node); the rest is shared dual-form plumbing.
+type DerivedMarkOptions = { from?: string; to?: string };
+
+export function createDerivedMark<O extends DerivedMarkOptions>(
+  type: string,
+  produce: (opts: O, children: GoFishAST[]) => any
+) {
+  function derived(options: O | undefined, children: GoFishAST[]): GoFishNode;
+  function derived(options?: O): Mark<any>;
+  function derived(
+    options?: O,
+    children?: GoFishAST[]
+  ): GoFishNode | Mark<any> {
+    const opts = (options ?? {}) as O;
+
+    // Low-level combinator form: connect the given children directly.
+    if (children !== undefined) {
+      return produce(opts, children) as GoFishNode;
+    }
+
+    // Pairwise `{ from, to }` form: one connector per row.
+    if (opts.from !== undefined && opts.to !== undefined) {
+      const from = opts.from;
+      const to = opts.to;
+      const mark: Mark<any[]> = async (rows: any[]) => {
+        const segments = await Promise.all(
+          rows.map(async (row) => {
+            const a = row[from];
+            const b = row[to];
+            if (!(a instanceof GoFishRef) || !(b instanceof GoFishRef)) {
+              throw new Error(
+                `${type}({ from: "${from}", to: "${to}" }): columns "${from}"/"${to}" ` +
+                  `must hold node refs — run resolve(["${from}", "${to}"], ` +
+                  `{ from: selectAll(...) }) in the flow first.`
+              );
+            }
+            const node = (await produce(opts, [a, b])) as GoFishNode;
+            (node as any).datum = row;
+            return node;
+          })
+        );
+        return Layer({}, segments);
+      };
+      const result = nameableMark(mark);
+      (result as any).__serialize = { type, opts };
+      return result;
+    }
+
+    // Bag form: applied to a `GoFishRef[]` (e.g. `selectAll(...)`).
+    const mark: Mark<GoFishRef[]> = async (d: GoFishRef[]) => produce(opts, d);
+    const result = nameableMark(mark);
+    (result as any).__serialize = { type, opts };
+    return result;
+  }
+  return derived;
+}
+
+export type LineOptions = {
+  fill?: MaybeValue<string>;
   stroke?: string;
   strokeWidth?: number;
   opacity?: number;
-  interpolation?: "linear" | "bezier";
+  mixBlendMode?: "normal" | "multiply";
+  // Screen-space path shape, as a factory call (`straight()`, `bezier()`,
+  // `catmullRom()`, `orthogonal()`, `arc({ direction })`, `perfectArrows({ bow })`,
+  // …) or a bare name (`"straight"` | `"bezier"`). The single path-shaping key.
+  curve?: Curve;
+  dir?: "x" | "y";
+  // Anchor mode: pin each endpoint to a normalized point on its mark's bbox
+  // (Bluefish-style `Line`) instead of the center — for ropes, node-link edges,
+  // etc. When given, the anchor points win over the routed center path.
+  source?: AnchorSpec;
+  target?: AnchorSpec;
   from?: string;
   to?: string;
-}): NameableMark<any> {
-  if (options?.from !== undefined && options?.to !== undefined) {
-    return pairwiseConnect("line", options, {
+};
+
+// `line` — a center-mode connector (the "line" component): the path between the
+// centers of consecutive marks. `route` picks the shape (straight | bezier |
+// orthogonal | arc | perfectArrows | …).
+export const line = createDerivedMark<LineOptions>("line", (o, children) =>
+  Connect(
+    {
+      direction: o.dir ?? "x",
       mode: "center",
-      strokeWidth: options.strokeWidth ?? 1,
-      interpolation: options.interpolation ?? "linear",
-    });
-  }
-  const mark: Mark<GoFishRef[]> = async (
-    d: GoFishRef[],
-    _key?: string | number,
-    _layerContext?: LayerContext
-  ) => {
-    // `selectAll(...)` resolves to one ref per named node; connect them.
-    return Connect(
-      {
-        direction: 0, // x direction
-        mode: "center",
-        stroke: options?.stroke,
-        strokeWidth: options?.strokeWidth ?? 1,
-        opacity: options?.opacity,
-        interpolation: options?.interpolation ?? "linear",
-      },
-      d
-    );
-  };
-  const result = nameableMark(mark);
-  (result as any).__serialize = { type: "line", opts: options ?? {} };
-  return result;
-}
+      fill: o.fill,
+      stroke: o.stroke,
+      strokeWidth: o.strokeWidth ?? 1,
+      opacity: o.opacity,
+      mixBlendMode: o.mixBlendMode,
+      // Omitted ⇒ "auto": connect smooths (catmullRom) when the connected
+      // points share a continuous connection axis, else a straight line.
+      curve: o.curve,
+      source: o.source,
+      target: o.target,
+    },
+    children
+  )
+);
 
-// Shared pairwise (per-row) connector: each row carries two ref-valued columns
-// (`from`/`to`, populated by `resolve(...)`); emit one Connect per row and
-// stack them in a Layer. Backs the `{ from, to }` form of `line`/`area`.
-function pairwiseConnect(
-  irType: "line" | "area",
-  options: {
-    stroke?: string;
-    strokeWidth?: number;
-    opacity?: number;
-    interpolation?: "linear" | "bezier";
-    mixBlendMode?: "normal" | "multiply";
-    dir?: "x" | "y";
-    from?: string;
-    to?: string;
-  },
-  connectOpts: {
-    mode: "center" | "edge";
-    strokeWidth: number;
-    interpolation: "linear" | "bezier";
-  }
-): NameableMark<any> {
-  const from = options.from as string;
-  const to = options.to as string;
-  const mark: Mark<any[]> = async (
-    rows: any[],
-    _key?: string | number,
-    _layerContext?: LayerContext
-  ) => {
-    const segments = await Promise.all(
-      rows.map(async (row) => {
-        const a = row[from];
-        const b = row[to];
-        if (!(a instanceof GoFishRef) || !(b instanceof GoFishRef)) {
-          throw new Error(
-            `${irType}({ from: "${from}", to: "${to}" }): columns "${from}"/"${to}" ` +
-              `must hold node refs — run resolve(["${from}", "${to}"], ` +
-              `{ from: selectAll(...) }) in the flow first.`
-          );
-        }
-        const node = await Connect(
-          {
-            direction: options.dir ?? 0,
-            mode: connectOpts.mode,
-            stroke: options.stroke,
-            strokeWidth: connectOpts.strokeWidth,
-            opacity: options.opacity,
-            interpolation: connectOpts.interpolation,
-            mixBlendMode: options.mixBlendMode,
-          },
-          [a, b]
-        );
-        (node as any).datum = row;
-        return node;
-      })
-    );
-    return Layer({}, segments);
-  };
-  const result = nameableMark(mark);
-  (result as any).__serialize = { type: irType, opts: options };
-  return result;
-}
-
-// area() mark connects data points using edge-to-edge mode
-export function area(options?: {
+export type RibbonOptions = {
+  fill?: MaybeValue<string>;
   stroke?: string;
   strokeWidth?: number;
   opacity?: number;
   mixBlendMode?: "normal" | "multiply";
   dir?: "x" | "y";
-  interpolation?: "linear" | "bezier";
+  // Screen-space path shape for the band edges (`straight()` | `bezier()`).
+  // Edge mode honors straight (linear band) vs bezier (S-curve band).
+  curve?: Curve;
   from?: string;
   to?: string;
-}): NameableMark<any> {
-  if (options?.from !== undefined && options?.to !== undefined) {
-    return pairwiseConnect("area", options, {
-      mode: "edge",
-      strokeWidth: options.strokeWidth ?? 0,
-      interpolation: options.interpolation ?? "bezier",
-    });
-  }
-  const mark: Mark<GoFishRef[]> = async (
-    d: GoFishRef[],
-    _key?: string | number,
-    _layerContext?: LayerContext
-  ) => {
-    // `selectAll(...)` resolves to one ref per named node; connect them.
-    return Connect(
+};
+
+// `ribbon` — an edge-mode connector: a filled band between the facing edges of
+// consecutive marks (areas, streamgraphs, sankey ribbons).
+export const ribbon = createDerivedMark<RibbonOptions>(
+  "ribbon",
+  (o, children) =>
+    Connect(
       {
-        direction: options?.dir ?? "x",
+        direction: o.dir ?? "x",
         mode: "edge",
-        mixBlendMode: options?.mixBlendMode ?? "normal",
-        stroke: options?.stroke,
-        strokeWidth: options?.strokeWidth ?? 0,
-        opacity: options?.opacity,
-        interpolation: options?.interpolation ?? "bezier",
+        mixBlendMode: o.mixBlendMode ?? "normal",
+        fill: o.fill,
+        stroke: o.stroke,
+        strokeWidth: o.strokeWidth ?? 0,
+        opacity: o.opacity,
+        // Omitted ⇒ "auto": edge mode currently resolves to a bezier band
+        // (continuous-ribbon Catmull-Rom is a follow-on).
+        curve: o.curve,
       },
-      d
-    );
-  };
-  const result = nameableMark(mark);
-  (result as any).__serialize = { type: "area", opts: options ?? {} };
-  return result;
-}
+      children
+    )
+);
 
 // blank() mark creates invisible guides for positioning
 export function blank<T extends Record<string, any>>({

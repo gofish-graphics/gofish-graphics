@@ -35,20 +35,27 @@ import { combine, byDepth, mount } from "./_shared";
 //     containment/wrapping semantics of nest are still lost; recovering them
 //     needs a growable internal-node mark or a nest constraint that participates
 //     in the polar transform's r budget.
-//  2. No angular auto-fit: sibling θ spacing is a fixed per-level constant
-//     (2π/6 rad between centers) that does NOT shrink with the number of nodes
-//     at a depth. GoTree allocates angle by subtree leaf-count; gofish-gotree
-//     has none, so deep/wide trees overflow the 2π budget and wedges wrap —
-//     visible here as the spiral overlap, which actually echoes the reference.
-//  3. polar() takes no options: the dsl's PolarAxis=x-axis swap, PolarCenter,
-//     InnerRadius, Direction, CentralAngle, and Mode=bottom-up are not
-//     expressible. (PolarAxis x-axis already matches gofish's x→θ default, so
-//     plain polar() is the closer match here; a θ/r swap would map the
-//     radial sibling-stagger onto θ and lose the spiral.)
+//  2. No angular auto-fit for POINT nodes: sibling θ spacing is a fixed per-level
+//     constant (2π/6 rad between centers) that does NOT shrink with the number of
+//     nodes at a depth. GoTree allocates angle by subtree leaf-count. Wedge
+//     (rect) nodes now auto-fit via thetaSize since #622; these circle nodes hit
+//     the point-node gap tracked in #627, so deep/wide trees overflow the 2π
+//     budget and wedges wrap — visible here as the spiral overlap, which actually
+//     echoes the reference. (The #627 data-position workaround is demonstrated in
+//     RadialDeep.stories.tsx.)
+//  3. polar() now takes options — { innerRadius, centralAngle, startAngle,
+//     direction, center } since #620 — so InnerRadius, Direction and CentralAngle
+//     are now expressible via polar({ ... }) since #620 (not yet applied here).
+//     Still NOT expressible: the dsl's PolarAxis=x-axis swap, PolarCenter=right
+//     (a polar-space anchor, which polar's screen-offset `center` does not
+//     cover), and Mode=bottom-up. (PolarAxis x-axis already matches gofish's
+//     x→θ default, so plain polar() is the closer match here; a θ/r swap would
+//     map the radial sibling-stagger onto θ and lose the spiral.)
 //  4. Link=curveStepBefore (orthogonal step links) is NOT supported →
-//     {interpolation:"linear"}. The reference's right-angle "step" corners
-//     therefore render as straight segments, which bow into arcs under the polar
-//     transform (a straight cartesian edge maps to a polar arc).
+//     {curve:"straight"} (the route→curve link API lands in draft PR #637).
+//     The reference's right-angle "step" corners therefore render as straight
+//     segments, which bow into arcs under the polar transform (a straight
+//     cartesian edge maps to a polar arc).
 //  5. mode:"center" on every distribute treats circles as points (no bbox
 //     accumulation) so spacing reads in domain units — radians for θ, r-units
 //     for r.
@@ -65,7 +72,7 @@ export const OakTreeVis: StoryObj = {
       {
         node,
         // curveStepBefore unsupported → linear (see GAP 4).
-        link: { interpolation: "linear", stroke: "#90a4ae", strokeWidth: 2 },
+        link: { curve: "straight", stroke: "#90a4ae", strokeWidth: 2 },
         parentChild: combine({
           // θ: parent angularly centered over its subtree's span (dsl within/align).
           x: { kind: "align", alignment: "middle" },

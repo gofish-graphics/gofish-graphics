@@ -114,6 +114,13 @@ export type ORDINAL_TYPE = {
    *  space (continuous → measure unit, ordinal → grouping field), not a surface
    *  field-name heuristic. Undefined = "no claim". */
   measure?: Measure;
+  /** True when this ordinal's keys are POSITIONAL (a `spread` with no `by` — its
+   *  children were auto-keyed by index). Such a spread carries no grouping
+   *  identity, so it renders no axis (unit dots packed for layout only). Set at
+   *  construction from the contributing nodes' `_syntheticKey` (see
+   *  `distributeSpaceFold`), never sniffed back from the domain. An
+   *  explicitly-keyed or `by`-grouped ordinal leaves this false. */
+  anonymous?: boolean;
 };
 
 export type UNDEFINED_TYPE = {
@@ -232,11 +239,13 @@ export const hasBaseline = (space: UnderlyingSpace): space is CONTINUOUS_TYPE =>
 
 export const ORDINAL = (
   domain?: string[],
-  measure?: Measure
+  measure?: Measure,
+  anonymous?: boolean
 ): UnderlyingSpace => ({
   kind: "ordinal",
   domain,
   measure,
+  anonymous,
 });
 export const isORDINAL = (space: UnderlyingSpace): space is ORDINAL_TYPE =>
   space.kind === "ordinal";
@@ -244,6 +253,12 @@ export const isORDINAL = (space: UnderlyingSpace): space is ORDINAL_TYPE =>
 export const UNDEFINED: UnderlyingSpace = { kind: "undefined" };
 export const isUNDEFINED = (space: UnderlyingSpace): space is UNDEFINED_TYPE =>
   space.kind === "undefined";
+
+/** A *positioning* space — one that places marks along an axis (a `POSITION`
+ *  data axis or an `ORDINAL` category axis), as opposed to `SIZE` (a mark's own
+ *  extent) or `UNDEFINED`. Used to find the axis a set of marks is laid out on. */
+export const isPositioningSpace = (space: UnderlyingSpace): boolean =>
+  isPOSITION(space) || isORDINAL(space);
 
 /** Read the measure of any space, or undefined for the measureless kind
  *  (UNDEFINED). Both CONTINUOUS (unit) and ORDINAL (grouping field) carry one. */

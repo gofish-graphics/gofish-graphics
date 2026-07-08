@@ -232,6 +232,16 @@ export function composeConstraintSpaces(
       ? (node.key as string | undefined)
       : undefined;
   };
+  // A child whose `key` was assigned positionally (no `by` — see createOperator).
+  // An ordinal folded entirely from synthetic-keyed children is `anonymous`.
+  const syntheticOf = (i: number): boolean => {
+    const node = childNodes[i];
+    return (
+      typeof node === "object" &&
+      node !== null &&
+      (node as { _syntheticKey?: boolean })._syntheticKey === true
+    );
+  };
   const idxOf = (refs: { name: string }[]): number[] | undefined => {
     const out = refs.map((r) => indexByName.get(r.name));
     return out.every((i): i is number => i !== undefined) ? out : undefined;
@@ -313,7 +323,13 @@ export function composeConstraintSpaces(
       const fold = distributeSpaceFold(
         s.idx.map((i) => childSpaces[i][axis]),
         s.idx.map(keyOf),
-        { spacing: s.spacing, mode: s.mode, glue: s.glue, measure: s.measure }
+        {
+          spacing: s.spacing,
+          mode: s.mode,
+          glue: s.glue,
+          measure: s.measure,
+          anonymous: s.idx.length > 0 && s.idx.every(syntheticOf),
+        }
       );
       if (!isUNDEFINED(fold)) fragments.push(axisSize(fold, axis));
     }

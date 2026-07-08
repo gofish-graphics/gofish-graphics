@@ -41,15 +41,17 @@ export type SpreadOptions = {
  * For `dir: "x"` the natural order (parent first → low x → left) is kept.
  * When used as a `sibling` combiner (N children, not 2), no swap is applied.
  */
-export const spread =
-  (opts: SpreadOptions): Combiner =>
-  (children: any[]) => {
+export const spread = (opts: SpreadOptions): Combiner => {
+  const combiner: Combiner = (children: any[]) => {
     const ordered =
       children.length === 2 && opts.dir === "y"
         ? [children[1], children[0]]
         : children;
     return gfSpread(opts as any, ordered);
   };
+  combiner.growthDir = opts.dir;
+  return combiner;
+};
 
 export type DistributeOptions = {
   dir: "x" | "y";
@@ -77,9 +79,8 @@ export type DistributeOptions = {
  * where parentChild distributes radially and siblings distribute
  * angularly, but the two axes have nothing else in common).
  */
-export const distribute =
-  (opts: DistributeOptions): Combiner =>
-  (children: any[]) => {
+export const distribute = (opts: DistributeOptions): Combiner => {
+  const combiner: Combiner = (children: any[]) => {
     // Each child needs a stable name so the Layer's constraint refs resolve.
     // Wrap in a thin Layer (chainable .name()) rather than calling .name on
     // the child directly — the latter loses chainability for createMark-
@@ -105,6 +106,9 @@ export const distribute =
       return cs;
     });
   };
+  combiner.growthDir = opts.dir;
+  return combiner;
+};
 
 /**
  * Per-axis combiner spec. Each axis independently picks one constraint kind —
@@ -144,9 +148,8 @@ const normalizeAxis = (a: CombineAxis | undefined) =>
  * `[outer, inner]`; the `spread`/`distribute`/`nest` helpers remain as
  * ergonomic shorthands for the common single-shape cases.
  */
-export const combine =
-  (opts: CombineOptions): Combiner =>
-  (children: any[]) => {
+export const combine = (opts: CombineOptions): Combiner => {
+  const combiner: Combiner = (children: any[]) => {
     const named = children.map((c, i) => Layer([c]).name(`__combine-${i}`));
     const refs = (c: any) => named.map((_, i) => c[`__combine-${i}`]);
     return Layer(named).constrain((c: any) => {
@@ -187,6 +190,17 @@ export const combine =
       return cs;
     });
   };
+  // Growth axis = the single axis that separates parent from child. `distribute`
+  // pushes them apart; `align`/`nest` don't (align is cross-axis, nest is
+  // containment). So the growth axis is the lone `distribute` axis; when both or
+  // neither distribute (a diagonal cascade, or a pure nest/align), it's
+  // ambiguous and links infer the bend from geometry instead.
+  const distributeAxes = (["x", "y"] as const).filter(
+    (axis) => normalizeAxis(opts[axis])?.kind === "distribute"
+  );
+  if (distributeAxes.length === 1) combiner.growthDir = distributeAxes[0];
+  return combiner;
+};
 
 export type NestOptions = { x?: number; y?: number };
 
