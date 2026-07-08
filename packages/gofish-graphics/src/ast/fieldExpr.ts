@@ -13,15 +13,19 @@
 //     size, mean for pos): the channel applies its default exactly as it
 //     always did, and over the singleton an aggregate op produces, sum and
 //     mean are both the identity. Neither side knows about the other.
-// `normalize` is reserved for Phase 2 (operator size-channel space-filling);
-// it type-checks here but throws a clear "not yet supported" error wherever
-// it would be evaluated.
+//   - `normalize` is a THIRD, disjoint slot: it is valid only on an
+//     operator's (`spread`/`stack`) entry-flagged `size` channel, where it
+//     replaces each split entry's size with its share of the window — see
+//     `hasNormalizeOp`/`splitAtNormalize`/`applyEntryNormalize` below.
+//     Everywhere else (a plain value slot, a `by` slot, or chained after
+//     another op) it throws a clear "not yet supported"/"not valid here"
+//     error at evaluation time.
 //
 // Only type-only imports from `data.ts` (no runtime import) so `data.ts` can
 // import THIS module's class at runtime without a cycle.
 import sumBy from "lodash/sumBy";
 import meanBy from "lodash/meanBy";
-import type { Measure } from "./data";
+import type { Measure, MaybeValue } from "./data";
 
 export type FieldOp =
   | { op: "sort"; by?: string; order?: "asc" | "desc" }
@@ -89,8 +93,12 @@ export class FieldExpr {
     });
   }
 
-  /** Reserved for Phase 2 — space-filling normalization on an operator's size
-   *  channel. Evaluating it today throws a clear "not yet supported" error. */
+  /** Space-filling normalization on an operator's (`spread`/`stack`) `size`
+   *  channel: replaces each split entry's size with its SHARE of the window
+   *  (`v_e / Σv_e` over the operator's own split entries), turning the stack
+   *  axis into a space-filling spine — see `applyEntryNormalize` below. Valid
+   *  only there; anywhere else (a plain value slot, or chained after another
+   *  op) it throws a clear error. */
   normalize(): FieldExpr {
     return this._withOp({ op: "normalize" });
   }
@@ -221,9 +229,123 @@ export function evalFieldValues<T>(
   }
 }
 
-/** The Phase-2 "not yet supported" error, shared so both slots throw the
- *  identical message. */
+/** The "not yet supported" error for `normalize()` outside its one valid
+ *  slot (an operator's entry-flagged `size` channel), shared so every other
+ *  evaluation site throws the identical message. */
 export const normalizeNotSupportedError = (): Error =>
   new Error(
     "field(...).normalize() is only supported on an operator's size channel"
   );
+
+/** Whether a field accessor's pipeline carries a `normalize` op anywhere. */
+export function hasNormalizeOp(accessor: unknown): boolean {
+  return getFieldOps(accessor).some((op) => op.op === "normalize");
+}
+
+/**
+ * Split a field accessor's pipeline at its `normalize` op, for the entry-
+ * flagged `size`-channel window in createOperator.ts's `applyChannels`: the
+ * PRE expression (everything before `normalize`) evaluates once per split
+ * entry exactly as any size accessor would — an aggregate op like `.count()`
+ * if present, else the channel's own default sum (see `evalFieldValues` /
+ * `inferSize` in channels.ts) — and the resulting per-entry values become the
+ * window `applyEntryNormalize` shares. POST ops (anything chained after
+ * `.normalize()`) have no defined meaning yet, so do a second `normalize()`;
+ * both throw.
+ */
+export function splitAtNormalize(
+  accessor: string | ((r: any) => unknown) | FieldExprWire | FieldExpr
+): {
+  pre: string | ((r: any) => unknown) | FieldExprWire | FieldExpr;
+  post: FieldOp[];
+} {
+  const ops = getFieldOps(accessor);
+  const idx = ops.findIndex((op) => op.op === "normalize");
+  if (idx === -1) return { pre: accessor, post: [] };
+  const rest = ops.slice(idx + 1);
+  if (rest.some((op) => op.op === "normalize")) {
+    throw new Error("field(...) can carry only one normalize() op.");
+  }
+  if (rest.length > 0) {
+    throw new Error(
+      `field(...).normalize().${rest[0].op}() is not yet supported — ops ` +
+        `chained after normalize() have no defined meaning in a size ` +
+        `channel's windowed share.`
+    );
+  }
+  const preOps = ops.slice(0, idx);
+  const name =
+    accessor instanceof FieldExpr ? accessor.name : (accessor as any).name;
+  const measure =
+    accessor instanceof FieldExpr
+      ? accessor.measure
+      : (accessor as any).measure;
+  const pre: FieldExprWire = {
+    type: "field",
+    name,
+    ...(measure !== undefined ? { measure } : {}),
+    ...(preOps.length ? { ops: preOps } : {}),
+  };
+  return { pre, post: rest };
+}
+
+/** Duck-typed read of a `Value<number>`'s `.datum`/`.measure`, without a
+ *  runtime dependency on data.ts's `isValue`/`getValue`/`getMeasure` (this
+ *  module must not import data.ts at runtime — see the file header). Mirrors
+ *  their identical `.type === "datum"` check; a plain object literal with
+ *  this shape IS the wire form those functions already accept. */
+const isDatumValue = (
+  v: unknown
+): v is { type: "datum"; datum: unknown; measure?: Measure } =>
+  typeof v === "object" && v !== null && (v as any).type === "datum";
+const numericDatum = (v: MaybeValue<number>): number =>
+  isDatumValue(v) ? Number(v.datum) : Number(v);
+const datumMeasure = (v: MaybeValue<number>): Measure | undefined =>
+  isDatumValue(v) ? v.measure : undefined;
+
+/**
+ * Share measure naming: a share is a NEW unit (0–1, not the base measure's
+ * own units), so `"count"` and `"count share"` must never silently union on
+ * the same axis — see `mergeMeasures`' throw in underlyingSpace.ts, which is
+ * exactly the type guard this is meant to trigger. `byName`, when present,
+ * further qualifies by the grouping field the shares were computed over, so
+ * a per-`origin` share and a per-`cylinders` share (two nesting levels of the
+ * same mosaic) stay distinct measures even though both are "count share".
+ */
+export const shareMeasure = (
+  base: Measure | undefined,
+  byName?: string
+): Measure => `${base ?? "value"} share${byName ? ` by ${byName}` : ""}`;
+
+/**
+ * The windowed normalize stage: given the collected per-entry Values already
+ * evaluated with the PRE-normalize expression (see `splitAtNormalize`), compute
+ * each entry's share `v_e / Σv_e` across the window — the operator's own split
+ * entries. A non-positive total has no meaningful share, so every entry gets 0
+ * and a console warning rather than a divide-by-zero/negative-share NaN. Shares
+ * are tagged with `shareMeasure` — see its doc for why that's load-bearing.
+ */
+export function applyEntryNormalize(
+  entryValues: MaybeValue<number>[],
+  byName?: string
+): MaybeValue<number>[] {
+  const nums = entryValues.map(numericDatum);
+  const total = sumBy(nums);
+  const baseMeasure = entryValues
+    .map(datumMeasure)
+    .find((m) => m !== undefined);
+  const measure = shareMeasure(baseMeasure, byName);
+  if (!(total > 0)) {
+    if (typeof console !== "undefined" && typeof console.warn === "function") {
+      console.warn(
+        `field(...).normalize(): the entry total is ${total} (≤ 0), so ` +
+          `every share is 0. Check that the size field/aggregate produces ` +
+          `positive values.`
+      );
+    }
+    return nums.map(() => ({ type: "datum", datum: 0, measure }) as const);
+  }
+  return nums.map(
+    (n) => ({ type: "datum", datum: n / total, measure }) as const
+  );
+}
