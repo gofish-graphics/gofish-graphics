@@ -21,6 +21,12 @@ export { value as v } from "./ast/data";
 // accessor; `literal(x)` is an explicit constant.
 export { datum, field, literal } from "./ast/data";
 export type { FieldAccessor, LiteralValue } from "./ast/data";
+// `field(name)` returns a `FieldExpr` — a chainable pipeline expression
+// (`.sort()`, `.bin()`, `.normalize()`, aggregates); `FieldOp` is one step of
+// its serialized `ops` pipeline. Exported so consumers can type against the
+// value the operator docs describe.
+export { FieldExpr } from "./ast/fieldExpr";
+export type { FieldOp } from "./ast/fieldExpr";
 // Measure-provenance tagging: how a data transform (e.g. `bin`) declares that
 // its output columns are in a source field's units. The deserializer re-applies
 // it to RPC-returned rows (the array symbol can't cross the bridge).

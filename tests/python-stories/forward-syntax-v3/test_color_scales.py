@@ -15,6 +15,7 @@ from gofish import (
     group,
     palette,
     gradient,
+    field,
 )
 from python_stories.data import SEAFOOD, SCORES_DATA
 
@@ -139,8 +140,7 @@ def story_ribbon_highlight():
         chart(SEAFOOD, color=palette({"Salmon": "#e15759", "Trout": "#4e79a7"}))
         .flow(
             spread(by="lake", dir="x", spacing=64),
-            derive(lambda d: sorted(d, key=lambda r: r["count"])),
-            stack(by="species", dir="y"),
+            stack(by=field("species").sort("count"), dir="y"),
         )
         .mark(rect(h="count", fill="species").name("bars"))
     )

@@ -199,8 +199,11 @@ export type SpreadOptions<T = any> = {
   glue?: boolean;
   w?: number | (keyof T & string);
   h?: number | (keyof T & string);
-  /** Per-entry stack-axis extent (one value per split entry): a field name, a
-   *  field expression, or an explicit per-entry array. The space-filling spine
+  /** The size of each CHILD along `dir` (a distributive singular, like a
+   *  mark's `fill` or `cut`'s `size` — one extent per split entry, NOT this
+   *  operator's own box, which is `w`/`h`): a field name, a field expression,
+   *  or an explicit per-entry array. The summed measure lives on the operator
+   *  so the mark carries only non-positional channels. The space-filling spine
    *  (the mosaic/marimekko conditional axis) is `size: field(<name>).normalize()`
    *  — each entry's SHARE of the window (Σ over this operator's own split
    *  entries) becomes a data-driven size claim, which makes that entry's
