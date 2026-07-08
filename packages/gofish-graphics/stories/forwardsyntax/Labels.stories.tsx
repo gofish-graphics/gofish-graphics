@@ -10,13 +10,14 @@ import {
   gradient,
   derive,
   palette,
+  field,
 } from "../../src/lib";
 import {
   calculateLabelOffset,
   getLabelTextAnchor,
   type LabelPosition,
 } from "../../src/ast/labels/labelPlacement";
-import { sumBy, orderBy } from "lodash";
+import { sumBy } from "lodash";
 import data from "vega-datasets";
 
 const meta: Meta = {
@@ -422,8 +423,7 @@ export const NormalizedStackedBarWithLabels: StoryObj<Args> = {
           }))
         ),
         // Female left, Male right
-        derive((d: any[]) => orderBy(d, "sex", "asc")),
-        stack({ by: "sex",  dir: "x" })
+        stack({ by: field("sex").sort(),  dir: "x" })
       )
       .mark(
         rect({ w: "proportion", fill: "sex" }).label(

@@ -1,7 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../../helper";
-import { chart, spread, rect, derive, log } from "../../../src/lib";
-import { groupBy, sumBy, orderBy } from "lodash";
+import { chart, spread, rect, field } from "../../../src/lib";
 import data from "vega-datasets";
 
 // Mirrors: https://vega.github.io/vega-lite/examples/bar_aggregate_sort_by_encoding.html
@@ -27,22 +26,9 @@ export const Default: StoryObj<Args> = {
       (d) => d.year === 2000
     );
 
-    // We'll pre-aggregate (sum people by age) and then sort age groups by that sum in descending order.
-    // This ordering will apply to spread({ by: "age",  dir: "y" }) for sorted bars.
-    // Derive returns a new array [{ age, people }], sorted descending by people.
+    // Order age groups by their total (summed) people, descending.
     chart(year2000, {axes: true})
-      .flow(
-        derive((data: any[]) => {
-          const aggregated = Object.entries(groupBy(data, "age")).map(
-            ([age, rows]) => ({
-              age,
-              people: sumBy(rows, "people"),
-            })
-          );
-          return orderBy(aggregated, ["people"], ["desc"]);
-        }),
-        spread({ by: "age",  dir: "y", reverse: true })
-      )
+      .flow(spread({ by: field("age").sort("people", "desc"),  dir: "y", reverse: true }))
       .mark(rect({ w: "people" }))
       .render(container, { w: args.w, h: args.h });
 

@@ -1,9 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../../helper";
-import { chart, spread, stack, rect, derive, log, palette } from "../../../src/lib";
-import { groupBy } from "lodash";
+import { chart, spread, stack, rect, derive, palette, field } from "../../../src/lib";
 import data from "vega-datasets";
-import _ from "lodash";
 
 // Mirrors: https://vega.github.io/vega-lite/examples/stacked_bar_weather.html
 
@@ -76,13 +74,9 @@ export const Default: StoryObj<Args> = {
           }
           return d;
         }),
-        stack({ by: "weather",  dir: "y" }),
-        log("spread data"),
-        // log("spread data"),
-        // stack({ by: "date",  dir: "y" })
-        derive((d) => ({ count: d.length, weather: d[0].weather }))
+        stack({ by: "weather",  dir: "y" })
       )
-      .mark(rect({ h: "count", fill: "weather" }))
+      .mark(rect({ h: field("date").count(), fill: "weather" }))
       .render(container, { w: args.w, h: args.h });
 
     return container;

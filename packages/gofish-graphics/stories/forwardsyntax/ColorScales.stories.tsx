@@ -1,9 +1,8 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
 import { seafood } from "../../src/data/catch";
-import { chart, spread, stack, rect, derive, palette, gradient, assignGradientColor, layer, selectAll } from "../../src/lib";
+import { chart, spread, stack, rect, derive, palette, gradient, assignGradientColor, layer, selectAll, field } from "../../src/lib";
 import { ribbon, group } from "../../src/lib";
-import { orderBy } from "lodash";
 import { clock } from "../../src/ast/coordinateTransforms/clock";
 
 const meta: Meta = {
@@ -262,8 +261,7 @@ export const RibbonHighlight: StoryObj<Args> = {
       chart(seafood, { color: palette({ Salmon: "#e15759", Trout: "#4e79a7" }) })
         .flow(
           spread({ by: "lake",  dir: "x", spacing: 64 }),
-          derive((d) => orderBy(d, "count", "asc")),
-          stack({ by: "species",  dir: "y" })
+          stack({ by: field("species").sort("count"),  dir: "y" })
         )
         .mark(rect({ h: "count", fill: "species" }).name("bars")),
       chart(selectAll("bars"))
