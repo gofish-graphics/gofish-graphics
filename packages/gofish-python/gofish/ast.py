@@ -1820,6 +1820,276 @@ def gradient(stops: Union[str, List[str]]) -> dict:
     return {"_tag": "gradient", "stops": stops}
 
 
+# Named gradient schemes, mirrored from packages/gofish-graphics/src/ast/colorSchemes.ts.
+# Only the gradient-type schemes are needed here; assign_gradient_color() is the
+# Python-side counterpart of assignGradientColor() for use inside a derive()
+# callback, where the interpolated hex must be byte-identical to chroma-js's
+# `chroma.scale(stops).mode("lab")(t).hex()`.
+_GRADIENT_SCHEMES: Dict[str, List[str]] = {
+    "viridis": ["#440154", "#31688e", "#35b779", "#fde725"],
+    "blues": ["#f7fbff", "#deebf7", "#9ecae1", "#3182bd", "#08306b"],
+    "reds": ["#fff5f0", "#fc9272", "#de2d26", "#67000d"],
+}
+
+# chroma-js Lab constants (D65 white point), transcribed verbatim from
+# chroma-js/src/io/lab/lab-constants.js so the Lab<->sRGB round trip below
+# matches chroma-js bit-for-bit (both are IEEE-754 doubles).
+_LAB_XN = 0.95047
+_LAB_YN = 1.0
+_LAB_ZN = 1.08883
+_LAB_KE = 216.0 / 24389.0
+_LAB_KK = 24389.0 / 27.0
+
+_MTX_RGB2XYZ = {
+    "m00": 0.4124564390896922,
+    "m01": 0.21267285140562253,
+    "m02": 0.0193338955823293,
+    "m10": 0.357576077643909,
+    "m11": 0.715152155287818,
+    "m12": 0.11919202588130297,
+    "m20": 0.18043748326639894,
+    "m21": 0.07217499330655958,
+    "m22": 0.9503040785363679,
+}
+_MTX_XYZ2RGB = {
+    "m00": 3.2404541621141045,
+    "m01": -0.9692660305051868,
+    "m02": 0.055643430959114726,
+    "m10": -1.5371385127977166,
+    "m11": 1.8760108454466942,
+    "m12": -0.2040259135167538,
+    "m20": -0.498531409556016,
+    "m21": 0.041556017530349834,
+    "m22": 1.0572251882231791,
+}
+# used in rgb2xyz's chromatic adaptation
+_LAB_AS = 0.9414285350000001
+_LAB_BS = 1.040417467
+_LAB_CS = 1.089532651
+_MTX_ADAPT_MA = {
+    "m00": 0.8951,
+    "m01": -0.7502,
+    "m02": 0.0389,
+    "m10": 0.2664,
+    "m11": 1.7135,
+    "m12": -0.0685,
+    "m20": -0.1614,
+    "m21": 0.0367,
+    "m22": 1.0296,
+}
+_MTX_ADAPT_MA_I = {
+    "m00": 0.9869929054667123,
+    "m01": 0.43230526972339456,
+    "m02": -0.008528664575177328,
+    "m10": -0.14705425642099013,
+    "m11": 0.5183602715367776,
+    "m12": 0.04004282165408487,
+    "m20": 0.15996265166373125,
+    "m21": 0.0492912282128556,
+    "m22": 0.9684866957875502,
+}
+# RefWhiteRGB in chroma-js is D65 too, same as the default Lab white point
+_REF_WHITE_RGB = {"X": 0.95047, "Y": 1.0, "Z": 1.08883}
+
+
+def _hex_to_rgb(hex_color: str) -> tuple[float, float, float]:
+    """Parse a `#rgb` / `#rrggbb` hex string into 0-255 rgb components."""
+    s = hex_color.lstrip("#")
+    if len(s) == 3:
+        s = "".join(ch * 2 for ch in s)
+    r = int(s[0:2], 16)
+    g = int(s[2:4], 16)
+    b = int(s[4:6], 16)
+    return (float(r), float(g), float(b))
+
+
+def _gamma_adjust_srgb(companded: float) -> float:
+    sign = -1.0 if companded < 0 else (1.0 if companded > 0 else 0.0)
+    companded = abs(companded)
+    linear = (
+        companded / 12.92
+        if companded <= 0.04045
+        else ((companded + 0.055) / 1.055) ** 2.4
+    )
+    return linear * sign
+
+
+def _rgb_to_xyz(r: float, g: float, b: float) -> tuple[float, float, float]:
+    r = _gamma_adjust_srgb(r / 255)
+    g = _gamma_adjust_srgb(g / 255)
+    b = _gamma_adjust_srgb(b / 255)
+
+    m = _MTX_RGB2XYZ
+    x = r * m["m00"] + g * m["m10"] + b * m["m20"]
+    y = r * m["m01"] + g * m["m11"] + b * m["m21"]
+    z = r * m["m02"] + g * m["m12"] + b * m["m22"]
+
+    ma = _MTX_ADAPT_MA
+    ad = _LAB_XN * ma["m00"] + _LAB_YN * ma["m10"] + _LAB_ZN * ma["m20"]
+    bd = _LAB_XN * ma["m01"] + _LAB_YN * ma["m11"] + _LAB_ZN * ma["m21"]
+    cd = _LAB_XN * ma["m02"] + _LAB_YN * ma["m12"] + _LAB_ZN * ma["m22"]
+
+    xx = x * ma["m00"] + y * ma["m10"] + z * ma["m20"]
+    yy = x * ma["m01"] + y * ma["m11"] + z * ma["m21"]
+    zz = x * ma["m02"] + y * ma["m12"] + z * ma["m22"]
+
+    xx *= ad / _LAB_AS
+    yy *= bd / _LAB_BS
+    zz *= cd / _LAB_CS
+
+    mai = _MTX_ADAPT_MA_I
+    x2 = xx * mai["m00"] + yy * mai["m10"] + zz * mai["m20"]
+    y2 = xx * mai["m01"] + yy * mai["m11"] + zz * mai["m21"]
+    z2 = xx * mai["m02"] + yy * mai["m12"] + zz * mai["m22"]
+
+    return (x2, y2, z2)
+
+
+def _xyz_to_lab(x: float, y: float, z: float) -> tuple[float, float, float]:
+    xr = x / _LAB_XN
+    yr = y / _LAB_YN
+    zr = z / _LAB_ZN
+
+    fx = xr ** (1.0 / 3.0) if xr > _LAB_KE else (_LAB_KK * xr + 16.0) / 116.0
+    fy = yr ** (1.0 / 3.0) if yr > _LAB_KE else (_LAB_KK * yr + 16.0) / 116.0
+    fz = zr ** (1.0 / 3.0) if zr > _LAB_KE else (_LAB_KK * zr + 16.0) / 116.0
+
+    return (116.0 * fy - 16.0, 500.0 * (fx - fy), 200.0 * (fy - fz))
+
+
+def _rgb_to_lab(r: float, g: float, b: float) -> tuple[float, float, float]:
+    x, y, z = _rgb_to_xyz(r, g, b)
+    return _xyz_to_lab(x, y, z)
+
+
+def _lab_to_xyz(lab_l: float, lab_a: float, lab_b: float) -> tuple[float, float, float]:
+    fy = (lab_l + 16.0) / 116.0
+    fx = 0.002 * lab_a + fy
+    fz = fy - 0.005 * lab_b
+
+    fx3 = fx * fx * fx
+    fz3 = fz * fz * fz
+
+    xr = fx3 if fx3 > _LAB_KE else (116.0 * fx - 16.0) / _LAB_KK
+    yr = ((lab_l + 16.0) / 116.0) ** 3.0 if lab_l > 8.0 else lab_l / _LAB_KK
+    zr = fz3 if fz3 > _LAB_KE else (116.0 * fz - 16.0) / _LAB_KK
+
+    return (xr * _LAB_XN, yr * _LAB_YN, zr * _LAB_ZN)
+
+
+def _compand(linear: float) -> float:
+    sign = -1.0 if linear < 0 else (1.0 if linear > 0 else 0.0)
+    linear = abs(linear)
+    companded = (
+        linear * 12.92 if linear <= 0.0031308 else 1.055 * (linear ** (1.0 / 2.4)) - 0.055
+    )
+    return companded * sign
+
+
+def _xyz_to_rgb(x: float, y: float, z: float) -> tuple[float, float, float]:
+    ma = _MTX_ADAPT_MA
+    mai = _MTX_ADAPT_MA_I
+    m = _MTX_XYZ2RGB
+    rw = _REF_WHITE_RGB
+
+    as_ = _LAB_XN * ma["m00"] + _LAB_YN * ma["m10"] + _LAB_ZN * ma["m20"]
+    bs_ = _LAB_XN * ma["m01"] + _LAB_YN * ma["m11"] + _LAB_ZN * ma["m21"]
+    cs_ = _LAB_XN * ma["m02"] + _LAB_YN * ma["m12"] + _LAB_ZN * ma["m22"]
+
+    ad = rw["X"] * ma["m00"] + rw["Y"] * ma["m10"] + rw["Z"] * ma["m20"]
+    bd = rw["X"] * ma["m01"] + rw["Y"] * ma["m11"] + rw["Z"] * ma["m21"]
+    cd = rw["X"] * ma["m02"] + rw["Y"] * ma["m12"] + rw["Z"] * ma["m22"]
+
+    x1 = (x * ma["m00"] + y * ma["m10"] + z * ma["m20"]) * (ad / as_)
+    y1 = (x * ma["m01"] + y * ma["m11"] + z * ma["m21"]) * (bd / bs_)
+    z1 = (x * ma["m02"] + y * ma["m12"] + z * ma["m22"]) * (cd / cs_)
+
+    x2 = x1 * mai["m00"] + y1 * mai["m10"] + z1 * mai["m20"]
+    y2 = x1 * mai["m01"] + y1 * mai["m11"] + z1 * mai["m21"]
+    z2 = x1 * mai["m02"] + y1 * mai["m12"] + z1 * mai["m22"]
+
+    r = _compand(x2 * m["m00"] + y2 * m["m10"] + z2 * m["m20"])
+    g = _compand(x2 * m["m01"] + y2 * m["m11"] + z2 * m["m21"])
+    b = _compand(x2 * m["m02"] + y2 * m["m12"] + z2 * m["m22"])
+
+    return (r * 255, g * 255, b * 255)
+
+
+def _lab_to_rgb(lab_l: float, lab_a: float, lab_b: float) -> tuple[float, float, float]:
+    x, y, z = _lab_to_xyz(lab_l, lab_a, lab_b)
+    return _xyz_to_rgb(x, y, z)
+
+
+def _clip_channel(v: float) -> float:
+    return max(0.0, min(255.0, v))
+
+
+def _rgb_to_hex(r: float, g: float, b: float) -> str:
+    ri = round(_clip_channel(r))
+    gi = round(_clip_channel(g))
+    bi = round(_clip_channel(b))
+    return f"#{ri:02x}{gi:02x}{bi:02x}"
+
+
+def _lab_mix_hex(hex1: str, hex2: str, t: float) -> str:
+    """chroma.js `mix(col1, col2, t, 'lab')` — Lab-space linear interpolation."""
+    l0, a0, b0 = _rgb_to_lab(*_hex_to_rgb(hex1))
+    l1, a1, b1 = _rgb_to_lab(*_hex_to_rgb(hex2))
+    lab_l = l0 + t * (l1 - l0)
+    lab_a = a0 + t * (a1 - a0)
+    lab_b = b0 + t * (b1 - b0)
+    return _rgb_to_hex(*_lab_to_rgb(lab_l, lab_a, lab_b))
+
+
+def assign_gradient_color(gradient_config: dict, t: float) -> str:
+    """
+    Assign a gradient color by interpolating at position t in [0, 1].
+
+    Python-side counterpart of `assignGradientColor` (colorSchemes.ts). Meant for
+    use inside a `derive()` callback that needs to precompute a literal hex fill
+    (a raw `fill` channel) rather than going through the JS-side `color:
+    gradient(...)` chart option. Reproduces chroma-js's
+    `chroma.scale(stops).mode("lab")(t).hex()` byte-for-bit: Lab-space
+    (D65, `mode("lab")`) piecewise-linear interpolation across the stops, with
+    chroma-js's exact clip-then-`Math.round` behavior converting back to sRGB.
+
+    Args:
+        gradient_config: A `gradient(...)` config dict (`{"_tag": "gradient",
+            "stops": ...}`).
+        t: Interpolation position in [0, 1] (values outside are clamped).
+
+    Returns:
+        A lowercase `#rrggbb` hex color string.
+    """
+    stops = gradient_config["stops"]
+    if isinstance(stops, str):
+        scheme = _GRADIENT_SCHEMES.get(stops)
+        if scheme is None:
+            return stops
+        colors = scheme
+    else:
+        colors = list(stops)
+
+    if len(colors) == 1:
+        colors = [colors[0], colors[0]]
+
+    n = len(colors)
+    positions = [i / (n - 1) for i in range(n)]
+    tt = max(0.0, min(1.0, t))
+
+    for i, p in enumerate(positions):
+        if tt <= p:
+            return colors[i]
+        if tt >= p and i == len(positions) - 1:
+            return colors[i]
+        if tt > p and tt < positions[i + 1]:
+            local_t = (tt - p) / (positions[i + 1] - p)
+            return _lab_mix_hex(colors[i], colors[i + 1], local_t)
+
+    # unreachable: positions[0] == 0 and tt is clamped to [0, 1]
+    return colors[-1]
+
+
 # Coordinate transforms
 
 

@@ -16,6 +16,7 @@ from gofish import (
     palette,
     gradient,
 )
+from gofish.ast import assign_gradient_color
 from python_stories.data import SEAFOOD, SCORES_DATA
 
 
@@ -51,6 +52,44 @@ def story_gradient_string_array():
         chart(SCORES_DATA, color=gradient(["#f7fbff", "#42c663", "#6b0808"]))
         .flow(spread(by="label", dir="x"))
         .mark(rect(h="value", fill="value")),
+        {"w": 400, "h": 400, "axes": True},
+    )
+
+
+_PAIRED_BARS = [
+    {"pair": "P1", "type": "warm", "value": 20},
+    {"pair": "P1", "type": "cold", "value": 20},
+    {"pair": "P2", "type": "warm", "value": 45},
+    {"pair": "P2", "type": "cold", "value": 45},
+    {"pair": "P3", "type": "warm", "value": 70},
+    {"pair": "P3", "type": "cold", "value": 70},
+    {"pair": "P4", "type": "warm", "value": 90},
+    {"pair": "P4", "type": "cold", "value": 90},
+]
+
+_WARM_GRADIENT = gradient(["#ffe0b2", "#e65100"])
+_COLD_GRADIENT = gradient(["#bbdefb", "#0d47a1"])
+
+
+def story_paired_palettes():
+    def _assign_colors(d):
+        values = [item["value"] for item in d]
+        mn, mx = min(values), max(values)
+        out = []
+        for item in d:
+            t = 0 if mx == mn else (item["value"] - mn) / (mx - mn)
+            scale = _WARM_GRADIENT if item["type"] == "warm" else _COLD_GRADIENT
+            out.append({**item, "color": assign_gradient_color(scale, t)})
+        return out
+
+    return (
+        chart(_PAIRED_BARS)
+        .flow(
+            derive(_assign_colors),
+            spread(by="pair", dir="x"),
+            stack(by="type", dir="x"),
+        )
+        .mark(rect(h="value", fill="color")),
         {"w": 400, "h": 400, "axes": True},
     )
 

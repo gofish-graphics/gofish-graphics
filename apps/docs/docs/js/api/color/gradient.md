@@ -27,4 +27,6 @@ chart(data, { color: gradient(["#f7fbff", "#08306b"]) });
 
 **Built-in schemes:** `"viridis"`, `"blues"`, `"reds"`
 
-See also [`palette`](/js/api/color/palette) for categorical data.
+See also [`palette`](/js/api/color/palette) for categorical data, and
+[`assignGradientColor`](/js/api/color/assign-gradient-color) to precompute a
+color from a gradient outside of a chart's `fill` channel.

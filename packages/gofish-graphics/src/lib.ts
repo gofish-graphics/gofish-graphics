@@ -194,6 +194,7 @@ import "./ast/marks/builderMixins";
 // stays scoped (`Serialize.mapMark`, etc.).
 export * as Serialize from "./serialize";
 export { palette, gradient, assignGradientColor } from "./ast/colorSchemes";
+export { barChart } from "./charts/bar";
 export type {
   ColorConfig,
   PaletteScale,
