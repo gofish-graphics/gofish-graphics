@@ -61,6 +61,9 @@ const SCHEMA_OPERATOR_KEYS: Record<string, readonly string[]> = {
     "reverse",
     "glue",
     "axes",
+    "w",
+    "h",
+    "normalize",
   ],
   stack: [
     "by",
@@ -72,6 +75,9 @@ const SCHEMA_OPERATOR_KEYS: Record<string, readonly string[]> = {
     "mode",
     "reverse",
     "axes",
+    "w",
+    "h",
+    "normalize",
   ],
   group: ["by"],
   scatter: [

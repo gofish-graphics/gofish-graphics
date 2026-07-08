@@ -808,6 +808,19 @@ for the API.
         "axes": {
           "$ref": "#/$defs/AxesOptions"
         },
+        "w": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Data-driven main-axis extent (field/datum-sized children)."
+        },
+        "h": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Data-driven main-axis extent (field/datum-sized children)."
+        },
+        "normalize": {
+          "type": "boolean",
+          "description": "Space-filling spine: children fill the container proportionally (mosaic/marimekko).",
+          "default": false
+        },
         "translate": {
           "$ref": "#/$defs/Translate"
         },
@@ -865,6 +878,19 @@ for the API.
         },
         "axes": {
           "$ref": "#/$defs/AxesOptions"
+        },
+        "w": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Data-driven main-axis extent (field/datum-sized children)."
+        },
+        "h": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Data-driven main-axis extent (field/datum-sized children)."
+        },
+        "normalize": {
+          "type": "boolean",
+          "description": "Space-filling spine: children fill the container proportionally (mosaic/marimekko).",
+          "default": false
         },
         "translate": {
           "$ref": "#/$defs/Translate"

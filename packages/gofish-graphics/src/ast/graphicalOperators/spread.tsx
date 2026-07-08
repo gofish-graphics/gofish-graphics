@@ -46,6 +46,7 @@ export const Spread = createNodeOperator(
       mode = "edge",
       reverse = false,
       glue = false,
+      normalize = false,
       axes,
       axisMeasures,
       ...fancyDims
@@ -60,6 +61,12 @@ export const Spread = createNodeOperator(
       // When true, treat as a stack: glue children together, summing their
       // sizes into a POSITION at this level. `spacing` is ignored.
       glue?: boolean;
+      // Space-filling spine: `normalize` is pure LAYOUT (the data is never
+      // mutated — children stack their raw size field). This flag tells the
+      // elaborated layer to make the STACKING axis a local self-scaling scope so
+      // the raw fold fills the extent — the irreducibly-layout half of a mosaic
+      // conditional axis.
+      normalize?: boolean;
       /** Override axis rendering for this node. true/false applies to both
        * dims; object form controls x/y independently. */
       axes?: boolean | { x?: AxisOptions; y?: AxisOptions };
@@ -84,9 +91,15 @@ export const Spread = createNodeOperator(
 
     // Elaborate to a layer carrying the cross-axis align + the stack distribute.
     // `fancyDims` (explicit w/h) flow to the layer, whose self-scaling region
-    // handles an explicit size exactly as the bespoke spread did.
+    // handles an explicit size exactly as the bespoke spread did. `normalize`
+    // rides through as `__normalizeAxis` (the stack axis) so the layer self-
+    // scales that axis into a local fill scope — see layer.tsx.
     const node = (await layer(
-      { key, ...fancyDims } as any,
+      {
+        key,
+        ...fancyDims,
+        ...(normalize ? { __normalizeAxis: stackDir } : {}),
+      } as any,
       childList
     )) as GoFishNode;
     node.constrain((ref) => {
@@ -142,6 +155,12 @@ export type SpreadOptions<T = any> = {
   glue?: boolean;
   w?: number | (keyof T & string);
   h?: number | (keyof T & string);
+  /** Space-filling spine (the mosaic/marimekko conditional axis): make the
+   *  stacking axis a local self-scaling scope so its segments fill the extent in
+   *  proportion to their size. Pure layout — the data is not mutated, so the
+   *  cross-axis size still reads the raw marginal sum (e.g. width = raw Σcount,
+   *  height = the same counts rescaled to fill). */
+  normalize?: boolean;
   debug?: boolean;
   axes?: boolean | { x?: AxisOptions; y?: AxisOptions };
 };

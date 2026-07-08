@@ -254,6 +254,14 @@ export interface SpreadOperator
   /** Stack semantics: glue children together (sizes sum into a position at
    *  this level) instead of slicing a budget. Forces `spacing` to 0. */
   glue?: boolean;
+  /** Data-driven operator extent (#4/#20): a field name or pixel number sizing
+   *  this operator's box, reported as a SIZE claim to the enclosing scale. */
+  w?: ChannelValue;
+  h?: ChannelValue;
+  /** Space-filling spine: make the layout (`dir`) axis fill its extent in
+   *  proportion to child size — the mosaic/marimekko conditional axis. Pure
+   *  layout; the data is not mutated. */
+  normalize?: boolean;
   axes?: AxesOptions;
 }
 
@@ -274,6 +282,14 @@ export interface StackOperator
   sharedScale?: boolean;
   mode?: "edge" | "center";
   reverse?: boolean;
+  /** Data-driven operator extent (#4/#20): a field name or pixel number sizing
+   *  this operator's box, reported as a SIZE claim to the enclosing scale. */
+  w?: ChannelValue;
+  h?: ChannelValue;
+  /** Space-filling spine: make the layout (`dir`) axis fill its extent in
+   *  proportion to child size — the mosaic/marimekko conditional axis. Pure
+   *  layout; the data is not mutated. */
+  normalize?: boolean;
   axes?: AxesOptions;
 }
 

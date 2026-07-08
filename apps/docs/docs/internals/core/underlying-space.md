@@ -803,6 +803,34 @@ opposed to the through-origin `linear(w, 0)` of a scaling extent) — is the
 eventual, more honest home for what a self-scaling region contributes to its
 parent.
 
+### Space-filling spines: `normalize` self-scales a stacking axis
+
+The same machinery drives the **space-filling spine** — the conditional axis of a
+mosaic / marimekko. A `stack({ normalize: true })` is a spine: its segments should
+_fill_ the extent in proportion to their value, showing a conditional distribution
+(each column of a mosaic runs 0–100% locally). That is exactly a self-scaling region,
+but triggered by intent rather than by a pixel size, and on the **stacking** axis
+rather than a sized dim.
+
+`spread` elaborates `normalize` into a `__normalizeAxis` hint on the layer options (it
+does **not** touch the distribute constraint — the fill is a scale-scope decision, not
+a distribution rule). `layer`'s resolver reads that hint and stashes the named stacking
+axis just like a pixel-sized one — with one twist: it stashes the glue fold's `[0, Σ]`
+as a baseline **magnitude** (`SIZE(width)`), not the anchored POSITION the fold returns.
+A POSITION stash builds only a posScale (it _positions_ children); a magnitude stash
+also yields a **scale factor** (`width.inverse(size)`), which is what a _nested_ stack's
+own `w`/`h` SIZE claim needs to be scaled to fill. Leaf rects are fine either way; a
+`stack` inside a `stack` is not.
+
+This is the whole trick behind **nested mosaics**. Each level plays two roles on its
+two axes: its stacking axis `normalize`s (a local, isolated conditional scope,
+reporting `UNDEFINED` up), while its cross axis reports its raw `Σcount` SIZE _up_
+(the ordinary data-driven-size path — the operator is a leaf in its ancestor's scale
+scope). Because the conditional axes are local scopes and the raw count is never
+mutated, the marginal × conditional × conditional factorization composes to any depth:
+`class → sex → survived` alternates y → x → y, and every level reads `count` raw. See
+the `stack` operator and the mosaic gallery examples.
+
 ## Measures: units are types
 
 The self-scaling region above is the heavy hammer — give a sub-chart an

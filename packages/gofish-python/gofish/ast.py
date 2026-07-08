@@ -1344,7 +1344,11 @@ def spread(
             Marks to lay out side-by-side.
         by: Field name to partition by (operator form only). Omit for
             per-item spread.
-        **options: dir ("x"|"y"), spacing, alignment, sharedScale, mode, etc.
+        **options: dir ("x"|"y"), spacing, alignment, sharedScale, mode, glue.
+            Also `w`/`h` — a field name or pixel number sizing this operator's
+            box (data-driven operator extent, e.g. a mosaic's column width), and
+            `normalize=True` — make the layout axis fill its extent in
+            proportion to child size (the mosaic/marimekko conditional axis).
 
     Returns:
         Operator (no children) or Mark (with children).
@@ -1574,7 +1578,11 @@ def stack(
             Marks to stack.
         by: Field name to partition by (operator form only). Omit for
             per-item stack.
-        **options: dir ("x"|"y"), alignment, sharedScale, mode, etc.
+        **options: dir ("x"|"y"), alignment, sharedScale, mode. Also `w`/`h` —
+            a field name or pixel number sizing this operator's box (data-driven
+            operator extent, e.g. a mosaic's column width), and `normalize=True`
+            — make the stacking axis fill its extent in proportion to child size
+            (the mosaic/marimekko conditional axis).
 
     Returns:
         Operator (no children) or Mark (with children).

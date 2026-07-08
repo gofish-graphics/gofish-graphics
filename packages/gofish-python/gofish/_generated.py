@@ -508,7 +508,7 @@ def arrow(children: List["Mark"], *, bow: Optional[float] = None, stretch: Optio
 
 # --- Dual-form cores (dispatch stays hand-written in ast.py) -----------------
 
-def _spread_opts(*, by: Optional[str] = None, dir: Optional[str] = None, spacing: Optional[float] = None, alignment: Optional[str] = None, sharedScale: Optional[bool] = None, mode: Optional[str] = None, reverse: Optional[bool] = None, glue: Optional[bool] = None, axes: Optional[Any] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
+def _spread_opts(*, by: Optional[str] = None, dir: Optional[str] = None, spacing: Optional[float] = None, alignment: Optional[str] = None, sharedScale: Optional[bool] = None, mode: Optional[str] = None, reverse: Optional[bool] = None, glue: Optional[bool] = None, axes: Optional[Any] = None, w: Optional[Union[int, float, str]] = None, h: Optional[Union[int, float, str]] = None, normalize: Optional[bool] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
     """Arrange children along `dir` with spacing, aligning them on the cross axis.
 
     Args:
@@ -520,6 +520,9 @@ def _spread_opts(*, by: Optional[str] = None, dir: Optional[str] = None, spacing
         mode: Default "edge".
         reverse: Default false.
         glue: Stack semantics: children glued, sizes sum; spacing forced to 0. Default false.
+        w: Data-driven main-axis extent (field/datum-sized children).
+        h: Data-driven main-axis extent (field/datum-sized children).
+        normalize: Space-filling spine: children fill the container proportionally (mosaic/marimekko). Default false.
         debug: Universal v3-operator dev escape hatch; stripped by the JS factory (FACTORY_ONLY_KEYS) before layout, but present on the wire when a producer passes it.
     """
     opts: Dict[str, Any] = {}
@@ -533,13 +536,16 @@ def _spread_opts(*, by: Optional[str] = None, dir: Optional[str] = None, spacing
         ("reverse", reverse),
         ("glue", glue),
         ("axes", axes),
+        ("w", w),
+        ("h", h),
+        ("normalize", normalize),
         ("debug", debug),
     ]:
         if _v is not None:
             opts[_k] = _v
     return opts
 
-def _stack_opts(*, by: Optional[str] = None, dir: Optional[str] = None, spacing: Optional[float] = None, glue: Optional[bool] = None, alignment: Optional[str] = None, sharedScale: Optional[bool] = None, mode: Optional[str] = None, reverse: Optional[bool] = None, axes: Optional[Any] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
+def _stack_opts(*, by: Optional[str] = None, dir: Optional[str] = None, spacing: Optional[float] = None, glue: Optional[bool] = None, alignment: Optional[str] = None, sharedScale: Optional[bool] = None, mode: Optional[str] = None, reverse: Optional[bool] = None, axes: Optional[Any] = None, w: Optional[Union[int, float, str]] = None, h: Optional[Union[int, float, str]] = None, normalize: Optional[bool] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
     """`spread({ glue: true })` under its own wire tag — children glued together (touching, no gaps).
 
     Args:
@@ -551,6 +557,9 @@ def _stack_opts(*, by: Optional[str] = None, dir: Optional[str] = None, spacing:
         sharedScale: Default false.
         mode: Default "edge".
         reverse: Default false.
+        w: Data-driven main-axis extent (field/datum-sized children).
+        h: Data-driven main-axis extent (field/datum-sized children).
+        normalize: Space-filling spine: children fill the container proportionally (mosaic/marimekko). Default false.
         debug: Universal v3-operator dev escape hatch; stripped by the JS factory (FACTORY_ONLY_KEYS) before layout, but present on the wire when a producer passes it.
     """
     opts: Dict[str, Any] = {}
@@ -564,6 +573,9 @@ def _stack_opts(*, by: Optional[str] = None, dir: Optional[str] = None, spacing:
         ("mode", mode),
         ("reverse", reverse),
         ("axes", axes),
+        ("w", w),
+        ("h", h),
+        ("normalize", normalize),
         ("debug", debug),
     ]:
         if _v is not None:

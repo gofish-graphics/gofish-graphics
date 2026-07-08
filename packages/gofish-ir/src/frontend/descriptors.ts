@@ -325,13 +325,17 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
         doc: "Stack semantics: children glued, sizes sum; spacing forced to 0.",
       },
       axes: { type: t.ref("AxesOptions") },
-      // NOTE: the low-level JS `Spread`/`SpreadOptions` combinator accepts
-      // explicit `w`/`h` (FancyDims passthrough to the elaborated layer), but
-      // today's v3-operator IR (schema.ts's `SpreadOperator`, and
-      // validate.ts's `knownFields.spread`) does NOT expose them — found
-      // drift, preserved here rather than fixed (IR truth wins per the task
-      // brief). See `COMBINATOR_MARKS.spread` for the combinator form, which
-      // does carry them.
+      // Data-driven operator extent (#4/#20) + space-filling spine (mosaic):
+      // the v3 spread operator carries `w`/`h` (field/datum-driven main-axis
+      // sizing) and `normalize` (space-filling spine). `COMBINATOR_MARKS.spread`
+      // also carries `w`/`h` for the low-level Spread combinator's FancyDims.
+      w: ch.num("Data-driven main-axis extent (field/datum-sized children)."),
+      h: ch.num("Data-driven main-axis extent (field/datum-sized children)."),
+      normalize: {
+        type: t.boolean,
+        default: false,
+        doc: "Space-filling spine: children fill the container proportionally (mosaic/marimekko).",
+      },
     },
   }),
 
@@ -358,7 +362,14 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
       mode: { type: t.enum("edge", "center"), default: "edge" },
       reverse: { type: t.boolean, default: false },
       axes: { type: t.ref("AxesOptions") },
-      // See the `w`/`h` drift note on `spread` above — same gap, same reason.
+      // Data-driven extent + space-filling spine — see `spread` above.
+      w: ch.num("Data-driven main-axis extent (field/datum-sized children)."),
+      h: ch.num("Data-driven main-axis extent (field/datum-sized children)."),
+      normalize: {
+        type: t.boolean,
+        default: false,
+        doc: "Space-filling spine: children fill the container proportionally (mosaic/marimekko).",
+      },
     },
   }),
 
@@ -706,12 +717,12 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
 
 export const COMBINATOR_MARKS: Record<string, ConstructDescriptor> = {
   spread: combinatorMark("spread", {
-    doc: "Low-level combinator form of `spread`. Unlike the v3 operator, this form's `Spread`/`SpreadOptions` factory accepts explicit `w`/`h` (FancyDims passthrough to the elaborated layer).",
-    fields: { ...resolveFields(OPERATORS.spread), w: ch.num(), h: ch.num() },
+    doc: "Low-level combinator form of `spread`. Its `Spread`/`SpreadOptions` factory carries the same `w`/`h` (FancyDims passthrough to the elaborated layer) the v3 operator now exposes.",
+    fields: resolveFields(OPERATORS.spread),
   }),
   stack: combinatorMark("stack", {
     doc: "Low-level combinator form of `stack`. See `spread`'s note on `w`/`h`.",
-    fields: { ...resolveFields(OPERATORS.stack), w: ch.num(), h: ch.num() },
+    fields: resolveFields(OPERATORS.stack),
   }),
   scatter: combinatorMark("scatter", {
     fields: resolveFields(OPERATORS.scatter),

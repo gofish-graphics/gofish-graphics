@@ -5,11 +5,19 @@
 
 # Low-level API stories (v1/v2)
 # Ported to tests/python-stories/low-level-syntax/ (#433): BalloonChart,
-# IcicleChart, NestedMosaicChart, NestedWaffleChart, SankeyTree,
+# IcicleChart, NestedWaffleChart, SankeyTree,
 # StringlineChart, Whisker — all byte-identical to the JS baseline. The ports
 # map the v1 directional operators to combinator-form spread/stack/connect,
 # frame→layer, and add the polar/wavy coord transforms to the Python wrapper +
 # IR bridge.
+#
+# NestedMosaicChart was ported under #433, but the story was rewritten (#675) to
+# the fluent `chart().flow(stack(normalize=True)...)` pipeline with a 2-D
+# function fill (`survived == "No" ? gray : classColor[class]`). A function
+# channel can't cross the derive RPC, so it is now exempt — the pure-spec
+# `normalize` mosaics (atom/Mosaic and Forward Syntax Mosaic Chart) ARE ported
+# and byte-parity-validated.
+packages/gofish-graphics/stories/lowlevel/NestedMosaicChart.stories.tsx
 #
 # ViolinPlot is ported too (tests/python-stories/low-level-syntax/
 # test_violin_plot.py) but stays exempt: the JS story uses `fast-kde`'s

@@ -29,12 +29,14 @@ low-level form behind the v1 `stackX`/`stackY` operators).
 
 ## Parameters
 
-| Parameter   | Type                | Description                                                                                                                                                                                               |
-| ----------- | ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `by`        | `str` \| `Callable` | Field, dotted path, or callable to partition by. Omit to stack per row. Path-aware (use `"datum.field"` after a selection); see [`spread` → path-aware `by`](/python/api/operators/spread#path-aware-by). |
-| `dir`       | `"x"` \| `"y"`      | **Required.** Axis to stack along.                                                                                                                                                                        |
-| `alignment` | `str`               | Cross-axis alignment of the stacked groups.                                                                                                                                                               |
-| `label`     | `bool`              | Whether to emit an axis label for the partition field.                                                                                                                                                    |
+| Parameter   | Type                | Description                                                                                                                                                                                                                                 |
+| ----------- | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `by`        | `str` \| `Callable` | Field, dotted path, or callable to partition by. Omit to stack per row. Path-aware (use `"datum.field"` after a selection); see [`spread` → path-aware `by`](/python/api/operators/spread#path-aware-by).                                   |
+| `dir`       | `"x"` \| `"y"`      | **Required.** Axis to stack along.                                                                                                                                                                                                          |
+| `alignment` | `str`               | Cross-axis alignment of the stacked groups.                                                                                                                                                                                                 |
+| `w`, `h`    | `int` \| `str`      | Fixed pixel size, or a field name sizing this operator's box from data (data-driven operator extent — e.g. a mosaic's column width).                                                                                                        |
+| `normalize` | `bool`              | Space-filling spine: make the stacking axis fill its extent in proportion to child size (the mosaic/marimekko conditional axis). See [`spread` → Space-filling spines](/python/api/operators/spread#space-filling-spines-mosaic-marimekko). |
+| `label`     | `bool`              | Whether to emit an axis label for the partition field.                                                                                                                                                                                      |
 
 Returns an `Operator` for use inside [`.flow()`](/python/api/core/flow).
 
