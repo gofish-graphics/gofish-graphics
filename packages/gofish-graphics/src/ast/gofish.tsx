@@ -693,6 +693,7 @@ export async function layout(
     underlyingSpaceX: niceUnderlyingSpaceX,
     underlyingSpaceY: niceUnderlyingSpaceY,
     yUp,
+    rootFlipsWhole,
     scales: rootScales,
     child,
     width: finalW,
@@ -753,6 +754,14 @@ type LayoutData = {
    * #629/#143/#16.
    */
   yUp: boolean;
+  /**
+   * Whether the ROOT plot content flips as a whole about the canvas band
+   * (`yUp || isCONTINUOUS(root-y)`) — the decision behind the `_rootFlipScope`
+   * stamp. Unlike `yUp` (the global override only), this also captures the
+   * per-scope continuous-y auto-flip, so the interaction frame's root
+   * data→pixel map (`toPixel`) matches what the plot actually paints. #629.
+   */
+  rootFlipsWhole: boolean;
   scales: Size<AxisScale | undefined>;
   child: GoFishNode;
   width: number;
@@ -858,6 +867,9 @@ function renderLayout(
       defs,
       // The resolved y-up decision (root y space), computed in `layout()`.
       yUp: data.yUp,
+      // The root-content whole-plot flip (incl. continuous-y auto-flip), so the
+      // interaction frame's root data→pixel map matches the painted orientation.
+      rootFlipsWhole: data.rootFlipsWhole,
       rightOverhang: data.rightOverhang,
       rightContentOverhang: data.rightContentOverhang,
       topOverhang: data.topOverhang,
@@ -1115,6 +1127,7 @@ export const render = (
     bottomOverhang = 0,
     svgPadding,
     yUp = false,
+    rootFlipsWhole = yUp,
     interaction,
     posScales,
     domains,
@@ -1130,6 +1143,7 @@ export const render = (
     bottomOverhang?: number;
     svgPadding?: number;
     yUp?: boolean;
+    rootFlipsWhole?: boolean;
     interaction?: InteractionRuntime;
     posScales?: [
       ((pos: number) => number) | undefined,
@@ -1190,9 +1204,17 @@ export const render = (
   const ambientFlip: FlipScope | undefined = yUp
     ? { baseY: 0, height }
     : undefined;
-  // The root scope's pixel map (gutters + ambient flip) is the frame-level
-  // GoFish-space → screen map interaction publishes for hit-test / dataPos reads.
-  const rootToPixel = toPixelFor(ambientFlip);
+  // The frame-level GoFish-space → screen map interaction publishes for
+  // hit-test / dataPos reads. It must mirror the ROOT PLOT's orientation, which
+  // flips about the canvas band whenever the plot flips as a whole — i.e. the
+  // global `yUp` override OR the per-scope continuous-y auto-flip
+  // (`rootFlipsWhole`, mirroring the `_rootFlipScope` stamp). Using `ambientFlip`
+  // (yUp only) here would report y-down for a continuous-y chart that paints
+  // y-up, inverting drags. #629.
+  const rootFlip: FlipScope | undefined = rootFlipsWhole
+    ? { baseY: 0, height }
+    : undefined;
+  const rootToPixel = toPixelFor(rootFlip);
   const interactive = interaction !== undefined;
   const paintBaked = () => {
     const items = lowerToDisplayList(child, toPixelFor, ambientFlip);
