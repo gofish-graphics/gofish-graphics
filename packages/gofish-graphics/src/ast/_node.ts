@@ -238,7 +238,6 @@ const reportConflict = (type: string, dir: 0 | 1, c: BBoxConflict): void => {
  *  auto-claims on that dim. Ordinal owners record `"o:<keys>"` instead. */
 const AXIS_CLAIM_OPAQUE = "continuous";
 
-
 export class GoFishNode {
   public readonly uid: string;
   private static uidCounter = 0;
@@ -271,17 +270,6 @@ export class GoFishNode {
   // private inferDomains: (childDomains: Size<Domain>[]) => FancySize<Domain | undefined>;
   private _resolveUnderlyingSpace: ResolveUnderlyingSpace;
   public _underlyingSpace?: Size<UnderlyingSpace> = undefined;
-  /** The per-axis space a self-scaling scope (a `normalize` spine, a nested
-   *  stack's data-driven extent) resolves LOCALLY but reports as UNDEFINED
-   *  upward — see `selfScaledSpaces` in layer.tsx. Distinct from
-   *  `_underlyingSpace` precisely so an ancestor's scale-union ignores this axis
-   *  while orientation still sees its true kind: a self-scaled CONTINUOUS y is
-   *  still continuous, so the bake walk must open a y-up flip scope over it
-   *  (`declaredYUp`), exactly as it would for a reported continuous y. #629/#20. */
-  public _selfScaledSpace?: [
-    UnderlyingSpace | undefined,
-    UnderlyingSpace | undefined,
-  ] = undefined;
   private _layout: Layout;
   /** Per-primitive IR lowering (see {@link Lower}). Optional during the
    *  render→lower migration; once every factory supplies one, `_render` is
@@ -794,7 +782,9 @@ export class GoFishNode {
             ? "o:" + JSON.stringify(s.domain ?? [])
             : undefined;
         const dupOrdinal =
-          override !== false && mySig !== undefined && claimed.get(dim) === mySig;
+          override !== false &&
+          mySig !== undefined &&
+          claimed.get(dim) === mySig;
         const show = override !== false && !dupOrdinal;
         if (dim === 0) this.axis.x = show;
         else this.axis.y = show;

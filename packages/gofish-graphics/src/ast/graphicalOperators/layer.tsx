@@ -592,12 +592,6 @@ export const layer = createNodeOperatorSequential(
     );
     // Stash alias-keyed dims (theta/r/…) for the resolveAliases pass.
     node._pendingAliases = pendingAliases;
-    // Surface the self-scaled spaces (mutated by resolveUnderlyingSpace above)
-    // so the bake walk's orientation pass sees this axis's TRUE kind even though
-    // `_underlyingSpace` reports it UNDEFINED to ancestors — a normalize spine's
-    // continuous y must still open a y-up flip scope. Reference, not copy: the
-    // array is filled during layout, read by bake afterward.
-    node._selfScaledSpace = selfScaledSpaces;
     return node;
   }
 );
