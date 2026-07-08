@@ -90,11 +90,13 @@ keeps the IR small and never leaks an extra layer into your code.
   [`selectAll`](/js/api/selection/ref) form. `.connect()` only threads a chart
   through its own marks.
 
-## Builder `.connect()` vs. the low-level `Connect` operator
+## Builder `.connect()` vs. the combinator form
 
 This page documents the **v3 builder method** `ChartBuilder.connect()`. It is
-distinct from the lower-level [`connect` / `Connect` operator](/js/api/operators/connect),
-which draws a connector between explicitly-listed `ref(...)` children inside a
-layout (anchor/edge modes, source/target anchors). The builder sugar wraps a
-ref-consuming _mark_ (`line` / `ribbon`); the operator is a _layout primitive_ you
-place children into directly.
+distinct from the [combinator form](/js/api/operators/connect) of the
+[`line`](/js/api/marks/line) / [`ribbon`](/js/api/marks/ribbon) marks, which draws
+a connector between explicitly-listed `ref(...)` children inside a layout
+(anchor/edge modes, source/target anchors). The builder sugar wraps a
+ref-consuming _mark_ for you; the combinator form is one you place children into
+directly. The standalone `connect` / `Connect` operators have been removed — see
+that page for the migration table.

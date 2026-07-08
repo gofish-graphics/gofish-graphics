@@ -359,12 +359,11 @@ conventions and switch from JSON descriptors to callable helpers.
 
 ## Milestone status
 
+All milestones below have shipped:
+
 - **M1** — node-link with `spread` combiner; linear links.
-- **M2** (this milestone) — `Constraint.nest` primitive in `gofish-graphics`;
-  `nest` combiner in `gofish-gotree`; nested-box trees.
+- **M2** — `Constraint.nest` primitive in `gofish-graphics`; `nest` combiner in
+  `gofish-gotree`; nested-box trees.
 - **M3** — polar coord wrap; sunburst and radial node-link.
 - **M4** — `orthogonal`/`bezier`/`arc` links; sort.
 - **M5** — `bottomUp` mode for dendrograms via intrinsic-dim wiring.
-
-Trying to use values from M3+ (`coord: polar(...)`, `orthogonal`/`bezier`/`arc`
-link curves) raises an explicit error.

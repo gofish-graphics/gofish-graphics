@@ -137,14 +137,14 @@ diagrams should prefer anchor mode.
 
 ## Visual props
 
-| Option         | Type                          | Default                                                    | Description                                                                                                             |
-| -------------- | ----------------------------- | ---------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| `stroke`       | `string`                      | `fill`                                                     | Stroke color                                                                                                            |
-| `strokeWidth`  | `number`                      | `0`                                                        | Stroke width                                                                                                            |
-| `fill`         | `MaybeValue<string>`          | `"black"`                                                  | Fill (for closed paths; channel-bindable)                                                                               |
-| `opacity`      | `number`                      | `1`                                                        | Element opacity                                                                                                         |
-| `mixBlendMode` | `"multiply" \| "normal"`      | `"multiply"` in edge mode / `"normal"` in `mode: "center"` | Blend mode of the rendered path. Override to `"normal"` for opaque strokes that don't darken under colored backgrounds. |
-| `curve`        | see [Path curve](#path-curve) | `"auto"`                                                   | Shape of the path between consecutive children (replaces the removed `interpolation`)                                   |
+| Option         | Type                          | Default    | Description                                                                                                                      |
+| -------------- | ----------------------------- | ---------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `stroke`       | `string`                      | `fill`     | Stroke color                                                                                                                     |
+| `strokeWidth`  | `number`                      | `0`        | Stroke width                                                                                                                     |
+| `fill`         | `MaybeValue<string>`          | `"black"`  | Fill (for closed paths; channel-bindable)                                                                                        |
+| `opacity`      | `number`                      | `1`        | Element opacity                                                                                                                  |
+| `mixBlendMode` | `"multiply" \| "normal"`      | `"normal"` | Blend mode of the rendered path. Override to `"multiply"` for overlapping translucent bands that should darken where they cross. |
+| `curve`        | see [Path curve](#path-curve) | `"auto"`   | Shape of the path between consecutive children (replaces the removed `interpolation`)                                            |
 
 ## Path curve
 

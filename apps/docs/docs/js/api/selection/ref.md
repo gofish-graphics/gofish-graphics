@@ -77,7 +77,7 @@ gf.layer([
     .mark(gf.rect({ h: "total" }).name("kpi")),
   gf.text({ text: "peak" }).name("label"),
   // ref("kpi") as the connector's target: one ref; throws on 0 or >1 nodes
-  gf.Connect({ source: "middle" }, [gf.ref("label"), gf.ref("kpi")]),
+  gf.line({ source: "middle" }, [gf.ref("label"), gf.ref("kpi")]),
 ]);
 ```
 

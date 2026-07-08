@@ -47,6 +47,18 @@ drawn node refs, driving the ribbon / node-link / labeling patterns via
 `.layer()` + `resolve`; `join` is a one-to-many equi-join relating two data
 tables on a shared key).
 
+Connectors are no longer a surface of their own. The standalone `connect` /
+`connectX` / `connectY` operators (and the capitalized `Connect`) were removed;
+a connector is now the _combinator form_ of an ordinary mark — `line` (center)
+or `ribbon` (edge band, formerly the `area` mark) — invoked with an explicit
+array of `ref(...)` children. The shape of the drawn path is a single `curve`
+key, backed by the pluggable router registry that `lib.ts` re-exports from
+`ast/graphicalOperators/routers` (`registerRoute` / `getRoute` / `resolveCurve`
+and the built-in `straight` / `bezier` / `orthogonal` / `arc` / `perfectArrows`
+routers). `curve: "auto"` smooths automatically on continuous axes — see
+[Underlying Space](/internals/core/underlying-space) for the positioning-space
+test that decides this.
+
 ## Planned contents
 
 - The three surfaces side by side — the same chart in each.
