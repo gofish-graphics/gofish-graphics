@@ -14,21 +14,33 @@ chart([{"label": "GoFish"}]).mark(
 ## Signature
 
 ```python
-text(text=None, fill=None, fontSize=None, fontWeight=None, fontFamily=None,
-     debugBoundingBox=None, label=None) -> Mark
+text(*, text=None, fill=None, stroke=None, strokeWidth=None, filter=None,
+     fontSize=None, fontFamily=None, debugBoundingBox=None, rotate=None,
+     x=None, cx=None, x2=None, w=None, emX=None,
+     y=None, cy=None, y2=None, h=None, emY=None,
+     theta=None, thetaSize=None, r=None, rSize=None, key=None) -> Mark
 ```
+
+Keyword-only (matches every existing call site, which already passes
+`text=...` by keyword). Note: the previously-documented `fontWeight` kwarg
+never existed on the JS side and has been removed — it silently serialized
+and was dropped on the floor at render.
 
 ## Parameters
 
-| Parameter          | Type            | Description                                                                   |
-| ------------------ | --------------- | ----------------------------------------------------------------------------- |
-| `text`             | `str` \| `int`  | The string to render — a constant, a field name, or a `(row) -> str` callable |
-| `fill`             | `str`           | Fill color — a constant or a field name                                       |
-| `fontSize`         | `int` \| `str`  | Font size in pixels                                                           |
-| `fontWeight`       | `int` \| `str`  | Font weight                                                                   |
-| `fontFamily`       | `str`           | Font family                                                                   |
-| `debugBoundingBox` | `bool`          | Draw the text's bounding box (for layout debugging)                           |
-| `label`            | `bool` \| `str` | Auto value-label flag (distinct from `text` content)                          |
+| Parameter                                                | Type           | Description                                                                   |
+| -------------------------------------------------------- | -------------- | ----------------------------------------------------------------------------- |
+| `text`                                                   | `str` \| `int` | The string to render — a constant, a field name, or a `(row) -> str` callable |
+| `fill`                                                   | `str`          | Fill color — a constant or a field name                                       |
+| `stroke`, `strokeWidth`                                  | `str`, `int`   | Outline color / width                                                         |
+| `filter`                                                 | `str`          | Raw SVG filter attribute                                                      |
+| `fontSize`                                               | `int` \| `str` | Font size in pixels (default 12)                                              |
+| `fontFamily`                                             | `str`          | Font family (default `"system-ui, sans-serif"`)                               |
+| `debugBoundingBox`                                       | `bool`         | Draw the text's bounding box (for layout debugging)                           |
+| `rotate`                                                 | `int`          | Rotation in degrees about the text anchor                                     |
+| `x`, `cx`, `x2`, `w`, `emX`, `y`, `cy`, `y2`, `h`, `emY` | `int` \| `str` | Box-geometry position channels (position the text anchor)                     |
+| `theta`, `thetaSize`, `r`, `rSize`                       | `int` \| `str` | Polar coord-space aliases for `x`/`w`/`y`/`h`                                 |
+| `key`                                                    | `str`          | Internal per-node key override                                                |
 
 Returns a `Mark` for use in [`.mark()`](/python/api/core/mark).
 

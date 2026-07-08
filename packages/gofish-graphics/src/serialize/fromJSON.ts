@@ -13,7 +13,7 @@
  */
 
 // Source-module imports — see the note in registry.ts.
-import { chart, selectAll } from "../ast/marks/chart";
+import { chart, selectAll, PREVIOUS_LAYER_MARKS } from "../ast/marks/chart";
 import { clock } from "../ast/coordinateTransforms/clock";
 import { polar } from "../ast/coordinateTransforms/polar";
 import { wavy } from "../ast/coordinateTransforms/wavy";
@@ -529,11 +529,17 @@ export function buildChart(
   );
 
   // Resolve chartSpec.data. The canonical shapes are:
-  //   - { type: "inline", rows: [...] } — inline rows live on the spec
-  //   - { type: "select", layer }       — late-bound layer reference
-  //   - null / undefined                — data was shipped via the bridge's
-  //                                       arrow_data sidecar; use the
-  //                                       `data` argument the caller passed
+  //   - { type: "inline", rows: [...] }  — inline rows live on the spec
+  //   - { type: "select", layer }        — late-bound layer reference
+  //   - { type: "previous-tier" }        — empty chart() scope inside a
+  //                                        .layer(...) builder chain; maps to
+  //                                        the PREVIOUS_LAYER_MARKS sentinel
+  //                                        so LayerBuilder's own wireTiers()
+  //                                        does the auto-naming/selectAll
+  //                                        wiring (see chartBuilder.ts)
+  //   - null / undefined                 — data was shipped via the bridge's
+  //                                        arrow_data sidecar; use the
+  //                                        `data` argument the caller passed
   let chartData: any = data;
   const dataField = (chartSpec as any).data;
   if (dataField && typeof dataField === "object") {
@@ -546,6 +552,8 @@ export function buildChart(
           : ref(dataField.layer);
     } else if (dataField.type === "inline" && Array.isArray(dataField.rows)) {
       chartData = dataField.rows;
+    } else if (dataField.type === "previous-tier") {
+      chartData = PREVIOUS_LAYER_MARKS;
     }
   }
 

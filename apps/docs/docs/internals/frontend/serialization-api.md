@@ -183,7 +183,7 @@ in #gofish before relying on the shape — it's likely to change.
 - [The Jupyter Bridge & RPC](/internals/python/bridge) — the
   anywidget transport, RPC, and the Python-widget sentinels documented
   in the Frontend IR essay's "Bridge extensions" section.
-- Source: `packages/gofish-ir/src/frontend/{schema,validate,jsonSchema,examples}.ts`,
+- Source: `packages/gofish-ir/src/frontend/{schema,validate,jsonSchema,descriptors,examples}.ts`,
   `packages/gofish-graphics/src/serialize/{toJSON,fromJSON,registry}.ts`.
 - Validator at runtime: `Frontend.validate(doc, { strict?: boolean })`.
 - JSON Schema artifact: `packages/gofish-ir/dist/frontend/v0.json` (build output).

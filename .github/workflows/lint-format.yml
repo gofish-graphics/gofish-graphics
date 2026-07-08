@@ -62,5 +62,13 @@ jobs:
       - name: Check internals wiki back-links
         run: pnpm --filter docs check-backlinks
 
+      - name: Build gofish-ir
+        run: pnpm --filter gofish-ir build
+
       - name: Check Frontend IR JSON Schema docs page is in sync
         run: pnpm --filter docs check-ir-schema
+
+      - name: Check generated Python factory layer is in sync
+        run: |
+          pnpm --filter gofish-python gen
+          git diff --exit-code -- packages/gofish-python/gofish/_generated.py

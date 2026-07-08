@@ -174,6 +174,11 @@ export {
   // the package's public entry instead of deep-importing internals. The
   // deserializer's registry.ts maps the "over" wire type to this same factory.
   over,
+  // `PREVIOUS_LAYER_MARKS` is NOT public API — users spell "inherit the
+  // previous tier's marks" as an empty `chart()` scope. Re-exported only so
+  // the IR test harness can map the `{type: "previous-tier"}` DataIR variant
+  // to this same sentinel without deep-importing internals (mirrors `over`).
+  PREVIOUS_LAYER_MARKS,
 } from "./ast/marks/chart";
 export type { ConstrainableMark } from "./ast/marks/chart";
 export type {

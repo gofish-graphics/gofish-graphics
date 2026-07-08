@@ -3,14 +3,190 @@
 // </gofish-wiki>
 
 /**
- * Hand-written JSON Schema for the GoFish frontend IR (v0).
+ * JSON Schema for the GoFish frontend IR (v0).
  *
- * Structural only — defines the document shape, the discriminator unions
- * for operators / marks / channel values, and the validity envelope. Full
- * field-level coverage matches `validate.ts`; this file is the wire
- * artifact (consumed by external tooling, language servers, and the
- * Python wrapper's parity-test harness).
+ * The envelope (Root/ChartIR/LayerIR/DataIR/MarkIR union, ChannelValue,
+ * ConstraintIR, ...) stays hand-written below — these are structural/
+ * recursive shapes, not flat field bags, and are cheap to keep authored.
+ *
+ * The per-operator `$defs` (a discriminated `oneOf`, one member per operator
+ * type with its own required/optional properties) and the per-leaf-mark
+ * `$defs` (enumerated channels, `additionalProperties: true` — the warn-
+ * don't-reject rollout stance) are GENERATED from `descriptors.ts` by
+ * `buildOperatorDefs()` / `buildLeafMarkDefs()` below, merged into the
+ * authored `$defs` object. Field-level coverage matches `validate.ts` (which
+ * interprets the same descriptor table); this file is the wire artifact
+ * (consumed by external tooling, language servers, and the Python wrapper's
+ * parity-test harness).
  */
+
+import {
+  LEAF_MARKS,
+  OPERATORS,
+  resolveFields,
+  type FieldGroup,
+  type FieldType,
+} from "./descriptors.js";
+
+// ---------------------------------------------------------------------------
+// Descriptor → JSON Schema fragment
+// ---------------------------------------------------------------------------
+
+/** Convert one descriptor `FieldType` to a JSON Schema fragment. */
+function fieldTypeToSchema(type: FieldType): Record<string, unknown> {
+  switch (type.kind) {
+    case "string":
+      return { type: "string" };
+    case "number":
+      return { type: "number" };
+    case "boolean":
+      return { type: "boolean" };
+    case "any":
+      return {};
+    case "enum":
+      return { enum: [...type.values] };
+    case "channel":
+      return { $ref: "#/$defs/ChannelValue" };
+    case "ref":
+      return { $ref: `#/$defs/${type.name}` };
+    case "union":
+      return { oneOf: type.options.map(fieldTypeToSchema) };
+    case "array":
+      return { type: "array", items: fieldTypeToSchema(type.items) };
+    case "tuple":
+      return {
+        type: "array",
+        minItems: type.items.length,
+        maxItems: type.items.length,
+        prefixItems: type.items.map(fieldTypeToSchema),
+      };
+    case "record":
+      return {
+        type: "object",
+        additionalProperties: fieldTypeToSchema(type.valueType),
+      };
+    case "object": {
+      const { properties, required } = fieldsToProperties(type.fields);
+      return {
+        type: "object",
+        properties,
+        ...(required.length > 0 ? { required } : {}),
+      };
+    }
+  }
+}
+
+/** Convert a `FieldGroup` into JSON Schema `properties` + `required`. */
+function fieldsToProperties(fields: FieldGroup): {
+  properties: Record<string, unknown>;
+  required: string[];
+} {
+  const properties: Record<string, unknown> = {};
+  const required: string[] = [];
+  for (const [name, spec] of Object.entries(fields)) {
+    const schema = fieldTypeToSchema(spec.type);
+    properties[name] = {
+      ...schema,
+      ...(spec.doc ? { description: spec.doc } : {}),
+      ...(spec.default !== undefined ? { default: spec.default } : {}),
+    };
+    if (spec.required) required.push(name);
+  }
+  return { properties, required };
+}
+
+const pascalCase = (s: string): string =>
+  s.replace(/(^|[-_])([a-z])/g, (_m, _sep, c: string) => c.toUpperCase());
+
+/**
+ * Build one `$def` per operator type (`SpreadOperator`, `TableOperator`, ...)
+ * plus the `OperatorIR` discriminated union referencing them. Mirrors
+ * `validate.ts`'s walkOperator field shapes with `type`/`translate`/`origin`/
+ * `meta`/`debug` always present as properties. `additionalProperties` stays
+ * `true`: the published schema keeps the permissive wire contract (the JS
+ * low-level factories accept passthrough options the v3 IR doesn't model,
+ * e.g. spread/stack `FancyDims` — real producers emit them); strict
+ * unknown-field rejection is validate.ts strict mode's job, not the wire
+ * artifact's.
+ */
+function buildOperatorDefs(): Record<string, unknown> {
+  const defs: Record<string, unknown> = {};
+  const refs: Record<string, unknown>[] = [];
+  for (const descriptor of Object.values(OPERATORS)) {
+    const defName = `${pascalCase(descriptor.type)}Operator`;
+    const { properties, required } = fieldsToProperties(
+      resolveFields(descriptor)
+    );
+    defs[defName] = {
+      ...(descriptor.doc ? { description: descriptor.doc } : {}),
+      type: "object",
+      required: ["type", ...required],
+      additionalProperties: true,
+      properties: {
+        type: { const: descriptor.type },
+        ...properties,
+        translate: { $ref: "#/$defs/Translate" },
+        origin: { $ref: "#/$defs/Origin" },
+        meta: { $ref: "#/$defs/Meta" },
+        debug: { type: "boolean" },
+      },
+    };
+    refs.push({ $ref: `#/$defs/${defName}` });
+  }
+  defs.OperatorIR = {
+    description:
+      "A pipeline operator — a discriminated union, one member per operator type. See validate.ts and schema.ts for the same field shapes.",
+    oneOf: refs,
+  };
+  return defs;
+}
+
+/**
+ * Build one `$def` per leaf-mark type (`RectMark`, `TextMark`, ...) plus the
+ * `LeafMarkIR` union referencing them. Unlike operators, `additionalProperties`
+ * stays `true` (leaf marks are open-world for now — the gradual-rollout
+ * stance `validate.ts`'s leaf-mark warnings implement) and `required` is
+ * just `["type"]` regardless of the descriptor's own required fields, so an
+ * external strict consumer of this schema doesn't start rejecting documents
+ * our own validator only warns about.
+ */
+function buildLeafMarkDefs(): Record<string, unknown> {
+  const defs: Record<string, unknown> = {};
+  const refs: Record<string, unknown>[] = [];
+  for (const descriptor of Object.values(LEAF_MARKS)) {
+    const defName = `${pascalCase(descriptor.type)}Mark`;
+    const { properties } = fieldsToProperties(resolveFields(descriptor));
+    defs[defName] = {
+      ...(descriptor.doc ? { description: descriptor.doc } : {}),
+      type: "object",
+      required: ["type"],
+      additionalProperties: true,
+      properties: {
+        type: { const: descriptor.type },
+        ...properties,
+        name: { type: "string" },
+        label: { $ref: "#/$defs/LabelIR" },
+        constraints: {
+          type: "array",
+          items: { $ref: "#/$defs/ConstraintIR" },
+        },
+        zOrder: { type: "number" },
+        debug: { type: "boolean" },
+        translate: { $ref: "#/$defs/Translate" },
+      },
+    };
+    refs.push({ $ref: `#/$defs/${defName}` });
+  }
+  defs.LeafMarkIR = {
+    oneOf: refs,
+  };
+  return defs;
+}
+
+const GENERATED_DEFS: Record<string, unknown> = {
+  ...buildOperatorDefs(),
+  ...buildLeafMarkDefs(),
+};
 
 export const FRONTEND_IR_JSON_SCHEMA = {
   $schema: "https://json-schema.org/draft/2020-12/schema",
@@ -74,6 +250,15 @@ export const FRONTEND_IR_JSON_SCHEMA = {
             id: { type: "string" },
           },
         },
+        {
+          type: "object",
+          required: ["type"],
+          properties: {
+            type: { const: "previous-tier" },
+          },
+          description:
+            "An empty chart() scope inside a .layer(...) chain: inherit the immediately preceding tier's marks. Only valid on a tier inside a builder:true LayerIR.",
+        },
       ],
     },
     ChartIR: {
@@ -129,36 +314,8 @@ export const FRONTEND_IR_JSON_SCHEMA = {
         meta: { $ref: "#/$defs/Meta" },
       },
     },
-    OperatorIR: {
-      type: "object",
-      description:
-        "A pipeline operator. Field coverage is open at the schema level (`additionalProperties` is permitted) — see validate.ts and schema.ts for per-type field shapes. `spread`, `stack`, and `scatter` accept an `axes` property of shape `AxesOptions`; operators may carry structural `translate` metadata.",
-      required: ["type"],
-      properties: {
-        type: {
-          enum: [
-            "derive",
-            "resolve",
-            "join",
-            "spread",
-            "stack",
-            "group",
-            "scatter",
-            "table",
-            "log",
-          ],
-        },
-        axes: { $ref: "#/$defs/AxesOptions" },
-        translate: { $ref: "#/$defs/Translate" },
-        w: { $ref: "#/$defs/ChannelValue" },
-        h: { $ref: "#/$defs/ChannelValue" },
-        cols: { type: "array", items: { type: "string" } },
-        from: { type: "string" },
-        key: { type: "string" },
-        on: { type: "string" },
-        right: { type: "array", items: { type: "object" } },
-      },
-    },
+    // OperatorIR + one $def per operator type (SpreadOperator, TableOperator,
+    // ...) are GENERATED from descriptors.ts — see GENERATED_DEFS below.
     Translate: {
       description:
         "Structural pixel translation reapplied by the runtime deserializer.",
@@ -278,35 +435,8 @@ export const FRONTEND_IR_JSON_SCHEMA = {
         },
       ],
     },
-    LeafMarkIR: {
-      type: "object",
-      required: ["type"],
-      properties: {
-        type: {
-          enum: [
-            "rect",
-            "circle",
-            "line",
-            "ribbon",
-            "blank",
-            "ellipse",
-            "petal",
-            "text",
-            "image",
-            "polygon",
-            "mark-fn",
-          ],
-        },
-        name: { type: "string" },
-        label: { $ref: "#/$defs/LabelIR" },
-        constraints: {
-          type: "array",
-          items: { $ref: "#/$defs/ConstraintIR" },
-        },
-        zOrder: { type: "number" },
-        translate: { $ref: "#/$defs/Translate" },
-      },
-    },
+    // LeafMarkIR + one $def per leaf-mark type (RectMark, TextMark, ...) are
+    // GENERATED from descriptors.ts — see GENERATED_DEFS below.
     CombinatorMarkIR: {
       type: "object",
       required: ["type", "__combinator", "children"],
@@ -342,6 +472,7 @@ export const FRONTEND_IR_JSON_SCHEMA = {
           items: { $ref: "#/$defs/ConstraintIR" },
         },
         zOrder: { type: "number" },
+        debug: { type: "boolean" },
         translate: { $ref: "#/$defs/Translate" },
       },
     },
@@ -449,5 +580,6 @@ export const FRONTEND_IR_JSON_SCHEMA = {
         },
       ],
     },
+    ...GENERATED_DEFS,
   },
-} as const;
+};

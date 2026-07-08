@@ -5,15 +5,17 @@
   "private": true,
   "scripts": {
     "build:widget": "node build-widget.mjs",
+    "gen": "pnpm --dir ../gofish-ir run build && tsx scripts/generate.ts",
     "test": "uv run pytest"
   },
   "dependencies": {
     "apache-arrow": "^14.0.0",
     "solid-js": "^1.9.5",
-    "gofish-graphics": "workspace:*"
+    "gofish-graphics": "workspace:*",
+    "gofish-ir": "workspace:*"
   },
   "devDependencies": {
-    "esbuild": "^0.24.0"
+    "esbuild": "^0.24.0",
+    "tsx": "^4.19.2"
   }
 }
-

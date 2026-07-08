@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * sync-ir-schema — regenerate the "Full JSON Schema" docs page from the
- * canonical `FRONTEND_IR_JSON_SCHEMA` constant exported by gofish-ir.
+ * built Frontend IR JSON Schema artifact.
  *
  * Mirrors the sync-backlinks pattern: there's a generator (`sync`) and a
  * CI-friendly drift detector (`check`). The generated page lives at
@@ -12,9 +12,18 @@
  *   check  — exit non-zero if the page would be regenerated to something
  *            different than what's on disk
  *
- * This script consumes the *source* (gofish-ir/src/frontend/jsonSchema.ts)
- * rather than the build artifact, so it doesn't require `pnpm --filter
- * gofish-ir build` to have run first.
+ * This script consumes the *build artifact*
+ * (`packages/gofish-ir/dist/frontend/v0.json`), not the TS source. Since
+ * `jsonSchema.ts` retargeted its per-operator/per-leaf-mark `$defs` onto
+ * `descriptors.ts` (generated at call time via `buildOperatorDefs()` /
+ * `buildLeafMarkDefs()`), the exported schema is no longer a single `as
+ * const` object literal a regex can lift out of the source — it has to be
+ * evaluated, and the JSON artifact is the already-evaluated result. This
+ * means `pnpm --filter gofish-ir build` MUST run before this script, the
+ * same ordering `gofish-python`'s `scripts/generate.ts` needs (it imports
+ * `gofish-ir/frontend`, which resolves through `dist/`) — see that CI step
+ * and this package's `sync-ir-schema` / `check-ir-schema` scripts, which
+ * both run the build first rather than each consumer re-deriving it.
  */
 
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
@@ -24,9 +33,9 @@ import prettier from "prettier";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, "..", "..", "..");
-const SCHEMA_SOURCE = resolve(
+const SCHEMA_ARTIFACT = resolve(
   REPO_ROOT,
-  "packages/gofish-ir/src/frontend/jsonSchema.ts"
+  "packages/gofish-ir/dist/frontend/v0.json"
 );
 const DOC_PAGE = resolve(
   REPO_ROOT,
@@ -35,35 +44,15 @@ const DOC_PAGE = resolve(
 
 const mode = process.argv[2] === "check" ? "check" : "sync";
 
-/**
- * The schema is exported as a TypeScript `as const` object literal.
- * We can't `import()` it in plain Node (no ts loader), so we parse the
- * JS object literal out of the source. The constant's body is
- * everything between `FRONTEND_IR_JSON_SCHEMA = ` and the trailing
- * `} as const;`.
- */
+/** Read the built JSON Schema artifact. Requires `pnpm --filter gofish-ir
+ *  build` to have run first (see the module doc comment above). */
 function readSchemaConstant() {
-  const src = readFileSync(SCHEMA_SOURCE, "utf-8");
-  const start = src.indexOf("FRONTEND_IR_JSON_SCHEMA = ");
-  if (start === -1) {
+  if (!existsSync(SCHEMA_ARTIFACT)) {
     throw new Error(
-      `couldn't find FRONTEND_IR_JSON_SCHEMA in ${SCHEMA_SOURCE}`
+      `${SCHEMA_ARTIFACT} does not exist. Run \`pnpm --filter gofish-ir build\` first.`
     );
   }
-  const afterEq = src.slice(start + "FRONTEND_IR_JSON_SCHEMA = ".length);
-  const endMarker = "} as const;";
-  const endIdx = afterEq.lastIndexOf(endMarker);
-  if (endIdx === -1) {
-    throw new Error(`couldn't find "} as const;" terminator`);
-  }
-  // Trim the trailing `}` back onto the body, drop ` as const;`.
-  const body = afterEq.slice(0, endIdx + 1);
-  // Use `new Function` so we can evaluate the literal without bringing
-  // in a TS loader. The literal is plain JSON-ish JS — object/array
-  // literals with string/number/boolean values — so this is safe.
-
-  const value = new Function(`return (${body})`)();
-  return value;
+  return JSON.parse(readFileSync(SCHEMA_ARTIFACT, "utf-8"));
 }
 
 const PAGE_TEMPLATE = (json) => `---

@@ -67,6 +67,7 @@ import {
   createName,
   Treemap,
   setMeasureProvenance,
+  PREVIOUS_LAYER_MARKS,
   type ChartBuilder,
   type MeasureProvenance,
   type Operator,
@@ -123,7 +124,7 @@ const COMBINATOR_FACTORIES: Record<
 type SelectDataSpec = Extract<Frontend.DataIR, { type: "select" }>;
 
 interface ChartHarnessSpec {
-  data: Record<string, any>[] | SelectDataSpec | null;
+  data: Record<string, any>[] | Frontend.DataIR | null;
   operators: OperatorSpec[];
   mark: MarkSpec;
   options: Record<string, any>;
@@ -795,6 +796,9 @@ function buildChartFromSpec(
   //   - { type: "inline", rows: [...] } → use the rows directly
   //   - { type: "select", layer: name, mode } → resolve against the layer
   //     registry: mode "all" → selectAll(layer), otherwise → ref(layer)
+  //   - { type: "previous-tier" } → empty chart() scope inside a .layer(...)
+  //     builder chain; maps to PREVIOUS_LAYER_MARKS so LayerBuilder's own
+  //     wireTiers() does the auto-naming/selectAll wiring JS-side
   //   - null / array (legacy) → treat as bare rows
   let chartData: any = chartSpec.data;
   if (chartData && typeof chartData === "object" && !Array.isArray(chartData)) {
@@ -803,6 +807,8 @@ function buildChartFromSpec(
       chartData = sel.mode === "all" ? selectAll(sel.layer) : ref(sel.layer);
     } else if ((chartData as any).type === "inline") {
       chartData = (chartData as any).rows;
+    } else if ((chartData as any).type === "previous-tier") {
+      chartData = PREVIOUS_LAYER_MARKS;
     }
   }
 
