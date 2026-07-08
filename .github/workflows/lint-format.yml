@@ -64,3 +64,9 @@ jobs:
 
       - name: Check Frontend IR JSON Schema docs page is in sync
         run: pnpm --filter docs check-ir-schema
+
+      - name: Check generated Python factory layer is in sync
+        run: |
+          pnpm --filter gofish-ir build
+          pnpm --filter gofish-python gen
+          git diff --exit-code -- packages/gofish-python/gofish/_generated.py

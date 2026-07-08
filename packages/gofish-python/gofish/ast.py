@@ -119,6 +119,20 @@ class _PendingAccessor:
         self.lambda_id = str(uuid.uuid4())
 
 
+def _channel(v: Any) -> Any:
+    """Wrap a bare callable channel value in `_PendingAccessor`.
+
+    Generalizes what `text()` already did for its `text=` kwarg (the only
+    channel that supported an accessor lambda) to any generated leaf-mark
+    channel kwarg — a plain literal/field-name/`datum()` passes through
+    unchanged, a callable `(row) -> value` gets wrapped so
+    `_collect_mark_lambdas` can register it with the derive RPC bridge.
+    """
+    if v is not None and not isinstance(v, (str, int, float, bool)) and callable(v):
+        return _PendingAccessor(v)
+    return v
+
+
 def _collect_mark_lambdas(mark: "Mark") -> List[tuple]:
     """Walk a Mark tree, yielding `(lambda_id, rows_fn)` pairs for every
     `_PendingAccessor` in mark kwargs (and recursively in combinator
@@ -493,6 +507,41 @@ class Mark:
     def _repr_mimebundle_(self, include=None, exclude=None):
         """Auto-display in notebooks (see ChartBuilder._repr_mimebundle_)."""
         return self.render()._repr_mimebundle_(include=include, exclude=exclude)
+
+
+# The generated factory layer (packages/gofish-python/gofish/_generated.py)
+# imports `Mark` / `_channel` from this module, so it can only be imported
+# here AFTER both are defined (circular import, resolved by Python's partial
+# module semantics: `gofish._generated` reads these two names off the
+# already-executing `gofish.ast` module object). See
+# apps/docs/docs/internals/design/python-wrapper-codegen.md.
+from ._generated import (  # noqa: E402
+    rect,
+    circle,
+    ellipse,
+    petal,
+    text,
+    image,
+    polygon,
+    blank,
+    over,
+    intersect,
+    exclude,
+    subtract,
+    paint,
+    mask,
+    enclose,
+    arrow,
+    _spread_opts,
+    _stack_opts,
+    _scatter_opts,
+    _group_opts,
+    _table_opts,
+    _treemap_opts,
+    _line_opts,
+    _ribbon_opts,
+    _polar_config,
+)
 
 
 # Low-level constraint surface — mirrors JS `Constraint.align` / `Constraint.distribute`
@@ -1339,17 +1388,21 @@ def spread(
                 "spread() combinator form (with children) does not accept "
                 "`by` — the layout is over the explicit child list, not data."
             )
+        # Combinator form: the low-level `Spread`/`SpreadOptions` factory
+        # additionally takes the full box-dims passthrough (x/y/w/h/key/...),
+        # which the v3-operator IR doesn't — stays open (see the `w`/`h` drift
+        # note on COMBINATOR_MARKS.spread in the descriptor table).
         return Mark("spread", _children=list(children), **options)
     if by is not None:
         options["by"] = by
-    return Operator("spread", **options)
+    return Operator("spread", **_spread_opts(**options))
 
 
 def layer(
     children_or_options: Union[List[Any], dict],
     children: Optional[List[Any]] = None,
     **options: Any,
-):
+) -> Union["LayerBuilder", "ConstrainableMark"]:
     """Layer marks or charts — a single dual-form `layer` (like spread/stack).
 
     Two element kinds, dispatched by child type:
@@ -1381,26 +1434,8 @@ def layer(
     return ConstrainableMark("layer", _children=list(kids), **opts)
 
 
-def enclose(children: List["Mark"], **options: Any) -> "Mark":
-    """Enclose child marks in a bordered rectangle.
-
-    A graphical wrapping operator (combinator-only, like a low-level
-    ``layer([...])`` but it draws a rounded border around its children and has
-    no ``.constrain``). Mirrors the JS ``enclose([...], {padding, rx, ry})``
-    combinator.
-
-    Args:
-        children: The child Marks to wrap.
-        **options: ``padding`` (border inset, default 2), ``rx`` / ``ry``
-            (corner radii, default 2).
-
-    Example::
-
-        enclose([
-            spread([bars, heatmap], dir="x", spacing=40),
-        ], padding=8)
-    """
-    return Mark("enclose", _children=list(children), **options)
+# `enclose` is generated (packages/gofish-python/gofish/_generated.py) —
+# pure kwargs-collection, imported above.
 
 
 # Attribute names reserved on `_RefProxy` so they pass through normal
@@ -1525,90 +1560,18 @@ def Treemap(  # noqa: N802  — match JS storybook spelling
     Mirrors JS `Treemap({valueField, ...}, nodes)` from
     `packages/gofish-graphics/src/ast/graphicalOperators/treemap.tsx:62`.
     """
-    return Mark("treemap", _children=list(children), **options)
+    return Mark("treemap", _children=list(children), **_treemap_opts(**options))
 
 
-def arrow(
-    children: List["Mark"],
-    **options: Any,
-) -> Mark:
-    """
-    Low-level combinator-form arrow.
-
-    Takes a list of two (or more) refs / marks and draws an arrow between
-    them. Mirrors JS `arrow({stroke?, strokeWidth?, ...}, [from, to])` from
-    `packages/gofish-graphics/src/ast/graphicalOperators/arrow.tsx:45`.
-
-        arrow([ref("label"), ref("Mercury")])
-        arrow([ref("a"), ref("b")], stroke="red", strokeWidth=2)
-    """
-    return Mark("arrow", _children=list(children), **options)
-
-
-# ─── Region-compositing combinators (Porter-Duff) ──────────────────────────
-# Mirrors the JS region-compositing operators from
-# `packages/gofish-graphics/src/ast/graphicalOperators/porterDuff` (and the
-# v3 re-exports in `marks/chart.ts`). Each is a two-children combinator whose
-# IR carries the same `__combinator: true` shape as `spread`/`layer`/`arrow`.
-# The harness/widget reconstructs by calling the JS factory.
-#
-# PR #404's Stage-2 rename (#196/#202) renamed the public Porter-Duff exports
-# to Figma-inspired names:
-#   inside → intersect, xor → exclude, out → subtract, atop → paint.
-# `over` stays internal-for-IR (conceptually `layer`, #196) — prefer `layer`
-# in user code. Only the Python user-facing NAMES changed: the emitted IR wire
-# `type` strings stay the OLD spellings ("inside"/"xor"/"out"/"atop"), which the
-# IR serializer never renamed (the COMBINATOR_FACTORIES map in tests/harness and
-# packages/gofish-graphics/src/serialize/registry.ts is still keyed by the old
-# wire types). This divergence mirrors the matching comments there.
-
-
-def over(children: List["Mark"], **options: Any) -> Mark:
-    """Region union — destination painted over source.
-
-    Internal-for-IR: emits the "over" wire type, but the JS side treats it as
-    a `layer`. Prefer `layer(...)` in user code; this is re-exported only so the
-    low-level Union demo can mirror the JS storybook.
-    """
-    return Mark("over", _children=list(children), **options)
-
-
-def intersect(children: List["Mark"], **options: Any) -> Mark:
-    """Region intersection — keep only where source and destination overlap.
-
-    Renamed from `inside` (#196/#202). Emits the OLD "inside" wire type.
-    """
-    return Mark("inside", _children=list(children), **options)
-
-
-def exclude(children: List["Mark"], **options: Any) -> Mark:
-    """Region symmetric difference — keep where exactly one of source /
-    destination is present.
-
-    Renamed from `xor` (#196/#202). Emits the OLD "xor" wire type.
-    """
-    return Mark("xor", _children=list(children), **options)
-
-
-def subtract(children: List["Mark"], **options: Any) -> Mark:
-    """Region difference — source minus destination.
-
-    Renamed from `out` (#196/#202). Emits the OLD "out" wire type.
-    """
-    return Mark("out", _children=list(children), **options)
-
-
-def paint(children: List["Mark"], **options: Any) -> Mark:
-    """Region paint — source painted only where destination is.
-
-    Renamed from `atop` (#196/#202). Emits the OLD "atop" wire type.
-    """
-    return Mark("atop", _children=list(children), **options)
-
-
-def mask(children: List["Mark"], **options: Any) -> Mark:
-    """Alpha-mask compositing (unchanged name)."""
-    return Mark("mask", _children=list(children), **options)
+# `arrow` and the region-compositing quartet (Porter-Duff-style
+# inside/xor/out/atop, renamed intersect/exclude/subtract/paint per #196/#202,
+# plus `over`/`mask`) are generated (packages/gofish-python/gofish/_generated.py)
+# — pure kwargs-collection + the `pyName` rename table, imported above. Wire
+# `type` strings stay the OLD Porter-Duff spellings ("inside"/"xor"/"out"/
+# "atop") per the descriptor's `pyName` — the IR serializer never renamed them
+# (COMBINATOR_FACTORIES in tests/harness and
+# packages/gofish-graphics/src/serialize/registry.ts are still keyed by the
+# old wire types).
 
 
 def stack(
@@ -1651,9 +1614,15 @@ def stack(
                 "stack() combinator form (with children) does not accept "
                 "`by` — the layout is over the explicit child list, not data."
             )
+        # Combinator form stays open — see the matching note in spread().
         return Mark("stack", _children=list(children), **options)
     if by is not None:
         options["by"] = by
+    # Stays open (not routed through `_stack_opts`'s closed signature): real
+    # stories pass `spacing`/`y`/`h`/`label` to the stack OPERATOR even
+    # though schema.ts's `StackOperator` doesn't declare them — pre-existing
+    # wire-level drift beyond this stage's scope to resolve (would need a
+    # schema.ts change, not just a Python-wrapper one).
     return Operator("stack", **options)
 
 
@@ -1688,7 +1657,7 @@ def group(*, by: str, **options: Any) -> Operator:
         Operator object
     """
     options["by"] = by
-    return Operator("group", **options)
+    return Operator("group", **_group_opts(**options))
 
 
 def resolve(cols: List[str], *, from_: Any, key: Optional[str] = None) -> Operator:
@@ -1791,7 +1760,16 @@ def scatter(
     """
     if by is not None:
         options["by"] = by
-    return Operator("scatter", **options)
+    # `debug` is a universal v3-operator escape hatch (createOperator.ts's
+    # `FACTORY_ONLY_KEYS` strips it before layout, generically — not part of
+    # the canonical schema/descriptor, so it can't go through `_scatter_opts`'s
+    # closed signature). Pop it out, route the rest through the core, add it
+    # back.
+    debug = options.pop("debug", None)
+    core_opts = _scatter_opts(**options)
+    if debug is not None:
+        core_opts["debug"] = debug
+    return Operator("scatter", **core_opts)
 
 
 def treemap(**options: Any) -> Operator:
@@ -1801,7 +1779,7 @@ def treemap(**options: Any) -> Operator:
     Mirrors JS ``treemap({ valueField, tile, sort, flipY, ... })`` in
     ``.flow()``.
     """
-    return Operator("treemap", **options)
+    return Operator("treemap", **_treemap_opts(**options))
 
 
 def table(
@@ -1822,7 +1800,7 @@ def table(
     """
     if by is not None:
         options["by"] = by
-    return Operator("table", **options)
+    return Operator("table", **_table_opts(**options))
 
 
 def log(label: Optional[str] = None) -> Operator:
@@ -1873,31 +1851,11 @@ def gradient(stops: Union[str, List[str]]) -> dict:
 # Coordinate transforms
 
 
-def _polar_config(
-    transform_type: str,
-    inner_radius: float | None,
-    central_angle: float | None,
-    start_angle: float | None,
-    direction: int | None,
-    center: tuple[float, float] | list[float] | None,
-) -> dict:
-    """Shared builder for the polar-family coord configs. Options ride along in
-    the tag dict; the JS side reconstructs ``polar(opts)``/``clock(opts)`` from
-    them (the function body can't cross the IR bridge). Only set options are
-    emitted, so defaults stay on the JS side. Wire keys are camelCase to match
-    the JS ``PolarOptions``."""
-    cfg: dict = {"type": transform_type}
-    if inner_radius is not None:
-        cfg["innerRadius"] = inner_radius
-    if central_angle is not None:
-        cfg["centralAngle"] = central_angle
-    if start_angle is not None:
-        cfg["startAngle"] = start_angle
-    if direction is not None:
-        cfg["direction"] = direction
-    if center is not None:
-        cfg["center"] = list(center)
-    return cfg
+# `_polar_config` is generated (packages/gofish-python/gofish/_generated.py)
+# from the shared `polarFields` group in the descriptor table — imported
+# above. `clock()`/`polar()`/`wavy()` stay hand-written thin wrappers (the
+# snake_case-kwarg convention and the `clock`-vs-`polar` type-tag dispatch
+# aren't part of the descriptor).
 
 
 def clock(
@@ -1924,7 +1882,12 @@ def clock(
         Coord config dict for use in chart options
     """
     return _polar_config(
-        "clock", inner_radius, central_angle, start_angle, direction, center
+        "clock",
+        inner_radius=inner_radius,
+        central_angle=central_angle,
+        start_angle=start_angle,
+        direction=direction,
+        center=center,
     )
 
 
@@ -1954,7 +1917,12 @@ def polar(
         Coord config dict for use in chart/layer options
     """
     return _polar_config(
-        "polar", inner_radius, central_angle, start_angle, direction, center
+        "polar",
+        inner_radius=inner_radius,
+        central_angle=central_angle,
+        start_angle=start_angle,
+        direction=direction,
+        center=center,
     )
 
 
@@ -2149,90 +2117,13 @@ def repeat(row: dict, field: str) -> List[dict]:
 
 
 # Mark factory functions
-
-
-def rect(
-    w: Optional[Union[int, str]] = None,
-    h: Optional[Union[int, str]] = None,
-    fill: Optional[str] = None,
-    stroke: Optional[str] = None,
-    strokeWidth: Optional[int] = None,
-    opacity: Optional[float] = None,
-    rx: Optional[int] = None,
-    ry: Optional[int] = None,
-    emX: Optional[bool] = None,
-    emY: Optional[bool] = None,
-    rs: Optional[int] = None,
-    ts: Optional[int] = None,
-    x: Optional[Union[int, str]] = None,
-    y: Optional[Union[int, str]] = None,
-    cx: Optional[Union[int, str]] = None,
-    cy: Optional[Union[int, str]] = None,
-    x2: Optional[Union[int, str]] = None,
-    y2: Optional[Union[int, str]] = None,
-    aspectRatio: Optional[float] = None,
-    filter: Optional[str] = None,
-    label: Optional[Union[bool, str]] = None,
-    key: Optional[str] = None,
-    debug: Optional[bool] = None,
-) -> Mark:
-    """Rectangle mark."""
-    kwargs: Dict[str, Any] = {}
-    for k, value in [
-        ("w", w),
-        ("h", h),
-        ("fill", fill),
-        ("stroke", stroke),
-        ("strokeWidth", strokeWidth),
-        ("opacity", opacity),
-        ("rx", rx),
-        ("ry", ry),
-        ("emX", emX),
-        ("emY", emY),
-        ("rs", rs),
-        ("ts", ts),
-        ("x", x),
-        ("y", y),
-        ("cx", cx),
-        ("cy", cy),
-        ("x2", x2),
-        ("y2", y2),
-        ("aspectRatio", aspectRatio),
-        ("filter", filter),
-        ("label", label),
-        ("key", key),
-        ("debug", debug),
-    ]:
-        if value is not None:
-            kwargs[k] = value
-    return Mark("rect", **kwargs)
-
-
-def circle(
-    r: Optional[Union[int, str]] = None,
-    fill: Optional[str] = None,
-    stroke: Optional[str] = None,
-    strokeWidth: Optional[int] = None,
-    opacity: Optional[float] = None,
-    label: Optional[Union[bool, str]] = None,
-    debug: Optional[bool] = None,
-    **kwargs: Any,
-) -> Mark:
-    """Circle mark. Extra channels (`x`, `y`, `cx`, …) accepted via `**kwargs`."""
-    mark_kwargs: Dict[str, Any] = {}
-    for k, value in [
-        ("r", r),
-        ("fill", fill),
-        ("stroke", stroke),
-        ("strokeWidth", strokeWidth),
-        ("opacity", opacity),
-        ("label", label),
-        ("debug", debug),
-    ]:
-        if value is not None:
-            mark_kwargs[k] = value
-    mark_kwargs.update(kwargs)
-    return Mark("circle", **mark_kwargs)
+#
+# rect / circle / ellipse / petal / text / image / polygon / blank are
+# generated (packages/gofish-python/gofish/_generated.py) — pure
+# kwargs-collection + wire rename, imported above. `rect()`'s generated
+# signature drops the phantom `rs=`/`ts=` kwargs (they existed nowhere in JS)
+# and gains the real coord aliases (`theta`/`thetaSize`/`r`/`rSize`); `text()`
+# drops a phantom `fontWeight=` (also nowhere in JS).
 
 
 def line(
@@ -2265,22 +2156,19 @@ def line(
       - pairwise form ``line(from_=..., to=...)`` over rows whose ``from``/``to``
         columns hold refs (one segment per row, after :func:`resolve`).
     """
-    kwargs: Dict[str, Any] = {}
-    for k, value in [
-        ("dir", dir),
-        ("source", source),
-        ("target", target),
-        ("fill", fill),
-        ("stroke", stroke),
-        ("strokeWidth", strokeWidth),
-        ("opacity", opacity),
-        ("mixBlendMode", mixBlendMode),
-        ("curve", curve),
-        ("from", from_),
-        ("to", to),
-    ]:
-        if value is not None:
-            kwargs[k] = value
+    kwargs = _line_opts(
+        dir=dir,
+        source=source,
+        target=target,
+        fill=fill,
+        stroke=stroke,
+        strokeWidth=strokeWidth,
+        opacity=opacity,
+        mixBlendMode=mixBlendMode,
+        curve=curve,
+        from_=from_,
+        to=to,
+    )
     if children is not None:
         return Mark("line", _children=list(children), **kwargs)
     return Mark("line", **kwargs)
@@ -2307,200 +2195,20 @@ def ribbon(
     children — drop-in for the removed ``connect``), bag form, and pairwise form
     ``ribbon(from_=..., to=...)`` (one band per row, after :func:`resolve`).
     """
-    kwargs: Dict[str, Any] = {}
-    for k, value in [
-        ("dir", dir),
-        ("fill", fill),
-        ("stroke", stroke),
-        ("strokeWidth", strokeWidth),
-        ("opacity", opacity),
-        ("mixBlendMode", mixBlendMode),
-        ("curve", curve),
-        ("from", from_),
-        ("to", to),
-    ]:
-        if value is not None:
-            kwargs[k] = value
+    kwargs = _ribbon_opts(
+        dir=dir,
+        fill=fill,
+        stroke=stroke,
+        strokeWidth=strokeWidth,
+        opacity=opacity,
+        mixBlendMode=mixBlendMode,
+        curve=curve,
+        from_=from_,
+        to=to,
+    )
     if children is not None:
         return Mark("ribbon", _children=list(children), **kwargs)
     return Mark("ribbon", **kwargs)
-
-
-def blank(
-    w: Optional[Union[int, str]] = None,
-    h: Optional[Union[int, str]] = None,
-    **kwargs: Any,
-) -> Mark:
-    """Blank mark - invisible guide for positioning."""
-    blank_kwargs: Dict[str, Any] = {}
-    if w is not None:
-        blank_kwargs["w"] = w
-    if h is not None:
-        blank_kwargs["h"] = h
-    blank_kwargs.update(kwargs)
-    return Mark("blank", **blank_kwargs)
-
-
-def ellipse(
-    w: Optional[Union[int, str]] = None,
-    h: Optional[Union[int, str]] = None,
-    fill: Optional[str] = None,
-    stroke: Optional[str] = None,
-    strokeWidth: Optional[int] = None,
-    debug: Optional[bool] = None,
-    **kwargs: Any,
-) -> Mark:
-    """Ellipse mark.
-
-    Extra positioning channels (`x`, `y`, `cx`, `cy`, `emX`, …) accepted via
-    `**kwargs`, matching JS `ellipse({...})` which takes the full shape-channel
-    set — the low-level stories position ellipses with `x`/`cx`/`cy`.
-    """
-    mark_kwargs: Dict[str, Any] = {}
-    for k, value in [
-        ("w", w),
-        ("h", h),
-        ("fill", fill),
-        ("stroke", stroke),
-        ("strokeWidth", strokeWidth),
-        ("debug", debug),
-    ]:
-        if value is not None:
-            mark_kwargs[k] = value
-    mark_kwargs.update(kwargs)
-    return Mark("ellipse", **mark_kwargs)
-
-
-def petal(
-    w: Optional[Union[int, str]] = None,
-    h: Optional[Union[int, str]] = None,
-    fill: Optional[str] = None,
-    stroke: Optional[str] = None,
-    strokeWidth: Optional[int] = None,
-    debug: Optional[bool] = None,
-    **kwargs: Any,
-) -> Mark:
-    """Petal mark. Extra channels (`x`, `cx`, …) accepted via `**kwargs`."""
-    mark_kwargs: Dict[str, Any] = {}
-    for k, value in [
-        ("w", w),
-        ("h", h),
-        ("fill", fill),
-        ("stroke", stroke),
-        ("strokeWidth", strokeWidth),
-        ("debug", debug),
-    ]:
-        if value is not None:
-            mark_kwargs[k] = value
-    mark_kwargs.update(kwargs)
-    return Mark("petal", **mark_kwargs)
-
-
-def text(
-    text: Optional[Any] = None,
-    fill: Optional[str] = None,
-    fontSize: Optional[Union[int, str]] = None,
-    fontWeight: Optional[Union[int, str]] = None,
-    fontFamily: Optional[str] = None,
-    debugBoundingBox: Optional[bool] = None,
-    label: Optional[str] = None,
-    debug: Optional[bool] = None,
-) -> Mark:
-    """Text mark.
-
-    Args:
-        text: String content, a field-name accessor, or a callable
-            `(row) -> str`. Callables are routed through the same derive RPC
-            as `derive()` operators — `ChartBuilder.mark()` walks the mark
-            tree, registers the callable, and prepends a derive step that
-            populates an auto-generated field per row.
-        fill: Text color.
-        fontSize / fontWeight / fontFamily: Typography.
-        debugBoundingBox: Draw the text's bounding box (for layout debug).
-        label: Auto-value-label flag (different from text content).
-    """
-    if (
-        text is not None
-        and not isinstance(text, (str, int, float, bool))
-        and callable(text)
-    ):
-        text = _PendingAccessor(text)
-    kwargs: Dict[str, Any] = {}
-    for k, value in [
-        ("text", text),
-        ("fill", fill),
-        ("fontSize", fontSize),
-        ("fontWeight", fontWeight),
-        ("fontFamily", fontFamily),
-        ("debugBoundingBox", debugBoundingBox),
-        ("label", label),
-        ("debug", debug),
-    ]:
-        if value is not None:
-            kwargs[k] = value
-    return Mark("text", **kwargs)
-
-
-def image(
-    href: Optional[str] = None,
-    w: Optional[Union[int, str]] = None,
-    h: Optional[Union[int, str]] = None,
-    x: Optional[Union[int, str]] = None,
-    y: Optional[Union[int, str]] = None,
-    debug: Optional[bool] = None,
-) -> Mark:
-    """Image mark.
-
-    Args:
-        href: URL of the image. Matches the JS storybook spelling
-            (`image({href: ...})`). For local files in the parity-test
-            environment, use Vite's `/@fs/<absolute-path>` form.
-        w, h: Width/height.
-        x, y: Position.
-    """
-    kwargs: Dict[str, Any] = {}
-    for k, value in [
-        ("href", href),
-        ("w", w),
-        ("h", h),
-        ("x", x),
-        ("y", y),
-        ("debug", debug),
-    ]:
-        if value is not None:
-            kwargs[k] = value
-    return Mark("image", **kwargs)
-
-
-def polygon(
-    points: List[List[float]],
-    fill: Optional[str] = None,
-    stroke: Optional[str] = None,
-    strokeWidth: Optional[float] = None,
-    debug: Optional[bool] = None,
-) -> Mark:
-    """Polygon mark — closed polygon from explicit local-coord points.
-
-    Args:
-        points: Vertices `[[x, y], ...]` in local coordinates. GoFish is
-            y-up: `[0, 0]` is the bottom-left.
-        fill: Fill color.
-        stroke: Stroke color (defaults to `fill`).
-        strokeWidth: Stroke width.
-
-    Mirrors JS `polygon({ points, fill?, stroke?, strokeWidth? })` from
-    `packages/gofish-graphics/src/ast/shapes/polygon.tsx`.
-    """
-    kwargs: Dict[str, Any] = {"points": points}
-    for k, value in [
-        ("fill", fill),
-        ("stroke", stroke),
-        ("strokeWidth", strokeWidth),
-        ("debug", debug),
-    ]:
-        if value is not None:
-            kwargs[k] = value
-    return Mark("polygon", **kwargs)
 
 
 # ─── cut: slice a source shape into N clipped sub-shapes ────────────────────

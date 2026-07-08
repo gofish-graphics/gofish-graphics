@@ -23,8 +23,11 @@ chart([{}]).mark(
 ## Signature
 
 ```python
-polygon(points, fill=None, stroke=None, strokeWidth=None) -> Mark
+polygon(*, points=None, fill=None, stroke=None, strokeWidth=None, debug=None) -> Mark
 ```
+
+Keyword-only (matches every existing call site, which already passes
+`points=...` by keyword).
 
 ## Parameters
 

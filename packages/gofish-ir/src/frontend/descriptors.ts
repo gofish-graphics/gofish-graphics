@@ -249,6 +249,7 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
       from: {
         type: t.string,
         doc: "Layer name whose nodes the columns are resolved against (a selectAll).",
+        py: "from_",
       },
       key: {
         type: t.string,
@@ -457,6 +458,17 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
         type: t.boolean,
         doc: "Draw an inline value-label (the resolved fill value) at the mark's center. NOT the same field as the base `.label()` LabelIR mechanism — see the drift note in this file's report.",
       },
+      // A v3-mark-factory-wide dev flag (`FACTORY_ONLY_KEYS` in
+      // marks/createOperator.ts strips `by`/`debug` before layout, generically
+      // — not a rect-only feature). Documented per-mark (matching `blank`'s
+      // existing note) rather than as a base field since only the
+      // console.log-on-construction marks (rect/circle/ellipse/petal/blank)
+      // wire it through today. Found while grounding the Python generator:
+      // the hand-written Python wrapper already exposes it on all four.
+      debug: {
+        type: t.boolean,
+        doc: "Dev-only console.log flag. Genuinely serializes on the wire today but is stripped before layout (FACTORY_ONLY_KEYS) — carries no rendering meaning.",
+      },
     },
   }),
 
@@ -470,6 +482,10 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
       label: {
         type: t.boolean,
         doc: "Draw an inline value-label at the mark's center.",
+      },
+      debug: {
+        type: t.boolean,
+        doc: "Dev-only console.log flag; stripped before layout (FACTORY_ONLY_KEYS).",
       },
     },
   }),
@@ -489,6 +505,10 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
         type: t.boolean,
         doc: "Draw an inline value-label at the mark's center.",
       },
+      debug: {
+        type: t.boolean,
+        doc: "Dev-only console.log flag; stripped before layout (FACTORY_ONLY_KEYS).",
+      },
     },
   }),
 
@@ -499,6 +519,10 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
       fill: ch.color(),
       stroke: ch.color("Defaults to `fill`."),
       strokeWidth: { type: t.number },
+      debug: {
+        type: t.boolean,
+        doc: "Dev-only console.log flag; stripped before layout (FACTORY_ONLY_KEYS).",
+      },
     },
   }),
 
@@ -536,6 +560,10 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
       filter: { type: t.string, doc: "Raw SVG filter attribute." },
       opacity: { type: t.number },
       preserveAspectRatio: { type: t.string, default: "xMidYMid meet" },
+      debug: {
+        type: t.boolean,
+        doc: "Dev-only console.log flag; stripped before layout (FACTORY_ONLY_KEYS).",
+      },
     },
   }),
 
@@ -550,6 +578,10 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
       fill: { type: t.string, default: "black" },
       stroke: { type: t.string, doc: "Defaults to `fill`." },
       strokeWidth: { type: t.number },
+      debug: {
+        type: t.boolean,
+        doc: "Dev-only console.log flag; stripped before layout (FACTORY_ONLY_KEYS).",
+      },
     },
   }),
 
@@ -593,6 +625,7 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
       from: {
         type: t.string,
         doc: "Pairwise form: column holding the source ref.",
+        py: "from_",
       },
       to: {
         type: t.string,
@@ -614,7 +647,7 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
         type: t.any,
         doc: 'Screen-space band-edge shape (straight() | bezier()). Omitted = "auto" (bezier).',
       },
-      from: { type: t.string },
+      from: { type: t.string, py: "from_" },
       to: { type: t.string },
     },
   }),

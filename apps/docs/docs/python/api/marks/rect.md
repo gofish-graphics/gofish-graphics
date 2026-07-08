@@ -23,16 +23,17 @@ rect(w=None, h=None, fill=None, stroke=None, strokeWidth=None, opacity=None,
 
 ## Parameters
 
-| Parameter                        | Type            | Description                                 |
-| -------------------------------- | --------------- | ------------------------------------------- |
-| `w`, `h`                         | `int` \| `str`  | Width / height — a constant or a field name |
-| `fill`                           | `str`           | Fill color — a constant or a field name     |
-| `stroke`                         | `str`           | Stroke color                                |
-| `strokeWidth`                    | `int`           | Stroke width in pixels                      |
-| `opacity`                        | `float`         | Opacity, `0`–`1`                            |
-| `rx`, `ry`                       | `int`           | Corner radii                                |
-| `x`, `y`, `cx`, `cy`, `x2`, `y2` | `int` \| `str`  | Explicit position accessors                 |
-| `label`                          | `bool` \| `str` | Whether/what to label the rectangle         |
+| Parameter                          | Type            | Description                                   |
+| ---------------------------------- | --------------- | --------------------------------------------- |
+| `w`, `h`                           | `int` \| `str`  | Width / height — a constant or a field name   |
+| `fill`                             | `str`           | Fill color — a constant or a field name       |
+| `stroke`                           | `str`           | Stroke color                                  |
+| `strokeWidth`                      | `int`           | Stroke width in pixels                        |
+| `opacity`                          | `float`         | Opacity, `0`–`1`                              |
+| `rx`, `ry`                         | `int`           | Corner radii                                  |
+| `x`, `y`, `cx`, `cy`, `x2`, `y2`   | `int` \| `str`  | Explicit position accessors                   |
+| `theta`, `thetaSize`, `r`, `rSize` | `int` \| `str`  | Polar coord-space aliases for `x`/`w`/`y`/`h` |
+| `label`                            | `bool` \| `str` | Whether/what to label the rectangle           |
 
 Returns a `Mark` for use in [`.mark()`](/python/api/core/mark).
 
