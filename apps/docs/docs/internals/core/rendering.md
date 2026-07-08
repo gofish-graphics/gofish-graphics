@@ -310,6 +310,34 @@ display list. The declared orientation is derived from `session.flip !== undefin
 The SVG-export terminals (`toSVG`/`toSVGElement`/`save`) run the same lower→paint
 pipeline against a throwaway container and serialize the result.
 
+### The interaction hooks in paint
+
+The [reactive layer](/internals/frontend/reactivity) threads an optional
+`InteractionRuntime` through `render()`. When it is present (a chart read a
+signal during resolve), three things change; when it is absent — the common case
+— paint is **byte-identical** to a non-interactive build.
+
+- **`data-gf-id`.** `paintSVG` takes an optional `PaintContext` whose _only_ job
+  is to emit each item's `id` as a `data-gf-id` attribute for pointer hit-testing.
+  It is stamped only when a runtime is active, so the static path never emits it.
+- **Live slots.** A `live()` channel bakes a datum-bound thunk into a
+  `WeakMap` side table keyed by the display item (`liveSlots.ts`) at lower time —
+  outside the item, so the display list stays pure serializable data. In paint,
+  `paintSVG` looks the item up and, if a slot exists, _calls the thunk in JSX
+  attribute position_ (`fill={live.fill()}`), so Solid tracks the signal reads and
+  patches only that attribute — no re-lower, no re-layout. A `"text"` slot
+  overrides text content while the box keeps its measured size.
+- **Frame publication.** Before painting, `render()` publishes the lowered
+  `items`, the root `posScales`, and `toPixel` to the runtime as an
+  `InteractionFrame`, so hit-testing and data↔px conversions see the current
+  frame. Re-rendering into the same container first calls a stashed
+  `__gofishDispose` to tear down the previous reactive root (the interaction
+  scheduler re-renders into the same container on every spec change).
+
+The mechanism is: `data-gf-id` is the hit-test hook; the side table + JSX
+attribute calls are the paint reactivity; the runtime carries neither — it owns
+scheduling, event dispatch, and hit-testing only.
+
 ## `toDisplayList`: stopping at the IR
 
 Outside consumers that are not SVG — a Canvas/WebGPU backend, or a foreign host such

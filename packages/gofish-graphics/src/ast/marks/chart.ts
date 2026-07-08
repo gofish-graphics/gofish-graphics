@@ -13,6 +13,7 @@ import { type ColorConfig } from "../colorSchemes";
 
 export type { ColorConfig };
 import { inferSize } from "../channels";
+import { isLive, evalLiveStatic, type LiveValue } from "../../interaction/live";
 import { rect as generatedRect } from "../shapes/rect";
 import { Ellipse } from "../shapes/ellipse";
 import { Mark, Operator } from "../types";
@@ -253,7 +254,7 @@ export function circle<T extends Record<string, any>>({
   label,
 }: {
   r?: number;
-  fill?: string | keyof T;
+  fill?: string | keyof T | LiveValue;
   stroke?: string;
   strokeWidth?: number;
   debug?: boolean;
@@ -270,10 +271,22 @@ export function circle<T extends Record<string, any>>({
     if (debug) console.log("circle", key, d);
     // scatter passes an array of items; unwrap to first element for field lookup
     const datum: Record<string, any> = Array.isArray(d) ? (d as any[])[0] : d;
+    // `live(...)` fill: the pipeline renders the resolve-time value (evaluated
+    // untracked so its input reads wire events but aren't pipeline deps); paint
+    // re-evaluates it reactively via the datum-bound thunk baked at lower time.
+    let liveFill: LiveValue | undefined;
+    let staticFill: string | keyof T | undefined = fill as
+      | string
+      | keyof T
+      | undefined;
+    if (isLive(fill)) {
+      liveFill = fill;
+      staticFill = evalLiveStatic(fill, d) as string | undefined;
+    }
     const resolvedFill =
-      typeof fill === "string" && datum && fill in datum
-        ? v(datum[fill as string])
-        : (fill as Value<string> | undefined);
+      typeof staticFill === "string" && datum && staticFill in datum
+        ? v(datum[staticFill as string])
+        : (staticFill as Value<string> | undefined);
     const resolvedStroke =
       typeof stroke === "string" && datum && stroke in datum
         ? v(datum[stroke as string])
@@ -287,7 +300,8 @@ export function circle<T extends Record<string, any>>({
       strokeWidth,
       label,
     }).name(key?.toString() ?? "");
-    (node as any).datum = d;
+    node.datum = d;
+    if (liveFill) node.__gfLive = { fill: liveFill };
     return node;
   };
   const result = nameableMark(base);

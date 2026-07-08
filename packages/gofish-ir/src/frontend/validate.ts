@@ -190,7 +190,7 @@ function walkLayer(
 ): void {
   walkBaseFields(node, path, ctx);
   expectField(node, "charts", path, ctx, (v, p) =>
-    walkArray(v, p, ctx, walkRootChart)
+    walkArray(v, p, ctx, walkLayerChild)
   );
   optionalField(node, "options", path, ctx, expectObject);
   optionalField(node, "constraints", path, ctx, (v, p) =>
@@ -207,15 +207,22 @@ function walkLayer(
   }
 }
 
-function walkRootChart(node: unknown, path: string, ctx: Context): void {
-  if (!isObject(node) || node.type !== "chart") {
-    ctx.errors.push({
-      path,
-      message: 'layer children must be charts (type === "chart")',
-    });
+function walkLayerChild(node: unknown, path: string, ctx: Context): void {
+  if (isObject(node) && node.type === "chart") {
+    walkChart(node, path, ctx);
     return;
   }
-  walkChart(node, path, ctx);
+  // A v3 `chart(...).layer(mark)` builder chain drops a component-level
+  // annotation tier straight into `charts` as a raw-mark.
+  if (isObject(node) && node.type === "raw-mark") {
+    walkRawMark(node, path, ctx);
+    return;
+  }
+  ctx.errors.push({
+    path,
+    message:
+      'layer children must be charts or raw-marks (type === "chart" | "raw-mark")',
+  });
 }
 
 function walkRawMark(

@@ -110,10 +110,13 @@ export interface ChartIR extends BaseIRNode {
   name?: string;
 }
 
-/** Multiple charts composed on the same canvas. */
+/** Multiple tiers composed on the same canvas. Each tier is a `ChartIR`; the
+ *  v3 `chart(...).layer(mark)` builder chain may also drop in a `RawMarkIR`
+ *  tier (a component-level, datumless annotation overlay). The field stays
+ *  named `charts` for wire-format stability. */
 export interface LayerIR extends BaseIRNode {
   type: "layer";
-  charts: ChartIR[];
+  charts: Array<ChartIR | RawMarkIR>;
   options?: Record<string, unknown>;
   /** Layer-level constraints (from `Layer([...]).constrain(...)`), resolving
    *  refs against the child charts' `name`s. */

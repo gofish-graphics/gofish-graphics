@@ -115,7 +115,9 @@ type FrontendIRDocument = {
 The root types mirror the v3 fluent builder shapes:
 
 - `ChartIR` — `{ type: "chart", data?, operators?, mark, connect?, options?, zOrder? }`
-- `LayerIR` — `{ type: "layer", charts, options? }`
+- `LayerIR` — `{ type: "layer", charts, options? }` (each `charts` tier is a
+  `ChartIR`, or a `RawMarkIR` for a component-level annotation tier from the v3
+  `chart(...).layer(mark)` builder chain)
 - `RawMarkIR` — `{ type: "raw-mark", mark, options? }`
 
 `data` is either `{type: "inline", rows}`, `{type: "select", layer}`,

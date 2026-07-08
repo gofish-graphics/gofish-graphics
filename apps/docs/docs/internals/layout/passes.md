@@ -728,6 +728,22 @@ are in final absolute pixels, painting is verbatim — a `rect` item becomes
 item kinds (`rect`/`ellipse`/`path`/`text`/`image`/`group`/`composite`/`mask`) and the
 `toDisplayList({ w, h })` terminal that stops at the IR for non-SVG consumers.
 
+### Render Pass 5.5: Interaction hooks (when reactive)
+
+The [reactive layer](/internals/frontend/reactivity) adds a few hooks to this
+phase that are inert on the static path. The render terminal
+(`chartBuilder.ts`) always resolves under an **ambient interaction context**, so
+a `live()` channel or a library input read inside `derive()` can register during
+resolve; if nothing registers, rendering proceeds untouched. When something does,
+`INTERNAL_lower` (`_node.ts`) stamps each emitted item's `id` (the node's uid, for
+`data-gf-id` hit-testing) and — for a `live()` channel carried on the node as
+`__gfLive` — bakes a datum-bound thunk into a per-item side table (`liveSlots.ts`)
+that `paintSVG` re-evaluates reactively. `render()` (`gofish.tsx`) then publishes
+the lowered frame (items + recorded `posScales`/`toPixel`) to the runtime before
+paint and attaches delegated event listeners to the `<svg>`. See
+[Rendering](/internals/core/rendering#the-interaction-hooks-in-paint) for the
+paint side.
+
 ### Render Pass 6: Axis Rendering (removed)
 
 The bespoke axis-rendering pass that used to live here (hand-written SVG for

@@ -144,6 +144,19 @@ Walking `withGoFish.ts:431-477`:
 5. **Tag the node** with `name = key` and `datum = d` so downstream
    coordinators (`ref` / `selectAll`, label placement) can find it back.
 
+### `live()` channels
+
+A `color` or `raw` channel value may be a `live(...)` reactive callback (the
+[reactivity layer](/internals/frontend/reactivity)); `channels.ts` widens those
+two channel unions to accept a `LiveValue`. When the channel loop sees one, it
+does two things: it evaluates the callback **once, untracked and under the
+`inLiveEval` flag**, to get the resolve-time value the pipeline measures and
+infers scales with (so its input reads wire event dispatch but do _not_ become
+pipeline dependencies), and it stashes the raw callback on the produced node as
+`__gfLive[channel]`. Lowering (`_node.ts`) later bakes that callback, bound to the
+node's datum, into the paint-time side table so paint re-evaluates it reactively.
+`circle` (in `marks/chart.ts`) gives its `fill` the same live-only treatment.
+
 ## `.name()`, `.label()`, `.zOrder()`, and `.translate()`
 
 `createMark` returns a `NameableMark`, which is the base mark plus chainable

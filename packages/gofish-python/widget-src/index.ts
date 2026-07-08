@@ -283,14 +283,24 @@ function renderLayer(
   }
 
   const resolveToken = Serialize.makeTokenResolver();
-  const childCharts: ChartBuilder<any>[] = spec.charts.map(
-    (chartSpec: ChartSpec, i: number) => {
-      const b64 = arrowDict[String(i)] || "";
-      const data = decodeArrowB64(b64);
-      log(`Building chart ${i}: ${data.length} rows`);
-      return Serialize.buildChart(chartSpec, data, bridge, resolveToken);
+  // A tier is a chart (ChartBuilder) or a component-level annotation
+  // (raw-mark → a Mark). Build each accordingly; the builder chain stacks
+  // them via `.layer()`, which accepts either.
+  const childTiers = spec.charts.map((childSpec: any, i: number) => {
+    if (childSpec && childSpec.type === "raw-mark") {
+      log(`Building raw-mark tier ${i}`);
+      return Serialize.mapMark(childSpec.mark, bridge, resolveToken) as any;
     }
-  );
+    const b64 = arrowDict[String(i)] || "";
+    const data = decodeArrowB64(b64);
+    log(`Building chart ${i}: ${data.length} rows`);
+    return Serialize.buildChart(
+      childSpec as ChartSpec,
+      data,
+      bridge,
+      resolveToken
+    );
+  });
 
   const resolvedLayerOptions = Serialize.resolveOptions(
     (spec.options ?? {}) as Record<string, any>
@@ -307,18 +317,19 @@ function renderLayer(
     // LayerBuilder so JS owns the builder's render logic (inferred axis
     // titles, etc.) instead of the wrapper re-deriving it. The child charts
     // are already wired (the producer mark is named, the consumer reads
-    // selectAll), so chaining `.layer()` just stacks them.
-    const layerBuilder = childCharts
+    // selectAll), so chaining `.layer()` just stacks them. The first tier is
+    // always a chart; later tiers may be mark tiers (`.layer(text({...}))`).
+    const layerBuilder = childTiers
       .slice(1)
-      .reduce((acc: any, c) => acc.layer(c), childCharts[0] as any);
+      .reduce((acc: any, c) => acc.layer(c), childTiers[0] as any);
     layerBuilder.render(container, renderOptions);
   } else if (Object.keys(resolvedLayerOptions).length > 0) {
-    (Layer as any)(resolvedLayerOptions, childCharts).render(
+    (Layer as any)(resolvedLayerOptions, childTiers).render(
       container,
       renderOptions
     );
   } else {
-    (Layer as any)(childCharts).render(container, renderOptions);
+    (Layer as any)(childTiers).render(container, renderOptions);
   }
   log("Layer rendered successfully!");
 }

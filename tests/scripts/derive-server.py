@@ -172,15 +172,29 @@ class DeriveHandler(BaseHTTPRequestHandler):
                 _MarkFn,
             )
 
-            def serialize_chart(child: ChartBuilder) -> tuple:
-                """Return (child_payload, derive_ids) for one chart builder.
+            def serialize_chart(child) -> tuple:
+                """Return (child_payload, derive_ids) for one layer tier.
 
                 child_payload: {operators, mark, options, data, zOrder, connect}
                   data is the canonical Frontend.DataIR shape:
                     - {"type": "inline", "rows": [...]} for inline rows
                     - {"type": "select", "layer": name, "mode": ...} for ref/selectAll data
                   See packages/gofish-ir/src/frontend/schema.ts.
+
+                A bare `Mark` tier (a component-level annotation via
+                ``.layer(mark)``) serializes as a ``{type: "raw-mark", mark}``
+                payload; its accessor lambdas are registered so paint-time reads
+                resolve over the derive RPC.
                 """
+                if isinstance(child, Mark):
+                    mark_ids = []
+                    for lambda_id, rows_fn in _collect_mark_lambdas(child):
+                        mark_ids.append(lambda_id)
+                        _registry[lambda_id] = rows_fn
+                    return (
+                        {"type": "raw-mark", "mark": child.to_dict()},
+                        mark_ids,
+                    )
                 child_ir = child.to_ir()
                 if isinstance(child.data, _RefProxy) or child._uses_previous_marks():
                     # `_RefProxy` (ref/selectAll) → {"type": "select", ...};

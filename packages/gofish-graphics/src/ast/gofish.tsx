@@ -17,12 +17,15 @@ import {
 import {
   posScaleFromSpace,
   axisScale,
+  posFn,
   type AxisMap,
   type AxisScale,
 } from "./domain";
 import { bake } from "./coordinateTransforms/bake";
 import { lowerToDisplayList, makeToPixelFor } from "./displayList/lower";
 import { paintSVG } from "./displayList/paintSVG";
+import type { InteractionRuntime } from "../interaction/runtime";
+import { renderWithInteraction } from "../interaction/renderTerminal";
 import type { ToPixel } from "./_node";
 import type { FlipScope } from "./_displayObject";
 import type { Size } from "./dims";
@@ -192,6 +195,7 @@ export async function layout(
   underlyingSpaceX: UnderlyingSpace;
   underlyingSpaceY: UnderlyingSpace;
   yUp: boolean;
+  rootFlipsWhole: boolean;
   scales: Size<AxisScale | undefined>;
   child: GoFishNode;
   width: number;
@@ -690,6 +694,7 @@ export async function layout(
     underlyingSpaceX: niceUnderlyingSpaceX,
     underlyingSpaceY: niceUnderlyingSpaceY,
     yUp,
+    rootFlipsWhole,
     scales: rootScales,
     child,
     width: finalW,
@@ -725,6 +730,13 @@ export type GoFishRenderOptions = {
    * this composable per-subtree instead of root-global.
    */
   yUp?: boolean;
+  /**
+   * Interaction runtime (see src/interaction/). When present, the render pass
+   * publishes each lowered frame to it, emits `data-gf-id` hit-test hooks, and
+   * attaches its delegated event listeners to the produced <svg>. Absent (the
+   * static path), rendering is byte-identical to before.
+   */
+  interaction?: InteractionRuntime;
 };
 
 /** Extra options for the SVG-export terminals (`toSVG` / `toSVGElement` / `save`). */
@@ -743,6 +755,14 @@ type LayoutData = {
    * #629/#143/#16.
    */
   yUp: boolean;
+  /**
+   * Whether the ROOT plot content flips as a whole about the canvas band
+   * (`yUp || isCONTINUOUS(root-y)`) — the decision behind the `_rootFlipScope`
+   * stamp. Unlike `yUp` (the global override only), this also captures the
+   * per-scope continuous-y auto-flip, so the interaction frame's root
+   * data→pixel map (`toPixel`) matches what the plot actually paints. #629.
+   */
+  rootFlipsWhole: boolean;
   scales: Size<AxisScale | undefined>;
   child: GoFishNode;
   width: number;
@@ -821,11 +841,24 @@ export async function runLayout(
   }
 }
 
+/** Continuous data domain of an axis's underlying space, for interaction
+ *  anchors (clamping, selectors). Undefined for ordinal / difference / bare
+ *  magnitude axes. */
+const continuousDomain = (
+  us?: UnderlyingSpace
+): [number, number] | undefined =>
+  us?.kind === "continuous" &&
+  us.dataDomain !== undefined &&
+  us.dataDomain !== "delta"
+    ? [us.dataDomain.min, us.dataDomain.max]
+    : undefined;
+
 /** Build the `<svg>` JSX element from already-computed layout data. */
 function renderLayout(
   data: LayoutData,
   svgPadding: number,
-  defs?: JSX.Element[]
+  defs?: JSX.Element[],
+  interaction?: InteractionRuntime
 ): JSX.Element {
   return render(
     {
@@ -835,11 +868,22 @@ function renderLayout(
       defs,
       // The resolved y-up decision (root y space), computed in `layout()`.
       yUp: data.yUp,
+      // The root-content whole-plot flip (incl. continuous-y auto-flip), so the
+      // interaction frame's root data→pixel map matches the painted orientation.
+      rootFlipsWhole: data.rootFlipsWhole,
       rightOverhang: data.rightOverhang,
       rightContentOverhang: data.rightContentOverhang,
       topOverhang: data.topOverhang,
       leftOverhang: data.leftOverhang,
       bottomOverhang: data.bottomOverhang,
+      interaction,
+      // Root data → gofish-space maps, read off the recorded root scales for
+      // the interaction layer's data↔px conversions (frameConversions).
+      posScales: [posFn(data.scales[0]?.map), posFn(data.scales[1]?.map)],
+      domains: {
+        x: continuousDomain(data.underlyingSpaceX),
+        y: continuousDomain(data.underlyingSpaceY),
+      },
     },
     data.child
   );
@@ -848,25 +892,83 @@ function renderLayout(
 export const gofish = (
   container: HTMLElement,
   options: GoFishRenderOptions,
-  child: GoFishNode | Promise<GoFishNode>
-) => {
+  child:
+    | GoFishNode
+    | Promise<GoFishNode>
+    | (() => GoFishNode | Promise<GoFishNode>)
+): HTMLElement | Promise<HTMLElement> => {
+  // Component thunk (`() => node`): a raw shape/operator composition — no
+  // `chart()` builder, no data binding — that we give the full reactive
+  // treatment. A raw node is built once and can't re-evaluate its spec, so
+  // component-level PIPELINE reactivity (a `signal()`/`wheel()` read outside
+  // `live()`) needs a thunk the scheduler can re-invoke; and a `pointer()` read
+  // in a `live()` needs the runtime installed for `data-gf-id` hit-testing. Both
+  // fall out of routing the thunk through the same terminal the chart builders
+  // use — a fresh InteractionRuntime, resolve under the ambient context, thread
+  // the runtime only if something registered. A PLAIN node keeps today's exact
+  // static behavior below (a `live()` channel on a plain node still patches at
+  // paint — that's runtime-independent — it just gets no runtime/hit-testing).
+  if (typeof child === "function") {
+    const thunk = child as () => GoFishNode | Promise<GoFishNode>;
+    return renderWithInteraction(
+      async () => ({ node: await thunk(), options: { ...options } }),
+      container
+    );
+  }
+
   const svgPadding = options.padding ?? PADDING;
+
+  type GofishState = {
+    dispose: () => void;
+    runtime?: InteractionRuntime;
+  };
+  const stateHost = container as HTMLElement & { __gofishState?: GofishState };
+
+  // Re-rendering into the same container must always dispose the previous Solid
+  // root, or roots and DOM accumulate. TWO cases enter here with a prior state:
+  //  1. A Tier-2 re-render of the SAME chart (the interaction scheduler, per
+  //     spec change) — SAME runtime. Dispose only the old Solid root; the
+  //     runtime is reused and must survive (disposing it would clear its
+  //     rerenderFn/inputs and kill interactivity after one frame).
+  //  2. A DIFFERENT chart taking over this container — dispose the old Solid
+  //     root AND the old runtime, so a still-live input (e.g. a running timer
+  //     the previous chart never stopped) stops zombie-invalidating a dead
+  //     chart whose container is now someone else's.
+  const prev = stateHost.__gofishState;
+  if (prev) {
+    prev.dispose();
+    if (prev.runtime && prev.runtime !== options.interaction) {
+      prev.runtime.dispose();
+    }
+  }
 
   const [layoutData] = createResource(() => runLayout(options, child));
 
   // Render to the provided container
-  solidRender(() => {
+  const dispose = solidRender(() => {
     // used to handle async rendering of derived data
     return (
       <Suspense fallback={<div>Loading...</div>}>
         {(() => {
           const data = layoutData();
           if (!data) return null;
-          return renderLayout(data, svgPadding, options.defs);
+          return renderLayout(
+            data,
+            svgPadding,
+            options.defs,
+            options.interaction
+          );
         })()}
       </Suspense>
     );
   }, container);
+  stateHost.__gofishState = {
+    dispose: () => {
+      dispose();
+      container.innerHTML = "";
+    },
+    runtime: options.interaction,
+  };
   return container;
 };
 
@@ -1026,6 +1128,10 @@ export const render = (
     bottomOverhang = 0,
     svgPadding,
     yUp = false,
+    rootFlipsWhole = yUp,
+    interaction,
+    posScales,
+    domains,
   }: {
     width: number;
     height: number;
@@ -1038,6 +1144,13 @@ export const render = (
     bottomOverhang?: number;
     svgPadding?: number;
     yUp?: boolean;
+    rootFlipsWhole?: boolean;
+    interaction?: InteractionRuntime;
+    posScales?: [
+      ((pos: number) => number) | undefined,
+      ((pos: number) => number) | undefined,
+    ];
+    domains?: { x?: [number, number]; y?: [number, number] };
   },
   child: GoFishNode
 ): JSX.Element => {
@@ -1089,13 +1202,37 @@ export const render = (
   // (mirror about the whole canvas height), threaded as `ambientFlip`.
   const baseDown: ToPixel = ([gx, gy]) => [gx + leftReserve, gy + topReserve];
   const toPixelFor = makeToPixelFor(baseDown);
-  const ambientFlip: FlipScope | undefined = yUp
-    ? { baseY: 0, height }
-    : undefined;
-  const paintBaked = () =>
-    lowerToDisplayList(child, toPixelFor, ambientFlip).map(paintSVG);
+  // The whole-canvas y-flip band. Shared by both maps below so that when the
+  // plot flips as a whole they pass the SAME `FlipScope` identity to
+  // `toPixelFor`, which memoizes per identity — one cached closure, not two.
+  const canvasFlip: FlipScope = { baseY: 0, height };
+  const ambientFlip: FlipScope | undefined = yUp ? canvasFlip : undefined;
+  // The frame-level GoFish-space → screen map interaction publishes for
+  // hit-test / dataPos reads. It must mirror the ROOT PLOT's orientation, which
+  // flips about the canvas band whenever the plot flips as a whole — i.e. the
+  // global `yUp` override OR the per-scope continuous-y auto-flip
+  // (`rootFlipsWhole`, mirroring the `_rootFlipScope` stamp). Using `ambientFlip`
+  // (yUp only) here would report y-down for a continuous-y chart that paints
+  // y-up, inverting drags. #629.
+  const rootFlip: FlipScope | undefined = rootFlipsWhole ? canvasFlip : undefined;
+  const rootToPixel = toPixelFor(rootFlip);
+  const interactive = interaction !== undefined;
+  const paintBaked = () => {
+    const items = lowerToDisplayList(child, toPixelFor, ambientFlip);
+    // Publish the frame (id-keyed hit-test map + data-space conversions) before
+    // paint so the first hit-test / dataPos reads see the current frame.
+    interaction?.publishFrame({
+      items,
+      toPixel: rootToPixel,
+      posScales,
+      domains,
+      size: { width, height },
+    });
+    return items.map((item) => paintSVG(item, interactive));
+  };
   return (
     <svg
+      ref={(el: SVGSVGElement) => interaction?.attachSVG(el)}
       width={
         leftReserve + width + rightOverhang + reserve(rightContentOverhang)
       }

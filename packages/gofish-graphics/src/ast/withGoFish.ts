@@ -34,6 +34,7 @@ import {
   type ZOrderValue,
 } from "./marks/createOperator";
 import { isValue } from "./data";
+import { isLive, evalLiveStatic, type LiveValue } from "../interaction/live";
 import { KNOWN_ALIAS_KEYS } from "./dims";
 import { Mark } from "./types";
 import type { ConstraintSpec, ConstraintRef } from "./constraints";
@@ -585,10 +586,18 @@ function buildCreatedMark(
     // per-row array — used by expand-kind marks. Unannotated props (which
     // is everything when channels is omitted/empty) pass through.
     const shapeProps: Record<string, any> = {};
+    // `live(...)` channels: the pipeline renders (and measures) the accessor's
+    // resolve-time value; the paint layer re-evaluates it reactively per frame
+    // via the datum-bound thunk baked at lower time.
+    let liveChannels: Record<string, LiveValue> | undefined;
     for (const propName of Object.keys(markOpts)) {
       if (propName === "debug") continue;
       const channelSpec = channels[propName];
-      const markValue = markOpts[propName];
+      let markValue = markOpts[propName];
+      if (isLive(markValue)) {
+        (liveChannels ??= {})[propName] = markValue;
+        markValue = evalLiveStatic(markValue, d);
+      }
 
       let channelType =
         typeof channelSpec === "string" ? channelSpec : channelSpec?.type;
@@ -635,13 +644,15 @@ function buildCreatedMark(
       for (let i = 0; i < result.length; i++) {
         const node = result[i];
         node.name(key?.toString() ?? "");
-        (node as any).datum = data[i] ?? d;
+        node.datum = data[i] ?? d;
+        if (liveChannels) node.__gfLive = liveChannels;
       }
       return result as unknown as GoFishNode;
     }
     const node = result as GoFishNode;
     node.name(key?.toString() ?? "");
-    (node as any).datum = d;
+    node.datum = d;
+    if (liveChannels) node.__gfLive = liveChannels;
     node.scope();
     // Mark as a component for string-name search bounding. Distinct from
     // _isScope so future operators that scope (for token reasons) don't
