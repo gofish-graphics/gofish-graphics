@@ -21,9 +21,10 @@ import {
   type AxisScale,
 } from "./domain";
 import { bake } from "./coordinateTransforms/bake";
-import { lowerToDisplayList } from "./displayList/lower";
+import { lowerToDisplayList, makeToPixelFor } from "./displayList/lower";
 import { paintSVG } from "./displayList/paintSVG";
 import type { ToPixel } from "./_node";
+import type { FlipScope } from "./_displayObject";
 import type { Size } from "./dims";
 import {
   continuousInterval,
@@ -34,7 +35,11 @@ import {
   type UnderlyingSpace,
 } from "./underlyingSpace";
 import { shadowCheckScaleRoot } from "./solver/shadow";
-import { elaborateAxes, elaborateAxisTitles } from "./axes/elaborate";
+import {
+  elaborateAxes,
+  elaborateAxisTitles,
+  X_TITLE_NAME,
+} from "./axes/elaborate";
 import { elaborateLegend, legendOverhang } from "./legends/elaborate";
 
 export type CategoricalScale = {
@@ -79,22 +84,27 @@ export const isContinuousColorScale = (
   s: Scale | undefined
 ): s is ContinuousColorScale => s !== undefined && "scaleFn" in s;
 export type AxesOptions = boolean | { x?: AxisOptions; y?: AxisOptions };
-/** `side` (issue #143/#16): which frame edge the axis seats on — `"start"`
- *  (default: the near/origin side — bottom in y-up, top in y-down) or `"end"`
- *  (the far side — top in y-up, bottom in y-down). Frame-relative, matching the
- *  start/end vocabulary of alignment/distribute. */
+/** `side` (issue #143/#16): which frame edge the axis seats on — `"start"` (the
+ *  near/origin side — top for a y-DOWN frame, bottom for y-UP) or `"end"` (the
+ *  far side). Frame-relative, matching the start/end vocabulary of
+ *  alignment/distribute. When OMITTED, a continuous/difference X-axis defaults to
+ *  the visual BOTTOM regardless of the frame's flip (see `axisSide` in
+ *  `elaborate.tsx`); an explicit `side` overrides that with the literal
+ *  frame-relative seating. */
 export type AxisOptions =
   | boolean
   | { title?: string | false; side?: "start" | "end" };
 
-/** Per-dim axis `side`, defaulting to `"start"` (the existing seating). */
+/** Per-dim axis `side` AS AUTHORED — `undefined` where the caller did not specify
+ *  one, so the elaboration can tell an explicit `"start"` (literal frame-relative
+ *  seating) apart from the default (a continuous x-axis defaults to the bottom). */
 export function resolveAxisSides(
   axes: AxesOptions | undefined
-): ["start" | "end", "start" | "end"] {
-  const sideOf = (o: AxisOptions | undefined): "start" | "end" =>
-    o && typeof o === "object" && o.side === "end" ? "end" : "start";
+): ["start" | "end" | undefined, "start" | "end" | undefined] {
+  const sideOf = (o: AxisOptions | undefined): "start" | "end" | undefined =>
+    o && typeof o === "object" ? o.side : undefined;
   if (axes && typeof axes === "object") return [sideOf(axes.x), sideOf(axes.y)];
-  return ["start", "start"];
+  return [undefined, undefined];
 }
 
 // Fallback extent for an omitted `w`/`h` on a POSITION or data-driven SIZE axis,
@@ -107,13 +117,13 @@ function resolveAxisTitle(
   axisOpt: AxisOptions | undefined
 ): string | false | undefined {
   if (axisOpt === undefined || axisOpt === false) return false;
-  if (axisOpt === true) return undefined; // infer from axisFields
+  if (axisOpt === true) return undefined; // infer from the space measure
   return axisOpt.title;
 }
 
 function resolveAxisTitles(
   axes: AxesOptions | undefined,
-  axisFields?: { x?: string; y?: string }
+  measures?: { x?: string; y?: string }
 ): { xTitle: string | undefined; yTitle: string | undefined } {
   let xTitleOpt: string | false | undefined = false;
   let yTitleOpt: string | false | undefined = false;
@@ -125,10 +135,33 @@ function resolveAxisTitles(
     yTitleOpt = resolveAxisTitle(axes.y);
   }
   return {
-    xTitle: xTitleOpt === false ? undefined : (xTitleOpt ?? axisFields?.x),
-    yTitle: yTitleOpt === false ? undefined : (yTitleOpt ?? axisFields?.y),
+    xTitle: xTitleOpt === false ? undefined : (xTitleOpt ?? measures?.x),
+    yTitle: yTitleOpt === false ? undefined : (yTitleOpt ?? measures?.y),
   };
 }
+
+/** True if `node` or any descendant satisfies `pred`. Shared depth-first walk
+ *  behind the whole-subtree y-up triggers below. */
+const subtreeHas = (
+  node: GoFishNode,
+  pred: (n: GoFishNode) => boolean
+): boolean => {
+  if (pred(node)) return true;
+  const kids = node.children as (GoFishNode | unknown)[] | undefined;
+  if (kids)
+    for (const k of kids)
+      if (k instanceof GoFishNode && subtreeHas(k, pred)) return true;
+  return false;
+};
+
+/** True if `node` or any descendant is a `coord` node (polar/clock/wavy). A
+ *  coordinate system flips its own scope (`resolveNodeFlip` in bake), so the
+ *  chart-level chrome must follow it to the visual edge even when the root y is
+ *  UNDEFINED (a pie's `count` has no cartesian y). The right convention for
+ *  polar/coord is still open (#662); until then the presence of one anywhere is a
+ *  chrome-mirror trigger, exactly as the pre-#629 global flip treated it. */
+const subtreeHasCoord = (node: GoFishNode): boolean =>
+  subtreeHas(node, (n) => (n as { type?: string }).type === "coord");
 
 export async function layout(
   {
@@ -139,7 +172,6 @@ export async function layout(
     transform,
     debug = false,
     axes = false,
-    axisFields,
     yUp = false,
   }: {
     w?: number;
@@ -150,7 +182,6 @@ export async function layout(
     debug?: boolean;
     defs?: JSX.Element[];
     axes?: AxesOptions;
-    axisFields?: { x?: string; y?: string };
     yUp?: boolean;
   },
   child: GoFishNode | Promise<GoFishNode>,
@@ -195,6 +226,19 @@ export async function layout(
   child.resolveAliases();
   child.resolveUnderlyingSpace();
 
+  // Chart-level axis TITLE measure, captured PRE-elaboration. The root space
+  // here carries the OUTERMOST grouping's measure (the outer operator's fold is
+  // authoritative over its subtree), e.g. a grouped bar's x = "lake". After
+  // axis elaboration inserts the inner (per-facet) ordinal axis nodes, the
+  // re-resolved root unions those up and a finer grouping's measure ("species")
+  // can win — but the chart-level title should name the outermost axis, so we
+  // read it before that. (Nicing changes domains, not measures, so pre/post
+  // agree except for this elaboration bubble-up.)
+  const titleMeasures = {
+    x: spaceMeasure(child._underlyingSpace?.[0]),
+    y: spaceMeasure(child._underlyingSpace?.[1]),
+  };
+
   // The original root content object stays in the tree as the plot after any
   // wrapping below (axis / legend / title elaboration each wrap, never replace,
   // the content). Captured here so the title pass can center on it as the
@@ -223,7 +267,7 @@ export async function layout(
       if (axes.x !== false) enabled.add(0);
       if (axes.y !== false) enabled.add(1);
     }
-    child.resolveAxes(new Set(), enabled);
+    child.resolveAxes(new Map(), enabled);
     child.resolveNiceDomains();
 
     // Axis elaboration: turn inferred axes into ordinary shapes + constraints.
@@ -231,7 +275,7 @@ export async function layout(
     // handled axis flags; the new subtree is then re-resolved below. A flag the
     // pass doesn't handle (e.g. an UNDEFINED space) is inert — nothing else
     // consumes `node.axis`.
-    const elaborated = await elaborateAxes(child, resolveAxisSides(axes));
+    const elaborated = await elaborateAxes(child, resolveAxisSides(axes), yUp);
     titleAnchors = elaborated.titleAnchors;
     if (elaborated.changed) {
       child = elaborated.node;
@@ -252,20 +296,59 @@ export async function layout(
   const niceUnderlyingSpaceX = child._underlyingSpace![0];
   const niceUnderlyingSpaceY = child._underlyingSpace![1];
 
-  // y-UP scope decision (issue #143/#16). The y axis is "inverted" — origin at
-  // the bottom, values increasing upward — exactly when it carries a CONTINUOUS
-  // scale: a chart's value axis, or any low-level spec with datum-positioned or
-  // baseline-magnitude y (box-and-whisker, hand-drawn axes). An ORDINAL or
-  // UNDEFINED y (a category axis, a free-space diagram, an icicle/mosaic) stays
-  // SVG-native y-DOWN so it reads top→bottom. This is the semantic rule that
-  // replaces the old "is this a chart()?" structural heuristic: a vertical bar
-  // chart flips because its value axis is continuous, a horizontal bar chart
-  // does NOT (its y is the ordinal category axis, which should read top-down),
-  // and a continuous low-level spec flips without needing an explicit `yUp`. A
-  // `coord` (polar/clock) subtree keeps its existing y-up handling (the right
-  // convention there is still open). `yUp` (from options) is an explicit
-  // override on top. See the `subtreeHasCoord`/`isCONTINUOUS` callers.
-  const effYUp = yUp || subtreeHasContinuousY(child) || subtreeHasCoord(child);
+  // y-orientation is a PER-SCOPE property resolved at bake time (issue #629): the
+  // bake walk opens a y-up mirror at each topmost continuous-y node and mirrors
+  // about its own placed band, so a continuous chart grows up while an ordinal-y
+  // neighbor (a heatmap beside a bar chart) stays y-down — no single global root
+  // decision. The scope opens at the plot CONTENT (the chrome wrappers are
+  // `_scopeTransparent`), so a chart's chrome (legend column, axis titles) is NOT
+  // a member of the scope: its INTERIOR renders in the ambient frame (glyphs,
+  // legend row order, colorbar direction), while its BOX is placed by the plot's
+  // frame — the bake box-mirrors `_ambientYDown` chrome about the plot's flip
+  // scope (a parent's orientation places a child's box, never re-interprets its
+  // interior). Three layout-time orientation bits fall out:
+  //  - `chromeYUp`: the AMBIENT orientation the chrome INTERIOR builders read
+  //    (legend swatch order, colorbar value direction, axis-title rotation) —
+  //    y-down unless the explicit global `options.yUp` flips the whole canvas.
+  //  - `rootFlipsWhole`: whether the ROOT content node itself opens ONE canvas-
+  //    wide flip scope that its whole subtree inherits (mirrors about `[0, finalH]`)
+  //    — a continuous root y (a plain bar/line chart) or the global override. It
+  //    stays NARROW: a per-scope opener BELOW the root (a `coord`, a continuous
+  //    subtree inside an UNDEFINED-root free-space mix, or a facet cell) mirrors
+  //    about its OWN band, never this canvas frame, and an ORDINAL root does NOT
+  //    flip as a whole (a faceted scatter keeps its panels in natural order; its
+  //    shared continuous axis is instead defaulted to the bottom edge, see the
+  //    axis-side note below). This gates the `_rootFlipScope` stamp. #629.
+  //  - `chromeFlipsY`: whether the ROOT frame the chrome annotates mirrors about
+  //    the canvas — so a chart's chrome (y-title, legend column, colorbar, and an
+  //    ordinal-x title) box-mirrors to the same VISUAL edge as the flipped
+  //    content. It is `rootFlipsWhole` PLUS a `coord` at the root: a pie/clock has
+  //    an UNDEFINED root y (no cartesian flip) but its `coord` opens its own scope
+  //    that fills the canvas, so its chrome must still follow. It deliberately does
+  //    NOT fire on a continuous DESCENDANT under an ordinal/undefined root (a
+  //    faceted stack, a unit chart): that content flips per-scope BELOW the root,
+  //    the root chrome frame does not mirror, and a chart-level title that
+  //    mirrored there would split from its (unflipped) axis. The chart-level
+  //    CONTINUOUS x-axis is the one exception, handled by seating it (and its
+  //    title) on the far edge directly — see the axis-side note. This gates the
+  //    `_chromeFrame` stamp and the legend's abstract frame. See #629/#143/#16.
+  const chromeYUp = yUp;
+  const rootFlipsWhole = yUp || isCONTINUOUS(niceUnderlyingSpaceY);
+  const chromeFlipsY = rootFlipsWhole || subtreeHasCoord(child);
+  //  - `xTitleSeatsFar`: a CONTINUOUS x-axis whose frame does NOT flip at all
+  //    (`!chromeFlipsY` — an ordinal cross y AND no `coord`: a horizontal bar, a
+  //    faceted stack). `elaborateAxes` seats such a line on the FAR edge directly
+  //    (no mirror), so its title is authored to match and its box-mirror is
+  //    suppressed below — the two stay together at the visual bottom instead of the
+  //    title lifting above. A `coord` chart (a pie) is EXCLUDED: its frame flips via
+  //    the coord scope, so its x-axis and title mirror like any flipped frame. Only
+  //    the DEFAULT (unspecified) side seats far — an explicit `side` is honored
+  //    literally, matching the axis line.
+  const xSideOpt = resolveAxisSides(axes)[0];
+  const xTitleSeatsFar =
+    xSideOpt === undefined &&
+    isCONTINUOUS(niceUnderlyingSpaceX) &&
+    !chromeFlipsY;
 
   // Reference to the content node whose extent defines the final canvas
   // (`finalW`/`finalH` via the `finalDim` readback below). Both the title pass
@@ -287,24 +370,37 @@ export async function layout(
   // see the legend column. Title Texts resolve UNDEFINED spaces on both dims, so
   // the wrapper preserves the content's underlying spaces and the nice spaces
   // captured above remain valid. The caller owns the "any title?" guard.
-  // Each axis names itself off its OWN resolved space: a continuous axis by its
-  // measure (unit), an ordinal axis by its grouping-field measure. This is the
-  // post-resolution source of truth — the builder's syntactic `axisFields`
-  // (mark/operator field names) is only a fallback for a space that carries no
-  // measure (e.g. a magnitude whose measures forgot on conflict).
-  const measureFields = {
-    x: spaceMeasure(niceUnderlyingSpaceX) ?? axisFields?.x,
-    y: spaceMeasure(niceUnderlyingSpaceY) ?? axisFields?.y,
-  };
-  const { xTitle, yTitle } = resolveAxisTitles(axes, measureFields);
+  // The title names each axis off its space `measure` (continuous → unit,
+  // ordinal → grouping field), read from `titleMeasures` (the OUTERMOST grouping,
+  // captured pre-elaboration). An axis whose space carries no measure (e.g. a
+  // magnitude whose measures forgot on conflict) simply gets no title.
+  const { xTitle, yTitle } = resolveAxisTitles(axes, titleMeasures);
   if (xTitle !== undefined || yTitle !== undefined) {
+    // The x-axis title is authored at the SAME abstract side as its axis LINE, so
+    // the two stay together and land at the same visual edge (#143/#16/#629):
+    //  - `xTitleSeatsFar` (a DEFAULT continuous x over a non-flipping frame — a
+    //    horizontal bar, a faceted stack): `elaborateAxes` seated the line on the
+    //    far "end" edge directly, so the title matches and its box-mirror is
+    //    suppressed (see the chrome-frame stamp) — else it would lift above the
+    //    line. `titleSides[0] = "end"`.
+    //  - default continuous x on a FLIPPING frame (a scatter, a `coord` pie): the
+    //    line is authored "start" and mirrors to the bottom, so the title rides
+    //    along on "start". `titleSides[0] = "start"`.
+    //  - an EXPLICIT `side`, or an ordinal x: honored literally (`baseSides[0]`,
+    //    defaulting to "start"), mirroring with the content like any chrome.
+    // The y-title (left gutter) is untouched — the vertical flip never moves it.
+    const baseSides = resolveAxisSides(axes);
+    const titleSides: ["start" | "end", "start" | "end"] = [
+      xTitleSeatsFar ? "end" : (baseSides[0] ?? "start"),
+      baseSides[1] ?? "start",
+    ];
     child = await elaborateAxisTitles(child, {
       xTitle,
       yTitle,
       anchors: titleAnchors,
       plotNode,
-      yUp: effYUp,
-      sides: resolveAxisSides(axes),
+      yUp: chromeYUp,
+      sides: titleSides,
     });
     if (contexts?.session) child.setRenderSession(contexts.session);
     // The title pass introduces `ref()` stand-ins (to the axis line / plot) that
@@ -329,15 +425,17 @@ export async function layout(
     (isCategoricalScale(unitScale) && unitScale.color.size > 0) ||
     isContinuousColorScale(unitScale);
   if (hasLegend && unitScale) {
-    // The legend entries should read top→bottom. Under the y-up chart flip that
-    // needs `reverse` (a y-spread lays out bottom→top); in y-down free space the
-    // natural order already reads top→bottom. Pass the effective orientation
-    // (`effYUp`, computed above from the root y space) so the swatch column
-    // reverses only when y-up. See issue #143/#16.
+    // The legend entries should read top→bottom. The swatch column is chrome
+    // (`_ambientYDown`, #629): its INTERIOR renders in the ambient frame, where a
+    // `Spread({dir:"y"})` already reads top→bottom — no `reverse` unless the
+    // whole canvas is forced y-up by `options.yUp` (`chromeYUp`). Its BOX aligns
+    // against the plot's abstract frame (`chromeFlipsY`) and is box-mirrored by
+    // the bake when the plot flips, landing top-aligned on screen. #143/#16/#629.
     child = await elaborateLegend(
       child,
       unitScale as CategoricalScale | ContinuousColorScale,
-      effYUp
+      chromeYUp,
+      chromeFlipsY
     );
     legendAdded = true;
     if (contexts?.session) child.setRenderSession(contexts.session);
@@ -498,6 +596,64 @@ export async function layout(
   const finalW = finalDim(0, w);
   const finalH = finalDim(1, h);
 
+  // The canvas y-flip frame (issue #629): the whole-plot band `[0, finalH]` the
+  // old global flip mirrored about (`data.height`). finalH is only known here,
+  // and the canvas origin (0) is NOT recoverable from a node's placed bbox (a
+  // shrink-to-fit pin can offset it), so it is stamped authoritatively rather
+  // than re-derived by the bake. Feeds both the root-content scope stamp below
+  // and the chrome frame.
+  const canvasFrame: FlipScope = { baseY: 0, height: finalH };
+
+  // Stamp the ROOT plot content with the canvas y-flip frame (issue #629), when
+  // the root plot flips as a WHOLE (`rootFlipsWhole`). The bake walk opens the
+  // y-up scope at `contentNode` (the plot, inside any scope-transparent
+  // title/legend chrome) and mirrors about THIS frame; the whole subtree inherits
+  // it (no double flip). The bake honors this stamp even for an ordinal root y (a
+  // faceted-by-y chart) — an explicit whole-plot decision overriding the per-node
+  // `declaredYUp` rule. A scope that opens BELOW the canvas frame (a `coord`, a
+  // continuous subtree inside an UNDEFINED-root free-space mix) is not
+  // `contentNode`, carries no stamp, and mirrors about its own placed band. Stamp
+  // UNCONDITIONALLY every layout (undefined when the root does not flip whole) so
+  // no stale frame from a prior layout of the same node tree survives an
+  // option/data change — a re-layout that turns `rootFlipsWhole` false must clear
+  // the previous `{baseY, height}`, or the bake would mirror about a dead frame
+  // (#629, stale-scope finding).
+  contentNode._rootFlipScope = rootFlipsWhole ? canvasFrame : undefined;
+
+  // Stamp the chrome placement frame (issue #629) directly on each OUTERMOST
+  // `_ambientYDown` chrome subtree (axis titles, legend column, colorbar), so the
+  // bake reads `node._chromeFrame` instead of searching up through the
+  // scope-transparent wrappers on every visit. The frame is the WHOLE-plot canvas
+  // band: the chart-level chrome spans the whole plot, so it mirrors about the
+  // canvas even when the content flips per-scope BELOW the root (a `coord`'s own
+  // scope) — which is why the gate is the whole-subtree `chromeFlipsY`, not the
+  // narrower root-only `rootFlipsWhole`. The bake box-mirrors a chrome box about it (its interior
+  // still renders ambient). Only when the plot mirrors somewhere — otherwise
+  // chrome passes through unchanged, and a re-layout that turns `chromeFlipsY`
+  // false stamps nothing (the chrome subtrees are freshly rebuilt by the
+  // elaboration passes each layout, so no stale frame survives). The walk stops
+  // at `contentNode` (never descends into the plot) and at the outermost ambient
+  // node of each chrome subtree (its descendants render ambient — a second mirror
+  // would double-flip). #629 chrome-frame finding.
+  if (chromeFlipsY) {
+    const frame = canvasFrame;
+    const stampChrome = (n: GoFishNode): void => {
+      if (n === contentNode) return;
+      if (n._ambientYDown === true) {
+        // Suppress the box-mirror for a far-seated continuous x-axis title
+        // (`xTitleSeatsFar`): `elaborateAxes` already placed its line on the far
+        // edge directly and the title was authored to match (see `titleSides`), so
+        // mirroring it here would lift it back above the line. Every other chrome
+        // node (y-title, legend, colorbar) still mirrors.
+        if (n._name === X_TITLE_NAME && xTitleSeatsFar) return;
+        n._chromeFrame = frame;
+        return;
+      }
+      for (const c of n.children) if (c instanceof GoFishNode) stampChrome(c);
+    };
+    stampChrome(child);
+  }
+
   // Measured overhangs off the OUTERMOST wrapper (`child`), from its laid-out
   // extent. Anything seated beyond the content box is reserved by its placed
   // extent minus the content box; `render()` then sizes the SVG around them.
@@ -533,7 +689,7 @@ export async function layout(
   return {
     underlyingSpaceX: niceUnderlyingSpaceX,
     underlyingSpaceY: niceUnderlyingSpaceY,
-    yUp: effYUp,
+    yUp,
     scales: rootScales,
     child,
     width: finalW,
@@ -558,7 +714,6 @@ export type GoFishRenderOptions = {
   debug?: boolean;
   defs?: JSX.Element[];
   axes?: AxesOptions;
-  axisFields?: { x?: string; y?: string };
   colorConfig?: ColorConfig;
   padding?: number;
   /**
@@ -581,7 +736,12 @@ export type GoFishExportOptions = GoFishRenderOptions & {
 type LayoutData = {
   underlyingSpaceX: UnderlyingSpace;
   underlyingSpaceY: UnderlyingSpace;
-  /** Whether the root renders y-UP (continuous y / coord scope). See #143/#16. */
+  /**
+   * The explicit global y-UP override (`options.yUp`). Per-scope orientation
+   * (continuous-y subtrees) is decided independently at bake via the flip scopes
+   * stamped in `layout()`; this only forces a whole-canvas y-up ambient. See
+   * #629/#143/#16.
+   */
   yUp: boolean;
   scales: Size<AxisScale | undefined>;
   child: GoFishNode;
@@ -612,7 +772,6 @@ export async function runLayout(
     debug = false,
     defs,
     axes = false,
-    axisFields,
     colorConfig,
   } = options;
   // Seed the unit color scale by config kind. A gradient is a continuous
@@ -650,18 +809,7 @@ export async function runLayout(
     }
 
     return await layout(
-      {
-        w,
-        h,
-        x,
-        y,
-        transform,
-        debug,
-        defs,
-        axes,
-        axisFields,
-        yUp: options.yUp,
-      },
+      { w, h, x, y, transform, debug, defs, axes, yUp: options.yUp },
       child,
       contexts
     );
@@ -865,54 +1013,6 @@ export async function gofishSave(
 
 const PADDING = 40;
 
-/**
- * Finds the translation from the top-level coord node.
- * Checks the node itself first, then its immediate children.
- * Returns the coord node's transform.translate values, or null if not found.
- */
-/** True if `node` or any descendant satisfies `pred`. Shared depth-first walk
- *  behind the y-up triggers below. */
-const subtreeHas = (
-  node: GoFishNode,
-  pred: (n: GoFishNode) => boolean
-): boolean => {
-  if (pred(node)) return true;
-  const kids = node.children as (GoFishNode | unknown)[] | undefined;
-  if (kids)
-    for (const k of kids)
-      if (k instanceof GoFishNode && subtreeHas(k, pred)) return true;
-  return false;
-};
-
-/** True if `node` or any descendant is a `coord` node (polar/clock/wavy). A
- *  coordinate system currently renders y-up regardless of its y-space kind, so
- *  the root flips when one is present even nested inside free-space
- *  `gofish([...])`/`.layer()`. This is the ONE remaining structural y-up trigger:
- *  cartesian y-up is now decided semantically from the root y space
- *  (`isCONTINUOUS`), but the right convention for polar/coord is still open, so
- *  its legacy behavior is preserved here. See issue #143/#16. */
-export const subtreeHasCoord = (node: GoFishNode): boolean =>
-  subtreeHas(node, (n) => n.type === "coord");
-
-/** True if `node` or ANY descendant has a CONTINUOUS y underlying space — i.e.
- *  somewhere in the tree y is a real position/magnitude scale (a value axis, a
- *  datum-positioned mark, a swarm's distribution), not an ordinal/undefined
- *  category band. This is the y-up trigger (issue #143/#16): the rule is "a
- *  cartesian scope with a continuous y position is inverted", so the presence of
- *  ANY such scope flips the (currently global) root frame. Checking the whole
- *  subtree — not just the root y — is what keeps a faceted scatter or a violin
- *  swarm upright: their root y is the ordinal facet/category axis, but the
- *  scatter/distribution NESTED inside is continuous, and that inner scope is what
- *  wants y-up. An all-ordinal chart (heatmap, horizontal bar, strip plot) has no
- *  continuous y anywhere and stays SVG-native y-down (reads top→bottom). A true
- *  per-scope coordinate transform (the follow-up) will localize this so a mixed
- *  composition can flip only the continuous scopes; today it is one global flip. */
-export const subtreeHasContinuousY = (node: GoFishNode): boolean =>
-  subtreeHas(node, (n) => {
-    const sy = n._underlyingSpace?.[1];
-    return sy !== undefined && isCONTINUOUS(sy);
-  });
-
 export const render = (
   {
     width,
@@ -979,20 +1079,21 @@ export const render = (
   // <g> translate, so it needn't be pixel-snapped — a fractional width is
   // harmless (legend overhangs are fractional text widths).
   // Two-pass render: lower the baked scenegraph into the display-list IR, then
-  // paint each item. Items are final absolute pixels. The default frame is
-  // SVG-native y-DOWN (top-left origin): a vertical list reads top→bottom and
-  // `toPixel` only offsets by the gutter reserves. A `chart()` renders y-UP
-  // (`yUp` threaded from the builder): the root mirrors y about the canvas
-  // height — bars grow up, the y-axis increases upward — reproducing the old
-  // global flip. See issue #143/#16. (A true y-up coordinate transform — the
-  // follow-up — will make this composable per-subtree instead of root-global.)
-  // `yUp` is the resolved decision threaded from `layout()` (`LayoutData.yUp`,
-  // computed from the root y space), not a raw option — see `subtreeHasCoord`.
-  const toPixel: ToPixel = yUp
-    ? ([gx, gy]) => [gx + leftReserve, height + topReserve - gy]
-    : ([gx, gy]) => [gx + leftReserve, gy + topReserve];
-  child.getRenderSession().toPixel = toPixel;
-  const paintBaked = () => lowerToDisplayList(child).map(paintSVG);
+  // paint each item. Items are final absolute pixels. The ambient frame is
+  // SVG-native y-DOWN (top-left origin): the base map only offsets by the gutter
+  // reserves, so a vertical list reads top→bottom. Orientation is now a PER-SCOPE
+  // property (issue #629): the bake walk tags each draw entry with the placed
+  // y-band it renders in (`d.flip`), and `toPixelFor` mirrors that entry's y
+  // about its own band — so a continuous-y chart grows up while an ordinal-y
+  // neighbor stays y-down. `options.yUp` still forces a GLOBAL y-up ambient
+  // (mirror about the whole canvas height), threaded as `ambientFlip`.
+  const baseDown: ToPixel = ([gx, gy]) => [gx + leftReserve, gy + topReserve];
+  const toPixelFor = makeToPixelFor(baseDown);
+  const ambientFlip: FlipScope | undefined = yUp
+    ? { baseY: 0, height }
+    : undefined;
+  const paintBaked = () =>
+    lowerToDisplayList(child, toPixelFor, ambientFlip).map(paintSVG);
   return (
     <svg
       width={

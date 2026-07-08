@@ -4,7 +4,7 @@ import { luv } from "culori";
 import type { DisplayList } from "gofish-ir";
 import type { GoFishNode, ToPixel } from "../_node";
 import { displayTranslate, type Transform } from "../dims";
-import { toPixelFlipsY } from "../displayList/lowerHelpers";
+import { declaredFlipsY } from "../displayList/lowerHelpers";
 import { getValue, type MaybeValue } from "../data";
 import { resolveColorChannel } from "../../color";
 import {
@@ -103,7 +103,7 @@ function computeLabel(
   const h = node.intrinsicDims[1].size ?? 0;
 
   const shapeType = (
-    ["rect", "ellipse", "petal", "line", "area"].includes(node.type)
+    ["rect", "ellipse", "petal", "line", "ribbon"].includes(node.type)
       ? node.type
       : "rect"
   ) as ShapeInfo["type"];
@@ -168,6 +168,7 @@ export function lowerLabelItems(
     role: "overlay",
     style: { fill: l.labelColor },
   };
-  if (l.rotate) item.rotate = toPixelFlipsY(toPixel) ? l.rotate : -l.rotate;
+  if (l.rotate)
+    item.rotate = declaredFlipsY(node, toPixel) ? l.rotate : -l.rotate;
   return [item];
 }

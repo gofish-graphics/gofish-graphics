@@ -1,3 +1,7 @@
+// gofish-gotree implements the GoTree grammar (Li et al., CHI 2020) on GoFish
+// primitives. Paper: https://doi.org/10.1145/3313831.3376297 — source, editor,
+// and gallery at https://github.com/BIT-VIS/gotree (https://bit-vis.github.io/gotree/).
+// See README.md for the concept mapping and citation.
 import { Layer, Frame, rect } from "gofish-graphics";
 import type { GoTreeSpec, TreeData, NodeFactory } from "./spec";
 import { normalize } from "./data";
@@ -11,7 +15,7 @@ export function tree(spec: GoTreeSpec, data: TreeData): any {
   const filledSpec: GoTreeSpec = { node: DEFAULT_NODE, ...spec };
 
   const nodeTree = renderSubtree(root, filledSpec);
-  const edges = collectEdges(root, filledSpec.link);
+  const edges = collectEdges(root, filledSpec);
 
   // Layer order: nodeTree first so its named marks register before connects
   // try to resolve their refs (matches the sankey pattern); edges come after.

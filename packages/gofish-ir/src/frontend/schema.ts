@@ -67,6 +67,14 @@ interface TranslatableIR {
   translate?: TranslateIR;
 }
 
+/** Mixin for every operator: fields real producers put on the wire that the
+ *  JS factory strips (`FACTORY_ONLY_KEYS` in createOperator.ts) before
+ *  layout. Mirrors `OPERATOR_BASE_FIELDS` in descriptors.ts. */
+interface OperatorFlagsIR {
+  /** Dev escape hatch (`debug: true`); a no-op for layout. */
+  debug?: boolean;
+}
+
 export interface Origin {
   /** User-supplied name via `.name("bars")` on the v3 fluent builder. */
   name?: string;
@@ -141,11 +149,20 @@ export interface RawMarkIR extends BaseIRNode {
  *   (or absent) corresponds to `ref(name)`.
  * - **External**: `{type: "external", id?: "..."}` indicates data ships over a
  *   sidecar transport (anywidget's `arrow_data` trait) and the id keys into it.
+ * - **Previous tier**: `{type: "previous-tier"}` marks an empty `chart()` /
+ *   `Chart()` scope inside a `.layer(...)` chain — "inherit the immediately
+ *   preceding tier's marks". The deserializer maps this to the JS
+ *   `PREVIOUS_LAYER_MARKS` sentinel so `LayerBuilder`'s own `wireTiers()`
+ *   (auto-naming the producer's mark + binding this tier to
+ *   `selectAll(name)`) runs JS-side — the same code a native
+ *   `chart(...).layer(...)` chain goes through. Only valid on a tier inside a
+ *   `builder: true` `LayerIR`.
  */
 export type DataIR =
   | { type: "inline"; rows: Array<Record<string, unknown>> }
   | { type: "select"; layer: string; mode?: "one" | "all" }
-  | { type: "external"; id?: string };
+  | { type: "external"; id?: string }
+  | { type: "previous-tier" };
 
 // ---------------------------------------------------------------------------
 // Operators
@@ -160,14 +177,18 @@ export type OperatorIR =
   | GroupOperator
   | ScatterOperator
   | TableOperator
-  | LogOperator;
+  | LogOperator
+  | TreemapOperator;
 
 /**
  * `derive(fn)` — opaque user transformation. Function bodies are not
  * serializable; the IR carries a bridge handle (`lambdaId`) when the
  * Python widget is the producer, and is otherwise empty.
  */
-export interface DeriveOperator extends BaseIRNode, TranslatableIR {
+export interface DeriveOperator
+  extends BaseIRNode,
+    TranslatableIR,
+    OperatorFlagsIR {
   type: "derive";
   lambdaId?: string;
   /** Measure provenance a transform (e.g. `bin`) declares for its output
@@ -186,7 +207,10 @@ export interface DeriveOperator extends BaseIRNode, TranslatableIR {
  * and label anchoring. The match key defaults to the field `from`'s nodes were
  * grouped by; `key` overrides it.
  */
-export interface ResolveOperator extends BaseIRNode, TranslatableIR {
+export interface ResolveOperator
+  extends BaseIRNode,
+    TranslatableIR,
+    OperatorFlagsIR {
   type: "resolve";
   /** Local columns holding references to resolve in place. */
   cols: string[];
@@ -204,7 +228,10 @@ export interface ResolveOperator extends BaseIRNode, TranslatableIR {
  * data tables (contrast `resolve`, which dereferences columns into drawn
  * nodes), so `right` rides in the IR as inline JSON and round-trips.
  */
-export interface JoinOperator extends BaseIRNode, TranslatableIR {
+export interface JoinOperator
+  extends BaseIRNode,
+    TranslatableIR,
+    OperatorFlagsIR {
   type: "join";
   /** Shared key field matched between the incoming rows and `right`. */
   on: string;
@@ -212,7 +239,10 @@ export interface JoinOperator extends BaseIRNode, TranslatableIR {
   right: Record<string, unknown>[];
 }
 
-export interface SpreadOperator extends BaseIRNode, TranslatableIR {
+export interface SpreadOperator
+  extends BaseIRNode,
+    TranslatableIR,
+    OperatorFlagsIR {
   type: "spread";
   by?: string;
   dir?: "x" | "y";
@@ -235,10 +265,19 @@ export interface SpreadOperator extends BaseIRNode, TranslatableIR {
   axes?: AxesOptions;
 }
 
-export interface StackOperator extends BaseIRNode, TranslatableIR {
+export interface StackOperator
+  extends BaseIRNode,
+    TranslatableIR,
+    OperatorFlagsIR {
   type: "stack";
   by?: string;
   dir?: "x" | "y";
+  /** Spread-parity passthrough: the JS `stack` is `Spread({...props, glue:
+   *  true})`, so producers may put spread's options on the wire. Glue
+   *  semantics force the effective gap to 0. */
+  spacing?: number;
+  /** Spread-parity passthrough; stack always glues regardless. */
+  glue?: boolean;
   alignment?: string;
   sharedScale?: boolean;
   mode?: "edge" | "center";
@@ -254,12 +293,18 @@ export interface StackOperator extends BaseIRNode, TranslatableIR {
   axes?: AxesOptions;
 }
 
-export interface GroupOperator extends BaseIRNode, TranslatableIR {
+export interface GroupOperator
+  extends BaseIRNode,
+    TranslatableIR,
+    OperatorFlagsIR {
   type: "group";
   by: string;
 }
 
-export interface ScatterOperator extends BaseIRNode, TranslatableIR {
+export interface ScatterOperator
+  extends BaseIRNode,
+    TranslatableIR,
+    OperatorFlagsIR {
   type: "scatter";
   by?: string;
   x?: ChannelValue;
@@ -288,16 +333,53 @@ export interface ScatterOperator extends BaseIRNode, TranslatableIR {
 export type AxesOptions = boolean | { x?: AxisOptions; y?: AxisOptions };
 export type AxisOptions = boolean | { title?: string | false };
 
-export interface TableOperator extends BaseIRNode, TranslatableIR {
+export interface TableOperator
+  extends BaseIRNode,
+    TranslatableIR,
+    OperatorFlagsIR {
   type: "table";
   by: { x: string; y: string };
   spacing?: number | [number, number];
   numCols?: number;
 }
 
-export interface LogOperator extends BaseIRNode, TranslatableIR {
+export interface LogOperator
+  extends BaseIRNode,
+    TranslatableIR,
+    OperatorFlagsIR {
   type: "log";
   label?: string;
+}
+
+/**
+ * `treemap({...})` — d3-hierarchy treemap layout over the flow's rows,
+ * fare/weight-proportional. Dual-form like `spread`/`stack`/`scatter`/
+ * `group`/`table`: also usable as a low-level combinator mark
+ * (`CombinatorMarkType`'s `"treemap"`, disambiguated by `__combinator`).
+ * Mirrors JS's `TreemapProps` (`graphicalOperators/treemap.tsx`) minus the
+ * JS-only `value` function accessor (not serializable) and `key`.
+ */
+export interface TreemapOperator
+  extends BaseIRNode,
+    TranslatableIR,
+    OperatorFlagsIR {
+  type: "treemap";
+  paddingInner?: number;
+  paddingOuter?: number;
+  round?: boolean;
+  tile?:
+    | "squarify"
+    | "slice"
+    | "dice"
+    | "binary"
+    | "slicedice"
+    | "squarifyCircle";
+  sort?: "asc" | "desc" | "none";
+  valueField?: string;
+  flipY?: boolean;
+  leafIntrinsicRadiusField?: string;
+  w?: ChannelValue;
+  h?: ChannelValue;
 }
 
 // ---------------------------------------------------------------------------
@@ -315,7 +397,7 @@ export type LeafMarkType =
   | "rect"
   | "circle"
   | "line"
-  | "area"
+  | "ribbon"
   | "blank"
   | "ellipse"
   | "petal"
@@ -332,8 +414,14 @@ export type CombinatorMarkType =
   | "group"
   | "table"
   | "layer"
+  | "enclose"
   | "arrow"
-  | "connect"
+  // `line`/`ribbon` are derived marks with a low-level combinator form
+  // (children = the refs/marks to connect) — the drop-in for the removed
+  // `connect`. They are ALSO leaf marks (bag/pairwise forms); the
+  // `__combinator` flag disambiguates.
+  | "line"
+  | "ribbon"
   | "treemap"
   | "over"
   | "inside"
@@ -564,7 +652,18 @@ export function isLeafMarkIR(mark: MarkIR): mark is LeafMarkIR {
   );
 }
 
-/** The set of operator type discriminators recognized in v0. */
+/**
+ * The set of operator type discriminators recognized in v0. `treemap` is
+ * dual-form (also a combinator mark, `COMBINATOR_MARK_TYPES`'s `"treemap"`)
+ * exactly like `spread`/`stack`/`scatter`/`group`/`table` — confirmed by a
+ * real Python story (`atom/titanic-unit-dots`) that uses `treemap(...)` as a
+ * `.flow()` operator, producing `{ type: "treemap", ... }` at the top level
+ * of `operators`. Originally this list's inclusion of `treemap` looked like
+ * drift against `OperatorIR`/the JSON Schema enum (both omitted it) — but
+ * the story corpus proved the OTHER two were the ones missing it, not this
+ * list; `OperatorIR` and the generated JSON Schema now include
+ * `TreemapOperator` too (see `descriptors.ts`'s `OPERATORS.treemap`).
+ */
 export const OPERATOR_TYPES = [
   "derive",
   "resolve",
@@ -583,7 +682,7 @@ export const LEAF_MARK_TYPES: readonly LeafMarkType[] = [
   "rect",
   "circle",
   "line",
-  "area",
+  "ribbon",
   "blank",
   "ellipse",
   "petal",
@@ -601,8 +700,10 @@ export const COMBINATOR_MARK_TYPES: readonly CombinatorMarkType[] = [
   "group",
   "table",
   "layer",
+  "enclose",
   "arrow",
-  "connect",
+  "line",
+  "ribbon",
   "treemap",
   "over",
   "inside",

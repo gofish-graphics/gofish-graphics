@@ -15,10 +15,8 @@ import { initializeContainer } from "../helper";
 //                 their tops aligned on a level.
 // This is a node-link tree (same layout family as NodeLinkTree). distribute on
 // y uses  so the parent lands at high y = top of screen (y-up),
-// matching the reference (root at top, leaves at bottom).
-//
-// TODO: needs orthogonal links implemented — the dsl uses orthogonal (elbow)
-// links; we fall back to {interpolation:"linear"} (straight segments).
+// matching the reference (root at top, leaves at bottom). Links use the
+// `orthogonal` route (elbow connectors), matching the dsl's orthogonal links.
 const node = (d: any) =>
   circle({ r: 8, fill: byDepth()(d), stroke: "#08306b", strokeWidth: 1 });
 
@@ -36,8 +34,7 @@ export const ReadableTreeLayout: StoryObj = {
     tree(
       {
         node,
-        // TODO: needs orthogonal links implemented — fall back to linear.
-        link: { interpolation: "linear", stroke: "#555555", strokeWidth: 2 },
+        link: { curve: "orthogonal", stroke: "#555555", strokeWidth: 2 },
         parentChild: combine({
           x: { kind: "align", alignment: "middle" },
           y: { kind: "distribute", spacing: 60 },

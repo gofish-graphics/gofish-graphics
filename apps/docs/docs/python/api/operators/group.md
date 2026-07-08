@@ -35,7 +35,7 @@ use the datum path — `by="datum.species"`:
 ```python
 chart(selectAll("bars")) \
     .flow(group(by="datum.species")) \
-    .mark(area(opacity=0.8))
+    .mark(ribbon(opacity=0.8))
 ```
 
 A `datum.field` path resolves to a scalar only when every row in the ref's bag

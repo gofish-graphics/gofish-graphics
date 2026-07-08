@@ -37,19 +37,22 @@ import { initializeContainer } from "../helper";
 // total angular extent works out to the 2π budget: N_leaves * leafTheta = 2π.
 //
 // NOTES — polar features in the dsl that gofish's polar() CANNOT express
-// (no options, no hacks; flagged, not faked):
-//  - InnerRadius: 0 is NOT achievable — observe the hollow center. The root
-//    ring lands at r ∈ [bandHeight, 2·bandHeight] because the first
-//    parentChild distribute step starts the root band at r = bandHeight, not
-//    r = 0; polar() has no inner-radius origin knob to pin the root to the
-//    center. (The dsl asks for InnerRadius:0 = no hole; we get a hole.)
-//  - Direction: clockwise — polar() is fixed-orientation; no CW/CCW swap.
-//  - StartAngle / CentralAngle: no start-angle or sub-2π sweep knob; the disc
-//    always starts at the same angle and the budget is the full 2π.
+// (flagged, not faked):
+//  - InnerRadius: 0 is now expressible via polar({ innerRadius }) since #620 —
+//    not yet applied here. As drawn, the root ring lands at
+//    r ∈ [bandHeight, 2·bandHeight] because the first parentChild distribute step
+//    starts the root band at r = bandHeight, not r = 0. (The dsl asks for
+//    InnerRadius:0 = no hole; as drawn we get a hole — observe the hollow center.)
+//  - Direction: clockwise — now expressible via polar({ direction }) since #620
+//    — not yet applied here.
+//  - StartAngle / CentralAngle: now expressible via
+//    polar({ startAngle, centralAngle }) since #620 — not yet applied here; as
+//    drawn the disc starts at the same angle and the budget is the full 2π.
 //  - PolarAxis: y-axis (the θ/r axis swap from the dsl) is not expressible.
 //  - Link:curve — links are not drawn for a filled-wedge sunburst (link:"none"
-//    is correct here); polar links only support {interpolation:"linear"|"none"},
-//    never curved arcs.
+//    is correct here); polar links only support {curve:"straight"|"none"},
+//    never curved arcs (draft PR #637's route→curve registry is where curved
+//    links land).
 //  - Angular AUTO-FIT (#618): leaves carry a unit `thetaSize` weight; the coord
 //    fits the summed weights to the budget and nest grows each parent to its
 //    children's combined arc — so the disc closes for any tree with no hand-set

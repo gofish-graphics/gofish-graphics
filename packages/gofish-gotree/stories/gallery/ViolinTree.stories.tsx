@@ -19,9 +19,11 @@ import { combine, byDepth, mount, sampleTree } from "./_shared";
 // silhouette. θ-width is a fixed per-node constant (no angular auto-fit).
 //
 // POLAR LIMITATIONS (no hacks here — flagged honestly):
-//  - polar() takes NO options. The dsl's PolarCenter:"bottom" and
-//    StartAngle:0.01 (and any CentralAngle/Direction/InnerRadius) are NOT
-//    expressible — our disc is centered with θ starting at 0.
+//  - StartAngle:0.01, and any CentralAngle/Direction/InnerRadius, are now
+//    expressible via polar({ ... }) since #620 — not yet applied here (our disc
+//    stays centered with θ starting at 0). PolarCenter:"bottom" remains
+//    inexpressible: it is a polar-space anchor, which polar()'s screen-offset
+//    `center` does not cover.
 //  - No angular auto-fit. θ-width is a fixed constant per node and sibling θ
 //    spacing is fixed; GoTree allocates θ by subtree leaf-count so its violins
 //    pack the disc exactly. Here a wide level can overflow the 2π budget and

@@ -5,7 +5,7 @@ import { stack } from "../ast/graphicalOperators/stack";
 import { rect } from "../ast/shapes/rect";
 import { color, color6 } from "../color";
 import { layer } from "../ast/graphicalOperators/layer";
-import { connect } from "../ast/graphicalOperators/connect";
+import { line } from "../lib";
 import { ref } from "../ast/shapes/ref";
 import { color10Order } from "./color10";
 import { mix } from "spectral.js";
@@ -85,15 +85,14 @@ export const testPolarRibbonOther = (size: { width: number; height: number }) =>
           )
         ),
         ...Object.entries(_.groupBy(data, "group")).map(([group, items], i) =>
-          connect(
+          line(
             {
-              direction: "y",
-              mode: "center",
+              dir: "y",
               fill: colorScale[group as keyof typeof colorScale],
               // fill: "black",
               // fill: "none",
               stroke: i == 0 ? "black" : "none",
-              interpolation: "bezier",
+              curve: "bezier",
               opacity: 1,
             },
             items.map((d) => ref(`${d.category}-${d.group}`))

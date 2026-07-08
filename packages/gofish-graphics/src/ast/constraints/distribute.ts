@@ -165,6 +165,9 @@ export function distributeSpaceFold(
      *  is the continuous measure composed from the children for a SIZE/POSITION
      *  result.) */
     measure?: string;
+    /** True when every contributing child was POSITIONALLY keyed (a `spread`
+     *  with no `by`): the folded ORDINAL is anonymous and renders no axis. */
+    anonymous?: boolean;
   }
 ): UnderlyingSpace {
   const n = targetSpaces.length;
@@ -200,7 +203,8 @@ export function distributeSpaceFold(
     if (allSize || allPosition) {
       return POSITION(Interval.interval(0, sumWidths()), childMeasure);
     }
-    if (namedKeys.length > 0) return ORDINAL(namedKeys, opts.measure);
+    if (namedKeys.length > 0)
+      return ORDINAL(namedKeys, opts.measure, opts.anonymous);
     return UNDEFINED;
   }
 
@@ -220,7 +224,8 @@ export function distributeSpaceFold(
       : Monotonic.adds(Monotonic.add(...childDomains), spacing * (n - 1));
 
   if (dataDriven) return SIZE(composeSize(), childMeasure);
-  if (namedKeys.length > 0) return ORDINAL(namedKeys, opts.measure);
+  if (namedKeys.length > 0)
+      return ORDINAL(namedKeys, opts.measure, opts.anonymous);
   if (allSize) return SIZE(composeSize(), childMeasure);
   if (allPosition)
     return POSITION(Interval.interval(0, sumWidths()), childMeasure);

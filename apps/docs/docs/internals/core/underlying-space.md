@@ -230,6 +230,17 @@ discrete analogue of `CONTINUOUS`'s measure. It's set from the grouping operator
 own resolved space — a continuous axis by its unit, an ordinal axis by its
 grouping field (see [the layout passes](/internals/layout/passes)).
 
+A companion predicate, **`isPositioningSpace`**, folds the two axis-bearing
+kinds together: it holds for `POSITION` (a data axis) and `ORDINAL` (a category
+axis) but not for `SIZE` (a mark's own extent) or `UNDEFINED`. In other words it
+answers "does this space lay marks _out along an axis_?" — the question you ask
+when you want the axis a set of siblings is arranged on rather than each
+sibling's own size. Its first consumer is the connector's `curve: "auto"`: a
+`line` / `ribbon` reads the underlying space its endpoints resolved to and, when
+that space is a _positioning_ one whose measure is continuous, smooths the path
+(centripetal Catmull–Rom) instead of drawing straight segments — so a line over
+a continuous x auto-curves while one over discrete categories stays polylinear.
+
 The guide a space supports keys on **`dataDomain`** (data-space), never on
 placement:
 

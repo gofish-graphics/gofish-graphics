@@ -34,7 +34,7 @@ const data = {
 const chart = tree(
   {
     node: (d) => circle({ r: 10, fill: "steelblue" }),
-    link: { interpolation: "linear", stroke: "#888" },
+    link: { curve: "straight", stroke: "#888" },
     parentChild: spread({ dir: "y", spacing: 48, alignment: "middle" }),
     sibling: spread({ dir: "x", spacing: 24, alignment: "start" }),
   },
@@ -109,16 +109,20 @@ node: (d) => circle({ r: 4 + d.height * 2, fill: colorByDepth(d.depth) });
 ### `link` — the edge encoding
 
 - `"none"` — omit all edges (useful for nested-box / icicle / treemap variants).
-- An options object `{ interpolation, stroke, strokeWidth, opacity }` — applied
+- An options object `{ curve, stroke, strokeWidth, opacity }` — applied
   uniformly.
 - A function `(source, target) => LinkOptions` — per-edge styling.
 
 ```ts
-link: { interpolation: "linear", stroke: "#90a4ae", strokeWidth: 1.5 }
+link: { curve: "straight", stroke: "#90a4ae", strokeWidth: 1.5 }
 ```
 
-Currently only `interpolation: "linear"` is supported. `"bezier"`, `"orthogonal"`,
-and `"arc"` are planned for later milestones.
+`curve` accepts `"straight"` (default), `"bezier"`, `"orthogonal"` (right-angle
+elbows), and `"arc"`. The `orthogonal` and `bezier` links fold along the tree's
+growth axis — the direction its `parentChild` combiner distributes — so a
+vertical tree's elbows bend downward and a horizontal tree's bend sideways. When
+the growth axis is ambiguous (a cascade that distributes on both axes), the
+orthogonal elbow infers its bend from each edge's geometry.
 
 ### `parentChild` and `sibling` — the layout combiners
 
@@ -336,7 +340,7 @@ conventions and switch from JSON descriptors to callable helpers.
 | Paper                             | GoTree-in-GoFish                                   |
 | --------------------------------- | -------------------------------------------------- |
 | `Element.Node: "rectangle"`       | `node: (d) => rect({...})`                         |
-| `Element.Link: "straight"`        | `link: { interpolation: "linear" }`                |
+| `Element.Link: "straight"`        | `link: { curve: "straight" }`                      |
 | `Element.Color: "depth"`          | inside `node`: `fill: byDepth(d.depth)`            |
 | `Element.Width/Height`            | inside `node`: `w` / `h` on the mark               |
 | `Element.LinkWidth`               | `link.strokeWidth`                                 |
@@ -355,12 +359,11 @@ conventions and switch from JSON descriptors to callable helpers.
 
 ## Milestone status
 
+All milestones below have shipped:
+
 - **M1** — node-link with `spread` combiner; linear links.
-- **M2** (this milestone) — `Constraint.nest` primitive in `gofish-graphics`;
-  `nest` combiner in `gofish-gotree`; nested-box trees.
+- **M2** — `Constraint.nest` primitive in `gofish-graphics`; `nest` combiner in
+  `gofish-gotree`; nested-box trees.
 - **M3** — polar coord wrap; sunburst and radial node-link.
 - **M4** — `orthogonal`/`bezier`/`arc` links; sort.
 - **M5** — `bottomUp` mode for dendrograms via intrinsic-dim wiring.
-
-Trying to use values from M3+ (`coord: polar(...)`, `orthogonal`/`bezier`/`arc`
-link interpolations) raises an explicit error.

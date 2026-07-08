@@ -12,7 +12,6 @@ import { seafood } from "../data/catch";
 import _ from "lodash";
 import { spreadX } from "../ast/graphicalOperators/spreadX";
 import { frame } from "../ast/graphicalOperators/frame";
-import { connectX } from "../ast/graphicalOperators/connectX";
 import { ref } from "../ast/shapes/ref";
 import { mix } from "spectral.js";
 import { enclose } from "../ast/graphicalOperators/enclose";

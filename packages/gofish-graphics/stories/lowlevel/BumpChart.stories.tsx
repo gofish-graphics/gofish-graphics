@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
 import { newCarColors } from "../../src/data/newCarColors";
-import { frame, spread, connectY, ellipse, ref, For, v } from "../../src/lib";
+import { frame, spread, line, ellipse, ref, For, v } from "../../src/lib";
 import { groupBy } from "lodash";
 import _ from "lodash";
 
@@ -34,8 +34,10 @@ export const Default: StoryObj<Args> = {
         )
       ),
       For(groupBy(newCarColors, "Color"), (d) =>
-        connectY(
-          { strokeWidth: 2, mode: "center" },
+        line(
+          // Default curve: the connection (y) axis is the ordinal rank stack, so
+          // it resolves to straight segments between each year's rank.
+          { dir: "y", strokeWidth: 2 },
           For(d, (d) => ref(`${d.Color}-${d.Year}`))
         )
       ),

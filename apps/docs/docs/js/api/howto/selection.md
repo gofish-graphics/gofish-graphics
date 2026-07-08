@@ -32,7 +32,7 @@ the second chart to overlay the first.
 
 ## Example: Connected scatterplot
 
-[`line`](/js/api/marks/line) and [`area`](/js/api/marks/area) take an array of
+[`line`](/js/api/marks/line) and [`ribbon`](/js/api/marks/ribbon) take an array of
 refs directly and read placed geometry off them, so feed them `selectAll`:
 
 ::: gofish
@@ -107,7 +107,7 @@ gf.layer([
   gf
     .chart(gf.selectAll("bars"))
     .flow(gf.group({ by: "datum.species" }))
-    .mark(gf.area({ opacity: 0.8 })),
+    .mark(gf.ribbon({ opacity: 0.8 })),
 ]).render(root, { w: 500, h: 300, axes: true });
 ```
 
@@ -133,7 +133,7 @@ layer([
   chart(data).flow(/* ... */).mark(blank().name("origin")),
   text({ text: "start" }).name("label"),
   // ref("origin") returns one ref; errors if "origin" matched 0 or >1 nodes
-  Connect({ source: "middle" }, [ref("label"), ref("origin")]),
+  line({ source: "middle" }, [ref("label"), ref("origin")]),
 ]);
 ```
 
@@ -154,9 +154,9 @@ Each ref:
 
 ## Common use cases
 
-| Goal                | Pattern                                                                                   |
-| ------------------- | ----------------------------------------------------------------------------------------- |
-| Line through points | `circle().name("points")` → `selectAll("points")` + `line()`                              |
-| Area under line     | `blank().name("points")` → `selectAll("points")` + `area()`                               |
-| Ribbon / stream     | `rect().name("bars")` → `selectAll("bars")` + `group({ by: "datum.species" })` + `area()` |
-| Single annotation   | Name one mark → `ref("name")` as data → `ref` it from a connector                         |
+| Goal                | Pattern                                                                                     |
+| ------------------- | ------------------------------------------------------------------------------------------- |
+| Line through points | `circle().name("points")` → `selectAll("points")` + `line()`                                |
+| Area under line     | `blank().name("points")` → `selectAll("points")` + `ribbon()`                               |
+| Ribbon / stream     | `rect().name("bars")` → `selectAll("bars")` + `group({ by: "datum.species" })` + `ribbon()` |
+| Single annotation   | Name one mark → `ref("name")` as data → `ref` it from a connector                           |

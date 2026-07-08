@@ -58,6 +58,35 @@ def dataframe_to_arrow(df: pd.DataFrame) -> bytes:
     return sink.getvalue().to_pybytes()
 
 
+def empty_placeholder_arrow_bytes() -> bytes:
+    """
+    Arrow IPC bytes for an empty table with a single dummy `_placeholder`
+    column — the wire payload for a chart tier that has no data of its own
+    (a `ref`/`selectAll` chart borrowing nodes from a sibling, or a tier
+    whose data is an empty DataFrame/list). The widget only needs *some*
+    valid Arrow stream; the placeholder column is never read.
+
+    Extracted so `Mark.render`, `ChartBuilder.render`, and
+    `LayerBuilder.render`'s `_serialize_child_data` all emit byte-identical
+    empty tables from one place instead of re-deriving the schema/sink/
+    writer boilerplate.
+
+    Example:
+        >>> arrow_data = empty_placeholder_arrow_bytes()
+    """
+    schema = pa.schema([pa.field("_placeholder", pa.int32())])
+    # NOTE: the copy-pasted originals built this via
+    # `pa.Table.from_arrays([], schema=schema)`, which modern pyarrow rejects
+    # ("Schema and number of arrays unequal" — one field, zero arrays), so any
+    # widget render hitting this path crashed. `empty_table()` is the
+    # supported spelling for the same 0-row, 1-column table.
+    table = schema.empty_table()
+    sink = pa.BufferOutputStream()
+    with pa.ipc.new_stream(sink, schema) as writer:
+        writer.write_table(table)
+    return sink.getvalue().to_pybytes()
+
+
 def arrow_to_dataframe(arrow_bytes: bytes) -> pd.DataFrame:
     """
     Convert Apache Arrow bytes back to a pandas DataFrame.

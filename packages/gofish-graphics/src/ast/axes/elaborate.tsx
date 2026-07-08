@@ -16,6 +16,7 @@ import {
   isPOSITION,
   isORDINAL,
   isDIFFERENCE,
+  isCONTINUOUS,
   continuousInterval,
   type CONTINUOUS_TYPE,
   type UnderlyingSpace,
@@ -399,7 +400,17 @@ function elaborateOrdinalAxis(
  */
 function collectKeyMap(node: GoFishNode): Record<string, GoFishNode> {
   const out: Record<string, GoFishNode> = {};
-  const walk = (n: GoFishNode) => {
+  // BREADTH-first so the SHALLOWEST node with a given key wins — the grouping
+  // bands this axis labels sit at one consistent (shallow) depth, while the
+  // per-datum mark nodes below them carry bare positional keys ("0","1",…) that
+  // COLLIDE with ordinal keys (e.g. cylinder values "3".."8", pclass "1".."3").
+  // A pre-order DFS would let a deep datum key inside an EARLY sibling band beat
+  // the real (later-sibling) band — collapsing every label past the first onto
+  // one slot. Level-order makes "shallower wins" hold globally, not just within
+  // a subtree, so the bands always claim their keys before any datum node.
+  const queue: GoFishNode[] = [node];
+  while (queue.length > 0) {
+    const n = queue.shift()!;
     if (n._ordinalKeyMap) {
       for (const k of Object.keys(n._ordinalKeyMap)) {
         if (!(k in out)) out[k] = n._ordinalKeyMap[k];
@@ -407,10 +418,9 @@ function collectKeyMap(node: GoFishNode): Record<string, GoFishNode> {
     }
     if (n.key !== undefined && !(n.key in out)) out[n.key] = n;
     n.children.forEach((c) => {
-      if (c instanceof GoFishNode) walk(c);
+      if (c instanceof GoFishNode) queue.push(c);
     });
-  };
-  walk(node);
+  }
   return out;
 }
 
@@ -426,7 +436,9 @@ function collectKeyMap(node: GoFishNode): Record<string, GoFishNode> {
  */
 function elaborationsFor(
   node: GoFishNode,
-  sides: ["start" | "end", "start" | "end"]
+  sides: ["start" | "end" | undefined, "start" | "end" | undefined],
+  yUp: boolean,
+  underCoord: boolean
 ): {
   constrained: AxisElaboration[];
   refBased: AxisElaboration[];
@@ -471,6 +483,23 @@ function elaborationsFor(
     undefined,
   ];
   const owned: [boolean, boolean] = [false, false];
+  // A continuous/difference X-axis with NO explicit `side` renders at the visual
+  // BOTTOM by default (#143/#16/#629). It sits at its cross (y) axis's low edge;
+  // which abstract edge that is depends on whether this owner's frame y-flips —
+  // CONTINUOUS cross y (a scatter's value axis), a global `yUp`, or a `coord`
+  // ancestor (a polar plot) all mirror the frame, so the near "start" edge lands
+  // at the bottom; otherwise (a horizontal bar's ordinal category y, a faceted
+  // stack's ordinal facet y) the far "end" edge is the bottom. An EXPLICIT `side`
+  // is honored literally (frame-relative: `start`=near, `end`=far) — it is the
+  // override, so a caller can still force the far edge. The Y-axis (dim 1) keeps
+  // its `start` (left) default; the vertical flip never moves it horizontally.
+  const axisSide = (dim: 0 | 1): "start" | "end" => {
+    const userSide = sides[dim];
+    if (dim !== 0) return userSide ?? "start";
+    if (userSide !== undefined) return userSide;
+    const crossFlips = yUp || underCoord || isCONTINUOUS(space[cross(dim)]);
+    return crossFlips ? "start" : "end";
+  };
   for (const dim of [0, 1] as (0 | 1)[]) {
     if (!owns(dim)) continue;
     const s = space[dim];
@@ -482,17 +511,27 @@ function elaborationsFor(
         nices[dim]!,
         prefix,
         crossFloor,
-        sides[dim]
+        axisSide(dim)
       );
       constrained.push(e);
       anchors[dim] = e.anchor;
     } else if (isDIFFERENCE(s)) {
-      const e = elaborateDifferenceAxis(dim, s, prefix, crossFloor, sides[dim]);
+      const e = elaborateDifferenceAxis(
+        dim,
+        s,
+        prefix,
+        crossFloor,
+        axisSide(dim)
+      );
       constrained.push(e);
       anchors[dim] = e.anchor;
     } else if (isORDINAL(s)) {
       keyMap ??= collectKeyMap(node);
-      refBased.push(elaborateOrdinalAxis(dim, s, keyMap, prefix, sides[dim]));
+      // Ordinal axes keep the `start` default (they follow the content's own flip
+      // like a category row); only continuous axes default to the bottom.
+      refBased.push(
+        elaborateOrdinalAxis(dim, s, keyMap, prefix, sides[dim] ?? "start")
+      );
     } else {
       continue;
     }
@@ -530,7 +569,12 @@ function elaborationsFor(
  */
 export async function elaborateAxes(
   node: GoFishNode,
-  sides: ["start" | "end", "start" | "end"] = ["start", "start"]
+  sides: ["start" | "end" | undefined, "start" | "end" | undefined] = [
+    undefined,
+    undefined,
+  ],
+  yUp = false,
+  underCoord = false
 ): Promise<{
   node: GoFishNode;
   changed: boolean;
@@ -541,11 +585,16 @@ export async function elaborateAxes(
     undefined,
     undefined,
   ];
+  // A `coord` (polar/clock) fixes its own frame orientation, so any axis inside
+  // it flips with the coord rather than seating on the far edge directly. Track
+  // whether we are under one so `axisSide` keeps the near/"start" seating there.
+  const childUnderCoord =
+    underCoord || (node as { type?: string }).type === "coord";
   // Bottom-up: replace each child with its elaborated form.
   for (let i = 0; i < node.children.length; i++) {
     const child = node.children[i];
     if (child instanceof GoFishNode) {
-      const res = await elaborateAxes(child, sides);
+      const res = await elaborateAxes(child, sides, yUp, childUnderCoord);
       if (res.changed) changed = true;
       // A child's anchor fills a dim slot we haven't claimed yet.
       for (const dim of [0, 1] as (0 | 1)[]) {
@@ -562,7 +611,9 @@ export async function elaborateAxes(
 
   const { constrained, refBased, anchors, owned } = elaborationsFor(
     node,
-    sides
+    sides,
+    yUp,
+    childUnderCoord
   );
   // Any dim this node owns an axis on is claimed — its own anchor replaces
   // whatever bubbled up from children, INCLUDING replacing it with undefined
@@ -631,7 +682,8 @@ export async function elaborateAxes(
 // The CHART-level title pass. Unlike the per-owner axis pass above (which wraps
 // every node that owns an axis, anywhere in the tree), titles are a single pass
 // at the root: at most one title per dim, resolved by the orchestrator from the
-// `axes` options + the inferred `axisFields`. A title is placed RELATIVE TO the
+// `axes` options + the root space's `measure` (the outermost grouping). A title
+// is placed RELATIVE TO the
 // elaborated axis shape it describes — the axis line for that dim, which may
 // span less than the whole plot (a difference axis spans the data width; a
 // facet-owned axis spans its facet). `elaborateAxes` hands us those axis-line
@@ -648,15 +700,17 @@ const TITLE_CONTENT_GAP = 8; // gap between a title and the full content bbox
 const TITLE_CONTENT_NAME = "__titleContent";
 const X_TITLE_ANCHOR_NAME = "__xTitleAnchor";
 const Y_TITLE_ANCHOR_NAME = "__yTitleAnchor";
-const X_TITLE_NAME = "__xAxisTitle";
+export const X_TITLE_NAME = "__xAxisTitle";
 const Y_TITLE_NAME = "__yAxisTitle";
 
 /** The x-axis title: horizontal text below the plot. The customization seam
  *  (like `legendColumn` / `tickMark`) — a future public API can override it. */
 export function xAxisTitle(text: string): GoFishNode {
-  return Text({ text, fontSize: TITLE_FONT_SIZE, fill: TITLE_COLOR }).name(
+  const t = Text({ text, fontSize: TITLE_FONT_SIZE, fill: TITLE_COLOR }).name(
     X_TITLE_NAME
   );
+  t._ambientYDown = true; // chrome: reads y-down, never in the plot flip scope (#629)
+  return t;
 }
 
 /** The y-axis title, reading bottom-to-top (facing inward) in the left gutter.
@@ -666,12 +720,14 @@ export function xAxisTitle(text: string): GoFishNode {
  *  top-to-bottom, facing outward. See issue #143/#16. Customization seam, like
  *  `xAxisTitle`. */
 export function yAxisTitle(text: string, yUp = true): GoFishNode {
-  return Text({
+  const t = Text({
     text,
     fontSize: TITLE_FONT_SIZE,
     fill: TITLE_COLOR,
     rotate: yUp ? 90 : -90,
   }).name(Y_TITLE_NAME);
+  t._ambientYDown = true; // chrome: reads y-down, never in the plot flip scope (#629)
+  return t;
 }
 
 /**
@@ -766,6 +822,11 @@ export async function elaborateAxisTitles(
         // … and seat it past the FULL content bbox on the same edge as the
         // axis: title BEFORE the content seats it on the start edge, AFTER on
         // the end edge (so it clears the tick/label rows and tracks `side`).
+        // This is authored in the shared ABSTRACT frame — the same side as the
+        // axis labels. When the plot mirrors (y-up), the bake box-mirrors the
+        // title (an `_ambientYDown` chrome sibling) about the plot's flip
+        // scope, so it lands on the same VISUAL edge as the flipped labels;
+        // its interior (glyphs, rotation) stays ambient. See bake.ts. #629
         cs.push(
           Constraint.distribute(
             { dir: "y", spacing: TITLE_CONTENT_GAP },
@@ -797,6 +858,13 @@ export async function elaborateAxisTitles(
       return cs;
     });
 
+    // The title wrapper only UNIONS the plot's continuous y up (to keep the space
+    // valid for nicing); it is not itself the σ-scope. Mark it scope-transparent
+    // so the y-up flip (#629) opens at the plot CONTENT it wraps — whose frame is
+    // the canvas `finalH` — not at this wrapper (whose bbox includes the title,
+    // which would over-size the mirror band). The titles themselves are
+    // `_ambientYDown`, so they stay y-down regardless.
+    root._scopeTransparent = true;
     return root;
   });
 }

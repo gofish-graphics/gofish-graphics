@@ -68,7 +68,7 @@ export const NodeLinkTree: StoryObj = {
       {
         node,
         // straight links → linear interpolation.
-        link: { interpolation: "linear", stroke: "#555", strokeWidth: 1.5 },
+        link: { curve: "straight", stroke: "#555", strokeWidth: 1.5 },
         parentChild: combine({
           x: { kind: "align", alignment: "middle" },
           y: { kind: "distribute", spacing: 90 },

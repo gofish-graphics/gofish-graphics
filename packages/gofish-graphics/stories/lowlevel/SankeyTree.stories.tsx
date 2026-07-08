@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
 import { titanic } from "../../src/data/titanic";
-import { layer, spreadX, spreadY, stackY, rect, For, connectX, ref } from "../../src/lib";
+import { layer, spreadX, spreadY, stackY, rect, For, ribbon, ref } from "../../src/lib";
 import { color6, gray, neutral } from "../../src/color";
 import { groupBy } from "lodash";
 import _ from "lodash";
@@ -111,26 +111,31 @@ export const Default: StoryObj = {
         ),
       ]),
       For(groupBy(titanic, "class"), (items, cls) => [
-        connectX(
+        ribbon(
           {
+            dir: "x",
             fill: classColor[cls],
-            interpolation: "bezier",
+            curve: "bezier",
             opacity: 0.7,
+            mixBlendMode: "multiply",
           },
           [ref(`${cls}-src`), ref(`${cls}-tgt`)]
         ),
         For(groupBy(items, "sex"), (sexItems, sex) => [
-          connectX(
+          ribbon(
             {
+              dir: "x",
               fill: sex === "Female" ? color6[4] : color6[5],
-              interpolation: "bezier",
+              curve: "bezier",
               opacity: 0.7,
+              mixBlendMode: "multiply",
             },
             [ref(`${cls}-${sex}-src`), ref(`${cls}-${sex}-tgt`)]
           ),
           For(groupBy(sexItems, "survived"), (survivedItems, survived) =>
-            connectX(
+            ribbon(
               {
+                dir: "x",
                 fill:
                   sex === "Female"
                     ? survived === "No"
@@ -139,8 +144,9 @@ export const Default: StoryObj = {
                     : survived === "No"
                       ? gray
                       : color6[5],
-                interpolation: "bezier",
+                curve: "bezier",
                 opacity: 0.7,
+                mixBlendMode: "multiply",
               },
               [
                 ref(`${cls}-${sex}-${survived}-src`),
