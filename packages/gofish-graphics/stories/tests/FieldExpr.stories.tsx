@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
-import { chart, spread, rect, field } from "../../src/lib";
+import { chart, spread, stack, rect, field } from "../../src/lib";
 
 const meta: Meta = {
   title: "Tests/Field Expression Pipeline",
@@ -74,6 +74,56 @@ export const MeanAggregate: StoryObj<Args> = {
     chart(meanData, { axes: true })
       .flow(spread({ by: "species", dir: "x", spacing: 20 }))
       .mark(rect({ w: 60, h: field("weight").mean(), fill: "species" }))
+      .render(container, { w: args.w, h: args.h });
+    return container;
+  },
+};
+
+const shareData = [
+  { category: "a", part: "x", n: 1 },
+  { category: "a", part: "y", n: 3 },
+  { category: "b", part: "x", n: 2 },
+  { category: "b", part: "y", n: 2 },
+];
+
+export const NormalizeSizeStack: StoryObj<Args> = {
+  args: { w: 300, h: 250 },
+  render: (args: Args) => {
+    const container = initializeContainer();
+    // stack's `size: field("n").normalize()` (#700 Phase 2) replaces each
+    // entry's raw `n` with its SHARE of the column: category "a" is 1/4 x,
+    // 3/4 y; category "b" is 1/2 x, 1/2 y. Every bar reaches the same
+    // full-height 1 (a percent-bar), unlike the raw-count MosaicChart story.
+    chart(shareData, { axes: true })
+      .flow(
+        spread({ by: "category", dir: "x", spacing: 20 }),
+        stack({ by: "part", dir: "y", size: field("n").normalize() })
+      )
+      .mark(rect({ w: 60, fill: "part" }))
+      .render(container, { w: args.w, h: args.h });
+    return container;
+  },
+};
+
+const spreadSizeData = [
+  { lake: "Huron", fish: 12 },
+  { lake: "Erie", fish: 30 },
+  { lake: "Ontario", fish: 18 },
+];
+
+export const SpreadSizeOrdinalAxis: StoryObj<Args> = {
+  args: { w: 400, h: 250 },
+  render: (args: Args) => {
+    const container = initializeContainer();
+    // `spread({ by, size })` wraps each child in a sized layer (#700 Phase
+    // 2). Regression check: the wrapper must copy the split identity (key/
+    // datum/__splitBy) onto itself, or the legend/fill-by-category loses its
+    // per-bar identity (all three bars would render the SAME color instead
+    // of Huron/Erie/Ontario each keeping their own). Bar widths are also
+    // proportional to `fish` (12/30/18).
+    chart(spreadSizeData, { axes: true })
+      .flow(spread({ by: "lake", dir: "x", spacing: 20, size: "fish" }))
+      .mark(rect({ h: 40, fill: "lake" }))
       .render(container, { w: args.w, h: args.h });
     return container;
   },

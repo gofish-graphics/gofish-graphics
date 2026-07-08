@@ -18,6 +18,7 @@ import { Constraint } from "../constraints";
 import { ensureChildNames } from "../constraints/shared";
 import { createOperator } from "../marks/createOperator";
 import { Mark, Operator } from "../types";
+import type { FieldExpr } from "../fieldExpr";
 
 // Utility function to unwrap lodash wrapped arrays
 const unwrapLodashArray = function <T>(value: T[] | Collection<T>): T[] {
@@ -35,6 +36,18 @@ const unwrapLodashArray = function <T>(value: T[] | Collection<T>): T[] {
  * layer honors `sharedScale` as a scale scope (layer.tsx). `stack` is
  * `spread({ glue: true })`; `spreadX`/`spreadY` fix `dir`. The IR keeps `spread`/
  * `stack` (the v3 wrapper's `serialize` tag), so this elaboration is below the IR.
+ *
+ * `size` (per-entry stack-axis extent, #700 Phase 2) wraps each child in its
+ * own sized layer BEFORE the align/distribute elaboration below: `layer({ [w|h]:
+ * size[i] }, [child])` on the stack axis. A prop-less child (e.g. a rect with
+ * only `fill`) fills its wrapper's proposed size, so the usual mark stays
+ * unchanged — only the wrapping is new. This replaces the old `normalize`
+ * layout flag: `size: field(<name>).normalize()` computes each entry's SHARE
+ * of the window (see fieldExpr.ts's `applyEntryNormalize`) as a data-driven
+ * SIZE claim on the wrapper, which layer.tsx's data-valued-size branch turns
+ * into a local self-scaling region for that child's subtree — the same
+ * space-filling-spine effect `normalize: true` used to special-case, but now
+ * just the general "data-valued size ⇒ self-scaling region" rule.
  */
 export const Spread = createNodeOperator(
   async (
@@ -47,7 +60,7 @@ export const Spread = createNodeOperator(
       mode = "edge",
       reverse = false,
       glue = false,
-      normalize = false,
+      size,
       axes,
       axisMeasures,
       ...fancyDims
@@ -62,12 +75,10 @@ export const Spread = createNodeOperator(
       // When true, treat as a stack: glue children together, summing their
       // sizes into a POSITION at this level. `spacing` is ignored.
       glue?: boolean;
-      // Space-filling spine: `normalize` is pure LAYOUT (the data is never
-      // mutated — children stack their raw size field). This flag tells the
-      // elaborated layer to make the STACKING axis a local self-scaling scope so
-      // the raw fold fills the extent — the irreducibly-layout half of a mosaic
-      // conditional axis.
-      normalize?: boolean;
+      /** Per-entry stack-axis extent — one value per child, in child order.
+       *  Wraps each child in a sized layer on the stack axis before the
+       *  align/distribute elaboration. See the doc comment above. */
+      size?: MaybeValue<number>[];
       /** Override axis rendering for this node. true/false applies to both
        * dims; object form controls x/y independently. */
       axes?: boolean | { x?: AxisOptions; y?: AxisOptions };
@@ -78,6 +89,13 @@ export const Spread = createNodeOperator(
     } & FancyDims<MaybeValue<number>>,
     children: GoFishAST[] | Collection<GoFishAST>
   ) => {
+    if ((fancyDims as any).normalize !== undefined) {
+      throw new Error(
+        "spread/stack: `normalize: true` was removed — use " +
+          "`size: field(<field-name>).normalize()` instead (#700 Phase 2)."
+      );
+    }
+
     children = unwrapLodashArray(children);
 
     const stackDir = elaborateDirection(dir);
@@ -87,19 +105,44 @@ export const Spread = createNodeOperator(
 
     // Give each child a unique constraint name so the align/distribute can
     // reference it (shared with scatter — see `ensureChildNames`).
-    const childList = children as GoFishAST[];
+    let childList = children as GoFishAST[];
+
+    if (size !== undefined) {
+      if (size.length !== childList.length) {
+        throw new Error(
+          `spread/stack: \`size\` has ${size.length} entries but there are ` +
+            `${childList.length} children — one size value is required per child.`
+        );
+      }
+      const sizeKey = stackAxis === "x" ? "w" : "h";
+      childList = await Promise.all(
+        childList.map(async (child, i) => {
+          const wrapped = (await layer({ [sizeKey]: size[i] } as any, [
+            child,
+          ])) as GoFishNode;
+          // Copy split identity onto the wrapper so downstream ordinal-axis
+          // labeling / resolve()-by-key see the same key/datum the unwrapped
+          // child would have — the wrapper is purely a sizing shim.
+          if (child instanceof GoFishNode) {
+            wrapped.setKey(child.key ?? "");
+            wrapped._syntheticKey = child._syntheticKey;
+            (wrapped as any).__splitBy = (child as any).__splitBy;
+            wrapped.datum = child.datum;
+          }
+          return wrapped;
+        })
+      );
+    }
+
     const names = ensureChildNames(childList, "spread");
 
     // Elaborate to a layer carrying the cross-axis align + the stack distribute.
     // `fancyDims` (explicit w/h) flow to the layer, whose self-scaling region
-    // handles an explicit size exactly as the bespoke spread did. `normalize`
-    // rides through as `__normalizeAxis` (the stack axis) so the layer self-
-    // scales that axis into a local fill scope — see layer.tsx.
+    // handles an explicit size exactly as the bespoke spread did.
     const node = (await layer(
       {
         key,
         ...fancyDims,
-        ...(normalize ? { __normalizeAxis: stackDir } : {}),
       } as any,
       childList
     )) as GoFishNode;
@@ -156,17 +199,19 @@ export type SpreadOptions<T = any> = {
   glue?: boolean;
   w?: number | (keyof T & string);
   h?: number | (keyof T & string);
-  /** Space-filling spine (the mosaic/marimekko conditional axis): make the
-   *  stacking axis a local self-scaling scope so its segments fill the extent in
-   *  proportion to their size. Pure layout — the data is not mutated, so the
-   *  cross-axis size still reads the raw marginal sum (e.g. width = raw Σcount,
-   *  height = the same counts rescaled to fill). */
-  normalize?: boolean;
+  /** Per-entry stack-axis extent (one value per split entry): a field name, a
+   *  field expression, or an explicit per-entry array. The space-filling spine
+   *  (the mosaic/marimekko conditional axis) is `size: field(<name>).normalize()`
+   *  — each entry's SHARE of the window (Σ over this operator's own split
+   *  entries) becomes a data-driven size claim, which makes that entry's
+   *  subtree a local self-scaling region so its segments fill the extent in
+   *  proportion to their share (see the `Spread` doc comment above). */
+  size?: (keyof T & string) | FieldExpr | MaybeValue<number>[];
   debug?: boolean;
   axes?: boolean | { x?: AxisOptions; y?: AxisOptions };
 };
 
-export const spread = createOperator<any, SpreadOptions>(Spread, {
+export const spread = createOperator<any, SpreadOptions>(Spread as any, {
   // With `by`: groupBy on the field. Without `by`: identity split — one leaf
   // per row (the waffle grid relies on this to spread chunked sub-arrays).
   // Expand-kind marks (e.g. `cut`) need the whole array in one leaf instead;
@@ -174,7 +219,7 @@ export const spread = createOperator<any, SpreadOptions>(Spread, {
   // not here, so this split stays kind-agnostic.
   split: ({ by }, d) =>
     by ? splitEntries(by, d) : new Map(d.map((r, i) => [i, r])),
-  channels: { w: "size", h: "size" },
+  channels: { w: "size", h: "size", size: { type: "size", entry: true } },
   axisFields: ({ by, dir }) => {
     const name =
       typeof by === "string" ? by : isField(by) ? by.name : undefined;

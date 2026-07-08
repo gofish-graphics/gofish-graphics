@@ -1,7 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../../helper";
-import { chart, spread, stack, rect, derive, log, palette } from "../../../src/lib";
-import { groupBy, sumBy } from "lodash";
+import { chart, spread, stack, rect, derive, field, palette } from "../../../src/lib";
 import data from "vega-datasets";
 
 // Mirrors: https://vega.github.io/vega-lite/examples/stacked_bar_normalize.html
@@ -39,15 +38,9 @@ export const Default: StoryObj<Args> = {
           d.map((row) => ({ ...row, sex: row.sex === 1 ? "Male" : "Female" }))
         ),
         spread({ by: "age",  dir: "x" }),
-        derive((d) =>
-          d.map((row) => ({
-            ...row,
-            proportion: row.people / sumBy(d, "people"),
-          }))
-        ),
-        stack({ by: "sex",  dir: "y" })
+        stack({ by: "sex", dir: "y", size: field("people").normalize() })
       )
-      .mark(rect({ h: "proportion", fill: "sex" }))
+      .mark(rect({ fill: "sex" }))
       .render(container, { w: args.w, h: args.h });
 
     return container;
