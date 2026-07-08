@@ -242,6 +242,12 @@ function startHarness(
     {
       cwd: harnessDir,
       stdio: ["ignore", "pipe", "pipe"],
+      // Own process group so `killProc` can tear down the whole tree — a plain
+      // `.kill()` only signals the `npx` wrapper, orphaning the `vite` grandchild
+      // that holds the stdout/stderr pipes (which keeps THIS process alive past
+      // "benchmark complete") and the harness port (which the later same-runner
+      // bench:plots step reuses).
+      detached: true,
       env: {
         ...process.env,
         NODE_ENV: "development",
@@ -261,12 +267,30 @@ function startDeriveServer(): ChildProcess {
   const proc = spawn(
     "python3",
     [join(TESTS_DIR, "scripts/derive-server.py"), String(DERIVE_SERVER_PORT)],
-    { cwd: ROOT, stdio: ["ignore", "pipe", "pipe"] }
+    { cwd: ROOT, stdio: ["ignore", "pipe", "pipe"], detached: true }
   );
   proc.stderr?.on("data", (d) => {
     if (process.env.DEBUG) process.stderr.write(d);
   });
   return proc;
+}
+
+/** Kill a spawned server and its whole process group (the `npx`/`python3`
+ *  wrapper plus the real `vite`/server grandchild). A plain `proc.kill()` only
+ *  reaches the direct child, orphaning the grandchild — which holds the piped
+ *  stdio fds that otherwise keep this process alive after the run finishes. */
+function killProc(proc: ChildProcess | null | undefined): void {
+  if (!proc || proc.pid === undefined) return;
+  try {
+    // Negative pid → the process group (created via `detached: true`).
+    process.kill(-proc.pid, "SIGKILL");
+  } catch {
+    try {
+      proc.kill("SIGKILL");
+    } catch {
+      /* already gone */
+    }
+  }
 }
 
 async function waitFor(url: string, timeoutMs = 30_000): Promise<void> {
@@ -1195,9 +1219,9 @@ async function main() {
     await context.close();
   } finally {
     await browser?.close();
-    harnessProc.kill();
-    abHarnessProc?.kill();
-    deriveProc?.kill();
+    killProc(harnessProc);
+    killProc(abHarnessProc);
+    killProc(deriveProc);
   }
 
   mkdirSync(OUT_DIR, { recursive: true });
@@ -1236,7 +1260,13 @@ function baseSha(dir: string): string {
   }
 }
 
-main().catch((err) => {
-  console.error("Fatal error:", err);
-  process.exit(1);
-});
+main().then(
+  // Exit explicitly: even after killing the harness process groups, a lingering
+  // handle (a not-yet-drained pipe, a keep-alive socket) can otherwise leave the
+  // event loop non-empty, hanging the CI step long after "benchmark complete".
+  () => process.exit(0),
+  (err) => {
+    console.error("Fatal error:", err);
+    process.exit(1);
+  }
+);
