@@ -1201,9 +1201,11 @@ export const render = (
   // (mirror about the whole canvas height), threaded as `ambientFlip`.
   const baseDown: ToPixel = ([gx, gy]) => [gx + leftReserve, gy + topReserve];
   const toPixelFor = makeToPixelFor(baseDown);
-  const ambientFlip: FlipScope | undefined = yUp
-    ? { baseY: 0, height }
-    : undefined;
+  // The whole-canvas y-flip band. Shared by both maps below so that when the
+  // plot flips as a whole they pass the SAME `FlipScope` identity to
+  // `toPixelFor`, which memoizes per identity — one cached closure, not two.
+  const canvasFlip: FlipScope = { baseY: 0, height };
+  const ambientFlip: FlipScope | undefined = yUp ? canvasFlip : undefined;
   // The frame-level GoFish-space → screen map interaction publishes for
   // hit-test / dataPos reads. It must mirror the ROOT PLOT's orientation, which
   // flips about the canvas band whenever the plot flips as a whole — i.e. the
@@ -1211,9 +1213,7 @@ export const render = (
   // (`rootFlipsWhole`, mirroring the `_rootFlipScope` stamp). Using `ambientFlip`
   // (yUp only) here would report y-down for a continuous-y chart that paints
   // y-up, inverting drags. #629.
-  const rootFlip: FlipScope | undefined = rootFlipsWhole
-    ? { baseY: 0, height }
-    : undefined;
+  const rootFlip: FlipScope | undefined = rootFlipsWhole ? canvasFlip : undefined;
   const rootToPixel = toPixelFor(rootFlip);
   const interactive = interaction !== undefined;
   const paintBaked = () => {
