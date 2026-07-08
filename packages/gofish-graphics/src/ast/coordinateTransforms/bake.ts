@@ -171,7 +171,14 @@ const isTransparent = (node: GoFishAST): boolean =>
 const declaredYUp = (node: GoFishAST): boolean => {
   if (!(node instanceof GoFishNode)) return false;
   const sy = node._underlyingSpace?.[1];
-  return sy !== undefined && isCONTINUOUS(sy);
+  if (sy !== undefined && isCONTINUOUS(sy)) return true;
+  // A self-scaling scope (a `normalize` spine, a data-driven extent) resolves a
+  // CONTINUOUS y locally but reports UNDEFINED upward to keep its units out of an
+  // ancestor's scale union. For orientation it is still continuous, so it opens a
+  // y-up flip scope over its own band exactly as a reported continuous y would —
+  // otherwise a normalize mosaic's segments stack y-down inside the scope. #20.
+  const ssy = node._selfScaledSpace?.[1];
+  return ssy !== undefined && isCONTINUOUS(ssy);
 };
 
 /** The node's CONTENT bbox band `[baseY, baseY+height]` in its own local frame,
