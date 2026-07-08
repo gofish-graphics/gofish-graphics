@@ -262,10 +262,13 @@ function walkData(node: unknown, path: string, ctx: Context): void {
       optionalField(node, "id", path, ctx, expectString);
       if (ctx.strict) rejectUnknown(node, ["type", "id"], path, ctx);
       return;
+    case "previous-tier":
+      if (ctx.strict) rejectUnknown(node, ["type"], path, ctx);
+      return;
     default:
       ctx.errors.push({
         path: `${path}.type`,
-        message: `data type must be "inline" | "select" | "external", got ${JSON.stringify(
+        message: `data type must be "inline" | "select" | "external" | "previous-tier", got ${JSON.stringify(
           node.type
         )}`,
       });

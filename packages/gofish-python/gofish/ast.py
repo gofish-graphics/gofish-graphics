@@ -468,17 +468,10 @@ class Mark:
 
         Returns a GoFishChartWidget; in a notebook this auto-displays.
         """
-        import base64
-        import json
         from .widget import GoFishChartWidget
-        import pyarrow as pa
+        from .arrow_utils import empty_placeholder_arrow_bytes
 
-        schema = pa.schema([pa.field("_placeholder", pa.int32())])
-        table = pa.Table.from_arrays([], schema=schema)
-        sink = pa.BufferOutputStream()
-        with pa.ipc.new_stream(sink, schema) as writer:
-            writer.write_table(table)
-        arrow_data = sink.getvalue().to_pybytes()
+        arrow_data = empty_placeholder_arrow_bytes()
 
         widget = GoFishChartWidget(
             spec=self.to_ir(),
@@ -945,21 +938,15 @@ class ConstrainableMark(Mark):
 
 
 # Sentinel chart-data for an empty `chart()` scope used inside `.layer(...)`:
-# "inherit the previous tier's marks". `_wire_layer_tier` binds it by naming the
-# previous tier's mark and pointing this tier's data at `selectAll(thatName)`.
+# "inherit the previous tier's marks". Unlike earlier revisions, this wrapper
+# no longer resolves that wiring itself — it emits `{"type": "previous-tier"}`
+# on the wire (see `ChartBuilder.to_ir`) and lets JS's `LayerBuilder.wireTiers()`
+# (the real `.layer()` chain's own logic — see chartBuilder.ts) auto-name the
+# preceding tier's mark and bind this tier to `selectAll(thatName)`. This is
+# the shallow-port goal: Python emits tiers as authored, JS owns the auto-naming
+# (see apps/docs/docs/internals/design/python-wrapper-codegen.md, "Recommended
+# staging" step 1).
 _PREVIOUS_LAYER_MARKS = object()
-
-
-def _wire_layer_tier(producer, consumer, auto_idx):
-    """Wire a `.layer()` step. If `consumer` is an empty `chart()` scope, name
-    `producer`'s mark (auto unless already named) and bind the consumer's data to
-    `selectAll(thatName)`. Returns the (possibly updated) producer and consumer.
-    """
-    if not consumer._uses_previous_marks():
-        return producer, consumer
-    producer, name = producer._ensure_named_mark(f"__gofish_layer_{auto_idx}")
-    consumer = consumer._with_data(selectAll(name))
-    return producer, consumer
 
 
 class ChartBuilder:
@@ -1082,17 +1069,22 @@ class ChartBuilder:
         dataset (resolve back into the chart with
         ``resolve(..., from_=selectAll(...))``). Returns a ``LayerBuilder`` so
         tiers keep chaining: ``.layer(a).layer(b)``. Mirrors the JS ``.layer()``.
+
+        The auto-naming/``selectAll`` wiring for an empty-scope ``child`` is
+        NOT resolved here — each tier is emitted as authored (see
+        ``_PREVIOUS_LAYER_MARKS``) and JS's real ``LayerBuilder`` derives it,
+        the same as a native ``chart(...).layer(...)`` chain.
         """
-        producer, consumer = _wire_layer_tier(self, child, 0)
-        return LayerBuilder([producer, consumer], builder_chain=True)
+        return LayerBuilder([self, child], builder_chain=True)
 
     def _uses_previous_marks(self) -> bool:
         """True for an empty ``chart()`` scope (data defers to the prev tier)."""
         return self.data is _PREVIOUS_LAYER_MARKS
 
     def _with_data(self, data: Any) -> "ChartBuilder":
-        """Copy of this builder with its data replaced (used by `.layer()` to
-        bind an empty scope to ``selectAll(previousTierMarkName)``)."""
+        """Copy of this builder with its data replaced (used by ``.mark()``'s
+        nested-``ChartBuilder`` form to bind an empty scope to the incoming
+        partition datum — see ``ChartBuilder.mark``)."""
         nb = ChartBuilder(
             data, self.options, self.operators, z_order=self._z_order
         )
@@ -1100,23 +1092,6 @@ class ChartBuilder:
         nb._connect = self._connect
         nb._name = self._name
         return nb
-
-    def _ensure_named_mark(self, auto_name: str):
-        """Ensure this tier's mark carries a name so a later tier can
-        ``selectAll`` its nodes. An existing ``.name(...)`` wins; otherwise
-        ``auto_name`` is applied. Returns ``(builder, name)``."""
-        if self._mark is None:
-            raise ValueError(
-                ".layer(chart()): the previous tier has no .mark() to inherit — "
-                "add a mark to the previous tier, or give the layer's chart() "
-                "its own data."
-            )
-        existing = getattr(self._mark, "_name", None)
-        if existing is not None:
-            name = existing.tag if isinstance(existing, Token) else existing
-            return self, name
-        named = self._mark.name(auto_name)
-        return self.mark(named), auto_name
 
     def name(self, name_or_token: Union[str, "Token"]) -> "ChartBuilder":
         """Tag this chart with a name so a `layer([...]).constrain(...)` callback
@@ -1187,10 +1162,15 @@ class ChartBuilder:
             raise ValueError("Chart must have a mark before converting to IR")
 
         # Serialize data: a `_RefProxy` used as chart data (`ref(name)` or
-        # `selectAll(name)`) becomes a select spec; otherwise None. The wire
-        # shape is `{"type": "select", "layer": <name>, "mode": "one"|"all"}`
+        # `selectAll(name)`) becomes a select spec; an empty `chart()` scope
+        # inside a `.layer(...)` chain becomes `{"type": "previous-tier"}` (JS's
+        # `LayerBuilder.wireTiers()` derives the auto-name/selectAll wiring from
+        # this marker — see `_PREVIOUS_LAYER_MARKS`); otherwise None. The select
+        # wire shape is `{"type": "select", "layer": <name>, "mode": "one"|"all"}`
         # — "one" for a singular `ref(name)`, "all" for `selectAll(name)`.
-        if isinstance(self.data, _RefProxy):
+        if self._uses_previous_marks():
+            data_ir: Any = {"type": "previous-tier"}
+        elif isinstance(self.data, _RefProxy):
             selection = self.data._sel()
             if (
                 len(selection) != 1
@@ -1201,7 +1181,7 @@ class ChartBuilder:
                     "selection (e.g. `ref(\"bars\")` / `selectAll(\"bars\")`); "
                     "token/path refs cannot serialize as chart data"
                 )
-            data_ir: Any = {
+            data_ir = {
                 "type": "select",
                 "layer": selection[0],
                 "mode": self.data.multiplicity or "one",
@@ -1262,19 +1242,13 @@ class ChartBuilder:
 
         # Import here to avoid circular dependencies
         from .widget import GoFishChartWidget
-        from .arrow_utils import dataframe_to_arrow
+        from .arrow_utils import dataframe_to_arrow, empty_placeholder_arrow_bytes
         import pandas as pd
 
         # Ref-data charts (`ref(name)` / `selectAll(name)`) have no data of
         # their own — they borrow nodes from a sibling chart.
         if isinstance(self.data, _RefProxy):
-            import pyarrow as pa
-            schema = pa.schema([pa.field("_placeholder", pa.int32())])
-            table = pa.Table.from_arrays([], schema=schema)
-            sink = pa.BufferOutputStream()
-            with pa.ipc.new_stream(sink, schema) as writer:
-                writer.write_table(table)
-            arrow_data = sink.getvalue().to_pybytes()
+            arrow_data = empty_placeholder_arrow_bytes()
         else:
             # Convert data to Arrow format
             if isinstance(self.data, pd.DataFrame):
@@ -1285,13 +1259,7 @@ class ChartBuilder:
                 df = pd.DataFrame(self.data)
 
             if len(df) == 0:
-                import pyarrow as pa
-                schema = pa.schema([pa.field("_placeholder", pa.int32())])
-                table = pa.Table.from_arrays([], schema=schema)
-                sink = pa.BufferOutputStream()
-                with pa.ipc.new_stream(sink, schema) as writer:
-                    writer.write_table(table)
-                arrow_data = sink.getvalue().to_pybytes()
+                arrow_data = empty_placeholder_arrow_bytes()
             else:
                 arrow_data = dataframe_to_arrow(df)
 
@@ -2408,12 +2376,10 @@ class LayerBuilder:
 
     def layer(self, child: ChartBuilder) -> "LayerBuilder":
         """Stack another tier; an empty ``chart()`` scope inherits the marks of
-        the immediately preceding tier (see ``ChartBuilder.layer``)."""
-        producer, consumer = _wire_layer_tier(
-            self.children[-1], child, len(self.children) - 1
-        )
+        the immediately preceding tier (see ``ChartBuilder.layer`` — the
+        auto-naming/``selectAll`` wiring is JS-side, not resolved here)."""
         return LayerBuilder(
-            [*self.children[:-1], producer, consumer],
+            [*self.children, child],
             self.options,
             builder_chain=True,
         )
@@ -2504,19 +2470,16 @@ class LayerBuilder:
         import base64
         import json
         from .widget import GoFishChartWidget
-        from .arrow_utils import dataframe_to_arrow
+        from .arrow_utils import dataframe_to_arrow, empty_placeholder_arrow_bytes
         import pandas as pd
-        import pyarrow as pa
 
         def _serialize_child_data(child: ChartBuilder) -> str:
             """Serialize a child chart's data to base64 Arrow bytes."""
-            if isinstance(child.data, _RefProxy):
-                schema = pa.schema([pa.field("_placeholder", pa.int32())])
-                table = pa.Table.from_arrays([], schema=schema)
-                sink = pa.BufferOutputStream()
-                with pa.ipc.new_stream(sink, schema) as writer:
-                    writer.write_table(table)
-                return base64.b64encode(sink.getvalue().to_pybytes()).decode("ascii")
+            # Ref-data tiers borrow nodes from a sibling; empty `chart()`
+            # scopes (previous-tier) inherit the preceding tier's marks
+            # JS-side — neither ships rows of its own.
+            if isinstance(child.data, _RefProxy) or child._uses_previous_marks():
+                return base64.b64encode(empty_placeholder_arrow_bytes()).decode("ascii")
 
             if isinstance(child.data, pd.DataFrame):
                 df = child.data
@@ -2526,12 +2489,7 @@ class LayerBuilder:
                 df = pd.DataFrame(child.data)
 
             if len(df) == 0:
-                schema = pa.schema([pa.field("_placeholder", pa.int32())])
-                table = pa.Table.from_arrays([], schema=schema)
-                sink = pa.BufferOutputStream()
-                with pa.ipc.new_stream(sink, schema) as writer:
-                    writer.write_table(table)
-                return base64.b64encode(sink.getvalue().to_pybytes()).decode("ascii")
+                return base64.b64encode(empty_placeholder_arrow_bytes()).decode("ascii")
 
             return base64.b64encode(dataframe_to_arrow(df)).decode("ascii")
 

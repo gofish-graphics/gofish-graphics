@@ -51,10 +51,11 @@ import {
   LayerBuilder,
   chart,
   resolveRefData,
+  PREVIOUS_LAYER_MARKS,
 } from "./chartBuilder";
 import type { ChartOptions } from "./chartBuilder";
 import { projectPath } from "../datumProjection";
-export { ChartBuilder, LayerBuilder, chart };
+export { ChartBuilder, LayerBuilder, chart, PREVIOUS_LAYER_MARKS };
 export type { ChartOptions };
 
 /* Data Transformation Operators */

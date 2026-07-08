@@ -114,8 +114,14 @@ The root types mirror the v3 fluent builder shapes:
 - `LayerIR` — `{ type: "layer", charts, options? }`
 - `RawMarkIR` — `{ type: "raw-mark", mark, options? }`
 
-`data` is either `{type: "inline", rows}`, `{type: "select", layer}`, or
-`{type: "external", id?}`. Operators are a flat list (`derive`, `resolve`,
+`data` is either `{type: "inline", rows}`, `{type: "select", layer}`,
+`{type: "external", id?}`, or `{type: "previous-tier"}` — the last marks an
+empty `chart()` scope inside a `builder: true` layer chain ("inherit the
+previous tier's marks"). The deserializer maps it to the JS
+`PREVIOUS_LAYER_MARKS` sentinel so the real `LayerBuilder.wireTiers()` derives
+the auto-naming + `selectAll` wiring at resolve time — the producer's
+auto-minted layer name never appears in the IR (mirroring how `connect` keeps
+its resolve-time markers out of the JSON). Operators are a flat list (`derive`, `resolve`,
 `join`, `spread`, `stack`, `group`, `scatter`, `table`, `log`) — note `join`
 inlines its right-hand table as JSON rows, so unlike `derive` it round-trips
 without a bridge. Marks are a tree — leaves
@@ -284,7 +290,7 @@ The high-level structure:
     "ChartIR":    { /* type, data, operators, mark, connect, options, zOrder, ... */ },
     "LayerIR":    { /* type, charts, options, ... */ },
     "RawMarkIR":  { /* type, mark, options, ... */ },
-    "DataIR":     { "oneOf": [/* inline, select, external */] },
+    "DataIR":     { "oneOf": [/* inline, select, external, previous-tier */] },
     "OperatorIR": { /* type enum: derive | spread | stack | group | scatter | table | log */ },
     "MarkIR":     { "oneOf": [LeafMarkIR, CombinatorMarkIR, RefMarkIR, OffsetMarkIR, CutMarkIR] },
     "LabelIR":      { /* accessor, position, fontSize, ... */ },

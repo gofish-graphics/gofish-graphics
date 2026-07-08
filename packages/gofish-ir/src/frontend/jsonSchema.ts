@@ -244,6 +244,15 @@ export const FRONTEND_IR_JSON_SCHEMA = {
             id: { type: "string" },
           },
         },
+        {
+          type: "object",
+          required: ["type"],
+          properties: {
+            type: { const: "previous-tier" },
+          },
+          description:
+            "An empty chart() scope inside a .layer(...) chain: inherit the immediately preceding tier's marks. Only valid on a tier inside a builder:true LayerIR.",
+        },
       ],
     },
     ChartIR: {

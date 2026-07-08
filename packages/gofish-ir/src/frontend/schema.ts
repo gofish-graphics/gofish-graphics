@@ -141,11 +141,20 @@ export interface RawMarkIR extends BaseIRNode {
  *   (or absent) corresponds to `ref(name)`.
  * - **External**: `{type: "external", id?: "..."}` indicates data ships over a
  *   sidecar transport (anywidget's `arrow_data` trait) and the id keys into it.
+ * - **Previous tier**: `{type: "previous-tier"}` marks an empty `chart()` /
+ *   `Chart()` scope inside a `.layer(...)` chain — "inherit the immediately
+ *   preceding tier's marks". The deserializer maps this to the JS
+ *   `PREVIOUS_LAYER_MARKS` sentinel so `LayerBuilder`'s own `wireTiers()`
+ *   (auto-naming the producer's mark + binding this tier to
+ *   `selectAll(name)`) runs JS-side — the same code a native
+ *   `chart(...).layer(...)` chain goes through. Only valid on a tier inside a
+ *   `builder: true` `LayerIR`.
  */
 export type DataIR =
   | { type: "inline"; rows: Array<Record<string, unknown>> }
   | { type: "select"; layer: string; mode?: "one" | "all" }
-  | { type: "external"; id?: string };
+  | { type: "external"; id?: string }
+  | { type: "previous-tier" };
 
 // ---------------------------------------------------------------------------
 // Operators
