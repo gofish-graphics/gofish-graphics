@@ -1,3 +1,7 @@
+// <gofish-wiki> AUTO-GENERATED — see covers: in the essay; run `pnpm --filter docs sync-backlinks`
+// @wiki Frontend IR — /internals/frontend/serialization
+// </gofish-wiki>
+
 /**
  * Generates `packages/gofish-python/gofish/_generated.py` from the
  * gofish-ir frontend descriptor table

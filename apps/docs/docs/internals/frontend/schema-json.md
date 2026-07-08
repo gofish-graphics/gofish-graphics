@@ -115,6 +115,16 @@ for the API.
               "type": "string"
             }
           }
+        },
+        {
+          "type": "object",
+          "required": ["type"],
+          "properties": {
+            "type": {
+              "const": "previous-tier"
+            }
+          },
+          "description": "An empty chart() scope inside a .layer(...) chain: inherit the immediately preceding tier's marks. Only valid on a tier inside a builder:true LayerIR."
         }
       ]
     },
@@ -218,59 +228,6 @@ for the API.
         },
         "meta": {
           "$ref": "#/$defs/Meta"
-        }
-      }
-    },
-    "OperatorIR": {
-      "type": "object",
-      "description": "A pipeline operator. Field coverage is open at the schema level (`additionalProperties` is permitted) — see validate.ts and schema.ts for per-type field shapes. `spread`, `stack`, and `scatter` accept an `axes` property of shape `AxesOptions`; operators may carry structural `translate` metadata.",
-      "required": ["type"],
-      "properties": {
-        "type": {
-          "enum": [
-            "derive",
-            "resolve",
-            "join",
-            "spread",
-            "stack",
-            "group",
-            "scatter",
-            "table",
-            "log"
-          ]
-        },
-        "axes": {
-          "$ref": "#/$defs/AxesOptions"
-        },
-        "translate": {
-          "$ref": "#/$defs/Translate"
-        },
-        "w": {
-          "$ref": "#/$defs/ChannelValue"
-        },
-        "h": {
-          "$ref": "#/$defs/ChannelValue"
-        },
-        "cols": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "from": {
-          "type": "string"
-        },
-        "key": {
-          "type": "string"
-        },
-        "on": {
-          "type": "string"
-        },
-        "right": {
-          "type": "array",
-          "items": {
-            "type": "object"
-          }
         }
       }
     },
@@ -464,45 +421,6 @@ for the API.
           }
         }
       ]
-    },
-    "LeafMarkIR": {
-      "type": "object",
-      "required": ["type"],
-      "properties": {
-        "type": {
-          "enum": [
-            "rect",
-            "circle",
-            "line",
-            "ribbon",
-            "blank",
-            "ellipse",
-            "petal",
-            "text",
-            "image",
-            "polygon",
-            "mark-fn"
-          ]
-        },
-        "name": {
-          "type": "string"
-        },
-        "label": {
-          "$ref": "#/$defs/LabelIR"
-        },
-        "constraints": {
-          "type": "array",
-          "items": {
-            "$ref": "#/$defs/ConstraintIR"
-          }
-        },
-        "zOrder": {
-          "type": "number"
-        },
-        "translate": {
-          "$ref": "#/$defs/Translate"
-        }
-      }
     },
     "CombinatorMarkIR": {
       "type": "object",
@@ -730,6 +648,1400 @@ for the API.
               "type": "string"
             }
           }
+        }
+      ]
+    },
+    "DeriveOperator": {
+      "description": "Opaque user transformation (`derive(fn)`). Function bodies aren't serializable; the IR carries a bridge handle when the Python widget is the producer.",
+      "type": "object",
+      "required": ["type"],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "derive"
+        },
+        "lambdaId": {
+          "type": "string",
+          "description": "Python-bridge handle for the remote callable."
+        },
+        "provenance": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Measure provenance a transform (e.g. bin) declares for its output columns — output field name → measure."
+        },
+        "translate": {
+          "$ref": "#/$defs/Translate"
+        },
+        "origin": {
+          "$ref": "#/$defs/Origin"
+        },
+        "meta": {
+          "$ref": "#/$defs/Meta"
+        }
+      }
+    },
+    "ResolveOperator": {
+      "description": "Dereference reference columns into the drawn nodes they name (`resolve(cols, { from, key? })`).",
+      "type": "object",
+      "required": ["type", "cols"],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "resolve"
+        },
+        "cols": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Local columns holding references to resolve in place."
+        },
+        "from": {
+          "type": "string",
+          "description": "Layer name whose nodes the columns are resolved against (a selectAll)."
+        },
+        "key": {
+          "type": "string",
+          "description": "Explicit match field; defaults to the producing operator's `by`."
+        },
+        "translate": {
+          "$ref": "#/$defs/Translate"
+        },
+        "origin": {
+          "$ref": "#/$defs/Origin"
+        },
+        "meta": {
+          "$ref": "#/$defs/Meta"
+        }
+      }
+    },
+    "JoinOperator": {
+      "description": "One-to-many equi-join of the incoming rows against an inlined `right` table on a shared `on` key.",
+      "type": "object",
+      "required": ["type", "on", "right"],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "join"
+        },
+        "on": {
+          "type": "string",
+          "description": "Shared key field matched between the incoming rows and `right`."
+        },
+        "right": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {}
+          },
+          "description": "The right-hand table, inlined as JSON rows."
+        },
+        "translate": {
+          "$ref": "#/$defs/Translate"
+        },
+        "origin": {
+          "$ref": "#/$defs/Origin"
+        },
+        "meta": {
+          "$ref": "#/$defs/Meta"
+        }
+      }
+    },
+    "SpreadOperator": {
+      "description": "Arrange children along `dir` with spacing, aligning them on the cross axis.",
+      "type": "object",
+      "required": ["type"],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "spread"
+        },
+        "by": {
+          "type": "string",
+          "description": "Field to partition rows by."
+        },
+        "dir": {
+          "enum": ["x", "y"],
+          "description": "Direction to spread along."
+        },
+        "spacing": {
+          "type": "number",
+          "description": "Gap between children, px.",
+          "default": 8
+        },
+        "alignment": {
+          "type": "string",
+          "description": "Cross-axis alignment (\"start\" | \"middle\" | \"end\" | \"baseline\").",
+          "default": "baseline"
+        },
+        "sharedScale": {
+          "type": "boolean",
+          "default": false
+        },
+        "mode": {
+          "enum": ["edge", "center"],
+          "default": "edge"
+        },
+        "reverse": {
+          "type": "boolean",
+          "default": false
+        },
+        "glue": {
+          "type": "boolean",
+          "description": "Stack semantics: children glued, sizes sum; spacing forced to 0.",
+          "default": false
+        },
+        "axes": {
+          "$ref": "#/$defs/AxesOptions"
+        },
+        "translate": {
+          "$ref": "#/$defs/Translate"
+        },
+        "origin": {
+          "$ref": "#/$defs/Origin"
+        },
+        "meta": {
+          "$ref": "#/$defs/Meta"
+        }
+      }
+    },
+    "StackOperator": {
+      "description": "`spread({ glue: true })` under its own wire tag — children glued together (touching, no gaps).",
+      "type": "object",
+      "required": ["type"],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "stack"
+        },
+        "by": {
+          "type": "string",
+          "description": "Field to partition rows by."
+        },
+        "dir": {
+          "enum": ["x", "y"],
+          "description": "Direction to stack along."
+        },
+        "alignment": {
+          "type": "string",
+          "default": "baseline"
+        },
+        "sharedScale": {
+          "type": "boolean",
+          "default": false
+        },
+        "mode": {
+          "enum": ["edge", "center"],
+          "default": "edge"
+        },
+        "reverse": {
+          "type": "boolean",
+          "default": false
+        },
+        "axes": {
+          "$ref": "#/$defs/AxesOptions"
+        },
+        "translate": {
+          "$ref": "#/$defs/Translate"
+        },
+        "origin": {
+          "$ref": "#/$defs/Origin"
+        },
+        "meta": {
+          "$ref": "#/$defs/Meta"
+        }
+      }
+    },
+    "GroupOperator": {
+      "description": "Partition rows by `by` into a flat `Frame` (no layout beyond grouping).",
+      "type": "object",
+      "required": ["type", "by"],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "group"
+        },
+        "by": {
+          "type": "string",
+          "description": "Field to group rows by."
+        },
+        "translate": {
+          "$ref": "#/$defs/Translate"
+        },
+        "origin": {
+          "$ref": "#/$defs/Origin"
+        },
+        "meta": {
+          "$ref": "#/$defs/Meta"
+        }
+      }
+    },
+    "ScatterOperator": {
+      "description": "Position each child at an explicit (x, y) point or [min, max] span in data space.",
+      "type": "object",
+      "required": ["type"],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "scatter"
+        },
+        "by": {
+          "type": "string",
+          "description": "Field to partition rows by."
+        },
+        "x": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Point position, x."
+        },
+        "y": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Point position, y."
+        },
+        "xMin": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Range form: left/bottom edge, x."
+        },
+        "xMax": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Range form: right/top edge, x."
+        },
+        "yMin": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Range form: left/bottom edge, y."
+        },
+        "yMax": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Range form: right/top edge, y."
+        },
+        "alignment": {
+          "type": "string",
+          "description": "Cross-axis alignment for the axis without an explicit position.",
+          "default": "baseline"
+        },
+        "axes": {
+          "$ref": "#/$defs/AxesOptions"
+        },
+        "w": {
+          "$ref": "#/$defs/ChannelValue"
+        },
+        "h": {
+          "$ref": "#/$defs/ChannelValue"
+        },
+        "translate": {
+          "$ref": "#/$defs/Translate"
+        },
+        "origin": {
+          "$ref": "#/$defs/Origin"
+        },
+        "meta": {
+          "$ref": "#/$defs/Meta"
+        }
+      }
+    },
+    "TableOperator": {
+      "description": "Arrange cells in a `numCols`-wide grid (or a `{x, y}` keyed grid via `by`).",
+      "type": "object",
+      "required": ["type", "by"],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "table"
+        },
+        "by": {
+          "type": "object",
+          "properties": {
+            "x": {
+              "type": "string"
+            },
+            "y": {
+              "type": "string"
+            }
+          },
+          "required": ["x", "y"],
+          "description": "Grouping fields for the column/row keys — the table operator can't run without both."
+        },
+        "spacing": {
+          "oneOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "array",
+              "minItems": 2,
+              "maxItems": 2,
+              "prefixItems": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "number"
+                }
+              ]
+            }
+          ],
+          "description": "Cell gap: a single number for both axes, or [x, y].",
+          "default": 0
+        },
+        "numCols": {
+          "type": "number",
+          "description": "Explicit column count (falls back to the number of distinct column keys)."
+        },
+        "translate": {
+          "$ref": "#/$defs/Translate"
+        },
+        "origin": {
+          "$ref": "#/$defs/Origin"
+        },
+        "meta": {
+          "$ref": "#/$defs/Meta"
+        }
+      }
+    },
+    "LogOperator": {
+      "description": "Debug pass-through: logs each row (optionally under `label`) and forwards it unchanged.",
+      "type": "object",
+      "required": ["type"],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "log"
+        },
+        "label": {
+          "type": "string",
+          "description": "Console label prefix."
+        },
+        "translate": {
+          "$ref": "#/$defs/Translate"
+        },
+        "origin": {
+          "$ref": "#/$defs/Origin"
+        },
+        "meta": {
+          "$ref": "#/$defs/Meta"
+        }
+      }
+    },
+    "TreemapOperator": {
+      "description": "d3-hierarchy treemap layout over the flow's rows, fare/weight-proportional.",
+      "type": "object",
+      "required": ["type"],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "const": "treemap"
+        },
+        "w": {
+          "$ref": "#/$defs/ChannelValue"
+        },
+        "h": {
+          "$ref": "#/$defs/ChannelValue"
+        },
+        "paddingInner": {
+          "type": "number",
+          "default": 0
+        },
+        "paddingOuter": {
+          "type": "number",
+          "default": 0
+        },
+        "round": {
+          "type": "boolean",
+          "default": true
+        },
+        "tile": {
+          "enum": [
+            "squarify",
+            "slice",
+            "dice",
+            "binary",
+            "slicedice",
+            "squarifyCircle"
+          ],
+          "default": "squarify"
+        },
+        "sort": {
+          "enum": ["asc", "desc", "none"],
+          "default": "desc"
+        },
+        "valueField": {
+          "type": "string",
+          "description": "Field summed per row to weight the tile size."
+        },
+        "flipY": {
+          "type": "boolean",
+          "description": "Mirror leaf layout top-to-bottom within the treemap box.",
+          "default": false
+        },
+        "leafIntrinsicRadiusField": {
+          "type": "string",
+          "description": "When set, each leaf is laid out in a square of side min(leafW, leafH, 2*datum[field])."
+        },
+        "translate": {
+          "$ref": "#/$defs/Translate"
+        },
+        "origin": {
+          "$ref": "#/$defs/Origin"
+        },
+        "meta": {
+          "$ref": "#/$defs/Meta"
+        }
+      }
+    },
+    "OperatorIR": {
+      "description": "A pipeline operator — a discriminated union, one member per operator type. See validate.ts and schema.ts for the same field shapes.",
+      "oneOf": [
+        {
+          "$ref": "#/$defs/DeriveOperator"
+        },
+        {
+          "$ref": "#/$defs/ResolveOperator"
+        },
+        {
+          "$ref": "#/$defs/JoinOperator"
+        },
+        {
+          "$ref": "#/$defs/SpreadOperator"
+        },
+        {
+          "$ref": "#/$defs/StackOperator"
+        },
+        {
+          "$ref": "#/$defs/GroupOperator"
+        },
+        {
+          "$ref": "#/$defs/ScatterOperator"
+        },
+        {
+          "$ref": "#/$defs/TableOperator"
+        },
+        {
+          "$ref": "#/$defs/LogOperator"
+        },
+        {
+          "$ref": "#/$defs/TreemapOperator"
+        }
+      ]
+    },
+    "RectMark": {
+      "description": "A rectangle. Box geometry via the shared dims channels.",
+      "type": "object",
+      "required": ["type"],
+      "additionalProperties": true,
+      "properties": {
+        "type": {
+          "const": "rect"
+        },
+        "x": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Left edge position."
+        },
+        "cx": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Center x."
+        },
+        "x2": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Right edge position."
+        },
+        "w": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Width."
+        },
+        "emX": {
+          "type": "boolean",
+          "description": "Embed x in the parent's x space."
+        },
+        "y": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Top/bottom edge position (y-up: bottom)."
+        },
+        "cy": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Center y."
+        },
+        "y2": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Other y edge position."
+        },
+        "h": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Height."
+        },
+        "emY": {
+          "type": "boolean",
+          "description": "Embed y in the parent's y space."
+        },
+        "theta": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Angular position alias (polar coord's x)."
+        },
+        "thetaSize": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Angular extent alias (polar coord's w)."
+        },
+        "r": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Radial position alias (polar coord's y)."
+        },
+        "rSize": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Radial extent alias (polar coord's h)."
+        },
+        "fill": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Fill color, or a field name for a color scale."
+        },
+        "stroke": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Stroke color. Defaults to `fill`."
+        },
+        "strokeWidth": {
+          "type": "number",
+          "default": 0
+        },
+        "opacity": {
+          "type": "number",
+          "default": 1
+        },
+        "filter": {
+          "type": "string",
+          "description": "Raw SVG filter attribute."
+        },
+        "key": {
+          "type": "string",
+          "description": "Internal per-node key override."
+        },
+        "rx": {
+          "type": "number",
+          "description": "Corner radius, x.",
+          "default": 0
+        },
+        "ry": {
+          "type": "number",
+          "description": "Corner radius, y.",
+          "default": 0
+        },
+        "aspectRatio": {
+          "type": "number",
+          "description": "w/h ratio to enforce; the constraining axis wins when both are data-driven."
+        },
+        "label": {
+          "$ref": "#/$defs/LabelIR"
+        },
+        "debug": {
+          "type": "boolean",
+          "description": "Dev-only console.log flag. Genuinely serializes on the wire today but is stripped before layout (FACTORY_ONLY_KEYS) — carries no rendering meaning."
+        },
+        "name": {
+          "type": "string"
+        },
+        "constraints": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ConstraintIR"
+          }
+        },
+        "zOrder": {
+          "type": "number"
+        },
+        "translate": {
+          "$ref": "#/$defs/Translate"
+        }
+      }
+    },
+    "CircleMark": {
+      "description": "A circle, drawn as an aspect-locked ellipse. Does NOT support the boxDims positioning channels directly (JS `circle()` in marks/chart.ts destructures only r/fill/stroke/strokeWidth/label) — position it via `spread`/`scatter`.",
+      "type": "object",
+      "required": ["type"],
+      "additionalProperties": true,
+      "properties": {
+        "type": {
+          "const": "circle"
+        },
+        "r": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Radius; becomes w=h=2r on the underlying ellipse."
+        },
+        "fill": {
+          "$ref": "#/$defs/ChannelValue"
+        },
+        "stroke": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Defaults to `fill`."
+        },
+        "strokeWidth": {
+          "type": "number"
+        },
+        "label": {
+          "$ref": "#/$defs/LabelIR"
+        },
+        "debug": {
+          "type": "boolean",
+          "description": "Dev-only console.log flag; stripped before layout (FACTORY_ONLY_KEYS)."
+        },
+        "name": {
+          "type": "string"
+        },
+        "constraints": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ConstraintIR"
+          }
+        },
+        "zOrder": {
+          "type": "number"
+        },
+        "translate": {
+          "$ref": "#/$defs/Translate"
+        }
+      }
+    },
+    "EllipseMark": {
+      "description": "An ellipse. Box geometry via the shared dims channels; paint is a strict subset of `paint` (no filter/opacity).",
+      "type": "object",
+      "required": ["type"],
+      "additionalProperties": true,
+      "properties": {
+        "type": {
+          "const": "ellipse"
+        },
+        "x": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Left edge position."
+        },
+        "cx": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Center x."
+        },
+        "x2": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Right edge position."
+        },
+        "w": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Width."
+        },
+        "emX": {
+          "type": "boolean",
+          "description": "Embed x in the parent's x space."
+        },
+        "y": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Top/bottom edge position (y-up: bottom)."
+        },
+        "cy": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Center y."
+        },
+        "y2": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Other y edge position."
+        },
+        "h": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Height."
+        },
+        "emY": {
+          "type": "boolean",
+          "description": "Embed y in the parent's y space."
+        },
+        "theta": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Angular position alias (polar coord's x)."
+        },
+        "thetaSize": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Angular extent alias (polar coord's w)."
+        },
+        "r": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Radial position alias (polar coord's y)."
+        },
+        "rSize": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Radial extent alias (polar coord's h)."
+        },
+        "fill": {
+          "$ref": "#/$defs/ChannelValue"
+        },
+        "stroke": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Defaults to `fill`."
+        },
+        "strokeWidth": {
+          "type": "number"
+        },
+        "aspectRatio": {
+          "type": "number",
+          "description": "w/h ratio to enforce. When both dims are data-driven, the constraining axis is used."
+        },
+        "label": {
+          "$ref": "#/$defs/LabelIR"
+        },
+        "debug": {
+          "type": "boolean",
+          "description": "Dev-only console.log flag; stripped before layout (FACTORY_ONLY_KEYS)."
+        },
+        "name": {
+          "type": "string"
+        },
+        "constraints": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ConstraintIR"
+          }
+        },
+        "zOrder": {
+          "type": "number"
+        },
+        "translate": {
+          "$ref": "#/$defs/Translate"
+        }
+      }
+    },
+    "PetalMark": {
+      "description": "A polar-only wedge/petal shape (Petal.tsx). Box geometry via the shared dims channels.",
+      "type": "object",
+      "required": ["type"],
+      "additionalProperties": true,
+      "properties": {
+        "type": {
+          "const": "petal"
+        },
+        "x": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Left edge position."
+        },
+        "cx": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Center x."
+        },
+        "x2": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Right edge position."
+        },
+        "w": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Width."
+        },
+        "emX": {
+          "type": "boolean",
+          "description": "Embed x in the parent's x space."
+        },
+        "y": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Top/bottom edge position (y-up: bottom)."
+        },
+        "cy": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Center y."
+        },
+        "y2": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Other y edge position."
+        },
+        "h": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Height."
+        },
+        "emY": {
+          "type": "boolean",
+          "description": "Embed y in the parent's y space."
+        },
+        "theta": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Angular position alias (polar coord's x)."
+        },
+        "thetaSize": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Angular extent alias (polar coord's w)."
+        },
+        "r": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Radial position alias (polar coord's y)."
+        },
+        "rSize": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Radial extent alias (polar coord's h)."
+        },
+        "fill": {
+          "$ref": "#/$defs/ChannelValue"
+        },
+        "stroke": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Defaults to `fill`."
+        },
+        "strokeWidth": {
+          "type": "number"
+        },
+        "debug": {
+          "type": "boolean",
+          "description": "Dev-only console.log flag; stripped before layout (FACTORY_ONLY_KEYS)."
+        },
+        "name": {
+          "type": "string"
+        },
+        "label": {
+          "$ref": "#/$defs/LabelIR"
+        },
+        "constraints": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ConstraintIR"
+          }
+        },
+        "zOrder": {
+          "type": "number"
+        },
+        "translate": {
+          "$ref": "#/$defs/Translate"
+        }
+      }
+    },
+    "TextMark": {
+      "description": "A text label. Box geometry via the shared dims channels positions the text anchor.",
+      "type": "object",
+      "required": ["type"],
+      "additionalProperties": true,
+      "properties": {
+        "type": {
+          "const": "text"
+        },
+        "x": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Left edge position."
+        },
+        "cx": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Center x."
+        },
+        "x2": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Right edge position."
+        },
+        "w": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Width."
+        },
+        "emX": {
+          "type": "boolean",
+          "description": "Embed x in the parent's x space."
+        },
+        "y": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Top/bottom edge position (y-up: bottom)."
+        },
+        "cy": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Center y."
+        },
+        "y2": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Other y edge position."
+        },
+        "h": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Height."
+        },
+        "emY": {
+          "type": "boolean",
+          "description": "Embed y in the parent's y space."
+        },
+        "theta": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Angular position alias (polar coord's x)."
+        },
+        "thetaSize": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Angular extent alias (polar coord's w)."
+        },
+        "r": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Radial position alias (polar coord's y)."
+        },
+        "rSize": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Radial extent alias (polar coord's h)."
+        },
+        "key": {
+          "type": "string",
+          "description": "Internal per-node key override."
+        },
+        "text": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Text content (raw channel — a literal, field name, or accessor)."
+        },
+        "fill": {
+          "$ref": "#/$defs/ChannelValue"
+        },
+        "stroke": {
+          "$ref": "#/$defs/ChannelValue"
+        },
+        "strokeWidth": {
+          "type": "number"
+        },
+        "filter": {
+          "type": "string",
+          "description": "Raw SVG filter attribute."
+        },
+        "fontSize": {
+          "type": "number",
+          "default": 12
+        },
+        "fontFamily": {
+          "type": "string",
+          "default": "system-ui, sans-serif"
+        },
+        "debugBoundingBox": {
+          "type": "boolean",
+          "default": false
+        },
+        "rotate": {
+          "type": "number",
+          "description": "Rotation in degrees, applied in the chart's y-up world frame about the text anchor.",
+          "default": 0
+        },
+        "name": {
+          "type": "string"
+        },
+        "label": {
+          "$ref": "#/$defs/LabelIR"
+        },
+        "constraints": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ConstraintIR"
+          }
+        },
+        "zOrder": {
+          "type": "number"
+        },
+        "translate": {
+          "$ref": "#/$defs/Translate"
+        }
+      }
+    },
+    "ImageMark": {
+      "description": "An embedded raster/SVG image. Box geometry via the shared dims channels.",
+      "type": "object",
+      "required": ["type"],
+      "additionalProperties": true,
+      "properties": {
+        "type": {
+          "const": "image"
+        },
+        "x": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Left edge position."
+        },
+        "cx": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Center x."
+        },
+        "x2": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Right edge position."
+        },
+        "w": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Width."
+        },
+        "emX": {
+          "type": "boolean",
+          "description": "Embed x in the parent's x space."
+        },
+        "y": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Top/bottom edge position (y-up: bottom)."
+        },
+        "cy": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Center y."
+        },
+        "y2": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Other y edge position."
+        },
+        "h": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Height."
+        },
+        "emY": {
+          "type": "boolean",
+          "description": "Embed y in the parent's y space."
+        },
+        "theta": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Angular position alias (polar coord's x)."
+        },
+        "thetaSize": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Angular extent alias (polar coord's w)."
+        },
+        "r": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Radial position alias (polar coord's y)."
+        },
+        "rSize": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Radial extent alias (polar coord's h)."
+        },
+        "key": {
+          "type": "string",
+          "description": "Internal per-node key override."
+        },
+        "href": {
+          "type": "string",
+          "description": "Image URL or data URI."
+        },
+        "filter": {
+          "type": "string",
+          "description": "Raw SVG filter attribute."
+        },
+        "opacity": {
+          "type": "number"
+        },
+        "preserveAspectRatio": {
+          "type": "string",
+          "default": "xMidYMid meet"
+        },
+        "debug": {
+          "type": "boolean",
+          "description": "Dev-only console.log flag; stripped before layout (FACTORY_ONLY_KEYS)."
+        },
+        "name": {
+          "type": "string"
+        },
+        "label": {
+          "$ref": "#/$defs/LabelIR"
+        },
+        "constraints": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ConstraintIR"
+          }
+        },
+        "zOrder": {
+          "type": "number"
+        },
+        "translate": {
+          "$ref": "#/$defs/Translate"
+        }
+      }
+    },
+    "PolygonMark": {
+      "description": "A closed polygon defined by explicit local-coordinate points (y-up). No dims channels — the bbox is computed from `points`.",
+      "type": "object",
+      "required": ["type"],
+      "additionalProperties": true,
+      "properties": {
+        "type": {
+          "const": "polygon"
+        },
+        "points": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "minItems": 2,
+            "maxItems": 2,
+            "prefixItems": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "number"
+              }
+            ]
+          },
+          "description": "Vertex list, at least 3 points."
+        },
+        "fill": {
+          "type": "string",
+          "default": "black"
+        },
+        "stroke": {
+          "type": "string",
+          "description": "Defaults to `fill`."
+        },
+        "strokeWidth": {
+          "type": "number"
+        },
+        "debug": {
+          "type": "boolean",
+          "description": "Dev-only console.log flag; stripped before layout (FACTORY_ONLY_KEYS)."
+        },
+        "name": {
+          "type": "string"
+        },
+        "label": {
+          "$ref": "#/$defs/LabelIR"
+        },
+        "constraints": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ConstraintIR"
+          }
+        },
+        "zOrder": {
+          "type": "number"
+        },
+        "translate": {
+          "$ref": "#/$defs/Translate"
+        }
+      }
+    },
+    "BlankMark": {
+      "description": "An invisible sizing/positioning guide — a transparent rect with a restricted channel set (no x/y/cx/cy/x2/y2/theta/r — position it via a layout operator).",
+      "type": "object",
+      "required": ["type"],
+      "additionalProperties": true,
+      "properties": {
+        "type": {
+          "const": "blank"
+        },
+        "emX": {
+          "type": "boolean"
+        },
+        "emY": {
+          "type": "boolean"
+        },
+        "w": {
+          "$ref": "#/$defs/ChannelValue",
+          "default": 0
+        },
+        "h": {
+          "$ref": "#/$defs/ChannelValue",
+          "default": 0
+        },
+        "rx": {
+          "type": "number"
+        },
+        "ry": {
+          "type": "number"
+        },
+        "fill": {
+          "$ref": "#/$defs/ChannelValue"
+        },
+        "stroke": {
+          "type": "string"
+        },
+        "strokeWidth": {
+          "type": "number"
+        },
+        "debug": {
+          "type": "boolean",
+          "description": "Dev-only console.log flag. Genuinely serializes on the wire today (found while grounding this table) but carries no rendering meaning."
+        },
+        "name": {
+          "type": "string"
+        },
+        "label": {
+          "$ref": "#/$defs/LabelIR"
+        },
+        "constraints": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ConstraintIR"
+          }
+        },
+        "zOrder": {
+          "type": "number"
+        },
+        "translate": {
+          "$ref": "#/$defs/Translate"
+        }
+      }
+    },
+    "LineMark": {
+      "description": "Center-mode connector — the path between the centers of consecutive marks (the drop-in for the removed `connect`). Bag form over a ref array, or pairwise `{from, to}` form over rows with two ref columns.",
+      "type": "object",
+      "required": ["type"],
+      "additionalProperties": true,
+      "properties": {
+        "type": {
+          "const": "line"
+        },
+        "fill": {
+          "$ref": "#/$defs/ChannelValue"
+        },
+        "stroke": {
+          "type": "string"
+        },
+        "strokeWidth": {
+          "type": "number"
+        },
+        "opacity": {
+          "type": "number"
+        },
+        "mixBlendMode": {
+          "enum": ["normal", "multiply"]
+        },
+        "curve": {
+          "description": "Screen-space path shape: a factory call (straight()/bezier()/catmullRom()/orthogonal()/arc({direction})/perfectArrows({bow})/...) or a bare name. Omitted = \"auto\" (catmullRom on a homogeneous continuous connection axis, else straight)."
+        },
+        "dir": {
+          "enum": ["x", "y"]
+        },
+        "source": {
+          "description": "Anchor-mode start point: a normalized [fx, fy] on the mark's bbox, or a start/middle/end keyword."
+        },
+        "target": {
+          "description": "Anchor-mode end point; see `source`."
+        },
+        "from": {
+          "type": "string",
+          "description": "Pairwise form: column holding the source ref."
+        },
+        "to": {
+          "type": "string",
+          "description": "Pairwise form: column holding the target ref."
+        },
+        "name": {
+          "type": "string"
+        },
+        "label": {
+          "$ref": "#/$defs/LabelIR"
+        },
+        "constraints": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ConstraintIR"
+          }
+        },
+        "zOrder": {
+          "type": "number"
+        },
+        "translate": {
+          "$ref": "#/$defs/Translate"
+        }
+      }
+    },
+    "RibbonMark": {
+      "description": "Edge-mode connector — a filled band between the facing edges of consecutive marks (areas, streamgraphs, sankey ribbons).",
+      "type": "object",
+      "required": ["type"],
+      "additionalProperties": true,
+      "properties": {
+        "type": {
+          "const": "ribbon"
+        },
+        "fill": {
+          "$ref": "#/$defs/ChannelValue"
+        },
+        "stroke": {
+          "type": "string"
+        },
+        "strokeWidth": {
+          "type": "number",
+          "default": 0
+        },
+        "opacity": {
+          "type": "number"
+        },
+        "mixBlendMode": {
+          "enum": ["normal", "multiply"],
+          "default": "normal"
+        },
+        "dir": {
+          "enum": ["x", "y"]
+        },
+        "curve": {
+          "description": "Screen-space band-edge shape (straight() | bezier()). Omitted = \"auto\" (bezier)."
+        },
+        "from": {
+          "type": "string"
+        },
+        "to": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "label": {
+          "$ref": "#/$defs/LabelIR"
+        },
+        "constraints": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ConstraintIR"
+          }
+        },
+        "zOrder": {
+          "type": "number"
+        },
+        "translate": {
+          "$ref": "#/$defs/Translate"
+        }
+      }
+    },
+    "MarkFnMark": {
+      "description": "Python-bridge: a registered `(data) -> ChartBuilder` lambda, resolved via the bridge.",
+      "type": "object",
+      "required": ["type"],
+      "additionalProperties": true,
+      "properties": {
+        "type": {
+          "const": "mark-fn"
+        },
+        "lambdaId": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "label": {
+          "$ref": "#/$defs/LabelIR"
+        },
+        "constraints": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ConstraintIR"
+          }
+        },
+        "zOrder": {
+          "type": "number"
+        },
+        "translate": {
+          "$ref": "#/$defs/Translate"
+        }
+      }
+    },
+    "LeafMarkIR": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/RectMark"
+        },
+        {
+          "$ref": "#/$defs/CircleMark"
+        },
+        {
+          "$ref": "#/$defs/EllipseMark"
+        },
+        {
+          "$ref": "#/$defs/PetalMark"
+        },
+        {
+          "$ref": "#/$defs/TextMark"
+        },
+        {
+          "$ref": "#/$defs/ImageMark"
+        },
+        {
+          "$ref": "#/$defs/PolygonMark"
+        },
+        {
+          "$ref": "#/$defs/BlankMark"
+        },
+        {
+          "$ref": "#/$defs/LineMark"
+        },
+        {
+          "$ref": "#/$defs/RibbonMark"
+        },
+        {
+          "$ref": "#/$defs/MarkFnMark"
         }
       ]
     }

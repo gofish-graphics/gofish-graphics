@@ -1,3 +1,7 @@
+// <gofish-wiki> AUTO-GENERATED — see covers: in the essay; run `pnpm --filter docs sync-backlinks`
+// @wiki Frontend IR — /internals/frontend/serialization
+// </gofish-wiki>
+
 /**
  * GoFish Frontend IR — construct descriptors (Stage 1 of the Python-wrapper
  * codegen design, see apps/docs/docs/internals/design/python-wrapper-codegen.md).

@@ -8,9 +8,11 @@ covers:
   - packages/gofish-ir/src/frontend/schema.ts
   - packages/gofish-ir/src/frontend/validate.ts
   - packages/gofish-ir/src/frontend/jsonSchema.ts
+  - packages/gofish-ir/src/frontend/descriptors.ts
   - packages/gofish-graphics/src/serialize/toJSON.ts
   - packages/gofish-graphics/src/serialize/fromJSON.ts
   - packages/gofish-graphics/src/serialize/registry.ts
+  - packages/gofish-python/scripts/generate.ts
 ---
 
 # The Frontend IR
@@ -33,14 +35,16 @@ expansion and elaboration. Three consumers:
 
 ## What ships in v0
 
-| Artifact                                                      | Path                                                        |
-| ------------------------------------------------------------- | ----------------------------------------------------------- |
-| Schema types + validator + canonical examples                 | `packages/gofish-ir/src/frontend/`                          |
-| JSON Schema (Draft 2020-12)                                   | `packages/gofish-ir/dist/frontend/v0.json` (build artifact) |
-| JS-side emitter (`Serialize.toJSON`, `ChartBuilder.toJSON()`) | `packages/gofish-graphics/src/serialize/toJSON.ts`          |
-| JS-side deserializer (`Serialize.buildChart`, `mapMark`, …)   | `packages/gofish-graphics/src/serialize/fromJSON.ts`        |
-| Operator/mark factory registry                                | `packages/gofish-graphics/src/serialize/registry.ts`        |
-| Python emit (existing `to_dict()`), validated against schema  | `packages/gofish-python/gofish/ast.py`                      |
+| Artifact                                                                                                | Path                                                                       |
+| ------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| Construct descriptor table (single-source field lists)                                                  | `packages/gofish-ir/src/frontend/descriptors.ts`                           |
+| Schema types + validator + canonical examples                                                           | `packages/gofish-ir/src/frontend/`                                         |
+| JSON Schema (Draft 2020-12)                                                                             | `packages/gofish-ir/dist/frontend/v0.json` (build artifact)                |
+| JS-side emitter (`Serialize.toJSON`, `ChartBuilder.toJSON()`)                                           | `packages/gofish-graphics/src/serialize/toJSON.ts`                         |
+| JS-side deserializer (`Serialize.buildChart`, `mapMark`, …)                                             | `packages/gofish-graphics/src/serialize/fromJSON.ts`                       |
+| Operator/mark factory registry                                                                          | `packages/gofish-graphics/src/serialize/registry.ts`                       |
+| Generated Python factory layer (checked in, CI freshness-checked)                                       | `packages/gofish-python/gofish/_generated.py` (from `scripts/generate.ts`) |
+| Hand-written Python residue (dispatch, bridge, DataFrame conversion), emits IR validated against schema | `packages/gofish-python/gofish/ast.py`                                     |
 
 v0 matches the existing widget wire format exactly — lowercase `type`
 discriminators, `__combinator` flag on combinator-form marks, channel
@@ -260,10 +264,76 @@ node through the combinator factory registry (`layer`, `spread`,
 `arrow`, `line`, `ribbon`, `treemap`, Porter-Duff) rather than the leaf-mark
 registry — same `type` discriminator namespace, different code path.
 
+## The descriptor table — one authored source for construct field lists
+
+Before the change described in this section, a construct's field list
+(what keys `rect` or `spread` accept, which are required, what they
+default to) was hand-duplicated across four places: the TS type in
+`schema.ts`, the field checks in `validate.ts`, the `$defs` in
+`jsonSchema.ts`, and the Python factory in `ast.py`. They drifted —
+`OPERATOR_TYPES` listed `"treemap"` while the `OperatorIR` union and the
+JSON Schema enum omitted it, and the hand-written Python `rect()` exposed
+`rs=`/`ts=` kwargs that don't exist anywhere in JS (the real names are
+`rSize`/`thetaSize`; they serialized, passed the open-world validator, and
+were silently dropped at render).
+
+[`descriptors.ts`](https://github.com/gofish-graphics/gofish-graphics/blob/main/packages/gofish-ir/src/frontend/descriptors.ts)
+collapses three of those four into one authored table: one entry per
+construct (operator, leaf mark, combinator mark, coord transform) listing
+its fields in a small type DSL (`t.string`, `t.number`, `t.enum(...)`,
+`t.channel(...)` for a `ChannelValue` slot, `t.ref("AxesOptions")` for a
+pointer at an authored envelope `$def`, and so on — see the file's `t`/`ch`
+exports). Shared field groups (`boxDims`, the 14 box-geometry/coord-alias
+channels; `paint`, the five paint channels) are declared once and pulled
+into a mark's entry by reference, so most mark entries list only the
+fields genuinely their own.
+
+**What's still authored, not in the table**: the envelope
+(`ChartIR`/`LayerIR`/`DataIR`/`MarkIR` union, `ChannelValue`,
+`ConstraintIR`, `LabelIR`, `TranslateIR`, `AxesOptions`) and `cut`/`offset`/
+`ref` — these are structural or recursive shapes rather than flat field
+bags, and stay hand-written in `schema.ts` and `jsonSchema.ts` (the parts
+of those files the doc comment marks as "stays hand-written below").
+Constraints likewise stay authored.
+
+Three consumers read the table:
+
+- **`validate.ts`** interprets it generically — a single walk over each
+  descriptor's resolved fields instead of a per-type imperative switch.
+  **Operators keep their original exact accept/reject behavior**: an
+  unknown field or a wrong-shaped known one is a hard validation error,
+  same as before the refactor. **Leaf marks only warn**, never reject, on
+  an unknown or mistyped field — a deliberate rollout stance. Leaf-mark
+  channel lists were previously open-world in the IR (`[key: string]:
+unknown`) even though they aren't really open on the JS side (a mark's
+  real channels are exactly its factory's destructured options); flipping
+  straight to strict rejection risked breaking specs that happen to rely
+  on a field the descriptor entry hasn't caught up to yet. The warning
+  period is the mechanism for finding those gaps safely; once the
+  enumerated lists have been checked against the story corpus, leaf marks
+  flip to strict like operators. Until then, don't read "validated"
+  against a leaf mark's field list as "guaranteed accepted."
+- **`jsonSchema.ts`** builds one `$def` per operator (`SpreadOperator`,
+  `TableOperator`, …) and one per leaf mark (`RectMark`, `TextMark`, …)
+  from the table (`buildOperatorDefs()` / `buildLeafMarkDefs()`), merged
+  into the hand-written `$defs` object. Operator `$defs` are
+  `additionalProperties: false` (schema-level strict, matching
+  `validate.ts`'s operator behavior); leaf-mark `$defs` stay
+  `additionalProperties: true` so an external strict consumer of the
+  published schema doesn't start rejecting documents our own validator
+  only warns about.
+- **`gofish-python/scripts/generate.ts`** emits the mechanical part of the
+  Python wrapper from the same table — see
+  [§ Generating the Python factory layer](#generating-the-python-factory-layer)
+  below.
+
 ## The JSON Schema
 
-The shipped schema is Draft 2020-12, hand-written, ~280 lines. It lives
-in source at
+The schema is Draft 2020-12. Its envelope (`Root`, `ChartIR`, `LayerIR`,
+`DataIR`, `ChannelValue`, `ConstraintIR`, `LabelIR`, and friends) is
+hand-written; the per-operator and per-leaf-mark `$defs` are generated
+from `descriptors.ts` at call time (see the previous section) and merged
+in. It lives in source at
 [`packages/gofish-ir/src/frontend/jsonSchema.ts`](https://github.com/gofish-graphics/gofish-graphics/blob/main/packages/gofish-ir/src/frontend/jsonSchema.ts)
 and is emitted as a JSON artifact during build to
 `packages/gofish-ir/dist/frontend/v0.json`. See
@@ -291,8 +361,9 @@ The high-level structure:
     "LayerIR":    { /* type, charts, options, ... */ },
     "RawMarkIR":  { /* type, mark, options, ... */ },
     "DataIR":     { "oneOf": [/* inline, select, external, previous-tier */] },
-    "OperatorIR": { /* type enum: derive | spread | stack | group | scatter | table | log */ },
+    "OperatorIR": { /* GENERATED oneOf: SpreadOperator | StackOperator | ... | TreemapOperator */ },
     "MarkIR":     { "oneOf": [LeafMarkIR, CombinatorMarkIR, RefMarkIR, OffsetMarkIR, CutMarkIR] },
+    "LeafMarkIR": { /* GENERATED oneOf: RectMark | CircleMark | ... */ },
     "LabelIR":      { /* accessor, position, fontSize, ... */ },
     "ConstraintIR": { /* type, options, refs */ },
     "ChannelValue": { "oneOf": [/* primitives, field, datum, literal, bridge sentinels */] }
@@ -302,11 +373,59 @@ The high-level structure:
 
 The validator at
 [`validate.ts`](https://github.com/gofish-graphics/gofish-graphics/blob/main/packages/gofish-ir/src/frontend/validate.ts)
-covers the same shapes plus per-operator field constraints (e.g.
-`spread.dir ∈ {"x","y"}`, `table.by` requires `{x, y}`, `spread`/`stack`/`scatter`
-accept an `axes` override of shape `AxesOptions`). It runs in
-permissive mode by default (unknown fields ignored, for forward-compat)
-and strict mode in CI tests.
+covers the same shapes, generically interpreting the descriptor table as
+described above, plus the structural checks for the hand-authored parts
+(e.g. `table.by` requires `{x, y}`, `spread`/`stack`/`scatter` accept an
+`axes` override of shape `AxesOptions`). It runs in permissive mode by
+default (unknown fields ignored, for forward-compat) and strict mode in
+CI tests — "strict" here composes with the operator-reject/leaf-mark-warn
+split above, it doesn't override it.
+
+## Generating the Python factory layer
+
+The `treemap` drift mentioned above ran the opposite direction from what
+you'd guess: `treemap` isn't a stray entry that needs deleting from
+`OPERATOR_TYPES` — it's confirmed as a genuine dual-form construct (a real
+Python story sizes with `h: "fare"` through the `.flow()` operator form),
+so the fix added a `TreemapOperator` member to the `OperatorIR` union and
+its JSON Schema enum, matching what `descriptors.ts` already modeled.
+
+[`packages/gofish-python/scripts/generate.ts`](https://github.com/gofish-graphics/gofish-graphics/blob/main/packages/gofish-python/scripts/generate.ts)
+imports the same `descriptors.ts` table (via the `gofish-ir/frontend`
+package export, so it needs `pnpm --filter gofish-ir build` to have run
+first) and emits `gofish/_generated.py` — checked into the repo, with a
+CI freshness check (`pnpm --filter gofish-python gen` then `git diff
+--exit-code`) rather than a build-time step, matching the "commit the
+generated Python" norm Altair and Plotly.py both follow. It emits:
+
+- Closed-signature **leaf mark** factories (`rect`, `circle`, `ellipse`,
+  `petal`, `text`, `image`, `polygon`, `blank`) — pure kwargs-collection
+  plus wire-key rename, with docstrings from each field's `doc`.
+- Compositing-quartet and other **combinator-only** marks — the
+  Porter-Duff-style renames (`inside`→`intersect`, `xor`→`exclude`,
+  `out`→`subtract`, `atop`→`paint`) come from the descriptor's `pyName`,
+  killing four previously hand-copied wire-name tables.
+- `_opts(...) -> dict` **cores** for the dual-form constructs (`spread`,
+  `stack`, `scatter`, `group`, `table`, `treemap`, `line`, `ribbon`,
+  `layer`, the polar coord family) — just the kwargs→dict half. The
+  polymorphic operator-vs-combinator dispatch stays hand-written in
+  `ast.py`, calling into these generated cores.
+
+`derive`/`resolve`/`join` (real RPC-bridge/ref-shape/DataFrame logic) and
+`palette`/`gradient`/`field`/`datum`/`normalize`/`repeat`/`ref`/`selectAll`
+(not in the descriptor table at all) stay fully hand-written in `ast.py`,
+alongside the builder chain, `_RefProxy`, `DatumValue` arithmetic, and the
+widget/RPC layer — see
+[Design space: generating the Python wrapper](/internals/design/python-wrapper-codegen)
+for the full hand-written-residue accounting and what's still deferred
+(closing the deserializer-registry/parity-harness generification, the
+`.layer()`/constrain-ref-walk follow-ups).
+
+Generating this layer fixed real drift along the way: the hand-written
+`rect()` had exposed phantom `rs=`/`ts=` kwargs (see the descriptor-table
+section above) that the generator's output doesn't have; `text()` lost a
+phantom `fontWeight` and a phantom `label` kwarg that don't exist on the
+JS factory, and gained the box-dims channels it was missing.
 
 ## Modularity — the registry pattern
 

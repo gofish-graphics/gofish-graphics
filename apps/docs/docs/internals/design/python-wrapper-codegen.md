@@ -2,7 +2,7 @@
 title: "Design Space: Generating the Python Wrapper"
 section: Speculative Notes
 order: 62
-status: speculative
+status: stable
 ---
 
 # Design space: generating the Python wrapper from a single source of truth
@@ -46,7 +46,14 @@ could be generated mechanically, from what source, and what the options are.
 
 - The three encodings are genuinely hand-duplicated, not derived, and are
   **already drifting**: `OPERATOR_TYPES` includes `"treemap"` but the
-  `OperatorIR` union and the JSON Schema enum omit it.
+  `OperatorIR` union and the JSON Schema enum omit it. (Resolved during
+  implementation — see § What shipped below. The fix went the opposite
+  direction from what this drift suggests: `treemap` isn't a stray
+  `OPERATOR_TYPES` entry to delete, it's confirmed as a genuine dual-form
+  operator (`.flow(treemap(...))`, grounded in a real Python story that
+  sizes tiles with `h: "fare"`), so the fix added a `TreemapOperator`
+  member to the `OperatorIR` union and the JSON Schema enum instead of
+  removing it from `OPERATOR_TYPES`.)
 - Richness is asymmetric. **Operators** are fully typed, doc-commented
   discriminated interfaces in `schema.ts` — an excellent codegen source.
   **Leaf marks are deliberately open** (`[key: string]: unknown`): per-shape
@@ -315,3 +322,62 @@ arithmetic, `_RefProxy`, the builder chain itself (`.flow/.mark/.layer/…` —
 thin methods over generated factories), and the d3 `bin` port (until/unless
 binning becomes a declarative operator resolved JS-side, which would delete
 it).
+
+## What shipped
+
+Stages 1–3 of the recommended staging above landed (three commits:
+`a1d83ddc`, `7f7ce088`, `f2b3f3b0`):
+
+- **The descriptor table** (`packages/gofish-ir/src/frontend/descriptors.ts`)
+  — one authored entry per operator, leaf mark, combinator mark, and coord
+  transform, in the `t.*`/`ch.*` field-type DSL sketched above.
+  `validate.ts` was retargeted to interpret it generically (operators keep
+  their original exact accept/reject behavior; leaf marks only warn,
+  never reject, for a gradual rollout — see the caveat in the
+  [Frontend IR](/internals/frontend/serialization) essay) and
+  `jsonSchema.ts` now builds its per-operator and per-leaf-mark `$defs`
+  from the same table. The `treemap` drift this doc flagged was fixed the
+  direction described in § What the audit found above: `TreemapOperator`
+  joined the `OperatorIR` union rather than `"treemap"` being stripped out
+  of `OPERATOR_TYPES`.
+- **The generated Python factory layer**
+  (`packages/gofish-python/gofish/_generated.py`, emitted by
+  `packages/gofish-python/scripts/generate.ts`, `pnpm --filter
+gofish-python gen`, CI-checked for freshness). Net about -450 lines in
+  the Python package; the four hand-copied wire-name tables (compositing
+  renames, constraint/mark/operator type strings) are gone, replaced by
+  descriptor lookups. Two real drift bugs were fixed as a byproduct: the
+  hand-written `rect()` had phantom `rs=`/`ts=` kwargs that don't exist in
+  JS (the real names are `rSize`/`thetaSize`) and silently dropped on the
+  floor at render; `text()` had a phantom `fontWeight` and a phantom
+  `label` kwarg and was missing its box-dims channels. IR for all 161
+  Python stories was verified byte-identical across the change.
+- **`.layer()` wiring moved JS-side** via a new `{type: "previous-tier"}`
+  `DataIR` variant (an empty `chart()` scope inside a `.layer(...)` chain
+  now serializes as that sentinel instead of Python pre-minting a tier
+  name and rewriting to `selectAll`); JS's own `LayerBuilder.wireTiers()`
+  — the same path a native JS chain runs — derives the auto-naming and
+  wiring on both reconstruction sites (the `fromJSON` registry and the
+  parity harness). 160/160 Python stories stayed DOM-identical to their
+  JS counterparts. A latent pyarrow-22 crash on the empty-placeholder
+  Arrow path was fixed in passing (deduped into one
+  `empty_placeholder_arrow_bytes()` helper using `schema.empty_table()`).
+
+**Deliberately deferred**, not follow-up bugs:
+
+- **The constrain ref-walk** (`ConstrainableMark.constrain`'s Python-side
+  mirror of `collectConstraintRefs`) — evaluated and kept hand-written.
+  Dropping it needs a loud unknown/duplicate-ref guard added JS-side
+  first; without one, authoring errors that are cheap to catch in Python
+  today would surface as cryptic solver failures instead.
+- **Generifying the deserializer registry and the parity-harness
+  switch** off the descriptor table (option 5 in § Option A above) —
+  both remain hand-maintained; see the CLAUDE.md checklist's step 2 note.
+- **Closing the `spread`/`stack`/`scatter` operator-vs-combinator `w`/`h`
+  schema drift** — the low-level combinator forms accept explicit `w`/`h`
+  passthrough that the v3-operator IR doesn't expose; `descriptors.ts`
+  documents this as IR truth rather than resolving it (see the `NOTE`
+  comments on `OPERATORS.spread`/`OPERATORS.stack`).
+- **Flipping leaf-mark validation from warn to strict** — waiting on the
+  enumerated channel lists being checked against the full story corpus,
+  per the gradual-rollout stance in § The mark-channel decision above.
