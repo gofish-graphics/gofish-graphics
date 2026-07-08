@@ -302,7 +302,10 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
   spread: operator("spread", {
     doc: "Arrange children along `dir` with spacing, aligning them on the cross axis.",
     fields: {
-      by: { type: t.string, doc: "Field to partition rows by." },
+      by: {
+        type: t.union(t.string, t.ref("FieldAccessor")),
+        doc: "Field to partition rows by; also accepts a field(...) accessor carrying domain ops (sort/reverse/bin).",
+      },
       // IR truth: optional here even though Python's spread() requires dir —
       // matches validate.ts's optionalField("dir", ...) today.
       dir: { type: t.enum("x", "y"), doc: "Direction to spread along." },
@@ -344,7 +347,10 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
   stack: operator("stack", {
     doc: "`spread({ glue: true })` under its own wire tag — children glued together (touching, no gaps).",
     fields: {
-      by: { type: t.string, doc: "Field to partition rows by." },
+      by: {
+        type: t.union(t.string, t.ref("FieldAccessor")),
+        doc: "Field to partition rows by; also accepts a field(...) accessor carrying domain ops (sort/reverse/bin).",
+      },
       dir: { type: t.enum("x", "y"), doc: "Direction to stack along." },
       // Real producers pass spread's options through (the JS `stack` is a
       // literal `Spread({...props, glue: true})` forward, and stories emit
@@ -377,9 +383,9 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
     doc: "Partition rows by `by` into a flat `Frame` (no layout beyond grouping).",
     fields: {
       by: {
-        type: t.string,
+        type: t.union(t.string, t.ref("FieldAccessor")),
         required: true,
-        doc: "Field to group rows by.",
+        doc: "Field to group rows by; also accepts a field(...) accessor carrying domain ops (sort/reverse/bin).",
       },
     },
   }),
@@ -387,7 +393,10 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
   scatter: operator("scatter", {
     doc: "Position each child at an explicit (x, y) point or [min, max] span in data space.",
     fields: {
-      by: { type: t.string, doc: "Field to partition rows by." },
+      by: {
+        type: t.union(t.string, t.ref("FieldAccessor")),
+        doc: "Field to partition rows by; also accepts a field(...) accessor carrying domain ops (sort/reverse/bin).",
+      },
       x: ch.num("Point position, x."),
       y: ch.num("Point position, y."),
       xMin: ch.num("Range form: left/bottom edge, x."),

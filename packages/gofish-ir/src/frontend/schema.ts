@@ -247,7 +247,7 @@ export interface SpreadOperator
     TranslatableIR,
     OperatorFlagsIR {
   type: "spread";
-  by?: string;
+  by?: string | FieldAccessor;
   dir?: "x" | "y";
   spacing?: number;
   alignment?: string;
@@ -275,7 +275,7 @@ export interface StackOperator
     TranslatableIR,
     OperatorFlagsIR {
   type: "stack";
-  by?: string;
+  by?: string | FieldAccessor;
   dir?: "x" | "y";
   /** Spread-parity passthrough: the JS `stack` is `Spread({...props, glue:
    *  true})`, so producers may put spread's options on the wire. Glue
@@ -301,7 +301,7 @@ export interface GroupOperator
     TranslatableIR,
     OperatorFlagsIR {
   type: "group";
-  by: string;
+  by: string | FieldAccessor;
 }
 
 export interface ScatterOperator
@@ -309,7 +309,7 @@ export interface ScatterOperator
     TranslatableIR,
     OperatorFlagsIR {
   type: "scatter";
-  by?: string;
+  by?: string | FieldAccessor;
   x?: ChannelValue;
   y?: ChannelValue;
   xMin?: ChannelValue;
@@ -546,12 +546,32 @@ export type ChannelValue =
 
 /** Explicit field-accessor form, emitted by `field(name, measure?)`. The
  *  optional `measure` is a unit annotation on the channel's underlying space
- *  (a type claim — see gofish-graphics' `resolveMeasure`). */
+ *  (a type claim — see gofish-graphics' `resolveMeasure`). `ops` is the
+ *  optional chained pipeline (#700 Phase 1/2), e.g. `field("site").sort("yield")`
+ *  or `field("count").normalize()` — see `FieldOpIR` and gofish-graphics'
+ *  `fieldExpr.ts` (`FieldOp`), which this mirrors exactly. Two disjoint
+ *  slots consume it: a `by` (grouping key) slot accepts the domain ops
+ *  (`sort`/`reverse`/`bin`); a value (size/pos) channel slot accepts the
+ *  aggregate ops (`sum`/`mean`/`count`/`distinct`) and, only on an
+ *  operator's entry-flagged `size` channel, `normalize`. */
 export interface FieldAccessor {
   type: "field";
   name: string;
   measure?: string;
+  ops?: FieldOpIR[];
 }
+
+/** One op in a `field(...)` pipeline — mirrors gofish-graphics'
+ *  `FieldOp` (`ast/fieldExpr.ts`) exactly. See {@link FieldAccessor}. */
+export type FieldOpIR =
+  | { op: "sort"; by?: string; order?: "asc" | "desc" }
+  | { op: "reverse" }
+  | { op: "bin"; thresholds?: number | number[] }
+  | { op: "normalize" }
+  | { op: "sum" }
+  | { op: "mean" }
+  | { op: "count" }
+  | { op: "distinct" };
 
 /** A post-scale color transform carried by a datum value, applied AFTER the
  *  datum maps through its color scale — the color analog of {@link

@@ -11,11 +11,11 @@
 # frame→layer, and add the polar/wavy coord transforms to the Python wrapper +
 # IR bridge.
 #
-# NestedMosaicChart was ported under #433, but the story was rewritten (#675) to
-# the fluent `chart().flow(stack(normalize=True)...)` pipeline with a 2-D
-# function fill (`survived == "No" ? gray : classColor[class]`). A function
-# channel can't cross the derive RPC, so it is now exempt — the pure-spec
-# `normalize` mosaics (atom/Mosaic and Forward Syntax Mosaic Chart) ARE ported
+# NestedMosaicChart was ported under #433, but the story was rewritten (#675,
+# then #700) to the fluent `chart().flow(stack(size: field("count").normalize()))`
+# pipeline with a 2-D function fill (`survived == "No" ? gray : classColor[class]`).
+# A function channel can't cross the derive RPC, so it is now exempt — the
+# pure-spec mosaics (atom/Mosaic and Forward Syntax Mosaic Chart) ARE ported
 # and byte-parity-validated.
 packages/gofish-graphics/stories/lowlevel/NestedMosaicChart.stories.tsx
 #
