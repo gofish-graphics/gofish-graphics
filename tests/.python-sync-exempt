@@ -20,23 +20,12 @@
 # (IR + render) without failing the byte-parity gate.
 packages/gofish-graphics/stories/lowlevel/ViolinPlot.stories.tsx
 
-# ImageMixedPrimitives stays exempt: it renders large binary image assets
-# (over Vite's inline threshold) whose hrefs become build-hashed URLs the DOM
-# normalizer doesn't touch, so a Python port can't byte-match the JS hrefs —
-# the same fundamental blocker as the ImageMarks shape story below.
-# TODO(#404): the DOM normalizer now collapses <image> hrefs to their
-# hash-stripped basename, so this href blocker is resolved. This story (and
-# ImageMarks below) may be un-exemptable once the image-bearing DOM baselines
-# are re-accepted via the Visual Diff Review. Keeping the exemption for now;
-# revisit after re-baselining.
-packages/gofish-graphics/stories/lowlevel/ImageMixedPrimitives.stories.tsx
-
-# Shape primitives
-packages/gofish-graphics/stories/shapes/TextMarks.stories.tsx
-# TODO(#404): ImageMarks' only parity blocker was build-hashed <image> hrefs,
-# now normalized to basename by the DOM normalizer. Likely un-exemptable after
-# the image-bearing DOM baselines are re-accepted via the Visual Diff Review.
-packages/gofish-graphics/stories/shapes/ImageMarks.stories.tsx
+# Per-export exemption — PolarText constructs a raw custom coordinate
+# transform inline ({ type, transform: ([r, theta]) => ..., domain }), an
+# arbitrary JS closure rather than one of the IR's named coord transforms
+# (polar/clock/wavy/bipolar/arcLengthPolar/linear), so it cannot cross the
+# bridge. The other TextMarks exports are ported.
+packages/gofish-graphics/stories/shapes/TextMarks.stories.tsx::PolarText
 
 # Docs regression test
 packages/gofish-graphics/stories/DocsContextRegression.stories.tsx
@@ -47,10 +36,6 @@ packages/gofish-graphics/stories/forwardsyntax/Bar/BarWithLabels.stories.tsx
 # with fresh text — the refs can't cross the Python derive RPC, so it can't be
 # expressed with a Python mark-fn. (Ribbon/Layered and NodeLink ARE ported.)
 packages/gofish-graphics/stories/forwardsyntax/LabeledChart.stories.tsx
-packages/gofish-graphics/stories/forwardsyntax/Bar/BarTemplate.stories.tsx
-
-# Forward syntax stories needing mark-as-function or nested chart
-packages/gofish-graphics/stories/forwardsyntax/FacetedChart.stories.tsx
 
 # FlowerChart is a labeled-bar-chart shape: the stems are a real bar chart
 # (one chart, so their heights share a scale) and each flower is the stem's
@@ -62,29 +47,12 @@ packages/gofish-graphics/stories/forwardsyntax/FacetedChart.stories.tsx
 # Tracked by #591 (bridge selectAll-label / ref-datum mark-fns to Python).
 packages/gofish-graphics/stories/lowlevel/FlowerChart.stories.tsx
 
-# Atom unit-visualization replications (stories/atom/) that build a per-group
-# *nested chart* inside a mark-as-function (`.mark((d) => chart(d).flow(...)...)`)
-# to wrap each unit grid. The Python mark-fn runs over the RPC bridge and
-# receives plain JSON rows, not a builder it can re-`chart()`, so these can't be
-# expressed as a Python mark-fn — same blocker as FacetedChart. (The pure-spec
-# atom stories TitanicFacet, TitanicUnitDots, and Mosaic ARE ported.)
-packages/gofish-graphics/stories/atom/UnitColumnChart.stories.tsx
-packages/gofish-graphics/stories/atom/UnitHistogram.stories.tsx
-packages/gofish-graphics/stories/atom/Violin.stories.tsx
-packages/gofish-graphics/stories/atom/UnitMosaic.stories.tsx
-
 # Forward syntax stories needing coord transforms other than clock
 # (clock is now supported)
 
 # (Vega-Lite ports were brought over from exempt to real parity tests;
 # see tests/python-stories/vega-lite/.)
 
-
-# Per-export exemption — uses `assignGradientColor` to precompute per-row
-# fills from two distinct gradients in a single chart. The Python wrapper
-# doesn't expose `assignGradientColor` (one chart, one color config), so
-# this story can't be ported without a workaround or a wrapper extension.
-packages/gofish-graphics/stories/forwardsyntax/ColorScales.stories.tsx::PairedPalettes
 
 # Per-export exemption for Cut.stories.tsx — ImageCutWithLabels builds a
 # per-slice `layer(...)` inside a mark-as-function over `selectAll("part")`,

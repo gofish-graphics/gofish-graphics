@@ -39,6 +39,7 @@ from .ast import (
     selectAll,
     palette,
     gradient,
+    assign_gradient_color,
     normalize,
     repeat,
     rect,
@@ -55,6 +56,7 @@ from .ast import (
     field,
 )
 from .transforms import bin
+from .charts import bar_chart
 
 __all__ = [
     "chart",
@@ -93,6 +95,7 @@ __all__ = [
     "selectAll",
     "palette",
     "gradient",
+    "assign_gradient_color",
     "normalize",
     "repeat",
     "rect",
@@ -108,6 +111,7 @@ __all__ = [
     "datum",
     "field",
     "bin",
+    "bar_chart",
 ]
 
 __version__ = "0.1.0"

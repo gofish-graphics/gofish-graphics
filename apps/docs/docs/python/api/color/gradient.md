@@ -26,4 +26,6 @@ chart(data, color=gradient(["#f7fbff", "#08306b"]))
 
 **Built-in schemes:** `"viridis"`, `"blues"`, `"reds"`
 
-See also [`palette`](/python/api/color/palette) for categorical data.
+See also [`palette`](/python/api/color/palette) for categorical data, and
+[`assign_gradient_color`](/python/api/color/assign-gradient-color) to
+precompute a color from a gradient outside of a chart's `fill` channel.

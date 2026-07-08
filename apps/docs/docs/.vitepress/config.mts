@@ -494,6 +494,10 @@ export default defineConfig({
               items: [
                 { text: "palette", link: "/js/api/color/palette" },
                 { text: "gradient", link: "/js/api/color/gradient" },
+                {
+                  text: "assignGradientColor",
+                  link: "/js/api/color/assign-gradient-color",
+                },
               ],
             },
             {
@@ -616,6 +620,10 @@ export default defineConfig({
               items: [
                 { text: "palette", link: "/python/api/color/palette" },
                 { text: "gradient", link: "/python/api/color/gradient" },
+                {
+                  text: "assign_gradient_color",
+                  link: "/python/api/color/assign-gradient-color",
+                },
               ],
             },
             {
