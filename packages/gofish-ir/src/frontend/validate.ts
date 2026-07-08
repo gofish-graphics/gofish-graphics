@@ -28,6 +28,13 @@ import {
   type Origin,
   type RefMarkIR,
 } from "./schema.js";
+import {
+  LEAF_MARKS,
+  OPERATORS,
+  resolveFields,
+  type FieldSpec,
+  type FieldType,
+} from "./descriptors.js";
 
 export interface ValidationError {
   /** Dotted path into the document. */
@@ -35,9 +42,23 @@ export interface ValidationError {
   message: string;
 }
 
+/**
+ * A non-fatal finding — currently emitted only for leaf-mark channel fields
+ * that aren't in the enumerated descriptor list (`descriptors.ts`'s
+ * `LEAF_MARKS`). Leaf marks stay open-world for now (the gradual rollout the
+ * python-wrapper-codegen design doc calls for): an unrecognized channel is a
+ * signal worth surfacing, but not a validity failure — strict mode must NOT
+ * start rejecting these until the enumerated lists are proven against the
+ * story corpus.
+ */
+export interface ValidationWarning {
+  path: string;
+  message: string;
+}
+
 export type ValidationResult =
-  | { valid: true }
-  | { valid: false; errors: ValidationError[] };
+  | { valid: true; warnings: ValidationWarning[] }
+  | { valid: false; errors: ValidationError[]; warnings: ValidationWarning[] };
 
 export interface ValidateOptions {
   /** Reject unknown fields. Default: false (permissive). */
@@ -52,11 +73,12 @@ export function validate(
   const ctx: Context = {
     strict: options.strict === true,
     errors: [],
+    warnings: [],
   };
   walkDocument(doc, "$", ctx);
   return ctx.errors.length === 0
-    ? { valid: true }
-    : { valid: false, errors: ctx.errors };
+    ? { valid: true, warnings: ctx.warnings }
+    : { valid: false, errors: ctx.errors, warnings: ctx.warnings };
 }
 
 // ---------------------------------------------------------------------------
@@ -66,6 +88,7 @@ export function validate(
 interface Context {
   strict: boolean;
   errors: ValidationError[];
+  warnings: ValidationWarning[];
 }
 
 function walkDocument(node: unknown, path: string, ctx: Context): void {
@@ -249,6 +272,201 @@ function walkData(node: unknown, path: string, ctx: Context): void {
   }
 }
 
+/**
+ * Generic per-type field interpreter: walks the descriptor table
+ * (`descriptors.ts`) for a construct's type instead of a hand-written
+ * per-type switch. Shared by operators (errors — the CRITICAL behavior
+ * contract is that accepted/rejected documents stay exactly as before) and,
+ * with `asWarning: true`, leaf marks (warnings only — the gradual rollout the
+ * python-wrapper-codegen design doc calls for).
+ */
+function walkDescriptorFields(
+  node: Record<string, unknown>,
+  path: string,
+  ctx: Context,
+  fields: Record<string, FieldSpec>,
+  extraKnownKeys: readonly string[],
+  opts: { asWarning?: boolean; rejectUnknownInStrict?: boolean } = {}
+): void {
+  const push = (path: string, message: string) => {
+    if (opts.asWarning) ctx.warnings.push({ path, message });
+    else ctx.errors.push({ path, message });
+  };
+  for (const [name, spec] of Object.entries(fields)) {
+    const check = (v: unknown, p: string) =>
+      walkFieldType(spec.type, v, p, ctx, push);
+    if (spec.required) {
+      if (!(name in node)) {
+        push(`${path}.${name}`, `required field "${name}" is missing`);
+      } else {
+        check(node[name], `${path}.${name}`);
+      }
+    } else {
+      if (!(name in node) || node[name] === undefined || node[name] === null)
+        continue;
+      check(node[name], `${path}.${name}`);
+    }
+  }
+  // Errors: unknown-field rejection is strict-mode-gated, matching the
+  // pre-descriptor behavior exactly. Warnings are advisory and non-blocking,
+  // so they surface regardless of strict mode — there's no reason to hide an
+  // "unrecognized channel" signal from a permissive-mode caller.
+  const shouldCheckUnknown = opts.asWarning ? true : ctx.strict;
+  if (shouldCheckUnknown && (opts.rejectUnknownInStrict ?? true)) {
+    const known = [...extraKnownKeys, ...Object.keys(fields)];
+    for (const k of Object.keys(node)) {
+      if (!known.includes(k)) {
+        push(
+          `${path}.${k}`,
+          opts.asWarning
+            ? `unrecognized channel "${k}" for this mark type`
+            : `unknown field "${k}" (strict)`
+        );
+      }
+    }
+  }
+}
+
+/** Dispatch a single value against a descriptor `FieldType`. `push` routes to
+ *  either `ctx.errors` or `ctx.warnings` depending on the caller. */
+function walkFieldType(
+  type: FieldType,
+  value: unknown,
+  path: string,
+  ctx: Context,
+  push: (path: string, message: string) => void
+): void {
+  switch (type.kind) {
+    case "string":
+      if (typeof value !== "string")
+        push(path, `expected string, got ${typeNameOf(value)}`);
+      return;
+    case "number":
+      if (typeof value !== "number")
+        push(path, `expected number, got ${typeNameOf(value)}`);
+      return;
+    case "boolean":
+      if (typeof value !== "boolean")
+        push(path, `expected boolean, got ${typeNameOf(value)}`);
+      return;
+    case "any":
+      return;
+    case "enum":
+      if (typeof value !== "string" || !type.values.includes(value)) {
+        push(
+          path,
+          `expected one of ${type.values.map((v) => JSON.stringify(v)).join(", ")}, got ${JSON.stringify(value)}`
+        );
+      }
+      return;
+    case "channel": {
+      // Delegate to the existing permissive ChannelValue walker, but redirect
+      // through a scratch context so its findings route through `push` (this
+      // matters when `push` targets ctx.warnings — the leaf-mark descriptor
+      // walk — rather than ctx.errors directly).
+      const probe: Context = { strict: false, errors: [], warnings: [] };
+      walkChannelValue(value, path, probe);
+      for (const e of probe.errors) push(e.path, e.message);
+      return;
+    }
+    case "ref":
+      walkRefType(type.name, value, path, ctx);
+      return;
+    case "union": {
+      // Valid if ANY branch matches cleanly (no errors raised by that branch).
+      for (const branch of type.options) {
+        const probe: Context = { strict: false, errors: [], warnings: [] };
+        walkFieldType(branch, value, path, probe, (p, m) =>
+          probe.errors.push({ path: p, message: m })
+        );
+        if (probe.errors.length === 0) return;
+      }
+      push(
+        path,
+        `value did not match any of the expected shapes: ${JSON.stringify(value)}`
+      );
+      return;
+    }
+    case "array":
+      if (!Array.isArray(value)) {
+        push(path, `expected array, got ${typeNameOf(value)}`);
+        return;
+      }
+      value.forEach((item, i) =>
+        walkFieldType(type.items, item, `${path}[${i}]`, ctx, push)
+      );
+      return;
+    case "tuple":
+      if (!Array.isArray(value) || value.length !== type.items.length) {
+        push(
+          path,
+          `expected a ${type.items.length}-tuple, got ${typeNameOf(value)}`
+        );
+        return;
+      }
+      type.items.forEach((item, i) =>
+        walkFieldType(item, value[i], `${path}[${i}]`, ctx, push)
+      );
+      return;
+    case "record":
+      if (!isObject(value)) {
+        push(path, `expected object, got ${typeNameOf(value)}`);
+        return;
+      }
+      for (const [k, v] of Object.entries(value)) {
+        walkFieldType(type.valueType, v, `${path}.${k}`, ctx, push);
+      }
+      return;
+    case "object":
+      if (!isObject(value)) {
+        push(path, `expected object, got ${typeNameOf(value)}`);
+        return;
+      }
+      // Nested object fields validate the same way as top-level descriptor
+      // fields (required/optional), but do NOT reject unrecognized keys —
+      // matching the pre-descriptor behavior (e.g. `table.by` never rejected
+      // extra keys, even in strict mode).
+      for (const [name, spec] of Object.entries(type.fields)) {
+        const has =
+          name in value && value[name] !== undefined && value[name] !== null;
+        if (spec.required && !has) {
+          push(`${path}.${name}`, `required field "${name}" is missing`);
+        } else if (has) {
+          walkFieldType(spec.type, value[name], `${path}.${name}`, ctx, push);
+        }
+      }
+      return;
+  }
+}
+
+/** Resolve a `t.ref(name)` against the small set of authored envelope
+ *  shapes already validated elsewhere in this file. */
+function walkRefType(
+  name: string,
+  value: unknown,
+  path: string,
+  ctx: Context
+): void {
+  switch (name) {
+    case "AxesOptions":
+      walkAxesOptions(value, path, ctx);
+      return;
+    case "LabelIR":
+      walkLabel(value, path, ctx);
+      return;
+    case "TranslateIR":
+      walkTranslate(value, path, ctx);
+      return;
+    case "ConstraintIR":
+      walkConstraint(value, path, ctx);
+      return;
+    default:
+      // Unknown ref name — permissive (forward-compat), mirrors the rest of
+      // this validator's stance on shapes it doesn't recognize yet.
+      return;
+  }
+}
+
 function walkOperator(node: unknown, path: string, ctx: Context): void {
   if (!isObject(node)) {
     ctx.errors.push({ path, message: "expected object" });
@@ -267,160 +485,15 @@ function walkOperator(node: unknown, path: string, ctx: Context): void {
     return;
   }
   walkBaseFields(node, path, ctx);
-  // Per-type field validation. Each operator has a known set of optional
-  // and required fields; in strict mode, unknown fields are rejected.
-  const knownFields: Record<string, string[]> = {
-    derive: ["type", "lambdaId", "provenance", "translate", "origin", "meta"],
-    resolve: ["type", "cols", "from", "key", "translate", "origin", "meta"],
-    join: ["type", "on", "right", "translate", "origin", "meta"],
-    spread: [
-      "type",
-      "by",
-      "dir",
-      "spacing",
-      "alignment",
-      "sharedScale",
-      "mode",
-      "reverse",
-      "glue",
-      "axes",
-      "translate",
-      "origin",
-      "meta",
-    ],
-    stack: [
-      "type",
-      "by",
-      "dir",
-      "alignment",
-      "sharedScale",
-      "mode",
-      "reverse",
-      "axes",
-      "translate",
-      "origin",
-      "meta",
-    ],
-    group: ["type", "by", "translate", "origin", "meta"],
-    scatter: [
-      "type",
-      "by",
-      "x",
-      "y",
-      "xMin",
-      "xMax",
-      "yMin",
-      "yMax",
-      "alignment",
-      "axes",
-      "w",
-      "h",
-      "translate",
-      "origin",
-      "meta",
-    ],
-    table: ["type", "by", "spacing", "numCols", "translate", "origin", "meta"],
-    log: ["type", "label", "translate", "origin", "meta"],
-  };
   optionalField(node, "translate", path, ctx, walkTranslate);
-  switch (node.type) {
-    case "derive":
-      optionalField(node, "lambdaId", path, ctx, expectString);
-      optionalField(node, "provenance", path, ctx, expectStringRecord);
-      break;
-    case "resolve":
-      expectField(node, "cols", path, ctx, (v, p) => {
-        if (!Array.isArray(v) || !v.every((x) => typeof x === "string")) {
-          ctx.errors.push({
-            path: p,
-            message: "resolve.cols must be an array of strings",
-          });
-        }
-      });
-      optionalField(node, "from", path, ctx, expectString);
-      optionalField(node, "key", path, ctx, expectString);
-      break;
-    case "join":
-      expectField(node, "on", path, ctx, expectString);
-      expectField(node, "right", path, ctx, (v, p) => {
-        if (!Array.isArray(v) || !v.every((x) => isObject(x))) {
-          ctx.errors.push({
-            path: p,
-            message: "join.right must be an array of row objects",
-          });
-        }
-      });
-      break;
-    case "spread":
-    case "stack":
-      optionalField(node, "by", path, ctx, expectString);
-      optionalField(node, "dir", path, ctx, (v, p) => {
-        if (v !== "x" && v !== "y")
-          ctx.errors.push({
-            path: p,
-            message: `dir must be "x" | "y", got ${JSON.stringify(v)}`,
-          });
-      });
-      optionalField(node, "spacing", path, ctx, expectNumber);
-      optionalField(node, "alignment", path, ctx, expectString);
-      optionalField(node, "sharedScale", path, ctx, expectBoolean);
-      optionalField(node, "reverse", path, ctx, expectBoolean);
-      optionalField(node, "mode", path, ctx, (v, p) => {
-        if (v !== "edge" && v !== "center")
-          ctx.errors.push({
-            path: p,
-            message: `mode must be "edge" | "center"`,
-          });
-      });
-      // spread-only stack options (stack operator rejects these via its own
-      // knownFields list); optionalField no-ops when the field is absent.
-      optionalField(node, "glue", path, ctx, expectBoolean);
-      optionalField(node, "axes", path, ctx, walkAxesOptions);
-      break;
-    case "group":
-      expectField(node, "by", path, ctx, expectString);
-      break;
-    case "scatter":
-      optionalField(node, "by", path, ctx, expectString);
-      for (const k of ["x", "y", "xMin", "xMax", "yMin", "yMax", "w", "h"]) {
-        optionalField(node, k, path, ctx, walkChannelValue);
-      }
-      optionalField(node, "alignment", path, ctx, expectString);
-      optionalField(node, "axes", path, ctx, walkAxesOptions);
-      break;
-    case "table":
-      // `by` is required: the table operator can't run without an
-      // {x, y} field-name pair (Python's table() raises if missing).
-      expectField(node, "by", path, ctx, (v, p) => {
-        if (!isObject(v)) {
-          ctx.errors.push({ path: p, message: "table.by must be an object" });
-          return;
-        }
-        expectField(v, "x", p, ctx, expectString);
-        expectField(v, "y", p, ctx, expectString);
-      });
-      optionalField(node, "spacing", path, ctx, (v, p) => {
-        if (typeof v === "number") return;
-        if (
-          Array.isArray(v) &&
-          v.length === 2 &&
-          v.every((n) => typeof n === "number")
-        )
-          return;
-        ctx.errors.push({
-          path: p,
-          message: "table.spacing must be a number or [number, number]",
-        });
-      });
-      optionalField(node, "numCols", path, ctx, expectNumber);
-      break;
-    case "log":
-      optionalField(node, "label", path, ctx, expectString);
-      break;
-  }
-  if (ctx.strict) {
-    rejectUnknown(node, knownFields[node.type] ?? ["type"], path, ctx);
-  }
+  const descriptor = OPERATORS[node.type];
+  const fields = descriptor ? resolveFields(descriptor) : {};
+  walkDescriptorFields(node, path, ctx, fields, [
+    "type",
+    "translate",
+    "origin",
+    "meta",
+  ]);
 }
 
 function walkTranslate(node: unknown, path: string, ctx: Context): void {
@@ -809,6 +882,46 @@ function walkLeafMark(
   // Strict mode does NOT reject unknown fields on leaf marks, because the
   // entire point of a leaf is to carry channel-valued props with arbitrary
   // names (h, w, fill, x, y, etc.).
+  //
+  // Descriptor-driven channel warnings (non-blocking, both permissive and
+  // strict mode): the enumerated channel list in `descriptors.ts`'s
+  // `LEAF_MARKS` documents each mark's REAL channel set (its factory's
+  // destructured options + the shared box-dims/paint groups it includes).
+  // An unrecognized field is silently dropped at render — surfacing it here
+  // as a warning turns that into a visible signal without breaking any
+  // currently-valid document (see the gradual-rollout note in
+  // ValidationWarning's docstring).
+  const descriptor = LEAF_MARKS[node.type as string];
+  if (descriptor) {
+    // `label` is deliberately excluded here even though a few descriptors
+    // (rect/circle/ellipse) list it as their own boolean inline-value-label
+    // flag: on the wire it shares the same top-level key as the base
+    // LabelIR mechanism (`.label()`'s canonical object/string/boolean
+    // shorthand — already validated above by `walkLabel`), and the two
+    // overlap in the boolean case (`label: true` is valid under both
+    // readings) but diverge for the object/string forms. Re-checking it here
+    // as "must be boolean" would fire a spurious warning on ordinary
+    // `.label("field")` usage. The descriptor still lists it (informational,
+    // for the Python-codegen stage) — just not wired into this warning walk.
+    const { label: _ownLabelFlag, ...fields } = resolveFields(descriptor);
+    walkDescriptorFields(
+      node,
+      path,
+      ctx,
+      fields,
+      [
+        "type",
+        "name",
+        "label",
+        "constraints",
+        "zOrder",
+        "translate",
+        "origin",
+        "meta",
+      ],
+      { asWarning: true }
+    );
+  }
 }
 
 function walkLabel(node: unknown, path: string, ctx: Context): void {
@@ -1055,26 +1168,6 @@ function expectObject(value: unknown, path: string, ctx: Context): void {
       path,
       message: `expected object, got ${typeNameOf(value)}`,
     });
-  }
-}
-
-/** An object whose every value is a string — e.g. a measure-provenance map
- *  (field name → measure). */
-function expectStringRecord(value: unknown, path: string, ctx: Context): void {
-  if (!isObject(value)) {
-    ctx.errors.push({
-      path,
-      message: `expected object, got ${typeNameOf(value)}`,
-    });
-    return;
-  }
-  for (const [k, v] of Object.entries(value)) {
-    if (typeof v !== "string") {
-      ctx.errors.push({
-        path: `${path}.${k}`,
-        message: `expected string, got ${typeNameOf(v)}`,
-      });
-    }
   }
 }
 

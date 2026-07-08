@@ -160,7 +160,8 @@ export type OperatorIR =
   | GroupOperator
   | ScatterOperator
   | TableOperator
-  | LogOperator;
+  | LogOperator
+  | TreemapOperator;
 
 /**
  * `derive(fn)` — opaque user transformation. Function bodies are not
@@ -282,6 +283,34 @@ export interface TableOperator extends BaseIRNode, TranslatableIR {
 export interface LogOperator extends BaseIRNode, TranslatableIR {
   type: "log";
   label?: string;
+}
+
+/**
+ * `treemap({...})` — d3-hierarchy treemap layout over the flow's rows,
+ * fare/weight-proportional. Dual-form like `spread`/`stack`/`scatter`/
+ * `group`/`table`: also usable as a low-level combinator mark
+ * (`CombinatorMarkType`'s `"treemap"`, disambiguated by `__combinator`).
+ * Mirrors JS's `TreemapProps` (`graphicalOperators/treemap.tsx`) minus the
+ * JS-only `value` function accessor (not serializable) and `key`.
+ */
+export interface TreemapOperator extends BaseIRNode, TranslatableIR {
+  type: "treemap";
+  paddingInner?: number;
+  paddingOuter?: number;
+  round?: boolean;
+  tile?:
+    | "squarify"
+    | "slice"
+    | "dice"
+    | "binary"
+    | "slicedice"
+    | "squarifyCircle";
+  sort?: "asc" | "desc" | "none";
+  valueField?: string;
+  flipY?: boolean;
+  leafIntrinsicRadiusField?: string;
+  w?: ChannelValue;
+  h?: ChannelValue;
 }
 
 // ---------------------------------------------------------------------------
@@ -554,7 +583,18 @@ export function isLeafMarkIR(mark: MarkIR): mark is LeafMarkIR {
   );
 }
 
-/** The set of operator type discriminators recognized in v0. */
+/**
+ * The set of operator type discriminators recognized in v0. `treemap` is
+ * dual-form (also a combinator mark, `COMBINATOR_MARK_TYPES`'s `"treemap"`)
+ * exactly like `spread`/`stack`/`scatter`/`group`/`table` — confirmed by a
+ * real Python story (`atom/titanic-unit-dots`) that uses `treemap(...)` as a
+ * `.flow()` operator, producing `{ type: "treemap", ... }` at the top level
+ * of `operators`. Originally this list's inclusion of `treemap` looked like
+ * drift against `OperatorIR`/the JSON Schema enum (both omitted it) — but
+ * the story corpus proved the OTHER two were the ones missing it, not this
+ * list; `OperatorIR` and the generated JSON Schema now include
+ * `TreemapOperator` too (see `descriptors.ts`'s `OPERATORS.treemap`).
+ */
 export const OPERATOR_TYPES = [
   "derive",
   "resolve",
