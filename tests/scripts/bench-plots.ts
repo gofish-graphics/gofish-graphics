@@ -43,9 +43,31 @@ function startHarness(): ChildProcess {
     {
       cwd: HARNESS_DIR,
       stdio: ["ignore", "pipe", "pipe"],
+      // Own process group so `killProc` can tear down the whole tree — a plain
+      // `.kill()` only signals the `npx` wrapper, orphaning the `vite` grandchild
+      // that holds the piped stdio fds and keeps this process alive past
+      // "plots done".
+      detached: true,
       env: { ...process.env, NODE_ENV: "development" },
     }
   );
+}
+
+/** Kill a spawned server and its whole process group (the `npx` wrapper plus the
+ *  real `vite` grandchild). A plain `proc.kill()` only reaches the wrapper,
+ *  orphaning the grandchild — which holds the piped stdio fds that otherwise
+ *  keep this process alive after the run finishes. */
+function killProc(proc: ChildProcess | null | undefined): void {
+  if (!proc || proc.pid === undefined) return;
+  try {
+    process.kill(-proc.pid, "SIGKILL");
+  } catch {
+    try {
+      proc.kill("SIGKILL");
+    } catch {
+      /* already gone */
+    }
+  }
 }
 
 async function waitFor(url: string, timeoutMs = 30_000): Promise<void> {
@@ -144,13 +166,19 @@ async function main() {
     await context.close();
   } finally {
     await browser?.close();
-    harnessProc.kill();
+    killProc(harnessProc);
   }
 
   console.log(`\nPlots → ${PLOTS_DIR}`);
 }
 
-main().catch((err) => {
-  console.error("Fatal error:", err);
-  process.exit(1);
-});
+main().then(
+  // Exit explicitly: even after killing the harness process group, a lingering
+  // handle can leave the event loop non-empty and hang the CI step after the
+  // plots are written.
+  () => process.exit(0),
+  (err) => {
+    console.error("Fatal error:", err);
+    process.exit(1);
+  }
+);
