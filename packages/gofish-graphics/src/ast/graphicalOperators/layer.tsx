@@ -231,6 +231,22 @@ export const layer = createNodeOperatorSequential(
             // units, e.g. a marginal histogram, which must NOT pollute the
             // ancestor's data domain.)
             if (isValue(dsize)) {
+              // A data-valued size claim (e.g. `w: "count"`) overrides the
+              // composed content space with its own SIZE claim. If that
+              // composed space had a baseline (an anchored POSITION or a
+              // "free" magnitude — the normal case for a subtree with real
+              // content), stash it before overriding: without this, a
+              // subtree under a data-valued size silently consumed the
+              // ancestor's σ instead of getting its own local scope (#651
+              // smell 1). The stash is baseline-MAGNITUDE form (SIZE) so a
+              // nested sized layer's own descendants get a scale factor, not
+              // just an anchored map. This makes "data-valued size ⇒
+              // self-scaling region" the general rule: the node's box is
+              // solved by the ancestor scope, its interior is a fresh scope
+              // resolved against that box.
+              if (hasBaseline(composed)) {
+                selfScaledSpaces[axis] = SIZE(composed.width, composed.measure);
+              }
               resolved[axis] = SIZE(
                 Monotonic.linear(getValue(dsize)!, 0),
                 getMeasure(dsize)
