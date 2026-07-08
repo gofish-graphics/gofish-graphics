@@ -1,0 +1,40 @@
+{
+  "version": "0.1.0",
+  "builtAt": "2026-07-08T20:17:54.920Z",
+  "wallOnly": true,
+  "points": [
+    {
+      "family": "spread",
+      "n": 300
+    },
+    {
+      "family": "spread",
+      "n": 1000
+    },
+    {
+      "family": "stack",
+      "n": 300
+    },
+    {
+      "family": "stack",
+      "n": 1000
+    },
+    {
+      "family": "scatter",
+      "n": 300
+    },
+    {
+      "family": "scatter",
+      "n": 1000
+    },
+    {
+      "family": "grid",
+      "n": 300
+    },
+    {
+      "family": "grid",
+      "n": 1000
+    }
+  ],
+  "enginePackage": "gofish-graphics@0.1.0"
+}
