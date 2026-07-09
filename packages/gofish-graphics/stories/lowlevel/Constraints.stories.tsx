@@ -516,3 +516,74 @@ export const AlignCenterDistributeY: StoryObj<Args> = {
     return container;
   },
 };
+
+// ──────────────────────────────────────────────────────────
+// "span" / "size" alignment values (#726)
+// ──────────────────────────────────────────────────────────
+
+/**
+ * `align({ x: "span" })` / `align({ y: "span" })`: a bare, unbound rect
+ * ("border") adopts an already-placed group's full extent on both axes —
+ * position AND size — without the group moving. `group` is a literal-
+ * positioned sub-layer (so it is already placed when the outer align runs),
+ * matching the Bluefish `LayoutFunction` pattern this value grammar replaces
+ * (cell border / highlight / underline — take the source's `[min, max]` and
+ * stamp it onto a bare rect).
+ */
+export const AlignSpan: StoryObj<Args> = {
+  args: { w: 340, h: 220 },
+  render: (args: Args) => {
+    const container = initializeContainer();
+    const group = layer({ x: 40, y: 50 }, [
+      rect({ w: 60, h: 60, fill: "#e63946" }).name("a"),
+      rect({ w: 60, h: 60, fill: "#457b9d" }).name("b"),
+      rect({ w: 60, h: 60, fill: "#2a9d8f" }).name("c"),
+    ])
+      .constrain(({ a, b, c }) => [
+        Constraint.align({ y: "start" }, [a, b, c]),
+        Constraint.distribute({ dir: "x", spacing: 10 }, [a, b, c]),
+      ])
+      .name("group");
+
+    layer([
+      group,
+      rect({ fill: "none", stroke: "#333", strokeWidth: 2 }).name("border"),
+    ])
+      .constrain(({ group, border }) => [
+        Constraint.align({ x: "span" }, [group, border]),
+        Constraint.align({ y: "span" }, [group, border]),
+      ])
+      .render(container, { w: args.w, h: args.h });
+    return container;
+  },
+};
+
+/**
+ * `align({ x: "size" })`: a bare, unbound-on-x divider rect adopts a placed
+ * stack's WIDTH without moving — its x position is left to the parent seed
+ * (it is not itself given an x, and no other constraint touches its x), and
+ * its y is set independently (a literal `y`, positioning it below the
+ * stack). Verifies "size" copies length only, with no position coupling.
+ */
+export const AlignSize: StoryObj<Args> = {
+  args: { w: 320, h: 180 },
+  render: (args: Args) => {
+    const container = initializeContainer();
+    const stack = layer({ x: 0, y: 20 }, [
+      rect({ w: 220, h: 30, fill: "#e63946" }).name("s1"),
+      rect({ w: 220, h: 30, fill: "#457b9d" }).name("s2"),
+    ])
+      .constrain(({ s1, s2 }) => [
+        Constraint.align({ x: "start" }, [s1, s2]),
+        Constraint.distribute({ dir: "y", spacing: 4 }, [s1, s2]),
+      ])
+      .name("stack");
+
+    layer([stack, rect({ y: 110, h: 10, fill: "#2a9d8f" }).name("divider")])
+      .constrain(({ stack, divider }) => [
+        Constraint.align({ x: "size" }, [stack, divider]),
+      ])
+      .render(container, { w: args.w, h: args.h });
+    return container;
+  },
+};

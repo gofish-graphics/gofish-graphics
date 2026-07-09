@@ -491,6 +491,14 @@ sub-issues for size-setting constraints (#545), scatter/position (#546),
 treemap (#541), the general composition algebra (#547), table (#548), and
 sharedScale claim hoisting (#549).
 
+✅ **Size-setting constraints, unbound-target slice (#726).** `align`'s
+`"span"`/`"size"` values ship a third size-setting mechanism alongside
+`position`'s interval form and `nest` — scoped to a target with no intrinsic
+size on the axis (the case all the Bluefish `LayoutFunction` evidence
+actually needs; see [[operators-over-placed-nodes]] §3.5). A bound target is
+an ownership conflict, not silently resolved — the residual case (#545) is
+still open for a target that already carries a size.
+
 ## Python / IR implications
 
 **Decision: the high-level IR stays the Python bridge target.** Operators

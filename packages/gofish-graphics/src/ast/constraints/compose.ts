@@ -282,7 +282,11 @@ export function composeConstraintSpaces(
     if (idx === undefined) continue;
     for (const axis of [0, 1] as const) {
       const spec = axis === 0 ? a.x : a.y;
-      if (typeof spec === "string")
+      // "span"/"size" (#726) are placement-time interval statistics, not a
+      // point-anchor space fold — the target they write is UNDEFINED on this
+      // axis by construction (that's the unbound-target scope), so it
+      // contributes no space claim here.
+      if (typeof spec === "string" && spec !== "span" && spec !== "size")
         alignFolds.push({ axis, anchor: spec, idx });
     }
   }

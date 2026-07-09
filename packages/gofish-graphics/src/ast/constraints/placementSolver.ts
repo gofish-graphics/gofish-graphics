@@ -87,17 +87,21 @@ function closeSizes(
   const boxOwner = new Map<NodeId, string>();
   const conflicts: PlacementConflict[] = [];
   for (const fact of pins) {
-    if (fact.type !== "anchor-pin") continue;
+    if (fact.type !== "anchor-pin" && fact.type !== "size-pin") continue;
     if (fact.owner === "self-placement") continue; // weak seed, not a strong fact
-    if (fact.anchor === "baseline") continue; // baseline is not a size box key
+    if (fact.type === "anchor-pin" && fact.anchor === "baseline") continue; // baseline is not a size box key
     // start→min, middle→center, end→max — the same edge classification
     // `anchorOffset` applies (a non-canonical value falls to the same branch).
+    // A size-pin (#726, align `"size"`) writes the `size` key directly,
+    // independent of any anchor.
     const boxKey =
-      fact.anchor === "start"
-        ? "min"
-        : fact.anchor === "middle"
-          ? "center"
-          : "max";
+      fact.type === "size-pin"
+        ? "size"
+        : fact.anchor === "start"
+          ? "min"
+          : fact.anchor === "middle"
+            ? "center"
+            : "max";
     let box = boxes.get(fact.node);
     if (!box) {
       boxes.set(fact.node, (box = new BBox()));
@@ -117,7 +121,10 @@ function closeSizes(
   const sizes = new Map<NodeId, number>();
   const owners = new Map<NodeId, string>();
   for (const [node, box] of boxes) {
-    if (!box.solved) continue;
+    // Not gated on `box.solved`: a rank-1 box holding only a direct `"size"`
+    // pin (align `"size"`, no companion anchor) still reads its size back
+    // (`BBox.read` falls back to the direct pin when under-determined) — that
+    // is exactly the "size without a determined position" case.
     const size = box.read("size");
     if (size !== undefined) {
       sizes.set(node, size);
@@ -158,6 +165,12 @@ function reduceToAxisProblem(
   };
 
   for (const fact of facts) {
+    // A size-pin only feeds `closeSizes`'s box closure (above) — it has no
+    // anchor/position content of its own, so the difference graph never sees
+    // it. When it stays rank-1 (no companion anchor pin lands on this node),
+    // the target's size is under-determined here and keeps whatever its own
+    // layout gave it — exactly "size" without movement.
+    if (fact.type === "size-pin") continue;
     if (fact.type === "anchor-pin") {
       const offset = resolveOffset(fact.node, fact.anchor);
       if (offset === undefined) continue;
@@ -199,7 +212,11 @@ function solveRank2Axis(
   axis: Axis,
   facts: AnchorFact[],
   targets: Map<string, Placeable>
-): { cells: Map<NodeId, SolvedCell>; conflicts: PlacementConflict[] } {
+): {
+  cells: Map<NodeId, SolvedCell>;
+  sizeOnly: Map<NodeId, { size: number; owner: string }>;
+  conflicts: PlacementConflict[];
+} {
   const { sizes, owners, conflicts: sizeConflicts } = closeSizes(axis, facts);
   const problem = reduceToAxisProblem(axis, facts, sizes, targets);
   const { positions, conflicts: graphConflicts } = solveAxisProblem(
@@ -219,7 +236,16 @@ function solveRank2Axis(
       sizeOwner: owners.get(node),
     });
   }
-  return { cells, conflicts: [...sizeConflicts, ...graphConflicts] };
+  // A determined size with no solved position: align `"size"` with no
+  // companion anchor pin never becomes a difference-graph participant, so it
+  // never surfaces in `positions` above — it still needs a write-back, just
+  // the size, with no position coupling (#726).
+  const sizeOnly = new Map<NodeId, { size: number; owner: string }>();
+  for (const [node, size] of sizes) {
+    if (cells.has(node)) continue;
+    sizeOnly.set(node, { size, owner: owners.get(node)! });
+  }
+  return { cells, sizeOnly, conflicts: [...sizeConflicts, ...graphConflicts] };
 }
 
 export function solvePlacementConstraints(
@@ -266,6 +292,10 @@ export function solvePlacementConstraints(
         );
       } else if (target.pinAnchor) target.pinAnchor(axis, cell.min, "min");
       else target.place(axis, cell.min, "min");
+    }
+    for (const [name, { size, owner }] of result.sizeOnly) {
+      const target = targets.get(name);
+      target?.setSizeOnly?.(axisLabel, size, owner);
     }
   });
   return conflicts;

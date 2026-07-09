@@ -1,8 +1,9 @@
 """Equivalent of lowlevel/Constraints.stories.tsx — Low Level Syntax/Constraints.
 
-Ports the seven single-chart stories: the six that demonstrate
-`layer + constrain` directly, plus `SpreadEnd_UnderCoordTransform` (the
-pixel-pure `end` fallback canary, #552). The eight side-by-side equivalence
+Ports the nine single-chart stories: the six that demonstrate
+`layer + constrain` directly, `SpreadEnd_UnderCoordTransform` (the
+pixel-pure `end` fallback canary, #552), and `AlignSpan`/`AlignSize` (#726 —
+the `"span"`/`"size"` alignment values). The eight side-by-side equivalence
 stories (`SpreadY_*`, `SpreadX_*`) use a multi-panel DOM scaffold that
 doesn't fit the single-chart parity harness — those are per-export exempt.
 `SpreadY_AlignMiddle` specifically now compares two freely translated systems
@@ -120,4 +121,65 @@ def story_align_center_distribute_y():
             Constraint.distribute([a, b, c, d], dir="y", spacing=8),
         ]),
         {"w": 300, "h": 400},
+    )
+
+
+# ─── "span" / "size" alignment values (#726) ────────────────────────────────
+
+
+def story_align_span():
+    group = (
+        layer(
+            [
+                rect(w=60, h=60, fill="#e63946").name("a"),
+                rect(w=60, h=60, fill="#457b9d").name("b"),
+                rect(w=60, h=60, fill="#2a9d8f").name("c"),
+            ],
+            x=40,
+            y=50,
+        )
+        .constrain(lambda a, b, c: [
+            Constraint.align([a, b, c], y="start"),
+            Constraint.distribute([a, b, c], dir="x", spacing=10),
+        ])
+        .name("group")
+    )
+
+    return (
+        layer([
+            group,
+            rect(fill="none", stroke="#333", strokeWidth=2).name("border"),
+        ]).constrain(lambda group, border, **_: [
+            Constraint.align([group, border], x="span"),
+            Constraint.align([group, border], y="span"),
+        ]),
+        {"w": 340, "h": 220},
+    )
+
+
+def story_align_size():
+    stack = (
+        layer(
+            [
+                rect(w=220, h=30, fill="#e63946").name("s1"),
+                rect(w=220, h=30, fill="#457b9d").name("s2"),
+            ],
+            x=0,
+            y=20,
+        )
+        .constrain(lambda s1, s2: [
+            Constraint.align([s1, s2], x="start"),
+            Constraint.distribute([s1, s2], dir="y", spacing=4),
+        ])
+        .name("stack")
+    )
+
+    return (
+        layer([
+            stack,
+            rect(y=110, h=10, fill="#2a9d8f").name("divider"),
+        ]).constrain(lambda stack, divider, **_: [
+            Constraint.align([stack, divider], x="size"),
+        ]),
+        {"w": 320, "h": 180},
     )

@@ -12,6 +12,7 @@ import type {
   PlacementParticipantRequest,
   PlacementPinRequest,
   PlacementRelationRequest,
+  PlacementSizePinRequest,
 } from "./placementFacts";
 import { emptyAnchorProgram } from "./placementFacts";
 
@@ -96,6 +97,17 @@ export class PlacementProgramLowerer implements PlacementFactEmitter {
       from: { node: request.from.name, anchor: request.from.anchor },
       to: { node: request.to.name, anchor: request.to.anchor },
       gap: request.gap,
+      owner: request.owner,
+    });
+  }
+
+  pinSize(request: PlacementSizePinRequest): void {
+    if (!this.target(request.name)) return;
+    this.anchorFacts(request.axis).push({
+      type: "size-pin",
+      node: request.name,
+      axis: request.axis,
+      value: request.value,
       owner: request.owner,
     });
   }
