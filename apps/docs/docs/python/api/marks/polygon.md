@@ -23,7 +23,8 @@ chart([{}]).mark(
 ## Signature
 
 ```python
-polygon(*, points=None, fill=None, stroke=None, strokeWidth=None, debug=None) -> Mark
+polygon(*, points=None, fill=None, stroke=None, strokeWidth=None, opacity=None,
+        debug=None) -> Mark
 ```
 
 Keyword-only (matches every existing call site, which already passes
@@ -37,6 +38,7 @@ Keyword-only (matches every existing call site, which already passes
 | `fill`        | `str`               | `"black"` | Fill color                                                                 |
 | `stroke`      | `str`               | `fill`    | Stroke color (defaults to `fill`)                                          |
 | `strokeWidth` | `int`               | `0`       | Stroke width                                                               |
+| `opacity`     | `float`             | `1`       | Opacity, `0`–`1` (applies to fill and stroke)                              |
 
 Returns a `Mark` for use in [`.mark()`](/python/api/core/mark). Call
 [`.name()`](/python/api/core/mark) on the result to make it referenceable via

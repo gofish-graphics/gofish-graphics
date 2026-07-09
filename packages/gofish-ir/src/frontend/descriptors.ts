@@ -549,12 +549,13 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
   }),
 
   ellipse: leafMark("ellipse", {
-    doc: "An ellipse. Box geometry via the shared dims channels; paint is a strict subset of `paint` (no filter/opacity).",
+    doc: "An ellipse. Box geometry via the shared dims channels; paint is a strict subset of `paint` (no filter).",
     include: [boxDims],
     fields: {
       fill: ch.color(),
       stroke: ch.color("Defaults to `fill`."),
       strokeWidth: { type: t.number },
+      opacity: { type: t.number, default: 1 },
       aspectRatio: {
         type: t.number,
         doc: "w/h ratio to enforce. When both dims are data-driven, the constraining axis is used.",
@@ -600,6 +601,14 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
       filter: { type: t.string, doc: "Raw SVG filter attribute." },
       fontSize: { type: t.number, default: 12 },
       fontFamily: { type: t.string, default: "system-ui, sans-serif" },
+      fontStyle: {
+        type: t.string,
+        doc: 'Raw CSS font-style (e.g. "italic").',
+      },
+      fontWeight: {
+        type: t.union(t.number, t.string),
+        doc: 'CSS font-weight (e.g. 300, 700, "bold").',
+      },
       debugBoundingBox: { type: t.boolean, default: false },
       rotate: {
         type: t.number,
@@ -636,6 +645,7 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
       fill: { type: t.string, default: "black" },
       stroke: { type: t.string, doc: "Defaults to `fill`." },
       strokeWidth: { type: t.number },
+      opacity: { type: t.number, default: 1 },
       debug: {
         type: t.boolean,
         doc: "Dev-only console.log flag; stripped before layout (FACTORY_ONLY_KEYS).",
@@ -768,6 +778,11 @@ export const COMBINATOR_MARKS: Record<string, ConstructDescriptor> = {
       padding: { type: t.number, default: 2 },
       rx: { type: t.number, default: 2 },
       ry: { type: t.number, default: 2 },
+      fill: { type: t.string, default: "none" },
+      stroke: { type: t.string, default: "#D1D9E2" },
+      strokeWidth: { type: t.number, default: 1 },
+      strokeDasharray: { type: t.string },
+      opacity: { type: t.number, default: 1 },
     },
   }),
 

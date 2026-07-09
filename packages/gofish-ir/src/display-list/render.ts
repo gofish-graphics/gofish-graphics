@@ -67,6 +67,14 @@ const itemToSVG = (item: DisplayItem): string => {
         item.fontFamily !== undefined
           ? ` font-family="${esc(item.fontFamily)}"`
           : "";
+      const fst =
+        item.fontStyle !== undefined
+          ? ` font-style="${esc(item.fontStyle)}"`
+          : "";
+      const fw =
+        item.fontWeight !== undefined
+          ? ` font-weight="${esc(String(item.fontWeight))}"`
+          : "";
       const ta =
         item.textAnchor !== undefined
           ? ` text-anchor="${esc(item.textAnchor)}"`
@@ -79,7 +87,7 @@ const itemToSVG = (item: DisplayItem): string => {
         item.rotate !== undefined
           ? ` transform="rotate(${item.rotate} ${item.x} ${item.y})"`
           : "";
-      return `<text x="${item.x}" y="${item.y}"${fs}${ff}${ta}${db}${rot}${s}>${esc(item.text)}</text>`;
+      return `<text x="${item.x}" y="${item.y}"${fs}${ff}${fst}${fw}${ta}${db}${rot}${s}>${esc(item.text)}</text>`;
     }
     case "image": {
       const par =

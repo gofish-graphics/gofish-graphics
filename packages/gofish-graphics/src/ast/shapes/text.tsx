@@ -57,13 +57,17 @@ const getMeasureContext = (): CanvasRenderingContext2D | null => {
 const estimateTextDimensions = (
   text: string,
   fontSize: number,
-  fontFamily: string
+  fontFamily: string,
+  fontStyle?: string,
+  fontWeight?: number | string
 ): TextDimensions => {
   const ctx = getMeasureContext();
   if (ctx) {
-    // Measure using the same font-family that the <text> element will use.
-    // (We omit weight/style for now since this mark API doesn't expose them.)
-    ctx.font = `${fontSize}px ${fontFamily}`;
+    // Measure using the same font-family/style/weight that the <text> element
+    // will use (CSS shorthand order: style weight size family).
+    ctx.font = `${fontStyle ? `${fontStyle} ` : ""}${
+      fontWeight !== undefined ? `${fontWeight} ` : ""
+    }${fontSize}px ${fontFamily}`;
     const metrics = ctx.measureText(text);
     const width = metrics.width;
     // Prefer font-level metrics for stable line height across strings.
@@ -134,9 +138,17 @@ const resolveTextLayout = (
   fontSize: number,
   fontFamily: string,
   textAnchor: "start" | "middle" | "end",
-  dominantBaseline: "auto" | "central" | "hanging" | "mathematical"
+  dominantBaseline: "auto" | "central" | "hanging" | "mathematical",
+  fontStyle?: string,
+  fontWeight?: number | string
 ): TextLayout => {
-  const dims = estimateTextDimensions(text ?? "", fontSize, fontFamily);
+  const dims = estimateTextDimensions(
+    text ?? "",
+    fontSize,
+    fontFamily,
+    fontStyle,
+    fontWeight
+  );
   const bbox = {
     minX: 0,
     minY: dims.descent,
@@ -172,6 +184,8 @@ export const Text = ({
   filter,
   fontSize = 12,
   fontFamily = "system-ui, sans-serif",
+  fontStyle,
+  fontWeight,
   debugBoundingBox = false,
   rotate = 0,
   ...fancyDims
@@ -184,6 +198,8 @@ export const Text = ({
   filter?: string;
   fontSize?: number;
   fontFamily?: string;
+  fontStyle?: string;
+  fontWeight?: number | string;
   debugBoundingBox?: boolean;
   /** Rotation in degrees, applied in the chart's y-up world frame about the
    *  text anchor. `rotate: 90` yields a conventional y-axis title — it reads
@@ -209,6 +225,8 @@ export const Text = ({
         filter,
         fontSize,
         fontFamily,
+        fontStyle,
+        fontWeight,
         textAnchor,
         debugBoundingBox,
         rotate,
@@ -258,7 +276,9 @@ export const Text = ({
           fontSize,
           fontFamily,
           textAnchor,
-          dominantBaseline
+          dominantBaseline,
+          fontStyle,
+          fontWeight
         );
 
         // Anchor-relative bbox. When the text is rotated, its layout footprint
@@ -358,7 +378,9 @@ export const Text = ({
               fontSize,
               fontFamily,
               textAnchor,
-              dominantBaseline
+              dominantBaseline,
+              fontStyle,
+              fontWeight
             );
           const relRaw = {
             minX: layout.bbox.minX - layout.anchor.x,
@@ -396,6 +418,8 @@ export const Text = ({
           text,
           fontSize,
           fontFamily,
+          fontStyle,
+          fontWeight,
           textAnchor: textAnchor as DisplayList.TextItem["textAnchor"],
           dominantBaseline:
             dominantBaseline as DisplayList.TextItem["dominantBaseline"],

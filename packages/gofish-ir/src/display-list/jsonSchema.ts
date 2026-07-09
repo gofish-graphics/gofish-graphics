@@ -144,6 +144,8 @@ export const DISPLAY_LIST_JSON_SCHEMA = {
         text: { type: "string" },
         fontSize: { type: "number" },
         fontFamily: { type: "string" },
+        fontStyle: { type: "string" },
+        fontWeight: { type: ["number", "string"] },
         textAnchor: { enum: ["start", "middle", "end"] },
         dominantBaseline: {
           enum: ["auto", "central", "middle", "hanging", "mathematical"],
