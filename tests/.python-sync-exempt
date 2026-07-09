@@ -19,6 +19,28 @@
 # and byte-parity-validated.
 packages/gofish-graphics/stories/lowlevel/NestedMosaicChart.stories.tsx
 #
+# QuantumCircuit (Bluefish port, #438) is a low-level Layer/createName/
+# createMark/enclose diagram (cross-tier refs into nested wire-group layers,
+# an `enclose()` bake boundary used as a highlight box) — the same low-level
+# vocabulary as Pulley/PythonTutor above, not yet expressible via the
+# fluent chart() pipeline.
+packages/gofish-graphics/stories/bluefish/QuantumCircuit.stories.tsx
+#
+# InsertionSort (Bluefish port, #435) is a low-level Layer/createName/
+# createMark diagram (per-cell dynamic name tokens, cross-tier ref arrows
+# from the moving cell to its insertion point, an `enclose()` row outline) —
+# the same low-level vocabulary as QuantumCircuit/Pulley/PythonTutor above,
+# not yet expressible via the fluent chart() pipeline.
+packages/gofish-graphics/stories/bluefish/InsertionSort.stories.tsx
+#
+# Topology (Bluefish port, #440) uses the `position({x, y}, [child])`
+# graphical operator (an absolute-pixel-offset placement primitive) to place
+# analytically-computed neighbourhood outlines (enclose can't style its hull
+# or draw the concave a/c case — see the file's friction-log comment).
+# `position` has no entry in the gofish-ir descriptor table yet, so it isn't
+# in the generated Python wrapper — not portable until it's added.
+packages/gofish-graphics/stories/bluefish/Topology.stories.tsx
+#
 # ViolinPlot is ported too (tests/python-stories/low-level-syntax/
 # test_violin_plot.py) but stays exempt: the JS story uses `fast-kde`'s
 # density1d, while the idiomatic Python port uses `scipy.stats.gaussian_kde`.
