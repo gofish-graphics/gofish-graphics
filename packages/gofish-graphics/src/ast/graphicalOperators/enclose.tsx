@@ -1,4 +1,4 @@
-import { GoFishNode } from "../_node";
+import { GoFishNode, placeUnplacedChild } from "../_node";
 import { Size, displayTranslate } from "../dims";
 import type { DisplayList } from "gofish-ir";
 import {
@@ -9,6 +9,7 @@ import {
 import { GoFishAST } from "../_ast";
 import { black, gray, tailwindColors } from "../../color";
 import { Domain } from "../domain";
+import { foldFinite } from "../../util";
 import { UNDEFINED, UnderlyingSpace } from "../underlyingSpace";
 import { createNodeOperator } from "../withGoFish";
 
@@ -32,31 +33,50 @@ export const enclose = createNodeOperator(
           return [UNDEFINED, UNDEFINED];
         },
         layout: (shared, size, scales, children) => {
+          // Child placement mirrors `layer`'s own rule exactly (see
+          // `placeUnplacedChild` in `_node.ts`, reused here rather than
+          // re-derived): a FRESH child (e.g. a plain shape) reports an
+          // undefined translate until placed, so it gets `layer`'s usual
+          // baseline-origin placement. An ALREADY-PLACED operand — most
+          // notably a `ref(...)` child, which reconciles its own translate
+          // against its LCA during its own `layout()` (see `GoFishRef.layout`
+          // in `_ref.tsx`) — must NOT be re-placed: `GoFishRef.place()` has no
+          // ledger to make that a no-op, so calling it would collapse every
+          // ref onto one point (see `enclose({}, [ref("1"), ref("2"), ...])`
+          // used to do). Enclose's own contribution beyond `layer` is purely
+          // the hull/bbox union + padding below, read from each child's ACTUAL
+          // (placed) box — the same union `layer` folds over `childPlaceables`.
           const childPlaceables = [];
 
           for (const child of children) {
             const childPlaceable = child.layout(size, scales);
-            childPlaceable.place("x", 0, "baseline");
-            childPlaceable.place("y", 0, "baseline");
+            placeUnplacedChild(childPlaceable);
             childPlaceables.push(childPlaceable);
           }
 
-          const maxWidth = Math.max(
-            ...childPlaceables.map(
-              (childPlaceable) => childPlaceable.dims[0].max!
-            )
+          const minX = foldFinite(
+            childPlaceables.map((cp) => cp.dims[0].min),
+            Math.min
           );
-          const maxHeight = Math.max(
-            ...childPlaceables.map(
-              (childPlaceable) => childPlaceable.dims[1].max!
-            )
+          const maxX = foldFinite(
+            childPlaceables.map((cp) => cp.dims[0].max),
+            Math.max
           );
+          const minY = foldFinite(
+            childPlaceables.map((cp) => cp.dims[1].min),
+            Math.min
+          );
+          const maxY = foldFinite(
+            childPlaceables.map((cp) => cp.dims[1].max),
+            Math.max
+          );
+
           return {
             intrinsicDims: {
-              x: -padding,
-              y: -padding,
-              w: maxWidth + padding * 2,
-              h: maxHeight + padding * 2,
+              x: minX - padding,
+              y: minY - padding,
+              w: maxX - minX + padding * 2,
+              h: maxY - minY + padding * 2,
             },
             transform: { translate: [undefined, undefined] },
           };
@@ -76,15 +96,20 @@ export const enclose = createNodeOperator(
           const [tx, ty] = displayTranslate(transform);
           const outer = node.getRenderSession().toPixel!;
 
+          const localMinX = intrinsicDims?.[0]?.min ?? -padding;
+          const localMinY = intrinsicDims?.[1]?.min ?? -padding;
           const w = intrinsicDims?.[0]?.size ?? 0;
           const h = intrinsicDims?.[1]?.size ?? 0;
-          // Enclosure rect at local (-padding, -padding, w, h), inside the
-          // node's translate → absolute y-up box, mapped via the outer toPixel.
+          // Enclosure rect at local (localMinX, localMinY, w, h) — the hull's
+          // own box (children's bbox union ± padding; see `layout` above),
+          // inside the node's translate → absolute y-up box, mapped via the
+          // outer toPixel. `localMinX/Y` collapse to `-padding` in the common
+          // (all-fresh-children) case, matching the old hardcoded assumption.
           const box = rectItemFromBox(
-            tx - padding,
-            tx - padding + w,
-            ty - padding,
-            ty - padding + h,
+            tx + localMinX,
+            tx + localMinX + w,
+            ty + localMinY,
+            ty + localMinY + h,
             outer,
             {
               rx,
