@@ -41,6 +41,28 @@ import {
 // bare, w-less rect) adopts the `mem` block row's exact horizontal extent
 // without `mem` itself moving. See the one call site below, tagged
 // "SPAN SITE".
+//
+// SECOND FIDELITY PASS (6 maintainer-flagged defects, all fixed): (1) the
+// Applier row now centers over `diskDataTable` (was start-aligned) so it
+// sits directly above the fan-out arrows' shared, centered origin; (2) the
+// `BigComma()` groups now bottom-align (`alignment: "end"`) against their
+// block row instead of middle-aligning, matching ground truth's
+// baseline-set commas; (3) the two `DashedFunnel` `line()`s dropped
+// `.zOrder(-1)` so sibling paint order (declared after the stage boxes) puts
+// them on top, and they now pin `source`/`target` to bbox edges (not the
+// default center) so they visibly land at a block's top/bottom edge instead
+// of piercing into it — a defect the paint-order fix would otherwise have
+// newly exposed; (4) `diskLogInner` grew an invisible `labelSpace` spacer so
+// its bbox (and thus the DiskLog card's border) extends down far enough to
+// contain the tick-mark labels; "Available log space" also became a
+// `LabelLines` two-line stack (mirroring Bluefish's own two-line `<StackV>`)
+// since the single-line text was wider than `rect4` and overflowed into the
+// "apply" label; (5) `TitledBackground`'s border `strokeWidth` went 1 → 3 to
+// match the blocks/arrows; (6) the 5 disk-data cells dropped their
+// `stroke`/`strokeWidth` (a GoFish `rect()` defaults `strokeWidth` to 0, so
+// an unset stroke is invisible, matching Bluefish's un-stroked originals),
+// and `diskDataTable`'s enclosing border went from a faint `#ccc` hairline to
+// the same solid black/strokeWidth-3 style as the stage cards.
 
 const meta: Meta = {
   title: "Bluefish/DFSCQ File System",
@@ -99,7 +121,7 @@ const withMinWidth = (width: number, content: ReturnType<typeof spread>) =>
 // top-left corner within the shared 15px padding). Sharp corners, thin black
 // stroke, white fill — matching the ground-truth diagram's plain box style.
 const TitledBackground = (title: string, content: ReturnType<typeof spread>) =>
-  enclose({ padding: 15, fill: "white", stroke: "black", strokeWidth: 1, rx: 0, ry: 0 }, [
+  enclose({ padding: 15, fill: "white", stroke: "black", strokeWidth: 3, rx: 0, ry: 0 }, [
     spread({ dir: "y", spacing: 4, alignment: "start" }, [
       text({ text: title, fontFamily: "serif", fontWeight: 300, fontSize: 20 }),
       withMinWidth(CONTENT_WIDTH, content),
@@ -203,10 +225,10 @@ export const DFSCQ: StoryObj<Args> = {
         text({ text: "committedTxns:", fontFamily: "monospace", fontWeight: 300, fontSize: 18 })
       ),
       BigBracket("left").name(bigleftbracket),
-      spread({ dir: "x", spacing: 0 }, [Blocks(Array(2).fill("gray"), 18), BigComma()]),
-      spread({ dir: "x", spacing: 0 }, [Blocks(Array(7).fill("gray"), 18), BigComma()]),
-      spread({ dir: "x", spacing: 0 }, [Blocks(Array(4).fill("gray"), 18), BigComma()]),
-      spread({ dir: "x", spacing: 0 }, [
+      spread({ dir: "x", spacing: 0, alignment: "end" }, [Blocks(Array(2).fill("gray"), 18), BigComma()]),
+      spread({ dir: "x", spacing: 0, alignment: "end" }, [Blocks(Array(7).fill("gray"), 18), BigComma()]),
+      spread({ dir: "x", spacing: 0, alignment: "end" }, [Blocks(Array(4).fill("gray"), 18), BigComma()]),
+      spread({ dir: "x", spacing: 0, alignment: "end" }, [
         Blocks(Array(3).fill(BLUE), 18).name(committedTxnsBlock),
         BigComma(),
       ]),
@@ -232,14 +254,25 @@ export const DFSCQ: StoryObj<Args> = {
     // `collectConstraintRefs`-based cross-tier lookup (`src/ast/constraints/
     // index.ts`) resolves correctly — see FRICTION LOG #4 below for the
     // depth-2 case that did NOT resolve correctly and the workaround.
-    const diskLogInner = Layer([memRow, rect({ h: 3, fill: "black" }).name("line")]).constrain(
-      (c) => [
-        // ── SPAN SITE: the divider line adopts `mem`'s exact horizontal
-        // extent — the one Bluefish `LayoutFunction` call this port replaces.
-        Constraint.distribute({ dir: "y", spacing: 20 }, [c.mem, c.line]),
-        Constraint.align({ x: "span" }, [c.mem, c.line]),
-      ]
-    );
+    // `labelSpace`: an invisible spacer that stretches `diskLogInner`'s own
+    // bbox down far enough to include the tick marks AND the "Log header" /
+    // "Log data" / "Available log / space" label row beneath them (those are
+    // placed by tier-2 `Tick`/`Label`/`LabelLines` layers below, anchored via
+    // `ref()` — see FRICTION LOG #4 — so they aren't structurally nested
+    // under this node and wouldn't otherwise contribute to its bbox). Ground
+    // truth's DiskLog box border sits below that label row, not above it.
+    const diskLogInner = Layer([
+      memRow,
+      rect({ h: 3, fill: "black" }).name("line"),
+      rect({ w: 1, h: 1, fill: "transparent" }).name("labelSpace"),
+    ]).constrain((c) => [
+      // ── SPAN SITE: the divider line adopts `mem`'s exact horizontal
+      // extent — the one Bluefish `LayoutFunction` call this port replaces.
+      Constraint.distribute({ dir: "y", spacing: 20 }, [c.mem, c.line]),
+      Constraint.align({ x: "span" }, [c.mem, c.line]),
+      Constraint.distribute({ dir: "y", spacing: 80 }, [c.mem, c.labelSpace]),
+      Constraint.align({ x: "start" }, [c.mem, c.labelSpace]),
+    ]);
 
     // Ticks/labels anchor to rect1/rect2/rect4, which sit TWO levels below
     // this point (diskLogInner > memRow > rectN) — deep enough that the
@@ -271,6 +304,20 @@ export const DFSCQ: StoryObj<Args> = {
         Constraint.distribute({ dir: "y", spacing: 30 }, [a, t]),
         Constraint.align({ x: "middle" }, [a, t]),
       ]);
+    // Two-line variant (Bluefish wraps "Available log" / "space" onto two
+    // rows via a nested StackV — the single-line text is wider than rect4
+    // (100px), so it overflows into the "apply" action label below).
+    const LabelLines = (anchor: ReturnType<typeof createName>, lines: string[]) =>
+      Layer([
+        ref(anchor).name("a"),
+        spread(
+          { dir: "y", spacing: 0, alignment: "middle" },
+          lines.map((l) => text({ text: l, fontFamily: "serif", fontWeight: 300, fontSize: 18 }))
+        ).name("t"),
+      ]).constrain(({ a, t }) => [
+        Constraint.distribute({ dir: "y", spacing: 30 }, [a, t]),
+        Constraint.align({ x: "middle" }, [a, t]),
+      ]);
 
     const diskLogRow = spread({ dir: "x", spacing: 0, alignment: "start" }, [
       rect({ w: LEFT_COLUMN_WIDTH, h: 0, fill: "transparent" }).name(disklogleft),
@@ -284,25 +331,19 @@ export const DFSCQ: StoryObj<Args> = {
       Blocks(Array(3).fill(BLUE), 10),
     ]).name(diskdata);
 
+    // The 5 cells are borderless (Bluefish's originals pass no `stroke` — a
+    // GoFish `rect()` defaults `strokeWidth` to 0, so an unset stroke is
+    // invisible) — only the enclosing table gets a border, so the arrows
+    // appear to land inside one plain white box, not 5 bordered cells.
     const diskDataCells = spread({ dir: "x", spacing: 0, mode: "edge" }, [
-      rect({ w: DISK_DATA_WIDTH / 5, h: 40, fill: "white", stroke: "#999", strokeWidth: 1 }).name(
-        diskdata1
-      ),
-      rect({ w: DISK_DATA_WIDTH / 5, h: 40, fill: "white", stroke: "#999", strokeWidth: 1 }).name(
-        diskdata2
-      ),
-      rect({ w: DISK_DATA_WIDTH / 5, h: 40, fill: "white", stroke: "#999", strokeWidth: 1 }).name(
-        diskdata3
-      ),
-      rect({ w: DISK_DATA_WIDTH / 5, h: 40, fill: "white", stroke: "#999", strokeWidth: 1 }).name(
-        diskdata4
-      ),
-      rect({ w: DISK_DATA_WIDTH / 5, h: 40, fill: "white", stroke: "#999", strokeWidth: 1 }).name(
-        diskdata5
-      ),
+      rect({ w: DISK_DATA_WIDTH / 5, h: 40, fill: "white" }).name(diskdata1),
+      rect({ w: DISK_DATA_WIDTH / 5, h: 40, fill: "white" }).name(diskdata2),
+      rect({ w: DISK_DATA_WIDTH / 5, h: 40, fill: "white" }).name(diskdata3),
+      rect({ w: DISK_DATA_WIDTH / 5, h: 40, fill: "white" }).name(diskdata4),
+      rect({ w: DISK_DATA_WIDTH / 5, h: 40, fill: "white" }).name(diskdata5),
     ]).name(diskdataStack);
 
-    const diskDataTable = enclose({ padding: 5, fill: "none", stroke: "#ccc", strokeWidth: 1 }, [
+    const diskDataTable = enclose({ padding: 5, fill: "white", stroke: "black", strokeWidth: 3 }, [
       diskDataCells,
     ]);
 
@@ -311,7 +352,11 @@ export const DFSCQ: StoryObj<Args> = {
       diskDataTable.name("diskDataTable"),
     ]).constrain((c) => [
       Constraint.distribute({ dir: "y", spacing: 50 }, [c.diskdata, c.diskDataTable]),
-      Constraint.align({ x: "start" }, [c.diskdata, c.diskDataTable]),
+      // Centered (not start-aligned) so the disk-data row sits directly
+      // above the fan-out arrows' shared origin, which is itself centered
+      // over `diskDataTable` (see `fanoutAnchorLayer` below) — matching
+      // ground truth's converging fan under the row.
+      Constraint.align({ x: "middle" }, [c.diskdata, c.diskDataTable]),
     ]);
 
     const applierRow = spread({ dir: "x", spacing: 0, alignment: "start" }, [
@@ -402,7 +447,7 @@ export const DFSCQ: StoryObj<Args> = {
       Label(rect1, "Log header"),
       logDataAnchorLayer,
       Label(logDataAnchor, "Log data"),
-      Label(rect4, "Available log space"),
+      LabelLines(rect4, ["Available log", "space"]),
 
       // "commit"/"flush"/"apply" action labels — right-aligned against the
       // stage box that follows them (see `ActionLabel`).
@@ -431,23 +476,31 @@ export const DFSCQ: StoryObj<Args> = {
       // Dashed (Bluefish's `DashedFunnel`, `stroke-dasharray="5"`) — the new
       // `strokeDasharray` option on `line()` (Task 1) is what makes this
       // possible; previously the funnels had to render solid.
-      line({ stroke: "black", strokeWidth: 2, strokeDasharray: "5" }, [
-        ref(bigleftbracket),
-        ref(blocks1),
-      ]).zOrder(-1),
-      line({ stroke: "black", strokeWidth: 2, strokeDasharray: "5" }, [
-        ref(bigrightbracket),
-        ref(blocks2),
-      ]).zOrder(-1),
+      // `source`/`target` pin each end to a normalized bbox point instead of
+      // the default center (empirically here `"end"` on y lands at the
+      // rendered-bottom of the upper element and `"start"` at the
+      // rendered-top of the lower one) — so each funnel visibly converges at
+      // the bottom edge of the upper element and the top edge of the lower
+      // one, matching ground truth's tick-to-tick funnels, rather than
+      // piercing into the lower block's middle (only hidden before by the
+      // paint-order bug).
+      line(
+        { stroke: "black", strokeWidth: 2, strokeDasharray: "5", source: { y: "end" }, target: { y: "start" } },
+        [ref(bigleftbracket), ref(blocks1)]
+      ),
+      line(
+        { stroke: "black", strokeWidth: 2, strokeDasharray: "5", source: { y: "end" }, target: { y: "start" } },
+        [ref(bigrightbracket), ref(blocks2)]
+      ),
       // Funnel 2: DiskLog's middle ticks converge onto Applier's disk-data row.
-      line({ stroke: "black", strokeWidth: 2, strokeDasharray: "5" }, [
-        ref(rect2),
-        ref(diskdata),
-      ]).zOrder(-1),
-      line({ stroke: "black", strokeWidth: 2, strokeDasharray: "5" }, [
-        ref(rect4),
-        ref(diskdata),
-      ]).zOrder(-1),
+      line(
+        { stroke: "black", strokeWidth: 2, strokeDasharray: "5", source: { y: "end" }, target: { y: "start" } },
+        [ref(rect2), ref(diskdata)]
+      ),
+      line(
+        { stroke: "black", strokeWidth: 2, strokeDasharray: "5", source: { y: "end" }, target: { y: "start" } },
+        [ref(rect4), ref(diskdata)]
+      ),
 
       // commit arrow: LogAPI's active txn → GroupLog's tracked committed txn.
       arrow({ stretch: 0 }, [ref(activeTxnBlock), ref(committedTxnsBlock)]),
