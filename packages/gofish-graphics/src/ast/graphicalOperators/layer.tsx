@@ -2,7 +2,7 @@
 // @wiki Underlying Space — /internals/core/underlying-space
 // </gofish-wiki>
 
-import { GoFishNode, type ToPixel } from "../_node";
+import { GoFishNode, placeUnplacedChild, type ToPixel } from "../_node";
 import type { DisplayList } from "gofish-ir";
 import { shadowCheckScaleRoot } from "../solver/shadow";
 import { flattenForZOrder, topoSortByZOrder } from "../paintOrder";
@@ -431,8 +431,7 @@ export const layer = createNodeOperatorSequential(
             // tier laid out after them (see notes/nested-layer-tiers.md), not
             // rely on a re-layout pass here.
             for (const cp of childPlaceables) {
-              if (cp.dims[0].min === undefined) cp.place("x", 0, "baseline");
-              if (cp.dims[1].min === undefined) cp.place("y", 0, "baseline");
+              placeUnplacedChild(cp);
             }
           } else {
             // Default layer behavior: place all children at (0, 0)

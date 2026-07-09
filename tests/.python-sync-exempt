@@ -38,6 +38,14 @@ packages/gofish-graphics/stories/shapes/TextMarks.stories.tsx::PolarText
 # Docs regression test
 packages/gofish-graphics/stories/DocsContextRegression.stories.tsx
 
+# EncloseRefs regression probe: guards the enclose-around-refs collapse bug
+# (enclose used to unconditionally re-place already-placed children, e.g.
+# ref() operands, collapsing them onto one point). Uses only portable
+# constructs (layer/ref), but it's a layout regression repro, not a showpiece
+# spec meant for Python-parity coverage — same rationale as
+# DocsContextRegression above.
+packages/gofish-graphics/stories/lowlevel/EncloseRefs.stories.tsx
+
 # Benchmark plot stories: dev/bench tooling, not portable specs. They render
 # benchmark numbers injected at runtime via `window.__BENCH_RESULTS__` /
 # `__BENCH_HISTORY__` (with an embedded synthetic fallback) and use Math/window

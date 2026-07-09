@@ -158,6 +158,28 @@ export type Placeable = {
   pinAnchor?: (axis: FancyDirection, value: number, anchor: Anchor) => void;
 };
 
+/** Place a child at `(0, 0)` on whichever axes it hasn't already resolved a
+ *  position for — the "fresh vs. already-placed" child rule shared by every
+ *  operator that lays out already-placed operands (e.g. a `ref` whose
+ *  translate was reconciled against its LCA during its own `layout()`)
+ *  alongside fresh ones. `dims[axis].min === undefined` IS that placed/unplaced
+ *  signal (see `combineDims`): a fresh node reports an undefined translate
+ *  until placed, while an already-placed node (a ref, or any other
+ *  initially-placed target — see `isInitiallyPlaced` in
+ *  `constraints/placementLowering.ts`, the same rule) already has a
+ *  determined `min`, so re-placing it here would be a no-op-that-should-be —
+ *  except `GoFishRef.place()` has no ledger to make that a true no-op, so it
+ *  must not be called at all in that case. This is `layer`'s own
+ *  unplaced-child finalization (its constrained-children branch); `enclose`
+ *  reuses it verbatim rather than re-deriving the rule. */
+export function placeUnplacedChild(
+  child: Placeable,
+  anchor: Anchor = "baseline"
+): void {
+  if (child.dims[0].min === undefined) child.place("x", 0, anchor);
+  if (child.dims[1].min === undefined) child.place("y", 0, anchor);
+}
+
 // `scales` is the per-axis data→pixel affine scale handed down (the single
 // {@link AxisScale} carrier: `sigma` = pixels-per-data-unit for size, `map` =
 // the anchored data→pixel map). A node MUST NOT mutate this array: to establish
