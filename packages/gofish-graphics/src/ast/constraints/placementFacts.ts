@@ -40,10 +40,27 @@ export type AnchorParticipantFact = {
   owner: string;
 };
 
+/** A size-cell equation independent of any anchor (#726, align `"size"`): the
+ *  target's `size` box key := `value`, with no coupling to `min`/`max`/`center`.
+ *  Consumed directly by `closeSizes` — it feeds the SAME per-node `BBox` an
+ *  anchor pin would, so it combines with a companion anchor pin (from another
+ *  constraint or an authoritative position pin) to reach rank 2, but alone it
+ *  stays under-determined for POSITION (by design — "size" must not move the
+ *  target) while still being read back by `reduceToAxisProblem`'s strong-size
+ *  substitution. */
+export type SizePinFact = {
+  type: "size-pin";
+  node: NodeId;
+  axis: Axis;
+  value: number;
+  owner: string;
+};
+
 export type AnchorFact =
   | AnchorPinFact
   | AnchorRelationFact
-  | AnchorParticipantFact;
+  | AnchorParticipantFact
+  | SizePinFact;
 
 export type AnchorProgram = { axes: [AnchorFact[], AnchorFact[]] };
 
@@ -84,6 +101,15 @@ export type PlacementPinRequest = {
   owner: string;
 };
 
+/** Request a size-only equation on `name` (#726, align `"size"`) — see
+ *  {@link SizePinFact}. */
+export type PlacementSizePinRequest = {
+  axis: Axis;
+  name: NodeId;
+  value: number;
+  owner: string;
+};
+
 export type PlacementParticipant = {
   type: "participant";
   name: NodeId;
@@ -108,6 +134,7 @@ export interface PlacementFactEmitter {
   pin(request: PlacementPinRequest): void;
   include(request: PlacementParticipantRequest): void;
   relate(request: PlacementRelationRequest): void;
+  pinSize(request: PlacementSizePinRequest): void;
 }
 
 export const anchorExpr = (

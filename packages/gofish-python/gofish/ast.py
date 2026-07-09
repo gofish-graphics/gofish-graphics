@@ -673,11 +673,16 @@ class Constraint:
         Args:
             refs: List of RefSentinels (typically the kwargs given to the
                 constrain callback).
-            x: Optional `"start" | "middle" | "end"` — alignment on the
-                x-axis. Pass a list of the same length as `refs` to assign
-                one anchor per child positionally (e.g.
-                `["middle", "start"]` aligns the first child's center to
-                the second child's start).
+            x: Optional `"start" | "middle" | "end" | "baseline"` — alignment
+                on the x-axis. Also accepts the interval-statistic values
+                `"span"` (the target adopts the source's position AND size)
+                and `"size"` (the target adopts only the source's length,
+                without moving) — see the docs page for the unbound-target
+                scope these require. Pass a list of the same length as
+                `refs` to assign one point anchor per child positionally
+                (e.g. `["middle", "start"]` aligns the first child's center
+                to the second child's start) — `"span"`/`"size"` cannot
+                appear inside a list.
             y: Optional alignment on the y-axis. Same shape as `x`.
 
         At least one of `x` or `y` must be provided.

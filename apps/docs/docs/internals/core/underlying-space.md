@@ -344,7 +344,9 @@ composes its targets' spaces into the layer's claim on that axis:
   (A former POSITION's pixel extent at σ=1 is `width.run(1) = b−a`, so the
   unified `width`-based sum subsumes the old separate POSITION-sum branch.)
 - `Constraint.align` contributes the alignment fold (`alignSpaceFold` →
-  `resolveAlignmentSpace`) on its axis.
+  `resolveAlignmentSpace`) on its axis — but only for a point-anchor value;
+  `"span"`/`"size"` (#726, below) contribute nothing to the space fold, since
+  their target is UNDEFINED on that axis by construction.
 - `Constraint.nest` contributes the nesting fold (`nestedSpace`,
   `constraints/nest.ts`) and a deterministic dependency plan
   (`constraints/nestPlan.ts`). It is the first _size-setting_ constraint: on
@@ -395,6 +397,31 @@ composes its targets' spaces into the layer's claim on that axis:
   scatter channel such as `x: "lake"` lowers to discrete placement coordinates
   `i / count · axisSize`; those are placement coordinates, not datum values, so
   they become numeric placement facts without affecting the layer's data domain.
+
+- `align`'s `"span"`/`"size"` values (#726, `constraints/align.ts`) are the
+  **third** size-setting mechanism — ships the unbound-target case from the
+  "lingering open item" [[operators-vs-constraints]] flags (a bound target is
+  still an ownership conflict, not a silent write; see
+  [[operators-over-placed-nodes]] §3.5): `"span"` reads the source's
+  already-solved `(min, size)` at lowering time and emits two strong
+  `anchor-pin` facts on the target (`start`/`end`) — the same two-edge
+  cell-closure route `position`'s interval form uses, so it reaches rank 2
+  through the existing bbox machinery with no new solver phase. `"size"` needs
+  a genuinely rank-1 write (a size with **no** position coupling), which the
+  anchor-pin vocabulary can't express (every anchor maps to a `min`/`max`/
+  `center` box key) — it gets its own `SizePinFact`/`emitter.pinSize` that
+  writes the `size` box key directly. `closeSizes` reads a box's `size` key
+  even when the box never reaches rank 2 (a direct pin, not just the solved
+  system), so a size-pin with no companion anchor pin still surfaces a
+  determined size with no solved position; the write-back for that case is a
+  new rank-1 sibling of `setExtent`, `GoFishNode.setSizeOnly` (writes
+  `intrinsicDims[dir].size` only — no ledger, no translate), so the target's
+  position is left to whatever else determines it (a companion align, or the
+  parent-seed `placeUnplacedChild` fallback). Both values are scoped to an
+  **unbound** target — `spaceOn(axis)` is `UNDEFINED` (no `w`/`h`/data
+  binding on that axis) — checked before any fact is emitted; a bound target
+  is an ownership conflict, reported per the paragraph below rather than
+  clobbered.
 
 The layer composes these per axis — children not covered by a constraint
 max-union in as overlay siblings. On an axis a constraint **does** cover, that
@@ -490,7 +517,16 @@ closed box), else the node's local-frame anchor offset. `position`, `align`,
 go through BFS components + pin offsets + distribute/normalized-origin
 fallbacks. Every solved cell writes back through **one path**: a size-strong
 cell sets its extent (`setExtent({min, max})`), a position-only cell pins its
-`min` anchor — replacing the old three-way branch and the size side-channel.
+`min` anchor, a rank-1 size-with-no-position cell (align `"size"`, above)
+sets its size only (`setSizeOnly`) — replacing the old three-way branch and
+the size side-channel. `solvePlacementConstraints` throws on a bbox conflict
+(both intervals' owners named in the message) rather than the silent
+last-writer-wins an ungoverned second write would otherwise produce
+(#725/#726) — align `"span"`/`"size"` reuse this exact path for their
+unbound-target check, and `lowerAlignPlacement` separately warns (not
+throws) when a constraint ends up with nothing movable — every listed
+operand already placed — except the deliberate `isDataPositionedAlignTarget`
+skip (a self-scaled scatter facet), which stays silent.
 
 The placement-coordinate compiler preserves the literal/datum distinction until
 facts are emitted: literals are pixels, while datum coordinates elaborate

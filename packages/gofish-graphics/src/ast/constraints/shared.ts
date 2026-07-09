@@ -13,6 +13,14 @@ export type Alignment = "start" | "middle" | "end";
  *  solver normalizes that floating component so its minimum coordinate is 0. */
 export type AlignAnchor = Alignment | "baseline";
 
+/** The align constraint's full per-axis value grammar (#726): a point anchor
+ *  ({@link AlignAnchor}), or an interval statistic over the size cell —
+ *  `"size"` (equate lengths only; the target does not move) or `"span"`
+ *  (equate both endpoints: position AND size). `"span"`/`"size"` are align-only
+ *  — they name a relation the target has no intrinsic size for, not a point on
+ *  a box, so `position`/`distribute` do not accept them. */
+export type AlignValue = AlignAnchor | "span" | "size";
+
 /** Lightweight handle for referencing a named child inside .constrain() */
 export type ConstraintRef = { readonly name: string };
 

@@ -5,12 +5,14 @@
 import type { Placeable } from "../_node";
 import type {
   AlignAnchor,
+  AlignValue,
   Axis,
   ConstraintPosScales,
   ConstraintRef,
 } from "./shared";
 import { axisIndex } from "./shared";
 import type { UnderlyingSpace } from "../underlyingSpace";
+import { isUNDEFINED } from "../underlyingSpace";
 import { resolveAlignmentSpace } from "../graphicalOperators/alignment";
 import type { PlacementFactEmitter } from "./placementFacts";
 
@@ -33,12 +35,15 @@ export function alignSpaceFold(
 }
 
 /**
- * Anchor spec for one axis of an `align` constraint. A single anchor
+ * Value spec for one axis of an `align` constraint. A single anchor
  * is shared by every child (the common case). An array gives each child its
  * own anchor positionally — `align({x: ["middle", "start"]}, [A, B])` aligns
  * A's center with B's start. The array length must equal `children.length`.
+ * `"span"`/`"size"` (#726) are whole-constraint values, not per-child — a
+ * heterogeneous array of point anchors has no span/size equivalent, so they
+ * are rejected inside an array (see `normalizedAnchors`).
  */
-export type AlignAxisSpec = AlignAnchor | AlignAnchor[];
+export type AlignAxisSpec = AlignValue | AlignAnchor[];
 
 export interface AlignConstraint {
   type: "align";
@@ -64,7 +69,10 @@ export const createAlignConstraint = (
   return { type: "align", x, y, children };
 };
 
-function normalizedAnchors(spec: AlignAxisSpec, count: number): AlignAnchor[] {
+function normalizedAnchors(
+  spec: AlignAnchor | AlignAnchor[],
+  count: number
+): AlignAnchor[] {
   if (!Array.isArray(spec)) return new Array<AlignAnchor>(count).fill(spec);
   if (spec.length !== count) {
     throw new Error(
@@ -103,8 +111,79 @@ export function lowerAlignPlacement(
     isPinned: (axis: Axis, name: string) => boolean;
   }
 ): void {
+  /**
+   * `"span"`/`"size"` (#726): equate an interval statistic against the first
+   * PINNED (already-placed) child — the source — rather than a point anchor.
+   * Scope: the unbound-target case only (§3.5 of
+   * operators-over-placed-nodes.md) — a target with no intrinsic size on this
+   * axis (`isUNDEFINED` on its resolved space). A target that already has an
+   * intrinsic size is an ownership conflict (two writers for one cell): report
+   * it, don't clobber or silently skip.
+   */
+  const emitSpanOrSize = (axis: Axis, kind: "span" | "size") => {
+    const idx = axisIndex(axis);
+    const children = constraint.children.filter((child) =>
+      targets.has(child.name)
+    );
+    if (children.length < 2) return;
+    const sourceRef = children.find((child) => isPinned(axis, child.name));
+    if (!sourceRef) {
+      throw new Error(
+        `Constraint.align: "${kind}" on axis "${axis}" (${owner}) needs an ` +
+          `already-placed source — none of [${children
+            .map((c) => c.name)
+            .join(", ")}] is placed yet.`
+      );
+    }
+    const source = targets.get(sourceRef.name)!;
+    const sourceMin = source.dims[idx].min;
+    const sourceSize = source.dims[idx].size;
+    if (sourceMin === undefined || sourceSize === undefined) {
+      throw new Error(
+        `Constraint.align: "${kind}" on axis "${axis}" (${owner}) source ` +
+          `"${sourceRef.name}" has no resolved extent yet.`
+      );
+    }
+    for (const child of children) {
+      if (child.name === sourceRef.name) continue;
+      const target = targets.get(child.name)!;
+      const space = target.spaceOn?.(idx);
+      if (space === undefined || !isUNDEFINED(space)) {
+        throw new Error(
+          `Constraint.align: "${kind}" on axis "${axis}" (${owner}) cannot ` +
+            `set "${child.name}"'s ${
+              kind === "size" ? "size" : "position and size"
+            } — it already has an intrinsic ${
+              axis === "x" ? "width" : "height"
+            } (writer: "${child.name}"'s own size option). "${kind}" only ` +
+            `applies to a target with no intrinsic size on that axis.`
+        );
+      }
+      if (kind === "span") {
+        emitter.pin({
+          axis,
+          target: { name: child.name, anchor: "start" },
+          value: sourceMin,
+          owner,
+        });
+        emitter.pin({
+          axis,
+          target: { name: child.name, anchor: "end" },
+          value: sourceMin + sourceSize,
+          owner,
+        });
+      } else {
+        emitter.pinSize({ axis, name: child.name, value: sourceSize, owner });
+      }
+    }
+  };
+
   const emit = (axis: Axis, spec: AlignAxisSpec | undefined) => {
     if (spec === undefined) return;
+    if (spec === "span" || spec === "size") {
+      emitSpanOrSize(axis, spec);
+      return;
+    }
     const children = constraint.children.filter((child) =>
       targets.has(child.name)
     );
@@ -126,12 +205,34 @@ export function lowerAlignPlacement(
     // writes. Faceted scatter panels, where every panel is already
     // data-positioned, still contribute no write targets.
     const source = entries.find(({ child }) => isPinned(axis, child.name));
-    const movable = entries.filter(({ child, anchor }) => {
-      if (isPinned(axis, child.name)) return false;
+    const nonPinned = entries.filter(
+      ({ child }) => !isPinned(axis, child.name)
+    );
+    const movable = nonPinned.filter(({ child, anchor }) => {
       const target = targets.get(child.name);
       return !isDataPositionedAlignTarget(target, anchor, idx, posScales);
     });
-    if (movable.length === 0) return;
+    if (movable.length === 0) {
+      // Nothing this constraint can write is either the deliberate
+      // data-positioned skip (scatter facets — stay silent, `align` never
+      // fights a self-scaled panel) or a genuine "every operand is already
+      // placed" no-op, which is worth an honest diagnostic (#725 item 6)
+      // rather than a silent nothing.
+      const allDataPositioned =
+        nonPinned.length > 0 &&
+        nonPinned.every(({ child, anchor }) => {
+          const target = targets.get(child.name);
+          return isDataPositionedAlignTarget(target, anchor, idx, posScales);
+        });
+      if (!allDataPositioned) {
+        console.warn(
+          `[align] ${owner} on axis "${axis}": nothing movable — every ` +
+            `operand [${children.map((c) => c.name).join(", ")}] is ` +
+            `already placed.`
+        );
+      }
+      return;
+    }
 
     if (source) {
       for (const target of movable) {

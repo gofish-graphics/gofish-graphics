@@ -156,6 +156,18 @@ export type Placeable = {
    *  Handles `baseline` too, so a scatter override never bypasses the ledger.
    *  Optional for the same reason as `setExtent` (a `ref` stand-in omits it). */
   pinAnchor?: (axis: FancyDirection, value: number, anchor: Anchor) => void;
+  /** Write ONLY this axis's size, leaving position untouched (#726, align
+   *  `"size"`) — the genuinely rank-1 sibling of `setExtent`'s rank-2 write
+   *  (which requires ≥2 keys and refuses a lone `size`, since that alone
+   *  can't determine a position; here that's the point). Optional for the
+   *  same reason as `setExtent`/`pinAnchor`. */
+  setSizeOnly?: (axis: FancyDirection, size: number, owner?: string) => void;
+  /** This target's resolved {@link UnderlyingSpace} on `dir`, when known — the
+   *  unbound-target test for align `"span"`/`"size"` (#726): `isUNDEFINED` on
+   *  this means the target has no intrinsic size/position on that axis (a bare
+   *  `rect({})`), so the size cell is free for the constraint to own. Optional
+   *  for the same reason as the other constraint write hooks. */
+  spaceOn?: (dir: Direction) => UnderlyingSpace | undefined;
 };
 
 /** Place a child at `(0, 0)` on whichever axes it hasn't already resolved a
@@ -1231,6 +1243,29 @@ export class GoFishNode {
       value -
       localAnchorPoint(anchor, intrinsic?.min ?? 0, intrinsic?.size ?? 0);
     this._clearTranslateIfSolved(dir);
+  }
+
+  /**
+   * Write ONLY this axis's size (#726, align `"size"`) — no bbox ledger, no
+   * translate write. Overwrites whatever the node's own layout computed for
+   * `size` (e.g. a bare rect's baked `DEFAULT_RECT_SIZE`) in place, so a
+   * subsequent position write (a companion align, or the parent-seed
+   * `placeUnplacedChild` fallback) still lands normally — this genuinely does
+   * not participate in position resolution at all.
+   */
+  public setSizeOnly(
+    axis: FancyDirection,
+    size: number,
+    _owner?: string
+  ): void {
+    const dir = elaborateDirection(axis);
+    if (!this.intrinsicDims) this.intrinsicDims = [];
+    this.intrinsicDims[dir] = { ...(this.intrinsicDims[dir] ?? {}), size };
+  }
+
+  /** {@link Placeable.spaceOn} */
+  public spaceOn(dir: Direction): UnderlyingSpace | undefined {
+    return this._underlyingSpace?.[dir];
   }
 
   /** Lazily ensure `transform.translate` exists (preserving any `scale`) and

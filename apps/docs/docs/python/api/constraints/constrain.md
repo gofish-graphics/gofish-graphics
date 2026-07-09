@@ -64,6 +64,38 @@ a scaled axis uses the scale origin `posScale(0)`, a pixel-pure axis uses the
 layer's own edge (`start` = 0, `middle` = midpoint, `end` = full extent,
 `baseline` = layer origin).
 
+### `"span"` and `"size"`
+
+`x` / `y` also accept `"span"` and `"size"` — an **interval statistic** rather
+than a point anchor, equating the size cell itself:
+
+- `"span"` — the target adopts the source's **both** endpoints: position AND
+  size (e.g. a border rect that exactly bounds a placed group).
+- `"size"` — the target adopts only the source's **length**, without moving
+  (e.g. a divider that matches a stack's width but is positioned
+  independently).
+
+As with the point-anchor form, the source is the first already-placed ref;
+every other listed ref is a target.
+
+```python
+layer([group, rect(fill="none", stroke="#333").name("border")]).constrain(
+    lambda group, border: [
+        Constraint.align([group, border], x="span"),  # border adopts group's left AND right
+        Constraint.align([group, border], y="span"),  # together: border exactly bounds the group
+    ]
+)
+```
+
+**Unbound-target scope**: `"span"`/`"size"` only apply when the target has
+**no intrinsic size** on that axis (a bare `rect()` with no `w`/`h`/data
+binding on that axis). If the target already has an intrinsic size, this is
+an ownership conflict — GoFish raises a structured error naming the
+constraint and the target's own size option, rather than silently clobbering
+or skipping it. Fractional/two-sided anchors, offsets, and cross-axis length
+matching are not supported. `"span"`/`"size"` are whole-constraint values and
+cannot appear inside a per-ref list.
+
 ### Per-ref anchors
 
 The list form of `x` / `y` expresses "edges share" relations directly — the

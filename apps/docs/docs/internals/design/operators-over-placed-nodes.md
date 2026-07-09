@@ -562,17 +562,26 @@ parity suite for anything touching IR). Work items 3–7 are tracked by
    [#681](https://github.com/gofish-graphics/gofish-graphics/issues/681) claim/scope
    vocabulary settled. Unblocks `FlowerChart` (and gives `LabeledChart` a home if its
    `resolve`-driven variant returns).
-6. **Ownership errors (S–M, prerequisite for opening the vocabulary).** Record an owner per
-   (node, axis, cell) — O(1) per write — and report a structured error naming both writers
-   (Bluefish's `bboxOwners`, as [[constraints-as-core]] already recommends), replacing the
-   silent second-write no-op. An open `relate()` vocabulary with silent conflict swallowing
-   reproduces Bluefish's action-at-a-distance debugging stories; the error must land first
-   or with it. Also turns "arrangement over operands that are all already placed, with
-   nothing movable" from a silent no-op into an honest diagnostic.
-7. **`"span"` and `"size"` alignment values (M).** Per §3.5: the unbound-target case only
-   (target has no intrinsic size on that axis), ownership error otherwise. Evidence-backed
-   by all five Bluefish `LayoutFunction` sites; unblocks the brownie/DFSCQ/ohm gallery
-   ports and the table-as-constraint-folds thread
+6. ✅ **Ownership errors (S–M, prerequisite for opening the vocabulary). SHIPPED (#725 core)
+   alongside item 7.** The placement solver's rank-2 bbox (`constraints/bbox.ts`) already
+   recorded an owner per equation and returned a structured `BBoxConflict`; what shipped here
+   is `solvePlacementConstraints` throwing on it (naming both writers, their asserted/implied
+   values, the axis) instead of a silent second-write no-op, plus a `console.warn` in
+   `lowerAlignPlacement` when a constraint's operands are all already placed and nothing is
+   movable — except the deliberate `isDataPositionedAlignTarget` skip (a self-scaled scatter
+   facet stays silent). The general per-(node,axis,cell) owner ledger across every `place()`
+   call site (item 6's original full scope — seed-vs-assert write strength, threading an
+   `owner` string through every operator) is NOT done; only the constraint-solver write-back
+   path (already the one with real ownership data) got the throw. Still open.
+7. ✅ **`"span"` and `"size"` alignment values (M). SHIPPED.** Per §3.5: the unbound-target case
+   only (target has no intrinsic size on that axis — checked via the target's
+   `spaceOn`/`isUNDEFINED`), ownership error otherwise, reusing item 6's throw path. `"span"`
+   reduces to `position`'s existing two-edge-pin route (`constraints/align.ts`); `"size"` needed
+   a genuinely rank-1 size-only write with no position coupling, added as a new
+   `SizePinFact`/`emitter.pinSize` fact kind and a `GoFishNode.setSizeOnly` write-back sibling
+   of `setExtent`. Evidence-backed by all five Bluefish `LayoutFunction` sites; unblocks the
+   brownie/DFSCQ/ohm gallery ports (not yet done — this item is the primitive, not the ports)
+   and the table-as-constraint-folds thread
    ([#548](https://github.com/gofish-graphics/gofish-graphics/issues/548)).
 
 **What this does to #591:** items (1)–(2) un-exempt two of its four stories with no bridge

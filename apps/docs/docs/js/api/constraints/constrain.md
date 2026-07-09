@@ -42,14 +42,34 @@ Aligns a set of children to a shared edge or center on one or both axes. At leas
 Constraint.align({ x?, y? }, [ref1, ref2, ...])
 ```
 
-| Option | Type                           | Default | Description                                                           |
-| ------ | ------------------------------ | ------- | --------------------------------------------------------------------- |
-| `x`    | `AlignAnchor \| AlignAnchor[]` | —       | Edge/center/origin to align on the x axis (omit to leave x untouched) |
-| `y`    | `AlignAnchor \| AlignAnchor[]` | —       | Edge/center/origin to align on the y axis (omit to leave y untouched) |
+| Option | Type                          | Default | Description                                                                 |
+| ------ | ----------------------------- | ------- | --------------------------------------------------------------------------- |
+| `x`    | `AlignValue \| AlignAnchor[]` | —       | Value/edge/center/origin to align on the x axis (omit to leave x untouched) |
+| `y`    | `AlignValue \| AlignAnchor[]` | —       | Value/edge/center/origin to align on the y axis (omit to leave y untouched) |
 
-`AlignAnchor` is `"start" \| "middle" \| "end" \| "baseline"`. The first three anchor a child by its bounding-box edge or center. `"baseline"` anchors a child by its **origin** (its local 0 point) instead of its box. With no placed sibling the fallback is the **axis origin**: the scale's zero (`posScale(0)`) on a scaled axis, the layer's origin on a pixel-pure one. On a pixel-pure axis, `align({ y: "baseline" })` thus means "stay where you were laid out" — regardless of how far its box overhangs the origin (a bar dipping below zero, axis labels hanging under a chart). For an unconditional origin pin regardless of axis, use `Constraint.position({ x: 0, y: 0, anchor: "baseline" })`. Pass a single value to share one anchor across every child (the common case); pass an array to assign one anchor _per child_ positionally — the array length must equal the number of children.
+`AlignValue` is `AlignAnchor | "span" | "size"`, where `AlignAnchor` is `"start" \| "middle" \| "end" \| "baseline"`. The first three anchor a child by its bounding-box edge or center. `"baseline"` anchors a child by its **origin** (its local 0 point) instead of its box. With no placed sibling the fallback is the **axis origin**: the scale's zero (`posScale(0)`) on a scaled axis, the layer's origin on a pixel-pure one. On a pixel-pure axis, `align({ y: "baseline" })` thus means "stay where you were laid out" — regardless of how far its box overhangs the origin (a bar dipping below zero, axis labels hanging under a chart). For an unconditional origin pin regardless of axis, use `Constraint.position({ x: 0, y: 0, anchor: "baseline" })`. Pass a single value to share one anchor across every child (the common case); pass an array to assign one anchor _per child_ positionally — the array length must equal the number of children (`"span"`/`"size"` are whole-constraint values and cannot appear inside a per-child array).
 
 The first already-placed child in the list acts as the anchor on each specified axis (read at _that child's_ anchor). Unplaced children are moved to match it (placed at _their own_ anchor). If no child is placed yet, the fallback depends on the axis's underlying space: a scaled axis uses the scale origin `posScale(0)`, a pixel-pure axis uses the layer's own edge (`start` = 0, `middle` = midpoint, `end` = full extent, `baseline` = layer origin). When both `x` and `y` are given, x is resolved before y.
+
+### `"span"` and `"size"`
+
+`"span"` and `"size"` name an **interval statistic** rather than a point anchor — they equate the size cell itself, not just a position on it:
+
+- `"span"` — the target adopts the source's **both** endpoints: position AND size (e.g. a border rect that exactly bounds a placed group).
+- `"size"` — the target adopts only the source's **length**, without moving (e.g. a divider that matches a stack's width but is positioned independently).
+
+Like the point-anchor form, the source is the first already-placed child; every other listed child is a target.
+
+```ts
+Layer([group, rect({ fill: "none", stroke: "#333" }).name("border")]).constrain(
+  ({ group, border }) => [
+    Constraint.align({ x: "span" }, [group, border]), // border adopts group's left AND right
+    Constraint.align({ y: "span" }, [group, border]), // together: border exactly bounds the group
+  ]
+);
+```
+
+**Unbound-target scope**: `"span"`/`"size"` only apply when the target has **no intrinsic size** on that axis (a bare `rect({})` with no `w`/`h`/data binding on that axis). If the target already has an intrinsic size, this is an ownership conflict — GoFish throws a structured error naming the constraint and the target's own size option, rather than silently clobbering or skipping it. Fractional/two-sided anchors, offsets, and cross-axis length matching are not supported.
 
 ### Per-child anchors
 
