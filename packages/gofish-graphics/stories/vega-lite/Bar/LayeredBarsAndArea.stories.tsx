@@ -5,14 +5,13 @@ import {
   spread,
   stack,
   group,
-  derive,
   rect,
   ribbon,
   layer,
   selectAll,
   palette,
-  orderBy,
   project,
+  field,
 } from "../../../src/lib";
 import data from "vega-datasets";
 
@@ -45,8 +44,7 @@ export const Default: StoryObj<Args> = {
         .flow(
           spread({ by: "variety", dir: "x", spacing: 20 }),
           spread({ by: "year", dir: "x", spacing: 40 }),
-          derive((d) => orderBy(d, "yield", "asc")),
-          stack({ by: "site", dir: "y" })
+          stack({ by: field("site").sort("yield"), dir: "y" })
         )
         .mark(rect({ h: "yield", fill: "site" }).name("bars")),
       chart(selectAll("bars"))
@@ -83,8 +81,7 @@ export const TwoSites: StoryObj<Args> = {
         .flow(
           spread({ by: "variety", dir: "x", spacing: 20 }),
           spread({ by: "year", dir: "x", spacing: 40 }),
-          derive((d) => orderBy(d, "yield", "asc")),
-          stack({ by: "site", dir: "y" })
+          stack({ by: field("site").sort("yield"), dir: "y" })
         )
         .mark(rect({ h: "yield", fill: "site" }).name("bars")),
       chart(selectAll("bars"))
@@ -130,8 +127,7 @@ export const HoistedVarietySpread: StoryObj<Args> = {
           chart()
             .flow(
               spread({ by: "year", dir: "x", spacing: 40 }),
-              derive((rows) => orderBy(rows, "yield", "asc")),
-              stack({ by: "site", dir: "y" })
+              stack({ by: field("site").sort("yield"), dir: "y" })
             )
             .mark(rect({ h: "yield", fill: "site" }).name("bars")),
           chart(selectAll("bars"))

@@ -483,6 +483,23 @@ function walkRefType(
     case "ConstraintIR":
       walkConstraint(value, path, ctx);
       return;
+    case "FieldAccessor":
+      if (!isObject(value)) {
+        ctx.errors.push({
+          path,
+          message: `expected a field(...) accessor object, got ${typeNameOf(value)}`,
+        });
+        return;
+      }
+      if (value.type !== "field") {
+        ctx.errors.push({
+          path: `${path}.type`,
+          message: `expected type "field", got ${JSON.stringify(value.type)}`,
+        });
+        return;
+      }
+      walkFieldAccessor(value, path, ctx);
+      return;
     default:
       // Unknown ref name — permissive (forward-compat), mirrors the rest of
       // this validator's stance on shapes it doesn't recognize yet.
@@ -592,19 +609,7 @@ function walkChannelValue(value: unknown, path: string, ctx: Context): void {
     return;
   }
   if (obj.type === "field") {
-    if (typeof obj.name !== "string") {
-      ctx.errors.push({
-        path: `${path}.name`,
-        message: 'field channel must have a string "name"',
-      });
-    }
-    // Optional unit annotation (field(name, measure)); a string when present.
-    if (obj.measure !== undefined && typeof obj.measure !== "string") {
-      ctx.errors.push({
-        path: `${path}.measure`,
-        message: 'field "measure" must be a string when present',
-      });
-    }
+    walkFieldAccessor(obj, path, ctx);
     return;
   }
   if (obj.type === "literal") {
@@ -617,6 +622,114 @@ function walkChannelValue(value: unknown, path: string, ctx: Context): void {
     return;
   }
   // Permissive fallback: allow unknown object shapes for forward-compat.
+}
+
+/**
+ * Explicit field-accessor form (`field(name, measure?)`), optionally with a
+ * chained `ops` pipeline (`field("site").sort("yield")` /
+ * `field("count").normalize()` — #700). Shared by `walkChannelValue`'s
+ * `type: "field"` branch and `walkRefType`'s `FieldAccessor` case (the `by`
+ * slot on spread/stack/group/scatter — see descriptors.ts).
+ */
+function walkFieldAccessor(
+  obj: Record<string, unknown>,
+  path: string,
+  ctx: Context
+): void {
+  if (typeof obj.name !== "string") {
+    ctx.errors.push({
+      path: `${path}.name`,
+      message: 'field accessor must have a string "name"',
+    });
+  }
+  // Optional unit annotation (field(name, measure)); a string when present.
+  if (obj.measure !== undefined && typeof obj.measure !== "string") {
+    ctx.errors.push({
+      path: `${path}.measure`,
+      message: 'field "measure" must be a string when present',
+    });
+  }
+  if (obj.ops !== undefined) {
+    if (!Array.isArray(obj.ops)) {
+      ctx.errors.push({
+        path: `${path}.ops`,
+        message: 'field "ops" must be an array of pipeline ops when present',
+      });
+    } else {
+      obj.ops.forEach((op, i) => walkFieldOp(op, `${path}.ops[${i}]`, ctx));
+    }
+  }
+}
+
+/** Known `field(...)` pipeline op names — mirrors gofish-graphics'
+ *  `FieldOp` (`ast/fieldExpr.ts`) exactly. */
+const FIELD_OP_NAMES = [
+  "sort",
+  "reverse",
+  "bin",
+  "normalize",
+  "sum",
+  "mean",
+  "count",
+  "distinct",
+] as const;
+
+/** One op in a `field(...)` pipeline. Rejects an unrecognized op name
+ *  consistently with this validator's other enum-style checks. */
+function walkFieldOp(value: unknown, path: string, ctx: Context): void {
+  if (!isObject(value)) {
+    ctx.errors.push({
+      path,
+      message: `field op must be an object, got ${typeNameOf(value)}`,
+    });
+    return;
+  }
+  if (
+    typeof value.op !== "string" ||
+    !(FIELD_OP_NAMES as readonly string[]).includes(value.op)
+  ) {
+    ctx.errors.push({
+      path: `${path}.op`,
+      message: `field op "op" must be one of ${FIELD_OP_NAMES.join(", ")}, got ${JSON.stringify(
+        value.op
+      )}`,
+    });
+    return;
+  }
+  switch (value.op) {
+    case "sort":
+      optionalField(value, "by", path, ctx, expectString);
+      if (
+        value.order !== undefined &&
+        value.order !== "asc" &&
+        value.order !== "desc"
+      ) {
+        ctx.errors.push({
+          path: `${path}.order`,
+          message: `sort "order" must be "asc" | "desc", got ${JSON.stringify(value.order)}`,
+        });
+      }
+      return;
+    case "bin":
+      if (
+        value.thresholds !== undefined &&
+        typeof value.thresholds !== "number" &&
+        !(
+          Array.isArray(value.thresholds) &&
+          value.thresholds.every((t) => typeof t === "number")
+        )
+      ) {
+        ctx.errors.push({
+          path: `${path}.thresholds`,
+          message:
+            'bin "thresholds" must be a number or an array of numbers when present',
+        });
+      }
+      return;
+    default:
+      // reverse/normalize/sum/mean/count/distinct carry no extra fields.
+      return;
+  }
 }
 
 /**

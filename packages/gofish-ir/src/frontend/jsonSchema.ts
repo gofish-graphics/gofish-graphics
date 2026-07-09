@@ -359,6 +359,83 @@ export const FRONTEND_IR_JSON_SCHEMA = {
         },
       ],
     },
+    FieldAccessor: {
+      description:
+        'Explicit field-accessor form, emitted by field(name, measure?). Optionally carries a chained pipeline (ops) — field("site").sort("yield") or field("count").normalize(). Two disjoint slots consume ops: a `by` (grouping key) slot accepts the domain ops (sort/reverse/bin); a value (size/pos) channel slot accepts the aggregate ops (sum/mean/count/distinct) and, only on an operator\'s entry-flagged size channel, normalize.',
+      type: "object",
+      required: ["type", "name"],
+      properties: {
+        type: { const: "field" },
+        name: { type: "string" },
+        measure: {
+          type: "string",
+          description:
+            "Optional unit annotation for the channel's underlying space (a type claim; see field(name, measure)).",
+        },
+        ops: {
+          type: "array",
+          items: { $ref: "#/$defs/FieldOpIR" },
+        },
+      },
+    },
+    FieldOpIR: {
+      description:
+        "One op in a field(...) pipeline. Mirrors gofish-graphics' FieldOp (ast/fieldExpr.ts) exactly.",
+      oneOf: [
+        {
+          type: "object",
+          required: ["op"],
+          properties: {
+            op: { const: "sort" },
+            by: { type: "string" },
+            order: { enum: ["asc", "desc"] },
+          },
+        },
+        {
+          type: "object",
+          required: ["op"],
+          properties: { op: { const: "reverse" } },
+        },
+        {
+          type: "object",
+          required: ["op"],
+          properties: {
+            op: { const: "bin" },
+            thresholds: {
+              oneOf: [
+                { type: "number" },
+                { type: "array", items: { type: "number" } },
+              ],
+            },
+          },
+        },
+        {
+          type: "object",
+          required: ["op"],
+          properties: { op: { const: "normalize" } },
+        },
+        {
+          type: "object",
+          required: ["op"],
+          properties: { op: { const: "sum" } },
+        },
+        {
+          type: "object",
+          required: ["op"],
+          properties: { op: { const: "mean" } },
+        },
+        {
+          type: "object",
+          required: ["op"],
+          properties: { op: { const: "count" } },
+        },
+        {
+          type: "object",
+          required: ["op"],
+          properties: { op: { const: "distinct" } },
+        },
+      ],
+    },
     MarkIR: {
       oneOf: [
         { $ref: "#/$defs/LeafMarkIR" },
@@ -545,19 +622,7 @@ export const FRONTEND_IR_JSON_SCHEMA = {
         { type: "number" },
         { type: "boolean" },
         { type: "null" },
-        {
-          type: "object",
-          required: ["type", "name"],
-          properties: {
-            type: { const: "field" },
-            name: { type: "string" },
-            measure: {
-              type: "string",
-              description:
-                "Optional unit annotation for the channel's underlying space (a type claim; see field(name, measure)).",
-            },
-          },
-        },
+        { $ref: "#/$defs/FieldAccessor" },
         {
           type: "object",
           required: ["type", "value"],

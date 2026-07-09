@@ -22,16 +22,16 @@ spread(*, by=None, dir, **options) -> Operator
 
 ## Parameters
 
-| Parameter   | Type                | Description                                                                                                                                                                                                                                                                                          |
-| ----------- | ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `by`        | `str` \| `Callable` | Field, dotted path, or callable to partition by (see [path-aware `by`](#path-aware-by)). Omit to spread per row.                                                                                                                                                                                     |
-| `dir`       | `"x"` \| `"y"`      | **Required.** Axis to lay groups out along.                                                                                                                                                                                                                                                          |
-| `spacing`   | `int`               | Gap between groups in pixels. Ignored when `glue=True`.                                                                                                                                                                                                                                              |
-| `alignment` | `str`               | Cross-axis alignment of the groups.                                                                                                                                                                                                                                                                  |
-| `glue`      | `bool`              | Glue children together: collapse data-driven sizes into a single positional axis at this level. [`stack`](/python/api/operators/stack) sets this.                                                                                                                                                    |
-| `w`, `h`    | `int` \| `str`      | Fixed pixel size, or a field name sizing this operator's box from data (data-driven operator extent — e.g. a mosaic's column width).                                                                                                                                                                 |
-| `normalize` | `bool`              | Space-filling spine: make the layout axis fill its extent in proportion to child size (the mosaic/marimekko conditional axis). Pure layout — data is not mutated, so a cross-axis `w`/`h` size still reads the raw marginal sum. See [Space-filling spines](#space-filling-spines-mosaic-marimekko). |
-| `label`     | `bool`              | Whether to emit an axis label for the partition field.                                                                                                                                                                                                                                               |
+| Parameter   | Type                                     | Description                                                                                                                                                                                                                                                                                                  |
+| ----------- | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `by`        | `str` \| `field(...)` \| `Callable`      | Field, dotted path, [`field(...)`](#field-expression-pipeline) accessor, or callable to partition by (see [path-aware `by`](#path-aware-by)). Omit to spread per row.                                                                                                                                        |
+| `dir`       | `"x"` \| `"y"`                           | **Required.** Axis to lay groups out along.                                                                                                                                                                                                                                                                  |
+| `spacing`   | `int`                                    | Gap between groups in pixels. Ignored when `glue=True`.                                                                                                                                                                                                                                                      |
+| `alignment` | `str`                                    | Cross-axis alignment of the groups.                                                                                                                                                                                                                                                                          |
+| `glue`      | `bool`                                   | Glue children together: collapse data-driven sizes into a single positional axis at this level. [`stack`](/python/api/operators/stack) sets this.                                                                                                                                                            |
+| `w`, `h`    | `int` \| `str`                           | Fixed pixel size, or a field name sizing this operator's own box from data (data-driven operator extent — e.g. a mosaic's column width).                                                                                                                                                                     |
+| `size`      | `int` \| `str` \| `field(...)` \| `list` | Per-entry stack-axis extent — a field name, a [`field(...)`](#field-expression-pipeline) accessor, or an explicit list with one value per split entry. `size=field("count").normalize()` makes the stack axis a **space-filling spine**. See [Space-filling spines](#space-filling-spines-mosaic-marimekko). |
+| `label`     | `bool`                                   | Whether to emit an axis label for the partition field.                                                                                                                                                                                                                                                       |
 
 Returns an `Operator` for use inside [`.flow()`](/python/api/core/flow).
 
@@ -53,12 +53,14 @@ chart(seafood).flow(
 
 ## Path-aware `by` {#path-aware-by}
 
-`by` accepts a **field name**, a **dotted path string**, or a **callable**:
+`by` accepts a **field name**, a **dotted path string**, a **callable**, or a
+[`field(...)`](#field-expression-pipeline) accessor:
 
 ```python
 spread(by="species", dir="x")            # field on a raw record
 spread(by="datum.species", dir="x")      # path (e.g. after a selection)
 spread(by=lambda r: r.datum.species, dir="x")  # callable escape hatch
+spread(by=field("species").sort(), dir="x")    # field(...) accessor
 ```
 
 Path strings matter after a `ref` / `selectAll` selection: the stream items are then
@@ -114,32 +116,96 @@ Do **not** "consistency-refactor" channels into `datum.count` — a channel like
 Only `by` (on `group`/`spread`/`stack`/`scatter`) is path-aware, because only
 `by` sees the selection stream.
 
+## Field-expression pipeline {#field-expression-pipeline}
+
+`field(name)` returns a chainable accessor — a builder where each method
+appends one op to an ordered pipeline. It works in two disjoint places:
+
+- As `by` (a **domain** slot): `.sort(by=None, order=None)`, `.reverse()`,
+  and `.bin(thresholds=None)` decide **which groups exist and in what
+  order**.
+- As a mark or `size` channel value (a **value** slot): `.sum()`, `.mean()`,
+  `.count()`, and `.distinct()` **fold a group's rows to one number**,
+  overriding the channel's own default aggregation (sum for size, mean for
+  position).
+
+Mixing the two — an aggregate op on `by`, or a domain op on a value channel —
+raises.
+
+**Sort a stack's groups by another field's total**, instead of data order:
+
+```python
+# Bars ordered ascending by their own total `value`
+chart(data).flow(
+    spread(by=field("category").sort("value"), dir="x")
+).mark(rect(h="value"))
+```
+
+Omit the `by` argument to sort by the group key itself; pass
+`order="desc"` for descending.
+
+**Bin a numeric field into groups** — a histogram, with no precomputed bins:
+
+```python
+# One bar per ~10 auto-computed bins of `age`, height = row count per bin
+chart(data).flow(
+    spread(by=field("age").bin(), dir="x")
+).mark(rect(h=field("age").count()))
+```
+
+Empty bins are dropped, like an ordinary group-by. Pass
+`field("age").bin(5)` (a count) or explicit thresholds (a list) to control
+the binning.
+
+**Override a channel's default aggregation:**
+
+```python
+# The bar height is each species' MEAN weight, not the sum
+chart(data).flow(
+    spread(by="species", dir="x")
+).mark(rect(h=field("weight").mean()))
+```
+
+`.count()` and `.distinct()` report measure `"count"` (they're counts, not the
+source field's own units) unless you annotate the accessor explicitly:
+`field("id", measure="my-measure").distinct()`.
+
 ## Space-filling spines (mosaic / marimekko) {#space-filling-spines-mosaic-marimekko}
 
-`normalize=True` turns a stack into a **space-filling spine**: its segments fill
-the whole extent in proportion to their size, so the axis reads as a local
-0–100% conditional distribution. It is pure layout — the data is never mutated —
-so the same field can drive both a cross-axis marginal size and the normalized
-fill. Nest two stacks on alternating axes for a mosaic: the outer sizes each
-column by its raw total (`w="count"` — the marginal), the inner `normalize`s to
-fill each column's height by share (the conditional).
+`size=field(<name>).normalize()` turns a stack's entries into a
+**space-filling spine**: each entry's size becomes its SHARE of the window
+(the operator's own split entries, `v_e / Σv_e`), so the axis reads as a local
+0–100% conditional distribution. It replaces the removed `normalize=True`
+layout flag — `.normalize()` is a **data** transform on the `size` channel (a
+windowed share, computed once up front), not a layout mode, so the same field
+can drive both a cross-axis marginal size and the normalized fill with no
+preprocessing.
+
+Nest two stacks on alternating axes for a mosaic: the outer sizes each column
+by its raw total (`size="count"` — the marginal), the inner `size`s by each
+entry's share (the conditional):
 
 ```python
 (
     chart(passengers, axes=True)
     .flow(
         # columns by class — width ∝ each class's count (marginal)
-        stack(by="pclass", dir="x"),
+        stack(by="pclass", dir="x", size="count"),
         # survival share within each column (conditional), filling height
-        stack(by="survived", dir="y", w="count", normalize=True),
+        stack(by="survived", dir="y", size=field("count").normalize()),
     )
-    .mark(rect(h="count", fill="survived"))
+    .mark(rect(fill="survived", stroke="white", strokeWidth=1))
     .render(w=400, h=300)
 )
 ```
 
 ::: gofish example:titanic-survival-mosaic hidden
 :::
+
+`.normalize()` composes to any depth: a third alternating level gives a nested
+mosaic (`class → sex → survived`). Because each level's stacking axis is a
+local self-scaling region and the count is read raw everywhere, the marginal ×
+conditional × … area factorization holds all the way down.
 
 ::: warning
 Inner conditional axes are local scopes, so they don't yet render 0–1 tick

@@ -10,6 +10,8 @@ covers:
   - packages/gofish-graphics/src/ast/graphicalOperators/layer.tsx
   - packages/gofish-graphics/src/ast/channels.ts
   - packages/gofish-graphics/src/ast/data.ts
+  - packages/gofish-graphics/src/ast/fieldExpr.ts
+  - packages/gofish-graphics/src/ast/datumProjection.ts
   - packages/gofish-graphics/src/ast/constraints/folds.ts
   - packages/gofish-graphics/src/ast/constraints/proposalPlan.ts
   - packages/gofish-graphics/src/ast/constraints/compose.ts
@@ -750,15 +752,16 @@ The payoff is conceptual economy: "fill the container proportionally" is not
 a bespoke layout mode, it is what a size scale already does once its range is
 the parent's extent.
 
-## Self-scaling regions: an explicit pixel size absorbs an axis
+## Self-scaling regions: an explicit or data-valued size absorbs an axis
 
 The root resolves its scales against the canvas: POSITION → a posScale onto
 the pixel box, SIZE → invert the Monotonic against the canvas size. A
-`layer` (or `frame`) given an **explicit pixel size on a dim** does the same
-thing one level down — "a chart embeds the way it renders." On that dim it
-becomes a self-contained **scaling region**: its data space is absorbed
-internally rather than contributed to whatever shared space its parent is
-building.
+`layer` (or `frame`) given an **explicit size on a dim** — a literal pixel
+number, or a data-valued claim (a field name, a `field(...)` expression, or a
+per-entry array) — does the same thing one level down — "a chart embeds the
+way it renders." On that dim it becomes a self-contained **scaling region**:
+its data space is absorbed internally rather than contributed to whatever
+shared space its parent is building.
 
 The motivating case is a marginal histogram, seaborn-jointplot style: a
 center scatter in data units, with a count histogram pinned along each edge.
@@ -768,18 +771,37 @@ counts and beak-length millimeters are foreign units. The explicit pixel
 size is exactly the signal that this region carries its own scale.
 
 The rule lives in `layer`'s resolver and layout
-(`graphicalOperators/layer.tsx`), in two halves:
+(`graphicalOperators/layer.tsx`), in two halves, and it branches on whether
+the explicit size is a **literal** or a **data value**:
 
-- **`resolveUnderlyingSpace`.** After resolving each axis normally, for any
-  dim that has an explicit pixel size and whose resolved space **has a
-  baseline** (`hasBaseline` — `placement` is `free` or `determined`, i.e. not a
-  difference), the real space is **stashed** and `UNDEFINED` is reported upward.
-  A parent layer's `unionChildSpaces` then ignores that axis (UNDEFINED carries
-  no opinion — see [The contract](#the-contract)) instead of polluting a shared
-  domain with the absorbed region's units. ORDINAL and difference
-  (`placement: conflict`) extents are left untouched.
+- **`resolveUnderlyingSpace`.**
+  - **Literal pixel size** (`w: 80`). After resolving each axis normally, for
+    any dim that has an explicit pixel size and whose resolved space **has a
+    baseline** (`hasBaseline` — `placement` is `free` or `determined`, i.e. not
+    a difference), the real space is **stashed** verbatim and `UNDEFINED` is
+    reported upward. ORDINAL and difference (`placement: conflict`) extents
+    are left untouched.
+  - **Data-valued size** (`w: "count"`, `w: field("count").normalize()`, an
+    entry-flagged `size` array). This is the "DATA-DRIVEN operator extent"
+    case (#4/#20 — nested mosaic): the layer's own `w`/`h` becomes a `SIZE`
+    claim reported **upward**, so the _enclosing_ scale scope solves this
+    layer's pixel extent — the layer is a leaf in its ancestor's scope,
+    exactly like a leaf `rect({ w: "count" })`. But that leaves the layer's
+    own _composed content_ (its children's real space) needing somewhere to
+    go: if the composed space `hasBaseline`, it is stashed (in baseline-
+    **magnitude** form, `SIZE(width, measure)`, not the anchored POSITION a
+    fold might have returned) before being overridden by the new data-valued
+    `SIZE` claim. This is what makes "data-valued size ⇒ self-scaling
+    region" the **general** rule (fixed #651 smell 1: without the stash, a
+    subtree under a data-valued size silently consumed the _ancestor's_ σ
+    instead of getting its own local scope): the node's own box is solved by
+    the ancestor scope, and its interior is a fresh scope resolved against
+    that box.
+  - A parent layer's `unionChildSpaces` ignores an axis reported `UNDEFINED`
+    (no opinion — see [The contract](#the-contract)) instead of polluting a
+    shared domain with the absorbed region's units.
 - **`layout`.** The stashed space gets a **local** scale built against the
-  layer's own pixel box: an anchored extent is _both_ a coordinate scale
+  layer's own resolved box: an anchored extent is _both_ a coordinate scale
   (`posScaleFromSpace(stashed, size[dim])`) _and_ a σ-magnitude (a scale factor
   from `stashed.width.inverse(size[dim])`), so the layer builds both and each
   child reads the one it needs. These locals override the inherited posScale /
@@ -805,31 +827,57 @@ parent.
 
 ### Space-filling spines: `normalize` self-scales a stacking axis
 
-The same machinery drives the **space-filling spine** — the conditional axis of a
-mosaic / marimekko. A `stack({ normalize: true })` is a spine: its segments should
-_fill_ the extent in proportion to their value, showing a conditional distribution
-(each column of a mosaic runs 0–100% locally). That is exactly a self-scaling region,
-but triggered by intent rather than by a pixel size, and on the **stacking** axis
-rather than a sized dim.
+The **space-filling spine** — the conditional axis of a mosaic / marimekko —
+is now a plain instance of the general data-valued-size rule above, with no
+layout-side special case at all (#700 Phase 2; this replaced the earlier
+`stack({ normalize: true })` layout flag and its bespoke `__normalizeAxis`
+hint). Its segments should _fill_ the extent in proportion to their value,
+showing a conditional distribution (each column of a mosaic runs 0–100%
+locally): `stack({ by, dir, size: field("count").normalize() })`.
 
-`spread` elaborates `normalize` into a `__normalizeAxis` hint on the layer options (it
-does **not** touch the distribute constraint — the fill is a scale-scope decision, not
-a distribution rule). `layer`'s resolver reads that hint and stashes the named stacking
-axis just like a pixel-sized one — with one twist: it stashes the glue fold's `[0, Σ]`
-as a baseline **magnitude** (`SIZE(width)`), not the anchored POSITION the fold returns.
-A POSITION stash builds only a posScale (it _positions_ children); a magnitude stash
-also yields a **scale factor** (`width.inverse(size)`), which is what a _nested_ stack's
-own `w`/`h` SIZE claim needs to be scaled to fill. Leaf rects are fine either way; a
-`stack` inside a `stack` is not.
+The split is: `.normalize()` is a **data** transform, evaluated once, up
+front, by `applyChannels` (`marks/createOperator.ts`) via
+`splitAtNormalize`/`applyEntryNormalize` in `fieldExpr.ts` — it has nothing to
+do with layout. For each of the operator's own split entries it runs the
+PRE-normalize expression exactly as any size accessor would (an aggregate op
+like `.count()` if chained, else the channel's default sum), then replaces
+those per-entry values with each entry's **share** of their sum,
+`v_e / Σv_e` — a windowed data transform over the operator's own children,
+tagged with a share [measure](#measures-units-are-types) (`"<base> share by <by>"`,
+via `shareMeasure`) so a share axis can never silently union with the base
+measure's own axis.
 
-This is the whole trick behind **nested mosaics**. Each level plays two roles on its
-two axes: its stacking axis `normalize`s (a local, isolated conditional scope,
-reporting `UNDEFINED` up), while its cross axis reports its raw `Σcount` SIZE _up_
-(the ordinary data-driven-size path — the operator is a leaf in its ancestor's scale
-scope). Because the conditional axes are local scopes and the raw count is never
-mutated, the marginal × conditional × conditional factorization composes to any depth:
-`class → sex → survived` alternates y → x → y, and every level reads `count` raw. See
-the `stack` operator and the mosaic gallery examples.
+`spread`/`stack`'s `size` option (one value per split entry, computed this
+way) then wraps **each child** in its own sized `layer({ [w|h]: size[i] },
+[child])`, before the usual align/distribute elaboration (`spread.tsx`). Each
+wrapper's `w`/`h` is a **data-valued size claim** like any other — an ordinary
+instance of the rule above, not a special stacking-axis hint. The wrapper is
+purely a sizing shim: it copies the wrapped child's key/datum/`__splitBy`
+identity onto itself so downstream ordinal-axis labeling and
+`resolve(..., { from })` still see the un-wrapped child's identity.
+
+This is the whole trick behind **nested mosaics**. Each level plays two roles
+on its two axes: its stacking axis's per-entry `size` shares (each child a
+local, isolated self-scaling region, reporting `UNDEFINED` up from that
+child's wrapper), while its cross axis reports its raw `Σcount` SIZE _up_ from
+the operator as a whole (the ordinary data-driven-operator-extent path — the
+operator is a leaf in its ancestor's scale scope). Because the per-entry
+self-scaling regions are local and the raw count is never mutated, the
+marginal × conditional × conditional factorization composes to any depth:
+`class → sex → survived` alternates y → x → y, and every level reads `count`
+raw. See the `stack` operator and the mosaic gallery examples.
+
+An earlier iteration (the `stack({ normalize: true })` layout flag) needed a
+bake-side escape hatch: because `resolveUnderlyingSpace` reports `UNDEFINED`
+upward for a self-scaled axis, `declaredYUp` (`coordinateTransforms/bake.ts`)
+couldn't see that the axis was _really_ CONTINUOUS, so a parallel
+`_selfScaledSpace` field on `GoFishNode` carried the true kind alongside the
+reported `UNDEFINED`, purely so the [y-up flip scope](/internals/layout/coord-flattening)
+could still open over a normalized spine. The per-entry `size`-claim mechanism
+doesn't need that: each entry gets its own wrapper wired through the ordinary
+data-valued-size path above, and stacking now follows **data order** directly
+at every level rather than needing a flip to correct it — so `_selfScaledSpace`
+and its `declaredYUp` fallback were deleted outright, not generalized.
 
 ## Measures: units are types
 
@@ -952,7 +1000,7 @@ recognize it as foreign and refuse.
 The two remedies are the two escape hatches this essay already describes:
 annotate to declare the units _are_ the same (collapsing them to one measure),
 or wrap the foreign region in an explicit pixel size so it absorbs its own
-axis (the [self-scaling region](#self-scaling-regions-an-explicit-pixel-size-absorbs-an-axis)
+axis (the [self-scaling region](#self-scaling-regions-an-explicit-or-data-valued-size-absorbs-an-axis)
 above) and never reaches the shared union at all.
 
 **Stage 2.** This is Stage 1: one measure per axis, unified or refused. The
@@ -960,6 +1008,61 @@ sequel is a measure-keyed _family_ of underlying spaces per axis — true
 multi-scale, where a single axis can host several measures at once (dual axes).
 That is also the natural place for axis titles to read a measure off the space
 they describe (cf. issues #452, #386).
+
+## Field expressions: a pipeline orthogonal to channel aggregation
+
+`field(name)` (`fieldExpr.ts`, #700) returns a chainable expression — a
+Polars-column-expression-style builder where each method appends one op to an
+ordered pipeline (`field("age").bin().sort()` bins first, then sorts the
+resulting bins). The pipeline is read off either a live `FieldExpr` instance
+or its deserialized wire shape (`{ type: "field", name, measure?, ops? }`, what
+the Python bridge/IR produce directly) by the same `getFieldOps` helper, so
+every evaluation site handles both forms identically.
+
+Two op families consume disjoint **slots**, and mixing them is a checked
+error rather than silently doing the wrong thing:
+
+- **Domain ops** (`.sort(by?, order?)`, `.reverse()`, `.bin({thresholds?})`)
+  apply to a `by` grouping key. `splitEntries` (`datumProjection.ts`) is the
+  shared split-plus-ops helper behind `spread`/`stack`/`group`/`scatter`'s
+  `by`: it groups the raw rows first (`Map.groupBy` via `splitKeyFn`, which
+  reads a `field(...)`'s `.name` exactly like a bare string), then applies
+  each domain op in pipeline order — `bin` **replaces** the base grouping
+  entirely (re-groups the raw rows into numeric bins, dropping empty ones);
+  `sort` reorders the resulting entries, either by the group key itself or by
+  the SUM of another named field over each group's rows; `reverse` reverses
+  the entries. An aggregate op or `normalize` reaching a `by` slot throws — a
+  domain op describes _which groups exist_, not _what a group's value is_.
+- **Aggregate ops** (`.sum()`, `.mean()`, `.count()`, `.distinct()`) apply to
+  a _value_ channel slot (a mark's `h`/`w`/`x`/`y`, or an operator's
+  entry-flagged `size`) and fold a group's rows to a single value —
+  `evalFieldValues` in `fieldExpr.ts`. A domain op or a second aggregate
+  reaching a value slot throws (the fold happens once).
+
+**Expression evaluation is orthogonal to the channel's own aggregation.**
+`inferSize`/`inferPos`'s shared core (`inferNumeric` in `channels.ts`) always
+called `sumBy`/`meanBy` over the raw per-row values; it now instead calls
+`evalFieldValues(accessor, data)` first — running any pipeline ops (an
+aggregate, if the accessor carries one) — and only _then_ applies its own
+default aggregation to whatever that produced. Neither side knows about the
+other: when the pipeline already folded the rows to a singleton, the
+channel's own sum/mean is the identity over that singleton, so
+`rect({ h: field("weight").mean() })` reports the mean, not
+`mean-of-a-1-element-array`-nonsense. A bare string or plain function accessor
+carries no ops, so this is a strict superset of the pre-#700 behavior, not a
+new code path for the common case.
+
+**Measure implications.** `count`/`distinct` report values that are counts,
+not the source field's own units — `evalFieldValues` reports measure
+`"count"` for them (an explicit `field(name, measure)` annotation still wins
+over this pipeline-determined default, following the same precedence
+[`resolveMeasure`](#measures-units-are-types) already applies to provenance
+vs. annotation). Every other pipeline reports no measure of its own, leaving
+resolution to the channel as before. `.normalize()`'s share values get their
+own tag, `shareMeasure(base, byName)` — see
+[Space-filling spines](#space-filling-spines-normalize-self-scales-a-stacking-axis)
+above for why a share is a distinct unit (0–1, not the base measure's own
+units) that must never silently union with it.
 
 ## Axis inference
 

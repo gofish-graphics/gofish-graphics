@@ -2,7 +2,7 @@
 
 from datetime import datetime, timezone
 
-from gofish import chart, derive, spread, stack, log, rect, palette
+from gofish import chart, derive, field, spread, stack, rect, palette
 from python_stories.vega_data_urls import read_csv
 
 MONTHS = [
@@ -37,10 +37,6 @@ def _sort_by_weather(data):
     return data
 
 
-def _collapse(data):
-    return {"count": len(data), "weather": data[0]["weather"]}
-
-
 def story_default():
     df = read_csv("seattle-weather.csv")
     weather = df.to_dict("records")
@@ -60,9 +56,7 @@ def story_default():
             spread(by="month", dir="x"),
             derive(_sort_by_weather),
             stack(by="weather", dir="y"),
-            log("spread data"),
-            derive(_collapse),
         )
-        .mark(rect(h="count", fill="weather")),
+        .mark(rect(h=field("date").count(), fill="weather")),
         {"w": 600, "h": 300, "axes": True},
     )

@@ -16,6 +16,7 @@ import {
   type LiteralValue,
   type Measure,
 } from "./data";
+import { evalFieldValues } from "./fieldExpr";
 import type { LiveValue } from "../interaction/live";
 
 export type ChannelType = "size" | "pos" | "color" | "raw";
@@ -181,10 +182,11 @@ export const inferEntrySize = <T>(
 /**
  * Shared core of {@link inferSize} / {@link inferPos}: they differ only in the
  * lodash aggregation (`sumBy` vs `meanBy`). Resolves a numeric value from a
- * field name, function accessor, or literal number:
+ * field name, field expression, function accessor, or literal number:
  * - number / literal: passed through as a literal.
- * - string (field name): aggregated across the data array.
- * - function: called per-row and aggregated across the data array.
+ * - string / function / field expression: evaluated per-row via
+ *   `evalFieldValues` (fieldExpr.ts) — an aggregate op like `.mean()` folds
+ *   the rows there — then aggregated across whatever that evaluation produced.
  *
  * Field/string accessors are tagged with a resolved {@link Measure} so the
  * underlying-space layer can unify per measure. The caller may pass a
@@ -209,11 +211,17 @@ const inferNumeric =
     if (typeof accessor === "number") return accessor;
     if (isLiteral(accessor)) return accessor.value as number;
     const data = Array.isArray(d) ? d : [d];
-    const m = measure ?? resolveMeasure(d, accessor);
-    return value(
-      agg(data, (isField(accessor) ? accessor.name : accessor) as any),
-      m
+    // Expression evaluation is orthogonal to this channel: the pipeline maps
+    // the rows to values, and an aggregate op (`.mean()`, `.count()`, ...)
+    // folds them to a singleton. The channel then applies its default
+    // aggregation exactly as it always did — over a folded singleton, sum and
+    // mean are both the identity, so neither side knows about the other.
+    const { values, measure: pipelineMeasure } = evalFieldValues(
+      accessor,
+      data
     );
+    const m = pipelineMeasure ?? measure ?? resolveMeasure(d, accessor);
+    return value(agg(values as any[]), m);
   };
 
 /** Infer a size value (sums the field/function across the data array). */

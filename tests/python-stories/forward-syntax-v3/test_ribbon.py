@@ -7,7 +7,7 @@ from gofish import (
     ribbon,
     chart,
     clock,
-    derive,
+    field,
     group,
     rect,
     scatter,
@@ -23,8 +23,7 @@ def story_basic():
         chart(SEAFOOD)
         .flow(
             spread(by="lake", dir="x", spacing=64),
-            derive(lambda d: sorted(d, key=lambda r: r["count"])),
-            stack(by="species", dir="y"),
+            stack(by=field("species").sort("count"), dir="y"),
         )
         .mark(rect(h="count", fill="species").name("bars"))
     )
@@ -47,8 +46,7 @@ def story_layered():
         chart(SEAFOOD, axes=True)
         .flow(
             spread(by="lake", dir="x", spacing=64),
-            derive(lambda d: sorted(d, key=lambda r: r["count"])),
-            stack(by="species", dir="y"),
+            stack(by=field("species").sort("count"), dir="y"),
         )
         .mark(rect(h="count", fill="species"))
         .layer(
@@ -70,8 +68,7 @@ def story_polar():
                 w=2 * math.pi,
                 axes={"x": False, "y": True},
             ).translate(y=50),
-            derive(lambda d: sorted(d, key=lambda r: r["count"])),
-            stack(by="species", dir="y", label=False),
+            stack(by=field("species").sort("count"), dir="y", label=False),
         )
         .mark(rect(w=0.1, h="count", fill="species").name("bars"))
     )

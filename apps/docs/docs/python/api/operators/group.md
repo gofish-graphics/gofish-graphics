@@ -24,9 +24,9 @@ group(*, by, **options) -> Operator
 
 ## Parameters
 
-| Parameter | Type                | Description                                                |
-| --------- | ------------------- | ---------------------------------------------------------- |
-| `by`      | `str` \| `Callable` | **Required.** Field, dotted path, or callable to group by. |
+| Parameter | Type                                | Description                                                                                                                                 |
+| --------- | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `by`      | `str` \| `field(...)` \| `Callable` | **Required.** Field, dotted path, [`field(...)`](/python/api/operators/spread#field-expression-pipeline) accessor, or callable to group by. |
 
 `group` is most often reached for right after a `selectAll`, to re-partition
 selected nodes for a ribbon or stream chart. The selected stream is **refs**, so

@@ -7,12 +7,11 @@ import {
   scatter,
   rect,
   stack,
-  derive,
   layer,
   selectAll,
+  field,
 } from "../../src/lib";
 import { ribbon, group } from "../../src/lib";
-import { orderBy } from "lodash";
 import { clock } from "../../src/ast/coordinateTransforms/clock";
 
 const meta: Meta = {
@@ -47,8 +46,7 @@ export const Basic: StoryObj<Args> = {
       chart(seafood)
         .flow(
           spread({ by: "lake",  dir: "x", spacing: 64 }),
-          derive((d) => orderBy(d, "count", "asc")),
-          stack({ by: "species",  dir: "y" })
+          stack({ by: field("species").sort("count"),  dir: "y" })
         )
         .mark(rect({ h: "count", fill: "species" }).name("bars")),
       chart(selectAll("bars"))
@@ -77,8 +75,7 @@ export const Layered: StoryObj<Args> = {
     chart(seafood, { axes: true })
       .flow(
         spread({ by: "lake", dir: "x", spacing: 64 }),
-        derive((d) => orderBy(d, "count", "asc")),
-        stack({ by: "species", dir: "y" })
+        stack({ by: field("species").sort("count"), dir: "y" })
       )
       .mark(rect({ h: "count", fill: "species" }))
       .layer(
@@ -117,8 +114,7 @@ export const Polar: StoryObj<Args> = {
             w: 2 * Math.PI,
             axes: { x: false, y: true },
           }).translate({ y: 50 }),
-          derive((d) => orderBy(d, "count", "asc")),
-          stack({ by: "species", dir: "y", label: false })
+          stack({ by: field("species").sort("count"), dir: "y", label: false })
         )
         .mark(rect({ w: 0.1, h: "count", fill: "species" }).name("bars")),
       chart(selectAll("bars"))

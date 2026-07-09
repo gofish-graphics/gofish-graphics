@@ -72,10 +72,6 @@ export const layer = createNodeOperatorSequential(
           coord?: CoordinateTransform;
           transform?: { scale?: { x?: number; y?: number } };
           box?: boolean;
-          /** Space-filling spine (from `stack({ normalize: true })`): make this
-           *  axis a local self-scaling scope so its stacked children fill it.
-           *  Set by `spread`, not user-facing. */
-          __normalizeAxis?: 0 | 1;
         } & FancyDims)
       | GoFishAST[],
     maybeChildren?: GoFishAST[]
@@ -199,26 +195,7 @@ export const layer = createNodeOperatorSequential(
           selfScaledSpaces[0] = undefined;
           selfScaledSpaces[1] = undefined;
           for (const axis of [0, 1] as const) {
-            // SPACE-FILLING SPINE (#20 — nested mosaic). `normalize` is pure
-            // LAYOUT — the data is never mutated (children stack their RAW
-            // `count`). This makes the stacking axis a LOCAL self-scaling scope
-            // so the raw glue fold [0, Σ] fills its box (the conditional
-            // proportion), and reports UNDEFINED upward so a nested conditional
-            // axis never leaks its [0,1] into an ancestor/sibling scale. Stash
-            // the glue fold as a baseline MAGNITUDE (SIZE), not the anchored
-            // POSITION it returns: a POSITION stash builds only a posScale, but a
-            // NESTED stack's own `w`/`h` SIZE claim needs a SCALE FACTOR
-            // (extent/Σ) to fill too.
             const composed = resolved[axis];
-            if (
-              (options as { __normalizeAxis?: 0 | 1 }).__normalizeAxis ===
-                axis &&
-              hasBaseline(composed)
-            ) {
-              selfScaledSpaces[axis] = SIZE(composed.width, composed.measure);
-              resolved[axis] = UNDEFINED;
-              continue;
-            }
             const dsize = dims[axis].size;
             if (dsize === undefined) continue;
             // DATA-DRIVEN operator extent (#4/#20 — nested mosaic). Report a
@@ -231,6 +208,22 @@ export const layer = createNodeOperatorSequential(
             // units, e.g. a marginal histogram, which must NOT pollute the
             // ancestor's data domain.)
             if (isValue(dsize)) {
+              // A data-valued size claim (e.g. `w: "count"`) overrides the
+              // composed content space with its own SIZE claim. If that
+              // composed space had a baseline (an anchored POSITION or a
+              // "free" magnitude — the normal case for a subtree with real
+              // content), stash it before overriding: without this, a
+              // subtree under a data-valued size silently consumed the
+              // ancestor's σ instead of getting its own local scope (#651
+              // smell 1). The stash is baseline-MAGNITUDE form (SIZE) so a
+              // nested sized layer's own descendants get a scale factor, not
+              // just an anchored map. This makes "data-valued size ⇒
+              // self-scaling region" the general rule: the node's box is
+              // solved by the ancestor scope, its interior is a fresh scope
+              // resolved against that box.
+              if (hasBaseline(composed)) {
+                selfScaledSpaces[axis] = SIZE(composed.width, composed.measure);
+              }
               resolved[axis] = SIZE(
                 Monotonic.linear(getValue(dsize)!, 0),
                 getMeasure(dsize)
@@ -599,12 +592,6 @@ export const layer = createNodeOperatorSequential(
     );
     // Stash alias-keyed dims (theta/r/…) for the resolveAliases pass.
     node._pendingAliases = pendingAliases;
-    // Surface the self-scaled spaces (mutated by resolveUnderlyingSpace above)
-    // so the bake walk's orientation pass sees this axis's TRUE kind even though
-    // `_underlyingSpace` reports it UNDEFINED to ancestors — a normalize spine's
-    // continuous y must still open a y-up flip scope. Reference, not copy: the
-    // array is filled during layout, read by bake afterward.
-    node._selfScaledSpace = selfScaledSpaces;
     return node;
   }
 );

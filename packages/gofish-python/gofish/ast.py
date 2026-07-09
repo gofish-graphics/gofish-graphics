@@ -1320,7 +1320,7 @@ class ChartBuilder:
 def spread(
     children: Optional[List["Mark"]] = None,
     *,
-    by: Optional[str] = None,
+    by: Optional[Union[str, "FieldAccessor"]] = None,
     **options: Any,
 ) -> Union[Operator, "Mark"]:
     """
@@ -1342,13 +1342,16 @@ def spread(
     Args:
         children: When provided, switches to combinator form. List of child
             Marks to lay out side-by-side.
-        by: Field name to partition by (operator form only). Omit for
-            per-item spread.
+        by: Field name to partition by (operator form only), or a
+            ``field(...)`` accessor carrying domain ops
+            (``field("site").sort("yield")``). Omit for per-item spread.
         **options: dir ("x"|"y"), spacing, alignment, sharedScale, mode, glue.
             Also `w`/`h` — a field name or pixel number sizing this operator's
             box (data-driven operator extent, e.g. a mosaic's column width), and
-            `normalize=True` — make the layout axis fill its extent in
-            proportion to child size (the mosaic/marimekko conditional axis).
+            `size` — a field name, pixel number, or ``field(...)`` accessor
+            sizing each split entry along the stack axis;
+            `size=field("count").normalize()` makes it a space-filling spine
+            (the mosaic/marimekko conditional axis).
 
     Returns:
         Operator (no children) or Mark (with children).
@@ -1554,7 +1557,7 @@ def Treemap(  # noqa: N802  — match JS storybook spelling
 def stack(
     children: Optional[List["Mark"]] = None,
     *,
-    by: Optional[str] = None,
+    by: Optional[Union[str, "FieldAccessor"]] = None,
     **options: Any,
 ) -> Union[Operator, "Mark"]:
     """
@@ -1576,13 +1579,16 @@ def stack(
     Args:
         children: When provided, switches to combinator form. List of child
             Marks to stack.
-        by: Field name to partition by (operator form only). Omit for
-            per-item stack.
+        by: Field name to partition by (operator form only), or a
+            ``field(...)`` accessor carrying domain ops
+            (``field("site").sort("yield")``). Omit for per-item stack.
         **options: dir ("x"|"y"), alignment, sharedScale, mode. Also `w`/`h` —
             a field name or pixel number sizing this operator's box (data-driven
-            operator extent, e.g. a mosaic's column width), and `normalize=True`
-            — make the stacking axis fill its extent in proportion to child size
-            (the mosaic/marimekko conditional axis).
+            operator extent, e.g. a mosaic's column width), and `size` — a
+            field name, pixel number, or ``field(...)`` accessor sizing each
+            split entry along the stack axis; `size=field("count").normalize()`
+            makes it a space-filling spine (the mosaic/marimekko conditional
+            axis).
 
     Returns:
         Operator (no children) or Mark (with children).
@@ -1627,12 +1633,13 @@ def derive(fn: Callable) -> DeriveOperator:
     return DeriveOperator(fn, provenance)
 
 
-def group(*, by: str, **options: Any) -> Operator:
+def group(*, by: Union[str, "FieldAccessor"], **options: Any) -> Operator:
     """
     Group operator — partition data by `by`, wrap each group in a frame.
 
     Args:
-        by: Field name to group by.
+        by: Field name to group by, or a ``field(...)`` accessor carrying
+            domain ops (``field("site").sort("yield")``).
 
     Returns:
         Operator object
@@ -1719,7 +1726,7 @@ def join(right: Any, *, on: str) -> Operator:
 
 def scatter(
     *,
-    by: Optional[str] = None,
+    by: Optional[Union[str, "FieldAccessor"]] = None,
     **options: Any,
 ) -> Operator:
     """
@@ -1727,7 +1734,9 @@ def scatter(
     given) or per-item (when omitted).
 
     Args:
-        by: Field name to group by. Omit for per-item scatter.
+        by: Field name to group by, or a ``field(...)`` accessor carrying
+            domain ops (``field("site").sort("yield")``). Omit for per-item
+            scatter.
         **options:
             x, y: Field-name accessors (str) for position; or arrays for
                   combinator form. Required: at least one of x, y, xMin/xMax,
@@ -2288,7 +2297,91 @@ def datum(value: Any) -> DatumValue:
     return DatumValue({"type": "datum", "datum": value})
 
 
-def field(name: str, measure: Optional[str] = None) -> dict:
+class FieldAccessor(dict):
+    """
+    The `{type: "field", name, measure?, ops?}` wire shape, as a dict
+    subclass so `field(name)` supports the same chainable pipeline syntax as
+    JS's `FieldExpr` (`ast/fieldExpr.ts`) — a Polars-column-expression-style
+    builder where each method returns a NEW accessor with one more op
+    appended (immutable, own dict so it survives `dict(self)` copies), and
+    the wire form omits `ops` entirely when the pipeline is empty (matching
+    JS `toJSON` byte-for-byte for parity). Order matters: `.bin().sort()`
+    bins first, then sorts the resulting bins.
+
+    Two disjoint slots consume the pipeline (see the JS module's docstring
+    for the full contract — this class is a thin wire builder and does no
+    evaluation-time validation; the JS side is the single evaluator, so an
+    invalid op for a slot throws there, not here):
+
+    - DOMAIN ops (`sort`/`reverse`/`bin`) apply to a `by` grouping key, e.g.
+      `spread(by=field("site").sort("yield"))`.
+    - AGGREGATE ops (`sum`/`mean`/`count`/`distinct`) fold a value channel's
+      rows to a single value, e.g. `rect(h=field("price").mean())`.
+    - `normalize()` is valid only on an operator's (`spread`/`stack`)
+      entry-flagged `size` channel — `size=field("count").normalize()` turns
+      the stack axis into a space-filling spine (the mosaic/marimekko case).
+    """
+
+    def _with_op(self, op: dict) -> "FieldAccessor":
+        out = FieldAccessor(self)
+        out["ops"] = list(self.get("ops", [])) + [op]
+        return out
+
+    def sort(
+        self, by: Optional[str] = None, order: Optional[str] = None
+    ) -> "FieldAccessor":
+        """Order groups by the SUM of `by` over each group's rows (ascending
+        unless `order="desc"`), or by the group key itself when `by` is
+        omitted. Valid only in a `by` (domain) slot."""
+        op: dict = {"op": "sort"}
+        if by is not None:
+            op["by"] = by
+        if order is not None:
+            op["order"] = order
+        return self._with_op(op)
+
+    def reverse(self) -> "FieldAccessor":
+        """Reverse the group order. Valid only in a `by` (domain) slot."""
+        return self._with_op({"op": "reverse"})
+
+    def bin(
+        self, thresholds: Optional[Union[int, float, List[float]]] = None
+    ) -> "FieldAccessor":
+        """Bin this (numeric) field into groups, REPLACING the base
+        grouping. Valid only in a `by` (domain) slot."""
+        op: dict = {"op": "bin"}
+        if thresholds is not None:
+            op["thresholds"] = thresholds
+        return self._with_op(op)
+
+    def normalize(self) -> "FieldAccessor":
+        """Space-filling normalization on an operator's (`spread`/`stack`)
+        `size` channel: replaces each split entry's size with its SHARE of
+        the window. Valid only there."""
+        return self._with_op({"op": "normalize"})
+
+    def sum(self) -> "FieldAccessor":
+        """Fold the group's rows to the sum of this field. Valid only in a
+        value (size/pos) slot."""
+        return self._with_op({"op": "sum"})
+
+    def mean(self) -> "FieldAccessor":
+        """Fold the group's rows to the mean of this field. Valid only in a
+        value (size/pos) slot."""
+        return self._with_op({"op": "mean"})
+
+    def count(self) -> "FieldAccessor":
+        """Fold the group's rows to the row count (ignores the field's own
+        values). Valid only in a value (size/pos) slot."""
+        return self._with_op({"op": "count"})
+
+    def distinct(self) -> "FieldAccessor":
+        """Fold the group's rows to the number of distinct values of this
+        field. Valid only in a value (size/pos) slot."""
+        return self._with_op({"op": "distinct"})
+
+
+def field(name: str, measure: Optional[str] = None) -> FieldAccessor:
     """
     Explicit field-accessor wrapper. Mirrors the JS `field(...)` constructor
     in `packages/gofish-graphics/src/ast/data.ts` (the field/datum/literal
@@ -2310,14 +2403,19 @@ def field(name: str, measure: Optional[str] = None) -> dict:
     histogram's `start`/`end` edges auto-tag with the source field's units — no
     explicit annotation needed.
 
-    Emits the canonical `{type: "field", name, measure?}` wire shape; an
+    The returned `FieldAccessor` is also chainable, mirroring JS's
+    `field(...)` pipeline syntax — `field("site").sort("yield")` as an
+    operator's `by`, or `field("count").normalize()` as a `spread`/`stack`
+    `size` channel (see `FieldAccessor` for the full method list).
+
+    Emits the canonical `{type: "field", name, measure?, ops?}` wire shape; an
     annotation that contradicts known provenance is a type error.
 
     Args:
         name: The field name to read from each row.
         measure: Optional unit-of-measure annotation for the channel.
     """
-    out: dict = {"type": "field", "name": name}
+    out = FieldAccessor({"type": "field", "name": name})
     if measure is not None:
         out["measure"] = measure
     return out

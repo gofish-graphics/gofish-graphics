@@ -39,9 +39,15 @@ import {
   stashLayerName,
 } from "./chartBuilder";
 import { inferSize, inferPos, inferColor, resolveMeasure } from "../channels";
-import { discretePosition, copyMeasureProvenance } from "../data";
+import { discretePosition, copyMeasureProvenance, isField } from "../data";
 import type { Measure } from "../data";
 import type { MaybeValue, Value } from "../data";
+import {
+  hasNormalizeOp,
+  splitAtNormalize,
+  applyEntryNormalize,
+  type FieldExpr,
+} from "../fieldExpr";
 import type { LabelAccessor, LabelOptions } from "../labels/labelPlacement";
 import type { NameableMark } from "../withGoFish";
 import {
@@ -474,7 +480,7 @@ export type ChannelAnnotations<Options> = Partial<
  */
 type ChannelInput<Spec, Datum> = Spec extends { type: infer Type; entry: true }
   ? Type extends "size"
-    ? (keyof Datum & string) | MaybeValue<number>[] | undefined
+    ? (keyof Datum & string) | FieldExpr | MaybeValue<number>[] | undefined
     : Type extends "pos"
       ? (keyof Datum & string) | MaybeValue<number>[] | undefined
       : Type extends "color"
@@ -675,6 +681,30 @@ function applyChannels<Options extends Record<string, any>>(
         );
         continue;
       }
+      // Windowed normalize (#700 Phase 2 — `field(...).normalize()` on an
+      // operator's entry-flagged size channel): this is expression
+      // evaluation, not channel logic, so the WINDOW is all this factory
+      // supplies — run the per-entry channel with the PRE-normalize
+      // expression (an aggregate op if present, else the channel's own
+      // default sum, exactly as any size accessor would), then hand the
+      // collected per-entry values to fieldExpr.ts's applyEntryNormalize to
+      // compute shares across the window. `channels.ts` gains no ops
+      // knowledge from this.
+      if (type === "size" && hasNormalizeOp(val)) {
+        const { pre } = splitAtNormalize(val);
+        const rawEntryValues = [...entries.values()].map((items) =>
+          runChannel(type, pre, items, measure)
+        );
+        const byOpt = (opts as any).by;
+        const byName =
+          typeof byOpt === "string"
+            ? byOpt
+            : isField(byOpt)
+              ? byOpt.name
+              : undefined;
+        out[key] = applyEntryNormalize(rawEntryValues, byName);
+        continue;
+      }
       // Value aggregation uses each entry's items; the measure comes from
       // `wholeData` (the binned array still carries the symbol — each per-entry
       // slice does not).
@@ -872,10 +902,16 @@ export function createOperator<Datum, Options extends Record<string, any>>(
             // restating the key. The innermost grouping wins (`??=`); a function
             // `by` has no field name to record, so resolve errors there unless
             // given an explicit `key`.
-            if (typeof (opts as any).by === "string") {
+            const byField =
+              typeof (opts as any).by === "string"
+                ? (opts as any).by
+                : isField((opts as any).by)
+                  ? (opts as any).by.name
+                  : undefined;
+            if (byField !== undefined) {
               for (const node of leafNodes) {
                 if ((node as any).__splitBy === undefined) {
-                  (node as any).__splitBy = (opts as any).by;
+                  (node as any).__splitBy = byField;
                 }
               }
             }

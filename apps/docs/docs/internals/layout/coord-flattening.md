@@ -153,7 +153,10 @@ The decision is one rule, `resolveNodeFlip(node, composedTy, incomingFlip)`:
 - Otherwise a node **opens** a scope about its own placed band (`scopeBox`, or the
   authoritative `contentNode._rootFlipScope` for the root plot) iff its own resolved y is
   CONTINUOUS (`declaredYUp`) or it is a `coord`. An ORDINAL / UNDEFINED node declares
-  nothing.
+  nothing. `declaredYUp` reads only the node's reported underlying space — it briefly
+  carried a fallback to a privately stashed space so normalize-spine mosaics could open
+  a flip scope, but normalized stacks now report real continuous `[0,1]` share spaces
+  (see [Underlying Space](/internals/core/underlying-space)), so the fallback is gone.
 - `_scopeTransparent` chrome wrappers never open (their bbox is the wrong band); an
   `_ambientYDown` chrome subtree renders in the ambient frame and is **box-mirrored** about
   the plot's frame — stamped directly on the chrome nodes by `layout()` as `_chromeFrame`

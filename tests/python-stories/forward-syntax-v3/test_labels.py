@@ -9,6 +9,7 @@ per `tests/.python-sync-exempt`.
 from gofish import (
     chart,
     derive,
+    field,
     gradient,
     palette,
     rect,
@@ -192,10 +193,6 @@ def _add_proportion(data):
     return [{**row, "proportion": row["people"] / total} for row in data]
 
 
-def _order_by_sex(data):
-    return sorted(data, key=lambda row: row["sex"])
-
-
 def story_normalized_stacked_bar_with_labels():
     population = read_json("population.json")
     year2000 = population[population["year"] == 2000].to_dict("records")
@@ -209,8 +206,7 @@ def story_normalized_stacked_bar_with_labels():
             # y-down reads top→bottom, so age 0 lands at the top (Vega-Lite ref).
             spread(by="age", dir="y", spacing=2),
             derive(_add_proportion),
-            derive(_order_by_sex),
-            stack(by="sex", dir="x"),
+            stack(by=field("sex").sort(), dir="x"),
         )
         .mark(
             rect(w="proportion", fill="sex").label(

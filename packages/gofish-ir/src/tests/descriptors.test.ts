@@ -63,7 +63,7 @@ const SCHEMA_OPERATOR_KEYS: Record<string, readonly string[]> = {
     "axes",
     "w",
     "h",
-    "normalize",
+    "size",
   ],
   stack: [
     "by",
@@ -77,7 +77,7 @@ const SCHEMA_OPERATOR_KEYS: Record<string, readonly string[]> = {
     "axes",
     "w",
     "h",
-    "normalize",
+    "size",
   ],
   group: ["by"],
   scatter: [

@@ -302,7 +302,10 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
   spread: operator("spread", {
     doc: "Arrange children along `dir` with spacing, aligning them on the cross axis.",
     fields: {
-      by: { type: t.string, doc: "Field to partition rows by." },
+      by: {
+        type: t.union(t.string, t.ref("FieldAccessor")),
+        doc: "Field to partition rows by; also accepts a field(...) accessor carrying domain ops (sort/reverse/bin).",
+      },
       // IR truth: optional here even though Python's spread() requires dir —
       // matches validate.ts's optionalField("dir", ...) today.
       dir: { type: t.enum("x", "y"), doc: "Direction to spread along." },
@@ -325,24 +328,29 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
         doc: "Stack semantics: children glued, sizes sum; spacing forced to 0.",
       },
       axes: { type: t.ref("AxesOptions") },
-      // Data-driven operator extent (#4/#20) + space-filling spine (mosaic):
-      // the v3 spread operator carries `w`/`h` (field/datum-driven main-axis
-      // sizing) and `normalize` (space-filling spine). `COMBINATOR_MARKS.spread`
-      // also carries `w`/`h` for the low-level Spread combinator's FancyDims.
-      w: ch.num("Data-driven main-axis extent (field/datum-sized children)."),
-      h: ch.num("Data-driven main-axis extent (field/datum-sized children)."),
-      normalize: {
-        type: t.boolean,
-        default: false,
-        doc: "Space-filling spine: children fill the container proportionally (mosaic/marimekko).",
-      },
+      // Data-driven operator extent (#4/#20): the v3 spread operator carries
+      // `w`/`h` (field/datum-driven cross-axis sizing) and `size` (#700 Phase
+      // 2 — per-entry stack-axis extent, field/datum-sized children).
+      // `COMBINATOR_MARKS.spread` also carries `w`/`h` for the low-level
+      // Spread combinator's FancyDims. `size: field(<name>).normalize()`
+      // (a field accessor with a `normalize` pipeline op) is the
+      // space-filling spine (mosaic/marimekko) that replaced the old
+      // `normalize: true` layout flag.
+      w: ch.num("Data-driven cross-axis extent (field/datum-sized children)."),
+      h: ch.num("Data-driven cross-axis extent (field/datum-sized children)."),
+      size: ch.num(
+        "Per-entry stack-axis extent (field/datum-sized children); a field(...).normalize() accessor makes it a space-filling spine."
+      ),
     },
   }),
 
   stack: operator("stack", {
     doc: "`spread({ glue: true })` under its own wire tag — children glued together (touching, no gaps).",
     fields: {
-      by: { type: t.string, doc: "Field to partition rows by." },
+      by: {
+        type: t.union(t.string, t.ref("FieldAccessor")),
+        doc: "Field to partition rows by; also accepts a field(...) accessor carrying domain ops (sort/reverse/bin).",
+      },
       dir: { type: t.enum("x", "y"), doc: "Direction to stack along." },
       // Real producers pass spread's options through (the JS `stack` is a
       // literal `Spread({...props, glue: true})` forward, and stories emit
@@ -363,13 +371,11 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
       reverse: { type: t.boolean, default: false },
       axes: { type: t.ref("AxesOptions") },
       // Data-driven extent + space-filling spine — see `spread` above.
-      w: ch.num("Data-driven main-axis extent (field/datum-sized children)."),
-      h: ch.num("Data-driven main-axis extent (field/datum-sized children)."),
-      normalize: {
-        type: t.boolean,
-        default: false,
-        doc: "Space-filling spine: children fill the container proportionally (mosaic/marimekko).",
-      },
+      w: ch.num("Data-driven cross-axis extent (field/datum-sized children)."),
+      h: ch.num("Data-driven cross-axis extent (field/datum-sized children)."),
+      size: ch.num(
+        "Per-entry stack-axis extent (field/datum-sized children); a field(...).normalize() accessor makes it a space-filling spine."
+      ),
     },
   }),
 
@@ -377,9 +383,9 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
     doc: "Partition rows by `by` into a flat `Frame` (no layout beyond grouping).",
     fields: {
       by: {
-        type: t.string,
+        type: t.union(t.string, t.ref("FieldAccessor")),
         required: true,
-        doc: "Field to group rows by.",
+        doc: "Field to group rows by; also accepts a field(...) accessor carrying domain ops (sort/reverse/bin).",
       },
     },
   }),
@@ -387,7 +393,10 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
   scatter: operator("scatter", {
     doc: "Position each child at an explicit (x, y) point or [min, max] span in data space.",
     fields: {
-      by: { type: t.string, doc: "Field to partition rows by." },
+      by: {
+        type: t.union(t.string, t.ref("FieldAccessor")),
+        doc: "Field to partition rows by; also accepts a field(...) accessor carrying domain ops (sort/reverse/bin).",
+      },
       x: ch.num("Point position, x."),
       y: ch.num("Point position, y."),
       xMin: ch.num("Range form: left/bottom edge, x."),

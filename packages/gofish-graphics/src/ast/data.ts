@@ -3,6 +3,10 @@
 // </gofish-wiki>
 
 import { Interval } from "./dims";
+import { FieldExpr, type FieldOp } from "./fieldExpr";
+
+export type { FieldOp } from "./fieldExpr";
+export { FieldExpr } from "./fieldExpr";
 
 export type Measure = string;
 
@@ -211,12 +215,22 @@ export const datum = value;
  * error if it contradicts inferred provenance. Issue #266 is the field/datum/
  * literal trichotomy this completes.
  */
-export type FieldAccessor = { type: "field"; name: string; measure?: Measure };
-export const field = (name: string, measure?: Measure): FieldAccessor => ({
-  type: "field",
-  name,
-  ...(measure !== undefined ? { measure } : {}),
-});
+/**
+ * The field-accessor WIRE shape (what `field(...)` serializes to and what a
+ * deserialized IR/Python-bridge accessor looks like as a plain object). `ops`
+ * is the field-expression pipeline (#700 Phase 1) — see {@link FieldOp} and
+ * `fieldExpr.ts`'s `FieldExpr` class, which `field(...)` actually returns so
+ * `.sort()`/`.bin()`/`.mean()`/etc. can chain while still serializing to this
+ * shape via `toJSON`.
+ */
+export type FieldAccessor = {
+  type: "field";
+  name: string;
+  measure?: Measure;
+  ops?: FieldOp[];
+};
+export const field = (name: string, measure?: Measure): FieldExpr =>
+  new FieldExpr(name, measure);
 export const isField = (v: unknown): v is FieldAccessor =>
   typeof v === "object" &&
   v !== null &&

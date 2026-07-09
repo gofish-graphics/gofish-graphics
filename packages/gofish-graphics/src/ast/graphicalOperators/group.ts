@@ -3,7 +3,7 @@
 // want that import to transitively pull in createOperator → ChartBuilder.
 import { createOperator } from "../marks/createOperator";
 import { Frame } from "./frame";
-import { SplitBy, splitKeyFn } from "../datumProjection";
+import { SplitBy, splitEntries } from "../datumProjection";
 
 export type GroupOptions = {
   by?: SplitBy;
@@ -14,7 +14,7 @@ export const group = createOperator<any, GroupOptions>(
   {
     split: ({ by }, d) => {
       if (!by) throw new Error("group requires opts.by = fieldName");
-      return Map.groupBy(d, splitKeyFn(by));
+      return splitEntries(by, d);
     },
     serialize: { type: "group" },
   }

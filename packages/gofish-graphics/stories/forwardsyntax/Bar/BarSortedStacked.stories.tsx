@@ -1,8 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../../helper";
 import { seafood } from "../../../src/data/catch";
-import { chart, spread, rect, stack, derive } from "../../../src/lib";
-import { orderBy } from "lodash";
+import { chart, spread, rect, stack, field } from "../../../src/lib";
 
 const meta: Meta = {
   title: "Forward Syntax V3/Bar/Sorted Stacked",
@@ -27,8 +26,7 @@ export const Default: StoryObj<Args> = {
     chart(seafood, { axes: true })
       .flow(
         spread({ by: "lake",  dir: "x" }),
-        derive((d) => orderBy(d, "count", "asc")),
-        stack({ by: "species",  dir: "y" })
+        stack({ by: field("species").sort("count"),  dir: "y" })
       )
       .mark(rect({ h: "count", fill: "species" }))
       .render(container, {

@@ -508,11 +508,11 @@ def arrow(children: List["Mark"], *, bow: Optional[float] = None, stretch: Optio
 
 # --- Dual-form cores (dispatch stays hand-written in ast.py) -----------------
 
-def _spread_opts(*, by: Optional[str] = None, dir: Optional[str] = None, spacing: Optional[float] = None, alignment: Optional[str] = None, sharedScale: Optional[bool] = None, mode: Optional[str] = None, reverse: Optional[bool] = None, glue: Optional[bool] = None, axes: Optional[Any] = None, w: Optional[Union[int, float, str]] = None, h: Optional[Union[int, float, str]] = None, normalize: Optional[bool] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
+def _spread_opts(*, by: Optional[Any] = None, dir: Optional[str] = None, spacing: Optional[float] = None, alignment: Optional[str] = None, sharedScale: Optional[bool] = None, mode: Optional[str] = None, reverse: Optional[bool] = None, glue: Optional[bool] = None, axes: Optional[Any] = None, w: Optional[Union[int, float, str]] = None, h: Optional[Union[int, float, str]] = None, size: Optional[Union[int, float, str]] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
     """Arrange children along `dir` with spacing, aligning them on the cross axis.
 
     Args:
-        by: Field to partition rows by.
+        by: Field to partition rows by; also accepts a field(...) accessor carrying domain ops (sort/reverse/bin).
         dir: Direction to spread along.
         spacing: Gap between children, px. Default 8.
         alignment: Cross-axis alignment ("start" | "middle" | "end" | "baseline"). Default "baseline".
@@ -520,9 +520,9 @@ def _spread_opts(*, by: Optional[str] = None, dir: Optional[str] = None, spacing
         mode: Default "edge".
         reverse: Default false.
         glue: Stack semantics: children glued, sizes sum; spacing forced to 0. Default false.
-        w: Data-driven main-axis extent (field/datum-sized children).
-        h: Data-driven main-axis extent (field/datum-sized children).
-        normalize: Space-filling spine: children fill the container proportionally (mosaic/marimekko). Default false.
+        w: Data-driven cross-axis extent (field/datum-sized children).
+        h: Data-driven cross-axis extent (field/datum-sized children).
+        size: Per-entry stack-axis extent (field/datum-sized children); a field(...).normalize() accessor makes it a space-filling spine.
         debug: Universal v3-operator dev escape hatch; stripped by the JS factory (FACTORY_ONLY_KEYS) before layout, but present on the wire when a producer passes it.
     """
     opts: Dict[str, Any] = {}
@@ -538,18 +538,18 @@ def _spread_opts(*, by: Optional[str] = None, dir: Optional[str] = None, spacing
         ("axes", axes),
         ("w", w),
         ("h", h),
-        ("normalize", normalize),
+        ("size", size),
         ("debug", debug),
     ]:
         if _v is not None:
             opts[_k] = _v
     return opts
 
-def _stack_opts(*, by: Optional[str] = None, dir: Optional[str] = None, spacing: Optional[float] = None, glue: Optional[bool] = None, alignment: Optional[str] = None, sharedScale: Optional[bool] = None, mode: Optional[str] = None, reverse: Optional[bool] = None, axes: Optional[Any] = None, w: Optional[Union[int, float, str]] = None, h: Optional[Union[int, float, str]] = None, normalize: Optional[bool] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
+def _stack_opts(*, by: Optional[Any] = None, dir: Optional[str] = None, spacing: Optional[float] = None, glue: Optional[bool] = None, alignment: Optional[str] = None, sharedScale: Optional[bool] = None, mode: Optional[str] = None, reverse: Optional[bool] = None, axes: Optional[Any] = None, w: Optional[Union[int, float, str]] = None, h: Optional[Union[int, float, str]] = None, size: Optional[Union[int, float, str]] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
     """`spread({ glue: true })` under its own wire tag — children glued together (touching, no gaps).
 
     Args:
-        by: Field to partition rows by.
+        by: Field to partition rows by; also accepts a field(...) accessor carrying domain ops (sort/reverse/bin).
         dir: Direction to stack along.
         spacing: Forwarded to the underlying spread. Glue semantics force the effective gap to 0; accepted for spread-parity.
         glue: Spread-parity passthrough; stack always glues regardless.
@@ -557,9 +557,9 @@ def _stack_opts(*, by: Optional[str] = None, dir: Optional[str] = None, spacing:
         sharedScale: Default false.
         mode: Default "edge".
         reverse: Default false.
-        w: Data-driven main-axis extent (field/datum-sized children).
-        h: Data-driven main-axis extent (field/datum-sized children).
-        normalize: Space-filling spine: children fill the container proportionally (mosaic/marimekko). Default false.
+        w: Data-driven cross-axis extent (field/datum-sized children).
+        h: Data-driven cross-axis extent (field/datum-sized children).
+        size: Per-entry stack-axis extent (field/datum-sized children); a field(...).normalize() accessor makes it a space-filling spine.
         debug: Universal v3-operator dev escape hatch; stripped by the JS factory (FACTORY_ONLY_KEYS) before layout, but present on the wire when a producer passes it.
     """
     opts: Dict[str, Any] = {}
@@ -575,18 +575,18 @@ def _stack_opts(*, by: Optional[str] = None, dir: Optional[str] = None, spacing:
         ("axes", axes),
         ("w", w),
         ("h", h),
-        ("normalize", normalize),
+        ("size", size),
         ("debug", debug),
     ]:
         if _v is not None:
             opts[_k] = _v
     return opts
 
-def _scatter_opts(*, by: Optional[str] = None, x: Optional[Union[int, float, str]] = None, y: Optional[Union[int, float, str]] = None, xMin: Optional[Union[int, float, str]] = None, xMax: Optional[Union[int, float, str]] = None, yMin: Optional[Union[int, float, str]] = None, yMax: Optional[Union[int, float, str]] = None, alignment: Optional[str] = None, axes: Optional[Any] = None, w: Optional[Union[int, float, str]] = None, h: Optional[Union[int, float, str]] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
+def _scatter_opts(*, by: Optional[Any] = None, x: Optional[Union[int, float, str]] = None, y: Optional[Union[int, float, str]] = None, xMin: Optional[Union[int, float, str]] = None, xMax: Optional[Union[int, float, str]] = None, yMin: Optional[Union[int, float, str]] = None, yMax: Optional[Union[int, float, str]] = None, alignment: Optional[str] = None, axes: Optional[Any] = None, w: Optional[Union[int, float, str]] = None, h: Optional[Union[int, float, str]] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
     """Position each child at an explicit (x, y) point or [min, max] span in data space.
 
     Args:
-        by: Field to partition rows by.
+        by: Field to partition rows by; also accepts a field(...) accessor carrying domain ops (sort/reverse/bin).
         x: Point position, x.
         y: Point position, y.
         xMin: Range form: left/bottom edge, x.
@@ -615,11 +615,11 @@ def _scatter_opts(*, by: Optional[str] = None, x: Optional[Union[int, float, str
             opts[_k] = _v
     return opts
 
-def _group_opts(*, by: str, debug: Optional[bool] = None) -> Dict[str, Any]:
+def _group_opts(*, by: Any, debug: Optional[bool] = None) -> Dict[str, Any]:
     """Partition rows by `by` into a flat `Frame` (no layout beyond grouping).
 
     Args:
-        by: Field to group rows by.
+        by: Field to group rows by; also accepts a field(...) accessor carrying domain ops (sort/reverse/bin).
         debug: Universal v3-operator dev escape hatch; stripped by the JS factory (FACTORY_ONLY_KEYS) before layout, but present on the wire when a producer passes it.
     """
     opts: Dict[str, Any] = {}

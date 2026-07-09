@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
-import { chart, rect, stack } from "../../src/lib";
+import { chart, rect, stack, field } from "../../src/lib";
 
 const meta: Meta = {
   title: "Forward Syntax V3/Mosaic Chart",
@@ -44,16 +44,17 @@ export const Default: StoryObj<Args> = {
 
     chart(data, { axes: true })
       .flow(
-        // Column widths ∝ each region's total (marginal). Stacked segments
-        // fill the column, split by cylinder share (conditional): `w: "count"`
-        // sizes the column by its raw Σcount, `normalize: true` rescales the
-        // same field so the segments fill the height. No preprocessing.
-        stack({ by: "origin", dir: "x" }),
-        stack({ by: "cylinders", dir: "y", w: "count", normalize: true })
+        // Column widths ∝ each region's total (marginal): `size: "count"`
+        // sizes each column by its raw Σcount. Stacked segments fill the
+        // column, split by cylinder share (conditional): `size:
+        // field("count").normalize()` replaces both the segment's raw count
+        // AND its w/h — the wrapper's data-driven size claim fills the
+        // column height in proportion to each cylinder group's share. No
+        // preprocessing.
+        stack({ by: "origin", dir: "x", size: "count" }),
+        stack({ by: "cylinders", dir: "y", size: field("count").normalize() })
       )
-      .mark(
-        rect({ h: "count", fill: "origin", stroke: "white", strokeWidth: 2 })
-      )
+      .mark(rect({ fill: "origin", stroke: "white", strokeWidth: 2 }))
       .render(container, {
         w: args.w,
         h: args.h,
