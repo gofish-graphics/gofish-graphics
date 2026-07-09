@@ -50,8 +50,8 @@ layer([
 ```python
 # center connector
 line(children, *, source=None, target=None,
-     stroke=None, strokeWidth=None, fill=None, opacity=None,
-     mixBlendMode=None, curve=None,
+     stroke=None, strokeWidth=None, strokeDasharray=None, fill=None,
+     opacity=None, mixBlendMode=None, curve=None,
      # for non-anchor (edge) mode:
      direction=None, mode=None) -> Mark
 
@@ -125,14 +125,15 @@ diagrams should prefer anchor mode.
 
 ## Visual props
 
-| Option         | Type                          | Default    | Description                                                                                                                      |
-| -------------- | ----------------------------- | ---------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| `stroke`       | `str`                         | `fill`     | Stroke color                                                                                                                     |
-| `strokeWidth`  | `float`                       | `0`        | Stroke width                                                                                                                     |
-| `fill`         | `str` \| `Value`              | `"black"`  | Fill (for closed paths; channel-bindable)                                                                                        |
-| `opacity`      | `float`                       | `1`        | Element opacity                                                                                                                  |
-| `mixBlendMode` | `"multiply"` \| `"normal"`    | `"normal"` | Blend mode of the rendered path. Override to `"multiply"` for overlapping translucent bands that should darken where they cross. |
-| `curve`        | see [Path curve](#path-curve) | `"auto"`   | Shape of the path between consecutive children (replaces the removed `interpolation`)                                            |
+| Option            | Type                          | Default    | Description                                                                                                                      |
+| ----------------- | ----------------------------- | ---------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `stroke`          | `str`                         | `fill`     | Stroke color                                                                                                                     |
+| `strokeWidth`     | `float`                       | `0`        | Stroke width                                                                                                                     |
+| `strokeDasharray` | `str`                         | solid      | SVG dash pattern for the stroked path (e.g. `"8"`, `"4 2"`), same spelling as `enclose`'s option                                 |
+| `fill`            | `str` \| `Value`              | `"black"`  | Fill (for closed paths; channel-bindable)                                                                                        |
+| `opacity`         | `float`                       | `1`        | Element opacity                                                                                                                  |
+| `mixBlendMode`    | `"multiply"` \| `"normal"`    | `"normal"` | Blend mode of the rendered path. Override to `"multiply"` for overlapping translucent bands that should darken where they cross. |
+| `curve`           | see [Path curve](#path-curve) | `"auto"`   | Shape of the path between consecutive children (replaces the removed `interpolation`)                                            |
 
 ## Path curve
 
