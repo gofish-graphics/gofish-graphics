@@ -111,7 +111,7 @@ const RULE_COLOR: Record<string, string> = {
 const BIG_FONT = { fontFamily: "monospace", fontWeight: 500, fontSize: 25 };
 const LABEL_FONT = { fontFamily: "monospace", fontWeight: 300, fontSize: 14 };
 const NOTE_FONT = { ...LABEL_FONT, fontStyle: "italic", fill: "#777" };
-const SPECIAL_FONT = { ...LABEL_FONT, fill: "green", fontStyle: "italic" };
+const SPECIAL_FONT = { ...LABEL_FONT, fill: "green" };
 
 // ── Hand-derived parse trace for "3 + (4 * 5)" ──────────────────────────
 // Char indices (0-based, inclusive spans): 0:'3' 1:' ' 2:'+' 3:' ' 4:'('
