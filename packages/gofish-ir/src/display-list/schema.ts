@@ -99,6 +99,8 @@ export interface TextItem extends BaseDisplayItem {
   text: string;
   fontSize?: number;
   fontFamily?: string;
+  fontStyle?: string;
+  fontWeight?: number | string;
   textAnchor?: "start" | "middle" | "end";
   dominantBaseline?: "auto" | "central" | "middle" | "hanging" | "mathematical";
   /** Rotation in degrees about `(x, y)`, in final screen space (SVG

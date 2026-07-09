@@ -119,6 +119,10 @@ export function paintSVG(
             item.fontSize !== undefined ? `${item.fontSize}px` : undefined
           }
           font-family={item.fontFamily}
+          font-style={
+            item.fontStyle as JSX.TextSVGAttributes<SVGTextElement>["font-style"]
+          }
+          font-weight={item.fontWeight}
           text-anchor={
             item.textAnchor as JSX.TextSVGAttributes<SVGTextElement>["text-anchor"]
           }

@@ -149,6 +149,20 @@ function checkItem(
         path: `${path}.fontFamily`,
         message: "fontFamily must be a string",
       });
+    if (item.fontStyle !== undefined && !isStr(item.fontStyle))
+      errors.push({
+        path: `${path}.fontStyle`,
+        message: "fontStyle must be a string",
+      });
+    if (
+      item.fontWeight !== undefined &&
+      !isNum(item.fontWeight) &&
+      !isStr(item.fontWeight)
+    )
+      errors.push({
+        path: `${path}.fontWeight`,
+        message: "fontWeight must be a number or a string",
+      });
     if (
       item.textAnchor !== undefined &&
       !["start", "middle", "end"].includes(item.textAnchor as string)

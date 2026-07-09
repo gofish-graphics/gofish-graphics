@@ -38,6 +38,7 @@ export const Ellipse = ({
   fill = color6_old[0],
   stroke = fill,
   strokeWidth = 0,
+  opacity = 1,
   aspectRatio,
   label,
   ...fancyDims
@@ -45,6 +46,7 @@ export const Ellipse = ({
   fill?: MaybeValue<string>;
   stroke?: MaybeValue<string>;
   strokeWidth?: number;
+  opacity?: number;
   /** w/h ratio to enforce. When both dims are data-driven, the constraining axis is used. */
   aspectRatio?: number;
   label?: boolean;
@@ -193,6 +195,7 @@ export const Ellipse = ({
           fill: resolvedFill,
           stroke: resolvedStroke,
           strokeWidth: strokeWidth ?? 0,
+          opacity,
         });
 
         // Build an EllipseItem from a display-space center; radii are unchanged
@@ -287,6 +290,7 @@ export const Ellipse = ({
                 fill: "none",
                 stroke: resolvedStroke,
                 strokeWidth: thickness + 0.5,
+                opacity,
               }),
             },
             ...valueLabel(labelX, labelY),
@@ -333,6 +337,7 @@ export const Ellipse = ({
               fill: resolvedFill,
               stroke: resolvedStroke,
               strokeWidth: strokeWidth ?? 0,
+              opacity,
             }),
           },
           ...valueLabel(labelX, labelY),

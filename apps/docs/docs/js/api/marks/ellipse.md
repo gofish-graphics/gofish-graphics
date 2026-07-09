@@ -16,7 +16,7 @@ gf.ellipse({ w: 100, h: 60, fill: "mediumseagreen" }).render(root, {
 ## Signature
 
 ```ts
-ellipse({ w?, h?, fill?, stroke?, strokeWidth? })
+ellipse({ w?, h?, fill?, stroke?, strokeWidth?, opacity = 1 })
 ```
 
 ## Parameters
@@ -28,6 +28,7 @@ ellipse({ w?, h?, fill?, stroke?, strokeWidth? })
 | `fill`        | `string`           | Fill color or field name for color encoding          |
 | `stroke`      | `string`           | Stroke color (defaults to `fill`)                    |
 | `strokeWidth` | `number`           | Stroke width (default `0`)                           |
+| `opacity`     | `number`           | Opacity, `0`–`1` (default `1`)                       |
 
 ## Examples
 
@@ -40,6 +41,9 @@ ellipse({ w: 60, h: 30, fill: "white", stroke: "black", strokeWidth: 2 });
 
 // Data-driven dimensions
 ellipse({ w: "width", h: "height", fill: "category" });
+
+// Translucent ellipse
+ellipse({ w: 80, h: 40, fill: "coral", opacity: 0.5 });
 ```
 
 ## See Also

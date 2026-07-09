@@ -7,7 +7,7 @@ import {
   rectItemFromBox,
 } from "../displayList/lowerHelpers";
 import { GoFishAST } from "../_ast";
-import { black, gray, tailwindColors } from "../../color";
+import { gray } from "../../color";
 import { Domain } from "../domain";
 import { foldFinite } from "../../util";
 import { UNDEFINED, UnderlyingSpace } from "../underlyingSpace";
@@ -19,7 +19,21 @@ export const enclose = createNodeOperator(
       padding = 2,
       rx = 2,
       ry = 2,
-    }: { padding?: number; rx?: number; ry?: number },
+      fill = "none",
+      stroke = gray,
+      strokeWidth = 1,
+      strokeDasharray,
+      opacity = 1,
+    }: {
+      padding?: number;
+      rx?: number;
+      ry?: number;
+      fill?: string;
+      stroke?: string;
+      strokeWidth?: number;
+      strokeDasharray?: string;
+      opacity?: number;
+    },
     children: GoFishAST[]
   ) => {
     return new GoFishNode(
@@ -81,8 +95,9 @@ export const enclose = createNodeOperator(
             transform: { translate: [undefined, undefined] },
           };
         },
-        // IR lowering — mirror of render: lower the children under the node's
-        // translate (the legacy `<g transform>`), then the enclosure rect on top.
+        // IR lowering — the enclosure rect paints FIRST (a true background
+        // behind the content), then the children under the node's translate
+        // (the legacy `<g transform>`) on top.
         lower: (
           { intrinsicDims, transform, coordinateTransform },
           _children,
@@ -115,10 +130,16 @@ export const enclose = createNodeOperator(
               rx,
               ry,
               role: "overlay",
-              style: lowerStyle({ fill: "none", stroke: gray, strokeWidth: 1 }),
+              style: lowerStyle({
+                fill,
+                stroke,
+                strokeWidth,
+                strokeDasharray,
+                opacity,
+              }),
             }
           );
-          return [...childItems, box];
+          return [box, ...childItems];
         },
       },
       children

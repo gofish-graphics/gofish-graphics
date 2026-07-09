@@ -104,8 +104,8 @@ def circle(*, label: Optional[bool] = None, debug: Optional[bool] = None, r: Opt
             _kw[_k] = _channel(_v)
     return Mark("circle", **_kw)
 
-def ellipse(*, label: Optional[bool] = None, debug: Optional[bool] = None, x: Optional[Union[int, float, str]] = None, cx: Optional[Union[int, float, str]] = None, x2: Optional[Union[int, float, str]] = None, w: Optional[Union[int, float, str]] = None, emX: Optional[bool] = None, y: Optional[Union[int, float, str]] = None, cy: Optional[Union[int, float, str]] = None, y2: Optional[Union[int, float, str]] = None, h: Optional[Union[int, float, str]] = None, emY: Optional[bool] = None, theta: Optional[Union[int, float, str]] = None, thetaSize: Optional[Union[int, float, str]] = None, r: Optional[Union[int, float, str]] = None, rSize: Optional[Union[int, float, str]] = None, fill: Optional[str] = None, stroke: Optional[str] = None, strokeWidth: Optional[float] = None, aspectRatio: Optional[float] = None, **kwargs: Any) -> Mark:
-    """An ellipse. Box geometry via the shared dims channels; paint is a strict subset of `paint` (no filter/opacity).
+def ellipse(*, label: Optional[bool] = None, debug: Optional[bool] = None, x: Optional[Union[int, float, str]] = None, cx: Optional[Union[int, float, str]] = None, x2: Optional[Union[int, float, str]] = None, w: Optional[Union[int, float, str]] = None, emX: Optional[bool] = None, y: Optional[Union[int, float, str]] = None, cy: Optional[Union[int, float, str]] = None, y2: Optional[Union[int, float, str]] = None, h: Optional[Union[int, float, str]] = None, emY: Optional[bool] = None, theta: Optional[Union[int, float, str]] = None, thetaSize: Optional[Union[int, float, str]] = None, r: Optional[Union[int, float, str]] = None, rSize: Optional[Union[int, float, str]] = None, fill: Optional[str] = None, stroke: Optional[str] = None, strokeWidth: Optional[float] = None, opacity: Optional[float] = None, aspectRatio: Optional[float] = None, **kwargs: Any) -> Mark:
+    """An ellipse. Box geometry via the shared dims channels; paint is a strict subset of `paint` (no filter).
 
     Args:
         label: Draw an inline value-label at the mark's center.
@@ -125,6 +125,7 @@ def ellipse(*, label: Optional[bool] = None, debug: Optional[bool] = None, x: Op
         r: Radial position alias (polar coord's y).
         rSize: Radial extent alias (polar coord's h).
         stroke: Defaults to `fill`.
+        opacity: Default 1.
         aspectRatio: w/h ratio to enforce. When both dims are data-driven, the constraining axis is used.
     """
     _kw: Dict[str, Any] = {}
@@ -148,6 +149,7 @@ def ellipse(*, label: Optional[bool] = None, debug: Optional[bool] = None, x: Op
         ("fill", fill),
         ("stroke", stroke),
         ("strokeWidth", strokeWidth),
+        ("opacity", opacity),
         ("aspectRatio", aspectRatio),
     ]:
         if _v is not None:
@@ -208,7 +210,7 @@ def petal(*, label: Optional[Union[bool, str]] = None, debug: Optional[bool] = N
             _kw[_k] = _channel(_v)
     return Mark("petal", **_kw)
 
-def text(*, label: Optional[Union[bool, str]] = None, debug: Optional[bool] = None, x: Optional[Union[int, float, str]] = None, cx: Optional[Union[int, float, str]] = None, x2: Optional[Union[int, float, str]] = None, w: Optional[Union[int, float, str]] = None, emX: Optional[bool] = None, y: Optional[Union[int, float, str]] = None, cy: Optional[Union[int, float, str]] = None, y2: Optional[Union[int, float, str]] = None, h: Optional[Union[int, float, str]] = None, emY: Optional[bool] = None, theta: Optional[Union[int, float, str]] = None, thetaSize: Optional[Union[int, float, str]] = None, r: Optional[Union[int, float, str]] = None, rSize: Optional[Union[int, float, str]] = None, key: Optional[str] = None, text: str, fill: Optional[str] = None, stroke: Optional[str] = None, strokeWidth: Optional[float] = None, filter: Optional[str] = None, fontSize: Optional[float] = None, fontFamily: Optional[str] = None, debugBoundingBox: Optional[bool] = None, rotate: Optional[float] = None) -> Mark:
+def text(*, label: Optional[Union[bool, str]] = None, debug: Optional[bool] = None, x: Optional[Union[int, float, str]] = None, cx: Optional[Union[int, float, str]] = None, x2: Optional[Union[int, float, str]] = None, w: Optional[Union[int, float, str]] = None, emX: Optional[bool] = None, y: Optional[Union[int, float, str]] = None, cy: Optional[Union[int, float, str]] = None, y2: Optional[Union[int, float, str]] = None, h: Optional[Union[int, float, str]] = None, emY: Optional[bool] = None, theta: Optional[Union[int, float, str]] = None, thetaSize: Optional[Union[int, float, str]] = None, r: Optional[Union[int, float, str]] = None, rSize: Optional[Union[int, float, str]] = None, key: Optional[str] = None, text: str, fill: Optional[str] = None, stroke: Optional[str] = None, strokeWidth: Optional[float] = None, filter: Optional[str] = None, fontSize: Optional[float] = None, fontFamily: Optional[str] = None, fontStyle: Optional[str] = None, fontWeight: Optional[Union[float, str]] = None, debugBoundingBox: Optional[bool] = None, rotate: Optional[float] = None) -> Mark:
     """A text label. Box geometry via the shared dims channels positions the text anchor.
 
     Args:
@@ -233,6 +235,8 @@ def text(*, label: Optional[Union[bool, str]] = None, debug: Optional[bool] = No
         filter: Raw SVG filter attribute.
         fontSize: Default 12.
         fontFamily: Default "system-ui, sans-serif".
+        fontStyle: Raw CSS font-style (e.g. "italic").
+        fontWeight: CSS font-weight (e.g. 300, 700, "bold").
         debugBoundingBox: Default false.
         rotate: Rotation in degrees, applied in the chart's y-up world frame about the text anchor. Default 0.
     """
@@ -262,6 +266,8 @@ def text(*, label: Optional[Union[bool, str]] = None, debug: Optional[bool] = No
         ("filter", filter),
         ("fontSize", fontSize),
         ("fontFamily", fontFamily),
+        ("fontStyle", fontStyle),
+        ("fontWeight", fontWeight),
         ("debugBoundingBox", debugBoundingBox),
         ("rotate", rotate),
     ]:
@@ -322,7 +328,7 @@ def image(*, label: Optional[Union[bool, str]] = None, debug: Optional[bool] = N
             _kw[_k] = _channel(_v)
     return Mark("image", **_kw)
 
-def polygon(*, label: Optional[Union[bool, str]] = None, debug: Optional[bool] = None, points: List[Any], fill: Optional[str] = None, stroke: Optional[str] = None, strokeWidth: Optional[float] = None) -> Mark:
+def polygon(*, label: Optional[Union[bool, str]] = None, debug: Optional[bool] = None, points: List[Any], fill: Optional[str] = None, stroke: Optional[str] = None, strokeWidth: Optional[float] = None, opacity: Optional[float] = None) -> Mark:
     """A closed polygon defined by explicit local-coordinate points (y-up). No dims channels — the bbox is computed from `points`.
 
     Args:
@@ -331,6 +337,7 @@ def polygon(*, label: Optional[Union[bool, str]] = None, debug: Optional[bool] =
         points: Vertex list, at least 3 points.
         fill: Default "black".
         stroke: Defaults to `fill`.
+        opacity: Default 1.
     """
     _kw: Dict[str, Any] = {}
     for _k, _v in [
@@ -340,6 +347,7 @@ def polygon(*, label: Optional[Union[bool, str]] = None, debug: Optional[bool] =
         ("fill", fill),
         ("stroke", stroke),
         ("strokeWidth", strokeWidth),
+        ("opacity", opacity),
     ]:
         if _v is not None:
             _kw[_k] = _channel(_v)
@@ -453,19 +461,28 @@ def mask(children: List["Mark"]) -> Mark:
     """
     return Mark("mask", _children=list(children))
 
-def enclose(children: List["Mark"], *, padding: Optional[float] = None, rx: Optional[float] = None, ry: Optional[float] = None) -> Mark:
+def enclose(children: List["Mark"], *, padding: Optional[float] = None, rx: Optional[float] = None, ry: Optional[float] = None, fill: Optional[str] = None, stroke: Optional[str] = None, strokeWidth: Optional[float] = None, strokeDasharray: Optional[str] = None, opacity: Optional[float] = None) -> Mark:
     """Draw a rounded-rect enclosure around the union of the children's bboxes, padded by `padding`.
 
     Args:
         padding: Default 2.
         rx: Default 2.
         ry: Default 2.
+        fill: Default "none".
+        stroke: Default "#D1D9E2".
+        strokeWidth: Default 1.
+        opacity: Default 1.
     """
     kwargs: Dict[str, Any] = {}
     for _k, _v in [
         ("padding", padding),
         ("rx", rx),
         ("ry", ry),
+        ("fill", fill),
+        ("stroke", stroke),
+        ("strokeWidth", strokeWidth),
+        ("strokeDasharray", strokeDasharray),
+        ("opacity", opacity),
     ]:
         if _v is not None:
             kwargs[_k] = _v
