@@ -678,6 +678,10 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
       fill: ch.str(),
       stroke: { type: t.string },
       strokeWidth: { type: t.number },
+      strokeDasharray: {
+        type: t.string,
+        doc: 'Raw SVG stroke-dasharray (e.g. "12") for a dashed line.',
+      },
       opacity: { type: t.number },
       mixBlendMode: { type: t.enum("normal", "multiply") },
       curve: {

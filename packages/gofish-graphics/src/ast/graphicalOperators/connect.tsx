@@ -75,6 +75,7 @@ export const connect = createNodeOperator(
       curve,
       stroke,
       strokeWidth,
+      strokeDasharray,
       opacity,
       mode = "edge",
       mixBlendMode,
@@ -93,6 +94,7 @@ export const connect = createNodeOperator(
       curve?: Curve;
       stroke?: string;
       strokeWidth?: number;
+      strokeDasharray?: string;
       opacity?: number;
       mode?: "edge" | "center";
       mixBlendMode?: "multiply" | "normal";
@@ -610,6 +612,7 @@ export const connect = createNodeOperator(
             fill: mode === "center" ? "none" : (resolvedFill ?? "none"),
             stroke: stroke ?? resolvedFill ?? "black",
             strokeWidth: strokeWidth ?? 0,
+            strokeDasharray,
             opacity: opacity ?? 1,
             // Normal by default for both modes; a ribbon that wants overlaps to
             // darken opts into `mixBlendMode: "multiply"` explicitly.

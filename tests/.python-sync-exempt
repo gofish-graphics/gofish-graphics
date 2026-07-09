@@ -41,6 +41,27 @@ packages/gofish-graphics/stories/bluefish/InsertionSort.stories.tsx
 # in the generated Python wrapper — not portable until it's added.
 packages/gofish-graphics/stories/bluefish/Topology.stories.tsx
 #
+# BakingRecipes (Bluefish port, #437) is a low-level Layer/createName/
+# createMark diagram (8 nested tiers of cross-tier ref unions feeding
+# `Constraint.align({x/y: "span"})` cell borders) — the same low-level
+# vocabulary as QuantumCircuit/Pulley/PythonTutor above, not yet
+# expressible via the fluent chart() pipeline.
+packages/gofish-graphics/stories/bluefish/BakingRecipes.stories.tsx
+#
+# DFSCQ (Bluefish port, #436) is a low-level Layer/createName/createMark
+# diagram (cross-tier ref anchors for funnels/arrows/ticks, span-matched
+# divider, enclose-styled stage boxes) — the same low-level vocabulary as
+# QuantumCircuit/Pulley/PythonTutor above, not yet expressible via the
+# fluent chart() pipeline.
+packages/gofish-graphics/stories/bluefish/DFSCQ.stories.tsx
+#
+# OhmParseTree (Bluefish port, #439) is a low-level Layer/createName
+# diagram driven by a recursive walk over an embedded parse-trace literal
+# (dynamically-named nodes, `Constraint.align({x: "span"})` label bars) —
+# the same low-level vocabulary as QuantumCircuit/Pulley/PythonTutor
+# above, not yet expressible via the fluent chart() pipeline.
+packages/gofish-graphics/stories/bluefish/OhmParseTree.stories.tsx
+#
 # ViolinPlot is ported too (tests/python-stories/low-level-syntax/
 # test_violin_plot.py) but stays exempt: the JS story uses `fast-kde`'s
 # density1d, while the idiomatic Python port uses `scipy.stats.gaussian_kde`.

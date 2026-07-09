@@ -2484,6 +2484,7 @@ def line(
     fill: Optional[str] = None,
     stroke: Optional[str] = None,
     strokeWidth: Optional[int] = None,
+    strokeDasharray: Optional[str] = None,
     opacity: Optional[float] = None,
     mixBlendMode: Optional[str] = None,
     curve: Optional[Union[str, Dict[str, Any]]] = None,
@@ -2500,6 +2501,9 @@ def line(
       - bag form ``line(...)`` over a ``selectAll(...)`` ref array (one polyline)
       - pairwise form ``line(from_=..., to=...)`` over rows whose ``from``/``to``
         columns hold refs (one segment per row, after :func:`resolve`).
+
+    ``strokeDasharray`` (e.g. ``"12"``) draws a dashed line, matching
+    ``enclose``'s option of the same name.
     """
     kwargs = _line_opts(
         dir=dir,
@@ -2508,6 +2512,7 @@ def line(
         fill=fill,
         stroke=stroke,
         strokeWidth=strokeWidth,
+        strokeDasharray=strokeDasharray,
         opacity=opacity,
         mixBlendMode=mixBlendMode,
         curve=curve,

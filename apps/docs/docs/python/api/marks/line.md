@@ -22,17 +22,18 @@ layer([
 ## Signature
 
 ```python
-line(stroke=None, strokeWidth=None, opacity=None, curve=None) -> Mark
+line(stroke=None, strokeWidth=None, strokeDasharray=None, opacity=None, curve=None) -> Mark
 ```
 
 ## Parameters
 
-| Parameter     | Type          | Description                                                             |
-| ------------- | ------------- | ----------------------------------------------------------------------- |
-| `stroke`      | `str`         | Line color                                                              |
-| `strokeWidth` | `int`         | Line width in pixels                                                    |
-| `opacity`     | `float`       | Opacity, `0`–`1`                                                        |
-| `curve`       | `str \| dict` | Path shape; default `"auto"`, which auto-smooths continuous line charts |
+| Parameter         | Type          | Description                                                             |
+| ----------------- | ------------- | ----------------------------------------------------------------------- |
+| `stroke`          | `str`         | Line color                                                              |
+| `strokeWidth`     | `int`         | Line width in pixels                                                    |
+| `strokeDasharray` | `str`         | Raw SVG `stroke-dasharray` (e.g. `"12"`) for a dashed line              |
+| `opacity`         | `float`       | Opacity, `0`–`1`                                                        |
+| `curve`           | `str \| dict` | Path shape; default `"auto"`, which auto-smooths continuous line charts |
 
 Returns a `Mark` for use in [`.mark()`](/python/api/core/mark).
 

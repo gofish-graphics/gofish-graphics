@@ -402,6 +402,7 @@ export type LineOptions = {
   fill?: MaybeValue<string>;
   stroke?: string;
   strokeWidth?: number;
+  strokeDasharray?: string;
   opacity?: number;
   mixBlendMode?: "normal" | "multiply";
   // Screen-space path shape, as a factory call (`straight()`, `bezier()`,
@@ -429,6 +430,7 @@ export const line = createDerivedMark<LineOptions>("line", (o, children) =>
       fill: o.fill,
       stroke: o.stroke,
       strokeWidth: o.strokeWidth ?? 1,
+      strokeDasharray: o.strokeDasharray,
       opacity: o.opacity,
       mixBlendMode: o.mixBlendMode,
       // Omitted ⇒ "auto": connect smooths (catmullRom) when the connected
