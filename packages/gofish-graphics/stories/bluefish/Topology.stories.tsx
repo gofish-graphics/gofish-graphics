@@ -190,8 +190,8 @@ const AC_PATH_SEGMENTS: [number, number][][] = [
 const AC_X_WARP: [number, number][] = [
   [2, -66], // outer edge of the "a" lobe
   [14, -50], // "a" lobe anchor -> dot a
-  [41.5, -30], // left dip wall (widened to clear the b-pill)
-  [64.5, 30], // right dip wall
+  [41.5, -16], // left dip wall (hugs the r=9 b-circle, like upstream)
+  [64.5, 16], // right dip wall
   [94, 50], // "c" lobe anchor -> dot c
   [104, 66], // outer edge of the "c" lobe
 ];
@@ -250,16 +250,18 @@ const acNeighbourhoodPoints = (): [number, number][] => {
   return pts;
 };
 
-// Per-axis ellipse padding, keyed by neighbourhood size. Hand-tuned so
-// every ellipse contains its dots AND their labels (which hang ~22px below
-// the dot centers) with breathing room, while nested pills keep readable
-// gaps: a single-point pill fits inside a two-point pill fits inside the
-// outer ellipse, and disjoint pills (e.g. the a-b pill and a c pill) never
-// touch. Sizing enclosures to contain labels automatically (a Penrose-style
-// optimization pass) is future design direction; these are hand-tuned
-// constants pending that.
+// Per-axis ellipse padding, keyed by neighbourhood size, matching the
+// Bluefish original's proportions: a single-point neighbourhood is a SMALL
+// CIRCLE snug around its dot (upstream draws an r=10 circle around an r=5
+// dot — it deliberately does NOT contain the point's label, which sits
+// below/outside it), while the multi-point pills and the outer set ellipse
+// are sized to contain their dots AND the labels (which hang ~22px below
+// the dot centers) with breathing room — label containment applies to
+// those outer levels only. Sizing enclosures to contain labels
+// automatically (a Penrose-style optimization pass) is future design
+// direction; these are hand-tuned constants pending that.
 const NEIGHBOURHOOD_PAD: Record<number, { x: number; y: number }> = {
-  1: { x: 14, y: 24 }, // pill: 36 x 56 (rx 18, ry 28)
+  1: { x: 5, y: 5 }, // circle: 18 x 18 (r 9) — snug, label outside
   2: { x: 21, y: 34 }, // pill: 100 x 76 (rx 50, ry 38)
 };
 const OUTER_PAD = { x: 34, y: 54 }; // outer: 176 x 116 (rx 88, ry 58)
