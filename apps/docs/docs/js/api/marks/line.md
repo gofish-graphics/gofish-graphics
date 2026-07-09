@@ -27,18 +27,19 @@ gf.layer([
 ## Signature
 
 ```ts
-line({ stroke?, strokeWidth = 1, opacity?, curve = "auto", from?, to? })
+line({ stroke?, strokeWidth = 1, strokeDasharray?, opacity?, curve = "auto", from?, to? })
 ```
 
 ## Parameters
 
-| Option        | Type                                  | Description                                                                                                         |
-| ------------- | ------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| `stroke`      | `string`                              | Line color                                                                                                          |
-| `strokeWidth` | `number`                              | Line thickness                                                                                                      |
-| `opacity`     | `number`                              | Opacity (0–1)                                                                                                       |
-| `curve`       | `"straight" \| "bezier" \| CurveSpec` | Screen-space path shape; default `"auto"` auto-smooths continuous line charts with a centripetal Catmull-Rom spline |
-| `from`, `to`  | `string`                              | Pairwise form: column names holding the two endpoint refs                                                           |
+| Option            | Type                                  | Description                                                                                                         |
+| ----------------- | ------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `stroke`          | `string`                              | Line color                                                                                                          |
+| `strokeWidth`     | `number`                              | Line thickness                                                                                                      |
+| `strokeDasharray` | `string`                              | Raw SVG `stroke-dasharray` (e.g. `"12"`) for a dashed line; same option name as `enclose`                           |
+| `opacity`         | `number`                              | Opacity (0–1)                                                                                                       |
+| `curve`           | `"straight" \| "bezier" \| CurveSpec` | Screen-space path shape; default `"auto"` auto-smooths continuous line charts with a centripetal Catmull-Rom spline |
+| `from`, `to`      | `string`                              | Pairwise form: column names holding the two endpoint refs                                                           |
 
 When `curve` is omitted (`"auto"`), `line` inspects the connected points: if they
 share a continuous connection axis it smooths them with a centripetal Catmull-Rom

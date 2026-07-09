@@ -2098,6 +2098,10 @@ for the API.
         "strokeWidth": {
           "type": "number"
         },
+        "strokeDasharray": {
+          "type": "string",
+          "description": "Raw SVG stroke-dasharray (e.g. \"12\") for a dashed line."
+        },
         "opacity": {
           "type": "number"
         },

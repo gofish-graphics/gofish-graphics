@@ -735,10 +735,11 @@ def _treemap_combinator_opts(*, w: Optional[Union[int, float, str]] = None, h: O
             opts[_k] = _v
     return opts
 
-def _line_opts(*, fill: Optional[str] = None, stroke: Optional[str] = None, strokeWidth: Optional[float] = None, opacity: Optional[float] = None, mixBlendMode: Optional[str] = None, curve: Optional[Any] = None, dir: Optional[str] = None, source: Optional[Any] = None, target: Optional[Any] = None, from_: Optional[str] = None, to: Optional[str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
+def _line_opts(*, fill: Optional[str] = None, stroke: Optional[str] = None, strokeWidth: Optional[float] = None, strokeDasharray: Optional[str] = None, opacity: Optional[float] = None, mixBlendMode: Optional[str] = None, curve: Optional[Any] = None, dir: Optional[str] = None, source: Optional[Any] = None, target: Optional[Any] = None, from_: Optional[str] = None, to: Optional[str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
     """Center-mode connector — the path between the centers of consecutive marks (the drop-in for the removed `connect`). Bag form over a ref array, or pairwise `{from, to}` form over rows with two ref columns.
 
     Args:
+        strokeDasharray: Raw SVG stroke-dasharray (e.g. "12") for a dashed line.
         curve: Screen-space path shape: a factory call (straight()/bezier()/catmullRom()/orthogonal()/arc({direction})/perfectArrows({bow})/...) or a bare name. Omitted = "auto" (catmullRom on a homogeneous continuous connection axis, else straight).
         source: Anchor-mode start point: a normalized [fx, fy] on the mark's bbox, or a start/middle/end keyword.
         target: Anchor-mode end point; see `source`.
@@ -751,6 +752,7 @@ def _line_opts(*, fill: Optional[str] = None, stroke: Optional[str] = None, stro
         ("fill", fill),
         ("stroke", stroke),
         ("strokeWidth", strokeWidth),
+        ("strokeDasharray", strokeDasharray),
         ("opacity", opacity),
         ("mixBlendMode", mixBlendMode),
         ("curve", curve),
