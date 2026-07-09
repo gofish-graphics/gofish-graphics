@@ -82,13 +82,20 @@ const stageLabel = (stage: number, length: number) => {
 // translucent white circle, and the value centered on top.
 const CELL_SIZE = 34;
 const CELL_SPACING = 3;
-// Sorted-prefix (teal) border padding — matches Bluefish's DashedBorder
-// padding={4} (upstream example-gallery/insertion-sort.tsx). The teal
-// stroke's outer edge (padding + strokeWidth/2 = 6px) stays clear of the
-// outer black outline, which sits at OUTLINE_PADDING = 10 — upstream
-// ArrayOutline uses Background's default padding of 10 (background.tsx).
+// Sorted-prefix (teal) border padding at a mid-row prefix boundary —
+// matches Bluefish's DashedBorder padding={4} (upstream
+// example-gallery/insertion-sort.tsx), which puts the vertical dash column
+// in the gap just past the last sorted cell.
 const BORDER_PADDING = 4;
+// Row outline padding — upstream ArrayOutline uses Background's default
+// padding of 10 (background.tsx).
 const OUTLINE_PADDING = 10;
+// In the original (Penrose-derived) rendering the teal dashes sit OUTSIDE
+// the black row outline on the top, bottom, and closed ends — the dash
+// band's inner edge is tangent to the outline's outer edge. Outline outer
+// edge = OUTLINE_PADDING + strokeWidth/2 = 11; dash band half-width = 2
+// (strokeWidth 4), so the dash box's edge sits at 13.
+const DASH_OVERHANG = OUTLINE_PADDING + 1 + 2;
 
 const ArrayEntry = createMark(
   ({
@@ -196,10 +203,17 @@ export const InsertionSort: StoryObj = {
         ...(from > 0
           ? [
               // Upstream DashedBorder: <Rect fill="none" stroke="teal"
-              // stroke-width={4} rx={12} stroke-dasharray="12" />.
+              // stroke-width={4} rx={12} stroke-dasharray="12" />. The box
+              // overhangs the black outline (DASH_OVERHANG) on the top,
+              // bottom, and left, and — when the prefix spans the whole row
+              // (the terminal Sorted stage) — on the right too. At a mid-row
+              // prefix boundary the right edge instead dips inside to hug the
+              // last sorted cell at BORDER_PADDING, like the original; since
+              // enclose has a single scalar padding, that asymmetry is folded
+              // into the invisible sizer's width.
               enclose(
                 {
-                  padding: BORDER_PADDING,
+                  padding: DASH_OVERHANG,
                   rx: 12,
                   ry: 12,
                   fill: "none",
@@ -209,7 +223,10 @@ export const InsertionSort: StoryObj = {
                 },
                 [
                   rect({
-                    w: from * CELL_SIZE + (from - 1) * CELL_SPACING,
+                    w:
+                      from * CELL_SIZE +
+                      (from - 1) * CELL_SPACING +
+                      (from === ar.length ? 0 : BORDER_PADDING - DASH_OVERHANG),
                     h: CELL_SIZE,
                     fill: "none",
                     stroke: "none",
