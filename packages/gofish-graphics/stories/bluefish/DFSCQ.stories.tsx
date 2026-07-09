@@ -198,6 +198,11 @@ export const DFSCQ: StoryObj<Args> = {
     const blocks1ArrowAnchorName = createName("blocks1ArrowAnchor");
     const rect3 = createName("rect3");
     const logDataAnchor = createName("logDataAnchor");
+    // The two tick DIVIDERS beneath the disk-log row (between "Log header"/
+    // "Log data" and between "Log data"/"Available log space") — Funnel 2's
+    // start anchors (Bluefish's `disklogtick2`/`disklogtick3`).
+    const disklogtick2 = createName("disklogtick2");
+    const disklogtick3 = createName("disklogtick3");
     // Stage-box names (for right-aligning the "commit"/"flush"/"apply"
     // labels against a box's right edge) + the vertical gap slots reserved
     // for those labels in the main vertical stack.
@@ -287,13 +292,24 @@ export const DFSCQ: StoryObj<Args> = {
     // `.constrain()` positioning the fresh shape relative to that ref — `ref`
     // resolves by global name registration, not tree descent, so nesting
     // depth is irrelevant.
-    const Tick = (anchor: ReturnType<typeof createName>, side: "start" | "end") =>
-      Layer([ref(anchor).name("a"), rect({ w: 3, h: 13, fill: "black" }).name("t")]).constrain(
-        ({ a, t }) => [
-          Constraint.distribute({ dir: "y", spacing: 15 }, [a, t]),
-          Constraint.align({ x: side }, [a, t]),
-        ]
-      );
+    // `tickName` (optional): when given, the tick rect is named with this
+    // global token instead of a local-only "t" so a funnel side can `ref()`
+    // it later (used for the two tick DIVIDERS beneath rect2/rect4 that
+    // Funnel 2 anchors to — see FRICTION LOG note above `Tick`/`Label`).
+    const Tick = (
+      anchor: ReturnType<typeof createName>,
+      side: "start" | "end",
+      tickName?: ReturnType<typeof createName>
+    ) => {
+      const key = tickName ? tickName.__tag : "t";
+      return Layer([
+        ref(anchor).name("a"),
+        rect({ w: 3, h: 13, fill: "black" }).name(tickName ?? "t"),
+      ]).constrain((c) => [
+        Constraint.distribute({ dir: "y", spacing: 15 }, [c.a, c[key]]),
+        Constraint.align({ x: side }, [c.a, c[key]]),
+      ]);
+    };
     const Label = (anchor: ReturnType<typeof createName>, labelText: string) =>
       Layer([
         ref(anchor).name("a"),
@@ -438,11 +454,79 @@ export const DFSCQ: StoryObj<Args> = {
       Constraint.align({ x: "start", y: "start" }, [c.a, c.logDataAnchor]),
     ]);
 
+    // ── Dashed funnels (Bluefish's `DashedFunnel`) ──────────────────────
+    // The original builds each side as a 3-segment dashed polyline: a short
+    // vertical drop below the top anchor, a diagonal, then a short vertical
+    // entry into the bottom anchor (see `DashedFunnel` in the ported
+    // source — `topTick1`/`bottomTick1` etc. are those short vertical stub
+    // Paths, stacked `spacing`-px off each anchor; the two `<Line>`s then
+    // run tick-to-tick, i.e. stub-end to stub-end, not anchor-to-anchor).
+    // Reproduced here as: two tiny invisible "stub" markers placed a fixed
+    // offset off each anchor's edge (via `distribute` + `align`, the same
+    // pattern as `Tick` above), then three dashed `line()` segments —
+    // anchor→stub, stub→stub (the diagonal), stub→anchor.
+    const FUNNEL_STUB = 18;
+    const FunnelSide = (
+      topAnchor: ReturnType<typeof createName>,
+      topEdge: "start" | "middle" | "end",
+      bottomAnchor: ReturnType<typeof createName>,
+      bottomEdge: "start" | "middle" | "end",
+      idPrefix: string
+    ) => {
+      const topStub = createName(`${idPrefix}TopStub`);
+      const bottomStub = createName(`${idPrefix}BottomStub`);
+      const topKey = topStub.__tag;
+      const bottomKey = bottomStub.__tag;
+      return [
+        // Short vertical drop below the top anchor's edge.
+        Layer([
+          ref(topAnchor).name("a"),
+          rect({ w: 1, h: 1, fill: "transparent" }).name(topStub),
+        ]).constrain((c) => [
+          Constraint.distribute({ dir: "y", spacing: FUNNEL_STUB }, [c.a, c[topKey]]),
+          Constraint.align({ x: topEdge }, [c.a, c[topKey]]),
+        ]),
+        // Short vertical entry above the bottom anchor's edge.
+        Layer([
+          rect({ w: 1, h: 1, fill: "transparent" }).name(bottomStub),
+          ref(bottomAnchor).name("b"),
+        ]).constrain((c) => [
+          Constraint.distribute({ dir: "y", spacing: FUNNEL_STUB }, [c[bottomKey], c.b]),
+          Constraint.align({ x: bottomEdge }, [c.b, c[bottomKey]]),
+        ]),
+        // Segment 1: vertical, anchor edge → top stub.
+        line(
+          {
+            stroke: "black",
+            strokeWidth: 2,
+            strokeDasharray: "5",
+            source: { x: topEdge, y: "end" },
+          },
+          [ref(topAnchor), ref(topStub)]
+        ),
+        // Segment 2: diagonal, top stub → bottom stub.
+        line({ stroke: "black", strokeWidth: 2, strokeDasharray: "5" }, [
+          ref(topStub),
+          ref(bottomStub),
+        ]),
+        // Segment 3: vertical, bottom stub → anchor edge.
+        line(
+          {
+            stroke: "black",
+            strokeWidth: 2,
+            strokeDasharray: "5",
+            target: { x: bottomEdge, y: "start" },
+          },
+          [ref(bottomStub), ref(bottomAnchor)]
+        ),
+      ];
+    };
+
     Layer({ x: 20, y: 20 }, [
       pipelineHead,
       Tick(rect1, "start"),
-      Tick(rect2, "start"),
-      Tick(rect4, "start"),
+      Tick(rect2, "start", disklogtick2),
+      Tick(rect4, "start", disklogtick3),
       Tick(rect4, "end"),
       Label(rect1, "Log header"),
       logDataAnchorLayer,
@@ -472,35 +556,19 @@ export const DFSCQ: StoryObj<Args> = {
         Constraint.align({ x: "end" }, [c.a, c.diskDataLabel]),
       ]),
 
-      // Funnel 1: GroupLog's big brackets converge onto DiskLog's blocks1/2.
-      // Dashed (Bluefish's `DashedFunnel`, `stroke-dasharray="5"`) — the new
-      // `strokeDasharray` option on `line()` (Task 1) is what makes this
-      // possible; previously the funnels had to render solid.
-      // `source`/`target` pin each end to a normalized bbox point instead of
-      // the default center (empirically here `"end"` on y lands at the
-      // rendered-bottom of the upper element and `"start"` at the
-      // rendered-top of the lower one) — so each funnel visibly converges at
-      // the bottom edge of the upper element and the top edge of the lower
-      // one, matching ground truth's tick-to-tick funnels, rather than
-      // piercing into the lower block's middle (only hidden before by the
-      // paint-order bug).
-      line(
-        { stroke: "black", strokeWidth: 2, strokeDasharray: "5", source: { y: "end" }, target: { y: "start" } },
-        [ref(bigleftbracket), ref(blocks1)]
-      ),
-      line(
-        { stroke: "black", strokeWidth: 2, strokeDasharray: "5", source: { y: "end" }, target: { y: "start" } },
-        [ref(bigrightbracket), ref(blocks2)]
-      ),
-      // Funnel 2: DiskLog's middle ticks converge onto Applier's disk-data row.
-      line(
-        { stroke: "black", strokeWidth: 2, strokeDasharray: "5", source: { y: "end" }, target: { y: "start" } },
-        [ref(rect2), ref(diskdata)]
-      ),
-      line(
-        { stroke: "black", strokeWidth: 2, strokeDasharray: "5", source: { y: "end" }, target: { y: "start" } },
-        [ref(rect4), ref(diskdata)]
-      ),
+      // Funnel 1: GroupLog's committedTxns ARRAY (the full bracketed
+      // extent — bigleftbracket/bigrightbracket) converges onto DiskLog's
+      // gray+blue run (blocks1's first block through blocks2's last block).
+      // Each side is the 3-segment vertical/diagonal/vertical polyline built
+      // by `FunnelSide` above (Bluefish's `DashedFunnel`, `stroke-dasharray
+      // ="5"`).
+      ...FunnelSide(bigleftbracket, "start", blocks1, "start", "funnel1L"),
+      ...FunnelSide(bigrightbracket, "end", blocks2, "end", "funnel1R"),
+      // Funnel 2: the two tick DIVIDERS beneath the disk-log row (between
+      // "Log header"/"Log data", and between "Log data"/"Available log
+      // space") converge onto Applier's gray+blue disk-data row.
+      ...FunnelSide(disklogtick2, "middle", diskdata, "start", "funnel2L"),
+      ...FunnelSide(disklogtick3, "middle", diskdata, "end", "funnel2R"),
 
       // commit arrow: LogAPI's active txn → GroupLog's tracked committed txn.
       arrow({ stretch: 0 }, [ref(activeTxnBlock), ref(committedTxnsBlock)]),
