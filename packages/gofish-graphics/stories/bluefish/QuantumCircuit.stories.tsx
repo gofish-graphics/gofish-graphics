@@ -67,10 +67,14 @@ const BoxedSymbol = createMark(({ label }: { label: string }) =>
       stroke: "black",
       strokeWidth: 3,
     }).name("box"),
+    // Upstream is `font-family="serif" font-style="italic"`. ("italic serif"
+    // as a single font-family string is invalid CSS — the browser silently
+    // falls back to the default font, upright.)
     text({
       text: label,
       fontSize: 30,
-      fontFamily: "italic serif",
+      fontFamily: "serif",
+      fontStyle: "italic",
       fill: "black",
     }).name("label"),
   ]).constrain(({ box, label }) => [
@@ -103,12 +107,16 @@ const ControlDot = () => circle({ r: 5, fill: "black" });
 // circuit's max slot count so they read as two parallel rails of identical
 // extent (Bluefish's right circuit passes depth={3} to the 2-symbol control
 // wire too). Rail width = span*SLOT + 30, matching Bluefish's
-// `depth * 60 + 30`: a 10px stub before the first gate, ~30px after the
-// last full column.
+// `depth * 60 + 30`.
 //
-// The 10px leader is a zero-width transparent rect PREPENDED to the gates
-// spread — the spread's 10px spacing after it becomes the leader (Bluefish
-// does the same with a 10px transparent Rect in its StackH). Tried first: a
+// The leader is a 10px transparent rect PREPENDED to the gates spread,
+// exactly as in Bluefish's StackH — and Bluefish's Stack ALSO defaults
+// spacing to 10, so the first gate starts 10 (rect) + 10 (gap) = 20px in.
+// With rail = 60n + 30 and gates ending at 60n + 10, that leaves 20px of
+// rail on BOTH sides: every gate row is horizontally centered on its rail.
+// (An earlier version of this port used a zero-width leader on the theory
+// that the spread's spacing replaced Bluefish's rect; that lost 10px on the
+// left and produced lopsided 10/30 stubs.) Tried first: a
 // `Constraint.distribute({dir:"x", spacing:10, mode:"edge"})` between `line`
 // and `gates`. `distribute` SEQUENCES its participants — edge mode places
 // the next one after the previous one's far edge, like a flow layout — it
@@ -124,7 +132,7 @@ const Wire = createMark(({ slots, span }: { slots: any[]; span?: number }) =>
       fill: "black",
     }).name("line"),
     spread({ dir: "x", spacing: SLOT - GATE, alignment: "middle" }, [
-      rect({ w: 0, h: GATE, fill: "transparent" }),
+      rect({ w: 10, h: GATE, fill: "transparent" }),
       ...slots,
     ]).name("gates"),
   ]).constrain(({ line, gates }) => [
@@ -171,6 +179,11 @@ export const QuantumCircuit: StoryObj<Args> = {
       stroke: "none",
     } as const;
     const highlightedOPlus = enclose({ ...highlight }, [OPlus({})]);
+    // Known 2-3px optical offset: the text ink sits slightly high in this
+    // pill. enclose centers geometry children exactly (see the ⊕ pill), but
+    // a text child's baseline-anchored bbox lands ~2.5px above the pill
+    // center — an enclose+text interaction in the library, not fixable from
+    // the story.
     const highlightedDescription = enclose({ ...highlight }, [
       text({ text: "This is a controlled-NOT." }),
     ]);

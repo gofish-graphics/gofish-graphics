@@ -2,7 +2,6 @@ import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
 import {
   layer,
-  spread,
   ellipse,
   text,
   position,
@@ -68,11 +67,12 @@ const isAandCNeighbourhood = (n: Neighbourhood) =>
 // between them but is NOT a member of the neighbourhood. GoFish has no
 // concave-enclosure primitive, but it does have `polygon` (explicit
 // local-coordinate point list) — so this samples the original path's cubic
-// Bézier segments into a dense point list and affinely remaps it into this
-// story's own point-spacing/point-size coordinate system, anchored on the
-// two points ("a" and "c") the shape must actually enclose. That keeps the
-// shape faithful to the original hand-drawn artwork instead of
-// re-approximating it with a bbox-based primitive.
+// Bézier segments into a dense point list and remaps it (piecewise-
+// linearly; see AC_X_WARP/AC_Y_WARP) into this story's own
+// point-spacing/point-size coordinate system, anchored on the two points
+// ("a" and "c") the shape must actually enclose. That keeps the shape
+// faithful to the original hand-drawn artwork instead of re-approximating
+// it with a bbox-based primitive.
 const AC_PATH_SEGMENTS: [number, number][][] = [
   // Each entry: [P0, C1, C2, P1] control points of one cubic Bézier segment,
   // transcribed directly from the original path's "d" attribute
@@ -175,16 +175,41 @@ const AC_PATH_SEGMENTS: [number, number][][] = [
   ],
 ];
 
-// Anchor points in the original path's own coordinate space: the centers of
-// the "a" and "c" lobes, derived from the symmetry of the path data (the
-// path is mirror-symmetric about x = 53) and cross-checked against the
-// upstream Path component's hand-tuned x:-7, y:-10 placement offset, which
-// lands the lobes on the actual "a"/"c" point centers.
-const AC_PATH_ANCHOR_A: [number, number] = [14, 17];
-const AC_PATH_ANCHOR_C: [number, number] = [94, 17];
-// Original point spacing (StackH spacing=30 + point diameter 10 = 40
-// center-to-center), so a-to-c center distance is 80 in path-space.
-const AC_ORIGINAL_A_TO_C = 80;
+// Remap from the path's own coordinate space into this story's point
+// layout, as two independent piecewise-linear warps (x and y). A single
+// affine map can't work here: the "a"/"c" lobe anchors must land exactly on
+// this story's dot centers (fixing the x scale between them), while the
+// concave dip's opening must clear this story's label-containing b-pill
+// (which is wider, relative to the dot spacing, than the original's tiny
+// r=5 dot circle) and the dip band must clear both the two-point pills
+// above it and the outer ellipse below it. The knots are hand-tuned against
+// rendered captures. Path-space landmarks (from the segment data above):
+// lobe anchors x=14/94 at y=17 (mirror-symmetric about x=53, cross-checked
+// against upstream's hand-tuned x:-7, y:-10 placement); dip walls at
+// x=41.5/64.5; band from y=42.07 (top) to y=48 (bottom); lobe tops at y=2.
+const AC_X_WARP: [number, number][] = [
+  [2, -66], // outer edge of the "a" lobe
+  [14, -50], // "a" lobe anchor -> dot a
+  [41.5, -30], // left dip wall (widened to clear the b-pill)
+  [64.5, 30], // right dip wall
+  [94, 50], // "c" lobe anchor -> dot c
+  [104, 66], // outer edge of the "c" lobe
+];
+const AC_Y_WARP: [number, number][] = [
+  [17, 0], // lobe anchor height -> dot centerline
+  [42.07, 43.5], // band top: below the two-point pills' deepest edge
+  [48, 49.5], // band bottom: inside the outer ellipse
+];
+
+// Piecewise-linear interpolation through sorted (input, output) knots,
+// extrapolating with the end segments' slopes.
+const warp1d = (knots: [number, number][], v: number): number => {
+  let i = 0;
+  while (i < knots.length - 2 && v > knots[i + 1][0]) i++;
+  const [x0, y0] = knots[i];
+  const [x1, y1] = knots[i + 1];
+  return y0 + ((v - x0) * (y1 - y0)) / (x1 - x0);
+};
 
 const cubicBezierPoint = (
   p0: [number, number],
@@ -206,17 +231,13 @@ const cubicBezierPoint = (
 
 const SAMPLES_PER_SEGMENT = 12;
 
-// Sample the hand-drawn a/c path into a dense point list, then remap from
-// the path's own coordinate space into this story's point layout: uniformly
-// scaled so the "a"-"c" anchor distance matches this story's actual
-// SPACING, and translated so the anchors land on the real "a"/"c" point
-// centers.
+// Sample the hand-drawn a/c path into a dense point list, warped through
+// the piecewise-linear x/y maps above so its lobes land on this story's
+// "a"/"c" dots and its dip clears this story's (larger) pills.
 const acNeighbourhoodPoints = (): [number, number][] => {
-  const scale = (2 * SPACING) / AC_ORIGINAL_A_TO_C;
-  const aCenter: [number, number] = [-SPACING, 0];
   const remap = ([px, py]: [number, number]): [number, number] => [
-    aCenter[0] + (px - AC_PATH_ANCHOR_A[0]) * scale,
-    aCenter[1] + (py - AC_PATH_ANCHOR_A[1]) * scale,
+    warp1d(AC_X_WARP, px),
+    warp1d(AC_Y_WARP, py),
   ];
 
   const pts: [number, number][] = [];
@@ -229,21 +250,35 @@ const acNeighbourhoodPoints = (): [number, number][] => {
   return pts;
 };
 
+// Per-axis ellipse padding, keyed by neighbourhood size. Hand-tuned so
+// every ellipse contains its dots AND their labels (which hang ~22px below
+// the dot centers) with breathing room, while nested pills keep readable
+// gaps: a single-point pill fits inside a two-point pill fits inside the
+// outer ellipse, and disjoint pills (e.g. the a-b pill and a c pill) never
+// touch. Sizing enclosures to contain labels automatically (a Penrose-style
+// optimization pass) is future design direction; these are hand-tuned
+// constants pending that.
+const NEIGHBOURHOOD_PAD: Record<number, { x: number; y: number }> = {
+  1: { x: 14, y: 24 }, // pill: 36 x 56 (rx 18, ry 28)
+  2: { x: 21, y: 34 }, // pill: 100 x 76 (rx 50, ry 38)
+};
+const OUTER_PAD = { x: 34, y: 54 }; // outer: 176 x 116 (rx 88, ry 58)
+
 // Analytic bbox for a neighbourhood: since the three points sit at known,
 // fixed x-offsets (index * SPACING) with a shared y, the ellipse outline
 // spanning a subset of them can be computed directly instead of asking
 // `enclose` to discover it from refs (see finding above).
-const neighbourhoodBox = (n: Neighbourhood, padding: number) => {
+const neighbourhoodBox = (n: Neighbourhood, pad: { x: number; y: number }) => {
   const indices = n.map((p) => POINT_NAMES.indexOf(p));
   const minIdx = Math.min(...indices);
   const maxIdx = Math.max(...indices);
   const spanW = (maxIdx - minIdx) * SPACING + POINT_SIZE;
   return {
     // centerX of the span, relative to the middle point (b, index 1) which
-    // spread({alignment:"middle"}) centers at x = 0.
+    // the panel's local coordinates place at x = 0.
     centerX: (minIdx + maxIdx - 2) * (SPACING / 2),
-    w: spanW + padding * 2,
-    h: POINT_SIZE + padding * 2,
+    w: spanW + pad.x * 2,
+    h: POINT_SIZE + pad.y * 2,
   };
 };
 
@@ -273,7 +308,9 @@ const ThreePointTopology = (
         return position(
           // -4: a single-character italic label is ~8px wide at fontSize 12;
           // approximate centering since text has no measured-width query here.
-          { x: x - 4, y: 14 },
+          // y: 10 keeps the label snug under the dot so the label-containing
+          // pill sizes (NEIGHBOURHOOD_PAD) stay compact.
+          { x: x - 4, y: 10 },
           [text({ text: p, fontStyle: "italic" })]
         );
       })
@@ -284,7 +321,7 @@ const ThreePointTopology = (
   // wrapping the full <StackH>. `overdraw` is accepted-but-unused there too
   // (the component only reads `fill`/`opacity`, both left at their plain
   // defaults), so it renders identically in both modes.
-  const outerBox = neighbourhoodBox(["a", "b", "c"], 36);
+  const outerBox = neighbourhoodBox(["a", "b", "c"], OUTER_PAD);
   const outer = position(
     { x: outerBox.centerX - outerBox.w / 2, y: -outerBox.h / 2 },
     [
@@ -312,14 +349,13 @@ const ThreePointTopology = (
       return polygon({
         points: acNeighbourhoodPoints(),
         fill: overdraw ? "none" : rawColor,
-        stroke: "#999",
+        stroke: "black",
         strokeWidth: 3,
         opacity: overdraw ? 1 : TOPOLOGY_OPACITY,
       });
     }
 
-    const padding = n.length * 17 - 12;
-    const box = neighbourhoodBox(n, padding);
+    const box = neighbourhoodBox(n, NEIGHBOURHOOD_PAD[n.length]);
     return position(
       { x: box.centerX - box.w / 2, y: -box.h / 2 },
       [
@@ -343,8 +379,26 @@ const ThreePointTopology = (
   return layer([outer, ...neighbourhoods, ...points, ...labels]);
 };
 
-const col = (panels: ReturnType<typeof ThreePointTopology>[]) =>
-  spread({ dir: "y", spacing: 40, mode: "edge", alignment: "middle" }, panels);
+// Grid pitches: panel = outer ellipse (176 x 116) + a 40px gutter. The grid
+// is placed EXPLICITLY (position() at fixed pitches) rather than with
+// nested `spread`s: spread spaces panels by their layout extents, and the
+// panels' extents vary spuriously (a label or the a/c polygon inflates a
+// panel's proposed size asymmetrically — see friction log item 7), which
+// produced visibly uneven gutters. The panels' ellipses are all the same
+// size, so a fixed-pitch grid is both correct and deterministic.
+const COL_PITCH = 176 + 40;
+const ROW_PITCH = 116 + 40;
+
+// `cols` is column-major: cols[c][r] is the panel at column c, row r —
+// matching the original Bluefish source's StackH-of-StackV structure.
+const panelGrid = (cols: ReturnType<typeof ThreePointTopology>[][]) =>
+  layer(
+    cols.flatMap((colPanels, c) =>
+      colPanels.map((panel, r) =>
+        position({ x: c * COL_PITCH, y: r * ROW_PITCH }, [panel])
+      )
+    )
+  );
 
 export const Topology: StoryObj<Args> = {
   tags: ["gallery"],
@@ -369,18 +423,18 @@ export const Topology: StoryObj<Args> = {
     Layer(
       {},
       [
-        spread({ dir: "x", spacing: 40, mode: "edge", alignment: "middle" }, [
-          col([
+        panelGrid([
+          [
             ThreePointTopology([], { showLabels: true }),
             ThreePointTopology([["b"]]),
             ThreePointTopology([["a", "b"]]),
-          ]),
-          col([
+          ],
+          [
             ThreePointTopology([["a", "b"], ["a"]], { showLabels: true }),
             ThreePointTopology([["a", "b"], ["c"]]),
             ThreePointTopology([["a", "b"], ["a"], ["b"]]),
-          ]),
-          col([
+          ],
+          [
             ThreePointTopology([["a", "b"], ["b", "c"], ["b"]], {
               showLabels: true,
             }),
@@ -391,7 +445,7 @@ export const Topology: StoryObj<Args> = {
               ["b"],
               ["a", "c"],
             ]),
-          ]),
+          ],
         ]),
       ]
     ).render(container, { w: 700, h: 460 });
@@ -415,13 +469,13 @@ export const TopologyOverdraw: StoryObj<Args> = {
     Layer(
       {},
       [
-        spread({ dir: "x", spacing: 40, mode: "edge", alignment: "middle" }, [
-          col([
+        panelGrid([
+          [
             ThreePointTopology([], { showLabels: true, overdraw: true }),
             ThreePointTopology([["b"]], { overdraw: true }),
             ThreePointTopology([["a", "b"]], { overdraw: true }),
-          ]),
-          col([
+          ],
+          [
             ThreePointTopology([["a", "b"], ["a"]], {
               showLabels: true,
               overdraw: true,
@@ -430,8 +484,8 @@ export const TopologyOverdraw: StoryObj<Args> = {
             ThreePointTopology([["a", "b"], ["a"], ["b"]], {
               overdraw: true,
             }),
-          ]),
-          col([
+          ],
+          [
             ThreePointTopology([["a", "b"], ["b", "c"], ["b"]], {
               showLabels: true,
               overdraw: true,
@@ -443,7 +497,7 @@ export const TopologyOverdraw: StoryObj<Args> = {
               [["a", "b"], ["a", "c"], ["b", "c"], ["b"]],
               { overdraw: true }
             ),
-          ]),
+          ],
         ]),
       ]
     ).render(container, { w: 700, h: 460 });
@@ -494,8 +548,9 @@ export const TopologyOverdraw: StoryObj<Args> = {
 //    (explicit local-coordinate point list), which is enough to *replicate*
 //    Bluefish's hand-authored concave SVG path for the a/c neighbourhood by
 //    sampling its cubic Bézier segments into a dense point list and
-//    affinely remapping them onto this story's own point layout (anchored
-//    on the "a"/"c" point centers) — see `acNeighbourhoodPoints`. That's a
+//    remapping them piecewise-linearly onto this story's own point layout
+//    (anchored on the "a"/"c" point centers, with the dip widened to clear
+//    the label-containing b-pill) — see `acNeighbourhoodPoints`. That's a
 //    faithful reproduction of the *specific* hand-drawn artwork, not a
 //    general concave-hull primitive; a real general fix still needs either
 //    a path-based enclose variant or a documented non-goal. It also
@@ -522,6 +577,24 @@ export const TopologyOverdraw: StoryObj<Args> = {
 // 6. `stack()` silently ignores `spacing` (its type comment says so — "the
 //    same as `spread` but never a gap") which is easy to reach for by
 //    analogy with `spread` and get flush-touching panels with no error.
-//    Switching to `spread({ mode: "edge" })` fixed it, but a runtime warning
-//    (or accepting the option as a no-op-with-warning) would have caught
-//    this immediately instead of via a visual diff.
+//    Switching to `spread({ mode: "edge" })` fixed it (the grid has since
+//    moved off spread entirely — see item 7), but a runtime warning (or
+//    accepting the option as a no-op-with-warning) would have caught this
+//    immediately instead of via a visual diff.
+//
+// 7. Spread spaces panels by phantom-inflated extents, so the grid is
+//    placed explicitly. With identical outer ellipses in every panel,
+//    `spread` should produce a uniform 3x3 grid — but panels containing a
+//    label or the a/c polygon report a layout extent asymmetrically larger
+//    than their visible content (measured: a labeled panel's box bottom sat
+//    at outer-max + label-max, a polygon panel's at outer-max +
+//    polygon-max — a SUM, not a union), producing visibly uneven gutters in
+//    both `mode: "edge"` (uneven gaps) and `mode: "center"` (shifted
+//    middles, since the phantom shifts the bbox middle). Adding invisible
+//    y-mirrored counterweight children did NOT re-center the boxes, which
+//    rules out a simple bbox-union story and points at the size-proposal
+//    pass double-counting positive `position` offsets / free minima (the
+//    #39 bbox-sync family). The story-local fix: place the nine panels at
+//    fixed pitches with `position()` (`panelGrid`), which no layout pass
+//    can perturb. The same inflation is why the rendered canvas is larger
+//    than the ink (item 5's margins).
