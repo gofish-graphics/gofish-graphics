@@ -158,11 +158,20 @@ export const QuantumCircuit: StoryObj<Args> = {
     // it lays out itself, but a ref's already-resolved absolute position
     // does not carry over when re-wrapped by enclose from outside its
     // subtree (confirmed by trying it: the enclosure rendered at the tree's
-    // local origin, nowhere near the ref'd content). `enclose`'s fill/stroke
-    // also aren't parameterized, so this renders as a neutral outline rather
-    // than Bluefish's yellow fill.
-    const highlightedOPlus = enclose({ padding: 8 }, [OPlus({})]);
-    const highlightedDescription = enclose({ padding: 4 }, [
+    // local origin, nowhere near the ref'd content). `enclose` takes
+    // fill/stroke/etc. and paints its rect BEHIND its children, so this
+    // matches Bluefish's `<Background background={() => <Rect
+    // fill="rgba(255,200,0,0.333)" rx="10" />}>` exactly — same translucent
+    // yellow, same corner rounding, and Background's default padding of 10.
+    const highlight = {
+      padding: 10,
+      rx: 10,
+      ry: 10,
+      fill: "rgba(255,200,0,0.333)",
+      stroke: "none",
+    } as const;
+    const highlightedOPlus = enclose({ ...highlight }, [OPlus({})]);
+    const highlightedDescription = enclose({ ...highlight }, [
       text({ text: "This is a controlled-NOT." }),
     ]);
 
@@ -199,8 +208,13 @@ export const QuantumCircuit: StoryObj<Args> = {
       ]),
 
       // ── tier 2: control-to-gate connector lines — read the placed refs ──
-      line({ stroke: "black", strokeWidth: 1 }, [ref(c1), ref(z)]),
-      line({ stroke: "black", strokeWidth: 1 }, [ref(c2), ref(oplus)]),
+      // Same stroke as the horizontal wire rails (black, 3px). zOrder(-1)
+      // paints them behind tier 1, so the gate boxes (e.g. the Z box) occlude
+      // the portion of the line that would otherwise run across their face.
+      line({ stroke: "black", strokeWidth: 3 }, [ref(c1), ref(z)]).zOrder(-1),
+      line({ stroke: "black", strokeWidth: 3 }, [ref(c2), ref(oplus)]).zOrder(
+        -1
+      ),
     ]).render(container, { w: args.w, h: args.h });
 
     return container;

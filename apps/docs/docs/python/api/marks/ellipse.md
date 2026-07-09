@@ -16,7 +16,7 @@ ellipse(w=24, h=30, fill="#e15759")
 
 ```python
 ellipse(w=None, h=None, fill=None, stroke=None, strokeWidth=None,
-        debug=None) -> Mark
+        opacity=None, debug=None) -> Mark
 ```
 
 ## Parameters
@@ -27,6 +27,7 @@ ellipse(w=None, h=None, fill=None, stroke=None, strokeWidth=None,
 | `fill`        | `str`          | Fill color — a constant or a field name     |
 | `stroke`      | `str`          | Stroke color                                |
 | `strokeWidth` | `int`          | Stroke width in pixels                      |
+| `opacity`     | `float`        | Opacity, `0`–`1` (default `1`)              |
 
 Returns a `Mark` for use in [`.mark()`](/python/api/core/mark).
 
@@ -38,6 +39,9 @@ chart(data).flow(scatter(x="x", y="y")).mark(ellipse(w="width", h="height"))
 
 # A circle is an ellipse with equal axes
 ellipse(w=20, h=20, fill="#4e79a7")
+
+# Translucent ellipse
+ellipse(w=80, h=40, fill="coral", opacity=0.5)
 ```
 
 ## Notes

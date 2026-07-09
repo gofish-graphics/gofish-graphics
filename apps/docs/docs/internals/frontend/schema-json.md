@@ -1504,7 +1504,7 @@ for the API.
       }
     },
     "EllipseMark": {
-      "description": "An ellipse. Box geometry via the shared dims channels; paint is a strict subset of `paint` (no filter/opacity).",
+      "description": "An ellipse. Box geometry via the shared dims channels; paint is a strict subset of `paint` (no filter).",
       "type": "object",
       "required": ["type"],
       "additionalProperties": true,
@@ -1577,6 +1577,10 @@ for the API.
         },
         "strokeWidth": {
           "type": "number"
+        },
+        "opacity": {
+          "type": "number",
+          "default": 1
         },
         "aspectRatio": {
           "type": "number",
@@ -1797,6 +1801,21 @@ for the API.
           "type": "string",
           "default": "system-ui, sans-serif"
         },
+        "fontStyle": {
+          "type": "string",
+          "description": "Raw CSS font-style (e.g. \"italic\")."
+        },
+        "fontWeight": {
+          "oneOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "description": "CSS font-weight (e.g. 300, 700, \"bold\")."
+        },
         "debugBoundingBox": {
           "type": "boolean",
           "default": false
@@ -1972,6 +1991,10 @@ for the API.
         },
         "strokeWidth": {
           "type": "number"
+        },
+        "opacity": {
+          "type": "number",
+          "default": 1
         },
         "debug": {
           "type": "boolean"

@@ -27,7 +27,7 @@ gf.chart([{}])
 ## Signature
 
 ```ts
-polygon({ points, fill?, stroke?, strokeWidth? })
+polygon({ points, fill?, stroke?, strokeWidth?, opacity = 1 })
 ```
 
 ## Parameters
@@ -38,6 +38,7 @@ polygon({ points, fill?, stroke?, strokeWidth? })
 | `fill`        | `string`             | `"black"` | Fill color                                                                 |
 | `stroke`      | `string`             | `fill`    | Stroke color (defaults to `fill`)                                          |
 | `strokeWidth` | `number`             | `0`       | Stroke width                                                               |
+| `opacity`     | `number`             | `1`       | Opacity, `0`–`1` (applies to fill and stroke)                              |
 
 ## Coordinates
 

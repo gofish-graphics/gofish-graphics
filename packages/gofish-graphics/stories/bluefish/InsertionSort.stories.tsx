@@ -83,11 +83,12 @@ const stageLabel = (stage: number, length: number) => {
 const CELL_SIZE = 34;
 const CELL_SPACING = 3;
 // Sorted-prefix (teal) border padding — matches Bluefish's DashedBorder
-// padding={4}. Kept smaller than the row outline's `enclose` padding (8) so
-// the teal stroke (outer edge at padding + strokeWidth/2 = 5.5px) stays
-// clear of the outer light-gray outline instead of crossing it.
+// padding={4} (upstream example-gallery/insertion-sort.tsx). The teal
+// stroke's outer edge (padding + strokeWidth/2 = 6px) stays clear of the
+// outer black outline, which sits at OUTLINE_PADDING = 10 — upstream
+// ArrayOutline uses Background's default padding of 10 (background.tsx).
 const BORDER_PADDING = 4;
-const OUTLINE_PADDING = 8;
+const OUTLINE_PADDING = 10;
 
 const ArrayEntry = createMark(
   ({
@@ -154,8 +155,17 @@ export const InsertionSort: StoryObj = {
       // (StackOptions omits `spacing`; the option is silently dropped and
       // children touch), so the inter-cell gap needs spread.
       return Layer([
+        // Row outline — upstream ArrayOutline: <Rect fill="none"
+        // stroke="black" stroke-width={2} rx={8} />.
         enclose(
-          { padding: OUTLINE_PADDING, rx: 8, ry: 8 },
+          {
+            padding: OUTLINE_PADDING,
+            rx: 8,
+            ry: 8,
+            fill: "none",
+            stroke: "black",
+            strokeWidth: 2,
+          },
           [spreadX({ spacing: CELL_SPACING, alignment: "middle" }, cells)]
         ).name(rowNames[stage]),
         // Sorted-prefix border: tried `enclose({padding}, [ref(first),
@@ -174,26 +184,38 @@ export const InsertionSort: StoryObj = {
         //
         // Workaround: the row's own geometry (ArrayOutline padding, cell
         // size, inter-cell spacing) is fully known at authoring time, so the
-        // sorted-prefix box is placed directly via `rect`'s own `x`/`y`
-        // (local-origin coordinates, relative to the row's first cell,
-        // which — like ArrayOutline's padding above — sits at the row's
-        // local (0, 0)) instead of going through enclose/refs at all.
+        // sorted-prefix box's *content* size is computed directly and handed
+        // to `enclose` as an invisible sizer child (enclose collapses every
+        // child to local (0, 0) anyway — see above — so the sizer only needs
+        // the right w/h, not x/y). `enclose`'s own `padding` then reproduces
+        // the same box the old manual `rect` computed, but now picks up
+        // `enclose`'s styling props — in particular `strokeDasharray`, which
+        // `rect` doesn't have — to match Bluefish's dashed sorted-prefix
+        // border (`rect` is still library-only for solid strokes; adding
+        // dash support there is out of scope for this story-only port).
         ...(from > 0
           ? [
-              rect({
-                x: -BORDER_PADDING,
-                y: -BORDER_PADDING,
-                w:
-                  from * CELL_SIZE +
-                  (from - 1) * CELL_SPACING +
-                  2 * BORDER_PADDING,
-                h: CELL_SIZE + 2 * BORDER_PADDING,
-                fill: "none",
-                stroke: "teal",
-                strokeWidth: 3,
-                rx: 12,
-                ry: 12,
-              }),
+              // Upstream DashedBorder: <Rect fill="none" stroke="teal"
+              // stroke-width={4} rx={12} stroke-dasharray="12" />.
+              enclose(
+                {
+                  padding: BORDER_PADDING,
+                  rx: 12,
+                  ry: 12,
+                  fill: "none",
+                  stroke: "teal",
+                  strokeWidth: 4,
+                  strokeDasharray: "12",
+                },
+                [
+                  rect({
+                    w: from * CELL_SIZE + (from - 1) * CELL_SPACING,
+                    h: CELL_SIZE,
+                    fill: "none",
+                    stroke: "none",
+                  }),
+                ]
+              ),
             ]
           : []),
         ...(from !== to
@@ -217,10 +239,15 @@ export const InsertionSort: StoryObj = {
       spreadY({ spacing: 15, alignment: "start" }, rows),
       ...stages.map((_, stage) =>
         spreadX({ spacing: 20, alignment: "middle" }, [
+          // Upstream LabelText: <Text font-family="serif"
+          // font-style="italic" font-weight={300} fill="gray"> at Bluefish
+          // Text's default font-size of 14.
           text({
             text: stageLabel(stage, stages.length),
             fontFamily: "serif",
             fontStyle: "italic",
+            fontWeight: 300,
+            fontSize: 14,
             fill: "gray",
           }),
           ref(rowNames[stage]),

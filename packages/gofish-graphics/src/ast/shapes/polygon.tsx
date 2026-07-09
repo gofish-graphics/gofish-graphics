@@ -20,11 +20,13 @@ export const Polygon = ({
   fill = "black",
   stroke = fill,
   strokeWidth = 0,
+  opacity = 1,
   points,
 }: {
   fill?: string;
   stroke?: string;
   strokeWidth?: number;
+  opacity?: number;
   points: [number, number][];
 }) => {
   // Without an explicit guard, Math.min(...[]) → Infinity and
@@ -88,6 +90,7 @@ export const Polygon = ({
               fill,
               stroke: stroke ?? fill ?? "black",
               strokeWidth: strokeWidth ?? 0,
+              opacity,
             }),
           },
         ];

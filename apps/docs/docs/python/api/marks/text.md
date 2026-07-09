@@ -15,16 +15,15 @@ chart([{"label": "GoFish"}]).mark(
 
 ```python
 text(*, text=None, fill=None, stroke=None, strokeWidth=None, filter=None,
-     fontSize=None, fontFamily=None, debugBoundingBox=None, rotate=None,
+     fontSize=None, fontFamily=None, fontStyle=None, fontWeight=None,
+     debugBoundingBox=None, rotate=None,
      x=None, cx=None, x2=None, w=None, emX=None,
      y=None, cy=None, y2=None, h=None, emY=None,
      theta=None, thetaSize=None, r=None, rSize=None, key=None) -> Mark
 ```
 
 Keyword-only (matches every existing call site, which already passes
-`text=...` by keyword). Note: the previously-documented `fontWeight` kwarg
-never existed on the JS side and has been removed — it silently serialized
-and was dropped on the floor at render.
+`text=...` by keyword).
 
 ## Parameters
 
@@ -36,6 +35,8 @@ and was dropped on the floor at render.
 | `filter`                                                 | `str`          | Raw SVG filter attribute                                                      |
 | `fontSize`                                               | `int` \| `str` | Font size in pixels (default 12)                                              |
 | `fontFamily`                                             | `str`          | Font family (default `"system-ui, sans-serif"`)                               |
+| `fontStyle`                                              | `str`          | CSS font style, e.g. `"italic"`                                               |
+| `fontWeight`                                             | `int` \| `str` | CSS font weight, e.g. `300`, `700`, `"bold"`                                  |
 | `debugBoundingBox`                                       | `bool`         | Draw the text's bounding box (for layout debugging)                           |
 | `rotate`                                                 | `int`          | Rotation in degrees about the text anchor                                     |
 | `x`, `cx`, `x2`, `w`, `emX`, `y`, `cy`, `y2`, `h`, `emY` | `int` \| `str` | Box-geometry position channels (position the text anchor)                     |
@@ -76,4 +77,10 @@ layer([
 
 # Computed per-row label
 chart(bottles).mark(text(text=lambda d: f"{d['amount']}%", fontSize=35, fill="#666"))
+
+# Italic label
+text(text="note", fontStyle="italic")
+
+# Light-weight label
+text(text="caption", fontWeight=300)
 ```
