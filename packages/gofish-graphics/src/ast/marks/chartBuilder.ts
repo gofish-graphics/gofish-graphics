@@ -171,6 +171,22 @@ export function resolveRefData(
 }
 
 /**
+ * True when chart data is already a bag of refs — a single `GoFishRef`
+ * (`ref(...)`/`selectAll(...)` used as chart data) or a non-empty array of
+ * them (`LayerBuilder.resolve()`'s `withData(prevRefs)` shape: one resolved
+ * ref per node the previous tier named). Names the "data is already refs,
+ * nothing to anchor" concept for `mark()`'s blank-fusion guard. Any NEW
+ * refs-bag shape `LayerBuilder` (or `selectAll`) starts producing must be
+ * added HERE, not at call sites.
+ */
+function dataIsRefs(data: unknown): boolean {
+  return (
+    data instanceof GoFishRef ||
+    (Array.isArray(data) && data.length > 0 && data[0] instanceof GoFishRef)
+  );
+}
+
+/**
  * Stash the chained `.name(...)` value directly on a mark function, so a
  * user-chained name can be detected without relying on the `__serialize` tag
  * (absent on untagged custom marks, and it omits Tokens). Every `.name()`
@@ -315,27 +331,16 @@ export class ChartBuilder<TInput, TOutput = TInput> {
     // inheriting the previous tier's marks inside `.layer(...)` — has nothing
     // to anchor: the incoming data already IS (or will become) the refs bag
     // the connector reads. `usesPreviousLayerMarks()` catches the empty-scope
-    // case; `this.data instanceof GoFishRef` catches the explicit
-    // `selectAll(...)`/`ref(...)` case.
+    // case; `dataIsRefs` catches every already-refs data shape — the explicit
+    // `selectAll(...)`/`ref(...)` case and `LayerBuilder.resolve()`'s
+    // `withData(prevRefs)` array shape (defense in depth: `ensureNamedMark`
+    // bypasses this method entirely, but a future direct `.mark()` call could
+    // still see that shape).
     const fusable = (mark as any)?.__relationalFusable as
       | { opts: Record<string, any>; makeAnchor: () => Mark<any> }
       | undefined;
     const dataNeedsAnchors =
-      !this.usesPreviousLayerMarks() &&
-      !(this.data instanceof GoFishRef) &&
-      // Defense in depth: `LayerBuilder.resolve()`'s `tier.withData(prevRefs)`
-      // shape — a plain `Array` of already-resolved `GoFishRef`s (one per
-      // node the previous tier named), not a single `GoFishRef` instance —
-      // has nothing to anchor either, same as the `usesPreviousLayerMarks()`
-      // and `instanceof GoFishRef` cases above. This mirrors `ensureNamedMark`
-      // (see its comment), which must bypass this method entirely rather than
-      // rely on this guard, but a future direct `.mark()` call could still
-      // see this exact shape, so guard against it here too.
-      !(
-        Array.isArray(this.data) &&
-        this.data.length > 0 &&
-        this.data[0] instanceof GoFishRef
-      );
+      !this.usesPreviousLayerMarks() && !dataIsRefs(this.data);
     if (fusable && dataNeedsAnchors) {
       return this.mark(fusable.makeAnchor() as unknown as Mark<TOutput>).layer(
         mark as Mark<any>
@@ -434,13 +439,12 @@ export class ChartBuilder<TInput, TOutput = TInput> {
     // `finalMark` CAN still be a still-tagged `__relationalFusable` mark here:
     // `LayerBuilder.resolve()` calls `tier.withData(prevRefs)` on an
     // empty-scope tier before calling `ensureNamedMark`, which sets `data` to
-    // a plain `Array` of already-resolved `GoFishRef`s — not a `GoFishRef`
-    // instance — a shape `mark()`'s `dataNeedsAnchors` guard now also
-    // excludes, but renaming must not depend on that guard staying in sync
-    // with every refs-bag shape `LayerBuilder` can produce. `.name()`
-    // propagates tags, so `named` still carries `__relationalFusable`, and
-    // re-entering `mark(named)` here would return a `LayerBuilder` — breaking
-    // this method's `ChartBuilder`-returning contract with a lying cast, and
+    // a plain `Array` of already-resolved `GoFishRef`s — a shape `dataIsRefs`
+    // covers, but renaming must not depend on the guard staying in sync with
+    // every refs-bag shape `LayerBuilder` can produce. `.name()` propagates
+    // tags, so `named` still carries `__relationalFusable`, and re-entering
+    // `mark(named)` here would return a `LayerBuilder` — breaking this
+    // method's `ChartBuilder`-returning contract with a lying cast, and
     // blowing up later in `resolve()` (`tier.withLayerContext is not a
     // function`). Building the `ChartBuilder` directly sidesteps `mark()`'s
     // fusion logic entirely, which is correct: fusion was already decided
