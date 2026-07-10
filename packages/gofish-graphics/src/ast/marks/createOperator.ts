@@ -635,6 +635,16 @@ function translateOperator<T, U>(
     const arranged = await operator(mark);
     return translateMark(arranged, opts) as Mark<T>;
   };
+  // `translated` is a NEW function object wrapping `operator`, so it starts
+  // with no `__serialize` tag of its own. Without copying the base
+  // operator's tag forward (and stamping `translate`), `operatorToIR`'s
+  // `readTag` would find nothing here and silently fall back to the opaque
+  // `{type: "derive"}` IR — losing both `.translate()` and any chained
+  // `.label()` from the wire.
+  const baseTag = (operator as any).__serialize;
+  if (baseTag) {
+    (translated as any).__serialize = { ...baseTag, translate: opts };
+  }
   const withTranslate = attachTranslateOption(translated, (next) =>
     translateOperator(translated, next)
   ) as TranslatableOperator<T, U>;
@@ -645,6 +655,12 @@ function translateOperator<T, U>(
   if (typeof (operator as any).label === "function") {
     attachLabelOption(withTranslate, (accessor, options) => {
       (operator as any).label(accessor, options);
+      const tag = (translated as any).__serialize;
+      if (tag) {
+        const field = labelIRField(accessor, options);
+        if (field) tag.label = field;
+        else delete tag.label;
+      }
     });
   }
   return withTranslate;

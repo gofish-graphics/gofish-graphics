@@ -35,8 +35,15 @@ interface SerializeTag {
   children?: Mark<any>[] | Promise<Mark<any>[]>;
   /** Set when `.name(layerName)` is chained on a mark. Strings pass through; Tokens become bridge-style sentinels. */
   name?: string | { __gofish_token: string; __tag: string };
-  /** Set when `.label(accessor, options)` is chained on a mark (object form). */
+  /** Set when `.label(accessor, options)` is chained on a mark (object form),
+   *  or on an operator's traversal form (createOperator.ts's `translateOperator`
+   *  / bottom-of-`dual` attachment). */
   label?: { accessor: string; [k: string]: unknown };
+  /** Set when `.translate({x, y})` is chained on an operator (traversal
+   *  form) — `translateOperator` copies the base operator's tag forward onto
+   *  its wrapper and stamps this field so the structural pixel offset
+   *  reaches the wire (mirrors `TranslatableIR.translate` in gofish-ir). */
+  translate?: { x?: number; y?: number };
 }
 
 function readTag(value: unknown): SerializeTag | undefined {
@@ -202,14 +209,16 @@ function operatorToIR(op: Operator<any, any>): Frontend.OperatorIR {
     // represents these as `{ type: "derive" }`.
     return { type: "derive" } as Frontend.DeriveOperator;
   }
-  // `.label(accessor, options)` chained on the operator (traversal) form
-  // lands in `tag.label`, mirroring how a chained mark `.label()` surfaces
-  // as a top-level field in `markToIR` — see createOperator.ts's
-  // `attachLabelOption`.
+  // `.label(accessor, options)` / `.translate({x, y})` chained on the
+  // operator (traversal) form land in `tag.label` / `tag.translate`,
+  // mirroring how a chained mark `.label()` surfaces as a top-level field in
+  // `markToIR` — see createOperator.ts's `attachLabelOption` /
+  // `translateOperator`.
   return {
     type: tag.type,
     ...tag.opts,
     ...(tag.label !== undefined ? { label: tag.label } : {}),
+    ...(tag.translate !== undefined ? { translate: tag.translate } : {}),
   } as Frontend.OperatorIR;
 }
 

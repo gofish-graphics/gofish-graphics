@@ -18,6 +18,7 @@ import {
   type LabelPosition,
 } from "../../src/ast/labels/labelPlacement";
 import data from "vega-datasets";
+import { titanicPassengers } from "../../src/data/titanicPassengers";
 
 const meta: Meta = {
   title: "Forward Syntax V3/Labels",
@@ -266,9 +267,10 @@ export const AllPositions: StoryObj<{ w: number; h: number }> = {
 };
 
 // ─── Label on spread (group label) ────────────────────────────────────────────
-// The label is on the spread combinator, not on individual marks.
-// Because the spread carries its own datum, resolveLabels keeps the label
-// at the group level instead of propagating it down to each child rect.
+// `.label(accessor, options?)` chained on the operator (not the mark): each
+// split leaf (a lake's rows) gets its produced node stamped with the leaf's
+// own subdata and a deferred label — resolveLabels then keeps the label at
+// the group level instead of propagating it down to each species bar.
 // Result: one label per lake group, centred above the pair of bars.
 
 export const LabelOnSpread: StoryObj<Args> = {
@@ -277,18 +279,45 @@ export const LabelOnSpread: StoryObj<Args> = {
   render: (args) => {
     const container = initializeContainer();
     chart(seafood, { axes: false })
-      .flow(spread({ by: "lake",  dir: "x", spacing: 50 }))
+      .flow(
+        spread({ by: "lake", dir: "x", spacing: 50 }).label("lake", {
+          position: "outset-top-start",
+          fontSize: 13,
+          offset: 50,
+          rotate: 60,
+        })
+      )
       .mark(async (d: any) => {
-        const node = await chart(d)
-          .flow(stack({ by: "species",  dir: "x" }))
+        return chart(d)
+          .flow(stack({ by: "species", dir: "x" }))
           .mark(rect({ h: "count" as any, fill: "species" as any }))
           .resolve();
-        // Stamp datum so resolveLabels keeps the label at group level
-        // instead of propagating it down to each species bar
-        (node as any).datum = d[0];
-        node.label("lake", { position: "outset-top-start", fontSize: 13, offset: 50, rotate: 60 });
-        return node;
       })
+      .render(container, { w: args.w, h: args.h });
+    return container;
+  }
+};
+
+// ─── Label on stack (per-group label, #702) ───────────────────────────────────
+// `.label(accessor)` chained directly on a `stack({by, dir})` operator: each
+// class's leaf produces one rect, stamped with that leaf's own rows and a
+// deferred label reading `pclass` off the group's first row — one label per
+// stacked segment, no manual datum-stamping workaround needed.
+
+export const LabelOnStackOperator: StoryObj<Args> = {
+  name: "Label on Stack operator (per-group)",
+  args: { w: 260, h: 300 },
+  render: (args) => {
+    const container = initializeContainer();
+    chart(titanicPassengers, { axes: false })
+      .flow(
+        stack({ by: "pclass", dir: "y" }).label("pclass", {
+          position: "center",
+          fontSize: 14,
+          color: "white",
+        })
+      )
+      .mark(rect({ w: 120, h: field("survived").count() }))
       .render(container, { w: args.w, h: args.h });
     return container;
   }
