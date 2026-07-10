@@ -136,10 +136,37 @@ chart(data)
   .mark(rect({ h: "count" }));
 ```
 
-A string accessor reads a field off the group's first row, same as on a
-mark; a function accessor receives the group's whole row array, so it can
-compute an aggregate (`(rows) => rows.length`). See
-[`.label()` on operators](/js/api/core/mark#operator-label) for the full
+The accessor you pass here has three forms, and which one you need depends
+on what you're labeling:
+
+- **A bare field name** (`"class"` above) must be constant across every row
+  in the group — true by construction for a `by` field, since every row in
+  the group shares that value. If the field's value actually varies from row
+  to row, `.label()` throws a loud error rather than silently picking one
+  row's value:
+
+  ```
+  [gofish] .label("count"): field is not constant within the group; use an
+  aggregate like field("count").mean()
+  ```
+
+- **A `field(...)` aggregate** folds the group's rows to one value — this is
+  the spelling for a group total or mean, e.g. a stacked bar's segment count:
+
+  ```ts
+  chart(data)
+    .flow(stack({ by: "class", dir: "y" }).label(field("count").sum()))
+    .mark(rect({ h: "count" }));
+  ```
+
+  `field(...)` also supports `.mean()`, `.count()`, and `.distinct()` — see
+  the [field-expression pipeline](/js/api/operators/spread#field-expression-pipeline).
+
+- **A function accessor** is the raw escape hatch: it receives the group's
+  whole row array and returns whatever text it computes, e.g.
+  `(rows) => rows.length`.
+
+See [`.label()` on operators](/js/api/core/mark#operator-label) for the full
 semantics.
 
 ## Custom label text
@@ -157,18 +184,20 @@ Pass a function instead of a field name for computed labels.
 ## Examples
 
 ```ts
-// Outset labels on a bar chart
-.mark(rect({ h: "count" }).label("count"))
+// Outset labels on a bar chart, one bar per lake — "count" is a real per-row
+// field, so a bare string label needs a group total, not a bare field read
+.mark(rect({ h: "count" }).label(field("count").sum()))
 
-// Center labels on stacked bars
+// Center labels on stacked bars — one bar per (lake, species) pair, so
+// "count" is already constant within each bar's group
 .mark(rect({ h: "count", fill: "species" }).label("count", { position: "center" }))
 
-// Right-aligned labels on horizontal bars
-.mark(rect({ w: "count" }).label("count", { position: "outset-right", offset: 15 }))
+// Right-aligned labels on horizontal bars (group total again)
+.mark(rect({ w: "count" }).label(field("count").sum(), { position: "outset-right", offset: 15 }))
 
 // Heatmap with auto-contrast
 .mark(rect({ fill: "value" }).label("value", { position: "center", fontSize: 11 }))
 
-// Rotated labels above bars
+// Rotated labels above bars, labeled by the (constant) by-field
 .mark(rect({ h: "count" }).label("lake", { position: "outset", rotate: 60 }))
 ```

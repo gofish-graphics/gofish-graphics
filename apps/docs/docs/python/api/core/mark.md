@@ -90,8 +90,9 @@ on a mark to attach a deferred text label, mirroring JS's `.label(accessor, opti
 rect(h="count").label("count", position="center", font_size=10)
 ```
 
-`accessor` is a field name read off the mark's datum. Python has no
-function-accessor form (JS accepts a callback there); use a field name.
+`accessor` is either a plain field name (a string) or a `field(...)`
+aggregate. Python has no function-accessor form (JS accepts a callback
+there); use one of these two instead.
 
 ### `.label()` on operators {#operator-label}
 
@@ -100,7 +101,28 @@ Every dual-mode operator (`spread`, `stack`, `group`, `scatter`, `table`,
 `Mark.label`. Chaining it on the operator instead of the mark labels the
 **group**, not each individual mark instance — every node a split leaf (one
 group's rows) produces gets stamped with that leaf's own subdata, and
-`accessor` reads a field off the group's first row:
+`accessor` resolves one of two ways:
+
+- **A bare field name** (`"class"` below) must be constant across every row
+  in the group — true by construction for a `by` field, since every row in
+  the group shares that value. If it isn't actually constant, this is a
+  spec error and `.label()` raises loudly rather than silently reading one
+  row's value:
+
+  ```
+  [gofish] .label("count"): field is not constant within the group; use an
+  aggregate like field("count").mean()
+  ```
+
+- **A `field(...)` aggregate** (`field("count").sum()` / `.mean()` /
+  `.count()` / `.distinct()`) folds the group's rows to one value — use this
+  for a group total or mean:
+
+  ```python
+  chart(data).flow(
+      stack(by="class", dir="y").label(field("count").sum(), position="center")
+  ).mark(rect(h="count"))
+  ```
 
 ```python
 chart(data).flow(
