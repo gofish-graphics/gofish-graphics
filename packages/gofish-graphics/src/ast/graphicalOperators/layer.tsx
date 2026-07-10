@@ -5,7 +5,7 @@
 import { GoFishNode, placeUnplacedChild, type ToPixel } from "../_node";
 import type { DisplayList } from "gofish-ir";
 import { shadowCheckScaleRoot } from "../solver/shadow";
-import { flattenForZOrder, topoSortByZOrder } from "../paintOrder";
+import { getScopeRegistry } from "../solver/scopes";
 import { isToken } from "../createName";
 import {
   Size,
@@ -19,6 +19,8 @@ import {
   UNDEFINED,
   UnderlyingSpace,
   hasBaseline,
+  isCONTINUOUS,
+  isUNDEFINED,
 } from "../underlyingSpace";
 import { getMeasure, getValue, isValue } from "../data";
 import * as Monotonic from "../../util/monotonic";
@@ -26,14 +28,16 @@ import { computeSize, foldFinite } from "../../util";
 import { axisScale } from "../domain";
 import { CoordinateTransform } from "../coordinateTransforms/coord";
 import { coord } from "../coordinateTransforms/coord";
+import { bakeChildren } from "../coordinateTransforms/bake";
 import { createNodeOperatorSequential } from "../withGoFish";
 import { GoFishAST } from "../_ast";
 import {
   applyConstraints,
   collectPositionDomains,
   gridSpaces,
-  gridCellSize,
-  isZOrderConstraint,
+  resolveGridTracks,
+  gridCellSizeByName,
+  gridTracksFromSizes,
   type ConstraintSpec,
   type ZOrderConstraint,
 } from "../constraints";
@@ -136,11 +140,15 @@ export const layer = createNodeOperatorSequential(
           _shared: Size<boolean>,
           constraints
         ) => {
-          // A grid constraint makes this layer a grid: its axes are categorical
-          // (ORDINAL over columns / rows) and the cells fill flex tracks (sized
-          // in `layout`). It's exclusive — no union/nest/position fold applies.
+          // A grid constraint makes this layer a grid. Stage 6e: the grid no
+          // longer bypasses the fold — it participates. Its categorical track
+          // axes (ORDINAL over columns / rows, for axis rendering) are composed
+          // in at the END of this function, overriding the covered axes, while
+          // any sibling constraint (align / position) still contributes to the
+          // fold below. Its size claim (Σ max-of-cell-claims + gaps) is consumed
+          // at layout time by `resolveGridTracks`, not reported as the axis space
+          // — a categorical axis cannot also be a SIZE magnitude.
           const gridC = selectGridConstraint(constraints ?? []);
-          if (gridC !== undefined) return gridSpaces(gridC, _childNodes);
 
           // Nest space fold: only INSIDE_OUT edges (`dir: 'in'`) derive a
           // space — `outer = inner + 2·padding` when inner is SIZE — so a
@@ -189,11 +197,29 @@ export const layer = createNodeOperatorSequential(
             }
           }
 
+          // Grid track axes compose LAST, overriding the covered axes with the
+          // categorical ORDINAL space (columns on x, rows on y) that axis
+          // rendering consumes — the grid's contribution to the fold. A pure
+          // grid therefore reports exactly `gridSpaces` (as before); a grid mixed
+          // with a sibling constraint keeps that sibling's fold on any axis the
+          // grid leaves UNDEFINED (no keys).
+          if (gridC !== undefined) {
+            const gridAxes = gridSpaces(gridC, _childNodes);
+            for (const axis of [0, 1] as const) {
+              if (!isUNDEFINED(gridAxes[axis])) resolved[axis] = gridAxes[axis];
+            }
+          }
+
           // Stash the absorbed anchored extent and report UNDEFINED upward for
           // any dim with an explicit pixel size — self-scaling region; see
           // selfScaledSpaces above. (last write wins — may run more than once.)
+          // `node.selfScaledDims` mirrors the stash for the axis-demand walk
+          // (issue #659): a stashed dim roots its own σ-scope, so an enclosing
+          // scope's nicing-demand walk must not descend past it.
           selfScaledSpaces[0] = undefined;
           selfScaledSpaces[1] = undefined;
+          node.selfScaledDims[0] = false;
+          node.selfScaledDims[1] = false;
           for (const axis of [0, 1] as const) {
             const composed = resolved[axis];
             const dsize = dims[axis].size;
@@ -235,6 +261,7 @@ export const layer = createNodeOperatorSequential(
             // magnitude); a difference / ORDINAL is left untouched (no stash).
             if (hasBaseline(sp)) {
               selfScaledSpaces[axis] = sp;
+              node.selfScaledDims[axis] = true;
               resolved[axis] = UNDEFINED;
             }
           }
@@ -261,11 +288,26 @@ export const layer = createNodeOperatorSequential(
               size[1],
           ];
 
-          // Grid budget: a grid layer is exclusively cells (table elaboration),
-          // and every cell fills its flex track — so all children get the equal
-          // track size (box-division); the placement solver then centers them.
+          // Grid budget (Stage 6e): resolve the tracks under the unified max rule
+          // from the cells' pre-layout size claims — each track sizes to the max
+          // claim of its cells, fill tracks split the leftover equally. This
+          // sizes only the FILL cells (a claim cell keeps its own size); the
+          // authoritative PLACEMENT tracks are recomputed from the actual
+          // laid-out cell sizes after the child loop (`gridTracksFromSizes`), so
+          // cell centers pin to the real geometry.
           const gridC = selectGridConstraint(node.constraints);
-          const gridCell = gridC ? gridCellSize(gridC, size) : undefined;
+          const gridCellByName = gridC
+            ? gridCellSizeByName(
+                gridC,
+                resolveGridTracks(
+                  gridC,
+                  node.children,
+                  size,
+                  getScopeRegistry(node.tryGetRenderSession()),
+                  node.key ?? node.type
+                )
+              )
+            : undefined;
 
           // Build the LOCAL scale for each self-scaled (stashed) dim against our
           // own pixel box — see selfScaledSpaces above. The recipe (cf. the
@@ -281,6 +323,14 @@ export const layer = createNodeOperatorSequential(
           // applies regardless of `ownsPositionAxis`. `childScaleFactors` is a
           // fresh array — never mutate the parent's inherited σ (unlike
           // spread, which mutates intentionally for sibling sharing).
+          // Demand-driven nicing (issue #659): any scope this layer roots
+          // (self-scaled stash, shared-scale, datum-position) nices its
+          // POSITION domain only if some node in the scope renders an axis on
+          // that dim — read off the persistent axis-demand stamps.
+          const axisDemand: Size<boolean> = [
+            node.scopeRendersAxis(0),
+            node.scopeRendersAxis(1),
+          ];
           const childScalePlan = buildChildScalePlan(
             selfScaledSpaces,
             node._underlyingSpace,
@@ -288,7 +338,12 @@ export const layer = createNodeOperatorSequential(
             inheritedScaleFactors,
             inheritedPosScales,
             constraintBudget,
-            shared
+            shared,
+            axisDemand,
+            // Stage 6b: derive every scale this layer roots through the render's
+            // one σ-scope registry (shared with the root and coord boundaries).
+            getScopeRegistry(node.tryGetRenderSession()),
+            node.key ?? node.type
           );
           const { basePosScales, childScaleFactors } = childScalePlan;
           for (const failure of childScalePlan.budgetFailures) {
@@ -346,7 +401,8 @@ export const layer = createNodeOperatorSequential(
             ownsAxis,
             space,
             size,
-            basePosScales
+            basePosScales,
+            axisDemand
           );
           const effectivePosScales = positionScalePlan.effectivePosScales;
 
@@ -374,7 +430,12 @@ export const layer = createNodeOperatorSequential(
             // proposal, so nest composes with — and wins on its derived axes
             // over — any budget slice.
             const layoutSize = applyNestLayoutProposal(
-              childLayoutSizeProposal(childName, size, gridCell, sliceByName),
+              childLayoutSizeProposal(
+                childName,
+                size,
+                gridCellByName,
+                sliceByName
+              ),
               layoutPlan.nestPlan?.byDerived.get(i),
               childPlaceables
             );
@@ -417,11 +478,57 @@ export const layer = createNodeOperatorSequential(
             // Compose and solve placement constraints as one per-axis relational
             // problem. Declaration order does not choose an anchor; unanchored
             // components receive a deterministic weak origin.
+            // Placement tracks from the ACTUAL laid-out cell sizes (Stage 6e):
+            // each track's extent is the max of its cells' real geometry, so the
+            // cell-center pins match what rendered (and the solver shadow agrees).
+            const gridTracks = gridC
+              ? gridTracksFromSizes(
+                  gridC,
+                  childPlaceables.map((cp) =>
+                    cp
+                      ? ([
+                          Math.abs(cp.dims[0].size ?? 0),
+                          Math.abs(cp.dims[1].size ?? 0),
+                        ] as [number, number])
+                      : undefined
+                  )
+                )
+              : undefined;
+
+            // Which (constrained child, axis) is anchored to a data scale — its
+            // baseline is fixed at `posScale(0)` by the shared map, so `align`
+            // leaves it where its own scale puts it (a scatter facet panel).
+            // This is the SPACE/scope fact that used to be reconstructed inside
+            // the align guard via a `placementOn` method on the target; Stage 6f
+            // collects it ONCE here, at the layer boundary, reading the pure DATA
+            // fact (`dataDomain` present on a continuous axis) and hands it to the
+            // placement solve's ownership plan — the constraint path no longer
+            // consults the space pass's free/determined/conflict lattice.
+            const dataPositioned: [Set<string>, Set<string>] = [
+              new Set(),
+              new Set(),
+            ];
+            for (const [name, cp] of nameToPlaceable) {
+              const childSpace = (cp as GoFishNode)._underlyingSpace;
+              if (childSpace === undefined) continue;
+              for (const axis of [0, 1] as const) {
+                const s = childSpace[axis];
+                if (
+                  s !== undefined &&
+                  isCONTINUOUS(s) &&
+                  s.dataDomain !== undefined
+                )
+                  dataPositioned[axis].add(name);
+              }
+            }
+
             applyConstraints(
               node.constraints,
               nameToPlaceable,
               size,
-              effectivePosScales
+              effectivePosScales,
+              gridTracks,
+              dataPositioned
             );
 
             // Place any child the constraints left unplaced at the layer's
@@ -485,95 +592,34 @@ export const layer = createNodeOperatorSequential(
             },
           };
         },
-        // IR lowering — mirror of the box/layer render. The box's translate is
-        // composed into a child-local `toPixel` (so children land in the right
-        // pixels); a non-identity scale can't be folded into coordinates, so it
-        // becomes a `group` item wrapping the children. Z-order mirrors render.
+        // IR lowering — mirror of the box/layer render. #39 stage 6d: the box's
+        // subtree is flattened to absolute-transform display objects (seeded at
+        // the box's own baked absolute translate) and each is lowered at that
+        // absolute transform — no per-container `toPixel` closure. z-order is
+        // resolved by the shared bake walk exactly as the root bake does. A
+        // non-identity scale can't fold into coordinates, so it stays a `group`
+        // item wrapping the children.
         lower: ({ transform, coordinateTransform }, _children, node) => {
           const scaleX = options.transform?.scale?.x ?? 1;
           const scaleY = options.transform?.scale?.y ?? 1;
           const [wrapTx, wrapTy] = displayTranslate(transform);
           // A `box` is a coordinate-transform barrier: its children render in
           // linear box-local space (the box positions itself in the parent
-          // coord, but its content does not warp). Mirror INTERNAL_render's
+          // coord, but its content does not warp). Mirror the render's
           // `this.type !== "box" ? coordinateTransform : undefined`.
           const childCoord =
             node.type === "box" ? undefined : coordinateTransform;
 
-          const session = node.getRenderSession();
-          const outer = session.toPixel!;
-          // Translate-only composition (scale handled by the group below).
-          const composed: ToPixel = ([cx, cy]) =>
-            outer([wrapTx + cx, wrapTy + cy]);
-
-          // Lower the (z-ordered) children under `composed`, restoring `toPixel`
-          // afterward. A per-child accTranslate (z-constraint flatten) is folded
-          // into the mapping for that child.
-          const lowerChildren = (): DisplayList.DisplayItem[] => {
-            const zConstraints = (node.constraints ?? []).filter(
-              isZOrderConstraint
-            );
-            const items: DisplayList.DisplayItem[] = [];
-            const withToPixel = (
-              fn: ToPixel,
-              run: () => DisplayList.DisplayItem[]
-            ) => {
-              session.toPixel = fn;
-              try {
-                return run();
-              } finally {
-                session.toPixel = composed;
-              }
-            };
-
-            if (zConstraints.length === 0) {
-              const ordered = node.children
-                .map((child, index) => ({
-                  child,
-                  index,
-                  zOrder: child instanceof GoFishNode ? child.getZOrder() : 0,
-                }))
-                .sort((a, b) => a.zOrder - b.zOrder || a.index - b.index);
-              session.toPixel = composed;
-              try {
-                for (const { child } of ordered)
-                  items.push(...child.INTERNAL_lower(childCoord));
-              } finally {
-                session.toPixel = outer;
-              }
-              return items;
-            }
-
-            const flat = flattenForZOrder(node.children);
-            const sorted = topoSortByZOrder(flat, zConstraints, {
-              node: (it) => it.node,
-              z: (it) => it.defaultZ,
-              order: (it) => it.defaultOrder,
-            });
-            try {
-              for (const item of sorted) {
-                const [ax, ay] = item.accTranslate;
-                const map: ToPixel =
-                  ax === 0 && ay === 0
-                    ? composed
-                    : ([cx, cy]) => composed([cx + ax, cy + ay]);
-                items.push(
-                  ...withToPixel(map, () =>
-                    item.node.INTERNAL_lower(childCoord)
-                  )
-                );
-              }
-            } finally {
-              session.toPixel = outer;
-            }
-            return items;
-          };
-
-          const childItems = lowerChildren();
+          // Seed the subtree bake at the box's absolute translate only — scale
+          // is applied by the group below, not folded into coordinates.
+          const childItems = bakeChildren(node, [wrapTx, wrapTy]).flatMap((d) =>
+            d.node.INTERNAL_lower(childCoord, d.transform)
+          );
 
           if (scaleX === 1 && scaleY === 1) return childItems;
 
           // Scale about the box's pixel origin: p ↦ origin + s·(p − origin).
+          const outer = node.getRenderSession().toPixel!;
           const [ox, oy] = outer([wrapTx, wrapTy]);
           return [
             {

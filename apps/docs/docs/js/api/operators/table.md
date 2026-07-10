@@ -64,3 +64,14 @@ chart(data, { color: gradient(["#ffffcc", "#fd8d3c", "#bd0026"]), axes: true })
 - Data insertion order determines column and row ordering. Sort your data first if you need a specific order.
 - Unlike nested `spread` calls, `table` correctly exposes ordinal axes on both dimensions so axis labels render on both x and y.
 - Pair with `gradient()` on the chart color option and `fill: "fieldName"` on the mark for heatmap coloring.
+
+### Cell sizing
+
+Tracks size by one rule: a column (or row) is as wide (or tall) as its widest
+(or tallest) cell — `track = max(cell size claims)`. Cells that carry no size
+claim ("fill" cells, like a plain `rect({ fill })` in a heatmap) contribute
+nothing, so an **all-fill table divides its box into equal tracks** exactly as
+before — heatmaps are unchanged. When cells DO carry a size claim (for example a
+nested chart whose own content has an intrinsic size), each track sizes to its
+widest cell and the table shrinks to fit its content, rather than stretching
+every cell to an equal share of the box.

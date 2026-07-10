@@ -125,11 +125,29 @@ scale. `map` is the _whole_ anchored map, with the intercept explicit as data
 rather than closed over a function: `px(d) = pxMin + sigma·(d − domainMin)`,
 evaluated by `pxOf` (the old `posScale(0)` intercept is `pxOf(map, 0)`). So
 "anchored" shows up operationally as "has a `map`"; "unanchored" as "has only a
-`sigma`." `map` carries its own slope, which need not equal the top-level
-`sigma` — a sub-budget layer scales a mark's size and its data position against
-different pixel extents. This single record replaced the former two parallel
+`sigma`." This single record replaced the former two parallel
 channels (`scaleFactors` = slope-only, `posScales` = whole map) in Stage 4 of
 [the σ-affine plan](/internals/design/sigma-affine-simplification).
+
+**One slope per σ-scope, and the two-scope carrier.** The carrier's two slopes —
+its `sigma` and its `map.sigma` — are not independent numbers. Each is the σ of a
+distinct σ-scope solved once by the scope registry (below):
+`sigma` is the axis's **SIZE** scope (what a magnitude is scaled by), `map.sigma`
+is the axis's **POSITION** scope (what an anchored coordinate is mapped by). No
+site fabricates either — every `map` comes from `computePosScale` through
+`solvePosition` (or the equal-measure recentering), every `sigma` from
+`solveSize` (Stage 6c). Within any one scope there is therefore exactly one slope,
+by construction. When both halves are present and `sigma ≠ map.sigma`, the axis
+genuinely carries **two scopes**, and each half is read by the channel it belongs
+to — magnitudes read `sigma`, anchored positions read `map`. That happens when a
+sub-budget layer scales size against a local extent but positions against an
+inherited map (a sub-budget vs inherited split) — two honest scopes on one axis,
+the multi-scale reading of the same equation, not a slope with a redundant,
+drifting twin. A niced-ticks-vs-raw-content split is _not_ a sanctioned case:
+that was the #659 bug (a self-scaled panel's stashed domain escaping the old
+pre-layout nice walk), and since nicing moved onto the scope solve
+([below](#nicing-is-a-scope-operation-applied-on-demand)) a scope's map and σ
+read one domain by construction.
 
 ## Why an explicit IR
 
@@ -450,8 +468,8 @@ constraint overrides: union child spaces, apply `transform.scale` to free
 magnitudes, and merge datum-valued position/span domains with constraint
 measures taking precedence.
 `childLayoutSizeProposal` is the final per-child proposal priority before nest:
-grid cell size, else distribute slice for that named child, else the full layer
-box.
+the cell's own track extent (grid), else distribute slice for that named child,
+else the full layer box.
 `buildLayerConstraintLayoutPlan` packages the per-layer execution plan — which
 children skip baseline placement, nest source-before-derived order, and
 datum-position target axes — so the layer executes deterministic artifacts
@@ -464,17 +482,37 @@ out first. The bottom-up space pass applies only the inside-out portion via
 `applyNestSpacePlan`; once the source has concrete dimensions,
 `applyNestLayoutProposal` does the corresponding layout-time arithmetic on the
 derived axes.
-Grid is also selected through the proposal plan (`selectGridConstraint`):
-because a grid owns both track partitions for a layer — and bypasses the
-space/size fold entirely — it is a whole-layer layout mode, not a composable
-constraint. `selectGridConstraint` therefore enforces two exclusivity rules
-(it is the one site both the space pass and the layout pass flow through): more
-than one grid constraint is a proposal conflict rather than a declaration-order
-choice, and a grid mixed with any non-z-order constraint (align / distribute /
-position / nest) throws — that sibling would be applied by placement but never
-enter the space fold, so it would silently half-apply. z-order constraints
-(zAbove / zBelow) are render-time paint order and compose freely alongside a
-grid. Grid has no public factory; it is `table`'s private elaboration target.
+Grid is a **track equation** under the same unified sizing rule, not a separate
+layout regime (Stage 6e). Per axis, `resolveGridTracks` sets
+
+```
+track claim = Monotonic.max(claims of the cells in that track)      (max, +)
+grid claim  = Monotonic.add(track claims) + gaps                    (the σ-frame)
+```
+
+A claim-less ("fill") cell contributes nothing, so an all-fill grid has no track
+claims and the tracks split the leftover (allocated − gaps) equally — bit-for-bit
+the former `sliceExtent` box-division. Content-sized tracks emerge automatically
+when cells carry size claims: a track sizes to its widest cell, and fill tracks
+share whatever the claimed tracks leave. When every track carries a σ-dependent
+claim (no fill to absorb the slack), the grid claim is inverted against the
+allocated size by the same scope registry that solves any other frame equation.
+Because a categorical track axis cannot simultaneously be a SIZE magnitude, the
+grid's _reported_ space stays ORDINAL over the columns/rows (`gridSpaces`, for
+axis rendering) while the size claim is consumed at layout time by the track
+resolution. The layout budget sizes fill cells to their track extent; the
+authoritative **placement tracks** are recomputed from the actual laid-out cell
+sizes (`gridTracksFromSizes`) so each cell pins to the real geometry — one source
+the placement and the solver shadow both read, so they cannot drift.
+
+The grid now **genuinely composes** with sibling constraints: its per-track claim
+participates in the fold and its cell-center pins solve jointly with any align /
+position / z-order on the same layer (a `position` pin on a cell overrides its
+track centering — the authoritative-pin pattern). The Stage-3 containment throw
+is gone. `selectGridConstraint` keeps the one remaining rule: at most one grid
+per layer (two track partitions would be source-order-sensitive) is still a
+proposal conflict. Grid has no public factory; it is `table`'s private
+elaboration target.
 The same proposal plan marks datum-valued `position` targets
 (`buildPositionTargetDims`) so the layer does not also forward the consumed
 data→pixel scale to that child axis; literal pixel pins are not marked because
@@ -555,26 +593,42 @@ needs the aligned system to appear at a particular place must say so explicitly
 with a placement constraint.
 
 That normalization is also what keeps data-positioned children safe. A faceted
-scatter panel over `[1955, 2010]`, whose `placement` is `determined`, should not
-be pulled to `posScale(0)` (data-zero, far below 1955). So the placement solver
-reads `Placeable.placementOn(dir)`: **a target whose subtree already commits a
-data position (`placement` `determined`/`conflict`) on a posScale axis, with a
-non-`middle` anchor, is left alone** — `align` shares the frame (it still unions
-the children's `dataDomain`) but supplies no baseline. When alignment does write
-an anchor relation, it asks
+scatter panel over `[1955, 2010]`, anchored to the shared y data scale, should
+not be pulled to `posScale(0)` (data-zero, far below 1955). So `align` leaves it
+alone: **a target anchored to a data (POSITION) scope on a posScale axis, with a
+non-`middle` anchor, is not moved** — `align` shares the frame (it still unions
+the children's `dataDomain`) but supplies no baseline. Its baseline is already
+`posScale(0)` of the shared scope, so all such panels co-locate by construction.
+
+**The guard asks the solver, not the space pass (Stage 6f).** This is the
+blindingly-obvious final form the whole design arc was reaching for. The question
+"is this target already positioned?" is answered by the placement solve's own
+authority record — the `PlacementOwnershipPlan` — through one predicate,
+`isDataPositioned(axis, name)`. The fact it reads (which children are anchored to
+a POSITION scope on each axis) is a pure **data/scope** fact — a child's
+`dataDomain` is present on that axis — collected _once_ at the layer boundary and
+handed to the solve as an explicit ownership input. The constraint path no longer
+reconstructs the space pass's `free`/`determined`/`conflict` lattice by calling a
+`placementOn` method on the target mid-lowering; there is no layout fact derived
+from the space pass in the guards anymore. (`spacePlacement` still computes that
+lattice for the space folds themselves — the `union`/`middle`/anchored decisions —
+which is where a determinacy read belongs.)
+
+When alignment does write an anchor relation, it asks
 `Placeable.localAnchor(axis, anchor)` for the anchor's coordinate in the
 target's local box. `GoFishNode.localAnchor()` derives that from the node's
 intrinsic dimensions (including baseline/min/center/max), so relation solving
 can handle asymmetric boxes such as text and negative bars without relying on
 the display transform.
 
-Because placement is first-class, this is the _whole_ mechanism — no flag, no
-scoping. (Historically the same effect needed a `guardDataPositioned` flag on
-spread/scatter aligns plus a per-axis `fromSize` boolean reconstructed from the
-pre-fold child spaces in the layer; the flag was a _proxy_ for the placement
-fact, and the reconstruction read it indirectly. Both are gone — the per-child
-placement read is strictly more general, handling a mix of positioned and free
-children that the old all-or-nothing axis guard could not.) See
+Because the fact is a single scope-membership input to the solve, this is the
+_whole_ mechanism — no flag, no scoping. (Historically the same effect needed a
+`guardDataPositioned` flag on spread/scatter aligns plus a per-axis `fromSize`
+boolean reconstructed from the pre-fold child spaces in the layer; then a
+`placementOn` method reconstructing the placement lattice per target during
+lowering. All are gone — the ownership plan's per-child scope-membership read is
+strictly more general, handling a mix of positioned and free children that the
+old all-or-nothing axis guard could not.) See
 [the spec](/internals/design/size-difference-unification) for the
 "space as abstract interpretation" framing this falls out of.
 
@@ -740,6 +794,112 @@ This dispatch is the practical embodiment of the underlying-space-kind
 distinction. It also happens to make the rendering pipeline more readable:
 once you know the kind, you know which arithmetic applies.
 
+## The one solve site: the σ-scope registry
+
+Every scale above resolves the same frame equation — `content(σ) = allocated`,
+inverted once by `Monotonic.inverse` — but historically that inversion was
+written out at four-plus places, each with its own pixel budget and fallback:
+the render root (`gofish.tsx`), an explicit-pixel-size axis and a composed
+distribute budget and a `sharedScale` scope (all three inside
+`buildChildScalePlan`), and a coord boundary (`coord.tsx`'s `fitAxis`). Keeping
+them consistent needed a hand-written guard (the #618 "an intermediate must
+propagate the inherited σ, not re-root against its own budget" rule).
+
+Stage 6b makes those a **single mechanism**. A `ScopeRegistry`
+(`ast/solver/scopes.ts`), created once per render on the `RenderSession`, is the
+one place σ / posScale is derived: `solveSize(frame, allocated)` inverts the σ
+slope, `solvePosition(space, allocated)` builds the anchored `AxisMap`. The
+derivation sites are now **σ-scope roots** — the render root, an axis with an
+explicit pixel size, a constraint budget that roots its own scope, a
+`sharedScale` operator, and a coord boundary — and each calls the registry.
+**Everyone else inherits**: the #618 guard is now the structural rule "not a root
+→ don't call the solve", so the inherited σ propagates unchanged (in
+`buildChildScalePlan`, an intermediate budget simply skips the solve — the
+`inheritedScaleFactors[axis] !== undefined && selfScaledSpaces[axis] ===
+undefined` test that _was_ the guard is now the "is this a scope root?"
+predicate). Because the arithmetic is exactly what the sites ran inline, the
+solved numbers are unchanged; the registry only adds the choke-point.
+
+Behind `GOFISH_DUMP_SCOPES` the registry prints every scope it solved as a
+printable frame equation — the debuggability bar the σ-affine model was chosen
+for. One line per scope, e.g. a stacked bar (root POSITION scope + a shared SIZE
+scope on the same axis, agreeing on one slope) and a sunburst (a coord boundary
+re-rooting σ on the angular axis):
+
+```
+[scope] root   key=root  axis=y [0,140]→[0,400] = 400  σ=2.857 map=yes
+[scope] shared key=layer axis=y 140σ = 400            σ=2.857 map=no
+[scope] coord  key=coord axis=x 16σ = 6.283           σ=0.393 map=no
+```
+
+That the root and shared scopes on one axis print the same σ is Stage 6's
+invariant made visible: **one slope per σ-scope, by construction**, because the
+frame equation is solved once and the posScale is a derived view of that solve.
+
+Stage 6c makes the registry the _sole_ producer of every slope, so that "by
+construction" holds everywhere the carrier flows. Two former exceptions closed:
+a coord boundary's POSITION axis used to hand down a fabricated `σ = 1` alongside
+its map (a scope-less slope that no consumer read) — it now carries no size σ at
+all, since a POSITION-only axis has no SIZE scope; and the #582 equal-measure
+recentering (equating x and y when they share a unit of measure) used to rewrite
+the root's σ inline in `gofish.tsx`, off the registry's books. It is now a named
+`recenterEqualMeasure` operation _on_ the registry, so the dump records the FINAL
+σ (a `recenter` entry per axis) rather than the pre-recentering root σ. With both
+closed, the only way a carrier shows two different slopes on one axis is the
+legitimate **two-scope** case above (a SIZE scope and a POSITION scope, e.g. a
+sub-budget panel's local size scale vs an inherited position map) — each half
+still a single registry-solved scope σ, never independent state.
+
+### Nicing is a scope operation, applied on demand
+
+Domain rounding — `d3.nice` stretching `[0, 44]` to `[0, 45]` so ticks land on
+round numbers — used to be a **pre-layout tree walk** (`resolveNiceDomains`)
+that mutated every node's POSITION domain in place. That per-node formulation
+had two failure modes (issue #659): a self-scaled region's stashed space never
+got walked, so a marginal panel's bars sized the _raw_ domain while its niced
+width solved an orphan scope (two slopes for one space — a genuine dual-slope
+bug, not the sanctioned two-scope case); and any node could in principle nice
+its own _subset_ of a shared domain differently from the union.
+
+The settled semantics, recorded on #659: **scale resolution is per-scope; axis
+rendering is per-node. An axis is a view of a scope, drawn at whatever node
+wants one.** Nicing is therefore an operation on the _scope's_ domain — applied
+once, at the scope's solve, so every consumer in the scope (content sizes, the
+position map, axis ticks) reads the same rounded domain. `niceContinuous`
+(`underlyingSpace.ts`) is the one nicing function; the non-coord scope roots
+apply it at their solve sites — the render root (`gofish.tsx`), the self-scaled
+stash and the shared-scale step (`buildChildScalePlan`), and the layer-local
+datum-position scale (`buildPositionScalePlan`). It touches only anchored
+POSITION domains — never SIZE magnitudes, never deltas — and a **coord scope
+never nices** (its domains map into a fixed coordinate range; rounding them
+would break the mapping).
+
+And it is **demand-driven**: a scope nices its POSITION domain **iff at least
+one node in the scope renders an axis on that dim**. Nicing is a presentation
+adjustment whose demand comes from axis views — with no axis there is no tick
+grid to round for, so axis-less content stays at the honest raw scale; with an
+axis, content and ticks share the one niced domain, which is the contract.
+Mechanically, `resolveAxes` leaves a persistent `axisDemand` stamp on every
+axis-owning node (the `axis` work flags are consumed and cleared by
+elaboration; the stamps survive to layout), and each solve site asks
+`GoFishNode.scopeRendersAxis(dim)`: a walk over the scope's **space-flow
+region** — up from the scope root while neither a self-scaled stash nor a coord
+boundary cuts the flow, then across that region's subtree, stopping at deeper
+stashes and coords. The region is exactly the neighborhood whose axes all view
+the same underlying domain (an inner shared scope under an axis-drawing root
+inherits the root's demand, because its space is what bubbled up into the
+domain that axis draws; a stashed panel does not, because its space never
+reached the ancestor's axis). Tick elaboration nices node-locally with the same
+`d3.nice`, applied to the axis-owning node's domain — the same union domain
+that bubbled to the scope root — so elaboration and the solve cannot disagree.
+
+The facet corollaries fall out of the one rule: shared-scale facets all render
+the parent scope's identical niced axis, and free-scale facets are their own
+scope roots and nice per-panel — iff they draw their own axis. The marginal
+histogram's panels draw no count axis, so their scopes stay raw and the panel's
+map and σ agree on the raw domain; give a panel a count axis and its one scope
+nices once, keeping bars and ticks consistent by construction.
+
 ## Scales generalize flex factors
 
 A size scale whose range resolves to the parent's extent is doing exactly
@@ -844,7 +1004,14 @@ the explicit size is a **literal** or a **data value**:
   scale factor on that dim — definitionally, since the inherited scale is in
   the parent's foreign units. If the size can't be resolved (NaN), the locals
   are left undefined and the dim degrades to the inherited path rather than
-  producing NaN scales.
+  producing NaN scales. The stashed domain participates in demand-driven
+  nicing exactly like the root's
+  ([above](#nicing-is-a-scope-operation-applied-on-demand), issue #659): if
+  the region renders an axis on the dim, the stash is niced at this solve, so
+  the local map, the local σ, and the ticks read one rounded domain; if not,
+  it stays raw. (Before #659 the stash escaped the pre-layout nice walk
+  entirely — the panel's content sized the raw domain while a niced width
+  solved an orphan scope.)
 
 Note that a histogram's count axis is **anchored, not origin-less**, at the
 frame boundary. Under start/end/baseline alignment, `resolveAlignmentSpace`

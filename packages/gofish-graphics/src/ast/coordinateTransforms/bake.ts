@@ -372,3 +372,76 @@ export const bake = (
   walk(root, startTransform, [1, 1], startFlip);
   return items;
 };
+
+/**
+ * Flatten a node's CHILDREN into absolute-transform `DisplayObject`s at an
+ * already-composed `translate`/`scale`, with no flip-scope tracking — the
+ * shared body for a translate-only barrier (a `box`/`layer` coordinate-
+ * transform barrier) whose content does not itself open a y-up scope. The
+ * boundary lowers each returned entry at its baked absolute transform (via
+ * `INTERNAL_lower(coord, d.transform)`) — the same mechanism the root bake
+ * uses for a plain (non-flip-scope) descent — so a translate-only boundary
+ * needs no per-container `toPixel` closure (#39 stage 6d). z-order is
+ * resolved identically to {@link bake} via the shared
+ * {@link orderChildrenForPaint}, just without a flip payload threaded
+ * through the hoist.
+ */
+export const bakeChildren = (
+  node: GoFishAST,
+  translate: [number, number] = [0, 0],
+  scale: [number, number] = [1, 1]
+): DisplayObject[] => {
+  const items: DisplayObject[] = [];
+
+  const walkNode = (
+    n: GoFishAST,
+    transform: [number, number],
+    sc: [number, number]
+  ): void => {
+    const [ownTx, ownTy] = bakeTranslate(n);
+    const composedTranslate: [number, number] = [
+      ownTx + transform[0],
+      ownTy + transform[1],
+    ];
+    const composedScale: [number, number] = [
+      (n.transform?.scale?.[0] ?? 1) * sc[0],
+      (n.transform?.scale?.[1] ?? 1) * sc[1],
+    ];
+
+    if (!isTransparent(n)) {
+      items.push({
+        node: n,
+        transform: { translate: composedTranslate, scale: composedScale },
+      });
+      return;
+    }
+
+    for (const { node: child, accTranslate } of orderChildrenForPaint(n)) {
+      walkNode(
+        child,
+        [
+          composedTranslate[0] + accTranslate[0],
+          composedTranslate[1] + accTranslate[1],
+        ],
+        composedScale
+      );
+    }
+  };
+
+  // Always descend into `node`'s CHILDREN, never `node` itself — `node` here is
+  // the boundary/barrier (a `box`/`layer` type in `BAKE_BOUNDARY_TYPES`), which
+  // `isTransparent` correctly reports as opaque; walking it through `walkNode`
+  // directly would re-emit `node` as its own leaf DisplayObject and infinitely
+  // recurse when the caller lowers that entry (its `lower` body calls
+  // `bakeChildren(node, ...)` again). Iterating `node`'s children up front,
+  // exactly like the root `bake`'s own top-level fold, is what makes this a
+  // CHILDREN flatten rather than a whole-subtree one.
+  for (const { node: child, accTranslate } of orderChildrenForPaint(node)) {
+    walkNode(
+      child,
+      [translate[0] + accTranslate[0], translate[1] + accTranslate[1]],
+      scale
+    );
+  }
+  return items;
+};

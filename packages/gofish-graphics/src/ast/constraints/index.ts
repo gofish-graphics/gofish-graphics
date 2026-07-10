@@ -25,9 +25,14 @@ import type { DistributeConstraint, DistributeOptions } from "./distribute";
 import type { PositionConstraint, PositionOptions } from "./position";
 import type { ZAboveConstraint, ZBelowConstraint } from "./zorder";
 import type { NestConstraint, NestOptions } from "./nest";
-import type { GridConstraint } from "./grid";
-import { type ConstraintPosScales, type ConstraintRef } from "./shared";
+import type { GridConstraint, TrackLayout } from "./grid";
+import {
+  isPlacedOn,
+  type ConstraintPosScales,
+  type ConstraintRef,
+} from "./shared";
 import { solvePlacementConstraints } from "./placementSolver";
+import { shadowCheckConstraint, solverCheckEnabled } from "../solver/shadow";
 
 export type {
   Axis,
@@ -55,7 +60,14 @@ export type { NestConstraint, NestOptions } from "./nest";
 export type { GridConstraint } from "./grid";
 export { isZOrderConstraint } from "./zorder";
 export { isNestConstraint, nestedSpace } from "./nest";
-export { isGridConstraint, gridSpaces, gridCellSize } from "./grid";
+export {
+  isGridConstraint,
+  gridSpaces,
+  resolveGridTracks,
+  gridCellSizeByName,
+  gridTracksFromSizes,
+  type TrackLayout,
+} from "./grid";
 export { getPositioningConstraintRefs } from "./proposalPlan";
 export { BBox } from "./bbox";
 
@@ -229,12 +241,17 @@ export function collectPositionDomains(constraints: ConstraintSpec[]): {
  * @param nameToPlaceable - Map from child name to its Placeable
  * @param sizes - The layer's box size `[w, h]`, used by grid placement
  * @param posScales - Per-axis data→pixel scales for `position` constraints
+ * @param dataPositioned - Per-axis sets of child names anchored to a data scale
+ *   (baseline fixed at `posScale(0)`); `align` leaves these where their own scale
+ *   puts them. The space/scope fact that replaced the `placementOn` guard read.
  */
 export function applyConstraints(
   constraints: ConstraintSpec[],
   nameToPlaceable: Map<string, Placeable>,
   sizes: [number, number],
-  posScales?: ConstraintPosScales
+  posScales?: ConstraintPosScales,
+  gridTracks?: [TrackLayout, TrackLayout],
+  dataPositioned?: [Set<string>, Set<string>]
 ): void {
   const placement = constraints.filter(
     (
@@ -246,5 +263,52 @@ export function applyConstraints(
       | NestConstraint
       | GridConstraint => !isZOrderConstraint(constraint)
   );
-  solvePlacementConstraints(placement, nameToPlaceable, sizes, posScales);
+
+  // Solver shadow (#39, disposable observe→assert): snapshot each child's
+  // per-axis placement BEFORE the solve — only when the check is on, so
+  // production pays nothing — so each constraint's shadow can tell a child it
+  // packed from one that arrived pre-positioned. The rank-2 solve places every
+  // target at once (no per-constraint apply boundary), so the checks run once
+  // AFTER the solve against the settled positions.
+  const prePlaced = solverCheckEnabled()
+    ? new Map<string, [boolean, boolean]>(
+        [...nameToPlaceable].map(([name, p]) => [
+          name,
+          [isPlacedOn(p, 0), isPlacedOn(p, 1)] as [boolean, boolean],
+        ])
+      )
+    : undefined;
+
+  solvePlacementConstraints(
+    placement,
+    nameToPlaceable,
+    sizes,
+    posScales,
+    gridTracks,
+    dataPositioned
+  );
+
+  if (prePlaced) {
+    for (const constraint of placement) {
+      // Build the target list and its aligned pre-solve placement snapshot in
+      // one pass (index i of each array is the same child), so the per-target
+      // `prePlaced` the checks read is the state BEFORE the solve, not after.
+      const targets: Placeable[] = [];
+      const targetPrePlaced: [boolean, boolean][] = [];
+      for (const ref of constraint.children) {
+        const p = ref ? nameToPlaceable.get(ref.name) : undefined;
+        if (p === undefined) continue;
+        targets.push(p);
+        targetPrePlaced.push(prePlaced.get(ref!.name) ?? [false, false]);
+      }
+      shadowCheckConstraint(
+        constraint,
+        targets,
+        posScales,
+        targetPrePlaced,
+        nameToPlaceable,
+        sizes
+      );
+    }
+  }
 }

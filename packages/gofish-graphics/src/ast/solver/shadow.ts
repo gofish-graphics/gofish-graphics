@@ -6,12 +6,15 @@
  * ledger (stages 0–2). Guarded by `GOFISH_SOLVER_CHECK` (env or `globalThis`);
  * zero-cost and silent when off, so production behavior is unchanged.
  *
- * Phase-1 coverage = PLACEMENT COMPOSITION before data→size: given each child's
- * engine-computed size, does the solver's box-key machinery reproduce the engine's
- * absolute positions? Start with the `distribute` constraint (the composition
- * `spread`/`stack`/`scatter` all elaborate to), edge mode, no pre-placed anchor —
- * the stacked/edge-spread core. Other modes/anchors are skipped (not yet
- * modeled), so a clean run means "every covered case agrees", not "everything".
+ * Coverage = PLACEMENT COMPOSITION (does the box-key model reproduce the engine's
+ * absolute positions given each child's size?) plus the σ-SCOPE frame equation
+ * (does content(σ)=allocated close where σ is solved?). The placement checks span
+ * `distribute` (edge AND center, including pre-placed/data-positioned chains via
+ * the pack/consistency-check boundary), `align`, `position`, `nest`
+ * (inner centered in outer), and `grid` (equal-track cell centers). The frame check
+ * runs at every σ-scope root: the render root (`gofish.tsx`), a shared/self-scaled
+ * layer axis (`layer.tsx`), and a coord boundary (`coord.tsx` fitAxis). A clean
+ * run means "every covered case agrees", not "everything".
  */
 import * as M from "../../util/monotonic";
 import { SolverBox } from "./index";
@@ -22,6 +25,7 @@ import { computeAesthetic, envFlag } from "../../util";
 import { pxOf } from "../domain";
 import { localAnchorPoint } from "../dims";
 import type { ConstraintSpec, ConstraintPosScales } from "../constraints";
+import { distributePlacementAnchors } from "../constraints/distribute";
 import { isCONTINUOUS, type UnderlyingSpace } from "../underlyingSpace";
 
 /** Whether the solver shadow assertions run. Off (and zero-cost) in prod, so the
@@ -50,18 +54,24 @@ interface DistributeLike {
 }
 
 /**
- * Check the edge-distribute CONTIGUITY invariant the engine enforces on its
- * output: consecutive targets satisfy `child[i+1].min == child[i].max + spacing`.
- * This is anchor-agnostic — which child anchored the walk only sets the absolute
- * offset, not the spacing relation — which matters because the shadow runs after
- * the placement solver, by which point every target is placed (so the
- * pre-placement anchor distinction is gone).
+ * Check the distribute SPACING relation the engine enforces on its output. Every
+ * distribute lowers to a chain of anchored relations (`distribute.ts`): between
+ * consecutive targets in placement order, the `to`-anchor of the later child
+ * equals the `from`-anchor of the earlier one plus `spacing`. The two anchors
+ * are mode-dependent — `edge` uses `prev.max → cur.min` (contiguity), `center`
+ * uses `prev.center → cur.center` (center-to-center) — read here through the
+ * same box-key model (`anchorCoord`) `align`/`position` use, so this covers BOTH
+ * modes with one relation.
  *
- * The solver expresses it as an origin chain: seed the first target at its real
- * position (boundary condition), then predict each subsequent child's `min` via
- * `SolverBox` — `baseline = previous.max + spacing`, size pinned — and compare to
- * the engine. Agreement validates the solver representation reproduces the engine
- * composition on real story data (and that target/order/axis extraction is right).
+ * The consistency-check-not-pack boundary (the violin case). Distribute only
+ * PACKS children it places; a chain edge whose BOTH endpoints arrived
+ * pre-positioned on the stack axis (e.g. the violin's `stackY` over rects pinned
+ * at `y: data`) was a no-op in the lowering (`distribute.ts` skips it) — the
+ * spacing relation does NOT hold there, those two keep their data positions.
+ * Every other edge (≥1 unplaced endpoint) is packed, so the relation must hold.
+ * Validating exactly that boundary is the point of this check: it asserts the
+ * relation on packed edges and deliberately does not on the pre-placed ones,
+ * matching the engine's own pack/check split.
  */
 export function shadowCheckDistribute(
   constraint: DistributeLike,
@@ -70,42 +80,164 @@ export function shadowCheckDistribute(
   prePlaced: boolean[]
 ): void {
   if (!enabled() || constraint.type !== "distribute") return;
-  // Center mode (center-to-center spacing) is not yet modeled; only edge.
-  if (constraint.mode !== "edge") return;
   const idx = axisIndex(constraint.dir);
 
-  // Distribute only PACKS children it places. A child already placed on the
-  // stack axis (e.g. the violin's `stackY` over rects pinned at `y: data`) is
-  // data-positioned — distribute consistency-checks it, doesn't pack it — so the
-  // contiguity invariant doesn't apply. Validate only pure packing (nothing
-  // pre-placed); mixed/data-positioned distributes are deferred (honest
-  // coverage, not silently passed). Across all 189 stories this covers 2560
-  // edge-distributes; 934 are skipped here as data-positioned, 3 as center mode.
-  if (prePlaced.some(Boolean)) return;
+  // Placement order (`reverse` reverses the chain — mirror it index-wise so the
+  // pre-placed flags travel with their targets).
+  const order = targets.map((_, i) => i);
+  if (constraint.order === "reverse") order.reverse();
+  if (order.length < 2) return;
 
-  const ordered =
-    constraint.order === "reverse" ? [...targets].reverse() : targets;
-  if (ordered.length < 2) return;
+  // Mode picks the anchor pair the lowering relates: edge = prev.max→cur.min,
+  // center = prev.center→cur.center.
+  const anchors = distributePlacementAnchors(constraint.mode);
 
-  let prevMax: M.Monotonic | undefined;
-  for (let i = 0; i < ordered.length; i++) {
-    const size = ordered[i].dims[idx].size;
-    const engineMin = ordered[i].dims[idx].min;
-    // Bail the whole chain if any link is unplaced/unsized — can't model it.
-    if (size === undefined || engineMin === undefined) return;
-
-    const box = new SolverBox(0); // edge targets are min-anchored (baseline ≡ min)
-    box.add(
-      "baseline",
-      i === 0 ? engineMin : M.adds(prevMax!, constraint.spacing)
-    );
-    box.add("size", size);
-
-    const solverMin = box.read("min", 0)!;
-    if (i > 0 && Math.abs(solverMin - engineMin) > 1e-6) {
-      report(`distribute.edge dir=${constraint.dir}`, solverMin, engineMin);
+  for (let k = 1; k < order.length; k++) {
+    const pi = order[k - 1];
+    const ci = order[k];
+    // Both pre-placed → the lowering emits no relation (consistency check, not a
+    // pack); the spacing relation is not asserted here. See docstring.
+    if (prePlaced[pi] && prePlaced[ci]) continue;
+    const from = anchorCoord(targets[pi], idx, anchors.from);
+    const to = anchorCoord(targets[ci], idx, anchors.to);
+    if (from === undefined || to === undefined) continue; // unplaced/unsized link
+    // `to.anchor == from.anchor + spacing` (the relation direction proved in
+    // placementSolver.reduceToAxisProblem: `to.min = from.min + fromOff + gap −
+    // toOff`, i.e. anchor-point + gap).
+    if (Math.abs(to - (from + constraint.spacing)) > 1e-6) {
+      report(
+        `distribute.${constraint.mode} dir=${constraint.dir}`,
+        to,
+        from + constraint.spacing
+      );
     }
-    prevMax = box.keyMono("max");
+  }
+}
+
+/** The subset of a nest constraint the shadow reads. `x`/`y` are the paddings on
+ *  the constrained axes; `children` is `[outer, inner]`. */
+interface NestLike {
+  type?: string;
+  x?: number;
+  y?: number;
+  children: { name: string }[];
+}
+
+/**
+ * Check the `nest` composition. On each constrained axis `nest` emits ONE
+ * placement relation to the solver (`nest.ts` `lowerNestPlacement`): the inner is
+ * CENTERED in the outer (`outer.center == inner.center`, the middle-to-middle
+ * relate with gap 0). That center coincidence is the hard, placed-geometry
+ * invariant, read here through the box-key model.
+ *
+ * The padded-extent relation (`|outer| == |inner| + 2·padding`) is deliberately
+ * NOT asserted here: it is a size PROPOSAL — the space fold `nestedSpace` plus the
+ * layer's nest layout proposal — that COMPOSES WITH and YIELDS TO other size
+ * claims. In the OUTSIDE_IN direction (`inner = outer − 2·padding`) a
+ * larger-natural-content inner overflows the derived size, so the placed sizes do
+ * not satisfy the wrap relation even though the layout is correct (observed on
+ * GoTree `combine({x:"nest"})` stories). The pad relation is thus validated at the
+ * space-fold layer, not at placed geometry; Stage 6 folds it in as a size
+ * equation, where authority tiers make the override explicit.
+ */
+export function shadowCheckNest(
+  constraint: NestLike,
+  outer: Placeable | undefined,
+  inner: Placeable | undefined
+): void {
+  if (!enabled() || constraint.type !== "nest" || !outer || !inner) return;
+  const axes: [Axis, number | undefined][] = [
+    ["x", constraint.x],
+    ["y", constraint.y],
+  ];
+  for (const [axis, padding] of axes) {
+    if (padding === undefined) continue; // axis left unconstrained
+    const idx = axisIndex(axis);
+    // Centered placement: outer and inner share a center line (the emitted relate).
+    const oc = anchorCoord(outer, idx, "middle");
+    const ic = anchorCoord(inner, idx, "middle");
+    if (oc !== undefined && ic !== undefined && Math.abs(oc - ic) > 1e-6)
+      report(`nest.center ${axis}`, oc, ic);
+  }
+}
+
+/** The subset of a grid constraint the shadow reads. */
+interface GridLike {
+  type?: string;
+  numCols: number;
+  xSpacing: number;
+  ySpacing: number;
+  children: { name: string }[];
+}
+
+/**
+ * Check the `grid` composition — cells centered in their (column, row) tracks
+ * (`grid.ts`). Stage 6e: tracks are content-sized under the unified max rule, so
+ * the gap between two adjacent cells is no longer a uniform `cellExtent+spacing`
+ * — it is `extent(col)/2 + spacing + extent(col+1)/2`, where a track's extent is
+ * the max laid-out size of its cells (a cell that fills equals the extent; a
+ * smaller claim cell is centered, and the column's widest cell pins the extent).
+ * Recovering the track extents from the placed cell sizes and asserting the
+ * center-to-center gaps is the ORIGIN-INDEPENDENT invariant (differences cancel
+ * the unknown layer origin). Cell EXTENT is deliberately not asserted; a cell
+ * whose center is overridden by a `position` pin is skipped on that axis.
+ */
+export function shadowCheckGrid(
+  constraint: GridLike,
+  targetByName: Map<string, Placeable>,
+  layerSize: [number, number]
+): void {
+  if (!enabled() || constraint.type !== "grid") return;
+  void layerSize;
+  const numCols = constraint.numCols;
+  const numRows = Math.ceil(constraint.children.length / numCols);
+  const targetOf = (i: number): Placeable | undefined =>
+    targetByName.get(constraint.children[i]?.name);
+  const centerOf = (i: number, idx: 0 | 1): number | undefined => {
+    const t = targetOf(i);
+    return t ? anchorCoord(t, idx, "middle") : undefined;
+  };
+  const sizeOf = (i: number, idx: 0 | 1): number | undefined => {
+    const t = targetOf(i);
+    const s = t?.dims[idx].size;
+    return s === undefined ? undefined : Math.abs(s);
+  };
+  // A track's extent is the max laid-out cell size across the track.
+  const colExtent = (col: number): number => {
+    let m = 0;
+    for (let row = 0; row < numRows; row++)
+      m = Math.max(m, sizeOf(row * numCols + col, 0) ?? 0);
+    return m;
+  };
+  const rowExtent = (row: number): number => {
+    let m = 0;
+    for (let col = 0; col < numCols; col++)
+      m = Math.max(m, sizeOf(row * numCols + col, 1) ?? 0);
+    return m;
+  };
+  for (let i = 0; i < constraint.children.length; i++) {
+    const col = i % numCols;
+    // Adjacent column in the same row → centers half-extents + spacing apart.
+    if (col + 1 < numCols && i + 1 < constraint.children.length) {
+      const a = centerOf(i, 0);
+      const b = centerOf(i + 1, 0);
+      if (a !== undefined && b !== undefined) {
+        const gap =
+          colExtent(col) / 2 + constraint.xSpacing + colExtent(col + 1) / 2;
+        if (Math.abs(b - a - gap) > 1e-6) report(`grid.col`, b - a, gap);
+      }
+    }
+    // Adjacent row in the same column → centers half-extents + spacing apart.
+    const row = Math.floor(i / numCols);
+    if (i + numCols < constraint.children.length) {
+      const a = centerOf(i, 1);
+      const b = centerOf(i + numCols, 1);
+      if (a !== undefined && b !== undefined) {
+        const gap =
+          rowExtent(row) / 2 + constraint.ySpacing + rowExtent(row + 1) / 2;
+        if (Math.abs(b - a - gap) > 1e-6) report(`grid.row`, b - a, gap);
+      }
+    }
   }
 }
 
@@ -277,18 +409,22 @@ export function shadowCheckScaleRoot(
 }
 
 /**
- * Single per-constraint shadow hook for the constraint dispatcher — one line in
- * `applyConstraints` instead of three interleaved calls with bespoke pre-state
- * capture, so this disposable observe→assert scaffolding lifts out cleanly when
- * the solver lands. `prePlaced` is the per-target `[x, y]` placement snapshot the
- * caller takes BEFORE applying the constraint (only when the check is enabled);
- * it's `undefined` (and this no-ops) in production.
+ * Single per-constraint shadow hook for `applyConstraints` — one call that
+ * dispatches by constraint type, so this disposable observe→assert scaffolding
+ * lifts out cleanly when the solver lands. `prePlaced` is the per-target `[x, y]`
+ * placement snapshot the caller takes BEFORE the placement solve (only when the
+ * check is enabled); it's `undefined` (and this no-ops) in production.
+ * `nameToPlaceable`/`layerSize` are the layer's resolved children and pixel box,
+ * used by the `nest` and `grid` checks (which read placeables by name and the
+ * grid's track sizes).
  */
 export function shadowCheckConstraint(
   constraint: ConstraintSpec,
   targets: Placeable[],
   posScales: ConstraintPosScales | undefined,
-  prePlaced: [boolean, boolean][] | undefined
+  prePlaced: [boolean, boolean][] | undefined,
+  nameToPlaceable: Map<string, Placeable>,
+  layerSize: [number, number]
 ): void {
   if (!enabled() || !prePlaced) return;
   const c = constraint as { type?: string; dir?: Axis };
@@ -303,5 +439,14 @@ export function shadowCheckConstraint(
     );
   } else if (c.type === "position") {
     shadowCheckPosition(constraint as PositionLike, targets, posScales);
+  } else if (c.type === "nest") {
+    const nest = constraint as NestLike;
+    shadowCheckNest(
+      nest,
+      nameToPlaceable.get(nest.children[0]?.name),
+      nameToPlaceable.get(nest.children[1]?.name)
+    );
+  } else if (c.type === "grid") {
+    shadowCheckGrid(constraint as GridLike, nameToPlaceable, layerSize);
   }
 }
