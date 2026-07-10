@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
 import { seafood } from "../../src/data/catch";
-import { chart, spread, stack, rect, derive, palette, gradient, assignGradientColor, layer, selectAll, field } from "../../src/lib";
+import { chart, spread, stack, rect, derive, palette, gradient, assignGradientColor, field } from "../../src/lib";
 import { ribbon, group } from "../../src/lib";
 import { clock } from "../../src/ast/coordinateTransforms/clock";
 
@@ -257,17 +257,18 @@ export const RibbonHighlight: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    layer([
-      chart(seafood, { color: palette({ Salmon: "#e15759", Trout: "#4e79a7" }) })
-        .flow(
-          spread({ by: "lake",  dir: "x", spacing: 64 }),
-          stack({ by: field("species").sort("count"),  dir: "y" })
-        )
-        .mark(rect({ h: "count", fill: "species" }).name("bars")),
-      chart(selectAll("bars"))
-        .flow(group({ by: "species" }))
-        .mark(ribbon({ opacity: 0.6 })),
-    ]).render(container, { w: args.w, h: args.h, axes: true });
+    chart(seafood, { color: palette({ Salmon: "#e15759", Trout: "#4e79a7" }), axes: true })
+      .flow(
+        spread({ by: "lake", dir: "x", spacing: 64 }),
+        stack({ by: field("species").sort("count"), dir: "y" })
+      )
+      .mark(rect({ h: "count", fill: "species" }))
+      .layer(
+        chart()
+          .flow(group({ by: "species" }))
+          .mark(ribbon({ opacity: 0.6 }))
+      )
+      .render(container, { w: args.w, h: args.h });
 
     return container;
   },

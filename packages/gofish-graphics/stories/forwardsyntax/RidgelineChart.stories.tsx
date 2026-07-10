@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
 import { seafood } from "../../src/data/catch";
-import { chart, spread, blank, layer, selectAll } from "../../src/lib";
+import { chart, spread, blank } from "../../src/lib";
 import { ribbon, group } from "../../src/lib";
 
 const meta: Meta = {
@@ -32,21 +32,21 @@ export const Default: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    layer([
-      chart(seafood)
-        .flow(
-          spread({ by: "lake", dir: "x", spacing: 80 }),
-          spread({ by: "species", dir: "y", spacing: -16 })
-        )
-        .mark(blank({ h: "count", fill: "species" }).name("points")),
-      chart(selectAll("points"))
-        .flow(group({ by: "species" }))
-        .mark(ribbon({ opacity: 0.8, mixBlendMode: "normal" })),
-    ]).render(container, {
-      w: args.w,
-      h: args.h,
-      axes: true,
-    });
+    chart(seafood, { axes: true })
+      .flow(
+        spread({ by: "lake", dir: "x", spacing: 80 }),
+        spread({ by: "species", dir: "y", spacing: -16 })
+      )
+      .mark(blank({ h: "count", fill: "species" }))
+      .layer(
+        chart()
+          .flow(group({ by: "species" }))
+          .mark(ribbon({ opacity: 0.8, mixBlendMode: "normal" }))
+      )
+      .render(container, {
+        w: args.w,
+        h: args.h,
+      });
 
     return container;
   },

@@ -7,7 +7,6 @@ import {
   image,
   text,
   Constraint,
-  selectAll,
   spread,
   stack,
   Spread,
@@ -71,10 +70,11 @@ export const ImageCut: StoryObj<Args> = {
   },
 };
 
-/** Cut chart with labels added via selectAll() in a separate sub-chart. The cut
- *  chart returns just the named slices; a second sub-chart selects "part"
- *  (one ref per slice) and overlays category and amount labels at each slice's
- *  position. Each ref exposes the slice's datum via `.datum`. */
+/** Cut chart with labels added via a chained `.layer()` sub-chart. The cut
+ *  chart returns just the named slices; the empty-scope `.layer(chart()...)`
+ *  tier inherits those slices (one ref per slice) and overlays category and
+ *  amount labels at each slice's position. Each ref exposes the slice's datum
+ *  via `.datum`. */
 export const ImageCutWithLabels: StoryObj<Args> = {
   args: { w: 800, h: 700 },
   tags: ["gallery"],
@@ -88,51 +88,51 @@ export const ImageCutWithLabels: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    type Datum = { category: string; amount: number };
-
-    layer<Datum>([
-      // The cut ties each slice's image band to data order (slice i = band i,
-      // top→bottom). To land Grape juice (the bulk) at the BOTTOM showing the
-      // bottle BODY, it must be the LAST data row (bottom band) AND positioned
-      // last — so reverse the data and keep `reverse: true` on the spread.
-      chart([...bottleData].reverse())
-        .flow(spread({ dir: "y", spacing: 20, reverse: true }))
-        .mark(
-          image({ href: bottlePng, w: 193, h: 600 })
-            .cut({ dir: "y", size: "amount", inset: 4 })
-            .name("part")
-        ),
-
-      chart(selectAll<Datum>("part")).mark(((data: any[]) =>
-        layer(
-          data.map((d) =>
-            layer([
-              d.name("slice"),
-              text({
-                fontSize: 18,
-                fontWeight: "bold",
-                fill: "#1c5e20",
-                text: d.datum.category,
-              }).name("label"),
-              text({
-                fontSize: 36,
-                fontFamily: "Impact",
-                fill: "#1c5e20",
-                text: `${d.datum.amount}`,
-              }).name("amount"),
-            ]).constrain(({ slice, label, amount }) => [
-              Constraint.align({ y: "middle" }, [slice, label]),
-              Constraint.distribute(
-                { dir: "x", spacing: 12 },
-                [slice, label]
-              ),
-              Constraint.align({ x: "middle" }, [slice, amount]),
-              Constraint.align({ y: "middle" }, [slice, amount]),
-            ])
-          )
-        )) as any
-      ),
-    ]).render(container, { axes: false });
+    // The cut ties each slice's image band to data order (slice i = band i,
+    // top→bottom). To land Grape juice (the bulk) at the BOTTOM showing the
+    // bottle BODY, it must be the LAST data row (bottom band) AND positioned
+    // last — so reverse the data and keep `reverse: true` on the spread.
+    chart([...bottleData].reverse())
+      .flow(spread({ dir: "y", spacing: 20, reverse: true }))
+      .mark(
+        image({ href: bottlePng, w: 193, h: 600 }).cut({
+          dir: "y",
+          size: "amount",
+          inset: 4,
+        })
+      )
+      .layer(
+        chart().mark(((data: any[]) =>
+          layer(
+            data.map((d) =>
+              layer([
+                d.name("slice"),
+                text({
+                  fontSize: 18,
+                  fontWeight: "bold",
+                  fill: "#1c5e20",
+                  text: d.datum.category,
+                }).name("label"),
+                text({
+                  fontSize: 36,
+                  fontFamily: "Impact",
+                  fill: "#1c5e20",
+                  text: `${d.datum.amount}`,
+                }).name("amount"),
+              ]).constrain(({ slice, label, amount }) => [
+                Constraint.align({ y: "middle" }, [slice, label]),
+                Constraint.distribute(
+                  { dir: "x", spacing: 12 },
+                  [slice, label]
+                ),
+                Constraint.align({ x: "middle" }, [slice, amount]),
+                Constraint.align({ y: "middle" }, [slice, amount]),
+              ])
+            )
+          )) as any
+        )
+      )
+      .render(container, { axes: false });
 
     return container;
   },
