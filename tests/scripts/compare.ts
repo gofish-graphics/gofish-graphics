@@ -15,6 +15,7 @@ import { join, relative } from "path";
 import { execSync } from "child_process";
 import { getSnapshotBranchName, pullSnapshots } from "./snapshot-branch.js";
 import { storyToPath } from "./path-mapping.js";
+import { collectRemovedStories } from "./diff-utils.js";
 
 const ROOT = join(import.meta.dirname, "../..");
 const BASELINE_DIR = join(ROOT, "__snapshots__/dom");
@@ -81,7 +82,7 @@ function listHtmlFiles(dir: string, prefix = ""): string[] {
 }
 
 interface Failure {
-  kind: "regression" | "parity" | "missing-baseline";
+  kind: "regression" | "parity" | "missing-baseline" | "removed";
   path: string;
   expected?: string;
   actual?: string;
@@ -176,12 +177,21 @@ function main() {
 
   const regressions = checkRegressions();
   const parityFailures = jsOnly ? [] : checkParity();
+  // Removed stories join the failure set exactly like a new/missing-baseline
+  // story: a story with a baseline but no current capture must be reviewed
+  // and accepted (which deletes the baseline) before the job goes green.
+  const removedFailures: Failure[] = collectRemovedStories().map((entry) => ({
+    kind: "removed",
+    path: entry.path,
+    expected: entry.beforeDom ?? undefined,
+  }));
 
   const rCount = regressions.filter((f) => f.kind === "regression").length;
   const mCount = regressions.filter(
     (f) => f.kind === "missing-baseline"
   ).length;
   const pCount = parityFailures.length;
+  const remCount = removedFailures.length;
 
   // Print summary
   if (rCount > 0) {
@@ -205,15 +215,32 @@ function main() {
     }
   }
 
-  const allFailures = [...regressions, ...parityFailures];
+  // Removed stories fail the job like any other unreviewed change: baseline
+  // exists but the story is gone, so someone must accept the removal
+  // (deleting the baseline) or restore the story.
+  if (remCount > 0) {
+    console.log(
+      `  ${remCount} removed stor${remCount === 1 ? "y" : "ies"} (baseline exists, story no longer present):`
+    );
+    for (const f of removedFailures) {
+      console.log(`    - ${f.path}`);
+    }
+  }
+
+  const allFailures = [...regressions, ...parityFailures, ...removedFailures];
 
   // Always emit a structured summary so downstream tooling (CI status
-  // descriptions, the review site) can render counts without re-parsing
-  // logs.
+  // descriptions, the review site) can render counts without re-parsing logs.
   writeFileSync(
     SUMMARY_PATH,
     JSON.stringify(
-      { regressions: rCount, newStories: mCount, parityFailures: pCount },
+      {
+        regressions: rCount,
+        newStories: mCount,
+        parityFailures: pCount,
+        removed: remCount,
+        removedStories: removedFailures.map((f) => f.path),
+      },
       null,
       2
     )
