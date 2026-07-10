@@ -1,9 +1,8 @@
 """Equivalent of Bar/StackedBarChartRounded.stories.tsx — Vega-Lite/Stacked Bar Chart (Rounded Corners)."""
 
-from collections import OrderedDict
 from datetime import datetime, timezone
 
-from gofish import chart, derive, spread, stack, rect, palette
+from gofish import chart, derive, field, spread, stack, rect, palette
 from python_stories.vega_data_urls import read_csv
 
 MONTHS = [
@@ -18,25 +17,10 @@ def _js_month_index(date_str: str) -> int:
     return dt.astimezone().month - 1
 
 
-def _aggregate(data):
-    # Mirror the JS: groupBy(month) → groupBy(weather) → counts; iterate
-    # months in calendar order, weather in natural data order (JS uses
-    # lodash's groupBy which preserves insertion order).
-    by_month: "OrderedDict[str, OrderedDict[str, int]]" = OrderedDict()
-    for row in data:
-        month = MONTHS[_js_month_index(str(row["date"]))]
-        weather = row["weather"]
-        if month not in by_month:
-            by_month[month] = OrderedDict()
-        by_month[month][weather] = by_month[month].get(weather, 0) + 1
-
-    result = []
-    for month in MONTHS:
-        if month not in by_month:
-            continue
-        for weather, count in by_month[month].items():
-            result.append({"month": month, "weather": weather, "count": count})
-    return result
+def _with_month(data):
+    return [
+        {"month": MONTHS[_js_month_index(str(row["date"]))], **row} for row in data
+    ]
 
 
 def story_default():
@@ -54,10 +38,10 @@ def story_default():
             }),
         )
         .flow(
-            derive(_aggregate),
-            spread(by="month", dir="x"),
+            derive(_with_month),
+            spread(by=field("month").sort(MONTHS), dir="x"),
             stack(by="weather", dir="y"),
         )
-        .mark(rect(h="count", fill="weather", rx=3, ry=3)),
+        .mark(rect(h=field("date").count(), fill="weather", rx=3, ry=3)),
         {"w": 600, "h": 300, "axes": True},
     )

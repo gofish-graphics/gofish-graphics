@@ -1,6 +1,6 @@
 """Equivalent of Area.stories.tsx — Forward Syntax V3/Area."""
 
-from gofish import layer, chart, spread, stack, blank, selectAll, ribbon, group
+from gofish import chart, spread, stack, blank, ribbon, group
 from python_stories.data import SEAFOOD, STREAMGRAPH_DATA
 
 
@@ -22,26 +22,22 @@ def story_basic():
 
 def story_stacked():
     return (
-        layer([
-            chart(SEAFOOD)
-            .flow(
-                spread(by="lake", dir="x", spacing=64),
-                stack(by="species", dir="y"),
-            )
-            .mark(blank(h="count", fill="species").name("bars")),
-            chart(selectAll("bars")).flow(group(by="species")).mark(ribbon(opacity=0.8)),
-        ]),
-        {"w": 400, "h": 400, "axes": True},
+        chart(SEAFOOD, axes=True)
+        .flow(
+            spread(by="lake", dir="x", spacing=64),
+            stack(by="species", dir="y"),
+        )
+        .mark(blank(h="count", fill="species"))
+        .layer(chart().flow(group(by="species")).mark(ribbon(opacity=0.8))),
+        {"w": 400, "h": 400},
     )
 
 
 def story_layered():
     return (
-        layer([
-            chart(STREAMGRAPH_DATA)
-            .flow(spread(by="x", dir="x", spacing=50), group(by="c"))
-            .mark(blank(h="y", fill="c").name("points")),
-            chart(selectAll("points")).flow(group(by="c")).mark(ribbon(opacity=0.7)),
-        ]),
-        {"w": 500, "h": 300, "axes": True},
+        chart(STREAMGRAPH_DATA, axes=True)
+        .flow(spread(by="x", dir="x", spacing=50), group(by="c"))
+        .mark(blank(h="y", fill="c"))
+        .layer(chart().flow(group(by="c")).mark(ribbon(opacity=0.7))),
+        {"w": 500, "h": 300},
     )

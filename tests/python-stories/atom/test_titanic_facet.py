@@ -19,20 +19,6 @@ def story_default():
         size = ceil(sqrt(len(rows)))
         return [rows[i : i + size] for i in range(0, len(rows), size)]
 
-    def passenger_dots(group_data):
-        return (
-            chart(group_data)
-            .flow(
-                derive(order_by_survived),
-                derive(chunk_rows),
-                # Fill each cell bottom-up (y-down free space: reverse so the
-                # partial last row lands at the top), like a waffle that grows up.
-                spread(spacing=2, dir="y", reverse=True),
-                spread(spacing=2, dir="x"),
-            )
-            .mark(circle(r=4, fill="survived"))
-        )
-
     return (
         chart(titanic_passengers, color=palette(["#2b8cbe", "#ff8408"]), axes=True)
         .flow(
@@ -45,6 +31,17 @@ def story_default():
                 spacing=32,
             )
         )
-        .mark(passenger_dots),
+        .mark(
+            chart()
+            .flow(
+                derive(order_by_survived),
+                derive(chunk_rows),
+                # Fill each cell bottom-up (y-down free space: reverse so the
+                # partial last row lands at the top), like a waffle that grows up.
+                spread(spacing=2, dir="y", reverse=True),
+                spread(spacing=2, dir="x"),
+            )
+            .mark(circle(r=4, fill="survived"))
+        ),
         {"w": 720, "h": 480},
     )

@@ -17,19 +17,6 @@ def story_default():
         size = 14
         return [rows[i : i + size] for i in range(0, len(rows), size)]
 
-    def passenger_dots(group_data):
-        return (
-            chart(group_data)
-            .flow(
-                derive(order_by_survived),
-                derive(chunk_rows),
-                # Reverse the rows so the ragged partial row lands at the top.
-                spread(spacing=2, dir="y", reverse=True),
-                spread(spacing=2, dir="x"),
-            )
-            .mark(circle(r=4, fill="survived"))
-        )
-
     return (
         chart(
             titanic_passengers,
@@ -41,6 +28,16 @@ def story_default():
         # Bottom-align the columns (y-down free space: "end" = bottom) so the
         # unit stacks share a baseline and grow upward.
         .flow(spread(by="pclass", dir="x", spacing=24, alignment="end"))
-        .mark(passenger_dots),
+        .mark(
+            chart()
+            .flow(
+                derive(order_by_survived),
+                derive(chunk_rows),
+                # Reverse the rows so the ragged partial row lands at the top.
+                spread(spacing=2, dir="y", reverse=True),
+                spread(spacing=2, dir="x"),
+            )
+            .mark(circle(r=4, fill="survived"))
+        ),
         {"w": 520, "h": 580},
     )

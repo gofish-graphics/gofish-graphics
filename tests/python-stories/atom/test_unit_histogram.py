@@ -4,7 +4,7 @@ import math
 
 import pandas as pd
 
-from gofish import chart, circle, derive, palette, spread
+from gofish import chart, circle, derive, field, palette, spread
 
 
 def _age_decade(age):
@@ -40,38 +40,9 @@ def story_default():
     def order_by_survived(rows):
         return sorted(rows, key=lambda row: row["survived"], reverse=True)
 
-    def order_by_age_bin(rows):
-        return sorted(rows, key=lambda row: row["ageBin"])
-
     def chunk_rows(rows):
         size = 3
         return [rows[i : i + size] for i in range(0, len(rows), size)]
-
-    def bin_dots(bin_data):
-        return (
-            chart(bin_data)
-            .flow(
-                derive(order_by_survived),
-                derive(chunk_rows),
-                # Reverse so the ragged partial row lands at the top.
-                spread(spacing=1.5, dir="y", reverse=True),
-                spread(spacing=1.5, dir="x"),
-            )
-            .mark(circle(r=3, fill="survived"))
-        )
-
-    def panel_bars(panel_data):
-        return (
-            chart(panel_data)
-            .flow(
-                # Age bins in ascending order along x — `spread` lays groups
-                # out in data-appearance order, so sort by the bin key first
-                # (as the strip plot sorts before its categorical spread).
-                derive(order_by_age_bin),
-                spread(by="ageBin", dir="x", spacing=6, alignment="end"),
-            )
-            .mark(bin_dots)
-        )
 
     return (
         chart(
@@ -84,7 +55,23 @@ def story_default():
         # Bottom-align panels and their age-bin bars (y-down free space:
         # "end" = bottom) so every unit stack shares a baseline and grows
         # upward.
-        .flow(spread(by="pclass", dir="x", spacing=40, alignment="end"))
-        .mark(panel_bars),
+        .flow(
+            spread(by="pclass", dir="x", spacing=40, alignment="end"),
+            # Age bins in ascending order along x — `spread` lays groups out
+            # in data-appearance order, so sort by the bin key first (as the
+            # strip plot sorts before its categorical spread).
+            spread(by=field("ageBin").sort(), dir="x", spacing=6, alignment="end"),
+        )
+        .mark(
+            chart()
+            .flow(
+                derive(order_by_survived),
+                derive(chunk_rows),
+                # Reverse so the ragged partial row lands at the top.
+                spread(spacing=1.5, dir="y", reverse=True),
+                spread(spacing=1.5, dir="x"),
+            )
+            .mark(circle(r=3, fill="survived"))
+        ),
         {"w": 900, "h": 560},
     )

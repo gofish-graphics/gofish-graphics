@@ -1,4 +1,8 @@
-"""Equivalent of 1DStripPlot.stories.tsx — Vega-Lite/1D Strip Plot."""
+"""Equivalent of 1DStripPlot.stories.tsx — Vega-Lite/1D Strip Plot.
+
+JS dropped an unused `log` import in the story-simplifications pass; there was
+never a Python counterpart to that dead import, so nothing here changes.
+"""
 
 from gofish import chart, scatter, rect
 from vega_datasets import data as vega_data

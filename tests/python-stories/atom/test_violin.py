@@ -26,31 +26,6 @@ def story_default():
         ["ageBin", "survived"], ascending=[True, False], kind="mergesort"
     )
 
-    def dot_row(bin_data):
-        return (
-            chart(bin_data)
-            .flow(spread(dir="x", spacing=1, alignment="middle"))
-            .mark(circle(r=2, fill="survived"))
-        )
-
-    def age_panel(panel_data):
-        return (
-            chart(panel_data)
-            .flow(
-                # Reverse so age increases UPWARD (youngest bin at the bottom)
-                # in y-down free space — the density silhouette stacks up the
-                # age axis.
-                spread(
-                    by="ageBin",
-                    dir="y",
-                    spacing=1,
-                    alignment="middle",
-                    reverse=True,
-                )
-            )
-            .mark(dot_row)
-        )
-
     return (
         chart(
             aged_passengers,
@@ -59,7 +34,20 @@ def story_default():
             # index, so suppress it.
             axes={"x": {"side": "end"}, "y": False},
         )
-        .flow(spread(by="pclass", dir="x", spacing=48, alignment="middle"))
-        .mark(age_panel),
+        .flow(
+            spread(by="pclass", dir="x", spacing=48, alignment="middle"),
+            # Reverse so age increases UPWARD (youngest bin at the bottom)
+            # in y-down free space — the density silhouette stacks up the
+            # age axis.
+            spread(
+                by="ageBin",
+                dir="y",
+                spacing=1,
+                alignment="middle",
+                reverse=True,
+            ),
+            spread(dir="x", spacing=1, alignment="middle"),
+        )
+        .mark(circle(r=2, fill="survived")),
         {"w": 680, "h": 260},
     )
