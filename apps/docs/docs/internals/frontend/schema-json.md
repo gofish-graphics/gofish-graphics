@@ -383,6 +383,15 @@ for the API.
           "required": ["op"],
           "properties": {
             "op": {
+              "const": "dropNulls"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": ["op"],
+          "properties": {
+            "op": {
               "const": "normalize"
             }
           }
@@ -1256,6 +1265,17 @@ for the API.
         "h": {
           "$ref": "#/$defs/ChannelValue"
         },
+        "by": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/FieldAccessor"
+            }
+          ],
+          "description": "Field to partition rows by (like spread/group); also accepts a field(...) accessor carrying domain ops (sort/reverse/bin/dropNulls). Without `by`, one leaf is emitted per row."
+        },
         "paddingInner": {
           "type": "number",
           "default": 0
@@ -1283,9 +1303,9 @@ for the API.
           "enum": ["asc", "desc", "none"],
           "default": "desc"
         },
-        "valueField": {
-          "type": "string",
-          "description": "Field summed per row to weight the tile size."
+        "size": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Per-leaf weight driving tile area (entry-flagged per split entry); a field name aggregates (sums by default) per group."
         },
         "flipY": {
           "type": "boolean",

@@ -16,9 +16,15 @@ const items = [
 ];
 
 // Each child gets its own rectangle; Treemap assigns its (x,y,w,h).
-// `valueField` reads weights from each child's datum.
+// `size` is an explicit per-child weight array (one value per child, in
+// child order) that drives each leaf's tile area.
 gf.Treemap(
-  { valueField: "value", paddingInner: 2, paddingOuter: 2, round: true },
+  {
+    size: items.map((d) => d.value),
+    paddingInner: 2,
+    paddingOuter: 2,
+    round: true,
+  },
   gf.For(items, (d) =>
     gf.rect({
       // Setting fill to the label string makes rect's built-in label show it.
@@ -35,18 +41,27 @@ gf.Treemap(
 
 ::::
 
+Inside `.flow(...)` (the v3 API), `treemap({ by, size, ... })` partitions the
+rows itself, mirroring `spread`/`group`: `by` groups the flow's rows (a field
+name or a `field(...)` accessor carrying domain ops, e.g.
+`field("genre").dropNulls()`), and `size` — an entry-flagged channel — sums a
+field per group (or takes an explicit per-entry array) to weight each tile's
+area. See [`spread`](./spread.md) for the `by`/entry-flagged-channel pattern
+this mirrors.
+
 ## Signature
 
 ```ts
 Treemap(options?, children)
+treemap(options) // .flow() operator form
 ```
 
 ## Parameters
 
 | Option                     | Type                                                                             | Description                                                                                                                                                                                                                                                                                                                                                                                     |
 | -------------------------- | -------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `valueField`               | `string`                                                                         | Reads weights from `(childNode as any).datum[valueField]` (or sums if datum is an array).                                                                                                                                                                                                                                                                                                       |
-| `value`                    | `(node: GoFishNode) => number`                                                   | Custom weight accessor (overrides `valueField`).                                                                                                                                                                                                                                                                                                                                                |
+| `by`                       | `string \| FieldAccessor`                                                        | **Operator form only** (`.flow()`): field to partition rows by; also accepts a `field(...)` accessor carrying domain ops (`sort`/`reverse`/`bin`/`dropNulls`). Without `by`, one leaf is emitted per row.                                                                                                                                                                                       |
+| `size`                     | `string \| FieldAccessor \| (number \| Value<number>)[]`                         | Per-leaf weight driving tile area — entry-flagged (one value per split entry): a field name (summed by default), a `field(...)` accessor, or an explicit per-child array (combinator form).                                                                                                                                                                                                     |
 | `paddingInner`             | `number`                                                                         | Padding between sibling rectangles.                                                                                                                                                                                                                                                                                                                                                             |
 | `paddingOuter`             | `number`                                                                         | Padding around the outer edge of the treemap.                                                                                                                                                                                                                                                                                                                                                   |
 | `round`                    | `boolean`                                                                        | Round pixel positions/sizes.                                                                                                                                                                                                                                                                                                                                                                    |
@@ -60,3 +75,4 @@ Treemap(options?, children)
 ## Notes
 
 - Treemap accepts a **flat list of children**; for multi-level treemaps, compose by nesting `Treemap(...)` calls (or add a higher-level wrapper).
+- In the combinator form, `size` is an **explicit array**, one weight per child in child order — it does not read back off each child's bound datum.

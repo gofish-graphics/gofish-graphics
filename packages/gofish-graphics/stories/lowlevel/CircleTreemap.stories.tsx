@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
-import { chart, treemap, circle, derive, groupBy, sumBy } from "../../src/lib";
+import { chart, treemap, circle, field } from "../../src/lib";
 import { gray } from "../../src/color";
 import data from "vega-datasets";
 
@@ -39,29 +39,17 @@ export const Default: StoryObj<Args> = {
 
     chart(moviesRaw)
       .flow(
-        derive((d) => {
-          const grouped = groupBy(
-            d.filter((m) => m["Major Genre"] != null),
-            (m) => String(m["Major Genre"])
-          );
-          return Object.entries(grouped)
-            .map(([key, values]) => ({
-              key,
-              worldwideGross: sumBy(
-                values,
-                (m) => Number(m["Worldwide Gross"]) || 0
-              ),
-            }))
-            .filter((d) => d.worldwideGross > 0);
-        }),
         treemap({
-          valueField: "worldwideGross",
+          by: field("Major Genre").dropNulls(),
+          size: "Worldwide Gross",
           paddingInner: args.paddingInner,
           paddingOuter: args.paddingInner,
           round: true,
         })
       )
-      .mark(circle({ fill: "key", stroke: gray, strokeWidth: 1, label: true }))
+      .mark(
+        circle({ fill: "Major Genre", stroke: gray, strokeWidth: 1, label: true })
+      )
       .render(container, { w: args.w, h: args.h });
 
     return container;

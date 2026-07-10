@@ -31,7 +31,7 @@ export const Default: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
     chart(titanicPassengers, { color: palette(["#2b8cbe", "#ff8408"]) }).facet({by: "pclass", dir: "x"})
-      .flow(treemap({ h: "fare", valueField: "fare", paddingInner: args.paddingInner, tile: "squarifyCircle", sort: "desc", flipY: true}))
+      .flow(treemap({ h: "fare", size: "fare", paddingInner: args.paddingInner, tile: "squarifyCircle", sort: "desc", flipY: true}))
       .mark(circle({ fill: "survived", stroke: "#ccc", strokeWidth: 1 }))
       .render(container, { w: args.w, h: args.h });
     return container;
