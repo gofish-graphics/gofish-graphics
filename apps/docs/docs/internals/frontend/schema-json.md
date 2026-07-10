@@ -2175,6 +2175,22 @@ for the API.
           ],
           "description": "Bag form: partition the operand refs by this field (or field(...) accessor) and draw one connector per group."
         },
+        "emX": {
+          "type": "boolean",
+          "description": "Blank-fusion anchor key: placed directly in `.mark()` position, `line(opts)` elaborates to an invisible anchor tier (a `blank()` carrying just `{w, h, emX, emY}`) plus this connector — see the `mark` construct's doc. Ignored by `line` itself."
+        },
+        "emY": {
+          "type": "boolean",
+          "description": "Blank-fusion anchor key — see `emX`. Ignored by `line` itself."
+        },
+        "w": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Blank-fusion anchor key — see `emX`. Ignored by `line` itself."
+        },
+        "h": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Blank-fusion anchor key — see `emX`. Ignored by `line` itself."
+        },
         "name": {
           "type": "string"
         },
@@ -2246,6 +2262,22 @@ for the API.
             }
           ],
           "description": "Bag form: partition the operand refs by this field (or field(...) accessor) and draw one connector per group."
+        },
+        "emX": {
+          "type": "boolean",
+          "description": "Blank-fusion anchor key: placed directly in `.mark()` position, `ribbon(opts)` elaborates to an invisible anchor tier (a `blank()` carrying just `{w, h, emX, emY}`) plus this connector — see the `mark` construct's doc. Ignored by `ribbon` itself."
+        },
+        "emY": {
+          "type": "boolean",
+          "description": "Blank-fusion anchor key — see `emX`. Ignored by `ribbon` itself."
+        },
+        "w": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Blank-fusion anchor key — see `emX`. Ignored by `ribbon` itself."
+        },
+        "h": {
+          "$ref": "#/$defs/ChannelValue",
+          "description": "Blank-fusion anchor key — see `emX`. Ignored by `ribbon` itself."
         },
         "name": {
           "type": "string"

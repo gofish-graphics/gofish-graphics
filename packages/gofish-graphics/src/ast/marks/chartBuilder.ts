@@ -171,6 +171,22 @@ export function resolveRefData(
 }
 
 /**
+ * True when chart data is already a bag of refs — a single `GoFishRef`
+ * (`ref(...)`/`selectAll(...)` used as chart data) or a non-empty array of
+ * them (`LayerBuilder.resolve()`'s `withData(prevRefs)` shape: one resolved
+ * ref per node the previous tier named). Names the "data is already refs,
+ * nothing to anchor" concept for `mark()`'s blank-fusion guard. Any NEW
+ * refs-bag shape `LayerBuilder` (or `selectAll`) starts producing must be
+ * added HERE, not at call sites.
+ */
+function dataIsRefs(data: unknown): boolean {
+  return (
+    data instanceof GoFishRef ||
+    (Array.isArray(data) && data.length > 0 && data[0] instanceof GoFishRef)
+  );
+}
+
+/**
  * Stash the chained `.name(...)` value directly on a mark function, so a
  * user-chained name can be detected without relying on the `__serialize` tag
  * (absent on untagged custom marks, and it omits Tokens). Every `.name()`
@@ -265,22 +281,101 @@ export class ChartBuilder<TInput, TOutput = TInput> {
   // callback (issue #243): an empty-scope child (`chart()` / `chart(options)`)
   // inherits the incoming partition datum; a child with its own data is drawn
   // as-is per partition.
+  //
+  // Blank-fusion sugar: a relational mark (`line()`/`ribbon()`) placed
+  // directly here elaborates to an invisible anchor tier plus a connector
+  // tier —
+  //
+  //   .mark(R(opts))  ⇒  .mark(blank(anchor(opts))).layer(R(opts))
+  //
+  // `createRelationalMark` (chart.ts) tags every bag-form / by-split-form
+  // mark it produces with `__relationalFusable = { opts, makeAnchor }` —
+  // never the pairwise `{from, to}` form, which already consumes ref-bearing
+  // rows directly in `.mark()` position and keeps its existing (unfused)
+  // meaning. `makeAnchor()` is a pre-bound `blank({w, h, emX, emY})` call (the
+  // anchor-key subset of `opts`); the connector tier is simply `mark` AS
+  // GIVEN — the factory's `produce` only reads the fields it knows about, so
+  // the leftover spatial keys are inert there. Any `.name()`/`.label()`/
+  // `.zOrder()` already chained onto `mark` rides along unchanged and applies
+  // to the CONNECTOR; the anchor tier gets `LayerBuilder`'s usual
+  // auto-naming. This returns a `LayerBuilder`, not a `ChartBuilder` — like
+  // the explicit two-tier form it desugars to, the result supports further
+  // `.layer(...)` chaining and the render/toSVG/... terminals, but not
+  // `ChartBuilder`-only methods (`.name()` on the chart itself, further
+  // `.mark()`/`.flow()`) or use as a nested `.layer(...)` tier.
   mark(
     mark: Mark<TOutput> | ChartBuilder<any, any>
-  ): ChartBuilder<TInput, TOutput> {
-    const finalMark =
-      mark instanceof ChartBuilder
-        ? (((d: TOutput, _key, layerContext) =>
-            (mark.usesPreviousLayerMarks()
-              ? mark.withData(d)
-              : mark
-            ).withLayerContext(layerContext ?? {})) as Mark<TOutput>)
-        : mark;
+  ): ChartBuilder<TInput, TOutput> | LayerBuilder {
+    if (mark instanceof ChartBuilder) {
+      const finalMark = ((d: TOutput, _key, layerContext) =>
+        (mark.usesPreviousLayerMarks()
+          ? mark.withData(d)
+          : mark
+        ).withLayerContext(layerContext ?? {})) as Mark<TOutput>;
+      return new ChartBuilder(
+        this.data,
+        this.options,
+        this.operators,
+        finalMark,
+        this.layerContext,
+        this.nodeZOrder,
+        this.nodeName
+      );
+    }
+
+    // Only fuse when this chart's data is genuine per-row data that still
+    // needs anchors drawn for it. The OTHER well-established bag-form usage —
+    // a relational mark applied directly to a bag of ALREADY-drawn refs, e.g.
+    // `chart(selectAll("bars")).flow(group({by})).mark(ribbon(opts))` (the
+    // ribbon connects the existing bars) or an empty-scope `chart()` tier
+    // inheriting the previous tier's marks inside `.layer(...)` — has nothing
+    // to anchor: the incoming data already IS (or will become) the refs bag
+    // the connector reads. `usesPreviousLayerMarks()` catches the empty-scope
+    // case; `dataIsRefs` catches every already-refs data shape — the explicit
+    // `selectAll(...)`/`ref(...)` case and `LayerBuilder.resolve()`'s
+    // `withData(prevRefs)` array shape (defense in depth: `ensureNamedMark`
+    // bypasses this method entirely, but a future direct `.mark()` call could
+    // still see that shape).
+    const fusable = (mark as any)?.__relationalFusable as
+      | {
+          type: string;
+          opts: Record<string, any>;
+          anchorKeys: string[];
+          makeAnchor: () => Mark<any>;
+        }
+      | undefined;
+    const dataNeedsAnchors =
+      !this.usesPreviousLayerMarks() && !dataIsRefs(this.data);
+    if (fusable && dataNeedsAnchors) {
+      return this.mark(fusable.makeAnchor() as unknown as Mark<TOutput>).layer(
+        mark as Mark<any>
+      );
+    }
+
+    // Fusion was skipped — this mark connects existing marks (an empty-scope
+    // `chart()` tier, or a chart whose data is already refs), so any anchor
+    // keys it's still carrying (`w`/`h`/`emX`/`emY`) have nothing to anchor
+    // and would silently do nothing. That's exactly the kind of
+    // user-wrote-X/system-did-Y disagreement that should be a loud error
+    // rather than a quiet no-op.
+    if (fusable && fusable.anchorKeys.length > 0) {
+      const keys = fusable.anchorKeys;
+      const plural = keys.length > 1;
+      throw new Error(
+        `${fusable.type}({ ${keys.join(", ")} }): anchor channel${plural ? "s" : ""} ` +
+          `(${keys.join(", ")}) ${plural ? "have" : "has"} no effect here — this ` +
+          `${fusable.type} connects EXISTING marks (an empty-scope chart() tier, ` +
+          `or a chart over refs), so there's nothing to anchor. Remove ${
+            plural ? "them" : "it"
+          }, or chart() over raw rows so ${fusable.type} can synthesize its own anchor tier.`
+      );
+    }
+
     return new ChartBuilder(
       this.data,
       this.options,
       this.operators,
-      finalMark,
+      mark,
       this.layerContext,
       this.nodeZOrder,
       this.nodeName
@@ -363,7 +458,33 @@ export class ChartBuilder<TInput, TOutput = TInput> {
       return { builder: this, name: existing };
     }
     const named = (this.finalMark as any).name(autoName) as Mark<TOutput>;
-    return { builder: this.mark(named), name: autoName };
+    // Construct the renamed builder DIRECTLY (mirroring the plain-mark branch
+    // of `mark()`) rather than calling `this.mark(named)`. This tier's
+    // `finalMark` CAN still be a still-tagged `__relationalFusable` mark here:
+    // `LayerBuilder.resolve()` calls `tier.withData(prevRefs)` on an
+    // empty-scope tier before calling `ensureNamedMark`, which sets `data` to
+    // a plain `Array` of already-resolved `GoFishRef`s — a shape `dataIsRefs`
+    // covers, but renaming must not depend on the guard staying in sync with
+    // every refs-bag shape `LayerBuilder` can produce. `.name()` propagates
+    // tags, so `named` still carries `__relationalFusable`, and re-entering
+    // `mark(named)` here would return a `LayerBuilder` — breaking this
+    // method's `ChartBuilder`-returning contract with a lying cast, and
+    // blowing up later in `resolve()` (`tier.withLayerContext is not a
+    // function`). Building the `ChartBuilder` directly sidesteps `mark()`'s
+    // fusion logic entirely, which is correct: fusion was already decided
+    // (and skipped) when this mark was first attached.
+    return {
+      builder: new ChartBuilder(
+        this.data,
+        this.options,
+        this.operators,
+        named,
+        this.layerContext,
+        this.nodeZOrder,
+        this.nodeName
+      ),
+      name: autoName,
+    };
   }
 
   /** The render-time metadata threaded from the root tier: resolved axes/color
