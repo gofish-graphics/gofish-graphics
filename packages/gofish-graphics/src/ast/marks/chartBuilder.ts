@@ -321,7 +321,21 @@ export class ChartBuilder<TInput, TOutput = TInput> {
       | { opts: Record<string, any>; makeAnchor: () => Mark<any> }
       | undefined;
     const dataNeedsAnchors =
-      !this.usesPreviousLayerMarks() && !(this.data instanceof GoFishRef);
+      !this.usesPreviousLayerMarks() &&
+      !(this.data instanceof GoFishRef) &&
+      // Defense in depth: `LayerBuilder.resolve()`'s `tier.withData(prevRefs)`
+      // shape — a plain `Array` of already-resolved `GoFishRef`s (one per
+      // node the previous tier named), not a single `GoFishRef` instance —
+      // has nothing to anchor either, same as the `usesPreviousLayerMarks()`
+      // and `instanceof GoFishRef` cases above. This mirrors `ensureNamedMark`
+      // (see its comment), which must bypass this method entirely rather than
+      // rely on this guard, but a future direct `.mark()` call could still
+      // see this exact shape, so guard against it here too.
+      !(
+        Array.isArray(this.data) &&
+        this.data.length > 0 &&
+        this.data[0] instanceof GoFishRef
+      );
     if (fusable && dataNeedsAnchors) {
       return this.mark(fusable.makeAnchor() as unknown as Mark<TOutput>).layer(
         mark as Mark<any>
@@ -415,14 +429,32 @@ export class ChartBuilder<TInput, TOutput = TInput> {
       return { builder: this, name: existing };
     }
     const named = (this.finalMark as any).name(autoName) as Mark<TOutput>;
-    // `this.finalMark` was already stored by a prior `.mark()` call, so it's
-    // never itself a fusable relational mark (fusion resolves at `.mark()`
-    // call time into an anchor `ChartBuilder` + connector tier — see
-    // `mark()`'s doc-comment) — `.name(...)` on it can't reintroduce the
-    // `__relationalFusable` tag, so `this.mark(named)` always takes the
-    // plain-mark branch and stays a `ChartBuilder`.
+    // Construct the renamed builder DIRECTLY (mirroring the plain-mark branch
+    // of `mark()`) rather than calling `this.mark(named)`. This tier's
+    // `finalMark` CAN still be a still-tagged `__relationalFusable` mark here:
+    // `LayerBuilder.resolve()` calls `tier.withData(prevRefs)` on an
+    // empty-scope tier before calling `ensureNamedMark`, which sets `data` to
+    // a plain `Array` of already-resolved `GoFishRef`s — not a `GoFishRef`
+    // instance — a shape `mark()`'s `dataNeedsAnchors` guard now also
+    // excludes, but renaming must not depend on that guard staying in sync
+    // with every refs-bag shape `LayerBuilder` can produce. `.name()`
+    // propagates tags, so `named` still carries `__relationalFusable`, and
+    // re-entering `mark(named)` here would return a `LayerBuilder` — breaking
+    // this method's `ChartBuilder`-returning contract with a lying cast, and
+    // blowing up later in `resolve()` (`tier.withLayerContext is not a
+    // function`). Building the `ChartBuilder` directly sidesteps `mark()`'s
+    // fusion logic entirely, which is correct: fusion was already decided
+    // (and skipped) when this mark was first attached.
     return {
-      builder: this.mark(named) as ChartBuilder<TInput, TOutput>,
+      builder: new ChartBuilder(
+        this.data,
+        this.options,
+        this.operators,
+        named,
+        this.layerContext,
+        this.nodeZOrder,
+        this.nodeName
+      ),
       name: autoName,
     };
   }
