@@ -45,7 +45,8 @@ incompatible:
   staggers — with no data-driven trigger at all.
 
 These are not competing answers to one question. They are answers to **five
-independent questions**, and each system bundles a fixed answer to all five:
+largely separable questions**, and each system bundles a preferred answer to
+all five:
 
 1. **What drives time?** A timer, a user input event, or a data change.
 2. **What varies?** The data, the encodings/spec, or nothing but presentation
@@ -64,34 +65,62 @@ time axis**, and the reactivity substrate (#671) supplies the trigger layer.
 The design is one substrate plus temporal readings of existing strata, not a
 bolted-on animation subsystem.
 
-## 2. Lineage: this design was promised three papers ago
+## 2. Semantic kernel: what exists at runtime
 
-The temporal reading of spatial relations is the standing future-work thread
-of this research program:
+"Time is an axis" is the algebraic model, not the runtime object model. Space
+can be solved once; animation also has clocks, causality, interruption, and
+state that changes while it is being observed. The surface syntax therefore
+elaborates into the following small temporal IR:
 
-- **Bluefish** (UIST 2024, §9): "common fate, where elements travel in the
-  same direction are grouped together, is alignment applied to velocity...
-  we could think of Bluefish's Distribute as distributing elements along a
-  time axis to stagger movements in time, and a temporal Align as unifying
-  the start or end of multiple animations."
-- **The GoFish paper** (§8): "The Gemini grammar's concat and sync operators
-  act as temporal spacing and alignment, respectively, which are the
-  constituent Gestalt principles of Stack. In the CAST animation system,
-  animations may be staged or nested, conveying information similar to a
-  temporal Enclose. We wonder whether future animation grammars could benefit
-  from a **temporal Connect** that animates an element along a path between
-  two other elements."
-- **Animated Vega-Lite** (§7.2.2): "Combining Gemini's segue abstractions
-  with Animated Vega-Lite's scene abstractions is a promising future
-  direction for expressive animation."
+| Object             | Meaning                                                                                                                                                                                        |
+| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **clock**          | An event source that can advance a playhead: wall time, a pointer or slider, or an application signal. A clock does not own animation structure.                                               |
+| **playhead**       | The current position in one timeline's local time, plus transport state (`playing`, `paused`, direction, rate). Autonomous playback binds it to a clock; scrubbing writes it directly.         |
+| **state**          | An immutable animation endpoint. Upstream states contain pipeline inputs; downstream states contain resolved display values; reveal states contain paint values.                               |
+| **correspondence** | Keyed matches between the elements of adjacent states, partitioned into update, enter, and exit. It is required whenever element sets can differ, whether the animation is a scene or a segue. |
+| **track**          | A target plus a function from local progress to a value. A track declares its interpolation space: upstream, downstream, or paint.                                                             |
+| **interval**       | A track's start, end, preferred duration, and before/after fill behavior in its parent's local time.                                                                                           |
+| **clip**           | The schedulable value consumed by `sequence`, `parallel`, and `stagger`: one or more tracks with an intrinsic or preferred duration.                                                           |
+| **timeline**       | A tree of clips and timing constraints. Solving it assigns intervals; an optional duration budget may rescale flexible descendants.                                                            |
 
-In-repo, #54 already proposed animation as "spreading in the time direction,"
-an interpolation mark paralleling `line`/`ribbon` for the time dimension, a
-"segue spec language" where interpolations are not tied 1:1 to keyframes, and
-nested keyframes as nested time underlying spaces (the CAST+ aside). #211
-proposed the `motion()` signal whose `.set(value, tween(ms))` drives
-re-resolution over time. This document is the combination all of those asked
-for.
+This separates three quantities that are easy to conflate: **data time** (for
+example the `year` field), **timeline time** (milliseconds or normalized local
+progress), and **clock time** (the event source advancing playback). A scale
+may map data time into timeline time; a clock only moves the playhead.
+
+### 2.1 Duration and fill invariants
+
+A connection owns no _spatial_ size claim, but its temporal reading is a clip
+and therefore does make a preferred duration claim. Composition determines the
+final interval: sequence adds extents, parallel takes their maximum, and an
+explicit parent duration rescales descendants whose durations are flexible.
+An explicit child duration is fixed unless the author opts it into scaling.
+
+Every interval also declares what its target does outside the interval. The
+semantic choices are **absent**, **hold the boundary value**, and **paint
+hidden** (laid out but not painted or hit-tested). Defaults are stratum-specific:
+scenes default to absent before an element exists, segues hold endpoint values,
+and reveals are paint-hidden before reveal and hold afterward. Authors may
+override both the before and after behavior.
+
+### 2.2 Interruption and competing writers
+
+The first write to a playhead or data source is simple; the second write while
+a transition is active is where an animation system earns its semantics.
+GoFish uses these defaults:
+
+- A new keyed update **retargets from the currently rendered value**, avoiding
+  a jump back to the previous endpoint.
+- Enter and exit tracks already in flight finish unless the same key is matched
+  again, in which case the element retargets as an update.
+- A scrub write wins over an autonomous clock until playback explicitly
+  resumes. At most one source owns a playhead at a time.
+- Scene inputs are sampled at the playhead position. If their structure
+  changes, a new correspondence is computed at that sample boundary.
+
+Queue, jump, and blend remain useful explicit policies, but they are not the
+default. Nested timelines inherit transport from their parent while retaining
+local time; easing composes as track-local time warps inside any parent warp.
 
 ## 3. Three kinds of animation: scenes, segues, reveals
 
@@ -115,9 +144,8 @@ grammars:
 
 The trichotomy matters because the three kinds have different semantics
 (§4), different composition needs (§5), and — as it happens — different
-costs and prerequisites (Appendix A). A complete animation grammar must
-express all three; every existing system commits to one and approximates the
-others.
+costs and prerequisites (Appendix A). A complete animation grammar should
+express all three without forcing one kind through another kind's defaults.
 
 ## 4. Where interpolation lives: upstream or downstream of layout
 
@@ -145,28 +173,33 @@ parameter `t ∈ [0, 1]`:
   violated. Magic Move, FLIP, D3 transitions, and Gemini (which interpolates
   compiled scenegraphs) all live here.
 
-Segues are _forced_ downstream: their endpoints are different specs, so there
-is no shared parameter to interpolate upstream. Untrue intermediate frames
-are inherent to segues, not an implementation shortcut. Reveals sidestep the
-question entirely — nothing is interpolated but paint.
+Generic segues default downstream: their endpoints are different specs, so
+there is ordinarily no shared input parameter to interpolate. A segue may run
+upstream only when an author or compiler supplies an explicit parameterization
+between the specs — a typed spec morph rather than a generic interpolation.
+Without one, non-layout intermediate frames are inherent to the segue, not an
+implementation shortcut. Reveals sidestep the question entirely — nothing is
+interpolated but paint.
 
 ### 4.1 The commutativity condition
 
-When do the two sides agree? Exactly when layout is affine in the
-interpolated quantities over the transition — which the σ-affine model makes
-precise. Within a σ-scope, `px(d) = pxMin + σ·(d − domainMin)`. If a
-transition holds σ, the domain, and the structure fixed, then
+When do the two sides agree? They agree throughout a transition when the
+relevant path through layout is affine in the interpolated quantities — which
+the σ-affine model can often prove. Within a σ-scope,
+`px(d) = pxMin + σ·(d − domainMin)`. If a transition holds σ, the domain, and
+the structure fixed, and every operator on the affected path is affine, then
 
 `layout ∘ lerp = lerp ∘ layout`
 
 and a scene-specified animation may be _lowered_ to a cheap downstream tween
-with identical frames. The condition fails exactly when: the domain or σ
-changes (Animated Vega-Lite's `rescale`), the structure changes (marks enter
-or exit, an operator re-partitions), or the frame is non-affine (log scales,
-polar and other curved coordinate transforms). Those are precisely the
-transitions where "which side?" is a visible design decision — tween σ itself
-(an animated axis rescale is a scene animation _of the scale_) or tween
-pixels (Magic Move) — and the grammar should let the author say which.
+with identical frames. Changing the domain or σ, changing structure, applying
+a non-affine frame (log scales, polar and other curved transforms), or crossing
+a discrete branch, clamp, or measurement boundary defeats that proof. Those
+are precisely the transitions where "which side?" is a visible design
+decision — tween σ itself (an animated axis rescale is a scene animation _of
+the scale_) or tween pixels (Magic Move) — and the grammar should let the
+author say which. Equality can still occur accidentally on a particular path;
+the affine test is the useful static guarantee.
 
 Gemini²'s keyframe recommendation and Gemini's "staged" transitions are two
 statements of the same repair: **factor one large spec-crossing segue into
@@ -232,7 +265,7 @@ uses distinct temporal vocabulary (§9.1). The equations:
 | data-driven duration              | value-proportional sizing on `t`                                                                                                                                       | Canis `{ "field": …, "minDuration": … }`                                                                                            |
 | fit to a total duration           | budget inversion (`Monotonic.inverse`) on `t`                                                                                                                          | Manim `AnimationGroup` rescaling run times to fit `run_time`; Gemini `totalDuration`                                                |
 | nested keyframe groups            | nested scopes — σ-scopes in `t`: only a scope root solves its local time frame, descendants inherit                                                                    | Canis recursive `grouping`; CAST's nested keyframe tree; "temporal Enclose" (GoFish paper)                                          |
-| transition between two states     | a connection mark on `t` — derived geometry consuming resolved states, owning no time claim of its own                                                                 | "temporal Connect" (GoFish paper); #54's interpolation mark; Gemini steps                                                           |
+| transition between two states     | a connection mark on `t` — derived geometry consuming resolved states; no spatial claim, but a preferred temporal duration                                             | "temporal Connect" (GoFish paper); #54's interpolation mark; Gemini steps                                                           |
 | keyframe interpolation dispatch   | `curve: "auto"` on `t`: continuous underlying space → one spline through the whole run; discrete → pairwise eased connectors                                           | AE spatial/roving keyframes vs CSS `@keyframes`; note CSS easing functions _are_ cubic Béziers — the honest discrete-pose connector |
 | the timeline UI                   | the `t` axis, rendered — recursive axes (#606) means every space renders its axis; a time axis's natural rendering is a scrubber/progress bar, with keyframes as ticks | play bars everywhere; Animated Vega-Lite binding an animated selection to a slider                                                  |
 
@@ -257,7 +290,8 @@ inherit).
 **Interpolation marks are connections.** #54's interpolation mark — draw the
 in-between frames differently from the true keyframes — is the connection
 stratum on `t`: derived geometry that consumes resolved states the way
-`line` consumes resolved bboxes, owning no claim of its own. This is where
+`line` consumes resolved bboxes. It owns no spatial claim, but as a clip it
+requests a temporal interval (§2.1). This is where
 segues live in the grammar (and it cleanly hosts #54's "segue spec language"
 point that interpolations need not be tied 1:1 to keyframes: a connection is
 free to reference any subset of states, just as `line` references any subset
@@ -266,14 +300,14 @@ of marks).
 ## 6. Triggers: one substrate, three event sources
 
 Underneath everything is the Animated Vega-Lite unification, which #671 has
-already made materially true in GoFish: **animation is timer-driven
-interaction.** A `timer()` is a signal; a pointer is a signal; a
-data-changing `signal()` is a signal. The trigger question (question 1 of
-§1) is fully orthogonal to everything above — any timing structure from §5
-can be driven by a timer (autonomous playback), an input (scrubbing,
-hover-to-advance), or a data write (live data). Binding the `t` axis to a
-slider _is_ scrubbing; pausing is `timer.stop()`; these compose by
-construction rather than by feature.
+already made materially true in GoFish: **animation and interaction share
+event sources.** A `timer()` is a signal; a pointer is a signal; a
+data-changing `signal()` is a signal. Any timing structure from §5 can be
+driven by a timer (autonomous playback), an input (scrubbing,
+hover-to-advance), or a data write (live data). Binding the playhead to a
+slider is scrubbing; pausing releases the clock without destroying the
+timeline. The ownership and interruption rules in §2.2 define how those
+sources compose.
 
 This is also where the interaction design thread (#667, Meros) reattaches:
 interaction and animation share the substrate and differ in event source,
@@ -290,9 +324,9 @@ keys from spec position × data key), and the correspondence has three parts:
 - **update** — the matched pairs (the bijective part). Tweenable; FLIP-style
   position animation and Animated Vega-Lite's `key` both live here.
 - **enter** — new elements with no source. **exit** — old elements with no
-  destination. Enter/exit is _the non-bijective remainder of a segue
-  correspondence_ — which is why lifecycle belongs to the segue/downstream
-  stratum, and why no amount of scene machinery produces it.
+  destination. Enter/exit is _the non-bijective remainder of a state
+  correspondence_. Its visual behavior is implemented by downstream or paint
+  tracks even when an upstream scene change caused the correspondence.
 
 We adopt the transition-group model, not D3's: lifecycle behavior is
 **declared once on the mark, keyed off dataset changes**, rather than
@@ -354,14 +388,18 @@ Two rejected poles, for the record:
 
 Adopted: named temporal forms that elaborate to `t`-axis constraints —
 strawman vocabulary, following house option style (single `by` key, options
-object, combinator/operator dual forms where sensible):
+object, combinator/operator dual forms where sensible). Each form returns a
+`Clip`, the schedulable value from §2:
 
 ```ts
-sequence([a, b, c], { overlap: 0.1 }); // ≡ stack in t, negative spacing
-parallel([a, b]); // ≡ layer in t
-stagger({ by: "month", delay: 50 }); // ≡ distribute({ dir: "t", by, spacing })
-keyframes("year", { key: "country" }); // ≡ spread in t (scene operator, §9.2)
+sequence([titleIn, barsIn, annotationIn], { overlap: 0.1 });
+parallel([axesIn, marksIn]);
+stagger(barsIn, { by: "month", delay: 50 });
+keyframes("year", { key: "country" });
 ```
+
+The first three compose clips. `keyframes` is an operator that constructs one
+clip from a data-time field; its output can be passed to the same combinators.
 
 The names are placeholders; the principle — new temporal names, shared
 underlying algebra, documented equivalences — is the decision.
@@ -379,32 +417,45 @@ chart(gapminder)
 
 `rescale` from Animated Vega-Lite is then just: does the σ-scope of the
 chart re-solve per keyframe (a scene animation of the scale) or hold fixed —
-a per-scope declaration, not a global mode.
+a per-scope declaration, not a global mode. `key` constructs the correspondence
+between adjacent years. The data interpolator must define each field's behavior
+and route missing countries through the mark's enter/exit tracks; upstream
+interpolation does not remove the need for identity.
 
 ### 9.3 Timing constraints (Gemini as constraints)
 
 ```ts
 .constrain((c) => [
-  c.align({ t: "start" }, [selectAll("bars"), ref("title")]),   // sync
-  c.distribute({ dir: "t", spacing: 30 }, selectAll("bars")),   // stagger
+  c.syncStart([selectAll("bars"), ref("title")]),
+  c.stagger(selectAll("bars"), { by: "month", delay: 30 }),
 ])
 ```
+
+These temporal names elaborate to the same internal constraints as
+`align`-in-`t` and `distribute`-in-`t`, without exposing spatial vocabulary at
+the API boundary.
 
 ### 9.4 Segue marks and lifecycle (downstream)
 
 ```ts
 // temporal Connect: derived geometry between two named states
 segue(ref("before"), ref("after"), { curve: "auto", duration: 800 })
-  // lifecycle: declared once, keyed; exit retained until finished
+  // lifecycle is declared once and inherits the segue interval
   .mark(
     rect({ h: "value" }).transition({
       key: "id",
-      enter: fadeIn(300),
-      update: tween(500),
-      exit: fadeOut(300),
+      enter: fadeIn(),
+      update: tween(),
+      exit: fadeOut(),
     })
   );
 ```
+
+The segue's `duration` is the clip's preferred duration. Lifecycle tracks
+inherit that interval by default; a child may request its own duration, in
+which case §2.1's fixed-versus-flexible budgeting rule applies. A new update
+arriving during the 800 ms interval follows §2.2 and retargets from the current
+rendered value.
 
 ### 9.5 Reveals (paint-only staging of a finished layout)
 
@@ -418,19 +469,41 @@ chart(data)
   ]);
 ```
 
-Open interval-semantics question, deliberately unresolved: what is a mark
-before/after its `t` interval — absent (scene default: the year's data
-doesn't exist yet), frozen at its boundary pose (reveal default: the chart
-is finished, just undisclosed), or clipped? Space never faces this because
-space doesn't play back; it is the one genuinely new semantic knob the time
-axis introduces, and probably wants a per-stratum default plus an override.
+The interval behavior here follows §2.1: each bar is paint-hidden before its
+reveal interval and holds its finished paint afterward. Paint-hidden marks do
+not participate in hit-testing. This keeps the final layout fixed while
+preventing undisclosed content from behaving as if it were visible.
+
+### 9.6 First elaboration: reveal to paint patches
+
+Reveal is the smallest end-to-end slice of the semantic kernel. The example
+above elaborates in five steps:
+
+1. Resolve and lay out the finished chart once, then resolve `ref` and
+   `selectAll` against stable display-item identities.
+2. Turn each `s.reveal(...)` into paint tracks whose value is a reveal mask;
+   authored opacity remains separate and displayed opacity is
+   `authoredOpacity × revealMask`.
+3. Lower `by`, `overlap`, and `after` into interval constraints and solve the
+   stage timeline.
+4. Create a chart-owned playhead. A chart-owned clock advances it during
+   playback; a scrubber may instead write it directly. Disposal stops the
+   clock and releases the tracks.
+5. On each playhead change, evaluate only active paint tracks and patch the
+   display list. No layout or scale work is repeated.
+
+The first implementation deliberately supports play, pause, seek, one
+chart-owned clock, opacity reveals, sequence, and stagger. It excludes layout
+tweens, arbitrary clip-path generation, nested easing, and mid-flight data
+retargeting. Those exclusions keep the MVP honest without changing the IR it
+elaborates into.
 
 ## 10. Open questions
 
-- **Easing's home.** Easing is time-reparameterization (§4.2), so it could
-  attach to the time _scale_ (warping the whole timeline), to a segue
-  (per-transition), or both. Both, probably — but the composition of nested
-  easings needs a rule (compose the warps? innermost wins?).
+- **Easing defaults.** §2 places easing on tracks and defines nested easing as
+  function composition. The remaining design choice is which easing each
+  stratum supplies when the author provides none, and whether a timeline-level
+  warp should be exposed as ordinary syntax or only as a compiler primitive.
 - **Data-space interpolation family.** Extend #635's family with
   `interpolate({ method })` emitting dense rows (uniform parameterization by
   default, per the metric argument in §4.2)? This is the upstream sibling of
@@ -439,8 +512,9 @@ axis introduces, and probably wants a per-stratum default plus an override.
   connection axis), the _default_ smoothing should be parameterized by that
   variable's data values and evaluated upstream; centripetal-in-screen
   remains only for parameterless geometric curves (routing, hulls, bundles).
-- **Playback semantics.** Loop, alternate, play-once; `timer()` already has
-  `stop()`/`start()`. Likely properties of the `t` scale, not new constructs.
+- **Transport surface.** Loop, alternate, and play-once are properties of the
+  playhead transport, not of the data-time scale. The open question is how
+  much transport control belongs on a chart versus an external binding.
 - **Coordinate transforms on `t`.** If `t` is an axis, coordinate transforms
   apply: a polar `t` axis is a clock face; a sweep animation is `t` bent
   through `polar`. Possibly a curiosity, possibly radar/clock charts for
@@ -449,30 +523,55 @@ axis introduces, and probably wants a per-stratum default plus an override.
   _recommenders_ over their grammars (enumerate candidate stagings, rank by
   perceptual cost). This grammar is the search space; synthesis over it is a
   separate project (relates to the layout-synthesis thread, #610/#631).
-- **Interaction composition.** Scrub-while-playing, hover-to-pause,
-  brush-to-filter-mid-animation — the shared-substrate claim (§6) says these
-  compose; the Meros binding algebra (#667) is where the composition rules
-  would live.
+- **Interaction composition.** Scrub-while-playing, hover-to-pause, and
+  brush-to-filter-mid-animation follow §2.2's ownership
+  and retargeting defaults. The Meros binding algebra (#667) is where richer
+  multi-source policies such as blend and queue would live.
+
+## 11. Lineage: why this model fits GoFish
+
+The temporal reading of spatial relations is the standing future-work thread
+of this research program:
+
+- **Bluefish** (UIST 2024, §9) identifies common fate with alignment applied
+  to velocity, temporal distribution with staggering, and temporal alignment
+  with unified animation starts or ends.
+- **The GoFish paper** (§8) relates Gemini's `concat` and `sync` to temporal
+  spacing and alignment, CAST's nesting to temporal enclosure, and proposes a
+  temporal `Connect` that moves an element along a path between states.
+- **Animated Vega-Lite** (§7.2.2) calls out the combination of Gemini's segue
+  abstractions with Animated Vega-Lite's scene abstractions as future work.
+
+In-repo, #54 proposed animation as spreading in the time direction, an
+interpolation mark paralleling `line`/`ribbon`, a segue language in which
+interpolations need not be tied 1:1 to keyframes, and nested keyframes as
+nested underlying time spaces. #211 proposed the `motion()` signal whose
+`.set(value, tween(ms))` drives re-resolution. The model in this document
+combines those threads, while §2 adds the runtime semantics that the spatial
+analogy alone cannot supply.
 
 ## Appendix A: cost model and prerequisites (implementation, brief)
 
 The strata land on the two regimes of #671 unevenly, which gives a natural
 sequencing — this is deliberately a sketch, not a plan:
 
-- **Reveals are nearly free today.** Paint-tier only: `live()` channels over
-  a `timer()`, zero re-layout, no identity needed (nothing changes but
-  paint). `.stage()` could ship on the current substrate.
+- **Reveals are the smallest first slice, but not free.** Paint-tier updates
+  can reuse `live()`-style patches with zero re-layout. `.stage()` still needs
+  the temporal IR, post-layout selector resolution, reveal-mask composition,
+  a chart-owned playhead and clock with disposal, and paint-hidden hit-testing
+  semantics. §9.6 fixes the first slice's boundaries.
 - **Scenes work today, expensively.** A signal read in resolve re-runs the
   full pipeline per tick (rAF-coalesced). Correct semantics (every frame a
   true layout) at full-solve cost; incremental layout (#674) is the
   economics fix, and the σ-affine commutativity check (§4.1) is the
   semantics-preserving fast path (lower to a downstream tween when the frame
   is fixed).
-- **Segues and lifecycle gate on stable identity (#673).** A correspondence
-  between two solves needs keys; #673 (spec position × data key) is the
-  prerequisite, already flagged in `incremental-layout.md` as "enables object
-  constancy in animation." Exit retention also needs the renderer to keep
-  unmatched display items alive past their solve.
+- **Structural scenes, segues, and lifecycle gate on stable identity (#673).**
+  Any correspondence between states with changing element sets needs keys;
+  #673 (spec position × data key) is the prerequisite, already flagged in
+  `incremental-layout.md` as "enables object constancy in animation." Exit
+  retention also needs the renderer to keep unmatched display items alive past
+  their solve. Fixed-structure numeric scenes can run without this machinery.
 - **FLIP-style updates want translation-absorbing lowering.** Whether a
   moved subtree is one `<g transform>` patch or a full repaint is the open
   display-list question in `incremental-layout.md` §3; a tweening layer
