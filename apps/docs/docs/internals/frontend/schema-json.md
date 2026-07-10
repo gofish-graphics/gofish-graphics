@@ -797,6 +797,9 @@ for the API.
         "type": {
           "const": "derive"
         },
+        "label": {
+          "$ref": "#/$defs/LabelIR"
+        },
         "lambdaId": {
           "type": "string",
           "description": "Python-bridge handle for the remote callable."
@@ -830,6 +833,9 @@ for the API.
       "properties": {
         "type": {
           "const": "resolve"
+        },
+        "label": {
+          "$ref": "#/$defs/LabelIR"
         },
         "cols": {
           "type": "array",
@@ -869,6 +875,9 @@ for the API.
         "type": {
           "const": "join"
         },
+        "label": {
+          "$ref": "#/$defs/LabelIR"
+        },
         "on": {
           "type": "string",
           "description": "Shared key field matched between the incoming rows and `right`."
@@ -903,6 +912,9 @@ for the API.
       "properties": {
         "type": {
           "const": "spread"
+        },
+        "label": {
+          "$ref": "#/$defs/LabelIR"
         },
         "by": {
           "oneOf": [
@@ -984,6 +996,9 @@ for the API.
         "type": {
           "const": "stack"
         },
+        "label": {
+          "$ref": "#/$defs/LabelIR"
+        },
         "by": {
           "oneOf": [
             {
@@ -1061,6 +1076,9 @@ for the API.
         "type": {
           "const": "group"
         },
+        "label": {
+          "$ref": "#/$defs/LabelIR"
+        },
         "by": {
           "oneOf": [
             {
@@ -1094,6 +1112,9 @@ for the API.
       "properties": {
         "type": {
           "const": "scatter"
+        },
+        "label": {
+          "$ref": "#/$defs/LabelIR"
         },
         "by": {
           "oneOf": [
@@ -1166,6 +1187,9 @@ for the API.
       "properties": {
         "type": {
           "const": "table"
+        },
+        "label": {
+          "$ref": "#/$defs/LabelIR"
         },
         "by": {
           "type": "object",
@@ -1255,6 +1279,9 @@ for the API.
       "properties": {
         "type": {
           "const": "treemap"
+        },
+        "label": {
+          "$ref": "#/$defs/LabelIR"
         },
         "w": {
           "$ref": "#/$defs/ChannelValue"

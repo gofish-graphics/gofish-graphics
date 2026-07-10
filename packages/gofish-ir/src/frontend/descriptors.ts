@@ -193,8 +193,18 @@ export const PY_LEAF_BASE_KWARGS: FieldGroup = group({
   debug: MARK_BASE_FIELDS.debug,
 });
 
-/** Every operator carries these (BaseIRNode + TranslatableIR in schema.ts). */
+/** Every operator carries these (BaseIRNode + TranslatableIR in schema.ts).
+ *
+ *  `label` is the `.label(accessor, options?)` chain (createOperator.ts's
+ *  `attachLabelOption`) available on every dual-mode operator (spread/stack/
+ *  group/scatter/table/treemap). `log` is the one operator descriptor that
+ *  declares its OWN `label` field (a plain string console-prefix, unrelated
+ *  to the chain — `log` isn't built via `createOperator` and never gets
+ *  `.label()`); `walkOperator` in validate.ts merges base fields BEFORE the
+ *  per-type descriptor's own fields so `log`'s own `label: string` entry
+ *  wins there, matching its real wire shape. */
 export const OPERATOR_BASE_FIELDS: FieldGroup = group({
+  label: { type: t.ref("LabelIR") },
   translate: { type: t.ref("TranslateIR") },
   debug: {
     type: t.boolean,

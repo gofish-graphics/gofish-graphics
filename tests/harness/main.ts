@@ -366,11 +366,29 @@ function mapOperator(
   op: OperatorSpec,
   deriveServerUrl?: string
 ): Operator<any, any> | null {
-  const { type, translate, ...opts } = op;
+  const { type, translate, label, ...opts } = op;
   const applyTranslate = <T>(operator: T): T =>
     translate && typeof (operator as any).translate === "function"
       ? ((operator as any).translate(translate) as T)
       : operator;
+  // `.label(accessor, options?)` chained on the operator (traversal) form —
+  // every operator below except `log` (whose own `label` is an unrelated
+  // console-prefix string, re-added to `opts` in that case instead).
+  const applyLabel = <T>(operator: T): T =>
+    label !== undefined &&
+    type !== "log" &&
+    typeof (operator as any).label === "function"
+      ? (() => {
+          const { accessor, ...labelOpts } = label as {
+            accessor: any;
+          } & Record<string, any>;
+          return (operator as any).label(
+            accessor,
+            Object.keys(labelOpts).length > 0 ? labelOpts : undefined
+          ) as T;
+        })()
+      : operator;
+  if (type === "log") opts.label = label;
 
   switch (type) {
     case "derive": {
@@ -413,11 +431,11 @@ function mapOperator(
     // `dir`, etc. as keyword args. The previous `field`-positional shape
     // was stale and silently miscalled most ops.
     case "spread":
-      return applyTranslate(spread(opts as any));
+      return applyTranslate(applyLabel(spread(opts as any)));
     case "stack":
-      return applyTranslate(stack(opts as any));
+      return applyTranslate(applyLabel(stack(opts as any)));
     case "group":
-      return applyTranslate(group(opts as any));
+      return applyTranslate(applyLabel(group(opts as any)));
     case "resolve":
       return applyTranslate(
         resolve(opts.cols as string[], {
@@ -430,11 +448,11 @@ function mapOperator(
         join(opts.right as any[], { on: opts.on as string })
       );
     case "scatter":
-      return applyTranslate(scatter(opts as any));
+      return applyTranslate(applyLabel(scatter(opts as any)));
     case "table":
-      return applyTranslate(table(opts as any));
+      return applyTranslate(applyLabel(table(opts as any)));
     case "treemap":
-      return applyTranslate(treemap(opts as any));
+      return applyTranslate(applyLabel(treemap(opts as any)));
     case "log":
       return applyTranslate(logOp(opts.label));
     default:

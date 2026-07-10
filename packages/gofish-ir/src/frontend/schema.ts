@@ -240,6 +240,11 @@ export interface SpreadOperator
     TranslatableIR,
     OperatorFlagsIR {
   type: "spread";
+  /** Set via `.label(accessor, options?)` chained on the operator: each
+   *  split leaf's produced node(s) get a deferred label over the leaf's own
+   *  subdata. String accessors round-trip; function accessors don't (see
+   *  `LabelIR`/`labelIRField` in createOperator.ts). */
+  label?: LabelIR;
   by?: string | FieldAccessor;
   dir?: "x" | "y";
   spacing?: number;
@@ -268,6 +273,8 @@ export interface StackOperator
     TranslatableIR,
     OperatorFlagsIR {
   type: "stack";
+  /** See `SpreadOperator.label` — `stack` is `spread({glue: true})` re-tagged. */
+  label?: LabelIR;
   by?: string | FieldAccessor;
   dir?: "x" | "y";
   /** Spread-parity passthrough: the JS `stack` is `Spread({...props, glue:
@@ -294,6 +301,8 @@ export interface GroupOperator
     TranslatableIR,
     OperatorFlagsIR {
   type: "group";
+  /** See `SpreadOperator.label`. */
+  label?: LabelIR;
   by: string | FieldAccessor;
 }
 
@@ -302,6 +311,8 @@ export interface ScatterOperator
     TranslatableIR,
     OperatorFlagsIR {
   type: "scatter";
+  /** See `SpreadOperator.label`. */
+  label?: LabelIR;
   by?: string | FieldAccessor;
   x?: ChannelValue;
   y?: ChannelValue;
@@ -334,6 +345,8 @@ export interface TableOperator
     TranslatableIR,
     OperatorFlagsIR {
   type: "table";
+  /** See `SpreadOperator.label`. */
+  label?: LabelIR;
   by: { x: string; y: string };
   spacing?: number | [number, number];
   numCols?: number;
@@ -344,6 +357,13 @@ export interface LogOperator
     TranslatableIR,
     OperatorFlagsIR {
   type: "log";
+  /** Console label prefix (`log(label)`) — NOT the `.label(accessor, options)`
+   *  chain other operators (spread/stack/group/scatter/table/treemap) carry.
+   *  `log` isn't built via `createOperator`'s `dual()`, so it never gets that
+   *  chainable; this field is a plain string and stays that way deliberately
+   *  — the two `label` wire fields share a name across operator types but not
+   *  a shape (`descriptors.ts`'s `walkOperator` field-merge order lets this
+   *  per-type entry win over the shared `LabelIR` base field for validation). */
   label?: string;
 }
 
@@ -360,6 +380,8 @@ export interface TreemapOperator
     TranslatableIR,
     OperatorFlagsIR {
   type: "treemap";
+  /** See `SpreadOperator.label`. */
+  label?: LabelIR;
   /** Field to partition rows by; also accepts a field(...) accessor carrying
    *  domain ops (sort/reverse/bin/dropNulls). Without `by`, one leaf is
    *  emitted per row. */

@@ -254,10 +254,32 @@ export function mapOperator(
   op: OperatorSpec,
   bridge?: DeriveBridge
 ): Operator<any, any> | null {
-  const { type, translate, ...opts } = op as Record<string, any>;
+  const { type, translate, label, ...opts } = op as Record<string, any>;
   const factory = OPERATOR_MAP[type as string];
   if (!factory) return null;
-  const operator = factory(opts, bridge);
+  // `log`'s own `label` field (a plain string console prefix) rides in
+  // `opts` and must reach its factory unchanged — only re-add it there;
+  // every other operator's `label` is the `.label(accessor, options?)`
+  // chain (LabelIR shape), handled below via the operator's own method.
+  let operator =
+    type === "log"
+      ? factory({ ...opts, label }, bridge)
+      : factory(opts, bridge);
+  if (
+    operator &&
+    label !== undefined &&
+    type !== "log" &&
+    typeof (operator as any).label === "function"
+  ) {
+    const { accessor, ...labelOpts } = label as { accessor: any } & Record<
+      string,
+      any
+    >;
+    operator = (operator as any).label(
+      accessor,
+      Object.keys(labelOpts).length > 0 ? labelOpts : undefined
+    );
+  }
   if (
     operator &&
     translate &&

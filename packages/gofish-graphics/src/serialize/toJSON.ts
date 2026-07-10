@@ -202,7 +202,15 @@ function operatorToIR(op: Operator<any, any>): Frontend.OperatorIR {
     // represents these as `{ type: "derive" }`.
     return { type: "derive" } as Frontend.DeriveOperator;
   }
-  return { type: tag.type, ...tag.opts } as Frontend.OperatorIR;
+  // `.label(accessor, options)` chained on the operator (traversal) form
+  // lands in `tag.label`, mirroring how a chained mark `.label()` surfaces
+  // as a top-level field in `markToIR` — see createOperator.ts's
+  // `attachLabelOption`.
+  return {
+    type: tag.type,
+    ...tag.opts,
+    ...(tag.label !== undefined ? { label: tag.label } : {}),
+  } as Frontend.OperatorIR;
 }
 
 async function markToIR(mark: Mark<any>): Promise<Frontend.MarkIR> {
