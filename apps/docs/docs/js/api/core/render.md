@@ -68,6 +68,7 @@ axes: { x: true, y: false }                    // x only
 axes: { x: { title: "Year" }, y: true }        // custom x title, inferred y title
 axes: { x: { title: false }, y: true }         // suppress the inferred x title
 axes: { x: { side: "end" } }                   // seat the x-axis on the far edge
+axes: { x: { labelAngle: 45 } }                // rotate x tick/category labels 45°
 ```
 
 Each per-axis object also accepts `side: "start" | "end"`. By default a
@@ -78,6 +79,33 @@ their value axis at the bottom without any option. An explicit `side` overrides
 that with the literal **frame-relative** seating: `"start"` is the near/origin edge
 (top in a y-down frame, bottom in y-up) and `"end"` is the far edge — e.g.
 `{ x: { side: "end" } }` forces the x-axis onto the opposite edge from the default.
+
+### Rotating tick and category labels
+
+Each per-axis object also accepts `labelAngle: number` — degrees, **clockwise on
+screen**, matching Vega-Lite's `labelAngle`. It rotates both continuous tick labels
+and ordinal category labels on that axis, including every nested tier of a grouped
+ordinal axis (e.g. a two-level grouped bar chart's inner and outer category rows).
+This is useful when category labels would otherwise overlap at small chart sizes:
+
+::: gofish
+
+```js
+gf.chart(seafood)
+  .flow(gf.spread({ by: "lake", dir: "x" }))
+  .mark(gf.rect({ h: "count" }))
+  .render(root, {
+    w: 300,
+    h: 210,
+    axes: { x: { labelAngle: 45 }, y: true },
+  });
+```
+
+:::
+
+There is currently no "auto" mode that rotates only when labels would collide —
+`labelAngle` is a manual, always-on rotation (auto-rotation is tracked in
+[#486](https://github.com/gofish-graphics/gofish/issues/486)).
 
 `axes` is most naturally a `chart()`/`chart()` option (e.g.
 `gf.chart(data, { axes: true })`); it is also accepted directly on `.render()`, as

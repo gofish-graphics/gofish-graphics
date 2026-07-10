@@ -81,21 +81,35 @@ const tickRect = (dim: 0 | 1): GoFishNode =>
  *  INNER element (facing the content) and the label the outer one, so the order
  *  follows `side`: with the axis on the near/start side the inner edge is the
  *  cross-`end`, so `[label, tick]`; on the far/end side the inner edge is the
- *  cross-`start`, so `[tick, label]`. */
+ *  cross-`start`, so `[tick, label]`.
+ *
+ *  `labelAngle` (already sign-resolved for this node's flip scope, see
+ *  `resolveLabelRotate`) rotates the label about its anchor. A `0`/`undefined`
+ *  angle keeps the default centered alignment along the track axis (pixel-
+ *  identical to no rotation); a nonzero angle switches the track-axis alignment
+ *  to `start` — the label's anchor (first character) sits at the tick instead
+ *  of centering the (now off-axis) rotated bbox on it, matching the
+ *  Vega-Lite `labelAngle` look. */
 function tickMark(
   dim: 0 | 1,
   label: string,
   name: string,
-  side: "start" | "end" = "start"
+  side: "start" | "end" = "start",
+  labelAngle?: number
 ): GoFishNode {
   const text = Text({
     text: label,
     fontSize: LABEL_FONT_SIZE,
     fill: AXIS_COLOR,
+    rotate: labelAngle,
   });
   const tick = tickRect(dim);
   return (Spread as any)(
-    { dir: crossName(dim), spacing: LABEL_TICK_GAP, alignment: "middle" },
+    {
+      dir: crossName(dim),
+      spacing: LABEL_TICK_GAP,
+      alignment: labelAngle ? "start" : "middle",
+    },
     side === "end" ? [tick, text] : [text, tick]
   ).name(name) as GoFishNode;
 }
@@ -273,7 +287,8 @@ function elaborateContinuousAxis(
   nice: [number, number],
   prefix: string,
   crossFloor?: number,
-  side: "start" | "end" = "start"
+  side: "start" | "end" = "start",
+  labelAngle?: number
 ): AxisElaboration {
   const [niceMin, niceMax] = nice;
   const tickValues = d3Ticks(niceMin, niceMax, TICK_COUNT);
@@ -283,7 +298,7 @@ function elaborateContinuousAxis(
     lineMin: niceMin,
     lineMax: niceMax,
     tickValues,
-    tickNode: (v, _i, name) => tickMark(dim, fmtNum(v), name, side),
+    tickNode: (v, _i, name) => tickMark(dim, fmtNum(v), name, side, labelAngle),
     crossFloor,
     side,
   });
@@ -342,20 +357,29 @@ function elaborateOrdinalAxis(
   space: Extract<UnderlyingSpace, { kind: "ordinal" }>,
   keyMap: Record<string, GoFishNode>,
   prefix: string,
-  side: "start" | "end" = "start"
+  side: "start" | "end" = "start",
+  labelAngle?: number
 ): AxisElaboration {
   const keys = (space.domain ?? []).filter((k) => keyMap[k] !== undefined);
   const trackAxis = dirName(dim); // labels track their key along the axis dim
   const gutterDir = crossName(dim); // labels sit in the cross gutter
   const lName = (i: number) => `${prefix}ol${i}`;
   const rName = (i: number) => `${prefix}or${i}`;
+  // A nonzero angle switches the track-axis alignment from centered to the
+  // label's own anchor (`start`, its first character) so the rotated label
+  // hangs off its key like a Vega-Lite `labelAngle` label instead of centering
+  // its rotated bbox on it.
+  const trackAlign = labelAngle ? "start" : "middle";
 
   const nodes: GoFishNode[] = [];
   keys.forEach((k, i) => {
     nodes.push(
-      Text({ text: k, fontSize: LABEL_FONT_SIZE, fill: AXIS_COLOR }).name(
-        lName(i)
-      )
+      Text({
+        text: k,
+        fontSize: LABEL_FONT_SIZE,
+        fill: AXIS_COLOR,
+        rotate: labelAngle,
+      }).name(lName(i))
     );
     nodes.push((ref(keyMap[k]) as any).name(rName(i)) as GoFishNode);
   });
@@ -365,7 +389,7 @@ function elaborateOrdinalAxis(
     keys.forEach((_, i) => {
       // Track the key along the axis dim …
       cs.push(
-        Constraint.align({ [trackAxis]: "middle" } as any, [
+        Constraint.align({ [trackAxis]: trackAlign } as any, [
           g[lName(i)],
           g[rName(i)],
         ])
@@ -438,7 +462,8 @@ function elaborationsFor(
   node: GoFishNode,
   sides: ["start" | "end" | undefined, "start" | "end" | undefined],
   yUp: boolean,
-  underCoord: boolean
+  underCoord: boolean,
+  labelAngles: [number | undefined, number | undefined] = [undefined, undefined]
 ): {
   constrained: AxisElaboration[];
   refBased: AxisElaboration[];
@@ -500,6 +525,21 @@ function elaborationsFor(
     const crossFlips = yUp || underCoord || isCONTINUOUS(space[cross(dim)]);
     return crossFlips ? "start" : "end";
   };
+  // `labelAngle` is authored screen-clockwise (Vega-Lite semantics), but the
+  // `Text` `rotate` prop is applied in this node's own y-up WORLD frame and
+  // gets negated at render time when that frame flips (see `text.tsx`'s
+  // `flips ? -rotate : rotate`). This node's frame flips iff a y-up mirror
+  // scope is active over it — the exact same predicate `axisSide` uses for
+  // its own cross-flip check (`yUp || underCoord || isCONTINUOUS(space[1])`,
+  // dim-independent since it's really "does THIS node's y mirror") — so we
+  // pre-negate here to cancel that render-time negation and land back on the
+  // literal screen angle regardless of the frame's orientation.
+  const frameFlips = yUp || underCoord || isCONTINUOUS(space[1]);
+  const resolvedLabelAngle = (dim: 0 | 1): number | undefined => {
+    const a = labelAngles[dim];
+    if (!a) return undefined;
+    return frameFlips ? -a : a;
+  };
   for (const dim of [0, 1] as (0 | 1)[]) {
     if (!owns(dim)) continue;
     const s = space[dim];
@@ -511,7 +551,8 @@ function elaborationsFor(
         nices[dim]!,
         prefix,
         crossFloor,
-        axisSide(dim)
+        axisSide(dim),
+        resolvedLabelAngle(dim)
       );
       constrained.push(e);
       anchors[dim] = e.anchor;
@@ -530,7 +571,14 @@ function elaborationsFor(
       // Ordinal axes keep the `start` default (they follow the content's own flip
       // like a category row); only continuous axes default to the bottom.
       refBased.push(
-        elaborateOrdinalAxis(dim, s, keyMap, prefix, sides[dim] ?? "start")
+        elaborateOrdinalAxis(
+          dim,
+          s,
+          keyMap,
+          prefix,
+          sides[dim] ?? "start",
+          resolvedLabelAngle(dim)
+        )
       );
     } else {
       continue;
@@ -574,7 +622,8 @@ export async function elaborateAxes(
     undefined,
   ],
   yUp = false,
-  underCoord = false
+  underCoord = false,
+  labelAngles: [number | undefined, number | undefined] = [undefined, undefined]
 ): Promise<{
   node: GoFishNode;
   changed: boolean;
@@ -594,7 +643,13 @@ export async function elaborateAxes(
   for (let i = 0; i < node.children.length; i++) {
     const child = node.children[i];
     if (child instanceof GoFishNode) {
-      const res = await elaborateAxes(child, sides, yUp, childUnderCoord);
+      const res = await elaborateAxes(
+        child,
+        sides,
+        yUp,
+        childUnderCoord,
+        labelAngles
+      );
       if (res.changed) changed = true;
       // A child's anchor fills a dim slot we haven't claimed yet.
       for (const dim of [0, 1] as (0 | 1)[]) {
@@ -613,7 +668,8 @@ export async function elaborateAxes(
     node,
     sides,
     yUp,
-    childUnderCoord
+    childUnderCoord,
+    labelAngles
   );
   // Any dim this node owns an axis on is claimed — its own anchor replaces
   // whatever bubbled up from children, INCLUDING replacing it with undefined

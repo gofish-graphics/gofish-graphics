@@ -99,6 +99,29 @@ direct far-edge seating (with the mirror suppressed) when it does not. `gofish.t
 computes the title's `sides` and the mirror-suppression (`xTitleSeatsFar`) to match
 wherever `axisSide` put the line, so the two always land together.
 
+### Label rotation (`labelAngle`)
+
+The public `axes: { x: { labelAngle: number } }` option (#746) rotates a tick or
+category label about its anchor, authored **screen-clockwise** to match
+Vega-Lite's `labelAngle`. It is threaded the same way `side` is —
+`elaborateAxes → elaborationsFor → elaborate{Continuous,Ordinal}Axis → tickMark` /
+`elaborateOrdinalAxis` — landing on the `Text` mark's `rotate` prop, which is
+applied in the node's own **y-up world frame** and gets negated at render time
+when that frame flips (`text.tsx`'s `flips ? -rotate : rotate`). Since
+`elaborationsFor` doesn't know the bake-time flip decision, it pre-negates using
+the same predicate `axisSide` already uses for its cross-flip check
+(`yUp || underCoord || isCONTINUOUS(space[1])` — this is dim-independent: it's
+really "does this node's own y mirror", not specific to the axis being labeled),
+canceling the render-time negation so the label lands at the literal screen angle
+regardless of the frame's orientation. A nonzero angle also switches the
+track-axis alignment from centered (`"middle"`) to the label's own anchor
+(`"start"`) — `tickMark`'s `Spread` alignment and `elaborateOrdinalAxis`'s
+`Constraint.align` — so the label's first character sits at the tick instead of
+centering the now-diagonal bbox on it. A grouped ordinal axis's inner and outer
+label tiers both receive the same resolved angle, since `labelAngles` is threaded
+unchanged through the recursive `elaborateAxes` walk. There is no "auto" rotation
+mode (deferred to #486) — this is a manual, always-on angle.
+
 The wrapper inherits the wrapped node's `key` and `_name`, so faceting and
 external refs keep resolving to it. After the rewrite, the whole tree's underlying
 space is recomputed (the cache is cleared); then normal layout runs, and each

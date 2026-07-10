@@ -89,3 +89,43 @@ export const AxesSuppressedTitle: StoryObj<Args> = {
   render: (args: Args) =>
     renderBar(args, { x: { title: false }, y: true }),
 };
+
+// labelAngle (#746): a nested grouped bar chart (city, then year) at a small
+// thumbnail size, where the unrotated category labels would collide under the
+// bars. Two-tier x axis: labelAngle applies to both the inner (year) and
+// outer (city) label rows.
+const cityYear = [
+  { city: "Austin", year: "2022", visitors: 42 },
+  { city: "Austin", year: "2023", visitors: 58 },
+  { city: "Austin", year: "2024", visitors: 71 },
+  { city: "Boston", year: "2022", visitors: 55 },
+  { city: "Boston", year: "2023", visitors: 49 },
+  { city: "Boston", year: "2024", visitors: 63 },
+  { city: "Chicago", year: "2022", visitors: 38 },
+  { city: "Chicago", year: "2023", visitors: 44 },
+  { city: "Chicago", year: "2024", visitors: 51 },
+];
+
+function renderGroupedBar(args: Args, labelAngle: number): HTMLElement {
+  const container = initializeContainer();
+
+  chart(cityYear, { axes: { x: { labelAngle } } })
+    .flow(
+      spread({ by: "city", dir: "x", spacing: 24 }),
+      spread({ by: "year", dir: "x", spacing: 0 })
+    )
+    .mark(rect({ h: "visitors", fill: "year" }))
+    .render(container, { w: args.w, h: args.h });
+
+  return container;
+}
+
+export const GroupedLabelAngle45: StoryObj<Args> = {
+  args: { w: 300, h: 210 },
+  render: (args: Args) => renderGroupedBar(args, 45),
+};
+
+export const GroupedLabelAngle90: StoryObj<Args> = {
+  args: { w: 300, h: 210 },
+  render: (args: Args) => renderGroupedBar(args, 90),
+};
