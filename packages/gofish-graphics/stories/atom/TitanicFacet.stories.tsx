@@ -1,15 +1,12 @@
 import type { Meta, StoryObj } from "@storybook/html";
-import { chunk, groupBy, orderBy, sumBy } from "lodash";
+import { chunk, orderBy } from "lodash";
 import { initializeContainer } from "../helper";
 
-import { table } from "../../src/lib";
-
-import { chart, Treemap, circle, derive, rect, repeat, spread, palette } from "../../src/lib";
+import { chart, table, circle, derive, spread, palette } from "../../src/lib";
 import {
   titanicPassengers,
   type TitanicPassenger,
 } from "../../src/data/titanicPassengers";
-import { from } from "solid-js";
 
 /**
  * Data: [intuinno/unit `titanic3.csv`](https://github.com/intuinno/unit/blob/master/app/data/titanic3.csv)
@@ -49,7 +46,7 @@ export const Default: StoryObj<Args> = {
                 // semantics (equal cells, fit-derived unit size) is #663.
                 spacing: 32,
               }))
-      .mark((d) => chart(d)
+      .mark(chart()
             .flow(
               derive((rows) => orderBy(rows, ["survived"], ["desc"])),
               derive((rows) => chunk(rows, Math.ceil(Math.sqrt(rows.length)))),

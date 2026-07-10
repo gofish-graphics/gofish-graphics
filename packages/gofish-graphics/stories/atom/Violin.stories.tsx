@@ -72,8 +72,8 @@ export const Default: StoryObj<Args> = {
       axes: { x: { side: "end" }, y: false },
     })
       .flow(spread({ by: "pclass", dir: "x", spacing: 48, alignment: "middle" }))
-      .mark((panel) =>
-        chart(panel)
+      .mark(
+        chart()
           // Reverse so age increases UPWARD (youngest bin at the bottom) in
           // y-down free space — the density silhouette stacks up the age axis.
           .flow(
@@ -85,8 +85,8 @@ export const Default: StoryObj<Args> = {
               reverse: true,
             })
           )
-          .mark((bin) =>
-            chart(bin)
+          .mark(
+            chart()
               .flow(spread({ dir: "x", spacing: 1, alignment: "middle" }))
               .mark(circle({ r: 2, fill: "survived" }))
           )

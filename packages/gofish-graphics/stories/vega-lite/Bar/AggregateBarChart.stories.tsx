@@ -1,7 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../../helper";
-import { chart, spread, rect, derive } from "../../../src/lib";
-import { groupBy, sumBy } from "lodash";
+import { chart, spread, rect } from "../../../src/lib";
 import data from "vega-datasets";
 
 // Mirrors: https://vega.github.io/vega-lite/examples/bar_aggregate.html

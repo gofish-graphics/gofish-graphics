@@ -1,9 +1,8 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
-import { Treemap, rect, v, circle } from "../../src/lib";
+import { chart, treemap, rect, derive, groupBy, sumBy } from "../../src/lib";
 import { gray } from "../../src/color";
 import data from "vega-datasets";
-import { groupBy } from "lodash";
 
 const meta: Meta = {
   title: "Low Level Syntax/Treemap",
@@ -34,51 +33,48 @@ export const Default: StoryObj<Args> = {
         "Movie counts by major genre laid out as a treemap of nested rectangles whose areas encode each genre's frequency.",
     },
   },
-  render: async (args: Args, context: any) => {
+  render: (args: Args, context: any) => {
     const container = initializeContainer();
     const moviesRaw = context.loaded.movies as Movie[];
 
-    const moviesGrouped = groupBy(
-      moviesRaw.filter((d) => d["Major Genre"] != null),
-      (d) => String(d["Major Genre"])
-    );
-    // Flatten grouped data into explicit nodes (avoid relying on array .groupBy()).
-    const nodes = await Promise.all(
-      Object.entries(moviesGrouped)
-        .map(([key, values]) => {
-          const worldwideGross = values.reduce(
-            (acc, d) => acc + (Number(d["Worldwide Gross"]) || 0),
-            0
+    chart(moviesRaw)
+      .flow(
+        derive((d) => {
+          const grouped = groupBy(
+            d.filter((m) => m["Major Genre"] != null),
+            (m) => String(m["Major Genre"])
           );
-          return { key, values, worldwideGross };
+          return Object.entries(grouped)
+            .map(([key, values]) => ({
+              key,
+              worldwideGross: sumBy(
+                values,
+                (m) => Number(m["Worldwide Gross"]) || 0
+              ),
+            }))
+            .filter((d) => d.worldwideGross > 0);
+        }),
+        treemap({
+          valueField: "worldwideGross",
+          paddingInner: args.paddingInner,
+          paddingOuter: args.paddingInner,
+          round: true,
+          tile: "squarify",
+          flipY: false,
         })
-        .filter((d) => d.worldwideGross > 0)
-        .map((d) =>
-          rect<{ key: string; values: Movie[]; worldwideGross: number }>({
-            // Make fill data-driven by genre so the built-in label shows the genre name.
-            fill: v(d.key),
-            stroke: gray,
-            strokeWidth: 1,
-            rx: 2, 
-            ry: 2,
-            label: true,
-          })(d, d.key)
-        )
-    );
-
-    Treemap(
-      {
-        valueField: "worldwideGross",
-        paddingInner: args.paddingInner,
-        paddingOuter: args.paddingInner,
-        round: true,
-        tile: "squarify",
-        flipY: false
-      },
-      nodes as any
-    ).render(container, { w: args.w, h: args.h });
+      )
+      .mark(
+        rect({
+          fill: "key",
+          stroke: gray,
+          strokeWidth: 1,
+          rx: 2,
+          ry: 2,
+          label: true,
+        })
+      )
+      .render(container, { w: args.w, h: args.h });
 
     return container;
   },
 };
-

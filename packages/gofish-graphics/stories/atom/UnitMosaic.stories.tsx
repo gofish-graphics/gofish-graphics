@@ -76,16 +76,16 @@ export const Default: StoryObj<Args> = {
     chart(mosaicPassengers, { color: palette(["#2b8cbe", "#ff8408"]) })
       // pclass rows: 1st at the bottom, 3rd at the top
       .flow(spread({ by: "pclass", dir: "y", spacing: 6, alignment: "start" }))
-      .mark((cls) =>
-        chart(cls)
+      .mark(
+        chart()
           // sex sub-rows within a class: female bottom, male top
           .flow(spread({ by: "sex", dir: "y", spacing: 3, alignment: "start" }))
-          .mark((sexRow) =>
-            chart(sexRow)
+          .mark(
+            chart()
               // survived columns: survived (blue) left, died (orange) right
               .flow(spread({ by: "survived", dir: "x", spacing: 3, alignment: "start" }))
-              .mark((cell) =>
-                chart(cell)
+              .mark(
+                chart()
                   .flow(
                     // Fill column-by-column — each column `gridRows` tall — so
                     // every cell has flush top and bottom edges and only the

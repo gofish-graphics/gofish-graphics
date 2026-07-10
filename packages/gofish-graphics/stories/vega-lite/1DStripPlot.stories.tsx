@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
-import { chart, scatter, rect, log } from "../../src/lib";
+import { chart, scatter, rect } from "../../src/lib";
 import data from "vega-datasets";
 
 // Mirrors: https://vega.github.io/vega-lite/examples/tick_dot.html

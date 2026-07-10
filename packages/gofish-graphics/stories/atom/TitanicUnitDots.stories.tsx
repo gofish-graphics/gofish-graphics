@@ -1,7 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/html";
-import { groupBy, maxBy, orderBy, sumBy } from "lodash";
 import { initializeContainer } from "../helper";
-import { treemap, circle, Spread, chart, palette } from "../../src/lib";
+import { treemap, circle, chart, palette } from "../../src/lib";
 import {
   titanicPassengers,
   type TitanicPassenger,
