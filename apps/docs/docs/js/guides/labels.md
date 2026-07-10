@@ -123,6 +123,25 @@ gf.chart(seafood, { axes: true })
 
 :::
 
+## Labeling a group instead of a mark instance
+
+`.label()` also chains on an operator returned by `.flow(...)` (`spread`,
+`stack`, `group`, `scatter`, `table`, `treemap`), not just on a mark. This
+labels each **group** the operator produces — one label per split leaf —
+instead of one label per mark instance:
+
+```ts
+chart(data)
+  .flow(stack({ by: "class", dir: "y" }).label("class", { position: "center" }))
+  .mark(rect({ h: "count" }));
+```
+
+A string accessor reads a field off the group's first row, same as on a
+mark; a function accessor receives the group's whole row array, so it can
+compute an aggregate (`(rows) => rows.length`). See
+[`.label()` on operators](/js/api/core/mark#operator-label) for the full
+semantics.
+
 ## Custom label text
 
 Pass a function instead of a field name for computed labels.

@@ -80,3 +80,37 @@ it binds the previous tier's marks.
 The older callback form `mark(lambda data: chart(data, ...).flow(...).mark(...))`
 still works and is equivalent — the function receives each group's data slice and
 returns a nested chart.
+
+## Labeling a mark
+
+Call `.label(accessor, position=..., font_size=..., color=..., offset=..., min_space=..., rotate=...)`
+on a mark to attach a deferred text label, mirroring JS's `.label(accessor, options?)`:
+
+```python
+rect(h="count").label("count", position="center", font_size=10)
+```
+
+`accessor` is a field name read off the mark's datum. Python has no
+function-accessor form (JS accepts a callback there); use a field name.
+
+### `.label()` on operators {#operator-label}
+
+Every dual-mode operator (`spread`, `stack`, `group`, `scatter`, `table`,
+`treemap`) also accepts `.label(accessor, ...)`, with the same kwargs as
+`Mark.label`. Chaining it on the operator instead of the mark labels the
+**group**, not each individual mark instance — every node a split leaf (one
+group's rows) produces gets stamped with that leaf's own subdata, and
+`accessor` reads a field off the group's first row:
+
+```python
+chart(data).flow(
+    stack(by="class", dir="y").label("class", position="center")
+).mark(rect(h="count"))
+```
+
+`.label()` and `.translate()` chain in either order:
+
+```python
+stack(by="class", dir="y").translate(y=8).label("class")
+stack(by="class", dir="y").label("class").translate(y=8)
+```

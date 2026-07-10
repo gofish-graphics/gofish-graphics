@@ -119,3 +119,36 @@ chart(data)
   .flow(scatter({ by: "lake", x: "lake" }).translate({ y: 50 }))
   .mark(rect({ w: 0.1, h: "count" }));
 ```
+
+### `.label()` on operators {#operator-label}
+
+Every dual-mode operator (`spread`, `stack`, `group`, `scatter`, `table`,
+`treemap` — anything with an operator (traversal) form inside `.flow(...)`)
+also accepts `.label(accessor, options?)`, with the same signature as a
+mark's `.label()` (see the [labels guide](/js/guides/labels)). Chaining it on
+the operator instead of the mark labels the **group**, not each individual
+mark instance:
+
+```ts
+chart(data)
+  .flow(stack({ by: "class", dir: "y" }).label("class", { position: "center" }))
+  .mark(rect({ h: "count" }));
+```
+
+At execution time, every node a split leaf (one group's rows) produces gets
+stamped with that leaf's own subdata — a string accessor reads a field off
+the group's first row (the same unwrap a mark-level string accessor uses);
+a function accessor instead receives the **whole group** (an array of rows),
+so it can compute an aggregate label (e.g. `(rows) => rows.length`). This
+replaces the older pattern of manually stamping `node.datum` before calling
+`node.label(...)` on an already-resolved chart (see the "Label on Spread"
+story for the equivalent hand-rolled version). As with mark-level `.label`,
+a string accessor round-trips through the [IR](/internals/python/bridge); a
+function accessor can't be serialized and is dropped with a console warning.
+
+`.label()` and `.translate()` chain in either order:
+
+```ts
+stack({ by: "class", dir: "y" }).translate({ y: 8 }).label("class");
+stack({ by: "class", dir: "y" }).label("class").translate({ y: 8 });
+```
