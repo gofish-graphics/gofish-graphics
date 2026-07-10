@@ -1856,6 +1856,11 @@ for the API.
           "description": "Rotation in degrees, applied in the chart's y-up world frame about the text anchor.",
           "default": 0
         },
+        "textAnchor": {
+          "enum": ["start", "middle", "end"],
+          "description": "Where the text anchor — the local origin `rotate` pivots about and dims channels position — sits along the string: its first character, center, or last character.",
+          "default": "start"
+        },
         "name": {
           "type": "string"
         },
