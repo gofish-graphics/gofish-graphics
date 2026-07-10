@@ -98,12 +98,10 @@ const tickRect = (dim: 0 | 1): GoFishNode =>
  *  cross-`start`, so `[tick, label]`.
  *
  *  `labelAngle` (already sign-resolved for this node's flip scope, see
- *  `resolveLabelRotate`) rotates the label about its anchor. A `0`/`undefined`
- *  angle keeps the default centered alignment along the track axis (pixel-
- *  identical to no rotation); a nonzero angle switches the track-axis alignment
- *  to `start` — the label's anchor (first character) sits at the tick instead
- *  of centering the (now off-axis) rotated bbox on it, matching the
- *  Vega-Lite `labelAngle` look. */
+ *  `resolveLabelRotate`) rotates the label about its anchor. Rotation never
+ *  changes alignment: the track-axis alignment stays centered regardless of
+ *  angle, so a rotated label's (now off-axis) rotated bbox is centered on the
+ *  tick exactly like an unrotated label's bbox would be. */
 function tickMark(
   dim: 0 | 1,
   label: string,
@@ -122,7 +120,7 @@ function tickMark(
     {
       dir: crossName(dim),
       spacing: LABEL_TICK_GAP,
-      alignment: labelAngle ? "start" : "middle",
+      alignment: "middle",
     },
     side === "end" ? [tick, text] : [text, tick]
   ).name(name) as GoFishNode;
@@ -379,11 +377,10 @@ function elaborateOrdinalAxis(
   const gutterDir = crossName(dim); // labels sit in the cross gutter
   const lName = (i: number) => `${prefix}ol${i}`;
   const rName = (i: number) => `${prefix}or${i}`;
-  // A nonzero angle switches the track-axis alignment from centered to the
-  // label's own anchor (`start`, its first character) so the rotated label
-  // hangs off its key like a Vega-Lite `labelAngle` label instead of centering
-  // its rotated bbox on it.
-  const trackAlign = labelAngle ? "start" : "middle";
+  // Rotation never changes alignment: the track-axis alignment stays centered
+  // regardless of `labelAngle`, so a rotated label's rotated bbox is centered
+  // on its key just like an unrotated label's bbox would be.
+  const trackAlign = "middle";
 
   const nodes: GoFishNode[] = [];
   keys.forEach((k, i) => {

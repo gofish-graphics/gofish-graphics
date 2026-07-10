@@ -114,12 +114,12 @@ the same predicate `axisSide` already uses for its cross-flip check
 (`yUp || underCoord || isCONTINUOUS(space[1])` — this is dim-independent: it's
 really "does this node's own y mirror", not specific to the axis being labeled),
 canceling the render-time negation so the label lands at the literal screen angle
-regardless of the frame's orientation. A nonzero angle also switches the
-track-axis alignment from centered (`"middle"`) to the label's own anchor
-(`"start"`) — `tickMark`'s `Spread` alignment and `elaborateOrdinalAxis`'s
-`Constraint.align` — so the label's first character sits at the tick instead of
-centering the now-diagonal bbox on it. There is no "auto" rotation mode (deferred
-to #486) — this is a manual, always-on angle.
+regardless of the frame's orientation. Rotation never changes alignment: the
+track-axis alignment stays centered (`"middle"`) in both `tickMark`'s `Spread`
+alignment and `elaborateOrdinalAxis`'s `Constraint.align`, so a rotated label's
+(now-diagonal) bbox is centered on its tick exactly like an unrotated label's
+bbox would be. There is no "auto" rotation mode (deferred to #486) — this is a
+manual, always-on angle.
 
 **Per-tier selection.** A plain number applies uniformly to every tier of a
 nested ordinal axis (a grouped bar chart's inner year row and outer city row
