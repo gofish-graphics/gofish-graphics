@@ -106,7 +106,10 @@ const cityYear = [
   { city: "Chicago", year: "2024", visitors: 51 },
 ];
 
-function renderGroupedBar(args: Args, labelAngle: number): HTMLElement {
+function renderGroupedBar(
+  args: Args,
+  labelAngle: number | number[]
+): HTMLElement {
   const container = initializeContainer();
 
   chart(cityYear, { axes: { x: { labelAngle } } })
@@ -128,4 +131,16 @@ export const GroupedLabelAngle45: StoryObj<Args> = {
 export const GroupedLabelAngle90: StoryObj<Args> = {
   args: { w: 300, h: 210 },
   render: (args: Args) => renderGroupedBar(args, 90),
+};
+
+// Per-tier labelAngle array: [45] rotates only the innermost (year) row,
+// leaving the outer (city) row upright.
+export const GroupedLabelAngleInner45: StoryObj<Args> = {
+  args: { w: 300, h: 210 },
+  render: (args: Args) => renderGroupedBar(args, [45]),
+};
+
+export const GroupedLabelAngleInner90: StoryObj<Args> = {
+  args: { w: 300, h: 210 },
+  render: (args: Args) => renderGroupedBar(args, [90]),
 };

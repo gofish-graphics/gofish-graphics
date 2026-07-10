@@ -95,3 +95,13 @@ def story_grouped_label_angle45():
 
 def story_grouped_label_angle90():
     return _grouped_bar(90)
+
+
+# Per-tier labelAngle array: [45]/[90] rotates only the innermost (year) row,
+# leaving the outer (city) row upright.
+def story_grouped_label_angle_inner45():
+    return _grouped_bar([45])
+
+
+def story_grouped_label_angle_inner90():
+    return _grouped_bar([90])

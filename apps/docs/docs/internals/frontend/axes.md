@@ -101,9 +101,10 @@ wherever `axisSide` put the line, so the two always land together.
 
 ### Label rotation (`labelAngle`)
 
-The public `axes: { x: { labelAngle: number } }` option (#746) rotates a tick or
-category label about its anchor, authored **screen-clockwise** to match
-Vega-Lite's `labelAngle`. It is threaded the same way `side` is —
+The public `axes: { x: { labelAngle: number | number[] } }` option (#746, extended
+to per-tier arrays afterward) rotates a tick or category label about its anchor,
+authored **screen-clockwise** to match Vega-Lite's `labelAngle`. It is threaded the
+same way `side` is —
 `elaborateAxes → elaborationsFor → elaborate{Continuous,Ordinal}Axis → tickMark` /
 `elaborateOrdinalAxis` — landing on the `Text` mark's `rotate` prop, which is
 applied in the node's own **y-up world frame** and gets negated at render time
@@ -117,10 +118,36 @@ regardless of the frame's orientation. A nonzero angle also switches the
 track-axis alignment from centered (`"middle"`) to the label's own anchor
 (`"start"`) — `tickMark`'s `Spread` alignment and `elaborateOrdinalAxis`'s
 `Constraint.align` — so the label's first character sits at the tick instead of
-centering the now-diagonal bbox on it. A grouped ordinal axis's inner and outer
-label tiers both receive the same resolved angle, since `labelAngles` is threaded
-unchanged through the recursive `elaborateAxes` walk. There is no "auto" rotation
-mode (deferred to #486) — this is a manual, always-on angle.
+centering the now-diagonal bbox on it. There is no "auto" rotation mode (deferred
+to #486) — this is a manual, always-on angle.
+
+**Per-tier selection.** A plain number applies uniformly to every tier of a
+nested ordinal axis (a grouped bar chart's inner year row and outer city row
+both rotate the same amount); an array is per-tier instead, indexed from the
+INNERMOST tier outward — `angleForTier(opt, tier)` picks `opt` itself when it's
+a number, or `opt[tier]` (possibly `undefined`, past the array's end) when it's
+an array. `elaborationsFor` needs to know which tier index `tier` a given
+ordinal-axis-owning node is, since **ordinal axes nest**: `resolveAxes` lets a
+distinct ordinal grouping claim its own axis at every depth (`_node.ts`'s
+`resolveAxes`), so a grouped bar chart has one node owning the city axis and,
+independently, one sibling-node-per-city each owning that city's year axis — a
+DEEPER call in the bottom-up `elaborateAxes` walk always elaborates an inner
+tier before an ancestor elaborates an outer one on the same dim.
+
+The tier index is computed by bubbling a per-dim `tierCounts: [number, number]`
+UP through the recursion, exactly like `titleAnchors` bubbles up axis-line
+anchors: `elaborateAxes` folds it as a `Math.max` over its own children's
+returned `tierCounts` (a node's tier count only depends on ITS OWN subtree, so
+sibling subtrees elsewhere in the tree — e.g. two independent grouped-bar
+regions — don't interfere with each other), then calls `elaborationsFor` with
+that folded value. Inside `elaborationsFor`, a node that claims an ordinal axis
+on dim `d` reads `tier = tierCounts[d]` (0 for the first — innermost — claim
+seen anywhere below it) as its OWN tier index, then increments
+`tierCounts[d]` by one before returning, so an ancestor claiming the same dim's
+next-outer tier reads the incremented count. Continuous/difference axes are
+always single-owner and single-tier (`resolveAxes`: "Continuous: single-owner —
+only the root-most unclaimed dim claims"), so they always resolve tier `0` —
+i.e. the number, or `array[0]`.
 
 The wrapper inherits the wrapped node's `key` and `_name`, so faceting and
 external refs keep resolving to it. After the rewrite, the whole tree's underlying

@@ -65,6 +65,20 @@ export type AxisElaboration = {
   anchor?: GoFishNode;
 };
 
+/** A `labelAngle` value as authored: a plain number applies to every tier of
+ *  a nested ordinal axis; an array is per-tier, indexed from the INNERMOST
+ *  tier outward (see `AxisOptions.labelAngle` in `gofish.tsx`). */
+type LabelAngleOpt = number | number[] | undefined;
+
+/** Select the angle for a given ordinal tier (0 = innermost) — or, for a
+ *  continuous/difference axis (always a single tier), tier `0`. A plain
+ *  number applies uniformly; an array indexes by tier, `undefined` past its
+ *  end (unrotated). */
+function angleForTier(opt: LabelAngleOpt, tier: number): number | undefined {
+  if (opt === undefined) return undefined;
+  return Array.isArray(opt) ? opt[tier] : opt;
+}
+
 const dirName = (dim: 0 | 1) => (dim === 0 ? "x" : "y");
 const cross = (dim: 0 | 1): 0 | 1 => (1 - dim) as 0 | 1;
 const crossName = (dim: 0 | 1) => dirName(cross(dim));
@@ -457,13 +471,21 @@ function collectKeyMap(node: GoFishNode): Record<string, GoFishNode> {
  *    out AFTER the content is in its final (shifted) position — i.e. in an outer
  *    tier. Otherwise the ref captures the pre-shift position and the labels miss
  *    the continuous-axis gutter offset.
+ *
+ * `tierCounts` is the per-dim count of ordinal axis tiers already elaborated
+ * BELOW this node in the subtree (0 = none yet, i.e. this node — if it owns an
+ * ordinal axis — is the innermost tier); see `elaborateAxes` for how it's
+ * bubbled up. The returned `tierCounts` adds one per dim this node claimed an
+ * ordinal axis on, so an ancestor owning the same dim's outer tier reads the
+ * right index for a per-tier `labelAngle` array.
  */
 function elaborationsFor(
   node: GoFishNode,
   sides: ["start" | "end" | undefined, "start" | "end" | undefined],
   yUp: boolean,
   underCoord: boolean,
-  labelAngles: [number | undefined, number | undefined] = [undefined, undefined]
+  labelAngles: [LabelAngleOpt, LabelAngleOpt] = [undefined, undefined],
+  tierCounts: [number, number] = [0, 0]
 ): {
   constrained: AxisElaboration[];
   refBased: AxisElaboration[];
@@ -474,6 +496,9 @@ function elaborationsFor(
    *  all — including an ordinal one, which contributes no `anchors` entry. An
    *  owner CLAIMS the dim for title-anchoring purposes (see `elaborateAxes`). */
   owned: [boolean, boolean];
+  /** Per-dim ordinal-tier count, incremented for each dim this node claimed
+   *  an ordinal axis on (see the doc comment above). */
+  tierCounts: [number, number];
 } {
   const space = node._underlyingSpace;
   if (!space)
@@ -482,6 +507,7 @@ function elaborationsFor(
       refBased: [],
       anchors: [undefined, undefined],
       owned: [false, false],
+      tierCounts,
     };
   const owns = (dim: 0 | 1) => (dim === 0 ? node.axis.x : node.axis.y) === true;
   // Niced [min, max] per owned POSITION dim, computed ONCE: it feeds both that
@@ -535,11 +561,14 @@ function elaborationsFor(
   // pre-negate here to cancel that render-time negation and land back on the
   // literal screen angle regardless of the frame's orientation.
   const frameFlips = yUp || underCoord || isCONTINUOUS(space[1]);
-  const resolvedLabelAngle = (dim: 0 | 1): number | undefined => {
-    const a = labelAngles[dim];
+  // `tier` is 0 for a continuous/difference axis (always single-tier) or the
+  // bubbled-up ordinal tier index (0 = innermost) for an ordinal one.
+  const resolvedLabelAngle = (dim: 0 | 1, tier: number): number | undefined => {
+    const a = angleForTier(labelAngles[dim], tier);
     if (!a) return undefined;
     return frameFlips ? -a : a;
   };
+  const outTierCounts: [number, number] = [...tierCounts];
   for (const dim of [0, 1] as (0 | 1)[]) {
     if (!owns(dim)) continue;
     const s = space[dim];
@@ -552,7 +581,7 @@ function elaborationsFor(
         prefix,
         crossFloor,
         axisSide(dim),
-        resolvedLabelAngle(dim)
+        resolvedLabelAngle(dim, 0)
       );
       constrained.push(e);
       anchors[dim] = e.anchor;
@@ -570,6 +599,7 @@ function elaborationsFor(
       keyMap ??= collectKeyMap(node);
       // Ordinal axes keep the `start` default (they follow the content's own flip
       // like a category row); only continuous axes default to the bottom.
+      const tier = outTierCounts[dim];
       refBased.push(
         elaborateOrdinalAxis(
           dim,
@@ -577,9 +607,10 @@ function elaborationsFor(
           keyMap,
           prefix,
           sides[dim] ?? "start",
-          resolvedLabelAngle(dim)
+          resolvedLabelAngle(dim, tier)
         )
       );
+      outTierCounts[dim] = tier + 1;
     } else {
       continue;
     }
@@ -587,7 +618,7 @@ function elaborationsFor(
     if (dim === 0) node.axis.x = undefined;
     else node.axis.y = undefined;
   }
-  return { constrained, refBased, anchors, owned };
+  return { constrained, refBased, anchors, owned, tierCounts: outTierCounts };
 }
 
 /**
@@ -614,6 +645,16 @@ function elaborationsFor(
  * ambiguous here — they overwrite the same slot, so whichever sibling is
  * visited last wins. We don't try to disambiguate (a per-facet title is out of
  * scope); the chart-level title just tracks one of them.
+ *
+ * It also bubbles up `tierCounts` — the per-dim count of ordinal axis tiers
+ * elaborated so far in this subtree — purely as an output (nothing is passed
+ * DOWN for it): each dim is folded bottom-up as `max` over the node's own
+ * children, then incremented by `elaborationsFor` if this node itself claims
+ * an ordinal axis on that dim. That gives a node's ordinal axis a tier index
+ * of 0 for the innermost nesting (e.g. a grouped bar chart's year row) and 1
+ * for the next one out (its city row), which `elaborationsFor` uses to pick
+ * the right entry of a per-tier `labelAngle` array. Sibling subtrees don't
+ * interfere: each call only sees counts folded from ITS OWN children.
  */
 export async function elaborateAxes(
   node: GoFishNode,
@@ -623,17 +664,19 @@ export async function elaborateAxes(
   ],
   yUp = false,
   underCoord = false,
-  labelAngles: [number | undefined, number | undefined] = [undefined, undefined]
+  labelAngles: [LabelAngleOpt, LabelAngleOpt] = [undefined, undefined]
 ): Promise<{
   node: GoFishNode;
   changed: boolean;
   titleAnchors: [GoFishNode | undefined, GoFishNode | undefined];
+  tierCounts: [number, number];
 }> {
   let changed = false;
   const titleAnchors: [GoFishNode | undefined, GoFishNode | undefined] = [
     undefined,
     undefined,
   ];
+  const tierCounts: [number, number] = [0, 0];
   // A `coord` (polar/clock) fixes its own frame orientation, so any axis inside
   // it flips with the coord rather than seating on the far edge directly. Track
   // whether we are under one so `axisSide` keeps the near/"start" seating there.
@@ -656,6 +699,7 @@ export async function elaborateAxes(
         if (titleAnchors[dim] === undefined && res.titleAnchors[dim]) {
           titleAnchors[dim] = res.titleAnchors[dim];
         }
+        tierCounts[dim] = Math.max(tierCounts[dim], res.tierCounts[dim]);
       }
       if (res.node !== child) {
         node.children[i] = res.node;
@@ -664,12 +708,19 @@ export async function elaborateAxes(
     }
   }
 
-  const { constrained, refBased, anchors, owned } = elaborationsFor(
+  const {
+    constrained,
+    refBased,
+    anchors,
+    owned,
+    tierCounts: nextTierCounts,
+  } = elaborationsFor(
     node,
     sides,
     yUp,
     childUnderCoord,
-    labelAngles
+    labelAngles,
+    tierCounts
   );
   // Any dim this node owns an axis on is claimed — its own anchor replaces
   // whatever bubbled up from children, INCLUDING replacing it with undefined
@@ -680,7 +731,7 @@ export async function elaborateAxes(
   }
 
   if (constrained.length === 0 && refBased.length === 0) {
-    return { node, changed, titleAnchors };
+    return { node, changed, titleAnchors, tierCounts: nextTierCounts };
   }
 
   // Move identity off the content onto whatever ends up outermost (so the
@@ -730,7 +781,12 @@ export async function elaborateAxes(
     return outerRoot;
   });
 
-  return { node: root, changed: true, titleAnchors };
+  return {
+    node: root,
+    changed: true,
+    titleAnchors,
+    tierCounts: nextTierCounts,
+  };
 }
 
 // ── Axis titles ──────────────────────────────────────────────────────────────
