@@ -123,9 +123,9 @@ export const COMBINATOR_FACTORIES: Record<
   enclose: (opts, marks) =>
     (enclose as any)(opts, marks) as unknown as Mark<any>,
   arrow: (opts, marks) => (arrow as any)(opts, marks) as unknown as Mark<any>,
-  // `line`/`ribbon` are derived marks (createDerivedMark) whose `(opts, marks)`
-  // overload is the low-level combinator form (the drop-in for the removed
-  // `connect`/`connectX`/`connectY`). It builds the internal connect node.
+  // `line`/`ribbon` are relational marks (createRelationalMark) whose
+  // `(opts, marks)` overload is the low-level combinator form. It builds the
+  // internal connect node.
   line: (opts, marks) => (line as any)(opts, marks) as unknown as Mark<any>,
   ribbon: (opts, marks) => (ribbon as any)(opts, marks) as unknown as Mark<any>,
   treemap: (opts, marks) =>

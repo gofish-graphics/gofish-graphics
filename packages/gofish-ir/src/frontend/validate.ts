@@ -160,7 +160,6 @@ function walkChart(
   expectField(node, "mark", path, ctx, walkMark);
   optionalField(node, "options", path, ctx, expectObject);
   optionalField(node, "zOrder", path, ctx, expectNumber);
-  optionalField(node, "connect", path, ctx, walkMark);
   optionalField(node, "name", path, ctx, expectNameOrToken);
   if (ctx.strict) {
     rejectUnknown(
@@ -172,7 +171,6 @@ function walkChart(
         "mark",
         "options",
         "zOrder",
-        "connect",
         "name",
         "origin",
         "meta",

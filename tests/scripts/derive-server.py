@@ -175,7 +175,7 @@ class DeriveHandler(BaseHTTPRequestHandler):
             def serialize_chart(child) -> tuple:
                 """Return (child_payload, derive_ids) for one layer tier.
 
-                child_payload: {operators, mark, options, data, zOrder, connect}
+                child_payload: {operators, mark, options, data, zOrder}
                   data is the canonical Frontend.DataIR shape:
                     - {"type": "inline", "rows": [...]} for inline rows
                     - {"type": "select", "layer": name, "mode": ...} for ref/selectAll data
@@ -230,11 +230,6 @@ class DeriveHandler(BaseHTTPRequestHandler):
                     for lambda_id, rows_fn in _collect_mark_lambdas(child._mark):
                         child_derive_ids.append(lambda_id)
                         _registry[lambda_id] = rows_fn
-                if child._connect is not None:
-                    for lambda_id, rows_fn in _collect_mark_lambdas(child._connect):
-                        child_derive_ids.append(lambda_id)
-                        _registry[lambda_id] = rows_fn
-
                 # Mark-as-function: register a wrapper that runs the user's
                 # `(data) -> ChartBuilder` callable, recursively serializes
                 # the resulting ChartBuilder (which also registers its own
@@ -268,7 +263,6 @@ class DeriveHandler(BaseHTTPRequestHandler):
                         "options": child_ir.get("options", {}),
                         "data": child_data,
                         "zOrder": child_ir.get("zOrder"),
-                        "connect": child_ir.get("connect"),
                         "name": child_name,
                     },
                     child_derive_ids,

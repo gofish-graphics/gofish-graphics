@@ -95,13 +95,6 @@ export interface ChartIR extends BaseIRNode {
   options?: Record<string, unknown>;
   zOrder?: number;
   /**
-   * Optional connector mark (from `.connect(line())` on the v3 builder).
-   * Elaborated JS-side at resolve time into a sibling layer over the nodes
-   * the chart's mark registers; an auto-generated layer name never appears
-   * in the IR.
-   */
-  connect?: MarkIR;
-  /**
    * Chart-level name (from `chart(...).name("scatter")` in Python /
    * `node.name(...)` on a resolved chart in JS) so a sibling
    * `Layer([...]).constrain(...)` callback can reference this chart. A

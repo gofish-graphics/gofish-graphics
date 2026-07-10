@@ -1,35 +1,112 @@
 # layer
 
-Stack another tier over the current one. `.layer(child)` takes a whole
-`chart(...)` pipeline as its argument: an **empty `chart()` scope** (no data)
-inherits the previous tier's marks — so you can connect, group, or annotate what
-you just drew without naming it — while `chart(table)` drives the tier from
-another dataset. `.layer(...)` returns a `LayerBuilder`, so tiers keep chaining
-(`.layer(a).layer(b)`); at render time they stack into one figure.
+Stack another tier over the current one. `.layer(child)` takes a `chart(...)`
+pipeline, a bare relational mark (`line(...)`, `ribbon(...)`), or a bare leaf
+mark (`text(...)`, `rect(...)`, …) as its argument. `.layer(...)` returns a
+`LayerBuilder`, so tiers keep chaining (`.layer(a).layer(b)`); at render time
+they stack into one figure.
 
-It generalizes [`.connect()`](/python/api/core/connect): where `.connect(line())`
-threads a single ref-consuming mark under the chart, `.layer()` gives the next
-tier a full `.flow().mark()` pipeline.
+`.layer()` is the **one** way to overlay a connector over a chart's own marks —
+there is no separate `.connect()` method. It gives every tier the previous
+tier's marks as scope, uniformly:
 
-## Ribbon — empty scope inherits the previous marks
+- An **empty `chart()` scope** (no data) inherits the previous tier's marks as
+  chart data, so a full `.flow().mark()` pipeline can group, re-partition, or
+  otherwise process them before drawing.
+- A **bare relational mark** (`line(...)`, `ribbon(...)`) used directly, with
+  no wrapping `chart()`, reads the previous tier's marks as the bag of refs it
+  connects — this is the one-line sugar for the simple case.
+- A **bare leaf mark** (`rect(...)`, `text(...)`, …) used directly is a
+  component-level annotation: it ignores the scope entirely, since its
+  channels have no ref-bag semantics to read.
 
-`chart()` with no data re-enters with the bars you just drew, grouped into bands
-by [`group`](/python/api/operators/group):
+## Ribbon — one-line sugar with `by`
+
+The simple case — draw a ribbon over the marks you just drew, split into one
+band per group — is a single `.layer(ribbon(by=...))` call. `by` uses the same
+grammar as any operator's `by` (bare field name, key function, or
+[`field(...)`](/python/api/operators/spread#field-expression-pipeline) accessor)
+and resolves against the refs' own datum automatically, just like
+`group(by=...)`:
 
 ::: gofish example:ribbon-chart hidden
 :::
 
 ```python
-from gofish import chart, spread, stack, group, rect, area
+from gofish import chart, spread, stack, field, rect, ribbon
 
 chart(seafood, axes=True).flow(
     spread(by="lake", dir="x", spacing=64),
+    stack(by=field("species").sort("count"), dir="y"),
+).mark(rect(h="count", fill="species")).layer(
+    ribbon(by="species", opacity=0.8)
+).render(w=400, h=320)
+```
+
+### Desugaring
+
+`.layer(ribbon(by="species"))` is sugar for the general `chart()`-tier form,
+which is itself the same manual wiring you'd write with
+[`layer([...])`](/python/api/operators/layer) and
+[`selectAll`](/python/api/selection/ref):
+
+```python
+# One-line sugar
+chart(data, axes=True).flow(
+    spread(by="lake", dir="x", spacing=64),
     stack(by="species", dir="y"),
 ).mark(rect(h="count", fill="species")).layer(
+    ribbon(by="species", opacity=0.8)
+)
+
+# ...is sugar for the general chart()-tier form:
+chart(data, axes=True).flow(
+    spread(by="lake", dir="x", spacing=64),
+    stack(by="species", dir="y"),
+).mark(rect(h="count", fill="species").name("bars")).layer(
     chart()  # empty scope = the previous tier's marks
     .flow(group(by="species"))
     .mark(ribbon(opacity=0.8))
-).render(w=400, h=320)
+)
+
+# ...which is itself sugar for the fully manual form:
+layer([
+    chart(data, axes=True).flow(
+        spread(by="lake", dir="x", spacing=64),
+        stack(by="species", dir="y"),
+    ).mark(rect(h="count", fill="species").name("bars")),
+    chart(selectAll("bars")).flow(group(by="species")).mark(
+        ribbon(opacity=0.8)
+    ).zOrder(-1),
+])
+```
+
+The general `chart()`-tier form (middle example) stays fully supported — reach
+for it when the connector's own `by` isn't enough, e.g. when the re-partition
+needs to compose with other operators in its own `.flow()`, or when the tier
+draws from another dataset entirely (see "Node-link" below). `by` on the
+connector mark itself also composes with an upstream `group()`: `group()`
+splits first, then the connector's own `by` splits again within each group, so
+you can nest a re-partition without writing a second `chart()` tier.
+
+## Connector — a bare relational mark tier
+
+For a line or ribbon with no re-partitioning at all, pass the connector mark
+directly — no `by`, no wrapping `chart()`. It reads the previous tier's marks
+as its bag of refs and threads one connector through all of them, painted
+underneath:
+
+::: gofish example:connected-scatter-plot hidden
+:::
+
+```python
+from gofish import chart, scatter, circle, line
+
+chart(driving_shifts, axes=True).flow(
+    scatter(by="year", x="miles", y="gas")
+).mark(circle(r=4, fill="white", stroke="black", strokeWidth=2)).layer(
+    line(stroke="black", strokeWidth=2)
+).render(w=500, h=300)
 ```
 
 ## Node-link — a tier with its own data
@@ -100,25 +177,35 @@ chart(sales, axes=True).flow(spread(by="quarter", dir="x")).mark(
 
 ## Parameters
 
-| Parameter | Type                   | Description                                                                                                                                                                                                                                                                                                      |
-| --------- | ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `child`   | `ChartBuilder \| Mark` | The next tier. A `chart(...)` pipeline stacks a data-driven tier — an empty `chart()` scope inherits the previous tier's marks; `chart(table)` drives it from another dataset (resolve back with [`resolve`](/python/api/operators/resolve)). A bare `Mark` is a component-level annotation overlay (datumless). |
+| Parameter | Type                   | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| --------- | ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `child`   | `ChartBuilder \| Mark` | The next tier. A `chart(...)` pipeline stacks a data-driven tier — an empty `chart()` scope inherits the previous tier's marks; `chart(table)` drives it from another dataset (resolve back with [`resolve`](/python/api/operators/resolve)). A bare relational mark (`line(...)`, `ribbon(...)`) reads the previous tier's marks as its bag of refs. A bare leaf mark (`rect(...)`, `text(...)`, …) is a component-level annotation overlay (datumless, ignores the scope). |
 
 Returns a `LayerBuilder` — chain `.layer(...)` again for more tiers, then
 `.render()`.
 
 ## Semantics
 
-- **Empty scope** — an empty `chart()` tier resolves to exactly the nodes the
-  previous tier's mark produced, one per flow leaf. Under the hood `.layer()`
-  names the previous tier's mark and binds the empty tier to
-  `selectAll(thatName)` — the same wiring you'd write by hand, done for you.
+- **Uniform scope** — every tier is handed the previous tier's marks as scope,
+  whether that tier is an empty `chart()` (binds the scope as chart data), a
+  bare relational mark (reads the scope as its ref bag), or a bare leaf mark
+  (ignores the scope). Under the hood `.layer()` names the previous tier's mark
+  and binds the next tier to `selectAll(thatName)` — the same wiring you'd
+  write by hand, done for you.
 - **Shared registry** — tiers resolve in order sharing one layer context, so a
   later tier's `selectAll("name")` finds an earlier tier's `.name("name")`.
 - **Chart-level options** — axes and color from the root `chart(data, ...)` apply
   to the whole stack.
 - **Paint order** — tiers paint in chain order (later tiers on top), like a
-  manual [`layer([...])`](/python/api/operators/layer).
+  manual [`layer([...])`](/python/api/operators/layer) — **except** relational
+  marks (`line(...)`, `ribbon(...)`, in any call form: bag, `by`-split,
+  pairwise `from_`/`to`, or the low-level combinator form inside a manual
+  `layer([...])`), which default to painting `zBelow` whatever they reference.
+  This is a real paint-order constraint, not a hardcoded z-index, so it
+  composes with other constraints — a `line(...)` or `ribbon(...)` tier needs
+  no `.zOrder(...)` incantation to sit under the marks it connects. An
+  explicit `.zOrder(...)` or `.constrain(...)` on the connector's own chain
+  overrides the default.
 - **Field references on refs** — `by` / `resolve` read bare field names off the
   refs (`by="species"`, not `by="datum.species"`); a ref descends into its row
   bag automatically.

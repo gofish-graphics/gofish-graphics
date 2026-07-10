@@ -186,12 +186,11 @@ ribbon([ref("A"), ref("B")], dir="x")
 ## Notes
 
 - This is the **low-level combinator form** of the `line` / `ribbon` marks,
-  distinct from the builder method
-  [`ChartBuilder.connect()`](/python/api/core/connect). The builder
-  `.connect(line())` is the canonical spelling for simple line/area charts: it
-  threads a ref-consuming _mark_ through a chart's own marks. This combinator form
-  connects explicitly-listed `ref(...)` children inside a layout — reach for it
-  only for cross-chart or hand-placed diagrams.
+  distinct from chaining [`.layer()`](/python/api/core/layer) with a bare
+  connector mark. `.layer(line())` is the canonical spelling for simple
+  line/area charts: it threads a ref-consuming _mark_ through a chart's own
+  marks. This combinator form connects explicitly-listed `ref(...)` children
+  inside a layout — reach for it only for cross-chart or hand-placed diagrams.
 - The same [`line`](/python/api/marks/line) and
   [`ribbon`](/python/api/marks/ribbon) marks also work in _selection_ form: they
   take the array of refs from [`selectAll(...)`](/python/api/selection/ref) and

@@ -15,7 +15,7 @@ def story_basic():
         chart(SEAFOOD)
         .flow(spread(by="lake", dir="x", spacing=w / (lakes - 1)))
         .mark(blank(h="count"))
-        .connect(ribbon(opacity=0.8)),
+        .layer(ribbon(opacity=0.8)),
         {"w": w, "h": 300, "axes": True},
     )
 

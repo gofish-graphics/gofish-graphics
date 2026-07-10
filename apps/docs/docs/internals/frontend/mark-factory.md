@@ -6,6 +6,7 @@ status: draft
 covers:
   - packages/gofish-graphics/src/ast/withGoFish.ts
   - packages/gofish-graphics/src/ast/channels.ts
+  - packages/gofish-graphics/src/ast/marks/chart.ts
 ---
 
 # `createMark`: turning a shape into a frontend mark
@@ -167,8 +168,12 @@ methods:
   `ref("layerName")` the single node, when the layer holds exactly one). It also
   stashes the passed name on the returned mark function via `stashLayerName`
   (defined in `chartBuilder.ts`, called by every `.name()` implementation), so
-  [`ChartBuilder.connect()`](/js/api/core/connect) can detect a user-chained
-  name without parsing the `__serialize` tag.
+  `.layer()`'s producer-tier auto-naming can detect a user-chained name
+  without parsing the `__serialize` tag. (An earlier `ChartBuilder.connect()`
+  method used this same stashed name; it was deleted in favor of
+  [`.layer()`](/js/api/core/layer), which generalizes the pattern to every
+  tier — see below.) `LayerBuilder.wireTiers()` looks for the stashed name on
+  the previous tier's mark the same way `.connect()` used to.
 - `mark.label(accessor, options?)` — calls `node.label(...)` on every produced
   node, deferring label placement to the layout phase.
 - `mark.zOrder(value)` — sets each produced node's paint-order hint, where
@@ -253,6 +258,49 @@ Today's channels are `"size"` and `"color"`. To add (say) `"angle"`:
 (see [The Operator Factory](/internals/frontend/operator-factory)) and would need
 the same treatment if the new channel should be available in operator opts as
 well.
+
+## `createRelationalMark`: connectors as marks
+
+`line` and `ribbon` (`src/ast/marks/chart.ts`) are not built on `createMark` —
+they aren't a single low-level shape with channel-annotated props, they're a
+connector that consumes _other_ marks' produced nodes. They're built on the
+sibling factory `createRelationalMark(type, produce)`, where `produce(opts,
+children)` builds the underlying `connect` node; everything else is shared
+dual-form plumbing the factory handles once for both `line` and `ribbon`.
+
+`createRelationalMark` dispatches on the shape of its arguments into four call
+forms:
+
+- **Low-level combinator form** — an explicit `children: GoFishAST[]` array is
+  passed as the second argument (used standalone inside a manual
+  `layer([...])`). Connects exactly those children.
+- **Pairwise `{ from, to }` form** — `opts.from`/`opts.to` name two columns
+  holding refs; one connector per row (node-link edges), after
+  [`resolve`](/js/api/operators/resolve) has turned endpoint ids into refs.
+- **`by`-split bag form** — `opts.by` partitions the operand bag with the same
+  `splitEntries` helper `group()`'s `split` hook uses, producing one
+  connector **per group** (e.g. `ribbon({ by: "species" })` over a bag of bar
+  refs draws one band per species). Composes with an upstream `group()` as a
+  nested split — no special-casing needed, since `splitEntries` is the same
+  function either way.
+- **Bag form** — applied directly to a `GoFishRef[]` (e.g. `selectAll(...)`
+  or the previous tier's marks via `.layer()`): one connector through all the
+  refs.
+
+### zBelow-by-default paint order
+
+Every node a relational mark produces, in every call form above, is tagged
+with the operand nodes/refs it was built from (`tagRelationalOperands`, which
+stashes `__relationalOperands` on the node). The `layer` combinator
+(`graphicalOperators/layer.tsx`) reads that tag and installs a default
+`zBelow(self, operand)` paint-order **constraint** — not a hardcoded z-index —
+so the connector paints under whatever it references. Because it's a real
+constraint, it composes with any other constraint in the layer; an explicit
+`.zOrder(...)` or `.constrain(...)` chained on the connector's own mark
+overrides the default (the tag is only consulted when neither has been set).
+This is what lets `line()`/`ribbon()` sit under the marks they connect with no
+zOrder incantation needed, in every call form including the low-level
+combinator one.
 
 ## Prior art
 

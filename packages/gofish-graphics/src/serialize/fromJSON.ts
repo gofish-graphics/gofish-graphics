@@ -566,10 +566,5 @@ export function buildChart(
   if ((chartSpec as any).zOrder !== undefined) {
     builder = builder.zOrder((chartSpec as any).zOrder);
   }
-  if (chartSpec.connect) {
-    builder = builder.connect(
-      mapMark(chartSpec.connect as MarkSpec, bridge, resolveToken)
-    );
-  }
   return builder;
 }

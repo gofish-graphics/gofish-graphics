@@ -39,7 +39,7 @@ export const Basic: StoryObj<Args> = {
     chart(seafood, { axes: true })
       .flow(spread({ by: "lake", dir: "x", spacing: args.w / (lakes - 1) }))
       .mark(blank({ h: "count" }))
-      .connect(ribbon({ opacity: 0.8 }))
+      .layer(ribbon({ opacity: 0.8 }))
       .render(container, {
         w: args.w,
         h: args.h,

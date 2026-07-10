@@ -735,7 +735,7 @@ def _treemap_combinator_opts(*, w: Optional[Union[int, float, str]] = None, h: O
             opts[_k] = _v
     return opts
 
-def _line_opts(*, fill: Optional[str] = None, stroke: Optional[str] = None, strokeWidth: Optional[float] = None, strokeDasharray: Optional[str] = None, opacity: Optional[float] = None, mixBlendMode: Optional[str] = None, curve: Optional[Any] = None, dir: Optional[str] = None, source: Optional[Any] = None, target: Optional[Any] = None, from_: Optional[str] = None, to: Optional[str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
+def _line_opts(*, fill: Optional[str] = None, stroke: Optional[str] = None, strokeWidth: Optional[float] = None, strokeDasharray: Optional[str] = None, opacity: Optional[float] = None, mixBlendMode: Optional[str] = None, curve: Optional[Any] = None, dir: Optional[str] = None, source: Optional[Any] = None, target: Optional[Any] = None, from_: Optional[str] = None, to: Optional[str] = None, by: Optional[Any] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
     """Center-mode connector — the path between the centers of consecutive marks (the drop-in for the removed `connect`). Bag form over a ref array, or pairwise `{from, to}` form over rows with two ref columns.
 
     Args:
@@ -745,6 +745,7 @@ def _line_opts(*, fill: Optional[str] = None, stroke: Optional[str] = None, stro
         target: Anchor-mode end point; see `source`.
         from_: Pairwise form: column holding the source ref.
         to: Pairwise form: column holding the target ref.
+        by: Bag form: partition the operand refs by this field (or field(...) accessor) and draw one connector per group.
         debug: Factory-only dev flag; the JS factory strips it (FACTORY_ONLY_KEYS) before layout.
     """
     opts: Dict[str, Any] = {}
@@ -761,19 +762,21 @@ def _line_opts(*, fill: Optional[str] = None, stroke: Optional[str] = None, stro
         ("target", target),
         ("from", from_),
         ("to", to),
+        ("by", by),
         ("debug", debug),
     ]:
         if _v is not None:
             opts[_k] = _v
     return opts
 
-def _ribbon_opts(*, fill: Optional[str] = None, stroke: Optional[str] = None, strokeWidth: Optional[float] = None, opacity: Optional[float] = None, mixBlendMode: Optional[str] = None, dir: Optional[str] = None, curve: Optional[Any] = None, from_: Optional[str] = None, to: Optional[str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
+def _ribbon_opts(*, fill: Optional[str] = None, stroke: Optional[str] = None, strokeWidth: Optional[float] = None, opacity: Optional[float] = None, mixBlendMode: Optional[str] = None, dir: Optional[str] = None, curve: Optional[Any] = None, from_: Optional[str] = None, to: Optional[str] = None, by: Optional[Any] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
     """Edge-mode connector — a filled band between the facing edges of consecutive marks (areas, streamgraphs, sankey ribbons).
 
     Args:
         strokeWidth: Default 0.
         mixBlendMode: Default "normal".
         curve: Screen-space band-edge shape (straight() | bezier()). Omitted = "auto" (bezier).
+        by: Bag form: partition the operand refs by this field (or field(...) accessor) and draw one connector per group.
         debug: Factory-only dev flag; the JS factory strips it (FACTORY_ONLY_KEYS) before layout.
     """
     opts: Dict[str, Any] = {}
@@ -787,6 +790,7 @@ def _ribbon_opts(*, fill: Optional[str] = None, stroke: Optional[str] = None, st
         ("curve", curve),
         ("from", from_),
         ("to", to),
+        ("by", by),
         ("debug", debug),
     ]:
         if _v is not None:

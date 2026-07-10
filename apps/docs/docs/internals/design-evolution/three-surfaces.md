@@ -59,6 +59,19 @@ routers). `curve: "auto"` smooths automatically on continuous axes — see
 [Underlying Space](/internals/core/underlying-space) for the positioning-space
 test that decides this.
 
+The fluent builder went through the same consolidation one layer up. It
+briefly had its own `.connect(connectorMark)` method — sugar for threading a
+single ref-consuming mark under a chart's own marks. That method has since
+been deleted too: `.layer()` was generalized to hand every tier the previous
+tier's marks as scope, uniformly, so a bare `line()`/`ribbon()` passed
+directly to `.layer()` does what `.connect()` used to, and `ribbon`/`line`
+gained their own `by` option for the common re-partition case
+(`.layer(ribbon({ by: "species" }))`) that used to need a separate
+`group()` step. `.layer()` is now the one way to overlay a connector, at
+every level — the fluent-builder method, the general `chart()`-tier form,
+and the low-level combinator form described above all funnel through it. See
+[`.layer()`](/js/api/core/layer) for the current API.
+
 ## Planned contents
 
 - The three surfaces side by side — the same chart in each.

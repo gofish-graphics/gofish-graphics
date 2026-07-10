@@ -202,10 +202,10 @@ ribbon({ dir: "x" }, [ref("A"), ref("B")]);
 ## Notes
 
 - This is the **low-level combinator form** of the `line` / `ribbon` marks,
-  distinct from the v3 builder method
-  [`ChartBuilder.connect()`](/js/api/core/connect). The builder `.connect(line())`
-  is sugar that threads a ref-consuming _mark_ through a chart's own marks; this
-  combinator form connects explicitly-listed `ref(...)` children inside a layout.
+  distinct from chaining [`.layer()`](/js/api/core/layer) with a bare
+  connector mark. `.layer(line())` is sugar that threads a ref-consuming
+  _mark_ through a chart's own marks; this combinator form connects
+  explicitly-listed `ref(...)` children inside a layout.
 - The same [`line`](/js/api/marks/line) and [`ribbon`](/js/api/marks/ribbon)
   marks also work in _selection_ form: they take the array of refs from
   [`selectAll(...)`](/js/api/selection/ref) and connect them. To re-partition
