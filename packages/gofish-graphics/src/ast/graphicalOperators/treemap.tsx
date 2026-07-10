@@ -83,7 +83,7 @@ export const Treemap = createNodeOperator(
       round = true,
       tile = "squarify",
       sort = "desc",
-      size,
+      size: sizeChannel,
       flipY = false,
       leafIntrinsicRadiusField,
       ...fancyDims
@@ -101,7 +101,7 @@ export const Treemap = createNodeOperator(
           round,
           tile,
           sort,
-          size,
+          size: sizeChannel,
           flipY,
           leafIntrinsicRadiusField,
           dims,
@@ -194,7 +194,7 @@ export const Treemap = createNodeOperator(
           // Build weights and hierarchy (single level: the passed-in children).
           const leafData: LeafDatum[] = childAsts.map((_child, i) => ({
             i,
-            weight: resolveWeight(size, i),
+            weight: resolveWeight(sizeChannel, i),
           }));
 
           // Ensure total > 0 so d3 doesn't produce NaNs.
