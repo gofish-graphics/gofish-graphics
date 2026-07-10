@@ -25,6 +25,7 @@ import {
   collectDiffs,
   collectRemovedStories,
   formatDomDiff,
+  escapeHtml,
   type DiffEntry,
 } from "./diff-utils.js";
 import { computePixelDiff } from "./pixel-diff.js";
@@ -64,18 +65,16 @@ function copyDir(src: string, dest: string): void {
 
 console.log("Building review site...");
 
-// Collect diffs
-const diffs: DiffEntry[] = collectDiffs();
+// Collect diffs. Removed stories (baseline exists, story no longer present)
+// are first-class DiffEntry("removed") too — they fail the job like any
+// other unreviewed change (see compare.ts), and accepting one deletes the
+// baseline instead of writing a new one.
+const removedEntries = collectRemovedStories();
+const diffs: DiffEntry[] = [...collectDiffs(), ...removedEntries];
 console.log(`  ${diffs.length} diff(s) found`);
-
-// Removed stories (baseline exists, story no longer present). Informational
-// only — not reviewable/acceptable like the DiffEntry kinds above, since
-// there's no "after" state to accept. See compare.ts for why removals never
-// fail the job.
-const removedStories = collectRemovedStories();
-if (removedStories.length > 0) {
+if (removedEntries.length > 0) {
   console.log(
-    `  ${removedStories.length} removed stor${removedStories.length === 1 ? "y" : "ies"} found`
+    `  ${removedEntries.length} removed stor${removedEntries.length === 1 ? "y" : "ies"} found`
   );
 }
 
@@ -133,9 +132,6 @@ const meta = {
    *  after Commit Accepted, so visual-test re-runs against the new baselines
    *  and python-parity (blocked on visual-test) is allowed to run. */
   runId: process.env.REVIEW_RUN_ID ?? "",
-  /** Baseline exists, story no longer present — informational, not part of
-   *  `diffs` (nothing to accept/reject: there's no "after" state). */
-  removedStories,
 };
 
 write(join(OUT_DIR, "data/meta.json"), JSON.stringify(meta, null, 2));
@@ -157,6 +153,12 @@ for (const entry of diffs) {
     write(
       join(OUT_DIR, "data/dom-diffs", entry.path),
       "<em>New story — no baseline to diff against.</em>"
+    );
+  } else if (entry.beforeDom !== null) {
+    // Removed: no "after" DOM — show the baseline that would be deleted.
+    write(
+      join(OUT_DIR, "data/dom-diffs", entry.path),
+      `<pre style="margin:0;white-space:pre-wrap;padding:12px;">${escapeHtml(entry.beforeDom)}</pre>`
     );
   }
 
@@ -238,6 +240,7 @@ const html = `<!DOCTYPE html>
     .kind-regression { color: #f38ba8; }
     .kind-new { color: #89b4fa; }
     .kind-parity { color: #fab387; }
+    .kind-removed { color: #9399b2; }
     .status-accepted { color: #a6e3a1 !important; }
     .status-rejected { color: #f38ba8 !important; }
 
@@ -304,7 +307,6 @@ const html = `<!DOCTYPE html>
     <h2>Visual Diff Review</h2>
     <div id="sidebar-meta"></div>
     <div id="sidebar-stats"></div>
-    <div id="sidebar-removed" style="display:none;font-size:11px;color:#a6adc8;margin-top:6px;font-family:monospace;line-height:1.5;"></div>
   </div>
   <div id="sidebar-filters">
     <button class="filter-btn active" data-filter="all">All</button>
@@ -356,6 +358,7 @@ const html = `<!DOCTYPE html>
           <h4 style="font-size:12px;color:#666;margin:0 0 6px;">After (current)</h4>
           <div style="background:#fff;border:1px solid #e0e0e0;border-radius:6px;padding:12px;min-height:80px;display:flex;align-items:flex-start;justify-content:center;">
             <img id="sbs-after" style="max-width:100%;display:block;" />
+            <div id="sbs-no-after" style="color:#aaa;font-size:13px;padding:32px;display:none;">Story removed — no current render</div>
           </div>
         </div>
       </div>
@@ -426,14 +429,6 @@ const html = `<!DOCTYPE html>
     const shortSha = meta.sha.slice(0, 8);
     metaEl.textContent = meta.branch + ' @ ' + shortSha;
 
-    if (meta.removedStories && meta.removedStories.length > 0) {
-      const removedEl = document.getElementById('sidebar-removed');
-      removedEl.style.display = 'block';
-      removedEl.innerHTML = meta.removedStories.length +
-        ' removed (baseline exists, story no longer present):<br>' +
-        meta.removedStories.map(p => '&nbsp;&nbsp;' + escHtml(p)).join('<br>');
-    }
-
     renderSidebar();
     const first = filteredDiffs()[0];
     if (first) selectStory(first.path);
@@ -503,7 +498,7 @@ const html = `<!DOCTYPE html>
     if (strobeInterval) { clearInterval(strobeInterval); strobeInterval = null; }
   }
 
-  function startStrobe(hasBefore) {
+  function startStrobe(hasBefore, singleLabel, singleColor) {
     stopStrobe();
     const imgAfter = document.getElementById('img-after');
     const imgBefore = document.getElementById('img-before');
@@ -511,8 +506,8 @@ const html = `<!DOCTYPE html>
 
     if (!hasBefore) {
       imgBefore.style.opacity = '0';
-      label.textContent = 'After (new)';
-      label.style.background = '#3498db';
+      label.textContent = singleLabel || 'After (new)';
+      label.style.background = singleColor || '#3498db';
       return;
     }
 
@@ -550,9 +545,14 @@ const html = `<!DOCTYPE html>
     document.getElementById('main-title').textContent = path;
     const badge = document.getElementById('main-kind-badge');
     badge.textContent = entry.kind.toUpperCase();
-    const kindColors = { regression: '#e74c3c', new: '#3498db', parity: '#e67e22' };
+    const kindColors = { regression: '#e74c3c', new: '#3498db', parity: '#e67e22', removed: '#7f8c8d' };
     const color = kindColors[entry.kind] || '#888';
     badge.style.cssText = 'background:' + color + '22;color:' + color + ';border:1px solid ' + color + ';border-radius:12px;padding:2px 10px;font-size:11px;font-weight:700;';
+
+    const acceptBtn = document.getElementById('btn-accept');
+    acceptBtn.textContent = entry.kind === 'removed'
+      ? '✖ Accept removal — delete baseline'
+      : '✓ Accept';
 
     document.getElementById('empty-state').style.display = 'none';
     renderCurrentView(entry);
@@ -581,7 +581,20 @@ const html = `<!DOCTYPE html>
     const sbsBefore = document.getElementById('sbs-before');
     const sbsAfter = document.getElementById('sbs-after');
     const noBefore = document.getElementById('sbs-no-before');
+    const noAfter = document.getElementById('sbs-no-after');
 
+    if (entry.kind === 'removed') {
+      sbsBefore.src = screenshotUrl('before', entry.path);
+      sbsBefore.style.display = 'block';
+      noBefore.style.display = 'none';
+      sbsAfter.src = '';
+      sbsAfter.style.display = 'none';
+      noAfter.style.display = 'block';
+      return;
+    }
+
+    noAfter.style.display = 'none';
+    sbsAfter.style.display = 'block';
     sbsAfter.src = screenshotUrl('after', entry.path);
     if (entry.kind !== 'new') {
       sbsBefore.src = screenshotUrl('before', entry.path);
@@ -597,6 +610,15 @@ const html = `<!DOCTYPE html>
   function renderStrobe(entry) {
     const imgAfter = document.getElementById('img-after');
     const imgBefore = document.getElementById('img-before');
+
+    if (entry.kind === 'removed') {
+      // No "after" state — show the baseline being deleted, no strobing.
+      imgAfter.src = screenshotUrl('before', entry.path);
+      imgBefore.style.display = 'none';
+      imgBefore.src = '';
+      startStrobe(false, 'Removed (baseline shown)', '#7f8c8d');
+      return;
+    }
 
     imgAfter.src = screenshotUrl('after', entry.path);
     if (entry.kind !== 'new') {
@@ -710,22 +732,29 @@ const html = `<!DOCTYPE html>
     const acceptedEntries = allDiffs.filter(d => d.status === 'accepted');
     if (acceptedEntries.length === 0) return;
 
+    // "removed" entries have no after-state to write — accepting one means
+    // deleting the baseline instead of updating it. Split so we only fetch
+    // after-files for real updates.
+    const updateEntries = acceptedEntries.filter(e => e.kind !== 'removed');
+    const removalEntries = acceptedEntries.filter(e => e.kind === 'removed');
+
     // Cloudflare Workers cap each invocation at 50 outgoing subrequests
     // (free plan). The Worker spends 5–7 on fixed Git data API calls and
     // 1 blob-create per accepted screenshot, so a single /api/commit
-    // beyond ~42 entries trips the limit. Chunk the accepts and let the
-    // Worker make one commit per chunk on top of the previous chunk's
-    // HEAD — final result is a small commit chain instead of one.
+    // beyond ~42 entries trips the limit. Chunk the accepts (updates and
+    // removals together) and let the Worker make one commit per chunk on
+    // top of the previous chunk's HEAD — final result is a small commit
+    // chain instead of one.
     const CHUNK_SIZE = 25;
 
     setAcceptBusy(true);
     try {
       // Phase 1: fetch file contents in the browser (avoids Worker subrequest limit)
       document.getElementById('action-status').innerHTML =
-        '<span class="spinner"></span>Fetching ' + acceptedEntries.length + ' file(s)...';
+        '<span class="spinner"></span>Fetching ' + updateEntries.length + ' file(s)...';
       const domContents = {};
       const screenshotContents = {};
-      await Promise.all(acceptedEntries.map(async (entry) => {
+      await Promise.all(updateEntries.map(async (entry) => {
         const pngPath = entry.path.replace(/\\.html$/, '.png');
         const [domRes, screenshotRes] = await Promise.all([
           fetch('/_after-files/dom/' + entry.path),
@@ -736,12 +765,17 @@ const html = `<!DOCTYPE html>
       }));
 
       // Phase 2: send to Worker for committing, chunked.
+      const combined = [
+        ...updateEntries.map(e => ({ path: e.path, action: 'update' })),
+        ...removalEntries.map(e => ({ path: e.path, action: 'remove' })),
+      ];
       const chunks = [];
-      for (let i = 0; i < acceptedEntries.length; i += CHUNK_SIZE) {
-        chunks.push(acceptedEntries.slice(i, i + CHUNK_SIZE));
+      for (let i = 0; i < combined.length; i += CHUNK_SIZE) {
+        chunks.push(combined.slice(i, i + CHUNK_SIZE));
       }
 
       let totalAccepted = 0;
+      let totalRemoved = 0;
       let lastCommitSha = '';
       const allErrors = [];
       const allWarnings = [];
@@ -749,11 +783,13 @@ const html = `<!DOCTYPE html>
       for (let ci = 0; ci < chunks.length; ci++) {
         const chunk = chunks[ci];
         const isLastChunk = ci === chunks.length - 1;
+        const chunkPaths = chunk.filter(c => c.action === 'update').map(c => c.path);
+        const chunkRemovals = chunk.filter(c => c.action === 'remove').map(c => c.path);
         const chunkDom = {};
         const chunkScreens = {};
-        for (const entry of chunk) {
-          if (domContents[entry.path] != null) chunkDom[entry.path] = domContents[entry.path];
-          const pngPath = entry.path.replace(/\\.html$/, '.png');
+        for (const path of chunkPaths) {
+          if (domContents[path] != null) chunkDom[path] = domContents[path];
+          const pngPath = path.replace(/\\.html$/, '.png');
           if (screenshotContents[pngPath] != null) chunkScreens[pngPath] = screenshotContents[pngPath];
         }
 
@@ -765,7 +801,8 @@ const html = `<!DOCTYPE html>
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            paths: chunk.map(e => e.path),
+            paths: chunkPaths,
+            removals: chunkRemovals,
             domContents: chunkDom,
             screenshotContents: chunkScreens,
             repo: meta.repo,
@@ -793,6 +830,7 @@ const html = `<!DOCTYPE html>
           return;
         }
         totalAccepted += data.accepted || 0;
+        totalRemoved += data.removed || 0;
         lastCommitSha = data.commitSha || lastCommitSha;
         if (data.errors && data.errors.length) allErrors.push(...data.errors);
         if (data.postCommitWarnings && data.postCommitWarnings.length) allWarnings.push(...data.postCommitWarnings);
@@ -801,7 +839,8 @@ const html = `<!DOCTYPE html>
       hasUncommittedAccepts = false;
       const warnings = allWarnings.join('; ');
       const commitsNote = chunks.length > 1 ? ' over ' + chunks.length + ' commits' : '';
-      const msg = 'Committed ' + totalAccepted + ' diff(s)' + commitsNote + ': ' + (lastCommitSha || '').slice(0, 8) +
+      const removedNote = totalRemoved > 0 ? ', removed ' + totalRemoved : '';
+      const msg = 'Committed ' + totalAccepted + ' diff(s)' + removedNote + commitsNote + ': ' + (lastCommitSha || '').slice(0, 8) +
         (allErrors.length ? ' (' + allErrors.length + ' errors)' : '') +
         (warnings ? ' — warnings: ' + warnings : '');
       setActionStatus(msg, allErrors.length > 0 || Boolean(warnings));

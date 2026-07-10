@@ -1,7 +1,7 @@
 /**
  * Generate a self-contained HTML diff report for visual review.
  *
- * For each failing story (regression or parity), the report shows:
+ * For each failing story (regression, parity, new, or removed), the report shows:
  *   - Strobe animation between before/after screenshots (base64-embedded, CSS keyframes)
  *   - Pixel diff image (base64-embedded) with diff percentage
  *   - Colored line diff of the DOM snapshot
@@ -47,7 +47,7 @@ interface ReportEntry extends DiffEntry {
   computedDiffPercent: number | null;
 }
 
-function buildReportEntries(diffs: DiffEntry[]): ReportEntry[] {
+function buildReportEntries(diffs: readonly DiffEntry[]): ReportEntry[] {
   return diffs.map((d) => {
     const beforeB64 = d.beforeScreenshotPath
       ? readImageBase64(d.beforeScreenshotPath)
@@ -73,43 +73,19 @@ function buildReportEntries(diffs: DiffEntry[]): ReportEntry[] {
   });
 }
 
-/**
- * A "removed stories" banner: baseline exists, story no longer present.
- * Informational only (never fails the job — see compare.ts) so it's a plain
- * list, not a reviewable/acceptable DiffEntry like the regression/new/parity
- * cards below.
- */
-function generateRemovedBanner(removedStories: string[]): string {
-  if (removedStories.length === 0) return "";
-  const items = removedStories
-    .map((path) => `<li><code>${escapeHtml(path)}</code></li>`)
-    .join("\n");
-  return `
-  <div style="border:1px solid #ddd;margin:16px 0;border-radius:6px;overflow:hidden;">
-    <div style="padding:12px 16px;background:#95a5a622;border-bottom:1px solid #ddd;">
-      <span style="font-weight:bold;color:#7f8c8d;">REMOVED</span>
-      <span style="margin-left:12px;color:#666;">baseline exists, story no longer present (${removedStories.length})</span>
-    </div>
-    <ul style="padding:12px 16px 16px 32px;margin:0;font-family:monospace;font-size:13px;">
-      ${items}
-    </ul>
-  </div>`;
-}
-
-function generateReport(
-  entries: ReportEntry[],
-  removedStories: string[]
-): string {
+function generateReport(entries: ReportEntry[]): string {
   const kindLabel: Record<string, string> = {
     regression: "REGRESSION",
     parity: "PARITY MISMATCH",
     new: "NEW (no baseline)",
+    removed: "REMOVED",
   };
 
   const kindColor: Record<string, string> = {
     regression: "#e74c3c",
     parity: "#e67e22",
     new: "#3498db",
+    removed: "#7f8c8d",
   };
 
   const entryHtml = entries
@@ -119,7 +95,9 @@ function generateReport(
           ? formatDomDiff(d.beforeDom, d.afterDom)
           : d.afterDom
             ? `<pre style="margin:0;white-space:pre-wrap;">${escapeHtml(d.afterDom)}</pre>`
-            : "";
+            : d.beforeDom
+              ? `<pre style="margin:0;white-space:pre-wrap;">${escapeHtml(d.beforeDom)}</pre>`
+              : "";
 
       // Strobe animation: two overlapping images, CSS toggles opacity
       const afterImg = d.afterB64
@@ -127,7 +105,13 @@ function generateReport(
         : `<div style="color:#999;padding:40px;text-align:center;">No screenshot</div>`;
 
       let strobeHtml: string;
-      if (d.beforeB64) {
+      if (d.kind === "removed") {
+        // No "after" state to strobe against — just show the baseline that
+        // accepting this entry would delete.
+        strobeHtml = d.beforeB64
+          ? `<img src="data:image/png;base64,${d.beforeB64}" style="display:block;max-width:100%;" />`
+          : `<div style="color:#999;padding:40px;text-align:center;">No screenshot</div>`;
+      } else if (d.beforeB64) {
         const beforeImg = `<img src="data:image/png;base64,${d.beforeB64}" style="position:absolute;top:0;left:0;max-width:100%;display:block;animation:strobeBefore_${i} 1s step-end infinite;" />`;
         const afterImgAnim = d.afterB64
           ? `<img src="data:image/png;base64,${d.afterB64}" style="display:block;max-width:100%;animation:strobeAfter_${i} 1s step-end infinite;" />`
@@ -194,7 +178,6 @@ function generateReport(
 <body>
   <h1>Visual Diff Report</h1>
   <p>${entries.length} difference(s) found. This is a static view-only report. Run <code>pnpm test:visual:review</code> for the interactive review server.</p>
-  ${generateRemovedBanner(removedStories)}
   ${entryHtml}
 </body>
 </html>`;
@@ -207,14 +190,15 @@ function generateReport(
 function main() {
   const diffs = collectDiffs();
   const removedStories = collectRemovedStories();
+  const allDiffs = [...diffs, ...removedStories];
 
-  if (diffs.length === 0 && removedStories.length === 0) {
+  if (allDiffs.length === 0) {
     console.log("No diffs to report.");
     return;
   }
 
-  const entries = buildReportEntries(diffs);
-  const html = generateReport(entries, removedStories);
+  const entries = buildReportEntries(allDiffs);
+  const html = generateReport(entries);
   writeFileSync(OUTPUT, html, "utf-8");
   console.log(
     `Diff report written to ${OUTPUT} (${entries.length} entries, ${removedStories.length} removed)`

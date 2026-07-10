@@ -190,18 +190,20 @@ jobs:
         if: github.event_name == 'pull_request'
         run: pnpm --filter @gofish/tests exec tsx scripts/compare.ts --js-only
 
-      # Removed stories are informational (they don't fail compare.ts), so on a
-      # green PR they'd otherwise only appear in the console log. Surface them
-      # in the job summary regardless of the compare outcome.
+      # Removed stories now fail compare.ts like any other unreviewed change
+      # (baseline exists, story no longer present), so this only ever runs
+      # alongside the other failure-path steps below (upload/review site).
+      # Kept as a quick-glance summary in the Checks tab, without needing to
+      # open the review site, for the common "just deleted a story" case.
       - name: Report removed stories (PR only)
-        if: (success() || failure()) && github.event_name == 'pull_request'
+        if: failure() && github.event_name == 'pull_request'
         run: |
           SUMMARY=tests/tmp/diff-summary.json
           if [ -f "$SUMMARY" ] && [ "$(jq '.removed // 0' "$SUMMARY")" -gt 0 ]; then
             {
               echo "### Removed stories"
               echo ""
-              echo "Baseline exists but the story is no longer present (baselines are pruned automatically on the next main push):"
+              echo "Baseline exists but the story is no longer present. Accept the removal in the review site to delete its baseline (or restore the story):"
               echo ""
               jq -r '.removedStories[] | "- `\(.)`"' "$SUMMARY"
             } >> "$GITHUB_STEP_SUMMARY"
@@ -282,10 +284,9 @@ jobs:
               if (summary.newStories > 0) {
                 parts.push(plural(summary.newStories, 'new story', 'new stories'));
               }
-              // Removed stories never fail the job (deletion is often
-              // intentional — see compare.ts), but still worth surfacing
-              // here since this description is the first thing seen on the
-              // PR's checks list.
+              // Removed stories fail the job like any other unreviewed
+              // change (see compare.ts) — surfaced here since this
+              // description is the first thing seen on the PR's checks list.
               if (summary.removed > 0) {
                 parts.push(plural(summary.removed, 'removed story', 'removed stories'));
               }

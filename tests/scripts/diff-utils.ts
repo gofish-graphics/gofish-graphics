@@ -9,6 +9,7 @@ import {
   mkdirSync,
   existsSync,
   cpSync,
+  rmSync,
 } from "fs";
 import { join, dirname } from "path";
 import { diffLines } from "diff";
@@ -56,7 +57,12 @@ export const PYTHON_DIR = join(import.meta.dirname, "../tmp/python");
 export interface DiffEntry {
   /** Relative path like "forward-syntax-v3/bar--basic.html" */
   path: string;
-  kind: "regression" | "parity" | "new";
+  /**
+   * "removed" = baseline exists, story no longer captured (deleted/renamed
+   * since the baseline was recorded). Has no "after" state — accepting it
+   * deletes the baseline instead of writing a new one.
+   */
+  kind: "regression" | "parity" | "new" | "removed";
   /** "pending" | "accepted" | "rejected" — runtime review state */
   status: "pending" | "accepted" | "rejected";
   beforeDom: string | null;
@@ -170,15 +176,35 @@ export function collectDiffs(): DiffEntry[] {
 
 /**
  * Stories with a baseline but no current JS capture — i.e. deleted (or
- * renamed) since the baseline was recorded. Informational only: a removed
- * story is not a regression and must not fail the job by itself, but it
- * should still be reported so deletions aren't silently invisible in CI.
+ * renamed) since the baseline was recorded. These fail the job exactly like
+ * a new/missing-baseline story: a removal must be reviewed and accepted
+ * (which deletes the baseline) before CI goes green.
+ *
+ * Returned as first-class `DiffEntry`s (kind: "removed") so the report and
+ * review site can render them as regular reviewable cards: `beforeDom`/
+ * `beforeScreenshotPath` hold the old baseline, `afterDom`/
+ * `afterScreenshotPath` are always null since there's no new render.
  */
-export function collectRemovedStories(): string[] {
+export function collectRemovedStories(): DiffEntry[] {
   const jsFiles = new Set(listHtmlFiles(JS_DIR));
-  return listHtmlFiles(BASELINE_DOM)
+  const removedPaths = listHtmlFiles(BASELINE_DOM)
     .filter((file) => !jsFiles.has(file))
     .sort();
+
+  return removedPaths.map((path) => {
+    const pngFile = path.replace(/\.html$/, ".png");
+    const beforePng = join(BASELINE_SCREENSHOTS, pngFile);
+    return {
+      path,
+      kind: "removed",
+      status: "pending",
+      beforeDom: readOptional(join(BASELINE_DOM, path)),
+      afterDom: null,
+      beforeScreenshotPath: existsSync(beforePng) ? beforePng : null,
+      afterScreenshotPath: null,
+      diffPercent: null,
+    };
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -255,6 +281,24 @@ export function acceptStory(path: string): void {
     mkdirSync(dirname(pngDest), { recursive: true });
     cpSync(pngSrc, pngDest);
   }
+}
+
+// ---------------------------------------------------------------------------
+// Accept a removal (delete baseline dom + screenshot)
+// ---------------------------------------------------------------------------
+
+/**
+ * Accepting a "removed" DiffEntry has no "after" state to copy in — it
+ * deletes the stale baseline instead. This is the manual-review analog of
+ * the auto-prune in update-baselines.ts (which does the same thing in bulk
+ * on every main push).
+ */
+export function removeBaselineStory(path: string): void {
+  const htmlPath = join(BASELINE_DOM, path);
+  if (existsSync(htmlPath)) rmSync(htmlPath, { force: true });
+
+  const pngPath = join(BASELINE_SCREENSHOTS, path.replace(/\.html$/, ".png"));
+  if (existsSync(pngPath)) rmSync(pngPath, { force: true });
 }
 
 // ---------------------------------------------------------------------------
