@@ -1,7 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../../helper";
-import { chart, spread, stack, rect, derive, palette } from "../../../src/lib";
-import { groupBy } from "lodash";
+import { chart, spread, stack, rect, derive, palette, field } from "../../../src/lib";
 import data from "vega-datasets";
 
 // Mirrors: https://vega.github.io/vega-lite/examples/stacked_bar_count_corner_radius_mark.html
@@ -48,27 +47,16 @@ export const Default: StoryObj<Args> = {
       color: palette({ sun: "#e7ba52", fog: "#dfdfdf", drizzle: "#79a1d5", rain: "#1f77b4", snow: "#9467bd" }),
     })
       .flow(
-        derive((d: any[]) => {
-          const withMonth = d.map((row) => ({
+        derive((d: any[]) =>
+          d.map((row) => ({
             month: MONTHS[new Date(row.date).getMonth()],
-            weather: row.weather,
-          }));
-          const result: { month: string; weather: string; count: number }[] =
-            [];
-          const byMonth = groupBy(withMonth, "month");
-          for (const month of MONTHS) {
-            if (!byMonth[month]) continue;
-            const byWeather = groupBy(byMonth[month], "weather");
-            for (const [weather, rows] of Object.entries(byWeather)) {
-              result.push({ month, weather, count: (rows as any[]).length });
-            }
-          }
-          return result;
-        }),
-        spread({ by: "month",  dir: "x" }),
+            ...row,
+          }))
+        ),
+        spread({ by: field("month").sort(MONTHS),  dir: "x" }),
         stack({ by: "weather",  dir: "y" })
       )
-      .mark(rect({ h: "count", fill: "weather", rx: 3, ry: 3 }))
+      .mark(rect({ h: field("date").count(), fill: "weather", rx: 3, ry: 3 }))
       .render(container, { w: args.w, h: args.h });
 
     return container;

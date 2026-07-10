@@ -32,7 +32,7 @@ def test_operators_accept_universal_debug_flag():
     assert spread(by="a", dir="x", debug=True).to_dict()["debug"] is True
     assert group(by="a", debug=True).to_dict()["debug"] is True
     assert table(by={"x": "a", "y": "b"}, debug=True).to_dict()["debug"] is True
-    assert treemap(valueField="v", debug=True).to_dict()["debug"] is True
+    assert treemap(size="v", debug=True).to_dict()["debug"] is True
 
 
 def test_stack_operator_accepts_spread_parity_options():
@@ -41,10 +41,10 @@ def test_stack_operator_accepts_spread_parity_options():
 
 
 def test_treemap_combinator_accepts_key():
-    node = Treemap([], valueField="gross", key="genre")
+    node = Treemap([], size="gross", key="genre")
     d = node.to_dict()
     assert d["options"]["key"] == "genre"
-    assert d["options"]["valueField"] == "gross"
+    assert d["options"]["size"] == "gross"
 
 
 def test_polygon_requires_points():

@@ -31,12 +31,6 @@ def _add_month(data):
     return out
 
 
-def _sort_by_weather(data):
-    if data and "weather" in data[0]:
-        return sorted(data, key=lambda r: WEATHER_ORDER.index(r["weather"]))
-    return data
-
-
 def story_default():
     df = read_csv("seattle-weather.csv")
     weather = df.to_dict("records")
@@ -54,8 +48,7 @@ def story_default():
         .flow(
             derive(_add_month),
             spread(by="month", dir="x"),
-            derive(_sort_by_weather),
-            stack(by="weather", dir="y"),
+            stack(by=field("weather").sort(WEATHER_ORDER), dir="y"),
         )
         .mark(rect(h=field("date").count(), fill="weather")),
         {"w": 600, "h": 300, "axes": True},

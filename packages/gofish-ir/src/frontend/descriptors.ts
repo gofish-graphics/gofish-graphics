@@ -460,6 +460,10 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
       // (atom/titanic-unit-dots, which sizes with `h: "fare"`).
       w: ch.num(),
       h: ch.num(),
+      by: {
+        type: t.union(t.string, t.ref("FieldAccessor")),
+        doc: "Field to partition rows by (like spread/group); also accepts a field(...) accessor carrying domain ops (sort/reverse/bin/dropNulls). Without `by`, one leaf is emitted per row.",
+      },
       paddingInner: { type: t.number, default: 0 },
       paddingOuter: { type: t.number, default: 0 },
       round: { type: t.boolean, default: true },
@@ -475,10 +479,9 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
         default: "squarify",
       },
       sort: { type: t.enum("asc", "desc", "none"), default: "desc" },
-      valueField: {
-        type: t.string,
-        doc: "Field summed per row to weight the tile size.",
-      },
+      size: ch.num(
+        "Per-leaf weight driving tile area (entry-flagged per split entry); a field name aggregates (sums by default) per group."
+      ),
       flipY: {
         type: t.boolean,
         default: false,
@@ -488,9 +491,6 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
         type: t.string,
         doc: "When set, each leaf is laid out in a square of side min(leafW, leafH, 2*datum[field]).",
       },
-      // NOTE: JS's TreemapProps also has a `value` function-accessor field —
-      // not serializable (see LEAF_MARKS-adjacent note on treemap's combinator
-      // form) and so not modeled here; Python callers use `valueField`.
     },
   }),
 };
@@ -825,14 +825,10 @@ export const COMBINATOR_MARKS: Record<string, ConstructDescriptor> = {
   }),
 
   treemap: combinatorMark("treemap", {
-    doc: "Low-level combinator form of `treemap` (single level). Same fields as the operator form (OPERATORS.treemap) plus `key` and the JS-only `value` function accessor.",
+    doc: "Low-level combinator form of `treemap` (single level). Same fields as the operator form (OPERATORS.treemap) plus `key`.",
     fields: {
       ...resolveFields(OPERATORS.treemap),
       key: { type: t.string },
-      value: {
-        type: t.any,
-        doc: "JS-only function accessor `(node) => number`; not serializable.",
-      },
     },
   }),
 

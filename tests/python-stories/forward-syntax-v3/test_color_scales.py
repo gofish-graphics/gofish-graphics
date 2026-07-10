@@ -3,16 +3,13 @@
 import math
 
 from gofish import (
-    layer,
     chart,
     clock,
     spread,
     stack,
     derive,
     rect,
-    selectAll,
     ribbon,
-    group,
     palette,
     gradient,
     field,
@@ -175,16 +172,17 @@ def story_rose_gradient():
 
 
 def story_ribbon_highlight():
-    bars = (
-        chart(SEAFOOD, color=palette({"Salmon": "#e15759", "Trout": "#4e79a7"}))
+    return (
+        chart(
+            SEAFOOD,
+            color=palette({"Salmon": "#e15759", "Trout": "#4e79a7"}),
+            axes=True,
+        )
         .flow(
             spread(by="lake", dir="x", spacing=64),
             stack(by=field("species").sort("count"), dir="y"),
         )
-        .mark(rect(h="count", fill="species").name("bars"))
-    )
-    overlay = chart(selectAll("bars")).flow(group(by="species")).mark(ribbon(opacity=0.6))
-    return (
-        layer([bars, overlay]),
-        {"w": 400, "h": 400, "axes": True},
+        .mark(rect(h="count", fill="species"))
+        .layer(ribbon(by="species", opacity=0.6)),
+        {"w": 400, "h": 400},
     )

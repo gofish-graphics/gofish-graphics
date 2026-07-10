@@ -913,13 +913,24 @@ function renderChart(spec: HarnessSpec) {
           // titles, etc.) instead of re-deriving it here. The child charts are
           // already wired (producer mark named, consumer reads selectAll), so
           // chaining `.layer()` just stacks them.
+          //
+          // Unlike the combinator `Layer(...)` path below, a real builder
+          // chain's `.render()` is normally called *without* an `axes` key at
+          // all — LayerBuilder.render → resolveForRender reads `axes` from
+          // the root tier's own chart options (`rootChart().renderMeta()`)
+          // when the render-level option is left undefined. Forcing
+          // `axes: axes ?? false` here would always pass an explicit
+          // `false`, which short-circuits that inheritance (`options.axes ??
+          // meta.axes` never falls through). Only pass `axes` through when
+          // the spec explicitly set it at the layer/render level, so the
+          // root tier's `axes` can flow through untouched otherwise.
           const layerBuilder = childCharts
             .slice(1)
             .reduce((acc: any, c) => acc.layer(c), childCharts[0] as any);
           await layerBuilder.render(container, {
             w,
             h,
-            axes: axes ?? false,
+            ...(axes !== undefined ? { axes } : {}),
             debug: debug ?? false,
           } as any);
         } else {

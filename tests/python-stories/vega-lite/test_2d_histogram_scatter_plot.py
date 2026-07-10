@@ -2,7 +2,7 @@
 
 import math
 
-from gofish import chart, log, scatter, rect
+from gofish import chart, scatter, rect
 from python_stories.vega_data_urls import read_json
 
 
@@ -69,10 +69,7 @@ def story_default():
 
     return (
         chart(movie_counts)
-        .flow(
-            log("scatter locations"),
-            scatter(by="id", x="x", y="y", debug=True),
-        )
+        .flow(scatter(by="id", x="x", y="y"))
         .mark(
             rect(
                 w="size",

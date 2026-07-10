@@ -31,26 +31,6 @@ def story_basic():
     )
 
 
-def story_layered():
-    # Same ribbon as story_basic, via the `.layer(chart(...))` API instead of the
-    # manual layer([...]) + selectAll form. An empty chart() scope inherits the
-    # previous tier's marks.
-    return (
-        chart(SEAFOOD, axes=True)
-        .flow(
-            spread(by="lake", dir="x", spacing=64),
-            stack(by=field("species").sort("count"), dir="y"),
-        )
-        .mark(rect(h="count", fill="species"))
-        .layer(
-            chart()
-            .flow(group(by="species"))
-            .mark(ribbon(opacity=0.8))
-        ),
-        {"w": 400, "h": 400, "axes": True},
-    )
-
-
 def story_polar():
     bars = (
         chart(SEAFOOD)

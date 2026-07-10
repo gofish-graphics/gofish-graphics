@@ -16,12 +16,15 @@ baseline. The SVG (1.5KB, under the threshold) is INLINED by Vite as a
 reconstruct the byte-identical data URI here with Vite's exact encoding.
 
 `story_image_cut_with_labels` (JS `ImageCutWithLabels`) is exempt — see
-tests/.python-sync-exempt. It builds a per-slice `layer(...)` inside a
-mark-as-function over `selectAll("part")`, embedding each JS ref node directly
-(`d.name("slice")`) and reading its bound datum (`d.datum.category`). The Python
-mark-fn runs over the RPC bridge and receives plain JSON rows, not JS ref nodes,
-so it cannot embed the slice nodes or project `.datum` — a wrapper project, not
-a port.
+tests/.python-sync-exempt. JS now overlays the labels via a chained
+`.layer(chart().mark((data) => ...))` empty-scope tier (rather than a second
+`chart(selectAll("part"))` sub-chart) — the wiring changed, but the blocker
+didn't: it builds a per-slice `layer(...)` inside that mark-as-function,
+embedding each JS ref node directly (`d.name("slice")`) and reading its bound
+datum (`d.datum.category`). The Python mark-fn still runs over the RPC bridge
+and receives plain JSON rows, not JS ref nodes, so it cannot embed the slice
+nodes or project `.datum` — a wrapper project, not a port, layer-chaining or
+not.
 """
 
 import os

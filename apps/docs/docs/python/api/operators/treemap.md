@@ -16,23 +16,21 @@ The two share the same options below.
 :::
 
 ```python
-from gofish import Treemap, circle, datum
+from gofish import chart, circle, field, treemap
 
-# Movie worldwide gross summed per major genre -> [(genre, gross), ...]
-nodes = [
-    circle(fill=datum(genre), stroke="gray", strokeWidth=1, label=True)
-        .bind_data({"worldwideGross": gross}, genre)
-    for genre, gross in genres
-]
-
-# Each child gets its own circle; Treemap assigns its (x, y, w, h).
-# `valueField` reads weights from each child's bound datum.
-Treemap(
-    nodes,
-    valueField="worldwideGross",
-    paddingInner=2,
-    paddingOuter=2,
-    round=True,
+# treemap(by=..., size=...) partitions the flow's rows itself, mirroring
+# spread/group: `by` groups (dropping null genres first), `size` sums
+# worldwide gross per group to weight each tile's area.
+chart(movies_raw).flow(
+    treemap(
+        by=field("Major Genre").drop_nulls(),
+        size="Worldwide Gross",
+        paddingInner=2,
+        paddingOuter=2,
+        round=True,
+    )
+).mark(
+    circle(fill="Major Genre", stroke="gray", strokeWidth=1, label=True)
 ).render(w=700, h=420)
 ```
 
@@ -50,8 +48,8 @@ Treemap(children, **options) -> Mark
 
 | Option                     | Type                                                                                       | Description                                                                                                                                                                                                                                                                                                                                                               |
 | -------------------------- | ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `valueField`               | `str`                                                                                      | Reads weights from each child's bound datum (`bind_data`); sums if the datum is a list.                                                                                                                                                                                                                                                                                   |
-| `value`                    | `Callable`                                                                                 | Custom weight accessor (overrides `valueField`).                                                                                                                                                                                                                                                                                                                          |
+| `by`                       | `str` \| `FieldAccessor`                                                                   | **Operator form only** (`.flow()`): field to partition rows by; also accepts a `field(...)` accessor carrying domain ops (`sort`/`reverse`/`bin`/`drop_nulls`). Without `by`, one leaf is emitted per row.                                                                                                                                                                |
+| `size`                     | `str` \| `FieldAccessor` \| `list`                                                         | Per-leaf weight driving tile area — entry-flagged (one value per split entry): a field name (summed by default), a `field(...)` accessor, or an explicit per-child list (combinator form).                                                                                                                                                                                |
 | `paddingInner`             | `float`                                                                                    | Padding between sibling rectangles.                                                                                                                                                                                                                                                                                                                                       |
 | `paddingOuter`             | `float`                                                                                    | Padding around the outer edge of the treemap.                                                                                                                                                                                                                                                                                                                             |
 | `round`                    | `bool`                                                                                     | Round pixel positions/sizes.                                                                                                                                                                                                                                                                                                                                              |
@@ -68,4 +66,6 @@ Treemap(children, **options) -> Mark
   compose by nesting `Treemap(...)` calls (or add a higher-level wrapper).
 - In the combinator form, each child is bound to its row with
   `mark.bind_data(d, key)` and a `datum(...)` channel (e.g.
-  `fill=datum(genre)`) makes the built-in label show the key.
+  `fill=datum(genre)`) makes the built-in label show the key. `size` in
+  combinator form is an **explicit list**, one weight per child in child
+  order — it does not read back off each child's bound datum.

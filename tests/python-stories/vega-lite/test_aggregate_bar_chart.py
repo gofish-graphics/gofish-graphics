@@ -1,4 +1,9 @@
-"""Equivalent of Bar/AggregateBarChart.stories.tsx — Vega-Lite/Aggregate Bar Chart."""
+"""Equivalent of Bar/AggregateBarChart.stories.tsx — Vega-Lite/Aggregate Bar Chart.
+
+JS dropped its unused `derive`/`groupBy`/`sumBy` imports in the
+story-simplifications pass; this port never had those dead imports, so
+nothing here changes.
+"""
 
 from gofish import chart, spread, rect
 from vega_datasets import data as vega_data

@@ -17,7 +17,6 @@ import {
   getLabelTextAnchor,
   type LabelPosition,
 } from "../../src/ast/labels/labelPlacement";
-import { sumBy } from "lodash";
 import data from "vega-datasets";
 
 const meta: Meta = {
@@ -404,7 +403,7 @@ export const NormalizedStackedBarWithLabels: StoryObj<Args> = {
       {
         color: palette({ Female: "#675193", Male: "#ca8861" }),
         // Keep the continuous proportion x-axis at the bottom (y-end).
-        axes: { x: { side: "end" }, y: true },
+        axes: { x: { side: "end", title: "proportion" }, y: true },
       }
     )
       .flow(
@@ -415,18 +414,11 @@ export const NormalizedStackedBarWithLabels: StoryObj<Args> = {
         // One row per age group; y-down reads top→bottom, so age 0 lands at the
         // top (matching the Vega-Lite reference).
         spread({ by: "age", dir: "y", spacing: 2 }),
-        // Normalize within each age group so bars span 0→1
-        derive((d: any[]) =>
-          d.map((row) => ({
-            ...row,
-            proportion: row.people / sumBy(d, "people"),
-          }))
-        ),
-        // Female left, Male right
-        stack({ by: field("sex").sort(),  dir: "x" })
+        // Female left, Male right; normalize within each age group so bars span 0→1
+        stack({ by: field("sex").sort(), dir: "x", size: field("people").normalize() })
       )
       .mark(
-        rect({ w: "proportion", fill: "sex" }).label(
+        rect({ fill: "sex" }).label(
           (d: any) => {
             const row = Array.isArray(d) ? d[0] : d;
             return row.people;

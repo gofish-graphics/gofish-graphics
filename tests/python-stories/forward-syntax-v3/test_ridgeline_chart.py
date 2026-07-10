@@ -1,24 +1,17 @@
 """Equivalent of RidgelineChart.stories.tsx — Forward Syntax V3/Ridgeline Chart."""
 
-from gofish import layer, chart, spread, blank, selectAll, ribbon, group
+from gofish import chart, spread, blank, ribbon
 from python_stories.data import SEAFOOD
 
 
 def story_default():
-    points = (
-        chart(SEAFOOD)
+    return (
+        chart(SEAFOOD, axes=True)
         .flow(
             spread(by="lake", dir="x", spacing=80),
             spread(by="species", dir="y", spacing=-16),
         )
-        .mark(blank(h="count", fill="species").name("points"))
-    )
-    overlay = (
-        chart(selectAll("points"))
-        .flow(group(by="species"))
-        .mark(ribbon(opacity=0.8, mixBlendMode="normal"))
-    )
-    return (
-        layer([points, overlay]),
-        {"w": 500, "h": 300, "axes": True},
+        .mark(blank(h="count", fill="species"))
+        .layer(ribbon(by="species", opacity=0.8, mixBlendMode="normal")),
+        {"w": 500, "h": 300},
     )

@@ -58,7 +58,7 @@ GoFish has no dedicated `gridxy` operator; an Atom layout decomposes into a shor
 | `subgroup: passthrough` | no operator (carry the array through) |
 | `subgroup: flatten` | the terminal `.mark(...)` applied per record; grid wrapping via `derive(rows => chunk(rows, …))` + `spread(dir:"y")` + `spread(dir:"x")` |
 | `size: uniform` | a fixed mark size (`circle({ r })`, `rect({ w, h })`) |
-| `size: sum(field)` | `treemap({ valueField: field })` |
+| `size: sum(field)` | `treemap({ size: field })` |
 | `size: count` | per-group count via `groupBy`, then main-axis value-proportional sizing through the σ solve (`rect({ h: "count" })` / `stack`); packed square-unit (2-D) case still awaits cross-scope size coupling ([gap #1](#feature-gaps)) |
 | `aspect_ratio: square / fillX / fillY` | manual grid via `chunk(rows, cols)` (e.g. `cols = ceil(sqrt(n))` for square) ([gap #2](#feature-gaps)) |
 | `aspect_ratio: maxfill` | `treemap({ tile: "squarify" })`, or manual chunking |
@@ -138,7 +138,7 @@ settings (see [gap #4](#feature-gaps)).
 | `mosaic.json` | ✅ `UnitMosaic` (count-proportional unit mosaic) and `Mosaic` (aggregated-rect 2-D marimekko, variable column widths) |
 | `fluctuation.json` | ✅ `TitanicFacet` (faceted unit grid; count-sizing gap #1) |
 | `squarified.json`, `titanic_spec_packxy_isolated.json`, `titanic_spec_packxy_mixed.json`, `titanic_spec_packxy_hierarchy.json` | ✅ `TitanicUnitDots` (treemap packing) |
-| `size_sum_shared.json`, `size_sum_notShared.json` | ✅ `TitanicUnitDots` (`treemap valueField`); ⚠️ non-treemap sum-sizing is gap #1 |
+| `size_sum_shared.json`, `size_sum_notShared.json` | ✅ `TitanicUnitDots` (`treemap size`); ⚠️ non-treemap sum-sizing is gap #1 |
 | `size_uniform_shared.json`, `size_uniform_notShared.json` | ➖ Permutation of `TitanicFacet` / `UnitColumnChart` (uniform size, `isShared` toggle — gap #4) |
 | `titanic_spec2.json`, `titanic_spec3.json`, `titanic_spec4.json` | ➖ Permutation of `UnitHistogram` / `TitanicFacet` (`aspect_ratio` / `direction` variants — gap #2) |
 | `maxfill_aspect.json`, `square_aspect.json` | ➖ Aspect-ratio demos — gap #2 |

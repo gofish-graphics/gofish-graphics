@@ -8,7 +8,7 @@
 // first, then sorts the resulting bins.
 //
 // Two disjoint slots consume the pipeline:
-//   - DOMAIN ops (`sort`/`reverse`/`bin`) apply to a `by` grouping key — see
+//   - DOMAIN ops (`sort`/`reverse`/`bin`/`dropNulls`) apply to a `by` grouping key — see
 //     `splitEntries` in datumProjection.ts, the shared split+ops helper used
 //     by spread/group/scatter.
 //   - AGGREGATE ops (`sum`/`mean`/`count`/`distinct`) fold a value channel's
@@ -32,9 +32,19 @@ import meanBy from "lodash/meanBy";
 import type { Measure, MaybeValue } from "./data";
 
 export type FieldOp =
-  | { op: "sort"; by?: string; order?: "asc" | "desc" }
+  | {
+      op: "sort";
+      by?: string;
+      order?: "asc" | "desc";
+      /** Explicit group order (#735), e.g. `.sort(["sun", "fog", ...])`.
+       *  Mutually exclusive with `by`/`order`. Groups whose key isn't in
+       *  this list are appended after, in natural sort order — see
+       *  `sortEntries` in datumProjection.ts. */
+      values?: (string | number)[];
+    }
   | { op: "reverse" }
   | { op: "bin"; thresholds?: number | number[] }
+  | { op: "dropNulls" }
   | { op: "normalize" }
   | { op: "sum" }
   | { op: "mean" }
@@ -70,13 +80,26 @@ export class FieldExpr {
     return new FieldExpr(this.name, this.measure, [...this._ops, op]);
   }
 
+  /** Order groups by an explicit list of group keys — e.g.
+   *  `field("weather").sort(["sun", "fog", "drizzle", "rain", "snow"])` for a
+   *  domain-specific order that no aggregate expresses. Groups whose key
+   *  isn't in the list are appended after, in natural sort order. Valid only
+   *  in a `by` (domain) slot. */
+  sort(values: (string | number)[]): FieldExpr;
   /** Order groups by the SUM of `by` over each group's rows (ascending unless
    *  `order: "desc"`), or by the group key itself when `by` is omitted. Valid
    *  only in a `by` (domain) slot. */
-  sort(by?: string, order?: "asc" | "desc"): FieldExpr {
+  sort(by?: string, order?: "asc" | "desc"): FieldExpr;
+  sort(
+    byOrValues?: string | (string | number)[],
+    order?: "asc" | "desc"
+  ): FieldExpr {
+    if (Array.isArray(byOrValues)) {
+      return this._withOp({ op: "sort", values: byOrValues });
+    }
     return this._withOp({
       op: "sort",
-      ...(by !== undefined ? { by } : {}),
+      ...(byOrValues !== undefined ? { by: byOrValues } : {}),
       ...(order !== undefined ? { order } : {}),
     });
   }
@@ -95,6 +118,13 @@ export class FieldExpr {
         ? { thresholds: options.thresholds }
         : {}),
     });
+  }
+
+  /** Drop rows whose value at this field is `null`/`undefined`, BEFORE
+   *  grouping — named after polars' `drop_nulls` (pandas `dropna`, tidyr
+   *  `drop_na`). Valid only in a `by` (domain) slot. */
+  dropNulls(): FieldExpr {
+    return this._withOp({ op: "dropNulls" });
   }
 
   /** Space-filling normalization on an operator's (`spread`/`stack`) `size`
@@ -165,7 +195,7 @@ export function getFieldOps(accessor: unknown): FieldOp[] {
 /** Aggregate op names — valid only on a value (size/pos) channel slot. */
 const AGGREGATE_OPS = new Set(["sum", "mean", "count", "distinct"]);
 /** Domain op names — valid only on a `by` (grouping) slot. */
-const DOMAIN_OPS = new Set(["sort", "reverse", "bin"]);
+const DOMAIN_OPS = new Set(["sort", "reverse", "bin", "dropNulls"]);
 
 export const isAggregateOp = (op: FieldOp): boolean => AGGREGATE_OPS.has(op.op);
 export const isDomainOp = (op: FieldOp): boolean => DOMAIN_OPS.has(op.op);

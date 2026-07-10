@@ -1,4 +1,9 @@
-"""Equivalent of Bar/HorizontalStackedBarChart.stories.tsx — Vega-Lite/Horizontal Stacked Bar Chart."""
+"""Equivalent of Bar/HorizontalStackedBarChart.stories.tsx — Vega-Lite/Horizontal Stacked Bar Chart.
+
+JS dropped its unused `derive`/`groupBy`/`sumBy` imports in the
+story-simplifications pass; this port never had those dead imports, so
+nothing here changes.
+"""
 
 from gofish import chart, spread, stack, rect, palette
 from vega_datasets import data as vega_data

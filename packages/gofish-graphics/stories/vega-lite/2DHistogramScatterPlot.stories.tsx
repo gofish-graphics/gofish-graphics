@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
-import { chart, circle, scatter, log, rect, v } from "../../src/lib";
+import { chart, circle, scatter, rect, v } from "../../src/lib";
 import data from "vega-datasets";
 import { uniq } from "lodash";
 
@@ -63,7 +63,7 @@ export const Default: StoryObj<Args> = {
     
 
     chart(movieCounts, { axes: true })
-      .flow(log("scatter locations"), scatter({ by: "id", x: "x", y: "y", debug: true }))
+      .flow(scatter({ by: "id", x: "x", y: "y" }))
       // Size each cell by bucket count.
       .mark(
         rect({

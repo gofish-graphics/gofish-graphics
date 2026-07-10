@@ -55,9 +55,18 @@ def _mosaic_passengers():
 
 
 def story_default():
-    def cell_dots(cell_data):
-        return (
-            chart(cell_data)
+    return (
+        chart(_mosaic_passengers(), color=palette(["#2b8cbe", "#ff8408"]))
+        .flow(
+            # pclass rows: 1st at the bottom, 3rd at the top
+            spread(by="pclass", dir="y", spacing=6, alignment="start"),
+            # sex sub-rows within a class: female bottom, male top
+            spread(by="sex", dir="y", spacing=3, alignment="start"),
+            # survived columns: survived (blue) left, died (orange) right
+            spread(by="survived", dir="x", spacing=3, alignment="start"),
+        )
+        .mark(
+            chart()
             .flow(
                 # Fill column-by-column — each column `gridRows` tall — so
                 # every cell has flush top and bottom edges and only the
@@ -69,28 +78,6 @@ def story_default():
                 spread(spacing=1, dir="y", reverse=True),
             )
             .mark(circle(r=3, fill="survived"))
-        )
-
-    def survived_cols(sex_row_data):
-        return (
-            chart(sex_row_data)
-            # survived columns: survived (blue) left, died (orange) right
-            .flow(spread(by="survived", dir="x", spacing=3, alignment="start"))
-            .mark(cell_dots)
-        )
-
-    def sex_rows(cls_data):
-        return (
-            chart(cls_data)
-            # sex sub-rows within a class: female bottom, male top
-            .flow(spread(by="sex", dir="y", spacing=3, alignment="start"))
-            .mark(survived_cols)
-        )
-
-    return (
-        chart(_mosaic_passengers(), color=palette(["#2b8cbe", "#ff8408"]))
-        # pclass rows: 1st at the bottom, 3rd at the top
-        .flow(spread(by="pclass", dir="y", spacing=6, alignment="start"))
-        .mark(sex_rows),
+        ),
         {"w": 400, "h": 300},
     )

@@ -186,13 +186,6 @@ def _decode_sex(data):
     ]
 
 
-def _add_proportion(data):
-    total = sum(row["people"] for row in data)
-    if total == 0:
-        return data
-    return [{**row, "proportion": row["people"] / total} for row in data]
-
-
 def story_normalized_stacked_bar_with_labels():
     population = read_json("population.json")
     year2000 = population[population["year"] == 2000].to_dict("records")
@@ -205,14 +198,21 @@ def story_normalized_stacked_bar_with_labels():
             derive(_decode_sex),
             # y-down reads top→bottom, so age 0 lands at the top (Vega-Lite ref).
             spread(by="age", dir="y", spacing=2),
-            derive(_add_proportion),
-            stack(by=field("sex").sort(), dir="x"),
+            # Female left, Male right; normalize within each age group so
+            # bars span 0→1.
+            stack(
+                by=field("sex").sort(),
+                dir="x",
+                size=field("people").normalize(),
+            ),
         )
         .mark(
-            rect(w="proportion", fill="sex").label(
-                "people", position="center", color="white"
-            )
+            rect(fill="sex").label("people", position="center", color="white")
         ),
         # Keep the continuous proportion x-axis at the bottom (y-end).
-        {"w": 350, "h": 400, "axes": {"x": {"side": "end"}, "y": True}},
+        {
+            "w": 350,
+            "h": 400,
+            "axes": {"x": {"side": "end", "title": "proportion"}, "y": True},
+        },
     )

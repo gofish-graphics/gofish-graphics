@@ -388,6 +388,12 @@ export const FRONTEND_IR_JSON_SCHEMA = {
             op: { const: "sort" },
             by: { type: "string" },
             order: { enum: ["asc", "desc"] },
+            values: {
+              type: "array",
+              items: { oneOf: [{ type: "string" }, { type: "number" }] },
+              description:
+                'Explicit group order (#735), e.g. sort(["sun", "fog", ...]). Mutually exclusive with by/order. Groups whose key isn\'t in this list are appended after, in natural sort order.',
+            },
           },
         },
         {
@@ -407,6 +413,11 @@ export const FRONTEND_IR_JSON_SCHEMA = {
               ],
             },
           },
+        },
+        {
+          type: "object",
+          required: ["op"],
+          properties: { op: { const: "dropNulls" } },
         },
         {
           type: "object",

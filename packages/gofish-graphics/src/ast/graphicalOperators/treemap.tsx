@@ -26,6 +26,8 @@ import { interval } from "../../util/interval";
 import * as Interval from "../../util/interval";
 import * as Monotonic from "../../util/monotonic";
 import { createOperator } from "../marks/createOperator";
+import { SplitBy, splitEntries } from "../datumProjection";
+import type { FieldExpr } from "../fieldExpr";
 
 type TreemapTile =
   | "squarify"
@@ -43,8 +45,9 @@ type TreemapProps = {
   round?: boolean;
   tile?: TreemapTile;
   sort?: TreemapSort;
-  valueField?: string;
-  value?: (node: GoFishNode) => number;
+  /** Per-entry weight driving each leaf's tile area — one value per child, in
+   *  child order (mirrors `spread`'s entry-flagged `size`, #700-style). */
+  size?: MaybeValue<number>[];
   /** When true, mirror leaf layout top-to-bottom within the treemap box (SVG y grows downward). */
   flipY?: boolean;
   /**
@@ -60,28 +63,15 @@ type LeafDatum = {
   weight: number;
 };
 
-function resolveWeightFromChild(
-  child: GoFishAST,
-  opts: Pick<TreemapProps, "value" | "valueField">
+function resolveWeight(
+  size: MaybeValue<number>[] | undefined,
+  i: number
 ): number {
-  if (!(child instanceof GoFishNode)) return 1;
-  if (opts.value) {
-    const v = Number(opts.value(child));
-    return Number.isFinite(v) && v > 0 ? v : 0;
-  }
-  if (opts.valueField) {
-    const d = (child as GoFishNode & { datum?: unknown }).datum;
-    if (Array.isArray(d)) {
-      const total = d.reduce((acc, row) => {
-        const vv = Number(row?.[opts.valueField!]);
-        return acc + (Number.isFinite(vv) ? vv : 0);
-      }, 0);
-      return total > 0 ? total : 0;
-    }
-    const vv = Number(d?.[opts.valueField]);
-    return Number.isFinite(vv) && vv > 0 ? vv : 0;
-  }
-  return 1;
+  if (!size) return 1;
+  const v = size[i];
+  if (v === undefined) return 1;
+  const num = isValue(v) ? Number(getValue(v)) : Number(v);
+  return Number.isFinite(num) && num > 0 ? num : 0;
 }
 
 export const Treemap = createNodeOperator(
@@ -93,8 +83,7 @@ export const Treemap = createNodeOperator(
       round = true,
       tile = "squarify",
       sort = "desc",
-      valueField,
-      value,
+      size: sizeChannel,
       flipY = false,
       leafIntrinsicRadiusField,
       ...fancyDims
@@ -112,7 +101,7 @@ export const Treemap = createNodeOperator(
           round,
           tile,
           sort,
-          valueField,
+          size: sizeChannel,
           flipY,
           leafIntrinsicRadiusField,
           dims,
@@ -203,9 +192,9 @@ export const Treemap = createNodeOperator(
           };
 
           // Build weights and hierarchy (single level: the passed-in children).
-          const leafData: LeafDatum[] = childAsts.map((child, i) => ({
+          const leafData: LeafDatum[] = childAsts.map((_child, i) => ({
             i,
-            weight: resolveWeightFromChild(child, { value, valueField }),
+            weight: resolveWeight(sizeChannel, i),
           }));
 
           // Ensure total > 0 so d3 doesn't produce NaNs.
@@ -318,13 +307,30 @@ export const Treemap = createNodeOperator(
   }
 );
 
-export const treemap = createOperator<any, TreemapProps>(
-  (props: TreemapProps, children: GoFishAST[]) => Treemap(props, children),
+export type TreemapOptions<T = any> = Omit<TreemapProps, "size"> & {
+  /** Field to partition rows by (like `spread`/`group`); also accepts a
+   *  `field(...)` accessor carrying domain ops (sort/reverse/bin/dropNulls).
+   *  Without `by`, one leaf is emitted per row (identity split). */
+  by?: SplitBy;
+  /** Per-leaf weight driving tile area: a field name, a field expression, or
+   *  an explicit per-entry array — mirrors `spread`'s entry-flagged `size`.
+   *  `inferSize` sums by default for a bare field name, so `size:
+   *  "Worldwide Gross"` aggregates per group. */
+  size?: (keyof T & string) | FieldExpr | MaybeValue<number>[];
+};
+
+export const treemap = createOperator<any, TreemapOptions>(
+  ((props: TreemapProps, children: GoFishAST[]) =>
+    Treemap(props, children)) as any,
   {
-    split: (_opts, d) => new Map(d.map((r, i) => [i, r])),
+    // With `by`: groupBy on the field (mirrors spread). Without `by`:
+    // identity split — one leaf per row.
+    split: ({ by }, d) =>
+      by ? splitEntries(by, d) : new Map(d.map((r, i) => [i, r])),
     channels: {
       w: "size",
       h: "size",
+      size: { type: "size", entry: true },
     } as any,
   }
 );

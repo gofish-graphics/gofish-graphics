@@ -1489,21 +1489,22 @@ def Treemap(  # noqa: N802  — match JS storybook spelling
     Low-level combinator-form treemap.
 
     Takes a list of pre-data-bound marks (typically `rect(...).bind_data(d, key)`
-    or `circle(...).bind_data(d, key)`) and lays them out by the
-    `valueField` on each mark's datum.
+    or `circle(...).bind_data(d, key)`) and lays them out by the per-leaf
+    weight given as `size` — one value per child, in child order (an
+    explicit list; there's no per-child data to group here).
 
         Treemap(
             [rect(fill=datum(genre)).bind_data({"worldwideGross": gross}, genre)
              for genre, gross in groups],
-            valueField="worldwideGross",
+            size=[gross for genre, gross in groups],
             paddingInner=2,
             paddingOuter=2,
             round=True,
             tile="squarify",
         ).render(w=700, h=420)
 
-    Mirrors JS `Treemap({valueField, ...}, nodes)` from
-    `packages/gofish-graphics/src/ast/graphicalOperators/treemap.tsx:62`.
+    Mirrors JS `Treemap({size, ...}, nodes)` from
+    `packages/gofish-graphics/src/ast/graphicalOperators/treemap.tsx`.
     """
     return Mark(
         "treemap",
@@ -1722,13 +1723,29 @@ def scatter(
     return Operator("scatter", **_scatter_opts(**options))
 
 
-def treemap(**options: Any) -> Operator:
+def treemap(
+    *,
+    by: Optional[Union[str, "FieldAccessor"]] = None,
+    **options: Any,
+) -> Operator:
     """
-    Treemap operator — lay out children in fare/weight-proportional rectangles.
+    Treemap operator — lay out children in weight-proportional rectangles.
 
-    Mirrors JS ``treemap({ valueField, tile, sort, flipY, ... })`` in
+    Args:
+        by: Field name to partition rows by (like ``spread``/``group``), or a
+            ``field(...)`` accessor carrying domain ops
+            (``field("site").sort("yield")``, ``field("genre").drop_nulls()``).
+            Without ``by``, one leaf is emitted per row.
+        **options: ``size`` (a field name, pixel number, or ``field(...)``
+            accessor sizing each leaf's tile area — entry-flagged, one value
+            per split entry), ``tile``, ``sort``, ``flipY``, ``paddingInner``,
+            ``paddingOuter``, ``round``, ``leafIntrinsicRadiusField``.
+
+    Mirrors JS ``treemap({ by, size, tile, sort, flipY, ... })`` in
     ``.flow()``.
     """
+    if by is not None:
+        options["by"] = by
     return Operator("treemap", **_treemap_opts(**options))
 
 
@@ -2282,8 +2299,8 @@ class FieldAccessor(dict):
     evaluation-time validation; the JS side is the single evaluator, so an
     invalid op for a slot throws there, not here):
 
-    - DOMAIN ops (`sort`/`reverse`/`bin`) apply to a `by` grouping key, e.g.
-      `spread(by=field("site").sort("yield"))`.
+    - DOMAIN ops (`sort`/`reverse`/`bin`/`drop_nulls`) apply to a `by`
+      grouping key, e.g. `spread(by=field("site").sort("yield"))`.
     - AGGREGATE ops (`sum`/`mean`/`count`/`distinct`) fold a value channel's
       rows to a single value, e.g. `rect(h=field("price").mean())`.
     - `normalize()` is valid only on an operator's (`spread`/`stack`)
@@ -2297,11 +2314,22 @@ class FieldAccessor(dict):
         return out
 
     def sort(
-        self, by: Optional[str] = None, order: Optional[str] = None
+        self,
+        by: Optional[Union[str, List[Union[str, float]]]] = None,
+        order: Optional[str] = None,
     ) -> "FieldAccessor":
         """Order groups by the SUM of `by` over each group's rows (ascending
         unless `order="desc"`), or by the group key itself when `by` is
-        omitted. Valid only in a `by` (domain) slot."""
+        omitted. Valid only in a `by` (domain) slot.
+
+        Pass a list instead of a field name for an explicit group order
+        (#735), e.g. `field("weather").sort(["sun", "fog", "drizzle",
+        "rain", "snow"])` — a domain-specific order that no aggregate
+        expresses. Groups whose key isn't in the list are appended after,
+        in natural sort order. Mutually exclusive with `order`.
+        """
+        if isinstance(by, list):
+            return self._with_op({"op": "sort", "values": by})
         op: dict = {"op": "sort"}
         if by is not None:
             op["by"] = by
@@ -2322,6 +2350,13 @@ class FieldAccessor(dict):
         if thresholds is not None:
             op["thresholds"] = thresholds
         return self._with_op(op)
+
+    def drop_nulls(self) -> "FieldAccessor":
+        """Drop rows whose value at this field is `None`, BEFORE grouping —
+        named after polars' `drop_nulls` (pandas `dropna`, tidyr
+        `drop_na`). Valid only in a `by` (domain) slot. Emits the wire op
+        `{"op": "dropNulls"}`."""
+        return self._with_op({"op": "dropNulls"})
 
     def normalize(self) -> "FieldAccessor":
         """Space-filling normalization on an operator's (`spread`/`stack`)

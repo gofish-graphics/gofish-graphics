@@ -352,14 +352,18 @@ export interface LogOperator
  * fare/weight-proportional. Dual-form like `spread`/`stack`/`scatter`/
  * `group`/`table`: also usable as a low-level combinator mark
  * (`CombinatorMarkType`'s `"treemap"`, disambiguated by `__combinator`).
- * Mirrors JS's `TreemapProps` (`graphicalOperators/treemap.tsx`) minus the
- * JS-only `value` function accessor (not serializable) and `key`.
+ * Mirrors JS's `TreemapProps`/`TreemapOptions` (`graphicalOperators/treemap.tsx`)
+ * minus `key`.
  */
 export interface TreemapOperator
   extends BaseIRNode,
     TranslatableIR,
     OperatorFlagsIR {
   type: "treemap";
+  /** Field to partition rows by; also accepts a field(...) accessor carrying
+   *  domain ops (sort/reverse/bin/dropNulls). Without `by`, one leaf is
+   *  emitted per row. */
+  by?: string | FieldAccessor;
   paddingInner?: number;
   paddingOuter?: number;
   round?: boolean;
@@ -371,7 +375,8 @@ export interface TreemapOperator
     | "slicedice"
     | "squarifyCircle";
   sort?: "asc" | "desc" | "none";
-  valueField?: string;
+  /** Per-leaf weight driving tile area (entry-flagged per split entry). */
+  size?: ChannelValue;
   flipY?: boolean;
   leafIntrinsicRadiusField?: string;
   w?: ChannelValue;
@@ -557,9 +562,18 @@ export interface FieldAccessor {
 /** One op in a `field(...)` pipeline — mirrors gofish-graphics'
  *  `FieldOp` (`ast/fieldExpr.ts`) exactly. See {@link FieldAccessor}. */
 export type FieldOpIR =
-  | { op: "sort"; by?: string; order?: "asc" | "desc" }
+  | {
+      op: "sort";
+      by?: string;
+      order?: "asc" | "desc";
+      /** Explicit group order (#735); mutually exclusive with `by`/`order`.
+       *  Groups whose key isn't in this list are appended after, in natural
+       *  sort order. */
+      values?: (string | number)[];
+    }
   | { op: "reverse" }
   | { op: "bin"; thresholds?: number | number[] }
+  | { op: "dropNulls" }
   | { op: "normalize" }
   | { op: "sum" }
   | { op: "mean" }

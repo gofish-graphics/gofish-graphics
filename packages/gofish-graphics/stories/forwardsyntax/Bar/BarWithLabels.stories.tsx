@@ -5,8 +5,6 @@ import {
   chart,
   spread,
   rect,
-  layer,
-  selectAll,
   text,
   sumBy,
   group,
@@ -41,30 +39,30 @@ export const Default: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    layer([
-      chart(seafood)
-        .flow(spread({ by: "lake",  dir: "x" }))
-        .mark(rect({ h: "count" }).name("bars")),
-      // `selectAll("bars")` yields one ref per lake; each ref's datum is that
-      // lake's array of species records (an aggregate). `by: "lake"`
+    chart(seafood, { axes: true })
+      .flow(spread({ by: "lake", dir: "x" }))
+      .mark(rect({ h: "count" }))
+      // `.layer()`'s empty scope yields one ref per lake; each ref's datum is
+      // that lake's array of species records (an aggregate). `by: "lake"`
       // resolves because every row in a lake agrees on `lake` (homogeneity
       // collapse), giving one frame per lake; sum the aggregate's rows for the
       // per-lake total label.
-      chart(selectAll("bars"))
-        .flow(group({ by: "lake" }))
-        .mark(((d: any[]) => {
-          return spread({ dir: "y", alignment: "middle", spacing: 10 },
-            [
-              d[0],
-              text({ text: String(sumBy(d[0].datum, "count")) }),
-            ]
-          );
-        }) as any),
-    ]).render(container, {
-      w: args.w,
-      h: args.h,
-      axes: true
-    });
+      .layer(
+        chart()
+          .flow(group({ by: "lake" }))
+          .mark(((d: any[]) => {
+            return spread({ dir: "y", alignment: "middle", spacing: 10 },
+              [
+                d[0],
+                text({ text: String(sumBy(d[0].datum, "count")) }),
+              ]
+            );
+          }) as any)
+      )
+      .render(container, {
+        w: args.w,
+        h: args.h,
+      });
 
     return container;
   },
@@ -79,27 +77,27 @@ export const SpeciesCountPerLake: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    layer([
-      chart(seafood)
-        .flow(spread({ by: "lake", dir: "x" }))
-        .mark(rect({ h: "count" }).name("bars")),
-      chart(selectAll("bars"))
-        .flow(group({ by: "lake" }))
-        .mark(((d: any[]) => {
-          // `pluck(ref, "species")` → the distinct species in this lake's bag.
-          const species = pluck(d[0], "species") as string[];
-          return spread({ dir: "y", alignment: "middle", spacing: 10 },
-            [
-              d[0],
-              text({ text: `${species.length} spp` }),
-            ]
-          );
-        }) as any),
-    ]).render(container, {
-      w: args.w,
-      h: args.h,
-      axes: true
-    });
+    chart(seafood, { axes: true })
+      .flow(spread({ by: "lake", dir: "x" }))
+      .mark(rect({ h: "count" }))
+      .layer(
+        chart()
+          .flow(group({ by: "lake" }))
+          .mark(((d: any[]) => {
+            // `pluck(ref, "species")` → the distinct species in this lake's bag.
+            const species = pluck(d[0], "species") as string[];
+            return spread({ dir: "y", alignment: "middle", spacing: 10 },
+              [
+                d[0],
+                text({ text: `${species.length} spp` }),
+              ]
+            );
+          }) as any)
+      )
+      .render(container, {
+        w: args.w,
+        h: args.h,
+      });
 
     return container;
   },

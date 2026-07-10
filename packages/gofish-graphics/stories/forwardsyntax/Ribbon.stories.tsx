@@ -58,36 +58,6 @@ export const Basic: StoryObj<Args> = {
   },
 };
 
-// The general `chart()`-tier form, for when the re-partition needs its own
-// pipeline (a nested `group()`, a different dataset, a cross-chart join) —
-// the simple re-partition-by-one-field case `Basic` shows is covered by the
-// mark-level `by` sugar directly on `ribbon()`. Should render identically to
-// `Basic`.
-export const Layered: StoryObj<Args> = {
-  args: { w: 400, h: 400 },
-  render: (args: Args) => {
-    const container = initializeContainer();
-
-    chart(seafood, { axes: true })
-      .flow(
-        spread({ by: "lake", dir: "x", spacing: 64 }),
-        stack({ by: field("species").sort("count"), dir: "y" })
-      )
-      .mark(rect({ h: "count", fill: "species" }))
-      .layer(
-        chart() // empty scope = the previous tier's marks
-          .flow(group({ by: "species" }))
-          .mark(ribbon({ opacity: 0.8 }))
-      )
-      .render(container, {
-        w: args.w,
-        h: args.h,
-      });
-
-    return container;
-  },
-};
-
 export const Polar: StoryObj<Args> = {
   args: { w: 400, h: 400 },
   tags: ["gallery"],

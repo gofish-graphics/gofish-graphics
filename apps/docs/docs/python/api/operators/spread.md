@@ -121,9 +121,9 @@ Only `by` (on `group`/`spread`/`stack`/`scatter`) is path-aware, because only
 `field(name)` returns a chainable accessor — a builder where each method
 appends one op to an ordered pipeline. It works in two disjoint places:
 
-- As `by` (a **domain** slot): `.sort(by=None, order=None)`, `.reverse()`,
-  and `.bin(thresholds=None)` decide **which groups exist and in what
-  order**.
+- As `by` (a **domain** slot): `.sort(by=None, order=None)`, `.sort(values)`
+  (an explicit order list), `.reverse()`, `.bin(thresholds=None)`, and
+  `.drop_nulls()` decide **which groups exist and in what order**.
 - As a mark or `size` channel value (a **value** slot): `.sum()`, `.mean()`,
   `.count()`, and `.distinct()` **fold a group's rows to one number**,
   overriding the channel's own default aggregation (sum for size, mean for
@@ -144,6 +144,19 @@ chart(data).flow(
 Omit the `by` argument to sort by the group key itself; pass
 `order="desc"` for descending.
 
+**Sort groups by an explicit order**, for a domain-specific sequence no
+aggregate expresses (severity, calendar order, a fixed ranking):
+
+```python
+# Weather categories in a fixed order, not alphabetical or by aggregate
+chart(data).flow(
+    stack(by=field("weather").sort(["sun", "fog", "drizzle", "rain", "snow"]), dir="y")
+)
+```
+
+Groups whose key isn't in the list are appended after, in natural sort
+order.
+
 **Bin a numeric field into groups** — a histogram, with no precomputed bins:
 
 ```python
@@ -156,6 +169,16 @@ chart(data).flow(
 Empty bins are dropped, like an ordinary group-by. Pass
 `field("age").bin(5)` (a count) or explicit thresholds (a list) to control
 the binning.
+
+**Drop rows with a missing/null grouping field**, before grouping:
+
+```python
+# Rows with a null/missing "genre" are excluded entirely, instead of
+# forming their own "null" group
+chart(data).flow(
+    treemap(by=field("genre").drop_nulls(), size="worldwideGross")
+)
+```
 
 **Override a channel's default aggregation:**
 

@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
 import { seafood } from "../../src/data/catch";
 import { streamgraphData } from "../../src/data/streamgraphData";
-import { chart, spread, blank, stack, layer, selectAll } from "../../src/lib";
+import { chart, spread, blank, stack } from "../../src/lib";
 import { ribbon, group } from "../../src/lib";
 
 const meta: Meta = {
@@ -61,21 +61,17 @@ export const Stacked: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    layer([
-      chart(seafood)
-        .flow(
-          spread({ by: "lake",  dir: "x", spacing: 64 }),
-          stack({ by: "species",  dir: "y" })
-        )
-        .mark(blank({ h: "count", fill: "species" }).name("bars")),
-      chart(selectAll("bars"))
-        .flow(group({ by: "species" }))
-        .mark(ribbon({ opacity: 0.8 })),
-    ]).render(container, {
-      w: args.w,
-      h: args.h,
-      axes: true,
-    });
+    chart(seafood, { axes: true })
+      .flow(
+        spread({ by: "lake", dir: "x", spacing: 64 }),
+        stack({ by: "species", dir: "y" })
+      )
+      .mark(blank({ h: "count", fill: "species" }))
+      .layer(ribbon({ by: "species", opacity: 0.8 }))
+      .render(container, {
+        w: args.w,
+        h: args.h,
+      });
 
     return container;
   },
@@ -92,18 +88,14 @@ export const Layered: StoryObj<Args> = {
   },
   render: (args: Args) => {
     const container = initializeContainer();
-    layer([
-      chart(streamgraphData)
-        .flow(spread({ by: "x",  dir: "x", spacing: 50 }), group({ by: "c" }))
-        .mark(blank({ h: "y", fill: "c" }).name("points")),
-      chart(selectAll("points"))
-        .flow(group({ by: "c" }))
-        .mark(ribbon({ opacity: 0.7 })),
-    ]).render(container, {
-      w: 500,
-      h: 300,
-      axes: true,
-    });
+    chart(streamgraphData, { axes: true })
+      .flow(spread({ by: "x", dir: "x", spacing: 50 }), group({ by: "c" }))
+      .mark(blank({ h: "y", fill: "c" }))
+      .layer(ribbon({ by: "c", opacity: 0.7 }))
+      .render(container, {
+        w: 500,
+        h: 300,
+      });
 
     return container;
   }

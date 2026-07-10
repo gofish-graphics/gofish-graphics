@@ -25,7 +25,7 @@ def story_default():
         .flow(
             treemap(
                 h="fare",
-                valueField="fare",
+                size="fare",
                 paddingInner=0,
                 tile="squarifyCircle",
                 sort="desc",

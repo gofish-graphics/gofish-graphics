@@ -668,16 +668,17 @@ def _table_opts(*, by: Any, spacing: Optional[Any] = None, numCols: Optional[flo
             opts[_k] = _v
     return opts
 
-def _treemap_opts(*, w: Optional[Union[int, float, str]] = None, h: Optional[Union[int, float, str]] = None, paddingInner: Optional[float] = None, paddingOuter: Optional[float] = None, round: Optional[bool] = None, tile: Optional[str] = None, sort: Optional[str] = None, valueField: Optional[str] = None, flipY: Optional[bool] = None, leafIntrinsicRadiusField: Optional[str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
+def _treemap_opts(*, w: Optional[Union[int, float, str]] = None, h: Optional[Union[int, float, str]] = None, by: Optional[Any] = None, paddingInner: Optional[float] = None, paddingOuter: Optional[float] = None, round: Optional[bool] = None, tile: Optional[str] = None, sort: Optional[str] = None, size: Optional[Union[int, float, str]] = None, flipY: Optional[bool] = None, leafIntrinsicRadiusField: Optional[str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
     """d3-hierarchy treemap layout over the flow's rows, fare/weight-proportional.
 
     Args:
+        by: Field to partition rows by (like spread/group); also accepts a field(...) accessor carrying domain ops (sort/reverse/bin/dropNulls). Without `by`, one leaf is emitted per row.
         paddingInner: Default 0.
         paddingOuter: Default 0.
         round: Default true.
         tile: Default "squarify".
         sort: Default "desc".
-        valueField: Field summed per row to weight the tile size.
+        size: Per-leaf weight driving tile area (entry-flagged per split entry); a field name aggregates (sums by default) per group.
         flipY: Mirror leaf layout top-to-bottom within the treemap box. Default false.
         leafIntrinsicRadiusField: When set, each leaf is laid out in a square of side min(leafW, leafH, 2*datum[field]).
         debug: Universal v3-operator dev escape hatch; stripped by the JS factory (FACTORY_ONLY_KEYS) before layout, but present on the wire when a producer passes it.
@@ -686,12 +687,13 @@ def _treemap_opts(*, w: Optional[Union[int, float, str]] = None, h: Optional[Uni
     for _k, _v in [
         ("w", w),
         ("h", h),
+        ("by", by),
         ("paddingInner", paddingInner),
         ("paddingOuter", paddingOuter),
         ("round", round),
         ("tile", tile),
         ("sort", sort),
-        ("valueField", valueField),
+        ("size", size),
         ("flipY", flipY),
         ("leafIntrinsicRadiusField", leafIntrinsicRadiusField),
         ("debug", debug),
@@ -700,35 +702,35 @@ def _treemap_opts(*, w: Optional[Union[int, float, str]] = None, h: Optional[Uni
             opts[_k] = _v
     return opts
 
-def _treemap_combinator_opts(*, w: Optional[Union[int, float, str]] = None, h: Optional[Union[int, float, str]] = None, paddingInner: Optional[float] = None, paddingOuter: Optional[float] = None, round: Optional[bool] = None, tile: Optional[str] = None, sort: Optional[str] = None, valueField: Optional[str] = None, flipY: Optional[bool] = None, leafIntrinsicRadiusField: Optional[str] = None, key: Optional[str] = None, value: Optional[Any] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
-    """Low-level combinator form of `treemap` (single level). Same fields as the operator form (OPERATORS.treemap) plus `key` and the JS-only `value` function accessor.
+def _treemap_combinator_opts(*, w: Optional[Union[int, float, str]] = None, h: Optional[Union[int, float, str]] = None, by: Optional[Any] = None, paddingInner: Optional[float] = None, paddingOuter: Optional[float] = None, round: Optional[bool] = None, tile: Optional[str] = None, sort: Optional[str] = None, size: Optional[Union[int, float, str]] = None, flipY: Optional[bool] = None, leafIntrinsicRadiusField: Optional[str] = None, key: Optional[str] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
+    """Low-level combinator form of `treemap` (single level). Same fields as the operator form (OPERATORS.treemap) plus `key`.
 
     Args:
+        by: Field to partition rows by (like spread/group); also accepts a field(...) accessor carrying domain ops (sort/reverse/bin/dropNulls). Without `by`, one leaf is emitted per row.
         paddingInner: Default 0.
         paddingOuter: Default 0.
         round: Default true.
         tile: Default "squarify".
         sort: Default "desc".
-        valueField: Field summed per row to weight the tile size.
+        size: Per-leaf weight driving tile area (entry-flagged per split entry); a field name aggregates (sums by default) per group.
         flipY: Mirror leaf layout top-to-bottom within the treemap box. Default false.
         leafIntrinsicRadiusField: When set, each leaf is laid out in a square of side min(leafW, leafH, 2*datum[field]).
-        value: JS-only function accessor `(node) => number`; not serializable.
         debug: Universal v3-operator dev escape hatch; stripped by the JS factory (FACTORY_ONLY_KEYS) before layout, but present on the wire when a producer passes it.
     """
     opts: Dict[str, Any] = {}
     for _k, _v in [
         ("w", w),
         ("h", h),
+        ("by", by),
         ("paddingInner", paddingInner),
         ("paddingOuter", paddingOuter),
         ("round", round),
         ("tile", tile),
         ("sort", sort),
-        ("valueField", valueField),
+        ("size", size),
         ("flipY", flipY),
         ("leafIntrinsicRadiusField", leafIntrinsicRadiusField),
         ("key", key),
-        ("value", value),
         ("debug", debug),
     ]:
         if _v is not None:

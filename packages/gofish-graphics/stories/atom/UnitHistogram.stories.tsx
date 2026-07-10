@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from "@storybook/html";
 import { chunk, orderBy } from "lodash";
 import { initializeContainer } from "../helper";
 
-import { chart, circle, derive, palette, spread } from "../../src/lib";
+import { chart, circle, derive, field, palette, spread } from "../../src/lib";
 import { titanicPassengers } from "../../src/data/titanicPassengers";
 
 /**
@@ -63,26 +63,23 @@ export const Default: StoryObj<Args> = {
     })
       // Bottom-align panels and their age-bin bars (y-down free space: "end" =
       // bottom) so every unit stack shares a baseline and grows upward.
-      .flow(spread({ by: "pclass", dir: "x", spacing: 40, alignment: "end" }))
-      .mark((panel) =>
-        chart(panel)
+      .flow(
+        spread({ by: "pclass", dir: "x", spacing: 40, alignment: "end" }),
+        // Age bins in ascending order along x — `spread` lays groups out in
+        // data-appearance order, so sort by the bin key first (as the strip
+        // plot sorts before its categorical spread).
+        spread({ by: field("ageBin").sort(), dir: "x", spacing: 6, alignment: "end" })
+      )
+      .mark(
+        chart()
           .flow(
-            // Age bins in ascending order along x — `spread` lays groups out in
-            // data-appearance order, so sort by the bin key first (as the strip
-            // plot sorts before its categorical spread).
-            derive((rows) => orderBy(rows, ["ageBin"], ["asc"])),
-            spread({ by: "ageBin", dir: "x", spacing: 6, alignment: "end" }))
-          .mark((bin) =>
-            chart(bin)
-              .flow(
-                derive((rows) => orderBy(rows, ["survived"], ["desc"])),
-                derive((rows) => chunk(rows, args.width)),
-                // Reverse so the ragged partial row lands at the top.
-                spread({ spacing: 1.5, dir: "y", reverse: true }),
-                spread({ spacing: 1.5, dir: "x" })
-              )
-              .mark(circle({ r: 3, fill: "survived" }))
+            derive((rows) => orderBy(rows, ["survived"], ["desc"])),
+            derive((rows) => chunk(rows, args.width)),
+            // Reverse so the ragged partial row lands at the top.
+            spread({ spacing: 1.5, dir: "y", reverse: true }),
+            spread({ spacing: 1.5, dir: "x" })
           )
+          .mark(circle({ r: 3, fill: "survived" }))
       )
       .render(container, { w: args.w, h: args.h });
 

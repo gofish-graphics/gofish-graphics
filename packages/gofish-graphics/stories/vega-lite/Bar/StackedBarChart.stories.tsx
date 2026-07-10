@@ -61,20 +61,7 @@ export const Default: StoryObj<Args> = {
           }))
         ),
         spread({ by: "month",  dir: "x" }),
-        derive((d: any[]) => {
-          // Enforce specific weather order for stacking
-          const WEATHER_ORDER = ["sun", "fog", "drizzle", "rain", "snow"];
-          // If d is already grouped into [{month, weather, count}], just sort on weather
-          if (d.length && d[0].weather !== undefined) {
-            return [...d].sort(
-              (a, b) =>
-                WEATHER_ORDER.indexOf(a.weather) -
-                WEATHER_ORDER.indexOf(b.weather)
-            );
-          }
-          return d;
-        }),
-        stack({ by: "weather",  dir: "y" })
+        stack({ by: field("weather").sort(["sun", "fog", "drizzle", "rain", "snow"]), dir: "y" })
       )
       .mark(rect({ h: field("date").count(), fill: "weather" }))
       .render(container, { w: args.w, h: args.h });

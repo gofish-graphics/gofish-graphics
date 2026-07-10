@@ -113,7 +113,7 @@ export const exampleTreemap: FrontendIRDocument = {
     mark: {
       type: "treemap",
       __combinator: true,
-      options: { valueField: "value" },
+      options: { size: "value" },
       children: [{ type: "rect", fill: "region" }],
     },
   },

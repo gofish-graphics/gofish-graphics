@@ -74,31 +74,27 @@ export const Default: StoryObj<Args> = {
     const container = initializeContainer();
 
     chart(mosaicPassengers, { color: palette(["#2b8cbe", "#ff8408"]) })
-      // pclass rows: 1st at the bottom, 3rd at the top
-      .flow(spread({ by: "pclass", dir: "y", spacing: 6, alignment: "start" }))
-      .mark((cls) =>
-        chart(cls)
-          // sex sub-rows within a class: female bottom, male top
-          .flow(spread({ by: "sex", dir: "y", spacing: 3, alignment: "start" }))
-          .mark((sexRow) =>
-            chart(sexRow)
-              // survived columns: survived (blue) left, died (orange) right
-              .flow(spread({ by: "survived", dir: "x", spacing: 3, alignment: "start" }))
-              .mark((cell) =>
-                chart(cell)
-                  .flow(
-                    // Fill column-by-column — each column `gridRows` tall — so
-                    // every cell has flush top and bottom edges and only the
-                    // last column is short. (Row-major chunking instead left a
-                    // ragged partial *row* spanning the whole cell width, which
-                    // broke the band boundaries.)
-                    derive((rows) => chunk(rows, rows[0]?.gridRows ?? 1)),
-                    spread({ spacing: 1, dir: "x" }),
-                    spread({ spacing: 1, dir: "y", reverse: true })
-                  )
-                  .mark(circle({ r: 3, fill: "survived" }))
-              )
+      .flow(
+        // pclass rows: 1st at the bottom, 3rd at the top
+        spread({ by: "pclass", dir: "y", spacing: 6, alignment: "start" }),
+        // sex sub-rows within a class: female bottom, male top
+        spread({ by: "sex", dir: "y", spacing: 3, alignment: "start" }),
+        // survived columns: survived (blue) left, died (orange) right
+        spread({ by: "survived", dir: "x", spacing: 3, alignment: "start" })
+      )
+      .mark(
+        chart()
+          .flow(
+            // Fill column-by-column — each column `gridRows` tall — so
+            // every cell has flush top and bottom edges and only the
+            // last column is short. (Row-major chunking instead left a
+            // ragged partial *row* spanning the whole cell width, which
+            // broke the band boundaries.)
+            derive((rows) => chunk(rows, rows[0]?.gridRows ?? 1)),
+            spread({ spacing: 1, dir: "x" }),
+            spread({ spacing: 1, dir: "y", reverse: true })
           )
+          .mark(circle({ r: 3, fill: "survived" }))
       )
       .render(container, { w: args.w, h: args.h });
 

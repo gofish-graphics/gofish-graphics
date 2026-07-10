@@ -58,8 +58,8 @@ export const Default: StoryObj<Args> = {
       // collapsing to the origin is a pre-existing nested-chart axis limitation,
       // independent of y-up/down.)
       .flow(spread({ by: "pclass", dir: "x", spacing: 24, alignment: "end" }))
-      .mark((d) =>
-        chart(d)
+      .mark(
+        chart()
           .flow(
             derive((rows) => orderBy(rows, ["survived"], ["desc"])),
             derive((rows) => chunk(rows, args.cols)),

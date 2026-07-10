@@ -25,8 +25,6 @@ import {
   line,
   rect,
   group,
-  layer,
-  selectAll,
   palette,
 } from "../../src/lib";
 
@@ -210,14 +208,15 @@ export const Asymptotics: StoryObj<Args> = {
         "log₁₀ solve ms": log10(p.passes.solve?.median ?? 0.001),
       }));
 
-    layer([
-      chart(pts, { color: palette(FAMILY_COLORS) })
-        .flow(scatter({ by: "id", x: "log₁₀ nodes", y: "log₁₀ solve ms" }))
-        .mark(circle({ r: 2.5, fill: "family" }).name("pts")),
-      chart(selectAll("pts"))
-        .flow(group({ by: "family" }))
-        .mark(line({ strokeWidth: 2 })),
-    ]).render(container, { w: args.w, h: args.h, axes: true });
+    chart(pts, { color: palette(FAMILY_COLORS), axes: true })
+      .flow(scatter({ by: "id", x: "log₁₀ nodes", y: "log₁₀ solve ms" }))
+      .mark(circle({ r: 2.5, fill: "family" }))
+      .layer(
+        chart()
+          .flow(group({ by: "family" }))
+          .mark(line({ strokeWidth: 2 }))
+      )
+      .render(container, { w: args.w, h: args.h });
 
     caption(
       container,
@@ -252,14 +251,15 @@ export const PassBreakdown: StoryObj<Args & { family: string }> = {
         }))
       );
 
-    layer([
-      chart(pts, { color: palette(PASS_COLORS) })
-        .flow(scatter({ by: "id", x: "log₁₀ nodes", y: "log₁₀ pass ms" }))
-        .mark(circle({ r: 2.5, fill: "pass" }).name("pts")),
-      chart(selectAll("pts"))
-        .flow(group({ by: "pass" }))
-        .mark(line({ strokeWidth: 2 })),
-    ]).render(container, { w: args.w, h: args.h, axes: true });
+    chart(pts, { color: palette(PASS_COLORS), axes: true })
+      .flow(scatter({ by: "id", x: "log₁₀ nodes", y: "log₁₀ pass ms" }))
+      .mark(circle({ r: 2.5, fill: "pass" }))
+      .layer(
+        chart()
+          .flow(group({ by: "pass" }))
+          .mark(line({ strokeWidth: 2 }))
+      )
+      .render(container, { w: args.w, h: args.h });
 
     caption(
       container,
@@ -381,20 +381,25 @@ export const Trend: StoryObj<Args> = {
       index: run.ecologicalIndex?.total ?? 1,
     }));
 
-    layer([
-      chart(idxPts, { color: palette(PASS_COLORS) })
-        .flow(scatter({ by: "id", x: "run", y: "index" }))
-        .mark(circle({ r: 2, fill: "pass" }).name("passPts")),
-      chart(selectAll("passPts"))
-        .flow(group({ by: "pass" }))
-        .mark(line({ strokeWidth: 1.5 })),
-      chart(totalPts, { color: palette(PASS_COLORS) })
-        .flow(scatter({ by: "id", x: "run", y: "index" }))
-        .mark(circle({ r: 3, fill: "pass" }).name("totalPts")),
-      chart(selectAll("totalPts"))
-        .flow(group({ by: "pass" }))
-        .mark(line({ strokeWidth: 3 })),
-    ]).render(panel1, { w: args.w, h: args.h, axes: true });
+    chart(idxPts, { color: palette(PASS_COLORS), axes: true })
+      .flow(scatter({ by: "id", x: "run", y: "index" }))
+      .mark(circle({ r: 2, fill: "pass" }))
+      .layer(
+        chart()
+          .flow(group({ by: "pass" }))
+          .mark(line({ strokeWidth: 1.5 }))
+      )
+      .layer(
+        chart(totalPts, { color: palette(PASS_COLORS) })
+          .flow(scatter({ by: "id", x: "run", y: "index" }))
+          .mark(circle({ r: 3, fill: "pass" }))
+      )
+      .layer(
+        chart()
+          .flow(group({ by: "pass" }))
+          .mark(line({ strokeWidth: 3 }))
+      )
+      .render(panel1, { w: args.w, h: args.h });
 
     // --- Panel 2: fitted solve exponent b per family over runs --------------
     const panel2 = document.createElement("div");
@@ -411,14 +416,15 @@ export const Trend: StoryObj<Args> = {
       }))
     );
 
-    layer([
-      chart(expPts, { color: palette(FAMILY_COLORS) })
-        .flow(scatter({ by: "id", x: "run", y: "b" }))
-        .mark(circle({ r: 2, fill: "family" }).name("expPts")),
-      chart(selectAll("expPts"))
-        .flow(group({ by: "family" }))
-        .mark(line({ strokeWidth: 1.5 })),
-    ]).render(panel2, { w: args.w, h: args.h, axes: true });
+    chart(expPts, { color: palette(FAMILY_COLORS), axes: true })
+      .flow(scatter({ by: "id", x: "run", y: "b" }))
+      .mark(circle({ r: 2, fill: "family" }))
+      .layer(
+        chart()
+          .flow(group({ by: "family" }))
+          .mark(line({ strokeWidth: 1.5 }))
+      )
+      .render(panel2, { w: args.w, h: args.h });
 
     caption(
       container,
@@ -466,26 +472,25 @@ export const Envelope: StoryObj<Args> = {
         "log₁₀ engine ms": log10(e.totalMs.median),
       }));
 
-    const nodes = layer([
-      chart(synPts, { color: palette(FAMILY_COLORS) })
-        .flow(scatter({ by: "id", x: "log₁₀ nodes", y: "log₁₀ engine ms" }))
-        .mark(circle({ r: 2, fill: "family" }).name("syn")),
-      chart(selectAll("syn"))
-        .flow(group({ by: "family" }))
-        .mark(line({ strokeWidth: 2 })),
-    ]);
+    const base = chart(synPts, { color: palette(FAMILY_COLORS), axes: true })
+      .flow(scatter({ by: "id", x: "log₁₀ nodes", y: "log₁₀ engine ms" }))
+      .mark(circle({ r: 2, fill: "family" }))
+      .layer(
+        chart()
+          .flow(group({ by: "family" }))
+          .mark(line({ strokeWidth: 2 }))
+      );
 
     // Overlay example dots in the same space only when we have any.
-    const overlay = exPts.length
-      ? layer([
-          nodes,
+    const final = exPts.length
+      ? base.layer(
           chart(exPts)
             .flow(scatter({ by: "id", x: "log₁₀ nodes", y: "log₁₀ engine ms" }))
-            .mark(circle({ r: 4, fill: "#111", stroke: "white", strokeWidth: 1 })),
-        ])
-      : nodes;
+            .mark(circle({ r: 4, fill: "#111", stroke: "white", strokeWidth: 1 }))
+        )
+      : base;
 
-    overlay.render(container, { w: args.w, h: args.h, axes: true });
+    final.render(container, { w: args.w, h: args.h });
 
     caption(
       container,
