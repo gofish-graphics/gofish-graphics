@@ -128,3 +128,25 @@ def story_spread_size_ordinal_axis():
         .mark(rect(h=40, fill="lake")),
         {"w": 400, "h": 250, "axes": True},
     )
+
+
+# One row has a null `x` (category) — a real-world "unlabeled"/missing-field
+# row that should be dropped rather than grouped into its own "null" bar.
+_DROP_NULLS_DATA = [
+    {"x": "A", "v": 10},
+    {"x": None, "v": 999},
+    {"x": "B", "v": 25},
+    {"x": "C", "v": 40},
+]
+
+
+def story_drop_nulls():
+    # field("x").drop_nulls() removes the null-`x` row BEFORE grouping:
+    # exactly 3 bars (A, B, C), each at its own `v` — no fourth "null" bar
+    # and no distortion from the 999-valued row.
+    return (
+        chart(_DROP_NULLS_DATA)
+        .flow(spread(by=field("x").drop_nulls(), dir="x", spacing=20))
+        .mark(rect(w=40, h="v", fill="x")),
+        {"w": 400, "h": 250, "axes": True},
+    )

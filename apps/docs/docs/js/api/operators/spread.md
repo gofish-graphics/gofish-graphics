@@ -144,8 +144,8 @@ running through the stack).
 appends one op to an ordered pipeline. It works in two disjoint places:
 
 - As `by` (a **domain** slot): `.sort(by?, order?)`, `.sort(values)` (an
-  explicit order list), `.reverse()`, and `.bin({ thresholds? })` decide
-  **which groups exist and in what order**.
+  explicit order list), `.reverse()`, `.bin({ thresholds? })`, and
+  `.dropNulls()` decide **which groups exist and in what order**.
 - As a mark or `size` channel value (a **value** slot): `.sum()`, `.mean()`,
   `.count()`, and `.distinct()` **fold a group's rows to one number**,
   overriding the channel's own default aggregation (sum for size, mean for
@@ -187,6 +187,14 @@ order.
 Empty bins are dropped, like an ordinary `groupBy`. Pass
 `field("age").bin({ thresholds: 5 })` (a count) or explicit thresholds
 (an array) to control the binning.
+
+**Drop rows with a missing/null grouping field**, before grouping:
+
+```ts
+// Rows with a null/undefined "genre" are excluded entirely, instead of
+// forming their own "null" group
+.flow(treemap({ by: field("genre").dropNulls(), size: "worldwideGross" }))
+```
 
 **Override a channel's default aggregation:**
 

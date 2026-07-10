@@ -8,7 +8,7 @@
 // first, then sorts the resulting bins.
 //
 // Two disjoint slots consume the pipeline:
-//   - DOMAIN ops (`sort`/`reverse`/`bin`) apply to a `by` grouping key — see
+//   - DOMAIN ops (`sort`/`reverse`/`bin`/`dropNulls`) apply to a `by` grouping key — see
 //     `splitEntries` in datumProjection.ts, the shared split+ops helper used
 //     by spread/group/scatter.
 //   - AGGREGATE ops (`sum`/`mean`/`count`/`distinct`) fold a value channel's
@@ -44,6 +44,7 @@ export type FieldOp =
     }
   | { op: "reverse" }
   | { op: "bin"; thresholds?: number | number[] }
+  | { op: "dropNulls" }
   | { op: "normalize" }
   | { op: "sum" }
   | { op: "mean" }
@@ -119,6 +120,13 @@ export class FieldExpr {
     });
   }
 
+  /** Drop rows whose value at this field is `null`/`undefined`, BEFORE
+   *  grouping — named after polars' `drop_nulls` (pandas `dropna`, tidyr
+   *  `drop_na`). Valid only in a `by` (domain) slot. */
+  dropNulls(): FieldExpr {
+    return this._withOp({ op: "dropNulls" });
+  }
+
   /** Space-filling normalization on an operator's (`spread`/`stack`) `size`
    *  channel: replaces each split entry's size with its SHARE of the window
    *  (`v_e / Σv_e` over the operator's own split entries), turning the stack
@@ -187,7 +195,7 @@ export function getFieldOps(accessor: unknown): FieldOp[] {
 /** Aggregate op names — valid only on a value (size/pos) channel slot. */
 const AGGREGATE_OPS = new Set(["sum", "mean", "count", "distinct"]);
 /** Domain op names — valid only on a `by` (grouping) slot. */
-const DOMAIN_OPS = new Set(["sort", "reverse", "bin"]);
+const DOMAIN_OPS = new Set(["sort", "reverse", "bin", "dropNulls"]);
 
 export const isAggregateOp = (op: FieldOp): boolean => AGGREGATE_OPS.has(op.op);
 export const isDomainOp = (op: FieldOp): boolean => DOMAIN_OPS.has(op.op);

@@ -667,6 +667,7 @@ const FIELD_OP_NAMES = [
   "sort",
   "reverse",
   "bin",
+  "dropNulls",
   "normalize",
   "sum",
   "mean",
@@ -741,7 +742,7 @@ function walkFieldOp(value: unknown, path: string, ctx: Context): void {
       }
       return;
     default:
-      // reverse/normalize/sum/mean/count/distinct carry no extra fields.
+      // reverse/dropNulls/normalize/sum/mean/count/distinct carry no extra fields.
       return;
   }
 }

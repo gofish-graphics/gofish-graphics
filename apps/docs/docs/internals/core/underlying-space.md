@@ -1225,17 +1225,21 @@ every evaluation site handles both forms identically.
 Two op families consume disjoint **slots**, and mixing them is a checked
 error rather than silently doing the wrong thing:
 
-- **Domain ops** (`.sort(by?, order?)`, `.reverse()`, `.bin({thresholds?})`)
-  apply to a `by` grouping key. `splitEntries` (`datumProjection.ts`) is the
-  shared split-plus-ops helper behind `spread`/`stack`/`group`/`scatter`'s
-  `by`: it groups the raw rows first (`Map.groupBy` via `splitKeyFn`, which
-  reads a `field(...)`'s `.name` exactly like a bare string), then applies
-  each domain op in pipeline order — `bin` **replaces** the base grouping
-  entirely (re-groups the raw rows into numeric bins, dropping empty ones);
-  `sort` reorders the resulting entries, either by the group key itself or by
-  the SUM of another named field over each group's rows; `reverse` reverses
-  the entries. An aggregate op or `normalize` reaching a `by` slot throws — a
-  domain op describes _which groups exist_, not _what a group's value is_.
+- **Domain ops** (`.sort(by?, order?)`, `.reverse()`, `.bin({thresholds?})`,
+  `.dropNulls()`) apply to a `by` grouping key. `splitEntries`
+  (`datumProjection.ts`) is the shared split-plus-ops helper behind
+  `spread`/`stack`/`group`/`scatter`/`treemap`'s `by`: `dropNulls` filters out
+  rows whose value at the field is `null`/`undefined` FIRST (so it composes
+  the same regardless of where it sits in the chain — every other domain op
+  re-derives its grouping from these filtered rows), then it groups the
+  remaining rows (`Map.groupBy` via `splitKeyFn`, which reads a `field(...)`'s
+  `.name` exactly like a bare string), then applies each remaining domain op
+  in pipeline order — `bin` **replaces** the base grouping entirely (re-groups
+  the raw rows into numeric bins, dropping empty ones); `sort` reorders the
+  resulting entries, either by the group key itself or by the SUM of another
+  named field over each group's rows; `reverse` reverses the entries. An
+  aggregate op or `normalize` reaching a `by` slot throws — a domain op
+  describes _which groups exist_, not _what a group's value is_.
 - **Aggregate ops** (`.sum()`, `.mean()`, `.count()`, `.distinct()`) apply to
   a _value_ channel slot (a mark's `h`/`w`/`x`/`y`, or an operator's
   entry-flagged `size`) and fold a group's rows to a single value —

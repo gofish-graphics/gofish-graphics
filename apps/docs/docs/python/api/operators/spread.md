@@ -122,8 +122,8 @@ Only `by` (on `group`/`spread`/`stack`/`scatter`) is path-aware, because only
 appends one op to an ordered pipeline. It works in two disjoint places:
 
 - As `by` (a **domain** slot): `.sort(by=None, order=None)`, `.sort(values)`
-  (an explicit order list), `.reverse()`, and `.bin(thresholds=None)` decide
-  **which groups exist and in what order**.
+  (an explicit order list), `.reverse()`, `.bin(thresholds=None)`, and
+  `.drop_nulls()` decide **which groups exist and in what order**.
 - As a mark or `size` channel value (a **value** slot): `.sum()`, `.mean()`,
   `.count()`, and `.distinct()` **fold a group's rows to one number**,
   overriding the channel's own default aggregation (sum for size, mean for
@@ -169,6 +169,16 @@ chart(data).flow(
 Empty bins are dropped, like an ordinary group-by. Pass
 `field("age").bin(5)` (a count) or explicit thresholds (a list) to control
 the binning.
+
+**Drop rows with a missing/null grouping field**, before grouping:
+
+```python
+# Rows with a null/missing "genre" are excluded entirely, instead of
+# forming their own "null" group
+chart(data).flow(
+    treemap(by=field("genre").drop_nulls(), size="worldwideGross")
+)
+```
 
 **Override a channel's default aggregation:**
 

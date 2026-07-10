@@ -418,6 +418,11 @@ export const FRONTEND_IR_JSON_SCHEMA = {
         {
           type: "object",
           required: ["op"],
+          properties: { op: { const: "dropNulls" } },
+        },
+        {
+          type: "object",
+          required: ["op"],
           properties: { op: { const: "normalize" } },
         },
         {

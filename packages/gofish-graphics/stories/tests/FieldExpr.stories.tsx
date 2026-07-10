@@ -161,3 +161,28 @@ export const SortByExplicitOrder: StoryObj<Args> = {
     return container;
   },
 };
+
+// One row has a null `x` (category) — a real-world "unlabeled"/missing-field
+// row that should be dropped rather than grouped into its own "null" bar.
+const dropNullsData = [
+  { x: "A", v: 10 },
+  { x: null, v: 999 },
+  { x: "B", v: 25 },
+  { x: undefined, v: 999 },
+  { x: "C", v: 40 },
+];
+
+export const DropNulls: StoryObj<Args> = {
+  args: { w: 400, h: 250 },
+  render: (args: Args) => {
+    const container = initializeContainer();
+    // field("x").dropNulls() removes the null/undefined-`x` rows BEFORE
+    // grouping: exactly 3 bars (A, B, C), each at its own `v` — no fourth
+    // "null" bar and no distortion from the two 999-valued rows.
+    chart(dropNullsData, { axes: true })
+      .flow(spread({ by: field("x").dropNulls(), dir: "x", spacing: 20 }))
+      .mark(rect({ w: 40, h: "v", fill: "x" }))
+      .render(container, { w: args.w, h: args.h });
+    return container;
+  },
+};

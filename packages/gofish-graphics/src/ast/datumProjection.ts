@@ -180,6 +180,10 @@ function sortEntries<T>(
 /**
  * Group `d` by `by` (via {@link splitKeyFn}), then apply any pipeline ops
  * carried by a `field(...)` accessor (read via `getFieldOps`) IN ORDER:
+ *   - `dropNulls` filters out rows whose value at `by`'s field is
+ *     `null`/`undefined`, BEFORE grouping — since grouping always happens
+ *     first (`bin` re-derives its own grouping from the same filtered rows),
+ *     this is equivalent regardless of where `dropNulls` sits in the chain.
  *   - `bin` REPLACES the base grouping (re-groups the raw `d` into bins).
  *   - `sort` / `reverse` reorder the entries Map.
  *   - a value-slot op (`sum`/`mean`/`count`/`distinct`) in a `by` slot, or
@@ -192,17 +196,32 @@ export function splitEntries<T extends Record<string, any>>(
   by: SplitBy,
   d: T[]
 ): Map<string | number, T[]> {
-  let entries: Map<string | number, T[]> = Map.groupBy(d, splitKeyFn(by));
   const ops: FieldOp[] = getFieldOps(by);
+  let rows = d;
+  if (ops.some((op) => op.op === "dropNulls")) {
+    if (!isField(by)) {
+      throw new Error(
+        "field(...).dropNulls() requires a field(name) accessor as `by`, not a function."
+      );
+    }
+    const name = by.name;
+    rows = d.filter((row) => {
+      const v = (row as Record<string, unknown>)[name];
+      return v !== null && v !== undefined;
+    });
+  }
+  let entries: Map<string | number, T[]> = Map.groupBy(rows, splitKeyFn(by));
   for (const op of ops) {
     switch (op.op) {
+      case "dropNulls":
+        break; // filtered above, before grouping
       case "bin": {
         if (!isField(by)) {
           throw new Error(
             "field(...).bin() requires a field(name) accessor as `by`, not a function."
           );
         }
-        entries = binEntries(by.name, d, op.thresholds);
+        entries = binEntries(by.name, rows, op.thresholds);
         break;
       }
       case "sort":
