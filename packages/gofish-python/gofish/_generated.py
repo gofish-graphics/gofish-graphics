@@ -210,7 +210,7 @@ def petal(*, label: Optional[Union[bool, str]] = None, debug: Optional[bool] = N
             _kw[_k] = _channel(_v)
     return Mark("petal", **_kw)
 
-def text(*, label: Optional[Union[bool, str]] = None, debug: Optional[bool] = None, x: Optional[Union[int, float, str]] = None, cx: Optional[Union[int, float, str]] = None, x2: Optional[Union[int, float, str]] = None, w: Optional[Union[int, float, str]] = None, emX: Optional[bool] = None, y: Optional[Union[int, float, str]] = None, cy: Optional[Union[int, float, str]] = None, y2: Optional[Union[int, float, str]] = None, h: Optional[Union[int, float, str]] = None, emY: Optional[bool] = None, theta: Optional[Union[int, float, str]] = None, thetaSize: Optional[Union[int, float, str]] = None, r: Optional[Union[int, float, str]] = None, rSize: Optional[Union[int, float, str]] = None, key: Optional[str] = None, text: str, fill: Optional[str] = None, stroke: Optional[str] = None, strokeWidth: Optional[float] = None, filter: Optional[str] = None, fontSize: Optional[float] = None, fontFamily: Optional[str] = None, fontStyle: Optional[str] = None, fontWeight: Optional[Union[float, str]] = None, debugBoundingBox: Optional[bool] = None, rotate: Optional[float] = None) -> Mark:
+def text(*, label: Optional[Union[bool, str]] = None, debug: Optional[bool] = None, x: Optional[Union[int, float, str]] = None, cx: Optional[Union[int, float, str]] = None, x2: Optional[Union[int, float, str]] = None, w: Optional[Union[int, float, str]] = None, emX: Optional[bool] = None, y: Optional[Union[int, float, str]] = None, cy: Optional[Union[int, float, str]] = None, y2: Optional[Union[int, float, str]] = None, h: Optional[Union[int, float, str]] = None, emY: Optional[bool] = None, theta: Optional[Union[int, float, str]] = None, thetaSize: Optional[Union[int, float, str]] = None, r: Optional[Union[int, float, str]] = None, rSize: Optional[Union[int, float, str]] = None, key: Optional[str] = None, text: str, fill: Optional[str] = None, stroke: Optional[str] = None, strokeWidth: Optional[float] = None, filter: Optional[str] = None, fontSize: Optional[float] = None, fontFamily: Optional[str] = None, fontStyle: Optional[str] = None, fontWeight: Optional[Union[float, str]] = None, debugBoundingBox: Optional[bool] = None, rotate: Optional[float] = None, textAnchor: Optional[str] = None) -> Mark:
     """A text label. Box geometry via the shared dims channels positions the text anchor.
 
     Args:
@@ -239,6 +239,7 @@ def text(*, label: Optional[Union[bool, str]] = None, debug: Optional[bool] = No
         fontWeight: CSS font-weight (e.g. 300, 700, "bold").
         debugBoundingBox: Default false.
         rotate: Rotation in degrees, applied in the chart's y-up world frame about the text anchor. Default 0.
+        textAnchor: Where the text anchor — the local origin `rotate` pivots about and dims channels position — sits along the string: its first character, center, or last character. Default "start".
     """
     _kw: Dict[str, Any] = {}
     for _k, _v in [
@@ -270,6 +271,7 @@ def text(*, label: Optional[Union[bool, str]] = None, debug: Optional[bool] = No
         ("fontWeight", fontWeight),
         ("debugBoundingBox", debugBoundingBox),
         ("rotate", rotate),
+        ("textAnchor", textAnchor),
     ]:
         if _v is not None:
             _kw[_k] = _channel(_v)

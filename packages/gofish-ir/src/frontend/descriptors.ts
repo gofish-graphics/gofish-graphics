@@ -615,6 +615,11 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
         default: 0,
         doc: "Rotation in degrees, applied in the chart's y-up world frame about the text anchor.",
       },
+      textAnchor: {
+        type: t.enum("start", "middle", "end"),
+        default: "start",
+        doc: "Where the text anchor — the local origin `rotate` pivots about and dims channels position — sits along the string: its first character, center, or last character.",
+      },
     },
   }),
 
