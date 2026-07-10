@@ -19,21 +19,14 @@ from python_stories.data import SEAFOOD
 
 
 def story_basic():
-    bars = (
-        chart(SEAFOOD)
+    return (
+        chart(SEAFOOD, axes=True)
         .flow(
             spread(by="lake", dir="x", spacing=64),
             stack(by=field("species").sort("count"), dir="y"),
         )
-        .mark(rect(h="count", fill="species").name("bars"))
-    )
-    overlay = (
-        chart(selectAll("bars"))
-        .flow(group(by="species"))
-        .mark(ribbon(opacity=0.8))
-    )
-    return (
-        layer([bars, overlay]),
+        .mark(rect(h="count", fill="species"))
+        .layer(ribbon(by="species", opacity=0.8)),
         {"w": 400, "h": 400, "axes": True},
     )
 
