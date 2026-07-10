@@ -71,26 +71,20 @@ export const Default: StoryObj<Args> = {
       // so suppress it.
       axes: { x: { side: "end" }, y: false },
     })
-      .flow(spread({ by: "pclass", dir: "x", spacing: 48, alignment: "middle" }))
-      .mark(
-        chart()
-          // Reverse so age increases UPWARD (youngest bin at the bottom) in
-          // y-down free space — the density silhouette stacks up the age axis.
-          .flow(
-            spread({
-              by: "ageBin",
-              dir: "y",
-              spacing: 1,
-              alignment: "middle",
-              reverse: true,
-            })
-          )
-          .mark(
-            chart()
-              .flow(spread({ dir: "x", spacing: 1, alignment: "middle" }))
-              .mark(circle({ r: 2, fill: "survived" }))
-          )
+      .flow(
+        spread({ by: "pclass", dir: "x", spacing: 48, alignment: "middle" }),
+        // Reverse so age increases UPWARD (youngest bin at the bottom) in
+        // y-down free space — the density silhouette stacks up the age axis.
+        spread({
+          by: "ageBin",
+          dir: "y",
+          spacing: 1,
+          alignment: "middle",
+          reverse: true,
+        }),
+        spread({ dir: "x", spacing: 1, alignment: "middle" })
       )
+      .mark(circle({ r: 2, fill: "survived" }))
       .render(container, { w: args.w, h: args.h });
 
     return container;
