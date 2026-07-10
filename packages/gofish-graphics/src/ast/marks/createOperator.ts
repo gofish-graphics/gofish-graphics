@@ -46,7 +46,7 @@ import {
   hasNormalizeOp,
   splitAtNormalize,
   applyEntryNormalize,
-  type FieldExpr,
+  FieldExpr,
 } from "../fieldExpr";
 import type { LabelAccessor, LabelOptions } from "../labels/labelPlacement";
 import type { NameableMark } from "../withGoFish";
@@ -330,6 +330,18 @@ function labelIRField(
   if (typeof accessor === "string") {
     return {
       accessor,
+      ...(options && typeof options === "object" ? options : {}),
+    };
+  }
+  if (
+    accessor instanceof FieldExpr ||
+    (accessor !== null &&
+      typeof accessor === "object" &&
+      (accessor as any).type === "field")
+  ) {
+    const wire = accessor instanceof FieldExpr ? accessor.toJSON() : accessor;
+    return {
+      accessor: wire,
       ...(options && typeof options === "object" ? options : {}),
     };
   }
@@ -994,10 +1006,12 @@ export function createOperator<Datum, Options extends Record<string, any>>(
             // every node this leaf produced with the leaf's own subdata (so
             // `resolveLabels`'s "a node with datum keeps its own label" gate
             // fires — mirrors the manual LabelOnSpread workaround) and defer
-            // placement via `node.label`. A string accessor reads off the
-            // group's first row (`resolveLabelText`'s existing unwrap); a
-            // function accessor receives the whole leaf, enabling aggregate
-            // labels (e.g. `(rows) => rows.length`).
+            // placement via `node.label`. A string accessor must be constant
+            // across the group's rows (true by construction for a `by`-field —
+            // `resolveLabelText` throws otherwise); a `field(...)` aggregate
+            // accessor (e.g. `field("count").sum()`) folds the group's rows to
+            // one value; a function accessor receives the whole leaf, enabling
+            // arbitrary aggregate labels (e.g. `(rows) => rows.length`).
             if (labelState) {
               for (const node of leafNodes) {
                 if (node.datum === undefined) node.datum = leaf;

@@ -637,12 +637,16 @@ export interface BridgeLambdaSentinel {
  *
  *   label: true     — show a label with default styling
  *   label: "field"  — label using this field accessor, defaults elsewhere
+ *
+ * The object form's `accessor` may also be a {@link FieldAccessor} — e.g.
+ * `label: field("count").sum()` — labeling a group with an aggregate over its
+ * rows, rather than a bare field that must be constant within the group.
  */
 export type LabelIR =
   | true
   | string
   | {
-      accessor: string;
+      accessor: string | FieldAccessor;
       position?: string;
       fontSize?: number;
       color?: string;

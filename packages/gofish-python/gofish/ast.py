@@ -36,7 +36,7 @@ class Operator:
 
     def label(
         self,
-        accessor: str,
+        accessor: Union[str, "FieldAccessor"],
         position: Optional[str] = None,
         fontSize: Optional[int] = None,
         color: Optional[str] = None,
@@ -48,17 +48,27 @@ class Operator:
 
         Mirrors JS ``stack({by, dir}).label(accessor, options?)``: at
         execution time, every node a split leaf produces gets stamped with
-        the leaf's own subdata and a deferred label. `accessor` is a field
-        name read off the group's first row — mirrors `Mark.label`'s
-        signature/kwargs exactly (Python has no function-accessor form; use
-        a string field name).
+        the leaf's own subdata and a deferred label.
+
+        `accessor` is either:
+
+        - a plain field name (``str``) — must be constant across every row
+          in the group (true by construction for a ``by`` field); raises
+          loudly at render time otherwise.
+        - a ``field(...)`` aggregate (``field("count").sum()`` /
+          ``.mean()`` / ``.count()`` / ``.distinct()``), folding the
+          group's rows to one value — use this for a group total/mean.
+
+        Python has no function-accessor form; use one of the above.
 
         Returns:
             New Operator (same subclass as self) with the label set.
         """
         new_op = type(self)(self.op_type, **self.kwargs)
         new_op._translate = self._translate
-        label_spec: Dict[str, Any] = {"accessor": accessor}
+        label_spec: Dict[str, Any] = {
+            "accessor": dict(accessor) if isinstance(accessor, FieldAccessor) else accessor
+        }
         if position is not None:
             label_spec["position"] = position
         if fontSize is not None:
@@ -403,7 +413,7 @@ class Mark:
 
     def label(
         self,
-        accessor: str,
+        accessor: Union[str, "FieldAccessor"],
         position: Optional[str] = None,
         fontSize: Optional[int] = None,
         color: Optional[str] = None,
@@ -415,7 +425,11 @@ class Mark:
         Attach a label to this mark.
 
         Args:
-            accessor: Field name to use as label text
+            accessor: Field name to use as label text (must be constant
+                across the datum's rows when the datum is a group of rows —
+                true by construction for a `by` field; raises otherwise), or
+                a `field(...)` aggregate (`field("count").sum()`, etc.)
+                folding the group's rows to one value.
             position: Label position (e.g. "center", "outset-top", "inset-bottom-start")
             fontSize: Font size in pixels
             color: Label color (auto-contrasted if omitted)
@@ -430,7 +444,9 @@ class Mark:
             self.mark_type, _children=self._children, **self.kwargs
         )
         self._copy_meta(new_mark)
-        label_spec: Dict[str, Any] = {"accessor": accessor}
+        label_spec: Dict[str, Any] = {
+            "accessor": dict(accessor) if isinstance(accessor, FieldAccessor) else accessor
+        }
         if position is not None:
             label_spec["position"] = position
         if fontSize is not None:

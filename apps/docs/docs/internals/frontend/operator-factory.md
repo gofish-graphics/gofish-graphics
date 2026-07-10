@@ -305,16 +305,34 @@ leaf` (the leaf's own subdata — usually the rows array `split` handed it)
   calls the base operator's own `.label(...)`, which mutates the base
   operator's closed-over `labelState`. That's what makes both
   `.translate().label()` and `.label().translate()` work identically.
+- `resolveLabelText` (`ast/labels/labelPlacement.ts`) resolves the accessor
+  in one of three ways, depending on both the accessor's shape and the
+  datum's shape:
+  - A **bare string** over the group's array-of-rows datum must be constant
+    across every row (true by construction for a `by`-field, since every row
+    in the group shares that value) — `resolveLabelText` throws a loud error
+    if it isn't, rather than silently reading just the first row. Over a
+    scalar (non-array) datum it just reads the field directly.
+  - A **`field(...)` aggregate** (`field("count").sum()`/`.mean()`/`.count()`/
+    `.distinct()`) folds the group's rows to one value via `evalFieldValues`
+    (the same evaluator the `by`/`size`/`pos` channel pipelines use) — this is
+    the spelling for a group-total or group-mean label.
+  - A **function** accessor is the raw escape hatch: it receives the whole
+    leaf (the rows array) and returns whatever it wants, e.g.
+    `(rows) => rows.length`.
 - Serialization mirrors the mark-side `labelModifier`'s `tag` hook (the
-  string-vs-function-accessor logic is factored into a shared
-  `labelIRField` helper): a string accessor becomes `tag.label = {accessor,
-...options}`; a function accessor warns and is dropped from the emitted
-  IR. `.translate()`'s wrapper has no tag of its own by default (the
-  wrapped function is new), so `translateOperator` copies the base
-  operator's `__serialize` tag onto the wrapper and stamps `tag.translate`
-  — without that copy, a translated operator would silently serialize as
-  the opaque `{type: "derive"}` fallback, losing both `translate` and any
-  chained `.label()`.
+  accessor-shape logic is factored into a shared `labelIRField` helper,
+  checked in order string → field-expression → function): a string accessor
+  becomes `tag.label = {accessor, ...options}`; a `field(...)` accessor
+  serializes via its own `.toJSON()` (the `FieldExprWire` shape) into
+  `tag.label = {accessor: {type: "field", name, measure?, ops?}, ...options}`;
+  a function accessor warns and is dropped from the emitted IR (functions
+  aren't serializable). `.translate()`'s wrapper has no tag of its own by
+  default (the wrapped function is new), so `translateOperator` copies the
+  base operator's `__serialize` tag onto the wrapper and stamps
+  `tag.translate` — without that copy, a translated operator would silently
+  serialize as the opaque `{type: "derive"}` fallback, losing both
+  `translate` and any chained `.label()`.
 
 ## 8. The relationship with `createMark`
 

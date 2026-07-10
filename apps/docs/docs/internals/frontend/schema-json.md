@@ -683,7 +683,14 @@ for the API.
           "required": ["accessor"],
           "properties": {
             "accessor": {
-              "type": "string"
+              "oneOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "$ref": "#/$defs/FieldAccessor"
+                }
+              ]
             },
             "position": {
               "type": "string"

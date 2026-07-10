@@ -605,7 +605,9 @@ export const FRONTEND_IR_JSON_SCHEMA = {
           type: "object",
           required: ["accessor"],
           properties: {
-            accessor: { type: "string" },
+            accessor: {
+              oneOf: [{ type: "string" }, { $ref: "#/$defs/FieldAccessor" }],
+            },
             position: { type: "string" },
             fontSize: { type: "number" },
             color: { type: "string" },

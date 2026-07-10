@@ -37,8 +37,10 @@ interface SerializeTag {
   name?: string | { __gofish_token: string; __tag: string };
   /** Set when `.label(accessor, options)` is chained on a mark (object form),
    *  or on an operator's traversal form (createOperator.ts's `translateOperator`
-   *  / bottom-of-`dual` attachment). */
-  label?: { accessor: string; [k: string]: unknown };
+   *  / bottom-of-`dual` attachment). `accessor` is a bare field name or a
+   *  `field(...)` aggregate's serialized `FieldExprWire` (`{type: "field", ...}`)
+   *  — see `labelIRField` in createOperator.ts. */
+  label?: { accessor: string | AnyObject; [k: string]: unknown };
   /** Set when `.translate({x, y})` is chained on an operator (traversal
    *  form) — `translateOperator` copies the base operator's tag forward onto
    *  its wrapper and stamps this field so the structural pixel offset
