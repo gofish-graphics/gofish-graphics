@@ -13,6 +13,7 @@ class Operator:
         self.op_type = op_type
         self.kwargs = kwargs
         self._translate: Optional[dict] = None
+        self._label: Optional[dict] = None
 
     def translate(
         self,
@@ -27,9 +28,50 @@ class Operator:
         operator's own channel grammar.
         """
         new_op = type(self)(self.op_type, **self.kwargs)
+        new_op._label = self._label
         new_op._translate = {
             k: v for k, v in {"x": x, "y": y}.items() if v is not None
         }
+        return new_op
+
+    def label(
+        self,
+        accessor: str,
+        position: Optional[str] = None,
+        fontSize: Optional[int] = None,
+        color: Optional[str] = None,
+        offset: Optional[int] = None,
+        minSpace: Optional[int] = None,
+        rotate: Optional[int] = None,
+    ) -> "Operator":
+        """Attach a per-group label to this operator (traversal form).
+
+        Mirrors JS ``stack({by, dir}).label(accessor, options?)``: at
+        execution time, every node a split leaf produces gets stamped with
+        the leaf's own subdata and a deferred label. `accessor` is a field
+        name read off the group's first row — mirrors `Mark.label`'s
+        signature/kwargs exactly (Python has no function-accessor form; use
+        a string field name).
+
+        Returns:
+            New Operator (same subclass as self) with the label set.
+        """
+        new_op = type(self)(self.op_type, **self.kwargs)
+        new_op._translate = self._translate
+        label_spec: Dict[str, Any] = {"accessor": accessor}
+        if position is not None:
+            label_spec["position"] = position
+        if fontSize is not None:
+            label_spec["fontSize"] = fontSize
+        if color is not None:
+            label_spec["color"] = color
+        if offset is not None:
+            label_spec["offset"] = offset
+        if minSpace is not None:
+            label_spec["minSpace"] = minSpace
+        if rotate is not None:
+            label_spec["rotate"] = rotate
+        new_op._label = label_spec
         return new_op
 
     def to_dict(self) -> dict:
@@ -37,6 +79,8 @@ class Operator:
         d = {"type": self.op_type, **self.kwargs}
         if self._translate:
             d["translate"] = self._translate
+        if self._label:
+            d["label"] = self._label
         return d
 
 
@@ -63,10 +107,23 @@ class DeriveOperator(Operator):
         """Translate a derived operator while preserving its lambda handle."""
         new_op = DeriveOperator(self.fn, self.provenance)
         new_op.lambda_id = self.lambda_id
+        new_op._label = self._label
         new_op._translate = {
             k: v for k, v in {"x": x, "y": y}.items() if v is not None
         }
         return new_op
+
+    def label(self, *args, **kwargs) -> "DeriveOperator":
+        """`derive(fn)` has no JS-side `.label()` — it isn't built via
+        `createOperator`'s dual-mode traversal form, so there's no per-leaf
+        split to stamp a label onto. Raise rather than silently no-op.
+        """
+        raise NotImplementedError(
+            "derive(fn) does not support .label() — it's a data transform, "
+            "not a layout operator with per-group leaves to label. Chain "
+            ".label() on the layout operator (stack/spread/group/scatter/"
+            "table/treemap) instead."
+        )
 
     def to_dict(self) -> dict:
         """Convert to dict - return lambda ID (+ measure provenance, if any)."""
