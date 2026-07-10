@@ -82,18 +82,30 @@ function normalizedAnchors(
   return spec;
 }
 
+/**
+ * "Is this align target already positioned by a data scale on this axis?" —
+ * the guard that leaves self-positioned children (a scatter facet panel) where
+ * their own data scale puts them, instead of moving them to the shared baseline.
+ *
+ * Stage 6f: this no longer reconstructs the space-pass `free/determined/conflict`
+ * lattice by calling a `placementOn` method on the target during lowering. The
+ * fact "this (node, axis) is anchored to a POSITION scope" is collected ONCE at
+ * the layer boundary (a member of the shared data→pixel map — its baseline is
+ * `posScale(0)`, not free to slide) and handed to the ownership plan, which is
+ * the single authority the align guard now consults (`isDataPositioned`). It is
+ * only meaningful where a data scale exists on the axis (`posScales[axis]`) and
+ * the anchor is not `middle` (a center alignment resolves against the box, not a
+ * scale origin).
+ */
 function isDataPositionedAlignTarget(
-  target: Placeable | undefined,
+  name: string,
   anchor: AlignAnchor,
   axis: 0 | 1,
-  posScales: ConstraintPosScales | undefined
+  posScales: ConstraintPosScales | undefined,
+  isDataPositioned: (axis: 0 | 1, name: string) => boolean
 ): boolean {
   if (anchor === "middle" || posScales?.[axis] === undefined) return false;
-  const placement =
-    typeof target?.placementOn === "function"
-      ? target.placementOn(axis)
-      : undefined;
-  return placement !== undefined && placement !== "free";
+  return isDataPositioned(axis, name);
 }
 
 export function lowerAlignPlacement(
@@ -104,11 +116,13 @@ export function lowerAlignPlacement(
     targets,
     posScales,
     isPinned,
+    isDataPositioned,
   }: {
     emitter: PlacementFactEmitter;
     targets: Map<string, Placeable>;
     posScales: ConstraintPosScales | undefined;
     isPinned: (axis: Axis, name: string) => boolean;
+    isDataPositioned: (axis: 0 | 1, name: string) => boolean;
   }
 ): void {
   /**
@@ -209,8 +223,13 @@ export function lowerAlignPlacement(
       ({ child }) => !isPinned(axis, child.name)
     );
     const movable = nonPinned.filter(({ child, anchor }) => {
-      const target = targets.get(child.name);
-      return !isDataPositionedAlignTarget(target, anchor, idx, posScales);
+      return !isDataPositionedAlignTarget(
+        child.name,
+        anchor,
+        idx,
+        posScales,
+        isDataPositioned
+      );
     });
     if (movable.length === 0) {
       // Nothing this constraint can write is either the deliberate
@@ -221,8 +240,13 @@ export function lowerAlignPlacement(
       const allDataPositioned =
         nonPinned.length > 0 &&
         nonPinned.every(({ child, anchor }) => {
-          const target = targets.get(child.name);
-          return isDataPositionedAlignTarget(target, anchor, idx, posScales);
+          return isDataPositionedAlignTarget(
+            child.name,
+            anchor,
+            idx,
+            posScales,
+            isDataPositioned
+          );
         });
       if (!allDataPositioned) {
         console.warn(

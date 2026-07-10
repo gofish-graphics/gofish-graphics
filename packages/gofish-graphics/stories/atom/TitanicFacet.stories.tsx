@@ -43,6 +43,11 @@ export const Default: StoryObj<Args> = {
      chart(titanicPassengers, { color: palette(["#2b8cbe", "#ff8408"]), axes: true })
         .flow(table({
                 by: {x: "pclass", y: "sex"},
+                // Content-sized tracks (σ-affine 6e) pack facets to their dot
+                // blocks; declared gutters replace the equal-split slack the
+                // old box-division provided by accident. The Atom-faithful
+                // semantics (equal cells, fit-derived unit size) is #663.
+                spacing: 32,
               }))
       .mark((d) => chart(d)
             .flow(

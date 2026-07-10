@@ -188,7 +188,8 @@ This is one of the most important passes. It determines the **underlying space**
 - **`CONTINUOUS`**: one data-driven extent, a `width` Monotonic in σ plus an
   `origin`:
   - `origin: number` — **POSITION**: anchored at a data coordinate (e.g.
-    `x: value(5)`); builds a position scale, niced, absolute axis.
+    `x: value(5)`); builds a position scale (niced per σ-scope at the scope's
+    solve, when an axis views the scope — issue #659), absolute axis.
   - `origin: "free"` — **SIZE**: a baseline magnitude, sized but unplaced (e.g.
     `h: "value"` with no min); no position scale.
   - `origin: "impossible"` — **DIFFERENCE**: unanchorable, only differences are
@@ -245,15 +246,20 @@ scale), but ordinal axes **nest** — a node claims its own ordinal axis even
 under an ancestor ordinal axis, as long as it is a _different_ grouping (a finer
 level). So a grouped or faceted chart renders one ordinal axis per grouping
 level (per facet) — e.g. a `spread(lake)`+`stack(species)` bar gets an outer
-`lake` axis and a per-lake `species` axis. Then
-`resolveNiceDomains` rounds POSITION domains to tick-friendly bounds, and then
+`lake` axis and a per-lake `species` axis. Wherever it sets an owning flag,
+`resolveAxes` also leaves a persistent `axisDemand` stamp — the demand bit that
+later gates per-scope domain nicing at the σ-scope solves (issue #659), since
+`resolveNiceDomains`'s old per-node tree walk is gone; nicing is now demand-
+driven at each scope's own solve (below). Then
 `elaborateAxes` **rewrites the tree**: each axis-owning node is wrapped in
 `Layer` tiers containing ordinary `rect`/`text`/`spread` axis shapes wired with
 `align`/`distribute`/`position` constraints. Axes are not a privileged node
 type and there is no axis-specific code later in the pipeline — after this
 pass they are just nodes. Because the rewrite inserts new nodes and moves
 keys onto wrappers, the affected resolution passes (color, names, labels,
-underlying space, nice domains) rerun on the new tree.
+underlying space) rerun on the new tree. Domain nicing is not a tree pass at
+all: each σ-scope nices its own POSITION domain at its solve, if some node in
+its space-flow region renders that dim's axis.
 
 See [Axes](/internals/frontend/axes) for the full elaboration story (the
 two-tier structure, origin pins, negative-space gutters, and the
@@ -389,7 +395,10 @@ are built and before `child.layout`: when `spaceMeasure(x) === spaceMeasure(y)`
 domain's `canvas / range` or a baseline-magnitude σ — is equated to the binding
 `min(...)` so one data unit measures the same on both axes (circles stay circular,
 maps stay undistorted); the binding axis fills, the other gets a recentered
-posScale. It is type equality, not a knob, and a single-coordinate-space coupling
+posScale. Stage 6c makes this a named `recenterEqualMeasure` operation _on_ the
+scope registry rather than an inline rewrite, so it is the one post-solve σ
+adjustment on the registry's books and `GOFISH_DUMP_SCOPES` records the final σ.
+It is type equality, not a knob, and a single-coordinate-space coupling
 — it does not reach sizes solved in separate nested operator scopes. After layout it
 reads the chart's _final_ extent back off the root via `child.dims[i].size`, so an
 unsized axis still yields a concrete SVG size (e.g. a no-width bar chart gets

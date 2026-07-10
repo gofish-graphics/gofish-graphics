@@ -125,6 +125,15 @@ Because the structure is preserved, a composed claim can be **printed as the equ
 represents** — `print` renders `40σ + 16`, or `max(160σ + 16, 90)` for an envelope —
 matching the forms in the [layout synthesis essay](/internals/design/layout-synthesis).
 
+`approxEqual(a, b, tol)` decides whether two claims are the same function. Two points pin a
+line, so the all-linear common case is exact from probes at σ = 0 and 1. A `max`-composed
+`Piecewise` needs more — two envelopes can agree at 0 and 1 yet differ on a middle segment
+— so when both operands are PWL it compares at 0, 1, and **every pairwise breakpoint** of
+the two envelopes' pieces (the only σ where a convex PWL can change slope); an `Unknown`
+operand falls back to a spread of sample points. This is what the `BBox` ledger uses to
+detect an over-determined key now that `table`'s content-sized tracks push piecewise claims
+into cells.
+
 ## Slope as a data-driven signal
 
 Because a `Linear` exposes its slope, the engine gets a cheap, exact predicate for

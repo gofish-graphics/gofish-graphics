@@ -224,6 +224,48 @@ export const max = (...args: Monotonic[]): Monotonic => {
   return unknown((x: number) => Math.max(...args.map((arg) => arg.run(x))));
 };
 
+/**
+ * Structural equality of two σ-affine claims within an absolute `tolerance`.
+ *
+ * Two points pin a line, so the all-linear common case is exact from probes at
+ * σ = 0 and 1 (the former `monoEqual` in bbox.ts, kept cheap). Once a claim is
+ * piecewise (the `max`-composed track claims of Stage 6e), two probes no longer
+ * suffice: two envelopes can agree at 0 and 1 yet differ on a middle segment. So
+ * when both operands are linear/piecewise (no `unknown`), compare at 0, 1, and
+ * every pairwise breakpoint of the two envelopes' pieces — the only σ where a
+ * convex PWL can change slope. An `unknown` operand has no closed envelope, so
+ * fall back to a spread of multi-point probes.
+ */
+export const approxEqual = (
+  a: Monotonic,
+  b: Monotonic,
+  tolerance = 1e-6
+): boolean => {
+  const close = (x: number, y: number): boolean => Math.abs(x - y) <= tolerance;
+  // All-linear fast path: identical to the two-point probe it replaces.
+  if (isLinear(a) && isLinear(b))
+    return close(a.run(0), b.run(0)) && close(a.run(1), b.run(1));
+
+  const pa = piecesOf(a);
+  const pb = piecesOf(b);
+  if (pa !== undefined && pb !== undefined) {
+    const xs = new Set<number>([0, 1]);
+    const all = [...pa, ...pb];
+    for (let i = 0; i < all.length; i++) {
+      for (let j = i + 1; j < all.length; j++) {
+        const ds = all[i].slope - all[j].slope;
+        if (Math.abs(ds) < 1e-12) continue;
+        const x = (all[j].intercept - all[i].intercept) / ds;
+        if (Number.isFinite(x) && x > 0) xs.add(x);
+      }
+    }
+    return [...xs].every((x) => close(a.run(x), b.run(x)));
+  }
+
+  // An `unknown` (opaque closure) operand: probe a spread of points.
+  return [0, 0.5, 1, 2, 10].every((x) => close(a.run(x), b.run(x)));
+};
+
 /** Pretty-print a Monotonic as the equation it represents — `40σ + 16`,
  *  `max(40σ + 16, 90)`, or `f(σ)` for an opaque closure. Matches the forms in
  *  the layout-synthesis essay; for debugging composed size claims. */

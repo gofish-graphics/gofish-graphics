@@ -14,7 +14,6 @@ import {
   FancyDims,
   Interval,
   Size,
-  translateString,
 } from "../dims";
 import { flattenLayout } from "./bake";
 import * as IntervalLib from "../../util/interval";
@@ -23,6 +22,7 @@ import {
   UnderlyingSpace,
   UNDEFINED,
   POSITION,
+  SIZE,
   ORDINAL,
   isORDINAL,
   isPOSITION,
@@ -34,6 +34,8 @@ import {
 } from "../underlyingSpace";
 import type { Measure } from "../data";
 import { posScaleFromSpace, axisScale, type AxisMap } from "../domain";
+import { shadowCheckScaleRoot } from "../solver/shadow";
+import { getScopeRegistry } from "../solver/scopes";
 import * as Monotonic from "../../util/monotonic";
 import { createNodeOperator } from "../withGoFish";
 import { computeTransformedBoundingBox } from "./coordUtils";
@@ -170,7 +172,11 @@ export const coord = createNodeOperator(
           spaceRef.current = result;
           return result;
         },
-        layout: (shared, size, scales, children) => {
+        layout: (shared, size, scales, children, node) => {
+          // Stage 6b: a coord boundary is a σ-scope root — it re-roots σ for its
+          // subtree. Derive through the render's one registry, shared with the
+          // render root and every layer scope.
+          const scopes = getScopeRegistry(node.tryGetRenderSession());
           /* TODO: need correct scale factors */
           // TODO: only works for polar-family transforms right now
           const [origW, origH] = size;
@@ -204,13 +210,25 @@ export const coord = createNodeOperator(
           const fitAxis = (
             axis: 0 | 1,
             budget: number
-          ): [number, AxisMap | undefined] => {
+          ): [number | undefined, AxisMap | undefined] => {
             // An anchored (data POSITION) axis: the coord's own
             // `resolveUnderlyingSpace` already unioned the children's POSITION
             // spaces into `spaceRef.current` — reuse it and map onto [0, budget].
+            // This is a POSITION scope only: it has no SIZE scope, so it carries
+            // NO σ (Stage 6c: never fabricate an independent size slope — the map's
+            // own slope IS the scope's σ). A data-bound size on this axis reads the
+            // map difference; a plain-number size bypasses both. The former `1`
+            // placeholder was a fabricated size σ with no scope behind it.
             const resolved = spaceRef.current?.[axis];
             if (resolved !== undefined && isPOSITION(resolved)) {
-              return [1, posScaleFromSpace(resolved, budget)];
+              return [
+                undefined,
+                scopes.solvePosition(
+                  { kind: "coord", rootKey: node.key ?? node.type, axis },
+                  resolved,
+                  budget
+                ),
+              ];
             }
             // A baseline-magnitude (data SIZE) axis: `resolveUnderlyingSpace`
             // leaves this case UNDEFINED, so sum the children's widths here and
@@ -221,7 +239,26 @@ export const coord = createNodeOperator(
               .filter(isBaselineMagnitude);
             if (baseline.length > 0) {
               const width = Monotonic.add(...baseline.map((s) => s.width));
-              return [width.inverse(budget) ?? 1, undefined];
+              // Stage 6b: the coord boundary's SIZE frame — solved through the one
+              // registry (content(σ)=budget via Monotonic.inverse).
+              const sigma = scopes.solveSize(
+                { kind: "coord", rootKey: node.key ?? node.type, axis },
+                width,
+                budget
+              );
+              // Solver shadow (#39): a coord boundary RE-ROOTS σ for its subtree,
+              // exactly as the root fits content to the canvas — assert the same
+              // frame equation content(σ)=budget closes at the boundary. Pass the
+              // raw inverse (undefined when it fails) so a degenerate re-root is
+              // caught, mirroring shadowCheckScaleRoot at the root. No-op unless
+              // GOFISH_SOLVER_CHECK is set.
+              shadowCheckScaleRoot(
+                SIZE(width),
+                budget,
+                sigma ?? undefined,
+                axis
+              );
+              return [sigma ?? 1, undefined];
             }
             return [1, undefined];
           };

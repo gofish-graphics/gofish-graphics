@@ -20,9 +20,13 @@ engine has no axis-specific code at all.
 ## The elaboration pass
 
 `elaborateAxes` (`src/ast/axes/elaborate.tsx`) runs inside `gofish.tsx`'s
-`layout()`, _after_ `resolveUnderlyingSpace` (so domains are known), `resolveAxes`
-(which flags which node owns an axis on each dimension), and `resolveNiceDomains`
-(so tick values come from the rounded domain). It walks the node tree **bottom-up**;
+`layout()`, _after_ `resolveUnderlyingSpace` (so domains are known) and
+`resolveAxes` (which flags which node owns an axis on each dimension — and leaves
+persistent `axisDemand` stamps that later gate demand-driven domain nicing at the
+σ-scope solves, issue #659). Tick values come from `d3.nice` applied node-locally
+to the owning node's POSITION domain — the same function the owning scope's
+solve applies to the same union domain, so ticks and content agree by
+construction. It walks the node tree **bottom-up**;
 any node `resolveAxes` flagged (`axis.x` / `axis.y === true | "budget"`) is replaced
 by up to two `Layer` tiers wrapping the original content plus the elaborated axis
 shapes:
@@ -97,7 +101,8 @@ wherever `axisSide` put the line, so the two always land together.
 
 The wrapper inherits the wrapped node's `key` and `_name`, so faceting and
 external refs keep resolving to it. After the rewrite, the whole tree's underlying
-space is recomputed (the cache is cleared) and re-niced; then normal layout runs.
+space is recomputed (the cache is cleared); then normal layout runs, and each
+σ-scope's solve nices its own domain on demand — there is no tree-wide nice pass.
 
 Because the axis is now a **real shape occupying real space**, everything the old
 bespoke pipeline hand-coded falls out of ordinary layout:
@@ -232,8 +237,11 @@ inflate it. See [Layout & Render Passes](/internals/layout/passes) and
 The former bespoke pipeline — `shapes/axis.tsx` (custom `GoFishNode`s with
 hand-written SVG `render()`), plus ~260 lines of axis budget / `innerBaseline` /
 content-shift / per-facet local-posScale machinery in `_node.ts` and a baseline
-cancellation in `spread.tsx` — has been deleted. `resolveAxes` and
-`resolveNiceDomains` remain (they feed the pass); the chart-level `axes` option
+cancellation in `spread.tsx` — has been deleted. `resolveAxes` remains (it
+feeds the pass, and its persistent `axisDemand` stamps drive the demand-driven
+per-scope domain nicing at the σ-scope solves); the former `resolveNiceDomains`
+tree walk is gone (issue #659 — nicing now happens once per σ-scope, at the
+solve). The chart-level `axes` option
 still drives both the axis pass and the title pass above. Axis titles used to
 render as raw `<text>` elements in `gofish.tsx`'s `render()` behind fixed
 40px margins; that bespoke path is gone too, replaced by the title elaboration

@@ -197,16 +197,31 @@ scatter bubble's area) stays a flat point even under a coord.
 did. A node that reaches `INTERNAL_lower` is either a **leaf** (a bare shape) or a
 **bake boundary** — `coord`, `box`, `connect`, `arrow`, `enclose`, and the
 Porter-Duff compositors/mask. A boundary carries its own absolute transform and must
-re-walk its subtree with that transform composed in (via `flattenLayout`) so its
-descendants land in absolute coordinates _before_ `toPixel`. Pre-recursed,
-parent-relative child items would be mispositioned. This is the same
-boundary-recursive structure the bake itself has: each boundary flattens within its
-own scope, emits its warped primitives, and is treated as a unit by its parent.
+re-walk its subtree so its descendants land in absolute coordinates _before_
+`toPixel`. Pre-recursed, parent-relative child items would be mispositioned. This is
+the same boundary-recursive structure the bake itself has: each boundary flattens
+within its own scope, emits its warped primitives, and is treated as a unit by its
+parent.
 
-A `coord` operator is the archetype: it lowers its whole subtree into resolved
-`path`/`rect`/`ellipse` items whose coordinates are already warped through its
-coordinate transform (a petal becomes a `path`, a polar bar becomes a warped `path`),
-so the backend never sees the polar mapping — just absolute pixel paths.
+How the re-walk lands descendants in absolute coordinates splits by boundary kind
+(#39 stage 6d):
+
+- A **pure translate-only container** (`box`/`frame`, `offset`, `enclose`) flattens
+  its subtree with `bakeChildren` (`bake.ts`) — the same z-ordered flatten the root
+  bake uses, seeded at the container's own absolute translate — and lowers each
+  returned entry at its baked absolute transform (`INTERNAL_lower(coord, d.transform)`).
+  There is no per-container `toPixel` closure: the translate is baked into each
+  descendant's coordinates, not composed onto the session map. A non-identity `scale`
+  is the one part a flat list can't fold, so it stays a `group` wrapper around the
+  flattened items.
+- A **space remapper** (`coord`) genuinely warps its content, so it keeps a
+  `contentToPixel` map: it flattens its subtree (`flattenLayout`) and maps each
+  descendant through its coordinate transform then its own translate. A `coord` is the
+  archetype: it lowers its whole subtree into resolved `path`/`rect`/`ellipse` items
+  whose coordinates are already warped (a petal becomes a `path`, a polar bar a warped
+  `path`), so the backend never sees the polar mapping — just absolute pixel paths.
+- A **self-drawer** (`connect`, `arrow`) reads its own baked absolute translate
+  (`displayTranslate`) to place the geometry it draws from its children's anchors.
 
 ## The display list IR
 

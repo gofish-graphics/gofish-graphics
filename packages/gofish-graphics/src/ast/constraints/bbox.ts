@@ -59,17 +59,14 @@ const COEFFS: Record<BBoxKey, [number, number]> = {
 const asMono = (v: BBoxValue): Monotonic.Monotonic =>
   typeof v === "number" ? Monotonic.linear(0, v) : v;
 
-/** Equality of two σ-affine claims, by probing at two distinct σ (two points
- *  pin a line). v1 limitation: exact only for linear claims; a piecewise claim
- *  agreeing at 0 and 1 but differing on another segment would read as equal —
- *  acceptable until a size-setting constraint produces a piecewise key. */
+/** Equality of two σ-affine claims. Linear claims are pinned exactly by two
+ *  probes; piecewise claims (Stage 6e's `max`-composed track claims) are
+ *  compared structurally at every breakpoint. See `Monotonic.approxEqual`. */
 const monoEqual = (
   a: Monotonic.Monotonic,
   b: Monotonic.Monotonic,
   tolerance: number
-): boolean =>
-  Math.abs(a.run(0) - b.run(0)) <= tolerance &&
-  Math.abs(a.run(1) - b.run(1)) <= tolerance;
+): boolean => Monotonic.approxEqual(a, b, tolerance);
 
 export interface BBoxConflict {
   key: BBoxKey;

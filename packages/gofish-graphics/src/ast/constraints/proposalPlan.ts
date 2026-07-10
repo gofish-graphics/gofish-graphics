@@ -9,9 +9,11 @@ import {
   isBaselineMagnitude,
   isCONTINUOUS,
   isPOSITION,
+  niceContinuous,
   type UnderlyingSpace,
 } from "../underlyingSpace";
 import { allocateSlices } from "./folds";
+import type { ScopeRegistry } from "../solver/scopes";
 import type { ConstraintSpec } from ".";
 import type { GridConstraint } from "./grid";
 import type { ConstraintPosScales } from "./shared";
@@ -130,7 +132,8 @@ export function buildDistributeSliceMap(
 /** Choose the concrete size proposed to one child in a layer.
  *
  * Priority is explicit and single-owner:
- *   1. grid: owns the whole layer proposal, so every child gets the cell size;
+ *   1. grid: each cell is proposed ITS (column, row) track's extent (Stage 6e —
+ *      resolved by the unified max rule in `resolveGridTracks`), keyed by name;
  *   2. distribute: owns only the named child axes it sliced;
  *   3. default layer box: unconstrained/fill proposal is the full layer size.
  *
@@ -139,10 +142,16 @@ export function buildDistributeSliceMap(
 export function childLayoutSizeProposal(
   childName: string | undefined,
   layerSize: Size,
-  gridCell: Size | undefined,
+  gridCellByName: Map<string, Size> | undefined,
   sliceByName: Map<string, Size> | undefined
 ): Size {
-  if (gridCell !== undefined) return gridCell;
+  if (
+    gridCellByName !== undefined &&
+    childName !== undefined &&
+    gridCellByName.has(childName)
+  ) {
+    return gridCellByName.get(childName)!;
+  }
   if (
     sliceByName === undefined ||
     childName === undefined ||
@@ -189,7 +198,18 @@ export function buildChildScalePlan(
   inheritedScaleFactors: Size<number | undefined> | undefined,
   inheritedPosScales: ConstraintPosScales,
   constraintBudget: ScaleBudget | undefined,
-  shared: Size<boolean>
+  shared: Size<boolean>,
+  // Demand-driven nicing (issue #659): per-dim "some node in this scope renders
+  // an axis" (`GoFishNode.scopeRendersAxis`). A scope this plan roots nices its
+  // anchored POSITION domain iff the dim's demand is true — nicing is a
+  // presentation adjustment whose demand comes from axis views, so axis-less
+  // content stays at the honest raw scale.
+  axisDemand: Size<boolean>,
+  // Stage 6b: the ONE σ-solve site. Every scale this plan roots is derived
+  // through the registry (so `GOFISH_DUMP_SCOPES` sees it and the numbers have a
+  // single source); `rootKey` labels the owning layer node in the dump.
+  scopes: ScopeRegistry,
+  rootKey: string
 ): ChildScalePlan {
   const basePosScales: ConstraintPosScales = [
     inheritedPosScales[0],
@@ -202,16 +222,40 @@ export function buildChildScalePlan(
   const budgetFailures: ChildScalePlan["budgetFailures"] = [];
   const sharedScaleChecks: ChildScalePlan["sharedScaleChecks"] = [];
 
+  // Nice each axis-demanded self-scaled stash up front (issue #659): a
+  // self-scaled region is a σ-scope root, so when its scope renders an axis on
+  // the dim, its anchored POSITION domain is niced AT this solve — the same
+  // operation the render root applies. The original bug was precisely that this
+  // stash sidestepped the (now-deleted) pre-layout nice walk, so the panel's
+  // content sized against the RAW domain while a niced width solved an orphan
+  // scope. Nicing here (or, without axis demand, leaving the raw domain here)
+  // makes the ONE scope's domain the single source, consumed by both the
+  // position map (`solvePosition`) and any size solve; `niceContinuous` is
+  // identity on a baseline magnitude (SIZE is never niced). The shared step
+  // below reads the stash again, so transform a local copy.
+  const nicedSelfScaled: Size<UnderlyingSpace | undefined> = [
+    axisDemand[0] ? niceContinuous(selfScaledSpaces[0]) : selfScaledSpaces[0],
+    axisDemand[1] ? niceContinuous(selfScaledSpaces[1]) : selfScaledSpaces[1],
+  ];
+
   for (const axis of [0, 1] as const) {
-    const stashed = selfScaledSpaces[axis];
+    const stashed = nicedSelfScaled[axis];
     if (stashed === undefined || !Number.isFinite(layerSize[axis])) continue;
     if (isPOSITION(stashed)) {
       basePosScales[axis] =
-        posScaleFromSpace(stashed, layerSize[axis]) ?? inheritedPosScales[axis];
+        scopes.solvePosition(
+          { kind: "self-scaled", rootKey, axis },
+          stashed,
+          layerSize[axis]
+        ) ?? inheritedPosScales[axis];
     }
     if (isBaselineMagnitude(stashed)) {
       childScaleFactors[axis] =
-        stashed.width.inverse(layerSize[axis]) ?? inheritedScaleFactors?.[axis];
+        scopes.solveSize(
+          { kind: "self-scaled", rootKey, axis },
+          stashed.width,
+          layerSize[axis]
+        ) ?? inheritedScaleFactors?.[axis];
     }
   }
 
@@ -219,25 +263,27 @@ export function buildChildScalePlan(
     for (const axis of [0, 1] as const) {
       const dom = constraintBudget.sizeDomain[axis];
       if (dom === undefined || !Number.isFinite(layerSize[axis])) continue;
-      // Scale-root scoping: if an ancestor scale root already resolved σ for this
-      // axis (an inherited scale factor is present) AND this layer didn't itself
-      // introduce a new pixel scope (no self-scaled/stashed space on the axis),
-      // then this distribute is an INTERMEDIATE in the ancestor's σ-scope — it
-      // must PROPAGATE the inherited σ, not re-root by inverting its own σ-fold
-      // against the locally allocated size. In a consistently-sized layout the
-      // re-derived factor equals the inherited one (no-op); it only diverges when
-      // the allocated size disagrees with the inherited σ — e.g. an equal-slice
-      // budget under a coord, where the distribute axis IS the σ-scaled axis, so
-      // a nested group would otherwise silently re-derive a smaller σ (#618).
-      if (
-        inheritedScaleFactors?.[axis] !== undefined &&
-        selfScaledSpaces[axis] === undefined
-      ) {
-        continue;
-      }
-      const sf = dom.inverse(layerSize[axis], {
-        upperBoundGuess: layerSize[axis],
-      });
+      // Structural σ-scope rule (Stage 6b — the former #618 propagate-vs-re-root
+      // guard, made structural): ONLY A SCOPE ROOT SOLVES. This budget roots a
+      // scope on the axis unless an ancestor scope already owns it — i.e. an
+      // inherited σ is present AND this layer introduced no pixel scope of its
+      // own (no self-scaled space). In that INTERMEDIATE case the inherited σ has
+      // already been copied into `childScaleFactors`, so inherit it: do NOT
+      // re-root by inverting the local σ-fold against the allocated size. The
+      // re-derive-equal cases produce the same σ (no-op); the divergent case is
+      // an equal-slice budget under a coord, where the distribute axis IS the
+      // σ-scaled axis — a nested group would otherwise silently re-derive a
+      // smaller σ (#618).
+      const rootsScope =
+        inheritedScaleFactors?.[axis] === undefined ||
+        selfScaledSpaces[axis] !== undefined;
+      if (!rootsScope) continue;
+      const sf = scopes.solveSize(
+        { kind: "constraint-budget", rootKey, axis },
+        dom,
+        layerSize[axis],
+        { upperBoundGuess: layerSize[axis] }
+      );
       if (sf !== undefined) childScaleFactors[axis] = sf;
       else budgetFailures.push({ axis, budget: layerSize[axis] });
     }
@@ -245,12 +291,24 @@ export function buildChildScalePlan(
 
   for (const axis of [0, 1] as const) {
     if (!shared[axis] || !Number.isFinite(layerSize[axis])) continue;
-    const sp = selfScaledSpaces[axis] ?? layerSpace?.[axis];
+    // A shared-scale scope root: when the scope renders an axis on this dim,
+    // nice its anchored POSITION domain at the solve (issue #659), so the SIZE
+    // σ it derives agrees with the niced position map. The self-scaled stash is
+    // already demand-niced above; the layer's own space is transformed here
+    // (identity on a baseline magnitude or without axis demand).
+    const sp =
+      nicedSelfScaled[axis] ??
+      (axisDemand[axis]
+        ? niceContinuous(layerSpace?.[axis])
+        : layerSpace?.[axis]);
     if (sp === undefined) continue;
     const sf = isCONTINUOUS(sp)
-      ? (sp.width.inverse(layerSize[axis], {
-          upperBoundGuess: layerSize[axis],
-        }) ?? 0)
+      ? (scopes.solveSize(
+          { kind: "shared", rootKey, axis },
+          sp.width,
+          layerSize[axis],
+          { upperBoundGuess: layerSize[axis] }
+        ) ?? 0)
       : undefined;
     if (sf !== undefined) childScaleFactors[axis] = sf;
     sharedScaleChecks.push({ axis, space: sp, sigma: sf });
@@ -264,10 +322,16 @@ export function buildChildScalePlan(
   };
 }
 
-/** A grid owns the whole two-axis proposal scope for its layer. Multiple grids
- * would otherwise be source-order-sensitive because space resolution and
- * proposal sizing can only choose one track partition while placement would see
- * all pins. */
+/** Select the layer's single grid constraint, if any.
+ *
+ * A grid resolves its tracks under the unified max rule (`resolveGridTracks`)
+ * and now GENUINELY COMPOSES with sibling constraints (Stage 6e): its per-track
+ * claim participates in sizing, and its cell-center pins solve jointly with any
+ * align/position/z-order on the same layer. The Stage-3 containment throw (which
+ * rejected any non-z-order sibling because the grid used to bypass the space and
+ * size folds) is therefore gone. The at-most-one-grid rule stays: two track
+ * partitions on one layer would be source-order-sensitive, so it is still an
+ * error. */
 export function selectGridConstraint(
   constraints: readonly ConstraintSpec[]
 ): GridConstraint | undefined {
@@ -280,24 +344,6 @@ export function selectGridConstraint(
       );
     }
     selected = constraint;
-  }
-  // A grid is a whole-layer layout mode, not a composable constraint: it owns
-  // both track partitions and bypasses the space/size fold, while placement
-  // still applies every sibling constraint — so a grid mixed with any other
-  // positioning constraint silently half-applies (its facts never enter the
-  // space fold). Reject non-z-order siblings; z-order (zAbove/zBelow) is
-  // render-time paint order and composes. This lifts when grids become track
-  // equations (Stage 6e, design/sigma-affine-simplification.md).
-  if (selected !== undefined) {
-    for (const constraint of constraints) {
-      if (constraint.type === "grid" || isZOrderConstraint(constraint)) {
-        continue;
-      }
-      throw new Error(
-        `Constraint.grid cannot be combined with a '${constraint.type}' constraint on the same layer. ` +
-          `Put the grid in its own layer, or nest layers, so each layout mode owns its own scope.`
-      );
-    }
   }
   return selected;
 }
@@ -345,15 +391,23 @@ export function buildPositionScalePlan(
   ownsAxis: [boolean, boolean],
   layerSpace: Size<UnderlyingSpace> | undefined,
   layerSize: Size,
-  basePosScales: ConstraintPosScales
+  basePosScales: ConstraintPosScales,
+  // Demand-driven nicing (issue #659): nice the local domain only when the
+  // scope renders an axis on that dim, so datum positions land on the same
+  // rounded scale as the ticks — and stay at the honest raw scale otherwise.
+  axisDemand: Size<boolean>
 ): PositionScalePlan {
   const ownsPositionAxis = ownsAxis[0] || ownsAxis[1];
+  // A layer that owns a datum-position axis roots a local POSITION scope for
+  // it; the domain is niced at this solve iff the dim has axis demand.
+  const localSpace = (axis: 0 | 1): UnderlyingSpace | undefined =>
+    axisDemand[axis] ? niceContinuous(layerSpace?.[axis]) : layerSpace?.[axis];
   return {
     ownsAxis,
     effectivePosScales: ownsPositionAxis
       ? [
-          basePosScales[0] ?? posScaleFromSpace(layerSpace?.[0], layerSize[0]),
-          basePosScales[1] ?? posScaleFromSpace(layerSpace?.[1], layerSize[1]),
+          basePosScales[0] ?? posScaleFromSpace(localSpace(0), layerSize[0]),
+          basePosScales[1] ?? posScaleFromSpace(localSpace(1), layerSize[1]),
         ]
       : [basePosScales[0], basePosScales[1]],
   };

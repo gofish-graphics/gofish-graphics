@@ -334,19 +334,50 @@ posScale and σ are _views_ of the solved system (the Stage-4 `AxisScale`
 record becomes exactly this view: σ = slope, `map` = anchored `min` anchor +
 pixel min; the intercept is `posScale(0)`, derived, never stored).
 
-**The dual slope is transitional debt, eliminated here — not a keeper.**
-Stage 4's `AxisScale.map` carries its own slope because today σ is solved in
-the four+ places above against four different pixel budgets, so a mark can
-read size-σ and position-slope from different extents on one axis (nicing
+**The dual slope was transitional debt — discharged in 6c as two scopes, not
+independent state.** Stage 4's `AxisScale.map` carried its own slope because σ was
+solved in the four+ places above against four different pixel budgets, so a mark
+could read size-σ and position-slope from different extents on one axis (nicing
 asymmetry, spacing's slope-vs-secant, sub-budget scopes vs an inherited map).
 Stage 6's invariant is **one slope per σ-scope, by construction**: the frame
 equation solves σ once at the scope root and the posScale is a derived view
-of the same solve, so within a scope the two cannot disagree. The divergences
-that remain must then become what they really are — two scopes on one axis
-(keyed by measure: the multi-scale/dual-axis design), or explicit non-data
-pixels (spacing as a piecewise gap, not a secant that papers over it).
-`AxisScale` collapses back to a single-slope view when 6b/6c land; if it
-still has two independent slopes after Stage 6, that is a bug in Stage 6.
+of the same solve, so within a scope the two cannot disagree. After 6c that holds
+everywhere the carrier flows — the scope registry is the **sole producer** of
+every slope, so neither `sigma` nor `map.sigma` is ever a free number. The
+remaining divergences became what they really are:
+
+- **Nicing asymmetry (case 1) resolves to two scopes (case 3).** The corpus
+  (`GOFISH_DUMP_SCOPES` + the 6b shadow) shows the only anchored-vs-size
+  disagreement is a marginal panel whose count axis is a **self-scaled region**:
+  it carries an explicit pixel size, so it stashes its own space and builds a
+  LOCAL scale against its own box (`buildChildScalePlan` step 2). That stashed
+  space **escapes the nicing** applied to the shared/outer axis domain (#659), so
+  the panel's own count scale (`45σ=80`, σ=1.778, the SIZE scope) and the shared
+  niced map read by the ticks (`[0,44]→[0,80]`, σ=1.818, the POSITION scope) are
+  two distinct scopes, each consumed by its own channel — exactly the
+  self-scaled-vs-inherited shape, so case 1 needs no separate machinery. (It is
+  NOT one axis whose ticks are niced and whose bars are un-niced; it is the
+  self-scaled stash sidestepping nicing entirely.) This stash-escape was
+  subsequently closed by the #659 stage below: nicing is now a per-scope,
+  demand-driven operation applied at the solve, so a scope's map and σ read one
+  domain by construction.
+- **Spacing / non-data pixels (case 2)** are already the Monotonic intercept in
+  the frame equation (`width.inverse(allocated)`), so the per-segment slope is the
+  scope σ, not a secant. No change needed.
+- **Sub-budget vs inherited (case 3)** is a SIZE scope (the panel's local budget)
+  and a POSITION scope (a shared ancestor map) coexisting on one axis. The
+  `AxisScale`'s two halves are precisely these two scope views; each is a single
+  registry-solved σ.
+
+So `AxisScale` is a **two-scope view**, not a slope with a redundant twin. Every
+`map` comes from `computePosScale` via `solvePosition` (or the equal-measure
+recentering), every `sigma` from `solveSize`; there is **no independent slope**
+after Stage 6. The two former fabrication sites are closed: a coord boundary's
+POSITION-only axis no longer hands down a scope-less `σ = 1` (it carries no size σ),
+and the #582 recentering is a named `recenterEqualMeasure` operation on the
+registry (so the dump shows the final σ). If a carrier ever shows two _independent_
+slopes — a slope not traceable to a registry scope — that is a bug; two _scopes_
+on one axis is the sanctioned multi-scale reading.
 
 ### Sub-stages, each gated
 
@@ -358,32 +389,179 @@ still has two independent slopes after Stage 6, that is a bug in Stage 6.
 - **6b — one solve site.** Move the root inversion + the three
   `buildChildScalePlan` steps behind a single scope-root API with the same
   numbers and priority. The #618 guard becomes "not a root → inherit".
-  Pixel gate.
-- **6c — σ-affine claims flow.** Marks/folds contribute width `Monotonic`s
-  into cells instead of pre-multiplied numbers; evaluation defers to the
-  scope boundary; the "evaluate at σ, hand concrete sizes down" double
-  bookkeeping (`computeSize`'s scaleFactor path) collapses. Pixel gate.
-- **6d — translate retirement (#39 stage 3-D).** Render consumes baked
-  absolute coordinates through the `displayTranslate`/`translateString`
-  chokepoints (`dims.ts:268-294` was written to make this a one-function
-  change); the per-container `<g translate>` wrappers collapse. Expect benign
-  DOM reshuffles — this is precisely the pixel-not-DOM gate case.
-- **6e — grid as tracks.** A grid scope introduces `numCols + numRows` track
-  cells; each cell(i, j) gets equations `cell.min = track.min` and
-  `cell.size = track.size` per axis. Equal-flex is "all track sizes equal +
-  Σ tracks + gaps = W" (today's `sliceExtent`, as equations); content-sized
-  tracks are `track.size ≥ max(cell claims)` — note `max` leaves the linear
-  fragment (piecewise claims; see the `monoEqual` two-point-probe caveat in
-  `bbox.ts`), so this lands as an iterate-or-piecewise extension, and is the
-  point where `table` gains content-sized tracks. The Stage-3 layer bypasses
-  (space-fold early return, cell-budget special case, mixing throw) delete;
-  `gridSpaces`' ORDINAL axes contribution stays but composes.
-- **6f — determinacy from rank.** The Stage-1 `spacePlacement` view retires:
-  free/determined/conflict is read off the scope system's baseline-subsystem
-  rank/consistency. Space resolution keeps only data facts
-  (`width`, `dataDomain`, `measure`). The align transfer functions become
-  transfer functions _of the solver's abstract domain_, closing the
-  "guards should be blindingly obvious" thread.
+  Pixel gate. **Landed:** `ast/solver/scopes.ts` holds a per-render
+  `ScopeRegistry` (on the `RenderSession`) whose `solveSize` / `solvePosition`
+  are the ONE place σ / posScale is derived; the render root (`gofish.tsx`),
+  `buildChildScalePlan`'s self-scaled / constraint-budget / shared steps, and the
+  coord boundary (`coord.tsx` `fitAxis`) all call it with bit-identical
+  arithmetic. The #618 propagate-vs-re-root guard is now the structural
+  "is this a scope root?" predicate in `buildChildScalePlan` (an intermediate
+  budget skips the solve and inherits). `GOFISH_DUMP_SCOPES` prints one frame
+  equation per scope. The sweep (`capture-sweep`) stayed clean and the
+  coord/confluence tests (flat ≡ nested σ) pass, confirming goTree/polar render
+  identically.
+- **6c — one slope per σ-scope, by construction.** **Landed (carrier + sole
+  producer):** the scope registry is now the ONLY producer of every slope, so the
+  `AxisScale`'s two halves (`sigma` = SIZE scope σ, `map.sigma` = POSITION scope σ)
+  are each a registry-solved scope view — never independent state. The two former
+  fabrication sites were closed: a coord boundary's POSITION-only axis dropped its
+  scope-less `σ = 1` placeholder (pixel-identical — no consumer read it), and the
+  #582 equal-measure recentering moved off `gofish.tsx` into a named
+  `ScopeRegistry.recenterEqualMeasure` operation (so `GOFISH_DUMP_SCOPES` records
+  the FINAL σ). The pre-change inventory (dump + a temporary `[solver-check]`
+  dual-slope shadow driven to zero across the 260-story sweep) confirmed the only
+  surviving anchored-vs-size disagreements are legitimate two-scope cases (nicing
+  and sub-budget), each half consumed by its own channel. **Deferred (residue,
+  acceptable per the plan):** the "evaluate at σ, hand concrete sizes down" double
+  bookkeeping still stands — `computeSize`'s `scaleFactor` path (`rect`, `layer`,
+  `treemap`), the `size × σ` pre-multiply in `petal`/`ellipse`, and distribute's
+  `scaleFactor` callbacks all still evaluate a width at a known σ at the consumer
+  rather than flowing a `Monotonic` claim to the scope boundary. Making cells
+  carry `Monotonic` claims (so evaluation defers to the boundary) is the larger
+  6e-adjacent change and was held to keep the carrier landing pixel-clean.
+- **6d — translate retirement (#39 stage 3-D). Landed.** The per-container
+  translate-composition closures collapse: a pure translate-only bake boundary
+  (`box`/`frame`, `offset`, `enclose`) no longer composes its translate into a
+  child-local `toPixel` closure and lower its children parent-relative. Instead
+  it flattens its own subtree via the new `bakeChildren` (the root bake's
+  z-ordered children-flatten, factored out of `bake`) seeded at its absolute
+  translate, and lowers each descendant at its baked absolute transform
+  (`INTERNAL_lower(coord, d.transform)`) — the identical mechanism the root bake
+  already uses, so the two paths can't drift. The non-identity `scale` exception
+  stays a `group` wrapper (a flat list can't fold scale). The dead
+  `translateString` chokepoint (`dims.ts`) — every legacy `<g transform>` render
+  had already migrated to the display-list `toPixel` fold, leaving it imported
+  but never called — is deleted along with its four dead imports. `displayTranslate`
+  stays: it is the read of a baked absolute transform that the space-remap boundary
+  (`coord`'s `contentToPixel`) and the self-drawers (`connect`/`arrow`) apply to
+  their own geometry — those are NOT pure translate-only containers, so they keep
+  composing (the documented exception).
+
+  **No `transform.translate` write was retired.** Render/lower already reads the
+  ledger projection (`projectedTranslate`/`_displayTransform`), never the raw
+  written field; the surviving raw writes (`_pinAnchor`'s under-determined-axis
+  fallback, the `layout()` seed) feed `_projectTranslate`'s fallback, which
+  `ref`s and constraints also read — so none is render-only, and the
+  `translate === undefined` "parent may place me" sentinel is untouched.
+
+  **Gate — pixel, not DOM.** The zero-pixel gate is a new `capture-pixels`
+  script (`tests/scripts/capture-pixels.ts`): render every story to PNG at HEAD
+  and at the base ref in the SAME local Chromium, pixelmatch at threshold 0.
+  Result: **260/260 stories, 0 pixels moved.** Because the display-list path had
+  already inlined translate composition into coordinates (no `<g translate>`
+  wrappers survived for these boundaries — only the `scale` group), collapsing
+  the closures is byte-identical in the normalized DOM too: `capture-diff` and
+  `capture-sweep` (solver shadow) both report **260/260 identical / clean**. The
+  anticipated "benign DOM reshuffle" did not materialize — the reshuffle was
+  spent by the earlier `_render`→display-list migration, so 6d is pixel- AND
+  DOM-neutral.
+
+- **6e — grid as tracks. Landed.** A grid resolves its tracks under the ONE
+  unified sizing rule — the same (max, +) fold every other operator uses:
+
+  ```
+  track claim = Monotonic.max(claims of the cells in that track)
+  grid claim  = Monotonic.add(track claims) + gaps          (the σ-frame LHS)
+  ```
+
+  A claim-less (fill) cell contributes nothing, so an all-fill grid has no track
+  claims and the leftover (allocated − gaps) splits equally — bit-identical to
+  the former `sliceExtent` box-division. Content-sized tracks emerge
+  automatically when cells carry claims (a track sizes to its widest cell; fill
+  tracks share the remainder). `max` and `add` are BOTH closed over the convex
+  piecewise-linear (max, +) algebra — the composed claim stays a `Monotonic`, so
+  when every track is claimed with a σ-dependent claim the grid claim inverts
+  against the allocated size through the scope registry exactly like any other
+  frame equation (the common all-constant, fixed-px case is σ-independent and
+  reads back its intercept). Because piecewise claims now flow into cells, the
+  `monoEqual` two-point probe in `bbox.ts` was upgraded to `Monotonic.approxEqual`
+  — structural (compare at 0, 1, and every pairwise breakpoint) for piecewise
+  operands, the same cheap two-point line probe for the all-linear common case.
+
+  **Design choice — pre-resolution, not tracks-in-the-graph.** Tracks are
+  resolved by `resolveGridTracks` (the sizing budget for fill cells) and, for
+  placement, by `gridTracksFromSizes` from the ACTUAL laid-out cell sizes, so the
+  cell-center pins match the real geometry and the solver shadow cannot drift
+  from what rendered. This reuses the rank-2 placement solver as-is (cells pin to
+  their track-intersection centers) — the equations are identical to naming each
+  track a cell in the difference graph, but lighter. The Stage-3 layer bypasses
+  are deleted (space-fold early return, the whole-layer cell-budget special case,
+  the mixing throw); grid now GENUINELY composes — its per-track claim
+  participates in the fold and its cell pins solve jointly with align / position
+  / z-order (a `position` pin on a cell overrides its track centering, the
+  authoritative-pin pattern). `gridSpaces`' ORDINAL track axes stay for axis
+  rendering (a categorical axis can't also be a SIZE magnitude), composing
+  through the same return path rather than an early exit. The at-most-one-grid
+  rule and `__grid_cell_i` naming stay. **Gate:** all-fill tables pixel-identical
+  (heatmaps unchanged); one intended mover — the Titanic facet unit grid, whose
+  cells carry intrinsic waffle-size claims, now content-sizes its tracks (facets
+  pack to content instead of stretching to equal box-division).
+
+- **6f — the guards ask the solver. Landed.** The last layout guard that
+  reconstructed a fact from the space pass retires. `align`'s "is this target
+  already positioned?" no longer calls a `Placeable.placementOn(dir)` method that
+  rebuilt the `free`/`determined`/`conflict` lattice from the target's
+  `dataDomain` mid-lowering. Instead the placement solve's own authority record —
+  the `PlacementOwnershipPlan` — answers it, through one predicate
+  `isDataPositioned(axis, name)`. The fact it reads (which children are anchored
+  to a POSITION scope on each axis) is a pure **data/scope** fact — a child's
+  `dataDomain` present on that axis — collected _once_ at the layer boundary
+  (`layer.tsx`, where the child spaces already live) and handed to the solve as an
+  explicit ownership input alongside `initiallyPlaced`/`positionPinned`. So the
+  constraint path no longer consults `spacePlacement` at all (the debug printer
+  and the space folds still do, which is where a determinacy read belongs), and
+  `placementOn` is deleted from the `Placeable` contract and `GoFishNode`.
+
+  **What "determinacy from rank" meant vs. what shipped.** The plan framed this
+  as reading free/determined/conflict off the placement subsystem's rank. The
+  corpus forensics (376 guarded cells across every faceted/stacked story) showed
+  the load-bearing targets — faceted scatter/stacked panels — carry **no strong
+  pin and no self-placement** (`dims.min` undefined); their determinacy comes
+  entirely from an **anchored posScale** (a SIZE/scope fact), which the placement
+  rank cannot see. So a literal "rank of the placement subsystem" reading would
+  have called them _free_ and moved them — a behavior change. The realized form
+  keeps the same fact but sources it honestly (scope membership, a data fact),
+  routing it through the ownership plan so the guard's _input_ is the solver's
+  authority record rather than a late reconstruction. Behavior-preserving:
+  the new path fires on exactly the same 376 cells; full suite + solver-shadow
+  sweep (260/260 clean) + pixel gate all green.
+
+  This closes the "guards should be blindingly obvious" thread that started the
+  whole design arc: space resolution now keeps only data facts (`width`,
+  `dataDomain`, `measure`), and every layout guard reads the placement solve's
+  ownership plan, not the space pass.
+
+- **#659 — nicing on the scope, demand-driven. Landed.** The pre-layout
+  `resolveNiceDomains` tree walk (which mutated every node's POSITION domain in
+  place, and which the self-scaled stash escaped) is **deleted**. Nicing is now
+  one pure function, `niceContinuous` (`underlyingSpace.ts`), applied per
+  σ-scope at the scope's solve: the render root (`gofish.tsx`), the self-scaled
+  stash and the shared-scale step (`buildChildScalePlan`), and the layer-local
+  datum-position scale (`buildPositionScalePlan`). POSITION domains only —
+  never SIZE magnitudes, never deltas — and a coord scope never nices
+  (unchanged exemption; `fitAxis` never calls it). Per the semantics settled on
+  the issue (**scale resolution is per-scope; axis rendering is per-node — an
+  axis is a view of a scope**), nicing is **demand-driven**: a scope nices iff
+  at least one node in its space-flow region renders an axis on the dim.
+  `resolveAxes` leaves persistent `axisDemand` stamps (the `axis` work flags
+  are cleared by elaboration); `GoFishNode.scopeRendersAxis` walks the region —
+  up while neither a self-scaled stash (`selfScaledDims`) nor a coord boundary
+  cuts the space flow, then across the region subtree stopping at deeper
+  stashes/coords — so an inner shared scope under an axis-drawing root inherits
+  the root's demand, while a stashed panel (whose space never reached that
+  axis) does not. Result on the exemplar: the marginal histogram's panel count
+  scopes collapse to ONE σ each — the self-scaled map `[0,44]→[0,80]` and the
+  shared width solve `44σ = 80` now agree at σ = 1.8182 on the raw domain
+  (the panels draw no count axis, so no nicing demand) — pixel-identical, with
+  the orphan dual solve gone. Corpus enumeration (`capture-diff` over all 260
+  stories): the only movers are two `axes`-permutation stories whose bar
+  chart suppresses the y axis (`{ x: true, y: false }` and
+  `{ x: false, y: false }`) — their anchored y domain was previously niced by
+  the walk despite drawing no y axis (the old gate niced for ANY truthy `axes`
+  value), and now stays honestly raw, which also makes `{ x: false, y: false }`
+  render identically to `axes: false`. Everything else — including every
+  axis-less chart and every axis-drawing chart — is pixel-identical. Full
+  suite + solver-shadow sweep (260/260) clean.
 
 ### Open design questions (resolve during 6, tracked now)
 
@@ -396,8 +574,13 @@ still has two independent slopes after Stage 6, that is a bug in Stage 6.
   scope registry is keyed that way from the start.
 - **Where scope state lives:** on the render session (like `toPixel`) vs a
   map keyed by scope-root uid; must survive resume/re-layout.
-- **Piecewise claims:** `max`-composition (6e) and any future clamp break the
-  two-point `monoEqual` probe; decide the claim representation before 6e.
+- **Piecewise claims (resolved in 6e):** `max`-composition keeps claims in the
+  convex piecewise-linear (max, +) algebra (both `max` and `add` are closed over
+  it), so the representation is unchanged — the only fix needed was the equality
+  probe: `monoEqual` now delegates to `Monotonic.approxEqual`, which compares
+  piecewise operands structurally (at 0, 1, and every breakpoint) and keeps the
+  cheap two-point line probe for the all-linear case. A future non-monotone clamp
+  would still need more.
 
 ### Debuggability requirement
 
@@ -426,6 +609,36 @@ Stages 0–3 are each a small PR and can land this week in any order. Stage 4 is
 the enabling refactor and should land alone, with nothing else in the diff.
 Stage 5 consumes 4. Stage 6 consumes 4+5 and subsumes the leftovers of 2
 (span's internal machinery) and 3 (grid's bypasses).
+
+**Status (per stage):**
+
+| Stage                                      | Status                                                 |
+| ------------------------------------------ | ------------------------------------------------------ |
+| 0 — docs / vocabulary                      | **landed**                                             |
+| 1 — placement lattice                      | **landed**                                             |
+| 2 — span → position                        | **landed**                                             |
+| 3 — grid cliff                             | **landed**                                             |
+| 4 — one scale carrier                      | **landed**                                             |
+| 5 — rank-2 placement (5a/5b/5c)            | **landed**                                             |
+| 6a — observe (shadow coverage)             | **landed**                                             |
+| 6b — one solve site (scope registry)       | **landed**                                             |
+| 6c — one slope per σ-scope                 | **landed** (carrier + sole producer; residue deferred) |
+| 6d — translate retirement                  | **landed**                                             |
+| 6e — grid as tracks                        | **landed**                                             |
+| 6f — the guards ask the solver             | **landed**                                             |
+| #659 — nicing on the scope (demand-driven) | **landed**                                             |
+
+The whole staged plan (0–6f, plus the #659 nicing stage) is landed. The last
+known dual-slope — a self-scaled marginal panel whose stashed count space
+sidestepped nicing, so its ticks and bars read two slopes of the _same_ space —
+is closed by the #659 stage above: nicing lives on the scope, demand-driven,
+and the panel's two solves agree on one σ by construction. The three other
+two-scope-on-one-axis stories the 6c inventory flagged (Faceted Chart/Default,
+Labels/LabelOnSpread, Layered Bars and Area/HoistedVarietySpread) are **not**
+#659 variants: each carries one shared POSITION scope (the y map) plus several
+panel-local SIZE scopes solved by the spread/stack `sharedScale` machinery, but
+the marks consume the inherited POSITION σ — the local SIZE σ is computed and not
+consumed, so there is no rendered dual slope and no correctness issue.
 
 Wiki obligation: most touched files carry the `@wiki Underlying Space`
 backlink — `underlying-space.md` must be updated in the same change for every
