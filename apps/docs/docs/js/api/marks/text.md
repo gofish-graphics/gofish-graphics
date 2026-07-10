@@ -18,24 +18,25 @@ gf.chart([{ label: "GoFish" }])
 ```ts
 text({ text, fill = "black", stroke?, strokeWidth = 0, fontSize = 12,
        fontFamily = "system-ui, sans-serif", fontStyle?, fontWeight?, rotate = 0,
-       debugBoundingBox = false, x?, y?, w?, h? })
+       textAnchor = "start", debugBoundingBox = false, x?, y?, w?, h? })
 ```
 
 ## Parameters
 
-| Option             | Type               | Description                                                                  |
-| ------------------ | ------------------ | ---------------------------------------------------------------------------- |
-| `text`             | `string \| number` | The string to render — a constant or a field name to read from data          |
-| `fill`             | `string`           | Fill color or field name for color encoding (default `"black"`)              |
-| `stroke`           | `string`           | Stroke color                                                                 |
-| `strokeWidth`      | `number`           | Stroke width (default `0`)                                                   |
-| `fontSize`         | `number`           | Font size in pixels (default `12`)                                           |
-| `fontFamily`       | `string`           | Font family (default `"system-ui, sans-serif"`)                              |
-| `fontStyle`        | `string`           | CSS font style, e.g. `"italic"`                                              |
-| `fontWeight`       | `number \| string` | CSS font weight, e.g. `300`, `700`, `"bold"`                                 |
-| `rotate`           | `number`           | Rotation in degrees about the anchor; `90` reads bottom-to-top for a y-title |
-| `debugBoundingBox` | `boolean`          | Draw the text's bounding box (for layout debugging)                          |
-| `x`, `y`, `w`, `h` | `number \| string` | Explicit position / size accessors                                           |
+| Option             | Type                           | Description                                                                                             |
+| ------------------ | ------------------------------ | ------------------------------------------------------------------------------------------------------- |
+| `text`             | `string \| number`             | The string to render — a constant or a field name to read from data                                     |
+| `fill`             | `string`                       | Fill color or field name for color encoding (default `"black"`)                                         |
+| `stroke`           | `string`                       | Stroke color                                                                                            |
+| `strokeWidth`      | `number`                       | Stroke width (default `0`)                                                                              |
+| `fontSize`         | `number`                       | Font size in pixels (default `12`)                                                                      |
+| `fontFamily`       | `string`                       | Font family (default `"system-ui, sans-serif"`)                                                         |
+| `fontStyle`        | `string`                       | CSS font style, e.g. `"italic"`                                                                         |
+| `fontWeight`       | `number \| string`             | CSS font weight, e.g. `300`, `700`, `"bold"`                                                            |
+| `rotate`           | `number`                       | Rotation in degrees about the anchor; `90` reads bottom-to-top for a y-title                            |
+| `textAnchor`       | `"start" \| "middle" \| "end"` | Which end of the text sits at its own local origin, the point `rotate` pivots about (default `"start"`) |
+| `debugBoundingBox` | `boolean`                      | Draw the text's bounding box (for layout debugging)                                                     |
+| `x`, `y`, `w`, `h` | `number \| string`             | Explicit position / size accessors                                                                      |
 
 ## Examples
 

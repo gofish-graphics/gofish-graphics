@@ -112,6 +112,13 @@ result). An index past the end of the array means unrotated. A continuous axis
 only ever has one tier, so it just uses the number, or `array[0]` for the array
 form.
 
+A rotated label is anchored at its **hanging point** — the point of the label
+nearest the axis line — rather than at its bounding box's middle: `0°` and
+`±90°` stay centered on the tick (unchanged from an unrotated label); any other
+angle hangs the label from whichever end sits closest to the axis, matching
+Vega-Lite's 45° look for a positive (clockwise) angle and matplotlib's
+`ha="right"` look for a negative one.
+
 ```js
 gf.chart(cityYear, { axes: { x: { labelAngle: [45] } } }) // year rotated, city upright
   .flow(

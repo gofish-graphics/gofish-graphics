@@ -114,12 +114,56 @@ the same predicate `axisSide` already uses for its cross-flip check
 (`yUp || underCoord || isCONTINUOUS(space[1])` — this is dim-independent: it's
 really "does this node's own y mirror", not specific to the axis being labeled),
 canceling the render-time negation so the label lands at the literal screen angle
-regardless of the frame's orientation. Rotation never changes alignment: the
-track-axis alignment stays centered (`"middle"`) in both `tickMark`'s `Spread`
-alignment and `elaborateOrdinalAxis`'s `Constraint.align`, so a rotated label's
-(now-diagonal) bbox is centered on its tick exactly like an unrotated label's
-bbox would be. There is no "auto" rotation mode (deferred to #486) — this is a
-manual, always-on angle.
+regardless of the frame's orientation. There is no "auto" rotation mode (deferred
+to #486) — this is a manual, always-on angle.
+
+**The hanging-point rule.** `resolveLabelRotation` (`axes/elaborate.tsx`) turns
+the authored angle `a` into a `LabelRotation` descriptor — `rotate` (the
+frame-resolved value passed to `Text`), `trackAlign`, and `textAnchor` — that
+governs how the label attaches to its tick/key along the TRACK axis (the axis's
+own direction): the label is anchored at whichever of its points ends up nearest
+the axis line, not at its rotated bbox's middle.
+
+- `a` is `0`/`undefined`: `trackAlign: "middle"` — plain bbox-middle centering,
+  IDENTICAL to the unrotated path (no rotation is even applied).
+- `|a| === 90`: also `trackAlign: "middle"` — the rotated column's bbox middle
+  already centers it horizontally on the tick.
+- `0 < a < 90` (slants down-right): `trackAlign: "baseline"`, `textAnchor:
+"start"` — the label hangs from its FIRST character (Vega-Lite's 45° look).
+- `-90 < a < 0` (slants up-right): `trackAlign: "baseline"`, `textAnchor: "end"`
+  — the label hangs from its LAST character (matplotlib's `ha="right"` look).
+
+`"baseline"` is `AlignAnchor`'s existing "pin the target's own local origin"
+mode (`_node.ts`'s `_pinAnchor`), and `Text`'s rotation is applied about that
+same local origin (`text.tsx`), so pinning `"baseline"` pins the rotation pivot
+directly — no bbox-edge arithmetic needed. `textAnchor` (a new `Text` prop)
+picks which end of the pre-rotation label sits at that origin: `"start"` (the
+default) puts the first character there, `"end"` puts the last character there,
+so the SAME `"baseline"` anchor reaches either hanging corner depending on the
+angle's sign. Accepted approximation: the origin sits on the label's baseline
+(`dominantBaseline: "auto"`), not the ascender-top corner an idealized "nearest
+point on the rotated bbox" derivation would use — the two differ by
+`ascent·sin(a)`, a couple of pixels at these sizes, invisible in practice.
+
+For an ordinal axis, `elaborateOrdinalAxis` expresses this directly:
+`Constraint.align`'s anchor accepts a per-child array
+(`[trackAlign, "middle"]`), so the label pivots to `"baseline"` while the key
+node it tracks stays `"middle"`-anchored on its own extent — one constraint,
+heterogeneous anchors. A continuous axis can't do the same by nesting the tick
+and label into one `tickMark` node the way the unrotated/±90° path does: an
+oblique label's rotated bbox is NOT symmetric about its pivot, so
+`positionAxis`'s per-tick `Constraint.position(pos(v), [tick])` — which defaults
+to `anchor: "middle"`, i.e. the target's bbox middle — would pin the PAIR's
+lopsided union bbox middle at the data value instead of the pivot, dragging the
+hanging point off the tick by however asymmetric the rotated label is. So for
+an oblique continuous axis, `elaborateContinuousAxis` keeps the tick bare
+(`tickRect`, unaffected by the label) and gives `positionAxis` a separate
+`tickLabel` builder: the DATA pin still targets the bare tick alone, and the
+label is a sibling related to it by the same heterogeneous
+`Constraint.align` + a cross-axis `Constraint.distribute`, mirroring
+`elaborateOrdinalAxis`'s approach. The unrotated/±90° path is untouched code
+(still `tickMark` + `Spread`'s uniform `"middle"` alignment), not just untouched
+geometry, so those angles stay pixel-identical to before the hanging-point rule.
 
 **Per-tier selection.** A plain number applies uniformly to every tier of a
 nested ordinal axis (a grouped bar chart's inner year row and outer city row

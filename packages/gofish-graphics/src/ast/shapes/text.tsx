@@ -188,6 +188,7 @@ export const Text = ({
   fontWeight,
   debugBoundingBox = false,
   rotate = 0,
+  textAnchor = "start",
   ...fancyDims
 }: {
   key?: string;
@@ -205,11 +206,19 @@ export const Text = ({
    *  text anchor. `rotate: 90` yields a conventional y-axis title — it reads
    *  bottom-to-top with glyph tops facing left. */
   rotate?: number;
+  /** Which end of the (pre-rotation) text sits at the node's own local
+   *  origin — the point `rotate` pivots about, and the point an `align`/
+   *  `position` constraint's `"baseline"` anchor pins (see `_node.ts`'s
+   *  `_pinAnchor`). Defaults to `"start"` (the first character), matching
+   *  ordinary left-to-right text flow; `"end"` pivots at the last character
+   *  instead — used for an obliquely-rotated label that should hang from its
+   *  end rather than its start (see `axes/elaborate.tsx`'s hanging-point
+   *  rule for rotated axis labels). */
+  textAnchor?: "start" | "middle" | "end";
 } & FancyDims<MaybeValue<number>>) => {
   // `embedded` is authored by the resolveEmbedding pass — see rect.tsx.
   const dims = elaborateDims(fancyDims);
 
-  const textAnchor = "start";
   const dominantBaseline = "auto";
 
   const node = new GoFishNode(
