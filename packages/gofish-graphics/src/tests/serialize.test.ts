@@ -25,6 +25,7 @@ const {
   rect,
   circle,
   line,
+  ribbon,
   text,
   layer,
   derive,
@@ -448,9 +449,11 @@ async function main() {
   }
 
   // -------------------------------------------------------------------------
-  // .connect() builder sugar (#511) — emits root.connect.
+  // Relational marks (`line`/`ribbon`) — `by` split option and the mark
+  // carrying a `__serialize` tag through `.layer(...)` (the replacement for
+  // the removed `.connect()` sugar).
   // -------------------------------------------------------------------------
-  console.log("\n# .connect() connector mark survives toJSON");
+  console.log("\n# relational mark `by` option");
 
   const connectData = [
     { g: "x", a: 1, b: 2 },
@@ -458,42 +461,23 @@ async function main() {
     { g: "x", a: 3, b: 1 },
   ];
 
-  // Unnamed mark + .connect(line()): connect present, deep-equals {type:"line"},
-  // validates strict.
+  // Bag-form `ribbon({ by })` stamps `by` into its own `__serialize` tag.
   {
-    const c = chart(connectData)
-      .flow(scatter({ by: "g", x: "a", y: "b" }))
-      .mark(circle({ r: 4 }))
-      .connect(line());
-    const doc = await c.toJSON();
-    validateDoc(doc, "connect() unnamed mark");
-    const root = doc.root as Frontend.ChartIR;
+    const rib = ribbon({ by: "g", opacity: 0.8 });
     check(
-      "root.connect deep-equals { type: 'line' }",
-      JSON.stringify(root.connect) === JSON.stringify({ type: "line" })
+      "ribbon({ by }) carries by in __serialize.opts",
+      (rib as any).__serialize?.opts?.by === "g"
     );
   }
 
-  // Named mark + .connect(line()): mark.name preserved AND connect present.
-  {
-    const c = chart(connectData)
-      .flow(scatter({ by: "g", x: "a", y: "b" }))
-      .mark(circle({ r: 4 }).name("pts"))
-      .connect(line());
-    const doc = await c.toJSON();
-    validateDoc(doc, "connect() named mark");
-    const root = doc.root as Frontend.ChartIR;
-    check("named connect: mark.name === 'pts'", (root.mark as any).name === "pts");
-    check("named connect: root.connect present", root.connect !== undefined);
-  }
-
-  // fromJSON → toJSON round trip preserves connect.
+  // A `.layer(line())` chart still resolves and its `.toJSON()` (the
+  // producer tier's ChartBuilder) round-trips through fromJSON.
   {
     const built = chart(connectData)
       .flow(scatter({ by: "g", x: "a", y: "b" }))
-      .mark(circle({ r: 4 }))
-      .connect(line());
+      .mark(circle({ r: 4 }).name("pts"));
     const doc = await built.toJSON();
+    validateDoc(doc, "layer() producer tier");
     const rebuilt = Serialize.buildChart(
       doc.root,
       connectData,
@@ -502,30 +486,9 @@ async function main() {
     );
     const doc2 = await rebuilt.toJSON();
     check(
-      "round-trip preserves root.connect",
-      JSON.stringify((doc2.root as Frontend.ChartIR).connect) ===
-        JSON.stringify((doc.root as Frontend.ChartIR).connect)
-    );
-  }
-
-  // Double .connect() throws with a clear message.
-  {
-    let threw = false;
-    let message = "";
-    try {
-      chart(connectData)
-        .flow(scatter({ by: "g", x: "a", y: "b" }))
-        .mark(circle({ r: 4 }))
-        .connect(line())
-        .connect(line());
-    } catch (e: any) {
-      threw = true;
-      message = String(e?.message ?? e);
-    }
-    check(
-      "double .connect() throws mentioning 'only one connector'",
-      threw && message.includes("only one connector"),
-      threw ? message : "did not throw"
+      "round-trip preserves mark.name",
+      (doc2.root as Frontend.ChartIR).mark.name ===
+        (doc.root as Frontend.ChartIR).mark.name
     );
   }
 

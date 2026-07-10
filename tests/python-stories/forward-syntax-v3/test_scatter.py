@@ -66,6 +66,6 @@ def story_connected():
         chart(DRIVING_SHIFTS)
         .flow(scatter(by="year", x="miles", y="gas"))
         .mark(circle(r=4, fill="white", stroke="black", strokeWidth=2))
-        .connect(line(stroke="black", strokeWidth=2)),
+        .layer(line(stroke="black", strokeWidth=2)),
         {"w": 400, "h": 400, "axes": True},
     )

@@ -1,6 +1,6 @@
 """Equivalent of RidgelineChart.stories.tsx — Forward Syntax V3/Ridgeline Chart."""
 
-from gofish import chart, spread, blank, ribbon, group
+from gofish import chart, spread, blank, ribbon
 from python_stories.data import SEAFOOD
 
 
@@ -12,10 +12,6 @@ def story_default():
             spread(by="species", dir="y", spacing=-16),
         )
         .mark(blank(h="count", fill="species"))
-        .layer(
-            chart()
-            .flow(group(by="species"))
-            .mark(ribbon(opacity=0.8, mixBlendMode="normal"))
-        ),
+        .layer(ribbon(by="species", opacity=0.8, mixBlendMode="normal")),
         {"w": 500, "h": 300},
     )

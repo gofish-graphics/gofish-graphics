@@ -703,6 +703,10 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
         type: t.string,
         doc: "Pairwise form: column holding the target ref.",
       },
+      by: {
+        type: t.union(t.string, t.ref("FieldAccessor")),
+        doc: "Bag form: partition the operand refs by this field (or field(...) accessor) and draw one connector per group.",
+      },
     },
   }),
 
@@ -721,6 +725,10 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
       },
       from: { type: t.string, py: "from_" },
       to: { type: t.string },
+      by: {
+        type: t.union(t.string, t.ref("FieldAccessor")),
+        doc: "Bag form: partition the operand refs by this field (or field(...) accessor) and draw one connector per group.",
+      },
     },
   }),
 

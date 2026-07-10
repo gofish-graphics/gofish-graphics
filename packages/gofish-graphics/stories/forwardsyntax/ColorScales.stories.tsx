@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
 import { seafood } from "../../src/data/catch";
 import { chart, spread, stack, rect, derive, palette, gradient, assignGradientColor, field } from "../../src/lib";
-import { ribbon, group } from "../../src/lib";
+import { ribbon } from "../../src/lib";
 import { clock } from "../../src/ast/coordinateTransforms/clock";
 
 const meta: Meta = {
@@ -263,11 +263,7 @@ export const RibbonHighlight: StoryObj<Args> = {
         stack({ by: field("species").sort("count"), dir: "y" })
       )
       .mark(rect({ h: "count", fill: "species" }))
-      .layer(
-        chart()
-          .flow(group({ by: "species" }))
-          .mark(ribbon({ opacity: 0.6 }))
-      )
+      .layer(ribbon({ by: "species", opacity: 0.6 }))
       .render(container, { w: args.w, h: args.h });
 
     return container;

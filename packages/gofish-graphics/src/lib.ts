@@ -165,7 +165,7 @@ export {
   line,
   blank,
   ribbon,
-  createDerivedMark,
+  createRelationalMark,
   normalize,
   repeat,
   log,

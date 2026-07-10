@@ -7,8 +7,13 @@
  * sends them in the request body. The Worker only makes GitHub API calls:
  * - 1 blob creation per screenshot (binary, needs blob API)
  * - DOM files use tree `content` field directly (no blob API needed)
- * - 5–7 fixed GitHub calls: get ref, get commit, create tree, create commit,
- *   update/create ref, and (final chunk only) status update + rerun.
+ * - Deletions (`removals`) use the same tree API with `sha: null` — no blob
+ *   calls, plus 1 extra recursive-tree fetch (only when removals is
+ *   non-empty) to know which paths actually exist on the base tree, since
+ *   the tree API errors if asked to delete a path that isn't there.
+ * - 6–9 fixed GitHub calls: get ref, get commit, (get recursive tree if
+ *   removals present), create tree, create commit, update/create ref, and
+ *   (final chunk only) status update + rerun.
  *
  * Cloudflare caps each invocation at 50 outgoing subrequests (free plan),
  * so the client splits accepts into chunks of ~25 and calls /api/commit
@@ -17,7 +22,7 @@
  * history is already a long "Accept N visual diff(s)" chain.
  *
  * Request body:
- *   { paths, domContents, screenshotContents, repo, branch,
+ *   { paths, removals?, domContents, screenshotContents, repo, branch,
  *     headSha?, runId? }  // headSha/runId set on the final chunk only
  *
  * GITHUB_TOKEN is a Cloudflare Pages secret.
@@ -28,7 +33,14 @@ interface Env {
 }
 
 interface CommitBody {
+  /** Story paths to add/update as baselines. */
   paths: string[];
+  /**
+   * Story paths whose baseline (dom + screenshot) should be deleted from
+   * the snapshot branch — the accept-removal counterpart to `paths`.
+   * Additive: omitting it (older clients) behaves exactly as before.
+   */
+  removals?: string[];
   domContents: Record<string, string>; // storyPath → HTML text
   screenshotContents: Record<string, string>; // pngPath → base64
   repo: string;
@@ -45,7 +57,7 @@ type TreeItem = {
   path: string;
   mode: string;
   type: string;
-  sha?: string;
+  sha?: string | null;
   content?: string;
 };
 
@@ -103,12 +115,9 @@ async function handleCommit(
   let body: CommitBody;
   try {
     const raw = (await request.json()) as Partial<CommitBody>;
-    if (
-      !Array.isArray(raw.paths) ||
-      raw.paths.length === 0 ||
-      !raw.repo ||
-      !raw.branch
-    ) {
+    const hasPaths = Array.isArray(raw.paths) && raw.paths.length > 0;
+    const hasRemovals = Array.isArray(raw.removals) && raw.removals.length > 0;
+    if ((!hasPaths && !hasRemovals) || !raw.repo || !raw.branch) {
       return json({ error: "Invalid request body" }, 400);
     }
     body = raw as CommitBody;
@@ -117,7 +126,8 @@ async function handleCommit(
   }
 
   const {
-    paths,
+    paths = [],
+    removals = [],
     domContents = {},
     screenshotContents = {},
     repo,
@@ -180,10 +190,6 @@ async function handleCommit(
     }
   }
 
-  if (treeItems.length === 0) {
-    return json({ ok: false, accepted: 0, errors });
-  }
-
   // Get current HEAD SHA of the snapshot branch, or null if it doesn't exist yet.
   const refRes = await fetch(`${apiBase}/git/ref/heads/${branch}`, {
     headers: githubHeaders,
@@ -239,6 +245,59 @@ async function handleCommit(
     throw new Error(`GitHub get ref failed (${refRes.status}): ${text}`);
   }
 
+  // Process removals (accept-removal: delete a stale baseline). Uses the
+  // same git data/trees API as the additions above — a tree entry with
+  // `sha: null` deletes that path — so no Contents-API blob-sha lookups are
+  // needed. The tree API errors if asked to delete a path that isn't on the
+  // base tree, so first fetch the base tree's full path list (one recursive
+  // GET, regardless of how many removals there are) and only emit delete
+  // entries for paths that are actually present.
+  let removed = 0;
+  if (removals.length > 0 && baseTreeSha) {
+    let existingPaths = new Set<string>();
+    try {
+      const treeData = await githubJson<{ tree: { path: string }[] }>(
+        await fetch(`${apiBase}/git/trees/${baseTreeSha}?recursive=1`, {
+          headers: githubHeaders,
+        }),
+        `get tree ${baseTreeSha} (recursive)`
+      );
+      existingPaths = new Set(treeData.tree.map((t) => t.path));
+    } catch (e) {
+      errors.push(`list existing baseline tree for removals: ${String(e)}`);
+    }
+
+    for (const storyPath of removals) {
+      const domPath = `dom/${storyPath}`;
+      const screenshotPath = `screenshots/${storyPath.replace(/\.html$/, ".png")}`;
+      if (existingPaths.has(domPath)) {
+        treeItems.push({
+          path: domPath,
+          mode: "100644",
+          type: "blob",
+          sha: null,
+        });
+      }
+      if (existingPaths.has(screenshotPath)) {
+        treeItems.push({
+          path: screenshotPath,
+          mode: "100644",
+          type: "blob",
+          sha: null,
+        });
+      }
+      removed++;
+    }
+  } else if (removals.length > 0) {
+    // No base tree at all (fresh repo, no snapshots/main either) — nothing
+    // to delete, but the desired end state (baseline absent) already holds.
+    removed = removals.length;
+  }
+
+  if (treeItems.length === 0) {
+    return json({ ok: false, accepted, removed, errors });
+  }
+
   // Create tree with all changes (base_tree omitted for orphan branch creation).
   const newTree = await githubJson<{ sha: string }>(
     await fetch(`${apiBase}/git/trees`, {
@@ -253,12 +312,18 @@ async function handleCommit(
   );
 
   // Create single commit (no parents if this is a new orphan branch).
+  const messageParts: string[] = [];
+  if (accepted > 0) messageParts.push(`Accept ${accepted} visual diff(s)`);
+  if (removed > 0) messageParts.push(`remove ${removed} stale baseline(s)`);
+  const commitMessage =
+    messageParts.length > 0 ? messageParts.join(", ") : "Update snapshots";
+
   const newCommit = await githubJson<{ sha: string }>(
     await fetch(`${apiBase}/git/commits`, {
       method: "POST",
       headers: githubHeaders,
       body: JSON.stringify({
-        message: `Accept ${accepted} visual diff(s)`,
+        message: commitMessage,
         tree: newTree.sha,
         parents: headSha ? [headSha] : [],
       }),
@@ -309,7 +374,10 @@ async function handleCommit(
         body: JSON.stringify({
           state: "success",
           target_url: `https://github.com/${repo}/tree/${branch}`,
-          description: `Accepted ${accepted} diff(s); re-running tests`,
+          description:
+            `Accepted ${accepted} diff(s)` +
+            (removed > 0 ? `, removed ${removed}` : "") +
+            `; re-running tests`,
           context: "Visual Diff Review",
         }),
       });
@@ -342,6 +410,7 @@ async function handleCommit(
   return json({
     ok: errors.length === 0,
     accepted,
+    removed,
     errors,
     commitSha: newCommit.sha,
     postCommitWarnings,

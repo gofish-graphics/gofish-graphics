@@ -58,7 +58,7 @@ export const Connected: StoryObj<Args> = {
     chart(drivingShifts, { axes: true })
       .flow(scatter({ by: "year", x: "miles", y: "gas" }))
       .mark(circle({ r: 4, fill: "white", stroke: "black", strokeWidth: 2 }))
-      .connect(line({ stroke: "black", strokeWidth: 2 }))
+      .layer(line({ stroke: "black", strokeWidth: 2 }))
       .render(container, {
         w: args.w,
         h: args.h,

@@ -160,9 +160,6 @@ for the API.
         "zOrder": {
           "type": "number"
         },
-        "connect": {
-          "$ref": "#/$defs/MarkIR"
-        },
         "name": {
           "type": "string",
           "description": "Chart-level name so a sibling Layer constrain callback can reference this chart."
@@ -2162,6 +2159,17 @@ for the API.
           "type": "string",
           "description": "Pairwise form: column holding the target ref."
         },
+        "by": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/FieldAccessor"
+            }
+          ],
+          "description": "Bag form: partition the operand refs by this field (or field(...) accessor) and draw one connector per group."
+        },
         "name": {
           "type": "string"
         },
@@ -2222,6 +2230,17 @@ for the API.
         },
         "to": {
           "type": "string"
+        },
+        "by": {
+          "oneOf": [
+            {
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/FieldAccessor"
+            }
+          ],
+          "description": "Bag form: partition the operand refs by this field (or field(...) accessor) and draw one connector per group."
         },
         "name": {
           "type": "string"

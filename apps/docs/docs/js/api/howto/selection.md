@@ -30,6 +30,10 @@ layer([
 The `layer` function renders both charts in the same coordinate space, allowing
 the second chart to overlay the first.
 
+> When the second chart traces the _first_ chart's own marks (rather than
+> another chart's), [`.layer()`](/js/api/core/layer) chained on the builder is
+> shorter sugar for this same pattern — see the examples below.
+
 ## Example: Connected scatterplot
 
 [`line`](/js/api/marks/line) and [`ribbon`](/js/api/marks/ribbon) take an array of
@@ -121,6 +125,11 @@ hatch: `group({ by: (r) => r.datum.species })`. Note the asymmetry: `by` reads
 the **selection stream** (refs, so `datum.` paths), while a mark's channel like
 `rect({ h: "count" })` reads the **raw record** and is _not_ path-prefixed. See
 [path-aware `by`](/js/api/operators/spread#path-aware-by).
+
+When the chart being re-partitioned is the first chart's own marks, skip this
+manual `group()` + `selectAll` wiring entirely: `ribbon` and `line` accept a
+`by` option directly, so `.layer(ribbon({ by: "species", opacity: 0.8 }))`
+does the same re-partition in one line. See [`.layer()`](/js/api/core/layer).
 
 ## Example: A single-node reference
 

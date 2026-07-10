@@ -47,11 +47,20 @@ rect(seafood, { h: "count", fill: "species" })
   .stackY("species")
   .derive(sort("count"))
   .spreadX("lake", { spacing: 64 })
-  // group the bars by species, then draw one ribbon through each group
-  .group({ by: "datum.species" })
-  .connect(ribbon({ opacity: 0.8 }))
+  // draw one ribbon through each species group
+  .layer(ribbon({ by: "species", opacity: 0.8 }))
   .render(root, { w: 500, h: 300, axes: true });
 ```
+
+::: tip What actually shipped
+The syntax debate below predates the real API. The shipped forward syntax
+settled on `chart(data).flow(...).mark(...)`, and the ribbon-chart case above
+is now `.layer(ribbon({ by: "species", opacity: 0.8 }))` chained on the
+builder — `by` on the connector mark itself does the re-partition that this
+"Reverse" sketch spells as a separate `.group({ by: "datum.species" })` step.
+There is no `.connect()` method. See [`.layer()`](/js/api/core/layer) for the
+current semantics.
+:::
 
 **Forward** (needed several more examples to figure out — the early sketches
 struggled with `connect`):

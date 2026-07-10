@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
 import { seafood } from "../../src/data/catch";
 import { chart, spread, blank } from "../../src/lib";
-import { ribbon, group } from "../../src/lib";
+import { ribbon } from "../../src/lib";
 
 const meta: Meta = {
   title: "Forward Syntax V3/Ridgeline Chart",
@@ -38,11 +38,7 @@ export const Default: StoryObj<Args> = {
         spread({ by: "species", dir: "y", spacing: -16 })
       )
       .mark(blank({ h: "count", fill: "species" }))
-      .layer(
-        chart()
-          .flow(group({ by: "species" }))
-          .mark(ribbon({ opacity: 0.8, mixBlendMode: "normal" }))
-      )
+      .layer(ribbon({ by: "species", opacity: 0.8, mixBlendMode: "normal" }))
       .render(container, {
         w: args.w,
         h: args.h,

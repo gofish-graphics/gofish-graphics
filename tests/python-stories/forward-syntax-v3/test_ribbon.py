@@ -26,11 +26,7 @@ def story_basic():
             stack(by=field("species").sort("count"), dir="y"),
         )
         .mark(rect(h="count", fill="species"))
-        .layer(
-            chart()
-            .flow(group(by="species"))
-            .mark(ribbon(opacity=0.8))
-        ),
+        .layer(ribbon(by="species", opacity=0.8)),
         {"w": 400, "h": 400, "axes": True},
     )
 

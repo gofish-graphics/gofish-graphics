@@ -23,19 +23,20 @@ layer([
 
 ```python
 ribbon(stroke=None, strokeWidth=None, opacity=None, mixBlendMode=None,
-     dir=None, curve=None) -> Mark
+     dir=None, curve=None, by=None) -> Mark
 ```
 
 ## Parameters
 
-| Parameter      | Type          | Description                               |
-| -------------- | ------------- | ----------------------------------------- |
-| `stroke`       | `str`         | Outline color                             |
-| `strokeWidth`  | `int`         | Outline width in pixels                   |
-| `opacity`      | `float`       | Opacity, `0`–`1`                          |
-| `mixBlendMode` | `str`         | CSS blend mode for overlapping areas      |
-| `dir`          | `str`         | Direction the ribbon fills toward         |
-| `curve`        | `str \| dict` | Screen-space path shape; default `"auto"` |
+| Parameter      | Type                            | Description                                                                                                                                                                                                                                                                                                                                                                                               |
+| -------------- | ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `stroke`       | `str`                           | Outline color                                                                                                                                                                                                                                                                                                                                                                                             |
+| `strokeWidth`  | `int`                           | Outline width in pixels                                                                                                                                                                                                                                                                                                                                                                                   |
+| `opacity`      | `float`                         | Opacity, `0`–`1`                                                                                                                                                                                                                                                                                                                                                                                          |
+| `mixBlendMode` | `str`                           | CSS blend mode for overlapping areas                                                                                                                                                                                                                                                                                                                                                                      |
+| `dir`          | `str`                           | Direction the ribbon fills toward                                                                                                                                                                                                                                                                                                                                                                         |
+| `curve`        | `str \| dict`                   | Screen-space path shape; default `"auto"`                                                                                                                                                                                                                                                                                                                                                                 |
+| `by`           | `str \| field(...) \| Callable` | Partitions the operand bag (the list of refs) into groups and draws one band per group. Same grammar as any operator's `by` — bare field name, key function, or [`field(...)`](/python/api/operators/spread#field-expression-pipeline) accessor. Resolves against the refs' own datum automatically (no `datum.` prefix), same as `group(by=...)`. Composes with an upstream `group()` as a nested split. |
 
 Returns a `Mark` for use in [`.mark()`](/python/api/core/mark).
 
@@ -52,19 +53,27 @@ ribbon per series), run it through `group(by="datum.field")` — see
 Stack several ribbons in one `layer` — with `opacity` or `mixBlendMode` — for
 layered and stacked area charts.
 
-## Sugar: `.connect()`
+## Sugar: `.layer(ribbon(by=...))`
 
 When the ribbon traces a chart's _own_ marks, skip the two-chart `selectAll`
-recipe and chain [`.connect()`](/python/api/core/connect) on the builder:
+recipe and chain [`.layer()`](/python/api/core/layer) with `by` on the
+builder — this is the canonical simple ribbon-chart spelling:
 
 ```python
-chart(data).flow(
-    spread(by="lake", dir="x")
-).mark(blank(h="count")).connect(ribbon(opacity=0.6))
+from gofish import chart, spread, stack, field, rect, ribbon
+
+chart(seafood, axes=True).flow(
+    spread(by="lake", dir="x", spacing=64),
+    stack(by=field("species").sort("count"), dir="y"),
+).mark(rect(h="count", fill="species")).layer(
+    ribbon(by="species", opacity=0.8)
+).render(w=400, h=400)
 ```
 
-See [`.connect()`](/python/api/core/connect) for the full semantics; the
-explicit `layer([...])` + `selectAll` form traces _another_ chart's marks.
+See [`.layer()`](/python/api/core/layer) for the full semantics, including the
+zBelow-by-default paint order and the desugaring to the explicit
+`layer([...])` + `selectAll` form (which is still what you want to trace
+_another_ chart's marks).
 
 ## Examples
 

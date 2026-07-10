@@ -288,8 +288,11 @@ the **modifier factory** that also lives in this file — `createModifier` +
 (layer / Porter-Duff marks, which add `.constrain()`). `.name(...)` also
 stashes the passed name on the returned mark function via `stashLayerName`
 (defined in `chartBuilder.ts`, called by the `name` modifier's `tag` hook), so
-[`ChartBuilder.connect()`](/js/api/core/connect) can detect a user-chained name
-without parsing the `__serialize` tag.
+[`.layer()`](/js/api/core/layer)'s producer-tier auto-naming can detect a
+user-chained name without parsing the `__serialize` tag. (An earlier
+`ChartBuilder.connect()` method used this same stashed name; it was deleted
+in favor of `.layer()`, which generalizes the pattern to every tier — see
+[The Mark Factory](/internals/frontend/mark-factory#createrelationalmark-connectors-as-marks).)
 
 A modifier's `apply(node, layerContext, datum, ...args)` receives the
 **per-instance datum** the mark was called with — the same value the shape

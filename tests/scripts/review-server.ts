@@ -13,8 +13,11 @@ import { join } from "path";
 import { exec } from "child_process";
 import {
   collectDiffs,
+  collectRemovedStories,
   acceptStory,
+  removeBaselineStory,
   formatDomDiff,
+  escapeHtml,
   ROOT,
   type DiffEntry,
 } from "./diff-utils.js";
@@ -37,7 +40,10 @@ pullSnapshots(getSnapshotBranchName(), join(ROOT, "__snapshots__"));
 // In-memory state
 // ---------------------------------------------------------------------------
 
-const diffs: DiffEntry[] = collectDiffs();
+// "Removed" stories (baseline exists, story no longer captured) are
+// first-class DiffEntry("removed") entries too — they must be reviewed and
+// accepted (which deletes the baseline) like any other diff.
+const diffs: DiffEntry[] = [...collectDiffs(), ...collectRemovedStories()];
 /** path → pixel diff result */
 const pixelDiffs = new Map<string, PixelDiffResult | null>();
 
@@ -156,19 +162,37 @@ function handleGetScreenshot(
 function handleGetDomDiff(res: ServerResponse, path: string): void {
   const entry = findEntry(path);
   if (!entry) return respondError(res, 404, "Not found");
-  if (!entry.beforeDom || !entry.afterDom) {
-    respond(res, 200, "text/html", "<em>No DOM diff available.</em>");
+  if (entry.beforeDom && entry.afterDom) {
+    respond(
+      res,
+      200,
+      "text/html",
+      formatDomDiff(entry.beforeDom, entry.afterDom)
+    );
     return;
   }
-  const html = formatDomDiff(entry.beforeDom, entry.afterDom);
-  respond(res, 200, "text/html", html);
+  if (entry.beforeDom) {
+    // Removed: no "after" DOM — show the baseline that would be deleted.
+    respond(
+      res,
+      200,
+      "text/html",
+      `<pre style="margin:0;white-space:pre-wrap;padding:12px;">${escapeHtml(entry.beforeDom)}</pre>`
+    );
+    return;
+  }
+  respond(res, 200, "text/html", "<em>No DOM diff available.</em>");
 }
 
 function handleAccept(res: ServerResponse, path: string): void {
   const entry = findEntry(path);
   if (!entry) return respondError(res, 404, "Not found");
   try {
-    acceptStory(path);
+    if (entry.kind === "removed") {
+      removeBaselineStory(path);
+    } else {
+      acceptStory(path);
+    }
     entry.status = "accepted";
     respondJson(res, { ok: true });
   } catch (e) {
@@ -188,7 +212,11 @@ function handleAcceptAll(res: ServerResponse): void {
   for (const entry of diffs) {
     if (entry.status === "pending") {
       try {
-        acceptStory(entry.path);
+        if (entry.kind === "removed") {
+          removeBaselineStory(entry.path);
+        } else {
+          acceptStory(entry.path);
+        }
         entry.status = "accepted";
       } catch (e) {
         errors.push(`${entry.path}: ${String(e)}`);
@@ -254,6 +282,7 @@ function serveApp(res: ServerResponse): void {
     .kind-regression { color: #f38ba8; }
     .kind-new { color: #89b4fa; }
     .kind-parity { color: #fab387; }
+    .kind-removed { color: #9399b2; }
     .status-accepted { color: #a6e3a1 !important; }
     .status-rejected { color: #f38ba8 !important; }
 
@@ -369,6 +398,7 @@ function serveApp(res: ServerResponse): void {
           <h4 style="font-size:12px;color:#666;margin:0 0 6px;">After (current)</h4>
           <div style="background:#fff;border:1px solid #e0e0e0;border-radius:6px;padding:12px;min-height:80px;display:flex;align-items:flex-start;justify-content:center;">
             <img id="sbs-after" style="max-width:100%;display:block;" />
+            <div id="sbs-no-after" style="color:#aaa;font-size:13px;padding:32px;display:none;">Story removed — no current render</div>
           </div>
         </div>
       </div>
@@ -494,7 +524,7 @@ function serveApp(res: ServerResponse): void {
     if (strobeInterval) { clearInterval(strobeInterval); strobeInterval = null; }
   }
 
-  function startStrobe(hasBefore) {
+  function startStrobe(hasBefore, singleLabel, singleColor) {
     stopStrobe();
     const imgAfter = document.getElementById('img-after');
     const imgBefore = document.getElementById('img-before');
@@ -502,8 +532,8 @@ function serveApp(res: ServerResponse): void {
 
     if (!hasBefore) {
       imgBefore.style.opacity = '0';
-      label.textContent = 'After (new)';
-      label.style.background = '#3498db';
+      label.textContent = singleLabel || 'After (new)';
+      label.style.background = singleColor || '#3498db';
       return;
     }
 
@@ -545,7 +575,7 @@ function serveApp(res: ServerResponse): void {
     document.getElementById('main-title').textContent = path;
     const badge = document.getElementById('main-kind-badge');
     badge.textContent = entry.kind.toUpperCase();
-    const kindColors = { regression: '#e74c3c', new: '#3498db', parity: '#e67e22' };
+    const kindColors = { regression: '#e74c3c', new: '#3498db', parity: '#e67e22', removed: '#7f8c8d' };
     badge.style.background = (kindColors[entry.kind] || '#888') + '22';
     badge.style.color = kindColors[entry.kind] || '#888';
     badge.style.border = '1px solid ' + (kindColors[entry.kind] || '#888');
@@ -553,6 +583,11 @@ function serveApp(res: ServerResponse): void {
     badge.style.padding = '2px 10px';
     badge.style.fontSize = '11px';
     badge.style.fontWeight = '700';
+
+    const acceptBtn = document.getElementById('btn-accept');
+    acceptBtn.textContent = entry.kind === 'removed'
+      ? '✖ Accept removal — delete baseline'
+      : '✓ Accept';
 
     document.getElementById('empty-state').style.display = 'none';
 
@@ -589,7 +624,20 @@ function serveApp(res: ServerResponse): void {
     const sbsBefore = document.getElementById('sbs-before');
     const sbsAfter = document.getElementById('sbs-after');
     const noBefore = document.getElementById('sbs-no-before');
+    const noAfter = document.getElementById('sbs-no-after');
 
+    if (entry.kind === 'removed') {
+      sbsBefore.src = '/api/screenshot/before/' + encodeURIComponent(entry.path);
+      sbsBefore.style.display = 'block';
+      noBefore.style.display = 'none';
+      sbsAfter.src = '';
+      sbsAfter.style.display = 'none';
+      noAfter.style.display = 'block';
+      return;
+    }
+
+    noAfter.style.display = 'none';
+    sbsAfter.style.display = 'block';
     sbsAfter.src = '/api/screenshot/after/' + encodeURIComponent(entry.path);
     if (entry.kind !== 'new') {
       sbsBefore.src = '/api/screenshot/before/' + encodeURIComponent(entry.path);
@@ -607,6 +655,15 @@ function serveApp(res: ServerResponse): void {
   function renderStrobe(entry) {
     const imgAfter = document.getElementById('img-after');
     const imgBefore = document.getElementById('img-before');
+
+    if (entry.kind === 'removed') {
+      // No "after" state — show the baseline being deleted, no strobing.
+      imgAfter.src = '/api/screenshot/before/' + encodeURIComponent(entry.path);
+      imgBefore.style.display = 'none';
+      imgBefore.src = '';
+      startStrobe(false, 'Removed (baseline shown)', '#7f8c8d');
+      return;
+    }
 
     imgAfter.src = '/api/screenshot/after/' + encodeURIComponent(entry.path);
     if (entry.kind !== 'new') {

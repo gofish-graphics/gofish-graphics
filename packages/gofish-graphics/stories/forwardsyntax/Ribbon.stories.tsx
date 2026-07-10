@@ -48,11 +48,7 @@ export const Basic: StoryObj<Args> = {
         stack({ by: field("species").sort("count"), dir: "y" })
       )
       .mark(rect({ h: "count", fill: "species" }))
-      .layer(
-        chart()
-          .flow(group({ by: "species" }))
-          .mark(ribbon({ opacity: 0.8 }))
-      )
+      .layer(ribbon({ by: "species", opacity: 0.8 }))
       .render(container, {
         w: args.w,
         h: args.h,

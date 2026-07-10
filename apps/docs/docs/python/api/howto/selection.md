@@ -32,10 +32,12 @@ the second chart to overlay the first.
 
 ::: tip
 For the common case of threading a connector through a chart's **own** marks,
-[`.connect()`](/python/api/core/connect) is shorter sugar for this two-layer
-recipe. Reach for the explicit `layer([...])` + `selectAll` form when connecting
-a _different_ chart's marks or when you need a custom paint order.
-:::
+chaining [`.layer()`](/python/api/core/layer) with a bare connector mark is
+shorter sugar for this two-layer recipe. Reach for the explicit `layer([...])`
+
+- `selectAll` form when connecting a _different_ chart's marks or when you
+  need a custom paint order.
+  :::
 
 ## Example: Connected scatterplot
 
@@ -113,6 +115,11 @@ hatch: `group(by=lambda r: r.datum.species)`. Note the asymmetry: `by` reads the
 **selection stream** (refs, so `datum.` paths), while a mark's channel like
 `rect(h="count")` reads the **raw record** and is _not_ path-prefixed. See
 [path-aware `by`](/python/api/operators/spread#path-aware-by).
+
+When the chart being re-partitioned is the first chart's own marks, skip this
+manual `group()` + `selectAll` wiring entirely: `ribbon` and `line` accept a
+`by` option directly, so `.layer(ribbon(by="species", opacity=0.8))` does the
+same re-partition in one line. See [`.layer()`](/python/api/core/layer).
 
 ## Example: A single-node reference
 

@@ -1,6 +1,6 @@
 """Equivalent of Streamgraph.stories.tsx — Forward Syntax V3/Streamgraph."""
 
-from gofish import chart, spread, stack, blank, ribbon, group
+from gofish import chart, spread, stack, blank, ribbon
 from python_stories.data import SEAFOOD
 
 
@@ -12,6 +12,6 @@ def story_default():
             stack(by="species", dir="y"),
         )
         .mark(blank(h="count", fill="species"))
-        .layer(chart().flow(group(by="species")).mark(ribbon(opacity=0.8))),
+        .layer(ribbon(by="species", opacity=0.8)),
         {"w": 400, "h": 400},
     )

@@ -171,30 +171,13 @@ export function resolveRefData(
 }
 
 /**
- * Stash the chained `.name(...)` value directly on a mark function.
- * `ChartBuilder.connect()` reads this to detect a user-chained name without
- * relying on the `__serialize` tag, which is absent on untagged custom marks
- * and omits Tokens. Every `.name()` implementation calls this.
+ * Stash the chained `.name(...)` value directly on a mark function, so a
+ * user-chained name can be detected without relying on the `__serialize` tag
+ * (absent on untagged custom marks, and it omits Tokens). Every `.name()`
+ * implementation calls this.
  */
 export function stashLayerName(mark: object, layerName: unknown): void {
   (mark as any).__layerName = layerName;
-}
-
-/**
- * Tag every node a mark produces with a per-resolve marker so `.connect()`
- * can find its targets without minting a registry name. Unlike a string
- * layer name, a Symbol key can't collide with — or leak to — sibling charts
- * sharing the layerContext: hygiene by construction.
- */
-function withConnectMarker<T>(base: Mark<T>, marker: symbol): Mark<T> {
-  return async (d, key, layerContext) => {
-    const node = await resolveMarkResult(
-      base(d, key, layerContext),
-      layerContext
-    );
-    (node as any)[marker] = true;
-    return node;
-  };
 }
 
 export class ChartBuilder<TInput, TOutput = TInput> {
@@ -204,7 +187,6 @@ export class ChartBuilder<TInput, TOutput = TInput> {
   private readonly finalMark?: Mark<TOutput>;
   private readonly layerContext: LayerContext;
   private readonly nodeZOrder?: number;
-  private readonly connector?: Mark<GoFishRef[]>;
   private readonly nodeName?: string;
 
   constructor(
@@ -214,7 +196,6 @@ export class ChartBuilder<TInput, TOutput = TInput> {
     finalMark?: Mark<TOutput>,
     layerContext: LayerContext = {},
     nodeZOrder?: number,
-    connector?: Mark<GoFishRef[]>,
     nodeName?: string
   ) {
     this.data = data;
@@ -223,7 +204,6 @@ export class ChartBuilder<TInput, TOutput = TInput> {
     this.finalMark = finalMark;
     this.layerContext = layerContext;
     this.nodeZOrder = nodeZOrder;
-    this.connector = connector;
     this.nodeName = nodeName;
   }
 
@@ -276,7 +256,6 @@ export class ChartBuilder<TInput, TOutput = TInput> {
       this.finalMark,
       this.layerContext,
       this.nodeZOrder,
-      this.connector,
       this.nodeName
     );
   }
@@ -304,7 +283,6 @@ export class ChartBuilder<TInput, TOutput = TInput> {
       finalMark,
       this.layerContext,
       this.nodeZOrder,
-      this.connector,
       this.nodeName
     );
   }
@@ -323,37 +301,7 @@ export class ChartBuilder<TInput, TOutput = TInput> {
       this.finalMark,
       this.layerContext,
       this.nodeZOrder,
-      this.connector,
       layerName
-    );
-  }
-
-  /**
-   * Overlay a connector mark (e.g. `line()`, `ribbon()`) under the nodes this
-   * chart's mark produces — sugar for the two-chart layer([...]) + selectAll
-   * pattern. If the mark has a string `.name(...)`, its registered nodes are
-   * the targets (exactly the manual selectAll(name) semantics); otherwise the
-   * produced nodes are tagged directly at resolve time — no name is minted or
-   * serialized. The connector renders beneath the marks (zOrder -1), matching
-   * the manual form's `.zOrder(-1)`.
-   */
-  connect(connector: Mark<GoFishRef[]>): ChartBuilder<TInput, TOutput> {
-    if (this.connector !== undefined) {
-      throw new Error(
-        ".connect() was already called on this chart; only one connector is " +
-          "supported. For additional overlays, use " +
-          "layer([chart(...).mark(m.name('pts')), chart(selectAll('pts')).mark(...)])."
-      );
-    }
-    return new ChartBuilder(
-      this.data,
-      this.options,
-      this.operators,
-      this.finalMark,
-      this.layerContext,
-      this.nodeZOrder,
-      connector,
-      this.nodeName
     );
   }
 
@@ -393,7 +341,6 @@ export class ChartBuilder<TInput, TOutput = TInput> {
       this.finalMark,
       this.layerContext,
       this.nodeZOrder,
-      this.connector,
       this.nodeName
     );
   }
@@ -439,31 +386,8 @@ export class ChartBuilder<TInput, TOutput = TInput> {
       throw new Error("Cannot resolve: no mark specified. Call .mark() first.");
     }
 
-    // .connect() targets: a user-chained string `.name(...)` means "the nodes
-    // registered under that name" (exactly the manual selectAll(name) form,
-    // including any same-named siblings). An unnamed mark is wrapped
-    // pre-composition so each leaf node it produces carries a per-resolve
-    // marker instead — no registry name exists to collide or leak.
-    let connectName: string | undefined;
-    let connectMarker: symbol | undefined;
-    let baseMark = this.finalMark as Mark<any>;
-    if (this.connector) {
-      const userName = (this.finalMark as any).__layerName;
-      if (typeof userName === "string" && userName.length > 0) {
-        connectName = userName;
-      } else if (userName !== undefined) {
-        throw new Error(
-          ".connect() requires the mark's .name(...) to be a string; Token " +
-            "names are not supported. Use the manual layer([...]) form."
-        );
-      } else {
-        connectMarker = Symbol("gofish-connect-target");
-        baseMark = withConnectMarker(baseMark, connectMarker);
-      }
-    }
-
     // Apply all operators to the mark
-    let composedMark = baseMark;
+    let composedMark = this.finalMark as Mark<any>;
     for (const op of this.operators.toReversed()) {
       composedMark = await op(composedMark);
     }
@@ -498,38 +422,6 @@ export class ChartBuilder<TInput, TOutput = TInput> {
     }
 
     let result: GoFishNode = node;
-    if (this.connector) {
-      // Collect the targets: the registered layer for a named mark, or the
-      // marker-tagged nodes for an unnamed one. Both ride the same bounded
-      // DFS walk as registration, so ordering and component-boundary hygiene
-      // match what selectAll(name) yields.
-      const targets = connectName
-        ? (this.layerContext[connectName]?.nodes ?? [])
-        : [...visibleNodes(node)].filter((n) => (n as any)[connectMarker!]);
-      if (targets.length === 0) {
-        throw new Error(
-          `.connect(): ${
-            connectName
-              ? `no nodes are registered under "${connectName}"`
-              : "the chart's mark produced no nodes"
-          } — nothing to connect (is the data empty?).`
-        );
-      }
-      // Elaborate as the literal desugaring: resolve the sibling
-      // Chart(refs).mark(connector).zOrder(-1) through this same method —
-      // one canonical Frame/setShared/registration/zOrder path — then layer
-      // it over the chart.
-      const refs = targets.map((n) => ref({ __ref: n }));
-      const connectFrame = await new ChartBuilder<GoFishRef[], GoFishRef[]>(
-        refs,
-        undefined,
-        [],
-        this.connector,
-        this.layerContext,
-        -1
-      ).resolve();
-      result = await Layer({}, [node, connectFrame]);
-    }
 
     // y-up is no longer a chart-vs-not flag: orientation is a PER-SCOPE property
     // resolved at bake time (issue #629). Each topmost continuous-y node (a value
@@ -545,7 +437,7 @@ export class ChartBuilder<TInput, TOutput = TInput> {
     // A user-chained `.name(...)` names the resolved node so it's a valid
     // `.constrain(...)` target on an enclosing layer (looked up by `_name`)
     // and resolvable via cross-chart `selectAll`/`ref`. `stashLayerName` keeps
-    // `.connect()`/serialize detection consistent with named marks.
+    // serialize detection consistent with named marks.
     if (this.nodeName !== undefined) {
       result.name(this.nodeName);
       stashLayerName(this, this.nodeName);
@@ -573,7 +465,6 @@ export class ChartBuilder<TInput, TOutput = TInput> {
       this.finalMark,
       layerContext,
       this.nodeZOrder,
-      this.connector,
       this.nodeName
     );
   }
@@ -586,7 +477,6 @@ export class ChartBuilder<TInput, TOutput = TInput> {
       this.finalMark,
       this.layerContext,
       value,
-      this.connector,
       this.nodeName
     );
   }
@@ -731,21 +621,27 @@ function isChartOptions(x: unknown): x is ChartOptions {
 export type LayerTier = ChartBuilder<any, any> | Mark<any> | GoFishNode;
 
 /**
- * A stack of chart tiers built by chaining `.layer(...)`. Most tiers are full
- * `Chart(...)` pipelines; a tier whose data is an empty `Chart()` scope inherits
- * the previous tier's marks (wired here as `selectAll(autoName)` against the
- * previous tier's auto-named mark). A bare `Mark` tier is a component-level
- * annotation: it passes through untouched (never a producer for an empty
- * `Chart()` scope, never a `selectAll` consumer) and resolves via
- * `resolveMarkResult`. Renders as the manual `layer([...])` form: tiers share
- * one `layerContext` and resolve in order, so each tier's name registrations
- * land before the next tier's `selectAll`.
+ * A stack of chart tiers built by chaining `.layer(...)`. The previous tier's
+ * marks are provided as UNIFORM scope to every tier: a `GoFishRef[]` bag of
+ * the refs `.name(...)`-registered against the previous tier's produced
+ * nodes. Consumption is decided entirely by what a tier's mark does with that
+ * input — there is no dispatch on tier kind here:
+ *   - an empty `Chart()` scope binds it as chart DATA (so its `.flow()`/
+ *     `.mark()` pipeline runs over the bag, e.g. a nested `group()`);
+ *   - a bare *relational* mark (`Mark<GoFishRef[]>`, e.g. `ribbon()`/`line()`
+ *     used without `.mark()`) consumes it directly as the bag it connects;
+ *   - a bare *leaf* mark (`rect`, `text`, …) ignores its datum argument for a
+ *     literal-valued annotation, so receiving the bag instead of `undefined`
+ *     is inert — it behaves exactly as before.
+ * Tiers share one `layerContext` and resolve in order, so each tier's name
+ * registrations land before the next tier's scope is read (mirrors the
+ * manual `layer([...])` form).
  */
 export class LayerBuilder {
   constructor(private readonly tiers: LayerTier[]) {}
 
-  /** Stack another tier; an empty `Chart()` scope inherits these marks, and a
-   *  bare `Mark` is a component-level annotation tier. */
+  /** Stack another tier; every tier is offered the previous tier's marks as
+   *  scope (see the class doc for how consumption is decided). */
   layer(child: LayerTier): LayerBuilder {
     return new LayerBuilder([...this.tiers, child]);
   }
@@ -763,69 +659,64 @@ export class LayerBuilder {
     return first;
   }
 
-  // Bind empty-scope tiers to the previous tier's marks: name the producer's
-  // mark (auto unless already named) and point the consumer at selectAll(name).
-  // Mark tiers pass through untouched.
-  private wireTiers(): LayerTier[] {
-    const out: LayerTier[] = [];
-    let prevName: string | undefined;
-    let prevWasMarkTier = false;
-    let autoIdx = 0;
-    for (let i = 0; i < this.tiers.length; i++) {
-      let tier = this.tiers[i];
-      // A mark tier (bare Mark / GoFishNode) is a component-level annotation:
-      // pass it through, and it's never a producer for an empty `Chart()` scope.
-      if (!(tier instanceof ChartBuilder)) {
-        out.push(tier);
-        prevWasMarkTier = true;
-        prevName = undefined;
-        continue;
-      }
-      if (tier.usesPreviousLayerMarks()) {
-        if (prevWasMarkTier) {
-          throw new Error(
-            ".layer(Chart()) with an empty scope can't inherit from a bare mark " +
-              "tier — give the previous tier a chart with a .mark() to draw from."
-          );
-        }
-        if (prevName === undefined) {
-          throw new Error(
-            ".layer(Chart()) with an empty scope has no previous tier to draw " +
-              "from — give the first tier real data."
-          );
-        }
-        tier = tier.withData(
-          new GoFishRef({ selection: prevName, multiplicity: "all" })
-        );
-      }
-      const next = this.tiers[i + 1];
-      if (next instanceof ChartBuilder && next.usesPreviousLayerMarks()) {
-        const named = tier.ensureNamedMark(`__gofish_layer_${autoIdx}`);
-        if (named.name === `__gofish_layer_${autoIdx}`) autoIdx++;
-        tier = named.builder;
-        prevName = named.name;
-      }
-      prevWasMarkTier = false;
-      out.push(tier);
-    }
-    return out;
-  }
-
   async resolve(): Promise<GoFishNode> {
-    const tiers = this.wireTiers();
     const sharedContext: LayerContext = {};
     const nodes: GoFishNode[] = [];
-    // Sequential so each tier's name registrations are visible to the next
-    // tier's selectAll (mirrors the manual `layer([...])` resolution order).
-    for (const tier of tiers) {
+    // The previous tier's marks, as a `GoFishRef[]` bag — offered uniformly to
+    // every tier (see class doc). `undefined` before any tier has produced
+    // named nodes (the root tier, or after a producer with no name).
+    let prevRefs: GoFishRef[] | undefined;
+    let autoIdx = 0;
+    // Sequential so each tier's name registrations (and the bag built from
+    // them) are visible to the next tier.
+    for (let i = 0; i < this.tiers.length; i++) {
+      let tier = this.tiers[i];
+      const hasNext = i < this.tiers.length - 1;
+
       if (tier instanceof ChartBuilder) {
+        if (tier.usesPreviousLayerMarks()) {
+          if (prevRefs === undefined) {
+            throw new Error(
+              ".layer(Chart()) with an empty scope has no previous tier's " +
+                "marks to draw from — give the first tier real data, or make " +
+                "sure the previous tier actually produced nodes."
+            );
+          }
+          tier = tier.withData(prevRefs as any);
+        }
+        // Auto-name this tier's mark (unless already named) whenever a later
+        // tier exists, so its produced nodes are addressable as the next
+        // tier's scope — uniformly, regardless of whether the next tier is an
+        // empty `Chart()` scope, a relational mark, or a leaf annotation.
+        let autoName: string | undefined;
+        if (hasNext) {
+          const named = tier.ensureNamedMark(`__gofish_layer_${autoIdx}`);
+          if (named.name === `__gofish_layer_${autoIdx}`) autoIdx++;
+          tier = named.builder;
+          autoName = named.name;
+        }
         nodes.push(await tier.withLayerContext(sharedContext).resolve());
+        prevRefs = autoName
+          ? (sharedContext[autoName]?.nodes ?? []).map((n) => ref({ __ref: n }))
+          : undefined;
       } else {
-        // Mark tier: resolve the bare mark against the shared layer context so
-        // a `.name(...)`-tagged annotation still registers. `resolveMarkResult`
-        // invokes a Mark function with an undefined datum (component-level
-        // semantics) and passes a GoFishNode through unchanged.
-        nodes.push(await resolveMarkResult(tier as any, sharedContext));
+        // Mark tier: resolve the bare mark against the shared layer context
+        // (so a `.name(...)`-tagged annotation still registers) and pass the
+        // previous tier's bag as its datum, uniformly. A relational mark
+        // (e.g. `ribbon()`) reads it as the refs it connects; a leaf mark
+        // (e.g. `rect({...})`) ignores its datum argument and renders exactly
+        // as before.
+        nodes.push(
+          await resolveMarkResult(
+            typeof tier === "function"
+              ? (tier as Mark<any>)(prevRefs as any, undefined, sharedContext)
+              : tier,
+            sharedContext
+          )
+        );
+        // A bare mark tier isn't auto-named, so it never becomes the next
+        // tier's producer.
+        prevRefs = undefined;
       }
     }
     const result = await Layer({}, nodes);

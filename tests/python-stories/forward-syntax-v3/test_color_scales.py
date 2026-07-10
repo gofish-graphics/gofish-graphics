@@ -10,7 +10,6 @@ from gofish import (
     derive,
     rect,
     ribbon,
-    group,
     palette,
     gradient,
     field,
@@ -184,6 +183,6 @@ def story_ribbon_highlight():
             stack(by=field("species").sort("count"), dir="y"),
         )
         .mark(rect(h="count", fill="species"))
-        .layer(chart().flow(group(by="species")).mark(ribbon(opacity=0.6))),
+        .layer(ribbon(by="species", opacity=0.6)),
         {"w": 400, "h": 400},
     )

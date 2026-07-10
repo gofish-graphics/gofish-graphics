@@ -39,7 +39,7 @@ export const Basic: StoryObj<Args> = {
     chart(seafood, { axes: true })
       .flow(spread({ by: "lake", dir: "x", spacing: args.w / (lakes - 1) }))
       .mark(blank({ h: "count" }))
-      .connect(ribbon({ opacity: 0.8 }))
+      .layer(ribbon({ opacity: 0.8 }))
       .render(container, {
         w: args.w,
         h: args.h,
@@ -67,11 +67,7 @@ export const Stacked: StoryObj<Args> = {
         stack({ by: "species", dir: "y" })
       )
       .mark(blank({ h: "count", fill: "species" }))
-      .layer(
-        chart()
-          .flow(group({ by: "species" }))
-          .mark(ribbon({ opacity: 0.8 }))
-      )
+      .layer(ribbon({ by: "species", opacity: 0.8 }))
       .render(container, {
         w: args.w,
         h: args.h,
@@ -95,11 +91,7 @@ export const Layered: StoryObj<Args> = {
     chart(streamgraphData, { axes: true })
       .flow(spread({ by: "x", dir: "x", spacing: 50 }), group({ by: "c" }))
       .mark(blank({ h: "y", fill: "c" }))
-      .layer(
-        chart()
-          .flow(group({ by: "c" }))
-          .mark(ribbon({ opacity: 0.7 }))
-      )
+      .layer(ribbon({ by: "c", opacity: 0.7 }))
       .render(container, {
         w: 500,
         h: 300,
