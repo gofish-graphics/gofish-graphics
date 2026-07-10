@@ -23,20 +23,21 @@ layer([
 
 ```python
 ribbon(stroke=None, strokeWidth=None, opacity=None, mixBlendMode=None,
-     dir=None, curve=None, by=None) -> Mark
+     dir=None, curve=None, by=None, w=None, h=None, emX=None, emY=None) -> Mark
 ```
 
 ## Parameters
 
-| Parameter      | Type                            | Description                                                                                                                                                                                                                                                                                                                                                                                               |
-| -------------- | ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `stroke`       | `str`                           | Outline color                                                                                                                                                                                                                                                                                                                                                                                             |
-| `strokeWidth`  | `int`                           | Outline width in pixels                                                                                                                                                                                                                                                                                                                                                                                   |
-| `opacity`      | `float`                         | Opacity, `0`–`1`                                                                                                                                                                                                                                                                                                                                                                                          |
-| `mixBlendMode` | `str`                           | CSS blend mode for overlapping areas                                                                                                                                                                                                                                                                                                                                                                      |
-| `dir`          | `str`                           | Direction the ribbon fills toward                                                                                                                                                                                                                                                                                                                                                                         |
-| `curve`        | `str \| dict`                   | Screen-space path shape; default `"auto"`                                                                                                                                                                                                                                                                                                                                                                 |
-| `by`           | `str \| field(...) \| Callable` | Partitions the operand bag (the list of refs) into groups and draws one band per group. Same grammar as any operator's `by` — bare field name, key function, or [`field(...)`](/python/api/operators/spread#field-expression-pipeline) accessor. Resolves against the refs' own datum automatically (no `datum.` prefix), same as `group(by=...)`. Composes with an upstream `group()` as a nested split. |
+| Parameter              | Type                            | Description                                                                                                                                                                                                                                                                                                                                                                                               |
+| ---------------------- | ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `stroke`               | `str`                           | Outline color                                                                                                                                                                                                                                                                                                                                                                                             |
+| `strokeWidth`          | `int`                           | Outline width in pixels                                                                                                                                                                                                                                                                                                                                                                                   |
+| `opacity`              | `float`                         | Opacity, `0`–`1`                                                                                                                                                                                                                                                                                                                                                                                          |
+| `mixBlendMode`         | `str`                           | CSS blend mode for overlapping areas                                                                                                                                                                                                                                                                                                                                                                      |
+| `dir`                  | `str`                           | Direction the ribbon fills toward                                                                                                                                                                                                                                                                                                                                                                         |
+| `curve`                | `str \| dict`                   | Screen-space path shape; default `"auto"`                                                                                                                                                                                                                                                                                                                                                                 |
+| `by`                   | `str \| field(...) \| Callable` | Partitions the operand bag (the list of refs) into groups and draws one band per group. Same grammar as any operator's `by` — bare field name, key function, or [`field(...)`](/python/api/operators/spread#field-expression-pipeline) accessor. Resolves against the refs' own datum automatically (no `datum.` prefix), same as `group(by=...)`. Composes with an upstream `group()` as a nested split. |
+| `w`, `h`, `emX`, `emY` | `int \| float \| str \| bool`   | **Ignored by `ribbon` itself.** Blank-fusion anchor keys: read only when `ribbon(...)` is placed directly in `.mark()` position, where they become the invisible anchor tier's `blank(w=..., h=..., emX=..., emY=...)` opts. See [`.layer()`'s blank-fusion section](/python/api/core/layer#blank-fusion-skip-layer-entirely-for-a-fresh-chart).                                                          |
 
 Returns a `Mark` for use in [`.mark()`](/python/api/core/mark).
 
@@ -74,6 +75,38 @@ See [`.layer()`](/python/api/core/layer) for the full semantics, including the
 zBelow-by-default paint order and the desugaring to the explicit
 `layer([...])` + `selectAll` form (which is still what you want to trace
 _another_ chart's marks).
+
+## Sugar: `.mark(ribbon(...))` (blank-fusion)
+
+When there's no earlier tier at all — just raw data that needs both fresh
+anchors and a connector — place `ribbon(...)` directly in `.mark()` position
+and skip `.layer()` too:
+
+```python
+chart(lake_totals).flow(
+    spread(by="lake", dir="x", spacing=64)
+).mark(ribbon(h="count", opacity=0.8))
+
+# ...is sugar for the explicit two-tier form:
+chart(lake_totals).flow(
+    spread(by="lake", dir="x", spacing=64)
+).mark(blank(h="count")).layer(ribbon(opacity=0.8))
+```
+
+A `by`-split ribbon's `fill` can be a shared field name (each group is
+homogeneous in it): `ribbon(h="count", fill="species", by="species")`
+resolves `fill` through the color scale per group, the same as it would if
+`fill` were declared on an explicit anchor `blank()`.
+
+See [`.layer()`'s blank-fusion section](/python/api/core/layer#blank-fusion-skip-layer-entirely-for-a-fresh-chart)
+for the full desugaring rule (the `w`/`h`/`emX`/`emY` anchor/connector key
+split, `.name()` chaining, and when the rule doesn't fire).
+
+The `w`/`h`/`emX`/`emY` anchor channels are only meaningful when `ribbon` gets
+to synthesize its own anchors this way; passing them to a `ribbon` that
+instead connects already-drawn marks (an empty-scope `chart()` tier inside
+`.layer()`, or `chart(selectAll(...))`/`chart(ref(...))`) is an error, since
+there's nothing left for them to anchor.
 
 ## Examples
 

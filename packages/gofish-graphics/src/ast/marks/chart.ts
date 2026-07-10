@@ -16,7 +16,7 @@ import type { Token } from "../createName";
 import { type ColorConfig } from "../colorSchemes";
 
 export type { ColorConfig };
-import { inferSize } from "../channels";
+import { inferSize, inferColor } from "../channels";
 import { isLive, evalLiveStatic, type LiveValue } from "../../interaction/live";
 import { rect as generatedRect } from "../shapes/rect";
 import { Ellipse } from "../shapes/ellipse";
@@ -377,6 +377,92 @@ function tagRelationalOperands<T extends GoFishAST>(
   return node;
 }
 
+// Anchor-tier keys the blank-fusion rewrite rule (see the doc-comment above
+// and `ChartBuilder.mark`) carves off a relational mark's opts: purely
+// spatial, nothing paint- or path-related. Everything else (fill, stroke,
+// strokeWidth, strokeDasharray, opacity, curve, dir, mixBlendMode, by,
+// source, target) stays with the connector.
+const ANCHOR_KEYS = ["w", "h", "emX", "emY"] as const;
+
+function pickAnchorOpts(opts: Record<string, any>): Record<string, any> {
+  const anchor: Record<string, any> = {};
+  for (const k of ANCHOR_KEYS) {
+    if (k in opts) anchor[k] = opts[k];
+  }
+  return anchor;
+}
+
+/**
+ * Tag a bag-form / by-split-form relational mark with the blank-fusion
+ * descriptor `ChartBuilder.mark()` reads when the mark is placed directly in
+ * `.mark()` position (instead of after an explicit anchor tier via
+ * `.layer(...)`):
+ *
+ *   .mark(R(opts))  ⇒  .mark(blank(anchor(opts))).layer(R(opts))
+ *
+ * `anchor(opts)` is exactly the `{w, h, emX, emY}` subset (`pickAnchorOpts`);
+ * the connector tier is simply the mark AS GIVEN — `produce` (the factory's
+ * second argument) only reads the fields it knows about, so the leftover
+ * spatial keys are inert on the connector side and no opts-splitting is
+ * needed there. `makeAnchor` is a pre-bound `blank(...)` call rather than a
+ * bare opts object: `blank` lives in this module, and `ChartBuilder.mark()`
+ * lives in chartBuilder.ts, which this module already imports FROM —
+ * importing `blank` the other way would cycle.
+ *
+ * The pairwise `{from, to}` form is never tagged: it already consumes rows
+ * with ref columns directly in `.mark()` position and keeps its existing
+ * (unfused) behavior.
+ *
+ * Also carries `type` and `anchorKeys` (the subset of `ANCHOR_KEYS` actually
+ * present in `opts`, keyed off `!== undefined` rather than `in` so an
+ * explicitly-passed `undefined` doesn't count) — `ChartBuilder.mark()` reads
+ * these to throw when the mark lands on the UNFUSED path (an empty-scope tier
+ * or refs data) while still carrying anchor keys that would otherwise be
+ * silently inert. Threading them here (rather than importing `ANCHOR_KEYS` /
+ * `pickAnchorOpts` into chartBuilder.ts) avoids an import cycle: this module
+ * already imports `ChartBuilder` FROM chartBuilder.ts.
+ */
+function tagRelationalFusable(
+  mark: object,
+  type: string,
+  opts: Record<string, any>
+): void {
+  const anchorOpts = pickAnchorOpts(opts);
+  (mark as any).__relationalFusable = {
+    type,
+    opts,
+    anchorKeys: Object.keys(anchorOpts).filter(
+      (k) => anchorOpts[k] !== undefined
+    ),
+    makeAnchor: () => blank(pickAnchorOpts(opts)),
+  };
+}
+
+/**
+ * A `by`-split connector's `fill` may be a shared field name (e.g.
+ * `ribbon({ fill: "species", by: "species" })`) rather than a literal color —
+ * each group is homogeneous in that field by construction whenever it names
+ * the split field itself (or another field the split happens to agree on),
+ * so resolve it once per group into a concrete `Value`, the same way a
+ * per-item mark's color channel would (`inferColor`), instead of leaking the
+ * bare field name through to `Connect` as a literal (invalid) CSS color.
+ * A no-op for literal colors, `Value`s, and undefined — `inferColor` itself
+ * tells a field name from a literal (falls through unchanged when the string
+ * isn't a key of the sampled row).
+ */
+function resolveGroupFill<O extends RelationalMarkOptions>(
+  opts: O,
+  groupRefs: GoFishRef[]
+): O {
+  const fill = (opts as any).fill;
+  if (typeof fill !== "string") return opts;
+  const rows = groupRefs.flatMap((r) =>
+    Array.isArray(r.datum) ? r.datum : [r.datum]
+  );
+  const resolved = inferColor(fill, rows);
+  return resolved === undefined ? opts : ({ ...opts, fill: resolved } as O);
+}
+
 export function createRelationalMark<O extends RelationalMarkOptions>(
   type: string,
   produce: (opts: O, children: GoFishAST[]) => any
@@ -441,8 +527,9 @@ export function createRelationalMark<O extends RelationalMarkOptions>(
             const groupRefs = (
               Array.isArray(group) ? group : [group]
             ) as GoFishRef[];
+            const groupOpts = resolveGroupFill(opts, groupRefs);
             return tagRelationalOperands(
-              (await produce(opts, groupRefs)) as GoFishNode,
+              (await produce(groupOpts, groupRefs)) as GoFishNode,
               groupRefs
             );
           })
@@ -451,6 +538,7 @@ export function createRelationalMark<O extends RelationalMarkOptions>(
       };
       const result = nameableMark(mark);
       (result as any).__serialize = { type, opts };
+      tagRelationalFusable(result, type, opts);
       return result;
     }
 
@@ -459,6 +547,7 @@ export function createRelationalMark<O extends RelationalMarkOptions>(
       tagRelationalOperands((await produce(opts, d)) as GoFishNode, d);
     const result = nameableMark(mark);
     (result as any).__serialize = { type, opts };
+    tagRelationalFusable(result, type, opts);
     return result;
   }
   return relational;
@@ -488,6 +577,15 @@ export type LineOptions = {
   // `line({ by: "series" })` over a bag of point refs draws one polyline per
   // series. Composes with an upstream `group()` as a nested split.
   by?: SplitBy;
+  // Anchor-tier keys for the blank-fusion sugar: placing `line(opts)` directly
+  // in `.mark()` position elaborates to `.mark(blank({w,h,emX,emY})).layer(line(opts))`
+  // (see `createRelationalMark`'s `tagRelationalFusable`). Purely spatial —
+  // `line`'s own `produce` ignores them; they only size/position the
+  // invisible anchor blank() the sugar synthesizes.
+  w?: number | string;
+  h?: number | string;
+  emX?: boolean;
+  emY?: boolean;
 };
 
 // `line` — a center-mode connector (the "line" component): the path between the
@@ -531,6 +629,15 @@ export type RibbonOptions = {
   // `ribbon({ by: "species" })` over a bag of bar refs draws one band per
   // species. Composes with an upstream `group()` as a nested split.
   by?: SplitBy;
+  // Anchor-tier keys for the blank-fusion sugar: placing `ribbon(opts)` directly
+  // in `.mark()` position elaborates to `.mark(blank({w,h,emX,emY})).layer(ribbon(opts))`
+  // (see `createRelationalMark`'s `tagRelationalFusable`). Purely spatial —
+  // `ribbon`'s own `produce` ignores them; they only size/position the
+  // invisible anchor blank() the sugar synthesizes.
+  w?: number | string;
+  h?: number | string;
+  emX?: boolean;
+  emY?: boolean;
 };
 
 // `ribbon` — an edge-mode connector: a filled band between the facing edges of

@@ -302,6 +302,39 @@ This is what lets `line()`/`ribbon()` sit under the marks they connect with no
 zOrder incantation needed, in every call form including the low-level
 combinator one.
 
+### Blank-fusion: `.mark(R(opts))` sugar
+
+The **bag** and **`by`-split bag** forms above are also reachable through a
+syntactic rewrite at `ChartBuilder.mark()` (`src/ast/marks/chartBuilder.ts`):
+placing a relational mark directly in `.mark()` position elaborates to an
+invisible anchor tier plus a connector tier —
+
+```
+.mark(R(opts))  ⇒  .mark(blank(anchor(opts))).layer(R(opts))
+```
+
+`anchor(opts)` is exactly `opts`'s `{w, h, emX, emY}` subset (`pickAnchorOpts`
+in chart.ts) — the rest (fill, stroke, curve, `by`, …) stays on the connector
+unchanged, since `produce` only reads the fields it knows about. The factory
+tags every bag-form / by-split-form mark it returns with a
+`__relationalFusable = { opts, makeAnchor }` descriptor (`makeAnchor` is a
+pre-bound `blank(...)` call, kept out of chartBuilder.ts to avoid a
+chart.ts ↔ chartBuilder.ts import cycle); `modifierMethod` in
+createOperator.ts propagates the tag through `.name()`/`.label()`/`.zOrder()`
+chaining so those still target the connector. The pairwise `{from, to}` form
+is never tagged.
+
+`ChartBuilder.mark()` only rewrites when the chart's own data still needs
+anchors drawn for it (`!usesPreviousLayerMarks() && !(data instanceof
+GoFishRef)`) — a relational mark applied directly to an already-drawn refs
+bag (`chart(selectAll("bars")).mark(ribbon(opts))`, or an empty-scope
+`chart()` tier inside `.layer(...)`) keeps its direct bag-form meaning
+unfused, since there's nothing to anchor. A `by`-split connector's `fill` may
+be a shared field name rather than a literal color; `resolveGroupFill` in
+chart.ts resolves it per group via `inferColor` (same channel helper
+`createMark` uses) before it reaches `Connect`, reading a representative row
+off the group's ref bag.
+
 ## Prior art
 
 `createMark` is most directly inspired by **Encodable** (Wongsuphasawat,

@@ -707,6 +707,22 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
         type: t.union(t.string, t.ref("FieldAccessor")),
         doc: "Bag form: partition the operand refs by this field (or field(...) accessor) and draw one connector per group.",
       },
+      emX: {
+        type: t.boolean,
+        doc: "Blank-fusion anchor key: placed directly in `.mark()` position, `line(opts)` elaborates to an invisible anchor tier (a `blank()` carrying just `{w, h, emX, emY}`) plus this connector — see the `mark` construct's doc. Ignored by `line` itself.",
+      },
+      emY: {
+        type: t.boolean,
+        doc: "Blank-fusion anchor key — see `emX`. Ignored by `line` itself.",
+      },
+      w: {
+        ...ch.num(),
+        doc: "Blank-fusion anchor key — see `emX`. Ignored by `line` itself.",
+      },
+      h: {
+        ...ch.num(),
+        doc: "Blank-fusion anchor key — see `emX`. Ignored by `line` itself.",
+      },
     },
   }),
 
@@ -728,6 +744,22 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
       by: {
         type: t.union(t.string, t.ref("FieldAccessor")),
         doc: "Bag form: partition the operand refs by this field (or field(...) accessor) and draw one connector per group.",
+      },
+      emX: {
+        type: t.boolean,
+        doc: "Blank-fusion anchor key: placed directly in `.mark()` position, `ribbon(opts)` elaborates to an invisible anchor tier (a `blank()` carrying just `{w, h, emX, emY}`) plus this connector — see the `mark` construct's doc. Ignored by `ribbon` itself.",
+      },
+      emY: {
+        type: t.boolean,
+        doc: "Blank-fusion anchor key — see `emX`. Ignored by `ribbon` itself.",
+      },
+      w: {
+        ...ch.num(),
+        doc: "Blank-fusion anchor key — see `emX`. Ignored by `ribbon` itself.",
+      },
+      h: {
+        ...ch.num(),
+        doc: "Blank-fusion anchor key — see `emX`. Ignored by `ribbon` itself.",
       },
     },
   }),
