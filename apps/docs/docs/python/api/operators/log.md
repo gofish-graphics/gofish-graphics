@@ -17,14 +17,14 @@ chart(seafood).flow(
 ## Signature
 
 ```python
-log(label=None) -> Operator
+log(prefix=None) -> Operator
 ```
 
 ## Parameters
 
 | Parameter | Type  | Description                            |
 | --------- | ----- | -------------------------------------- |
-| `label`   | `str` | Optional prefix for the console output |
+| `prefix`  | `str` | Optional prefix for the console output |
 
 Returns an `Operator` for use inside [`.flow()`](/python/api/core/flow).
 

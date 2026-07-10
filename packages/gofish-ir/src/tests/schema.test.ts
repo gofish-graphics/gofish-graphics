@@ -322,8 +322,8 @@ check(
 );
 
 check(
-  "log with non-string label rejected",
-  !validate(chart([{ type: "log", label: 5 }])).valid
+  "log with non-string prefix rejected",
+  !validate(chart([{ type: "log", prefix: 5 }])).valid
 );
 
 check(

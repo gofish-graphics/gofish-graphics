@@ -124,12 +124,10 @@ function buildOperatorDefs(): Record<string, unknown> {
       additionalProperties: true,
       properties: {
         type: { const: descriptor.type },
-        // Base `.label(accessor, options?)` chain (LabelIR), spread BEFORE
-        // the per-type `properties` so `log`'s own `label` (a plain string
-        // console prefix, unrelated to the chain) overrides it below —
-        // matches validate.ts's `walkOperator` merge order.
-        label: { $ref: "#/$defs/LabelIR" },
         ...properties,
+        // Base `.label(accessor, options?)` chain (LabelIR) — matches
+        // validate.ts's `walkOperator` merge order.
+        label: { $ref: "#/$defs/LabelIR" },
         translate: { $ref: "#/$defs/Translate" },
         origin: { $ref: "#/$defs/Origin" },
         meta: { $ref: "#/$defs/Meta" },

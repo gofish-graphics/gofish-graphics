@@ -209,7 +209,7 @@ export const OPERATOR_MAP: Record<
   scatter: (opts) => scatter(opts as any),
   table: (opts) => table(opts as any),
   treemap: (opts) => treemapOperator(opts as any),
-  log: (opts) => log(opts.label),
+  log: (opts) => log(opts.prefix),
 };
 
 /**

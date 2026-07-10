@@ -235,7 +235,7 @@ async function main() {
   }
 
   // -------------------------------------------------------------------------
-  // Log operator with a label.
+  // Log operator with a prefix.
   // -------------------------------------------------------------------------
   {
     const c = chart([{ a: 1 }])
@@ -245,7 +245,7 @@ async function main() {
     validateDoc(doc, "log chart");
     const ops = (doc.root as Frontend.ChartIR).operators!;
     check("log operator", ops[0].type === "log");
-    check("log label preserved", (ops[0] as any).label === "debug-label");
+    check("log prefix preserved", (ops[0] as any).prefix === "debug-label");
   }
 
   // -------------------------------------------------------------------------

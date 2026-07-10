@@ -104,15 +104,15 @@ export const normalize = <T, K extends keyof T>(
   }));
 };
 
-export function log<T>(label?: string): Operator<T, T> {
+export function log<T>(prefix?: string): Operator<T, T> {
   const op: Operator<T, T> = async (mark: Mark<T>) => {
     return (async (
       d: T,
       key?: string | number,
       layerContext?: LayerContext
     ) => {
-      if (label) {
-        console.log(label, d);
+      if (prefix) {
+        console.log(prefix, d);
       } else {
         console.log(d);
       }
@@ -121,7 +121,7 @@ export function log<T>(label?: string): Operator<T, T> {
   };
   (op as any).__serialize = {
     type: "log",
-    opts: label !== undefined ? { label } : {},
+    opts: prefix !== undefined ? { prefix } : {},
   };
   return op;
 }

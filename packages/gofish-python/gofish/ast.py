@@ -1827,19 +1827,19 @@ def table(
     return Operator("table", **_table_opts(**options))
 
 
-def log(label: Optional[str] = None) -> Operator:
+def log(prefix: Optional[str] = None) -> Operator:
     """
     Log operator - logs data to the console for debugging.
 
     Args:
-        label: Optional label to prefix the log output
+        prefix: Optional prefix to prepend to the log output
 
     Returns:
         Operator object
     """
     kwargs: Dict[str, Any] = {}
-    if label is not None:
-        kwargs["label"] = label
+    if prefix is not None:
+        kwargs["prefix"] = prefix
     return Operator("log", **kwargs)
 
 

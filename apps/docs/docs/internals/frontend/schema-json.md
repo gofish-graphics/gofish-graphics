@@ -797,9 +797,6 @@ for the API.
         "type": {
           "const": "derive"
         },
-        "label": {
-          "$ref": "#/$defs/LabelIR"
-        },
         "lambdaId": {
           "type": "string",
           "description": "Python-bridge handle for the remote callable."
@@ -810,6 +807,9 @@ for the API.
             "type": "string"
           },
           "description": "Measure provenance a transform (e.g. bin) declares for its output columns — output field name → measure."
+        },
+        "label": {
+          "$ref": "#/$defs/LabelIR"
         },
         "translate": {
           "$ref": "#/$defs/Translate"
@@ -834,9 +834,6 @@ for the API.
         "type": {
           "const": "resolve"
         },
-        "label": {
-          "$ref": "#/$defs/LabelIR"
-        },
         "cols": {
           "type": "array",
           "items": {
@@ -851,6 +848,9 @@ for the API.
         "key": {
           "type": "string",
           "description": "Explicit match field; defaults to the producing operator's `by`."
+        },
+        "label": {
+          "$ref": "#/$defs/LabelIR"
         },
         "translate": {
           "$ref": "#/$defs/Translate"
@@ -875,9 +875,6 @@ for the API.
         "type": {
           "const": "join"
         },
-        "label": {
-          "$ref": "#/$defs/LabelIR"
-        },
         "on": {
           "type": "string",
           "description": "Shared key field matched between the incoming rows and `right`."
@@ -889,6 +886,9 @@ for the API.
             "properties": {}
           },
           "description": "The right-hand table, inlined as JSON rows."
+        },
+        "label": {
+          "$ref": "#/$defs/LabelIR"
         },
         "translate": {
           "$ref": "#/$defs/Translate"
@@ -912,9 +912,6 @@ for the API.
       "properties": {
         "type": {
           "const": "spread"
-        },
-        "label": {
-          "$ref": "#/$defs/LabelIR"
         },
         "by": {
           "oneOf": [
@@ -973,6 +970,9 @@ for the API.
           "$ref": "#/$defs/ChannelValue",
           "description": "Per-entry stack-axis extent (field/datum-sized children); a field(...).normalize() accessor makes it a space-filling spine."
         },
+        "label": {
+          "$ref": "#/$defs/LabelIR"
+        },
         "translate": {
           "$ref": "#/$defs/Translate"
         },
@@ -995,9 +995,6 @@ for the API.
       "properties": {
         "type": {
           "const": "stack"
-        },
-        "label": {
-          "$ref": "#/$defs/LabelIR"
         },
         "by": {
           "oneOf": [
@@ -1053,6 +1050,9 @@ for the API.
           "$ref": "#/$defs/ChannelValue",
           "description": "Per-entry stack-axis extent (field/datum-sized children); a field(...).normalize() accessor makes it a space-filling spine."
         },
+        "label": {
+          "$ref": "#/$defs/LabelIR"
+        },
         "translate": {
           "$ref": "#/$defs/Translate"
         },
@@ -1076,9 +1076,6 @@ for the API.
         "type": {
           "const": "group"
         },
-        "label": {
-          "$ref": "#/$defs/LabelIR"
-        },
         "by": {
           "oneOf": [
             {
@@ -1089,6 +1086,9 @@ for the API.
             }
           ],
           "description": "Field to group rows by; also accepts a field(...) accessor carrying domain ops (sort/reverse/bin)."
+        },
+        "label": {
+          "$ref": "#/$defs/LabelIR"
         },
         "translate": {
           "$ref": "#/$defs/Translate"
@@ -1112,9 +1112,6 @@ for the API.
       "properties": {
         "type": {
           "const": "scatter"
-        },
-        "label": {
-          "$ref": "#/$defs/LabelIR"
         },
         "by": {
           "oneOf": [
@@ -1165,6 +1162,9 @@ for the API.
         "h": {
           "$ref": "#/$defs/ChannelValue"
         },
+        "label": {
+          "$ref": "#/$defs/LabelIR"
+        },
         "translate": {
           "$ref": "#/$defs/Translate"
         },
@@ -1187,9 +1187,6 @@ for the API.
       "properties": {
         "type": {
           "const": "table"
-        },
-        "label": {
-          "$ref": "#/$defs/LabelIR"
         },
         "by": {
           "type": "object",
@@ -1230,6 +1227,9 @@ for the API.
           "type": "number",
           "description": "Explicit column count (falls back to the number of distinct column keys)."
         },
+        "label": {
+          "$ref": "#/$defs/LabelIR"
+        },
         "translate": {
           "$ref": "#/$defs/Translate"
         },
@@ -1245,7 +1245,7 @@ for the API.
       }
     },
     "LogOperator": {
-      "description": "Debug pass-through: logs each row (optionally under `label`) and forwards it unchanged.",
+      "description": "Debug pass-through: logs each row (optionally under `prefix`) and forwards it unchanged.",
       "type": "object",
       "required": ["type"],
       "additionalProperties": true,
@@ -1253,9 +1253,12 @@ for the API.
         "type": {
           "const": "log"
         },
-        "label": {
+        "prefix": {
           "type": "string",
-          "description": "Console label prefix."
+          "description": "Console prefix string."
+        },
+        "label": {
+          "$ref": "#/$defs/LabelIR"
         },
         "translate": {
           "$ref": "#/$defs/Translate"
@@ -1279,9 +1282,6 @@ for the API.
       "properties": {
         "type": {
           "const": "treemap"
-        },
-        "label": {
-          "$ref": "#/$defs/LabelIR"
         },
         "w": {
           "$ref": "#/$defs/ChannelValue"
@@ -1339,6 +1339,9 @@ for the API.
         "leafIntrinsicRadiusField": {
           "type": "string",
           "description": "When set, each leaf is laid out in a square of side min(leafW, leafH, 2*datum[field])."
+        },
+        "label": {
+          "$ref": "#/$defs/LabelIR"
         },
         "translate": {
           "$ref": "#/$defs/Translate"

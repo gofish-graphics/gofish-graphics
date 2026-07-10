@@ -528,15 +528,10 @@ function walkOperator(node: unknown, path: string, ctx: Context): void {
   // `debug`/`label` (OPERATOR_BASE_FIELDS) ride every operator: `debug` is a
   // factory-only dev flag JS strips before layout; `label` is the
   // `.label(accessor, options?)` chain available on dual-mode operators.
-  // Base `label` is spread BEFORE the per-type descriptor fields (unlike
-  // `debug`, spread after) so `log`'s own `label: string` field — an
-  // unrelated console-prefix, not the chain — wins the merge and validates
-  // against its real (string, not LabelIR) wire shape. See the comment on
-  // OPERATOR_BASE_FIELDS in descriptors.ts.
   const fields = descriptor
     ? {
-        label: OPERATOR_BASE_FIELDS.label,
         ...resolveFields(descriptor),
+        label: OPERATOR_BASE_FIELDS.label,
         debug: OPERATOR_BASE_FIELDS.debug,
       }
     : {};

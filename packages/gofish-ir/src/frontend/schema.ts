@@ -357,14 +357,10 @@ export interface LogOperator
     TranslatableIR,
     OperatorFlagsIR {
   type: "log";
-  /** Console label prefix (`log(label)`) — NOT the `.label(accessor, options)`
-   *  chain other operators (spread/stack/group/scatter/table/treemap) carry.
-   *  `log` isn't built via `createOperator`'s `dual()`, so it never gets that
-   *  chainable; this field is a plain string and stays that way deliberately
-   *  — the two `label` wire fields share a name across operator types but not
-   *  a shape (`descriptors.ts`'s `walkOperator` field-merge order lets this
-   *  per-type entry win over the shared `LabelIR` base field for validation). */
-  label?: string;
+  /** Console prefix string for `log(prefix)`; unrelated to the operator-level
+   *  `.label(accessor, options)` chain, which `log` doesn't support since it
+   *  isn't built via `createOperator`'s `dual()`. */
+  prefix?: string;
 }
 
 /**

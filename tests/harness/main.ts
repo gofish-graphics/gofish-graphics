@@ -371,13 +371,9 @@ function mapOperator(
     translate && typeof (operator as any).translate === "function"
       ? ((operator as any).translate(translate) as T)
       : operator;
-  // `.label(accessor, options?)` chained on the operator (traversal) form —
-  // every operator below except `log` (whose own `label` is an unrelated
-  // console-prefix string, re-added to `opts` in that case instead).
+  // `.label(accessor, options?)` chained on the operator (traversal) form.
   const applyLabel = <T>(operator: T): T =>
-    label !== undefined &&
-    type !== "log" &&
-    typeof (operator as any).label === "function"
+    label !== undefined && typeof (operator as any).label === "function"
       ? (() => {
           const { accessor, ...labelOpts } = label as {
             accessor: any;
@@ -388,7 +384,6 @@ function mapOperator(
           ) as T;
         })()
       : operator;
-  if (type === "log") opts.label = label;
 
   switch (type) {
     case "derive": {
@@ -454,7 +449,7 @@ function mapOperator(
     case "treemap":
       return applyTranslate(applyLabel(treemap(opts as any)));
     case "log":
-      return applyTranslate(logOp(opts.label));
+      return applyTranslate(logOp(opts.prefix));
     default:
       console.warn(`Unknown operator type: ${type}`);
       return null;

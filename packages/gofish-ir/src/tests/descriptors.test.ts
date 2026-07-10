@@ -94,7 +94,7 @@ const SCHEMA_OPERATOR_KEYS: Record<string, readonly string[]> = {
     "h",
   ],
   table: ["by", "spacing", "numCols"],
-  log: ["label"],
+  log: ["prefix"],
   treemap: [
     "w",
     "h",
