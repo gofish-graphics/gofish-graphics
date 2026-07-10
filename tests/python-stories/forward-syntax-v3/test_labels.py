@@ -29,7 +29,7 @@ def story_default():
     return (
         chart(SEAFOOD)
         .flow(spread(by="lake", dir="x"))
-        .mark(rect(h="count").label("count")),
+        .mark(rect(h="count").label(field("count").sum())),
         {"w": 400, "h": 300, "axes": True},
     )
 
@@ -58,7 +58,7 @@ def story_above():
     return (
         chart(SEAFOOD)
         .flow(spread(by="lake", dir="x"))
-        .mark(rect(h="count").label("count", position="outset")),
+        .mark(rect(h="count").label(field("count").sum(), position="outset")),
         {"w": 400, "h": 300, "axes": True},
     )
 
@@ -110,7 +110,7 @@ def story_right():
         .flow(spread(by="lake", dir="y"))
         .mark(
             rect(w="count").label(
-                "count", position="outset-right", offset=15
+                field("count").sum(), position="outset-right", offset=15
             )
         ),
         {"w": 400, "h": 300, "axes": True},
@@ -189,6 +189,27 @@ def story_label_on_stack_operator():
         .flow(
             stack(by="pclass", dir="y").label(
                 "pclass", position="center", fontSize=14, color="white"
+            )
+        )
+        .mark(rect(w=120, h=field("survived").count())),
+        {"w": 260, "h": 300, "axes": False},
+    )
+
+
+# ─── label on stack operator (group total, #702 redesign) ──────────────────
+
+def story_label_on_stack_aggregate():
+    titanic_passengers = pd.read_json(
+        "packages/gofish-graphics/src/data/titanicPassengers.json"
+    )
+    return (
+        chart(titanic_passengers)
+        .flow(
+            stack(by="pclass", dir="y").label(
+                field("survived").count(),
+                position="center",
+                fontSize=14,
+                color="white",
             )
         )
         .mark(rect(w=120, h=field("survived").count())),

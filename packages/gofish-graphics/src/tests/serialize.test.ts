@@ -10,6 +10,7 @@
  */
 
 import { Frontend } from "gofish-ir";
+import { resolveLabelText } from "../ast/labels/labelPlacement";
 // Import from the built dist rather than source: lodash's named exports
 // don't survive Node ESM resolution without bundling, but the Vite-built
 // dist has them inlined. Run `pnpm build` first.
@@ -524,6 +525,123 @@ async function main() {
       );
       check(`${name} serializes label`, opIR.label?.accessor === "lake");
     }
+  }
+
+  // -------------------------------------------------------------------------
+  // Field-expression accessor on .label() (group-total aggregate labels) —
+  // the redesign that replaced silently reading a group's first row.
+  // -------------------------------------------------------------------------
+  console.log("\n# field(...) aggregate accessor on .label() survives toJSON");
+
+  // Mark-level .label(field(...).sum())
+  {
+    const built = chart(groupData)
+      .flow(stack({ by: "lake", dir: "x" }))
+      .mark(rect({ h: "count" }).label(field("count").sum()));
+    const doc = await built.toJSON();
+    validateDoc(doc, "chart with mark field-expr .label()");
+    const mark = (doc.root as Frontend.ChartIR).mark as any;
+    check(
+      "mark field-expr .label() accessor serialized as wire object",
+      mark.label?.accessor?.type === "field" &&
+        mark.label?.accessor?.name === "count" &&
+        mark.label?.accessor?.ops?.[0]?.op === "sum"
+    );
+
+    const rebuilt = Serialize.buildChart(
+      doc.root,
+      groupData,
+      undefined,
+      Serialize.makeTokenResolver()
+    );
+    const doc2 = await rebuilt.toJSON();
+    const mark2 = (doc2.root as Frontend.ChartIR).mark as any;
+    check(
+      "round-trip preserves mark field-expr .label()",
+      mark2.label?.accessor?.type === "field" &&
+        mark2.label?.accessor?.name === "count" &&
+        mark2.label?.accessor?.ops?.[0]?.op === "sum"
+    );
+  }
+
+  // Operator-level .label(field(...).sum())
+  {
+    const built = chart(groupData)
+      .flow(stack({ by: "lake", dir: "x" }).label(field("count").sum()))
+      .mark(rect({ h: "count" }));
+    const doc = await built.toJSON();
+    validateDoc(doc, "chart with operator field-expr .label()");
+    const op = (doc.root as Frontend.ChartIR).operators![0] as any;
+    check(
+      "operator field-expr .label() accessor serialized as wire object",
+      op.label?.accessor?.type === "field" &&
+        op.label?.accessor?.name === "count" &&
+        op.label?.accessor?.ops?.[0]?.op === "sum"
+    );
+
+    const rebuilt = Serialize.buildChart(
+      doc.root,
+      groupData,
+      undefined,
+      Serialize.makeTokenResolver()
+    );
+    const doc2 = await rebuilt.toJSON();
+    const op2 = (doc2.root as Frontend.ChartIR).operators![0] as any;
+    check(
+      "round-trip preserves operator field-expr .label()",
+      op2.label?.accessor?.type === "field" &&
+        op2.label?.accessor?.name === "count" &&
+        op2.label?.accessor?.ops?.[0]?.op === "sum"
+    );
+  }
+
+  // -------------------------------------------------------------------------
+  // resolveLabelText: heterogeneous bare-string accessor over an array datum
+  // throws loudly instead of silently reading the first row.
+  // -------------------------------------------------------------------------
+  console.log("\n# resolveLabelText homogeneity check");
+  {
+    const rows = [
+      { lake: "A", count: 12 },
+      { lake: "A", count: 8 },
+      { lake: "B", count: 5 },
+    ];
+    let threw = false;
+    let message = "";
+    try {
+      resolveLabelText("lake", rows);
+    } catch (e) {
+      threw = true;
+      message = String((e as Error).message);
+    }
+    check(
+      "heterogeneous bare-string accessor over an array datum throws",
+      threw && message.includes("lake")
+    );
+
+    // Homogeneous case (a real `by`-field) still resolves normally.
+    const homogeneousRows = rows.filter((r) => r.lake === "A");
+    check(
+      "homogeneous bare-string accessor over an array datum resolves",
+      resolveLabelText("lake", homogeneousRows) === "A"
+    );
+
+    // An aggregate accessor over the same heterogeneous rows works fine.
+    // (`.toJSON()` here — `field` comes from the built dist bundle in this
+    // test file, a different module instance than the `FieldExpr` class
+    // `resolveLabelText` imports from source, so `instanceof` wouldn't
+    // match; the wire form is what real cross-boundary accessors look like
+    // anyway, e.g. after a JSON round-trip through fromJSON.)
+    check(
+      "field(...).sum() over a heterogeneous array datum resolves",
+      resolveLabelText(field("count").sum().toJSON(), rows) === "25"
+    );
+
+    // Empty array does not throw — no rows, no label.
+    check(
+      "empty array datum resolves to empty string, no throw",
+      resolveLabelText("lake", []) === ""
+    );
   }
 
   // Round-trip after .name() — fromJSON should recreate the named mark.
