@@ -165,6 +165,23 @@ export function collectDiffs(): DiffEntry[] {
 }
 
 // ---------------------------------------------------------------------------
+// Removed stories: baseline exists, story no longer present in JS_DIR
+// ---------------------------------------------------------------------------
+
+/**
+ * Stories with a baseline but no current JS capture — i.e. deleted (or
+ * renamed) since the baseline was recorded. Informational only: a removed
+ * story is not a regression and must not fail the job by itself, but it
+ * should still be reported so deletions aren't silently invisible in CI.
+ */
+export function collectRemovedStories(): string[] {
+  const jsFiles = new Set(listHtmlFiles(JS_DIR));
+  return listHtmlFiles(BASELINE_DOM)
+    .filter((file) => !jsFiles.has(file))
+    .sort();
+}
+
+// ---------------------------------------------------------------------------
 // Collect parity diffs: Python output vs JS baselines
 // ---------------------------------------------------------------------------
 

@@ -13,6 +13,7 @@ import { readFileSync, writeFileSync, existsSync } from "fs";
 import { join } from "path";
 import {
   collectDiffs,
+  collectRemovedStories,
   formatDomDiff,
   escapeHtml,
   JS_DIR,
@@ -72,7 +73,33 @@ function buildReportEntries(diffs: DiffEntry[]): ReportEntry[] {
   });
 }
 
-function generateReport(entries: ReportEntry[]): string {
+/**
+ * A "removed stories" banner: baseline exists, story no longer present.
+ * Informational only (never fails the job — see compare.ts) so it's a plain
+ * list, not a reviewable/acceptable DiffEntry like the regression/new/parity
+ * cards below.
+ */
+function generateRemovedBanner(removedStories: string[]): string {
+  if (removedStories.length === 0) return "";
+  const items = removedStories
+    .map((path) => `<li><code>${escapeHtml(path)}</code></li>`)
+    .join("\n");
+  return `
+  <div style="border:1px solid #ddd;margin:16px 0;border-radius:6px;overflow:hidden;">
+    <div style="padding:12px 16px;background:#95a5a622;border-bottom:1px solid #ddd;">
+      <span style="font-weight:bold;color:#7f8c8d;">REMOVED</span>
+      <span style="margin-left:12px;color:#666;">baseline exists, story no longer present (${removedStories.length})</span>
+    </div>
+    <ul style="padding:12px 16px 16px 32px;margin:0;font-family:monospace;font-size:13px;">
+      ${items}
+    </ul>
+  </div>`;
+}
+
+function generateReport(
+  entries: ReportEntry[],
+  removedStories: string[]
+): string {
   const kindLabel: Record<string, string> = {
     regression: "REGRESSION",
     parity: "PARITY MISMATCH",
@@ -167,6 +194,7 @@ function generateReport(entries: ReportEntry[]): string {
 <body>
   <h1>Visual Diff Report</h1>
   <p>${entries.length} difference(s) found. This is a static view-only report. Run <code>pnpm test:visual:review</code> for the interactive review server.</p>
+  ${generateRemovedBanner(removedStories)}
   ${entryHtml}
 </body>
 </html>`;
@@ -178,16 +206,19 @@ function generateReport(entries: ReportEntry[]): string {
 
 function main() {
   const diffs = collectDiffs();
+  const removedStories = collectRemovedStories();
 
-  if (diffs.length === 0) {
+  if (diffs.length === 0 && removedStories.length === 0) {
     console.log("No diffs to report.");
     return;
   }
 
   const entries = buildReportEntries(diffs);
-  const html = generateReport(entries);
+  const html = generateReport(entries, removedStories);
   writeFileSync(OUTPUT, html, "utf-8");
-  console.log(`Diff report written to ${OUTPUT} (${entries.length} entries)`);
+  console.log(
+    `Diff report written to ${OUTPUT} (${entries.length} entries, ${removedStories.length} removed)`
+  );
 }
 
 main();

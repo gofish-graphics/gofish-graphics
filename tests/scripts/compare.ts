@@ -15,6 +15,7 @@ import { join, relative } from "path";
 import { execSync } from "child_process";
 import { getSnapshotBranchName, pullSnapshots } from "./snapshot-branch.js";
 import { storyToPath } from "./path-mapping.js";
+import { collectRemovedStories } from "./diff-utils.js";
 
 const ROOT = join(import.meta.dirname, "../..");
 const BASELINE_DIR = join(ROOT, "__snapshots__/dom");
@@ -176,12 +177,14 @@ function main() {
 
   const regressions = checkRegressions();
   const parityFailures = jsOnly ? [] : checkParity();
+  const removedStories = collectRemovedStories();
 
   const rCount = regressions.filter((f) => f.kind === "regression").length;
   const mCount = regressions.filter(
     (f) => f.kind === "missing-baseline"
   ).length;
   const pCount = parityFailures.length;
+  const remCount = removedStories.length;
 
   // Print summary
   if (rCount > 0) {
@@ -205,15 +208,34 @@ function main() {
     }
   }
 
+  // Removed stories are informational, not a failure: deletion is often
+  // intentional (see mCount above for the symmetric "added" case, which
+  // *does* fail the job). Mentioned so a PR that deletes a story doesn't
+  // pass through CI silently.
+  if (remCount > 0) {
+    console.log(
+      `  ${remCount} removed stor${remCount === 1 ? "y" : "ies"} (baseline exists, story no longer present):`
+    );
+    for (const path of removedStories) {
+      console.log(`    - ${path}`);
+    }
+  }
+
   const allFailures = [...regressions, ...parityFailures];
 
   // Always emit a structured summary so downstream tooling (CI status
   // descriptions, the review site) can render counts without re-parsing
-  // logs.
+  // logs. `removed` is additive: it never affects exit status.
   writeFileSync(
     SUMMARY_PATH,
     JSON.stringify(
-      { regressions: rCount, newStories: mCount, parityFailures: pCount },
+      {
+        regressions: rCount,
+        newStories: mCount,
+        parityFailures: pCount,
+        removed: remCount,
+        removedStories,
+      },
       null,
       2
     )

@@ -21,7 +21,12 @@ import {
   readdirSync,
 } from "fs";
 import { join, dirname } from "path";
-import { collectDiffs, formatDomDiff, type DiffEntry } from "./diff-utils.js";
+import {
+  collectDiffs,
+  collectRemovedStories,
+  formatDomDiff,
+  type DiffEntry,
+} from "./diff-utils.js";
 import { computePixelDiff } from "./pixel-diff.js";
 
 // ---------------------------------------------------------------------------
@@ -62,6 +67,17 @@ console.log("Building review site...");
 // Collect diffs
 const diffs: DiffEntry[] = collectDiffs();
 console.log(`  ${diffs.length} diff(s) found`);
+
+// Removed stories (baseline exists, story no longer present). Informational
+// only — not reviewable/acceptable like the DiffEntry kinds above, since
+// there's no "after" state to accept. See compare.ts for why removals never
+// fail the job.
+const removedStories = collectRemovedStories();
+if (removedStories.length > 0) {
+  console.log(
+    `  ${removedStories.length} removed stor${removedStories.length === 1 ? "y" : "ies"} found`
+  );
+}
 
 // Compute pixel diffs
 for (const entry of diffs) {
@@ -117,6 +133,9 @@ const meta = {
    *  after Commit Accepted, so visual-test re-runs against the new baselines
    *  and python-parity (blocked on visual-test) is allowed to run. */
   runId: process.env.REVIEW_RUN_ID ?? "",
+  /** Baseline exists, story no longer present — informational, not part of
+   *  `diffs` (nothing to accept/reject: there's no "after" state). */
+  removedStories,
 };
 
 write(join(OUT_DIR, "data/meta.json"), JSON.stringify(meta, null, 2));
@@ -285,6 +304,7 @@ const html = `<!DOCTYPE html>
     <h2>Visual Diff Review</h2>
     <div id="sidebar-meta"></div>
     <div id="sidebar-stats"></div>
+    <div id="sidebar-removed" style="display:none;font-size:11px;color:#a6adc8;margin-top:6px;font-family:monospace;line-height:1.5;"></div>
   </div>
   <div id="sidebar-filters">
     <button class="filter-btn active" data-filter="all">All</button>
@@ -405,6 +425,14 @@ const html = `<!DOCTYPE html>
     const metaEl = document.getElementById('sidebar-meta');
     const shortSha = meta.sha.slice(0, 8);
     metaEl.textContent = meta.branch + ' @ ' + shortSha;
+
+    if (meta.removedStories && meta.removedStories.length > 0) {
+      const removedEl = document.getElementById('sidebar-removed');
+      removedEl.style.display = 'block';
+      removedEl.innerHTML = meta.removedStories.length +
+        ' removed (baseline exists, story no longer present):<br>' +
+        meta.removedStories.map(p => '&nbsp;&nbsp;' + escHtml(p)).join('<br>');
+    }
 
     renderSidebar();
     const first = filteredDiffs()[0];

@@ -190,6 +190,23 @@ jobs:
         if: github.event_name == 'pull_request'
         run: pnpm --filter @gofish/tests exec tsx scripts/compare.ts --js-only
 
+      # Removed stories are informational (they don't fail compare.ts), so on a
+      # green PR they'd otherwise only appear in the console log. Surface them
+      # in the job summary regardless of the compare outcome.
+      - name: Report removed stories (PR only)
+        if: (success() || failure()) && github.event_name == 'pull_request'
+        run: |
+          SUMMARY=tests/tmp/diff-summary.json
+          if [ -f "$SUMMARY" ] && [ "$(jq '.removed // 0' "$SUMMARY")" -gt 0 ]; then
+            {
+              echo "### Removed stories"
+              echo ""
+              echo "Baseline exists but the story is no longer present (baselines are pruned automatically on the next main push):"
+              echo ""
+              jq -r '.removedStories[] | "- `\(.)`"' "$SUMMARY"
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
       # On main push: auto-accept all captures as the new baselines and push
       # to snapshots/main. This keeps snapshots/main in sync after every merge.
       - name: Configure git for snapshot commit (main push only)
@@ -264,6 +281,13 @@ jobs:
               }
               if (summary.newStories > 0) {
                 parts.push(plural(summary.newStories, 'new story', 'new stories'));
+              }
+              // Removed stories never fail the job (deletion is often
+              // intentional — see compare.ts), but still worth surfacing
+              // here since this description is the first thing seen on the
+              // PR's checks list.
+              if (summary.removed > 0) {
+                parts.push(plural(summary.removed, 'removed story', 'removed stories'));
               }
               if (parts.length > 0) {
                 description = parts.join(', ') + ' — click Details to review';
