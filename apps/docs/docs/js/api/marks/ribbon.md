@@ -26,21 +26,22 @@ gf.layer([
 ## Signature
 
 ```ts
-ribbon({ stroke?, strokeWidth = 0, opacity?, mixBlendMode = "normal", dir = "x", curve = "auto", by?, from?, to? })
+ribbon({ stroke?, strokeWidth = 0, opacity?, mixBlendMode = "normal", dir = "x", curve = "auto", by?, from?, to?, w?, h?, emX?, emY? })
 ```
 
 ## Parameters
 
-| Option         | Type                                     | Description                                                                                                                                                                                                                                                                                                                                                                                            |
-| -------------- | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `stroke`       | `string`                                 | Stroke color                                                                                                                                                                                                                                                                                                                                                                                           |
-| `strokeWidth`  | `number`                                 | Stroke width                                                                                                                                                                                                                                                                                                                                                                                           |
-| `opacity`      | `number`                                 | Opacity (0–1)                                                                                                                                                                                                                                                                                                                                                                                          |
-| `mixBlendMode` | `"normal" \| "multiply"`                 | Blend mode                                                                                                                                                                                                                                                                                                                                                                                             |
-| `dir`          | `"x" \| "y"`                             | Direction axis                                                                                                                                                                                                                                                                                                                                                                                         |
-| `curve`        | `"straight" \| "bezier" \| CurveSpec`    | Screen-space band shape; default `"auto"` (see below)                                                                                                                                                                                                                                                                                                                                                  |
-| `by`           | `string \| FieldExpr \| (ref) => string` | Partitions the operand bag (the array of refs) into groups and draws one band per group. Same grammar as any operator's `by` — bare field name, key function, or [`field(...)`](/js/api/operators/spread#field-expression-pipeline) accessor. Resolves against the refs' own datum automatically (no `datum.` prefix), same as `group({ by })`. Composes with an upstream `group()` as a nested split. |
-| `from`, `to`   | `string`                                 | Pairwise form: column names holding the two endpoint refs                                                                                                                                                                                                                                                                                                                                              |
+| Option                 | Type                                     | Description                                                                                                                                                                                                                                                                                                                                                                                            |
+| ---------------------- | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `stroke`               | `string`                                 | Stroke color                                                                                                                                                                                                                                                                                                                                                                                           |
+| `strokeWidth`          | `number`                                 | Stroke width                                                                                                                                                                                                                                                                                                                                                                                           |
+| `opacity`              | `number`                                 | Opacity (0–1)                                                                                                                                                                                                                                                                                                                                                                                          |
+| `mixBlendMode`         | `"normal" \| "multiply"`                 | Blend mode                                                                                                                                                                                                                                                                                                                                                                                             |
+| `dir`                  | `"x" \| "y"`                             | Direction axis                                                                                                                                                                                                                                                                                                                                                                                         |
+| `curve`                | `"straight" \| "bezier" \| CurveSpec`    | Screen-space band shape; default `"auto"` (see below)                                                                                                                                                                                                                                                                                                                                                  |
+| `by`                   | `string \| FieldExpr \| (ref) => string` | Partitions the operand bag (the array of refs) into groups and draws one band per group. Same grammar as any operator's `by` — bare field name, key function, or [`field(...)`](/js/api/operators/spread#field-expression-pipeline) accessor. Resolves against the refs' own datum automatically (no `datum.` prefix), same as `group({ by })`. Composes with an upstream `group()` as a nested split. |
+| `from`, `to`           | `string`                                 | Pairwise form: column names holding the two endpoint refs                                                                                                                                                                                                                                                                                                                                              |
+| `w`, `h`, `emX`, `emY` | `number \| string \| boolean`            | **Ignored by `ribbon` itself.** Blank-fusion anchor keys: read only when `ribbon(opts)` is placed directly in `.mark()` position, where they become the invisible anchor tier's `blank({w, h, emX, emY})` opts. See [`.layer()`'s blank-fusion section](/js/api/core/layer#blank-fusion-skip-layer-entirely-for-a-fresh-chart).                                                                        |
 
 `curve` accepts the strings `"straight"` or `"bezier"`, or a `CurveSpec` factory:
 `straight()`, `bezier()`, `orthogonal()`, `arc({ direction: "up" | "down" })`, or
@@ -78,6 +79,34 @@ zBelow-by-default paint order and the desugaring to the explicit `layer([...])`
 
 - `selectAll` form below (which is still what you want to trace _another_
   chart's marks).
+
+## Sugar: `.mark(ribbon(...))` (blank-fusion)
+
+When there's no earlier tier at all — just raw data that needs both fresh
+anchors and a connector — place `ribbon(...)` directly in `.mark()` position
+and skip `.layer()` too. This is the fused spelling of the [Area chart](/js/examples/area-chart)
+and [Ridgeline chart](/js/examples/ridgeline-chart) gallery examples:
+
+```ts
+chart(seafood, { axes: true })
+  .flow(spread({ by: "lake", dir: "x", spacing: 64 }))
+  .mark(ribbon({ h: "count", opacity: 0.8 }));
+
+// ...is sugar for the explicit two-tier form:
+chart(seafood, { axes: true })
+  .flow(spread({ by: "lake", dir: "x", spacing: 64 }))
+  .mark(blank({ h: "count" }))
+  .layer(ribbon({ opacity: 0.8 }));
+```
+
+A `by`-split ribbon's `fill` can be a shared field name (each group is
+homogeneous in it): `ribbon({ h: "count", fill: "species", by: "species" })`
+resolves `fill` through the color scale per group, the same as it would if
+`fill` were declared on an explicit anchor `blank()`.
+
+See [`.layer()`'s blank-fusion section](/js/api/core/layer#blank-fusion-skip-layer-entirely-for-a-fresh-chart)
+for the full desugaring rule (the `{w, h, emX, emY}` anchor/connector key
+split, `.name()` chaining, and when the rule doesn't fire).
 
 ## Example
 

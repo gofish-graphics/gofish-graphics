@@ -265,22 +265,74 @@ export class ChartBuilder<TInput, TOutput = TInput> {
   // callback (issue #243): an empty-scope child (`chart()` / `chart(options)`)
   // inherits the incoming partition datum; a child with its own data is drawn
   // as-is per partition.
+  //
+  // Blank-fusion sugar: a relational mark (`line()`/`ribbon()`) placed
+  // directly here elaborates to an invisible anchor tier plus a connector
+  // tier —
+  //
+  //   .mark(R(opts))  ⇒  .mark(blank(anchor(opts))).layer(R(opts))
+  //
+  // `createRelationalMark` (chart.ts) tags every bag-form / by-split-form
+  // mark it produces with `__relationalFusable = { opts, makeAnchor }` —
+  // never the pairwise `{from, to}` form, which already consumes ref-bearing
+  // rows directly in `.mark()` position and keeps its existing (unfused)
+  // meaning. `makeAnchor()` is a pre-bound `blank({w, h, emX, emY})` call (the
+  // anchor-key subset of `opts`); the connector tier is simply `mark` AS
+  // GIVEN — the factory's `produce` only reads the fields it knows about, so
+  // the leftover spatial keys are inert there. Any `.name()`/`.label()`/
+  // `.zOrder()` already chained onto `mark` rides along unchanged and applies
+  // to the CONNECTOR; the anchor tier gets `LayerBuilder`'s usual
+  // auto-naming. This returns a `LayerBuilder`, not a `ChartBuilder` — like
+  // the explicit two-tier form it desugars to, the result supports further
+  // `.layer(...)` chaining and the render/toSVG/... terminals, but not
+  // `ChartBuilder`-only methods (`.name()` on the chart itself, further
+  // `.mark()`/`.flow()`) or use as a nested `.layer(...)` tier.
   mark(
     mark: Mark<TOutput> | ChartBuilder<any, any>
-  ): ChartBuilder<TInput, TOutput> {
-    const finalMark =
-      mark instanceof ChartBuilder
-        ? (((d: TOutput, _key, layerContext) =>
-            (mark.usesPreviousLayerMarks()
-              ? mark.withData(d)
-              : mark
-            ).withLayerContext(layerContext ?? {})) as Mark<TOutput>)
-        : mark;
+  ): ChartBuilder<TInput, TOutput> | LayerBuilder {
+    if (mark instanceof ChartBuilder) {
+      const finalMark = ((d: TOutput, _key, layerContext) =>
+        (mark.usesPreviousLayerMarks()
+          ? mark.withData(d)
+          : mark
+        ).withLayerContext(layerContext ?? {})) as Mark<TOutput>;
+      return new ChartBuilder(
+        this.data,
+        this.options,
+        this.operators,
+        finalMark,
+        this.layerContext,
+        this.nodeZOrder,
+        this.nodeName
+      );
+    }
+
+    // Only fuse when this chart's data is genuine per-row data that still
+    // needs anchors drawn for it. The OTHER well-established bag-form usage —
+    // a relational mark applied directly to a bag of ALREADY-drawn refs, e.g.
+    // `chart(selectAll("bars")).flow(group({by})).mark(ribbon(opts))` (the
+    // ribbon connects the existing bars) or an empty-scope `chart()` tier
+    // inheriting the previous tier's marks inside `.layer(...)` — has nothing
+    // to anchor: the incoming data already IS (or will become) the refs bag
+    // the connector reads. `usesPreviousLayerMarks()` catches the empty-scope
+    // case; `this.data instanceof GoFishRef` catches the explicit
+    // `selectAll(...)`/`ref(...)` case.
+    const fusable = (mark as any)?.__relationalFusable as
+      | { opts: Record<string, any>; makeAnchor: () => Mark<any> }
+      | undefined;
+    const dataNeedsAnchors =
+      !this.usesPreviousLayerMarks() && !(this.data instanceof GoFishRef);
+    if (fusable && dataNeedsAnchors) {
+      return this.mark(fusable.makeAnchor() as unknown as Mark<TOutput>).layer(
+        mark as Mark<any>
+      );
+    }
+
     return new ChartBuilder(
       this.data,
       this.options,
       this.operators,
-      finalMark,
+      mark,
       this.layerContext,
       this.nodeZOrder,
       this.nodeName
@@ -363,7 +415,16 @@ export class ChartBuilder<TInput, TOutput = TInput> {
       return { builder: this, name: existing };
     }
     const named = (this.finalMark as any).name(autoName) as Mark<TOutput>;
-    return { builder: this.mark(named), name: autoName };
+    // `this.finalMark` was already stored by a prior `.mark()` call, so it's
+    // never itself a fusable relational mark (fusion resolves at `.mark()`
+    // call time into an anchor `ChartBuilder` + connector tier — see
+    // `mark()`'s doc-comment) — `.name(...)` on it can't reintroduce the
+    // `__relationalFusable` tag, so `this.mark(named)` always takes the
+    // plain-mark branch and stays a `ChartBuilder`.
+    return {
+      builder: this.mark(named) as ChartBuilder<TInput, TOutput>,
+      name: autoName,
+    };
   }
 
   /** The render-time metadata threaded from the root tier: resolved axes/color

@@ -294,6 +294,15 @@ user-chained name without parsing the `__serialize` tag. (An earlier
 in favor of `.layer()`, which generalizes the pattern to every tier — see
 [The Mark Factory](/internals/frontend/mark-factory#createrelationalmark-connectors-as-marks).)
 
+`modifierMethod` also propagates any `__relationalFusable` tag from the base
+mark onto the wrapped one (alongside the `__kind` tag it already carried) —
+the blank-fusion descriptor `createRelationalMark` stamps on bag-form /
+by-split-form relational marks (see
+[The Mark Factory](/internals/frontend/mark-factory#blank-fusion-mark-r-opts-sugar)).
+Without this, `ribbon(opts).name("area")` would lose the tag the moment
+`.name(...)` wraps it in a new function, and `.mark(ribbon(opts).name("area"))`
+would silently stop fusing.
+
 A modifier's `apply(node, layerContext, datum, ...args)` receives the
 **per-instance datum** the mark was called with — the same value the shape
 factory saw — so a modifier can produce a _data-driven_ value rather than a
