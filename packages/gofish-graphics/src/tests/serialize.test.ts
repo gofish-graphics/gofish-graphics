@@ -642,6 +642,23 @@ async function main() {
       "empty array datum resolves to empty string, no throw",
       resolveLabelText("lake", []) === ""
     );
+
+    // A field(...) accessor WITHOUT an aggregate op gets the same
+    // group-constant rule as a bare string — no first-row backdoor.
+    let fieldThrew = false;
+    try {
+      resolveLabelText(field("count").toJSON(), rows);
+    } catch (e) {
+      fieldThrew = true;
+    }
+    check(
+      "aggregate-less field accessor over heterogeneous rows throws",
+      fieldThrew
+    );
+    check(
+      "aggregate-less field accessor over homogeneous rows resolves",
+      resolveLabelText(field("lake").toJSON(), homogeneousRows) === "A"
+    );
   }
 
   // Round-trip after .name() — fromJSON should recreate the named mark.

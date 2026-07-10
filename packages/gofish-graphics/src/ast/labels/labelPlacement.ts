@@ -56,7 +56,18 @@ export function resolveLabelText(accessor: LabelAccessor, datum: any): string {
   if (isFieldExprAccessor(accessor)) {
     const rows: any[] = Array.isArray(datum) ? datum : [datum];
     const { values } = evalFieldValues(accessor, rows);
-    return values[0] != null ? String(values[0]) : "";
+    // Without an aggregate op, evalFieldValues returns one value per row;
+    // hold that to the same group-constant rule as a bare string accessor so
+    // `.label(field("age"))` can't silently read just the first row.
+    const first = values[0];
+    if (values.length > 1 && !values.every((v) => v === first)) {
+      throw new Error(
+        `[gofish] .label(field("${accessor.name}")): field is not constant ` +
+          `within the group; use an aggregate like ` +
+          `field("${accessor.name}").mean()`
+      );
+    }
+    return first != null ? String(first) : "";
   }
 
   if (Array.isArray(datum)) {
