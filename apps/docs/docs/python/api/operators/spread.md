@@ -31,7 +31,6 @@ spread(*, by=None, dir, **options) -> Operator
 | `glue`      | `bool`                                   | Glue children together: collapse data-driven sizes into a single positional axis at this level. [`stack`](/python/api/operators/stack) sets this.                                                                                                                                                            |
 | `w`, `h`    | `int` \| `str`                           | Fixed pixel size, or a field name sizing this operator's own box from data (data-driven operator extent — e.g. a mosaic's column width).                                                                                                                                                                     |
 | `size`      | `int` \| `str` \| `field(...)` \| `list` | Per-entry stack-axis extent — a field name, a [`field(...)`](#field-expression-pipeline) accessor, or an explicit list with one value per split entry. `size=field("count").normalize()` makes the stack axis a **space-filling spine**. See [Space-filling spines](#space-filling-spines-mosaic-marimekko). |
-| `label`     | `bool`                                   | Whether to emit an axis label for the partition field.                                                                                                                                                                                                                                                       |
 
 Returns an `Operator` for use inside [`.flow()`](/python/api/core/flow).
 

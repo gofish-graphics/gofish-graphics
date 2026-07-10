@@ -11,7 +11,7 @@ from gofish import chart, spread, stack, rect
 
 chart(seafood, axes=True).flow(
     spread(by="lake", dir="x"),
-    stack(by="species", dir="y", label=False),
+    stack(by="species", dir="y"),
 ).mark(rect(h="count", fill="species")).render(w=500, h=300)
 ```
 
@@ -36,7 +36,6 @@ low-level form behind the v1 `stackX`/`stackY` operators).
 | `alignment` | `str`                                    | Cross-axis alignment of the stacked groups.                                                                                                                                                                                                                                                                                       |
 | `w`, `h`    | `int` \| `str`                           | Fixed pixel size, or a field name sizing this operator's own box from data (data-driven operator extent — e.g. a mosaic's column width).                                                                                                                                                                                          |
 | `size`      | `int` \| `str` \| `field(...)` \| `list` | Per-entry stack-axis extent — a field name, a `field(...)` accessor, or an explicit list. `size=field("count").normalize()` makes the stacking axis a **space-filling spine** (the mosaic/marimekko conditional axis). See [`spread` → Space-filling spines](/python/api/operators/spread#space-filling-spines-mosaic-marimekko). |
-| `label`     | `bool`                                   | Whether to emit an axis label for the partition field.                                                                                                                                                                                                                                                                            |
 
 Returns an `Operator` for use inside [`.flow()`](/python/api/core/flow).
 
