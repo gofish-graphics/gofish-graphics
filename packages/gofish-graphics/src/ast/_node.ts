@@ -380,7 +380,13 @@ export class GoFishNode {
   public constraints: ConstraintSpec[] = [];
   public colorConfig?: ColorConfig;
   public _label?: LabelSpec;
-  private _zOrder = 0;
+  // `undefined` means "no author opinion" — distinct from an explicit
+  // `.zOrder(0)`, which is a deliberate choice and must be distinguishable
+  // from silence (e.g. by the relational-mark auto-zBelow suppression check
+  // in `graphicalOperators/layer.tsx`). Readers that need a numeric paint-
+  // order key apply `?? 0` at the comparison site so unset behaves exactly
+  // like an explicit 0 for sorting purposes.
+  private _zOrder: number | undefined = undefined;
   private renderSession?: RenderSession;
   // Axis state per dimension. Set by `resolveAxes` and consumed by the axis
   // elaboration pass (`elaborateAxes`), which wraps owning nodes in a Layer of
@@ -1539,7 +1545,11 @@ export class GoFishNode {
     return this;
   }
 
-  public getZOrder(): number {
+  /** The raw author-set z-order hint, or `undefined` if never set (distinct
+   *  from an explicit `.zOrder(0)`). Callers that need a numeric sort key
+   *  should apply `?? 0`; callers that need to detect "was a hint given at
+   *  all" should compare against `undefined`. */
+  public getZOrder(): number | undefined {
     return this._zOrder;
   }
 }

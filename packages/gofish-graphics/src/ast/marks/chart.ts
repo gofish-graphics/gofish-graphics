@@ -1,3 +1,7 @@
+// <gofish-wiki> AUTO-GENERATED — see covers: in the essay; run `pnpm --filter docs sync-backlinks`
+// @wiki The Mark Factory — /internals/frontend/mark-factory
+// </gofish-wiki>
+
 import { sumBy, v, type Curve } from "../../lib";
 import {
   connect as Connect,
@@ -42,6 +46,7 @@ import {
   mask as Mask,
 } from "../graphicalOperators/porterDuff";
 import type { ConstraintRef, ConstraintSpec } from "../constraints";
+import { splitEntries, type SplitBy } from "../datumProjection";
 
 export type { Mark, Operator };
 export { generatedRect as rect };
@@ -329,28 +334,59 @@ export function selectAll(
   };
 }
 
-// A `DerivedMark` is a mark whose geometry is *derived* from other marks via
-// refs — i.e. a connector. Like `createMark` (leaf shapes) and `createOperator`
-// (relations), this factory yields a value that works in BOTH levels:
+// A `RelationalMark` is a mark whose geometry is *derived* from other marks
+// via refs — i.e. a connector. Like `createMark` (leaf shapes) and
+// `createOperator` (relations over data), this factory yields a value that
+// works in BOTH levels:
 //   - low-level combinator: `line(opts, [ref(a), ref(b)])` → AST node
-//       (the drop-in for the old `connect`/`connectX`/`connectY`)
-//   - chart-builder Mark:    `line(opts)` → a `Mark` consumed by `.connect()` /
-//       `.mark()`, in two shapes —
+//       (explicit-children form, e.g. for a manual `layer([...])`)
+//   - chart-builder Mark:    `line(opts)` → a `Mark` consumed by `.layer()` /
+//       `.mark()`, in three shapes —
 //       · bag form      — applied to a `GoFishRef[]` (e.g. `selectAll(...)`),
 //                         one connector through all the refs
+//       · `by`-split bag form — partitions the bag with the same
+//                         `splitEntries` used by `group()`'s `split` hook,
+//                         producing one connector PER GROUP (e.g.
+//                         `ribbon({ by: "species" })` over all bar refs).
+//                         Composes with an upstream `group()` as a nested
+//                         split — no special-casing.
 //       · pairwise form — `{ from, to }` over rows with two ref columns, one
 //                         connector per row (node-link edges)
 // `produce(opts, children)` is the only connector-specific part (it builds the
 // underlying `connect` node); the rest is shared dual-form plumbing.
-type DerivedMarkOptions = { from?: string; to?: string };
+//
+// Every produced connector node is tagged with the operand nodes/refs it was
+// built from (`__relationalOperands`). The `layer` combinator (see
+// `graphicalOperators/layer.tsx`) reads this tag to install a default
+// `zBelow(self, operand)` paint-order constraint — the connector paints
+// under whatever it references — in every call form, including the
+// low-level one used standalone inside a manual `layer([...])`. An explicit
+// `.zOrder(...)` or `.constrain(...)` on the connector's node overrides the
+// default (the tag is only consulted when neither has been set).
+type RelationalMarkOptions = { from?: string; to?: string; by?: SplitBy };
 
-export function createDerivedMark<O extends DerivedMarkOptions>(
+/** Tag a produced connector node with the operand nodes/refs it references,
+ *  so `layer`'s default-zBelow pass can find them. See the factory doc above. */
+function tagRelationalOperands<T extends GoFishAST>(
+  node: T,
+  operands: GoFishAST[]
+): T {
+  if (operands.length > 0) {
+    (node as any).__relationalOperands = operands;
+  }
+  return node;
+}
+
+export function createRelationalMark<O extends RelationalMarkOptions>(
   type: string,
   produce: (opts: O, children: GoFishAST[]) => any
 ) {
-  function derived(options: O | undefined, children: GoFishAST[]): GoFishNode;
-  function derived(options?: O): Mark<any>;
-  function derived(
+  function relational(
+    options: O | undefined,
+    children: GoFishAST[]
+  ): GoFishNode;
+  function relational(options?: O): Mark<any>;
+  function relational(
     options?: O,
     children?: GoFishAST[]
   ): GoFishNode | Mark<any> {
@@ -358,7 +394,10 @@ export function createDerivedMark<O extends DerivedMarkOptions>(
 
     // Low-level combinator form: connect the given children directly.
     if (children !== undefined) {
-      return produce(opts, children) as GoFishNode;
+      return tagRelationalOperands(
+        produce(opts, children) as GoFishNode,
+        children
+      );
     }
 
     // Pairwise `{ from, to }` form: one connector per row.
@@ -377,7 +416,10 @@ export function createDerivedMark<O extends DerivedMarkOptions>(
                   `{ from: selectAll(...) }) in the flow first.`
               );
             }
-            const node = (await produce(opts, [a, b])) as GoFishNode;
+            const node = tagRelationalOperands(
+              (await produce(opts, [a, b])) as GoFishNode,
+              [a, b]
+            );
             (node as any).datum = row;
             return node;
           })
@@ -389,13 +431,37 @@ export function createDerivedMark<O extends DerivedMarkOptions>(
       return result;
     }
 
+    // `by`-split bag form: one connector per group.
+    if (opts.by !== undefined) {
+      const by = opts.by;
+      const mark: Mark<GoFishRef[]> = async (d: GoFishRef[]) => {
+        const entries = splitEntries(by, d as any);
+        const nodes = await Promise.all(
+          [...entries.values()].map(async (group) => {
+            const groupRefs = (
+              Array.isArray(group) ? group : [group]
+            ) as GoFishRef[];
+            return tagRelationalOperands(
+              (await produce(opts, groupRefs)) as GoFishNode,
+              groupRefs
+            );
+          })
+        );
+        return Layer({}, nodes);
+      };
+      const result = nameableMark(mark);
+      (result as any).__serialize = { type, opts };
+      return result;
+    }
+
     // Bag form: applied to a `GoFishRef[]` (e.g. `selectAll(...)`).
-    const mark: Mark<GoFishRef[]> = async (d: GoFishRef[]) => produce(opts, d);
+    const mark: Mark<GoFishRef[]> = async (d: GoFishRef[]) =>
+      tagRelationalOperands((await produce(opts, d)) as GoFishNode, d);
     const result = nameableMark(mark);
     (result as any).__serialize = { type, opts };
     return result;
   }
-  return derived;
+  return relational;
 }
 
 export type LineOptions = {
@@ -417,12 +483,17 @@ export type LineOptions = {
   target?: AnchorSpec;
   from?: string;
   to?: string;
+  // Split the operand bag into groups (same `SplitBy` grammar as v3
+  // operators' `by`) and draw one connector per group — e.g.
+  // `line({ by: "series" })` over a bag of point refs draws one polyline per
+  // series. Composes with an upstream `group()` as a nested split.
+  by?: SplitBy;
 };
 
 // `line` — a center-mode connector (the "line" component): the path between the
 // centers of consecutive marks. `route` picks the shape (straight | bezier |
 // orthogonal | arc | perfectArrows | …).
-export const line = createDerivedMark<LineOptions>("line", (o, children) =>
+export const line = createRelationalMark<LineOptions>("line", (o, children) =>
   Connect(
     {
       direction: o.dir ?? "x",
@@ -455,11 +526,16 @@ export type RibbonOptions = {
   curve?: Curve;
   from?: string;
   to?: string;
+  // Split the operand bag into groups (same `SplitBy` grammar as v3
+  // operators' `by`) and draw one ribbon per group — e.g.
+  // `ribbon({ by: "species" })` over a bag of bar refs draws one band per
+  // species. Composes with an upstream `group()` as a nested split.
+  by?: SplitBy;
 };
 
 // `ribbon` — an edge-mode connector: a filled band between the facing edges of
 // consecutive marks (areas, streamgraphs, sankey ribbons).
-export const ribbon = createDerivedMark<RibbonOptions>(
+export const ribbon = createRelationalMark<RibbonOptions>(
   "ribbon",
   (o, children) =>
     Connect(

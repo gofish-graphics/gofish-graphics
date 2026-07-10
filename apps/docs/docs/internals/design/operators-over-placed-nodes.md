@@ -618,7 +618,11 @@ are the arrangement's job.
 8. **Deferred piccl semantics** — fractional and two-sided anchors, snap offsets,
    cross-axis `lengthMatch` (§3.5). All fit the alignment-value slot; adopt individually
    when a ported example demands one, not before.
-9. **Does `.connect()` fold into `relate()`?** `.connect(line())` is already sugar over the
-   selectAll pipeline; under the one-slot view it could lower to a relate clause. It stays
-   the canonical spelling for simple line/area charts either way — the question is only
-   what it desugars to.
+9. **Does `.connect()` fold into `relate()`?** _RESOLVED, differently than either option this
+   posed._ `.connect()` was deleted outright rather than folded into `relate()`. `.layer()` was
+   generalized to hand every tier the previous tier's marks as scope uniformly (a bare
+   `line()`/`ribbon()` passed to `.layer()` reads that scope as its ref bag, same as
+   `.connect()` used to), and `line`/`ribbon` gained their own `by` option for the
+   re-partition case. `.layer(ribbon({ by: "species" }))` is now the canonical spelling for
+   simple line/ribbon charts — see [`.layer()`](/js/api/core/layer). `relate()` remains open
+   for the cases this thread was actually about (the one-slot open-terms view).

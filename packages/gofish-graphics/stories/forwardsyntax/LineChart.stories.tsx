@@ -28,7 +28,7 @@ export const Default: StoryObj<Args> = {
     chart(catchLocationsArray, { axes: true })
       .flow(scatter({ by: "lake", x: "x", y: "y" }))
       .mark(blank())
-      .connect(line())
+      .layer(line())
       .render(container, {
         w: args.w,
         h: args.h,
@@ -54,7 +54,7 @@ export const GasPrices: StoryObj<Args> = {
     chart(drivingShifts, { axes: true })
       .flow(scatter({ by: "year", x: "year", y: "gas" }))
       .mark(blank())
-      .connect(line({ stroke: "steelblue", strokeWidth: 2 }))
+      .layer(line({ stroke: "steelblue", strokeWidth: 2 }))
       .render(container, {
         w: args.w,
         h: args.h,

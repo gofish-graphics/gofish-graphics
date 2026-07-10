@@ -42,31 +42,27 @@ export const Basic: StoryObj<Args> = {
   render: (args: Args) => {
     const container = initializeContainer();
 
-    layer([
-      chart(seafood)
-        .flow(
-          spread({ by: "lake",  dir: "x", spacing: 64 }),
-          stack({ by: field("species").sort("count"),  dir: "y" })
-        )
-        .mark(rect({ h: "count", fill: "species" }).name("bars")),
-      chart(selectAll("bars"))
-        .flow(group({ by: "species" }))
-        .mark(ribbon({ opacity: 0.8 })),
-    ]).render(container, {
-      w: args.w,
-      h: args.h,
-      axes: true,
-    });
+    chart(seafood, { axes: true })
+      .flow(
+        spread({ by: "lake", dir: "x", spacing: 64 }),
+        stack({ by: field("species").sort("count"), dir: "y" })
+      )
+      .mark(rect({ h: "count", fill: "species" }))
+      .layer(ribbon({ by: "species", opacity: 0.8 }))
+      .render(container, {
+        w: args.w,
+        h: args.h,
+      });
 
     return container;
   },
 };
 
-// Same ribbon as `Basic`, expressed with the `.layer()` chaining API instead
-// of the manual `layer([...])` + `selectAll("bars")` form. The previous tier's
-// marks flow into `.layer()` implicitly (no `.name`), and `group({ by })`
-// reads the bare field off the refs (no `datum.` prefix). Should render
-// identically to `Basic`.
+// The general `chart()`-tier form, for when the re-partition needs its own
+// pipeline (a nested `group()`, a different dataset, a cross-chart join) —
+// the simple re-partition-by-one-field case `Basic` shows is covered by the
+// mark-level `by` sugar directly on `ribbon()`. Should render identically to
+// `Basic`.
 export const Layered: StoryObj<Args> = {
   args: { w: 400, h: 400 },
   render: (args: Args) => {

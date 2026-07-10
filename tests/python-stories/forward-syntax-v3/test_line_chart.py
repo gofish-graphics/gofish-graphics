@@ -9,7 +9,7 @@ def story_default():
         chart(CATCH_LOCATIONS_ARRAY)
         .flow(scatter(by="lake", x="x", y="y"))
         .mark(blank())
-        .connect(line()),
+        .layer(line()),
         {"w": 400, "h": 400, "axes": True},
     )
 
@@ -19,6 +19,6 @@ def story_gas_prices():
         chart(DRIVING_SHIFTS)
         .flow(scatter(by="year", x="year", y="gas"))
         .mark(blank())
-        .connect(line(stroke="steelblue", strokeWidth=2)),
+        .layer(line(stroke="steelblue", strokeWidth=2)),
         {"w": 500, "h": 400, "axes": True},
     )

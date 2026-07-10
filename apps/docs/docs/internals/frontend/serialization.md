@@ -114,7 +114,7 @@ type FrontendIRDocument = {
 
 The root types mirror the v3 fluent builder shapes:
 
-- `ChartIR` — `{ type: "chart", data?, operators?, mark, connect?, options?, zOrder? }`
+- `ChartIR` — `{ type: "chart", data?, operators?, mark, options?, zOrder? }`
 - `LayerIR` — `{ type: "layer", charts, options? }` (each `charts` tier is a
   `ChartIR`, or a `RawMarkIR` for a component-level annotation tier from the v3
   `chart(...).layer(mark)` builder chain)
@@ -126,8 +126,9 @@ empty `chart()` scope inside a `builder: true` layer chain ("inherit the
 previous tier's marks"). The deserializer maps it to the JS
 `PREVIOUS_LAYER_MARKS` sentinel so the real `LayerBuilder.wireTiers()` derives
 the auto-naming + `selectAll` wiring at resolve time — the producer's
-auto-minted layer name never appears in the IR (mirroring how `connect` keeps
-its resolve-time markers out of the JSON). Operators are a flat list (`derive`, `resolve`,
+auto-minted layer name never appears in the IR (mirroring how a relational
+mark's zBelow-by-default paint order stays a resolve-time constraint rather
+than a serialized field). Operators are a flat list (`derive`, `resolve`,
 `join`, `spread`, `stack`, `group`, `scatter`, `table`, `log`) — note `join`
 inlines its right-hand table as JSON rows, so unlike `derive` it round-trips
 without a bridge. Marks are a tree — leaves
@@ -160,15 +161,19 @@ absolute-vs-weight mixing, measure-unit checks) lives in ONE place, JS-side:
   `cut(source, opts)` returns a `Promise<GoFishNode>[]` that combinators accept
   directly as children (see `mapMarkChildren` in `fromJSON.ts`).
 
-`ChartIR.connect` is the optional connector mark from the v3 builder's
-[`.connect(line())`](/js/api/core/connect) sugar. It carries an ordinary
-`MarkIR` — no special shape — and elaboration is entirely JS-side: at resolve
-time `ChartBuilder.resolve()` rewrites the chart into a layer holding the
-chart's mark plus a sibling layer that refs those nodes and draws the connector
-with `zOrder(-1)`. When the chart's mark carries a string `.name(...)`, the
-targets are that registered layer (the manual `selectAll(name)` semantics);
-otherwise the produced nodes are tagged directly with a resolve-time Symbol
-marker — no name exists to mint or leak, so the JSON stays the user's spelling.
+There is no `connect` field on the wire. `.layer(...)` — the one way to
+overlay a connector — always serializes as an ordinary `LayerIR` tier: an
+empty `chart()` scope crosses as a `ChartIR` whose `data` is
+`{type: "previous-tier"}` (above), and a bare relational mark used directly
+crosses as a plain `RawMarkIR` wrapping that mark's ordinary `MarkIR` — `by`,
+where present, is just another field in the `line`/`ribbon` mark's own option
+bag, the same as `stroke` or `opacity`, not a separate IR shape. Elaboration
+(naming the previous tier's mark, wiring the next tier to `selectAll(thatName)`,
+and defaulting the connector to `zBelow`) is entirely JS-side, done at resolve
+time by `LayerBuilder.wireTiers()`: no name is minted or leaked into the JSON,
+and the zBelow default is applied as a paint-order constraint rather than
+serialized as a field, so it composes with any explicit `.zOrder(...)` or
+`.constrain(...)` the reader adds on top.
 
 A chart's **coordinate transform** rides the IR as a small spec the deserializer
 maps back to the JS factory by `type` — e.g. `{ type: "polar", innerRadius,
@@ -359,7 +364,7 @@ The high-level structure:
   },
   "$defs": {
     "Root":       { "oneOf": [ChartIR, LayerIR, RawMarkIR] },
-    "ChartIR":    { /* type, data, operators, mark, connect, options, zOrder, ... */ },
+    "ChartIR":    { /* type, data, operators, mark, options, zOrder, ... */ },
     "LayerIR":    { /* type, charts, options, ... */ },
     "RawMarkIR":  { /* type, mark, options, ... */ },
     "DataIR":     { "oneOf": [/* inline, select, external, previous-tier */] },

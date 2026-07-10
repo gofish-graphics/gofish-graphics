@@ -309,7 +309,7 @@ export const nameModifier = createModifier<[layerName: string | symbol]>({
     // Propagate `__serialize` through the chain (so toJSON still emits this
     // mark) and surface the name as the IR's canonical top-level `name` field.
     // Tokens aren't supported by toJSON — the tag still propagates, the name
-    // is omitted. Also stash the name for ChartBuilder.connect()'s lookup.
+    // is omitted. Also stash the name for `LayerBuilder`'s producer lookup.
     propagateSerialize(base, wrapped, (tag) => {
       if (typeof layerName === "string") tag.name = layerName;
     });

@@ -978,7 +978,6 @@ class ChartBuilder:
         self.options = options or {}
         self.operators: List[Operator] = operators or []
         self._mark: Optional[Mark] = None
-        self._connect: Optional["Mark"] = None
         self._z_order = z_order
         self._name: Optional[Union[str, "Token"]] = None
 
@@ -1035,36 +1034,6 @@ class ChartBuilder:
             new_builder._mark = _MarkFn(mark)
         else:
             new_builder._mark = mark
-        new_builder._connect = self._connect
-        return new_builder
-
-    def connect(self, mark: "Mark") -> "ChartBuilder":
-        """
-        Overlay a connector mark under this chart's mark nodes.
-
-        Sugar for the ``layer([...])`` + ``selectAll(name)`` pattern. Only
-        one connector per chart is supported; the JS side elaborates it at
-        resolve time.
-
-        Args:
-            mark: A connector `Mark` (e.g. `line()`, `ribbon()`)
-
-        Returns:
-            New ChartBuilder with the connector set
-        """
-        if self._connect is not None:
-            raise ValueError(
-                ".connect() was already called on this chart; only one "
-                "connector is supported. Use layer([...]) with "
-                "selectAll(name) for additional overlays."
-            )
-        if not isinstance(mark, Mark):
-            raise TypeError(".connect() expects a Mark (e.g. line(), ribbon())")
-        new_builder = ChartBuilder(
-            self.data, self.options, self.operators, z_order=self._z_order
-        )
-        new_builder._mark = self._mark
-        new_builder._connect = mark
         return new_builder
 
     def layer(self, child: "ChartBuilder") -> "LayerBuilder":
@@ -1095,7 +1064,6 @@ class ChartBuilder:
             data, self.options, self.operators, z_order=self._z_order
         )
         nb._mark = self._mark
-        nb._connect = self._connect
         nb._name = self._name
         return nb
 
@@ -1113,7 +1081,6 @@ class ChartBuilder:
             self.data, self.options, self.operators, z_order=self._z_order
         )
         new_builder._mark = self._mark
-        new_builder._connect = self._connect
         new_builder._name = name_or_token
         return new_builder
 
@@ -1123,7 +1090,6 @@ class ChartBuilder:
             self.data, self.options, self.operators, z_order=value
         )
         new_builder._mark = self._mark
-        new_builder._connect = self._connect
         new_builder._name = self._name
         return new_builder
 
@@ -1211,8 +1177,6 @@ class ChartBuilder:
         }
         if self._z_order is not None:
             result["zOrder"] = self._z_order
-        if self._connect is not None:
-            result["connect"] = self._connect.to_dict()
         return result
 
     def render(
@@ -2490,15 +2454,18 @@ def line(
     curve: Optional[Union[str, Dict[str, Any]]] = None,
     from_: Optional[str] = None,
     to: Optional[str] = None,
+    by: Optional[Union[str, "FieldAccessor"]] = None,
 ) -> Mark:
     """Line mark — a center-mode connector (the path between mark centers).
 
-    Three forms:
+    Four forms:
       - combinator form ``line([ref(a), ref(b)], dir="x")`` — the low-level
         connector over explicitly listed children (the drop-in for the removed
         ``connect``). ``source``/``target`` pin each endpoint to a normalized
         anchor on its bbox (Bluefish-style ``Line``) instead of the center.
       - bag form ``line(...)`` over a ``selectAll(...)`` ref array (one polyline)
+      - bag form with ``by=...`` — partition the ref bag by a field (or
+        ``field(...)`` accessor) and draw one polyline per group.
       - pairwise form ``line(from_=..., to=...)`` over rows whose ``from``/``to``
         columns hold refs (one segment per row, after :func:`resolve`).
 
@@ -2518,6 +2485,7 @@ def line(
         curve=curve,
         from_=from_,
         to=to,
+        by=by,
     )
     if children is not None:
         return Mark("line", _children=list(children), **kwargs)
@@ -2536,14 +2504,17 @@ def ribbon(
     curve: Optional[Union[str, Dict[str, Any]]] = None,
     from_: Optional[str] = None,
     to: Optional[str] = None,
+    by: Optional[Union[str, "FieldAccessor"]] = None,
 ) -> Mark:
     """Ribbon mark — an edge-mode connector: a filled band between the facing
     edges of consecutive marks (areas, streamgraphs, sankey ribbons).
 
-    Three forms, like :func:`line`: combinator form
+    Four forms, like :func:`line`: combinator form
     ``ribbon([ref(a), ref(b)], dir="x")`` (the low-level connector over listed
-    children — drop-in for the removed ``connect``), bag form, and pairwise form
-    ``ribbon(from_=..., to=...)`` (one band per row, after :func:`resolve`).
+    children — drop-in for the removed ``connect``), bag form, bag form with
+    ``by=...`` (partition the ref bag by a field and draw one ribbon per
+    group), and pairwise form ``ribbon(from_=..., to=...)`` (one band per row,
+    after :func:`resolve`).
     """
     kwargs = _ribbon_opts(
         dir=dir,
@@ -2555,6 +2526,7 @@ def ribbon(
         curve=curve,
         from_=from_,
         to=to,
+        by=by,
     )
     if children is not None:
         return Mark("ribbon", _children=list(children), **kwargs)

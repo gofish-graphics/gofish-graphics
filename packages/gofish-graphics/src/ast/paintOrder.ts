@@ -109,7 +109,7 @@ export function flattenForZOrder<P = undefined>(
           node: child,
           accTranslate: [accTx, accTy],
           defaultOrder: order++,
-          defaultZ: child.getZOrder(),
+          defaultZ: child.getZOrder() ?? 0,
           payload,
         });
       }
@@ -180,8 +180,8 @@ export function orderChildrenForPaint<P = undefined>(
     .map((child, index) => ({ child, index }))
     .sort(
       (a, b) =>
-        (a.child instanceof GoFishNode ? a.child.getZOrder() : 0) -
-          (b.child instanceof GoFishNode ? b.child.getZOrder() : 0) ||
+        (a.child instanceof GoFishNode ? (a.child.getZOrder() ?? 0) : 0) -
+          (b.child instanceof GoFishNode ? (b.child.getZOrder() ?? 0) : 0) ||
         a.index - b.index
     )
     .map(({ child }) => ({
