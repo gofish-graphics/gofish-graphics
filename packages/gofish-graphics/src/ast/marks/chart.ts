@@ -412,10 +412,28 @@ function pickAnchorOpts(opts: Record<string, any>): Record<string, any> {
  * The pairwise `{from, to}` form is never tagged: it already consumes rows
  * with ref columns directly in `.mark()` position and keeps its existing
  * (unfused) behavior.
+ *
+ * Also carries `type` and `anchorKeys` (the subset of `ANCHOR_KEYS` actually
+ * present in `opts`, keyed off `!== undefined` rather than `in` so an
+ * explicitly-passed `undefined` doesn't count) — `ChartBuilder.mark()` reads
+ * these to throw when the mark lands on the UNFUSED path (an empty-scope tier
+ * or refs data) while still carrying anchor keys that would otherwise be
+ * silently inert. Threading them here (rather than importing `ANCHOR_KEYS` /
+ * `pickAnchorOpts` into chartBuilder.ts) avoids an import cycle: this module
+ * already imports `ChartBuilder` FROM chartBuilder.ts.
  */
-function tagRelationalFusable(mark: object, opts: Record<string, any>): void {
+function tagRelationalFusable(
+  mark: object,
+  type: string,
+  opts: Record<string, any>
+): void {
+  const anchorOpts = pickAnchorOpts(opts);
   (mark as any).__relationalFusable = {
+    type,
     opts,
+    anchorKeys: Object.keys(anchorOpts).filter(
+      (k) => anchorOpts[k] !== undefined
+    ),
     makeAnchor: () => blank(pickAnchorOpts(opts)),
   };
 }
@@ -520,7 +538,7 @@ export function createRelationalMark<O extends RelationalMarkOptions>(
       };
       const result = nameableMark(mark);
       (result as any).__serialize = { type, opts };
-      tagRelationalFusable(result, opts);
+      tagRelationalFusable(result, type, opts);
       return result;
     }
 
@@ -529,7 +547,7 @@ export function createRelationalMark<O extends RelationalMarkOptions>(
       tagRelationalOperands((await produce(opts, d)) as GoFishNode, d);
     const result = nameableMark(mark);
     (result as any).__serialize = { type, opts };
-    tagRelationalFusable(result, opts);
+    tagRelationalFusable(result, type, opts);
     return result;
   }
   return relational;

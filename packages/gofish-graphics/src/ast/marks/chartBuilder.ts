@@ -337,13 +337,37 @@ export class ChartBuilder<TInput, TOutput = TInput> {
     // bypasses this method entirely, but a future direct `.mark()` call could
     // still see that shape).
     const fusable = (mark as any)?.__relationalFusable as
-      | { opts: Record<string, any>; makeAnchor: () => Mark<any> }
+      | {
+          type: string;
+          opts: Record<string, any>;
+          anchorKeys: string[];
+          makeAnchor: () => Mark<any>;
+        }
       | undefined;
     const dataNeedsAnchors =
       !this.usesPreviousLayerMarks() && !dataIsRefs(this.data);
     if (fusable && dataNeedsAnchors) {
       return this.mark(fusable.makeAnchor() as unknown as Mark<TOutput>).layer(
         mark as Mark<any>
+      );
+    }
+
+    // Fusion was skipped — this mark connects existing marks (an empty-scope
+    // `chart()` tier, or a chart whose data is already refs), so any anchor
+    // keys it's still carrying (`w`/`h`/`emX`/`emY`) have nothing to anchor
+    // and would silently do nothing. That's exactly the kind of
+    // user-wrote-X/system-did-Y disagreement that should be a loud error
+    // rather than a quiet no-op.
+    if (fusable && fusable.anchorKeys.length > 0) {
+      const keys = fusable.anchorKeys;
+      const plural = keys.length > 1;
+      throw new Error(
+        `${fusable.type}({ ${keys.join(", ")} }): anchor channel${plural ? "s" : ""} ` +
+          `(${keys.join(", ")}) ${plural ? "have" : "has"} no effect here — this ` +
+          `${fusable.type} connects EXISTING marks (an empty-scope chart() tier, ` +
+          `or a chart over refs), so there's nothing to anchor. Remove ${
+            plural ? "them" : "it"
+          }, or chart() over raw rows so ${fusable.type} can synthesize its own anchor tier.`
       );
     }
 

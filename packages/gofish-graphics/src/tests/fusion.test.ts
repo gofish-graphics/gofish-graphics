@@ -24,7 +24,8 @@
 // @ts-ignore -- dist may not exist at typecheck time; the test script builds first.
 import * as GoFish from "../../dist/index.js";
 
-const { chart, group, scatter, circle, line, text } = GoFish as any;
+const { chart, group, scatter, circle, line, ribbon, text, selectAll } =
+  GoFish as any;
 
 declare const process: { exit(code: number): never };
 
@@ -82,6 +83,89 @@ async function main() {
     threw instanceof Error ? threw.message : String(threw)
   );
   check("resolve() produced a node", node !== undefined && node !== null);
+
+  console.log(
+    "\n# Anchor channels on a relational mark that will NOT fuse must throw at .mark() call time"
+  );
+
+  // Empty-scope tier (`usesPreviousLayerMarks()`) + a relational mark carrying
+  // an anchor key (`h`) — the mark connects the previous tier's existing
+  // marks, so `h` has nothing to anchor and must be a loud error, thrown
+  // synchronously when `.mark()` is called (not deferred to `.resolve()`).
+  let anchorOnEmptyScopeThrew: unknown;
+  try {
+    chart()
+      .flow(group({ by: "family" }))
+      .mark(line({ h: "count" }));
+  } catch (e) {
+    anchorOnEmptyScopeThrew = e;
+  }
+  check(
+    "empty-scope tier: line({ h }) throws synchronously at .mark() call time",
+    anchorOnEmptyScopeThrew instanceof Error &&
+      /\bh\b/.test((anchorOnEmptyScopeThrew as Error).message)
+  );
+
+  // Same empty-scope shape, but with NO anchor keys — the existing happy path
+  // (also exercised end-to-end by the three-tier test above) must stay legal.
+  let noAnchorOnEmptyScopeThrew: unknown;
+  try {
+    chart()
+      .flow(group({ by: "family" }))
+      .mark(line({ strokeWidth: 1.5 }));
+  } catch (e) {
+    noAnchorOnEmptyScopeThrew = e;
+  }
+  check(
+    "empty-scope tier: line() with no anchor keys stays legal",
+    noAnchorOnEmptyScopeThrew === undefined,
+    noAnchorOnEmptyScopeThrew instanceof Error
+      ? noAnchorOnEmptyScopeThrew.message
+      : String(noAnchorOnEmptyScopeThrew)
+  );
+
+  // Chart data already refs (selectAll(...)) + an anchor key — same
+  // "connects existing marks" situation via the OTHER unfused path
+  // (`dataIsRefs`), must also throw at .mark() call time.
+  let anchorOnRefsDataThrew: unknown;
+  try {
+    chart(selectAll("dots")).mark(ribbon({ h: "count" }));
+  } catch (e) {
+    anchorOnRefsDataThrew = e;
+  }
+  check(
+    "refs-data chart: ribbon({ h }) throws synchronously at .mark() call time",
+    anchorOnRefsDataThrew instanceof Error &&
+      /\bh\b/.test((anchorOnRefsDataThrew as Error).message)
+  );
+
+  // Fused path: a relational mark WITH anchor keys directly over raw row
+  // data (a non-empty, non-refs scope) must still fuse and render, not throw.
+  const rows = [
+    { lake: "a", count: 3 },
+    { lake: "b", count: 5 },
+  ];
+  let fusedRibbonNode: any;
+  let fusedRibbonThrew: unknown;
+  try {
+    fusedRibbonNode = await chart(rows, { w: 200, h: 200 })
+      .flow(scatter({ by: "lake", x: "lake", y: "count" }))
+      .mark(ribbon({ h: "count" }))
+      .resolve();
+  } catch (e) {
+    fusedRibbonThrew = e;
+  }
+  check(
+    "fused path: ribbon({ h }) directly over raw row data does not throw",
+    fusedRibbonThrew === undefined,
+    fusedRibbonThrew instanceof Error
+      ? fusedRibbonThrew.message
+      : String(fusedRibbonThrew)
+  );
+  check(
+    "fused path: ribbon({ h }) over raw row data produced a node",
+    fusedRibbonNode !== undefined && fusedRibbonNode !== null
+  );
 
   console.log(`\n${passed} passed, ${failed} failed`);
   if (failed > 0) process.exit(1);

@@ -108,6 +108,12 @@ See [`.layer()`'s blank-fusion section](/js/api/core/layer#blank-fusion-skip-lay
 for the full desugaring rule (the `{w, h, emX, emY}` anchor/connector key
 split, `.name()` chaining, and when the rule doesn't fire).
 
+The `w`/`h`/`emX`/`emY` anchor channels are only meaningful when `ribbon` gets
+to synthesize its own anchors this way; passing them to a `ribbon` that
+instead connects already-drawn marks (an empty-scope `chart()` tier inside
+`.layer()`, or `chart(selectAll(...))`/`chart(ref(...))`) is an error, since
+there's nothing left for them to anchor.
+
 ## Example
 
 ```ts
