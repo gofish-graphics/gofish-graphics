@@ -87,6 +87,34 @@ _SPREAD_SIZE_DATA = [
 ]
 
 
+_EXPLICIT_ORDER_DATA = [
+    {"x": "rain", "v": 10},
+    {"x": "sun", "v": 40},
+    {"x": "extra", "v": 5},
+    {"x": "snow", "v": 15},
+    {"x": "fog", "v": 25},
+    {"x": "drizzle", "v": 30},
+]
+
+
+def story_sort_by_explicit_order():
+    # field("x").sort([...]) (#735) orders bars by an explicit list, not an
+    # aggregate: sun, fog, drizzle, rain, snow — left to right. "extra" isn't
+    # in the list, so it's appended after (natural sort order).
+    return (
+        chart(_EXPLICIT_ORDER_DATA)
+        .flow(
+            spread(
+                by=field("x").sort(["sun", "fog", "drizzle", "rain", "snow"]),
+                dir="x",
+                spacing=20,
+            )
+        )
+        .mark(rect(w=40, h="v", fill="x")),
+        {"w": 500, "h": 250, "axes": True},
+    )
+
+
 def story_spread_size_ordinal_axis():
     # `spread(by, size)` wraps each child in a sized layer (#700 Phase 2).
     # Regression check: the wrapper must copy the split identity (key/

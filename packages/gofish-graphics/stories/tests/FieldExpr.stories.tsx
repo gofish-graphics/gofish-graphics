@@ -128,3 +128,36 @@ export const SpreadSizeOrdinalAxis: StoryObj<Args> = {
     return container;
   },
 };
+
+// Deliberately in a data order that disagrees with both alphabetical and
+// the explicit order list below, so a correct `field("x").sort([...])`
+// visibly reorders the bars.
+const explicitOrderData = [
+  { x: "rain", v: 10 },
+  { x: "sun", v: 40 },
+  { x: "extra", v: 5 },
+  { x: "snow", v: 15 },
+  { x: "fog", v: 25 },
+  { x: "drizzle", v: 30 },
+];
+
+export const SortByExplicitOrder: StoryObj<Args> = {
+  args: { w: 500, h: 250 },
+  render: (args: Args) => {
+    const container = initializeContainer();
+    // field("x").sort([...]) (#735) orders bars by an explicit list, not an
+    // aggregate: sun, fog, drizzle, rain, snow — left to right. "extra"
+    // isn't in the list, so it's appended after (natural sort order).
+    chart(explicitOrderData, { axes: true })
+      .flow(
+        spread({
+          by: field("x").sort(["sun", "fog", "drizzle", "rain", "snow"]),
+          dir: "x",
+          spacing: 20,
+        })
+      )
+      .mark(rect({ w: 40, h: "v", fill: "x" }))
+      .render(container, { w: args.w, h: args.h });
+    return container;
+  },
+};

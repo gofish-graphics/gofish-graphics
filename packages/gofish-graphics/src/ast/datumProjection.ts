@@ -146,16 +146,30 @@ function binEntries<T extends Record<string, any>>(
   return entries;
 }
 
-/** Reorder `entries`: with `by`, by the SUM of that field over each entry's
- *  rows; without `by`, by the entry's own group key (numeric-aware). */
+/** Reorder `entries`: with `values` (#735), by that explicit group-key
+ *  order — groups not listed are appended after, in natural sort order; with
+ *  `by`, by the SUM of that field over each entry's rows; with neither, by
+ *  the entry's own group key (numeric-aware). */
 function sortEntries<T>(
   entries: Map<string | number, T[]>,
-  by: string | undefined,
-  order: "asc" | "desc"
+  op: Extract<FieldOp, { op: "sort" }>
 ): Map<string | number, T[]> {
-  const dir = order === "desc" ? -1 : 1;
   const pairs = [...entries.entries()];
-  if (by !== undefined) {
+  if (op.values !== undefined) {
+    const rank = new Map(op.values.map((v, i) => [v, i]));
+    pairs.sort(([ka], [kb]) => {
+      const ra = rank.get(ka);
+      const rb = rank.get(kb);
+      if (ra !== undefined && rb !== undefined) return ra - rb;
+      if (ra !== undefined) return -1;
+      if (rb !== undefined) return 1;
+      return compareKeys(ka, kb);
+    });
+    return new Map(pairs);
+  }
+  const dir = op.order === "desc" ? -1 : 1;
+  if (op.by !== undefined) {
+    const by = op.by;
     pairs.sort(([, a], [, b]) => dir * (sumBy(a, by) - sumBy(b, by)));
   } else {
     pairs.sort(([ka], [kb]) => dir * compareKeys(ka, kb));
@@ -192,7 +206,7 @@ export function splitEntries<T extends Record<string, any>>(
         break;
       }
       case "sort":
-        entries = sortEntries(entries, op.by, op.order ?? "asc");
+        entries = sortEntries(entries, op);
         break;
       case "reverse":
         entries = new Map([...entries.entries()].reverse());

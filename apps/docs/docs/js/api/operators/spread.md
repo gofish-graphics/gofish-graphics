@@ -143,8 +143,9 @@ running through the stack).
 `field(name)` returns a chainable expression — a builder where each method
 appends one op to an ordered pipeline. It works in two disjoint places:
 
-- As `by` (a **domain** slot): `.sort(by?, order?)`, `.reverse()`, and
-  `.bin({ thresholds? })` decide **which groups exist and in what order**.
+- As `by` (a **domain** slot): `.sort(by?, order?)`, `.sort(values)` (an
+  explicit order list), `.reverse()`, and `.bin({ thresholds? })` decide
+  **which groups exist and in what order**.
 - As a mark or `size` channel value (a **value** slot): `.sum()`, `.mean()`,
   `.count()`, and `.distinct()` **fold a group's rows to one number**,
   overriding the channel's own default aggregation (sum for size, mean for
@@ -163,6 +164,17 @@ throws.
 
 Omit the `by` argument to sort by the group key itself; pass
 `order: "desc"` for descending.
+
+**Sort groups by an explicit order**, for a domain-specific sequence no
+aggregate expresses (severity, calendar order, a fixed ranking):
+
+```ts
+// Weather categories in a fixed order, not alphabetical or by aggregate
+.flow(stack({ by: field("weather").sort(["sun", "fog", "drizzle", "rain", "snow"]), dir: "y" }))
+```
+
+Groups whose key isn't in the list are appended after, in natural sort
+order.
 
 **Bin a numeric field into groups** — a histogram, with no precomputed bins:
 

@@ -2333,11 +2333,22 @@ class FieldAccessor(dict):
         return out
 
     def sort(
-        self, by: Optional[str] = None, order: Optional[str] = None
+        self,
+        by: Optional[Union[str, List[Union[str, float]]]] = None,
+        order: Optional[str] = None,
     ) -> "FieldAccessor":
         """Order groups by the SUM of `by` over each group's rows (ascending
         unless `order="desc"`), or by the group key itself when `by` is
-        omitted. Valid only in a `by` (domain) slot."""
+        omitted. Valid only in a `by` (domain) slot.
+
+        Pass a list instead of a field name for an explicit group order
+        (#735), e.g. `field("weather").sort(["sun", "fog", "drizzle",
+        "rain", "snow"])` — a domain-specific order that no aggregate
+        expresses. Groups whose key isn't in the list are appended after,
+        in natural sort order. Mutually exclusive with `order`.
+        """
+        if isinstance(by, list):
+            return self._with_op({"op": "sort", "values": by})
         op: dict = {"op": "sort"}
         if by is not None:
             op["by"] = by

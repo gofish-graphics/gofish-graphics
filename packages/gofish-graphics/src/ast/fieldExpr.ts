@@ -32,7 +32,16 @@ import meanBy from "lodash/meanBy";
 import type { Measure, MaybeValue } from "./data";
 
 export type FieldOp =
-  | { op: "sort"; by?: string; order?: "asc" | "desc" }
+  | {
+      op: "sort";
+      by?: string;
+      order?: "asc" | "desc";
+      /** Explicit group order (#735), e.g. `.sort(["sun", "fog", ...])`.
+       *  Mutually exclusive with `by`/`order`. Groups whose key isn't in
+       *  this list are appended after, in natural sort order — see
+       *  `sortEntries` in datumProjection.ts. */
+      values?: (string | number)[];
+    }
   | { op: "reverse" }
   | { op: "bin"; thresholds?: number | number[] }
   | { op: "normalize" }
@@ -70,13 +79,26 @@ export class FieldExpr {
     return new FieldExpr(this.name, this.measure, [...this._ops, op]);
   }
 
+  /** Order groups by an explicit list of group keys — e.g.
+   *  `field("weather").sort(["sun", "fog", "drizzle", "rain", "snow"])` for a
+   *  domain-specific order that no aggregate expresses. Groups whose key
+   *  isn't in the list are appended after, in natural sort order. Valid only
+   *  in a `by` (domain) slot. */
+  sort(values: (string | number)[]): FieldExpr;
   /** Order groups by the SUM of `by` over each group's rows (ascending unless
    *  `order: "desc"`), or by the group key itself when `by` is omitted. Valid
    *  only in a `by` (domain) slot. */
-  sort(by?: string, order?: "asc" | "desc"): FieldExpr {
+  sort(by?: string, order?: "asc" | "desc"): FieldExpr;
+  sort(
+    byOrValues?: string | (string | number)[],
+    order?: "asc" | "desc"
+  ): FieldExpr {
+    if (Array.isArray(byOrValues)) {
+      return this._withOp({ op: "sort", values: byOrValues });
+    }
     return this._withOp({
       op: "sort",
-      ...(by !== undefined ? { by } : {}),
+      ...(byOrValues !== undefined ? { by: byOrValues } : {}),
       ...(order !== undefined ? { order } : {}),
     });
   }

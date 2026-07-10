@@ -564,7 +564,15 @@ export interface FieldAccessor {
 /** One op in a `field(...)` pipeline — mirrors gofish-graphics'
  *  `FieldOp` (`ast/fieldExpr.ts`) exactly. See {@link FieldAccessor}. */
 export type FieldOpIR =
-  | { op: "sort"; by?: string; order?: "asc" | "desc" }
+  | {
+      op: "sort";
+      by?: string;
+      order?: "asc" | "desc";
+      /** Explicit group order (#735); mutually exclusive with `by`/`order`.
+       *  Groups whose key isn't in this list are appended after, in natural
+       *  sort order. */
+      values?: (string | number)[];
+    }
   | { op: "reverse" }
   | { op: "bin"; thresholds?: number | number[] }
   | { op: "normalize" }

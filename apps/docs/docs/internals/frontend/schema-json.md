@@ -330,6 +330,20 @@ for the API.
             },
             "order": {
               "enum": ["asc", "desc"]
+            },
+            "values": {
+              "type": "array",
+              "items": {
+                "oneOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ]
+              },
+              "description": "Explicit group order (#735), e.g. sort([\"sun\", \"fog\", ...]). Mutually exclusive with by/order. Groups whose key isn't in this list are appended after, in natural sort order."
             }
           }
         },

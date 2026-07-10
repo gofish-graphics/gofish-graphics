@@ -709,6 +709,20 @@ function walkFieldOp(value: unknown, path: string, ctx: Context): void {
           message: `sort "order" must be "asc" | "desc", got ${JSON.stringify(value.order)}`,
         });
       }
+      if (value.values !== undefined) {
+        if (
+          !Array.isArray(value.values) ||
+          !value.values.every(
+            (v) => typeof v === "string" || typeof v === "number"
+          )
+        ) {
+          ctx.errors.push({
+            path: `${path}.values`,
+            message:
+              'sort "values" must be an array of strings/numbers when present',
+          });
+        }
+      }
       return;
     case "bin":
       if (
