@@ -2563,6 +2563,10 @@ def line(
     from_: Optional[str] = None,
     to: Optional[str] = None,
     by: Optional[Union[str, "FieldAccessor"]] = None,
+    emX: Optional[bool] = None,
+    emY: Optional[bool] = None,
+    w: Optional[Union[int, float, str]] = None,
+    h: Optional[Union[int, float, str]] = None,
 ) -> Mark:
     """Line mark — a center-mode connector (the path between mark centers).
 
@@ -2579,6 +2583,11 @@ def line(
 
     ``strokeDasharray`` (e.g. ``"12"``) draws a dashed line, matching
     ``enclose``'s option of the same name.
+
+    ``emX``/``emY``/``w``/``h`` are blank-fusion anchor keys: placed directly
+    in ``.mark(...)`` position, ``line(...)`` elaborates to an invisible
+    anchor tier (a ``blank()`` carrying just these four keys) plus this
+    connector. ``line`` itself ignores them.
     """
     kwargs = _line_opts(
         dir=dir,
@@ -2594,6 +2603,10 @@ def line(
         from_=from_,
         to=to,
         by=by,
+        emX=emX,
+        emY=emY,
+        w=w,
+        h=h,
     )
     if children is not None:
         return Mark("line", _children=list(children), **kwargs)
@@ -2613,6 +2626,10 @@ def ribbon(
     from_: Optional[str] = None,
     to: Optional[str] = None,
     by: Optional[Union[str, "FieldAccessor"]] = None,
+    emX: Optional[bool] = None,
+    emY: Optional[bool] = None,
+    w: Optional[Union[int, float, str]] = None,
+    h: Optional[Union[int, float, str]] = None,
 ) -> Mark:
     """Ribbon mark — an edge-mode connector: a filled band between the facing
     edges of consecutive marks (areas, streamgraphs, sankey ribbons).
@@ -2623,6 +2640,11 @@ def ribbon(
     ``by=...`` (partition the ref bag by a field and draw one ribbon per
     group), and pairwise form ``ribbon(from_=..., to=...)`` (one band per row,
     after :func:`resolve`).
+
+    ``emX``/``emY``/``w``/``h`` are blank-fusion anchor keys: placed directly
+    in ``.mark(...)`` position, ``ribbon(...)`` elaborates to an invisible
+    anchor tier (a ``blank()`` carrying just these four keys) plus this
+    connector. ``ribbon`` itself ignores them.
     """
     kwargs = _ribbon_opts(
         dir=dir,
@@ -2635,6 +2657,10 @@ def ribbon(
         from_=from_,
         to=to,
         by=by,
+        emX=emX,
+        emY=emY,
+        w=w,
+        h=h,
     )
     if children is not None:
         return Mark("ribbon", _children=list(children), **kwargs)

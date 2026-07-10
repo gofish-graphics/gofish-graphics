@@ -3,9 +3,11 @@
 Text mark layout: spreads of styled text labels (vertical, middle-aligned,
 horizontal) plus a text mark spread against an ellipse. JS `For(...)` is
 array-map sugar and becomes a list comprehension. The JS stories pass
-`textAnchor: "start"` to text(), but it is a no-op in JS (the renderer
-hardcodes "start") and is not an IR field, so it is omitted here.
-PolarText is exempt (raw JS coordinate-transform closure).
+`textAnchor: "start"`, which is now a real IR field (it positions the
+rotation pivot/local origin at the text's first character, center, or last
+character) — ported here too, even though "start" is also the default.
+PolarText is exempt (raw JS coordinate-transform closure, unrelated to
+textAnchor).
 """
 
 from gofish import ellipse, spread, text
@@ -27,6 +29,7 @@ def _label_texts():
             fill=label["color"],
             fontSize=28,
             fontFamily=FONT_FAMILY,
+            textAnchor="start",
             debugBoundingBox=True,
         )
         for label in LABELS

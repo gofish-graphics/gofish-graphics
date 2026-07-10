@@ -99,6 +99,100 @@ direct far-edge seating (with the mirror suppressed) when it does not. `gofish.t
 computes the title's `sides` and the mirror-suppression (`xTitleSeatsFar`) to match
 wherever `axisSide` put the line, so the two always land together.
 
+### Label rotation (`labelAngle`)
+
+The public `axes: { x: { labelAngle: number | number[] } }` option (#746, extended
+to per-tier arrays afterward) rotates a tick or category label about its anchor,
+authored **screen-clockwise** to match Vega-Lite's `labelAngle`. It is threaded the
+same way `side` is —
+`elaborateAxes → elaborationsFor → elaborate{Continuous,Ordinal}Axis → tickMark` /
+`elaborateOrdinalAxis` — landing on the `Text` mark's `rotate` prop, which is
+applied in the node's own **y-up world frame** and gets negated at render time
+when that frame flips (`text.tsx`'s `flips ? -rotate : rotate`). Since
+`elaborationsFor` doesn't know the bake-time flip decision, it pre-negates using
+the same predicate `axisSide` already uses for its cross-flip check
+(`yUp || underCoord || isCONTINUOUS(space[1])` — this is dim-independent: it's
+really "does this node's own y mirror", not specific to the axis being labeled),
+canceling the render-time negation so the label lands at the literal screen angle
+regardless of the frame's orientation. There is no "auto" rotation mode (deferred
+to #486) — this is a manual, always-on angle.
+
+**The hanging-point rule.** `resolveLabelRotation` (`axes/elaborate.tsx`) turns
+the authored angle `a` into a `LabelRotation` descriptor — `rotate` (the
+frame-resolved value passed to `Text`), `trackAlign`, and `textAnchor` — that
+governs how the label attaches to its tick/key along the TRACK axis (the axis's
+own direction): the label is anchored at whichever of its points ends up nearest
+the axis line, not at its rotated bbox's middle.
+
+- `a` is `0`/`undefined`: `trackAlign: "middle"` — plain bbox-middle centering,
+  IDENTICAL to the unrotated path (no rotation is even applied).
+- `|a| === 90`: also `trackAlign: "middle"` — the rotated column's bbox middle
+  already centers it horizontally on the tick.
+- `0 < a < 90` (slants down-right): `trackAlign: "baseline"`, `textAnchor:
+"start"` — the label hangs from its FIRST character (Vega-Lite's 45° look).
+- `-90 < a < 0` (slants up-right): `trackAlign: "baseline"`, `textAnchor: "end"`
+  — the label hangs from its LAST character (matplotlib's `ha="right"` look).
+
+`"baseline"` is `AlignAnchor`'s existing "pin the target's own local origin"
+mode (`_node.ts`'s `_pinAnchor`), and `Text`'s rotation is applied about that
+same local origin (`text.tsx`), so pinning `"baseline"` pins the rotation pivot
+directly — no bbox-edge arithmetic needed. `textAnchor` (a new `Text` prop)
+picks which end of the pre-rotation label sits at that origin: `"start"` (the
+default) puts the first character there, `"end"` puts the last character there,
+so the SAME `"baseline"` anchor reaches either hanging corner depending on the
+angle's sign. Accepted approximation: the origin sits on the label's baseline
+(`dominantBaseline: "auto"`), not the ascender-top corner an idealized "nearest
+point on the rotated bbox" derivation would use — the two differ by
+`ascent·sin(a)`, a couple of pixels at these sizes, invisible in practice.
+
+For an ordinal axis, `elaborateOrdinalAxis` expresses this directly:
+`Constraint.align`'s anchor accepts a per-child array
+(`[trackAlign, "middle"]`), so the label pivots to `"baseline"` while the key
+node it tracks stays `"middle"`-anchored on its own extent — one constraint,
+heterogeneous anchors. A continuous axis can't do the same by nesting the tick
+and label into one `tickMark` node the way the unrotated/±90° path does: an
+oblique label's rotated bbox is NOT symmetric about its pivot, so
+`positionAxis`'s per-tick `Constraint.position(pos(v), [tick])` — which defaults
+to `anchor: "middle"`, i.e. the target's bbox middle — would pin the PAIR's
+lopsided union bbox middle at the data value instead of the pivot, dragging the
+hanging point off the tick by however asymmetric the rotated label is. So for
+an oblique continuous axis, `elaborateContinuousAxis` keeps the tick bare
+(`tickRect`, unaffected by the label) and gives `positionAxis` a separate
+`tickLabel` builder: the DATA pin still targets the bare tick alone, and the
+label is a sibling related to it by the same heterogeneous
+`Constraint.align` + a cross-axis `Constraint.distribute`, mirroring
+`elaborateOrdinalAxis`'s approach. The unrotated/±90° path is untouched code
+(still `tickMark` + `Spread`'s uniform `"middle"` alignment), not just untouched
+geometry, so those angles stay pixel-identical to before the hanging-point rule.
+
+**Per-tier selection.** A plain number applies uniformly to every tier of a
+nested ordinal axis (a grouped bar chart's inner year row and outer city row
+both rotate the same amount); an array is per-tier instead, indexed from the
+INNERMOST tier outward — `angleForTier(opt, tier)` picks `opt` itself when it's
+a number, or `opt[tier]` (possibly `undefined`, past the array's end) when it's
+an array. `elaborationsFor` needs to know which tier index `tier` a given
+ordinal-axis-owning node is, since **ordinal axes nest**: `resolveAxes` lets a
+distinct ordinal grouping claim its own axis at every depth (`_node.ts`'s
+`resolveAxes`), so a grouped bar chart has one node owning the city axis and,
+independently, one sibling-node-per-city each owning that city's year axis — a
+DEEPER call in the bottom-up `elaborateAxes` walk always elaborates an inner
+tier before an ancestor elaborates an outer one on the same dim.
+
+The tier index is computed by bubbling a per-dim `tierCounts: [number, number]`
+UP through the recursion, exactly like `titleAnchors` bubbles up axis-line
+anchors: `elaborateAxes` folds it as a `Math.max` over its own children's
+returned `tierCounts` (a node's tier count only depends on ITS OWN subtree, so
+sibling subtrees elsewhere in the tree — e.g. two independent grouped-bar
+regions — don't interfere with each other), then calls `elaborationsFor` with
+that folded value. Inside `elaborationsFor`, a node that claims an ordinal axis
+on dim `d` reads `tier = tierCounts[d]` (0 for the first — innermost — claim
+seen anywhere below it) as its OWN tier index, then increments
+`tierCounts[d]` by one before returning, so an ancestor claiming the same dim's
+next-outer tier reads the incremented count. Continuous/difference axes are
+always single-owner and single-tier (`resolveAxes`: "Continuous: single-owner —
+only the root-most unclaimed dim claims"), so they always resolve tier `0` —
+i.e. the number, or `array[0]`.
+
 The wrapper inherits the wrapped node's `key` and `_name`, so faceting and
 external refs keep resolving to it. After the rewrite, the whole tree's underlying
 space is recomputed (the cache is cleared); then normal layout runs, and each

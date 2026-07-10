@@ -58,3 +58,50 @@ def story_axes_custom_xtitle():
 
 def story_axes_suppressed_title():
     return _story({"x": {"title": False}, "y": True})
+
+
+# labelAngle (#746): a nested grouped bar chart (city, then year) at a small
+# thumbnail size, where the unrotated category labels would collide under the
+# bars. Two-tier x axis: labelAngle applies to both the inner (year) and
+# outer (city) label rows.
+CITY_YEAR = [
+    {"city": "Austin", "year": "2022", "visitors": 42},
+    {"city": "Austin", "year": "2023", "visitors": 58},
+    {"city": "Austin", "year": "2024", "visitors": 71},
+    {"city": "Boston", "year": "2022", "visitors": 55},
+    {"city": "Boston", "year": "2023", "visitors": 49},
+    {"city": "Boston", "year": "2024", "visitors": 63},
+    {"city": "Chicago", "year": "2022", "visitors": 38},
+    {"city": "Chicago", "year": "2023", "visitors": 44},
+    {"city": "Chicago", "year": "2024", "visitors": 51},
+]
+
+
+def _grouped_bar(label_angle):
+    return (
+        chart(CITY_YEAR, axes={"x": {"labelAngle": label_angle}})
+        .flow(
+            spread(by="city", dir="x", spacing=24),
+            spread(by="year", dir="x", spacing=0),
+        )
+        .mark(rect(h="visitors", fill="year")),
+        {"w": 300, "h": 210},
+    )
+
+
+def story_grouped_label_angle45():
+    return _grouped_bar(45)
+
+
+def story_grouped_label_angle90():
+    return _grouped_bar(90)
+
+
+# Per-tier labelAngle array: [45]/[90] rotates only the innermost (year) row,
+# leaving the outer (city) row upright.
+def story_grouped_label_angle_inner45():
+    return _grouped_bar([45])
+
+
+def story_grouped_label_angle_inner90():
+    return _grouped_bar([90])

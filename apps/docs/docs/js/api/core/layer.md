@@ -20,6 +20,74 @@ tier's marks as scope, uniformly:
   component-level annotation: it ignores the scope entirely, since its channels
   have no ref-bag semantics to read.
 
+## Blank-fusion: skip `.layer()` entirely for a fresh chart
+
+When the connector's anchors don't exist yet either — there's no earlier tier
+to draw from, just raw data — `line()`/`ribbon()` can go straight in `.mark()`
+position and skip `.layer()` altogether:
+
+::: gofish
+
+```js
+gf.chart(seafood, { axes: true })
+  .flow(
+    gf.spread({ by: "lake", dir: "x", spacing: 64 }),
+    gf.stack({ by: gf.field("species").sort("count"), dir: "y" })
+  )
+  .mark(gf.ribbon({ h: "count", fill: "species", by: "species", opacity: 0.8 }))
+  .render(root, { w: 400, h: 320 });
+```
+
+:::
+
+### Desugaring
+
+A relational mark placed directly in `.mark()` position elaborates to an
+invisible anchor tier plus a connector tier:
+
+```
+.mark(R(opts))  ⇒  .mark(blank(anchor(opts))).layer(R(opts))
+```
+
+`anchor(opts)` is exactly the `{w, h, emX, emY}` subset of `opts` — the purely
+spatial keys `blank()` itself accepts. Everything else (`fill`, `stroke`,
+`strokeWidth`, `strokeDasharray`, `opacity`, `curve`, `dir`, `mixBlendMode`,
+`by`, `source`, `target`) stays on the connector, matching what you'd write by
+hand:
+
+```js
+// Fused
+chart(seafood, { axes: true })
+  .flow(
+    spread({ by: "lake", dir: "x", spacing: 64 }),
+    stack({ by: "species", dir: "y" })
+  )
+  .mark(ribbon({ h: "count", fill: "species", by: "species", opacity: 0.8 }));
+
+// ...is sugar for the explicit two-tier form:
+chart(seafood, { axes: true })
+  .flow(
+    spread({ by: "lake", dir: "x", spacing: 64 }),
+    stack({ by: "species", dir: "y" })
+  )
+  .mark(blank({ h: "count" }))
+  .layer(ribbon({ fill: "species", by: "species", opacity: 0.8 }));
+```
+
+A `.name(...)`/`.label(...)`/`.zOrder(...)` chained onto the relational mark
+names/labels/orders the **connector** (the anchor tier still gets `.layer()`'s
+usual auto-naming). This rule only fires when the chart's data still needs
+anchors drawn for it — a relational mark applied directly to an existing bag
+of refs (`chart(selectAll("bars")).mark(ribbon(opts))`, or the bare-mark tier
+form documented above) keeps its unfused, direct-connect meaning; only the
+pairwise `{from, to}` form is never fused either, since it already consumes
+ref-bearing rows in `.mark()` position.
+
+Reach for the explicit `.mark(blank(...)).layer(...)` form instead when the
+anchor needs options besides `{w, h, emX, emY}` (a visible rect anchor, for
+instance — see [`Ribbon`](/js/api/marks/ribbon)'s bar-chart example) or when
+you want the anchor and connector opts kept visually separate.
+
 ## Ribbon — one-line sugar with `by`
 
 The simple case — draw a ribbon over the marks you just drew, split into one

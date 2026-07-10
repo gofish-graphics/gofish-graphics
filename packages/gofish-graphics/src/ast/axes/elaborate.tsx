@@ -9,6 +9,7 @@ import { Spread } from "../graphicalOperators/spread";
 import { layer } from "../graphicalOperators/layer";
 import { ref } from "../shapes/ref";
 import { Constraint } from "../constraints";
+import type { AlignAnchor } from "../constraints/shared";
 import { wrapPreservingIdentity, fmtNum } from "../elaborationUtils";
 import { datum } from "../data";
 import { ticks as d3Ticks, nice as d3Nice } from "d3-array";
@@ -65,6 +66,82 @@ export type AxisElaboration = {
   anchor?: GoFishNode;
 };
 
+/** A `labelAngle` value as authored: a plain number applies to every tier of
+ *  a nested ordinal axis; an array is per-tier, indexed from the INNERMOST
+ *  tier outward (see `AxisOptions.labelAngle` in `gofish.tsx`). */
+type LabelAngleOpt = number | number[] | undefined;
+
+/** Select the angle for a given ordinal tier (0 = innermost) — or, for a
+ *  continuous/difference axis (always a single tier), tier `0`. A plain
+ *  number applies uniformly; an array indexes by tier, `undefined` past its
+ *  end (unrotated). */
+function angleForTier(opt: LabelAngleOpt, tier: number): number | undefined {
+  if (opt === undefined) return undefined;
+  return Array.isArray(opt) ? opt[tier] : opt;
+}
+
+/**
+ * How a `labelAngle`-rotated label is anchored to its tick/key — the
+ * "hanging point" rule: the point of the rotated label nearest the axis line
+ * is the point placed at the band/tick center, not the rotated bbox's
+ * middle. `trackAlign` picks the `Constraint.align`/`Spread` anchor mode
+ * along the TRACK axis (the axis's own direction — horizontal for an
+ * x-axis); `textAnchor` picks which end of the (pre-rotation) label sits at
+ * its own local origin, i.e. the point `"baseline"` alignment pins (see
+ * `_node.ts`'s `_pinAnchor`: a `"baseline"` anchor places a node's local
+ * coordinate 0, not a bbox edge). `Text`'s rotation is applied about that
+ * same local origin (`text.tsx`), so pinning it IS pinning the rotation
+ * pivot.
+ *
+ * Rule (screen-clockwise angle `a`; a bottom x-axis is the easiest intuition,
+ * but the derivation only depends on the label's own local frame, not which
+ * axis or side owns it):
+ *  - `a` is 0/undefined: `trackAlign: "middle"` — plain bbox-middle
+ *    centering, IDENTICAL to the unrotated path (no rotation is applied at
+ *    all, so this case never even reaches `Text`'s `rotate`/`textAnchor`).
+ *  - `|a| === 90`: also `trackAlign: "middle"` — the rotated column's bbox
+ *    middle already centers it horizontally on the tick (explicit user
+ *    feedback: this must not regress).
+ *  - `0 < a < 90` (slants down-right): `trackAlign: "baseline"`,
+ *    `textAnchor: "start"` — the pivot is the FIRST character's origin, so
+ *    the label hangs from its start (Vega-Lite's 45° look).
+ *  - `-90 < a < 0` (slants up-right): `trackAlign: "baseline"`,
+ *    `textAnchor: "end"` — the pivot is the LAST character's origin, so the
+ *    label hangs from its end (matplotlib's `ha="right"` look).
+ *
+ * Caveat, deliberately accepted: the label's local origin sits on its
+ * baseline (`dominantBaseline: "auto"`, y=0 at the baseline), not the
+ * ascender-TOP corner a literal "nearest point on the rotated bbox" geometric
+ * derivation would use. The two differ by `ascent·sin(a)` — a couple of
+ * pixels at these font sizes/angles — which the constraint system can't
+ * express without extra bbox-edge arithmetic (`AlignAnchor` only has
+ * `start`/`middle`/`end`/`baseline`, no fractional point). Using the
+ * baseline pivot directly is visually indistinguishable here and needs no
+ * extra machinery.
+ */
+type LabelRotation = {
+  /** The (frame-resolved) degrees to pass to `Text`'s `rotate`. */
+  rotate: number;
+  trackAlign: "middle" | "baseline";
+  textAnchor: "start" | "end";
+};
+
+function resolveLabelRotation(
+  a: number | undefined,
+  frameFlips: boolean
+): LabelRotation | undefined {
+  if (!a) return undefined;
+  const rotate = frameFlips ? -a : a;
+  if (Math.abs(a) === 90) {
+    return { rotate, trackAlign: "middle", textAnchor: "start" };
+  }
+  return {
+    rotate,
+    trackAlign: "baseline",
+    textAnchor: a < 0 ? "end" : "start",
+  };
+}
+
 const dirName = (dim: 0 | 1) => (dim === 0 ? "x" : "y");
 const cross = (dim: 0 | 1): 0 | 1 => (1 - dim) as 0 | 1;
 const crossName = (dim: 0 | 1) => dirName(cross(dim));
@@ -81,21 +158,43 @@ const tickRect = (dim: 0 | 1): GoFishNode =>
  *  INNER element (facing the content) and the label the outer one, so the order
  *  follows `side`: with the axis on the near/start side the inner edge is the
  *  cross-`end`, so `[label, tick]`; on the far/end side the inner edge is the
- *  cross-`start`, so `[tick, label]`. */
+ *  cross-`start`, so `[tick, label]`.
+ *
+ *  Used only for the "middle" hanging-point case (unrotated / ±90°, see
+ *  `LabelRotation`'s doc comment) — `elaborateContinuousAxis` bypasses this
+ *  for an oblique angle in favor of a bare tick (`tickRect`) plus a separate
+ *  sibling label positioned directly by `positionAxis`'s own constraints
+ *  (`tickLabel`). That split matters: `positionAxis` pins each tick at its
+ *  DATA value by the tick+label PAIR's own bbox middle (`Constraint.position`
+ *  defaults to `anchor: "middle"`); for "middle" alignment the pair's bbox
+ *  middle coincides with the shared tick/label centerline, so pinning it is
+ *  correct. An oblique label's rotated bbox is NOT symmetric about its
+ *  hanging-point pivot, so the pair's bbox middle would drift away from the
+ *  data value by however lopsided the rotated glyph box is — the exact bug
+ *  the hanging-point rule exists to avoid. Keeping a bare, unrotated,
+ *  symmetric tick as the thing `Constraint.position` pins sidesteps that: its
+ *  bbox middle IS its true center regardless of what the label next to it
+ *  does. */
 function tickMark(
   dim: 0 | 1,
   label: string,
   name: string,
-  side: "start" | "end" = "start"
+  side: "start" | "end" = "start",
+  labelAngle?: number
 ): GoFishNode {
   const text = Text({
     text: label,
     fontSize: LABEL_FONT_SIZE,
     fill: AXIS_COLOR,
+    rotate: labelAngle,
   });
   const tick = tickRect(dim);
   return (Spread as any)(
-    { dir: crossName(dim), spacing: LABEL_TICK_GAP, alignment: "middle" },
+    {
+      dir: crossName(dim),
+      spacing: LABEL_TICK_GAP,
+      alignment: "middle",
+    },
     side === "end" ? [tick, text] : [text, tick]
   ).name(name) as GoFishNode;
 }
@@ -195,6 +294,20 @@ function positionAxis(opts: {
   tickValues: number[];
   /** Build the node for tick i (labeled for continuous, bare for difference). */
   tickNode: (v: number, i: number, name: string) => GoFishNode;
+  /**
+   * Build a SEPARATE per-tick label, when the tick itself (`tickNode`) is
+   * bare — the oblique hanging-point path (see `elaborateContinuousAxis` and
+   * `tickMark`'s doc comment for why the label can't just be nested inside
+   * the tick node there). When given, each label ALIGNs to its tick
+   * (`labelRotation`'s track-axis anchor, heterogeneous when oblique — the
+   * label at its own pivot, the tick at "middle") and DISTRIBUTEs past it
+   * into the gutter; `Constraint.position`'s per-tick data pin still targets
+   * the bare tick alone, never the label.
+   */
+  tickLabel?: (v: number, i: number, name: string) => GoFishNode;
+  /** Shared hanging-point descriptor for `tickLabel` (see `LabelRotation`'s
+   *  doc comment) — only consulted when `tickLabel` is given. */
+  labelRotation?: LabelRotation;
   /** Extra labels placed at a data position (difference delta labels). */
   extraLabels?: { value: number; text: string }[];
   /** The other dim's scale floor, when it also carries a position-like axis —
@@ -208,11 +321,15 @@ function positionAxis(opts: {
   const lineName = `${prefix}line`;
   const tickName = (i: number) => `${prefix}t${i}`;
   const labelName = (i: number) => `${prefix}l${i}`;
+  const tickLabelName = (i: number) => `${prefix}tl${i}`;
   const pos = (v: number) =>
     (dim === 1 ? { y: datum(v) } : { x: datum(v) }) as any;
 
   const line = axisLine(dim, lineMin, lineMax, lineName);
   const tickNodes = tickValues.map((v, i) => opts.tickNode(v, i, tickName(i)));
+  const tickLabelNodes = opts.tickLabel
+    ? tickValues.map((v, i) => opts.tickLabel!(v, i, tickLabelName(i)))
+    : [];
   // Extra labels (difference deltas) are PLAIN text — no tick mark of their own,
   // or the axis ends up with a second row of ticks at the midpoints.
   const extra = opts.extraLabels ?? [];
@@ -224,6 +341,10 @@ function positionAxis(opts: {
 
   const constraints = (g: Record<string, any>) => {
     const ticks = tickValues.map((_, i) => g[tickName(i)]);
+    // Data pin: always the bare tick's own bbox (its "middle" anchor is its
+    // TRUE center regardless of what a sibling `tickLabel` does — see
+    // `tickMark`'s doc comment for why an oblique label can't be nested
+    // inside the pinned node).
     const cs: any[] = tickValues.map((v, i) =>
       Constraint.position(pos(v), [ticks[i]])
     );
@@ -235,6 +356,30 @@ function positionAxis(opts: {
     cs.push(
       ...gutterConstraints(dim, g, lineName, ticks, opts.crossFloor, side)
     );
+    if (opts.tickLabel) {
+      const trackAxis = dirName(dim);
+      const gutterDir = crossName(dim);
+      // Heterogeneous per-child anchor (see `positionAxis`'s `tickLabel` doc
+      // comment): the label pivots at its own origin when oblique; the tick
+      // keeps "middle" either way.
+      const anchors: AlignAnchor[] =
+        opts.labelRotation?.trackAlign === "baseline"
+          ? ["baseline", "middle"]
+          : ["middle", "middle"];
+      tickValues.forEach((_, i) => {
+        const label = g[tickLabelName(i)];
+        const tick = ticks[i];
+        cs.push(
+          Constraint.align({ [trackAxis]: anchors } as any, [label, tick])
+        );
+        cs.push(
+          Constraint.distribute(
+            { dir: gutterDir, spacing: LABEL_TICK_GAP },
+            side === "end" ? [tick, label] : [label, tick]
+          )
+        );
+      });
+    }
     // Each extra label is pinned at its data position along the axis, and —
     // having no tick of its own to provide an offset — DISTRIBUTEs off the
     // (now seated) line, at the same outer offset as the continuous labels
@@ -258,7 +403,7 @@ function positionAxis(opts: {
   // axis line's span (which may be narrower than the plot — a difference axis
   // spans the data width, a facet-owned axis spans its facet).
   return {
-    nodes: [line, ...tickNodes, ...labelNodes],
+    nodes: [line, ...tickNodes, ...tickLabelNodes, ...labelNodes],
     constraints,
     anchor: line,
   };
@@ -267,23 +412,47 @@ function positionAxis(opts: {
 /** One continuous (POSITION) axis. Mirrors the hand-drawn ContinuousYAxis.
  *  `nice` is the d3-niced [min, max] of the domain, computed once by
  *  `elaborationsFor` (the same pair feeds the other axis's `crossFloor`, so
- *  computing it in one place keeps the corner consistent). */
+ *  computing it in one place keeps the corner consistent).
+ *
+ *  `labelRotation`'s `trackAlign` picks how each tick's label is built (see
+ *  `tickMark`'s and `positionAxis`'s `tickLabel` doc comments for why): the
+ *  "middle" case (unrotated / ±90°) nests the label inside the tick node via
+ *  `tickMark`, unchanged from before the hanging-point rule; the "baseline"
+ *  (oblique) case keeps the tick bare and gives `positionAxis` a separate
+ *  `tickLabel` builder instead, so the data-position pin never targets the
+ *  (asymmetric, rotated) label's own bbox. */
 function elaborateContinuousAxis(
   dim: 0 | 1,
   nice: [number, number],
   prefix: string,
   crossFloor?: number,
-  side: "start" | "end" = "start"
+  side: "start" | "end" = "start",
+  labelRotation?: LabelRotation
 ): AxisElaboration {
   const [niceMin, niceMax] = nice;
   const tickValues = d3Ticks(niceMin, niceMax, TICK_COUNT);
+  const oblique = labelRotation?.trackAlign === "baseline";
   return positionAxis({
     dim,
     prefix,
     lineMin: niceMin,
     lineMax: niceMax,
     tickValues,
-    tickNode: (v, _i, name) => tickMark(dim, fmtNum(v), name, side),
+    tickNode: oblique
+      ? (_v, _i, name) => tickRect(dim).name(name)
+      : (v, _i, name) =>
+          tickMark(dim, fmtNum(v), name, side, labelRotation?.rotate),
+    tickLabel: oblique
+      ? (v, _i, name) =>
+          Text({
+            text: fmtNum(v),
+            fontSize: LABEL_FONT_SIZE,
+            fill: AXIS_COLOR,
+            rotate: labelRotation!.rotate,
+            textAnchor: labelRotation!.textAnchor,
+          }).name(name)
+      : undefined,
+    labelRotation,
     crossFloor,
     side,
   });
@@ -342,20 +511,35 @@ function elaborateOrdinalAxis(
   space: Extract<UnderlyingSpace, { kind: "ordinal" }>,
   keyMap: Record<string, GoFishNode>,
   prefix: string,
-  side: "start" | "end" = "start"
+  side: "start" | "end" = "start",
+  labelRotation?: LabelRotation
 ): AxisElaboration {
   const keys = (space.domain ?? []).filter((k) => keyMap[k] !== undefined);
   const trackAxis = dirName(dim); // labels track their key along the axis dim
   const gutterDir = crossName(dim); // labels sit in the cross gutter
   const lName = (i: number) => `${prefix}ol${i}`;
   const rName = (i: number) => `${prefix}or${i}`;
+  // Hanging-point rule (see `LabelRotation`'s doc comment): unrotated / ±90°
+  // keeps the plain bbox-middle centering used before (pixel-identical to the
+  // pre-hanging-point behavior); an oblique angle instead anchors the LABEL at
+  // its own rotation pivot (`"baseline"`) while the key node it tracks stays
+  // "middle"-anchored on its own extent — a heterogeneous per-child anchor,
+  // via `Constraint.align`'s anchor-array form.
+  const trackAnchors: AlignAnchor[] =
+    labelRotation?.trackAlign === "baseline"
+      ? ["baseline", "middle"]
+      : ["middle", "middle"];
 
   const nodes: GoFishNode[] = [];
   keys.forEach((k, i) => {
     nodes.push(
-      Text({ text: k, fontSize: LABEL_FONT_SIZE, fill: AXIS_COLOR }).name(
-        lName(i)
-      )
+      Text({
+        text: k,
+        fontSize: LABEL_FONT_SIZE,
+        fill: AXIS_COLOR,
+        rotate: labelRotation?.rotate,
+        textAnchor: labelRotation?.textAnchor,
+      }).name(lName(i))
     );
     nodes.push((ref(keyMap[k]) as any).name(rName(i)) as GoFishNode);
   });
@@ -365,7 +549,7 @@ function elaborateOrdinalAxis(
     keys.forEach((_, i) => {
       // Track the key along the axis dim …
       cs.push(
-        Constraint.align({ [trackAxis]: "middle" } as any, [
+        Constraint.align({ [trackAxis]: trackAnchors } as any, [
           g[lName(i)],
           g[rName(i)],
         ])
@@ -433,12 +617,21 @@ function collectKeyMap(node: GoFishNode): Record<string, GoFishNode> {
  *    out AFTER the content is in its final (shifted) position — i.e. in an outer
  *    tier. Otherwise the ref captures the pre-shift position and the labels miss
  *    the continuous-axis gutter offset.
+ *
+ * `tierCounts` is the per-dim count of ordinal axis tiers already elaborated
+ * BELOW this node in the subtree (0 = none yet, i.e. this node — if it owns an
+ * ordinal axis — is the innermost tier); see `elaborateAxes` for how it's
+ * bubbled up. The returned `tierCounts` adds one per dim this node claimed an
+ * ordinal axis on, so an ancestor owning the same dim's outer tier reads the
+ * right index for a per-tier `labelAngle` array.
  */
 function elaborationsFor(
   node: GoFishNode,
   sides: ["start" | "end" | undefined, "start" | "end" | undefined],
   yUp: boolean,
-  underCoord: boolean
+  underCoord: boolean,
+  labelAngles: [LabelAngleOpt, LabelAngleOpt] = [undefined, undefined],
+  tierCounts: [number, number] = [0, 0]
 ): {
   constrained: AxisElaboration[];
   refBased: AxisElaboration[];
@@ -449,6 +642,9 @@ function elaborationsFor(
    *  all — including an ordinal one, which contributes no `anchors` entry. An
    *  owner CLAIMS the dim for title-anchoring purposes (see `elaborateAxes`). */
   owned: [boolean, boolean];
+  /** Per-dim ordinal-tier count, incremented for each dim this node claimed
+   *  an ordinal axis on (see the doc comment above). */
+  tierCounts: [number, number];
 } {
   const space = node._underlyingSpace;
   if (!space)
@@ -457,6 +653,7 @@ function elaborationsFor(
       refBased: [],
       anchors: [undefined, undefined],
       owned: [false, false],
+      tierCounts,
     };
   const owns = (dim: 0 | 1) => (dim === 0 ? node.axis.x : node.axis.y) === true;
   // Niced [min, max] per owned POSITION dim, computed ONCE: it feeds both that
@@ -500,6 +697,28 @@ function elaborationsFor(
     const crossFlips = yUp || underCoord || isCONTINUOUS(space[cross(dim)]);
     return crossFlips ? "start" : "end";
   };
+  // `labelAngle` is authored screen-clockwise (Vega-Lite semantics), but the
+  // `Text` `rotate` prop is applied in this node's own y-up WORLD frame and
+  // gets negated at render time when that frame flips (see `text.tsx`'s
+  // `flips ? -rotate : rotate`). This node's frame flips iff a y-up mirror
+  // scope is active over it — the exact same predicate `axisSide` uses for
+  // its own cross-flip check (`yUp || underCoord || isCONTINUOUS(space[1])`,
+  // dim-independent since it's really "does THIS node's y mirror") — so we
+  // pre-negate here to cancel that render-time negation and land back on the
+  // literal screen angle regardless of the frame's orientation.
+  const frameFlips = yUp || underCoord || isCONTINUOUS(space[1]);
+  // `tier` is 0 for a continuous/difference axis (always single-tier) or the
+  // bubbled-up ordinal tier index (0 = innermost) for an ordinal one. Returns
+  // the full hanging-point descriptor (see `LabelRotation`), not just the
+  // angle — `resolveLabelRotation` also derives the track-axis alignment mode
+  // and, for an oblique angle, which end of the label anchors the rotation
+  // pivot.
+  const resolvedLabelRotation = (
+    dim: 0 | 1,
+    tier: number
+  ): LabelRotation | undefined =>
+    resolveLabelRotation(angleForTier(labelAngles[dim], tier), frameFlips);
+  const outTierCounts: [number, number] = [...tierCounts];
   for (const dim of [0, 1] as (0 | 1)[]) {
     if (!owns(dim)) continue;
     const s = space[dim];
@@ -511,7 +730,8 @@ function elaborationsFor(
         nices[dim]!,
         prefix,
         crossFloor,
-        axisSide(dim)
+        axisSide(dim),
+        resolvedLabelRotation(dim, 0)
       );
       constrained.push(e);
       anchors[dim] = e.anchor;
@@ -529,9 +749,18 @@ function elaborationsFor(
       keyMap ??= collectKeyMap(node);
       // Ordinal axes keep the `start` default (they follow the content's own flip
       // like a category row); only continuous axes default to the bottom.
+      const tier = outTierCounts[dim];
       refBased.push(
-        elaborateOrdinalAxis(dim, s, keyMap, prefix, sides[dim] ?? "start")
+        elaborateOrdinalAxis(
+          dim,
+          s,
+          keyMap,
+          prefix,
+          sides[dim] ?? "start",
+          resolvedLabelRotation(dim, tier)
+        )
       );
+      outTierCounts[dim] = tier + 1;
     } else {
       continue;
     }
@@ -539,7 +768,7 @@ function elaborationsFor(
     if (dim === 0) node.axis.x = undefined;
     else node.axis.y = undefined;
   }
-  return { constrained, refBased, anchors, owned };
+  return { constrained, refBased, anchors, owned, tierCounts: outTierCounts };
 }
 
 /**
@@ -566,6 +795,16 @@ function elaborationsFor(
  * ambiguous here — they overwrite the same slot, so whichever sibling is
  * visited last wins. We don't try to disambiguate (a per-facet title is out of
  * scope); the chart-level title just tracks one of them.
+ *
+ * It also bubbles up `tierCounts` — the per-dim count of ordinal axis tiers
+ * elaborated so far in this subtree — purely as an output (nothing is passed
+ * DOWN for it): each dim is folded bottom-up as `max` over the node's own
+ * children, then incremented by `elaborationsFor` if this node itself claims
+ * an ordinal axis on that dim. That gives a node's ordinal axis a tier index
+ * of 0 for the innermost nesting (e.g. a grouped bar chart's year row) and 1
+ * for the next one out (its city row), which `elaborationsFor` uses to pick
+ * the right entry of a per-tier `labelAngle` array. Sibling subtrees don't
+ * interfere: each call only sees counts folded from ITS OWN children.
  */
 export async function elaborateAxes(
   node: GoFishNode,
@@ -574,17 +813,20 @@ export async function elaborateAxes(
     undefined,
   ],
   yUp = false,
-  underCoord = false
+  underCoord = false,
+  labelAngles: [LabelAngleOpt, LabelAngleOpt] = [undefined, undefined]
 ): Promise<{
   node: GoFishNode;
   changed: boolean;
   titleAnchors: [GoFishNode | undefined, GoFishNode | undefined];
+  tierCounts: [number, number];
 }> {
   let changed = false;
   const titleAnchors: [GoFishNode | undefined, GoFishNode | undefined] = [
     undefined,
     undefined,
   ];
+  const tierCounts: [number, number] = [0, 0];
   // A `coord` (polar/clock) fixes its own frame orientation, so any axis inside
   // it flips with the coord rather than seating on the far edge directly. Track
   // whether we are under one so `axisSide` keeps the near/"start" seating there.
@@ -594,13 +836,20 @@ export async function elaborateAxes(
   for (let i = 0; i < node.children.length; i++) {
     const child = node.children[i];
     if (child instanceof GoFishNode) {
-      const res = await elaborateAxes(child, sides, yUp, childUnderCoord);
+      const res = await elaborateAxes(
+        child,
+        sides,
+        yUp,
+        childUnderCoord,
+        labelAngles
+      );
       if (res.changed) changed = true;
       // A child's anchor fills a dim slot we haven't claimed yet.
       for (const dim of [0, 1] as (0 | 1)[]) {
         if (titleAnchors[dim] === undefined && res.titleAnchors[dim]) {
           titleAnchors[dim] = res.titleAnchors[dim];
         }
+        tierCounts[dim] = Math.max(tierCounts[dim], res.tierCounts[dim]);
       }
       if (res.node !== child) {
         node.children[i] = res.node;
@@ -609,11 +858,19 @@ export async function elaborateAxes(
     }
   }
 
-  const { constrained, refBased, anchors, owned } = elaborationsFor(
+  const {
+    constrained,
+    refBased,
+    anchors,
+    owned,
+    tierCounts: nextTierCounts,
+  } = elaborationsFor(
     node,
     sides,
     yUp,
-    childUnderCoord
+    childUnderCoord,
+    labelAngles,
+    tierCounts
   );
   // Any dim this node owns an axis on is claimed — its own anchor replaces
   // whatever bubbled up from children, INCLUDING replacing it with undefined
@@ -624,7 +881,7 @@ export async function elaborateAxes(
   }
 
   if (constrained.length === 0 && refBased.length === 0) {
-    return { node, changed, titleAnchors };
+    return { node, changed, titleAnchors, tierCounts: nextTierCounts };
   }
 
   // Move identity off the content onto whatever ends up outermost (so the
@@ -674,7 +931,12 @@ export async function elaborateAxes(
     return outerRoot;
   });
 
-  return { node: root, changed: true, titleAnchors };
+  return {
+    node: root,
+    changed: true,
+    titleAnchors,
+    tierCounts: nextTierCounts,
+  };
 }
 
 // ── Axis titles ──────────────────────────────────────────────────────────────

@@ -210,7 +210,7 @@ def petal(*, label: Optional[Union[bool, str]] = None, debug: Optional[bool] = N
             _kw[_k] = _channel(_v)
     return Mark("petal", **_kw)
 
-def text(*, label: Optional[Union[bool, str]] = None, debug: Optional[bool] = None, x: Optional[Union[int, float, str]] = None, cx: Optional[Union[int, float, str]] = None, x2: Optional[Union[int, float, str]] = None, w: Optional[Union[int, float, str]] = None, emX: Optional[bool] = None, y: Optional[Union[int, float, str]] = None, cy: Optional[Union[int, float, str]] = None, y2: Optional[Union[int, float, str]] = None, h: Optional[Union[int, float, str]] = None, emY: Optional[bool] = None, theta: Optional[Union[int, float, str]] = None, thetaSize: Optional[Union[int, float, str]] = None, r: Optional[Union[int, float, str]] = None, rSize: Optional[Union[int, float, str]] = None, key: Optional[str] = None, text: str, fill: Optional[str] = None, stroke: Optional[str] = None, strokeWidth: Optional[float] = None, filter: Optional[str] = None, fontSize: Optional[float] = None, fontFamily: Optional[str] = None, fontStyle: Optional[str] = None, fontWeight: Optional[Union[float, str]] = None, debugBoundingBox: Optional[bool] = None, rotate: Optional[float] = None) -> Mark:
+def text(*, label: Optional[Union[bool, str]] = None, debug: Optional[bool] = None, x: Optional[Union[int, float, str]] = None, cx: Optional[Union[int, float, str]] = None, x2: Optional[Union[int, float, str]] = None, w: Optional[Union[int, float, str]] = None, emX: Optional[bool] = None, y: Optional[Union[int, float, str]] = None, cy: Optional[Union[int, float, str]] = None, y2: Optional[Union[int, float, str]] = None, h: Optional[Union[int, float, str]] = None, emY: Optional[bool] = None, theta: Optional[Union[int, float, str]] = None, thetaSize: Optional[Union[int, float, str]] = None, r: Optional[Union[int, float, str]] = None, rSize: Optional[Union[int, float, str]] = None, key: Optional[str] = None, text: str, fill: Optional[str] = None, stroke: Optional[str] = None, strokeWidth: Optional[float] = None, filter: Optional[str] = None, fontSize: Optional[float] = None, fontFamily: Optional[str] = None, fontStyle: Optional[str] = None, fontWeight: Optional[Union[float, str]] = None, debugBoundingBox: Optional[bool] = None, rotate: Optional[float] = None, textAnchor: Optional[str] = None) -> Mark:
     """A text label. Box geometry via the shared dims channels positions the text anchor.
 
     Args:
@@ -239,6 +239,7 @@ def text(*, label: Optional[Union[bool, str]] = None, debug: Optional[bool] = No
         fontWeight: CSS font-weight (e.g. 300, 700, "bold").
         debugBoundingBox: Default false.
         rotate: Rotation in degrees, applied in the chart's y-up world frame about the text anchor. Default 0.
+        textAnchor: Where the text anchor — the local origin `rotate` pivots about and dims channels position — sits along the string: its first character, center, or last character. Default "start".
     """
     _kw: Dict[str, Any] = {}
     for _k, _v in [
@@ -270,6 +271,7 @@ def text(*, label: Optional[Union[bool, str]] = None, debug: Optional[bool] = No
         ("fontWeight", fontWeight),
         ("debugBoundingBox", debugBoundingBox),
         ("rotate", rotate),
+        ("textAnchor", textAnchor),
     ]:
         if _v is not None:
             _kw[_k] = _channel(_v)
@@ -737,7 +739,7 @@ def _treemap_combinator_opts(*, w: Optional[Union[int, float, str]] = None, h: O
             opts[_k] = _v
     return opts
 
-def _line_opts(*, fill: Optional[str] = None, stroke: Optional[str] = None, strokeWidth: Optional[float] = None, strokeDasharray: Optional[str] = None, opacity: Optional[float] = None, mixBlendMode: Optional[str] = None, curve: Optional[Any] = None, dir: Optional[str] = None, source: Optional[Any] = None, target: Optional[Any] = None, from_: Optional[str] = None, to: Optional[str] = None, by: Optional[Any] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
+def _line_opts(*, fill: Optional[str] = None, stroke: Optional[str] = None, strokeWidth: Optional[float] = None, strokeDasharray: Optional[str] = None, opacity: Optional[float] = None, mixBlendMode: Optional[str] = None, curve: Optional[Any] = None, dir: Optional[str] = None, source: Optional[Any] = None, target: Optional[Any] = None, from_: Optional[str] = None, to: Optional[str] = None, by: Optional[Any] = None, emX: Optional[bool] = None, emY: Optional[bool] = None, w: Optional[Union[int, float, str]] = None, h: Optional[Union[int, float, str]] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
     """Center-mode connector — the path between the centers of consecutive marks (the drop-in for the removed `connect`). Bag form over a ref array, or pairwise `{from, to}` form over rows with two ref columns.
 
     Args:
@@ -748,6 +750,10 @@ def _line_opts(*, fill: Optional[str] = None, stroke: Optional[str] = None, stro
         from_: Pairwise form: column holding the source ref.
         to: Pairwise form: column holding the target ref.
         by: Bag form: partition the operand refs by this field (or field(...) accessor) and draw one connector per group.
+        emX: Blank-fusion anchor key: placed directly in `.mark()` position, `line(opts)` elaborates to an invisible anchor tier (a `blank()` carrying just `{w, h, emX, emY}`) plus this connector — see the `mark` construct's doc. Ignored by `line` itself.
+        emY: Blank-fusion anchor key — see `emX`. Ignored by `line` itself.
+        w: Blank-fusion anchor key — see `emX`. Ignored by `line` itself.
+        h: Blank-fusion anchor key — see `emX`. Ignored by `line` itself.
         debug: Factory-only dev flag; the JS factory strips it (FACTORY_ONLY_KEYS) before layout.
     """
     opts: Dict[str, Any] = {}
@@ -765,13 +771,17 @@ def _line_opts(*, fill: Optional[str] = None, stroke: Optional[str] = None, stro
         ("from", from_),
         ("to", to),
         ("by", by),
+        ("emX", emX),
+        ("emY", emY),
+        ("w", w),
+        ("h", h),
         ("debug", debug),
     ]:
         if _v is not None:
             opts[_k] = _v
     return opts
 
-def _ribbon_opts(*, fill: Optional[str] = None, stroke: Optional[str] = None, strokeWidth: Optional[float] = None, opacity: Optional[float] = None, mixBlendMode: Optional[str] = None, dir: Optional[str] = None, curve: Optional[Any] = None, from_: Optional[str] = None, to: Optional[str] = None, by: Optional[Any] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
+def _ribbon_opts(*, fill: Optional[str] = None, stroke: Optional[str] = None, strokeWidth: Optional[float] = None, opacity: Optional[float] = None, mixBlendMode: Optional[str] = None, dir: Optional[str] = None, curve: Optional[Any] = None, from_: Optional[str] = None, to: Optional[str] = None, by: Optional[Any] = None, emX: Optional[bool] = None, emY: Optional[bool] = None, w: Optional[Union[int, float, str]] = None, h: Optional[Union[int, float, str]] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
     """Edge-mode connector — a filled band between the facing edges of consecutive marks (areas, streamgraphs, sankey ribbons).
 
     Args:
@@ -779,6 +789,10 @@ def _ribbon_opts(*, fill: Optional[str] = None, stroke: Optional[str] = None, st
         mixBlendMode: Default "normal".
         curve: Screen-space band-edge shape (straight() | bezier()). Omitted = "auto" (bezier).
         by: Bag form: partition the operand refs by this field (or field(...) accessor) and draw one connector per group.
+        emX: Blank-fusion anchor key: placed directly in `.mark()` position, `ribbon(opts)` elaborates to an invisible anchor tier (a `blank()` carrying just `{w, h, emX, emY}`) plus this connector — see the `mark` construct's doc. Ignored by `ribbon` itself.
+        emY: Blank-fusion anchor key — see `emX`. Ignored by `ribbon` itself.
+        w: Blank-fusion anchor key — see `emX`. Ignored by `ribbon` itself.
+        h: Blank-fusion anchor key — see `emX`. Ignored by `ribbon` itself.
         debug: Factory-only dev flag; the JS factory strips it (FACTORY_ONLY_KEYS) before layout.
     """
     opts: Dict[str, Any] = {}
@@ -793,6 +807,10 @@ def _ribbon_opts(*, fill: Optional[str] = None, stroke: Optional[str] = None, st
         ("from", from_),
         ("to", to),
         ("by", by),
+        ("emX", emX),
+        ("emY", emY),
+        ("w", w),
+        ("h", h),
         ("debug", debug),
     ]:
         if _v is not None:

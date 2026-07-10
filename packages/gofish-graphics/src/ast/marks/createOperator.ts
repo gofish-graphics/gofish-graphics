@@ -234,6 +234,15 @@ function modifierMethod(
     // Preserve the kind tag so applyMark dispatches correctly through the
     // wrapped mark, then let the modifier stamp its own metadata.
     withMarkKind(wrapped, getMarkKind(base));
+    // Preserve the blank-fusion descriptor (see chart.ts's
+    // `tagRelationalFusable`) through `.name()`/`.label()`/`.zOrder()`
+    // chaining, so `.mark(ribbon(opts).name("area"))` still fuses — the
+    // descriptor names the ORIGINAL opts, which this chaining never changes,
+    // and the connector tier ends up being `wrapped` itself (which still
+    // applies the name/label/zOrder when invoked).
+    if ((base as any).__relationalFusable) {
+      (wrapped as any).__relationalFusable = (base as any).__relationalFusable;
+    }
     cfg.tag?.(wrapped, base, ...args);
     return redecorate(wrapped);
   };

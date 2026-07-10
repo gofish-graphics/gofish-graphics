@@ -106,7 +106,25 @@ export type AxesOptions = boolean | { x?: AxisOptions; y?: AxisOptions };
  *  frame-relative seating. */
 export type AxisOptions =
   | boolean
-  | { title?: string | false; side?: "start" | "end" };
+  | {
+      title?: string | false;
+      side?: "start" | "end";
+      /** Rotate tick/category labels by this many degrees, clockwise on screen
+       *  — matches Vega-Lite's `labelAngle` (e.g. `45` slants a label down to
+       *  the right, `90` reads top-to-bottom). Manual only: there is no
+       *  "auto" collision-avoidance mode (deferred, see #486).
+       *
+       *  A plain **number** applies to every tier of a nested ordinal axis
+       *  (e.g. both the city and year rows of a grouped bar chart). An
+       *  **array** is per-tier, indexed from the INNERMOST tier outward —
+       *  `[45]` rotates only the innermost category row (e.g. the year row
+       *  directly under grouped bars) and leaves outer tiers (e.g. the city
+       *  row) unrotated; `[45, 0]` is the explicit two-tier form. An index
+       *  beyond the array's length means unrotated/undefined. A continuous
+       *  axis has a single tier: it uses the number, or `array[0]` for the
+       *  array form. */
+      labelAngle?: number | number[];
+    };
 
 /** Per-dim axis `side` AS AUTHORED — `undefined` where the caller did not specify
  *  one, so the elaboration can tell an explicit `"start"` (literal frame-relative
@@ -117,6 +135,21 @@ export function resolveAxisSides(
   const sideOf = (o: AxisOptions | undefined): "start" | "end" | undefined =>
     o && typeof o === "object" ? o.side : undefined;
   if (axes && typeof axes === "object") return [sideOf(axes.x), sideOf(axes.y)];
+  return [undefined, undefined];
+}
+
+/** Per-dim `labelAngle` AS AUTHORED — `undefined` where unset, matching
+ *  `resolveAxisSides`'s shape. A `number` applies to every tier; a
+ *  `number[]` is per-tier, innermost first (see `AxisOptions.labelAngle`). */
+export function resolveAxisLabelAngles(
+  axes: AxesOptions | undefined
+): [number | number[] | undefined, number | number[] | undefined] {
+  const angleOf = (
+    o: AxisOptions | undefined
+  ): number | number[] | undefined =>
+    o && typeof o === "object" ? o.labelAngle : undefined;
+  if (axes && typeof axes === "object")
+    return [angleOf(axes.x), angleOf(axes.y)];
   return [undefined, undefined];
 }
 
@@ -291,7 +324,13 @@ export async function layout(
     // handled axis flags; the new subtree is then re-resolved below. A flag the
     // pass doesn't handle (e.g. an UNDEFINED space) is inert — nothing else
     // consumes `node.axis`.
-    const elaborated = await elaborateAxes(child, resolveAxisSides(axes), yUp);
+    const elaborated = await elaborateAxes(
+      child,
+      resolveAxisSides(axes),
+      yUp,
+      false,
+      resolveAxisLabelAngles(axes)
+    );
     titleAnchors = elaborated.titleAnchors;
     if (elaborated.changed) {
       child = elaborated.node;

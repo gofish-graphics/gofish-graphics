@@ -68,6 +68,8 @@ axes: { x: true, y: false }                    // x only
 axes: { x: { title: "Year" }, y: true }        // custom x title, inferred y title
 axes: { x: { title: false }, y: true }         // suppress the inferred x title
 axes: { x: { side: "end" } }                   // seat the x-axis on the far edge
+axes: { x: { labelAngle: 45 } }                // rotate x tick/category labels 45°
+axes: { x: { labelAngle: [45] } }              // rotate only the innermost tier
 ```
 
 Each per-axis object also accepts `side: "start" | "end"`. By default a
@@ -78,6 +80,58 @@ their value axis at the bottom without any option. An explicit `side` overrides
 that with the literal **frame-relative** seating: `"start"` is the near/origin edge
 (top in a y-down frame, bottom in y-up) and `"end"` is the far edge — e.g.
 `{ x: { side: "end" } }` forces the x-axis onto the opposite edge from the default.
+
+### Rotating tick and category labels
+
+Each per-axis object also accepts `labelAngle: number | number[]` — degrees,
+**clockwise on screen**, matching Vega-Lite's `labelAngle`. It rotates both
+continuous tick labels and ordinal category labels on that axis. This is useful
+when category labels would otherwise overlap at small chart sizes:
+
+::: gofish
+
+```js
+gf.chart(seafood)
+  .flow(gf.spread({ by: "lake", dir: "x" }))
+  .mark(gf.rect({ h: "count" }))
+  .render(root, {
+    w: 300,
+    h: 210,
+    axes: { x: { labelAngle: 45 }, y: true },
+  });
+```
+
+:::
+
+A **plain number** applies to every tier of a nested ordinal axis — e.g. a
+two-level grouped bar chart's inner (year) and outer (city) category rows both
+rotate the same amount. An **array** is per-tier instead, indexed from the
+INNERMOST tier outward: `labelAngle: [45]` rotates only the innermost row and
+leaves outer tiers unrotated; `[45, 0]` is the explicit two-tier form (same
+result). An index past the end of the array means unrotated. A continuous axis
+only ever has one tier, so it just uses the number, or `array[0]` for the array
+form.
+
+A rotated label is anchored at its **hanging point** — the point of the label
+nearest the axis line — rather than at its bounding box's middle: `0°` and
+`±90°` stay centered on the tick (unchanged from an unrotated label); any other
+angle hangs the label from whichever end sits closest to the axis, matching
+Vega-Lite's 45° look for a positive (clockwise) angle and matplotlib's
+`ha="right"` look for a negative one.
+
+```js
+gf.chart(cityYear, { axes: { x: { labelAngle: [45] } } }) // year rotated, city upright
+  .flow(
+    gf.spread({ by: "city", dir: "x", spacing: 24 }),
+    gf.spread({ by: "year", dir: "x", spacing: 0 })
+  )
+  .mark(gf.rect({ h: "visitors", fill: "year" }))
+  .render(root, { w: 300, h: 210 });
+```
+
+There is currently no "auto" mode that rotates only when labels would collide —
+`labelAngle` is a manual, always-on rotation (auto-rotation is tracked in
+[#486](https://github.com/gofish-graphics/gofish/issues/486)).
 
 `axes` is most naturally a `chart()`/`chart()` option (e.g.
 `gf.chart(data, { axes: true })`); it is also accepted directly on `.render()`, as

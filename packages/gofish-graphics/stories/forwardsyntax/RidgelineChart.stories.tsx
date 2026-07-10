@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
 import { seafood } from "../../src/data/catch";
-import { chart, spread, blank } from "../../src/lib";
+import { chart, spread } from "../../src/lib";
 import { ribbon } from "../../src/lib";
 
 const meta: Meta = {
@@ -37,8 +37,15 @@ export const Default: StoryObj<Args> = {
         spread({ by: "lake", dir: "x", spacing: 80 }),
         spread({ by: "species", dir: "y", spacing: -16 })
       )
-      .mark(blank({ h: "count", fill: "species" }))
-      .layer(ribbon({ by: "species", opacity: 0.8, mixBlendMode: "normal" }))
+      .mark(
+        ribbon({
+          h: "count",
+          fill: "species",
+          by: "species",
+          opacity: 0.8,
+          mixBlendMode: "normal",
+        })
+      )
       .render(container, {
         w: args.w,
         h: args.h,

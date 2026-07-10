@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
 import { catchLocationsArray } from "../../src/data/catch";
 import { drivingShifts } from "../../src/data/drivingShifts";
-import { chart, line, blank } from "../../src/lib";
+import { chart, line } from "../../src/lib";
 import { scatter } from "../../src/lib";
 
 const meta: Meta = {
@@ -27,8 +27,7 @@ export const Default: StoryObj<Args> = {
 
     chart(catchLocationsArray, { axes: true })
       .flow(scatter({ by: "lake", x: "x", y: "y" }))
-      .mark(blank())
-      .layer(line())
+      .mark(line())
       .render(container, {
         w: args.w,
         h: args.h,
@@ -53,8 +52,7 @@ export const GasPrices: StoryObj<Args> = {
 
     chart(drivingShifts, { axes: true })
       .flow(scatter({ by: "year", x: "year", y: "gas" }))
-      .mark(blank())
-      .layer(line({ stroke: "steelblue", strokeWidth: 2 }))
+      .mark(line({ stroke: "steelblue", strokeWidth: 2 }))
       .render(container, {
         w: args.w,
         h: args.h,
