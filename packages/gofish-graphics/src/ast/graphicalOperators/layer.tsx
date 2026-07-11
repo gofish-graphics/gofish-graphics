@@ -741,38 +741,6 @@ export const layer = createNodeOperatorSequential(
             paintedYBands.map((b) => b.max),
             Math.max
           );
-          // Record how far the painted-band fold extended this box ABOVE the
-          // plain layout fold (the pitch chain's amplitude allowance — e.g.
-          // January's peak above the first baseline). `render()` reads this
-          // (via `_pitchPaintedTopSpill`, propagated as a SUBTREE max below) to
-          // know the root's negative y min is PAINTED-TOP content and reserve
-          // the top gutter for it; without the stamp the legacy overhang
-          // mapping applies. Stamped unconditionally so no stale spill
-          // survives a re-layout.
-          const legacyMinY = foldFinite(
-            childPlaceables.map((cp) => cp.dims[1].min),
-            Math.min
-          );
-          const ownSpill =
-            minY !== undefined && legacyMinY !== undefined && minY < legacyMinY
-              ? legacyMinY - minY
-              : 0;
-          // Propagate as a SUBTREE max: a nested layer already stamped its own
-          // (subtree-max) spill on itself by the time its `.layout()` returned
-          // (children are laid out before their parent), so folding over
-          // `childPlaceables` here picks up any deeper spill too — the root
-          // check in `gofish.tsx` becomes an O(1) field read instead of a
-          // fresh recursive walk down the whole tree. `foldFinite` defaults to
-          // 0 with no finite inputs, matching "no spill anywhere".
-          const childSpill = foldFinite(
-            childPlaceables.map((cp) =>
-              cp instanceof GoFishNode ? cp._pitchPaintedTopSpill : undefined
-            ),
-            Math.max
-          );
-          const spill = Math.max(ownSpill, childSpill);
-          node._pitchPaintedTopSpill = spill > 0 ? spill : undefined;
-
           const scaleX = options.transform?.scale?.x ?? 1;
           const scaleY = options.transform?.scale?.y ?? 1;
 

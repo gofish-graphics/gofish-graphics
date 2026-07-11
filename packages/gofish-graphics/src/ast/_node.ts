@@ -422,14 +422,6 @@ export class GoFishNode {
   /** See {@link Placeable.pitchAnchorY} — the fixed-pitch distribute anchor this
    *  node's y was chained at, consumed by the bake's flip-scope band decision. */
   public pitchAnchorY?: "start" | "middle" | "end" | "baseline";
-  /** How far this layer's PAINTED-band bbox fold (`paintedYBand` in layer.tsx)
-   *  extended the box ABOVE the plain layout fold — the fixed-pitch chain's
-   *  amplitude allowance above the chain head (e.g. a ridgeline's January peak
-   *  above the first baseline). `render()` (gofish.tsx) checks the subtree for
-   *  this stamp to attribute the root's negative y min to the PAINTED TOP
-   *  gutter; absent, the legacy overhang-side mapping applies. Re-stamped
-   *  (or cleared) on every layout — no stale spill survives. */
-  public _pitchPaintedTopSpill?: number;
   /** The plot's flip frame a chrome subtree's BOX is mirrored about (issue #629).
    *  Stamped by `layout()` on each OUTERMOST `_ambientYDown` chrome node (axis
    *  title, legend column, colorbar) — the same value as the plot content's
