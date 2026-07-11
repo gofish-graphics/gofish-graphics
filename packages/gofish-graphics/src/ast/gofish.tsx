@@ -54,6 +54,7 @@ import {
 } from "./axes/elaborate";
 import { getScopeRegistry, type EqualMeasureAxis } from "./solver/scopes";
 import { elaborateLegend, legendOverhang } from "./legends/elaborate";
+import { elaborateLabels } from "./labels/elaborate";
 
 export type CategoricalScale = {
   color: Map<any, string>;
@@ -268,7 +269,6 @@ export async function layout(
   const __tResolve = perfNow();
   child.resolveColorScale();
   child.resolveNames();
-  child.resolveLabels();
   // Resolve coordinate-space axis aliases (polar theta/r/…) into x/y/w/h BEFORE
   // space inference reads the dims. Top-down + scope-bounded (see resolveAliases).
   child.resolveAliases();
@@ -337,13 +337,26 @@ export async function layout(
       if (contexts?.session) child.setRenderSession(contexts.session);
       child.resolveColorScale();
       child.resolveNames();
-      child.resolveLabels();
       // The rewrite inserted new nodes (wrappers + axis shapes) and moved keys
       // onto wrappers; `resolveUnderlyingSpace` memoizes, so clear every node's
       // cached space and recompute the whole tree from scratch.
       child.clearUnderlyingSpace();
       child.resolveUnderlyingSpace();
     }
+  }
+
+  // Label elaboration: turn every `.label(...)` spec into a real `Text` node +
+  // constraints (src/ast/labels/elaborate.tsx), the same technique the axis
+  // pass above uses. Runs after axis elaboration (a label may target a node
+  // an axis pass just wrapped) and before the contentNode/title/legend passes
+  // below, so a label's own bbox is folded into what those passes measure.
+  const labelRes = await elaborateLabels(child, { yUp });
+  if (labelRes.changed) {
+    child = labelRes.node;
+    if (contexts?.session) child.setRenderSession(contexts.session);
+    child.resolveNames();
+    child.clearUnderlyingSpace();
+    child.resolveUnderlyingSpace();
   }
 
   // The ROOT σ-scope's spaces, demand-niced (issue #659): nicing is per-scope,

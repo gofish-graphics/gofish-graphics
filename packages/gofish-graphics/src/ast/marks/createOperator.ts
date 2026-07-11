@@ -1013,9 +1013,9 @@ export function createOperator<Datum, Options extends Record<string, any>>(
             }
             // `.label(accessor, options)` chained on this operator: stamp
             // every node this leaf produced with the leaf's own subdata (so
-            // `resolveLabels`'s "a node with datum keeps its own label" gate
-            // fires — mirrors the manual LabelOnSpread workaround) and defer
-            // placement via `node.label`. A string accessor must be constant
+            // `resolveLabelTargets`'s "a node with datum keeps its own label"
+            // gate fires — mirrors the manual LabelOnSpread workaround) and
+            // defer placement via `node.label`. A string accessor must be constant
             // across the group's rows (true by construction for a `by`-field —
             // `resolveLabelText` throws otherwise); a `field(...)` aggregate
             // accessor (e.g. `field("count").sum()`) folds the group's rows to

@@ -37,7 +37,6 @@ import type {
 } from "./gofish";
 import { toDisplayList } from "./displayList/toDisplayList";
 import type { DisplayList } from "gofish-ir";
-import { lowerLabelItems } from "./labels/renderLabel";
 import { setLiveSlots } from "../interaction/liveSlots";
 import type { LiveValue } from "../interaction/live";
 import { GoFishRef } from "./_ref";
@@ -464,7 +463,7 @@ export class GoFishNode {
   public color?: MaybeValue<string>;
   public constraints: ConstraintSpec[] = [];
   public colorConfig?: ColorConfig;
-  public _label?: LabelSpec;
+  public _labels?: LabelSpec[];
   // `undefined` means "no author opinion" — distinct from an explicit
   // `.zOrder(0)`, which is a deliberate choice and must be distinguishable
   // from silence (e.g. by the relational-mark auto-zBelow suppression check
@@ -1517,13 +1516,6 @@ export class GoFishNode {
       }
       for (const item of items) setLiveSlots(item, slots);
     }
-    if (this._label && this.intrinsicDims) {
-      const labelItems = lowerLabelItems(this, transform, toPixel);
-      if (labelItems.length) {
-        for (const item of labelItems) item.id ??= this.uid;
-        return [...items, ...labelItems];
-      }
-    }
     return items;
   }
 
@@ -1661,25 +1653,8 @@ export class GoFishNode {
   }
 
   public label(accessor: LabelAccessor, options?: LabelOptions): this {
-    this._label = { accessor, ...options };
+    (this._labels ??= []).push({ accessor, ...options });
     return this;
-  }
-
-  public resolveLabels(): void {
-    // Propagate only when this node has no datum of its own.
-    // Nodes with datum (leaf shapes, or spread combinators that carry group data)
-    // render their label directly rather than pushing it to children.
-    if (this._label && this.children.length > 0 && this.datum === undefined) {
-      for (const child of this.children) {
-        if (child instanceof GoFishNode && !child._label) {
-          child._label = this._label;
-        }
-      }
-      this._label = undefined;
-    }
-    for (const child of this.children) {
-      if (child instanceof GoFishNode) child.resolveLabels();
-    }
   }
 
   public setKey(key: string): this {

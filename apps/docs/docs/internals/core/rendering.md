@@ -173,9 +173,14 @@ via `INTERNAL_lower`, which:
 - looks up the node's `_lower` method (its per-primitive lowering — the extension
   point), and the session `toPixel`;
 - calls `_lower({ intrinsicDims, transform, renderData, coordinateTransform, toPixel },
-children, node)`, which returns that node's `DisplayItem[]` fragment;
-- appends any label items (`lowerLabelItems`), since a labeled mark contributes both
-  its own primitive and its label text.
+children, node)`, which returns that node's `DisplayItem[]` fragment.
+
+`.label(...)` contributes nothing special here. It used to lower a raw `TextItem`
+alongside the labeled mark's own fragment (`lowerLabelItems`); a label is now
+**elaborated** into a real `Text` node + constraints before layout even runs
+(`src/ast/labels/elaborate.tsx`, the same technique `elaborateAxes` uses for tick
+labels), so by the time `bake`/`INTERNAL_lower` see the tree, a label is just an
+ordinary sibling shape with its own `_lower` fragment.
 
 The display list is the **concatenation of every node's fragment**. A node with no
 `_lower` throws — the migration is complete, so every shipping shape/operator supplies
