@@ -239,9 +239,9 @@ parts.push(
 );
 for (const name of GENERATED_LEAF_MARKS) {
   const d = LEAF_MARKS[name];
-  // Every leaf mark also exposes the base kwargs (`label` LabelIR shorthand,
-  // `debug`); a mark's own declared field of the same name wins (rect/circle/
-  // ellipse declare their own `label` flag).
+  // Every leaf mark also exposes the base kwargs (`debug`); a mark's own
+  // declared field of the same name wins. Labeling is done exclusively via
+  // the `.label(accessor, options?)` chain — no leaf-mark `label` kwarg.
   const fields = { ...PY_LEAF_BASE_KWARGS, ...resolveFields(d) };
   const openKwargs = OPEN_KWARGS_MARKS.has(name);
   // Render manually (not via renderLeafFactory's half-baked openKwargs path)

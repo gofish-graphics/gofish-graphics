@@ -48,7 +48,10 @@ export const Default: StoryObj<Args> = {
         })
       )
       .mark(
-        circle({ fill: "Major Genre", stroke: gray, strokeWidth: 1, label: true })
+        circle({ fill: "Major Genre", stroke: gray, strokeWidth: 1 }).label(
+          "Major Genre",
+          { position: "center", color: "white", fontSize: 12 }
+        )
       )
       .render(container, { w: args.w, h: args.h });
 

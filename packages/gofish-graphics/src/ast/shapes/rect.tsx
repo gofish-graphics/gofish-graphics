@@ -47,7 +47,6 @@ import {
   pathToPixelSVG,
   rectItemFromBox,
   roleFor,
-  valueLabelItems,
 } from "../displayList/lowerHelpers";
 
 const computeIntrinsicSize = (
@@ -69,7 +68,6 @@ export const Rect = ({
   rx = 0,
   ry = 0,
   filter,
-  label,
   opacity = 1,
   aspectRatio,
   ...fancyDims
@@ -81,7 +79,6 @@ export const Rect = ({
   rx?: number;
   ry?: number;
   filter?: string;
-  label?: boolean;
   opacity?: number;
   /** w/h ratio to enforce. w = h * aspectRatio. When both dims are data-driven,
    *  the constraining axis (smaller of the two scaled sizes) is used. */
@@ -102,7 +99,6 @@ export const Rect = ({
         rx,
         ry,
         filter,
-        label,
         opacity,
         dims,
       },
@@ -316,20 +312,9 @@ export const Rect = ({
         const displayDims = displayDimsOf(intrinsicDims, transform);
 
         const unitScale = node.getRenderSession().scaleContext?.unit;
-        const originalFill = fill;
         const resolvedFill = resolveColorChannel(fill, unitScale);
         const resolvedStroke =
           resolveColorChannel(stroke, unitScale) ?? resolvedFill ?? "black";
-
-        const labelText =
-          label && originalFill && isValue(originalFill)
-            ? String(getValue(originalFill) ?? "")
-            : undefined;
-
-        // The inline value-label (the `label` arg) — white text at the mark's
-        // transformed center.
-        const valueLabel = (cx: number, cy: number) =>
-          valueLabelItems(labelText, cx, cy, toPixel);
 
         const elementStyle = lowerStyle({
           fill: resolvedFill,
@@ -364,7 +349,6 @@ export const Rect = ({
               toPixel,
               rectExtra
             ),
-            ...valueLabel(tX, tY),
           ];
         }
 
@@ -387,11 +371,8 @@ export const Rect = ({
             const height = isXEmbedded
               ? thickness
               : (displayDims[1].max ?? 0) - (displayDims[1].min ?? 0);
-            const center: [number, number] = [x + width / 2, y + height / 2];
-            const [tX, tY] = space.transform(center);
             return [
               rectItemFromBox(x, x + width, y, y + height, toPixel, rectExtra),
-              ...valueLabel(tX, tY),
             ];
           }
 
@@ -435,12 +416,7 @@ export const Rect = ({
           const y = displayDims[1].min ?? 0;
           const xMax = displayDims[0].max ?? 0;
           const yMax = displayDims[1].max ?? 0;
-          const center: [number, number] = [(x + xMax) / 2, (y + yMax) / 2];
-          const [tX, tY] = space.transform(center);
-          return [
-            rectItemFromBox(x, xMax, y, yMax, toPixel, rectExtra),
-            ...valueLabel(tX, tY),
-          ];
+          return [rectItemFromBox(x, xMax, y, yMax, toPixel, rectExtra)];
         }
 
         const corners = path(

@@ -460,11 +460,10 @@ export function mapMark(
   }
 
   const { type, name: layerName, ...rest } = spec as any;
-  // Label has two shapes:
-  //   - Object `{accessor, ...opts}` — pull out and call the chained
-  //     `.label(accessor, opts)` method (adds an external label layer).
-  //   - Boolean / string shorthand — keep in opts so the mark *shape*
-  //     interprets it directly (e.g. rect's `label?: boolean` prop).
+  // Label is an object `{accessor, ...opts}` — pull out and call the chained
+  // `.label(accessor, opts)` method (adds an external label layer). The
+  // legacy boolean shorthand (mark shapes interpreting `label: true`
+  // themselves) was removed; `.label()` is the only surviving form.
   let labelObj: LabelSpec | undefined;
   let opts: Record<string, any>;
   if (
@@ -488,7 +487,7 @@ export function mapMark(
   if (labelObj && typeof (mark as any).label === "function") {
     const { accessor, ...labelOpts } = labelObj as Exclude<
       LabelSpec,
-      true | string
+      boolean | string
     >;
     mark = (mark as any).label(
       accessor,

@@ -695,11 +695,12 @@ function mapMark(
   const factory = MARK_MAP[type];
   if (!factory) throw new Error(`Unknown mark type: ${type}`);
 
-  // `label: true` (boolean) is a primitive kwarg the mark itself understands
-  // (auto-value labels). The Python Mark.label() chain emits a structured
+  // The Python Mark.label() chain emits a structured
   // `{accessor, position?, fontSize?, ...}` dict that must be reapplied as a
   // chained `.label(accessor, options)` call — same shape the JS storybook
   // uses (e.g. `rect({h: "count"}).label("count", {position: "outset"})`).
+  // (The legacy boolean/string `label` kwarg the mark shape itself
+  // interpreted was removed; `.label()` is the only surviving form.)
   const isStructuredLabel =
     label && typeof label === "object" && !Array.isArray(label);
   const factoryOpts: Record<string, any> = unwrapMarkOpts(

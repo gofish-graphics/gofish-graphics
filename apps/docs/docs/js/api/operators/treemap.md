@@ -26,15 +26,18 @@ gf.Treemap(
     round: true,
   },
   gf.For(items, (d) =>
-    gf.rect({
-      // Setting fill to the label string makes rect's built-in label show it.
-      fill: gf.v(d.name),
-      stroke: "white",
-      strokeWidth: 1,
-      rx: 3,
-      ry: 3,
-      label: true,
-    })(d, d.name)
+    gf
+      .rect({
+        fill: gf.v(d.name),
+        stroke: "white",
+        strokeWidth: 1,
+        rx: 3,
+        ry: 3,
+      })
+      .label("name", { position: "center", color: "white", fontSize: 12 })(
+      d,
+      d.name
+    )
   )
 ).render(root, { w: 520, h: 320 });
 ```

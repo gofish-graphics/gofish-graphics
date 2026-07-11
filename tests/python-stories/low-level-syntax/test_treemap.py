@@ -35,8 +35,7 @@ def story_default():
                 strokeWidth=1,
                 rx=2,
                 ry=2,
-                label=True,
-            )
+            ).label("Major Genre", position="center", color="white", fontSize=12)
         ),
         {"w": 700, "h": 420},
     )

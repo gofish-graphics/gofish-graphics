@@ -454,6 +454,10 @@ check(
   validate(chartWithLabel(true), { strict: true }).valid
 );
 check(
+  "label: false accepts (boolean shorthand)",
+  validate(chartWithLabel(false), { strict: true }).valid
+);
+check(
   "label: 'field' accepts (string shorthand)",
   validate(chartWithLabel("amount"), { strict: true }).valid
 );

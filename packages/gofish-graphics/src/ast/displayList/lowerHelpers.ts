@@ -140,31 +140,6 @@ export const lowerStyle = (vals: {
   return style;
 };
 
-/** The inline value-label a `rect`/`ellipse` emits when `label` is set: white,
- *  12px, centered at the mark's transformed center. Empty when no label. */
-export const valueLabelItems = (
-  labelText: string | undefined,
-  cx: number,
-  cy: number,
-  toPixel: ToPixel
-): DisplayList.TextItem[] => {
-  if (!labelText) return [];
-  const [x, y] = toPixel([cx, cy]);
-  return [
-    {
-      kind: "text",
-      x,
-      y,
-      text: labelText,
-      fontSize: 12,
-      textAnchor: "middle",
-      dominantBaseline: "central",
-      role: "overlay",
-      style: { fill: "white" },
-    },
-  ];
-};
-
 /** Install a baked entry's flip scope onto the render session (issue #629): set
  *  the active scope and derive its `toPixel` via the published per-scope factory
  *  (`session.toPixelFor`), so the entry lowers under its own scope's map. Shared

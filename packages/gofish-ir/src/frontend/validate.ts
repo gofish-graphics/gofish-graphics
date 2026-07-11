@@ -1051,16 +1051,11 @@ function walkLeafMark(
   // ValidationWarning's docstring).
   const descriptor = LEAF_MARKS[node.type as string];
   if (descriptor) {
-    // `label` is deliberately excluded here even though a few descriptors
-    // (rect/circle/ellipse) list it as their own boolean inline-value-label
-    // flag: on the wire it shares the same top-level key as the base
-    // LabelIR mechanism (`.label()`'s canonical object/string/boolean
-    // shorthand — already validated above by `walkLabel`), and the two
-    // overlap in the boolean case (`label: true` is valid under both
-    // readings) but diverge for the object/string forms. Re-checking it here
-    // as "must be boolean" would fire a spurious warning on ordinary
-    // `.label("field")` usage. The descriptor still lists it (informational,
-    // for the Python-codegen stage) — just not wired into this warning walk.
+    // `label` is deliberately excluded here: it's already validated above by
+    // `walkLabel` as the base LabelIR mechanism (`.label()`'s canonical
+    // object/string shorthand). Re-checking it here against the descriptor's
+    // own field type would risk a spurious warning divergence between the
+    // two walks.
     const { label: _ownLabelFlag, ...fields } = resolveFields(descriptor);
     walkDescriptorFields(
       node,
@@ -1085,9 +1080,9 @@ function walkLeafMark(
 }
 
 function walkLabel(node: unknown, path: string, ctx: Context): void {
-  // Shorthand forms (matching the JS API):
-  //   label: true   → "label with default settings"
-  //   label: "field" → "label with this field accessor, defaults elsewhere"
+  // Shorthand forms (matching the JS operator-level `.label()` API):
+  //   label: true|false → enable/suppress a label with default settings
+  //   label: "field"    → label with this field accessor, defaults elsewhere
   if (typeof node === "boolean") return;
   if (typeof node === "string") return;
   if (!isObject(node)) {

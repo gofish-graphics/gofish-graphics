@@ -633,17 +633,24 @@ export interface BridgeLambdaSentinel {
  *
  * The canonical object form `{accessor, position?, fontSize?, ...}` is
  * what `mark.label("field", options)` produces. Shorthand forms (matching
- * the JS mark-kwarg API):
+ * the JS operator-kwarg API — e.g. `stack({...}, label: false)` to
+ * explicitly suppress a label):
  *
- *   label: true     — show a label with default styling
- *   label: "field"  — label using this field accessor, defaults elsewhere
+ *   label: true|false — enable/suppress a label with default styling
+ *   label: "field"     — label using this field accessor, defaults elsewhere
  *
  * The object form's `accessor` may also be a {@link FieldAccessor} — e.g.
  * `label: field("count").sum()` — labeling a group with an aggregate over its
  * rows, rather than a bare field that must be constant within the group.
+ *
+ * NOTE: leaf marks (rect/ellipse/circle) used to interpret a bare `label:
+ * true` themselves as an inline value-label; that mark-shape-level reading
+ * was removed — `.label()` is the only way to label a leaf mark's drawn
+ * value. The boolean shorthand survives here for the operator-level
+ * `.label()` mechanism (`label: false` to suppress).
  */
 export type LabelIR =
-  | true
+  | boolean
   | string
   | {
       accessor: string | FieldAccessor;

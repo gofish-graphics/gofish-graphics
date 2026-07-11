@@ -595,9 +595,10 @@ export const FRONTEND_IR_JSON_SCHEMA = {
     },
     LabelIR: {
       // Three shapes: the canonical object form, a boolean shorthand
-      // (`label: true` — let the mark shape decide what to label), and
-      // a string shorthand (`label: "field"` — use this field accessor
-      // with default styling). All three match `LabelIR` in schema.ts.
+      // (`label: true|false` — enable/suppress a label, matching the
+      // operator-level `.label()` mechanism), and a string shorthand
+      // (`label: "field"` — use this field accessor with default styling).
+      // All three match `LabelIR` in schema.ts.
       oneOf: [
         { type: "boolean" },
         { type: "string" },

@@ -17,11 +17,10 @@ from .ast import Mark, _channel
 
 # --- Leaf marks -------------------------------------------------------------
 
-def rect(*, label: Optional[bool] = None, debug: Optional[bool] = None, x: Optional[Union[int, float, str]] = None, cx: Optional[Union[int, float, str]] = None, x2: Optional[Union[int, float, str]] = None, w: Optional[Union[int, float, str]] = None, emX: Optional[bool] = None, y: Optional[Union[int, float, str]] = None, cy: Optional[Union[int, float, str]] = None, y2: Optional[Union[int, float, str]] = None, h: Optional[Union[int, float, str]] = None, emY: Optional[bool] = None, theta: Optional[Union[int, float, str]] = None, thetaSize: Optional[Union[int, float, str]] = None, r: Optional[Union[int, float, str]] = None, rSize: Optional[Union[int, float, str]] = None, fill: Optional[str] = None, stroke: Optional[str] = None, strokeWidth: Optional[float] = None, opacity: Optional[float] = None, filter: Optional[str] = None, key: Optional[str] = None, rx: Optional[float] = None, ry: Optional[float] = None, aspectRatio: Optional[float] = None) -> Mark:
+def rect(*, debug: Optional[bool] = None, x: Optional[Union[int, float, str]] = None, cx: Optional[Union[int, float, str]] = None, x2: Optional[Union[int, float, str]] = None, w: Optional[Union[int, float, str]] = None, emX: Optional[bool] = None, y: Optional[Union[int, float, str]] = None, cy: Optional[Union[int, float, str]] = None, y2: Optional[Union[int, float, str]] = None, h: Optional[Union[int, float, str]] = None, emY: Optional[bool] = None, theta: Optional[Union[int, float, str]] = None, thetaSize: Optional[Union[int, float, str]] = None, r: Optional[Union[int, float, str]] = None, rSize: Optional[Union[int, float, str]] = None, fill: Optional[str] = None, stroke: Optional[str] = None, strokeWidth: Optional[float] = None, opacity: Optional[float] = None, filter: Optional[str] = None, key: Optional[str] = None, rx: Optional[float] = None, ry: Optional[float] = None, aspectRatio: Optional[float] = None) -> Mark:
     """A rectangle. Box geometry via the shared dims channels.
 
     Args:
-        label: Draw an inline value-label (the resolved fill value) at the mark's center. NOT the same field as the base `.label()` LabelIR mechanism — see the drift note in this file's report.
         debug: Dev-only console.log flag. Genuinely serializes on the wire today but is stripped before layout (FACTORY_ONLY_KEYS) — carries no rendering meaning.
         x: Left edge position.
         cx: Center x.
@@ -49,7 +48,6 @@ def rect(*, label: Optional[bool] = None, debug: Optional[bool] = None, x: Optio
     """
     _kw: Dict[str, Any] = {}
     for _k, _v in [
-        ("label", label),
         ("debug", debug),
         ("x", x),
         ("cx", cx),
@@ -79,18 +77,16 @@ def rect(*, label: Optional[bool] = None, debug: Optional[bool] = None, x: Optio
             _kw[_k] = _channel(_v)
     return Mark("rect", **_kw)
 
-def circle(*, label: Optional[bool] = None, debug: Optional[bool] = None, r: Optional[Union[int, float, str]] = None, fill: Optional[str] = None, stroke: Optional[str] = None, strokeWidth: Optional[float] = None, **kwargs: Any) -> Mark:
-    """A circle, drawn as an aspect-locked ellipse. Does NOT support the boxDims positioning channels directly (JS `circle()` in marks/chart.ts destructures only r/fill/stroke/strokeWidth/label) — position it via `spread`/`scatter`.
+def circle(*, debug: Optional[bool] = None, r: Optional[Union[int, float, str]] = None, fill: Optional[str] = None, stroke: Optional[str] = None, strokeWidth: Optional[float] = None, **kwargs: Any) -> Mark:
+    """A circle, drawn as an aspect-locked ellipse. Does NOT support the boxDims positioning channels directly (JS `circle()` in marks/chart.ts destructures only r/fill/stroke/strokeWidth) — position it via `spread`/`scatter`.
 
     Args:
-        label: Draw an inline value-label at the mark's center.
         debug: Dev-only console.log flag; stripped before layout (FACTORY_ONLY_KEYS).
         r: Radius; becomes w=h=2r on the underlying ellipse.
         stroke: Defaults to `fill`.
     """
     _kw: Dict[str, Any] = {}
     for _k, _v in [
-        ("label", label),
         ("debug", debug),
         ("r", r),
         ("fill", fill),
@@ -104,11 +100,10 @@ def circle(*, label: Optional[bool] = None, debug: Optional[bool] = None, r: Opt
             _kw[_k] = _channel(_v)
     return Mark("circle", **_kw)
 
-def ellipse(*, label: Optional[bool] = None, debug: Optional[bool] = None, x: Optional[Union[int, float, str]] = None, cx: Optional[Union[int, float, str]] = None, x2: Optional[Union[int, float, str]] = None, w: Optional[Union[int, float, str]] = None, emX: Optional[bool] = None, y: Optional[Union[int, float, str]] = None, cy: Optional[Union[int, float, str]] = None, y2: Optional[Union[int, float, str]] = None, h: Optional[Union[int, float, str]] = None, emY: Optional[bool] = None, theta: Optional[Union[int, float, str]] = None, thetaSize: Optional[Union[int, float, str]] = None, r: Optional[Union[int, float, str]] = None, rSize: Optional[Union[int, float, str]] = None, fill: Optional[str] = None, stroke: Optional[str] = None, strokeWidth: Optional[float] = None, opacity: Optional[float] = None, aspectRatio: Optional[float] = None, **kwargs: Any) -> Mark:
+def ellipse(*, debug: Optional[bool] = None, x: Optional[Union[int, float, str]] = None, cx: Optional[Union[int, float, str]] = None, x2: Optional[Union[int, float, str]] = None, w: Optional[Union[int, float, str]] = None, emX: Optional[bool] = None, y: Optional[Union[int, float, str]] = None, cy: Optional[Union[int, float, str]] = None, y2: Optional[Union[int, float, str]] = None, h: Optional[Union[int, float, str]] = None, emY: Optional[bool] = None, theta: Optional[Union[int, float, str]] = None, thetaSize: Optional[Union[int, float, str]] = None, r: Optional[Union[int, float, str]] = None, rSize: Optional[Union[int, float, str]] = None, fill: Optional[str] = None, stroke: Optional[str] = None, strokeWidth: Optional[float] = None, opacity: Optional[float] = None, aspectRatio: Optional[float] = None, **kwargs: Any) -> Mark:
     """An ellipse. Box geometry via the shared dims channels; paint is a strict subset of `paint` (no filter).
 
     Args:
-        label: Draw an inline value-label at the mark's center.
         debug: Dev-only console.log flag; stripped before layout (FACTORY_ONLY_KEYS).
         x: Left edge position.
         cx: Center x.
@@ -130,7 +125,6 @@ def ellipse(*, label: Optional[bool] = None, debug: Optional[bool] = None, x: Op
     """
     _kw: Dict[str, Any] = {}
     for _k, _v in [
-        ("label", label),
         ("debug", debug),
         ("x", x),
         ("cx", cx),
@@ -159,11 +153,10 @@ def ellipse(*, label: Optional[bool] = None, debug: Optional[bool] = None, x: Op
             _kw[_k] = _channel(_v)
     return Mark("ellipse", **_kw)
 
-def petal(*, label: Optional[Union[bool, str]] = None, debug: Optional[bool] = None, x: Optional[Union[int, float, str]] = None, cx: Optional[Union[int, float, str]] = None, x2: Optional[Union[int, float, str]] = None, w: Optional[Union[int, float, str]] = None, emX: Optional[bool] = None, y: Optional[Union[int, float, str]] = None, cy: Optional[Union[int, float, str]] = None, y2: Optional[Union[int, float, str]] = None, h: Optional[Union[int, float, str]] = None, emY: Optional[bool] = None, theta: Optional[Union[int, float, str]] = None, thetaSize: Optional[Union[int, float, str]] = None, r: Optional[Union[int, float, str]] = None, rSize: Optional[Union[int, float, str]] = None, fill: Optional[str] = None, stroke: Optional[str] = None, strokeWidth: Optional[float] = None, **kwargs: Any) -> Mark:
+def petal(*, debug: Optional[bool] = None, x: Optional[Union[int, float, str]] = None, cx: Optional[Union[int, float, str]] = None, x2: Optional[Union[int, float, str]] = None, w: Optional[Union[int, float, str]] = None, emX: Optional[bool] = None, y: Optional[Union[int, float, str]] = None, cy: Optional[Union[int, float, str]] = None, y2: Optional[Union[int, float, str]] = None, h: Optional[Union[int, float, str]] = None, emY: Optional[bool] = None, theta: Optional[Union[int, float, str]] = None, thetaSize: Optional[Union[int, float, str]] = None, r: Optional[Union[int, float, str]] = None, rSize: Optional[Union[int, float, str]] = None, fill: Optional[str] = None, stroke: Optional[str] = None, strokeWidth: Optional[float] = None, **kwargs: Any) -> Mark:
     """A polar-only wedge/petal shape (Petal.tsx). Box geometry via the shared dims channels.
 
     Args:
-        label: Value label: `True` for defaults or a field name (`.label()` shorthand). A field name is a bare string; it must be constant across a group's rows (errors otherwise) — an aggregate needs the explicit `.label(field(...).sum())` form instead.
         debug: Dev-only console.log flag; stripped before layout (FACTORY_ONLY_KEYS).
         x: Left edge position.
         cx: Center x.
@@ -183,7 +176,6 @@ def petal(*, label: Optional[Union[bool, str]] = None, debug: Optional[bool] = N
     """
     _kw: Dict[str, Any] = {}
     for _k, _v in [
-        ("label", label),
         ("debug", debug),
         ("x", x),
         ("cx", cx),
@@ -210,11 +202,10 @@ def petal(*, label: Optional[Union[bool, str]] = None, debug: Optional[bool] = N
             _kw[_k] = _channel(_v)
     return Mark("petal", **_kw)
 
-def text(*, label: Optional[Union[bool, str]] = None, debug: Optional[bool] = None, x: Optional[Union[int, float, str]] = None, cx: Optional[Union[int, float, str]] = None, x2: Optional[Union[int, float, str]] = None, w: Optional[Union[int, float, str]] = None, emX: Optional[bool] = None, y: Optional[Union[int, float, str]] = None, cy: Optional[Union[int, float, str]] = None, y2: Optional[Union[int, float, str]] = None, h: Optional[Union[int, float, str]] = None, emY: Optional[bool] = None, theta: Optional[Union[int, float, str]] = None, thetaSize: Optional[Union[int, float, str]] = None, r: Optional[Union[int, float, str]] = None, rSize: Optional[Union[int, float, str]] = None, key: Optional[str] = None, text: str, fill: Optional[str] = None, stroke: Optional[str] = None, strokeWidth: Optional[float] = None, filter: Optional[str] = None, fontSize: Optional[float] = None, fontFamily: Optional[str] = None, fontStyle: Optional[str] = None, fontWeight: Optional[Union[float, str]] = None, debugBoundingBox: Optional[bool] = None, rotate: Optional[float] = None, textAnchor: Optional[str] = None) -> Mark:
+def text(*, debug: Optional[bool] = None, x: Optional[Union[int, float, str]] = None, cx: Optional[Union[int, float, str]] = None, x2: Optional[Union[int, float, str]] = None, w: Optional[Union[int, float, str]] = None, emX: Optional[bool] = None, y: Optional[Union[int, float, str]] = None, cy: Optional[Union[int, float, str]] = None, y2: Optional[Union[int, float, str]] = None, h: Optional[Union[int, float, str]] = None, emY: Optional[bool] = None, theta: Optional[Union[int, float, str]] = None, thetaSize: Optional[Union[int, float, str]] = None, r: Optional[Union[int, float, str]] = None, rSize: Optional[Union[int, float, str]] = None, key: Optional[str] = None, text: str, fill: Optional[str] = None, stroke: Optional[str] = None, strokeWidth: Optional[float] = None, filter: Optional[str] = None, fontSize: Optional[float] = None, fontFamily: Optional[str] = None, fontStyle: Optional[str] = None, fontWeight: Optional[Union[float, str]] = None, debugBoundingBox: Optional[bool] = None, rotate: Optional[float] = None, textAnchor: Optional[str] = None) -> Mark:
     """A text label. Box geometry via the shared dims channels positions the text anchor.
 
     Args:
-        label: Value label: `True` for defaults or a field name (`.label()` shorthand). A field name is a bare string; it must be constant across a group's rows (errors otherwise) — an aggregate needs the explicit `.label(field(...).sum())` form instead.
         debug: Factory-only dev flag; the JS factory strips it (FACTORY_ONLY_KEYS) before layout.
         x: Left edge position.
         cx: Center x.
@@ -243,7 +234,6 @@ def text(*, label: Optional[Union[bool, str]] = None, debug: Optional[bool] = No
     """
     _kw: Dict[str, Any] = {}
     for _k, _v in [
-        ("label", label),
         ("debug", debug),
         ("x", x),
         ("cx", cx),
@@ -277,11 +267,10 @@ def text(*, label: Optional[Union[bool, str]] = None, debug: Optional[bool] = No
             _kw[_k] = _channel(_v)
     return Mark("text", **_kw)
 
-def image(*, label: Optional[Union[bool, str]] = None, debug: Optional[bool] = None, x: Optional[Union[int, float, str]] = None, cx: Optional[Union[int, float, str]] = None, x2: Optional[Union[int, float, str]] = None, w: Optional[Union[int, float, str]] = None, emX: Optional[bool] = None, y: Optional[Union[int, float, str]] = None, cy: Optional[Union[int, float, str]] = None, y2: Optional[Union[int, float, str]] = None, h: Optional[Union[int, float, str]] = None, emY: Optional[bool] = None, theta: Optional[Union[int, float, str]] = None, thetaSize: Optional[Union[int, float, str]] = None, r: Optional[Union[int, float, str]] = None, rSize: Optional[Union[int, float, str]] = None, key: Optional[str] = None, href: str, filter: Optional[str] = None, opacity: Optional[float] = None, preserveAspectRatio: Optional[str] = None) -> Mark:
+def image(*, debug: Optional[bool] = None, x: Optional[Union[int, float, str]] = None, cx: Optional[Union[int, float, str]] = None, x2: Optional[Union[int, float, str]] = None, w: Optional[Union[int, float, str]] = None, emX: Optional[bool] = None, y: Optional[Union[int, float, str]] = None, cy: Optional[Union[int, float, str]] = None, y2: Optional[Union[int, float, str]] = None, h: Optional[Union[int, float, str]] = None, emY: Optional[bool] = None, theta: Optional[Union[int, float, str]] = None, thetaSize: Optional[Union[int, float, str]] = None, r: Optional[Union[int, float, str]] = None, rSize: Optional[Union[int, float, str]] = None, key: Optional[str] = None, href: str, filter: Optional[str] = None, opacity: Optional[float] = None, preserveAspectRatio: Optional[str] = None) -> Mark:
     """An embedded raster/SVG image. Box geometry via the shared dims channels.
 
     Args:
-        label: Value label: `True` for defaults or a field name (`.label()` shorthand). A field name is a bare string; it must be constant across a group's rows (errors otherwise) — an aggregate needs the explicit `.label(field(...).sum())` form instead.
         debug: Dev-only console.log flag; stripped before layout (FACTORY_ONLY_KEYS).
         x: Left edge position.
         cx: Center x.
@@ -304,7 +293,6 @@ def image(*, label: Optional[Union[bool, str]] = None, debug: Optional[bool] = N
     """
     _kw: Dict[str, Any] = {}
     for _k, _v in [
-        ("label", label),
         ("debug", debug),
         ("x", x),
         ("cx", cx),
@@ -330,11 +318,10 @@ def image(*, label: Optional[Union[bool, str]] = None, debug: Optional[bool] = N
             _kw[_k] = _channel(_v)
     return Mark("image", **_kw)
 
-def polygon(*, label: Optional[Union[bool, str]] = None, debug: Optional[bool] = None, points: List[Any], fill: Optional[str] = None, stroke: Optional[str] = None, strokeWidth: Optional[float] = None, opacity: Optional[float] = None) -> Mark:
+def polygon(*, debug: Optional[bool] = None, points: List[Any], fill: Optional[str] = None, stroke: Optional[str] = None, strokeWidth: Optional[float] = None, opacity: Optional[float] = None) -> Mark:
     """A closed polygon defined by explicit local-coordinate points (y-up). No dims channels — the bbox is computed from `points`.
 
     Args:
-        label: Value label: `True` for defaults or a field name (`.label()` shorthand). A field name is a bare string; it must be constant across a group's rows (errors otherwise) — an aggregate needs the explicit `.label(field(...).sum())` form instead.
         debug: Dev-only console.log flag; stripped before layout (FACTORY_ONLY_KEYS).
         points: Vertex list, at least 3 points.
         fill: Default "black".
@@ -343,7 +330,6 @@ def polygon(*, label: Optional[Union[bool, str]] = None, debug: Optional[bool] =
     """
     _kw: Dict[str, Any] = {}
     for _k, _v in [
-        ("label", label),
         ("debug", debug),
         ("points", points),
         ("fill", fill),
@@ -355,18 +341,16 @@ def polygon(*, label: Optional[Union[bool, str]] = None, debug: Optional[bool] =
             _kw[_k] = _channel(_v)
     return Mark("polygon", **_kw)
 
-def blank(*, label: Optional[Union[bool, str]] = None, debug: Optional[bool] = None, emX: Optional[bool] = None, emY: Optional[bool] = None, w: Optional[Union[int, float, str]] = None, h: Optional[Union[int, float, str]] = None, rx: Optional[float] = None, ry: Optional[float] = None, fill: Optional[str] = None, stroke: Optional[str] = None, strokeWidth: Optional[float] = None, **kwargs: Any) -> Mark:
+def blank(*, debug: Optional[bool] = None, emX: Optional[bool] = None, emY: Optional[bool] = None, w: Optional[Union[int, float, str]] = None, h: Optional[Union[int, float, str]] = None, rx: Optional[float] = None, ry: Optional[float] = None, fill: Optional[str] = None, stroke: Optional[str] = None, strokeWidth: Optional[float] = None, **kwargs: Any) -> Mark:
     """An invisible sizing/positioning guide — a transparent rect with a restricted channel set (no x/y/cx/cy/x2/y2/theta/r — position it via a layout operator).
 
     Args:
-        label: Value label: `True` for defaults or a field name (`.label()` shorthand). A field name is a bare string; it must be constant across a group's rows (errors otherwise) — an aggregate needs the explicit `.label(field(...).sum())` form instead.
         debug: Dev-only console.log flag. Genuinely serializes on the wire today (found while grounding this table) but carries no rendering meaning.
         w: Default 0.
         h: Default 0.
     """
     _kw: Dict[str, Any] = {}
     for _k, _v in [
-        ("label", label),
         ("debug", debug),
         ("emX", emX),
         ("emY", emY),
