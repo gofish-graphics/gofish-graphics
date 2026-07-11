@@ -9,6 +9,11 @@ doesn't fit the single-chart parity harness — those are per-export exempt.
 `SpreadY_AlignMiddle` specifically now compares two freely translated systems
 after layout normalization instead of pinning a child to the canvas center; that
 change remains covered by the JS side-by-side story and the confluence tests.
+
+`story_spread_x_center_to_center` additionally ports the `Constraint.distribute`
+half of `SpreadX_CenterToCenter` (still exempt from byte-matching for the same
+multi-panel reason, but now captured + IR-validated) — the first Python
+coverage of `anchor="middle"` (#748).
 """
 
 from gofish import Constraint, datum, layer, rect, spread, wavy
@@ -121,6 +126,30 @@ def story_align_center_distribute_y():
             Constraint.distribute([a, b, c, d], dir="y", spacing=8),
         ]),
         {"w": 300, "h": 400},
+    )
+
+
+# ─── center-to-center mode (anchor="middle", #748) ──────────────────────────
+
+
+def story_spread_x_center_to_center():
+    # Port of the `SpreadX_CenterToCenter` equivalence story (still on the
+    # per-export exempt list — it's a two-panel `renderEquivalentStory()`
+    # scaffold the single-chart parity harness can't byte-match — but
+    # captured + IR-validated here via its `Constraint.distribute` half,
+    # `spread({ dir: "x", alignment: "start", spacing: 60, anchor: "middle" })`
+    # ≡ `align(y="start") + distribute(dir="x", spacing=60, anchor="middle")`.
+    # First Python coverage of `anchor="middle"`.
+    return (
+        layer([
+            rect(w=30, h=80, fill="#e63946").name("a"),
+            rect(w=50, h=80, fill="#457b9d").name("b"),
+            rect(w=20, h=80, fill="#2a9d8f").name("c"),
+        ]).constrain(lambda a, b, c: [
+            Constraint.align([a, b, c], y="start"),
+            Constraint.distribute([a, b, c], dir="x", spacing=60, anchor="middle"),
+        ]),
+        {"w": 400, "h": 300},
     )
 
 
