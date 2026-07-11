@@ -18,6 +18,7 @@ import {
   type LabelPosition,
 } from "../../src/ast/labels/labelPlacement";
 import data from "vega-datasets";
+import { titanicPassengers } from "../../src/data/titanicPassengers";
 
 const meta: Meta = {
   title: "Forward Syntax V3/Labels",
@@ -40,7 +41,7 @@ export const Default: StoryObj<Args> = {
     const container = initializeContainer();
     chart(seafood, { axes: true })
       .flow(spread({ by: "lake",  dir: "x" }))
-      .mark(rect({ h: "count" }).label("count"))
+      .mark(rect({ h: "count" }).label(field("count").sum()))
       .render(container, { w: args.w, h: args.h });
     return container;
   },
@@ -87,7 +88,7 @@ export const Above: StoryObj<Args> = {
     const container = initializeContainer();
     chart(seafood, { axes: true })
       .flow(spread({ by: "lake",  dir: "x" }))
-      .mark(rect({ h: "count" }).label("count", { position: "outset" }))
+      .mark(rect({ h: "count" }).label(field("count").sum(), { position: "outset" }))
       .render(container, { w: args.w, h: args.h });
     return container;
   },
@@ -152,7 +153,7 @@ export const Right: StoryObj<Args> = {
     const container = initializeContainer();
     chart(seafood, { axes: true })
       .flow(spread({ by: "lake",  dir: "y" }))
-      .mark(rect({ w: "count" }).label("count", { position: "outset-right", offset: 15 }))
+      .mark(rect({ w: "count" }).label(field("count").sum(), { position: "outset-right", offset: 15 }))
       .render(container, { w: args.w, h: args.h });
     return container;
   },
@@ -257,7 +258,7 @@ export const AllPositions: StoryObj<{ w: number; h: number }> = {
 
       chart(seafood, { axes: false })
         .flow(spread({ by: "lake",  dir: "x" }))
-        .mark(rect({ h: "count" }).label("count", { position: pos, fontSize: 9 }))
+        .mark(rect({ h: "count" }).label(field("count").sum(), { position: pos, fontSize: 9 }))
         .render(container, { w: args.w, h: args.h });
     }
 
@@ -266,10 +267,13 @@ export const AllPositions: StoryObj<{ w: number; h: number }> = {
 };
 
 // ─── Label on spread (group label) ────────────────────────────────────────────
-// The label is on the spread combinator, not on individual marks.
-// Because the spread carries its own datum, resolveLabels keeps the label
-// at the group level instead of propagating it down to each child rect.
-// Result: one label per lake group, centred above the pair of bars.
+// `.label(accessor, options?)` chained on the operator (not the mark): each
+// split leaf (a lake's rows) gets its produced node stamped with the leaf's
+// own subdata and a deferred label — resolveLabels then keeps the label at
+// the group level instead of propagating it down to each species bar.
+// Result: one label per lake group, centred above the pair of bars. `"lake"`
+// is constant across every row in the group (it's the `by` field itself), so
+// the bare-string accessor just works — no aggregate needed.
 
 export const LabelOnSpread: StoryObj<Args> = {
   name: "Label on Spread",
@@ -277,18 +281,73 @@ export const LabelOnSpread: StoryObj<Args> = {
   render: (args) => {
     const container = initializeContainer();
     chart(seafood, { axes: false })
-      .flow(spread({ by: "lake",  dir: "x", spacing: 50 }))
+      .flow(
+        spread({ by: "lake", dir: "x", spacing: 50 }).label("lake", {
+          position: "outset-top-start",
+          fontSize: 13,
+          offset: 50,
+          rotate: 60,
+        })
+      )
       .mark(async (d: any) => {
-        const node = await chart(d)
-          .flow(stack({ by: "species",  dir: "x" }))
+        return chart(d)
+          .flow(stack({ by: "species", dir: "x" }))
           .mark(rect({ h: "count" as any, fill: "species" as any }))
           .resolve();
-        // Stamp datum so resolveLabels keeps the label at group level
-        // instead of propagating it down to each species bar
-        (node as any).datum = d[0];
-        node.label("lake", { position: "outset-top-start", fontSize: 13, offset: 50, rotate: 60 });
-        return node;
       })
+      .render(container, { w: args.w, h: args.h });
+    return container;
+  }
+};
+
+// ─── Label on stack (per-group label, #702) ───────────────────────────────────
+// `.label(accessor)` chained directly on a `stack({by, dir})` operator: each
+// class's leaf produces one rect, stamped with that leaf's own rows and a
+// deferred label reading `pclass` off the group's rows — one label per
+// stacked segment, no manual datum-stamping workaround needed. `"pclass"` is
+// constant across every row in the group (it's the `by` field itself), so
+// the bare-string accessor just works — no aggregate needed.
+
+export const LabelOnStackOperator: StoryObj<Args> = {
+  name: "Label on Stack operator (per-group)",
+  args: { w: 260, h: 300 },
+  render: (args) => {
+    const container = initializeContainer();
+    chart(titanicPassengers, { axes: false })
+      .flow(
+        stack({ by: "pclass", dir: "y" }).label("pclass", {
+          position: "center",
+          fontSize: 14,
+          color: "white",
+        })
+      )
+      .mark(rect({ w: 120, h: field("survived").count() }))
+      .render(container, { w: args.w, h: args.h });
+    return container;
+  }
+};
+
+// ─── Label on stack (group-total aggregate label, #702 redesign) ─────────────
+// `.label(field("count").sum())` chained directly on a `stack({by, dir})`
+// operator: the accessor is a `field(...)` aggregate, not a bare field name,
+// so it folds each group's rows to their SUM rather than requiring the field
+// to be constant across the group. One label per stacked class, showing the
+// class's total passenger count (not any single row's value).
+
+export const LabelOnStackAggregate: StoryObj<Args> = {
+  name: "Label on Stack operator (group total)",
+  args: { w: 260, h: 300 },
+  render: (args) => {
+    const container = initializeContainer();
+    chart(titanicPassengers, { axes: false })
+      .flow(
+        stack({ by: "pclass", dir: "y" }).label(field("survived").count(), {
+          position: "center",
+          fontSize: 14,
+          color: "white",
+        })
+      )
+      .mark(rect({ w: 120, h: field("survived").count() }))
       .render(container, { w: args.w, h: args.h });
     return container;
   }
@@ -369,7 +428,7 @@ export const Rotated: StoryObj<Args> = {
       chart(seafood, { axes: true })
         .flow(spread({ by: "lake",  dir: "x" }))
         .mark(
-          rect({ h: "count" }).label("count", { position: "outset-top", rotate })
+          rect({ h: "count" }).label(field("count").sum(), { position: "outset-top", rotate })
         )
         .render(container, { w: args.w, h: args.h });
     }

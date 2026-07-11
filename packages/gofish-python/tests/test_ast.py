@@ -72,20 +72,20 @@ class TestOperators:
         op2 = derive(fn)
         assert op1.lambda_id != op2.lambda_id
 
-    def test_log_operator_no_label(self):
-        """Test log operator without label."""
+    def test_log_operator_no_prefix(self):
+        """Test log operator without prefix."""
         op = log()
         assert op.op_type == "log"
         d = op.to_dict()
         assert d["type"] == "log"
-        assert "label" not in d
+        assert "prefix" not in d
 
-    def test_log_operator_with_label(self):
-        """Test log operator with label."""
+    def test_log_operator_with_prefix(self):
+        """Test log operator with prefix."""
         op = log("my label")
         d = op.to_dict()
         assert d["type"] == "log"
-        assert d["label"] == "my label"
+        assert d["prefix"] == "my label"
 
 
 class TestMarkName:

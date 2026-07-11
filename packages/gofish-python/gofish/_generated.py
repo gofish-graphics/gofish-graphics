@@ -163,7 +163,7 @@ def petal(*, label: Optional[Union[bool, str]] = None, debug: Optional[bool] = N
     """A polar-only wedge/petal shape (Petal.tsx). Box geometry via the shared dims channels.
 
     Args:
-        label: Value label: `True` for defaults or a field name (`.label()` shorthand).
+        label: Value label: `True` for defaults or a field name (`.label()` shorthand). A field name is a bare string; it must be constant across a group's rows (errors otherwise) — an aggregate needs the explicit `.label(field(...).sum())` form instead.
         debug: Dev-only console.log flag; stripped before layout (FACTORY_ONLY_KEYS).
         x: Left edge position.
         cx: Center x.
@@ -214,7 +214,7 @@ def text(*, label: Optional[Union[bool, str]] = None, debug: Optional[bool] = No
     """A text label. Box geometry via the shared dims channels positions the text anchor.
 
     Args:
-        label: Value label: `True` for defaults or a field name (`.label()` shorthand).
+        label: Value label: `True` for defaults or a field name (`.label()` shorthand). A field name is a bare string; it must be constant across a group's rows (errors otherwise) — an aggregate needs the explicit `.label(field(...).sum())` form instead.
         debug: Factory-only dev flag; the JS factory strips it (FACTORY_ONLY_KEYS) before layout.
         x: Left edge position.
         cx: Center x.
@@ -281,7 +281,7 @@ def image(*, label: Optional[Union[bool, str]] = None, debug: Optional[bool] = N
     """An embedded raster/SVG image. Box geometry via the shared dims channels.
 
     Args:
-        label: Value label: `True` for defaults or a field name (`.label()` shorthand).
+        label: Value label: `True` for defaults or a field name (`.label()` shorthand). A field name is a bare string; it must be constant across a group's rows (errors otherwise) — an aggregate needs the explicit `.label(field(...).sum())` form instead.
         debug: Dev-only console.log flag; stripped before layout (FACTORY_ONLY_KEYS).
         x: Left edge position.
         cx: Center x.
@@ -334,7 +334,7 @@ def polygon(*, label: Optional[Union[bool, str]] = None, debug: Optional[bool] =
     """A closed polygon defined by explicit local-coordinate points (y-up). No dims channels — the bbox is computed from `points`.
 
     Args:
-        label: Value label: `True` for defaults or a field name (`.label()` shorthand).
+        label: Value label: `True` for defaults or a field name (`.label()` shorthand). A field name is a bare string; it must be constant across a group's rows (errors otherwise) — an aggregate needs the explicit `.label(field(...).sum())` form instead.
         debug: Dev-only console.log flag; stripped before layout (FACTORY_ONLY_KEYS).
         points: Vertex list, at least 3 points.
         fill: Default "black".
@@ -359,7 +359,7 @@ def blank(*, label: Optional[Union[bool, str]] = None, debug: Optional[bool] = N
     """An invisible sizing/positioning guide — a transparent rect with a restricted channel set (no x/y/cx/cy/x2/y2/theta/r — position it via a layout operator).
 
     Args:
-        label: Value label: `True` for defaults or a field name (`.label()` shorthand).
+        label: Value label: `True` for defaults or a field name (`.label()` shorthand). A field name is a bare string; it must be constant across a group's rows (errors otherwise) — an aggregate needs the explicit `.label(field(...).sum())` form instead.
         debug: Dev-only console.log flag. Genuinely serializes on the wire today (found while grounding this table) but carries no rendering meaning.
         w: Default 0.
         h: Default 0.

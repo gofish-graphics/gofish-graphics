@@ -254,10 +254,24 @@ export function mapOperator(
   op: OperatorSpec,
   bridge?: DeriveBridge
 ): Operator<any, any> | null {
-  const { type, translate, ...opts } = op as Record<string, any>;
+  const { type, translate, label, ...opts } = op as Record<string, any>;
   const factory = OPERATOR_MAP[type as string];
   if (!factory) return null;
-  const operator = factory(opts, bridge);
+  let operator = factory(opts, bridge);
+  if (
+    operator &&
+    label !== undefined &&
+    typeof (operator as any).label === "function"
+  ) {
+    const { accessor, ...labelOpts } = label as { accessor: any } & Record<
+      string,
+      any
+    >;
+    operator = (operator as any).label(
+      accessor,
+      Object.keys(labelOpts).length > 0 ? labelOpts : undefined
+    );
+  }
   if (
     operator &&
     translate &&

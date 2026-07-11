@@ -188,13 +188,24 @@ export const MARK_BASE_FIELDS: FieldGroup = group({
 export const PY_LEAF_BASE_KWARGS: FieldGroup = group({
   label: {
     type: t.union(t.boolean, t.string),
-    doc: "Value label: `True` for defaults or a field name (`.label()` shorthand).",
+    doc: "Value label: `True` for defaults or a field name (`.label()` shorthand). A field name is a bare string; it must be constant across a group's rows (errors otherwise) — an aggregate needs the explicit `.label(field(...).sum())` form instead.",
   },
   debug: MARK_BASE_FIELDS.debug,
 });
 
-/** Every operator carries these (BaseIRNode + TranslatableIR in schema.ts). */
+/** Every operator carries these (BaseIRNode + TranslatableIR in schema.ts).
+ *
+ *  `label` is the `.label(accessor, options?)` chain (createOperator.ts's
+ *  `attachLabelOption`) available on every dual-mode operator (spread/stack/
+ *  group/scatter/table/treemap). `log` doesn't carry this field at all — it
+ *  isn't built via `createOperator` and never gets `.label()`; its own
+ *  console-prefix option is the unrelated `prefix` field on `LogOperator`.
+ *  The `accessor` a `LabelIR` object carries may be a bare string (must be
+ *  constant across the group's rows — true by construction for a `by`-field —
+ *  or it throws) or a `field(...)` aggregate (`.sum()`/`.mean()`/etc.) folding
+ *  the group's rows to one value, e.g. `.label(field("count").sum())`. */
 export const OPERATOR_BASE_FIELDS: FieldGroup = group({
+  label: { type: t.ref("LabelIR") },
   translate: { type: t.ref("TranslateIR") },
   debug: {
     type: t.boolean,
@@ -438,9 +449,9 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
   }),
 
   log: operator("log", {
-    doc: "Debug pass-through: logs each row (optionally under `label`) and forwards it unchanged.",
+    doc: "Debug pass-through: logs each row (optionally under `prefix`) and forwards it unchanged.",
     fields: {
-      label: { type: t.string, doc: "Console label prefix." },
+      prefix: { type: t.string, doc: "Console prefix string." },
     },
   }),
 

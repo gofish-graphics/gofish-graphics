@@ -125,6 +125,9 @@ function buildOperatorDefs(): Record<string, unknown> {
       properties: {
         type: { const: descriptor.type },
         ...properties,
+        // Base `.label(accessor, options?)` chain (LabelIR) — matches
+        // validate.ts's `walkOperator` merge order.
+        label: { $ref: "#/$defs/LabelIR" },
         translate: { $ref: "#/$defs/Translate" },
         origin: { $ref: "#/$defs/Origin" },
         meta: { $ref: "#/$defs/Meta" },
@@ -602,7 +605,9 @@ export const FRONTEND_IR_JSON_SCHEMA = {
           type: "object",
           required: ["accessor"],
           properties: {
-            accessor: { type: "string" },
+            accessor: {
+              oneOf: [{ type: "string" }, { $ref: "#/$defs/FieldAccessor" }],
+            },
             position: { type: "string" },
             fontSize: { type: "number" },
             color: { type: "string" },

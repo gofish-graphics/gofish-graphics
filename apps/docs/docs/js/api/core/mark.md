@@ -119,3 +119,55 @@ chart(data)
   .flow(scatter({ by: "lake", x: "lake" }).translate({ y: 50 }))
   .mark(rect({ w: 0.1, h: "count" }));
 ```
+
+### `.label()` on operators {#operator-label}
+
+Every dual-mode operator (`spread`, `stack`, `group`, `scatter`, `table`,
+`treemap` — anything with an operator (traversal) form inside `.flow(...)`)
+also accepts `.label(accessor, options?)`, with the same signature as a
+mark's `.label()` (see the [labels guide](/js/guides/labels)). Chaining it on
+the operator instead of the mark labels the **group**, not each individual
+mark instance:
+
+```ts
+chart(data)
+  .flow(stack({ by: "class", dir: "y" }).label("class", { position: "center" }))
+  .mark(rect({ h: "count" }));
+```
+
+At execution time, every node a split leaf (one group's rows) produces gets
+stamped with that leaf's own subdata, and the accessor resolves one of three
+ways:
+
+- **A bare field name** (`"class"` above) must be constant across every row
+  in the group — true by construction for a `by` field, since every row in
+  the group shares that value. If it isn't actually constant, this is a
+  spec error and `.label()` throws loudly rather than silently reading one
+  row's value:
+
+  ```
+  [gofish] .label("count"): field is not constant within the group; use an
+  aggregate like field("count").mean()
+  ```
+
+- **A `field(...)` aggregate** (`field("count").sum()` / `.mean()` /
+  `.count()` / `.distinct()`) folds the group's rows to one value — use this
+  for a group total or mean, e.g. `.label(field("count").sum())` to label a
+  stacked segment with its total row count.
+- **A function accessor** receives the **whole group** (an array of rows),
+  so it can compute any custom aggregate label (e.g. `(rows) => rows.length`).
+
+This replaces the older pattern of manually stamping `node.datum` before
+calling `node.label(...)` on an already-resolved chart (see the "Label on
+Spread" story for the equivalent hand-rolled version). As with mark-level
+`.label`, a string or `field(...)` accessor round-trips through the
+[IR](/internals/python/bridge) — a `field(...)` accessor serializes as its
+own `{type: "field", name, ops}` wire object; a function accessor can't be
+serialized and is dropped with a console warning.
+
+`.label()` and `.translate()` chain in either order:
+
+```ts
+stack({ by: "class", dir: "y" }).translate({ y: 8 }).label("class");
+stack({ by: "class", dir: "y" }).label("class").translate({ y: 8 });
+```

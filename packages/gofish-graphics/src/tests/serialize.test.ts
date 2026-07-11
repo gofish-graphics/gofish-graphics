@@ -10,6 +10,7 @@
  */
 
 import { Frontend } from "gofish-ir";
+import { resolveLabelText } from "../ast/labels/labelPlacement";
 // Import from the built dist rather than source: lodash's named exports
 // don't survive Node ESM resolution without bundling, but the Vite-built
 // dist has them inlined. Run `pnpm build` first.
@@ -235,7 +236,7 @@ async function main() {
   }
 
   // -------------------------------------------------------------------------
-  // Log operator with a label.
+  // Log operator with a prefix.
   // -------------------------------------------------------------------------
   {
     const c = chart([{ a: 1 }])
@@ -245,7 +246,7 @@ async function main() {
     validateDoc(doc, "log chart");
     const ops = (doc.root as Frontend.ChartIR).operators!;
     check("log operator", ops[0].type === "log");
-    check("log label preserved", (ops[0] as any).label === "debug-label");
+    check("log prefix preserved", (ops[0] as any).prefix === "debug-label");
   }
 
   // -------------------------------------------------------------------------
@@ -417,6 +418,246 @@ async function main() {
     check(
       ".label() options preserved",
       mark.label?.position === "outset" && mark.label?.fontSize === 10
+    );
+  }
+
+  // -------------------------------------------------------------------------
+  // Chained .label() on operators (#702) — the traversal form used inside
+  // .flow(...), not the mark-level .label() tested above.
+  // -------------------------------------------------------------------------
+  console.log("\n# Chained .label() on operators survives toJSON (#702)");
+
+  const groupData = [
+    { lake: "A", species: "trout", count: 12 },
+    { lake: "A", species: "bass", count: 8 },
+    { lake: "B", species: "trout", count: 5 },
+  ];
+
+  // String accessor: appears in the emitted IR and survives fromJSON.
+  {
+    check(
+      ".label exists on stack(...) operator",
+      typeof stack({ by: "lake", dir: "x" }).label === "function"
+    );
+    check(
+      ".label exists on spread(...) operator",
+      typeof spread({ by: "lake", dir: "x" }).label === "function"
+    );
+
+    const built = chart(groupData)
+      .flow(
+        stack({ by: "lake", dir: "x" }).label("lake", {
+          position: "outset-top",
+        })
+      )
+      .mark(rect({ h: "count", fill: "species" }));
+    const doc = await built.toJSON();
+    validateDoc(doc, "chart with chained operator .label()");
+    const op = (doc.root as Frontend.ChartIR).operators![0] as any;
+    check("operator .label() preserved as object", typeof op.label === "object");
+    check("operator .label() accessor preserved", op.label?.accessor === "lake");
+    check(
+      "operator .label() options preserved",
+      op.label?.position === "outset-top"
+    );
+
+    const rebuilt = Serialize.buildChart(
+      doc.root,
+      groupData,
+      undefined,
+      Serialize.makeTokenResolver()
+    );
+    const doc2 = await rebuilt.toJSON();
+    const op2 = (doc2.root as Frontend.ChartIR).operators![0] as any;
+    check(
+      "round-trip preserves operator .label()",
+      op2.label?.accessor === "lake" && op2.label?.position === "outset-top"
+    );
+  }
+
+  // Function accessor: warns and is omitted from the emitted IR.
+  {
+    const warnings: unknown[][] = [];
+    const originalWarn = console.warn;
+    console.warn = (...args: unknown[]) => {
+      warnings.push(args);
+    };
+    let op: any;
+    try {
+      const built = chart(groupData)
+        .flow(spread({ by: "lake", dir: "x" }).label((d: any) => d[0]?.lake))
+        .mark(rect({ h: "count" }));
+      const doc = await built.toJSON();
+      op = (doc.root as Frontend.ChartIR).operators![0] as any;
+    } finally {
+      console.warn = originalWarn;
+    }
+    check(
+      "function accessor on operator .label() warns",
+      warnings.length === 1 && /function accessors aren't serializable/.test(
+        String(warnings[0]?.[0])
+      )
+    );
+    check("function accessor omitted from operator IR", op.label === undefined);
+  }
+
+  // `.translate().label()` and `.label().translate()` both serialize both
+  // fields, regardless of chain order (createOperator.ts's translateOperator
+  // delegates .label() back to the base operator's own setter).
+  {
+    const translateThenLabel = scatter({ by: "lake", x: "count" })
+      .translate({ y: 5 })
+      .label("lake");
+    const labelThenTranslate = scatter({ by: "lake", x: "count" })
+      .label("lake")
+      .translate({ y: 5 });
+
+    for (const [name, op] of [
+      ["translate().label()", translateThenLabel],
+      ["label().translate()", labelThenTranslate],
+    ] as const) {
+      const built = chart(groupData).flow(op).mark(rect({ h: "count" }));
+      const doc = await built.toJSON();
+      const opIR = (doc.root as Frontend.ChartIR).operators![0] as any;
+      check(
+        `${name} serializes translate`,
+        opIR.translate?.y === 5
+      );
+      check(`${name} serializes label`, opIR.label?.accessor === "lake");
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // Field-expression accessor on .label() (group-total aggregate labels) —
+  // the redesign that replaced silently reading a group's first row.
+  // -------------------------------------------------------------------------
+  console.log("\n# field(...) aggregate accessor on .label() survives toJSON");
+
+  // Mark-level .label(field(...).sum())
+  {
+    const built = chart(groupData)
+      .flow(stack({ by: "lake", dir: "x" }))
+      .mark(rect({ h: "count" }).label(field("count").sum()));
+    const doc = await built.toJSON();
+    validateDoc(doc, "chart with mark field-expr .label()");
+    const mark = (doc.root as Frontend.ChartIR).mark as any;
+    check(
+      "mark field-expr .label() accessor serialized as wire object",
+      mark.label?.accessor?.type === "field" &&
+        mark.label?.accessor?.name === "count" &&
+        mark.label?.accessor?.ops?.[0]?.op === "sum"
+    );
+
+    const rebuilt = Serialize.buildChart(
+      doc.root,
+      groupData,
+      undefined,
+      Serialize.makeTokenResolver()
+    );
+    const doc2 = await rebuilt.toJSON();
+    const mark2 = (doc2.root as Frontend.ChartIR).mark as any;
+    check(
+      "round-trip preserves mark field-expr .label()",
+      mark2.label?.accessor?.type === "field" &&
+        mark2.label?.accessor?.name === "count" &&
+        mark2.label?.accessor?.ops?.[0]?.op === "sum"
+    );
+  }
+
+  // Operator-level .label(field(...).sum())
+  {
+    const built = chart(groupData)
+      .flow(stack({ by: "lake", dir: "x" }).label(field("count").sum()))
+      .mark(rect({ h: "count" }));
+    const doc = await built.toJSON();
+    validateDoc(doc, "chart with operator field-expr .label()");
+    const op = (doc.root as Frontend.ChartIR).operators![0] as any;
+    check(
+      "operator field-expr .label() accessor serialized as wire object",
+      op.label?.accessor?.type === "field" &&
+        op.label?.accessor?.name === "count" &&
+        op.label?.accessor?.ops?.[0]?.op === "sum"
+    );
+
+    const rebuilt = Serialize.buildChart(
+      doc.root,
+      groupData,
+      undefined,
+      Serialize.makeTokenResolver()
+    );
+    const doc2 = await rebuilt.toJSON();
+    const op2 = (doc2.root as Frontend.ChartIR).operators![0] as any;
+    check(
+      "round-trip preserves operator field-expr .label()",
+      op2.label?.accessor?.type === "field" &&
+        op2.label?.accessor?.name === "count" &&
+        op2.label?.accessor?.ops?.[0]?.op === "sum"
+    );
+  }
+
+  // -------------------------------------------------------------------------
+  // resolveLabelText: heterogeneous bare-string accessor over an array datum
+  // throws loudly instead of silently reading the first row.
+  // -------------------------------------------------------------------------
+  console.log("\n# resolveLabelText homogeneity check");
+  {
+    const rows = [
+      { lake: "A", count: 12 },
+      { lake: "A", count: 8 },
+      { lake: "B", count: 5 },
+    ];
+    let threw = false;
+    let message = "";
+    try {
+      resolveLabelText("lake", rows);
+    } catch (e) {
+      threw = true;
+      message = String((e as Error).message);
+    }
+    check(
+      "heterogeneous bare-string accessor over an array datum throws",
+      threw && message.includes("lake")
+    );
+
+    // Homogeneous case (a real `by`-field) still resolves normally.
+    const homogeneousRows = rows.filter((r) => r.lake === "A");
+    check(
+      "homogeneous bare-string accessor over an array datum resolves",
+      resolveLabelText("lake", homogeneousRows) === "A"
+    );
+
+    // An aggregate accessor over the same heterogeneous rows works fine.
+    // (`.toJSON()` here — `field` comes from the built dist bundle in this
+    // test file, a different module instance than the `FieldExpr` class
+    // `resolveLabelText` imports from source, so `instanceof` wouldn't
+    // match; the wire form is what real cross-boundary accessors look like
+    // anyway, e.g. after a JSON round-trip through fromJSON.)
+    check(
+      "field(...).sum() over a heterogeneous array datum resolves",
+      resolveLabelText(field("count").sum().toJSON(), rows) === "25"
+    );
+
+    // Empty array does not throw — no rows, no label.
+    check(
+      "empty array datum resolves to empty string, no throw",
+      resolveLabelText("lake", []) === ""
+    );
+
+    // A field(...) accessor WITHOUT an aggregate op gets the same
+    // group-constant rule as a bare string — no first-row backdoor.
+    let fieldThrew = false;
+    try {
+      resolveLabelText(field("count").toJSON(), rows);
+    } catch (e) {
+      fieldThrew = true;
+    }
+    check(
+      "aggregate-less field accessor over heterogeneous rows throws",
+      fieldThrew
+    );
+    check(
+      "aggregate-less field accessor over homogeneous rows resolves",
+      resolveLabelText(field("lake").toJSON(), homogeneousRows) === "A"
     );
   }
 

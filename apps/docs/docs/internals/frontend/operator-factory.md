@@ -68,6 +68,10 @@ operator's own options. That distinction matters for operators like `scatter`:
 scatter's discrete placement encoding, while `y: 50` belongs to the outer
 translation wrapper.
 
+The operator (traversal) form also gets `.label(accessor, options?)` — see
+section 7 below. Unlike `.translate`, it's operator-form-only: the combinator
+form has no `split` step to attach a per-group label to.
+
 ## 2. The split → fmap → combine shape
 
 Pick any layout operator and you'll find the same three steps — a fan-out
@@ -271,7 +275,66 @@ Operators created with `createOperator` automatically support
 composes the ordinary split/channel/combine pipeline with a structural
 translation wrapper around the produced node.
 
-## 7. The relationship with `createMark`
+## 7. `.label()` on the operator (traversal) form
+
+`stack({ by: "class", dir: "y" }).label(accessor, options?)` labels each
+**group** the split produces, rather than each mark instance. It is not
+built on the `createModifier`/`attachModifiers` system section 8 describes
+(that system decorates a _mark_; the operator form needs to affect the
+_execution_ of a still-being-called operator, after `.label()` has already
+returned). Instead:
+
+- `dual`'s operator branch closes over a `let labelState` that starts
+  `undefined`. `.label()` (`attachLabelOption`) mutates it; the operator's
+  execution closure reads the current value each time it runs (once per
+  `.flow()` render), so `.label()` can be called any time before render,
+  in any position in the chain.
+- In the per-leaf loop (where `applyMark` turns one split leaf into node(s)),
+  if `labelState` is set, every node the leaf produced gets `node.datum ??=
+leaf` (the leaf's own subdata — usually the rows array `split` handed it)
+  and `node.label(labelState.accessor, labelState.options)`. Stamping
+  `datum` here is what makes `resolveLabels()`'s "a node with its own datum
+  keeps its own label instead of propagating it to children" gate fire at
+  the group level — the same effect the pre-#702 manual workaround achieved
+  by hand (see the "Label on Spread" story, which now uses the operator
+  form instead).
+- `.translate()` wraps the operator in a _new_ function object (`translated`
+  in `translateOperator`), so `.label()` needs to reach the SAME `labelState`
+  regardless of which wrapper the caller holds. `translateOperator` doesn't
+  attach a fresh label-modifier — it delegates: `translated.label(...)`
+  calls the base operator's own `.label(...)`, which mutates the base
+  operator's closed-over `labelState`. That's what makes both
+  `.translate().label()` and `.label().translate()` work identically.
+- `resolveLabelText` (`ast/labels/labelPlacement.ts`) resolves the accessor
+  in one of three ways, depending on both the accessor's shape and the
+  datum's shape:
+  - A **bare string** over the group's array-of-rows datum must be constant
+    across every row (true by construction for a `by`-field, since every row
+    in the group shares that value) — `resolveLabelText` throws a loud error
+    if it isn't, rather than silently reading just the first row. Over a
+    scalar (non-array) datum it just reads the field directly.
+  - A **`field(...)` aggregate** (`field("count").sum()`/`.mean()`/`.count()`/
+    `.distinct()`) folds the group's rows to one value via `evalFieldValues`
+    (the same evaluator the `by`/`size`/`pos` channel pipelines use) — this is
+    the spelling for a group-total or group-mean label.
+  - A **function** accessor is the raw escape hatch: it receives the whole
+    leaf (the rows array) and returns whatever it wants, e.g.
+    `(rows) => rows.length`.
+- Serialization mirrors the mark-side `labelModifier`'s `tag` hook (the
+  accessor-shape logic is factored into a shared `labelIRField` helper,
+  checked in order string → field-expression → function): a string accessor
+  becomes `tag.label = {accessor, ...options}`; a `field(...)` accessor
+  serializes via its own `.toJSON()` (the `FieldExprWire` shape) into
+  `tag.label = {accessor: {type: "field", name, measure?, ops?}, ...options}`;
+  a function accessor warns and is dropped from the emitted IR (functions
+  aren't serializable). `.translate()`'s wrapper has no tag of its own by
+  default (the wrapped function is new), so `translateOperator` copies the
+  base operator's `__serialize` tag onto the wrapper and stamps
+  `tag.translate` — without that copy, a translated operator would silently
+  serialize as the opaque `{type: "derive"}` fallback, losing both
+  `translate` and any chained `.label()`.
+
+## 8. The relationship with `createMark`
 
 The two factories are siblings:
 
@@ -355,7 +418,7 @@ that produces `Spread`, `Scatter`, etc. is `createNodeOperator`
 whose output is a single `GoFishNode`, not the dual-mode shape that
 `createOperator` returns.
 
-## 8. Prior art
+## 9. Prior art
 
 `createOperator` extends the per-component channel-grammar pattern from
 **Encodable** (Wongsuphasawat, IEEE VIS 2020 —
@@ -376,7 +439,7 @@ The two-call-shapes design (combinator and operator/traversal) — where the
 multiplicity comes from the marks array vs. the data partitions — is novel
 to `createOperator`; Encodable doesn't address layout multiplicity.
 
-## 9. Pointers
+## 10. Pointers
 
 - The factory: `src/ast/marks/createOperator.ts`.
 - Existing operators (each colocated with their low-level layout):

@@ -1,6 +1,11 @@
 import { Direction, Size } from "../dims";
+import { evalFieldValues, FieldExpr, FieldExprWire } from "../fieldExpr";
 
-export type LabelAccessor<D = any> = string | ((d: D) => string);
+export type LabelAccessor<D = any> =
+  | string
+  | FieldExprWire
+  | FieldExpr
+  | ((d: D) => string);
 
 export interface LabelOptions {
   position?: LabelPosition;
@@ -15,11 +20,71 @@ export interface LabelSpec<D = any> extends LabelOptions {
   accessor: LabelAccessor<D>;
 }
 
+/** Is this accessor a field-expression (either the `FieldExpr` class or its
+ *  deserialized `FieldExprWire` wire form)? Mirrors the duck-typed check in
+ *  `fieldExpr.ts`'s `getFieldOps`. */
+const isFieldExprAccessor = (
+  accessor: unknown
+): accessor is FieldExprWire | FieldExpr =>
+  accessor instanceof FieldExpr ||
+  (accessor !== null &&
+    typeof accessor === "object" &&
+    (accessor as any).type === "field");
+
+/**
+ * Resolve a label's display text for one datum.
+ *
+ * - Function accessor: call it directly — the raw, non-serializable escape
+ *   hatch. Unchanged behavior.
+ * - Field-expression accessor (`field(name).sum()`/`.mean()`/etc., or its
+ *   wire form): evaluate the aggregate over the datum's rows via
+ *   `evalFieldValues`. A scalar (non-array) datum is treated as a single-row
+ *   group (wrapped as `[datum]`).
+ * - Bare string accessor over an ARRAY datum (the group-label case, e.g. a
+ *   spread/stack group): the field must be constant across the group's rows
+ *   (this is always true for a `by`-field, by construction). If it isn't,
+ *   this is a user-spec error and throws loudly rather than silently reading
+ *   just the first row.
+ * - Bare string accessor over a scalar datum: read the field directly off it,
+ *   unchanged.
+ * - Null/undefined datum: "" unchanged.
+ */
 export function resolveLabelText(accessor: LabelAccessor, datum: any): string {
   if (typeof accessor === "function") return String(accessor(datum) ?? "");
   if (datum == null) return "";
-  const obj = Array.isArray(datum) ? datum[0] : datum;
-  return obj?.[accessor] != null ? String(obj[accessor]) : "";
+
+  if (isFieldExprAccessor(accessor)) {
+    const rows: any[] = Array.isArray(datum) ? datum : [datum];
+    const { values } = evalFieldValues(accessor, rows);
+    // Without an aggregate op, evalFieldValues returns one value per row;
+    // hold that to the same group-constant rule as a bare string accessor so
+    // `.label(field("age"))` can't silently read just the first row.
+    const first = values[0];
+    if (values.length > 1 && !values.every((v) => v === first)) {
+      throw new Error(
+        `[gofish] .label(field("${accessor.name}")): field is not constant ` +
+          `within the group; use an aggregate like ` +
+          `field("${accessor.name}").mean()`
+      );
+    }
+    return first != null ? String(first) : "";
+  }
+
+  if (Array.isArray(datum)) {
+    if (datum.length === 0) return "";
+    const values = datum.map((row) => row?.[accessor]);
+    const first = values[0];
+    const homogeneous = values.every((v) => v === first);
+    if (!homogeneous) {
+      throw new Error(
+        `[gofish] .label("${accessor}"): field is not constant within the ` +
+          `group; use an aggregate like field("${accessor}").mean()`
+      );
+    }
+    return first != null ? String(first) : "";
+  }
+
+  return datum?.[accessor] != null ? String(datum[accessor]) : "";
 }
 
 export type LabelSide = "inset" | "outset";

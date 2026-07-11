@@ -240,6 +240,11 @@ export interface SpreadOperator
     TranslatableIR,
     OperatorFlagsIR {
   type: "spread";
+  /** Set via `.label(accessor, options?)` chained on the operator: each
+   *  split leaf's produced node(s) get a deferred label over the leaf's own
+   *  subdata. String accessors round-trip; function accessors don't (see
+   *  `LabelIR`/`labelIRField` in createOperator.ts). */
+  label?: LabelIR;
   by?: string | FieldAccessor;
   dir?: "x" | "y";
   spacing?: number;
@@ -268,6 +273,8 @@ export interface StackOperator
     TranslatableIR,
     OperatorFlagsIR {
   type: "stack";
+  /** See `SpreadOperator.label` — `stack` is `spread({glue: true})` re-tagged. */
+  label?: LabelIR;
   by?: string | FieldAccessor;
   dir?: "x" | "y";
   /** Spread-parity passthrough: the JS `stack` is `Spread({...props, glue:
@@ -294,6 +301,8 @@ export interface GroupOperator
     TranslatableIR,
     OperatorFlagsIR {
   type: "group";
+  /** See `SpreadOperator.label`. */
+  label?: LabelIR;
   by: string | FieldAccessor;
 }
 
@@ -302,6 +311,8 @@ export interface ScatterOperator
     TranslatableIR,
     OperatorFlagsIR {
   type: "scatter";
+  /** See `SpreadOperator.label`. */
+  label?: LabelIR;
   by?: string | FieldAccessor;
   x?: ChannelValue;
   y?: ChannelValue;
@@ -334,6 +345,8 @@ export interface TableOperator
     TranslatableIR,
     OperatorFlagsIR {
   type: "table";
+  /** See `SpreadOperator.label`. */
+  label?: LabelIR;
   by: { x: string; y: string };
   spacing?: number | [number, number];
   numCols?: number;
@@ -344,7 +357,10 @@ export interface LogOperator
     TranslatableIR,
     OperatorFlagsIR {
   type: "log";
-  label?: string;
+  /** Console prefix string for `log(prefix)`; unrelated to the operator-level
+   *  `.label(accessor, options)` chain, which `log` doesn't support since it
+   *  isn't built via `createOperator`'s `dual()`. */
+  prefix?: string;
 }
 
 /**
@@ -360,6 +376,8 @@ export interface TreemapOperator
     TranslatableIR,
     OperatorFlagsIR {
   type: "treemap";
+  /** See `SpreadOperator.label`. */
+  label?: LabelIR;
   /** Field to partition rows by; also accepts a field(...) accessor carrying
    *  domain ops (sort/reverse/bin/dropNulls). Without `by`, one leaf is
    *  emitted per row. */
@@ -619,12 +637,16 @@ export interface BridgeLambdaSentinel {
  *
  *   label: true     — show a label with default styling
  *   label: "field"  — label using this field accessor, defaults elsewhere
+ *
+ * The object form's `accessor` may also be a {@link FieldAccessor} — e.g.
+ * `label: field("count").sum()` — labeling a group with an aggregate over its
+ * rows, rather than a bare field that must be constant within the group.
  */
 export type LabelIR =
   | true
   | string
   | {
-      accessor: string;
+      accessor: string | FieldAccessor;
       position?: string;
       fontSize?: number;
       color?: string;

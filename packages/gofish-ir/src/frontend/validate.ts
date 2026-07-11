@@ -525,10 +525,15 @@ function walkOperator(node: unknown, path: string, ctx: Context): void {
   walkBaseFields(node, path, ctx);
   optionalField(node, "translate", path, ctx, walkTranslate);
   const descriptor = OPERATORS[node.type];
-  // `debug` (OPERATOR_BASE_FIELDS) rides every operator: a factory-only dev
-  // flag JS strips before layout, but real producers put it on the wire.
+  // `debug`/`label` (OPERATOR_BASE_FIELDS) ride every operator: `debug` is a
+  // factory-only dev flag JS strips before layout; `label` is the
+  // `.label(accessor, options?)` chain available on dual-mode operators.
   const fields = descriptor
-    ? { ...resolveFields(descriptor), debug: OPERATOR_BASE_FIELDS.debug }
+    ? {
+        ...resolveFields(descriptor),
+        label: OPERATOR_BASE_FIELDS.label,
+        debug: OPERATOR_BASE_FIELDS.debug,
+      }
     : {};
   walkDescriptorFields(node, path, ctx, fields, [
     "type",
@@ -1092,7 +1097,28 @@ function walkLabel(node: unknown, path: string, ctx: Context): void {
     });
     return;
   }
-  expectField(node, "accessor", path, ctx, expectString);
+  if (!("accessor" in node) || node.accessor === undefined) {
+    ctx.errors.push({
+      path: `${path}.accessor`,
+      message: 'required field "accessor" is missing',
+    });
+  } else if (typeof node.accessor === "string") {
+    // bare field name — fine
+  } else if (isObject(node.accessor)) {
+    if (node.accessor.type !== "field") {
+      ctx.errors.push({
+        path: `${path}.accessor.type`,
+        message: `expected type "field", got ${JSON.stringify(node.accessor.type)}`,
+      });
+    } else {
+      walkFieldAccessor(node.accessor, `${path}.accessor`, ctx);
+    }
+  } else {
+    ctx.errors.push({
+      path: `${path}.accessor`,
+      message: `expected a string or field(...) accessor object, got ${typeNameOf(node.accessor)}`,
+    });
+  }
   optionalField(node, "position", path, ctx, expectString);
   optionalField(node, "fontSize", path, ctx, expectNumber);
   optionalField(node, "color", path, ctx, expectString);

@@ -46,7 +46,7 @@ import {
   hasNormalizeOp,
   splitAtNormalize,
   applyEntryNormalize,
-  type FieldExpr,
+  FieldExpr,
 } from "../fieldExpr";
 import type { LabelAccessor, LabelOptions } from "../labels/labelPlacement";
 import type { NameableMark } from "../withGoFish";
@@ -326,6 +326,51 @@ export const nameModifier = createModifier<[layerName: string | symbol]>({
   },
 });
 
+/**
+ * Compute the IR-serializable form of a `.label(accessor, options)` call, or
+ * `undefined` when the accessor can't round-trip. Shared by the mark-side
+ * `labelModifier` and the operator-form `.label()` (createOperator's `dual`)
+ * so both surfaces warn identically on a function accessor.
+ */
+function labelIRField(
+  accessor: LabelAccessor,
+  options?: LabelOptions
+): Record<string, unknown> | undefined {
+  if (typeof accessor === "string") {
+    return {
+      accessor,
+      ...(options && typeof options === "object" ? options : {}),
+    };
+  }
+  if (
+    accessor instanceof FieldExpr ||
+    (accessor !== null &&
+      typeof accessor === "object" &&
+      (accessor as any).type === "field")
+  ) {
+    const wire = accessor instanceof FieldExpr ? accessor.toJSON() : accessor;
+    return {
+      accessor: wire,
+      ...(options && typeof options === "object" ? options : {}),
+    };
+  }
+  if (
+    typeof accessor === "function" &&
+    typeof console !== "undefined" &&
+    typeof console.warn === "function"
+  ) {
+    // Function accessors can't be JSON-serialized. The caller stays
+    // serializable (the rest of the tag propagates) but the label is
+    // dropped from the emitted IR. Matches `dataToIR`'s warn precedent.
+    console.warn(
+      "[gofish-ir] .label(fn): function accessors aren't serializable; " +
+        "label will be omitted from the emitted IR. Use a string field " +
+        "name if you need the label to round-trip."
+    );
+  }
+  return undefined;
+}
+
 /** `.label(accessor, options?)` — defers label placement on each node. */
 export const labelModifier = createModifier<
   [accessor: LabelAccessor, options?: LabelOptions]
@@ -336,25 +381,8 @@ export const labelModifier = createModifier<
   },
   tag: (wrapped, base, accessor, options) => {
     propagateSerialize(base, wrapped, (tag) => {
-      if (typeof accessor === "string") {
-        tag.label = {
-          accessor,
-          ...(options && typeof options === "object" ? options : {}),
-        };
-      } else if (
-        typeof accessor === "function" &&
-        typeof console !== "undefined" &&
-        typeof console.warn === "function"
-      ) {
-        // Function accessors can't be JSON-serialized. The mark stays
-        // serializable (the rest of the tag propagates) but the label is
-        // dropped from the emitted IR. Matches `dataToIR`'s warn precedent.
-        console.warn(
-          "[gofish-ir] .label(fn): function accessors aren't serializable; " +
-            "label will be omitted from the emitted IR. Use a string field " +
-            "name if you need the label to round-trip."
-        );
-      }
+      const field = labelIRField(accessor, options);
+      if (field) tag.label = field;
     });
   },
 });
@@ -580,6 +608,10 @@ export type DualModeOperator<Datum, Options> = {
 
 export type TranslatableOperator<T, U> = Operator<T, U> & {
   translate(opts: TranslateModifierOptions): TranslatableOperator<T, U>;
+  label(
+    accessor: LabelAccessor,
+    options?: LabelOptions
+  ): TranslatableOperator<T, U>;
 };
 
 function attachTranslateOption<T extends object>(
@@ -594,6 +626,28 @@ function attachTranslateOption<T extends object>(
   return target;
 }
 
+/**
+ * Attach `.label(accessor, options?)` to an operator (traversal form).
+ * `setLabel` is the mutation the executing operator's closure consults —
+ * see `dual`'s operator branch, where a `let labelState` (read at execution
+ * time, once per `.flow()` run) is stamped onto each per-leaf node alongside
+ * `node.datum ??= leaf`. Returns `target` so the call chains like `.translate`.
+ */
+function attachLabelOption<T extends object>(
+  target: T,
+  setLabel: (accessor: LabelAccessor, options?: LabelOptions) => void
+): T {
+  Object.defineProperty(target, "label", {
+    value: (accessor: LabelAccessor, options?: LabelOptions) => {
+      setLabel(accessor, options);
+      return target;
+    },
+    writable: true,
+    configurable: true,
+  });
+  return target;
+}
+
 function translateOperator<T, U>(
   operator: Operator<T, U>,
   opts: TranslateModifierOptions
@@ -602,9 +656,35 @@ function translateOperator<T, U>(
     const arranged = await operator(mark);
     return translateMark(arranged, opts) as Mark<T>;
   };
-  return attachTranslateOption(translated, (next) =>
+  // `translated` is a NEW function object wrapping `operator`, so it starts
+  // with no `__serialize` tag of its own. Without copying the base
+  // operator's tag forward (and stamping `translate`), `operatorToIR`'s
+  // `readTag` would find nothing here and silently fall back to the opaque
+  // `{type: "derive"}` IR — losing both `.translate()` and any chained
+  // `.label()` from the wire.
+  const baseTag = (operator as any).__serialize;
+  if (baseTag) {
+    (translated as any).__serialize = { ...baseTag, translate: opts };
+  }
+  const withTranslate = attachTranslateOption(translated, (next) =>
     translateOperator(translated, next)
   ) as TranslatableOperator<T, U>;
+  // Delegate `.label()` to the base operator's own setter so the pending-
+  // label state (closed over inside the base operator's execution closure)
+  // stays shared no matter which chain order produced this wrapper —
+  // `.translate().label()` and `.label().translate()` both land here.
+  if (typeof (operator as any).label === "function") {
+    attachLabelOption(withTranslate, (accessor, options) => {
+      (operator as any).label(accessor, options);
+      const tag = (translated as any).__serialize;
+      if (tag) {
+        const field = labelIRField(accessor, options);
+        if (field) tag.label = field;
+        else delete tag.label;
+      }
+    });
+  }
+  return withTranslate;
 }
 
 /**
@@ -835,6 +915,13 @@ export function createOperator<Datum, Options extends Record<string, any>>(
       return combinator;
     }
     // Operator (traversal) form: split d, apply mark per leaf, layout.
+    // `.label(accessor, options?)` is chained AFTER `dual(opts)` returns, so
+    // the pending state lives in this closed-over `let` and is read fresh
+    // each time the operator executes (once per `.flow()` run) — see the
+    // per-leaf stamp below and `setLabel`/`attachLabelOption` at the bottom.
+    let labelState:
+      | { accessor: LabelAccessor; options?: LabelOptions }
+      | undefined;
     const operator: Operator<Datum[], Datum[]> = async (mark) => {
       return (async (
         d: Datum[],
@@ -924,6 +1011,22 @@ export function createOperator<Datum, Options extends Record<string, any>>(
                 }
               }
             }
+            // `.label(accessor, options)` chained on this operator: stamp
+            // every node this leaf produced with the leaf's own subdata (so
+            // `resolveLabels`'s "a node with datum keeps its own label" gate
+            // fires — mirrors the manual LabelOnSpread workaround) and defer
+            // placement via `node.label`. A string accessor must be constant
+            // across the group's rows (true by construction for a `by`-field —
+            // `resolveLabelText` throws otherwise); a `field(...)` aggregate
+            // accessor (e.g. `field("count").sum()`) folds the group's rows to
+            // one value; a function accessor receives the whole leaf, enabling
+            // arbitrary aggregate labels (e.g. `(rows) => rows.length`).
+            if (labelState) {
+              for (const node of leafNodes) {
+                if (node.datum === undefined) node.datum = leaf;
+                node.label(labelState.accessor, labelState.options);
+              }
+            }
             return leafNodes;
           })
         );
@@ -957,9 +1060,19 @@ export function createOperator<Datum, Options extends Record<string, any>>(
         opts: payload,
       };
     }
-    return attachTranslateOption(operator, (translateOpts) =>
+    const withTranslate = attachTranslateOption(operator, (translateOpts) =>
       translateOperator(operator, translateOpts)
     ) as TranslatableOperator<Datum[], Datum[]>;
+    attachLabelOption(withTranslate, (accessor, options) => {
+      labelState = { accessor, options };
+      const tag = (operator as any).__serialize;
+      if (tag) {
+        const field = labelIRField(accessor, options);
+        if (field) tag.label = field;
+        else delete tag.label;
+      }
+    });
+    return withTranslate;
   }
   return dual as DualModeOperator<Datum, Options>;
 }
