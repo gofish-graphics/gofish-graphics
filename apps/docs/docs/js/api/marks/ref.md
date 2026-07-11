@@ -127,6 +127,6 @@ distinct value at a path instead, use [`pluck`](/js/api/selection/ref#pluck).
 
 ## Notes
 
-- Refs participate in layout: the referenced node's placement determines the ref's bounding box, and `Arrow`, `connect`, etc. use that to draw geometry between nodes.
+- Refs participate in layout: the referenced node's placement determines the ref's bounding box, and `Arrow`, `line`, `ribbon`, etc. use that to draw geometry between nodes.
 - Cross-subtree refs resolve correctly: the ref traverses to the least common ancestor and accumulates coordinate transforms along the way, so you can ref a node inside one component from inside another.
 - Errors name the scope: if a path segment misses, the error lists the tags or indices available at that level.

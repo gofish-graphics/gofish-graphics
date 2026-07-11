@@ -1,7 +1,7 @@
 # arrow
 
 Draws a curved, arrowheaded connector from the first child to the second.
-Like [`connect`](/js/api/operators/connect), `arrow` links elements that have
+Like [`line`](/js/api/marks/line), `arrow` links elements that have
 already been placed by another layer or constraint — but it renders a directed,
 gently bowed arrow (powered by
 [perfect-arrows](https://github.com/steveruizok/perfect-arrows)) instead of a
@@ -91,10 +91,10 @@ Arrow({ bow: 0, padEnd: 25, padStart: 0, stroke: "#1A5683", start: true }, [
 ## Notes
 
 - The arrow's bbox is the union of the resolved endpoints' boxes — like
-  `connect`, it does not contribute its own space.
+  `line`, it does not contribute its own space.
 - `ref(name)` resolves names declared via `.name(...)`. With `createName()`
   tokens, the name is global; with plain strings, it is layer-scoped.
-- Use [`connect`](/js/api/operators/connect) instead when you want an
+- Use [`line`](/js/api/marks/line) or [`ribbon`](/js/api/marks/ribbon) instead when you want an
   _undirected_ line (or a multi-stop polyline) with explicit bbox-anchor
   control; use `arrow` when you want a _directed_ arrowhead and automatic curved
   routing.

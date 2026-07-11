@@ -1,7 +1,7 @@
 # arrow
 
 Draws a curved, arrowheaded connector from the first child to the second.
-Like [`connect`](/python/api/operators/connect), `arrow` links elements that
+Like [`line`](/python/api/marks/line), `arrow` links elements that
 have already been placed by another layer or constraint — but it renders a
 directed, gently bowed arrow (powered by
 [perfect-arrows](https://github.com/steveruizok/perfect-arrows)) instead of a
@@ -86,10 +86,10 @@ arrow(
 ## Notes
 
 - The arrow's bbox is the union of the resolved endpoints' boxes — like
-  `connect`, it does not contribute its own space.
+  `line`, it does not contribute its own space.
 - `ref(name)` resolves names declared via `.name(...)`. With `createName()`
   tokens, the name is global; with plain strings, it is layer-scoped.
-- Use [`connect`](/python/api/operators/connect) instead when you want an
+- Use [`line`](/python/api/marks/line) or [`ribbon`](/python/api/marks/ribbon) instead when you want an
   _undirected_ line (or a multi-stop polyline) with explicit bbox-anchor
   control; use `arrow` when you want a _directed_ arrowhead and automatic curved
   routing.
