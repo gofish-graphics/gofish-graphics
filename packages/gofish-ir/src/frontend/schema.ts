@@ -629,38 +629,46 @@ export interface BridgeLambdaSentinel {
 // ---------------------------------------------------------------------------
 
 /**
- * Label specification.
- *
- * The canonical object form `{accessor, position?, fontSize?, ...}` is
- * what `mark.label("field", options)` produces. Shorthand forms (matching
- * the JS operator-kwarg API — e.g. `stack({...}, label: false)` to
- * explicitly suppress a label):
- *
- *   label: true|false — enable/suppress a label with default styling
- *   label: "field"     — label using this field accessor, defaults elsewhere
- *
- * The object form's `accessor` may also be a {@link FieldAccessor} — e.g.
- * `label: field("count").sum()` — labeling a group with an aggregate over its
+ * A single label specification — what one `.label(accessor, options?)` call
+ * produces. `accessor` may be a bare field name or a {@link FieldAccessor}
+ * (e.g. `field("count").sum()`) labeling a group with an aggregate over its
  * rows, rather than a bare field that must be constant within the group.
+ */
+export interface LabelSpecIR {
+  accessor: string | FieldAccessor;
+  position?: string;
+  fontSize?: number;
+  color?: string;
+  offset?: number;
+  rotate?: number;
+  /** Passed straight through to the label's `Text` node. Defaults to the
+   *  elaborator's own font family when unset. */
+  fontFamily?: string;
+  fontWeight?: number | string;
+  fontStyle?: string;
+}
+
+/**
+ * Label specification carried on a mark or operator's `label` wire field.
+ *
+ * - **Array of specs** — one entry per `.label(accessor, options?)` call;
+ *   repeated calls on the same mark/operator append. This is the only
+ *   producing shape: `.label()` always emits (or appends to) an array, even
+ *   for a single call.
+ * - **Boolean shorthand** (matching the JS operator-kwarg API — e.g.
+ *   `stack({...}, label: false)`) — `label: false` explicitly suppresses a
+ *   label; this is a distinct, live mechanism from the array form, not
+ *   sugar for a one-element array. `label: true` is accepted symmetrically
+ *   but has no producer today.
  *
  * NOTE: leaf marks (rect/ellipse/circle) used to interpret a bare `label:
  * true` themselves as an inline value-label; that mark-shape-level reading
  * was removed — `.label()` is the only way to label a leaf mark's drawn
- * value. The boolean shorthand survives here for the operator-level
- * `.label()` mechanism (`label: false` to suppress).
+ * value. A bare-string shorthand (`label: "field"`) existed in an earlier
+ * revision of this type but was never emitted or consumed by either
+ * frontend; it has been dropped.
  */
-export type LabelIR =
-  | boolean
-  | string
-  | {
-      accessor: string | FieldAccessor;
-      position?: string;
-      fontSize?: number;
-      color?: string;
-      offset?: number;
-      minSpace?: number;
-      rotate?: number;
-    };
+export type LabelIR = boolean | LabelSpecIR[];
 
 export interface ConstraintIR {
   type: "align" | "distribute" | "position" | "nest" | "zAbove" | "zBelow";

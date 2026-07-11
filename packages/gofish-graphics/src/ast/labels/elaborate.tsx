@@ -333,7 +333,9 @@ async function wrapWithLabelTexts(
           Text({
             text,
             fontSize: spec.fontSize ?? 11,
-            fontFamily: LABEL_FONT_FAMILY,
+            fontFamily: spec.fontFamily ?? LABEL_FONT_FAMILY,
+            fontWeight: spec.fontWeight,
+            fontStyle: spec.fontStyle,
             fill: spec.color ?? autoLabelColor(target, position),
             rotate,
           } as any).name(textName) as GoFishNode

@@ -13,7 +13,10 @@ class Operator:
         self.op_type = op_type
         self.kwargs = kwargs
         self._translate: Optional[dict] = None
-        self._label: Optional[dict] = None
+        # One entry per `.label(accessor, options?)` call, in call order —
+        # repeated calls append rather than overwrite. Mirrors JS
+        # createOperator.ts's `labelState` array.
+        self._labels: List[dict] = []
 
     def translate(
         self,
@@ -28,7 +31,7 @@ class Operator:
         operator's own channel grammar.
         """
         new_op = type(self)(self.op_type, **self.kwargs)
-        new_op._label = self._label
+        new_op._labels = list(self._labels)
         new_op._translate = {
             k: v for k, v in {"x": x, "y": y}.items() if v is not None
         }
@@ -41,14 +44,17 @@ class Operator:
         fontSize: Optional[int] = None,
         color: Optional[str] = None,
         offset: Optional[int] = None,
-        minSpace: Optional[int] = None,
         rotate: Optional[int] = None,
+        font_family: Optional[str] = None,
+        font_weight: Optional[Union[int, str]] = None,
+        font_style: Optional[str] = None,
     ) -> "Operator":
         """Attach a per-group label to this operator (traversal form).
 
         Mirrors JS ``stack({by, dir}).label(accessor, options?)``: at
         execution time, every node a split leaf produces gets stamped with
-        the leaf's own subdata and a deferred label.
+        the leaf's own subdata and a deferred label. Calling ``.label()``
+        more than once appends — each call adds its own label.
 
         `accessor` is either:
 
@@ -62,7 +68,7 @@ class Operator:
         Python has no function-accessor form; use one of the above.
 
         Returns:
-            New Operator (same subclass as self) with the label set.
+            New Operator (same subclass as self) with the label appended.
         """
         new_op = type(self)(self.op_type, **self.kwargs)
         new_op._translate = self._translate
@@ -77,11 +83,15 @@ class Operator:
             label_spec["color"] = color
         if offset is not None:
             label_spec["offset"] = offset
-        if minSpace is not None:
-            label_spec["minSpace"] = minSpace
         if rotate is not None:
             label_spec["rotate"] = rotate
-        new_op._label = label_spec
+        if font_family is not None:
+            label_spec["fontFamily"] = font_family
+        if font_weight is not None:
+            label_spec["fontWeight"] = font_weight
+        if font_style is not None:
+            label_spec["fontStyle"] = font_style
+        new_op._labels = [*self._labels, label_spec]
         return new_op
 
     def to_dict(self) -> dict:
@@ -89,8 +99,8 @@ class Operator:
         d = {"type": self.op_type, **self.kwargs}
         if self._translate:
             d["translate"] = self._translate
-        if self._label:
-            d["label"] = self._label
+        if self._labels:
+            d["label"] = self._labels
         return d
 
 
@@ -117,7 +127,7 @@ class DeriveOperator(Operator):
         """Translate a derived operator while preserving its lambda handle."""
         new_op = DeriveOperator(self.fn, self.provenance)
         new_op.lambda_id = self.lambda_id
-        new_op._label = self._label
+        new_op._labels = list(self._labels)
         new_op._translate = {
             k: v for k, v in {"x": x, "y": y}.items() if v is not None
         }
@@ -286,7 +296,10 @@ class Mark:
         self.mark_type = mark_type
         self.kwargs = kwargs
         self._name: Optional[Union[str, "Token"]] = None
-        self._label: Optional[dict] = None
+        # One entry per `.label(accessor, options?)` call, in call order —
+        # repeated calls append rather than overwrite. Mirrors JS
+        # createOperator.ts's mark-side `labelModifier` accumulation.
+        self._labels: List[dict] = []
         # When set, this Mark is the combinator form of a layout operator
         # (e.g. `spread([rect, rect], dir="x")`) and `to_dict()` will emit a
         # `__combinator: true` payload the harness/widget reconstructs by
@@ -311,7 +324,7 @@ class Mark:
 
     def _copy_meta(self, target: "Mark") -> "Mark":
         target._name = self._name
-        target._label = self._label
+        target._labels = list(self._labels)
         target._children = self._children
         target._is_scope = self._is_scope
         target._datum = self._datum
@@ -418,11 +431,15 @@ class Mark:
         fontSize: Optional[int] = None,
         color: Optional[str] = None,
         offset: Optional[int] = None,
-        minSpace: Optional[int] = None,
         rotate: Optional[int] = None,
+        font_family: Optional[str] = None,
+        font_weight: Optional[Union[int, str]] = None,
+        font_style: Optional[str] = None,
     ) -> "Mark":
         """
-        Attach a label to this mark.
+        Attach a label to this mark. Calling `.label()` more than once
+        appends — each call adds its own label (e.g. a value centered
+        inside a bar plus a category name above it).
 
         Args:
             accessor: Field name to use as label text (must be constant
@@ -434,11 +451,14 @@ class Mark:
             fontSize: Font size in pixels
             color: Label color (auto-contrasted if omitted)
             offset: Offset from shape edge in pixels
-            minSpace: Minimum space required to show label
             rotate: Rotation angle in degrees
+            font_family: Font family passed straight through to the label's
+                text node (defaults to the elaborator's own font family)
+            font_weight: Font weight (e.g. `"bold"` or a numeric weight)
+            font_style: Font style (e.g. `"italic"`)
 
         Returns:
-            New Mark (same subclass as self) with label set
+            New Mark (same subclass as self) with the label appended
         """
         new_mark = type(self)(
             self.mark_type, _children=self._children, **self.kwargs
@@ -455,11 +475,15 @@ class Mark:
             label_spec["color"] = color
         if offset is not None:
             label_spec["offset"] = offset
-        if minSpace is not None:
-            label_spec["minSpace"] = minSpace
         if rotate is not None:
             label_spec["rotate"] = rotate
-        new_mark._label = label_spec
+        if font_family is not None:
+            label_spec["fontFamily"] = font_family
+        if font_weight is not None:
+            label_spec["fontWeight"] = font_weight
+        if font_style is not None:
+            label_spec["fontStyle"] = font_style
+        new_mark._labels = [*self._labels, label_spec]
         return new_mark
 
     def to_dict(self) -> dict:
@@ -492,8 +516,8 @@ class Mark:
                 if isinstance(self._name, Token)
                 else self._name
             )
-        if self._label is not None:
-            d["label"] = self._label
+        if self._labels:
+            d["label"] = self._labels
         # Only ConstrainableMark carries _constraints, but reading via getattr
         # keeps the base class oblivious to the subclass extension.
         constraints = getattr(self, "_constraints", None)
@@ -1464,7 +1488,7 @@ def layer(
 # fails, so this is mostly defensive — but explicit guards make the
 # failure mode loud if a child happens to be named e.g. "kwargs".
 _REF_PROXY_RESERVED = frozenset({
-    "mark_type", "kwargs", "_name", "_label", "_children", "_is_scope",
+    "mark_type", "kwargs", "_name", "_labels", "_children", "_is_scope",
     "name", "label", "to_dict", "to_ir", "render", "_copy_meta",
     "_repr_mimebundle_", "constrain", "multiplicity",
 })

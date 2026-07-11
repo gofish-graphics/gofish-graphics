@@ -490,6 +490,33 @@ export const NormalizedStackedBarWithLabels: StoryObj<Args> = {
   },
 };
 
+// ─── two labels per bar (repeated .label(), #706) ─────────────────────────────
+// Repeated `.label()` calls on the same mark append rather than overwrite:
+// each bar carries both a bold white value label centered inside it AND a
+// small category label above it, with independent styling (fontFamily/
+// fontWeight/fontStyle round-trip through the wire IR the same way).
+
+export const TwoLabelsPerBar: StoryObj<Args> = {
+  name: "Two labels per bar (repeated .label())",
+  args: { w: 400, h: 300 },
+  render: (args) => {
+    const container = initializeContainer();
+    chart(seafood, { axes: true })
+      .flow(spread({ by: "lake", dir: "x", spacing: 40 }))
+      .mark(
+        rect({ h: field("count").sum() })
+          .label(field("count").sum(), {
+            position: "center",
+            color: "white",
+            fontWeight: "bold",
+          })
+          .label("lake", { position: "outset-top", fontSize: 9 })
+      )
+      .render(container, { w: args.w, h: args.h });
+    return container;
+  },
+};
+
 // ─── position showcase ────────────────────────────────────────────────────────
 // A single large rectangle with every position string rendered at its computed
 // location. Blue = inset positions, amber = outset positions.

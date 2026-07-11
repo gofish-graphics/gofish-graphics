@@ -11,8 +11,12 @@ export interface LabelOptions {
   fontSize?: number;
   color?: string;
   offset?: number;
-  minSpace?: number;
   rotate?: number;
+  /** Passed straight through to the label's `Text` node; defaults to the
+   *  elaborator's own font family when unset. */
+  fontFamily?: string;
+  fontWeight?: number | string;
+  fontStyle?: string;
 }
 
 export interface LabelSpec<D = any> extends LabelOptions {

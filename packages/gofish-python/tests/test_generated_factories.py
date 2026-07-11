@@ -39,7 +39,28 @@ def test_text_has_no_label_kwarg():
 def test_text_label_via_chain():
     mark = text(text="hi").label("name")
     d = mark.to_dict()
-    assert d["label"] == {"accessor": "name"}
+    assert d["label"] == [{"accessor": "name"}]
+
+
+def test_repeated_label_calls_append():
+    """Calling `.label()` more than once appends to the wire array rather
+    than overwriting — mirrors JS createOperator.ts's mark-side
+    `labelModifier` accumulation."""
+    mark = (
+        text(text="hi")
+        .label("name", position="center", color="white", font_weight="bold")
+        .label("count", position="outset-top", fontSize=9)
+    )
+    d = mark.to_dict()
+    assert d["label"] == [
+        {
+            "accessor": "name",
+            "position": "center",
+            "color": "white",
+            "fontWeight": "bold",
+        },
+        {"accessor": "count", "position": "outset-top", "fontSize": 9},
+    ]
 
 
 def test_operators_accept_universal_debug_flag():

@@ -676,39 +676,52 @@ for the API.
           "type": "boolean"
         },
         {
-          "type": "string"
-        },
-        {
-          "type": "object",
-          "required": ["accessor"],
-          "properties": {
-            "accessor": {
-              "oneOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "$ref": "#/$defs/FieldAccessor"
-                }
-              ]
-            },
-            "position": {
-              "type": "string"
-            },
-            "fontSize": {
-              "type": "number"
-            },
-            "color": {
-              "type": "string"
-            },
-            "offset": {
-              "type": "number"
-            },
-            "minSpace": {
-              "type": "number"
-            },
-            "rotate": {
-              "type": "number"
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["accessor"],
+            "properties": {
+              "accessor": {
+                "oneOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "$ref": "#/$defs/FieldAccessor"
+                  }
+                ]
+              },
+              "position": {
+                "type": "string"
+              },
+              "fontSize": {
+                "type": "number"
+              },
+              "color": {
+                "type": "string"
+              },
+              "offset": {
+                "type": "number"
+              },
+              "rotate": {
+                "type": "number"
+              },
+              "fontFamily": {
+                "type": "string"
+              },
+              "fontWeight": {
+                "oneOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "string"
+                  }
+                ]
+              },
+              "fontStyle": {
+                "type": "string"
+              }
             }
           }
         }
@@ -1502,14 +1515,14 @@ for the API.
           "type": "number",
           "description": "w/h ratio to enforce; the constraining axis wins when both are data-driven."
         },
-        "label": {
-          "$ref": "#/$defs/LabelIR"
-        },
         "debug": {
           "type": "boolean"
         },
         "name": {
           "type": "string"
+        },
+        "label": {
+          "$ref": "#/$defs/LabelIR"
         },
         "constraints": {
           "type": "array",
@@ -1526,7 +1539,7 @@ for the API.
       }
     },
     "CircleMark": {
-      "description": "A circle, drawn as an aspect-locked ellipse. Does NOT support the boxDims positioning channels directly (JS `circle()` in marks/chart.ts destructures only r/fill/stroke/strokeWidth/label) — position it via `spread`/`scatter`.",
+      "description": "A circle, drawn as an aspect-locked ellipse. Does NOT support the boxDims positioning channels directly (JS `circle()` in marks/chart.ts destructures only r/fill/stroke/strokeWidth) — position it via `spread`/`scatter`.",
       "type": "object",
       "required": ["type"],
       "additionalProperties": true,
@@ -1548,14 +1561,14 @@ for the API.
         "strokeWidth": {
           "type": "number"
         },
-        "label": {
-          "$ref": "#/$defs/LabelIR"
-        },
         "debug": {
           "type": "boolean"
         },
         "name": {
           "type": "string"
+        },
+        "label": {
+          "$ref": "#/$defs/LabelIR"
         },
         "constraints": {
           "type": "array",
@@ -1654,14 +1667,14 @@ for the API.
           "type": "number",
           "description": "w/h ratio to enforce. When both dims are data-driven, the constraining axis is used."
         },
-        "label": {
-          "$ref": "#/$defs/LabelIR"
-        },
         "debug": {
           "type": "boolean"
         },
         "name": {
           "type": "string"
+        },
+        "label": {
+          "$ref": "#/$defs/LabelIR"
         },
         "constraints": {
           "type": "array",

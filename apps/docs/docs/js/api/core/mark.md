@@ -77,6 +77,12 @@ Marks support a few chainable modifiers:
 rect({ h: "count" }).name("bars").label("count").translate({ y: 8 });
 ```
 
+Calling `.label()` more than once appends rather than overwrites — each call
+adds its own label (e.g. a value centered inside a bar plus a category name
+above it), and all of them round-trip through the IR as an array. See the
+[labels guide](/js/guides/labels#multiple-labels-per-mark) for the full
+options list, including `fontFamily`/`fontWeight`/`fontStyle`.
+
 ### `.zOrder(value)` — paint order {#zorder}
 
 `.zOrder(value)` sets the mark's paint-order hint: higher values paint **later**

@@ -413,11 +413,94 @@ async function main() {
     const doc = await c.toJSON();
     validateDoc(doc, "chart with chained .label()");
     const mark = (doc.root as Frontend.ChartIR).mark as any;
-    check(".label() preserved as object", typeof mark.label === "object");
-    check(".label() accessor preserved", mark.label?.accessor === "count");
+    check(".label() preserved as an array", Array.isArray(mark.label));
+    check(".label() array has one entry", mark.label?.length === 1);
+    check(".label() accessor preserved", mark.label?.[0]?.accessor === "count");
     check(
       ".label() options preserved",
-      mark.label?.position === "outset" && mark.label?.fontSize === 10
+      mark.label?.[0]?.position === "outset" &&
+        mark.label?.[0]?.fontSize === 10
+    );
+  }
+
+  // Two chained .label() calls on the same mark — each appends its own
+  // entry to the wire array, and both round-trip through fromJSON.
+  {
+    const c = chart([{ a: 1, count: 5, lake: "A" }]).mark(
+      rect({ h: "count" })
+        .label("count", {
+          position: "center",
+          color: "white",
+          fontWeight: "bold",
+        })
+        .label("lake", { position: "outset-top", fontSize: 9 })
+    );
+    const doc = await c.toJSON();
+    validateDoc(doc, "chart with two chained .label() calls");
+    const mark = (doc.root as Frontend.ChartIR).mark as any;
+    check("two .label() calls preserved as a 2-entry array", mark.label?.length === 2);
+    check(
+      "first .label() entry preserved",
+      mark.label?.[0]?.accessor === "count" &&
+        mark.label?.[0]?.position === "center" &&
+        mark.label?.[0]?.color === "white" &&
+        mark.label?.[0]?.fontWeight === "bold"
+    );
+    check(
+      "second .label() entry preserved",
+      mark.label?.[1]?.accessor === "lake" &&
+        mark.label?.[1]?.position === "outset-top" &&
+        mark.label?.[1]?.fontSize === 9
+    );
+
+    const rebuilt = Serialize.buildChart(
+      doc.root,
+      [{ a: 1, count: 5, lake: "A" }],
+      undefined,
+      Serialize.makeTokenResolver()
+    );
+    const doc2 = await rebuilt.toJSON();
+    const mark2 = (doc2.root as Frontend.ChartIR).mark as any;
+    check(
+      "round-trip preserves both .label() calls",
+      mark2.label?.length === 2 &&
+        mark2.label?.[0]?.accessor === "count" &&
+        mark2.label?.[1]?.accessor === "lake"
+    );
+  }
+
+  // fontFamily / fontWeight / fontStyle round-trip through toJSON/fromJSON.
+  {
+    const c = chart([{ a: 1, count: 5 }]).mark(
+      rect({ h: "count" }).label("count", {
+        fontFamily: "Georgia, serif",
+        fontWeight: 700,
+        fontStyle: "italic",
+      })
+    );
+    const doc = await c.toJSON();
+    validateDoc(doc, "chart with label font-style options");
+    const mark = (doc.root as Frontend.ChartIR).mark as any;
+    check(
+      "fontFamily/fontWeight/fontStyle preserved in emitted IR",
+      mark.label?.[0]?.fontFamily === "Georgia, serif" &&
+        mark.label?.[0]?.fontWeight === 700 &&
+        mark.label?.[0]?.fontStyle === "italic"
+    );
+
+    const rebuilt = Serialize.buildChart(
+      doc.root,
+      [{ a: 1, count: 5 }],
+      undefined,
+      Serialize.makeTokenResolver()
+    );
+    const doc2 = await rebuilt.toJSON();
+    const mark2 = (doc2.root as Frontend.ChartIR).mark as any;
+    check(
+      "fontFamily/fontWeight/fontStyle round-trip",
+      mark2.label?.[0]?.fontFamily === "Georgia, serif" &&
+        mark2.label?.[0]?.fontWeight === 700 &&
+        mark2.label?.[0]?.fontStyle === "italic"
     );
   }
 
@@ -454,11 +537,11 @@ async function main() {
     const doc = await built.toJSON();
     validateDoc(doc, "chart with chained operator .label()");
     const op = (doc.root as Frontend.ChartIR).operators![0] as any;
-    check("operator .label() preserved as object", typeof op.label === "object");
-    check("operator .label() accessor preserved", op.label?.accessor === "lake");
+    check("operator .label() preserved as an array", Array.isArray(op.label));
+    check("operator .label() accessor preserved", op.label?.[0]?.accessor === "lake");
     check(
       "operator .label() options preserved",
-      op.label?.position === "outset-top"
+      op.label?.[0]?.position === "outset-top"
     );
 
     const rebuilt = Serialize.buildChart(
@@ -471,7 +554,49 @@ async function main() {
     const op2 = (doc2.root as Frontend.ChartIR).operators![0] as any;
     check(
       "round-trip preserves operator .label()",
-      op2.label?.accessor === "lake" && op2.label?.position === "outset-top"
+      op2.label?.[0]?.accessor === "lake" &&
+        op2.label?.[0]?.position === "outset-top"
+    );
+  }
+
+  // Repeated .label() on the same operator (traversal form) — each call
+  // appends its own entry to the wire array, and both round-trip.
+  {
+    const built = chart(groupData)
+      .flow(
+        stack({ by: "lake", dir: "x" })
+          .label("lake", { position: "outset-top" })
+          .label(field("count").sum(), { position: "center" })
+      )
+      .mark(rect({ h: "count", fill: "species" }));
+    const doc = await built.toJSON();
+    validateDoc(doc, "chart with two chained operator .label() calls");
+    const op = (doc.root as Frontend.ChartIR).operators![0] as any;
+    check("two operator .label() calls preserved as a 2-entry array", op.label?.length === 2);
+    check(
+      "first operator .label() entry preserved",
+      op.label?.[0]?.accessor === "lake" && op.label?.[0]?.position === "outset-top"
+    );
+    check(
+      "second operator .label() entry preserved",
+      op.label?.[1]?.accessor?.type === "field" &&
+        op.label?.[1]?.accessor?.name === "count" &&
+        op.label?.[1]?.position === "center"
+    );
+
+    const rebuilt = Serialize.buildChart(
+      doc.root,
+      groupData,
+      undefined,
+      Serialize.makeTokenResolver()
+    );
+    const doc2 = await rebuilt.toJSON();
+    const op2 = (doc2.root as Frontend.ChartIR).operators![0] as any;
+    check(
+      "round-trip preserves both operator .label() calls",
+      op2.label?.length === 2 &&
+        op2.label?.[0]?.accessor === "lake" &&
+        op2.label?.[1]?.accessor?.name === "count"
     );
   }
 
@@ -523,7 +648,7 @@ async function main() {
         `${name} serializes translate`,
         opIR.translate?.y === 5
       );
-      check(`${name} serializes label`, opIR.label?.accessor === "lake");
+      check(`${name} serializes label`, opIR.label?.[0]?.accessor === "lake");
     }
   }
 
@@ -543,9 +668,9 @@ async function main() {
     const mark = (doc.root as Frontend.ChartIR).mark as any;
     check(
       "mark field-expr .label() accessor serialized as wire object",
-      mark.label?.accessor?.type === "field" &&
-        mark.label?.accessor?.name === "count" &&
-        mark.label?.accessor?.ops?.[0]?.op === "sum"
+      mark.label?.[0]?.accessor?.type === "field" &&
+        mark.label?.[0]?.accessor?.name === "count" &&
+        mark.label?.[0]?.accessor?.ops?.[0]?.op === "sum"
     );
 
     const rebuilt = Serialize.buildChart(
@@ -558,9 +683,9 @@ async function main() {
     const mark2 = (doc2.root as Frontend.ChartIR).mark as any;
     check(
       "round-trip preserves mark field-expr .label()",
-      mark2.label?.accessor?.type === "field" &&
-        mark2.label?.accessor?.name === "count" &&
-        mark2.label?.accessor?.ops?.[0]?.op === "sum"
+      mark2.label?.[0]?.accessor?.type === "field" &&
+        mark2.label?.[0]?.accessor?.name === "count" &&
+        mark2.label?.[0]?.accessor?.ops?.[0]?.op === "sum"
     );
   }
 
@@ -574,9 +699,9 @@ async function main() {
     const op = (doc.root as Frontend.ChartIR).operators![0] as any;
     check(
       "operator field-expr .label() accessor serialized as wire object",
-      op.label?.accessor?.type === "field" &&
-        op.label?.accessor?.name === "count" &&
-        op.label?.accessor?.ops?.[0]?.op === "sum"
+      op.label?.[0]?.accessor?.type === "field" &&
+        op.label?.[0]?.accessor?.name === "count" &&
+        op.label?.[0]?.accessor?.ops?.[0]?.op === "sum"
     );
 
     const rebuilt = Serialize.buildChart(
@@ -589,9 +714,9 @@ async function main() {
     const op2 = (doc2.root as Frontend.ChartIR).operators![0] as any;
     check(
       "round-trip preserves operator field-expr .label()",
-      op2.label?.accessor?.type === "field" &&
-        op2.label?.accessor?.name === "count" &&
-        op2.label?.accessor?.ops?.[0]?.op === "sum"
+      op2.label?.[0]?.accessor?.type === "field" &&
+        op2.label?.[0]?.accessor?.name === "count" &&
+        op2.label?.[0]?.accessor?.ops?.[0]?.op === "sum"
     );
   }
 
