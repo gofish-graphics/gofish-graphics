@@ -284,7 +284,6 @@ export const LabelOnSpread: StoryObj<Args> = {
         spread({ by: "lake", dir: "x", spacing: 50 }).label("lake", {
           position: "outset-top-start",
           fontSize: 13,
-          offset: 50,
           rotate: 60,
         })
       )
