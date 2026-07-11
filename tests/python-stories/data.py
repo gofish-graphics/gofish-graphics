@@ -23,6 +23,10 @@ GENDER_PAY_GAP = _load_json("gender_pay_gap")
 PAY_GRADE = _load_json("pay_grade")
 CATCH_LOCATIONS = _load_json("catch_locations")  # {lake: {"x", "y"}}
 
+# Seattle daily weather 2012-2015 (date, precipitation, temp_max, temp_min,
+# wind, weather) — mirrors packages/gofish-graphics/src/data/seatle-weather.ts.
+SEATTLE_WEATHER = _load_json("seatle_weather")
+
 # Resolved color values (color6 palette, gray/neutral, and the spectral.js
 # mix() results the stories compute at runtime — precomputed so Python emits
 # byte-identical fills).
