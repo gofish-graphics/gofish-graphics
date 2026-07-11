@@ -26,9 +26,9 @@ blank(w=None, h=None, **options) -> Mark
 
 ## Parameters
 
-| Parameter | Type           | Description                                 |
-| --------- | -------------- | ------------------------------------------- |
-| `w`, `h`  | `int` \| `str` | Width / height — a constant or a field name |
+| Parameter | Type                                                         | Description                                                                                                        |
+| --------- | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------ |
+| `w`, `h`  | `int` \| `float` \| `str` \| `FieldAccessor` \| `datum(...)` | Width / height — a constant, a field name, or a `field(...)` pipeline like `field("count").sum()` for an aggregate |
 
 Returns a `Mark` for use in [`.mark()`](/python/api/core/mark).
 
