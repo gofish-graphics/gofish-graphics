@@ -371,7 +371,7 @@ The high-level structure:
     "OperatorIR": { /* GENERATED oneOf: SpreadOperator | StackOperator | ... | TreemapOperator */ },
     "MarkIR":     { "oneOf": [LeafMarkIR, CombinatorMarkIR, RefMarkIR, OffsetMarkIR, CutMarkIR] },
     "LeafMarkIR": { /* GENERATED oneOf: RectMark | CircleMark | ... */ },
-    "LabelIR":      { /* accessor, position, fontSize, ... */ },
+    "LabelIR":      { "oneOf": [/* boolean shorthand, array of {accessor, position, fontSize, ...} specs */] },
     "ConstraintIR": { /* type, options, refs */ },
     "ChannelValue": { "oneOf": [/* primitives, field, datum, literal, bridge sentinels */] }
   }

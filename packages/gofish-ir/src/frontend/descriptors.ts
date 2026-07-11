@@ -182,14 +182,10 @@ export const MARK_BASE_FIELDS: FieldGroup = group({
 
 /** The base fields the Python generator exposes as leaf-mark kwargs (the
  *  rest of MARK_BASE_FIELDS ride Mark methods: `.name()`, `.z_order()`,
- *  `.translate()`, `.constrain()`). `label` here is the LabelIR shorthand
- *  (`True` / `"field"`); marks that declare their own `label` flag
- *  (rect/circle/ellipse) keep their entry instead. */
+ *  `.translate()`, `.constrain()`, `.label()`). Labeling a leaf mark is done
+ *  exclusively via the `.label(accessor, options?)` chain — there is no
+ *  leaf-mark `label` kwarg. */
 export const PY_LEAF_BASE_KWARGS: FieldGroup = group({
-  label: {
-    type: t.union(t.boolean, t.string),
-    doc: "Value label: `True` for defaults or a field name (`.label()` shorthand). A field name is a bare string; it must be constant across a group's rows (errors otherwise) — an aggregate needs the explicit `.label(field(...).sum())` form instead.",
-  },
   debug: MARK_BASE_FIELDS.debug,
 });
 
@@ -529,10 +525,6 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
         type: t.number,
         doc: "w/h ratio to enforce; the constraining axis wins when both are data-driven.",
       },
-      label: {
-        type: t.boolean,
-        doc: "Draw an inline value-label (the resolved fill value) at the mark's center. NOT the same field as the base `.label()` LabelIR mechanism — see the drift note in this file's report.",
-      },
       // A v3-mark-factory-wide dev flag (`FACTORY_ONLY_KEYS` in
       // marks/createOperator.ts strips `by`/`debug` before layout, generically
       // — not a rect-only feature). Documented per-mark (matching `blank`'s
@@ -548,16 +540,12 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
   }),
 
   circle: leafMark("circle", {
-    doc: "A circle, drawn as an aspect-locked ellipse. Does NOT support the boxDims positioning channels directly (JS `circle()` in marks/chart.ts destructures only r/fill/stroke/strokeWidth/label) — position it via `spread`/`scatter`.",
+    doc: "A circle, drawn as an aspect-locked ellipse. Does NOT support the boxDims positioning channels directly (JS `circle()` in marks/chart.ts destructures only r/fill/stroke/strokeWidth) — position it via `spread`/`scatter`.",
     fields: {
       r: ch.num("Radius; becomes w=h=2r on the underlying ellipse."),
       fill: ch.color(),
       stroke: ch.color("Defaults to `fill`."),
       strokeWidth: { type: t.number },
-      label: {
-        type: t.boolean,
-        doc: "Draw an inline value-label at the mark's center.",
-      },
       debug: {
         type: t.boolean,
         doc: "Dev-only console.log flag; stripped before layout (FACTORY_ONLY_KEYS).",
@@ -576,10 +564,6 @@ export const LEAF_MARKS: Record<string, ConstructDescriptor> = {
       aspectRatio: {
         type: t.number,
         doc: "w/h ratio to enforce. When both dims are data-driven, the constraining axis is used.",
-      },
-      label: {
-        type: t.boolean,
-        doc: "Draw an inline value-label at the mark's center.",
       },
       debug: {
         type: t.boolean,

@@ -18,21 +18,22 @@ chart(catch_locations, axes=True).flow(scatter(by="lake", x="x", y="y")).mark(
 
 ```python
 circle(r=None, fill=None, stroke=None, strokeWidth=None, opacity=None,
-       label=None, debug=None) -> Mark
+       debug=None) -> Mark
 ```
 
 ## Parameters
 
-| Parameter     | Type            | Description                             |
-| ------------- | --------------- | --------------------------------------- |
-| `r`           | `int` \| `str`  | Radius — a constant or a field name     |
-| `fill`        | `str`           | Fill color — a constant or a field name |
-| `stroke`      | `str`           | Stroke color                            |
-| `strokeWidth` | `int`           | Stroke width in pixels                  |
-| `opacity`     | `float`         | Opacity, `0`–`1`                        |
-| `label`       | `bool` \| `str` | Whether/what to label the circle        |
+| Parameter     | Type           | Description                             |
+| ------------- | -------------- | --------------------------------------- |
+| `r`           | `int` \| `str` | Radius — a constant or a field name     |
+| `fill`        | `str`          | Fill color — a constant or a field name |
+| `stroke`      | `str`          | Stroke color                            |
+| `strokeWidth` | `int`          | Stroke width in pixels                  |
+| `opacity`     | `float`        | Opacity, `0`–`1`                        |
 
-Returns a `Mark` for use in [`.mark()`](/python/api/core/mark).
+Returns a `Mark` for use in [`.mark()`](/python/api/core/mark). To attach a
+text label, chain [`.label(accessor, ...)`](/python/api/core/mark#labeling-a-mark)
+on the returned mark rather than passing a `label` option here.
 
 ## Examples
 

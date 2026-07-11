@@ -185,9 +185,10 @@ The decision is one rule, `resolveNodeFlip(node, composedTy, incomingFlip)`:
   baseline (a ridgeline row's silhouette grows up from its own zero line). The layout side
   accounts for that painted extent too: the space fold attributes the chain's amplitude
   allowance to the painted side (`composeSize` in constraints/distribute.ts), the enclosing
-  layer folds each such row's MIRRORED band into its bbox (`paintedYBand` in layer.tsx,
-  stamped as `_pitchPaintedTopSpill`), and `render()` reserves the resulting negative min as
-  a painted-TOP gutter — so the first baseline sits an allowance below the box top, the last
+  layer folds each such row's MIRRORED band into its bbox (`paintedYBand` in layer.tsx),
+  and `render()` attributes y overhangs by painted side (an unflipped root's negative min
+  is the painted TOP), so the resulting negative min is reserved as a painted-TOP gutter —
+  the first baseline sits an allowance below the box top, the last
   baseline lands at the box bottom with the x axis directly beneath it, and no story-side
   padding is needed. See [Underlying Space](/internals/core/underlying-space) for the
   per-anchor allowance formulas.

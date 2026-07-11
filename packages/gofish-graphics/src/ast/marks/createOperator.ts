@@ -371,6 +371,20 @@ function labelIRField(
   return undefined;
 }
 
+/** Append `field` onto `tag.label`'s array — every producer of `tag.label`
+ *  (mark-side `labelModifier`, the operator traversal form, and
+ *  `translateOperator`'s delegation) shares this so repeated `.label()`
+ *  calls accumulate onto ONE wire array rather than each overwriting the
+ *  last. `tag.label` starts undefined; the first call creates the array. */
+function pushLabelField(
+  tag: Record<string, any>,
+  field: Record<string, unknown> | undefined
+): void {
+  if (!field) return;
+  const existing = Array.isArray(tag.label) ? tag.label : [];
+  tag.label = [...existing, field];
+}
+
 /** `.label(accessor, options?)` — defers label placement on each node. */
 export const labelModifier = createModifier<
   [accessor: LabelAccessor, options?: LabelOptions]
@@ -381,8 +395,7 @@ export const labelModifier = createModifier<
   },
   tag: (wrapped, base, accessor, options) => {
     propagateSerialize(base, wrapped, (tag) => {
-      const field = labelIRField(accessor, options);
-      if (field) tag.label = field;
+      pushLabelField(tag, labelIRField(accessor, options));
     });
   },
 });
@@ -678,9 +691,7 @@ function translateOperator<T, U>(
       (operator as any).label(accessor, options);
       const tag = (translated as any).__serialize;
       if (tag) {
-        const field = labelIRField(accessor, options);
-        if (field) tag.label = field;
-        else delete tag.label;
+        pushLabelField(tag, labelIRField(accessor, options));
       }
     });
   }
@@ -916,12 +927,13 @@ export function createOperator<Datum, Options extends Record<string, any>>(
     }
     // Operator (traversal) form: split d, apply mark per leaf, layout.
     // `.label(accessor, options?)` is chained AFTER `dual(opts)` returns, so
-    // the pending state lives in this closed-over `let` and is read fresh
+    // the pending state lives in this closed-over array and is read fresh
     // each time the operator executes (once per `.flow()` run) — see the
-    // per-leaf stamp below and `setLabel`/`attachLabelOption` at the bottom.
-    let labelState:
-      | { accessor: LabelAccessor; options?: LabelOptions }
-      | undefined;
+    // per-leaf stamp below and `attachLabelOption` at the bottom. Repeated
+    // `.label()` calls append, so every leaf's produced node(s) get one
+    // deferred label per call.
+    let labelState: Array<{ accessor: LabelAccessor; options?: LabelOptions }> =
+      [];
     const operator: Operator<Datum[], Datum[]> = async (mark) => {
       return (async (
         d: Datum[],
@@ -1011,20 +1023,24 @@ export function createOperator<Datum, Options extends Record<string, any>>(
                 }
               }
             }
-            // `.label(accessor, options)` chained on this operator: stamp
+            // `.label(accessor, options)` chained on this operator (possibly
+            // more than once — each call appends to `labelState`): stamp
             // every node this leaf produced with the leaf's own subdata (so
-            // `resolveLabels`'s "a node with datum keeps its own label" gate
-            // fires — mirrors the manual LabelOnSpread workaround) and defer
-            // placement via `node.label`. A string accessor must be constant
-            // across the group's rows (true by construction for a `by`-field —
-            // `resolveLabelText` throws otherwise); a `field(...)` aggregate
-            // accessor (e.g. `field("count").sum()`) folds the group's rows to
-            // one value; a function accessor receives the whole leaf, enabling
-            // arbitrary aggregate labels (e.g. `(rows) => rows.length`).
-            if (labelState) {
+            // `resolveLabelTargets`'s "a node with datum keeps its own label"
+            // gate fires — mirrors the manual LabelOnSpread workaround) and
+            // defer placement via `node.label`, once per accumulated call. A
+            // string accessor must be constant across the group's rows (true
+            // by construction for a `by`-field — `resolveLabelText` throws
+            // otherwise); a `field(...)` aggregate accessor (e.g.
+            // `field("count").sum()`) folds the group's rows to one value; a
+            // function accessor receives the whole leaf, enabling arbitrary
+            // aggregate labels (e.g. `(rows) => rows.length`).
+            if (labelState.length > 0) {
               for (const node of leafNodes) {
                 if (node.datum === undefined) node.datum = leaf;
-                node.label(labelState.accessor, labelState.options);
+                for (const { accessor, options } of labelState) {
+                  node.label(accessor, options);
+                }
               }
             }
             return leafNodes;
@@ -1064,12 +1080,10 @@ export function createOperator<Datum, Options extends Record<string, any>>(
       translateOperator(operator, translateOpts)
     ) as TranslatableOperator<Datum[], Datum[]>;
     attachLabelOption(withTranslate, (accessor, options) => {
-      labelState = { accessor, options };
+      labelState = [...labelState, { accessor, options }];
       const tag = (operator as any).__serialize;
       if (tag) {
-        const field = labelIRField(accessor, options);
-        if (field) tag.label = field;
-        else delete tag.label;
+        pushLabelField(tag, labelIRField(accessor, options));
       }
     });
     return withTranslate;

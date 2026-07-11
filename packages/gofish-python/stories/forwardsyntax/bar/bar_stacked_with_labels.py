@@ -13,5 +13,9 @@ def default(w=400, h=400):
             spread(by="lake", dir="x"),
             stack(by="species", dir="y"),
         )
-        .mark(rect(h="count", fill="species", label=True))
+        .mark(
+            rect(h="count", fill="species").label(
+                "species", position="center", color="white", fontSize=12
+            )
+        )
     )

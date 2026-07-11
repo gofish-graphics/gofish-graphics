@@ -132,8 +132,8 @@ export const flattenLayout = (
 // string set — a new self-drawing operator not listed here silently mis-renders
 // (its draw is dropped, its children hoisted). The right altitude is a flag the
 // operator factory sets on the node (like `_isComponent` / `_zOrder`), read once
-// via a polymorphic `node.isBakeBoundary()`; that would also subsume the `_label`
-// reach in `isTransparent` and `flattenLayout`'s inline `connect`/`box` cases.
+// via a polymorphic `node.isBakeBoundary()`; that would also subsume
+// `flattenLayout`'s inline `connect`/`box` cases.
 const BAKE_BOUNDARY_TYPES = new Set([
   "coord",
   "over",
@@ -149,15 +149,16 @@ const BAKE_BOUNDARY_TYPES = new Set([
 ]);
 
 /** A node is *transparent* to the root bake (flattened through, contributing only
- *  its transform) iff it is a pure positioning operator: it has children, is not a
- *  boundary type, and carries no label of its own. Everything else is a boundary
- *  (or a leaf) and emits a single DisplayObject. */
+ *  its transform) iff it is a pure positioning operator: it has children and is
+ *  not a boundary type. Everything else is a boundary (or a leaf) and emits a
+ *  single DisplayObject. (Labels used to force a boundary here — they now
+ *  elaborate into ordinary sibling `Text` nodes before layout, so a labeled
+ *  node is transparent like any other.) */
 const isTransparent = (node: GoFishAST): boolean =>
   "children" in node &&
   !!node.children &&
   node.children.length > 0 &&
-  !BAKE_BOUNDARY_TYPES.has((node as { type?: string }).type ?? "") &&
-  !(node instanceof GoFishNode && node._label !== undefined);
+  !BAKE_BOUNDARY_TYPES.has((node as { type?: string }).type ?? "");
 
 /** Does this node DECLARE y-up (issue #629)? A node declares y-up iff its own
  *  resolved y underlying space is CONTINUOUS — a value axis, a datum-positioned

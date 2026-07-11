@@ -1051,16 +1051,11 @@ function walkLeafMark(
   // ValidationWarning's docstring).
   const descriptor = LEAF_MARKS[node.type as string];
   if (descriptor) {
-    // `label` is deliberately excluded here even though a few descriptors
-    // (rect/circle/ellipse) list it as their own boolean inline-value-label
-    // flag: on the wire it shares the same top-level key as the base
-    // LabelIR mechanism (`.label()`'s canonical object/string/boolean
-    // shorthand — already validated above by `walkLabel`), and the two
-    // overlap in the boolean case (`label: true` is valid under both
-    // readings) but diverge for the object/string forms. Re-checking it here
-    // as "must be boolean" would fire a spurious warning on ordinary
-    // `.label("field")` usage. The descriptor still lists it (informational,
-    // for the Python-codegen stage) — just not wired into this warning walk.
+    // `label` is deliberately excluded here: it's already validated above by
+    // `walkLabel` as the base LabelIR mechanism (`.label()`'s canonical
+    // object/string shorthand). Re-checking it here against the descriptor's
+    // own field type would risk a spurious warning divergence between the
+    // two walks.
     const { label: _ownLabelFlag, ...fields } = resolveFields(descriptor);
     walkDescriptorFields(
       node,
@@ -1084,16 +1079,13 @@ function walkLeafMark(
   }
 }
 
-function walkLabel(node: unknown, path: string, ctx: Context): void {
-  // Shorthand forms (matching the JS API):
-  //   label: true   → "label with default settings"
-  //   label: "field" → "label with this field accessor, defaults elsewhere"
-  if (typeof node === "boolean") return;
-  if (typeof node === "string") return;
+/** One entry of a `LabelIR` array — the shape a single `.label(accessor,
+ *  options?)` call produces. */
+function walkLabelSpec(node: unknown, path: string, ctx: Context): void {
   if (!isObject(node)) {
     ctx.errors.push({
       path,
-      message: "expected object, boolean, or string",
+      message: `expected object, got ${typeNameOf(node)}`,
     });
     return;
   }
@@ -1123,8 +1115,10 @@ function walkLabel(node: unknown, path: string, ctx: Context): void {
   optionalField(node, "fontSize", path, ctx, expectNumber);
   optionalField(node, "color", path, ctx, expectString);
   optionalField(node, "offset", path, ctx, expectNumber);
-  optionalField(node, "minSpace", path, ctx, expectNumber);
   optionalField(node, "rotate", path, ctx, expectNumber);
+  optionalField(node, "fontFamily", path, ctx, expectString);
+  optionalField(node, "fontWeight", path, ctx, expectStringOrNumber);
+  optionalField(node, "fontStyle", path, ctx, expectString);
   if (ctx.strict) {
     rejectUnknown(
       node,
@@ -1134,13 +1128,24 @@ function walkLabel(node: unknown, path: string, ctx: Context): void {
         "fontSize",
         "color",
         "offset",
-        "minSpace",
         "rotate",
+        "fontFamily",
+        "fontWeight",
+        "fontStyle",
       ],
       path,
       ctx
     );
   }
+}
+
+function walkLabel(node: unknown, path: string, ctx: Context): void {
+  // Boolean shorthand (matching the JS operator-kwarg API, e.g.
+  // `stack({...}, label: false)`): enable/suppress a label with default
+  // settings. Distinct, live mechanism — not sugar for a one-element array.
+  if (typeof node === "boolean") return;
+  // Otherwise: an array of label specs, one per `.label(...)` call.
+  walkArray(node, path, ctx, walkLabelSpec);
 }
 
 function walkConstraint(node: unknown, path: string, ctx: Context): void {
@@ -1308,6 +1313,19 @@ function expectNumber(value: unknown, path: string, ctx: Context): void {
     ctx.errors.push({
       path,
       message: `expected number, got ${typeNameOf(value)}`,
+    });
+  }
+}
+
+function expectStringOrNumber(
+  value: unknown,
+  path: string,
+  ctx: Context
+): void {
+  if (typeof value !== "string" && typeof value !== "number") {
+    ctx.errors.push({
+      path,
+      message: `expected string or number, got ${typeNameOf(value)}`,
     });
   }
 }

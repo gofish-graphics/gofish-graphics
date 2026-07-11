@@ -508,10 +508,11 @@ band about the chained anchor — the band it actually paints — so the layer's
 box gains the amplitude allowance above the chain head (matching the fold
 extent above) instead of phantom space below the tail where nothing paints,
 and the x axis lands directly below the last baseline. The resulting negative
-layer min reaches `render()` as a painted-TOP overhang: the layer records the
-spill (`_pitchPaintedTopSpill`) and gofish.tsx maps the y overhang sides
-painted-wise only when that stamp is present (an exact no-op for `"middle"`,
-whose mirror is the identity on its own band, and for every legacy story).
+layer min reaches `render()` as a painted-TOP overhang: gofish.tsx attributes
+the y overhang sides by painted truth — an unflipped root's negative min is
+always the painted TOP and its max-past-`finalH` the painted bottom, with the
+flipped mapping when the root mirrors as a whole (an exact no-op for
+`"middle"`, whose mirror is the identity on its own band).
 This all assumes the chained rows self-mirror — continuous y with no enclosing
 y-up scope, the fixed-pitch-under-ordinal-spread case; inside a whole-plot
 flip the rows would inherit that scope and the plain layout band would be the

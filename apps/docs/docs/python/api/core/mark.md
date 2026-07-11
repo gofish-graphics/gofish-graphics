@@ -83,7 +83,7 @@ returns a nested chart.
 
 ## Labeling a mark
 
-Call `.label(accessor, position=..., font_size=..., color=..., offset=..., min_space=..., rotate=...)`
+Call `.label(accessor, position=..., font_size=..., color=..., offset=..., rotate=..., font_family=..., font_weight=..., font_style=...)`
 on a mark to attach a deferred text label, mirroring JS's `.label(accessor, options?)`:
 
 ```python
@@ -93,6 +93,15 @@ rect(h="count").label("count", position="center", font_size=10)
 `accessor` is either a plain field name (a string) or a `field(...)`
 aggregate. Python has no function-accessor form (JS accepts a callback
 there); use one of these two instead.
+
+Calling `.label()` more than once appends rather than overwrites — each call
+adds its own label, and all of them round-trip through the IR as an array:
+
+```python
+rect(h="count").label(
+    field("count").sum(), position="center", color="white", font_weight="bold"
+).label("lake", position="outset-top", font_size=9)
+```
 
 ### `.label()` on operators {#operator-label}
 

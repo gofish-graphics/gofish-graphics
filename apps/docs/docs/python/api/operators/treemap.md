@@ -30,7 +30,9 @@ chart(movies_raw).flow(
         round=True,
     )
 ).mark(
-    circle(fill="Major Genre", stroke="gray", strokeWidth=1, label=True)
+    circle(fill="Major Genre", stroke="gray", strokeWidth=1).label(
+        "Major Genre", position="center", color="white", fontSize=12
+    )
 ).render(w=700, h=420)
 ```
 
@@ -65,7 +67,7 @@ Treemap(children, **options) -> Mark
 - A treemap accepts a **flat list of children**; for multi-level treemaps,
   compose by nesting `Treemap(...)` calls (or add a higher-level wrapper).
 - In the combinator form, each child is bound to its row with
-  `mark.bind_data(d, key)` and a `datum(...)` channel (e.g.
-  `fill=datum(genre)`) makes the built-in label show the key. `size` in
-  combinator form is an **explicit list**, one weight per child in child
-  order — it does not read back off each child's bound datum.
+  `mark.bind_data(d, key)`; chain `.label(accessor, ...)` on the mark to show
+  a field's value on each tile. `size` in combinator form is an **explicit
+  list**, one weight per child in child order — it does not read back off
+  each child's bound datum.

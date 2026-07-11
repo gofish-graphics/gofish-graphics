@@ -13,8 +13,7 @@ import {
   field,
 } from "../../src/lib";
 import {
-  calculateLabelOffset,
-  getLabelTextAnchor,
+  parseLabelPosition,
   type LabelPosition,
 } from "../../src/ast/labels/labelPlacement";
 import data from "vega-datasets";
@@ -285,7 +284,6 @@ export const LabelOnSpread: StoryObj<Args> = {
         spread({ by: "lake", dir: "x", spacing: 50 }).label("lake", {
           position: "outset-top-start",
           fontSize: 13,
-          offset: 50,
           rotate: 60,
         })
       )
@@ -491,6 +489,33 @@ export const NormalizedStackedBarWithLabels: StoryObj<Args> = {
   },
 };
 
+// ─── two labels per bar (repeated .label(), #706) ─────────────────────────────
+// Repeated `.label()` calls on the same mark append rather than overwrite:
+// each bar carries both a bold white value label centered inside it AND a
+// small category label above it, with independent styling (fontFamily/
+// fontWeight/fontStyle round-trip through the wire IR the same way).
+
+export const TwoLabelsPerBar: StoryObj<Args> = {
+  name: "Two labels per bar (repeated .label())",
+  args: { w: 400, h: 300 },
+  render: (args) => {
+    const container = initializeContainer();
+    chart(seafood, { axes: true })
+      .flow(spread({ by: "lake", dir: "x", spacing: 40 }))
+      .mark(
+        rect({ h: field("count").sum() })
+          .label(field("count").sum(), {
+            position: "center",
+            color: "white",
+            fontWeight: "bold",
+          })
+          .label("lake", { position: "outset-top", fontSize: 9 })
+      )
+      .render(container, { w: args.w, h: args.h });
+    return container;
+  },
+};
+
 // ─── position showcase ────────────────────────────────────────────────────────
 // A single large rectangle with every position string rendered at its computed
 // location. Blue = inset positions, amber = outset positions.
@@ -522,6 +547,107 @@ const SHOWCASE_POSITIONS: LabelPosition[] = [
   "outset-right-start",
   "outset-right-end",
 ];
+
+// Local re-implementation of the old (deleted) `calculateLabelOffset`/
+// `getLabelTextAnchor` pixel math, kept here purely as a standalone demo of
+// what each `LabelPosition` token means — it draws raw SVG, not a real
+// gofish chart, so it doesn't exercise the label elaboration pass at all.
+function demoLabelOffset(
+  position: LabelPosition,
+  [width, height]: [number, number],
+  offset: number
+): { x: number; y: number } {
+  if (position === "center") return { x: 0, y: 0 };
+  const { side, edge, align } = parseLabelPosition(position);
+
+  if (side === "outset") {
+    switch (edge ?? "top") {
+      case "top": {
+        const xAlign =
+          align === "start" ? -width / 2 : align === "end" ? width / 2 : 0;
+        return { x: xAlign, y: height / 2 + offset };
+      }
+      case "bottom": {
+        const xAlign =
+          align === "start" ? -width / 2 : align === "end" ? width / 2 : 0;
+        return { x: xAlign, y: -(height / 2 + offset) };
+      }
+      case "left": {
+        const yAlign =
+          align === "start" ? height / 2 : align === "end" ? -height / 2 : 0;
+        return { x: -(width / 2 + offset), y: yAlign };
+      }
+      case "right": {
+        const yAlign =
+          align === "start" ? height / 2 : align === "end" ? -height / 2 : 0;
+        return { x: width / 2 + offset, y: yAlign };
+      }
+    }
+  }
+
+  // side === "inset"
+  if (edge === null) return { x: 0, y: 0 };
+
+  switch (edge) {
+    case "top": {
+      const xAlign =
+        align === "start"
+          ? -(width / 2 - offset)
+          : align === "end"
+            ? width / 2 - offset
+            : 0;
+      return { x: xAlign, y: height / 2 - offset };
+    }
+    case "bottom": {
+      const xAlign =
+        align === "start"
+          ? -(width / 2 - offset)
+          : align === "end"
+            ? width / 2 - offset
+            : 0;
+      return { x: xAlign, y: -(height / 2 - offset) };
+    }
+    case "left": {
+      const yAlign =
+        align === "start"
+          ? height / 2 - offset
+          : align === "end"
+            ? -(height / 2 - offset)
+            : 0;
+      return { x: -(width / 2 - offset), y: yAlign };
+    }
+    case "right": {
+      const yAlign =
+        align === "start"
+          ? height / 2 - offset
+          : align === "end"
+            ? -(height / 2 - offset)
+            : 0;
+      return { x: width / 2 - offset, y: yAlign };
+    }
+    default:
+      return { x: 0, y: 0 };
+  }
+}
+
+function demoLabelTextAnchor(
+  position: LabelPosition
+): "start" | "middle" | "end" {
+  if (position === "center") return "middle";
+  const { side, edge, align } = parseLabelPosition(position);
+  const resolvedEdge = edge ?? (side === "inset" ? null : "top");
+
+  if (resolvedEdge === "top" || resolvedEdge === "bottom" || resolvedEdge === null) {
+    if (align === "start") return "start";
+    if (align === "end") return "end";
+    return "middle";
+  }
+
+  if (resolvedEdge === "left") return side === "inset" ? "start" : "end";
+  if (resolvedEdge === "right") return side === "inset" ? "end" : "start";
+
+  return "middle";
+}
 
 export const PositionShowcase: StoryObj = {
   name: "Position showcase – all positions on one rect",
@@ -573,9 +699,7 @@ export const PositionShowcase: StoryObj = {
     }
 
     for (const pos of SHOWCASE_POSITIONS) {
-      const { x, y } = calculateLabelOffset(pos, [rectW, rectH], {
-        offset: OFFSET,
-      });
+      const { x, y } = demoLabelOffset(pos, [rectW, rectH], OFFSET);
       const lx = cx + x;
       const ly = cy - y; // negate: calculateLabelOffset uses y-up coords
 
@@ -596,7 +720,7 @@ export const PositionShowcase: StoryObj = {
       text.setAttribute("fill", color);
       text.setAttribute("font-size", "9");
       text.setAttribute("dominant-baseline", "central");
-      text.setAttribute("text-anchor", getLabelTextAnchor(pos));
+      text.setAttribute("text-anchor", demoLabelTextAnchor(pos));
       text.textContent = pos;
       svg.appendChild(text);
     }

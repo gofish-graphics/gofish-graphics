@@ -40,7 +40,10 @@ export type LayerSpec = Frontend.LayerIR;
 export type RawMarkSpec = Frontend.RawMarkIR;
 export type MarkSpec = Frontend.MarkIR;
 export type OperatorSpec = Frontend.OperatorIR;
-export type LabelSpec = Frontend.LabelIR;
+/** One entry of a `label` wire array — see `Frontend.LabelSpecIR`. Named
+ *  `LabelSpec` here (rather than the wire field's full `Frontend.LabelIR`
+ *  union) because every reapplication site below works entry-by-entry. */
+export type LabelSpec = Frontend.LabelSpecIR;
 export type ConstraintSpec = Frontend.ConstraintIR;
 
 // ---------------------------------------------------------------------------
@@ -249,7 +252,13 @@ export function resolveOptions(raw: Record<string, any>): Record<string, any> {
 // Deserializers
 // ---------------------------------------------------------------------------
 
-/** Build a single operator from its IR spec. */
+/** Build a single operator from its IR spec. `label` is either an array of
+ *  label specs (one `.label(accessor, options?)` call per entry, applied in
+ *  order so repeated calls round-trip) or the boolean suppression shorthand
+ *  (`label: false`, e.g. Ribbon's `stack({..., label: false})`) — normalized
+ *  to a one-element array here so both shapes share the same reapplication
+ *  loop; destructuring `accessor`/options off a boolean primitive yields
+ *  `undefined`/`{}`, reproducing the pre-array-form suppression behavior. */
 export function mapOperator(
   op: OperatorSpec,
   bridge?: DeriveBridge
@@ -263,14 +272,17 @@ export function mapOperator(
     label !== undefined &&
     typeof (operator as any).label === "function"
   ) {
-    const { accessor, ...labelOpts } = label as { accessor: any } & Record<
-      string,
-      any
-    >;
-    operator = (operator as any).label(
-      accessor,
-      Object.keys(labelOpts).length > 0 ? labelOpts : undefined
-    );
+    const specs = Array.isArray(label) ? label : [label];
+    for (const spec of specs) {
+      const { accessor, ...labelOpts } = spec as { accessor: any } & Record<
+        string,
+        any
+      >;
+      operator = (operator as any).label(
+        accessor,
+        Object.keys(labelOpts).length > 0 ? labelOpts : undefined
+      );
+    }
   }
   if (
     operator &&
@@ -460,21 +472,18 @@ export function mapMark(
   }
 
   const { type, name: layerName, ...rest } = spec as any;
-  // Label has two shapes:
-  //   - Object `{accessor, ...opts}` — pull out and call the chained
-  //     `.label(accessor, opts)` method (adds an external label layer).
-  //   - Boolean / string shorthand — keep in opts so the mark *shape*
-  //     interprets it directly (e.g. rect's `label?: boolean` prop).
-  let labelObj: LabelSpec | undefined;
+  // Label is an array of `{accessor, ...opts}` specs — pull out and call the
+  // chained `.label(accessor, opts)` method once per entry, in order, so
+  // repeated `.label()` calls round-trip (adds one external label layer per
+  // call). The legacy boolean shorthand (mark shapes interpreting `label:
+  // true` themselves) was removed; `.label()` is the only surviving form
+  // for marks. A non-array `label` (e.g. a stray boolean) is left inert in
+  // `opts`, matching the pre-array-form fallback.
+  let labelSpecs: LabelSpec[] | undefined;
   let opts: Record<string, any>;
-  if (
-    rest.label !== undefined &&
-    rest.label !== null &&
-    typeof rest.label === "object" &&
-    !Array.isArray(rest.label)
-  ) {
-    const { label: lbl, ...rest2 } = rest;
-    labelObj = lbl as LabelSpec;
+  if (Array.isArray(rest.label)) {
+    const { label: specs, ...rest2 } = rest;
+    labelSpecs = specs as LabelSpec[];
     opts = rest2;
   } else {
     opts = rest;
@@ -485,15 +494,14 @@ export function mapMark(
     throw new Error(`Unknown mark type: ${String(type)}`);
   }
   let mark = factory(unwrapMarkOpts(opts, bridge));
-  if (labelObj && typeof (mark as any).label === "function") {
-    const { accessor, ...labelOpts } = labelObj as Exclude<
-      LabelSpec,
-      true | string
-    >;
-    mark = (mark as any).label(
-      accessor,
-      Object.keys(labelOpts).length > 0 ? labelOpts : undefined
-    );
+  if (labelSpecs && typeof (mark as any).label === "function") {
+    for (const labelObj of labelSpecs) {
+      const { accessor, ...labelOpts } = labelObj;
+      mark = (mark as any).label(
+        accessor,
+        Object.keys(labelOpts).length > 0 ? labelOpts : undefined
+      );
+    }
   }
   if (spec.__scope) {
     mark = wrapWithScope(mark);

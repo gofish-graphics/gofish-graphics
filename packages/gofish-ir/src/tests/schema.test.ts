@@ -436,7 +436,7 @@ check(
 // Bug fixes — label shorthand, table.by required (from PR review)
 // ---------------------------------------------------------------------------
 
-console.log("\n# Label shorthand forms (true / string / object)");
+console.log("\n# Label forms (array of specs / boolean shorthand)");
 
 function chartWithLabel(label: any) {
   return {
@@ -454,12 +454,32 @@ check(
   validate(chartWithLabel(true), { strict: true }).valid
 );
 check(
-  "label: 'field' accepts (string shorthand)",
-  validate(chartWithLabel("amount"), { strict: true }).valid
+  "label: false accepts (boolean shorthand)",
+  validate(chartWithLabel(false), { strict: true }).valid
 );
 check(
-  "label: { accessor } accepts (canonical object form)",
-  validate(chartWithLabel({ accessor: "amount", position: "outset" }), {
+  "label: 'field' is rejected (bare-string shorthand was dropped)",
+  !validate(chartWithLabel("amount"), { strict: true }).valid
+);
+check(
+  "label: [{ accessor }] accepts (array-of-specs form)",
+  validate(chartWithLabel([{ accessor: "amount", position: "outset" }]), {
+    strict: true,
+  }).valid
+);
+check(
+  "label: [{ accessor }, { accessor }] accepts (multiple specs)",
+  validate(
+    chartWithLabel([
+      { accessor: "amount", position: "outset" },
+      { accessor: "count", position: "center", fontWeight: "bold" },
+    ]),
+    { strict: true }
+  ).valid
+);
+check(
+  "label: { accessor } is rejected (bare object shorthand was dropped; must be an array)",
+  !validate(chartWithLabel({ accessor: "amount", position: "outset" }), {
     strict: true,
   }).valid
 );

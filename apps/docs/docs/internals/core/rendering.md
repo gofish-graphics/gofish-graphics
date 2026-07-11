@@ -173,9 +173,14 @@ via `INTERNAL_lower`, which:
 - looks up the node's `_lower` method (its per-primitive lowering — the extension
   point), and the session `toPixel`;
 - calls `_lower({ intrinsicDims, transform, renderData, coordinateTransform, toPixel },
-children, node)`, which returns that node's `DisplayItem[]` fragment;
-- appends any label items (`lowerLabelItems`), since a labeled mark contributes both
-  its own primitive and its label text.
+children, node)`, which returns that node's `DisplayItem[]` fragment.
+
+`.label(...)` contributes nothing special here. It used to lower a raw `TextItem`
+alongside the labeled mark's own fragment (`lowerLabelItems`); a label is now
+**elaborated** into a real `Text` node + constraints before layout even runs
+(`src/ast/labels/elaborate.tsx`, the same technique `elaborateAxes` uses for tick
+labels), so by the time `bake`/`INTERNAL_lower` see the tree, a label is just an
+ordinary sibling shape with its own `_lower` fragment.
 
 The display list is the **concatenation of every node's fragment**. A node with no
 `_lower` throws — the migration is complete, so every shipping shape/operator supplies
@@ -291,12 +296,15 @@ filter graphs and assigning their deterministic def ids.
 
 The orchestrator `render()` in `gofish.tsx` is now small. It computes the gutter
 reserves, builds the y-DOWN base map plus a per-scope mirror factory (`toPixelFor`),
-and paints the lowered list into an `<svg>`. The y gutter sides keep the historical
-mapping (top ← layout-max past `finalH`, bottom ← negative layout min) except when
-the tree carries a fixed-pitch painted-top spill (`_pitchPaintedTopSpill`, stamped by
-layer.tsx's `paintedYBand` — a ridgeline's amplitude allowance above its first
-baseline): an unflipped root then reserves that negative min as the painted TOP
-gutter and the max-side chrome as the bottom one — see
+and paints the lowered list into an `<svg>`. The y gutter sides are attributed by
+PAINTED side: when the root flips as a whole (`rootFlipsWhole` — a continuous-y
+chart, or the global `yUp`), the canvas mirror sends layout-max past `finalH` to
+the visual top and negative layout min to the visual bottom; on an unflipped root
+the attribution swaps (negative min is painted-TOP content — a ridgeline's
+amplitude allowance above its first baseline, a heatmap's category label row —
+and max past `finalH` is painted-bottom, e.g. elaborated labels below
+fixed-pitch rows). This one rule replaced both the historical always-flipped
+mapping and the `_pitchPaintedTopSpill` ridgeline special case — see
 [Underlying Space](/internals/core/underlying-space). Orientation is decided **per draw entry**
 by the bake walk (each entry carries its `FlipScope`), so `render()` does not pick a
 single global map; it only threads the base map and the `ambientFlip` that

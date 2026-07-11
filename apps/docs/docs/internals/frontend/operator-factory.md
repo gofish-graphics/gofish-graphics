@@ -293,9 +293,9 @@ returned). Instead:
   if `labelState` is set, every node the leaf produced gets `node.datum ??=
 leaf` (the leaf's own subdata — usually the rows array `split` handed it)
   and `node.label(labelState.accessor, labelState.options)`. Stamping
-  `datum` here is what makes `resolveLabels()`'s "a node with its own datum
-  keeps its own label instead of propagating it to children" gate fire at
-  the group level — the same effect the pre-#702 manual workaround achieved
+  `datum` here is what makes the label-elaboration pass's `resolveLabelTargets`
+  gate ("a node with its own datum keeps its own label instead of propagating
+  it to children") fire at the group level — the same effect the pre-#702 manual workaround achieved
   by hand (see the "Label on Spread" story, which now uses the operator
   form instead).
 - `.translate()` wraps the operator in a _new_ function object (`translated`

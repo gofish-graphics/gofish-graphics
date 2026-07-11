@@ -56,8 +56,7 @@ export const Default: StoryObj<Args> = {
           strokeWidth: 1,
           rx: 2,
           ry: 2,
-          label: true,
-        })
+        }).label("Major Genre", { position: "center", color: "white", fontSize: 12 })
       )
       .render(container, { w: args.w, h: args.h });
 

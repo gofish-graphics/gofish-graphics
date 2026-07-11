@@ -257,14 +257,12 @@ export function circle<T extends Record<string, any>>({
   stroke,
   strokeWidth,
   debug,
-  label,
 }: {
   r?: number;
   fill?: string | keyof T | LiveValue;
   stroke?: string;
   strokeWidth?: number;
   debug?: boolean;
-  label?: boolean;
 }): Mark<T> & {
   name(layerName: string | Token): Mark<T>;
   label(accessor: LabelAccessor, options?: LabelOptions): Mark<T>;
@@ -304,7 +302,6 @@ export function circle<T extends Record<string, any>>({
       fill: resolvedFill,
       stroke: resolvedStroke,
       strokeWidth,
-      label,
     }).name(key?.toString() ?? "");
     node.datum = d;
     if (liveFill) node.__gfLive = { fill: liveFill };
@@ -313,7 +310,7 @@ export function circle<T extends Record<string, any>>({
   const result = nameableMark(base);
   (result as any).__serialize = {
     type: "circle",
-    opts: { r, fill, stroke, strokeWidth, label },
+    opts: { r, fill, stroke, strokeWidth },
   };
   return result;
 }

@@ -37,7 +37,6 @@ import type {
 } from "./gofish";
 import { toDisplayList } from "./displayList/toDisplayList";
 import type { DisplayList } from "gofish-ir";
-import { lowerLabelItems } from "./labels/renderLabel";
 import { setLiveSlots } from "../interaction/liveSlots";
 import type { LiveValue } from "../interaction/live";
 import { GoFishRef } from "./_ref";
@@ -423,14 +422,6 @@ export class GoFishNode {
   /** See {@link Placeable.pitchAnchorY} — the fixed-pitch distribute anchor this
    *  node's y was chained at, consumed by the bake's flip-scope band decision. */
   public pitchAnchorY?: "start" | "middle" | "end" | "baseline";
-  /** How far this layer's PAINTED-band bbox fold (`paintedYBand` in layer.tsx)
-   *  extended the box ABOVE the plain layout fold — the fixed-pitch chain's
-   *  amplitude allowance above the chain head (e.g. a ridgeline's January peak
-   *  above the first baseline). `render()` (gofish.tsx) checks the subtree for
-   *  this stamp to attribute the root's negative y min to the PAINTED TOP
-   *  gutter; absent, the legacy overhang-side mapping applies. Re-stamped
-   *  (or cleared) on every layout — no stale spill survives. */
-  public _pitchPaintedTopSpill?: number;
   /** The plot's flip frame a chrome subtree's BOX is mirrored about (issue #629).
    *  Stamped by `layout()` on each OUTERMOST `_ambientYDown` chrome node (axis
    *  title, legend column, colorbar) — the same value as the plot content's
@@ -464,7 +455,7 @@ export class GoFishNode {
   public color?: MaybeValue<string>;
   public constraints: ConstraintSpec[] = [];
   public colorConfig?: ColorConfig;
-  public _label?: LabelSpec;
+  public _labels?: LabelSpec[];
   // `undefined` means "no author opinion" — distinct from an explicit
   // `.zOrder(0)`, which is a deliberate choice and must be distinguishable
   // from silence (e.g. by the relational-mark auto-zBelow suppression check
@@ -1517,13 +1508,6 @@ export class GoFishNode {
       }
       for (const item of items) setLiveSlots(item, slots);
     }
-    if (this._label && this.intrinsicDims) {
-      const labelItems = lowerLabelItems(this, transform, toPixel);
-      if (labelItems.length) {
-        for (const item of labelItems) item.id ??= this.uid;
-        return [...items, ...labelItems];
-      }
-    }
     return items;
   }
 
@@ -1661,25 +1645,8 @@ export class GoFishNode {
   }
 
   public label(accessor: LabelAccessor, options?: LabelOptions): this {
-    this._label = { accessor, ...options };
+    (this._labels ??= []).push({ accessor, ...options });
     return this;
-  }
-
-  public resolveLabels(): void {
-    // Propagate only when this node has no datum of its own.
-    // Nodes with datum (leaf shapes, or spread combinators that carry group data)
-    // render their label directly rather than pushing it to children.
-    if (this._label && this.children.length > 0 && this.datum === undefined) {
-      for (const child of this.children) {
-        if (child instanceof GoFishNode && !child._label) {
-          child._label = this._label;
-        }
-      }
-      this._label = undefined;
-    }
-    for (const child of this.children) {
-      if (child instanceof GoFishNode) child.resolveLabels();
-    }
   }
 
   public setKey(key: string): this {

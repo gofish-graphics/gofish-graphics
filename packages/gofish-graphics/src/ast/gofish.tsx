@@ -54,6 +54,7 @@ import {
 } from "./axes/elaborate";
 import { getScopeRegistry, type EqualMeasureAxis } from "./solver/scopes";
 import { elaborateLegend, legendOverhang } from "./legends/elaborate";
+import { elaborateLabels } from "./labels/elaborate";
 
 export type CategoricalScale = {
   color: Map<any, string>;
@@ -268,7 +269,6 @@ export async function layout(
   const __tResolve = perfNow();
   child.resolveColorScale();
   child.resolveNames();
-  child.resolveLabels();
   // Resolve coordinate-space axis aliases (polar theta/r/…) into x/y/w/h BEFORE
   // space inference reads the dims. Top-down + scope-bounded (see resolveAliases).
   child.resolveAliases();
@@ -337,13 +337,26 @@ export async function layout(
       if (contexts?.session) child.setRenderSession(contexts.session);
       child.resolveColorScale();
       child.resolveNames();
-      child.resolveLabels();
       // The rewrite inserted new nodes (wrappers + axis shapes) and moved keys
       // onto wrappers; `resolveUnderlyingSpace` memoizes, so clear every node's
       // cached space and recompute the whole tree from scratch.
       child.clearUnderlyingSpace();
       child.resolveUnderlyingSpace();
     }
+  }
+
+  // Label elaboration: turn every `.label(...)` spec into a real `Text` node +
+  // constraints (src/ast/labels/elaborate.tsx), the same technique the axis
+  // pass above uses. Runs after axis elaboration (a label may target a node
+  // an axis pass just wrapped) and before the contentNode/title/legend passes
+  // below, so a label's own bbox is folded into what those passes measure.
+  const labelRes = await elaborateLabels(child, { yUp });
+  if (labelRes.changed) {
+    child = labelRes.node;
+    if (contexts?.session) child.setRenderSession(contexts.session);
+    child.resolveNames();
+    child.clearUnderlyingSpace();
+    child.resolveUnderlyingSpace();
   }
 
   // The ROOT σ-scope's spaces, demand-niced (issue #659): nicing is per-scope,
@@ -778,29 +791,25 @@ export async function layout(
   const rightContentOverhang = legendAdded
     ? 0
     : Math.max(0, child.dims[0].max! - finalW);
-  // The y overhang sides. Historically top ← (max − finalH) and bottom ←
-  // (−min); the curated corpus depends on that mapping even where it is not
-  // the painted truth (an unflipped chart's bottom chrome absorbed into the
-  // top reserve), so it stays the default. The one case that genuinely needs
-  // the PAINTED mapping is a fixed-pitch chain's amplitude allowance: its
-  // rows mirror about their chained anchors at paint, the layer bbox fold
-  // extends the box ABOVE the chain head accordingly (`paintedYBand`,
-  // layer.tsx — stamped as `_pitchPaintedTopSpill`), and on an unflipped
-  // root that negative min is painted-TOP content (January's ridge peak)
-  // while max-past-finalH (the x-axis chrome) is painted-bottom. Detecting
-  // the stamp — not just any negative min — keeps every legacy story
-  // byte-identical. `_pitchPaintedTopSpill` is propagated as a SUBTREE max
-  // during the layer bbox fold (layer.tsx), so this is an O(1) field read on
-  // `child` rather than a fresh recursive walk down the whole tree.
+  // The y overhang sides — attributed by PAINTED side. When the root flips as
+  // a whole (`rootFlipsWhole`: a continuous-y chart, or the global `yUp`),
+  // the canvas mirror sends authored max-past-finalH to the visual TOP and
+  // authored negative min to the visual BOTTOM; on an unflipped root the
+  // authored directions ARE the painted ones, so the attribution swaps. The
+  // historical mapping was the flipped one unconditionally ("top ←
+  // max − finalH"), which mis-sided an unflipped chart's spill — harmless
+  // while every unflipped y-spill was small chrome absorbed into `pad` on
+  // either side (`reserve()`'s floor), but real content past the given
+  // canvas (elaborated labels below fixed-pitch rows, a ridgeline's painted
+  // amplitude) got its reserve on the wrong edge: a phantom gap on one side
+  // and clipping on the other. The painted-truth rule subsumes the former
+  // `_pitchPaintedTopSpill` special case (the ridgeline amplitude stamp) —
+  // an unflipped root's negative min is always painted-TOP content and its
+  // max-past-finalH painted-bottom, whatever produced them.
   const layoutMaxOverhang = Math.max(0, child.dims[1].max! - finalH);
   const layoutMinOverhang = Math.max(0, -child.dims[1].min!);
-  const paintedSides =
-    !rootFlipsWhole &&
-    layoutMinOverhang > 0 &&
-    child._pitchPaintedTopSpill !== undefined &&
-    child._pitchPaintedTopSpill > 0;
-  const topOverhang = paintedSides ? layoutMinOverhang : layoutMaxOverhang;
-  const bottomOverhang = paintedSides ? layoutMaxOverhang : layoutMinOverhang;
+  const topOverhang = rootFlipsWhole ? layoutMaxOverhang : layoutMinOverhang;
+  const bottomOverhang = rootFlipsWhole ? layoutMinOverhang : layoutMaxOverhang;
   const leftOverhang = Math.max(0, -child.dims[0].min!);
 
   if (debug) {

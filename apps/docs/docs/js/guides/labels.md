@@ -1,6 +1,6 @@
 # Labels
 
-Add text labels to marks using the `.label()` method. Labels automatically position themselves, contrast against fill colors, and hide when space is tight.
+Add text labels to marks using the `.label()` method. Labels are laid out like any other shape — they position themselves relative to the mark they describe, contrast against fill colors automatically, and occupy real space in the layout (a label near the chart edge makes room for itself instead of being clipped).
 
 ## Basic usage
 
@@ -67,13 +67,42 @@ Special values:
 
 ## Options
 
-| Option     | Type     | Default | Description                              |
-| ---------- | -------- | ------- | ---------------------------------------- |
-| `position` | `string` | auto    | Label position (see above)               |
-| `fontSize` | `number` | —       | Font size in pixels                      |
-| `color`    | `string` | auto    | Text color (auto-contrasts against fill) |
-| `offset`   | `number` | `10`    | Distance from the shape edge             |
-| `rotate`   | `number` | `0`     | Rotation in degrees (clockwise)          |
+| Option       | Type               | Default | Description                                      |
+| ------------ | ------------------ | ------- | ------------------------------------------------ |
+| `position`   | `string`           | auto    | Label position (see above)                       |
+| `fontSize`   | `number`           | —       | Font size in pixels                              |
+| `color`      | `string`           | auto    | Text color (auto-contrasts against fill)         |
+| `offset`     | `number`           | `6`     | Distance from the shape edge                     |
+| `rotate`     | `number`           | `0`     | Rotation in degrees (clockwise)                  |
+| `fontFamily` | `string`           | —       | Font family, passed straight through to the text |
+| `fontWeight` | `number \| string` | —       | Font weight (e.g. `"bold"` or `700`)             |
+| `fontStyle`  | `string`           | —       | Font style (e.g. `"italic"`)                     |
+
+## Multiple labels per mark
+
+Calling `.label()` more than once on the same mark appends — each call adds
+its own label, so a single bar can carry both a value centered inside it and
+a category name above it:
+
+::: gofish
+
+```js
+gf.chart(seafood, { axes: true })
+  .flow(gf.spread({ by: "lake", dir: "x", spacing: 40 }))
+  .mark(
+    gf
+      .rect({ h: gf.field("count").sum() })
+      .label(gf.field("count").sum(), {
+        position: "center",
+        color: "white",
+        fontWeight: "bold",
+      })
+      .label("lake", { position: "outset-top", fontSize: 9 })
+  )
+  .render(root, { w: 400, h: 300 });
+```
+
+:::
 
 ## Auto-contrast
 

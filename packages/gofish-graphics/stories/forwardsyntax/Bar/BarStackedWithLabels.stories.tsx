@@ -36,7 +36,13 @@ export const Default: StoryObj<Args> = {
         spread({ by: "lake",  dir: "x" }), //
         stack({ by: "species",  dir: "y" })
       )
-      .mark(rect({ h: "count", fill: "species", label: true }))
+      .mark(
+        rect({ h: "count", fill: "species" }).label("species", {
+          position: "center",
+          color: "white",
+          fontSize: 12,
+        })
+      )
       .render(container, {
         w: args.w,
         h: args.h,

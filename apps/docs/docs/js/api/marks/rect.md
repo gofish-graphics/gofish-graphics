@@ -15,7 +15,7 @@ gf.chart([{ value: 80 }])
 ## Signature
 
 ```ts
-rect({ w?, h?, fill?, stroke?, strokeWidth = 0, rx?, ry?, label? })
+rect({ w?, h?, fill?, stroke?, strokeWidth = 0, rx?, ry? })
 ```
 
 ## Parameters
@@ -29,7 +29,9 @@ rect({ w?, h?, fill?, stroke?, strokeWidth = 0, rx?, ry?, label? })
 | `strokeWidth` | `number`           | Stroke width                                         |
 | `rx`          | `number`           | Horizontal border radius                             |
 | `ry`          | `number`           | Vertical border radius                               |
-| `label`       | `boolean`          | Render field value as text label inside rect         |
+
+Chain [`.label(accessor, ...)`](/js/guides/labels) on the returned mark to
+attach a text label — there is no `label` option here.
 
 ## Examples
 

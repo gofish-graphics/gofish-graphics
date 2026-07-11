@@ -31,7 +31,6 @@ import {
   lowerStyle,
   pathToPixelSVG,
   roleFor,
-  valueLabelItems,
 } from "../displayList/lowerHelpers";
 /* TODO: what should default embedding behavior be when all values are aesthetic? */
 export const Ellipse = ({
@@ -40,7 +39,6 @@ export const Ellipse = ({
   strokeWidth = 0,
   opacity = 1,
   aspectRatio,
-  label,
   ...fancyDims
 }: {
   fill?: MaybeValue<string>;
@@ -49,7 +47,6 @@ export const Ellipse = ({
   opacity?: number;
   /** w/h ratio to enforce. When both dims are data-driven, the constraining axis is used. */
   aspectRatio?: number;
-  label?: boolean;
 } & FancyDims<MaybeValue<number>>) => {
   // `embedded` is authored by the resolveEmbedding pass — see rect.tsx.
   const dims = elaborateDims(fancyDims);
@@ -174,22 +171,9 @@ export const Ellipse = ({
         const displayDims = displayDimsOf(intrinsicDims, transform);
 
         const unitScale = node.getRenderSession().scaleContext?.unit;
-        const originalFill = fill;
         const resolvedFill = resolveColorChannel(fill, unitScale);
         const resolvedStroke =
           resolveColorChannel(stroke, unitScale) ?? resolvedFill ?? "black";
-
-        const labelText =
-          label && originalFill && isValue(originalFill)
-            ? String(getValue(originalFill) ?? "")
-            : undefined;
-
-        // The inline value-label (the `label` arg) — white text at the mark's
-        // center. Mirrors the `<text>` each render branch emits. `cx`/`cy` are
-        // the same display-space center coords render passed to the `<text>`;
-        // `toPixel` applies the y-flip the legacy `scale(1, -1)` did.
-        const valueLabel = (cx: number, cy: number) =>
-          valueLabelItems(labelText, cx, cy, toPixel);
 
         const elementStyle = lowerStyle({
           fill: resolvedFill,
@@ -230,7 +214,6 @@ export const Ellipse = ({
           const height = displayDims[1].size ?? 0;
           return [
             ellipseItem(transformedX, transformedY, width / 2, height / 2),
-            ...valueLabel(transformedX, transformedY),
           ];
         }
 
@@ -256,7 +239,7 @@ export const Ellipse = ({
             const ry = isXEmbedded
               ? thickness / 2
               : ((displayDims[1].max ?? 0) - (displayDims[1].min ?? 0)) / 2;
-            return [ellipseItem(cx, cy, rx, ry), ...valueLabel(cx, cy)];
+            return [ellipseItem(cx, cy, rx, ry)];
           }
 
           // Nonlinear — warped line path along the midline.
@@ -275,11 +258,6 @@ export const Ellipse = ({
           );
           const transformed = transformPath(linePath, space);
 
-          const mid: [number, number] = [
-            ((displayDims[0].min ?? 0) + (displayDims[0].max ?? 0)) / 2,
-            ((displayDims[1].min ?? 0) + (displayDims[1].max ?? 0)) / 2,
-          ];
-          const [labelX, labelY] = space.transform(mid);
           return [
             {
               kind: "path",
@@ -293,7 +271,6 @@ export const Ellipse = ({
                 opacity,
               }),
             },
-            ...valueLabel(labelX, labelY),
           ];
         }
 
@@ -305,10 +282,7 @@ export const Ellipse = ({
           const height = (displayDims[1].max ?? 0) - y;
           const cx = x + width / 2;
           const cy = y + height / 2;
-          return [
-            ellipseItem(cx, cy, width / 2, height / 2),
-            ...valueLabel(cx, cy),
-          ];
+          return [ellipseItem(cx, cy, width / 2, height / 2)];
         }
 
         const corners = path(
@@ -322,11 +296,6 @@ export const Ellipse = ({
         );
         const transformed = transformPath(corners, space);
 
-        const mid: [number, number] = [
-          ((displayDims[0].min ?? 0) + (displayDims[0].max ?? 0)) / 2,
-          ((displayDims[1].min ?? 0) + (displayDims[1].max ?? 0)) / 2,
-        ];
-        const [labelX, labelY] = space.transform(mid);
         return [
           {
             kind: "path",
@@ -340,7 +309,6 @@ export const Ellipse = ({
               opacity,
             }),
           },
-          ...valueLabel(labelX, labelY),
         ];
       },
     },

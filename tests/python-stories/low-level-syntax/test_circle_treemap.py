@@ -22,6 +22,10 @@ def story_default():
                 round=True,
             )
         )
-        .mark(circle(fill="Major Genre", stroke=GRAY, strokeWidth=1, label=True)),
+        .mark(
+            circle(fill="Major Genre", stroke=GRAY, strokeWidth=1).label(
+                "Major Genre", position="center", color="white", fontSize=12
+            )
+        ),
         {"w": 700, "h": 420},
     )

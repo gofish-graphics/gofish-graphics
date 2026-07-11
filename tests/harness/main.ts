@@ -372,18 +372,27 @@ function mapOperator(
       ? ((operator as any).translate(translate) as T)
       : operator;
   // `.label(accessor, options?)` chained on the operator (traversal) form.
-  const applyLabel = <T>(operator: T): T =>
-    label !== undefined && typeof (operator as any).label === "function"
-      ? (() => {
-          const { accessor, ...labelOpts } = label as {
-            accessor: any;
-          } & Record<string, any>;
-          return (operator as any).label(
-            accessor,
-            Object.keys(labelOpts).length > 0 ? labelOpts : undefined
-          ) as T;
-        })()
-      : operator;
+  // `label` is either an array of specs (one call per entry, applied in
+  // order — repeated `.label()` calls round-trip) or the boolean suppression
+  // shorthand (`label: false`); normalize to a one-element array so both
+  // shapes share this loop, mirroring `fromJSON.ts`'s `mapOperator`.
+  const applyLabel = <T>(operator: T): T => {
+    if (label === undefined || typeof (operator as any).label !== "function") {
+      return operator;
+    }
+    let result: any = operator;
+    const specs = Array.isArray(label) ? label : [label];
+    for (const spec of specs) {
+      const { accessor, ...labelOpts } = spec as {
+        accessor: any;
+      } & Record<string, any>;
+      result = result.label(
+        accessor,
+        Object.keys(labelOpts).length > 0 ? labelOpts : undefined
+      );
+    }
+    return result as T;
+  };
 
   switch (type) {
     case "derive": {
@@ -695,27 +704,33 @@ function mapMark(
   const factory = MARK_MAP[type];
   if (!factory) throw new Error(`Unknown mark type: ${type}`);
 
-  // `label: true` (boolean) is a primitive kwarg the mark itself understands
-  // (auto-value labels). The Python Mark.label() chain emits a structured
-  // `{accessor, position?, fontSize?, ...}` dict that must be reapplied as a
-  // chained `.label(accessor, options)` call — same shape the JS storybook
-  // uses (e.g. `rect({h: "count"}).label("count", {position: "outset"})`).
-  const isStructuredLabel =
-    label && typeof label === "object" && !Array.isArray(label);
+  // The Python Mark.label() chain emits an array of structured
+  // `{accessor, position?, fontSize?, ...}` dicts (one per `.label()` call)
+  // that must be reapplied as chained `.label(accessor, options)` calls, in
+  // order — same shape the JS storybook uses (e.g.
+  // `rect({h: "count"}).label("count", {position: "outset"})`). (The legacy
+  // boolean/string `label` kwarg the mark shape itself interpreted was
+  // removed; `.label()` is the only surviving form. A non-array `label`,
+  // e.g. a stray boolean, is left inert in opts.)
+  const isArrayLabel = Array.isArray(label);
   const factoryOpts: Record<string, any> = unwrapMarkOpts(
-    isStructuredLabel
+    isArrayLabel
       ? opts
       : { ...opts, ...(label !== undefined ? { label } : {}) },
     deriveServerUrl
   );
 
   let mark = factory(factoryOpts);
-  if (isStructuredLabel && typeof (mark as any).label === "function") {
-    const { accessor, ...labelOpts } = label as { accessor: any } & Record<
-      string,
-      any
-    >;
-    mark = (mark as any).label(accessor, labelOpts);
+  if (isArrayLabel && typeof (mark as any).label === "function") {
+    for (const labelSpec of label as any[]) {
+      const { accessor, ...labelOpts } = labelSpec as {
+        accessor: any;
+      } & Record<string, any>;
+      mark = (mark as any).label(
+        accessor,
+        Object.keys(labelOpts).length > 0 ? labelOpts : undefined
+      );
+    }
   }
   if (spec.__scope) {
     mark = wrapWithScope(mark);

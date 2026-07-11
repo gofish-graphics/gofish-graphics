@@ -217,6 +217,29 @@ def story_label_on_stack_aggregate():
     )
 
 
+# ─── two labels per bar (repeated .label(), #706) ───────────────────────────
+# Repeated `.label()` calls append rather than overwrite: each bar carries a
+# bold white value label centered inside it AND a small category label above
+# it, with independent styling.
+
+def story_two_labels_per_bar():
+    return (
+        chart(SEAFOOD)
+        .flow(spread(by="lake", dir="x", spacing=40))
+        .mark(
+            rect(h=field("count").sum())
+            .label(
+                field("count").sum(),
+                position="center",
+                color="white",
+                font_weight="bold",
+            )
+            .label("lake", position="outset-top", fontSize=9)
+        ),
+        {"w": 400, "h": 300, "axes": True},
+    )
+
+
 # ─── normalized stacked bar – center labels ──────────────────────────────────
 # Mirrors https://vega.github.io/vega-lite/examples/bar_stacked_normalize_labeled.html
 
