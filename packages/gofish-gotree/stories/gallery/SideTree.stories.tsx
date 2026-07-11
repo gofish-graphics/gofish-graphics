@@ -20,7 +20,7 @@ import { combine, byDepth, mount } from "./_shared";
 //   - siblings ALIGN in θ (share one angle / lie on a common spoke) and
 //     DISTRIBUTE in r → a sibling group stacks radially along a single ray,
 //     reading as the long straight spines in the reference image.
-// Point-like circle nodes ⇒ mode:"center" on every distribute axis so spacing
+// Point-like circle nodes ⇒ anchor: "middle" on every distribute axis so spacing
 // is read in domain units (radians for θ, r-units for r) and bboxes don't
 // accumulate. Same convention as RadialTree / RadialNodes / Sunburst.
 //
@@ -57,15 +57,15 @@ export const SideTree: StoryObj = {
           x: {
             kind: "distribute",
             spacing: 0.5,
-            mode: "center",
+            anchor: "middle",
           },
-          y: { kind: "distribute", spacing: 70, mode: "center" },
+          y: { kind: "distribute", spacing: 70, anchor: "middle" },
         }),
         // sibling = (align θ, distribute r): siblings share a spoke (one angle)
         // and stack out along the radius.
         sibling: combine({
           x: { kind: "align", alignment: "middle" },
-          y: { kind: "distribute", spacing: 90, mode: "center" },
+          y: { kind: "distribute", spacing: 90, anchor: "middle" },
         }),
         coord: polar(),
       },

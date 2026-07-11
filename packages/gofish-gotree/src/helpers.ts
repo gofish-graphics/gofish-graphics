@@ -24,12 +24,12 @@ export type SpreadOptions = {
   alignment?: Alignment;
   /**
    * `"edge"` (default) sums children's bbox widths into the stack span;
-   * `"center"` places child centers `spacing` apart and ignores bbox widths.
-   * Use `"center"` under polar (or any coord transform) where nodes render
+   * `"middle"` places child centers `spacing` apart and ignores bbox widths.
+   * Use `"middle"` under polar (or any coord transform) where nodes render
    * as points — bbox accumulation would otherwise overflow the transform's
    * domain. Spacing is in domain units (radians for polar theta).
    */
-  mode?: "edge" | "center";
+  anchor?: "edge" | "start" | "middle" | "end" | "baseline";
 };
 
 /**
@@ -56,7 +56,7 @@ export const spread = (opts: SpreadOptions): Combiner => {
 export type DistributeOptions = {
   dir: "x" | "y";
   spacing?: number;
-  mode?: "edge" | "center";
+  anchor?: "edge" | "start" | "middle" | "end" | "baseline";
   /** "forward" (default): index 0 at low coord, walking up. "reverse": flip. */
   order?: "forward" | "reverse";
   /**
@@ -94,7 +94,7 @@ export const distribute = (opts: DistributeOptions): Combiner => {
           {
             dir: opts.dir,
             spacing: opts.spacing ?? 0,
-            mode: opts.mode ?? "edge",
+            anchor: opts.anchor ?? "edge",
             order: opts.order ?? "forward",
           },
           refs(c)
@@ -128,7 +128,7 @@ export type CombineAxis =
       kind: "distribute";
       spacing?: number;
       order?: "forward" | "reverse";
-      mode?: "edge" | "center";
+      anchor?: "edge" | "start" | "middle" | "end" | "baseline";
     }
   | { kind: "nest"; pad?: number };
 
@@ -168,7 +168,7 @@ export const combine = (opts: CombineOptions): Combiner => {
                 dir: axis,
                 spacing: spec.spacing ?? 0,
                 order: spec.order ?? "forward",
-                mode: spec.mode ?? "edge",
+                anchor: spec.anchor ?? "edge",
               },
               refs(c)
             )

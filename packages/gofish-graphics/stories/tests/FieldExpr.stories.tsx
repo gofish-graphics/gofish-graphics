@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/html";
 import { initializeContainer } from "../helper";
-import { chart, spread, stack, rect, field } from "../../src/lib";
+import { chart, spread, stack, rect, ribbon, field } from "../../src/lib";
 
 const meta: Meta = {
   title: "Tests/Field Expression Pipeline",
@@ -182,6 +182,28 @@ export const DropNulls: StoryObj<Args> = {
     chart(dropNullsData, { axes: true })
       .flow(spread({ by: field("x").dropNulls(), dir: "x", spacing: 20 }))
       .mark(rect({ w: 40, h: "v", fill: "x" }))
+      .render(container, { w: args.w, h: args.h });
+    return container;
+  },
+};
+
+export const BinnedRibbonHistogram: StoryObj<Args> = {
+  args: { w: 500, h: 250 },
+  render: (args: Args) => {
+    const container = initializeContainer();
+    // Same binning as BinnedSpread, but with `ribbon(...)` instead of
+    // `rect(...)`: a relational mark's anchor-tier `h` now accepts a
+    // `field(...)` pipeline the same way a leaf mark's "size" channel does.
+    // `ribbon({h: field("age").count()})` placed directly in `.mark()`
+    // position blank-fuses to `.mark(blank({h: field("age").count()}))` +
+    // `.layer(ribbon({}))` (see `createRelationalMark`'s
+    // `tagRelationalFusable`) — the anchor blank evaluates the expression
+    // per bin, and the connector bands the resulting bin-tops into an area
+    // histogram. Bins with zero rows are dropped rather than rendered as
+    // zero-height gaps, so the band visibly skips them — see #763.
+    chart(binData, { axes: true })
+      .flow(spread({ by: field("age").bin(), dir: "x", spacing: 0 }))
+      .mark(ribbon({ w: 30, h: field("age").count(), fill: "steelblue" }))
       .render(container, { w: args.w, h: args.h });
     return container;
   },

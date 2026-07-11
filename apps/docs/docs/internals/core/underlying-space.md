@@ -463,6 +463,60 @@ reach the same expressive ceiling as the spread pipeline, auto-fit included
 (issue #475). Composition beyond one distribute (+ one align) per axis falls
 back to `unionChildSpaces`; the general algebra is sketched in
 [[constraints-as-core]].
+
+`distribute`'s `anchor` option (`"edge" | "start" | "middle" | "end" |
+"baseline"`, default `"edge"`) picks which pair of anchors the chain relates
+between adjacent children: `"edge"` relates the facing edges
+(`prev.end → cur.start`, spacing = the gap between them, content-dependent);
+the fixed-pitch anchors relate the _same_ anchor on both sides
+(`prev.anchor → cur.anchor`, spacing = anchor-to-anchor pitch,
+content-independent) — `anchor[i+1] = anchor[i] + spacing`. `"middle"` is the
+old `mode: "center"` under its new name; `"start"`/`"end"`/`"baseline"` are new
+fixed-pitch siblings reusing the same anchor vocabulary `align` already uses
+(`constraints/shared.ts`'s `AlignAnchor`). The space fold
+(`distributeSpaceFold`'s `composeSize`) is `(n−1)·spacing` of chain plus an
+amplitude ALLOWANCE attributed to the side of the chain where children's
+content actually extends relative to the chained anchor (the painted side —
+fixed-pitch rows mirror about their anchor at paint, below):
+
+- `"middle"`: half above, half below every anchor — the exact symmetric
+  `h_first/2 + (n−1)·s + h_last/2` (the original center-mode form, unchanged).
+- `"baseline"` / `"start"`: content rises entirely ABOVE each anchor, so the
+  allowance sits above the chain head: `max_k(h_k − k·s)⁺ + (n−1)·s` (k in
+  chain order — the binding row is whichever peak clears the rows chained
+  above it; for a ridgeline that's usually the first row).
+- `"end"`: the mirror image — allowance below the chain tail:
+  `max_k(h_k − (n−1−k)·s)⁺ + (n−1)·s`.
+
+The per-k max assumes each child's extent lies wholly on one side of its
+anchor (true for SIZE claims — baseline magnitudes) and that the fold's child
+order is the chain order (compose.ts passes placement order).
+
+A fixed-pitch chain also has a PAINT-side handshake. The chain is an overlay,
+not a tiling — its targets' allocated slices are just the leftover budget — so
+if a chained target later opens its own y-up flip scope, mirroring about the
+allocated band would displace every painted anchor away from where the solver
+chained it. `lowerDistributePlacement` therefore stamps the chained anchor on
+each y-chained target (`Placeable.pitchAnchorY`), and the bake's scope-band
+decision (`scopeBox` in `coordinateTransforms/bake.ts`) mirrors such a scope
+about that anchor pointwise (`y ↦ 2·anchor − y`), keeping the painted anchors
+exactly at the solved pitch — see
+[Flattening the Scenegraph](/internals/layout/coord-flattening). The same
+stamp drives the layer's bbox fold (`paintedYBand` in layer.tsx): a
+pitch-chained self-mirroring row's box is folded as the MIRROR of its layout
+band about the chained anchor — the band it actually paints — so the layer's
+box gains the amplitude allowance above the chain head (matching the fold
+extent above) instead of phantom space below the tail where nothing paints,
+and the x axis lands directly below the last baseline. The resulting negative
+layer min reaches `render()` as a painted-TOP overhang: the layer records the
+spill (`_pitchPaintedTopSpill`) and gofish.tsx maps the y overhang sides
+painted-wise only when that stamp is present (an exact no-op for `"middle"`,
+whose mirror is the identity on its own band, and for every legacy story).
+This all assumes the chained rows self-mirror — continuous y with no enclosing
+y-up scope, the fixed-pitch-under-ordinal-spread case; inside a whole-plot
+flip the rows would inherit that scope and the plain layout band would be the
+honest one.
+
 `resolveLayerBaseSpaces` is the default bottom-up axis resolver before composed
 constraint overrides: union child spaces, apply `transform.scale` to free
 magnitudes, and merge datum-valued position/span domains with constraint
@@ -1081,6 +1135,22 @@ doesn't need that: each entry gets its own wrapper wired through the ordinary
 data-valued-size path above, and stacking now follows **data order** directly
 at every level rather than needing a flip to correct it — so `_selfScaledSpace`
 and its `declaredYUp` fallback were deleted outright, not generalized.
+
+A differently-shaped side channel came back later for a different consumer.
+`layer.tsx`'s self-scaling branch now also writes the real (anchored/
+difference) space it's about to replace with `UNDEFINED` into
+`GoFishNode.selfScaledSpace` — its presence (`!== undefined`) IS the "this
+dim is self-scaled" marker, so there is no separate boolean field to keep in
+sync. Nothing in layout reads it — `_underlyingSpace` is still
+`UNDEFINED` there, so sizing is exactly as before. The reader is `resolveAxes`
+(see [Axes](/internals/frontend/axes)'s "unifying duplicate axes across
+self-scaled siblings" section): a `spread` whose per-group children are each
+self-scaled to the same explicit pixel width over the same domain (a ridgeline
+chart's per-month panels) collapses the union to `UNDEFINED` at the parent
+exactly like the mosaic case above, but here the parent needs to tell "my
+children all silently agree on one real scale" apart from "my children are
+independently self-scaled" — a distinction the boolean alone can't make. The
+stash makes that comparison possible without touching layout at all.
 
 ## Measures: units are types
 

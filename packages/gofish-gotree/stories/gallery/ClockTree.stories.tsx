@@ -111,13 +111,13 @@ export const ClockTree: StoryObj = {
         link: "none",
         parentChild: combine({
           // θ: parent and its child-group take adjacent angular slots.
-          x: { kind: "distribute", spacing: 0, mode: "edge" },
+          x: { kind: "distribute", spacing: 0, anchor: "edge" },
           // r: parent and group share the radial band.
           y: { kind: "align", alignment: "middle" },
         }),
         sibling: combine({
           // θ: siblings tile angularly (edge mode sums θ-widths).
-          x: { kind: "distribute", spacing: 0, mode: "edge" },
+          x: { kind: "distribute", spacing: 0, anchor: "edge" },
           // r: siblings share the same radial band.
           y: { kind: "align", alignment: "middle" },
         }),

@@ -44,7 +44,7 @@ const dist = (cs: any[]) => {
   const named = cs.map((c, i) => Layer([c]).name(`__d-${i}`));
   return Layer(named).constrain((c: any) => [
     Constraint.distribute(
-      { dir: "x", spacing: 0, mode: "edge", order: "forward" },
+      { dir: "x", spacing: 0, anchor: "edge", order: "forward" },
       named.map((_: any, i: number) => c[`__d-${i}`])
     ),
   ]);

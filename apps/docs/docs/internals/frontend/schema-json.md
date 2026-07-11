@@ -949,8 +949,8 @@ for the API.
           "type": "boolean",
           "default": false
         },
-        "mode": {
-          "enum": ["edge", "center"],
+        "anchor": {
+          "enum": ["edge", "start", "middle", "end", "baseline"],
           "default": "edge"
         },
         "reverse": {
@@ -1034,8 +1034,8 @@ for the API.
           "type": "boolean",
           "default": false
         },
-        "mode": {
-          "enum": ["edge", "center"],
+        "anchor": {
+          "enum": ["edge", "start", "middle", "end", "baseline"],
           "default": "edge"
         },
         "reverse": {

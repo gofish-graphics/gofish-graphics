@@ -145,7 +145,10 @@ packages/gofish-graphics/stories/forwardsyntax/Labels.stories.tsx::PositionShowc
 # be byte-matched. The eight single-chart exports (AlignOnly, AlignOnlyManualY,
 # DistributeOnly, SubsetSelection, BackgroundNotDistributed, AlignCenterDistributeY,
 # AlignSpan, AlignSize — the last two are the #726 "span"/"size" alignment
-# values) are ported.
+# values) are ported. SpreadX_CenterToCenter now also has a Python port
+# (story_spread_x_center_to_center, the Constraint.distribute half) — it
+# stays on this list because it's still the same two-panel shape that can't
+# be byte-gated, but it is captured + IR-validated rather than skipped.
 packages/gofish-graphics/stories/lowlevel/Constraints.stories.tsx::SpreadY_AlignStart
 packages/gofish-graphics/stories/lowlevel/Constraints.stories.tsx::SpreadY_AlignEnd
 packages/gofish-graphics/stories/lowlevel/Constraints.stories.tsx::SpreadY_AlignMiddle

@@ -86,7 +86,7 @@ const Block = (w: number, color: string = "black") =>
 
 // A flush row of same-colored-or-mixed blocks (Bluefish's <Blocks>).
 const Blocks = (colors: string[], width: number = 18) =>
-  spread({ dir: "x", spacing: 0, mode: "edge" }, colors.map((c) => Block(width, c)));
+  spread({ dir: "x", spacing: 0, anchor: "edge" }, colors.map((c) => Block(width, c)));
 
 // Hand-drawn "[" / "]" brackets built from 3 thin black rects (Bluefish's
 // <BigLeftBracket>/<BigRightBracket>).
@@ -245,7 +245,7 @@ export const DFSCQ: StoryObj<Args> = {
     // is PINNED from construction — required for it to serve as the SPAN
     // SITE's already-placed source (Constraint.align "span"/"size" throw
     // unless their source is already placed when the constraint lowers).
-    const memRow = spread({ dir: "x", spacing: 0, mode: "edge", x: 0, y: 0 }, [
+    const memRow = spread({ dir: "x", spacing: 0, anchor: "edge", x: 0, y: 0 }, [
       Block(80, "black").name(rect1),
       Block(80, "LightGray").name(rect2),
       Block(80, "LightGray").name(rect3),
@@ -341,7 +341,7 @@ export const DFSCQ: StoryObj<Args> = {
     ]);
 
     // ── Stage 4: Applier ─────────────────────────────────────────────────
-    const diskDataRow = spread({ dir: "x", spacing: 0, mode: "edge", x: 0, y: 0 }, [
+    const diskDataRow = spread({ dir: "x", spacing: 0, anchor: "edge", x: 0, y: 0 }, [
       Block(50, "LightGray"),
       Blocks(Array(7).fill("gray"), 10),
       Blocks(Array(3).fill(BLUE), 10),
@@ -351,7 +351,7 @@ export const DFSCQ: StoryObj<Args> = {
     // GoFish `rect()` defaults `strokeWidth` to 0, so an unset stroke is
     // invisible) — only the enclosing table gets a border, so the arrows
     // appear to land inside one plain white box, not 5 bordered cells.
-    const diskDataCells = spread({ dir: "x", spacing: 0, mode: "edge" }, [
+    const diskDataCells = spread({ dir: "x", spacing: 0, anchor: "edge" }, [
       rect({ w: DISK_DATA_WIDTH / 5, h: 40, fill: "white" }).name(diskdata1),
       rect({ w: DISK_DATA_WIDTH / 5, h: 40, fill: "white" }).name(diskdata2),
       rect({ w: DISK_DATA_WIDTH / 5, h: 40, fill: "white" }).name(diskdata3),

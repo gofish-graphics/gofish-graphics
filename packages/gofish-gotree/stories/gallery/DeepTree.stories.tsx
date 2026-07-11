@@ -16,7 +16,7 @@ import { combine, byDepth, mount } from "./_shared";
 //   sibling = (distribute θ, align r) :
 //     - θ distribute → siblings spread angularly (spacing in radians).
 //     - r align → all siblings share a radius (same ring).
-// Point-like circle nodes ⇒ mode:"center" on every distribute so spacing is read
+// Point-like circle nodes ⇒ anchor: "middle" on every distribute so spacing is read
 // in domain units (radians for θ, r-units for r) and pixel bboxes don't
 // accumulate. Same layout family as the Sunburst / RadialTree stories, deeper.
 //
@@ -83,7 +83,7 @@ export const DeepTree: StoryObj = {
           y: {
             kind: "distribute",
             spacing: 72,
-            mode: "center",
+            anchor: "middle",
             alignment: "middle",
           },
         }),
@@ -92,7 +92,7 @@ export const DeepTree: StoryObj = {
           x: {
             kind: "distribute",
             spacing: (2 * Math.PI) / 10,
-            mode: "center",
+            anchor: "middle",
             alignment: "middle",
           },
           // r: all siblings share a radius (same ring).

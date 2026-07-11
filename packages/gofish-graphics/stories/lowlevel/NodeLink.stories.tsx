@@ -76,9 +76,9 @@ export const NodeLink: StoryObj<Args> = {
         Node({ label: "C" }).name(C),
         Node({ label: "D" }).name(D),
       ]).constrain((c) => [
-        Constraint.distribute({ dir: "x", spacing: 60, mode: "edge" }, [c.A, c.B, c.C]),
+        Constraint.distribute({ dir: "x", spacing: 60, anchor: "edge" }, [c.A, c.B, c.C]),
         Constraint.align({ y: "middle" }, [c.A, c.B, c.C]),
-        Constraint.distribute({ dir: "y", spacing: 60, mode: "edge" }, [c.D, c.B]),
+        Constraint.distribute({ dir: "y", spacing: 60, anchor: "edge" }, [c.D, c.B]),
         Constraint.align({ x: "middle" }, [c.B, c.D]),
       ]),
 
@@ -110,12 +110,12 @@ export const NodeLink: StoryObj<Args> = {
       .constrain((c) => [
         // horizontal edges: label centered just above the edge
         Constraint.align({ x: "middle" }, [c.e1, c.t1]),
-        Constraint.distribute({ dir: "y", spacing: 3, mode: "edge" }, [c.e1, c.t1]),
+        Constraint.distribute({ dir: "y", spacing: 3, anchor: "edge" }, [c.e1, c.t1]),
         Constraint.align({ x: "middle" }, [c.e2, c.t2]),
-        Constraint.distribute({ dir: "y", spacing: 3, mode: "edge" }, [c.e2, c.t2]),
+        Constraint.distribute({ dir: "y", spacing: 3, anchor: "edge" }, [c.e2, c.t2]),
         // vertical edge: label centered just to the right
         Constraint.align({ y: "middle" }, [c.e3, c.t3]),
-        Constraint.distribute({ dir: "x", spacing: 4, mode: "edge" }, [c.e3, c.t3]),
+        Constraint.distribute({ dir: "x", spacing: 4, anchor: "edge" }, [c.e3, c.t3]),
       ])
       .render(container, { w: args.w, h: args.h });
 

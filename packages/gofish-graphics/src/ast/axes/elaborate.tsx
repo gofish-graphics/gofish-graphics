@@ -18,6 +18,7 @@ import {
   isORDINAL,
   isDIFFERENCE,
   isCONTINUOUS,
+  isUNDEFINED,
   continuousInterval,
   type CONTINUOUS_TYPE,
   type UnderlyingSpace,
@@ -655,6 +656,18 @@ function elaborationsFor(
       owned: [false, false],
       tierCounts,
     };
+  // A node can own a dim (`resolveAxes` set `axis.x/y`) whose own
+  // `_underlyingSpace` is the UNDEFINED sentinel — self-scaled children
+  // collapse the union above them (see `GoFishNode.selfScaledSpace`'s doc
+  // comment), which is right for sizing/layout but leaves nothing here to
+  // build ticks from. `resolveAxes`'s sibling-unification branch handles
+  // exactly this by stashing the shared child space it verified onto
+  // `hoistedAxisSpace`; fall back to it only when the real space is missing,
+  // so an ordinary (non-self-scaled) space is never overridden.
+  const spaceFor = (dim: 0 | 1): UnderlyingSpace =>
+    !isUNDEFINED(space[dim])
+      ? space[dim]
+      : (node.hoistedAxisSpace?.[dim] ?? space[dim]);
   const owns = (dim: 0 | 1) => (dim === 0 ? node.axis.x : node.axis.y) === true;
   // Niced [min, max] per owned POSITION dim, computed ONCE: it feeds both that
   // axis's own line/ticks and the other axis's `crossFloor` (the plot corner),
@@ -663,7 +676,7 @@ function elaborationsFor(
   const floors: (number | undefined)[] = [undefined, undefined];
   for (const dim of [0, 1] as (0 | 1)[]) {
     if (!owns(dim)) continue;
-    const s = space[dim];
+    const s = spaceFor(dim);
     const iv = continuousInterval(s);
     if (isPOSITION(s) && iv) {
       nices[dim] = d3Nice(iv.min, iv.max, TICK_COUNT);
@@ -721,7 +734,7 @@ function elaborationsFor(
   const outTierCounts: [number, number] = [...tierCounts];
   for (const dim of [0, 1] as (0 | 1)[]) {
     if (!owns(dim)) continue;
-    const s = space[dim];
+    const s = spaceFor(dim);
     const prefix = dim === 1 ? "__y" : "__x";
     const crossFloor = floors[cross(dim)];
     if (isPOSITION(s)) {

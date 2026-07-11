@@ -125,11 +125,11 @@ export const Sunburst: StoryObj = {
           // θ: parent wedge encloses its subtree's arc (pad 0 → exact tiling).
           x: { kind: "nest", pad: 0 },
           // r: parent inner ring, child group one ring out.
-          y: { kind: "distribute", spacing: bandHeight, mode: "edge" },
+          y: { kind: "distribute", spacing: bandHeight, anchor: "edge" },
         }),
         sibling: combine({
           // θ: siblings tile their parent's arc (edge mode sums θ-widths).
-          x: { kind: "distribute", spacing: 0, mode: "edge" },
+          x: { kind: "distribute", spacing: 0, anchor: "edge" },
           // r: siblings share the same ring.
           y: { kind: "align", alignment: "middle" },
         }),

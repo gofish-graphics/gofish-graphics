@@ -566,7 +566,7 @@ gf.layer({ coord: gf.clock(), axes: true }, [
         by: "lake",
         dir: "x",
         spacing: (2 * Math.PI) / 6,
-        mode: "center",
+        anchor: "middle",
         y: 50,
         label: false,
       }),

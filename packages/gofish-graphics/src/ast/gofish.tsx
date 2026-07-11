@@ -778,9 +778,30 @@ export async function layout(
   const rightContentOverhang = legendAdded
     ? 0
     : Math.max(0, child.dims[0].max! - finalW);
-  const topOverhang = Math.max(0, child.dims[1].max! - finalH);
+  // The y overhang sides. Historically top ← (max − finalH) and bottom ←
+  // (−min); the curated corpus depends on that mapping even where it is not
+  // the painted truth (an unflipped chart's bottom chrome absorbed into the
+  // top reserve), so it stays the default. The one case that genuinely needs
+  // the PAINTED mapping is a fixed-pitch chain's amplitude allowance: its
+  // rows mirror about their chained anchors at paint, the layer bbox fold
+  // extends the box ABOVE the chain head accordingly (`paintedYBand`,
+  // layer.tsx — stamped as `_pitchPaintedTopSpill`), and on an unflipped
+  // root that negative min is painted-TOP content (January's ridge peak)
+  // while max-past-finalH (the x-axis chrome) is painted-bottom. Detecting
+  // the stamp — not just any negative min — keeps every legacy story
+  // byte-identical. `_pitchPaintedTopSpill` is propagated as a SUBTREE max
+  // during the layer bbox fold (layer.tsx), so this is an O(1) field read on
+  // `child` rather than a fresh recursive walk down the whole tree.
+  const layoutMaxOverhang = Math.max(0, child.dims[1].max! - finalH);
+  const layoutMinOverhang = Math.max(0, -child.dims[1].min!);
+  const paintedSides =
+    !rootFlipsWhole &&
+    layoutMinOverhang > 0 &&
+    child._pitchPaintedTopSpill !== undefined &&
+    child._pitchPaintedTopSpill > 0;
+  const topOverhang = paintedSides ? layoutMinOverhang : layoutMaxOverhang;
+  const bottomOverhang = paintedSides ? layoutMaxOverhang : layoutMinOverhang;
   const leftOverhang = Math.max(0, -child.dims[0].min!);
-  const bottomOverhang = Math.max(0, -child.dims[1].min!);
 
   if (debug) {
     console.log("🌳 Node Tree:");

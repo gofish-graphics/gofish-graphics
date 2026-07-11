@@ -136,11 +136,11 @@ export const HierarchicalSectorChart: StoryObj = {
           // r: parent inner ring, child group on the next ring out (edge mode,
           // spacing 0 → child band starts exactly at the parent band's outer
           // edge, so rings touch with no radial gap).
-          y: { kind: "distribute", spacing: 0, mode: "edge" },
+          y: { kind: "distribute", spacing: 0, anchor: "edge" },
         }),
         sibling: combine({
           // θ: siblings tile their parent's arc (edge mode sums θ-widths).
-          x: { kind: "distribute", spacing: 0, mode: "edge" },
+          x: { kind: "distribute", spacing: 0, anchor: "edge" },
           // r: siblings share the same ring.
           y: { kind: "align", alignment: "middle" },
         }),

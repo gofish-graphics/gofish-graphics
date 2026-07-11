@@ -16,7 +16,7 @@ import {
   type LiteralValue,
   type Measure,
 } from "./data";
-import { evalFieldValues } from "./fieldExpr";
+import { evalFieldValues, type FieldExpr } from "./fieldExpr";
 import type { LiveValue } from "../interaction/live";
 
 export type ChannelType = "size" | "pos" | "color" | "raw";
@@ -39,7 +39,10 @@ export type ChannelAnnotations<T> = {
 /**
  * Derive mark prop types from shape prop types + channel annotations.
  *
- * - "size" channels: mark accepts `number | keyof T | Value<number>` instead of `MaybeValue<number>`
+ * - "size" channels: mark accepts `number | keyof T | Value<number> | FieldExpr`
+ *   instead of `MaybeValue<number>` — a `field(...)` pipeline (e.g.
+ *   `field("age").count()`) is evaluated the same way a bare field-name
+ *   accessor is (see `evalFieldValues` in fieldExpr.ts).
  * - "color" channels: mark accepts `string | keyof T | Value<string>` instead of `MaybeValue<string>`
  * - unannotated props: passed through with the same type
  */
@@ -59,6 +62,7 @@ export type DeriveMarkProps<
             | (keyof T & string)
             | ((d: T) => number)
             | Value<number>
+            | FieldExpr
             | undefined
         : Channels[K] extends "pos" | { type: "pos" }
           ?
@@ -66,6 +70,7 @@ export type DeriveMarkProps<
               | (keyof T & string)
               | ((d: T) => number)
               | Value<number>
+              | FieldExpr
               | undefined
           : Channels[K] extends "color" | { type: "color" }
             ?

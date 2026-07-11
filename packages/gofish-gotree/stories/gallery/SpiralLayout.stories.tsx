@@ -16,7 +16,7 @@ import { initializeContainer } from "../helper";
 //   - parentChild: child sits one θ-step around and one r-step out from parent.
 //   - sibling: each next sibling is one θ-step around and one r-step out from
 //     the prior sibling, so a fan of children itself spirals.
-// Point-like circle nodes ⇒ mode:"center" so spacing is read in domain units
+// Point-like circle nodes ⇒ anchor: "middle" so spacing is read in domain units
 // (radians for θ, r-units for r) and bboxes don't accumulate. Color = depth.
 // Links straight ⇒ {curve: "straight"}. See the polar Sunburst /
 // RadialNodes / RadialTree siblings for the same θ/r decomposition.
@@ -64,13 +64,13 @@ export const SpiralLayout: StoryObj = {
           x: {
             kind: "distribute",
             spacing: (2 * Math.PI) / 9,
-            mode: "center",
+            anchor: "middle",
             alignment: "middle",
           },
           y: {
             kind: "distribute",
             spacing: 50,
-            mode: "center",
+            anchor: "middle",
             alignment: "middle",
           },
         }),
@@ -79,13 +79,13 @@ export const SpiralLayout: StoryObj = {
           x: {
             kind: "distribute",
             spacing: (2 * Math.PI) / 9,
-            mode: "center",
+            anchor: "middle",
             alignment: "middle",
           },
           y: {
             kind: "distribute",
             spacing: 26,
-            mode: "center",
+            anchor: "middle",
             alignment: "middle",
           },
         }),

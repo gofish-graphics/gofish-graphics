@@ -13,11 +13,19 @@ const SCRIPTS_DIR = import.meta.dirname;
 const TESTS_DIR = dirname(SCRIPTS_DIR);
 const ROOT_DIR = dirname(TESTS_DIR);
 
-/** CamelCase / spaced → kebab-case (one source of truth for path generation). */
+/** CamelCase / spaced → kebab-case (one source of truth for path generation).
+ *
+ * Underscores fold to dashes like whitespace: Storybook's own name derivation
+ * (lodash startCase) treats `_` as a word break, so the JS DOM capture path for
+ * an export like `SpreadX_CenterToCenter` is `spread-x-center-to-center` — and
+ * the Python capture's snake→kebab rule (capture-python-dom.ts) agrees. Without
+ * this fold, resolving a `.python-sync-exempt` `file::Export` line through
+ * `storyToPath` kept the underscore (`spread-x_center-to-center`) and the
+ * parity-skip set never matched the captured DOM path. */
 export const toKebab = (s: string) =>
   s
     .replace(/([a-z])([A-Z])/g, "$1-$2")
-    .replace(/\s+/g, "-")
+    .replace(/[\s_]+/g, "-")
     .toLowerCase();
 
 /**

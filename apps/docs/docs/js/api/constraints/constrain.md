@@ -108,16 +108,16 @@ gf.layer([
 Stacks a set of children end-to-end along an axis, with optional spacing.
 
 ```ts
-Constraint.distribute({ dir, spacing, mode, order }, [ref1, ref2, ...])
+Constraint.distribute({ dir, spacing, anchor, order }, [ref1, ref2, ...])
 ```
 
-| Option    | Type                     | Default     | Description                                                                                  |
-| --------- | ------------------------ | ----------- | -------------------------------------------------------------------------------------------- |
-| `dir`     | `"x" \| "y"`             | —           | Axis to distribute along                                                                     |
-| `spacing` | `number`                 | `8`         | Gap between each element (forced to `0` when `glue` is set)                                  |
-| `mode`    | `"edge" \| "center"`     | `"edge"`    | Whether spacing is measured edge-to-edge or center-to-center                                 |
-| `order`   | `"forward" \| "reverse"` | `"forward"` | Order to place elements                                                                      |
-| `glue`    | `boolean`                | `false`     | Stack semantics: children touch, and their data-driven extents commit to one positional axis |
+| Option    | Type                                                   | Default     | Description                                                                                                                                                    |
+| --------- | ------------------------------------------------------ | ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `dir`     | `"x" \| "y"`                                           | —           | Axis to distribute along                                                                                                                                       |
+| `spacing` | `number`                                               | `8`         | Gap between each element (forced to `0` when `glue` is set)                                                                                                    |
+| `anchor`  | `"edge" \| "start" \| "middle" \| "end" \| "baseline"` | `"edge"`    | Whether `spacing` is measured between facing edges (`"edge"`), or as a fixed pitch between a chosen point on each element: `anchor[i+1] = anchor[i] + spacing` |
+| `order`   | `"forward" \| "reverse"`                               | `"forward"` | Order to place elements                                                                                                                                        |
+| `glue`    | `boolean`                                              | `false`     | Stack semantics: children touch, and their data-driven extents commit to one positional axis                                                                   |
 
 The first already-placed child acts as an anchor. Unplaced children after it are distributed forward (increasing position); unplaced children before it are distributed backward so they stack flush against the anchor's leading edge.
 
@@ -348,7 +348,7 @@ equivalent, **including** scale solving and auto-fit, not just placement:
 | ------------------------------------------------------------ | --------------------------------------------------------------- |
 | `Spread({ dir: "y", alignment: "start" }, items)`            | `align({ x: "start" })` + `distribute({ dir: "y" })`            |
 | `Spread({ dir: "x", alignment: "end", spacing: 10 }, items)` | `align({ y: "end" })` + `distribute({ dir: "x", spacing: 10 })` |
-| `Spread({ dir: "x", spacing: 60, mode: "center" }, items)`   | `distribute({ dir: "x", spacing: 60, mode: "center" })`         |
+| `Spread({ dir: "x", spacing: 60, anchor: "middle" }, items)` | `distribute({ dir: "x", spacing: 60, anchor: "middle" })`       |
 | `Spread({ dir: "y", reverse: true }, items)`                 | `distribute({ dir: "y", order: "reverse" })`                    |
 | `Stack({ dir: "y" }, items)`                                 | `distribute({ dir: "y", glue: true })`                          |
 

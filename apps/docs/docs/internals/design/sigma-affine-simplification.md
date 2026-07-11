@@ -545,7 +545,7 @@ on one axis is the sanctioned multi-scale reading.
   at least one node in its space-flow region renders an axis on the dim.
   `resolveAxes` leaves persistent `axisDemand` stamps (the `axis` work flags
   are cleared by elaboration); `GoFishNode.scopeRendersAxis` walks the region —
-  up while neither a self-scaled stash (`selfScaledDims`) nor a coord boundary
+  up while neither a self-scaled stash (`selfScaledSpace`) nor a coord boundary
   cuts the space flow, then across the region subtree stopping at deeper
   stashes/coords — so an inner shared scope under an axis-drawing root inherits
   the root's demand, while a stashed panel (whose space never reached that

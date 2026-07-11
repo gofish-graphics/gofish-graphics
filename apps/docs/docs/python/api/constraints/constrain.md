@@ -116,17 +116,17 @@ Constraint.align([b, c], x=["end", "start"])
 Stacks a set of refs end-to-end along an axis, with optional spacing.
 
 ```python
-Constraint.distribute(refs, *, dir, spacing=None, mode=None, order=None, glue=None, weights=None)
+Constraint.distribute(refs, *, dir, spacing=None, anchor=None, order=None, glue=None, weights=None)
 ```
 
-| Parameter | Type                       | Default     | Description                                                                                             |
-| --------- | -------------------------- | ----------- | ------------------------------------------------------------------------------------------------------- |
-| `dir`     | `"x"` \| `"y"`             | —           | **Required.** Axis to distribute along.                                                                 |
-| `spacing` | `int`                      | `8`         | Gap between each element (forced to `0` when `glue` is set).                                            |
-| `mode`    | `"edge"` \| `"center"`     | `"edge"`    | Spacing measured edge-to-edge or center-to-center.                                                      |
-| `order`   | `"forward"` \| `"reverse"` | `"forward"` | Order to place elements.                                                                                |
-| `glue`    | `bool`                     | `False`     | Stack semantics: children touch, and their data-driven extents commit to one positional axis.           |
-| `weights` | `list[float]`              | —           | Per-child budget weights (one per child, positional) — how fill children share the layer's slice space. |
+| Parameter | Type                                                           | Default     | Description                                                                                                                                        |
+| --------- | -------------------------------------------------------------- | ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `dir`     | `"x"` \| `"y"`                                                 | —           | **Required.** Axis to distribute along.                                                                                                            |
+| `spacing` | `int`                                                          | `8`         | Gap between each element (forced to `0` when `glue` is set).                                                                                       |
+| `anchor`  | `"edge"` \| `"start"` \| `"middle"` \| `"end"` \| `"baseline"` | `"edge"`    | Spacing measured between facing edges (`"edge"`), or as a fixed pitch between a chosen point on each element: `anchor[i+1] = anchor[i] + spacing`. |
+| `order`   | `"forward"` \| `"reverse"`                                     | `"forward"` | Order to place elements.                                                                                                                           |
+| `glue`    | `bool`                                                         | `False`     | Stack semantics: children touch, and their data-driven extents commit to one positional axis.                                                      |
+| `weights` | `list[float]`                                                  | —           | Per-child budget weights (one per child, positional) — how fill children share the layer's slice space.                                            |
 
 The first already-placed ref acts as an anchor; unplaced refs after it are
 distributed forward, and those before it backward so they stack flush.
@@ -335,7 +335,7 @@ equivalent, **including** scale solving and auto-fit, not just placement:
 | ----------------------------------------------------- | ---------------------------------------------------- |
 | `spread(items, dir="y", alignment="start")`           | `align(x="start")` + `distribute(dir="y")`           |
 | `spread(items, dir="x", alignment="end", spacing=10)` | `align(y="end")` + `distribute(dir="x", spacing=10)` |
-| `spread(items, dir="x", spacing=60, mode="center")`   | `distribute(dir="x", spacing=60, mode="center")`     |
+| `spread(items, dir="x", spacing=60, anchor="middle")` | `distribute(dir="x", spacing=60, anchor="middle")`   |
 | `spread(items, dir="y", reverse=True)`                | `distribute(dir="y", order="reverse")`               |
 | `stack(items, dir="y")`                               | `distribute(dir="y", glue=True)`                     |
 | `spread(items, dir="x", stackWeights=[2, 1])`         | `distribute(dir="x", weights=[2, 1])`                |

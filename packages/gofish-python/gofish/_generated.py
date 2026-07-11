@@ -527,7 +527,7 @@ def arrow(children: List["Mark"], *, bow: Optional[float] = None, stretch: Optio
 
 # --- Dual-form cores (dispatch stays hand-written in ast.py) -----------------
 
-def _spread_opts(*, by: Optional[Any] = None, dir: Optional[str] = None, spacing: Optional[float] = None, alignment: Optional[str] = None, sharedScale: Optional[bool] = None, mode: Optional[str] = None, reverse: Optional[bool] = None, glue: Optional[bool] = None, axes: Optional[Any] = None, w: Optional[Union[int, float, str]] = None, h: Optional[Union[int, float, str]] = None, size: Optional[Union[int, float, str]] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
+def _spread_opts(*, by: Optional[Any] = None, dir: Optional[str] = None, spacing: Optional[float] = None, alignment: Optional[str] = None, sharedScale: Optional[bool] = None, anchor: Optional[str] = None, reverse: Optional[bool] = None, glue: Optional[bool] = None, axes: Optional[Any] = None, w: Optional[Union[int, float, str]] = None, h: Optional[Union[int, float, str]] = None, size: Optional[Union[int, float, str]] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
     """Arrange children along `dir` with spacing, aligning them on the cross axis.
 
     Args:
@@ -536,7 +536,7 @@ def _spread_opts(*, by: Optional[Any] = None, dir: Optional[str] = None, spacing
         spacing: Gap between children, px. Default 8.
         alignment: Cross-axis alignment ("start" | "middle" | "end" | "baseline"). Default "baseline".
         sharedScale: Default false.
-        mode: Default "edge".
+        anchor: Default "edge".
         reverse: Default false.
         glue: Stack semantics: children glued, sizes sum; spacing forced to 0. Default false.
         w: Data-driven cross-axis extent (field/datum-sized children).
@@ -551,7 +551,7 @@ def _spread_opts(*, by: Optional[Any] = None, dir: Optional[str] = None, spacing
         ("spacing", spacing),
         ("alignment", alignment),
         ("sharedScale", sharedScale),
-        ("mode", mode),
+        ("anchor", anchor),
         ("reverse", reverse),
         ("glue", glue),
         ("axes", axes),
@@ -564,7 +564,7 @@ def _spread_opts(*, by: Optional[Any] = None, dir: Optional[str] = None, spacing
             opts[_k] = _v
     return opts
 
-def _stack_opts(*, by: Optional[Any] = None, dir: Optional[str] = None, spacing: Optional[float] = None, glue: Optional[bool] = None, alignment: Optional[str] = None, sharedScale: Optional[bool] = None, mode: Optional[str] = None, reverse: Optional[bool] = None, axes: Optional[Any] = None, w: Optional[Union[int, float, str]] = None, h: Optional[Union[int, float, str]] = None, size: Optional[Union[int, float, str]] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
+def _stack_opts(*, by: Optional[Any] = None, dir: Optional[str] = None, spacing: Optional[float] = None, glue: Optional[bool] = None, alignment: Optional[str] = None, sharedScale: Optional[bool] = None, anchor: Optional[str] = None, reverse: Optional[bool] = None, axes: Optional[Any] = None, w: Optional[Union[int, float, str]] = None, h: Optional[Union[int, float, str]] = None, size: Optional[Union[int, float, str]] = None, debug: Optional[bool] = None) -> Dict[str, Any]:
     """`spread({ glue: true })` under its own wire tag — children glued together (touching, no gaps).
 
     Args:
@@ -574,7 +574,7 @@ def _stack_opts(*, by: Optional[Any] = None, dir: Optional[str] = None, spacing:
         glue: Spread-parity passthrough; stack always glues regardless.
         alignment: Default "baseline".
         sharedScale: Default false.
-        mode: Default "edge".
+        anchor: Default "edge".
         reverse: Default false.
         w: Data-driven cross-axis extent (field/datum-sized children).
         h: Data-driven cross-axis extent (field/datum-sized children).
@@ -589,7 +589,7 @@ def _stack_opts(*, by: Optional[Any] = None, dir: Optional[str] = None, spacing:
         ("glue", glue),
         ("alignment", alignment),
         ("sharedScale", sharedScale),
-        ("mode", mode),
+        ("anchor", anchor),
         ("reverse", reverse),
         ("axes", axes),
         ("w", w),

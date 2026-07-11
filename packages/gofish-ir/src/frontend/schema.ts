@@ -250,7 +250,7 @@ export interface SpreadOperator
   spacing?: number;
   alignment?: string;
   sharedScale?: boolean;
-  mode?: "edge" | "center";
+  anchor?: "edge" | "start" | "middle" | "end" | "baseline";
   reverse?: boolean;
   /** Stack semantics: glue children together (sizes sum into a position at
    *  this level) instead of slicing a budget. Forces `spacing` to 0. */
@@ -285,7 +285,7 @@ export interface StackOperator
   glue?: boolean;
   alignment?: string;
   sharedScale?: boolean;
-  mode?: "edge" | "center";
+  anchor?: "edge" | "start" | "middle" | "end" | "baseline";
   reverse?: boolean;
   /** Data-driven operator extent (#4/#20): a field name or pixel number sizing
    *  this operator's box, reported as a SIZE claim to the enclosing scale. */

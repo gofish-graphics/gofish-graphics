@@ -35,7 +35,7 @@ export const testPolarCenterStackedBar = () =>
         spacing: (2 * Math.PI) / 3,
         alignment: "start",
         sharedScale: true,
-        mode: "center",
+        anchor: "middle",
       },
       Object.entries(_.groupBy(data, "category")).map(([category, items]) =>
         stack({ dir: 0,

@@ -10,6 +10,7 @@ import {
 import chunk from "lodash/chunk";
 import { GoFishNode } from "../_node";
 import type { MaybeValue, Value } from "../data";
+import type { FieldExpr } from "../fieldExpr";
 import { GoFishRef } from "../_ref";
 import type { GoFishAST } from "../_ast";
 import type { Token } from "../createName";
@@ -581,9 +582,13 @@ export type LineOptions = {
   // in `.mark()` position elaborates to `.mark(blank({w,h,emX,emY})).layer(line(opts))`
   // (see `createRelationalMark`'s `tagRelationalFusable`). Purely spatial —
   // `line`'s own `produce` ignores them; they only size/position the
-  // invisible anchor blank() the sugar synthesizes.
-  w?: number | string;
-  h?: number | string;
+  // invisible anchor blank() the sugar synthesizes. Accepts the same
+  // channel-value shapes as a leaf mark's "size" channel (e.g. rect's `h`) —
+  // a field name, a `Value<number>`, or a `field(...)` pipeline like
+  // `field("count").sum()` — since they're forwarded verbatim to the
+  // synthesized `blank()`, which evaluates them the same way.
+  w?: number | string | Value<number> | FieldExpr;
+  h?: number | string | Value<number> | FieldExpr;
   emX?: boolean;
   emY?: boolean;
 };
@@ -633,9 +638,13 @@ export type RibbonOptions = {
   // in `.mark()` position elaborates to `.mark(blank({w,h,emX,emY})).layer(ribbon(opts))`
   // (see `createRelationalMark`'s `tagRelationalFusable`). Purely spatial —
   // `ribbon`'s own `produce` ignores them; they only size/position the
-  // invisible anchor blank() the sugar synthesizes.
-  w?: number | string;
-  h?: number | string;
+  // invisible anchor blank() the sugar synthesizes. Accepts the same
+  // channel-value shapes as a leaf mark's "size" channel (e.g. rect's `h`) —
+  // a field name, a `Value<number>`, or a `field(...)` pipeline like
+  // `field("count").sum()` — since they're forwarded verbatim to the
+  // synthesized `blank()`, which evaluates them the same way.
+  w?: number | string | Value<number> | FieldExpr;
+  h?: number | string | Value<number> | FieldExpr;
   emX?: boolean;
   emY?: boolean;
 };
@@ -677,8 +686,12 @@ export function blank<T extends Record<string, any>>({
 }: {
   emX?: boolean;
   emY?: boolean;
-  w?: number | (keyof T & string);
-  h?: number | (keyof T & string);
+  // Same channel-value shapes rect's "size" channel accepts (see
+  // `DeriveMarkProps` in channels.ts) — blank() delegates straight to
+  // `rect` below, so a field name, `Value<number>`, or `field(...)`
+  // pipeline (e.g. `field("count").sum()`) evaluates identically.
+  w?: number | (keyof T & string) | Value<number> | FieldExpr;
+  h?: number | (keyof T & string) | Value<number> | FieldExpr;
   rx?: number;
   ry?: number;
   fill?: string | (keyof T & string);

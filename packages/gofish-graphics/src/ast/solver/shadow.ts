@@ -9,7 +9,7 @@
  * Coverage = PLACEMENT COMPOSITION (does the box-key model reproduce the engine's
  * absolute positions given each child's size?) plus the σ-SCOPE frame equation
  * (does content(σ)=allocated close where σ is solved?). The placement checks span
- * `distribute` (edge AND center, including pre-placed/data-positioned chains via
+ * `distribute` (edge AND fixed-pitch anchors, including pre-placed/data-positioned chains via
  * the pack/consistency-check boundary), `align`, `position`, `nest`
  * (inner centered in outer), and `grid` (equal-track cell centers). The frame check
  * runs at every σ-scope root: the render root (`gofish.tsx`), a shared/self-scaled
@@ -25,6 +25,7 @@ import { computeAesthetic, envFlag } from "../../util";
 import { pxOf } from "../domain";
 import { localAnchorPoint } from "../dims";
 import type { ConstraintSpec, ConstraintPosScales } from "../constraints";
+import type { AlignAnchor } from "../constraints/shared";
 import { distributePlacementAnchors } from "../constraints/distribute";
 import { isCONTINUOUS, type UnderlyingSpace } from "../underlyingSpace";
 
@@ -49,7 +50,7 @@ interface DistributeLike {
   type?: string;
   dir: Axis;
   spacing: number;
-  mode: "edge" | "center";
+  anchor: AlignAnchor | "edge";
   order: "forward" | "reverse";
 }
 
@@ -58,10 +59,11 @@ interface DistributeLike {
  * distribute lowers to a chain of anchored relations (`distribute.ts`): between
  * consecutive targets in placement order, the `to`-anchor of the later child
  * equals the `from`-anchor of the earlier one plus `spacing`. The two anchors
- * are mode-dependent — `edge` uses `prev.max → cur.min` (contiguity), `center`
- * uses `prev.center → cur.center` (center-to-center) — read here through the
- * same box-key model (`anchorCoord`) `align`/`position` use, so this covers BOTH
- * modes with one relation.
+ * are anchor-dependent — `edge` uses `prev.max → cur.min` (contiguity); the
+ * fixed-pitch anchors (`start`/`middle`/`end`/`baseline`) use `prev.<anchor> →
+ * cur.<anchor>` (anchor-to-anchor) — read here through the same box-key model
+ * (`anchorCoord`) `align`/`position` use, so this covers every anchor with one
+ * relation.
  *
  * The consistency-check-not-pack boundary (the violin case). Distribute only
  * PACKS children it places; a chain edge whose BOTH endpoints arrived
@@ -88,9 +90,9 @@ export function shadowCheckDistribute(
   if (constraint.order === "reverse") order.reverse();
   if (order.length < 2) return;
 
-  // Mode picks the anchor pair the lowering relates: edge = prev.max→cur.min,
-  // center = prev.center→cur.center.
-  const anchors = distributePlacementAnchors(constraint.mode);
+  // The constraint's anchor picks the anchor pair the lowering relates:
+  // edge = prev.max→cur.min, fixed-pitch = prev.<anchor>→cur.<anchor>.
+  const anchors = distributePlacementAnchors(constraint.anchor);
 
   for (let k = 1; k < order.length; k++) {
     const pi = order[k - 1];
@@ -106,7 +108,7 @@ export function shadowCheckDistribute(
     // toOff`, i.e. anchor-point + gap).
     if (Math.abs(to - (from + constraint.spacing)) > 1e-6) {
       report(
-        `distribute.${constraint.mode} dir=${constraint.dir}`,
+        `distribute.${constraint.anchor} dir=${constraint.dir}`,
         to,
         from + constraint.spacing
       );

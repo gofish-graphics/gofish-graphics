@@ -275,7 +275,7 @@ export const LabeledNestedBoxes: StoryObj<Args> = {
 //    sophisticated radial layout algorithm a la d3-hierarchy).
 //
 // Nodes stay as `circle({r: 8})` — they're points in the polar transform,
-// only their center sweeps through. `mode: "center"` on every spread
+// only their center sweeps through. `anchor: "middle"` on every spread
 // ignores bbox widths and uses spacing in domain units (radians for theta,
 // r-units for radius).
 // Sunburst — root at the center, leaves at the outer ring, each tree level
@@ -497,21 +497,21 @@ export const RadialNodes: StoryObj<Args> = {
           }),
         link: { curve: "straight", stroke: "#90a4ae", strokeWidth: 1.5 },
         // distribute on y forward order: parent at LOW y → r=0 (canvas
-        // center), children at HIGH y → outer rings. mode:"center" treats
+        // center), children at HIGH y → outer rings. anchor: "middle" treats
         // children as points (no bbox accumulation) and reads spacing in
         // domain units — r-units here for the radial direction.
         parentChild: distribute({
           dir: "y",
           spacing: 70,
-          mode: "center",
+          anchor: "middle",
           alignment: "middle",
         }),
-        // mode:"center" again for theta — spacing in radians between
+        // anchor: "middle" again for theta — spacing in radians between
         // sibling centers.
         sibling: distribute({
           dir: "x",
           spacing: (2 * Math.PI) / 3,
-          mode: "center",
+          anchor: "middle",
           alignment: "middle",
         }),
         coord: polar(),

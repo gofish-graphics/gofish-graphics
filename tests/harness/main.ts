@@ -870,11 +870,15 @@ function renderChart(spec: HarnessSpec) {
           debug: debug ?? false,
         });
       } else if (spec.type === "layer") {
-        // Layer-level options: w/h/axes/debug are render options; the rest
-        // (coord, color) become Layer's chart-level options.
+        // Layer-level options: w/h/axes/debug/padding are render options; the
+        // rest (coord, color) become Layer's chart-level options. `padding` is
+        // a render option in JS (`.render(container, { w, h, padding })` —
+        // GoFishOptions.padding), so it must be forwarded to render, not
+        // folded into the Layer's chart options where it is inert.
         const layerAll = spec.options || {};
-        const { w, h, axes, debug, ...layerOptsRaw } = layerAll;
+        const { w, h, axes, debug, padding, ...layerOptsRaw } = layerAll;
         const layerOpts = resolveOptions(layerOptsRaw);
+        const paddingOpt = padding !== undefined ? { padding } : {};
 
         // A tier is a chart (ChartBuilder) or a component-level annotation
         // (raw-mark → a Mark). Build each accordingly; the builder chain stacks
@@ -919,6 +923,7 @@ function renderChart(spec: HarnessSpec) {
             h,
             axes: axes ?? false,
             debug: debug ?? false,
+            ...paddingOpt,
           } as any);
         } else if (spec.builder) {
           // v3 `chart(...).layer(...)` chain: reconstruct through the real
@@ -945,6 +950,7 @@ function renderChart(spec: HarnessSpec) {
             h,
             ...(axes !== undefined ? { axes } : {}),
             debug: debug ?? false,
+            ...paddingOpt,
           } as any);
         } else {
           const layerNode =
@@ -957,6 +963,7 @@ function renderChart(spec: HarnessSpec) {
             h,
             axes: axes ?? false,
             debug: debug ?? false,
+            ...paddingOpt,
           } as any);
         }
       } else {
