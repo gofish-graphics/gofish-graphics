@@ -193,7 +193,7 @@ const distribute = (names: string[]): DistributeConstraint => ({
   type: "distribute",
   dir: "x",
   spacing: 5,
-  mode: "edge",
+  anchor: "edge",
   order: "forward",
   glue: false,
   children: names.map(child),

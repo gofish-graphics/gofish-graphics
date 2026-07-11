@@ -70,7 +70,7 @@ export const FlowerTree: StoryObj = {
           x: {
             kind: "distribute",
             spacing: (2 * Math.PI) / 7,
-            mode: "center",
+            anchor: "middle",
           },
           // r: siblings share a radius band.
           y: { kind: "align", alignment: "middle" },

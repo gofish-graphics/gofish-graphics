@@ -291,7 +291,13 @@ filter graphs and assigning their deterministic def ids.
 
 The orchestrator `render()` in `gofish.tsx` is now small. It computes the gutter
 reserves, builds the y-DOWN base map plus a per-scope mirror factory (`toPixelFor`),
-and paints the lowered list into an `<svg>`. Orientation is decided **per draw entry**
+and paints the lowered list into an `<svg>`. The y gutter sides keep the historical
+mapping (top ← layout-max past `finalH`, bottom ← negative layout min) except when
+the tree carries a fixed-pitch painted-top spill (`_pitchPaintedTopSpill`, stamped by
+layer.tsx's `paintedYBand` — a ridgeline's amplitude allowance above its first
+baseline): an unflipped root then reserves that negative min as the painted TOP
+gutter and the max-side chrome as the bottom one — see
+[Underlying Space](/internals/core/underlying-space). Orientation is decided **per draw entry**
 by the bake walk (each entry carries its `FlipScope`), so `render()` does not pick a
 single global map; it only threads the base map and the `ambientFlip` that
 `options.yUp` (`LayoutData.yUp`) forces. The canvas frame the root scope mirrors about

@@ -56,7 +56,7 @@ import { combine, byDepth, mount } from "./_shared";
 //     The reference's right-angle "step" corners therefore render as straight
 //     segments, which bow into arcs under the polar transform (a straight
 //     cartesian edge maps to a polar arc).
-//  5. mode:"center" on every distribute treats circles as points (no bbox
+//  5. anchor: "middle" on every distribute treats circles as points (no bbox
 //     accumulation) so spacing reads in domain units — radians for θ, r-units
 //     for r.
 const meta: Meta = { title: "GoTree / Gallery / OakTreeVis" };
@@ -81,15 +81,19 @@ export const OakTreeVis: StoryObj = {
           y: {
             kind: "distribute",
             spacing: 60,
-            mode: "center",
+            anchor: "middle",
             alignment: "middle",
           },
         }),
         sibling: combine({
           // θ: fan siblings angularly (radians between centers, center mode).
-          x: { kind: "distribute", spacing: (2 * Math.PI) / 6, mode: "center" },
+          x: {
+            kind: "distribute",
+            spacing: (2 * Math.PI) / 6,
+            anchor: "middle",
+          },
           // r: stagger siblings radially — the spiral/oak stagger (dsl flatten).
-          y: { kind: "distribute", spacing: 30, mode: "center" },
+          y: { kind: "distribute", spacing: 30, anchor: "middle" },
         }),
         coord: polar(),
       },

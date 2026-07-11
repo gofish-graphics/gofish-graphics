@@ -11,7 +11,7 @@ export const stackYTemplate = (
     spacing?: number;
     alignment?: "start" | "middle" | "end";
     sharedScale?: boolean;
-    mode?: "edge" | "center";
+    anchor?: "edge" | "start" | "middle" | "end" | "baseline";
     reverse?: boolean;
   } & FancyDims & { groupBy?: { field: string; sort?: string[] } },
   children: (d: any, i?: string | number) => any

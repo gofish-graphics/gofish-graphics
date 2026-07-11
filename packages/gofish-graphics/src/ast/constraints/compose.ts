@@ -252,7 +252,7 @@ export function composeConstraintSpaces(
   // here, so bail to the layer's default union.
   type Seg = DistributeSegment & {
     idx: number[];
-    mode: "edge" | "center";
+    anchor: AlignAnchor | "edge";
     glue: boolean;
     measure?: string;
   };
@@ -267,7 +267,7 @@ export function composeConstraintSpaces(
       spacing: d.spacing,
       order: ordered.map((r) => r.name),
       idx,
-      mode: d.mode,
+      anchor: d.anchor,
       glue: d.glue,
       measure: d.measure,
     });
@@ -329,7 +329,7 @@ export function composeConstraintSpaces(
         s.idx.map(keyOf),
         {
           spacing: s.spacing,
-          mode: s.mode,
+          anchor: s.anchor,
           glue: s.glue,
           measure: s.measure,
           anonymous: s.idx.length > 0 && s.idx.every(syntheticOf),

@@ -30,7 +30,7 @@ import { combine, byDepth, mount, sampleTree } from "./_shared";
 //    wrap. Sizes/spacings are hand-tuned for `sampleTree` (8 leaves).
 //  - nest-on-r (embedded radial dimension) is rough: combine() applies the
 //    parentChild x-distribute to [parent, childGroup] too, so I use
-//    spacing:0/mode:"center" there to keep the parent θ-centered over its
+//    spacing:0/anchor: "middle" there to keep the parent θ-centered over its
 //    subtree rather than juxtaposed beside it. True GoTree juxtapose offsets
 //    the parent angularly; that isn't faithfully reproducible without angular
 //    allocation. The radial embedding (nest y) is the load-bearing mapping.
@@ -73,13 +73,13 @@ export const ViolinTree: StoryObj = {
         // spacing:0/center on θ keeps parent θ-centered over its subtree (see
         // NOTES); nest on r grows the parent's rect to embed the subtree.
         parentChild: combine({
-          x: { kind: "distribute", spacing: 0, mode: "center" },
+          x: { kind: "distribute", spacing: 0, anchor: "middle" },
           y: { kind: "nest", pad: 6 },
         }),
         // sibling: X flatten → distribute θ ; Y flatten → distribute r.
         sibling: combine({
-          x: { kind: "distribute", spacing: LEAF_THETA, mode: "center" },
-          y: { kind: "distribute", spacing: 0, mode: "center" },
+          x: { kind: "distribute", spacing: LEAF_THETA, anchor: "middle" },
+          y: { kind: "distribute", spacing: 0, anchor: "middle" },
         }),
         coord: polar(),
       },

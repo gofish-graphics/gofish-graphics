@@ -61,7 +61,7 @@ export const testPolarCenterRibbon = (size: { width: number; height: number }) =
             spacing: (2 * Math.PI) / 8,
             alignment: "start",
             sharedScale: true,
-            mode: "center",
+            anchor: "middle",
           },
           Object.entries(_.groupBy(data, "category")).map(([category, items]) =>
             stack({ dir: 0,

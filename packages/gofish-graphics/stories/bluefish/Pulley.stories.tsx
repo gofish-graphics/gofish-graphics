@@ -131,9 +131,9 @@ export const Pulley: StoryObj<Args> = {
 
         // vertical placement: y-down free space matches Bluefish's ttb order
         // (ceiling on top, pulleys below, weights at the bottom) — #143/#16.
-        Constraint.distribute({ dir: "y", spacing: 40, mode: "edge" }, [c.ceiling, c.B]),
-        Constraint.distribute({ dir: "y", spacing: 30, mode: "edge" }, [c.B, c.A]),
-        Constraint.distribute({ dir: "y", spacing: 50, mode: "edge" }, [c.B, c.C]),
+        Constraint.distribute({ dir: "y", spacing: 40, anchor: "edge" }, [c.ceiling, c.B]),
+        Constraint.distribute({ dir: "y", spacing: 30, anchor: "edge" }, [c.B, c.A]),
+        Constraint.distribute({ dir: "y", spacing: 50, anchor: "edge" }, [c.B, c.C]),
 
         // ceiling centered over the cluster (substitute for Bluefish <Group>)
         Constraint.align({ x: "middle" }, [c.B, c.ceiling]),
@@ -141,9 +141,9 @@ export const Pulley: StoryObj<Args> = {
         // weights (negative spacing offsets each weight so its inset trapezoid
         // top sits under the rope source points — not natural anchor points,
         // so these stay as `distribute`)
-        Constraint.distribute({ dir: "y", spacing: 50, mode: "edge" }, [c.C, c.w2]),
-        Constraint.distribute({ dir: "x", spacing: -20, mode: "edge" }, [c.A, c.w2]),
-        Constraint.distribute({ dir: "x", spacing: -15, mode: "edge" }, [c.w1, c.A]),
+        Constraint.distribute({ dir: "y", spacing: 50, anchor: "edge" }, [c.C, c.w2]),
+        Constraint.distribute({ dir: "x", spacing: -20, anchor: "edge" }, [c.A, c.w2]),
+        Constraint.distribute({ dir: "x", spacing: -15, anchor: "edge" }, [c.w1, c.A]),
         Constraint.align({ y: "middle" }, [c.w2, c.w1]),
 
         // pulley letter labels — 1px gap from the wheel; the label sits on
@@ -156,7 +156,7 @@ export const Pulley: StoryObj<Args> = {
           ] as const
         ).flatMap(({ pulley, label, side, y }) => [
           Constraint.distribute(
-            { dir: "x", spacing: 1, mode: "edge" },
+            { dir: "x", spacing: 1, anchor: "edge" },
             side === "right" ? [pulley, label] : [label, pulley]
           ),
           Constraint.align({ y }, [pulley, label]),
@@ -217,7 +217,7 @@ export const Pulley: StoryObj<Args> = {
           { rope: c.ropeQ, label: c.labelQ, yAnchorTo: c.labelS },
           { rope: c.ropeP, label: c.labelP, yAnchorTo: c.labelS },
         ].flatMap(({ rope, label, yAnchorTo }) => [
-          Constraint.distribute({ dir: "x", spacing: 5, mode: "edge" }, [rope, label]),
+          Constraint.distribute({ dir: "x", spacing: 5, anchor: "edge" }, [rope, label]),
           Constraint.align({ y: "middle" }, [yAnchorTo, label]),
         ]),
 

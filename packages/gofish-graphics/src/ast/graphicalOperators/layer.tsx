@@ -44,6 +44,7 @@ import {
 } from "../constraints";
 import { GoFishRef, findPathToRoot } from "../_ref";
 import { childNameKey, type ConstraintPosScales } from "../constraints/shared";
+import { anchorOffset } from "../constraints/placementProgramLowerer";
 import {
   applyNestLayoutProposal,
   applyNestSpacePlan,
@@ -339,13 +340,14 @@ export const layer = createNodeOperatorSequential(
           // Stash the absorbed anchored extent and report UNDEFINED upward for
           // any dim with an explicit pixel size — self-scaling region; see
           // selfScaledSpaces above. (last write wins — may run more than once.)
-          // `node.selfScaledDims` mirrors the stash for the axis-demand walk
+          // `node.selfScaledSpace` mirrors the stash for the axis-demand walk
           // (issue #659): a stashed dim roots its own σ-scope, so an enclosing
-          // scope's nicing-demand walk must not descend past it.
+          // scope's nicing-demand walk must not descend past it (presence,
+          // not a separate boolean, is the "self-scaled" marker).
           selfScaledSpaces[0] = undefined;
           selfScaledSpaces[1] = undefined;
-          node.selfScaledDims[0] = false;
-          node.selfScaledDims[1] = false;
+          node.selfScaledSpace[0] = undefined;
+          node.selfScaledSpace[1] = undefined;
           for (const axis of [0, 1] as const) {
             const composed = resolved[axis];
             const dsize = dims[axis].size;
@@ -387,7 +389,15 @@ export const layer = createNodeOperatorSequential(
             // magnitude); a difference / ORDINAL is left untouched (no stash).
             if (hasBaseline(sp)) {
               selfScaledSpaces[axis] = sp;
-              node.selfScaledDims[axis] = true;
+              // Persist the stashed space itself (presence IS the "self-scaled"
+              // marker) — `resolveAxes` reads this to detect SIBLING self-scaled regions
+              // that genuinely share one domain+extent (e.g. a spread's
+              // per-group scatter facets all given the same explicit pixel
+              // width over the same padded data domain), so it can hoist a
+              // single axis claim to their common ancestor instead of letting
+              // each self-scaled sibling either draw its own duplicate or
+              // (since its space reports UNDEFINED upward) draw none at all.
+              node.selfScaledSpace[axis] = sp;
               resolved[axis] = UNDEFINED;
             }
           }
@@ -676,6 +686,45 @@ export const layer = createNodeOperatorSequential(
 
           // Calculate the bounding box of all children (NaN-safe; see
           // foldFinite for why undefined extents are skipped).
+          //
+          // A FIXED-PITCH chained child (`Placeable.pitchAnchorY`) that will
+          // self-mirror at paint (continuous y — it opens its own y-up flip
+          // scope, mirroring about its chained anchor; see `scopeBox` in
+          // coordinateTransforms/bake.ts) truly occupies the MIRROR of its
+          // layout band about that anchor. Fold THAT band, so the layer's box
+          // gains the amplitude allowance on the side where content actually
+          // paints (above a baseline-chained ridge row) instead of phantom
+          // space on the other side (below the chain tail, where nothing ever
+          // paints — which pushed the x axis far below the last row). Exact
+          // no-op for `"middle"` (a band mirrored about its own center is
+          // itself). Assumes no enclosing y-up scope is active above the chain
+          // — the fixed-pitch-under-ordinal-spread case; inside a whole-plot
+          // flip the rows would inherit that scope instead of self-mirroring,
+          // and the plain layout band would be the honest one.
+          const paintedYBand = (
+            cp: (typeof childPlaceables)[number]
+          ): { min: number | undefined; max: number | undefined } => {
+            const d = cp.dims[1];
+            const band = { min: d.min, max: d.max };
+            const gn = cp instanceof GoFishNode ? cp : undefined;
+            const anchor = gn?.pitchAnchorY;
+            if (anchor === undefined || d.min === undefined) return band;
+            const sy = gn?._underlyingSpace?.[1];
+            const selfMirrors =
+              sy !== undefined &&
+              isCONTINUOUS(sy) &&
+              gn?._scopeTransparent !== true &&
+              gn?._ambientYDown !== true;
+            if (!selfMirrors) return band;
+            const off = anchorOffset(gn!, "y", anchor);
+            if (off === undefined || d.max === undefined) return band;
+            const a = d.min + off;
+            return { min: 2 * a - d.max, max: 2 * a - d.min };
+          };
+          // Compute each child's painted y-band ONCE (it's otherwise called
+          // twice per child below — once for the min fold, once for the max —
+          // and each call re-derives `anchorOffset`/`localAnchor` internally).
+          const paintedYBands = childPlaceables.map(paintedYBand);
           const minX = foldFinite(
             childPlaceables.map((cp) => cp.dims[0].min),
             Math.min
@@ -685,13 +734,44 @@ export const layer = createNodeOperatorSequential(
             Math.max
           );
           const minY = foldFinite(
-            childPlaceables.map((cp) => cp.dims[1].min),
+            paintedYBands.map((b) => b.min),
             Math.min
           );
           const maxY = foldFinite(
-            childPlaceables.map((cp) => cp.dims[1].max),
+            paintedYBands.map((b) => b.max),
             Math.max
           );
+          // Record how far the painted-band fold extended this box ABOVE the
+          // plain layout fold (the pitch chain's amplitude allowance — e.g.
+          // January's peak above the first baseline). `render()` reads this
+          // (via `_pitchPaintedTopSpill`, propagated as a SUBTREE max below) to
+          // know the root's negative y min is PAINTED-TOP content and reserve
+          // the top gutter for it; without the stamp the legacy overhang
+          // mapping applies. Stamped unconditionally so no stale spill
+          // survives a re-layout.
+          const legacyMinY = foldFinite(
+            childPlaceables.map((cp) => cp.dims[1].min),
+            Math.min
+          );
+          const ownSpill =
+            minY !== undefined && legacyMinY !== undefined && minY < legacyMinY
+              ? legacyMinY - minY
+              : 0;
+          // Propagate as a SUBTREE max: a nested layer already stamped its own
+          // (subtree-max) spill on itself by the time its `.layout()` returned
+          // (children are laid out before their parent), so folding over
+          // `childPlaceables` here picks up any deeper spill too — the root
+          // check in `gofish.tsx` becomes an O(1) field read instead of a
+          // fresh recursive walk down the whole tree. `foldFinite` defaults to
+          // 0 with no finite inputs, matching "no spill anywhere".
+          const childSpill = foldFinite(
+            childPlaceables.map((cp) =>
+              cp instanceof GoFishNode ? cp._pitchPaintedTopSpill : undefined
+            ),
+            Math.max
+          );
+          const spill = Math.max(ownSpill, childSpill);
+          node._pitchPaintedTopSpill = spill > 0 ? spill : undefined;
 
           const scaleX = options.transform?.scale?.x ?? 1;
           const scaleY = options.transform?.scale?.y ?? 1;

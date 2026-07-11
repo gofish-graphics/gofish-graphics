@@ -117,7 +117,7 @@ const ControlDot = () => circle({ r: 5, fill: "black" });
 // (An earlier version of this port used a zero-width leader on the theory
 // that the spread's spacing replaced Bluefish's rect; that lost 10px on the
 // left and produced lopsided 10/30 stubs.) Tried first: a
-// `Constraint.distribute({dir:"x", spacing:10, mode:"edge"})` between `line`
+// `Constraint.distribute({dir:"x", spacing:10, anchor: "edge"})` between `line`
 // and `gates`. `distribute` SEQUENCES its participants — edge mode places
 // the next one after the previous one's far edge, like a flow layout — it
 // does not overlap them with an offset, so `gates` landed after the rail's

@@ -3,6 +3,7 @@
 // </gofish-wiki>
 
 import type { Axis, AlignAnchor, ConstraintRef } from "./shared";
+import type { Placeable } from "../_node";
 import { getMeasure, getValue, isValue, type MaybeValue } from "../data";
 import type { PlacementFactEmitter } from "./placementFacts";
 import {
@@ -23,7 +24,14 @@ import * as Interval from "../../util/interval";
 export interface DistributeOptions {
   dir: Axis;
   spacing?: number;
-  mode?: "edge" | "center";
+  /** How adjacent children in the chain relate:
+   *  - `"edge"` (default): `start[i+1] = end[i] + spacing` — spacing is the gap
+   *    between facing edges (content-dependent).
+   *  - `"start" | "middle" | "end" | "baseline"`: fixed-pitch anchor chaining —
+   *    `anchor[i+1] = anchor[i] + spacing` — spacing is a fixed,
+   *    content-independent anchor-to-anchor pitch. `"middle"` is the old
+   *    center-to-center mode. */
+  anchor?: AlignAnchor | "edge";
   order?: "forward" | "reverse";
   /** Stack semantics: glue children together (sizes sum into a POSITION at the
    *  layer) instead of slicing a budget. Forces `spacing` to 0. Mirrors
@@ -38,7 +46,7 @@ export interface DistributeConstraint {
   type: "distribute";
   dir: Axis;
   spacing: number;
-  mode: "edge" | "center";
+  anchor: AlignAnchor | "edge";
   order: "forward" | "reverse";
   glue: boolean;
   children: ConstraintRef[];
@@ -54,7 +62,7 @@ export const createDistributeConstraint = (
   // Glue pins spacing ≡ 0 for both the space fold and placement-solver
   // relations, so glued children touch.
   spacing: options.glue ? 0 : (options.spacing ?? 8),
-  mode: options.mode ?? "edge",
+  anchor: options.anchor ?? "edge",
   order: options.order ?? "forward",
   glue: options.glue ?? false,
   children,
@@ -71,14 +79,17 @@ export function distributeChildrenInPlacementOrder(
 }
 
 export function distributePlacementAnchors(
-  mode: DistributeConstraint["mode"]
+  anchor: DistributeConstraint["anchor"]
 ): {
   from: AlignAnchor;
   to: AlignAnchor;
 } {
-  return mode === "center"
-    ? { from: "middle", to: "middle" }
-    : { from: "end", to: "start" };
+  // Fixed-pitch anchors (start/middle/end/baseline) relate the SAME anchor on
+  // both sides of the chain edge (anchor[i+1] = anchor[i] + spacing); "edge"
+  // relates the facing edges (end of prev → start of cur).
+  return anchor === "edge"
+    ? { from: "end", to: "start" }
+    : { from: anchor, to: anchor };
 }
 
 export function lowerDistributePlacement(
@@ -90,7 +101,7 @@ export function lowerDistributePlacement(
     isInitiallyPlaced,
   }: {
     emitter: PlacementFactEmitter;
-    targets: Pick<Map<string, unknown>, "has">;
+    targets: Pick<Map<string, Placeable>, "has" | "get">;
     isInitiallyPlaced: (axis: Axis, name: string) => boolean;
   }
 ): void {
@@ -99,7 +110,19 @@ export function lowerDistributePlacement(
   );
   const ordered = distributeChildrenInPlacementOrder(constraint, children);
   if (ordered.length === 0) return;
-  const anchors = distributePlacementAnchors(constraint.mode);
+  const anchors = distributePlacementAnchors(constraint.anchor);
+  // A fixed-pitch chain on y is an OVERLAY, not a tiling: the targets' allocated
+  // y bands are just leftover slices, unrelated to where the chained anchor
+  // sits. Stamp the chained anchor on each target so a target that later opens
+  // its own y-up flip scope mirrors about that anchor (see `Placeable.
+  // pitchAnchorY` and `scopeBox` in coordinateTransforms/bake.ts) — keeping the
+  // painted anchors exactly where this chain solved them, at exact pitch.
+  if (constraint.anchor !== "edge" && constraint.dir === "y") {
+    for (const child of ordered) {
+      const target = targets.get(child.name);
+      if (target) target.pitchAnchorY = constraint.anchor;
+    }
+  }
   for (let i = 1; i < ordered.length; i++) {
     // A chain edge whose endpoints both arrived pre-positioned was a
     // consistency check/no-op in the legacy walk (not an owning relation).
@@ -137,8 +160,8 @@ export function lowerDistributePlacement(
  *    when all-SIZE; ORDINAL(keys) when any child is keyed; else UNDEFINED.
  *  - non-glue, all-SIZE & data-driven (some non-constant Monotonic) → SIZE
  *    composition (Monotonic.add + spacing·(n−1) for "edge"; the
- *    unknown-Monotonic center form for "center"), so a parent can solve a scale
- *    factor via Monotonic.inverse (auto-fit).
+ *    unknown-Monotonic fixed-pitch form for start/middle/end/baseline), so a
+ *    parent can solve a scale factor via Monotonic.inverse (auto-fit).
  *  - non-glue, any child keyed → ORDINAL.
  *  - non-glue, all-SIZE constant → SIZE composition.
  *  - non-glue, all-POSITION → POSITION([0, Σ widths]).
@@ -155,7 +178,7 @@ export function distributeSpaceFold(
   keys: (string | undefined)[],
   opts: {
     spacing: number;
-    mode: "edge" | "center";
+    anchor: AlignAnchor | "edge";
     glue?: boolean;
     /** Explicit size on the spread/layer's stack axis; overrides children. */
     size?: MaybeValue<number>;
@@ -213,15 +236,45 @@ export function distributeSpaceFold(
     : [];
   const dataDriven =
     allSize && childDomains.some((d) => !Monotonic.isConstant(d));
-  const composeSize = (): Monotonic.Monotonic =>
-    opts.mode === "center"
-      ? Monotonic.unknown(
-          (scaleFactor: number) =>
-            childDomains[0].run(scaleFactor) / 2 +
-            spacing * (n - 1) +
-            childDomains[childDomains.length - 1].run(scaleFactor) / 2
-        )
-      : Monotonic.adds(Monotonic.add(...childDomains), spacing * (n - 1));
+  // Fixed-pitch extents: `(n−1)·spacing` of chain plus an amplitude ALLOWANCE
+  // attributed to the side of the chain where content actually extends,
+  // relative to the chained anchor (the painted side — a fixed-pitch chain's
+  // rows mirror about their chained anchor at paint, see `pitchAnchorY`):
+  //  - "middle": content extends half above / half below every anchor — the
+  //    EXACT symmetric form `h_first/2 + (n−1)·s + h_last/2` (unchanged; the
+  //    original center mode).
+  //  - "baseline" / "start": content rises entirely ABOVE each anchor, so the
+  //    allowance sits above the chain HEAD: `max_k(h_k − k·s)⁺ + (n−1)·s`
+  //    (k in chain order — the binding row is whichever peak clears the rows
+  //    chained above it).
+  //  - "end": the mirror image — content hangs BELOW each anchor, allowance
+  //    below the chain TAIL: `max_k(h_k − (n−1−k)·s)⁺ + (n−1)·s`.
+  // The per-k max assumes each child's extent lies wholly on one side of its
+  // anchor (true for SIZE claims — baseline magnitudes) and that the fold's
+  // child order is the chain order (compose.ts passes placement order).
+  const composeSize = (): Monotonic.Monotonic => {
+    if (opts.anchor === "edge")
+      return Monotonic.adds(Monotonic.add(...childDomains), spacing * (n - 1));
+    if (opts.anchor === "middle")
+      return Monotonic.unknown(
+        (scaleFactor: number) =>
+          childDomains[0].run(scaleFactor) / 2 +
+          spacing * (n - 1) +
+          childDomains[childDomains.length - 1].run(scaleFactor) / 2
+      );
+    const anchor = opts.anchor;
+    return Monotonic.unknown((scaleFactor: number) => {
+      let allowance = 0;
+      for (let k = 0; k < n; k++) {
+        const pitchesFromAnchoredEnd = anchor === "end" ? n - 1 - k : k;
+        allowance = Math.max(
+          allowance,
+          childDomains[k].run(scaleFactor) - spacing * pitchesFromAnchoredEnd
+        );
+      }
+      return Math.max(0, allowance) + spacing * (n - 1);
+    });
+  };
 
   if (dataDriven) return SIZE(composeSize(), childMeasure);
   if (namedKeys.length > 0)

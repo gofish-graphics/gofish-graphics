@@ -172,6 +172,25 @@ The decision is one rule, `resolveNodeFlip(node, composedTy, incomingFlip)`:
   `_ambientYDown` chrome subtree renders in the ambient frame and is **box-mirrored** about
   the plot's frame — stamped directly on the chrome nodes by `layout()` as `_chromeFrame`
   (no walk-time search).
+- **Fixed-pitch exception.** A target chained by a fixed-pitch `distribute` on y
+  (`anchor: "baseline" | "start" | "middle" | "end"`) carries `pitchAnchorY` — the anchor the
+  chain related, stamped by `lowerDistributePlacement`. A fixed-pitch chain is an **overlay**,
+  not a tiling: the target's allocated band is just the leftover slice (`(h − (n−1)·pitch)/n`)
+  and bears no relation to where its chained anchor sits, so mirroring about it would displace
+  every painted anchor by the slice height (and a connector reading the same rows from outside
+  the scope by a _different_ amount — the ridgeline-wobble bug). Such a scope instead mirrors
+  about the chained anchor itself, a degenerate height-0 band: `y ↦ 2·anchor − y`, the unique
+  mirror that **fixes the chained anchor pointwise**. Painted anchors therefore sit exactly
+  where the placement solver chained them, at exact pitch, and content rises above its
+  baseline (a ridgeline row's silhouette grows up from its own zero line). The layout side
+  accounts for that painted extent too: the space fold attributes the chain's amplitude
+  allowance to the painted side (`composeSize` in constraints/distribute.ts), the enclosing
+  layer folds each such row's MIRRORED band into its bbox (`paintedYBand` in layer.tsx,
+  stamped as `_pitchPaintedTopSpill`), and `render()` reserves the resulting negative min as
+  a painted-TOP gutter — so the first baseline sits an allowance below the box top, the last
+  baseline lands at the box bottom with the x axis directly beneath it, and no story-side
+  padding is needed. See [Underlying Space](/internals/core/underlying-space) for the
+  per-anchor allowance formulas.
 
 Two places had to run this **same** rule so a subtree's orientation is stable no matter how
 it is wrapped:
@@ -187,8 +206,16 @@ it is wrapped:
   lowers each leaf under that leaf's own scope's `toPixel`. So a continuous-y bar chart inside
   an `enclose` still flips, while an ordinal neighbor beside it stays y-down. Single-orientation
   content inherits the boundary's flip and lowers byte-identically to the old single-map descent.
-  (A connector spanning _two different_ scopes is a known gap —
-  [#657](https://github.com/gofish-graphics/gofish-graphics/issues/657).)
+- **Relational connectors adopt their operands' scope.** A `connect` (the node behind
+  `line`/`ribbon`) paints its _operands'_ geometry, but it lives as a sibling tier outside
+  their subtrees — so when no scope is active at its own altitude it used to lower unflipped
+  even though its operands mirror inside their own scopes (per-row scopes under a fixed-pitch
+  distribute), drawing the band upside-down and displaced. `connectOperandFlip` handles the
+  **single-scope case**: when every operand lowers under the same scope (reconstructed by
+  re-running the scope decision along each operand's ancestor path below its common ancestor
+  with the connector), the connector adopts it. Operands under _different_ scopes (or none)
+  keep the old behavior — that multi-scope reconciliation is still the known gap
+  ([#657](https://github.com/gofish-graphics/gofish-graphics/issues/657)).
 
 ## Fitting the subtree to the coordinate budget
 

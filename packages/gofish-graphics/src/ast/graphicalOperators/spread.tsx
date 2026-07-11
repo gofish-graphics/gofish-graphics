@@ -15,7 +15,7 @@ import { createNodeOperator } from "../withGoFish";
 import { Alignment } from "./alignment";
 import { layer } from "./layer";
 import { Constraint } from "../constraints";
-import { ensureChildNames } from "../constraints/shared";
+import { ensureChildNames, type AlignAnchor } from "../constraints/shared";
 import { createOperator } from "../marks/createOperator";
 import { Mark, Operator } from "../types";
 import type { FieldExpr } from "../fieldExpr";
@@ -57,7 +57,7 @@ export const Spread = createNodeOperator(
       spacing = 8,
       alignment = "baseline",
       sharedScale = false,
-      mode = "edge",
+      anchor = "edge",
       reverse = false,
       glue = false,
       size,
@@ -70,7 +70,11 @@ export const Spread = createNodeOperator(
       spacing?: number;
       alignment?: Alignment;
       sharedScale?: boolean;
-      mode?: "edge" | "center";
+      /** How adjacent children relate on the stack axis: `"edge"` (default)
+       *  chains facing edges (spacing = gap); `"start"|"middle"|"end"|
+       *  "baseline"` chains that fixed anchor (spacing = anchor-to-anchor
+       *  pitch, content-independent). `"middle"` is the old `mode: "center"`. */
+      anchor?: AlignAnchor | "edge";
       reverse?: boolean;
       // When true, treat as a stack: glue children together, summing their
       // sizes into a POSITION at this level. `spacing` is ignored.
@@ -158,7 +162,7 @@ export const Spread = createNodeOperator(
           {
             dir: stackAxis,
             spacing: glue ? 0 : spacing,
-            mode,
+            anchor,
             glue,
             order: reverse ? "reverse" : "forward",
             // The grouping field for this (stack) axis → the ORDINAL space's
@@ -194,7 +198,11 @@ export type SpreadOptions<T = any> = {
   spacing?: number;
   alignment?: "start" | "middle" | "end" | "baseline";
   sharedScale?: boolean;
-  mode?: "edge" | "center";
+  /** How adjacent children relate on the stack axis: `"edge"` (default)
+   *  chains facing edges (spacing = gap); `"start"|"middle"|"end"|
+   *  "baseline"` chains that fixed anchor (spacing = anchor-to-anchor pitch,
+   *  content-independent). `"middle"` is the old `mode: "center"`. */
+  anchor?: AlignAnchor | "edge";
   reverse?: boolean;
   glue?: boolean;
   w?: number | (keyof T & string);

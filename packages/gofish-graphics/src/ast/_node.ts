@@ -1,5 +1,6 @@
 // <gofish-wiki> AUTO-GENERATED — see covers: in the essay; run `pnpm --filter docs sync-backlinks`
 // @wiki Underlying Space — /internals/core/underlying-space
+// @wiki Axes — /internals/frontend/axes
 // @wiki Color Scale Resolution — /internals/layout/color-scales
 // @wiki Overview — /internals/layout/passes
 // @wiki Architecture Overview — /internals/overview/architecture
@@ -166,6 +167,16 @@ export type Placeable = {
    *  `rect({})`), so the size cell is free for the constraint to own. Optional
    *  for the same reason as the other constraint write hooks. */
   spaceOn?: (dir: Direction) => UnderlyingSpace | undefined;
+  /** Stamped by a FIXED-PITCH `distribute` (`anchor` ≠ "edge") on `dir: "y"`:
+   *  the anchor the chain related on this target. A fixed-pitch chain is an
+   *  overlay, not a tiling — the target's allocated y band is just the leftover
+   *  slice and bears no relation to where its chained anchor sits — so if this
+   *  node later opens its own y-up flip scope, the scope mirrors about THIS
+   *  anchor (a point reflection; see `scopeBox` in coordinateTransforms/bake.ts)
+   *  rather than the allocated band. That keeps the PAINTED anchor coincident
+   *  with the solver's chained position, so `anchor: "baseline"` rows land on
+   *  their solved baselines at exact pitch. */
+  pitchAnchorY?: "start" | "middle" | "end" | "baseline";
 };
 
 /** Place a child at `(0, 0)` on whichever axes it hasn't already resolved a
@@ -270,6 +281,69 @@ const reportConflict = (type: string, dir: 0 | 1, c: BBoxConflict): void => {
  *  auto-claims on that dim. Ordinal owners record `"o:<keys>"` instead. */
 const AXIS_CLAIM_OPAQUE = "continuous";
 
+/** Signature for a node's own self-scaled (explicit-size) space on `dim`, or
+ *  `undefined` if the node isn't self-scaled there or its stashed space isn't
+ *  anchored/difference (see `GoFishNode.selfScaledSpace`). Two sibling
+ *  self-scaled nodes with equal signatures are genuinely viewing ONE shared
+ *  scale (same data domain, same σ-affine width, same measure) — e.g. a
+ *  `spread`'s per-group facets all given the same explicit pixel width over
+ *  the same padded data domain — as opposed to independent per-facet scales
+ *  that merely happen to be self-scaled too (a small-multiples chart with a
+ *  different domain per facet). Prefixed `"c:"` (parallel to the ordinal
+ *  `"o:<keys>"` signature) so a claim carrying this signature is
+ *  distinguishable from the generic {@link AXIS_CLAIM_OPAQUE} a plain
+ *  (non-self-scaled) continuous axis claims with. */
+function selfScaledAxisSignature(
+  node: GoFishNode,
+  dim: 0 | 1
+): string | undefined {
+  const s = node.selfScaledSpace[dim];
+  if (s === undefined || !(isPOSITION(s) || isDIFFERENCE(s))) return undefined;
+  return (
+    "c:" +
+    JSON.stringify({
+      d: s.dataDomain,
+      w: s.width,
+      m: s.measure,
+    })
+  );
+}
+
+/** If every one of `node`'s direct GoFishNode children is self-scaled on
+ *  `dim` with the SAME {@link selfScaledAxisSignature} (at least two of
+ *  them — a lone self-scaled child has no sibling to unify with), returns
+ *  that shared signature plus one representative child's real (anchored/
+ *  difference) space — the piece self-scaling normally throws away above the
+ *  child (it reports UNDEFINED upward so its parent's union / auto-fit sizing
+ *  ignores it; see `selfScaledSpace`'s doc comment). Returns `undefined` for
+ *  any mismatch (a differently-scaled sibling, a non-self-scaled sibling, or
+ *  fewer than two children) — the siblings do NOT genuinely share one scale,
+ *  so each keeps whatever per-sibling axis claim it would otherwise get. */
+function sharedSelfScaledChildSpace(
+  node: GoFishNode,
+  dim: 0 | 1
+): { sig: string; space: UnderlyingSpace } | undefined {
+  const kids = node.children.filter(
+    (c): c is GoFishNode => c instanceof GoFishNode
+  );
+  if (kids.length < 2) return undefined;
+  let sig: string | undefined;
+  let rep: UnderlyingSpace | undefined;
+  for (const kid of kids) {
+    const kidSig = selfScaledAxisSignature(kid, dim);
+    if (kidSig === undefined) return undefined;
+    if (sig === undefined) {
+      sig = kidSig;
+      rep = kid.selfScaledSpace[dim];
+    } else if (kidSig !== sig) {
+      return undefined;
+    }
+  }
+  return sig !== undefined && rep !== undefined
+    ? { sig, space: rep }
+    : undefined;
+}
+
 export class GoFishNode {
   public readonly uid: string;
   private static uidCounter = 0;
@@ -346,6 +420,17 @@ export class GoFishNode {
    *  scope opening deeper (a facet cell) has no stamp and mirrors about its own
    *  allocated band. `{baseY, height}` mirrors `FlipScope` in `_displayObject`. */
   public _rootFlipScope?: { baseY: number; height: number };
+  /** See {@link Placeable.pitchAnchorY} — the fixed-pitch distribute anchor this
+   *  node's y was chained at, consumed by the bake's flip-scope band decision. */
+  public pitchAnchorY?: "start" | "middle" | "end" | "baseline";
+  /** How far this layer's PAINTED-band bbox fold (`paintedYBand` in layer.tsx)
+   *  extended the box ABOVE the plain layout fold — the fixed-pitch chain's
+   *  amplitude allowance above the chain head (e.g. a ridgeline's January peak
+   *  above the first baseline). `render()` (gofish.tsx) checks the subtree for
+   *  this stamp to attribute the root's negative y min to the PAINTED TOP
+   *  gutter; absent, the legacy overhang-side mapping applies. Re-stamped
+   *  (or cleared) on every layout — no stale spill survives. */
+  public _pitchPaintedTopSpill?: number;
   /** The plot's flip frame a chrome subtree's BOX is mirrored about (issue #629).
    *  Stamped by `layout()` on each OUTERMOST `_ambientYDown` chrome node (axis
    *  title, legend column, colorbar) — the same value as the plot content's
@@ -406,13 +491,33 @@ export class GoFishNode {
    *  iff some node in the scope draws that dim's axis. Stamped by
    *  `resolveAxes` wherever it sets an owning (`true`) flag. */
   public axisDemand: [boolean, boolean] = [false, false];
-  /** Per-dim marker that this node roots its OWN σ-scope on the dim (a
-   *  self-scaled region: explicit pixel size absorbing a baseline space). Set
-   *  by `layer`'s space resolution alongside its stash; read by
-   *  `scopeRendersAxis` to stop the demand walk — an inner self-scaled
-   *  region's axis demand is served by its own solve, not the enclosing
-   *  scope's. */
-  public selfScaledDims: [boolean, boolean] = [false, false];
+  /** Per-dim: the real (anchored/difference) space that was stashed and
+   *  replaced with UNDEFINED for a self-scaled dim (explicit pixel size
+   *  absorbing a baseline space) — set by `layer`'s space resolution. A
+   *  self-scaled node's own `_underlyingSpace[dim]` is UNDEFINED (so an
+   *  ancestor's union ignores it), which is right for sizing but throws away
+   *  the one piece of information `resolveAxes` needs to tell a genuine
+   *  cross-sibling scale match from an incidental one: this field keeps that
+   *  real space reachable for the comparison, without touching
+   *  `_underlyingSpace`/layout at all. Presence (`!== undefined`) IS "this node
+   *  roots its own σ-scope on the dim" — read by `scopeRendersAxis` to stop the
+   *  demand walk — so there is no separate boolean to keep in sync. */
+  public selfScaledSpace: [
+    UnderlyingSpace | undefined,
+    UnderlyingSpace | undefined,
+  ] = [undefined, undefined];
+  /** Per-dim: a real (anchored/difference) space `resolveAxes` hoisted onto
+   *  this node from a set of self-scaled children that all share one
+   *  underlying scale (see `selfScaledSpace` and the sibling-unification
+   *  branch of `resolveAxes`). This node's own `_underlyingSpace[dim]` is
+   *  still UNDEFINED (self-scaling children collapse the union, and layout
+   *  must not be told otherwise); axis elaboration (`elaborationsFor` in
+   *  axes/elaborate.tsx) falls back to this field to compute nice bounds and
+   *  tick values for the single hoisted axis it draws in its place. */
+  public hoistedAxisSpace?: [
+    UnderlyingSpace | undefined,
+    UnderlyingSpace | undefined,
+  ];
   public _axisOverride?: { x?: boolean; y?: boolean };
   /** Explicit key→node map for ordinal axis label positioning. Set by
    * operators (e.g. table) whose domain keys differ from children's .key. */
@@ -839,11 +944,66 @@ export class GoFishNode {
           override !== false &&
           mySig !== undefined &&
           claimed.get(dim) === mySig;
-        const show = override !== false && !dupOrdinal;
+        // The continuous analogue: this node is one of several self-scaled
+        // SIBLING facets whose shared scale a parent already hoisted a single
+        // axis for (`sharedSelfScaledChildSpace`, below) — the parent claimed
+        // with THIS node's own self-scaled signature (not the generic
+        // {@link AXIS_CLAIM_OPAQUE}), so an exact signature match here means
+        // "an ancestor already drew the one axis this node's own local scale
+        // would draw." A mismatch (or no self-scaled signature at all) is NOT
+        // suppressed — an ordinary single global continuous scale, or an
+        // independent self-scaled facet (a small-multiples chart with its own
+        // per-facet domain) that merely happens to sit under an unrelated
+        // opaque claim, keeps its own override-forced axis exactly as before.
+        const mySelfScaledSig = selfScaledAxisSignature(this, dim);
+        const dupContinuous =
+          override !== false &&
+          mySig === undefined &&
+          mySelfScaledSig !== undefined &&
+          claimed.get(dim) === mySelfScaledSig;
+        const show = override !== false && !dupOrdinal && !dupContinuous;
         if (dim === 0) this.axis.x = show;
         else this.axis.y = show;
         if (show) this.axisDemand[dim] = true;
-        next.set(dim, mySig ?? AXIS_CLAIM_OPAQUE); // claim regardless — false blocks children too
+        // When this node's own space collapsed to UNDEFINED on `dim` (self-
+        // scaling swallowed it, or it unioned self-scaled children that did)
+        // but it's about to render an axis anyway (an explicit override),
+        // borrow a shared self-scaled child space for the ticks — see
+        // `hoistedAxisSpace`'s doc comment. Its signature (not the generic
+        // opaque one) is what the check above matches against.
+        let claimSig = mySig ?? AXIS_CLAIM_OPAQUE;
+        if (show && (s === undefined || isUNDEFINED(s))) {
+          const shared = sharedSelfScaledChildSpace(this, dim);
+          if (shared !== undefined) {
+            (this.hoistedAxisSpace ??= [undefined, undefined])[dim] =
+              shared.space;
+            claimSig = shared.sig;
+          }
+        }
+        next.set(dim, claimSig); // claim regardless — false blocks children too
+      } else if (
+        enabled.has(dim) &&
+        space &&
+        isUNDEFINED(space[dim]) &&
+        claimed.get(dim) === undefined
+      ) {
+        // No override here, and this node's own space collapsed to UNDEFINED
+        // on `dim` — normally a dead end (the natural-claim branch below
+        // requires a valid space). But if that collapse happened because
+        // every direct child is a self-scaled facet sharing ONE real scale
+        // (`sharedSelfScaledChildSpace`), this is exactly the unification
+        // case: claim the axis HERE, once, for the whole union, instead of
+        // leaving each sibling to independently claim (or, since each
+        // sibling's own space is equally UNDEFINED, claim nothing at all).
+        const shared = sharedSelfScaledChildSpace(this, dim);
+        if (shared !== undefined) {
+          if (dim === 0) this.axis.x = true;
+          else this.axis.y = true;
+          this.axisDemand[dim] = true;
+          (this.hoistedAxisSpace ??= [undefined, undefined])[dim] =
+            shared.space;
+          next.set(dim, shared.sig);
+        }
       } else if (enabled.has(dim) && space && !isUNDEFINED(space[dim])) {
         // A baseline magnitude ("free") owns no guide yet — only an anchored
         // (POSITION), unanchored (DIFFERENCE), or ORDINAL axis does.
@@ -897,7 +1057,7 @@ export class GoFishNode {
    * flows freely — every axis inside it is a view of the same underlying
    * domain, so a stamp anywhere in it is demand for every scope in it. It is
    * bounded by the two constructs that cut space flow:
-   *   - a self-scaled stash (`selfScaledDims`) — the stashed dim reports
+   *   - a self-scaled stash (`selfScaledSpace`) — the stashed dim reports
    *     UNDEFINED upward, so an ancestor's axis cannot be describing it (and,
    *     descending, a deeper stash roots its own region);
    *   - a coord boundary — a coord remaps its subtree into its own space
@@ -912,7 +1072,7 @@ export class GoFishNode {
   public scopeRendersAxis(dim: 0 | 1): boolean {
     let region: GoFishNode = this;
     while (
-      !region.selfScaledDims[dim] &&
+      region.selfScaledSpace[dim] === undefined &&
       region.parent !== undefined &&
       region.parent.type !== "coord"
     ) {
@@ -923,7 +1083,7 @@ export class GoFishNode {
 
   private walkAxisDemand(dim: 0 | 1, isScopeRoot: boolean): boolean {
     if (this.type === "coord") return false;
-    if (!isScopeRoot && this.selfScaledDims[dim]) return false;
+    if (!isScopeRoot && this.selfScaledSpace[dim] !== undefined) return false;
     if (this.axisDemand[dim]) return true;
     return this.children.some(
       (c) => c instanceof GoFishNode && c.walkAxisDemand(dim, false)

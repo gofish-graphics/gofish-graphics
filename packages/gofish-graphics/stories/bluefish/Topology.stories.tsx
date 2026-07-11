@@ -579,7 +579,7 @@ export const TopologyOverdraw: StoryObj<Args> = {
 // 6. `stack()` silently ignores `spacing` (its type comment says so — "the
 //    same as `spread` but never a gap") which is easy to reach for by
 //    analogy with `spread` and get flush-touching panels with no error.
-//    Switching to `spread({ mode: "edge" })` fixed it (the grid has since
+//    Switching to `spread({ anchor: "edge" })` fixed it (the grid has since
 //    moved off spread entirely — see item 7), but a runtime warning (or
 //    accepting the option as a no-op-with-warning) would have caught this
 //    immediately instead of via a visual diff.
@@ -591,7 +591,7 @@ export const TopologyOverdraw: StoryObj<Args> = {
 //    than their visible content (measured: a labeled panel's box bottom sat
 //    at outer-max + label-max, a polygon panel's at outer-max +
 //    polygon-max — a SUM, not a union), producing visibly uneven gutters in
-//    both `mode: "edge"` (uneven gaps) and `mode: "center"` (shifted
+//    both `anchor: "edge"` (uneven gaps) and `anchor: "middle"` (shifted
 //    middles, since the phantom shifts the bbox middle). Adding invisible
 //    y-mirrored counterweight children did NOT re-center the boxes, which
 //    rules out a simple bbox-union story and points at the size-proposal

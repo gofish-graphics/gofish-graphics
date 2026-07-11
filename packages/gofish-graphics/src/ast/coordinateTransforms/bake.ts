@@ -7,8 +7,10 @@ import type { DisplayObject, FlipScope } from "../_displayObject";
 import { mirrorY } from "../_displayObject";
 import type { Transform } from "../dims";
 import { GoFishNode } from "../_node";
+import { GoFishRef } from "../_ref";
 import { orderChildrenForPaint } from "../paintOrder";
 import { isCONTINUOUS } from "../underlyingSpace";
+import { BOX_ANCHOR } from "../constraints/placementProgramLowerer";
 
 /** The node's parent-frame translate as the bake should compose it, via the
  *  polymorphic `projectedTranslate`: a `GoFishNode` reports the LEDGER projection
@@ -199,9 +201,24 @@ const contentBboxBand = (node: GoFishAST, composedTy: number): FlipScope => {
  *  known), which is the exact frame the old global flip mirrored about — see
  *  `walk`. `scopeBox` is for scopes that open BELOW the canvas frame (a facet
  *  cell, a `coord`), which mirror about their own allocated band. Falls back to
- *  the content bbox extent when the axis is UNSIZED (allocated NaN). */
+ *  the content bbox extent when the axis is UNSIZED (allocated NaN).
+ *
+ *  FIXED-PITCH EXCEPTION: a target chained by a fixed-pitch `distribute` on y
+ *  (`anchor: "baseline" | "start" | "middle" | "end"`; see `Placeable.
+ *  pitchAnchorY`) is an OVERLAY row, not a tile — its allocated band is just the
+ *  leftover slice and bears no relation to its chained anchor. Its scope mirrors
+ *  about the chained anchor itself (a degenerate height-0 band: y ↦ 2·anchor −
+ *  y), the unique mirror that FIXES the anchor pointwise — so the painted
+ *  anchors sit exactly where the solver chained them, at exact pitch, and
+ *  content rises above its baseline instead of being displaced by the
+ *  meaningless slice height. */
 const scopeBox = (node: GoFishAST, composedTy: number): FlipScope => {
   const gn = node instanceof GoFishNode ? node : undefined;
+  const pitchAnchor = gn?.pitchAnchorY;
+  if (pitchAnchor !== undefined) {
+    const local = gn!.localAnchor("y", BOX_ANCHOR[pitchAnchor]);
+    if (local !== undefined) return { baseY: composedTy + local, height: 0 };
+  }
   const alloc = gn?._allocatedSize?.[1];
   // Allocated (coordinate-frame) extent: the band origin IS the frame origin
   // (`composedTy`). Unsized axis → fall back to the content bbox band, which
@@ -227,26 +244,129 @@ const scopeBox = (node: GoFishAST, composedTy: number): FlipScope => {
  *  run the SAME logic — one walk, not two — so adding a zOrder constraint (or
  *  wrapping in a bake boundary) can never change which scope a subtree lowers
  *  under. */
+/** Would `node` OPEN a y-up flip scope if none were active? The open condition
+ *  shared by {@link resolveNodeFlip} (the main walk) and {@link connectOperandFlip}
+ *  (re-running the scope decision along an operand's ancestor path) — the single
+ *  centralized copy of the condition. A `coord` opens its own scope (it fixes its
+ *  own orientation convention). This `type === "coord"` string dispatch is a
+ *  stopgap: the deeper fix is for `coord` to DECLARE its own orientation (a node
+ *  bit / its own y underlying space) so `declaredYUp` subsumes it — a follow-up to
+ *  #629, gated on the open polar/coord orientation redesign (#662). */
+const opensFlipScope = (node: GoFishAST): boolean => {
+  if (node instanceof GoFishNode && node._ambientYDown === true) return false;
+  const isCoord = (node as { type?: string }).type === "coord";
+  const scopeTransparent =
+    node instanceof GoFishNode && node._scopeTransparent === true;
+  return isCoord || (declaredYUp(node) && !scopeTransparent);
+};
+
 const resolveNodeFlip = (
   node: GoFishAST,
   composedTy: number,
   incomingFlip: FlipScope | undefined
 ): FlipScope | undefined => {
   if (incomingFlip !== undefined) return incomingFlip;
-  if (node instanceof GoFishNode && node._ambientYDown === true)
-    return undefined;
-  // A `coord` opens its own scope (it fixes its own orientation convention).
-  // This `type === "coord"` string dispatch is a stopgap: the deeper fix is for
-  // `coord` to DECLARE its own orientation (a node bit / its own y underlying
-  // space) so `declaredYUp` subsumes it — a follow-up to #629, gated on the open
-  // polar/coord orientation redesign (#662).
-  const isCoord = (node as { type?: string }).type === "coord";
-  const scopeTransparent =
-    node instanceof GoFishNode && node._scopeTransparent === true;
-  if (!(isCoord || (declaredYUp(node) && !scopeTransparent))) return undefined;
+  if (!opensFlipScope(node)) return undefined;
   const rootScope =
     node instanceof GoFishNode ? node._rootFlipScope : undefined;
   return rootScope ?? scopeBox(node, composedTy);
+};
+
+/**
+ * The #657 SINGLE-SCOPE case: a relational connector (`connect` — the node
+ * behind `line`/`ribbon`) paints its OPERANDS' geometry, but it lives as a
+ * sibling tier outside their subtrees, so when no scope is active at its own
+ * altitude it lowers unflipped even though its operands mirror inside their own
+ * scopes (e.g. per-row scopes under a fixed-pitch distribute) — drawing the
+ * band upside-down and displaced. When every operand lowers under the SAME
+ * scope, the connector must adopt it; operands under different scopes (or
+ * none) keep today's behavior (the deferred multi-scope case — see the
+ * LIMITATION note in connect.tsx's `lower`).
+ *
+ * `composedTy` is the connector's composed translate in this bake's frame; the
+ * operand scopes are reconstructed by re-running the scope decision along each
+ * operand's ancestor path below its common ancestor with the connector (the
+ * scope structure is a pure function of the tree, so this agrees with what the
+ * main walk assigns the operands themselves). Returns the shared scope, or
+ * `undefined` when there isn't exactly one.
+ */
+const connectOperandFlip = (
+  node: GoFishNode,
+  composedTy: number
+): FlipScope | undefined => {
+  const children = (node.children ?? []) as GoFishAST[];
+  if (children.length === 0) return undefined;
+
+  // The connector's ancestor chain, with the absolute y of each ancestor's
+  // FRAME: frameTy(A) = composedTy − Σ ownTy over the path from the connector
+  // up to (excluding) A.
+  //
+  // NOTE: this hand-rolls the ancestor walk rather than calling
+  // `findLeastCommonAncestor`/`findPathToRoot` (`_ref.tsx`) because the two are
+  // NOT drop-in here: `findLeastCommonAncestor(node, operand)` would return
+  // `node` itself when an operand happens to be a descendant of the connector
+  // (LCA of an ancestor/descendant pair is the ancestor), whereas this walk
+  // needs the least ancestor that is STRICTLY ABOVE the connector (`frameTy`
+  // is keyed by proper ancestors only, `node.parent` onward) — the per-operand
+  // scope has to be an ancestor common to *siblings*, not the connector's own
+  // subtree. Reusing the generic LCA would silently change which node is
+  // treated as the opener for that edge case.
+  const frameTy = new Map<GoFishNode, number>();
+  {
+    let acc = composedTy - (node.projectedTranslate(1) ?? 0);
+    let cur: GoFishNode | undefined = node.parent;
+    while (cur) {
+      frameTy.set(cur, acc);
+      acc -= cur.projectedTranslate(1) ?? 0;
+      cur = cur.parent;
+    }
+  }
+
+  let opener: GoFishNode | undefined;
+  let openerScope: FlipScope | undefined;
+  for (const child of children) {
+    const operand =
+      child instanceof GoFishRef
+        ? child.targetNode
+        : child instanceof GoFishNode
+          ? child
+          : undefined;
+    if (operand === undefined) return undefined;
+    // Path from the common ancestor down to the operand (exclusive of the
+    // ancestor, inclusive of the operand).
+    const path: GoFishNode[] = [];
+    let ca: GoFishNode | undefined;
+    for (let cur: GoFishNode | undefined = operand; cur; cur = cur.parent) {
+      if (frameTy.has(cur)) {
+        ca = cur;
+        break;
+      }
+      path.push(cur);
+    }
+    if (ca === undefined) return undefined;
+    // Walk top-down; the TOPMOST opener on the path is the operand's scope
+    // (the same first-opener-wins rule as the main walk).
+    let ty = frameTy.get(ca)!;
+    let found: GoFishNode | undefined;
+    let foundTy = 0;
+    for (let i = path.length - 1; i >= 0; i--) {
+      const n = path[i];
+      ty += n.projectedTranslate(1) ?? 0;
+      if (opensFlipScope(n)) {
+        found = n;
+        foundTy = ty;
+        break;
+      }
+    }
+    if (found === undefined) return undefined; // an unflipped operand → keep today's behavior
+    if (opener === undefined) {
+      opener = found;
+      openerScope = found._rootFlipScope ?? scopeBox(found, foundTy);
+    } else if (opener !== found) {
+      return undefined; // operands span different scopes (#657 deferral)
+    }
+  }
+  return openerScope;
 };
 
 /**
@@ -332,7 +452,16 @@ export const bake = (
     // active scope (no double flip). An `_ambientYDown` chrome node reads the
     // ambient seed (`ambientFlip`), so it flips only under a global `options.yUp`.
     const incomingFlip = ambient ? ambientFlip : flip;
-    const nodeFlip = resolveNodeFlip(node, composedTranslate[1], incomingFlip);
+    let nodeFlip = resolveNodeFlip(node, composedTranslate[1], incomingFlip);
+    // A relational connector with no scope of its own adopts its operands'
+    // unique scope (#657 single-scope case — see `connectOperandFlip`).
+    if (
+      nodeFlip === undefined &&
+      node instanceof GoFishNode &&
+      (node as { type?: string }).type === "connect"
+    ) {
+      nodeFlip = connectOperandFlip(node, composedTranslate[1]);
+    }
 
     if (!isTransparent(node)) {
       items.push({
