@@ -42,7 +42,7 @@ import {
  */
 
 // Visual constants — chosen to match the previous bespoke label styling.
-const DEFAULT_OFFSET = 10; // matches calculateLabelOffset's old baseOffset
+const DEFAULT_OFFSET = 6; // tuned down from the old 10px baseOffset now that the offset is real layout space
 const CONTENT_NAME = "__labelContent";
 const LABEL_FONT_FAMILY = "source-sans-pro, sans-serif";
 

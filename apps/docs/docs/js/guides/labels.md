@@ -72,7 +72,7 @@ Special values:
 | `position`   | `string`           | auto    | Label position (see above)                       |
 | `fontSize`   | `number`           | —       | Font size in pixels                              |
 | `color`      | `string`           | auto    | Text color (auto-contrasts against fill)         |
-| `offset`     | `number`           | `10`    | Distance from the shape edge                     |
+| `offset`     | `number`           | `6`     | Distance from the shape edge                     |
 | `rotate`     | `number`           | `0`     | Rotation in degrees (clockwise)                  |
 | `fontFamily` | `string`           | —       | Font family, passed straight through to the text |
 | `fontWeight` | `number \| string` | —       | Font weight (e.g. `"bold"` or `700`)             |
