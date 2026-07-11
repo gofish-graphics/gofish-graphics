@@ -21,7 +21,7 @@ rect(*, x=None, cx=None, x2=None, w=None, emX=None,
      y=None, cy=None, y2=None, h=None, emY=None,
      theta=None, thetaSize=None, r=None, rSize=None,
      fill=None, stroke=None, strokeWidth=None, opacity=None, filter=None,
-     rx=None, ry=None, aspectRatio=None, label=None, key=None) -> Mark
+     rx=None, ry=None, aspectRatio=None, key=None) -> Mark
 ```
 
 Closed signature — no catch-all `**kwargs`. An unrecognized keyword is a
@@ -31,21 +31,22 @@ see [Frontend IR](/internals/frontend/serialization#generating-the-python-factor
 
 ## Parameters
 
-| Parameter                          | Type            | Description                                                                   |
-| ---------------------------------- | --------------- | ----------------------------------------------------------------------------- |
-| `w`, `h`                           | `int` \| `str`  | Width / height — a constant or a field name                                   |
-| `fill`                             | `str`           | Fill color — a constant or a field name                                       |
-| `stroke`                           | `str`           | Stroke color                                                                  |
-| `strokeWidth`                      | `int`           | Stroke width in pixels                                                        |
-| `opacity`                          | `float`         | Opacity, `0`–`1`                                                              |
-| `filter`                           | `str`           | Raw SVG filter attribute                                                      |
-| `rx`, `ry`                         | `int`           | Corner radii                                                                  |
-| `aspectRatio`                      | `float`         | `w`/`h` ratio to enforce; the data-driven axis wins when both are data-driven |
-| `x`, `y`, `cx`, `cy`, `x2`, `y2`   | `int` \| `str`  | Explicit position accessors                                                   |
-| `theta`, `thetaSize`, `r`, `rSize` | `int` \| `str`  | Polar coord-space aliases for `x`/`w`/`y`/`h`                                 |
-| `label`                            | `bool` \| `str` | Whether/what to label the rectangle                                           |
+| Parameter                          | Type           | Description                                                                   |
+| ---------------------------------- | -------------- | ----------------------------------------------------------------------------- |
+| `w`, `h`                           | `int` \| `str` | Width / height — a constant or a field name                                   |
+| `fill`                             | `str`          | Fill color — a constant or a field name                                       |
+| `stroke`                           | `str`          | Stroke color                                                                  |
+| `strokeWidth`                      | `int`          | Stroke width in pixels                                                        |
+| `opacity`                          | `float`        | Opacity, `0`–`1`                                                              |
+| `filter`                           | `str`          | Raw SVG filter attribute                                                      |
+| `rx`, `ry`                         | `int`          | Corner radii                                                                  |
+| `aspectRatio`                      | `float`        | `w`/`h` ratio to enforce; the data-driven axis wins when both are data-driven |
+| `x`, `y`, `cx`, `cy`, `x2`, `y2`   | `int` \| `str` | Explicit position accessors                                                   |
+| `theta`, `thetaSize`, `r`, `rSize` | `int` \| `str` | Polar coord-space aliases for `x`/`w`/`y`/`h`                                 |
 
-Returns a `Mark` for use in [`.mark()`](/python/api/core/mark).
+Returns a `Mark` for use in [`.mark()`](/python/api/core/mark). To attach a
+text label, chain [`.label(accessor, ...)`](/python/api/core/mark#labeling-a-mark)
+on the returned mark rather than passing a `label` option here.
 
 ## Encoding
 

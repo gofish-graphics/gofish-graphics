@@ -1,6 +1,6 @@
 # Labels
 
-Add text labels to marks using the `.label()` method. Labels automatically position themselves, contrast against fill colors, and hide when space is tight.
+Add text labels to marks using the `.label()` method. Labels are laid out like any other shape — they position themselves relative to the mark they describe, contrast against fill colors automatically, and occupy real space in the layout (a label near the chart edge makes room for itself instead of being clipped).
 
 ## Basic usage
 

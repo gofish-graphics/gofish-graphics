@@ -1,3 +1,7 @@
+// <gofish-wiki> AUTO-GENERATED — see covers: in the essay; run `pnpm --filter docs sync-backlinks`
+// @wiki Labels — /internals/frontend/labels
+// </gofish-wiki>
+
 import chroma from "chroma-js";
 import { luv } from "culori";
 import { GoFishNode } from "../_node";

@@ -1,3 +1,7 @@
+// <gofish-wiki> AUTO-GENERATED — see covers: in the essay; run `pnpm --filter docs sync-backlinks`
+// @wiki Labels — /internals/frontend/labels
+// </gofish-wiki>
+
 import { evalFieldValues, FieldExpr, FieldExprWire } from "../fieldExpr";
 
 export type LabelAccessor<D = any> =
