@@ -70,11 +70,11 @@ def story_node_link():
                 ).constrain(
                     lambda A, B, C, D: [
                         Constraint.distribute(
-                            [A, B, C], dir="x", spacing=60, mode="edge"
+                            [A, B, C], dir="x", spacing=60, anchor="edge"
                         ),
                         Constraint.align([A, B, C], y="middle"),
                         Constraint.distribute(
-                            [D, B], dir="y", spacing=60, mode="edge"
+                            [D, B], dir="y", spacing=60, anchor="edge"
                         ),
                         Constraint.align([B, D], x="middle"),
                     ]
@@ -116,16 +116,16 @@ def story_node_link():
                 # Horizontal edges: label centered just above the edge.
                 Constraint.align([e1, t1], x="middle"),
                 Constraint.distribute(
-                    [e1, t1], dir="y", spacing=3, mode="edge"
+                    [e1, t1], dir="y", spacing=3, anchor="edge"
                 ),
                 Constraint.align([e2, t2], x="middle"),
                 Constraint.distribute(
-                    [e2, t2], dir="y", spacing=3, mode="edge"
+                    [e2, t2], dir="y", spacing=3, anchor="edge"
                 ),
                 # Vertical edge: label centered just to the right.
                 Constraint.align([e3, t3], y="middle"),
                 Constraint.distribute(
-                    [e3, t3], dir="x", spacing=4, mode="edge"
+                    [e3, t3], dir="x", spacing=4, anchor="edge"
                 ),
             ]
         ),

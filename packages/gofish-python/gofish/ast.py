@@ -702,7 +702,7 @@ class Constraint:
         *,
         dir: str,
         spacing: Optional[float] = None,
-        mode: Optional[str] = None,
+        anchor: Optional[str] = None,
         order: Optional[str] = None,
         glue: Optional[bool] = None,
     ) -> DistributeConstraint:
@@ -712,8 +712,10 @@ class Constraint:
             refs: List of RefSentinels.
             dir: "x" or "y" — required.
             spacing: Number of pixels between successive refs (default 8).
-            mode: "edge" (default) or "center" — edge-to-edge or
-                center-to-center spacing.
+            anchor: "edge" (default) — edge-to-edge spacing between facing
+                edges — or a fixed-pitch anchor point (`"start"`, `"middle"`,
+                `"end"`, `"baseline"`) placed at
+                `anchor[i+1] = anchor[i] + spacing`.
             order: "forward" (default) or "reverse" — distribute in reverse order.
             glue: Stack semantics — glue the refs together (their sizes sum
                 into a position at the layer) instead of slicing a budget.
@@ -722,8 +724,8 @@ class Constraint:
         options: Dict[str, Any] = {"dir": dir}
         if spacing is not None:
             options["spacing"] = spacing
-        if mode is not None:
-            options["mode"] = mode
+        if anchor is not None:
+            options["anchor"] = anchor
         if order is not None:
             options["order"] = order
         if glue is not None:
@@ -1314,7 +1316,7 @@ def spread(
         by: Field name to partition by (operator form only), or a
             ``field(...)`` accessor carrying domain ops
             (``field("site").sort("yield")``). Omit for per-item spread.
-        **options: dir ("x"|"y"), spacing, alignment, sharedScale, mode, glue.
+        **options: dir ("x"|"y"), spacing, alignment, sharedScale, anchor, glue.
             Also `w`/`h` — a field name or pixel number sizing this operator's
             box (data-driven operator extent, e.g. a mosaic's column width), and
             `size` — a field name, pixel number, or ``field(...)`` accessor
@@ -1552,7 +1554,7 @@ def stack(
         by: Field name to partition by (operator form only), or a
             ``field(...)`` accessor carrying domain ops
             (``field("site").sort("yield")``). Omit for per-item stack.
-        **options: dir ("x"|"y"), alignment, sharedScale, mode. Also `w`/`h` —
+        **options: dir ("x"|"y"), alignment, sharedScale, anchor. Also `w`/`h` —
             a field name or pixel number sizing this operator's box (data-driven
             operator extent, e.g. a mosaic's column width), and `size` — a
             field name, pixel number, or ``field(...)`` accessor sizing each

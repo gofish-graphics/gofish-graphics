@@ -274,8 +274,8 @@ check(
 );
 
 check(
-  "stack with bad mode rejected",
-  !validate(chart([{ type: "stack", mode: "elsewhere" }])).valid
+  "stack with bad anchor rejected",
+  !validate(chart([{ type: "stack", anchor: "elsewhere" }])).valid
 );
 
 check(

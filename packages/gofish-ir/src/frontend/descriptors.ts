@@ -320,7 +320,10 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
         doc: 'Cross-axis alignment ("start" | "middle" | "end" | "baseline").',
       },
       sharedScale: { type: t.boolean, default: false },
-      mode: { type: t.enum("edge", "center"), default: "edge" },
+      anchor: {
+        type: t.enum("edge", "start", "middle", "end", "baseline"),
+        default: "edge",
+      },
       reverse: { type: t.boolean, default: false },
       glue: {
         type: t.boolean,
@@ -367,7 +370,10 @@ export const OPERATORS: Record<string, ConstructDescriptor> = {
       },
       alignment: { type: t.string, default: "baseline" },
       sharedScale: { type: t.boolean, default: false },
-      mode: { type: t.enum("edge", "center"), default: "edge" },
+      anchor: {
+        type: t.enum("edge", "start", "middle", "end", "baseline"),
+        default: "edge",
+      },
       reverse: { type: t.boolean, default: false },
       axes: { type: t.ref("AxesOptions") },
       // Data-driven extent + space-filling spine — see `spread` above.

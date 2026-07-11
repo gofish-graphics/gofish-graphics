@@ -82,7 +82,7 @@ def story_zordered_mixed():
             # passes the resolved refs as keyword args keyed by name.
             lambda barsWrap, heatWrap: [
                 Constraint.distribute(
-                    [barsWrap, heatWrap], dir="x", spacing=40, mode="edge"
+                    [barsWrap, heatWrap], dir="x", spacing=40, anchor="edge"
                 ),
                 Constraint.z_above(heatWrap, barsWrap),
             ]
