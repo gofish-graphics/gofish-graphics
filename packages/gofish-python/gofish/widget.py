@@ -8,6 +8,7 @@ in Jupyter and marimo.
 """
 
 import base64
+import json
 import uuid
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
@@ -49,7 +50,8 @@ class GoFishChartWidget(anywidget.AnyWidget):
     def __init__(
         self,
         spec: Dict[str, Any],
-        arrow_data: bytes,
+        arrow_data: Optional[bytes] = None,
+        arrow_dict: Optional[Dict[str, bytes]] = None,
         derive_functions: Optional[Dict[str, Callable]] = None,
         width: int = 800,
         height: int = 600,
@@ -68,12 +70,31 @@ class GoFishChartWidget(anywidget.AnyWidget):
             )
         esm_code = bundle_path.read_text(encoding="utf-8")
 
-        arrow_data_b64 = base64.b64encode(arrow_data).decode("utf-8")
+        # The `arrow_data` trait carries one of two wire shapes, mirroring the
+        # two ways JS's `renderChart` (widget-src/index.ts) branches on
+        # `spec.type`: a single chart gets one base64-encoded Arrow IPC
+        # stream; a layer gets a JSON object mapping child index -> that same
+        # base64 encoding, one entry per tier (`renderLayer` does
+        # `JSON.parse` then looks up `arrowDict[String(i)]`). Exactly one of
+        # `arrow_data` (single chart) / `arrow_dict` (layer) must be passed —
+        # this constructor owns all base64/JSON encoding so callers only ever
+        # hand it raw bytes, never pre-formatted wire strings (see #683).
+        if (arrow_data is None) == (arrow_dict is None):
+            raise ValueError(
+                "GoFishChartWidget requires exactly one of `arrow_data` "
+                "(single chart) or `arrow_dict` (layer, keyed by child index)"
+            )
+        if arrow_dict is not None:
+            arrow_data_trait = json.dumps(
+                {key: base64.b64encode(value).decode("ascii") for key, value in arrow_dict.items()}
+            )
+        else:
+            arrow_data_trait = base64.b64encode(arrow_data).decode("utf-8")
 
         super().__init__(
             _esm=esm_code,
             spec=spec,
-            arrow_data=arrow_data_b64,
+            arrow_data=arrow_data_trait,
             width=width,
             height=height,
             axes=axes,
