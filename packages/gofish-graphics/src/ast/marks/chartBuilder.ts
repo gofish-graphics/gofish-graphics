@@ -8,7 +8,12 @@ import { layer as Layer } from "../graphicalOperators/layer";
 import { GoFishRef, visibleNodes } from "../_ref";
 import { ref } from "../shapes/ref";
 import { isField } from "../data";
-import { splitKeyFn, type SplitBy } from "../datumProjection";
+import {
+  splitKeyFn,
+  scatterPositions,
+  type SplitBy,
+  type InferredRelational,
+} from "../datumProjection";
 // The shared interactive render terminal now lives in the interaction layer
 // (renderTerminal.ts) so the low-level `gofish()` terminal can reach it too —
 // component thunks get the same two-regime treatment as ChartBuilder/
@@ -208,15 +213,12 @@ export function stashLayerName(mark: object, layerName: unknown): void {
  * needs `this.operators` — the flow tiers — which only `ChartBuilder` has in
  * hand.
  *
- * Structurally mirrors `InferredRelational` in chart.ts (kept as a separate
- * local type, not imported, to avoid a cycle: chart.ts imports ChartBuilder
- * FROM this module).
+ * `InferredRelational` (the cell this computation writes into) lives in
+ * `datumProjection.ts`, not here or in chart.ts — a type-only import creates
+ * no runtime cycle, so both modules that need the shape (chart.ts tags every
+ * relational mark with a cell of it; this module computes into it) import
+ * the same declaration instead of keeping structurally-identical copies.
  */
-type InferredRelational = {
-  by?: SplitBy;
-  dir?: "x" | "y";
-  resolved?: boolean;
-};
 
 /** The field name a flow tier's `by` groups on, for matching against an
  *  explicit `along`. A string `by` names itself; a `field(...)` accessor
@@ -230,8 +232,10 @@ function tierFieldName(by: SplitBy | undefined): string | undefined {
 }
 
 /** The `__relationalFusable` descriptor shape this module reads/writes —
- *  see `tagRelationalFusable` in chart.ts. */
-type RelationalFusable = {
+ *  see `tagRelationalFusable` in chart.ts, which builds and tags every
+ *  instance and imports this type back (type-only, no runtime cycle: chart.ts
+ *  already depends on this module at runtime) so the two sides can't drift. */
+export type RelationalFusable = {
   type: string;
   opts: Record<string, any>;
   inferred: InferredRelational;
@@ -284,13 +288,7 @@ function classifyOperator(op: Operator<any, any>): OperatorClass {
     };
   }
   if (type === "scatter") {
-    const hasX =
-      opts.x !== undefined ||
-      (opts.xMin !== undefined && opts.xMax !== undefined);
-    const hasY =
-      opts.y !== undefined ||
-      (opts.yMin !== undefined && opts.yMax !== undefined);
-    return { kind: "value", positions: { x: hasX, y: hasY }, by: opts.by };
+    return { kind: "value", positions: scatterPositions(opts), by: opts.by };
   }
   if (type === "group") {
     return { kind: "none", positions: { x: false, y: false }, by: opts.by };
@@ -306,12 +304,15 @@ function isDataDrivenSize(v: unknown): boolean {
 }
 
 /** Innermost (last in flow order) tier that positions anchors on either
- *  axis, skipping non-positioning tiers (group, derive, ...). */
+ *  axis, skipping non-positioning tiers (group, derive, ...). `classified` is
+ *  each flow tier's `classifyOperator(...)` result, precomputed once by
+ *  `applyDefaultRelational` and threaded through — this whole file's helpers
+ *  only ever need the classification, never the raw operator. */
 function innermostPositioning(
-  operators: Operator<any, any>[]
+  classified: OperatorClass[]
 ): { index: number; cls: OperatorClass } | undefined {
-  for (let i = operators.length - 1; i >= 0; i--) {
-    const cls = classifyOperator(operators[i]);
+  for (let i = classified.length - 1; i >= 0; i--) {
+    const cls = classified[i];
     if (cls.positions.x || cls.positions.y) return { index: i, cls };
   }
   return undefined;
@@ -323,9 +324,9 @@ function innermostPositioning(
  *  Otherwise see `OperatorClass`'s doc comment for the arrangement/value
  *  split. */
 function flowOrderTravelAxis(
-  operators: Operator<any, any>[]
+  classified: OperatorClass[]
 ): "x" | "y" | undefined {
-  const found = innermostPositioning(operators);
+  const found = innermostPositioning(classified);
   if (!found) return undefined;
   const { cls } = found;
   if (cls.positions.x && cls.positions.y) return undefined;
@@ -339,15 +340,15 @@ function flowOrderTravelAxis(
  *  the "flow order" fallback). `undefined` only when nothing in the flow
  *  positions anything. */
 function findPathTierIndex(
-  operators: Operator<any, any>[],
+  classified: OperatorClass[],
   travelAxis: "x" | "y" | undefined
 ): number | undefined {
   if (travelAxis !== undefined) {
-    for (let i = operators.length - 1; i >= 0; i--) {
-      if (classifyOperator(operators[i]).positions[travelAxis]) return i;
+    for (let i = classified.length - 1; i >= 0; i--) {
+      if (classified[i].positions[travelAxis]) return i;
     }
   }
-  return innermostPositioning(operators)?.index;
+  return innermostPositioning(classified)?.index;
 }
 
 /** Explicit `along`: pin the path tier to the flow tier whose `by` names the
@@ -355,17 +356,17 @@ function findPathTierIndex(
  *  error naming the field and the flow's available keys when no tier
  *  matches — `along` never silently falls back to inference. */
 function findTierIndexByAlong(
-  operators: Operator<any, any>[],
+  classified: OperatorClass[],
   along: string,
   markType: string
 ): number {
-  for (let i = operators.length - 1; i >= 0; i--) {
-    if (tierFieldName(classifyOperator(operators[i]).by) === along) return i;
+  for (let i = classified.length - 1; i >= 0; i--) {
+    if (tierFieldName(classified[i].by) === along) return i;
   }
   const available = Array.from(
     new Set(
-      operators
-        .map((op) => tierFieldName(classifyOperator(op).by))
+      classified
+        .map((cls) => tierFieldName(cls.by))
         .filter((n): n is string => n !== undefined)
     )
   );
@@ -395,7 +396,7 @@ function alongTravelAxis(cls: OperatorClass): "x" | "y" | undefined {
 function resolveTravelAxis(
   markOpts: Record<string, any>,
   anchorOpts: Record<string, any> | undefined,
-  operators: Operator<any, any>[]
+  classified: OperatorClass[]
 ): "x" | "y" | undefined {
   // Step 1: an explicit `dir` on the mark names the travel axis directly.
   if (markOpts.dir === "x" || markOpts.dir === "y") return markOpts.dir;
@@ -412,7 +413,7 @@ function resolveTravelAxis(
   if (wDriven && !hDriven) return "y";
 
   // Step 3: the innermost positioning flow tier.
-  return flowOrderTravelAxis(operators);
+  return flowOrderTravelAxis(classified);
 }
 
 /** The default split key: the combination of every flow tier's `by` EXCEPT
@@ -424,14 +425,13 @@ function resolveTravelAxis(
  *  receives the raw bag element (a `GoFishRef`), not a datum, matching
  *  today's function-form semantics. */
 function computeDefaultBy(
-  operators: Operator<any, any>[],
+  classified: OperatorClass[],
   pathTierIndex: number | undefined
 ): SplitBy | undefined {
   const tierBys: SplitBy[] = [];
-  operators.forEach((op, i) => {
+  classified.forEach((cls, i) => {
     if (i === pathTierIndex) return;
-    const by = classifyOperator(op).by;
-    if (by !== undefined) tierBys.push(by);
+    if (cls.by !== undefined) tierBys.push(cls.by);
   });
   if (tierBys.length === 0) return undefined;
   const keyFns = tierBys.map((by) => splitKeyFn(by));
@@ -455,6 +455,13 @@ function computeDefaultBy(
  * independently — an explicit `dir` still wins for the travel axis even when
  * `along` picks the path tier (mirrored by checking `fusable.opts.dir` first
  * below, same as step 1 of the inferred path).
+ *
+ * Classifies every flow tier ONCE (`classified = operators.map(classifyOperator)`)
+ * and threads that array through the rest of the resolution — `innermostPositioning`/
+ * `flowOrderTravelAxis`/`findPathTierIndex`/`findTierIndexByAlong`/`alongTravelAxis`/
+ * `computeDefaultBy` all take the precomputed classification instead of
+ * re-running `classifyOperator` (which re-parses each operator's
+ * `__serialize` tag) 2-4 times per tier over one resolution.
  */
 function applyDefaultRelational(
   fusable: RelationalFusable,
@@ -463,21 +470,22 @@ function applyDefaultRelational(
 ): void {
   if (fusable.inferred.resolved) return;
   const along = (fusable.opts as any).along as string | undefined;
+  const classified = operators.map(classifyOperator);
 
   let travelAxis: "x" | "y" | undefined;
   let pathTierIndex: number | undefined;
   if (along !== undefined) {
-    pathTierIndex = findTierIndexByAlong(operators, along, fusable.type);
+    pathTierIndex = findTierIndexByAlong(classified, along, fusable.type);
     travelAxis =
       fusable.opts.dir === "x" || fusable.opts.dir === "y"
         ? fusable.opts.dir
-        : alongTravelAxis(classifyOperator(operators[pathTierIndex]));
+        : alongTravelAxis(classified[pathTierIndex]);
   } else {
-    travelAxis = resolveTravelAxis(fusable.opts, anchorOpts, operators);
-    pathTierIndex = findPathTierIndex(operators, travelAxis);
+    travelAxis = resolveTravelAxis(fusable.opts, anchorOpts, classified);
+    pathTierIndex = findPathTierIndex(classified, travelAxis);
   }
 
-  const defaultBy = computeDefaultBy(operators, pathTierIndex);
+  const defaultBy = computeDefaultBy(classified, pathTierIndex);
   if (defaultBy !== undefined) fusable.inferred.by = defaultBy;
   if (travelAxis !== undefined && fusable.opts.dir === undefined) {
     fusable.inferred.dir = travelAxis;
@@ -639,18 +647,16 @@ export class ChartBuilder<TInput, TOutput = TInput> {
     // ribbon connects the existing bars) or an empty-scope `chart()` tier
     // inheriting the previous tier's marks inside `.layer(...)` — has nothing
     // to anchor: the incoming data already IS (or will become) the refs bag
-    // the connector reads. `usesPreviousLayerMarks()` catches the empty-scope
-    // case; `dataIsRefs` catches every already-refs data shape — the explicit
-    // `selectAll(...)`/`ref(...)` case and `LayerBuilder.resolve()`'s
-    // `withData(prevRefs)` array shape (defense in depth: `ensureNamedMark`
-    // bypasses this method entirely, but a future direct `.mark()` call could
-    // still see that shape).
+    // the connector reads. `hasOwnFlow()` (`usesPreviousLayerMarks()` /
+    // `dataIsRefs(this.data)`) is exactly "this chart was built from genuine
+    // row data flowing through `this.operators`" — see its doc comment,
+    // shared with the `.layer()` fusion guard below (defense in depth:
+    // `ensureNamedMark` bypasses this method entirely, but a future direct
+    // `.mark()` call could still see an already-refs shape).
     const fusable = (mark as any)?.__relationalFusable as
       | RelationalFusable
       | undefined;
-    const dataNeedsAnchors =
-      !this.usesPreviousLayerMarks() && !dataIsRefs(this.data);
-    if (fusable && dataNeedsAnchors) {
+    if (fusable && this.hasOwnFlow()) {
       // Default grouping (issue #752): this mark fuses over THIS chart's own
       // flow (real row data, not a refs bag — `dataNeedsAnchors` already
       // guarantees that), so a default split/travel-direction can be
@@ -742,21 +748,20 @@ export class ChartBuilder<TInput, TOutput = TInput> {
    * opts) so step 2 of the travel-axis rule can see a data-driven `h`/`w`
    * that lives on the anchor rather than on the connector.
    *
-   * Guarded to THIS tier's own flow, not a nested one: `usesPreviousLayerMarks()`
-   * / `dataIsRefs(this.data)` are false exactly when `this` was built from
-   * genuine row data flowing through `this.operators` — the same "current
-   * chart's own flow" boundary `.mark()`'s fusion guard (`dataNeedsAnchors`)
-   * uses. A `chart().flow(group({by})).mark(line())` tier passed as `child`
-   * is a `ChartBuilder`, not a bare `Mark`, so the `typeof child === "function"`
-   * check already excludes it — that nested idiom (the pre-#752 way to write
-   * this) stays untouched, per the design note's explicit scope boundary.
+   * Guarded to THIS tier's own flow, not a nested one: `hasOwnFlow()` is true
+   * exactly when `this` was built from genuine row data flowing through
+   * `this.operators` — the same "current chart's own flow" boundary
+   * `.mark()`'s fusion guard uses. A `chart().flow(group({by})).mark(line())`
+   * tier passed as `child` is a `ChartBuilder`, not a bare `Mark`, so the
+   * `typeof child === "function"` check already excludes it — that nested
+   * idiom (the pre-#752 way to write this) stays untouched, per the design
+   * note's explicit scope boundary.
    */
   layer(child: LayerTier): LayerBuilder {
     if (
       typeof child === "function" &&
       (child as any).__relationalFusable !== undefined &&
-      !this.usesPreviousLayerMarks() &&
-      !dataIsRefs(this.data)
+      this.hasOwnFlow()
     ) {
       const fusable = (child as any).__relationalFusable as RelationalFusable;
       const anchorOpts = (this.finalMark as any)?.__serialize?.opts as
@@ -780,6 +785,19 @@ export class ChartBuilder<TInput, TOutput = TInput> {
    *  previous tier's marks). Used by `LayerBuilder` to wire the chain. */
   usesPreviousLayerMarks(): boolean {
     return (this.data as unknown) === PREVIOUS_LAYER_MARKS;
+  }
+
+  /** True when this builder was built from genuine row data flowing through
+   *  `this.operators` — i.e. NOT an empty-scope `Chart()` tier
+   *  (`usesPreviousLayerMarks()`) and NOT already a refs bag
+   *  (`dataIsRefs(this.data)`, e.g. `chart(selectAll(...))` or
+   *  `LayerBuilder.resolve()`'s `withData(prevRefs)`). This is the "current
+   *  chart's own flow" boundary shared by both relational-mark default-
+   *  grouping fusion guards (issue #752): `.mark()`'s (fuse a bare relational
+   *  mark into an anchor + connector) and `.layer()`'s (compute the default
+   *  split/travel-direction for a bare relational-mark tier). */
+  private hasOwnFlow(): boolean {
+    return !this.usesPreviousLayerMarks() && !dataIsRefs(this.data);
   }
 
   /** A copy of this builder with its data replaced — used by `LayerBuilder` to

@@ -18,7 +18,7 @@ import {
 } from "../dims";
 import { pairs } from "../../util";
 import { linear } from "../coordinateTransforms/linear";
-import { MaybeValue } from "../data";
+import { isValue, MaybeValue } from "../data";
 import { Domain, axisScale } from "../domain";
 import {
   UNDEFINED,
@@ -128,11 +128,12 @@ export const connect = createNodeOperator(
         shared: [false, false],
         // The domain-building walk (`GoFishNode.resolveColorScale`) only
         // reads a node's single `color` property to register a field-valued
-        // paint into the shared discrete-color scale. A connector's own
-        // color-bearing channel is `fill` in edge mode (ribbon) or `stroke`
-        // in center mode (line) — `fill` wins when both happen to be set,
-        // which no relational-mark example does.
-        color: fill ?? stroke,
+        // paint into the shared discrete-color scale. Prefer whichever
+        // channel is data-driven — same idiom as rect/petal's `color`. By the
+        // time Connect sees them, field-valued paints have already been
+        // resolved to `Value`s by `resolveGroupFill` (chart.ts), so
+        // `isValue` distinguishes data-driven from a literal color.
+        color: isValue(fill) ? fill : stroke,
         resolveUnderlyingSpace: (
           children: Size<UnderlyingSpace>[],
           _childNodes: GoFishAST[]

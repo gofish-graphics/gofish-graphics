@@ -47,7 +47,11 @@ import {
   mask as Mask,
 } from "../graphicalOperators/porterDuff";
 import type { ConstraintRef, ConstraintSpec } from "../constraints";
-import { splitEntries, type SplitBy } from "../datumProjection";
+import {
+  splitEntries,
+  type SplitBy,
+  type InferredRelational,
+} from "../datumProjection";
 
 export type { Mark, Operator };
 export { generatedRect as rect };
@@ -60,7 +64,7 @@ import {
   resolveRefData,
   PREVIOUS_LAYER_MARKS,
 } from "./chartBuilder";
-import type { ChartOptions } from "./chartBuilder";
+import type { ChartOptions, RelationalFusable } from "./chartBuilder";
 import { projectPath } from "../datumProjection";
 export { ChartBuilder, LayerBuilder, chart, PREVIOUS_LAYER_MARKS };
 export type { ChartOptions };
@@ -455,7 +459,7 @@ function tagRelationalFusable(
   inferred: InferredRelational
 ): void {
   const anchorOpts = pickAnchorOpts(opts);
-  (mark as any).__relationalFusable = {
+  const fusable: RelationalFusable = {
     type,
     opts,
     inferred,
@@ -464,20 +468,8 @@ function tagRelationalFusable(
     ),
     makeAnchor: () => blank(pickAnchorOpts(opts)),
   };
+  (mark as any).__relationalFusable = fusable;
 }
-
-/**
- * The mutable cell `ChartBuilder` writes the computed default split/travel
- * direction into (see the doc comment on `tagRelationalFusable`). `resolved`
- * marks that a default computation already ran for this connector, so the
- * `.mark()` fusion rewrite's internal `.layer(...)` call (which re-enters
- * `ChartBuilder.layer()`) doesn't recompute and overwrite it.
- */
-export type InferredRelational = {
-  by?: SplitBy;
-  dir?: "x" | "y";
-  resolved?: boolean;
-};
 
 /**
  * A connector's `fill` or `stroke` may be a shared field name (e.g.
@@ -526,8 +518,12 @@ function resolveGroupFill<O extends RelationalMarkOptions>(
       // unchanged.
       continue;
     }
-    const first = rows[0][raw];
-    if (!rows.every((r) => r?.[raw] === first)) {
+    // `raw` names a field on the data: reuse `projectPath`'s projection +
+    // homogeneity collapse (same rule `by` uses elsewhere in this file) —
+    // the common value iff the group agrees on it, `undefined` if not.
+    // `groupRefs` (not the flattened `rows`) so it walks each ref's `.datum`
+    // bag itself, same as any other `projectPath` caller.
+    if (projectPath(groupRefs, raw) === undefined) {
       throw new Error(
         `[gofish] ${type}({ ${key}: "${raw}" }): "${raw}" is not constant ` +
           `across the connected group; make sure the flow this ${type} fuses ` +
@@ -628,7 +624,7 @@ export function createRelationalMark<O extends RelationalMarkOptions>(
           ? ({ ...opts, dir } as O)
           : opts;
 
-      if (by !== undefined && by !== null) {
+      if (by !== undefined) {
         const entries = splitEntries(by, d as any);
         const nodes = await Promise.all(
           [...entries.values()].map(async (group) => {
