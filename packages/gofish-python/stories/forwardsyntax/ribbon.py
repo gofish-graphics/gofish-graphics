@@ -4,7 +4,7 @@ import math
 
 from gofish import (
     layer,
-    area,
+    ribbon,
     chart,
     clock,
     derive,
@@ -34,7 +34,7 @@ def basic(w=400, h=400):
     overlay = (
         chart(selectAll("bars"))
         .flow(group(by="species"))
-        .mark(area(opacity=0.8))
+        .mark(ribbon(opacity=0.8))
     )
     return layer([bars, overlay])
 
@@ -58,6 +58,6 @@ def polar(w=400, h=400):
     overlay = (
         chart(selectAll("bars"))
         .flow(group(by="species"))
-        .mark(area(opacity=0.8))
+        .mark(ribbon(opacity=0.8))
     )
     return layer({"coord": clock()}, [bars, overlay])
