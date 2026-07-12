@@ -335,6 +335,73 @@ chart.ts resolves it per group via `inferColor` (same channel helper
 `createMark` uses) before it reaches `Connect`, reading a representative row
 off the group's ref bag.
 
+### Default grouping: a fused connector without `by`
+
+A fused relational mark with no explicit `by` doesn't fall back to one
+connector through the whole bag — it gets a **default split and travel
+direction computed from the flow it fuses over** (issue #752; full rule in
+`notes/design/relational-mark-default-split.md`). This is what lets a
+ridgeline write `ribbon({ h: "count" })` instead of restating
+`by: "month"` when `spread({ by: "month", dir: "y" })` already said it one
+line up, and what makes the barley slope chart draw one line per
+`site`×`variety` instead of a single zigzag across every panel.
+
+The computation happens in `ChartBuilder`, not `chart.ts`, because it needs
+`this.operators` — the flow tiers assembled by `.flow(...)` — which only the
+builder has in hand. Two call sites run it:
+
+- The `.mark(R(opts))` blank-fusion rewrite (above), right before it splits
+  `opts` into anchor and connector.
+- `ChartBuilder.layer(child)`, when `child` is a bare relational-mark tier
+  (`.mark(blank({h})).layer(ribbon({}))`) consuming _this_ tier's own marks —
+  the two-tier form the sugar above elaborates into.
+
+Both guard on the same "fuses over THIS chart's own flow" boundary
+`dataNeedsAnchors` already checks — `!usesPreviousLayerMarks() &&
+!dataIsRefs(this.data)` — so a refs-bag chart (`chart(selectAll(...))`) or the
+nested `chart().flow(group({by})).mark(line())` idiom never gets a default
+injected; both keep their pre-#752 meaning exactly.
+
+Crucially, the computed default is written into a **separate mutable cell**,
+`inferred`, not into `opts` — `tagRelationalFusable` now stamps `{ type,
+opts, inferred, anchorKeys, makeAnchor }`, and `opts` stays the untouched
+record of what the user wrote (the same object `__serialize.opts` reads, so
+mutating it would corrupt the emitted IR and make an inferred `dir` look
+user-specified). The connector's mark closure resolves the two at
+bag-arrival time: `by = opts.by !== undefined ? opts.by : inferred.by`, and
+`dir = opts.dir ?? inferred.dir`. This is also why the by-split-vs-plain-bag
+dispatch that used to happen at `createRelationalMark` call time now happens
+_inside_ the closure, at bag-arrival time: the computation can only run
+after the mark is constructed (it needs the rest of the flow), so the
+branch it feeds has to be decided later too.
+
+The rule itself, briefly: resolve a travel axis (an explicit `dir`; else a
+data-driven `h`/`w` on the mark or its anchor tier — `h` puts the value in y
+so travel is x, and vice versa; else the innermost flow tier that positions
+anchors) and a path tier (the innermost tier positioning along the travel
+axis). The path tier's own `by` orders the path and never splits; every
+_other_ flow tier's `by` becomes one term of a synthesized composite split
+key (`ChartBuilder`'s `computeDefaultBy`, built from `splitKeyFn` in
+datumProjection.ts — the same projection-through-`GoFishRef.datum` helper
+`splitEntries` uses, so string/field/function `by` forms behave identically
+to a real operator `by`). One subtlety `chartBuilder.ts`'s
+`classifyOperator` has to resolve that the design note's step-3 prose doesn't
+spell out: a `spread`/`stack` tier's `dir` is the axis it _lays its groups
+out along_, so a bare fallback (no `h`/`w`, no explicit `dir` anywhere)
+resolves the travel axis to that SAME axis (walking the arrangement is the
+natural path); a `scatter`'s `x`/`y` are literal per-item coordinates — a
+value channel exactly like `h`/`w` — so the travel axis there is the axis it
+does _not_ position. Both resolutions are validated against the design
+note's worked examples (its own "Intended?" column), not just its prose.
+
+The paint fix from the same design note rides along for free: `by`-split and
+plain-bag now share one code path in `createRelationalMark`'s bag-form mark,
+so `resolveGroupFill` runs on both — per group on the split branch (where
+it's a no-op safety net, since each group is homogeneous by construction),
+and over the _whole bag as one group_ on the plain-bag branch, where it now
+throws a loud, specific error if a field-valued `fill` disagrees across the
+bag instead of silently painting whatever the first row happens to have.
+
 ## Prior art
 
 `createMark` is most directly inspired by **Encodable** (Wongsuphasawat,

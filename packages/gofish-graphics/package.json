@@ -39,7 +39,7 @@
     "fetch-titanic-passengers": "node scripts/fetch-titanic-passengers.mjs",
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build",
-    "test": "pnpm run test:path && pnpm run test:font && pnpm run test:bbox && pnpm run test:solver && pnpm run test:space && pnpm run test:measure && pnpm run test:embedding && pnpm run test:confluence && pnpm run test:coord-confluence && pnpm run test:coord-paint-order && pnpm run test:serialize && pnpm run test:display-list && pnpm run test:interaction && pnpm run test:fusion",
+    "test": "pnpm run test:path && pnpm run test:font && pnpm run test:bbox && pnpm run test:solver && pnpm run test:space && pnpm run test:measure && pnpm run test:embedding && pnpm run test:confluence && pnpm run test:coord-confluence && pnpm run test:coord-paint-order && pnpm run test:serialize && pnpm run test:display-list && pnpm run test:interaction && pnpm run test:fusion && pnpm run test:default-split",
     "test:space": "tsx src/tests/space.test.ts",
     "test:measure": "tsx src/tests/measure.test.ts",
     "test:embedding": "tsx src/tests/embedding.test.ts",
@@ -53,6 +53,7 @@
     "test:bbox": "tsx src/tests/bbox.test.ts",
     "test:serialize": "pnpm run build && tsx src/tests/serialize.test.ts",
     "test:fusion": "pnpm run build && tsx src/tests/fusion.test.ts",
+    "test:default-split": "pnpm run build && tsx src/tests/defaultSplit.test.ts",
     "test:interaction": "pnpm run build && node --conditions browser --import tsx src/tests/interaction.test.ts",
     "typecheck": "tsc --noEmit"
   },

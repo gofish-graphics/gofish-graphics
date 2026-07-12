@@ -361,7 +361,15 @@ export function selectAll(
 // low-level one used standalone inside a manual `layer([...])`. An explicit
 // `.zOrder(...)` or `.constrain(...)` on the connector's node overrides the
 // default (the tag is only consulted when neither has been set).
-type RelationalMarkOptions = { from?: string; to?: string; by?: SplitBy };
+type RelationalMarkOptions = {
+  from?: string;
+  to?: string;
+  // `undefined` — no explicit split; a default may be computed from the flow
+  // (see `ChartBuilder`'s fusion/`.layer()` sugar and `notes/design/
+  // relational-mark-default-split.md`). A real `SplitBy` — the user's
+  // explicit override, current behavior, no default computed.
+  by?: SplitBy;
+};
 
 /** Tag a produced connector node with the operand nodes/refs it references,
  *  so `layer`'s default-zBelow pass can find them. See the factory doc above. */
@@ -419,16 +427,28 @@ function pickAnchorOpts(opts: Record<string, any>): Record<string, any> {
  * silently inert. Threading them here (rather than importing `ANCHOR_KEYS` /
  * `pickAnchorOpts` into chartBuilder.ts) avoids an import cycle: this module
  * already imports `ChartBuilder` FROM chartBuilder.ts.
+ *
+ * `inferred` is a mutable cell, SEPARATE from `opts`, that `ChartBuilder`
+ * writes the computed default split/travel-direction into (issue #752's
+ * default-grouping rule — see `notes/design/relational-mark-default-split.md`).
+ * It stays disjoint from `opts` on purpose: `opts` is the record of what the
+ * user actually wrote (verbatim, serializable — `__serialize.opts` reads the
+ * SAME object), so mutating it with a synthesized, non-serializable key
+ * function would corrupt the IR and make an inferred `dir` look
+ * user-specified. The mark closure (below) reads both at bag-arrival time and
+ * resolves them itself: an explicit `opts.by`/`opts.dir` always wins.
  */
 function tagRelationalFusable(
   mark: object,
   type: string,
-  opts: Record<string, any>
+  opts: Record<string, any>,
+  inferred: InferredRelational
 ): void {
   const anchorOpts = pickAnchorOpts(opts);
   (mark as any).__relationalFusable = {
     type,
     opts,
+    inferred,
     anchorKeys: Object.keys(anchorOpts).filter(
       (k) => anchorOpts[k] !== undefined
     ),
@@ -437,18 +457,42 @@ function tagRelationalFusable(
 }
 
 /**
- * A `by`-split connector's `fill` may be a shared field name (e.g.
+ * The mutable cell `ChartBuilder` writes the computed default split/travel
+ * direction into (see the doc comment on `tagRelationalFusable`). `resolved`
+ * marks that a default computation already ran for this connector, so the
+ * `.mark()` fusion rewrite's internal `.layer(...)` call (which re-enters
+ * `ChartBuilder.layer()`) doesn't recompute and overwrite it.
+ */
+export type InferredRelational = {
+  by?: SplitBy;
+  dir?: "x" | "y";
+  resolved?: boolean;
+};
+
+/**
+ * A connector's `fill` may be a shared field name (e.g.
  * `ribbon({ fill: "species", by: "species" })`) rather than a literal color —
- * each group is homogeneous in that field by construction whenever it names
- * the split field itself (or another field the split happens to agree on),
- * so resolve it once per group into a concrete `Value`, the same way a
- * per-item mark's color channel would (`inferColor`), instead of leaking the
- * bare field name through to `Connect` as a literal (invalid) CSS color.
+ * resolve it once per group into a concrete `Value`, the same way a per-item
+ * mark's color channel would (`inferColor`), instead of leaking the bare
+ * field name through to `Connect` as a literal (invalid) CSS color.
+ *
+ * Runs on BOTH the split and unsplit branches of the bag form (see
+ * `createRelationalMark`). On the split branch each group is homogeneous in
+ * the field by construction whenever it names the split field itself (or
+ * another field the split happens to agree on). On the unsplit branch — a
+ * connector with no `by` at all, drawn through the whole bag as one group —
+ * that homogeneity isn't guaranteed, so this THROWS a loud, specific error
+ * when the field disagrees across the bag instead of silently painting with
+ * whatever the first row happens to have (mirrors the homogeneity-collapse
+ * error `resolveLabelText` throws for `.label(field)` — see
+ * `labels/labelPlacement.ts`).
+ *
  * A no-op for literal colors, `Value`s, and undefined — `inferColor` itself
  * tells a field name from a literal (falls through unchanged when the string
  * isn't a key of the sampled row).
  */
 function resolveGroupFill<O extends RelationalMarkOptions>(
+  type: string,
   opts: O,
   groupRefs: GoFishRef[]
 ): O {
@@ -457,6 +501,19 @@ function resolveGroupFill<O extends RelationalMarkOptions>(
   const rows = groupRefs.flatMap((r) =>
     Array.isArray(r.datum) ? r.datum : [r.datum]
   );
+  if (rows.length === 0 || rows[0] == null || !(fill in rows[0])) {
+    // Not a field name on this data (e.g. a literal color like "steelblue")
+    // — inferColor's own fallthrough passes it through unchanged.
+    return opts;
+  }
+  const first = rows[0][fill];
+  if (!rows.every((r) => r?.[fill] === first)) {
+    throw new Error(
+      `[gofish] ${type}({ fill: "${fill}" }): "${fill}" is not constant ` +
+        `across the connected group; give the ${type} a \`by\` that groups ` +
+        `by "${fill}" (or a field it agrees with), or pass an explicit color.`
+    );
+  }
   const resolved = inferColor(fill, rows);
   return resolved === undefined ? opts : ({ ...opts, fill: resolved } as O);
 }
@@ -515,17 +572,36 @@ export function createRelationalMark<O extends RelationalMarkOptions>(
       return result;
     }
 
-    // `by`-split bag form: one connector per group.
-    if (opts.by !== undefined) {
-      const by = opts.by;
-      const mark: Mark<GoFishRef[]> = async (d: GoFishRef[]) => {
+    // Bag form: applied to a `GoFishRef[]` (e.g. `selectAll(...)`), with an
+    // optional split into one connector per group. `opts.by`/`opts.dir` are
+    // read HERE, at bag-arrival (invocation) time — not hoisted to a
+    // by-split-vs-plain-bag branch chosen at factory-call time — because
+    // `ChartBuilder` computes its default split/travel-direction AFTER this
+    // mark is constructed (it needs the rest of the flow, assembled in
+    // `.mark()`/`.layer()`) and writes it into `inferred`, a cell disjoint
+    // from `opts` (see `tagRelationalFusable`'s doc comment). An explicit
+    // `opts.by`/`opts.dir` always wins over the inferred default.
+    const inferred: InferredRelational = {};
+    const mark: Mark<GoFishRef[]> = async (d: GoFishRef[]) => {
+      const by = opts.by !== undefined ? opts.by : inferred.by;
+      const dir = (opts as any).dir ?? inferred.dir;
+      // Only allocate a copy when there's actually an inferred `dir` to
+      // splice in — `produce` (line/ribbon's Connect call) reads `o.dir` off
+      // whatever opts object it's given, defaulting to "x" itself when
+      // absent, so this is a no-op when nothing was inferred.
+      const baseOpts: O =
+        (opts as any).dir === undefined && dir !== undefined
+          ? ({ ...opts, dir } as O)
+          : opts;
+
+      if (by !== undefined && by !== null) {
         const entries = splitEntries(by, d as any);
         const nodes = await Promise.all(
           [...entries.values()].map(async (group) => {
             const groupRefs = (
               Array.isArray(group) ? group : [group]
             ) as GoFishRef[];
-            const groupOpts = resolveGroupFill(opts, groupRefs);
+            const groupOpts = resolveGroupFill(type, baseOpts, groupRefs);
             return tagRelationalOperands(
               (await produce(groupOpts, groupRefs)) as GoFishNode,
               groupRefs
@@ -533,19 +609,19 @@ export function createRelationalMark<O extends RelationalMarkOptions>(
           })
         );
         return Layer({}, nodes);
-      };
-      const result = nameableMark(mark);
-      (result as any).__serialize = { type, opts };
-      tagRelationalFusable(result, type, opts);
-      return result;
-    }
+      }
 
-    // Bag form: applied to a `GoFishRef[]` (e.g. `selectAll(...)`).
-    const mark: Mark<GoFishRef[]> = async (d: GoFishRef[]) =>
-      tagRelationalOperands((await produce(opts, d)) as GoFishNode, d);
+      // Unsplit: one connector through the whole bag, treated as a single
+      // group for `resolveGroupFill` (see its doc comment for the paint fix).
+      const groupOpts = resolveGroupFill(type, baseOpts, d);
+      return tagRelationalOperands(
+        (await produce(groupOpts, d)) as GoFishNode,
+        d
+      );
+    };
     const result = nameableMark(mark);
     (result as any).__serialize = { type, opts };
-    tagRelationalFusable(result, type, opts);
+    tagRelationalFusable(result, type, opts, inferred);
     return result;
   }
   return relational;
@@ -574,6 +650,10 @@ export type LineOptions = {
   // operators' `by`) and draw one connector per group — e.g.
   // `line({ by: "series" })` over a bag of point refs draws one polyline per
   // series. Composes with an upstream `group()` as a nested split.
+  // Omitted (`undefined`) when fused over the current chart's own flow (in
+  // `.mark()` position, or `.layer()` sugar over the previous tier's marks):
+  // a default split/travel-direction is computed from the flow — see
+  // `notes/design/relational-mark-default-split.md`.
   by?: SplitBy;
   // Anchor-tier keys for the blank-fusion sugar: placing `line(opts)` directly
   // in `.mark()` position elaborates to `.mark(blank({w,h,emX,emY})).layer(line(opts))`
@@ -630,6 +710,10 @@ export type RibbonOptions = {
   // operators' `by`) and draw one ribbon per group — e.g.
   // `ribbon({ by: "species" })` over a bag of bar refs draws one band per
   // species. Composes with an upstream `group()` as a nested split.
+  // Omitted (`undefined`) when fused over the current chart's own flow (in
+  // `.mark()` position, or `.layer()` sugar over the previous tier's marks):
+  // a default split/travel-direction is computed from the flow — see
+  // `notes/design/relational-mark-default-split.md`.
   by?: SplitBy;
   // Anchor-tier keys for the blank-fusion sugar: placing `ribbon(opts)` directly
   // in `.mark()` position elaborates to `.mark(blank({w,h,emX,emY})).layer(ribbon(opts))`

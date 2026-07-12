@@ -7,6 +7,8 @@ import { Frame } from "../graphicalOperators/frame";
 import { layer as Layer } from "../graphicalOperators/layer";
 import { GoFishRef, visibleNodes } from "../_ref";
 import { ref } from "../shapes/ref";
+import { isField } from "../data";
+import { splitKeyFn, type SplitBy } from "../datumProjection";
 // The shared interactive render terminal now lives in the interaction layer
 // (renderTerminal.ts) so the low-level `gofish()` terminal can reach it too —
 // component thunks get the same two-regime treatment as ChartBuilder/
@@ -196,6 +198,227 @@ export function stashLayerName(mark: object, layerName: unknown): void {
   (mark as any).__layerName = layerName;
 }
 
+/* ---- Default grouping for relational marks in a flow (issue #752) ----
+ *
+ * See `notes/design/relational-mark-default-split.md` for the full rule.
+ * Summary: a fused relational mark (`line`/`ribbon`) with no explicit `by`
+ * gets a default split computed from the flow it fuses over, and its
+ * `Connect` direction gets the computed travel axis. The computation lives
+ * here (not in chart.ts, which this module is imported FROM) because it
+ * needs `this.operators` — the flow tiers — which only `ChartBuilder` has in
+ * hand.
+ *
+ * Structurally mirrors `InferredRelational` in chart.ts (kept as a separate
+ * local type, not imported, to avoid a cycle: chart.ts imports ChartBuilder
+ * FROM this module).
+ */
+type InferredRelational = {
+  by?: SplitBy;
+  dir?: "x" | "y";
+  resolved?: boolean;
+};
+
+/** The `__relationalFusable` descriptor shape this module reads/writes —
+ *  see `tagRelationalFusable` in chart.ts. */
+type RelationalFusable = {
+  type: string;
+  opts: Record<string, any>;
+  inferred: InferredRelational;
+  anchorKeys: string[];
+  makeAnchor: () => Mark<any>;
+};
+
+/** How one flow tier (`spread`/`stack`/`scatter`/`group`/other) relates to
+ *  the travel-axis rule, read off `op.__serialize` (verbatim opts — see
+ *  `createOperator.ts`).
+ *   - "arrangement" (spread/stack): `dir` is the axis the tier LAYS ITS
+ *     GROUPS OUT ALONG — walking that sequence IS a natural path, so a
+ *     connector traveling along `dir` reads as "connect consecutive groups
+ *     of this spread". A bare fallback (no h/w, no explicit dir anywhere)
+ *     resolves to this SAME axis. This is a resolution the design note's
+ *     prose states as a general "one axis positioned -> travel the OTHER
+ *     axis" rule, which is right for scatter's continuous x/y (see "value"
+ *     below) but wrong for spread/stack's dir — literally applying "other
+ *     axis" there would draw the layered-area story's ribbon travelling
+ *     vertically through a single horizontally-spread tier, which the
+ *     design note's own worked example (and "Intended?" column) rejects.
+ *     This resolution is the one validated against that example; flagged
+ *     here since the note's step-3 prose doesn't spell out the distinction.
+ *   - "value" (scatter): `x`/`y` are literal per-item coordinates, i.e. a
+ *     continuous VALUE channel exactly like an anchor's `h`/`w` — so the
+ *     travel axis is the axis it does NOT position (mirrors step 2's h/w
+ *     rule: a value on one axis puts travel on the other).
+ *   - "none" (group, derive, anything unrecognized): positions nothing, and
+ *     — for group specifically — may still carry a `by` that's eligible to
+ *     split.
+ */
+type OperatorClass = {
+  kind: "arrangement" | "value" | "none";
+  positions: { x: boolean; y: boolean };
+  by?: SplitBy;
+};
+
+function classifyOperator(op: Operator<any, any>): OperatorClass {
+  const tag = (op as any).__serialize as
+    | { type: string; opts: Record<string, any> }
+    | undefined;
+  if (!tag) return { kind: "none", positions: { x: false, y: false } };
+  const { type, opts } = tag;
+  if (type === "spread" || type === "stack") {
+    const dir: "x" | "y" | undefined = opts.dir;
+    return {
+      kind: "arrangement",
+      positions: { x: dir === "x", y: dir === "y" },
+      by: opts.by,
+    };
+  }
+  if (type === "scatter") {
+    const hasX =
+      opts.x !== undefined ||
+      (opts.xMin !== undefined && opts.xMax !== undefined);
+    const hasY =
+      opts.y !== undefined ||
+      (opts.yMin !== undefined && opts.yMax !== undefined);
+    return { kind: "value", positions: { x: hasX, y: hasY }, by: opts.by };
+  }
+  if (type === "group") {
+    return { kind: "none", positions: { x: false, y: false }, by: opts.by };
+  }
+  return { kind: "none", positions: { x: false, y: false } };
+}
+
+/** A field name or `field(...)` accessor — a data-driven h/w — as opposed to
+ *  a literal number, a `Value`, or `undefined`. Step 2 of the travel-axis
+ *  rule: only a data-driven h/w carries a value-channel signal. */
+function isDataDrivenSize(v: unknown): boolean {
+  return typeof v === "string" || isField(v);
+}
+
+/** Innermost (last in flow order) tier that positions anchors on either
+ *  axis, skipping non-positioning tiers (group, derive, ...). */
+function innermostPositioning(
+  operators: Operator<any, any>[]
+): { index: number; cls: OperatorClass } | undefined {
+  for (let i = operators.length - 1; i >= 0; i--) {
+    const cls = classifyOperator(operators[i]);
+    if (cls.positions.x || cls.positions.y) return { index: i, cls };
+  }
+  return undefined;
+}
+
+/** Step 3 of the travel-axis rule: the innermost positioning tier decides.
+ *  Positions both axes -> "flow order" (no concrete axis — `undefined`, so
+ *  the caller leaves `dir` unset and line/ribbon's own `?? "x"` applies).
+ *  Otherwise see `OperatorClass`'s doc comment for the arrangement/value
+ *  split. */
+function flowOrderTravelAxis(
+  operators: Operator<any, any>[]
+): "x" | "y" | undefined {
+  const found = innermostPositioning(operators);
+  if (!found) return undefined;
+  const { cls } = found;
+  if (cls.positions.x && cls.positions.y) return undefined;
+  if (cls.kind === "arrangement") return cls.positions.x ? "x" : "y";
+  // "value" (scatter) positioning exactly one axis: travel is the other.
+  return cls.positions.x ? "y" : "x";
+}
+
+/** The path tier: the innermost flow tier that positions along the travel
+ *  axis; if none does, the innermost positioning tier of ANY axis (mirrors
+ *  the "flow order" fallback). `undefined` only when nothing in the flow
+ *  positions anything. */
+function findPathTierIndex(
+  operators: Operator<any, any>[],
+  travelAxis: "x" | "y" | undefined
+): number | undefined {
+  if (travelAxis !== undefined) {
+    for (let i = operators.length - 1; i >= 0; i--) {
+      if (classifyOperator(operators[i]).positions[travelAxis]) return i;
+    }
+  }
+  return innermostPositioning(operators)?.index;
+}
+
+/** Resolve the travel axis (steps 1-3 of the rule) and the path tier index
+ *  it implies. `markOpts` is the connector's own opts; `anchorOpts` is the
+ *  previous tier's mark opts when fusing via `.layer()` sugar (undefined at
+ *  `.mark()`-position fusion time, where the anchor hasn't been split off
+ *  yet and `markOpts` itself still carries `h`/`w`). */
+function resolveTravelAxis(
+  markOpts: Record<string, any>,
+  anchorOpts: Record<string, any> | undefined,
+  operators: Operator<any, any>[]
+): "x" | "y" | undefined {
+  // Step 1: an explicit `dir` on the mark names the travel axis directly.
+  if (markOpts.dir === "x" || markOpts.dir === "y") return markOpts.dir;
+
+  // Step 2: a data-driven h/w on the mark or the anchor tier. h -> travel x
+  // (the value lives in y); w -> travel y. Both driven -> fall through.
+  const hDriven =
+    isDataDrivenSize(markOpts.h) ||
+    (anchorOpts !== undefined && isDataDrivenSize(anchorOpts.h));
+  const wDriven =
+    isDataDrivenSize(markOpts.w) ||
+    (anchorOpts !== undefined && isDataDrivenSize(anchorOpts.w));
+  if (hDriven && !wDriven) return "x";
+  if (wDriven && !hDriven) return "y";
+
+  // Step 3: the innermost positioning flow tier.
+  return flowOrderTravelAxis(operators);
+}
+
+/** The default split key: the combination of every flow tier's `by` EXCEPT
+ *  the path tier's (which orders the path and never splits). `undefined`
+ *  when there's nothing to split on (no other grouping tier). Reuses
+ *  `splitKeyFn` (same one `splitEntries` uses) so string/field/function `by`
+ *  forms all project through `GoFishRef.datum` identically to a real
+ *  operator `by` — including the function-form trap: a function `by`
+ *  receives the raw bag element (a `GoFishRef`), not a datum, matching
+ *  today's function-form semantics. */
+function computeDefaultBy(
+  operators: Operator<any, any>[],
+  pathTierIndex: number | undefined
+): SplitBy | undefined {
+  const tierBys: SplitBy[] = [];
+  operators.forEach((op, i) => {
+    if (i === pathTierIndex) return;
+    const by = classifyOperator(op).by;
+    if (by !== undefined) tierBys.push(by);
+  });
+  if (tierBys.length === 0) return undefined;
+  const keyFns = tierBys.map((by) => splitKeyFn(by));
+  // Unit-separator join: a bare `join("")` would collide composite keys like
+  // ("ab","c") and ("a","bc").
+  return (r: any) => keyFns.map((fn) => fn(r)).join("\u001f");
+}
+
+/**
+ * Compute the default split/travel-direction for a fused relational mark and
+ * write it into `fusable.inferred` — NEVER into `fusable.opts` (the record
+ * of what the user wrote; see `tagRelationalFusable`'s doc comment in
+ * chart.ts). A no-op when the mark already carries an explicit `by`, or a
+ * default was already computed for this connector (`inferred.resolved` — set
+ * so the `.mark()` fusion rewrite's internal `.layer(...)` call, which
+ * re-enters `ChartBuilder.layer()` below, doesn't recompute).
+ */
+function applyDefaultRelational(
+  fusable: RelationalFusable,
+  operators: Operator<any, any>[],
+  anchorOpts: Record<string, any> | undefined
+): void {
+  if (fusable.opts.by !== undefined || fusable.inferred.resolved) return;
+  const travelAxis = resolveTravelAxis(fusable.opts, anchorOpts, operators);
+  const pathTierIndex = findPathTierIndex(operators, travelAxis);
+  const defaultBy = computeDefaultBy(operators, pathTierIndex);
+  if (defaultBy !== undefined) fusable.inferred.by = defaultBy;
+  if (travelAxis !== undefined && fusable.opts.dir === undefined) {
+    fusable.inferred.dir = travelAxis;
+  }
+  fusable.inferred.resolved = true;
+}
+
+/* ---- END default grouping for relational marks ---- */
+
 export class ChartBuilder<TInput, TOutput = TInput> {
   private readonly data: TInput;
   private readonly options?: ChartOptions;
@@ -337,16 +560,19 @@ export class ChartBuilder<TInput, TOutput = TInput> {
     // bypasses this method entirely, but a future direct `.mark()` call could
     // still see that shape).
     const fusable = (mark as any)?.__relationalFusable as
-      | {
-          type: string;
-          opts: Record<string, any>;
-          anchorKeys: string[];
-          makeAnchor: () => Mark<any>;
-        }
+      | RelationalFusable
       | undefined;
     const dataNeedsAnchors =
       !this.usesPreviousLayerMarks() && !dataIsRefs(this.data);
     if (fusable && dataNeedsAnchors) {
+      // Default grouping (issue #752): this mark fuses over THIS chart's own
+      // flow (real row data, not a refs bag — `dataNeedsAnchors` already
+      // guarantees that), so a default split/travel-direction can be
+      // computed from `this.operators`. `markOpts` still carries `h`/`w`
+      // here — the anchor tier `fusable.makeAnchor()` below hasn't split
+      // them off yet — so no separate anchor-opts lookup is needed (they're
+      // the same object). See `applyDefaultRelational`'s doc comment.
+      applyDefaultRelational(fusable, this.operators, undefined);
       return this.mark(fusable.makeAnchor() as unknown as Mark<TOutput>).layer(
         mark as Mark<any>
       );
@@ -415,8 +641,41 @@ export class ChartBuilder<TInput, TOutput = TInput> {
    *
    * Returns a `LayerBuilder` so tiers keep chaining: `.layer(a).layer(b)`. Sugar
    * for the manual `layer([this, child])` + `selectAll` wiring.
+   *
+   * Default grouping (issue #752): a bare relational-mark tier (`child` is a
+   * `Mark` tagged `__relationalFusable` by `createRelationalMark` — e.g.
+   * `.mark(blank({h})).layer(ribbon({}))`) always consumes THIS tier's
+   * produced marks as the bag it connects (see the class doc on
+   * `LayerBuilder`), so a default split/travel-direction can be computed
+   * from `this.operators` here too — the SAME computation `.mark()`'s fusion
+   * rewrite runs, just over an explicit two-tier `.mark(anchor).layer(R(...))`
+   * instead of the `.mark(R(...))` sugar that elaborates to it. `anchorOpts`
+   * is `this.finalMark`'s own `__serialize.opts` (e.g. `blank({h:"count"})`'s
+   * opts) so step 2 of the travel-axis rule can see a data-driven `h`/`w`
+   * that lives on the anchor rather than on the connector.
+   *
+   * Guarded to THIS tier's own flow, not a nested one: `usesPreviousLayerMarks()`
+   * / `dataIsRefs(this.data)` are false exactly when `this` was built from
+   * genuine row data flowing through `this.operators` — the same "current
+   * chart's own flow" boundary `.mark()`'s fusion guard (`dataNeedsAnchors`)
+   * uses. A `chart().flow(group({by})).mark(line())` tier passed as `child`
+   * is a `ChartBuilder`, not a bare `Mark`, so the `typeof child === "function"`
+   * check already excludes it — that nested idiom (the pre-#752 way to write
+   * this) stays untouched, per the design note's explicit scope boundary.
    */
   layer(child: LayerTier): LayerBuilder {
+    if (
+      typeof child === "function" &&
+      (child as any).__relationalFusable !== undefined &&
+      !this.usesPreviousLayerMarks() &&
+      !dataIsRefs(this.data)
+    ) {
+      const fusable = (child as any).__relationalFusable as RelationalFusable;
+      const anchorOpts = (this.finalMark as any)?.__serialize?.opts as
+        | Record<string, any>
+        | undefined;
+      applyDefaultRelational(fusable, this.operators, anchorOpts);
+    }
     return new LayerBuilder([this, child]);
   }
 

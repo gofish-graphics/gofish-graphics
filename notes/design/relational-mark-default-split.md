@@ -1,6 +1,6 @@
 # Default grouping for relational marks in a flow
 
-Status: proposal for issue #752. Not implemented. This note refines the rule sketched in the issue comments and checks it against every relational-mark example in the repo.
+Status: proposal for issue #752. The default rule (travel axis, path tier, split) is approved and being implemented. The `along` option below is drafted for review and not yet approved. This note refines the rule sketched in the issue comments and checks it against every relational-mark example in the repo.
 
 ## The problem
 
@@ -22,7 +22,7 @@ Resolve in this order, first match wins:
 
 1. An explicit `dir` on the mark names the travel axis directly.
 2. A data-driven `h` or `w` on the mark, or on the anchor tier it fuses over, names the value axis. `h` puts the value in y, so the path travels x. `w` puts the value in x, so the path travels y. If both `h` and `w` are data-driven, skip to step 3.
-3. Look at the innermost flow tier that positions anchors. If it positions both axes, it is itself the path tier and the path follows flow order through it. If it positions one axis, the path travels the other axis.
+3. Look at the innermost flow tier that positions anchors. A `scatter` that sets both axes is itself the path tier, and the path follows flow order through it. A `scatter` that sets one axis is setting a value coordinate, the same role `h` and `w` play, so the path travels the other axis. A `spread` or `stack` lays its groups out along its `dir`, an arrangement rather than a value, so the path travels that same axis.
 
 ### Path tier and split
 
@@ -37,8 +37,7 @@ The connector's internal direction should also be set to the travel axis. Today 
 
 ### Overrides
 
-- An explicit `by` on the mark replaces the default. This keeps the use where the user re-partitions differently from the flow.
-- `by: null` means no split, one path through everything. This is the analog of ggplot2's `aes(group = 1)`.
+- The explicit override is `along`, described in its own section below. It names the consumed dimension directly and replaces both `by` and `dir` on relational marks. An earlier draft of this note kept `by` as the override and added `by: null` for the no-split case. The `along` section supersedes both.
 - Charts over an explicit refs bag (`chart(selectAll(...))`) and the pairwise `line({ from, to })` form are untouched. The rule only applies where the mark fuses over the current chart's own flow, in `.mark()` position or in `.layer()` over the previous tier's marks.
 
 ## Where this diverges from the proposal in the issue
@@ -74,7 +73,42 @@ Ordering needs no extra work. The anchor bag arrives in depth-first flow order, 
 
 ## Precedent
 
-ggplot2 defaults the group of `geom_line` to the interaction of every discrete aesthetic, which is the same "everything discrete splits" idea, and its known failure (`aes(group = 1)` whenever x is a factor) is the case where the along-axis variable is wrongly included. GoFish flows record direction on positioning tiers, so the path tier is excluded automatically and that failure cannot appear. Vega-Lite splits line and area marks on the discrete `color` and `detail` channels and never on the x channel that orders the path.
+ggplot2 defaults the group of `geom_line` to the interaction of every discrete aesthetic, which is the same "everything discrete splits" idea, and its known failure (`aes(group = 1)` whenever x is a factor) is the case where the along-axis variable is wrongly included. GoFish flows record direction on positioning tiers, so the path tier is excluded automatically and that failure cannot appear. Vega-Lite splits line and area marks on the discrete `color` and `detail` channels and never on the x channel that orders the path. Observable Plot's `z` channel plays the same role as `detail`.
+
+All three of those precedents spell the override as the complement: the user names the split (`group`, `detail`, `z`), never the path. That is the spelling the default rule makes redundant. None of them offer the positive spelling, naming the dimension the path consumes, because none of them reify the nesting the way a flow does. The positive spelling does have precedent outside visualization: NumPy reductions take `axis=`, xarray reductions take `dim=`, and einsum names the contracted index. A relational mark is the same shape of operation, a reduction over the flow's partition product, which is what the next section builds on.
+
+## The `along` option
+
+The rule above has a useful decomposition. Given the flow's groupings, once one dimension is chosen as the path, the split is forced: everything else must split, the same way a quotient is determined by what is quotiented out. The only free choice a relational mark ever makes is which dimension the path runs along. So the honest option surface names that one choice, not its complement.
+
+The proposal: relational marks drop `by` and `dir` and gain a single option, `along`.
+
+- `along: "year"` names a flow tier by its `by` field. That tier becomes the path tier, the path threads its groups in order, and every other grouping splits. Naming a field that is not any tier's key is a loud error.
+- `along: "x"` or `along: "y"` names an axis. The path tier is the innermost tier that positions along that axis. This subsumes `dir`, which relational marks no longer need.
+- `along: ["lake", "species"]` consumes several dimensions. The path threads their combinations, nested in the listed order, and only the remaining groupings split. Listing every grouped dimension gives one path through everything, which subsumes `by: null`, and listing a strict subset expresses "connect across these groups", which was the one legitimate use of restating `by`.
+- Omitted, the default rule infers it: an explicit value channel first, then the flow shape.
+
+Why `by` can go entirely rather than staying as a second override: with the default in place, every `by` on a relational mark in the repo is a restatement of a flow grouping, and the complement spelling is the one that scales with flow depth (the barley slope needed the product of every enclosing grouping, by hand). The remaining genuine use, splitting by a field that appears in no flow tier, already has a canonical structural spelling, `chart(selectAll(...)).flow(group({ by })).mark(...)`, and the corpus shows every exotic case using exactly that idiom. One mark option that names one dimension is a smaller surface than two options where one must be computed from the other.
+
+This also changes the character of the inference. Today the inference must be clever because the explicit fallback is expensive. With `along` costing one word, the inference can stay exactly as designed for the cases with real evidence, and the genuinely ambiguous corner (a bare `line()` over a flow that positions nothing) can fail loudly asking for `along` instead of guessing.
+
+Respelled examples, explicit forms only (the defaults need nothing):
+
+- Barley slope: `line({ along: "year" })` instead of the hand-built composite key.
+- Connected scatterplot, stated explicitly: `line({ along: "year" })`, the same word whether the consumed tier is a spread or a scatter.
+- Streamgraph forced to a single path: `ribbon({ along: ["lake", "species"] })`.
+- A y-traveling ribbon: `ribbon({ w: "count", along: "y" })` instead of `dir: "y"`.
+
+## Enclose
+
+Issue #717 is turning `enclose` into a genuine relation over refs, contain this set and avoid that set. Once enclose can fuse into a flow the way line and ribbon do, the rule applies verbatim with one degeneracy: enclose consumes its dimension as a set rather than a sequence, so the path-order half of the rule is vacuous and only the split half acts. `spread(lake, x)` then `stack(species, y)` with a fused enclose gives one outline per species, each containing that species' rects across every lake, exactly where ribbon gives one band per species.
+
+The word is the one part that does not carry over. "Line along year" reads because a path has a direction of travel. "Enclose along year" does not, because a set has none. Two observations before picking a replacement word:
+
+- Enclose rarely needs the option at all. An unordered mark only feels its consumed dimension through the complement, the split, and the split is usually better said structurally. `group(cluster)` then `scatter(x, y)` with a fused enclose gives one hull per cluster with no option written, by the same rule that gives one line per lake in the small-multiples case.
+- If a word is ever needed, "over" reads better for sets than "along" ("enclose over year" is one outline spanning the years). That would be a mark-appropriate synonym for the same slot, not a second concept.
+
+The recommendation is to defer the word until fused-enclose examples exist, since #717 is not fully implemented and there are no specs to check a spelling against. The `avoiding` list from #717 is a second, separate relational slot (exclusion) and is out of scope here.
 
 ## The paint fix
 
@@ -83,13 +117,13 @@ Independent of the default split, a field-valued `fill` (or other paint) on a co
 ## Implementation notes
 
 - The computation lives in `ChartBuilder`, at the fusion rewrite in `.mark()` and at the `.layer()` sugar path over previous-tier marks. `this.operators` is in hand at that point, and each operator carries `__serialize.opts` verbatim, so `by`, `dir`, and scatter's `x`/`y` channels are all readable without re-executing anything.
-- The connector's closures read `opts.by` and `opts.dir` off the same object that `tagRelationalFusable` stamped, at call time rather than at construction time. So the builder can write the computed `by` and `dir` into `fusable.opts` in place, and no reconstruction or re-tagging is needed.
+- Explicit and inferred stay in separate channels. The factory captures the user's opts immutably, and the fusable tag carries a second mutable cell (`inferred`) that the builder fills in. The mark closure resolves the two in one place when it is applied to its bag, explicit winning over inferred. The inferred values never touch `__serialize.opts`, so the default cannot serialize or masquerade as user intent. One consequence is that the split-versus-no-split dispatch must happen inside the closure at application time. Today `createRelationalMark` picks the branch when the factory is called, which is before the builder has seen the flow.
 - The composite split key stays internal. The builder synthesizes a key function over the non-path fields rather than extending `SplitBy` to arrays, so nothing new serializes. The Python round trip rebuilds charts through the same `ChartBuilder.flow().mark()` chain in `fromJSON.ts`, so the default is recomputed on the JS side and both languages agree for free.
 - One trap: a function-form `SplitBy` receives the raw bag element, a `GoFishRef`, not a datum. The synthesized key function must project fields through `ref.datum` the way the string form already does, via `projectValues`.
-- `by: null` needs the option type widened from `SplitBy | undefined`, with `null` meaning the unsplit branch.
+- If `along` is adopted, `by` and `dir` leave the relational mark options and `along` crosses the Python bridge as a plain option, a string or a list of strings, with nothing nullable and nothing inferred ever serializing.
 
 ## Out of scope
 
 - The function-form `SplitBy` receiving a render node rather than a datum has its own issue and is not changed here.
-- Letting an explicit `by` accept an array of fields for manual composite splits would be a nice follow-up but is separable.
-- Migrating existing stories is implementation-phase work. Explicit `by` keeps working as an override, so nothing breaks, but the ridgeline, streamgraph, area, and ribbon stories can drop their restated `by`, and the barley area story can drop the double `group` nested idiom.
+- Enclose adopts the rule when #717 lands. Its option word, if it ever needs one, is deferred until fused-enclose examples exist. The `avoiding` exclusion list is a separate slot.
+- Migrating existing stories is implementation-phase work. The ridgeline, streamgraph, area, and ribbon stories drop their restated `by`, and the barley area story can drop the double `group` nested idiom.
