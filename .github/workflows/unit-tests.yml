@@ -81,6 +81,9 @@ jobs:
       - name: gofish-graphics tests (path + font + bbox + solver + serialize)
         run: pnpm --filter gofish-graphics test
 
+      - name: gofish-python widget Arrow transport tests
+        run: pnpm --filter gofish-python test:arrow-transport
+
   python-ir-validation:
     needs: changes
     if: ${{ github.event_name != 'pull_request' || needs.changes.outputs.relevant == 'true' }}

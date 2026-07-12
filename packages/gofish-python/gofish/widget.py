@@ -15,7 +15,7 @@ from typing import Any, Callable, Dict, List, Optional
 import anywidget
 import traitlets
 
-from .arrow_utils import arrow_to_dataframe, dataframe_to_arrow
+from .arrow_utils import arrow_to_records, dataframe_to_arrow
 
 
 class GoFishChartWidget(anywidget.AnyWidget):
@@ -113,8 +113,13 @@ class GoFishChartWidget(anywidget.AnyWidget):
             if fn is None:
                 raise ValueError(f"Derive function with ID {lambda_id} not found")
 
-            df = arrow_to_dataframe(base64.b64decode(arrow_b64))
-            result = fn(df.to_dict("records"))
+            # `arrow_to_records` (not `arrow_to_dataframe(...).to_dict("records")`)
+            # so a `list<struct>` column (a mark-fn's `datum` multi-row bag,
+            # #783) decodes to a plain `list[dict]` rather than a numpy
+            # `ndarray` of dicts — matching what the parity harness's derive
+            # server hands the same function over its plain-JSON transport.
+            rows = arrow_to_records(base64.b64decode(arrow_b64))
+            result = fn(rows)
 
             try:
                 import pandas as pd

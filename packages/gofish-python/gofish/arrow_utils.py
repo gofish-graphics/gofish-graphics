@@ -104,3 +104,38 @@ def arrow_to_dataframe(arrow_bytes: bytes) -> pd.DataFrame:
     table = reader.read_all()
     return table.to_pandas()
 
+
+def arrow_to_records(arrow_bytes: bytes) -> list:
+    """
+    Convert Apache Arrow bytes back to a list of plain-dict rows.
+
+    Deliberately bypasses `arrow_to_dataframe`/pandas for this: pandas'
+    `to_pandas()` decodes a `list<struct>` column (the JS-side widget
+    transport's explicit-schema encoding for a mark-fn's multi-row `datum`
+    bag — see `widget-src/arrowTransport.ts`, issue #783) into a numpy
+    `ndarray` of dicts rather than a plain Python `list` of dicts, which
+    doesn't match the plain-JSON-over-HTTP shape the parity test harness's
+    derive server hands a mark-fn (`tests/scripts/derive-server.py`).
+    `pyarrow.Array.to_pylist()` decodes straight to native Python
+    containers — `list`/`dict`/`None`/scalars — for every level of
+    nesting, so a `list<struct>` column round-trips to exactly a
+    `list[dict]`, and a struct field missing from some bag rows (ragged
+    but homogeneous data — the encoder fills those with a column-level
+    null) comes back as `None`.
+
+    Args:
+        arrow_bytes: Arrow IPC format bytes
+
+    Returns:
+        A list of dicts, one per row, in column order.
+
+    Example:
+        >>> rows = arrow_to_records(arrow_bytes)
+    """
+    reader = pa.ipc.open_stream(arrow_bytes)
+    table = reader.read_all()
+    columns = {name: table.column(name).to_pylist() for name in table.column_names}
+    return [
+        {name: columns[name][i] for name in table.column_names}
+        for i in range(table.num_rows)
+    ]
