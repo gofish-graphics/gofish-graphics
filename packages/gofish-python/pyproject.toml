@@ -12,18 +12,24 @@ name = "gofish-graphics"
 version = "0.1.0"
 description = "Clean AST implementation for GoFish graphics library"
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = ">=3.10"
 dependencies = [
     "anywidget>=0.9.0",
     "pyarrow>=10.0.0",
-    "pandas>=1.5.0",
+    "narwhals>=2.0.0",
 ]
 # Note: The widget bundle (gofish/_static/widget.esm.js) is self-contained
 # and includes all dependencies (gofish-graphics, solid-js, apache-arrow).
 # No network access or import maps are required at runtime.
+#
+# Data ingestion (gofish/arrow_utils.py) is dataframe-agnostic via narwhals
+# (https://narwhals-dev.github.io/narwhals/): pandas, polars, pyarrow,
+# DuckDB relations, etc. are all accepted, but none of them is a hard
+# dependency of this package — narwhals is a zero-dependency shim over
+# whichever dataframe library the caller already has installed.
 
 [project.optional-dependencies]
-test = ["pytest>=7.0.0"]
+test = ["pytest>=7.0.0", "pandas>=1.5.0", "polars>=1.0.0"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

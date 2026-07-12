@@ -16,7 +16,7 @@ from typing import Any, Callable, Dict, List, Optional
 import anywidget
 import traitlets
 
-from .arrow_utils import arrow_to_records, dataframe_to_arrow
+from .arrow_utils import arrow_to_records, data_to_arrow_bytes
 
 
 class GoFishChartWidget(anywidget.AnyWidget):
@@ -134,7 +134,8 @@ class GoFishChartWidget(anywidget.AnyWidget):
             if fn is None:
                 raise ValueError(f"Derive function with ID {lambda_id} not found")
 
-            # `arrow_to_records` (not `arrow_to_dataframe(...).to_dict("records")`)
+            # `arrow_to_records` (not a pandas decode like the pre-narwhals
+            # `arrow_to_dataframe(...).to_dict("records")`)
             # so a `list<struct>` column (a mark-fn's `datum` multi-row bag,
             # #783) decodes to a plain `list[dict]` rather than a numpy
             # `ndarray` of dicts — matching what the parity harness's derive
@@ -142,19 +143,11 @@ class GoFishChartWidget(anywidget.AnyWidget):
             rows = arrow_to_records(base64.b64decode(arrow_b64))
             result = fn(rows)
 
-            try:
-                import pandas as pd
-            except Exception as exc:  # pragma: no cover
-                raise RuntimeError("pandas is required for derive execution") from exc
-
-            if result is None:
-                result_df = pd.DataFrame()
-            elif isinstance(result, pd.DataFrame):
-                result_df = result
-            else:
-                result_df = pd.DataFrame(result)
-
-            result_b64 = base64.b64encode(dataframe_to_arrow(result_df)).decode("utf-8")
+            # A user's derive callback can return `None`, a list of dict
+            # rows, or a dataframe from any narwhals-supported backend
+            # (pandas, polars, pyarrow, ...) — `data_to_arrow_bytes` is the
+            # one ingestion choke point that handles all of those shapes.
+            result_b64 = base64.b64encode(data_to_arrow_bytes(result)).decode("utf-8")
             self.derive_response = {"request_id": request_id, "result_b64": result_b64}
         except Exception as exc:
             self.derive_response = {"request_id": request_id, "error": str(exc)}

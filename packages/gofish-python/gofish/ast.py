@@ -1363,26 +1363,14 @@ class ChartBuilder:
 
         # Import here to avoid circular dependencies
         from .widget import GoFishChartWidget
-        from .arrow_utils import dataframe_to_arrow, empty_placeholder_arrow_bytes
-        import pandas as pd
+        from .arrow_utils import data_to_arrow_bytes, empty_placeholder_arrow_bytes
 
         # Ref-data charts (`ref(name)` / `selectAll(name)`) have no data of
         # their own — they borrow nodes from a sibling chart.
         if isinstance(self.data, _RefProxy):
             arrow_data = empty_placeholder_arrow_bytes()
         else:
-            # Convert data to Arrow format
-            if isinstance(self.data, pd.DataFrame):
-                df = self.data
-            elif self.data is None:
-                df = pd.DataFrame()
-            else:
-                df = pd.DataFrame(self.data)
-
-            if len(df) == 0:
-                arrow_data = empty_placeholder_arrow_bytes()
-            else:
-                arrow_data = dataframe_to_arrow(df)
+            arrow_data = data_to_arrow_bytes(self.data)
 
         # Get the IR spec
         spec = self.to_ir()
@@ -1827,21 +1815,16 @@ def join(right: Any, *, on: str) -> Operator:
         )
 
     Args:
-        right: The right-hand table — a list of row dicts or a pandas DataFrame.
+        right: The right-hand table — a list of row dicts, or any dataframe
+            narwhals supports (pandas, polars, pyarrow, DuckDB relation, etc.).
         on: Shared key field matched between the incoming rows and ``right``.
 
     Returns:
         Operator object — IR ``{type: "join", on, right}``.
     """
-    try:
-        import pandas as pd
+    from .arrow_utils import to_records
 
-        if isinstance(right, pd.DataFrame):
-            right_rows: List[Any] = right.to_dict(orient="records")
-        else:
-            right_rows = list(right)
-    except ImportError:
-        right_rows = list(right)
+    right_rows: List[Any] = to_records(right)
     return Operator("join", on=on, right=right_rows)
 
 
@@ -3034,8 +3017,7 @@ class LayerBuilder:
             GoFishChartWidget instance that will display in Jupyter
         """
         from .widget import GoFishChartWidget
-        from .arrow_utils import dataframe_to_arrow, empty_placeholder_arrow_bytes
-        import pandas as pd
+        from .arrow_utils import data_to_arrow_bytes, empty_placeholder_arrow_bytes
 
         def _serialize_child_data(child: ChartBuilder) -> bytes:
             """Serialize a child chart's data to raw Arrow IPC bytes.
@@ -3049,17 +3031,7 @@ class LayerBuilder:
             if isinstance(child.data, _RefProxy) or child._uses_previous_marks():
                 return empty_placeholder_arrow_bytes()
 
-            if isinstance(child.data, pd.DataFrame):
-                df = child.data
-            elif child.data is None:
-                df = pd.DataFrame()
-            else:
-                df = pd.DataFrame(child.data)
-
-            if len(df) == 0:
-                return empty_placeholder_arrow_bytes()
-
-            return dataframe_to_arrow(df)
+            return data_to_arrow_bytes(child.data)
 
         # Serialize each child's data and collect derive functions
         arrow_dict: dict = {}

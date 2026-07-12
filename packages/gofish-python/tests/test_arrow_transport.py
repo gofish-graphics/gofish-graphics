@@ -109,8 +109,9 @@ class TestArrowToRecords:
 class TestWidgetMarkFnBagContract:
     """End-to-end through the real trait observer (`_on_derive_request`),
     not just the arrow_utils helper — confirms widget.py actually calls
-    `arrow_to_records` (plain list[dict] rows) rather than the old
-    `arrow_to_dataframe(...).to_dict("records")` path (numpy-wrapped bags).
+    `arrow_to_records` (plain list[dict] rows) rather than the old, deleted
+    `arrow_to_dataframe(...).to_dict("records")` pandas path (numpy-wrapped
+    bags).
     """
 
     def test_mark_fn_receives_plain_list_of_dicts_for_a_bag(self):
