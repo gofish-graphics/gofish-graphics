@@ -28,17 +28,17 @@ ribbon(stroke=None, strokeWidth=None, opacity=None, mixBlendMode=None,
 
 ## Parameters
 
-| Parameter      | Type                                                 | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| -------------- | ---------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `stroke`       | `str`                                                | Outline color                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
-| `strokeWidth`  | `int`                                                | Outline width in pixels                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
-| `opacity`      | `float`                                              | Opacity, `0`–`1`                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
-| `mixBlendMode` | `str`                                                | CSS blend mode for overlapping areas                                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| `dir`          | `str`                                                | Direction the ribbon fills toward                                                                                                                                                                                                                                                                                                                                                                                                                                           |
-| `curve`        | `str \| dict`                                        | Screen-space path shape; default `"auto"`                                                                                                                                                                                                                                                                                                                                                                                                                                   |
-| `by`           | `str \| field(...) \| Callable`                      | Partitions the operand bag (the list of refs) into groups and draws one band per group. Same grammar as any operator's `by` — bare field name, key function, or [`field(...)`](/python/api/operators/spread#field-expression-pipeline) accessor. Resolves against the refs' own datum automatically (no `datum.` prefix), same as `group(by=...)`. Composes with an upstream `group()` as a nested split.                                                                   |
-| `w`, `h`       | `int \| float \| str \| FieldAccessor \| datum(...)` | **Ignored by `ribbon` itself.** Blank-fusion anchor keys: read only when `ribbon(...)` is placed directly in `.mark()` position, where they become the invisible anchor tier's `blank(w=..., h=..., emX=..., emY=...)` opts — same channel-value shapes as a leaf mark's "size" channel, including a `field(...)` pipeline like `field("count").sum()`. See [`.layer()`'s blank-fusion section](/python/api/core/layer#blank-fusion-skip-layer-entirely-for-a-fresh-chart). |
-| `emX`, `emY`   | `bool`                                               | **Ignored by `ribbon` itself.** Blank-fusion anchor keys — see `w`/`h` above.                                                                                                                                                                                                                                                                                                                                                                                               |
+| Parameter      | Type                                                 | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| -------------- | ---------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `stroke`       | `str`                                                | Outline color                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| `strokeWidth`  | `int`                                                | Outline width in pixels                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| `opacity`      | `float`                                              | Opacity, `0`–`1`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| `mixBlendMode` | `str`                                                | CSS blend mode for overlapping areas                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| `dir`          | `str`                                                | Direction the ribbon fills toward                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| `curve`        | `str \| dict`                                        | Screen-space path shape; default `"auto"`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| `by`           | `str \| field(...) \| Callable`                      | Partitions the operand bag (the list of refs) into groups and draws one band per group. Same grammar as any operator's `by` — bare field name, key function, or [`field(...)`](/python/api/operators/spread#field-expression-pipeline) accessor. Resolves against the refs' own datum automatically (no `datum.` prefix), same as `group(by=...)`. Composes with an upstream `group()` as a nested split. When the ribbon is fused into a flow, an explicit `by` overrides the [default grouping](#default-grouping) computed from the flow; omit it and the flow's own groupings decide the split. |
+| `w`, `h`       | `int \| float \| str \| FieldAccessor \| datum(...)` | **Ignored by `ribbon` itself.** Blank-fusion anchor keys: read only when `ribbon(...)` is placed directly in `.mark()` position, where they become the invisible anchor tier's `blank(w=..., h=..., emX=..., emY=...)` opts — same channel-value shapes as a leaf mark's "size" channel, including a `field(...)` pipeline like `field("count").sum()`. See [`.layer()`'s blank-fusion section](/python/api/core/layer#blank-fusion-skip-layer-entirely-for-a-fresh-chart).                                                                                                                         |
+| `emX`, `emY`   | `bool`                                               | **Ignored by `ribbon` itself.** Blank-fusion anchor keys — see `w`/`h` above.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 
 Returns a `Mark` for use in [`.mark()`](/python/api/core/mark).
 
@@ -55,10 +55,22 @@ ribbon per series), run it through `group(by="datum.field")` — see
 Stack several ribbons in one `layer` — with `opacity` or `mixBlendMode` — for
 layered and stacked area charts.
 
-## Sugar: `.layer(ribbon(by=...))`
+## Default grouping
+
+A ribbon fused into a flow — in `.mark()` position or as `.layer()` sugar over
+the previous tier's marks — splits at the flow's own grouping by default: one
+tier lays the band's path, and every other grouping in the flow splits it into
+separate bands. You don't restate the split with `by` — the flow one line up
+already declared it. An explicit `by` still works and overrides the default,
+which is useful when you want a different split than the flow implies. This
+doesn't apply to a ribbon drawn over an explicit refs bag
+(`chart(selectAll(...))`), which is unaffected and keeps needing an explicit
+`by` (or an upstream `group()`) to split at all.
+
+## Sugar: `.layer(ribbon(...))`
 
 When the ribbon traces a chart's _own_ marks, skip the two-chart `selectAll`
-recipe and chain [`.layer()`](/python/api/core/layer) with `by` on the
+recipe and chain [`.layer()`](/python/api/core/layer) on the
 builder — this is the canonical simple ribbon-chart spelling:
 
 ```python
@@ -68,9 +80,12 @@ chart(seafood, axes=True).flow(
     spread(by="lake", dir="x", spacing=64),
     stack(by=field("species").sort("count"), dir="y"),
 ).mark(rect(h="count", fill="species")).layer(
-    ribbon(by="species", opacity=0.8)
+    ribbon(opacity=0.8)
 ).render(w=400, h=400)
 ```
+
+No `by` needed: the `stack(by="species")` tier already told the flow how to
+group, so the ribbon splits into one band per species by default.
 
 See [`.layer()`](/python/api/core/layer) for the full semantics, including the
 zBelow-by-default paint order and the desugaring to the explicit
@@ -94,10 +109,18 @@ chart(lake_totals).flow(
 ).mark(blank(h="count")).layer(ribbon(opacity=0.8))
 ```
 
-A `by`-split ribbon's `fill` can be a shared field name (each group is
-homogeneous in it): `ribbon(h="count", fill="species", by="species")`
-resolves `fill` through the color scale per group, the same as it would if
-`fill` were declared on an explicit anchor `blank()`.
+A grouped flow fuses the same way, with no `by` needed:
+
+```python
+chart(seafood, axes=True).flow(
+    spread(by="lake", dir="x", spacing=64, alignment="middle"),
+    stack(by="species", dir="y"),
+).mark(ribbon(h="count", fill="species", opacity=0.8))
+```
+
+`fill` here is a shared field name, homogeneous within each species group
+(the default split, above) — it resolves through the color scale per group,
+the same as it would if `fill` were declared on an explicit anchor `blank()`.
 
 See [`.layer()`'s blank-fusion section](/python/api/core/layer#blank-fusion-skip-layer-entirely-for-a-fresh-chart)
 for the full desugaring rule (the `w`/`h`/`emX`/`emY` anchor/connector key

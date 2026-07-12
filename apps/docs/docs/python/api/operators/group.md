@@ -29,11 +29,13 @@ group(*, by, **options) -> Operator
 | `by`      | `str` \| `field(...)` \| `Callable` | **Required.** Field, dotted path, [`field(...)`](/python/api/operators/spread#field-expression-pipeline) accessor, or callable to group by. |
 
 For the simple case — one ribbon or stream band per group, re-partitioning the
-marks a chart already drew — reach for `by` on the connector mark itself
-instead: [`.layer(ribbon(by="species"))`](/python/api/core/layer). `group()`
-is for nested splits (composing with a connector's own `by`) and for operator
-pipelines generally — anywhere you need a named per-partition frame without a
-connector mark driving the partitioning. `group`'s own `by` reads refs, so
+marks a chart already drew — reach for a bare `.layer(ribbon(...))` instead,
+with no `by` at all: a ribbon or line fused over a chart's own flow splits at
+the flow's own grouping by default (see [`ribbon`'s Default
+grouping](/python/api/marks/ribbon#default-grouping)). `group()` is for nested
+splits (composing with a connector's own `by`, or an explicit `by` override)
+and for operator pipelines generally — anywhere you need a named per-partition
+frame without a connector mark driving the partitioning. `group`'s own `by` reads
 when it runs after a `selectAll` use the datum path — `by="datum.species"`:
 
 ```python

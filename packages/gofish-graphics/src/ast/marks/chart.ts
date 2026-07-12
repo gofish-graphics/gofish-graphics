@@ -470,11 +470,15 @@ export type InferredRelational = {
 };
 
 /**
- * A connector's `fill` may be a shared field name (e.g.
- * `ribbon({ fill: "species", by: "species" })`) rather than a literal color —
- * resolve it once per group into a concrete `Value`, the same way a per-item
- * mark's color channel would (`inferColor`), instead of leaking the bare
- * field name through to `Connect` as a literal (invalid) CSS color.
+ * A connector's `fill` or `stroke` may be a shared field name (e.g.
+ * `ribbon({ fill: "species", by: "species" })` or
+ * `line({ stroke: "variety", by: "variety" })`) rather than a literal color —
+ * resolve each once per group into a concrete `Value`, the same way a
+ * per-item mark's color channel would (`inferColor`), instead of leaking the
+ * bare field name through to `Connect` as a literal (invalid) CSS color.
+ * `fill` colors a ribbon's band; `stroke` colors a line's (or a ribbon's
+ * outline's) path — both are the same "field name instead of a literal
+ * color" shape, so both go through the same resolution.
  *
  * Runs on BOTH the split and unsplit branches of the bag form (see
  * `createRelationalMark`). On the split branch each group is homogeneous in
@@ -491,31 +495,40 @@ export type InferredRelational = {
  * tells a field name from a literal (falls through unchanged when the string
  * isn't a key of the sampled row).
  */
+const PAINT_KEYS = ["fill", "stroke"] as const;
+
 function resolveGroupFill<O extends RelationalMarkOptions>(
   type: string,
   opts: O,
   groupRefs: GoFishRef[]
 ): O {
-  const fill = (opts as any).fill;
-  if (typeof fill !== "string") return opts;
   const rows = groupRefs.flatMap((r) =>
     Array.isArray(r.datum) ? r.datum : [r.datum]
   );
-  if (rows.length === 0 || rows[0] == null || !(fill in rows[0])) {
-    // Not a field name on this data (e.g. a literal color like "steelblue")
-    // — inferColor's own fallthrough passes it through unchanged.
-    return opts;
+  let resolvedOpts = opts;
+  for (const key of PAINT_KEYS) {
+    const raw = (opts as any)[key];
+    if (typeof raw !== "string") continue;
+    if (rows.length === 0 || rows[0] == null || !(raw in rows[0])) {
+      // Not a field name on this data (e.g. a literal color like
+      // "steelblue") — inferColor's own fallthrough passes it through
+      // unchanged.
+      continue;
+    }
+    const first = rows[0][raw];
+    if (!rows.every((r) => r?.[raw] === first)) {
+      throw new Error(
+        `[gofish] ${type}({ ${key}: "${raw}" }): "${raw}" is not constant ` +
+          `across the connected group; give the ${type} a \`by\` that groups ` +
+          `by "${raw}" (or a field it agrees with), or pass an explicit color.`
+      );
+    }
+    const resolved = inferColor(raw, rows);
+    if (resolved !== undefined) {
+      resolvedOpts = { ...resolvedOpts, [key]: resolved } as O;
+    }
   }
-  const first = rows[0][fill];
-  if (!rows.every((r) => r?.[fill] === first)) {
-    throw new Error(
-      `[gofish] ${type}({ fill: "${fill}" }): "${fill}" is not constant ` +
-        `across the connected group; give the ${type} a \`by\` that groups ` +
-        `by "${fill}" (or a field it agrees with), or pass an explicit color.`
-    );
-  }
-  const resolved = inferColor(fill, rows);
-  return resolved === undefined ? opts : ({ ...opts, fill: resolved } as O);
+  return resolvedOpts;
 }
 
 export function createRelationalMark<O extends RelationalMarkOptions>(
@@ -629,7 +642,7 @@ export function createRelationalMark<O extends RelationalMarkOptions>(
 
 export type LineOptions = {
   fill?: MaybeValue<string>;
-  stroke?: string;
+  stroke?: MaybeValue<string>;
   strokeWidth?: number;
   strokeDasharray?: string;
   opacity?: number;
@@ -696,7 +709,7 @@ export const line = createRelationalMark<LineOptions>("line", (o, children) =>
 
 export type RibbonOptions = {
   fill?: MaybeValue<string>;
-  stroke?: string;
+  stroke?: MaybeValue<string>;
   strokeWidth?: number;
   opacity?: number;
   mixBlendMode?: "normal" | "multiply";

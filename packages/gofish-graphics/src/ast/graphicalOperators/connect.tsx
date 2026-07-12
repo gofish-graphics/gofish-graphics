@@ -91,7 +91,7 @@ export const connect = createNodeOperator(
       // ("ribbon") mode only honors `straight` (linear band) vs `bezier`
       // (S-curve band). Defaults to `"straight"` when omitted.
       curve?: Curve;
-      stroke?: string;
+      stroke?: MaybeValue<string>;
       strokeWidth?: number;
       strokeDasharray?: string;
       opacity?: number;
@@ -126,7 +126,13 @@ export const connect = createNodeOperator(
       {
         type: "connect",
         shared: [false, false],
-        color: fill,
+        // The domain-building walk (`GoFishNode.resolveColorScale`) only
+        // reads a node's single `color` property to register a field-valued
+        // paint into the shared discrete-color scale. A connector's own
+        // color-bearing channel is `fill` in edge mode (ribbon) or `stroke`
+        // in center mode (line) — `fill` wins when both happen to be set,
+        // which no relational-mark example does.
+        color: fill ?? stroke,
         resolveUnderlyingSpace: (
           children: Size<UnderlyingSpace>[],
           _childNodes: GoFishAST[]
@@ -592,6 +598,10 @@ export const connect = createNodeOperator(
             rawFill as MaybeValue<string>,
             scaleContext?.unit
           );
+          const resolvedStroke: string | undefined = resolveColorChannel(
+            stroke,
+            scaleContext?.unit
+          );
 
           // The legacy `<g transform="translate(tx,ty)">` offset, folded into a
           // local pixel map so each path point lands at its absolute pixel.
@@ -609,7 +619,7 @@ export const connect = createNodeOperator(
 
           const style = lowerStyle({
             fill: mode === "center" ? "none" : (resolvedFill ?? "none"),
-            stroke: stroke ?? resolvedFill ?? "black",
+            stroke: resolvedStroke ?? resolvedFill ?? "black",
             strokeWidth: strokeWidth ?? 0,
             strokeDasharray,
             opacity: opacity ?? 1,

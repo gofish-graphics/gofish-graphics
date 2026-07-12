@@ -1,6 +1,6 @@
 # Default grouping for relational marks in a flow
 
-Status: proposal for issue #752. The default rule (travel axis, path tier, split) is approved and being implemented. The `along` option below is drafted for review and not yet approved. This note refines the rule sketched in the issue comments and checks it against every relational-mark example in the repo.
+Status: approved design for issue #752, including the `along` option (single field key, `dir` kept, `by` removed from relational marks). This note refines the rule sketched in the issue comments and checks it against every relational-mark example in the repo.
 
 ## The problem
 
@@ -37,7 +37,7 @@ The connector's internal direction should also be set to the travel axis. Today 
 
 ### Overrides
 
-- The explicit override is `along`, described in its own section below. It names the consumed dimension directly and replaces both `by` and `dir` on relational marks. An earlier draft of this note kept `by` as the override and added `by: null` for the no-split case. The `along` section supersedes both.
+- The explicit override is `along`, described in its own section below. It names the path tier directly and replaces `by` on relational marks. `dir` stays as the axis-level control. An earlier draft of this note kept `by` as the override and added `by: null` for the no-split case. The `along` section supersedes both.
 - Charts over an explicit refs bag (`chart(selectAll(...))`) and the pairwise `line({ from, to })` form are untouched. The rule only applies where the mark fuses over the current chart's own flow, in `.mark()` position or in `.layer()` over the previous tier's marks.
 
 ## Where this diverges from the proposal in the issue
@@ -81,12 +81,12 @@ All three of those precedents spell the override as the complement: the user nam
 
 The rule above has a useful decomposition. Given the flow's groupings, once one dimension is chosen as the path, the split is forced: everything else must split, the same way a quotient is determined by what is quotiented out. The only free choice a relational mark ever makes is which dimension the path runs along. So the honest option surface names that one choice, not its complement.
 
-The proposal: relational marks drop `by` and `dir` and gain a single option, `along`.
+The proposal: relational marks drop `by` and gain a single option, `along`, whose value is one field name.
 
 - `along: "year"` names a flow tier by its `by` field. That tier becomes the path tier, the path threads its groups in order, and every other grouping splits. Naming a field that is not any tier's key is a loud error.
-- `along: "x"` or `along: "y"` names an axis. The path tier is the innermost tier that positions along that axis. This subsumes `dir`, which relational marks no longer need.
-- `along: ["lake", "species"]` consumes several dimensions. The path threads their combinations, nested in the listed order, and only the remaining groupings split. Listing every grouped dimension gives one path through everything, which subsumes `by: null`, and listing a strict subset expresses "connect across these groups", which was the one legitimate use of restating `by`.
-- Omitted, the default rule infers it: an explicit value channel first, then the flow shape.
+- Omitted, the default rule infers the path tier: an explicit value channel first, then the flow shape.
+- `dir` stays as it is, the axis-level override (step 1 of the inference). An earlier draft folded it into `along` as `along: "x"`, but an axis name is not a field name, and overloading the two invites collisions with a dataset whose column is literally named "x". The two options answer different questions. `dir` says which axis the path travels, and `along` says which tier lays the path.
+- An earlier draft also had an array form, `along: ["lake", "species"]`, consuming several dimensions, mainly so `by: null` (one path through everything) would stay expressible. Dropped: no example in the corpus wants more than one path dimension, and the one-path-through-a-grouped-flow case has no real chart behind it either. If it ever appears, the refs idiom (`chart(selectAll(...))` with no grouping) already spells it.
 
 Why `by` can go entirely rather than staying as a second override: with the default in place, every `by` on a relational mark in the repo is a restatement of a flow grouping, and the complement spelling is the one that scales with flow depth (the barley slope needed the product of every enclosing grouping, by hand). The remaining genuine use, splitting by a field that appears in no flow tier, already has a canonical structural spelling, `chart(selectAll(...)).flow(group({ by })).mark(...)`, and the corpus shows every exotic case using exactly that idiom. One mark option that names one dimension is a smaller surface than two options where one must be computed from the other.
 
@@ -96,8 +96,8 @@ Respelled examples, explicit forms only (the defaults need nothing):
 
 - Barley slope: `line({ along: "year" })` instead of the hand-built composite key.
 - Connected scatterplot, stated explicitly: `line({ along: "year" })`, the same word whether the consumed tier is a spread or a scatter.
-- Streamgraph forced to a single path: `ribbon({ along: ["lake", "species"] })`.
-- A y-traveling ribbon: `ribbon({ w: "count", along: "y" })` instead of `dir: "y"`.
+- Transposed streamgraph, one band per lake threading species: `ribbon({ along: "species" })` instead of `by: "lake"`.
+- A y-traveling ribbon keeps `dir`: `ribbon({ w: "count", dir: "y" })`.
 
 ## Enclose
 
@@ -120,7 +120,7 @@ Independent of the default split, a field-valued `fill` (or other paint) on a co
 - Explicit and inferred stay in separate channels. The factory captures the user's opts immutably, and the fusable tag carries a second mutable cell (`inferred`) that the builder fills in. The mark closure resolves the two in one place when it is applied to its bag, explicit winning over inferred. The inferred values never touch `__serialize.opts`, so the default cannot serialize or masquerade as user intent. One consequence is that the split-versus-no-split dispatch must happen inside the closure at application time. Today `createRelationalMark` picks the branch when the factory is called, which is before the builder has seen the flow.
 - The composite split key stays internal. The builder synthesizes a key function over the non-path fields rather than extending `SplitBy` to arrays, so nothing new serializes. The Python round trip rebuilds charts through the same `ChartBuilder.flow().mark()` chain in `fromJSON.ts`, so the default is recomputed on the JS side and both languages agree for free.
 - One trap: a function-form `SplitBy` receives the raw bag element, a `GoFishRef`, not a datum. The synthesized key function must project fields through `ref.datum` the way the string form already does, via `projectValues`.
-- If `along` is adopted, `by` and `dir` leave the relational mark options and `along` crosses the Python bridge as a plain option, a string or a list of strings, with nothing nullable and nothing inferred ever serializing.
+- With `along` adopted, `by` leaves the relational mark options, `dir` stays, and `along` crosses the Python bridge as a plain string option, with nothing nullable and nothing inferred ever serializing.
 
 ## Out of scope
 

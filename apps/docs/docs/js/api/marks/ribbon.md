@@ -31,18 +31,18 @@ ribbon({ stroke?, strokeWidth = 0, opacity?, mixBlendMode = "normal", dir = "x",
 
 ## Parameters
 
-| Option         | Type                                             | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| -------------- | ------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `stroke`       | `string`                                         | Stroke color                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| `strokeWidth`  | `number`                                         | Stroke width                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| `opacity`      | `number`                                         | Opacity (0–1)                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| `mixBlendMode` | `"normal" \| "multiply"`                         | Blend mode                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
-| `dir`          | `"x" \| "y"`                                     | Direction axis                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
-| `curve`        | `"straight" \| "bezier" \| CurveSpec`            | Screen-space band shape; default `"auto"` (see below)                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| `by`           | `string \| FieldExpr \| (ref) => string`         | Partitions the operand bag (the array of refs) into groups and draws one band per group. Same grammar as any operator's `by` — bare field name, key function, or [`field(...)`](/js/api/operators/spread#field-expression-pipeline) accessor. Resolves against the refs' own datum automatically (no `datum.` prefix), same as `group({ by })`. Composes with an upstream `group()` as a nested split.                                                                       |
-| `from`, `to`   | `string`                                         | Pairwise form: column names holding the two endpoint refs                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| `w`, `h`       | `number \| string \| Value<number> \| FieldExpr` | **Ignored by `ribbon` itself.** Blank-fusion anchor keys: read only when `ribbon(opts)` is placed directly in `.mark()` position, where they become the invisible anchor tier's `blank({w, h, emX, emY})` opts — same channel-value shapes as a leaf mark's "size" channel (e.g. rect's `h`), including a `field(...)` pipeline like `field("count").sum()`. See [`.layer()`'s blank-fusion section](/js/api/core/layer#blank-fusion-skip-layer-entirely-for-a-fresh-chart). |
-| `emX`, `emY`   | `boolean`                                        | **Ignored by `ribbon` itself.** Blank-fusion anchor keys — see `w`/`h` above.                                                                                                                                                                                                                                                                                                                                                                                                |
+| Option         | Type                                             | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| -------------- | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `stroke`       | `string`                                         | Stroke color                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| `strokeWidth`  | `number`                                         | Stroke width                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| `opacity`      | `number`                                         | Opacity (0–1)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| `mixBlendMode` | `"normal" \| "multiply"`                         | Blend mode                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| `dir`          | `"x" \| "y"`                                     | Direction axis                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| `curve`        | `"straight" \| "bezier" \| CurveSpec`            | Screen-space band shape; default `"auto"` (see below)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| `by`           | `string \| FieldExpr \| (ref) => string`         | Partitions the operand bag (the array of refs) into groups and draws one band per group. Same grammar as any operator's `by` — bare field name, key function, or [`field(...)`](/js/api/operators/spread#field-expression-pipeline) accessor. Resolves against the refs' own datum automatically (no `datum.` prefix), same as `group({ by })`. Composes with an upstream `group()` as a nested split. When the ribbon is fused into a flow, an explicit `by` overrides the [default grouping](#default-grouping) computed from the flow; omit it and the flow's own groupings decide the split. |
+| `from`, `to`   | `string`                                         | Pairwise form: column names holding the two endpoint refs                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| `w`, `h`       | `number \| string \| Value<number> \| FieldExpr` | **Ignored by `ribbon` itself.** Blank-fusion anchor keys: read only when `ribbon(opts)` is placed directly in `.mark()` position, where they become the invisible anchor tier's `blank({w, h, emX, emY})` opts — same channel-value shapes as a leaf mark's "size" channel (e.g. rect's `h`), including a `field(...)` pipeline like `field("count").sum()`. See [`.layer()`'s blank-fusion section](/js/api/core/layer#blank-fusion-skip-layer-entirely-for-a-fresh-chart).                                                                                                                     |
+| `emX`, `emY`   | `boolean`                                        | **Ignored by `ribbon` itself.** Blank-fusion anchor keys — see `w`/`h` above.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 
 `curve` accepts the strings `"straight"` or `"bezier"`, or a `CurveSpec` factory:
 `straight()`, `bezier()`, `orthogonal()`, `arc({ direction: "up" | "down" })`, or
@@ -58,10 +58,22 @@ shown below) and a **pairwise form** `ribbon({ from, to })` over rows whose
 `from`/`to` columns hold refs (one band per row, after
 [`resolve`](/js/api/operators/resolve)).
 
-## Sugar: `.layer(ribbon({ by }))`
+## Default grouping
+
+A ribbon fused into a flow — in `.mark()` position or as `.layer()` sugar over
+the previous tier's marks — splits at the flow's own grouping by default: one
+tier lays the band's path, and every other grouping in the flow splits it into
+separate bands. You don't restate the split with `by` — the flow one line up
+already declared it. An explicit `by` still works and overrides the default,
+which is useful when you want a different split than the flow implies. This
+doesn't apply to a ribbon drawn over an explicit refs bag
+(`chart(selectAll(...))`), which is unaffected and keeps needing an explicit
+`by` (or an upstream `group()`) to split at all.
+
+## Sugar: `.layer(ribbon(...))`
 
 When the ribbon traces a chart's _own_ marks, skip the two-layer `selectAll`
-recipe and chain [`.layer()`](/js/api/core/layer) with `by` on the builder —
+recipe and chain [`.layer()`](/js/api/core/layer) on the builder —
 this is the canonical simple ribbon-chart spelling:
 
 ```ts
@@ -71,9 +83,12 @@ chart(seafood, { axes: true })
     stack({ by: field("species").sort("count"), dir: "y" })
   )
   .mark(rect({ h: "count", fill: "species" }))
-  .layer(ribbon({ by: "species", opacity: 0.8 }))
+  .layer(ribbon({ opacity: 0.8 }))
   .render(container, { w: 400, h: 400 });
 ```
+
+No `by` needed: the `stack({ by: "species" })` tier already told the flow how
+to group, so the ribbon splits into one band per species by default.
 
 See [`.layer()`](/js/api/core/layer) for the full semantics, including the
 zBelow-by-default paint order and the desugaring to the explicit `layer([...])`
@@ -100,10 +115,21 @@ chart(seafood, { axes: true })
   .layer(ribbon({ opacity: 0.8 }));
 ```
 
-A `by`-split ribbon's `fill` can be a shared field name (each group is
-homogeneous in it): `ribbon({ h: "count", fill: "species", by: "species" })`
-resolves `fill` through the color scale per group, the same as it would if
-`fill` were declared on an explicit anchor `blank()`.
+A grouped flow fuses the same way, with no `by` needed — a streamgraph is one
+line:
+
+```ts
+chart(seafood, { axes: true })
+  .flow(
+    spread({ by: "lake", dir: "x", spacing: 64, alignment: "middle" }),
+    stack({ by: "species", dir: "y" })
+  )
+  .mark(ribbon({ h: "count", fill: "species", opacity: 0.8 }));
+```
+
+`fill` here is a shared field name, homogeneous within each species group
+(the default split, above) — it resolves through the color scale per group,
+the same as it would if `fill` were declared on an explicit anchor `blank()`.
 
 See [`.layer()`'s blank-fusion section](/js/api/core/layer#blank-fusion-skip-layer-entirely-for-a-fresh-chart)
 for the full desugaring rule (the `{w, h, emX, emY}` anchor/connector key

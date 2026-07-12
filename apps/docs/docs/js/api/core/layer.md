@@ -34,11 +34,20 @@ gf.chart(seafood, { axes: true })
     gf.spread({ by: "lake", dir: "x", spacing: 64 }),
     gf.stack({ by: gf.field("species").sort("count"), dir: "y" })
   )
-  .mark(gf.ribbon({ h: "count", fill: "species", by: "species", opacity: 0.8 }))
+  .mark(gf.ribbon({ h: "count", fill: "species", opacity: 0.8 }))
   .render(root, { w: 400, h: 320 });
 ```
 
 :::
+
+No `by` on the ribbon: it's fused directly over this chart's own flow, and a
+fused relational mark splits at the flow's own grouping by default — one tier
+lays the band's path, every other grouping splits it. Here the `spread(lake)`
+tier lays the path and `stack({ by: "species" })` splits, giving one band per
+species with nothing restated. An explicit `by` still works and overrides the
+default (see [`ribbon`'s Default grouping](/js/api/marks/ribbon#default-grouping)
+and [`line`'s](/js/api/marks/line#default-grouping)); it's only required at all
+for a re-partition the flow doesn't already express.
 
 ### Desugaring
 
@@ -62,7 +71,7 @@ chart(seafood, { axes: true })
     spread({ by: "lake", dir: "x", spacing: 64 }),
     stack({ by: "species", dir: "y" })
   )
-  .mark(ribbon({ h: "count", fill: "species", by: "species", opacity: 0.8 }));
+  .mark(ribbon({ h: "count", fill: "species", opacity: 0.8 }));
 
 // ...is sugar for the explicit two-tier form:
 chart(seafood, { axes: true })
@@ -71,7 +80,7 @@ chart(seafood, { axes: true })
     stack({ by: "species", dir: "y" })
   )
   .mark(blank({ h: "count" }))
-  .layer(ribbon({ fill: "species", by: "species", opacity: 0.8 }));
+  .layer(ribbon({ fill: "species", opacity: 0.8 }));
 ```
 
 A `.name(...)`/`.label(...)`/`.zOrder(...)` chained onto the relational mark
@@ -88,13 +97,16 @@ anchor needs options besides `{w, h, emX, emY}` (a visible rect anchor, for
 instance — see [`Ribbon`](/js/api/marks/ribbon)'s bar-chart example) or when
 you want the anchor and connector opts kept visually separate.
 
-## Ribbon — one-line sugar with `by`
+## Ribbon — one-line sugar
 
 The simple case — draw a ribbon over the marks you just drew, split into one
-band per group — is a single `.layer(ribbon({ by }))` call. `by` uses the same
-grammar as any operator's `by` (bare field name, key function, or
-[`field(...)`](/js/api/operators/spread#field-expression-pipeline) accessor) and
-resolves against the refs' own datum automatically, just like `group({ by })`:
+band per group — is a single `.layer(ribbon(...))` call, with no `by` needed:
+the ribbon is fused over this chart's own flow, so it picks up the flow's
+grouping by default (see [`ribbon`'s Default
+grouping](/js/api/marks/ribbon#default-grouping)). Pass an explicit `by` (same
+grammar as any operator's — bare field name, key function, or
+[`field(...)`](/js/api/operators/spread#field-expression-pipeline) accessor)
+only to override that default with a different split:
 
 ::: gofish
 
@@ -105,7 +117,7 @@ gf.chart(seafood, { axes: true })
     gf.stack({ by: gf.field("species").sort("count"), dir: "y" })
   )
   .mark(gf.rect({ h: "count", fill: "species" }))
-  .layer(gf.ribbon({ by: "species", opacity: 0.8 }))
+  .layer(gf.ribbon({ opacity: 0.8 }))
   .render(root, { w: 400, h: 320 });
 ```
 
@@ -113,8 +125,8 @@ gf.chart(seafood, { axes: true })
 
 ### Desugaring
 
-`.layer(ribbon({ by: "species" }))` is sugar for the general `chart()`-tier
-form, which is itself the same manual wiring you'd write with
+`.layer(ribbon(...))` is sugar for the general `chart()`-tier form, which is
+itself the same manual wiring you'd write with
 [`layer([...])`](/js/api/operators/layer) and [`selectAll`](/js/api/selection/ref):
 
 ```js
@@ -125,7 +137,7 @@ chart(data, { axes: true })
     stack({ by: "species", dir: "y" })
   )
   .mark(rect({ h: "count", fill: "species" }))
-  .layer(ribbon({ by: "species", opacity: 0.8 }));
+  .layer(ribbon({ opacity: 0.8 }));
 
 // ...is sugar for the general chart()-tier form:
 chart(data, { axes: true })
