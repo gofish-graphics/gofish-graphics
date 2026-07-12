@@ -183,6 +183,6 @@ def story_ribbon_highlight():
             stack(by=field("species").sort("count"), dir="y"),
         )
         .mark(rect(h="count", fill="species"))
-        .layer(ribbon(by="species", opacity=0.6)),
+        .layer(ribbon(opacity=0.6)),
         {"w": 400, "h": 400},
     )

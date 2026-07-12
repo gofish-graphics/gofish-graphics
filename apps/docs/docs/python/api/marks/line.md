@@ -22,21 +22,21 @@ layer([
 ## Signature
 
 ```python
-line(stroke=None, strokeWidth=None, strokeDasharray=None, opacity=None, curve=None, by=None, w=None, h=None, emX=None, emY=None) -> Mark
+line(stroke=None, strokeWidth=None, strokeDasharray=None, opacity=None, curve=None, along=None, w=None, h=None, emX=None, emY=None) -> Mark
 ```
 
 ## Parameters
 
-| Parameter         | Type                                                 | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
-| ----------------- | ---------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `stroke`          | `str`                                                | Line color                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
-| `strokeWidth`     | `int`                                                | Line width in pixels                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| `strokeDasharray` | `str`                                                | Raw SVG `stroke-dasharray` (e.g. `"12"`) for a dashed line                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
-| `opacity`         | `float`                                              | Opacity, `0`–`1`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
-| `curve`           | `str \| dict`                                        | Path shape; default `"auto"`, which auto-smooths continuous line charts                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
-| `by`              | `str \| field(...) \| Callable`                      | Partitions the operand bag (the list of refs) into groups and draws one polyline per group. Same grammar as any operator's `by` — bare field name, key function, or [`field(...)`](/python/api/operators/spread#field-expression-pipeline) accessor. Resolves against the refs' own datum automatically (no `datum.` prefix), same as `group(by=...)`. Composes with an upstream `group()` as a nested split. When the line is fused into a flow, an explicit `by` overrides the [default grouping](#default-grouping) computed from the flow; omit it and the flow's own groupings decide the split. |
-| `w`, `h`          | `int \| float \| str \| FieldAccessor \| datum(...)` | **Ignored by `line` itself.** Blank-fusion anchor keys: read only when `line(...)` is placed directly in `.mark()` position, where they become the invisible anchor tier's `blank(w=..., h=..., emX=..., emY=...)` opts — same channel-value shapes as a leaf mark's "size" channel, including a `field(...)` pipeline like `field("count").sum()`. See [`.layer()`'s blank-fusion section](/python/api/core/layer#blank-fusion-skip-layer-entirely-for-a-fresh-chart).                                                                                                                               |
-| `emX`, `emY`      | `bool`                                               | **Ignored by `line` itself.** Blank-fusion anchor keys — see `w`/`h` above.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| Parameter         | Type                                                 | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| ----------------- | ---------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `stroke`          | `str`                                                | Line color                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| `strokeWidth`     | `int`                                                | Line width in pixels                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| `strokeDasharray` | `str`                                                | Raw SVG `stroke-dasharray` (e.g. `"12"`) for a dashed line                                                                                                                                                                                                                                                                                                                                                                                                              |
+| `opacity`         | `float`                                              | Opacity, `0`–`1`                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| `curve`           | `str \| dict`                                        | Path shape; default `"auto"`, which auto-smooths continuous line charts                                                                                                                                                                                                                                                                                                                                                                                                 |
+| `along`           | `str`                                                | Names a flow tier by its `by` field (see [Default grouping](#default-grouping)): that tier becomes the line's path, and every other grouping tier splits into separate lines. Usually omitted — the path tier is inferred from the flow shape. Naming a field that matches no tier, or using `along` on a line that doesn't fuse into a chart's own flow (a refs bag, or the pairwise `from`/`to` form), throws.                                                        |
+| `w`, `h`          | `int \| float \| str \| FieldAccessor \| datum(...)` | **Ignored by `line` itself.** Blank-fusion anchor keys: read only when `line(...)` is placed directly in `.mark()` position, where they become the invisible anchor tier's `blank(w=..., h=..., emX=..., emY=...)` opts — same channel-value shapes as a leaf mark's "size" channel, including a `field(...)` pipeline like `field("count").sum()`. See [`.layer()`'s blank-fusion section](/python/api/core/layer#blank-fusion-skip-layer-entirely-for-a-fresh-chart). |
+| `emX`, `emY`      | `bool`                                               | **Ignored by `line` itself.** Blank-fusion anchor keys — see `w`/`h` above.                                                                                                                                                                                                                                                                                                                                                                                             |
 
 Returns a `Mark` for use in [`.mark()`](/python/api/core/mark).
 
@@ -58,16 +58,21 @@ circles drawn on top.
 A line fused into a flow — in `.mark()` position or as `.layer()` sugar over
 the previous tier's marks — splits at the flow's own grouping by default: one
 tier lays the line's path, and every other grouping in the flow splits it into
-separate lines. You don't restate the split with `by` — the flow one line up
-already declared it. An explicit `by` still works and overrides the default,
-which is useful when you want a different split than the flow implies. This
-doesn't apply to a line drawn over an explicit refs bag
-(`chart(selectAll(...))`), which is unaffected and keeps needing an explicit
-`by` (or an upstream `group()`) to split at all.
+separate lines. You don't restate the split — the flow one line up already
+declared it, and `line` has no option that spells the split directly.
 
-A slope chart is a good example of why this matters: ten barley varieties
-across six field sites, one short line per site-variety pair from 1931 to
-1932, with no line crossing a site boundary.
+When you need a _different_ path tier than the one inference would pick, name
+it with `along`: `along="year"` finds the flow tier whose `by` is `"year"`,
+makes it the path, and splits by every other grouping tier instead. Naming a
+field no tier groups by is an error. This doesn't apply to a line drawn over
+an explicit refs bag (`chart(selectAll(...))`) or the pairwise `from`/`to`
+form — `along` is only meaningful when the line fuses into a chart's own
+flow, and throws if used on either of those. A refs bag spells its split
+structurally instead, with an upstream `flow(group(by="species"))`.
+
+A slope chart is a good example of why the default matters: ten barley
+varieties across six field sites, one short line per site-variety pair from
+1931 to 1932, with no line crossing a site boundary.
 
 ```python
 from gofish import chart, spread, scatter, line
@@ -79,10 +84,12 @@ chart(barley, axes=True).flow(
 ).mark(line(stroke="variety", strokeWidth=2))
 ```
 
-No `by` at all: the innermost tier that lays out the travel axis (the `year`
-spread) becomes the path, and every other grouping — `site` and `variety` —
-splits, giving one line per site-variety pair. Writing the same split by hand
-would take a composite key over both fields.
+No option at all: the innermost tier that lays out the travel axis (the
+`year` spread) becomes the path, and every other grouping — `site` and
+`variety` — splits, giving one line per site-variety pair. Writing the same
+split by hand would take a composite key over both fields; naming it
+explicitly would be `line(along="year", stroke="variety", strokeWidth=2)`,
+which picks the same path tier the default already infers.
 
 ## Sugar: `.layer(line(...))`
 

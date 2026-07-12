@@ -815,11 +815,11 @@ async function main() {
   }
 
   // -------------------------------------------------------------------------
-  // Relational marks (`line`/`ribbon`) — `by` split option and the mark
+  // Relational marks (`line`/`ribbon`) — `along` option and the mark
   // carrying a `__serialize` tag through `.layer(...)` (the replacement for
   // the removed `.connect()` sugar).
   // -------------------------------------------------------------------------
-  console.log("\n# relational mark `by` option");
+  console.log("\n# relational mark `along` option");
 
   const connectData = [
     { g: "x", a: 1, b: 2 },
@@ -827,12 +827,15 @@ async function main() {
     { g: "x", a: 3, b: 1 },
   ];
 
-  // Bag-form `ribbon({ by })` stamps `by` into its own `__serialize` tag.
+  // Bag-form `ribbon({ along })` stamps `along` into its own `__serialize`
+  // tag verbatim (the split it implies is computed separately by
+  // `ChartBuilder` and never written into `opts` — see `notes/design/
+  // relational-mark-default-split.md`).
   {
-    const rib = ribbon({ by: "g", opacity: 0.8 });
+    const rib = ribbon({ along: "g", opacity: 0.8 });
     check(
-      "ribbon({ by }) carries by in __serialize.opts",
-      (rib as any).__serialize?.opts?.by === "g"
+      "ribbon({ along }) carries along in __serialize.opts",
+      (rib as any).__serialize?.opts?.along === "g"
     );
   }
 

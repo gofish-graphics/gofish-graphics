@@ -277,15 +277,14 @@ forms:
 - **Pairwise `{ from, to }` form** — `opts.from`/`opts.to` name two columns
   holding refs; one connector per row (node-link edges), after
   [`resolve`](/js/api/operators/resolve) has turned endpoint ids into refs.
-- **`by`-split bag form** — `opts.by` partitions the operand bag with the same
-  `splitEntries` helper `group()`'s `split` hook uses, producing one
-  connector **per group** (e.g. `ribbon({ by: "species" })` over a bag of bar
-  refs draws one band per species). Composes with an upstream `group()` as a
-  nested split — no special-casing needed, since `splitEntries` is the same
-  function either way.
 - **Bag form** — applied directly to a `GoFishRef[]` (e.g. `selectAll(...)`
   or the previous tier's marks via `.layer()`): one connector through all the
-  refs.
+  refs, UNLESS the mark is fused over a flow, in which case `ChartBuilder`
+  computes a split and partitions the bag with `splitEntries` — the same
+  helper `group()`'s `split` hook uses — producing one connector **per
+  group** (e.g. `ribbon({})` fused over `stack({ by: "species" })` draws one
+  band per species; see "Default grouping" below). A refs-bag chart spells
+  the same split structurally instead, via an upstream `group()`.
 
 ### zBelow-by-default paint order
 
@@ -304,47 +303,51 @@ combinator one.
 
 ### Blank-fusion: `.mark(R(opts))` sugar
 
-The **bag** and **`by`-split bag** forms above are also reachable through a
-syntactic rewrite at `ChartBuilder.mark()` (`src/ast/marks/chartBuilder.ts`):
-placing a relational mark directly in `.mark()` position elaborates to an
-invisible anchor tier plus a connector tier —
+The bag form above is also reachable through a syntactic rewrite at
+`ChartBuilder.mark()` (`src/ast/marks/chartBuilder.ts`): placing a relational
+mark directly in `.mark()` position elaborates to an invisible anchor tier
+plus a connector tier —
 
 ```
 .mark(R(opts))  ⇒  .mark(blank(anchor(opts))).layer(R(opts))
 ```
 
 `anchor(opts)` is exactly `opts`'s `{w, h, emX, emY}` subset (`pickAnchorOpts`
-in chart.ts) — the rest (fill, stroke, curve, `by`, …) stays on the connector
-unchanged, since `produce` only reads the fields it knows about. The factory
-tags every bag-form / by-split-form mark it returns with a
-`__relationalFusable = { opts, makeAnchor }` descriptor (`makeAnchor` is a
-pre-bound `blank(...)` call, kept out of chartBuilder.ts to avoid a
-chart.ts ↔ chartBuilder.ts import cycle); `modifierMethod` in
-createOperator.ts propagates the tag through `.name()`/`.label()`/`.zOrder()`
-chaining so those still target the connector. The pairwise `{from, to}` form
-is never tagged.
+in chart.ts) — the rest (fill, stroke, curve, `along`, …) stays on the
+connector unchanged, since `produce` only reads the fields it knows about.
+The factory tags every bag-form mark it returns with a `__relationalFusable =
+{ opts, inferred, makeAnchor }` descriptor (`makeAnchor` is a pre-bound
+`blank(...)` call, kept out of chartBuilder.ts to avoid a chart.ts ↔
+chartBuilder.ts import cycle); `modifierMethod` in createOperator.ts
+propagates the tag through `.name()`/`.label()`/`.zOrder()` chaining so those
+still target the connector. The pairwise `{from, to}` form is never tagged.
 
 `ChartBuilder.mark()` only rewrites when the chart's own data still needs
 anchors drawn for it (`!usesPreviousLayerMarks() && !(data instanceof
 GoFishRef)`) — a relational mark applied directly to an already-drawn refs
 bag (`chart(selectAll("bars")).mark(ribbon(opts))`, or an empty-scope
 `chart()` tier inside `.layer(...)`) keeps its direct bag-form meaning
-unfused, since there's nothing to anchor. A `by`-split connector's `fill` may
-be a shared field name rather than a literal color; `resolveGroupFill` in
-chart.ts resolves it per group via `inferColor` (same channel helper
-`createMark` uses) before it reaches `Connect`, reading a representative row
-off the group's ref bag.
+unfused, since there's nothing to anchor; `along` on either of those, or on
+the pairwise form, is a builder-time error rather than a silent no-op
+(`rejectAlongWithoutFlow` in chartBuilder.ts, and the pairwise branch in
+chart.ts). A split connector's `fill` may be a shared field name rather than
+a literal color; `resolveGroupFill` in chart.ts resolves it per group via
+`inferColor` (same channel helper `createMark` uses) before it reaches
+`Connect`, reading a representative row off the group's ref bag.
 
-### Default grouping: a fused connector without `by`
+### Default grouping: a fused connector's split, and `along`
 
-A fused relational mark with no explicit `by` doesn't fall back to one
-connector through the whole bag — it gets a **default split and travel
-direction computed from the flow it fuses over** (issue #752; full rule in
+A fused relational mark doesn't fall back to one connector through the whole
+bag — it gets a **default split and travel direction computed from the flow
+it fuses over** (issue #752; full rule in
 `notes/design/relational-mark-default-split.md`). This is what lets a
-ridgeline write `ribbon({ h: "count" })` instead of restating
-`by: "month"` when `spread({ by: "month", dir: "y" })` already said it one
-line up, and what makes the barley slope chart draw one line per
-`site`×`variety` instead of a single zigzag across every panel.
+ridgeline write `ribbon({ h: "count" })` with no split option at all, when
+`spread({ by: "month", dir: "y" })` already said the grouping one line up,
+and what makes the barley slope chart draw one line per `site`×`variety`
+instead of a single zigzag across every panel. Relational marks have no
+option that spells the split directly — `by` was removed entirely; the only
+option is `along`, which names the flow tier that becomes the path (the
+split is always the complement, and is never user-spelled).
 
 The computation happens in `ChartBuilder`, not `chart.ts`, because it needs
 `this.operators` — the flow tiers assembled by `.flow(...)` — which only the
@@ -360,41 +363,54 @@ Both guard on the same "fuses over THIS chart's own flow" boundary
 `dataNeedsAnchors` already checks — `!usesPreviousLayerMarks() &&
 !dataIsRefs(this.data)` — so a refs-bag chart (`chart(selectAll(...))`) or the
 nested `chart().flow(group({by})).mark(line())` idiom never gets a default
-injected; both keep their pre-#752 meaning exactly.
+injected; both keep their pre-#752 meaning exactly, and using `along` on
+either throws instead (see the previous section).
 
 Crucially, the computed default is written into a **separate mutable cell**,
-`inferred`, not into `opts` — `tagRelationalFusable` now stamps `{ type,
-opts, inferred, anchorKeys, makeAnchor }`, and `opts` stays the untouched
-record of what the user wrote (the same object `__serialize.opts` reads, so
-mutating it would corrupt the emitted IR and make an inferred `dir` look
-user-specified). The connector's mark closure resolves the two at
-bag-arrival time: `by = opts.by !== undefined ? opts.by : inferred.by`, and
-`dir = opts.dir ?? inferred.dir`. This is also why the by-split-vs-plain-bag
-dispatch that used to happen at `createRelationalMark` call time now happens
-_inside_ the closure, at bag-arrival time: the computation can only run
-after the mark is constructed (it needs the rest of the flow), so the
-branch it feeds has to be decided later too.
+`inferred`, not into `opts` — `tagRelationalFusable` stamps `{ type, opts,
+inferred, anchorKeys, makeAnchor }`, and `opts` stays the untouched record of
+what the user wrote (the same object `__serialize.opts` reads, so mutating it
+would corrupt the emitted IR and make an inferred split look
+user-specified). The connector's mark closure reads the split off `inferred`
+only — there's no `opts.by` to check anymore — and resolves `dir = opts.dir
+?? inferred.dir`. The by-split-vs-plain-bag dispatch that used to happen at
+`createRelationalMark` call time happens _inside_ the closure, at
+bag-arrival time: the computation can only run after the mark is constructed
+(it needs the rest of the flow), so the branch it feeds has to be decided
+later too.
 
 The rule itself, briefly: resolve a travel axis (an explicit `dir`; else a
 data-driven `h`/`w` on the mark or its anchor tier — `h` puts the value in y
 so travel is x, and vice versa; else the innermost flow tier that positions
 anchors) and a path tier (the innermost tier positioning along the travel
-axis). The path tier's own `by` orders the path and never splits; every
-_other_ flow tier's `by` becomes one term of a synthesized composite split
-key (`ChartBuilder`'s `computeDefaultBy`, built from `splitKeyFn` in
-datumProjection.ts — the same projection-through-`GoFishRef.datum` helper
-`splitEntries` uses, so string/field/function `by` forms behave identically
-to a real operator `by`). One subtlety `chartBuilder.ts`'s
-`classifyOperator` has to resolve that the design note's step-3 prose doesn't
-spell out: a `spread`/`stack` tier's `dir` is the axis it _lays its groups
-out along_, so a bare fallback (no `h`/`w`, no explicit `dir` anywhere)
-resolves the travel axis to that SAME axis (walking the arrangement is the
-natural path); a `scatter`'s `x`/`y` are literal per-item coordinates — a
-value channel exactly like `h`/`w` — so the travel axis there is the axis it
-does _not_ position. Both resolutions are validated against the design
-note's worked examples (its own "Intended?" column), not just its prose.
+axis). `along`, when given, replaces this whole resolution: `findTierIndexByAlong`
+(chartBuilder.ts) scans the flow tiers for one whose `by` names the given
+field (`tierFieldName` matches a string `by` on itself, a `field(...)`
+accessor on `.name`, and never a function-form `by` — the design note's
+"Matching" clause), and throws, naming the field and the flow's available
+keys, if none match. The matched tier's travel axis mirrors
+`classifyOperator`'s own arrangement/value split (`alongTravelAxis`): an
+arrangement tier (`spread`/`stack`) travels its own `dir`; anything else
+(a scatter) travels flow order, leaving `dir` unset so `line`/`ribbon`'s own
+`?? "x"` applies — an explicit `opts.dir` still wins over either.
 
-The paint fix from the same design note rides along for free: `by`-split and
+Either way, once the path tier index is settled, the path tier's own `by`
+orders the path and never splits; every _other_ flow tier's `by` becomes one
+term of a synthesized composite split key (`ChartBuilder`'s
+`computeDefaultBy`, built from `splitKeyFn` in datumProjection.ts — the same
+projection-through-`GoFishRef.datum` helper `splitEntries` uses, so
+string/field/function `by` forms behave identically to a real operator `by`).
+One subtlety `chartBuilder.ts`'s `classifyOperator` has to resolve that the
+design note's step-3 prose doesn't spell out: a `spread`/`stack` tier's `dir`
+is the axis it _lays its groups out along_, so a bare fallback (no `h`/`w`,
+no explicit `dir` anywhere) resolves the travel axis to that SAME axis
+(walking the arrangement is the natural path); a `scatter`'s `x`/`y` are
+literal per-item coordinates — a value channel exactly like `h`/`w` — so the
+travel axis there is the axis it does _not_ position. Both resolutions are
+validated against the design note's worked examples (its own "Intended?"
+column), not just its prose.
+
+The paint fix from the same design note rides along for free: split and
 plain-bag now share one code path in `createRelationalMark`'s bag-form mark,
 so `resolveGroupFill` runs on both — per group on the split branch (where
 it's a no-op safety net, since each group is homogeneous by construction),

@@ -40,14 +40,15 @@ gf.chart(seafood, { axes: true })
 
 :::
 
-No `by` on the ribbon: it's fused directly over this chart's own flow, and a
-fused relational mark splits at the flow's own grouping by default — one tier
-lays the band's path, every other grouping splits it. Here the `spread(lake)`
-tier lays the path and `stack({ by: "species" })` splits, giving one band per
-species with nothing restated. An explicit `by` still works and overrides the
-default (see [`ribbon`'s Default grouping](/js/api/marks/ribbon#default-grouping)
-and [`line`'s](/js/api/marks/line#default-grouping)); it's only required at all
-for a re-partition the flow doesn't already express.
+No split option on the ribbon: it's fused directly over this chart's own
+flow, and a fused relational mark splits at the flow's own grouping by
+default — one tier lays the band's path, every other grouping splits it.
+Here the `spread(lake)` tier lays the path and `stack({ by: "species" })`
+splits, giving one band per species with nothing restated. When a _different_
+tier should lay the path, name it with `along` (see [`ribbon`'s Default
+grouping](/js/api/marks/ribbon#default-grouping) and
+[`line`'s](/js/api/marks/line#default-grouping)) — it's only needed at all
+for a path choice the flow's shape doesn't already imply.
 
 ### Desugaring
 
@@ -61,8 +62,8 @@ invisible anchor tier plus a connector tier:
 `anchor(opts)` is exactly the `{w, h, emX, emY}` subset of `opts` — the purely
 spatial keys `blank()` itself accepts. Everything else (`fill`, `stroke`,
 `strokeWidth`, `strokeDasharray`, `opacity`, `curve`, `dir`, `mixBlendMode`,
-`by`, `source`, `target`) stays on the connector, matching what you'd write by
-hand:
+`along`, `source`, `target`) stays on the connector, matching what you'd write
+by hand:
 
 ```js
 // Fused
@@ -100,13 +101,12 @@ you want the anchor and connector opts kept visually separate.
 ## Ribbon — one-line sugar
 
 The simple case — draw a ribbon over the marks you just drew, split into one
-band per group — is a single `.layer(ribbon(...))` call, with no `by` needed:
-the ribbon is fused over this chart's own flow, so it picks up the flow's
-grouping by default (see [`ribbon`'s Default
-grouping](/js/api/marks/ribbon#default-grouping)). Pass an explicit `by` (same
-grammar as any operator's — bare field name, key function, or
-[`field(...)`](/js/api/operators/spread#field-expression-pipeline) accessor)
-only to override that default with a different split:
+band per group — is a single `.layer(ribbon(...))` call, with no split option
+needed: the ribbon is fused over this chart's own flow, so it picks up the
+flow's grouping by default (see [`ribbon`'s Default
+grouping](/js/api/marks/ribbon#default-grouping)). Pass `along: "<field>"`
+only when a _different_ tier than the one inference picks should lay the
+path:
 
 ::: gofish
 
@@ -168,12 +168,13 @@ layer([
 ```
 
 The general `chart()`-tier form (middle example) stays fully supported — reach
-for it when the connector's own `by` isn't enough, e.g. when the re-partition
-needs to compose with other operators in its own `.flow()`, or when the tier
-draws from another dataset entirely (see "Node-link" below). `by` on the
-connector mark itself also composes with an upstream `group()`: `group()`
-splits first, then the connector's own `by` splits again within each group, so
-you can nest a re-partition without writing a second `chart()` tier.
+for it when the fused default (or `along`) isn't enough, e.g. when the
+re-partition needs to compose with other operators in its own `.flow()`
+(`derive`, a second `group()`, a different dataset entirely — see "Node-link"
+below), or when the split isn't named by any single flow tier at all. This is
+also the only place a connector still composes with a re-partition the way
+`by` used to: an explicit `flow(group({ by: "..." }))` on the tier splits
+first, and the ribbon/line then draws one connector per resulting group.
 
 ## Connector — a bare relational mark tier
 
@@ -291,7 +292,7 @@ Returns a `LayerBuilder` — chain `.layer(...)` again for more tiers, then `.re
   to the whole stack.
 - **Paint order** — tiers paint in chain order (later tiers on top), like a
   manual [`layer([...])`](/js/api/operators/layer) — **except** relational
-  marks (`line()`, `ribbon()`, in any call form: bag, `by`-split, pairwise
+  marks (`line()`, `ribbon()`, in any call form: bag, fused/split, pairwise
   `{from, to}`, or the low-level combinator form inside a manual `layer([...])`),
   which default to painting `zBelow` whatever they reference. This is a real
   paint-order constraint, not a hardcoded z-index, so it composes with other

@@ -622,7 +622,9 @@ are the arrangement's job.
    posed._ `.connect()` was deleted outright rather than folded into `relate()`. `.layer()` was
    generalized to hand every tier the previous tier's marks as scope uniformly (a bare
    `line()`/`ribbon()` passed to `.layer()` reads that scope as its ref bag, same as
-   `.connect()` used to), and `line`/`ribbon` gained their own `by` option for the
-   re-partition case. `.layer(ribbon({ by: "species" }))` is now the canonical spelling for
-   simple line/ribbon charts — see [`.layer()`](/js/api/core/layer). `relate()` remains open
+   `.connect()` used to), and a fused connector splits at the flow's own grouping by
+   default (issue #752), so no option is needed for the common re-partition case at all —
+   `along` names a different path tier explicitly when the default doesn't already pick
+   the right one. `.layer(ribbon({}))` is now the canonical spelling for simple
+   line/ribbon charts — see [`.layer()`](/js/api/core/layer). `relate()` remains open
    for the cases this thread was actually about (the one-slot open-terms view).

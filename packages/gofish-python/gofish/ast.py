@@ -2623,7 +2623,7 @@ def line(
     curve: Optional[Union[str, Dict[str, Any]]] = None,
     from_: Optional[str] = None,
     to: Optional[str] = None,
-    by: Optional[Union[str, "FieldAccessor"]] = None,
+    along: Optional[str] = None,
     emX: Optional[bool] = None,
     emY: Optional[bool] = None,
     w: Optional[Union[int, float, str]] = None,
@@ -2631,14 +2631,18 @@ def line(
 ) -> Mark:
     """Line mark — a center-mode connector (the path between mark centers).
 
-    Four forms:
+    Three forms:
       - combinator form ``line([ref(a), ref(b)], dir="x")`` — the low-level
         connector over explicitly listed children (the drop-in for the removed
         ``connect``). ``source``/``target`` pin each endpoint to a normalized
         anchor on its bbox (Bluefish-style ``Line``) instead of the center.
-      - bag form ``line(...)`` over a ``selectAll(...)`` ref array (one polyline)
-      - bag form with ``by=...`` — partition the ref bag by a field (or
-        ``field(...)`` accessor) and draw one polyline per group.
+      - bag form ``line(...)`` fused over the chart's own flow (in ``.mark()``
+        position, or ``.layer()`` over the previous tier's marks): the split
+        is inferred from the flow, or pinned with ``along="year"`` (names a
+        flow tier by its ``by`` field — that tier becomes the path, every
+        other grouping tier splits). A refs bag spells an explicit split
+        structurally instead: ``chart(selectAll(...)).flow(group(by="species"
+        )).mark(line())``.
       - pairwise form ``line(from_=..., to=...)`` over rows whose ``from``/``to``
         columns hold refs (one segment per row, after :func:`resolve`).
 
@@ -2663,7 +2667,7 @@ def line(
         curve=curve,
         from_=from_,
         to=to,
-        by=by,
+        along=along,
         emX=emX,
         emY=emY,
         w=w,
@@ -2686,7 +2690,7 @@ def ribbon(
     curve: Optional[Union[str, Dict[str, Any]]] = None,
     from_: Optional[str] = None,
     to: Optional[str] = None,
-    by: Optional[Union[str, "FieldAccessor"]] = None,
+    along: Optional[str] = None,
     emX: Optional[bool] = None,
     emY: Optional[bool] = None,
     w: Optional[Union[int, float, str]] = None,
@@ -2695,12 +2699,12 @@ def ribbon(
     """Ribbon mark — an edge-mode connector: a filled band between the facing
     edges of consecutive marks (areas, streamgraphs, sankey ribbons).
 
-    Four forms, like :func:`line`: combinator form
+    Three forms, like :func:`line`: combinator form
     ``ribbon([ref(a), ref(b)], dir="x")`` (the low-level connector over listed
-    children — drop-in for the removed ``connect``), bag form, bag form with
-    ``by=...`` (partition the ref bag by a field and draw one ribbon per
-    group), and pairwise form ``ribbon(from_=..., to=...)`` (one band per row,
-    after :func:`resolve`).
+    children — drop-in for the removed ``connect``), bag form fused over the
+    chart's own flow (split inferred, or pinned with ``along="year"`` — see
+    :func:`line`), and pairwise form ``ribbon(from_=..., to=...)`` (one band
+    per row, after :func:`resolve`).
 
     ``emX``/``emY``/``w``/``h`` are blank-fusion anchor keys: placed directly
     in ``.mark(...)`` position, ``ribbon(...)`` elaborates to an invisible
@@ -2717,7 +2721,7 @@ def ribbon(
         curve=curve,
         from_=from_,
         to=to,
-        by=by,
+        along=along,
         emX=emX,
         emY=emY,
         w=w,

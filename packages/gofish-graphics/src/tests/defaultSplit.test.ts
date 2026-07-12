@@ -1,9 +1,11 @@
 /**
  * Tests for the default-grouping rule for fused relational marks (issue
  * #752) — see `notes/design/relational-mark-default-split.md`. A `line()`/
- * `ribbon()` with no explicit `by`, fused over the current chart's own flow
- * (`.mark(R(...))`, or `.layer(R(...))` sugar over the previous tier's
+ * `ribbon()` with no explicit `along`, fused over the current chart's own
+ * flow (`.mark(R(...))`, or `.layer(R(...))` sugar over the previous tier's
  * marks), gets a default split and travel direction computed from the flow.
+ * `along` names a flow tier by its `by` field and pins it as the path tier,
+ * overriding the inference entirely (section 7 below).
  *
  * Verifies the computed default by counting how many connectors a chart
  * renders. `toDisplayList()`'s flat `doc.items` array is the inspectable
@@ -231,36 +233,140 @@ async function main() {
     );
   }
 
-  // -- 7a. Explicit `by` overrides the default. ----------------------------
+  // -- 7a. Explicit `along` transposes the split (design note's "transposed"
+  //    example): streamgraph shape spread(lake,x) -> stack(species,y), fused
+  //    ribbon. The default names the stack tier's OWN grouping (species) as
+  //    the split (matches #2's stacked-area case). `along: "species"`
+  //    instead pins the stack tier as the PATH — the path travels the
+  //    stack's own `dir` (y) — so the split becomes the complement, lake:
+  //    one band per lake, threading species. --------------------------------
   {
-    // Same shape as #6 (default would split by "c" -> 2 connectors), but an
-    // explicit by: "x" asks for a DIFFERENT split (3 distinct x values) —
-    // proves the override wins, not just that some split occurred.
     const data = [
-      { x: 0, c: "c1", y: 2 },
-      { x: 1, c: "c1", y: 3 },
-      { x: 2, c: "c1", y: 1 },
-      { x: 0, c: "c2", y: 1 },
-      { x: 1, c: "c2", y: 4 },
-      { x: 2, c: "c2", y: 2 },
+      { lake: "L1", species: "s1", count: 3 },
+      { lake: "L1", species: "s2", count: 5 },
+      { lake: "L1", species: "s3", count: 1 },
+      { lake: "L2", species: "s1", count: 4 },
+      { lake: "L2", species: "s2", count: 2 },
+      { lake: "L2", species: "s3", count: 6 },
     ];
-    const doc = await renderDisplayList(
+    const makeFlow = () => [
+      spread({ by: "lake", dir: "x", spacing: 50 }),
+      stack({ by: "species", dir: "y" }),
+    ];
+    const defaultDoc = await renderDisplayList(
       chart(data, { w: 200, h: 200 })
-        .flow(spread({ by: "x", dir: "x", spacing: 50 }), group({ by: "c" }))
-        .mark(blank({ h: "y" }))
-        .layer(ribbon({ by: "x" })),
+        .flow(...makeFlow())
+        .mark(blank({ h: "count" }))
+        .layer(ribbon({})),
       { w: 200, h: 200 }
     );
     check(
-      "explicit by overrides the default (split by x, 3, not the default c=2)",
-      pathCount(doc) === 3,
+      "streamgraph shape, no along: split by species (3)",
+      pathCount(defaultDoc) === 3,
+      `got ${pathCount(defaultDoc)}`
+    );
+    const alongDoc = await renderDisplayList(
+      chart(data, { w: 200, h: 200 })
+        .flow(...makeFlow())
+        .mark(blank({ h: "count" }))
+        .layer(ribbon({ along: "species" })),
+      { w: 200, h: 200 }
+    );
+    check(
+      "along: 'species' transposes the split to lake (2)",
+      pathCount(alongDoc) === 2,
+      `got ${pathCount(alongDoc)}`
+    );
+  }
+
+  // -- 7b. Barley shape: an explicit `along: "year"` gives the SAME result as
+  //    the inferred default (#3's site×variety split, 4 connectors) — proves
+  //    `along` can name the tier inference would have picked anyway. --------
+  {
+    const data: any[] = [];
+    let n = 0;
+    for (const site of ["S1", "S2"]) {
+      for (const year of ["Y1", "Y2"]) {
+        for (const variety of ["V1", "V2"]) {
+          data.push({ site, year, variety, yield: 10 + (n++ % 5) });
+        }
+      }
+    }
+    const doc = await renderDisplayList(
+      chart(data, { w: 300, h: 300 })
+        .flow(
+          spread({ by: "site", dir: "x", spacing: 80 }),
+          spread({ by: "year", dir: "x", spacing: 30 }),
+          scatter({ by: "variety", y: "yield" })
+        )
+        .mark(line({ along: "year" })),
+      { w: 300, h: 300 }
+    );
+    check(
+      "barley slope: along: 'year' matches the inferred default (4)",
+      pathCount(doc) === 4,
       `got ${pathCount(doc)}`
     );
   }
 
-  // -- 7b. After fusing a no-`by` connector, the mark's own __serialize.opts
-  //    stays unpolluted (the computed default lives in a separate cell, not
-  //    in the record of what the user wrote) while the split still happens.
+  // -- 7c. `along` naming a field no flow tier groups by is a loud error,
+  //    naming the field (never a silent no-op). ----------------------------
+  {
+    const data = [
+      { x: 0, c: "c1", y: 2 },
+      { x: 1, c: "c1", y: 3 },
+      { x: 0, c: "c2", y: 1 },
+      { x: 1, c: "c2", y: 4 },
+    ];
+    const err = await expectThrows(() =>
+      renderDisplayList(
+        chart(data, { w: 200, h: 200 })
+          .flow(spread({ by: "x", dir: "x", spacing: 50 }), group({ by: "c" }))
+          .mark(blank({ h: "y" }))
+          .layer(ribbon({ along: "nonexistent" })),
+        { w: 200, h: 200 }
+      )
+    );
+    check(
+      "along naming an unknown field throws, naming the field",
+      err instanceof Error && /nonexistent/.test((err as Error).message),
+      err instanceof Error ? err.message : String(err)
+    );
+  }
+
+  // -- 7d. `along` on a chart with no flow of its own — a refs-bag chart —
+  //    is a loud error, not a silent no-op. ---------------------------------
+  {
+    const data = [
+      { id: 0, family: "a", x: 0, y: 1 },
+      { id: 1, family: "a", x: 1, y: 2 },
+      { id: 2, family: "b", x: 0, y: 3 },
+      { id: 3, family: "b", x: 1, y: 4 },
+    ];
+    let threw: unknown;
+    try {
+      chart(data, { w: 200, h: 200 })
+        .flow(scatter({ by: "id", x: "x", y: "y" }))
+        .mark(circle({ r: 3 }).name("dots"))
+        .layer(
+          chart(selectAll("dots"))
+            .flow(group({ by: "family" }))
+            .mark(line({ along: "family" }))
+        );
+    } catch (e) {
+      threw = e;
+    }
+    check(
+      "along on a refs-bag chart throws (not silently ignored)",
+      threw instanceof Error && /refs/.test((threw as Error).message),
+      threw instanceof Error ? (threw as Error).message : String(threw)
+    );
+  }
+
+  // -- 7e. Fusing a no-`along` connector leaves the mark's own
+  //    `__serialize.opts` unpolluted (the computed default lives in a
+  //    separate cell, not in the record of what the user wrote) while the
+  //    split still happens. --------------------------------------------
   {
     const data = [
       { month: "A", x: 0, y: 1 },
@@ -276,8 +382,8 @@ async function main() {
       { w: 200, h: 200 }
     );
     check(
-      "fusing a no-by connector leaves __serialize.opts.by undefined",
-      (conn as any).__serialize?.opts?.by === undefined
+      "fusing a no-along connector leaves __serialize.opts.along undefined",
+      (conn as any).__serialize?.opts?.along === undefined
     );
     check(
       "...while the computed default split still happened (2 connectors)",

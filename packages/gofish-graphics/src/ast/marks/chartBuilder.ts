@@ -218,6 +218,17 @@ type InferredRelational = {
   resolved?: boolean;
 };
 
+/** The field name a flow tier's `by` groups on, for matching against an
+ *  explicit `along`. A string `by` names itself; a `field(...)` accessor
+ *  names `.name`; a function-form `by` never matches (see the design note's
+ *  "Matching" clause — a function receives the raw bag element, not a
+ *  field). */
+function tierFieldName(by: SplitBy | undefined): string | undefined {
+  if (typeof by === "string") return by;
+  if (isField(by)) return by.name;
+  return undefined;
+}
+
 /** The `__relationalFusable` descriptor shape this module reads/writes —
  *  see `tagRelationalFusable` in chart.ts. */
 type RelationalFusable = {
@@ -339,6 +350,43 @@ function findPathTierIndex(
   return innermostPositioning(operators)?.index;
 }
 
+/** Explicit `along`: pin the path tier to the flow tier whose `by` names the
+ *  given field (see `tierFieldName`), instead of inferring it. Throws a loud
+ *  error naming the field and the flow's available keys when no tier
+ *  matches — `along` never silently falls back to inference. */
+function findTierIndexByAlong(
+  operators: Operator<any, any>[],
+  along: string,
+  markType: string
+): number {
+  for (let i = operators.length - 1; i >= 0; i--) {
+    if (tierFieldName(classifyOperator(operators[i]).by) === along) return i;
+  }
+  const available = Array.from(
+    new Set(
+      operators
+        .map((op) => tierFieldName(classifyOperator(op).by))
+        .filter((n): n is string => n !== undefined)
+    )
+  );
+  throw new Error(
+    `${markType}({ along: "${along}" }): no flow tier groups by "${along}" ` +
+      (available.length > 0
+        ? `— this flow's tiers group by: ${available.map((n) => `"${n}"`).join(", ")}.`
+        : `— this flow has no grouping tiers to name.`)
+  );
+}
+
+/** The travel axis an explicitly-`along`-named tier implies, mirroring
+ *  `classifyOperator`'s arrangement/value split: an arrangement tier
+ *  (`spread`/`stack`) travels its own `dir`; a scatter (or any non-
+ *  arrangement) tier travels flow order — leave `dir` unset so line/ribbon's
+ *  own `?? "x"` applies. */
+function alongTravelAxis(cls: OperatorClass): "x" | "y" | undefined {
+  if (cls.kind !== "arrangement") return undefined;
+  return cls.positions.x ? "x" : "y";
+}
+
 /** Resolve the travel axis (steps 1-3 of the rule) and the path tier index
  *  it implies. `markOpts` is the connector's own opts; `anchorOpts` is the
  *  previous tier's mark opts when fusing via `.layer()` sugar (undefined at
@@ -396,25 +444,63 @@ function computeDefaultBy(
  * Compute the default split/travel-direction for a fused relational mark and
  * write it into `fusable.inferred` — NEVER into `fusable.opts` (the record
  * of what the user wrote; see `tagRelationalFusable`'s doc comment in
- * chart.ts). A no-op when the mark already carries an explicit `by`, or a
- * default was already computed for this connector (`inferred.resolved` — set
- * so the `.mark()` fusion rewrite's internal `.layer(...)` call, which
- * re-enters `ChartBuilder.layer()` below, doesn't recompute).
+ * chart.ts). A no-op when a default was already computed for this connector
+ * (`inferred.resolved` — set so the `.mark()` fusion rewrite's internal
+ * `.layer(...)` call, which re-enters `ChartBuilder.layer()` below, doesn't
+ * recompute).
+ *
+ * An explicit `along` beats inference entirely: it pins the path tier
+ * (`findTierIndexByAlong`, throwing if no tier matches) instead of running
+ * the travel-axis/path-tier inference (steps 1-3). `dir` still composes
+ * independently — an explicit `dir` still wins for the travel axis even when
+ * `along` picks the path tier (mirrored by checking `fusable.opts.dir` first
+ * below, same as step 1 of the inferred path).
  */
 function applyDefaultRelational(
   fusable: RelationalFusable,
   operators: Operator<any, any>[],
   anchorOpts: Record<string, any> | undefined
 ): void {
-  if (fusable.opts.by !== undefined || fusable.inferred.resolved) return;
-  const travelAxis = resolveTravelAxis(fusable.opts, anchorOpts, operators);
-  const pathTierIndex = findPathTierIndex(operators, travelAxis);
+  if (fusable.inferred.resolved) return;
+  const along = (fusable.opts as any).along as string | undefined;
+
+  let travelAxis: "x" | "y" | undefined;
+  let pathTierIndex: number | undefined;
+  if (along !== undefined) {
+    pathTierIndex = findTierIndexByAlong(operators, along, fusable.type);
+    travelAxis =
+      fusable.opts.dir === "x" || fusable.opts.dir === "y"
+        ? fusable.opts.dir
+        : alongTravelAxis(classifyOperator(operators[pathTierIndex]));
+  } else {
+    travelAxis = resolveTravelAxis(fusable.opts, anchorOpts, operators);
+    pathTierIndex = findPathTierIndex(operators, travelAxis);
+  }
+
   const defaultBy = computeDefaultBy(operators, pathTierIndex);
   if (defaultBy !== undefined) fusable.inferred.by = defaultBy;
   if (travelAxis !== undefined && fusable.opts.dir === undefined) {
     fusable.inferred.dir = travelAxis;
   }
   fusable.inferred.resolved = true;
+}
+
+/** Loud guard for `along` used where the mark does not fuse over this
+ *  chart's own flow (a refs-bag chart, or the `{from,to}` pairwise form —
+ *  see the design note's "Matching" clause). `applyDefaultRelational` is
+ *  never reached on these paths, so `along` would otherwise silently no-op;
+ *  call this wherever fusion is skipped but the mark could still carry
+ *  `along`. */
+function rejectAlongWithoutFlow(
+  fusable: { type: string; opts: Record<string, any> } | undefined
+): void {
+  if (fusable && fusable.opts.along !== undefined) {
+    throw new Error(
+      `${fusable.type}({ along: "${fusable.opts.along}" }): along names a ` +
+        `tier of this chart's flow; this chart has no flow / is over refs — ` +
+        `use flow(group({ by })) instead.`
+    );
+  }
 }
 
 /* ---- END default grouping for relational marks ---- */
@@ -579,11 +665,13 @@ export class ChartBuilder<TInput, TOutput = TInput> {
     }
 
     // Fusion was skipped — this mark connects existing marks (an empty-scope
-    // `chart()` tier, or a chart whose data is already refs), so any anchor
-    // keys it's still carrying (`w`/`h`/`emX`/`emY`) have nothing to anchor
-    // and would silently do nothing. That's exactly the kind of
-    // user-wrote-X/system-did-Y disagreement that should be a loud error
+    // `chart()` tier, or a chart whose data is already refs), so `along`
+    // (which names a tier of a flow that doesn't apply here) and any anchor
+    // keys it's still carrying (`w`/`h`/`emX`/`emY`, which have nothing to
+    // anchor) would otherwise silently do nothing. That's exactly the kind
+    // of user-wrote-X/system-did-Y disagreement that should be a loud error
     // rather than a quiet no-op.
+    rejectAlongWithoutFlow(fusable);
     if (fusable && fusable.anchorKeys.length > 0) {
       const keys = fusable.anchorKeys;
       const plural = keys.length > 1;
@@ -675,6 +763,15 @@ export class ChartBuilder<TInput, TOutput = TInput> {
         | Record<string, any>
         | undefined;
       applyDefaultRelational(fusable, this.operators, anchorOpts);
+    } else if (
+      typeof child === "function" &&
+      (child as any).__relationalFusable !== undefined
+    ) {
+      // Fusion is out of scope here (this tier has no flow of its own to
+      // name — see `rejectAlongWithoutFlow`'s doc comment).
+      rejectAlongWithoutFlow(
+        (child as any).__relationalFusable as RelationalFusable
+      );
     }
     return new LayerBuilder([this, child]);
   }

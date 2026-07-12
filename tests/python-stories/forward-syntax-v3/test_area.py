@@ -27,7 +27,7 @@ def story_stacked():
             stack(by="species", dir="y"),
         )
         .mark(blank(h="count", fill="species"))
-        .layer(ribbon(by="species", opacity=0.8)),
+        .layer(ribbon(opacity=0.8)),
         {"w": 400, "h": 400},
     )
 
@@ -37,6 +37,6 @@ def story_layered():
         chart(STREAMGRAPH_DATA, axes=True)
         .flow(spread(by="x", dir="x", spacing=50), group(by="c"))
         .mark(blank(h="y", fill="c"))
-        .layer(ribbon(by="c", opacity=0.7)),
+        .layer(ribbon(opacity=0.7)),
         {"w": 500, "h": 300},
     )

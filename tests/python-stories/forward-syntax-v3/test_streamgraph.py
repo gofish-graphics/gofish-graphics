@@ -12,6 +12,6 @@ def story_default():
             stack(by="species", dir="y"),
         )
         .mark(blank(h="count", fill="species"))
-        .layer(ribbon(by="species", opacity=0.8)),
+        .layer(ribbon(opacity=0.8)),
         {"w": 400, "h": 400},
     )
