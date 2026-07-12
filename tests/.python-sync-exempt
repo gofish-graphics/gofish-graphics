@@ -61,15 +61,6 @@ packages/gofish-graphics/stories/bluefish/DFSCQ.stories.tsx
 # the same low-level vocabulary as QuantumCircuit/Pulley/PythonTutor
 # above, not yet expressible via the fluent chart() pipeline.
 packages/gofish-graphics/stories/bluefish/OhmParseTree.stories.tsx
-#
-# ViolinPlot is ported too (tests/python-stories/low-level-syntax/
-# test_violin_plot.py) but stays exempt: the JS story uses `fast-kde`'s
-# density1d, while the idiomatic Python port uses `scipy.stats.gaussian_kde`.
-# The violins render with the same structure/colors/layout but the KDE curve
-# differs (different bandwidth/extent), so it can't byte-match the JS DOM.
-# capture-python skips file-level-exempt stories, so this port is validated
-# (IR + render) without failing the byte-parity gate.
-packages/gofish-graphics/stories/lowlevel/ViolinPlot.stories.tsx
 
 # Per-export exemption — PolarText constructs a raw custom coordinate
 # transform inline ({ type, transform: ([r, theta]) => ..., domain }), an
@@ -157,6 +148,17 @@ packages/gofish-graphics/stories/lowlevel/Constraints.stories.tsx::SpreadY_Spaci
 packages/gofish-graphics/stories/lowlevel/Constraints.stories.tsx::SpreadX_Spacing_AlignEnd
 packages/gofish-graphics/stories/lowlevel/Constraints.stories.tsx::SpreadX_CenterToCenter
 packages/gofish-graphics/stories/lowlevel/Constraints.stories.tsx::SpreadY_Reversed
+
+# Per-export exemption for ViolinPlot.stories.tsx — the JS story uses
+# `fast-kde`'s density1d, while the idiomatic Python port
+# (tests/python-stories/low-level-syntax/test_violin_plot.py) uses
+# `scipy.stats.gaussian_kde`. Both produce a real KDE curve over the same
+# data with the same violin structure/colors/layout, but the two libraries'
+# default bandwidth/extent choices diverge, so the rendered curve can't
+# byte-match the JS baseline — an accepted algorithm divergence, not a
+# missing feature. The port IS captured and IR-validated (mark/operator
+# structure, data, options); only the pixel-for-pixel DOM diff is skipped.
+packages/gofish-graphics/stories/lowlevel/ViolinPlot.stories.tsx::Default
 
 # ---------------------------------------------------------------------------
 # gofish-gotree (the GoTree tree-DSL package) — exempt from Python parity.
