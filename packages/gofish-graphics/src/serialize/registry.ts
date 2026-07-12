@@ -50,6 +50,7 @@ import { group } from "../ast/graphicalOperators/group";
 import { table } from "../ast/graphicalOperators/table";
 import { arrow } from "../ast/graphicalOperators/arrow";
 import { enclose } from "../ast/graphicalOperators/enclose";
+import { position } from "../ast/graphicalOperators/position";
 import {
   treemap as treemapOperator,
   Treemap,
@@ -122,6 +123,11 @@ export const COMBINATOR_FACTORIES: Record<
   // like layer but with no `.constrain`; opts ride in `options`.
   enclose: (opts, marks) =>
     (enclose as any)(opts, marks) as unknown as Mark<any>,
+  // Absolute-offset placement primitive — sets its single child's min-corner
+  // (x, y) in parent coordinates. Combinator-only, like `enclose`; opts ride
+  // in `options`. Mirrors tests/harness/main.ts's COMBINATOR_FACTORIES.
+  position: (opts, marks) =>
+    (position as any)(opts, marks) as unknown as Mark<any>,
   arrow: (opts, marks) => (arrow as any)(opts, marks) as unknown as Mark<any>,
   // `line`/`ribbon` are relational marks (createRelationalMark) whose
   // `(opts, marks)` overload is the low-level combinator form. It builds the

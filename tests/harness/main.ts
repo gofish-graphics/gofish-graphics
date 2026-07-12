@@ -43,6 +43,7 @@ import {
   ref,
   arrow,
   enclose,
+  position,
   // Region-compositing combinators. PR #404's Stage-2 rename (#196/#202)
   // renamed the public Porter-Duff exports to Figma-inspired names:
   //   inside → intersect, xor → exclude, out → subtract, atop → paint.
@@ -96,6 +97,10 @@ const COMBINATOR_FACTORIES: Record<
   // Graphical wrapping operator (padding/rx/ry border), combinator-only like
   // layer; opts ride in `options`. Mirrors registry.ts's COMBINATOR_FACTORIES.
   enclose: (opts, marks) => enclose(opts, marks) as unknown as Mark<any>,
+  // Absolute-offset placement primitive — sets its single child's min-corner
+  // (x, y) in parent coordinates. Combinator-only, like `enclose`; opts ride
+  // in `options`. Mirrors registry.ts's COMBINATOR_FACTORIES.
+  position: (opts, marks) => position(opts, marks) as unknown as Mark<any>,
   arrow: (opts, marks) => arrow(opts, marks) as unknown as Mark<any>,
   // line/ribbon low-level combinator form (replaces the removed connect).
   line: (opts, marks) => line(opts, marks) as unknown as Mark<any>,
@@ -660,11 +665,15 @@ function mapMark(
   // (for `ref(token).foo[2].bar` proxy navigation), or contain token
   // sentinels that need resolving.
   if (spec.type === "ref" && !spec.__combinator) {
-    return applyTranslate(
-      ref(
-        resolveRefSelection(spec.selection, resolveToken)
-      ) as unknown as Mark<any>
-    );
+    const refNode = ref(resolveRefSelection(spec.selection, resolveToken));
+    // `ref(name).name(name)` — the cross-tier name proxy (`pull`). GoFishRef's
+    // `.name()` mutates in place and returns `this`, making the ref a
+    // constraint target of the enclosing layer (same as the __inputRef
+    // branch above).
+    if (spec.name != null) {
+      (refNode as any).name(resolveNameField(spec.name, resolveToken));
+    }
+    return applyTranslate(refNode as unknown as Mark<any>);
   }
 
   // `offset` node: shift a single child by (x, y) render-pixels. Maps to the

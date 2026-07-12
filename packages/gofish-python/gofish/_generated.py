@@ -474,6 +474,23 @@ def enclose(children: List["Mark"], *, padding: Optional[float] = None, rx: Opti
             kwargs[_k] = _v
     return Mark("enclose", _children=list(children), **kwargs)
 
+def position(children: List["Mark"], *, key: Optional[str] = None, x: Optional[Union[int, float, str]] = None, y: Optional[Union[int, float, str]] = None) -> Mark:
+    """Set a single child's min-corner (x, y) in parent coordinates — an absolute-offset placement primitive, NOT center-anchored. Unlike `enclose`'s convex-hull styling, `position` draws nothing of its own; it exists for cases (e.g. the Topology story's combinator trees) that need to place one child precisely without `enclose`'s fill/stroke/hull limits.
+
+    Args:
+        x: Min-corner x offset.
+        y: Min-corner y offset.
+    """
+    kwargs: Dict[str, Any] = {}
+    for _k, _v in [
+        ("key", key),
+        ("x", x),
+        ("y", y),
+    ]:
+        if _v is not None:
+            kwargs[_k] = _v
+    return Mark("position", _children=list(children), **kwargs)
+
 def arrow(children: List["Mark"], *, bow: Optional[float] = None, stretch: Optional[float] = None, stretchMin: Optional[float] = None, stretchMax: Optional[float] = None, padStart: Optional[float] = None, padEnd: Optional[float] = None, flip: Optional[bool] = None, straights: Optional[bool] = None, stroke: Optional[str] = None, strokeWidth: Optional[float] = None, start: Optional[bool] = None) -> Mark:
     """A perfect-arrows box-to-box arrow between exactly two children.
 

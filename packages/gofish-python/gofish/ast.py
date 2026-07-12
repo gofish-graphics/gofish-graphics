@@ -673,6 +673,7 @@ from ._generated import (  # noqa: E402
     paint,
     mask,
     enclose,
+    position,
     arrow,
     _spread_opts,
     _stack_opts,
@@ -1572,6 +1573,22 @@ class _RefProxy(Mark):
         translated._translate = {k: v for k, v in {"x": x, "y": y}.items() if v is not None}
         return translated
 
+    def name(self, name_or_token: Union[str, "Token"]) -> "_RefProxy":
+        # Override Mark.name(): the base implementation reconstructs via
+        # `type(self)(mark_type, _children=..., **kwargs)`, which assumes
+        # the standard Mark constructor shape — `_RefProxy.__init__` takes
+        # `(selection, multiplicity=None)` instead, so that reconstruction
+        # raises. Mirrors the `translate()` override immediately above and
+        # JS `RefProxy`'s inherited `Node.name()` (`_node.ts`), which just
+        # sets `_name` and returns `this`. Lets `ref(name).name(name)`
+        # re-expose an existing selection as a new named node — the
+        # `pull(name)` cross-tier-name-proxy pattern used by ported
+        # Bluefish stories (e.g. `tests/python-stories/bluefish/test_baking_recipes.py`).
+        named = _RefProxy(self._sel(), multiplicity=self.multiplicity)
+        self._copy_meta(named)
+        named._name = name_or_token
+        return named
+
     def to_dict(self) -> dict:
         # `selectAll(...)` is a plural chart-data selector — it has no
         # inline-layout meaning. Chart-data serialization is handled by
@@ -1594,6 +1611,16 @@ class _RefProxy(Mark):
             d = {"type": "ref", "selection": serialized[0]}
         else:
             d = {"type": "ref", "selection": serialized}
+        # `ref(name).name(name)` — the cross-tier name proxy (`pull`) —
+        # must carry its name on the wire so the reconstructed GoFishRef
+        # is visible to the enclosing layer's constraint solver (RefMarkIR
+        # declares `name`; same emission shape as Mark.to_dict above).
+        if self._name is not None:
+            d["name"] = (
+                self._name.to_dict()
+                if isinstance(self._name, Token)
+                else self._name
+            )
         if self._translate:
             d["translate"] = self._translate
         return d

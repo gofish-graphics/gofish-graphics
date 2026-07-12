@@ -434,6 +434,7 @@ export type CombinatorMarkType =
   | "table"
   | "layer"
   | "enclose"
+  | "position"
   | "arrow"
   // `line`/`ribbon` are derived marks with a low-level combinator form
   // (children = the refs/marks to connect) — the drop-in for the removed
@@ -768,6 +769,7 @@ export const COMBINATOR_MARK_TYPES: readonly CombinatorMarkType[] = [
   "table",
   "layer",
   "enclose",
+  "position",
   "arrow",
   "line",
   "ribbon",

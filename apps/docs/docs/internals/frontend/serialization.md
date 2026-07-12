@@ -135,8 +135,12 @@ without a bridge. Marks are a tree — leaves
 (`rect`, `circle`, `blank`, `ellipse`, `petal`, `text`,
 `image`, `polygon`, plus the Python-bridge `mark-fn`), combinators (with
 `__combinator: true` and a `children` array — `layer`, `spread`, `stack`,
-`arrow`, `line`, `ribbon`, `treemap`, and the Porter-Duff family), refs, or the
-two self-discriminating wrapper marks `offset` and `cut` (below).
+`arrow`, `position`, `line`, `ribbon`, `treemap`, and the Porter-Duff family),
+refs, or the two self-discriminating wrapper marks `offset` and `cut` (below).
+`position` is `enclose`'s undecorated sibling: it sets a single child's
+min-corner `(x, y)` in the parent's coordinates and draws nothing of its own
+(no hull, no styling) — a workaround for `enclose`'s convex-bbox-hull-only
+styling limits, added for the bluefish Topology story's combinator trees.
 
 Operators and marks may also carry `translate: {x?, y?}`. This is canonical
 frontend IR, not a Python-only bridge sentinel: it records the structural
@@ -187,6 +191,17 @@ how a per-slice label overlay (`Cut.stories.tsx::ImageCutWithLabels`) can
 harness (`tests/harness/main.ts`) carries an equivalent
 `serializeMarkFnInput`/`__inputRef` implementation, since it renders from raw
 IR over plain HTTP rather than through the shared `fromJSON.ts`/widget path.
+
+The plain leaf-form `ref` node carries names the same way: `RefMarkIR`
+declares an optional `name`, emitted by Python's `_RefProxy.to_dict()` when
+the ref was renamed and re-applied by the deserializer (both `fromJSON.ts`
+and the harness's `mapMark`) via the same mutate-in-place `GoFishRef.name()`.
+This is what makes the `pull(name)` cross-tier proxy pattern —
+`ref(name).name(name)` re-exposed as a direct child so an outer layer's
+`.constrain(...)` can resolve the name (see `BakingRecipes.stories.tsx`) —
+work identically from Python: without the wire `name`, the reconstructed ref
+is invisible to the constraint solver's direct-children map and the
+constraints silently no-op.
 
 There is no `connect` field on the wire. `.layer(...)` — the one way to
 overlay a connector — always serializes as an ordinary `LayerIR` tier: an
@@ -295,8 +310,8 @@ chart(data).mark(
 
 The `__combinator: true` flag tells the deserializer to dispatch this
 node through the combinator factory registry (`layer`, `spread`,
-`arrow`, `line`, `ribbon`, `treemap`, Porter-Duff) rather than the leaf-mark
-registry — same `type` discriminator namespace, different code path.
+`arrow`, `position`, `line`, `ribbon`, `treemap`, Porter-Duff) rather than the
+leaf-mark registry — same `type` discriminator namespace, different code path.
 
 ## The descriptor table — one authored source for construct field lists
 
