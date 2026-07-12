@@ -55,11 +55,12 @@ rect(seafood, { h: "count", fill: "species" })
 ::: tip What actually shipped
 The syntax debate below predates the real API. The shipped forward syntax
 settled on `chart(data).flow(...).mark(...)`, and the ribbon-chart case above
-is now `.layer(ribbon({ by: "species", opacity: 0.8 }))` chained on the
-builder — `by` on the connector mark itself does the re-partition that this
-"Reverse" sketch spells as a separate `.group({ by: "datum.species" })` step.
-There is no `.connect()` method. See [`.layer()`](/js/api/core/layer) for the
-current semantics.
+is now `.layer(ribbon({ opacity: 0.8 }))` chained on the builder — no split
+option at all, since a ribbon fused over the chart's own flow splits at the
+flow's grouping by default (issue #752), the re-partition this "Reverse"
+sketch spells as a separate `.group({ by: "datum.species" })` step. There is
+no `.connect()` method. See [`.layer()`](/js/api/core/layer) for the current
+semantics.
 :::
 
 **Forward** (needed several more examples to figure out — the early sketches

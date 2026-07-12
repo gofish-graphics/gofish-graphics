@@ -23,7 +23,7 @@ layer([
 
 ```python
 ribbon(stroke=None, strokeWidth=None, opacity=None, mixBlendMode=None,
-     dir=None, curve=None, by=None, w=None, h=None, emX=None, emY=None) -> Mark
+     dir=None, curve=None, along=None, w=None, h=None, emX=None, emY=None) -> Mark
 ```
 
 ## Parameters
@@ -36,7 +36,7 @@ ribbon(stroke=None, strokeWidth=None, opacity=None, mixBlendMode=None,
 | `mixBlendMode` | `str`                                                | CSS blend mode for overlapping areas                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | `dir`          | `str`                                                | Direction the ribbon fills toward                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 | `curve`        | `str \| dict`                                        | Screen-space path shape; default `"auto"`                                                                                                                                                                                                                                                                                                                                                                                                                                   |
-| `by`           | `str \| field(...) \| Callable`                      | Partitions the operand bag (the list of refs) into groups and draws one band per group. Same grammar as any operator's `by` — bare field name, key function, or [`field(...)`](/python/api/operators/spread#field-expression-pipeline) accessor. Resolves against the refs' own datum automatically (no `datum.` prefix), same as `group(by=...)`. Composes with an upstream `group()` as a nested split.                                                                   |
+| `along`        | `str`                                                | Names a flow tier by its `by` field (see [Default grouping](#default-grouping)): that tier becomes the band's path, and every other grouping tier splits into separate bands. Usually omitted — the path tier is inferred from the flow shape. Naming a field that matches no tier, or using `along` on a ribbon that doesn't fuse into a chart's own flow (a refs bag, or the pairwise `from`/`to` form), throws.                                                          |
 | `w`, `h`       | `int \| float \| str \| FieldAccessor \| datum(...)` | **Ignored by `ribbon` itself.** Blank-fusion anchor keys: read only when `ribbon(...)` is placed directly in `.mark()` position, where they become the invisible anchor tier's `blank(w=..., h=..., emX=..., emY=...)` opts — same channel-value shapes as a leaf mark's "size" channel, including a `field(...)` pipeline like `field("count").sum()`. See [`.layer()`'s blank-fusion section](/python/api/core/layer#blank-fusion-skip-layer-entirely-for-a-fresh-chart). |
 | `emX`, `emY`   | `bool`                                               | **Ignored by `ribbon` itself.** Blank-fusion anchor keys — see `w`/`h` above.                                                                                                                                                                                                                                                                                                                                                                                               |
 
@@ -55,10 +55,28 @@ ribbon per series), run it through `group(by="datum.field")` — see
 Stack several ribbons in one `layer` — with `opacity` or `mixBlendMode` — for
 layered and stacked area charts.
 
-## Sugar: `.layer(ribbon(by=...))`
+## Default grouping
+
+A ribbon fused into a flow — in `.mark()` position or as `.layer()` sugar over
+the previous tier's marks — splits at the flow's own grouping by default: one
+tier lays the band's path, and every other grouping in the flow splits it into
+separate bands. You don't restate the split — the flow one line up already
+declared it, and `ribbon` has no option that spells the split directly.
+
+When you need a _different_ path tier than the one inference would pick,
+name it with `along`: `along="species"` finds the flow tier whose `by` is
+`"species"`, makes it the path, and splits by every other grouping tier
+instead. Naming a field no tier groups by is an error. This doesn't apply to
+a ribbon drawn over an explicit refs bag (`chart(selectAll(...))`) or the
+pairwise `from`/`to` form — `along` is only meaningful when the ribbon fuses
+into a chart's own flow, and throws if used on either of those. A refs bag
+spells its split structurally instead, with an upstream
+`flow(group(by="species"))`.
+
+## Sugar: `.layer(ribbon(...))`
 
 When the ribbon traces a chart's _own_ marks, skip the two-chart `selectAll`
-recipe and chain [`.layer()`](/python/api/core/layer) with `by` on the
+recipe and chain [`.layer()`](/python/api/core/layer) on the
 builder — this is the canonical simple ribbon-chart spelling:
 
 ```python
@@ -68,9 +86,12 @@ chart(seafood, axes=True).flow(
     spread(by="lake", dir="x", spacing=64),
     stack(by=field("species").sort("count"), dir="y"),
 ).mark(rect(h="count", fill="species")).layer(
-    ribbon(by="species", opacity=0.8)
+    ribbon(opacity=0.8)
 ).render(w=400, h=400)
 ```
+
+No `by` needed: the `stack(by="species")` tier already told the flow how to
+group, so the ribbon splits into one band per species by default.
 
 See [`.layer()`](/python/api/core/layer) for the full semantics, including the
 zBelow-by-default paint order and the desugaring to the explicit
@@ -94,10 +115,18 @@ chart(lake_totals).flow(
 ).mark(blank(h="count")).layer(ribbon(opacity=0.8))
 ```
 
-A `by`-split ribbon's `fill` can be a shared field name (each group is
-homogeneous in it): `ribbon(h="count", fill="species", by="species")`
-resolves `fill` through the color scale per group, the same as it would if
-`fill` were declared on an explicit anchor `blank()`.
+A grouped flow fuses the same way, with no `by` needed:
+
+```python
+chart(seafood, axes=True).flow(
+    spread(by="lake", dir="x", spacing=64, alignment="middle"),
+    stack(by="species", dir="y"),
+).mark(ribbon(h="count", fill="species", opacity=0.8))
+```
+
+`fill` here is a shared field name, homogeneous within each species group
+(the default split, above) — it resolves through the color scale per group,
+the same as it would if `fill` were declared on an explicit anchor `blank()`.
 
 See [`.layer()`'s blank-fusion section](/python/api/core/layer#blank-fusion-skip-layer-entirely-for-a-fresh-chart)
 for the full desugaring rule (the `w`/`h`/`emX`/`emY` anchor/connector key

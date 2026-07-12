@@ -27,7 +27,7 @@ gf.layer([
 ## Signature
 
 ```ts
-line({ stroke?, strokeWidth = 1, strokeDasharray?, opacity?, curve = "auto", by?, from?, to?, w?, h?, emX?, emY? })
+line({ stroke?, strokeWidth = 1, strokeDasharray?, opacity?, curve = "auto", along?, from?, to?, w?, h?, emX?, emY? })
 ```
 
 ## Parameters
@@ -39,7 +39,7 @@ line({ stroke?, strokeWidth = 1, strokeDasharray?, opacity?, curve = "auto", by?
 | `strokeDasharray` | `string`                                         | Raw SVG `stroke-dasharray` (e.g. `"12"`) for a dashed line; same option name as `enclose`                                                                                                                                                                                                                                                                                                                                                                                |
 | `opacity`         | `number`                                         | Opacity (0–1)                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
 | `curve`           | `"straight" \| "bezier" \| CurveSpec`            | Screen-space path shape; default `"auto"` auto-smooths continuous line charts with a centripetal Catmull-Rom spline                                                                                                                                                                                                                                                                                                                                                      |
-| `by`              | `string \| FieldExpr \| (ref) => string`         | Partitions the operand bag (the array of refs) into groups and draws one polyline per group. Same grammar as any operator's `by` — bare field name, key function, or [`field(...)`](/js/api/operators/spread#field-expression-pipeline) accessor. Resolves against the refs' own datum automatically (no `datum.` prefix), same as `group({ by })`. Composes with an upstream `group()` as a nested split.                                                               |
+| `along`           | `string`                                         | Names a flow tier by its `by` field (see [Default grouping](#default-grouping)): that tier becomes the line's path, and every other grouping tier splits into separate lines. Usually omitted — the path tier is inferred from the flow shape. Naming a field that matches no tier, or using `along` on a line that doesn't fuse into a chart's own flow (a refs bag, or the pairwise `{from, to}` form), throws.                                                        |
 | `from`, `to`      | `string`                                         | Pairwise form: column names holding the two endpoint refs                                                                                                                                                                                                                                                                                                                                                                                                                |
 | `w`, `h`          | `number \| string \| Value<number> \| FieldExpr` | **Ignored by `line` itself.** Blank-fusion anchor keys: read only when `line(opts)` is placed directly in `.mark()` position, where they become the invisible anchor tier's `blank({w, h, emX, emY})` opts — same channel-value shapes as a leaf mark's "size" channel (e.g. rect's `h`), including a `field(...)` pipeline like `field("count").sum()`. See [`.layer()`'s blank-fusion section](/js/api/core/layer#blank-fusion-skip-layer-entirely-for-a-fresh-chart). |
 | `emX`, `emY`      | `boolean`                                        | **Ignored by `line` itself.** Blank-fusion anchor keys — see `w`/`h` above.                                                                                                                                                                                                                                                                                                                                                                                              |
@@ -62,6 +62,44 @@ from the endpoint geometry instead (for layouts with no single growth axis).
   hold refs: one segment per row. Use after [`resolve`](/js/api/operators/resolve)
   has turned an edge table's endpoint ids into node refs — this is how node-link
   edges are drawn. See [`.layer()`](/js/api/core/layer) for the full recipe.
+
+## Default grouping
+
+A line fused into a flow — in `.mark()` position or as `.layer()` sugar over
+the previous tier's marks — splits at the flow's own grouping by default: one
+tier lays the line's path, and every other grouping in the flow splits it into
+separate lines. You don't restate the split — the flow one line up already
+declared it, and `line` has no option that spells the split directly.
+
+When you need a _different_ path tier than the one inference would pick, name
+it with `along`: `along: "year"` finds the flow tier whose `by` is `"year"`,
+makes it the path, and splits by every other grouping tier instead. Naming a
+field no tier groups by is an error. This doesn't apply to a line drawn over
+an explicit refs bag (`chart(selectAll(...))`) or the pairwise `{ from, to }`
+form — `along` is only meaningful when the line fuses into a chart's own
+flow, and throws if used on either of those. A refs bag spells its split
+structurally instead, with an upstream `flow(group({ by: "species" }))`.
+
+A slope chart is a good example of why the default matters: ten barley
+varieties across six field sites, one short line per site-variety pair from
+1931 to 1932, with no line crossing a site boundary.
+
+```ts
+chart(barley, { axes: true })
+  .flow(
+    spread({ by: "site", dir: "x", spacing: 110 }),
+    spread({ by: "year", dir: "x", spacing: 36 }),
+    scatter({ by: "variety", y: "yield" })
+  )
+  .mark(line({ stroke: "variety", strokeWidth: 2 }));
+```
+
+No option at all: the innermost tier that lays out the travel axis (the
+`year` spread) becomes the path, and every other grouping — `site` and
+`variety` — splits, giving one line per site-variety pair. Writing the same
+split by hand would take a composite key over both fields; naming it
+explicitly would be `line({ along: "year", stroke: "variety", strokeWidth: 2
+})`, which picks the same path tier the default already infers.
 
 ## Sugar: `.layer(line(...))`
 

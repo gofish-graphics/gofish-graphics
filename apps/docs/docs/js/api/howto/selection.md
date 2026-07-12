@@ -127,9 +127,13 @@ the **selection stream** (refs, so `datum.` paths), while a mark's channel like
 [path-aware `by`](/js/api/operators/spread#path-aware-by).
 
 When the chart being re-partitioned is the first chart's own marks, skip this
-manual `group()` + `selectAll` wiring entirely: `ribbon` and `line` accept a
-`by` option directly, so `.layer(ribbon({ by: "species", opacity: 0.8 }))`
-does the same re-partition in one line. See [`.layer()`](/js/api/core/layer).
+manual `group()` + `selectAll` wiring entirely: chain `.layer(ribbon({ opacity:
+0.8 }))` straight onto the producing chart, with no split option at all — the
+`stack({ by: "species" })` tier already told the flow how to group, so the
+fused ribbon splits by species by default. If you need a _different_ path
+tier than the one the default infers, name it with `along` — see the
+[`ribbon` docs](/js/api/marks/ribbon#default-grouping) for the full rule. See
+[`.layer()`](/js/api/core/layer).
 
 ## Example: A single-node reference
 

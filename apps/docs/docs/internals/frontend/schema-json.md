@@ -2214,16 +2214,9 @@ for the API.
           "type": "string",
           "description": "Pairwise form: column holding the target ref."
         },
-        "by": {
-          "oneOf": [
-            {
-              "type": "string"
-            },
-            {
-              "$ref": "#/$defs/FieldAccessor"
-            }
-          ],
-          "description": "Bag form: partition the operand refs by this field (or field(...) accessor) and draw one connector per group."
+        "along": {
+          "type": "string",
+          "description": "Names a flow tier by its `by` field: that tier becomes the path tier (threading its groups in order) and every OTHER grouping tier splits. Omitted: the path tier is inferred from the flow shape. Naming a field that matches no tier, or using `along` where the mark doesn't fuse over this chart's own flow (a refs bag, or the pairwise from/to form), is an error."
         },
         "emX": {
           "type": "boolean",
@@ -2302,16 +2295,9 @@ for the API.
         "to": {
           "type": "string"
         },
-        "by": {
-          "oneOf": [
-            {
-              "type": "string"
-            },
-            {
-              "$ref": "#/$defs/FieldAccessor"
-            }
-          ],
-          "description": "Bag form: partition the operand refs by this field (or field(...) accessor) and draw one connector per group."
+        "along": {
+          "type": "string",
+          "description": "Names a flow tier by its `by` field: that tier becomes the path tier (threading its groups in order) and every OTHER grouping tier splits. Omitted: the path tier is inferred from the flow shape. Naming a field that matches no tier, or using `along` where the mark doesn't fuse over this chart's own flow (a refs bag, or the pairwise from/to form), is an error."
         },
         "emX": {
           "type": "boolean",

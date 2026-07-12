@@ -88,6 +88,25 @@ export function projectPath(obj: unknown, path: string): unknown {
  *  {@link splitEntries}). */
 export type SplitBy = string | ((r: any) => unknown) | FieldAccessor;
 
+/**
+ * The mutable cell `ChartBuilder` writes the computed default split/travel
+ * direction into (issue #752's default-grouping rule — see
+ * `notes/design/relational-mark-default-split.md`). `resolved` marks that a
+ * default computation already ran for this connector, so the `.mark()`
+ * fusion rewrite's internal `.layer(...)` call (which re-enters
+ * `ChartBuilder.layer()`) doesn't recompute and overwrite it.
+ *
+ * Canonical home for both `chart.ts` (which tags every relational mark with
+ * an `inferred` cell of this shape) and `chartBuilder.ts` (which computes
+ * into it) — a type-only import creates no runtime cycle even though
+ * `chart.ts` also imports `ChartBuilder` from `chartBuilder.ts` at runtime.
+ */
+export type InferredRelational = {
+  by?: SplitBy;
+  dir?: "x" | "y";
+  resolved?: boolean;
+};
+
 /** Build the grouping key-function for a single split. Exists so that path
  *  parsing happens once per split (closing over the parsed `segments`) rather
  *  than once per row, and so the `typeof by === "function"` dispatch is resolved
@@ -245,6 +264,34 @@ export function splitEntries<T extends Record<string, any>>(
     }
   }
   return entries;
+}
+
+/** Which axes a scatter-family opts object positions: `x`/`y` true when a
+ *  plain point value or a full range (`Min`+`Max`) is given for that axis.
+ *  Shared by `Scatter`'s own `hasX`/`hasY` guard (`graphicalOperators/
+ *  scatter.tsx`) and `chartBuilder.ts`'s `classifyOperator` (which reads the
+ *  SAME opts shape off a scatter operator's `__serialize.opts` to classify
+ *  it for the relational-mark default-split rule — issue #752) so the two
+ *  don't drift. Lives in this leaf module (no dependency on either caller)
+ *  rather than being exported from `scatter.tsx`: that module imports
+ *  `createOperator.ts`, which imports back from `chartBuilder.ts` — a
+ *  `chartBuilder.ts -> scatter.tsx` runtime import would cycle. */
+export function scatterPositions(opts: {
+  x?: unknown;
+  xMin?: unknown;
+  xMax?: unknown;
+  y?: unknown;
+  yMin?: unknown;
+  yMax?: unknown;
+}): { x: boolean; y: boolean } {
+  return {
+    x:
+      opts.x !== undefined ||
+      (opts.xMin !== undefined && opts.xMax !== undefined),
+    y:
+      opts.y !== undefined ||
+      (opts.yMin !== undefined && opts.yMax !== undefined),
+  };
 }
 
 /** The full set of distinct values at `path` ("every possible value"), with no

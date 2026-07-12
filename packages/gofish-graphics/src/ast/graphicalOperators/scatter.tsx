@@ -5,7 +5,7 @@ import { FancyDims } from "../dims";
 import { createNodeOperator } from "../withGoFish";
 import { GoFishAST } from "../_ast";
 import { Collection } from "lodash";
-import { SplitBy, splitEntries } from "../datumProjection";
+import { SplitBy, splitEntries, scatterPositions } from "../datumProjection";
 import { Alignment } from "./alignment";
 import { createOperator } from "../marks/createOperator";
 import { layer } from "./layer";
@@ -51,8 +51,14 @@ export const Scatter = createNodeOperator(
     } = options;
     children = unwrapLodashArray(children);
 
-    const hasX = x !== undefined || (xMin !== undefined && xMax !== undefined);
-    const hasY = y !== undefined || (yMin !== undefined && yMax !== undefined);
+    const { x: hasX, y: hasY } = scatterPositions({
+      x,
+      xMin,
+      xMax,
+      y,
+      yMin,
+      yMax,
+    });
 
     if (children.length === 0) {
       throw new Error("Scatter operator expects at least one child");

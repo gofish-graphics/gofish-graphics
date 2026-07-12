@@ -34,11 +34,21 @@ gf.chart(seafood, { axes: true })
     gf.spread({ by: "lake", dir: "x", spacing: 64 }),
     gf.stack({ by: gf.field("species").sort("count"), dir: "y" })
   )
-  .mark(gf.ribbon({ h: "count", fill: "species", by: "species", opacity: 0.8 }))
+  .mark(gf.ribbon({ h: "count", fill: "species", opacity: 0.8 }))
   .render(root, { w: 400, h: 320 });
 ```
 
 :::
+
+No split option on the ribbon: it's fused directly over this chart's own
+flow, and a fused relational mark splits at the flow's own grouping by
+default — one tier lays the band's path, every other grouping splits it.
+Here the `spread(lake)` tier lays the path and `stack({ by: "species" })`
+splits, giving one band per species with nothing restated. When a _different_
+tier should lay the path, name it with `along` (see [`ribbon`'s Default
+grouping](/js/api/marks/ribbon#default-grouping) and
+[`line`'s](/js/api/marks/line#default-grouping)) — it's only needed at all
+for a path choice the flow's shape doesn't already imply.
 
 ### Desugaring
 
@@ -52,8 +62,8 @@ invisible anchor tier plus a connector tier:
 `anchor(opts)` is exactly the `{w, h, emX, emY}` subset of `opts` — the purely
 spatial keys `blank()` itself accepts. Everything else (`fill`, `stroke`,
 `strokeWidth`, `strokeDasharray`, `opacity`, `curve`, `dir`, `mixBlendMode`,
-`by`, `source`, `target`) stays on the connector, matching what you'd write by
-hand:
+`along`, `source`, `target`) stays on the connector, matching what you'd write
+by hand:
 
 ```js
 // Fused
@@ -62,7 +72,7 @@ chart(seafood, { axes: true })
     spread({ by: "lake", dir: "x", spacing: 64 }),
     stack({ by: "species", dir: "y" })
   )
-  .mark(ribbon({ h: "count", fill: "species", by: "species", opacity: 0.8 }));
+  .mark(ribbon({ h: "count", fill: "species", opacity: 0.8 }));
 
 // ...is sugar for the explicit two-tier form:
 chart(seafood, { axes: true })
@@ -71,7 +81,7 @@ chart(seafood, { axes: true })
     stack({ by: "species", dir: "y" })
   )
   .mark(blank({ h: "count" }))
-  .layer(ribbon({ fill: "species", by: "species", opacity: 0.8 }));
+  .layer(ribbon({ fill: "species", opacity: 0.8 }));
 ```
 
 A `.name(...)`/`.label(...)`/`.zOrder(...)` chained onto the relational mark
@@ -88,13 +98,15 @@ anchor needs options besides `{w, h, emX, emY}` (a visible rect anchor, for
 instance — see [`Ribbon`](/js/api/marks/ribbon)'s bar-chart example) or when
 you want the anchor and connector opts kept visually separate.
 
-## Ribbon — one-line sugar with `by`
+## Ribbon — one-line sugar
 
 The simple case — draw a ribbon over the marks you just drew, split into one
-band per group — is a single `.layer(ribbon({ by }))` call. `by` uses the same
-grammar as any operator's `by` (bare field name, key function, or
-[`field(...)`](/js/api/operators/spread#field-expression-pipeline) accessor) and
-resolves against the refs' own datum automatically, just like `group({ by })`:
+band per group — is a single `.layer(ribbon(...))` call, with no split option
+needed: the ribbon is fused over this chart's own flow, so it picks up the
+flow's grouping by default (see [`ribbon`'s Default
+grouping](/js/api/marks/ribbon#default-grouping)). Pass `along: "<field>"`
+only when a _different_ tier than the one inference picks should lay the
+path:
 
 ::: gofish
 
@@ -105,7 +117,7 @@ gf.chart(seafood, { axes: true })
     gf.stack({ by: gf.field("species").sort("count"), dir: "y" })
   )
   .mark(gf.rect({ h: "count", fill: "species" }))
-  .layer(gf.ribbon({ by: "species", opacity: 0.8 }))
+  .layer(gf.ribbon({ opacity: 0.8 }))
   .render(root, { w: 400, h: 320 });
 ```
 
@@ -113,8 +125,8 @@ gf.chart(seafood, { axes: true })
 
 ### Desugaring
 
-`.layer(ribbon({ by: "species" }))` is sugar for the general `chart()`-tier
-form, which is itself the same manual wiring you'd write with
+`.layer(ribbon(...))` is sugar for the general `chart()`-tier form, which is
+itself the same manual wiring you'd write with
 [`layer([...])`](/js/api/operators/layer) and [`selectAll`](/js/api/selection/ref):
 
 ```js
@@ -125,7 +137,7 @@ chart(data, { axes: true })
     stack({ by: "species", dir: "y" })
   )
   .mark(rect({ h: "count", fill: "species" }))
-  .layer(ribbon({ by: "species", opacity: 0.8 }));
+  .layer(ribbon({ opacity: 0.8 }));
 
 // ...is sugar for the general chart()-tier form:
 chart(data, { axes: true })
@@ -156,12 +168,13 @@ layer([
 ```
 
 The general `chart()`-tier form (middle example) stays fully supported — reach
-for it when the connector's own `by` isn't enough, e.g. when the re-partition
-needs to compose with other operators in its own `.flow()`, or when the tier
-draws from another dataset entirely (see "Node-link" below). `by` on the
-connector mark itself also composes with an upstream `group()`: `group()`
-splits first, then the connector's own `by` splits again within each group, so
-you can nest a re-partition without writing a second `chart()` tier.
+for it when the fused default (or `along`) isn't enough, e.g. when the
+re-partition needs to compose with other operators in its own `.flow()`
+(`derive`, a second `group()`, a different dataset entirely — see "Node-link"
+below), or when the split isn't named by any single flow tier at all. This is
+also the only place a connector still composes with a re-partition the way
+`by` used to: an explicit `flow(group({ by: "..." }))` on the tier splits
+first, and the ribbon/line then draws one connector per resulting group.
 
 ## Connector — a bare relational mark tier
 
@@ -279,7 +292,7 @@ Returns a `LayerBuilder` — chain `.layer(...)` again for more tiers, then `.re
   to the whole stack.
 - **Paint order** — tiers paint in chain order (later tiers on top), like a
   manual [`layer([...])`](/js/api/operators/layer) — **except** relational
-  marks (`line()`, `ribbon()`, in any call form: bag, `by`-split, pairwise
+  marks (`line()`, `ribbon()`, in any call form: bag, fused/split, pairwise
   `{from, to}`, or the low-level combinator form inside a manual `layer([...])`),
   which default to painting `zBelow` whatever they reference. This is a real
   paint-order constraint, not a hardcoded z-index, so it composes with other

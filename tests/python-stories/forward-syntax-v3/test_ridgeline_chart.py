@@ -82,7 +82,6 @@ def story_default():
                 fill="steelblue",
                 stroke="white",
                 strokeWidth=1,
-                by="month",
                 opacity=0.85,
                 mixBlendMode="normal",
             )

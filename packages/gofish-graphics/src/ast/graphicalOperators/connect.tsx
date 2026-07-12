@@ -18,7 +18,7 @@ import {
 } from "../dims";
 import { pairs } from "../../util";
 import { linear } from "../coordinateTransforms/linear";
-import { MaybeValue } from "../data";
+import { isValue, MaybeValue } from "../data";
 import { Domain, axisScale } from "../domain";
 import {
   UNDEFINED,
@@ -91,7 +91,7 @@ export const connect = createNodeOperator(
       // ("ribbon") mode only honors `straight` (linear band) vs `bezier`
       // (S-curve band). Defaults to `"straight"` when omitted.
       curve?: Curve;
-      stroke?: string;
+      stroke?: MaybeValue<string>;
       strokeWidth?: number;
       strokeDasharray?: string;
       opacity?: number;
@@ -126,7 +126,14 @@ export const connect = createNodeOperator(
       {
         type: "connect",
         shared: [false, false],
-        color: fill,
+        // The domain-building walk (`GoFishNode.resolveColorScale`) only
+        // reads a node's single `color` property to register a field-valued
+        // paint into the shared discrete-color scale. Prefer whichever
+        // channel is data-driven — same idiom as rect/petal's `color`. By the
+        // time Connect sees them, field-valued paints have already been
+        // resolved to `Value`s by `resolveGroupFill` (chart.ts), so
+        // `isValue` distinguishes data-driven from a literal color.
+        color: isValue(fill) ? fill : stroke,
         resolveUnderlyingSpace: (
           children: Size<UnderlyingSpace>[],
           _childNodes: GoFishAST[]
@@ -592,6 +599,10 @@ export const connect = createNodeOperator(
             rawFill as MaybeValue<string>,
             scaleContext?.unit
           );
+          const resolvedStroke: string | undefined = resolveColorChannel(
+            stroke,
+            scaleContext?.unit
+          );
 
           // The legacy `<g transform="translate(tx,ty)">` offset, folded into a
           // local pixel map so each path point lands at its absolute pixel.
@@ -609,7 +620,7 @@ export const connect = createNodeOperator(
 
           const style = lowerStyle({
             fill: mode === "center" ? "none" : (resolvedFill ?? "none"),
-            stroke: stroke ?? resolvedFill ?? "black",
+            stroke: resolvedStroke ?? resolvedFill ?? "black",
             strokeWidth: strokeWidth ?? 0,
             strokeDasharray,
             opacity: opacity ?? 1,
