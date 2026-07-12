@@ -76,6 +76,13 @@ export { bin } from "./ast/transforms";
 // Shapes
 export { ref } from "./ast/shapes/ref";
 
+// The ref runtime class itself (not just the `ref(...)` factory) — needed by
+// consumers that must distinguish "a resolved node ref" from "a plain data
+// row" at runtime, e.g. the Python-bridge mark-fn plumbing (issue #591) that
+// serializes each `GoFishRef` argument as an `{__inputRef, datum}` sentinel
+// before it crosses the RPC boundary.
+export { GoFishRef } from "./ast/_ref";
+
 // Datum projection — `pluck(ref, "species")` returns the full set of distinct
 // values for a field across a selected node's rows ("every possible value");
 // `project(ref, "species")` is its collapsing sibling — the single value when

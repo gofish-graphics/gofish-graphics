@@ -170,6 +170,7 @@ class DeriveHandler(BaseHTTPRequestHandler):
                 _RefProxy,
                 _collect_mark_lambdas,
                 _MarkFn,
+                _InputRef,
             )
 
             def serialize_chart(child) -> tuple:
@@ -241,8 +242,28 @@ class DeriveHandler(BaseHTTPRequestHandler):
                     child_derive_ids.append(mark_fn.lambda_id)
 
                     def _mark_fn_wrapped(data, _user_fn=mark_fn.fn):
-                        inner_cb = _user_fn(data)
-                        payload, _inner_ids = serialize_chart(inner_cb)
+                        # The JS harness/widget replaces each live `GoFishRef`
+                        # argument (e.g. `.flow(group(...)).mark((refs) =>
+                        # ...)`'s per-group refs) with an `{"__inputRef": i,
+                        # "datum": ...}` sentinel before the RPC — a ref can't
+                        # cross as JSON. Reconstruct an `_InputRef` per
+                        # sentinel so the user's function sees `d[0].datum`
+                        # exactly like the JS story does (issue #591). Rows
+                        # with no sentinel (the pre-#591 plain-data contract)
+                        # pass through unchanged.
+                        wrapped_data = [
+                            _InputRef(row["__inputRef"], row.get("datum"))
+                            if isinstance(row, dict) and "__inputRef" in row
+                            else row
+                            for row in data
+                        ]
+                        result = _user_fn(wrapped_data)
+                        # A mark-fn may return a ChartBuilder (build a chart
+                        # for the group) or a bare Mark (e.g. a `spread([...])`
+                        # combinator embedding one of the input refs directly,
+                        # mirroring JS `spread({...}, [d[0], text(...)])`).
+                        # `serialize_chart` already dispatches on both.
+                        payload, _inner_ids = serialize_chart(result)
                         # Return as a single-element list to fit the existing
                         # `/derive/<id>` rows-in / rows-out contract.
                         return [payload]

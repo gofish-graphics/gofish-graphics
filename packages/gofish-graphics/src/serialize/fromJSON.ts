@@ -21,6 +21,7 @@ import { createName, type Token } from "../ast/createName";
 import { Constraint } from "../ast/constraints";
 import { palette, gradient } from "../ast/colorSchemes";
 import { ref } from "../ast/shapes/ref";
+import { GoFishRef } from "../ast/_ref";
 import type { Frontend } from "gofish-ir";
 import {
   COMBINATOR_FACTORIES,
@@ -310,12 +311,13 @@ export function mapOperator(
 export function mapMarkChildren(
   specs: MarkSpec[],
   bridge: DeriveBridge | undefined,
-  resolveToken: TokenResolver
+  resolveToken: TokenResolver,
+  inputRefs?: any[]
 ): any[] {
   const out: any[] = [];
   for (const child of specs as any[]) {
     if (child && child.type === "cut") {
-      const sourceMark = mapMark(child.source, bridge, resolveToken);
+      const sourceMark = mapMark(child.source, bridge, resolveToken, inputRefs);
       // Pure cut requires an array `size`; the field-name-string sugar is only
       // valid in the chart `.mark(cut(...))` (data-bound expand) form.
       const slices = cutSlices(sourceMark as any, {
@@ -325,17 +327,48 @@ export function mapMarkChildren(
       });
       out.push(...slices);
     } else {
-      out.push(mapMark(child as MarkSpec, bridge, resolveToken));
+      out.push(mapMark(child as MarkSpec, bridge, resolveToken, inputRefs));
     }
   }
   return out;
 }
 
-/** Build a single mark from its IR spec. Recurses into combinator children. */
+/**
+ * Serialize a mark-fn's input array for the RPC bridge. Each `GoFishRef` (the
+ * shape `.flow(group(...)).mark((refs) => ...)` hands the callback — see
+ * `createRelationalMark`'s `by`-split bag form and `createOperator.ts`'s
+ * per-item `applyMark`) can't cross JSON as-is (it's a live class instance
+ * over the render's layer registry), so it's replaced with an
+ * `{__inputRef: i, datum}` sentinel carrying just its bound datum. The
+ * Python wrapper reconstructs an `_InputRef` Mark from the sentinel so
+ * `d[0].datum` reads naturally, and can round-trip `d[0]` itself back into a
+ * returned mark tree (`resolveInputRefs` below undoes the substitution using
+ * the same index against the original `GoFishRef` array). Plain data rows
+ * (the pre-#591 mark-fn contract, e.g. Scatter's pie-glyph story) pass
+ * through unchanged.
+ */
+function serializeMarkFnInput(data: any): { rows: any[]; inputRefs?: any[] } {
+  const items = Array.isArray(data) ? data : [data];
+  if (!items.some((item) => item instanceof GoFishRef)) {
+    return { rows: items };
+  }
+  const rows = items.map((item, i) =>
+    item instanceof GoFishRef ? { __inputRef: i, datum: item.datum } : item
+  );
+  return { rows, inputRefs: items };
+}
+
+/** Build a single mark from its IR spec. Recurses into combinator children.
+ *  `inputRefs`, when supplied, is the array of real `GoFishRef`s a mark-fn was
+ *  invoked with — an `{__inputRef: i}` sentinel anywhere in the (possibly
+ *  Python-returned) mark tree resolves back to `inputRefs[i]`, letting a
+ *  Python mark-fn embed the ref it was handed directly in its returned
+ *  layout (mirrors JS `spread({...}, [d[0], text(...)])`). */
 export function mapMark(
   markSpec: MarkSpec,
   bridge: DeriveBridge | undefined,
-  resolveToken: TokenResolver
+  resolveToken: TokenResolver,
+  inputRefs?: any[]
 ): Mark<any> {
   const spec = markSpec as any;
   const applyTranslate = <T>(mark: T): T =>
@@ -343,9 +376,31 @@ export function mapMark(
       ? ((mark as any).translate(spec.translate) as T)
       : mark;
 
-  // Mark-as-function: Python registered a `(data) -> ChartBuilder` lambda.
-  // The JS Mark fetches a chart IR per invocation (via the bridge) and
-  // rebuilds a ChartBuilder JS-side.
+  // `{__inputRef: i}` sentinel — round-trip back to the real `GoFishRef` a
+  // mark-fn was invoked with (see `serializeMarkFnInput`), rather than
+  // reconstructing a new mark from the spec.
+  if (typeof spec.__inputRef === "number") {
+    if (!inputRefs) {
+      throw new Error(
+        "encountered an { __inputRef } sentinel but no input refs were supplied " +
+          "— this mark tree must be returned from a mark-fn invocation"
+      );
+    }
+    const inputRef = inputRefs[spec.__inputRef];
+    // `.name(...)` on the Python `_InputRef` (issue #556) — `GoFishRef.name()`
+    // mutates in place and returns `this`, so this renames the SAME live ref
+    // the rest of the tree already shares (e.g. the stem/bar this ref also
+    // points at), letting an enclosing `.layer([...]).constrain(...)` target
+    // it by name.
+    if (spec.name != null && typeof (inputRef as any)?.name === "function") {
+      (inputRef as any).name(resolveNameField(spec.name, resolveToken));
+    }
+    return inputRef;
+  }
+
+  // Mark-as-function: Python registered a `(data) -> ChartBuilder | Mark`
+  // lambda. The JS Mark fetches a chart (or raw-mark) IR per invocation (via
+  // the bridge) and rebuilds it JS-side.
   if (spec.type === "mark-fn") {
     const lambdaId = spec.lambdaId as string;
     if (!bridge) {
@@ -354,19 +409,39 @@ export function mapMark(
       );
     }
     return (async (data: any, _key: any, _layerContext: any) => {
-      const rows = Array.isArray(data) ? data : [data];
+      const { rows, inputRefs: newInputRefs } = serializeMarkFnInput(data);
       const result = await bridge.applyLambda(lambdaId, rows);
-      // Returns a ChartBuilder which functionally behaves as a Mark in
-      // the deserialization pipeline; cast through `unknown` to express
+      // Returns a ChartBuilder or a raw Mark, both of which behave as a Mark
+      // in the deserialization pipeline; cast through `unknown` to express
       // that the deserializer is honoring the existing widget contract.
-      // mark-fn returns a one-element list; row[0] is the chart-spec dict.
+      // mark-fn returns a one-element list; row[0] is the chart/mark-spec dict.
       // Round-trip transport may wrap it under the first column.
       const first = result[0];
-      const chartSpec =
+      const resultSpec =
         first && typeof first === "object" && Object.keys(first).length === 1
           ? first[Object.keys(first)[0]]
           : first;
-      const cs = chartSpec as ChartSpec;
+      // A bare Mark returned by the Python mark-fn (e.g. `spread([...])`)
+      // serializes as `{type: "raw-mark", mark: ...}` — mirrors the
+      // top-level raw-mark IR (`Mark.to_ir()`), reused here since a mark-fn
+      // result is structurally the same "just a mark tree" shape.
+      if (
+        resultSpec &&
+        typeof resultSpec === "object" &&
+        (resultSpec as any).type === "raw-mark"
+      ) {
+        // Returned un-invoked: `resolveMarkResult` (the caller, one level up)
+        // already knows how to call a function-shaped Mark with
+        // `(undefined, undefined, layerContext)` — mirrors the ChartBuilder
+        // branch below, which is likewise returned rather than resolved here.
+        return mapMark(
+          (resultSpec as any).mark as MarkSpec,
+          bridge,
+          resolveToken,
+          newInputRefs
+        );
+      }
+      const cs = resultSpec as ChartSpec;
       const data2 = Array.isArray((cs as any).data)
         ? ((cs as any).data as Record<string, any>[])
         : [];
@@ -387,7 +462,12 @@ export function mapMark(
   // public `offset` operator, which accepts a Mark child and resolves it.
   if (spec.type === "offset") {
     const childSpecs = (spec.children ?? []) as MarkSpec[];
-    const [childMark] = mapMarkChildren(childSpecs, bridge, resolveToken);
+    const [childMark] = mapMarkChildren(
+      childSpecs,
+      bridge,
+      resolveToken,
+      inputRefs
+    );
     return applyTranslate(
       offsetOp({ x: spec.x, y: spec.y }, [
         childMark as any,
@@ -401,7 +481,12 @@ export function mapMark(
   // combinator CHILD is instead expanded into its N slice nodes IN PLACE — see
   // `mapMarkChildren` — so extent resolution lives in ONE place, JS-side.)
   if (spec.type === "cut") {
-    const sourceMark = mapMark(spec.source as MarkSpec, bridge, resolveToken);
+    const sourceMark = mapMark(
+      spec.source as MarkSpec,
+      bridge,
+      resolveToken,
+      inputRefs
+    );
     let mark = cutMark({
       source: sourceMark as any,
       dir: spec.dir,
@@ -428,7 +513,8 @@ export function mapMark(
     const childMarks = mapMarkChildren(
       (spec.children ?? []) as MarkSpec[],
       bridge,
-      resolveToken
+      resolveToken,
+      inputRefs
     );
     // Resolve color/coord configs (e.g. a `layer({coord: polar()})` carries
     // its coord transform in the combinator options, not chart options).

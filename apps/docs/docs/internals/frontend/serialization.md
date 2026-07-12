@@ -161,6 +161,33 @@ absolute-vs-weight mixing, measure-unit checks) lives in ONE place, JS-side:
   `cut(source, opts)` returns a `Promise<GoFishNode>[]` that combinators accept
   directly as children (see `mapMarkChildren` in `fromJSON.ts`).
 
+**`mark-fn` over refs** (#591) — a Python `.mark(fn)` callback isn't limited
+to receiving plain data rows: when the callback's `data` is a bag of
+`GoFishRef`s (e.g. the `.layer(chart().flow(group(...)).mark(fn))` shape that
+labels a bar chart's totals), each `GoFishRef` argument crosses the RPC
+serialized as an `{"__inputRef": i, "datum": <rows>}` sentinel rather than as
+a live node reference — a `GoFishRef` is a class instance over the render's
+layer registry, not JSON. `serializeMarkFnInput` in `fromJSON.ts` builds these
+sentinels from the real ref array right before the RPC call and keeps that
+array in closure; the Python side (`_InputRef` in `gofish/ast.py`) wraps each
+sentinel back into an object whose `.datum` reads naturally. The callback may
+return a `ChartBuilder` (as before) or — new — a bare `Mark`, wired as
+`{"type": "raw-mark", "mark": <mark-tree>}` (the same shape `Mark.to_ir()`
+uses at the top level), which lets it embed one of its `_InputRef` arguments
+directly in the returned layout (mirroring JS `spread({...}, [d[0],
+text(...)])`). `mapMark` resolves any `{"__inputRef": i}` sentinel found
+inside that returned mark tree back to `inputRefs[i]` — the _original_ live
+`GoFishRef` from the closure, not a reconstructed stand-in, so the ref's
+identity (and anything already registered against it, e.g. a name from an
+earlier tier) survives. A `.name(...)` call on the Python `_InputRef` (#556)
+rides along as a `name` field on the sentinel and is applied to the resolved
+ref before it's returned, since `GoFishRef.name()` mutates in place — this is
+how a per-slice label overlay (`Cut.stories.tsx::ImageCutWithLabels`) can
+`.constrain(...)` against a ref it only received through the bridge. The test
+harness (`tests/harness/main.ts`) carries an equivalent
+`serializeMarkFnInput`/`__inputRef` implementation, since it renders from raw
+IR over plain HTTP rather than through the shared `fromJSON.ts`/widget path.
+
 There is no `connect` field on the wire. `.layer(...)` — the one way to
 overlay a connector — always serializes as an ordinary `LayerIR` tier: an
 empty `chart()` scope crosses as a `ChartIR` whose `data` is

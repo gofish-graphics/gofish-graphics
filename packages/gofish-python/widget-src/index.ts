@@ -104,6 +104,23 @@ function arrayToArrow(rows: Record<string, any>[]): Uint8Array {
   if (!rows || rows.length === 0) {
     throw new Error("Cannot serialize empty data to Arrow");
   }
+  // KNOWN GAP (#591 follow-up): `Arrow.tableFromJSON`'s naive type inference
+  // throws "Unable to infer Vector type from input values" for a column
+  // whose value is a list of objects (list<struct>) — e.g. the `datum` field
+  // of a `{__inputRef, datum}` mark-fn sentinel (see
+  // `gofish-graphics/src/serialize/fromJSON.ts`'s `serializeMarkFnInput`)
+  // when the ref's bound datum is a multi-row bag (a `group(...)`'d ref,
+  // as in the BarWithLabels/FlowerChart shape) rather than a single row.
+  // A single-row struct datum encodes fine (verified); only the
+  // multi-row-bag case fails. The parity test harness sidesteps this
+  // entirely (it transports rows as plain JSON over HTTP, not Arrow), which
+  // is how BarWithLabels/FlowerChart/ImageCutWithLabels were validated to
+  // byte-parity — but a REAL anywidget notebook rendering that same shape
+  // will hit this Arrow encoding error. Fixing it generally (teaching this
+  // bridge to fall back to a JSON transport for non-Arrow-inferable columns,
+  // for mark-fn rows and any other RPC payload alike) is more design work
+  // than #591's scope — tracked as a follow-up rather than patched here with
+  // a narrow special-case unwrap for just the `__inputRef` shape.
   const table = Arrow.tableFromJSON(rows);
 
   if (
