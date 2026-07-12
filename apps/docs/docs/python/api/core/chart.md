@@ -27,13 +27,13 @@ tier's marks inside [`.layer(...)`](/python/api/core/layer).
 
 ## Parameters
 
-| Parameter | Type                        | Description                                                                                           |
-| --------- | --------------------------- | ----------------------------------------------------------------------------------------------------- |
-| `data`    | `list[dict]` \| `DataFrame` | The dataset to visualize, or [`selectAll()` / `ref()`](#cross-chart-references) for a layer reference |
-| `axes`    | keyword                     | Auto-generate axes, labels, and legends. See [Axes](#axes) below.                                     |
-| `coord`   | keyword                     | Coordinate transform, e.g. `coord=clock()`                                                            |
-| `color`   | keyword                     | Color scale applied to all marks — `palette(...)` or `gradient(...)`                                  |
-| `padding` | keyword                     | Extra SVG padding (px) — useful for polar charts and overflowing labels                               |
+| Parameter | Type                      | Description                                                                                                                                                                                                                                                    |
+| --------- | ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `data`    | `list[dict]` \| dataframe | The dataset to visualize — a list of dict rows, or any dataframe [narwhals](https://narwhals-dev.github.io/narwhals/) supports (pandas, polars, pyarrow, a DuckDB relation, ...) — or [`selectAll()` / `ref()`](#cross-chart-references) for a layer reference |
+| `axes`    | keyword                   | Auto-generate axes, labels, and legends. See [Axes](#axes) below.                                                                                                                                                                                              |
+| `coord`   | keyword                   | Coordinate transform, e.g. `coord=clock()`                                                                                                                                                                                                                     |
+| `color`   | keyword                   | Color scale applied to all marks — `palette(...)` or `gradient(...)`                                                                                                                                                                                           |
+| `padding` | keyword                   | Extra SVG padding (px) — useful for polar charts and overflowing labels                                                                                                                                                                                        |
 
 Chart-level options are passed as keyword arguments:
 

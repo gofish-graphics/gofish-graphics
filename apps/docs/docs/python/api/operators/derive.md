@@ -38,7 +38,9 @@ Returns a `DeriveOperator` for use inside [`.flow()`](/python/api/core/flow).
 When the chart renders, the engine calls back into your Python kernel for each
 `derive` step: it sends the current group's data to Python, runs `fn`, and uses
 the returned data for the rest of the pipeline. The function can return a list
-of dicts or a pandas `DataFrame`.
+of dicts, `None`, or a dataframe from any backend
+[narwhals](https://narwhals-dev.github.io/narwhals/) supports (pandas, polars,
+pyarrow, ...).
 
 ```python
 # Keep only large catches

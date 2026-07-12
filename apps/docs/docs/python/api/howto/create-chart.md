@@ -24,8 +24,9 @@ Each method has a specific role:
 
 ## Step 1: chart
 
-`chart(data)` creates a `ChartBuilder` with your dataset. The data can be any
-list of dicts (or a pandas `DataFrame`):
+`chart(data)` creates a `ChartBuilder` with your dataset. The data can be a
+list of dicts, or any dataframe [narwhals](https://narwhals-dev.github.io/narwhals/)
+supports (pandas, polars, pyarrow, a DuckDB relation, ...):
 
 ```python
 data = [

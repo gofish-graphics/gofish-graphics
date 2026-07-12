@@ -46,13 +46,13 @@ join(right, *, on) -> Operator
 
 ## Parameters
 
-| Parameter | Type                       | Description                                                         |
-| --------- | -------------------------- | ------------------------------------------------------------------- |
-| `right`   | `list[dict]` / `DataFrame` | The right-hand table — row dicts or a pandas DataFrame.             |
-| `on`      | `str`                      | The shared key field matched between the incoming rows and `right`. |
+| Parameter | Type                     | Description                                                                                                                                      |
+| --------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `right`   | `list[dict]` / dataframe | The right-hand table — row dicts, or any dataframe [narwhals](https://narwhals-dev.github.io/narwhals/) supports (pandas, polars, pyarrow, ...). |
+| `on`      | `str`                    | The shared key field matched between the incoming rows and `right`.                                                                              |
 
-A pandas DataFrame is converted to records automatically. Returns an `Operator`
-for use inside [`.flow()`](/python/api/core/flow).
+A dataframe `right` is converted to records automatically. Returns an
+`Operator` for use inside [`.flow()`](/python/api/core/flow).
 
 ## Semantics
 

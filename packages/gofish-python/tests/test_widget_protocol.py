@@ -9,18 +9,17 @@ import base64
 import json
 from typing import Any, Dict
 
-import pandas as pd
 import pyarrow as pa
 import pyarrow.ipc as pa_ipc
 import pytest
 
 from gofish import chart, layer, rect
-from gofish.arrow_utils import dataframe_to_arrow
+from gofish.arrow_utils import data_to_arrow_bytes
 from gofish.widget import GoFishChartWidget
 
 
 def _arrow_b64(rows: list) -> str:
-    return base64.b64encode(dataframe_to_arrow(pd.DataFrame(rows))).decode("utf-8")
+    return base64.b64encode(data_to_arrow_bytes(rows)).decode("utf-8")
 
 
 def _decode_arrow_b64(b64: str) -> list:
@@ -40,7 +39,7 @@ def _make_widget(derive_functions: Dict[str, Any]) -> GoFishChartWidget:
     }
     return GoFishChartWidget(
         spec=spec,
-        arrow_data=dataframe_to_arrow(pd.DataFrame([{"x": 1}])),
+        arrow_data=data_to_arrow_bytes([{"x": 1}]),
         derive_functions=derive_functions,
         width=400,
         height=300,
@@ -173,7 +172,7 @@ class TestArrowDataWireShape:
     """
 
     def test_single_chart_arrow_data_is_plain_base64(self):
-        raw = dataframe_to_arrow(pd.DataFrame([{"x": 1}]))
+        raw = data_to_arrow_bytes([{"x": 1}])
         widget = GoFishChartWidget(
             spec={"data": None, "operators": [], "mark": {"type": "rect"}, "options": {}, "zOrder": None},
             arrow_data=raw,
@@ -183,8 +182,8 @@ class TestArrowDataWireShape:
         assert base64.b64decode(widget.arrow_data) == raw
 
     def test_layer_arrow_dict_is_json_of_base64_by_index(self):
-        raw0 = dataframe_to_arrow(pd.DataFrame([{"x": 1}]))
-        raw1 = dataframe_to_arrow(pd.DataFrame([{"x": 2}]))
+        raw0 = data_to_arrow_bytes([{"x": 1}])
+        raw1 = data_to_arrow_bytes([{"x": 2}])
         widget = GoFishChartWidget(
             spec={"type": "layer", "charts": [], "options": {}},
             arrow_dict={"0": raw0, "1": raw1},

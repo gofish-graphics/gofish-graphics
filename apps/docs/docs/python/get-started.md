@@ -30,9 +30,12 @@ Import it as `gofish`:
 from gofish import chart, spread, rect
 ```
 
-It depends on `anywidget`, `pyarrow`, and `pandas`, and renders inside any
+It depends on `anywidget`, `pyarrow`, and `narwhals`, and renders inside any
 notebook environment that supports [anywidget](https://anywidget.dev/) — Jupyter,
-JupyterLab, VS Code notebooks, and marimo.
+JupyterLab, VS Code notebooks, and marimo. Data ingestion goes through
+[narwhals](https://narwhals-dev.github.io/narwhals/), so pandas, polars, and
+other dataframe libraries are all supported without being hard dependencies —
+install whichever one you already use.
 
 ## Your first chart
 
@@ -86,12 +89,21 @@ output you see here is exactly what `.render()` produces in a notebook.
 
 ## Data
 
-Pass either a list of dictionaries or a pandas `DataFrame`:
+Pass a list of dictionaries, or a dataframe from any backend
+[narwhals](https://narwhals-dev.github.io/narwhals/) supports — pandas,
+polars, pyarrow, a DuckDB relation, and more:
 
 ```python
 import pandas as pd
 
 df = pd.DataFrame(seafood)
+chart(df).flow(spread(by="lake", dir="x")).mark(rect(h="count"))
+```
+
+```python
+import polars as pl
+
+df = pl.DataFrame(seafood)
 chart(df).flow(spread(by="lake", dir="x")).mark(rect(h="count"))
 ```
 
