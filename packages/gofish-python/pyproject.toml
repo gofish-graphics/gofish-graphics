@@ -29,7 +29,13 @@ dependencies = [
 # whichever dataframe library the caller already has installed.
 
 [project.optional-dependencies]
-test = ["pytest>=7.0.0", "pandas>=1.5.0", "polars>=1.0.0"]
+test = [
+    "pytest>=7.0.0",
+    "pandas>=1.5.0",
+    "polars>=1.0.0",
+    "vega_datasets>=0.9",
+    "scipy>=1.10",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
