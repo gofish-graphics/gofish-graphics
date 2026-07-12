@@ -73,6 +73,14 @@ class TestForwardsyntaxBar:
         from stories.forwardsyntax.bar.bar_sorted_stacked import default
         _assert_valid_ir(default())
 
+    def test_bar_with_labels(self):
+        # A `.layer(...)` chain whose second tier is a mark-fn over refs
+        # (issue #591's ref/datum bridge) — `to_ir()` alone doesn't exercise
+        # the mark-fn's lambda body (that only runs over the derive RPC), but
+        # it does confirm the LayerBuilder assembles correctly.
+        from stories.forwardsyntax.bar.bar_with_labels import default
+        _assert_valid_layer_ir(default())
+
 
 # ---------------------------------------------------------------------------
 # Forward Syntax — other charts
@@ -198,15 +206,8 @@ class TestPieStories:
 # Blocked stories — xfail for remaining unsupported features
 # ---------------------------------------------------------------------------
 
-_V1_REASON = "requires v1 primitives (Spread, ref) — not yet in Python wrapper"
-
 
 class TestBlockedStories:
-
-    @pytest.mark.xfail(raises=NotImplementedError, reason=_V1_REASON, strict=True)
-    def test_bar_with_labels(self):
-        from stories.forwardsyntax.bar.bar_with_labels import default
-        default()
 
     @pytest.mark.xfail(raises=NotImplementedError, reason="requires nested chart as mark function — not yet supported", strict=True)
     def test_scatter_with_pie_glyphs(self):

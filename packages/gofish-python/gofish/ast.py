@@ -599,6 +599,58 @@ class Mark:
         return self.render()._repr_mimebundle_(include=include, exclude=exclude)
 
 
+class _InputRef(Mark):
+    """A `GoFishRef` handed into a mark-fn lambda, reconstructed Python-side
+    (issue #591).
+
+    JS's `.flow(group(...)).mark((refs) => ...)` invokes the callback with an
+    array of live `GoFishRef`s (one per group) — e.g. `d[0]` in
+    `BarWithLabels.stories.tsx`'s label mark-fn, whose `.datum` is the group's
+    row bag. A `GoFishRef` can't cross the derive RPC as-is (it's a class
+    instance over the render's layer registry, not JSON), so the JS side
+    (`serializeMarkFnInput` in `fromJSON.ts`/`main.ts`) replaces each ref
+    argument with an `{"__inputRef": i, "datum": ...}` sentinel; the derive
+    server wraps every such sentinel back into one of these before calling
+    the user's function, so `d[0].datum` reads exactly like the JS story.
+
+    `to_dict()` emits `{"type": "ref", "__inputRef": i}` — no `datum`, since
+    the datum already made the trip once and the JS side round-trips the
+    sentinel back to the *original* live ref object by index rather than
+    reconstructing one from the (re-serialized) datum. This lets a mark-fn
+    embed the ref directly in its returned layout (mirrors JS
+    `spread({...}, [d[0], text(...)])`).
+
+    `.name(...)` (issue #556 — a named ref surviving a mark-fn round trip, so
+    an enclosing `.layer([...]).constrain(...)` can target it by name, e.g.
+    `Cut.stories.tsx::ImageCutWithLabels`'s `d.name("slice")`) is overridden
+    rather than inherited from `Mark`: JS `GoFishRef.name()` MUTATES the ref
+    in place and returns `this` (not a fresh copy — the ref's identity, not
+    just its `_name`, is what the rest of the tree shares), so this mirrors
+    that instead of `Mark.name()`'s clone-a-new-instance pattern (which would
+    also fail here: `type(self)(self.mark_type, ...)` doesn't match
+    `_InputRef.__init__`'s `(index, datum)` signature).
+    """
+
+    def __init__(self, index: int, datum: Any):
+        super().__init__("ref")
+        self.index = index
+        self.datum = datum
+
+    def name(self, name_or_token: Union[str, "Token"]) -> "_InputRef":
+        self._name = name_or_token
+        return self
+
+    def to_dict(self) -> dict:
+        d: dict = {"type": "ref", "__inputRef": self.index}
+        if self._name is not None:
+            d["name"] = (
+                self._name.to_dict()
+                if isinstance(self._name, Token)
+                else self._name
+            )
+        return d
+
+
 # The generated factory layer (packages/gofish-python/gofish/_generated.py)
 # imports `Mark` / `_channel` from this module, so it can only be imported
 # here AFTER both are defined (circular import, resolved by Python's partial

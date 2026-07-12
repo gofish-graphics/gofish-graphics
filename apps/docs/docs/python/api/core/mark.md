@@ -81,6 +81,40 @@ The older callback form `mark(lambda data: chart(data, ...).flow(...).mark(...))
 still works and is equivalent — the function receives each group's data slice and
 returns a nested chart.
 
+## Mark-fn over refs — value labels
+
+When a callback's `data` is a bag of **refs** (rather than plain rows) — e.g.
+inside an empty-scope [`.layer(...)`](/python/api/core/layer) tier that groups
+the previous tier's own marks — each item exposes the underlying node's bound
+data via `.datum`, and the callback may return a raw combinator `Mark`
+(`spread([...])`, `stack([...])`, …) that embeds one of those refs directly,
+rather than only a nested `chart(...)`. This is how a bar chart gets a total
+label above each bar, drawn as a sibling of the bar itself rather than a
+separate chart:
+
+::: gofish example:bar-chart-with-value-labels hidden
+:::
+
+```python
+from gofish import chart, spread, rect, text, group
+
+def label_mark(d):
+    total = sum(row["count"] for row in d[0].datum)
+    return spread([d[0], text(text=str(total))], dir="y", alignment="middle", spacing=10)
+
+chart(seafood, axes=True).flow(spread(by="lake", dir="x")).mark(
+    rect(h="count")
+).layer(
+    chart().flow(group(by="lake")).mark(label_mark)
+).render(w=400, h=400)
+```
+
+`d[0]` is the ref for that lake's bar; `d[0].datum` is that lake's bag of
+species rows (an aggregate), so `sum(row["count"] for row in d[0].datum)` is
+the lake's total catch. Embedding `d[0]` in the returned `spread([...])`
+places the label as a sibling of the bar it labels, using the bar's own
+placed position and size — no separate positioning logic needed.
+
 ## Labeling a mark
 
 Call `.label(accessor, position=..., font_size=..., color=..., offset=..., rotate=..., font_family=..., font_weight=..., font_style=...)`

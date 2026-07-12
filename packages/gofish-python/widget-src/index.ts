@@ -23,6 +23,7 @@ import {
   type ChartBuilder,
 } from "gofish-graphics";
 import type { Frontend } from "gofish-ir";
+import { buildArrowTable } from "./arrowTransport";
 
 // Type aliases pointing at the canonical IR schema. Internal usages below
 // keep the legacy `…Spec` names for readability.
@@ -104,7 +105,13 @@ function arrayToArrow(rows: Record<string, any>[]): Uint8Array {
   if (!rows || rows.length === 0) {
     throw new Error("Cannot serialize empty data to Arrow");
   }
-  const table = Arrow.tableFromJSON(rows);
+  // Explicit-schema construction (issue #783) — see `arrowTransport.ts` for
+  // why `Arrow.tableFromJSON`'s inference isn't used here: it can't handle a
+  // `list<struct>` column at all (e.g. the `datum` field of an
+  // `{__inputRef, datum}` mark-fn sentinel when the ref's bound datum is a
+  // multi-row bag — a `group(...)`'d ref, as in the BarWithLabels/
+  // FlowerChart shape).
+  const table = buildArrowTable(rows);
 
   if (
     (Arrow as any).tableToIPC &&

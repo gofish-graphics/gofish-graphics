@@ -15,16 +15,13 @@ baseline. The SVG (1.5KB, under the threshold) is INLINED by Vite as a
 `data:image/svg+xml,` URI — the normalizer leaves data URIs untouched, so we
 reconstruct the byte-identical data URI here with Vite's exact encoding.
 
-`story_image_cut_with_labels` (JS `ImageCutWithLabels`) is exempt — see
-tests/.python-sync-exempt. JS now overlays the labels via a chained
-`.layer(chart().mark((data) => ...))` empty-scope tier (rather than a second
-`chart(selectAll("part"))` sub-chart) — the wiring changed, but the blocker
-didn't: it builds a per-slice `layer(...)` inside that mark-as-function,
-embedding each JS ref node directly (`d.name("slice")`) and reading its bound
-datum (`d.datum.category`). The Python mark-fn still runs over the RPC bridge
-and receives plain JSON rows, not JS ref nodes, so it cannot embed the slice
-nodes or project `.datum` — a wrapper project, not a port, layer-chaining or
-not.
+`story_image_cut_with_labels` (JS `ImageCutWithLabels`) is now ported (#591 —
+the ref/datum mark-fn bridge). The mark-fn receives one `_InputRef` per slice
+(reconstructed from the `{__inputRef, datum}` sentinel the JS harness/widget
+sends across the RPC in place of the live ref); `.name("slice")` on it
+survives the round trip (#556) via the `_InputRef.name()` override, so the
+per-slice `layer([...]).constrain(...)` can target it by name exactly like
+the JS story's `d.name("slice")`.
 """
 
 import os
@@ -88,6 +85,60 @@ def story_image_cut():
             )
         ),
         {"w": 400, "h": 700, "axes": False},
+    )
+
+
+def story_image_cut_with_labels():
+    """Cut chart with labels added via a chained `.layer()` sub-chart. The cut
+    chart returns just the named slices; the empty-scope `.layer(chart()...)`
+    tier inherits those slices (one ref per slice) and overlays category and
+    amount labels at each slice's position. Each ref exposes the slice's
+    datum via `.datum`.
+
+    The cut ties each slice's image band to data order (slice i = band i,
+    top→bottom). To land Grape juice (the bulk) at the BOTTOM showing the
+    bottle BODY, it must be the LAST data row (bottom band) AND positioned
+    last — so reverse the data and keep `reverse=True` on the spread.
+    """
+
+    def label_mark(data):
+        slices = []
+        for d in data:
+            d.name("slice")
+            category_label = text(
+                fontSize=18,
+                fontWeight="bold",
+                fill="#1c5e20",
+                text=d.datum["category"],
+            ).name("label")
+            amount_label = text(
+                fontSize=36,
+                fontFamily="Impact",
+                fill="#1c5e20",
+                text=str(d.datum["amount"]),
+            ).name("amount")
+
+            def _constrain(slice, label, amount):
+                return [
+                    Constraint.align([slice, label], y="middle"),
+                    Constraint.distribute([slice, label], dir="x", spacing=12),
+                    Constraint.align([slice, amount], x="middle"),
+                    Constraint.align([slice, amount], y="middle"),
+                ]
+
+            slices.append(layer([d, category_label, amount_label]).constrain(_constrain))
+        return layer(slices)
+
+    return (
+        chart(list(reversed(BOTTLE_DATA)))
+        .flow(spread(dir="y", spacing=20, reverse=True))
+        .mark(
+            image(href=BOTTLE_PNG, w=193, h=600).cut(
+                dir="y", size="amount", inset=4
+            )
+        )
+        .layer(chart().mark(label_mark)),
+        {"axes": False},
     )
 
 

@@ -1,18 +1,15 @@
-"""Forward Syntax V3/Bar/With Labels — mirrors BarWithLabels.stories.tsx
+"""Equivalent of BarWithLabels.stories.tsx — Forward Syntax V3/Bar/With Labels.
 
-Only the `Default` export is ported. `SpeciesCountPerLake` uses `pluck()`
-(the un-collapsed sibling of the `by: "field"` homogeneity collapse), which
-has no Python wrapper yet — a separate follow-up from #591's ref/datum
-mark-fn bridge implemented here.
+Only `Default` is ported (`story_default`). `SpeciesCountPerLake` uses
+`pluck()`, which has no Python wrapper yet — a separate follow-up from #591's
+ref/datum mark-fn bridge implemented here.
 """
 
 from gofish import chart, spread, rect, text, group
-from stories.data.seafood import seafood
-
-TITLE = "Forward Syntax V3/Bar/With Labels"
+from python_stories.data import SEAFOOD
 
 
-def default(w=400, h=400):
+def story_default():
     # `.layer()`'s empty scope yields one ref per lake; each ref's datum is
     # that lake's array of species records (an aggregate). `by="lake"`
     # resolves because every row in a lake agrees on `lake` (homogeneity
@@ -27,9 +24,10 @@ def default(w=400, h=400):
             spacing=10,
         )
 
-    return (
-        chart(seafood, axes=True)
+    chart_builder = (
+        chart(SEAFOOD, axes=True)
         .flow(spread(by="lake", dir="x"))
         .mark(rect(h="count"))
         .layer(chart().flow(group(by="lake")).mark(label_mark))
     )
+    return (chart_builder, {"w": 400, "h": 400})

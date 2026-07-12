@@ -88,37 +88,23 @@ packages/gofish-graphics/stories/lowlevel/EncloseRefs.stories.tsx
 packages/gofish-graphics/stories/bench/Benchmarks.stories.tsx
 
 # Forward syntax stories needing unsupported features
-packages/gofish-graphics/stories/forwardsyntax/Bar/BarWithLabels.stories.tsx
+# BarWithLabels::Default is ported (#591 — ref/datum mark-fn bridge: each
+# `GoFishRef` a mark-fn receives crosses the RPC as an `{__inputRef, datum}`
+# sentinel and reconstructs Python-side as `_InputRef`, with `d[0]` itself
+# round-tripping back into a returned combinator mark). SpeciesCountPerLake
+# still needs `pluck()`, which has no Python wrapper yet.
+packages/gofish-graphics/stories/forwardsyntax/Bar/BarWithLabels.stories.tsx::SpeciesCountPerLake
 # LabeledChart uses a JS-side function-mark that composes resolved node refs
 # with fresh text — the refs can't cross the Python derive RPC, so it can't be
 # expressed with a Python mark-fn. (Ribbon/Layered and NodeLink ARE ported.)
 packages/gofish-graphics/stories/forwardsyntax/LabeledChart.stories.tsx
 
-# FlowerChart is a labeled-bar-chart shape: the stems are a real bar chart
-# (one chart, so their heights share a scale) and each flower is the stem's
-# "label", placed on top via `Chart(selectAll("stems")).flow(group(...)).mark(d
-# => spread([d[0], <petal fan built from d[0].datum>]))`. This is the same
-# bridge blocker as Cut.stories.tsx::ImageCutWithLabels and BarWithLabels: the
-# Python mark-fn runs over the RPC bridge and receives plain JSON rows, not the
-# JS ref nodes, so it can neither embed `d[0]` nor project `d[0].datum`.
-# Tracked by #591 (bridge selectAll-label / ref-datum mark-fns to Python).
-packages/gofish-graphics/stories/lowlevel/FlowerChart.stories.tsx
 
 # Forward syntax stories needing coord transforms other than clock
 # (clock is now supported)
 
 # (Vega-Lite ports were brought over from exempt to real parity tests;
 # see tests/python-stories/vega-lite/.)
-
-
-# Per-export exemption for Cut.stories.tsx — ImageCutWithLabels builds a
-# per-slice `layer(...)` inside a mark-as-function over `selectAll("part")`,
-# embedding each JS ref node directly (`d.name("slice")`) and reading its bound
-# datum (`d.datum.category`). The Python mark-fn runs over the RPC bridge and
-# receives plain JSON rows, not JS ref nodes, so it cannot embed the slice nodes
-# or project `.datum` — a wrapper project, not a port. The other 10 Cut exports
-# are ported (tests/python-stories/forward-syntax-v3/test_cut.py).
-packages/gofish-graphics/stories/forwardsyntax/Cut.stories.tsx::ImageCutWithLabels
 
 # Per-export exemptions for Labels.stories.tsx — these stories don't fit
 # the single-chart parity harness (they compose many charts in a flex div,

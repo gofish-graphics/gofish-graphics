@@ -68,6 +68,7 @@ import {
   Treemap,
   setMeasureProvenance,
   PREVIOUS_LAYER_MARKS,
+  GoFishRef,
   type ChartBuilder,
   type MeasureProvenance,
   type Operator,
@@ -510,12 +511,18 @@ function resolveRefSelection(selection: any, resolveToken: TokenResolver): any {
 function mapMarkChildren(
   specs: MarkSpec[],
   deriveServerUrl: string | undefined,
-  resolveToken: TokenResolver
+  resolveToken: TokenResolver,
+  inputRefs?: any[]
 ): any[] {
   const out: any[] = [];
   for (const child of specs as any[]) {
     if (child && child.type === "cut") {
-      const sourceMark = mapMark(child.source, deriveServerUrl, resolveToken);
+      const sourceMark = mapMark(
+        child.source,
+        deriveServerUrl,
+        resolveToken,
+        inputRefs
+      );
       const slices = cutSlices(sourceMark as any, {
         dir: child.dir,
         size: unwrapMarkOpts(child.size, deriveServerUrl),
@@ -523,29 +530,79 @@ function mapMarkChildren(
       });
       out.push(...slices);
     } else {
-      out.push(mapMark(child as MarkSpec, deriveServerUrl, resolveToken));
+      out.push(
+        mapMark(child as MarkSpec, deriveServerUrl, resolveToken, inputRefs)
+      );
     }
   }
   return out;
 }
 
+/**
+ * Serialize a mark-fn's input array for the RPC bridge (mirrors
+ * `packages/gofish-graphics/src/serialize/fromJSON.ts`'s helper of the same
+ * name). Each `GoFishRef` (the shape `.flow(group(...)).mark((refs) => ...)`
+ * hands the callback) can't cross JSON as a live class instance, so it's
+ * replaced with an `{__inputRef: i, datum}` sentinel carrying just its bound
+ * datum. Plain data rows (the pre-#591 mark-fn contract) pass through
+ * unchanged.
+ */
+function serializeMarkFnInput(data: any): { rows: any[]; inputRefs?: any[] } {
+  const items = Array.isArray(data) ? data : [data];
+  if (!items.some((item) => item instanceof GoFishRef)) {
+    return { rows: items };
+  }
+  const rows = items.map((item, i) =>
+    item instanceof GoFishRef ? { __inputRef: i, datum: item.datum } : item
+  );
+  return { rows, inputRefs: items };
+}
+
 function mapMark(
   spec: MarkSpec,
   deriveServerUrl: string | undefined,
-  resolveToken: TokenResolver
+  resolveToken: TokenResolver,
+  inputRefs?: any[]
 ): Mark<any> {
   const applyTranslate = <T>(mark: T): T =>
     spec.translate && typeof (mark as any).translate === "function"
       ? ((mark as any).translate(spec.translate) as T)
       : mark;
 
-  // Mark-as-function: Python registered a `(data) -> ChartBuilder` lambda
-  // in the derive-server registry. The JS Mark fetches a chart IR per
-  // invocation and rebuilds a ChartBuilder JS-side; `resolveMarkResult`
-  // already accepts ChartBuilders as mark results. We memoize the
-  // ChartBuilder per data-key since the gofish runtime may resolve the
-  // same mark multiple times during a render (measurement + placement)
-  // and each RPC round-trip is expensive over localhost HTTP.
+  // `{__inputRef: i}` sentinel — round-trip back to the real `GoFishRef` a
+  // mark-fn was invoked with (see `serializeMarkFnInput`), instead of
+  // reconstructing a new mark from the spec.
+  if (typeof (spec as any).__inputRef === "number") {
+    if (!inputRefs) {
+      throw new Error(
+        "encountered an { __inputRef } sentinel but no input refs were supplied " +
+          "— this mark tree must be returned from a mark-fn invocation"
+      );
+    }
+    const inputRef = inputRefs[(spec as any).__inputRef];
+    // `.name(...)` on the Python `_InputRef` (issue #556) — `GoFishRef.name()`
+    // mutates in place and returns `this`, so this renames the SAME live ref
+    // the rest of the tree already shares, letting an enclosing
+    // `.layer([...]).constrain(...)` target it by name.
+    if (
+      (spec as any).name != null &&
+      typeof (inputRef as any)?.name === "function"
+    ) {
+      (inputRef as any).name(
+        resolveNameField((spec as any).name, resolveToken)
+      );
+    }
+    return inputRef;
+  }
+
+  // Mark-as-function: Python registered a `(data) -> ChartBuilder | Mark`
+  // lambda in the derive-server registry. The JS Mark fetches a chart (or
+  // raw-mark) IR per invocation and rebuilds it JS-side; `resolveMarkResult`
+  // already accepts ChartBuilders (and function-shaped Marks) as mark
+  // results. We memoize the RPC response per data-key since the gofish
+  // runtime may resolve the same mark multiple times during a render
+  // (measurement + placement) and each RPC round-trip is expensive over
+  // localhost HTTP.
   if (spec.type === "mark-fn") {
     const lambdaId = spec.lambdaId as string;
     if (!deriveServerUrl) {
@@ -555,14 +612,15 @@ function mapMark(
     }
     const cache = new Map<string, Promise<any>>();
     return (async (data: any, _key: any, _layerContext: any) => {
-      const cacheKey = JSON.stringify(data);
+      const { rows, inputRefs: newInputRefs } = serializeMarkFnInput(data);
+      const cacheKey = JSON.stringify(rows);
       let entry = cache.get(cacheKey);
       if (!entry) {
         entry = (async () => {
           const resp = await fetch(`${deriveServerUrl}/derive/${lambdaId}`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(data),
+            body: JSON.stringify(rows),
           });
           if (!resp.ok) {
             throw new Error(
@@ -570,8 +628,25 @@ function mapMark(
             );
           }
           const result = await resp.json();
-          const chartSpec = Array.isArray(result) ? result[0] : result;
-          return buildChartFromSpec(chartSpec, deriveServerUrl, resolveToken);
+          const resultSpec = Array.isArray(result) ? result[0] : result;
+          // A bare Mark returned by the Python mark-fn (e.g. `spread([...])`)
+          // serializes as `{type: "raw-mark", mark: ...}` (same shape as the
+          // top-level raw-mark IR). Returned un-invoked — `resolveMarkResult`
+          // calls a function-shaped Mark with `(undefined, undefined,
+          // layerContext)`, same as the ChartBuilder branch below.
+          if (
+            resultSpec &&
+            typeof resultSpec === "object" &&
+            resultSpec.type === "raw-mark"
+          ) {
+            return mapMark(
+              resultSpec.mark,
+              deriveServerUrl,
+              resolveToken,
+              newInputRefs
+            );
+          }
+          return buildChartFromSpec(resultSpec, deriveServerUrl, resolveToken);
         })();
         cache.set(cacheKey, entry);
       }
@@ -598,7 +673,8 @@ function mapMark(
     const [childMark] = mapMarkChildren(
       spec.children ?? [],
       deriveServerUrl,
-      resolveToken
+      resolveToken,
+      inputRefs
     );
     return applyTranslate(
       offsetOp({ x: spec.x, y: spec.y }, [
@@ -612,7 +688,12 @@ function mapMark(
   // `cut` used as a combinator CHILD is expanded into its N slice nodes in
   // place by `mapMarkChildren` — extent resolution lives in ONE place, JS.)
   if (spec.type === "cut") {
-    const sourceMark = mapMark(spec.source, deriveServerUrl, resolveToken);
+    const sourceMark = mapMark(
+      spec.source,
+      deriveServerUrl,
+      resolveToken,
+      inputRefs
+    );
     let mark = cutMark({
       source: sourceMark as any,
       dir: spec.dir,
@@ -643,7 +724,8 @@ function mapMark(
     const childMarks = mapMarkChildren(
       spec.children ?? [],
       deriveServerUrl,
-      resolveToken
+      resolveToken,
+      inputRefs
     );
     // Resolve color/coord configs too — e.g. a `layer({coord: polar()})`
     // carries its coord transform in the combinator options (BalloonChart,
