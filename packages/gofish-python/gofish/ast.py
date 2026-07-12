@@ -2981,19 +2981,21 @@ class LayerBuilder:
         Returns:
             GoFishChartWidget instance that will display in Jupyter
         """
-        import base64
-        import json
         from .widget import GoFishChartWidget
         from .arrow_utils import dataframe_to_arrow, empty_placeholder_arrow_bytes
         import pandas as pd
 
-        def _serialize_child_data(child: ChartBuilder) -> str:
-            """Serialize a child chart's data to base64 Arrow bytes."""
+        def _serialize_child_data(child: ChartBuilder) -> bytes:
+            """Serialize a child chart's data to raw Arrow IPC bytes.
+
+            ``GoFishChartWidget`` owns the base64/JSON wire encoding (see
+            ``arrow_dict`` there) — this only ever hands it plain bytes.
+            """
             # Ref-data tiers borrow nodes from a sibling; empty `chart()`
             # scopes (previous-tier) inherit the preceding tier's marks
             # JS-side — neither ships rows of its own.
             if isinstance(child.data, _RefProxy) or child._uses_previous_marks():
-                return base64.b64encode(empty_placeholder_arrow_bytes()).decode("ascii")
+                return empty_placeholder_arrow_bytes()
 
             if isinstance(child.data, pd.DataFrame):
                 df = child.data
@@ -3003,9 +3005,9 @@ class LayerBuilder:
                 df = pd.DataFrame(child.data)
 
             if len(df) == 0:
-                return base64.b64encode(empty_placeholder_arrow_bytes()).decode("ascii")
+                return empty_placeholder_arrow_bytes()
 
-            return base64.b64encode(dataframe_to_arrow(df)).decode("ascii")
+            return dataframe_to_arrow(df)
 
         # Serialize each child's data and collect derive functions
         arrow_dict: dict = {}
@@ -3015,12 +3017,11 @@ class LayerBuilder:
             for op in _collect_derive_operators(child.operators):
                 derive_functions[op.lambda_id] = op.fn
 
-        arrow_data = json.dumps(arrow_dict)
         spec = self.to_ir()
 
         widget = GoFishChartWidget(
             spec=spec,
-            arrow_data=arrow_data,
+            arrow_dict=arrow_dict,
             derive_functions=derive_functions,
             width=w,
             height=h,
