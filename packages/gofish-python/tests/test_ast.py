@@ -19,7 +19,7 @@ from gofish import (
     rect,
     circle,
     line,
-    area,
+    ribbon,
     ellipse,
     petal,
     text,
@@ -284,11 +284,11 @@ class TestNewMarks:
 
     def test_text_mark(self):
         """Test text mark creation."""
-        m = text(fill="black", label="name")
+        m = text(fill="black", text="name")
         d = m.to_dict()
         assert d["type"] == "text"
         assert d["fill"] == "black"
-        assert d["label"] == "name"
+        assert d["text"] == "name"
 
     def test_image_mark(self):
         """Test image mark creation."""
@@ -303,8 +303,8 @@ class TestNewMarks:
         for mark_fn in [
             lambda: ellipse(w=10),
             lambda: petal(w=10),
-            lambda: text(fill="red"),
-            lambda: image(w=10),
+            lambda: text(fill="red", text="value"),
+            lambda: image(w=10, href="url"),
         ]:
             m = mark_fn().name("layer1")
             assert m._name == "layer1"
