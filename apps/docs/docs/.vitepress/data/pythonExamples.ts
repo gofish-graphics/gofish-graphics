@@ -26,6 +26,7 @@ import { readFileSync, existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { loadStoryExamples, type StoryExample } from "./storyExamples.ts";
+import { dedent, indent } from "./textUtils.ts";
 
 export interface PythonExample {
   id: string;
@@ -48,8 +49,6 @@ const REPO_ROOT = resolve(__dirname, "../../../../..");
 const TESTS_DIR = join(REPO_ROOT, "tests");
 const PYTHON_STORIES_DIR = join(TESTS_DIR, "python-stories");
 const DATA_PY = join(PYTHON_STORIES_DIR, "data.py");
-const LOWLEVEL_HELPERS_PY = join(PYTHON_STORIES_DIR, "_lowlevel_helpers.py");
-const VEGA_URLS_PY = join(PYTHON_STORIES_DIR, "vega_data_urls.py");
 const LOWLEVEL_DATA_DIR = join(PYTHON_STORIES_DIR, "_lowlevel_data");
 const EXEMPT_FILE = join(TESTS_DIR, ".python-sync-exempt");
 
@@ -67,7 +66,16 @@ function toKebab(s: string): string {
 }
 
 /** Storybook title + JS file path → the expected Python parity test file. */
+const mapJsToPythonCache = new Map<string, string>();
 function mapJsToPython(jsFileRelToRepo: string): string {
+  const cached = mapJsToPythonCache.get(jsFileRelToRepo);
+  if (cached !== undefined) return cached;
+  const result = computeMapJsToPython(jsFileRelToRepo);
+  mapJsToPythonCache.set(jsFileRelToRepo, result);
+  return result;
+}
+
+function computeMapJsToPython(jsFileRelToRepo: string): string {
   const absPath = join(REPO_ROOT, jsFileRelToRepo);
   let title: string | null = null;
   try {
@@ -75,13 +83,34 @@ function mapJsToPython(jsFileRelToRepo: string): string {
     const m = content.match(/title:\s*["'](.+?)["']/);
     if (m) title = m[1];
   } catch {
-    /* unreadable — no python file possible */
+    /* unreadable — fall through to path-based fallback */
   }
-  if (!title) return "";
-  const segments = title.split("/").map(toKebab);
-  const dirPath = segments.slice(0, -1).join("/");
-  const basePart = segments[segments.length - 1].replace(/-/g, "_");
-  return `tests/python-stories/${dirPath}/test_${basePart}.py`;
+
+  if (title) {
+    const segments = title.split("/").map(toKebab);
+    const dirPath = segments.slice(0, -1).join("/");
+    const basePart = segments[segments.length - 1].replace(/-/g, "_");
+    return `tests/python-stories/${dirPath}/test_${basePart}.py`;
+  }
+
+  // Fallback: derive from file path (CamelCase → snake_case, flatten one level)
+  let rel = jsFileRelToRepo.replace(
+    /^packages\/gofish-graphics\/stories\//,
+    ""
+  );
+  rel = rel.replace(/\.stories\.tsx$/, "");
+  const lastSlash = rel.lastIndexOf("/");
+  const dirPart = lastSlash >= 0 ? rel.slice(0, lastSlash) : ".";
+  const basePart = lastSlash >= 0 ? rel.slice(lastSlash + 1) : rel;
+  const toSnake = (s: string) =>
+    s.replace(/([a-z])([A-Z])/g, "$1_$2").toLowerCase();
+  const snakeBase = toSnake(basePart);
+  let snakeDir = toSnake(dirPart);
+  if (snakeDir.includes("/")) {
+    snakeDir = snakeDir.replace(/\/[^/]*$/, "");
+  }
+  const prefix = snakeDir && snakeDir !== "." ? `${snakeDir}/` : "";
+  return `tests/python-stories/${prefix}test_${snakeBase}.py`;
 }
 
 /** JS story export name → the expected `story_*` Python function name. */
@@ -181,25 +210,6 @@ function splitTopLevelBlocks(source: string): PyBlock[] {
   return blocks;
 }
 
-/** Remove common leading indentation and trim blank edges. */
-function dedent(text: string): string {
-  const lines = text.replace(/\t/g, "    ").split("\n");
-  while (lines.length && lines[0].trim() === "") lines.shift();
-  while (lines.length && lines[lines.length - 1].trim() === "") lines.pop();
-  const indents = lines
-    .filter((l) => l.trim() !== "")
-    .map((l) => l.match(/^ */)![0].length);
-  const min = indents.length ? Math.min(...indents) : 0;
-  return lines.map((l) => l.slice(min)).join("\n");
-}
-
-function indentBlock(text: string, pad: string): string {
-  return text
-    .split("\n")
-    .map((l) => (l.trim() === "" ? l : pad + l))
-    .join("\n");
-}
-
 /** Drop trailing blank lines and comment-only lines (see call site). */
 function stripTrailingCommentLines(text: string): string {
   const lines = text.split("\n");
@@ -277,6 +287,48 @@ function referencedIdentifiers(text: string): Set<string> {
 // Balanced-expression scanning (string/comment aware).
 // ---------------------------------------------------------------------------
 
+/** If text[i] starts a `#` comment or a quoted (incl. triple-quoted) string
+ * literal, returns the index to resume scanning from (the comment's trailing
+ * newline, or just past the string's closing quote — possibly `end` if
+ * unterminated). Returns null when text[i] is neither, so the caller falls
+ * through to its normal per-character handling. Shared by scanBalanced() and
+ * splitTopLevel() so both stay string/comment-aware identically. */
+function skipStringOrComment(
+  text: string,
+  i: number,
+  end: number
+): number | null {
+  const ch = text[i];
+  if (ch === "#") {
+    let j = i;
+    while (j < end && text[j] !== "\n") j++;
+    return j;
+  }
+  if (ch === '"' || ch === "'") {
+    const quote = ch;
+    const triple = text.slice(i, i + 3) === quote.repeat(3);
+    let j = i + (triple ? 3 : 1);
+    while (j < end) {
+      if (text[j] === "\\") {
+        j += 2;
+        continue;
+      }
+      if (triple) {
+        if (text.slice(j, j + 3) === quote.repeat(3)) {
+          j += 3;
+          break;
+        }
+      } else if (text[j] === quote) {
+        j += 1;
+        break;
+      }
+      j++;
+    }
+    return j;
+  }
+  return null;
+}
+
 /** Given text[openIndex] === an opening bracket, returns the index of its
  * matching close, skipping over string literals and `#` comments. -1 if
  * unbalanced. */
@@ -286,31 +338,9 @@ function scanBalanced(text: string, openIndex: number): number {
   const n = text.length;
   while (i < n) {
     const ch = text[i];
-    if (ch === "#") {
-      while (i < n && text[i] !== "\n") i++;
-      continue;
-    }
-    if (ch === '"' || ch === "'") {
-      const quote = ch;
-      const triple = text.slice(i, i + 3) === quote.repeat(3);
-      let j = i + (triple ? 3 : 1);
-      while (j < n) {
-        if (text[j] === "\\") {
-          j += 2;
-          continue;
-        }
-        if (triple) {
-          if (text.slice(j, j + 3) === quote.repeat(3)) {
-            j += 3;
-            break;
-          }
-        } else if (text[j] === quote) {
-          j += 1;
-          break;
-        }
-        j++;
-      }
-      i = j;
+    const skip = skipStringOrComment(text, i, n);
+    if (skip !== null) {
+      i = skip;
       continue;
     }
     if (ch === "(" || ch === "[" || ch === "{") depth++;
@@ -331,31 +361,9 @@ function splitTopLevel(text: string, start: number, end: number): string[] {
   let i = start;
   while (i < end) {
     const ch = text[i];
-    if (ch === "#") {
-      while (i < end && text[i] !== "\n") i++;
-      continue;
-    }
-    if (ch === '"' || ch === "'") {
-      const quote = ch;
-      const triple = text.slice(i, i + 3) === quote.repeat(3);
-      let j = i + (triple ? 3 : 1);
-      while (j < end) {
-        if (text[j] === "\\") {
-          j += 2;
-          continue;
-        }
-        if (triple) {
-          if (text.slice(j, j + 3) === quote.repeat(3)) {
-            j += 3;
-            break;
-          }
-        } else if (text[j] === quote) {
-          j += 1;
-          break;
-        }
-        j++;
-      }
-      i = j;
+    const skip = skipStringOrComment(text, i, end);
+    if (skip !== null) {
+      i = skip;
       continue;
     }
     if (ch === "(" || ch === "[" || ch === "{") depth++;
@@ -422,23 +430,36 @@ function jsonLoadName(block: PyBlock): string | null {
   return m ? m[1] : null;
 }
 
-/** Transitive closure of data.py names, rendered as standalone Python source
- * (JSON-backed names inlined as Python literals; others kept verbatim). */
-function buildDatasetCode(names: string[]): string | null {
-  const mod = loadDataModule();
+/** Transitive closure of `byName`'s keys reachable from `seeds` by identifier
+ * reference (a name pulls in every other name its block's text mentions).
+ * Shared by buildDatasetCode() (data.py names) and transformPythonStory()'s
+ * decl closure (story-file top-level names) — same worklist/visited-set
+ * shape, different `byName` map. */
+function closeOverDecls(
+  byName: Map<string, PyBlock>,
+  seeds: Iterable<string>
+): Set<string> {
   const closure = new Set<string>();
-  const worklist = [...names];
+  const worklist = [...seeds];
   while (worklist.length) {
     const name = worklist.pop()!;
     if (closure.has(name)) continue;
-    const block = mod.byName.get(name);
-    if (!block) continue; // not a data.py name — ignore (handled elsewhere or missing)
+    const block = byName.get(name);
+    if (!block) continue; // not in this map — ignore (handled elsewhere or missing)
     closure.add(name);
     for (const dep of referencedIdentifiers(block.text)) {
-      if (dep !== name && mod.byName.has(dep) && !closure.has(dep))
-        worklist.push(dep);
+      if (!closure.has(dep)) worklist.push(dep);
     }
   }
+  return closure;
+}
+
+/** Transitive closure of data.py names, rendered as standalone Python source
+ * (JSON-backed names inlined as Python literals; others kept verbatim). */
+const jsonReprCache = new Map<string, string>();
+function buildDatasetCode(names: string[]): string | null {
+  const mod = loadDataModule();
+  const closure = closeOverDecls(mod.byName, names);
   if (closure.size === 0) return null;
 
   const parts: string[] = [];
@@ -446,9 +467,14 @@ function buildDatasetCode(names: string[]): string | null {
     if (!block.name || !closure.has(block.name)) continue;
     const jsonName = jsonLoadName(block);
     if (jsonName) {
-      const jsonPath = join(LOWLEVEL_DATA_DIR, `${jsonName}.json`);
-      const parsed = JSON.parse(readFileSync(jsonPath, "utf-8"));
-      parts.push(`${block.name} = ${pyRepr(parsed)}`);
+      let repr = jsonReprCache.get(jsonName);
+      if (repr === undefined) {
+        const jsonPath = join(LOWLEVEL_DATA_DIR, `${jsonName}.json`);
+        const parsed = JSON.parse(readFileSync(jsonPath, "utf-8"));
+        repr = pyRepr(parsed);
+        jsonReprCache.set(jsonName, repr);
+      }
+      parts.push(`${block.name} = ${repr}`);
     } else {
       parts.push(stripTrailingCommentLines(block.text).trim());
     }
@@ -486,37 +512,35 @@ function parseImportStatement(stmt: string): ParsedImport | null {
 }
 
 // ---------------------------------------------------------------------------
-// _lowlevel_helpers.py / vega_data_urls.py — small internal modules that get
-// inlined wholesale (dropping their own docstring/imports handling is done
-// generically below via the same import-classification pass).
+// Sibling modules (`_lowlevel_helpers.py`, `vega_data_urls.py`, …) — small
+// internal `tests/python-stories/<leaf>.py` modules that a story imports from
+// as `from python_stories.<leaf> import ...` and that get inlined wholesale
+// into the standalone snippet, in place of that import.
 // ---------------------------------------------------------------------------
 
-let lowlevelHelpersCache: string | undefined;
-function lowlevelHelpersSource(): string {
-  if (lowlevelHelpersCache !== undefined) return lowlevelHelpersCache;
+let siblingModuleCache: Map<string, string> | undefined;
+function inlineSiblingModule(moduleLeaf: string): string {
+  if (!siblingModuleCache) siblingModuleCache = new Map();
+  const cached = siblingModuleCache.get(moduleLeaf);
+  if (cached !== undefined) return cached;
   const blocks = splitTopLevelBlocks(
-    readFileSync(LOWLEVEL_HELPERS_PY, "utf-8")
+    readFileSync(join(PYTHON_STORIES_DIR, `${moduleLeaf}.py`), "utf-8")
   );
-  // Keep everything but the module docstring — the helpers' own imports
-  // (`typing`) and the `_Key` type alias are needed by the function bodies.
-  lowlevelHelpersCache = blocks
-    .filter(
-      (b) => b.kind === "import" || b.kind === "assign" || b.kind === "def"
-    )
+  // Keep everything but the module docstring (docstrings land in an "other"
+  // block, excluded below) and any self-imports of other python_stories.*
+  // siblings (not standalone-inlinable) — the module's own third-party/stdlib
+  // imports and its def/assign blocks are what the function bodies need.
+  const source = blocks
+    .filter((b) => {
+      if (b.kind === "def" || b.kind === "assign") return true;
+      if (b.kind === "import")
+        return !/^\s*from\s+python_stories\./m.test(b.text);
+      return false;
+    })
     .map((b) => stripTrailingCommentLines(b.text).trim())
     .join("\n\n\n");
-  return lowlevelHelpersCache;
-}
-
-let vegaUrlsCache: string | undefined;
-function vegaUrlsSource(): string {
-  if (vegaUrlsCache !== undefined) return vegaUrlsCache;
-  const blocks = splitTopLevelBlocks(readFileSync(VEGA_URLS_PY, "utf-8"));
-  const kept = blocks.filter((b) => b.kind === "assign" || b.kind === "def");
-  vegaUrlsCache =
-    "import io\nfrom urllib.request import urlopen\n\nimport pandas as pd\n\n" +
-    kept.map((b) => stripTrailingCommentLines(b.text).trim()).join("\n\n\n");
-  return vegaUrlsCache;
+  siblingModuleCache.set(moduleLeaf, source);
+  return source;
 }
 
 // ---------------------------------------------------------------------------
@@ -533,9 +557,9 @@ class FallbackNeeded extends Error {}
 
 function transformPythonStory(
   fileSource: string,
-  storyFn: string
+  storyFn: string,
+  blocks: PyBlock[]
 ): TransformResult {
-  const blocks = splitTopLevelBlocks(fileSource);
   const fnBlock = blocks.find((b) => b.kind === "def" && b.name === storyFn);
   if (!fnBlock) throw new FallbackNeeded(`function ${storyFn} not found`);
 
@@ -548,7 +572,7 @@ function transformPythonStory(
   const rawBody = stripTrailingCommentLines(
     fnLines.slice(headerIdx + 1).join("\n")
   );
-  const bodyDedented = dedent(rawBody);
+  const bodyDedented = dedent(rawBody, 4);
 
   // Find the top-level `return` statement — either a parenthesized tuple
   // (`return (\n  expr,\n  {...},\n)`) or a bare one-line tuple
@@ -575,8 +599,8 @@ function transformPythonStory(
   // dedent() (not trim()) so a multi-line chain's continuation lines
   // (`.flow(...)`, `.mark(...)`, …) stay aligned with its first line — trim()
   // only strips the first line's own leading whitespace, misaligning it.
-  const exprText = dedent(stripLeadingCommentLines(segments[0]));
-  const optsText = dedent(stripLeadingCommentLines(segments[1]));
+  const exprText = dedent(stripLeadingCommentLines(segments[0]), 4);
+  const optsText = dedent(stripLeadingCommentLines(segments[1]), 4);
 
   // Build the .render(...) call from the options segment.
   let renderCall: string;
@@ -613,7 +637,7 @@ function transformPythonStory(
   // exprText is already self-bracketed, e.g. a single `spread(...)` call)
   // rather than special-casing which shapes need it.
   const wrappedExpr = exprText.includes("\n")
-    ? "(\n" + indentBlock(exprText, "    ") + "\n)"
+    ? "(\n" + indent(exprText, "    ") + "\n)"
     : `(${exprText})`;
   const mainStatement = wrappedExpr + renderCall;
   const bodyParts = [preambleText, mainStatement].filter(Boolean);
@@ -630,18 +654,7 @@ function transformPythonStory(
       topDecls.set(b.name, b);
     }
   }
-  const closure = new Set<string>();
-  const worklist = [...referenced];
-  while (worklist.length) {
-    const name = worklist.pop()!;
-    if (closure.has(name)) continue;
-    const decl = topDecls.get(name);
-    if (!decl) continue;
-    closure.add(name);
-    for (const dep of referencedIdentifiers(decl.text)) {
-      if (!closure.has(dep)) worklist.push(dep);
-    }
-  }
+  const closure = closeOverDecls(topDecls, referenced);
   const declLines: string[] = [];
   for (const b of blocks) {
     if (
@@ -657,65 +670,50 @@ function transformPythonStory(
   const gofishNames = new Set<string>();
   const datasetNames = new Set<string>();
   const keepImportLines: string[] = [];
-  let needsLowlevelHelpers = false;
-  let needsVegaUrls = false;
+  const inlinedSiblingModules: string[] = [];
+  const seenSiblingModules = new Set<string>();
 
   for (const b of blocks) {
     if (b.kind !== "import") continue;
-    // An import-kind block may hold more than one import statement (a
-    // parenthesized multi-line import's continuation lines are indented, so
-    // they stay attached to their own block; but the splitter also glues any
-    // trailing comment lines before the *next* top-level statement onto this
-    // block — strip those first). Re-split into individual statements at
-    // column-0 `import `/`from ` lines.
-    const blockText = stripTrailingCommentLines(b.text);
-    const stmts: string[] = [];
-    let cur: string[] = [];
-    for (const line of blockText.split("\n")) {
-      if (/^(?:import|from)\s/.test(line)) {
-        if (cur.length) stmts.push(cur.join("\n"));
-        cur = [line];
-      } else if (cur.length) {
-        cur.push(line);
+    // splitTopLevelBlocks() flushes on every column-0 identifier line (see its
+    // definition), so an import block can never contain more than one
+    // top-level import statement — parse it directly.
+    const parsed = parseImportStatement(stripTrailingCommentLines(b.text));
+    if (!parsed) continue;
+    if (parsed.kind === "import") {
+      keepImportLines.push(`import ${parsed.spec}`);
+      continue;
+    }
+    const { module, names } = parsed;
+    if (module === "gofish") {
+      keepImportLines.push(`from gofish import ${names.join(", ")}`);
+      continue;
+    }
+    if (module === "python_stories.data") {
+      for (const n of names) datasetNames.add(n);
+      continue;
+    }
+    const siblingMatch = /^python_stories\.(\w+)$/.exec(module);
+    if (siblingMatch) {
+      const leaf = siblingMatch[1];
+      if (existsSync(join(PYTHON_STORIES_DIR, `${leaf}.py`))) {
+        if (!seenSiblingModules.has(leaf)) {
+          seenSiblingModules.add(leaf);
+          inlinedSiblingModules.push(inlineSiblingModule(leaf));
+        }
+        continue;
       }
     }
-    if (cur.length) stmts.push(cur.join("\n"));
-
-    for (const stmt of stmts) {
-      const parsed = parseImportStatement(stmt);
-      if (!parsed) continue;
-      if (parsed.kind === "import") {
-        keepImportLines.push(`import ${parsed.spec}`);
-        continue;
-      }
-      const { module, names } = parsed;
-      if (module === "gofish") {
-        keepImportLines.push(`from gofish import ${names.join(", ")}`);
-        continue;
-      }
-      if (module === "python_stories.data") {
-        for (const n of names) datasetNames.add(n);
-        continue;
-      }
-      if (module === "python_stories._lowlevel_helpers") {
-        needsLowlevelHelpers = true;
-        continue;
-      }
-      if (module === "python_stories.vega_data_urls") {
-        needsVegaUrls = true;
-        continue;
-      }
-      if (module.startsWith("python_stories")) {
-        throw new FallbackNeeded(
-          `unrewritable internal import: from ${module} import ...`
-        );
-      }
-      if (module.startsWith(".")) {
-        throw new FallbackNeeded(`relative import: from ${module} import ...`);
-      }
-      // stdlib / third-party import — keep verbatim
-      keepImportLines.push(`from ${module} import ${names.join(", ")}`);
+    if (module.startsWith("python_stories")) {
+      throw new FallbackNeeded(
+        `unrewritable internal import: from ${module} import ...`
+      );
     }
+    if (module.startsWith(".")) {
+      throw new FallbackNeeded(`relative import: from ${module} import ...`);
+    }
+    // stdlib / third-party import — keep verbatim
+    keepImportLines.push(`from ${module} import ${names.join(", ")}`);
   }
   if (/\bsys\.path\b/.test(fileSource)) {
     throw new FallbackNeeded("story file manipulates sys.path");
@@ -729,8 +727,7 @@ function transformPythonStory(
 
   const parts: string[] = [];
   if (keepImportLines.length) parts.push(keepImportLines.join("\n"));
-  if (needsLowlevelHelpers) parts.push(lowlevelHelpersSource());
-  if (needsVegaUrls) parts.push(vegaUrlsSource());
+  parts.push(...inlinedSiblingModules);
   if (declLines.length) parts.push(declLines.join("\n\n"));
   parts.push(bodyParts.join("\n\n"));
 
@@ -745,6 +742,19 @@ function transformPythonStory(
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
+
+/** splitTopLevelBlocks(fileSource), memoized per parity-file path — a story
+ * file backs one path but may hold several `story_*` functions (one per
+ * gallery example), so this is re-read across map() iterations. */
+const storyBlocksCache = new Map<string, PyBlock[]>();
+function loadStoryBlocks(path: string, fileSource: string): PyBlock[] {
+  let blocks = storyBlocksCache.get(path);
+  if (!blocks) {
+    blocks = splitTopLevelBlocks(fileSource);
+    storyBlocksCache.set(path, blocks);
+  }
+  return blocks;
+}
 
 let cache: PythonExample[] | undefined;
 
@@ -770,9 +780,10 @@ export function loadPythonExamples(): PythonExample[] {
 
     const fileSource = readFileSync(pyAbsPath, "utf-8");
     const storyFn = exportToStoryFn(ex.exportName);
+    const blocks = loadStoryBlocks(pyAbsPath, fileSource);
 
     try {
-      const result = transformPythonStory(fileSource, storyFn);
+      const result = transformPythonStory(fileSource, storyFn, blocks);
       return {
         id: ex.id,
         pythonCode: result.code,
@@ -795,11 +806,10 @@ export function loadPythonExamples(): PythonExample[] {
           };
         }
         warnings.push(`${ex.id} (${pyRelPath}::${storyFn}): ${err.message}`);
-        const blocks = splitTopLevelBlocks(fileSource);
         const fnBlock = blocks.find(
           (b) => b.kind === "def" && b.name === storyFn
         );
-        const code = fnBlock ? dedent(fnBlock.text) + "\n" : null;
+        const code = fnBlock ? dedent(fnBlock.text, 4) + "\n" : null;
         return {
           id: ex.id,
           pythonCode: code,

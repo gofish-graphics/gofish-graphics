@@ -48,17 +48,41 @@ function transpileTo(tsPath, tmpPath, rewrites = []) {
   writeFileSync(tmpPath, outputText);
 }
 
+// storyExamples.ts and pythonExamples.ts both statically import the shared
+// textUtils.ts (dedent/indent helpers) — pre-transpile it once, alongside
+// storyExamples.ts, and rewrite both files' `./textUtils.ts` specifiers to
+// point at it, the same trick used for the storyExamples.ts→pythonExamples.ts
+// cross-import below.
+const TEXT_UTILS_TMP_PATH = resolve(
+  __dirname,
+  "../docs/.vitepress/data/textUtils.__check__.mjs"
+);
+function ensureTextUtilsTmp() {
+  const existed = existsSync(TEXT_UTILS_TMP_PATH);
+  if (!existed) {
+    transpileTo(
+      resolve(__dirname, "../docs/.vitepress/data/textUtils.ts"),
+      TEXT_UTILS_TMP_PATH
+    );
+  }
+  return existed;
+}
+
 async function loadModule() {
   const tsPath = resolve(__dirname, "../docs/.vitepress/data/storyExamples.ts");
   const tmpPath = resolve(
     __dirname,
     "../docs/.vitepress/data/storyExamples.__check__.mjs"
   );
-  transpileTo(tsPath, tmpPath);
+  const textUtilsExisted = ensureTextUtilsTmp();
+  transpileTo(tsPath, tmpPath, [
+    ["./textUtils.ts", "./textUtils.__check__.mjs"],
+  ]);
   try {
     return await import(pathToFileURL(tmpPath).href);
   } finally {
     rmSync(tmpPath, { force: true });
+    if (!textUtilsExisted) rmSync(TEXT_UTILS_TMP_PATH, { force: true });
   }
 }
 
@@ -80,20 +104,24 @@ async function loadPythonModule() {
     __dirname,
     "../docs/.vitepress/data/pythonExamples.__check__.mjs"
   );
+  const textUtilsExisted = ensureTextUtilsTmp();
   const jsTmpExisted = existsSync(jsTmpPath);
   if (!jsTmpExisted)
     transpileTo(
       resolve(__dirname, "../docs/.vitepress/data/storyExamples.ts"),
-      jsTmpPath
+      jsTmpPath,
+      [["./textUtils.ts", "./textUtils.__check__.mjs"]]
     );
   transpileTo(tsPath, tmpPath, [
     ["./storyExamples.ts", "./storyExamples.__check__.mjs"],
+    ["./textUtils.ts", "./textUtils.__check__.mjs"],
   ]);
   try {
     return await import(pathToFileURL(tmpPath).href);
   } finally {
     rmSync(tmpPath, { force: true });
     if (!jsTmpExisted) rmSync(jsTmpPath, { force: true });
+    if (!textUtilsExisted) rmSync(TEXT_UTILS_TMP_PATH, { force: true });
   }
 }
 
@@ -260,11 +288,32 @@ async function main() {
   } catch {
     pythonAvailable = false;
   }
+  // One python3 driver ast.parse()s every written snippet, instead of a
+  // separate `python3` process per snippet (up to ~2× pyExamples.length
+  // spawns) — cheaper at ~200+ snippets while keeping the same per-file
+  // failure reporting.
+  const PY_AST_CHECK_DRIVER = `
+import ast, sys
+with open(sys.argv[1]) as f:
+    paths = [line.rstrip("\\n") for line in f if line.strip()]
+failures = []
+for path in paths:
+    try:
+        with open(path) as fh:
+            ast.parse(fh.read())
+    except SyntaxError as e:
+        failures.append(path + "\\t" + str(e).replace("\\n", " "))
+for line in failures:
+    print(line)
+sys.exit(1 if failures else 0)
+`;
+
   let syntaxErrors = 0;
   if (pythonAvailable) {
     const tmpDir = resolve(__dirname, "../.tmp-py-check");
     mkdirSync(tmpDir, { recursive: true });
     try {
+      const entries = [];
       for (const ex of pyExamples) {
         for (const [label, src] of [
           ["code", ex.pythonCode],
@@ -273,16 +322,31 @@ async function main() {
           if (!src) continue;
           const f = resolve(tmpDir, `${ex.id}.${label}.py`);
           writeFileSync(f, src);
-          try {
-            execFileSync(
-              "python3",
-              ["-c", "import ast, sys; ast.parse(open(sys.argv[1]).read())", f],
-              { stdio: "pipe" }
-            );
-          } catch (err) {
+          entries.push({ id: ex.id, label, path: f });
+        }
+      }
+
+      if (entries.length) {
+        const manifestPath = resolve(tmpDir, "manifest.txt");
+        writeFileSync(
+          manifestPath,
+          entries.map((e) => e.path).join("\n") + "\n"
+        );
+        const byPath = new Map(entries.map((e) => [e.path, e]));
+        try {
+          execFileSync("python3", ["-c", PY_AST_CHECK_DRIVER, manifestPath], {
+            stdio: "pipe",
+            encoding: "utf-8",
+          });
+        } catch (err) {
+          const stdout = err.stdout ?? "";
+          for (const line of stdout.split("\n")) {
+            if (!line.trim()) continue;
+            const [path, ...msgParts] = line.split("\t");
+            const entry = byPath.get(path);
             syntaxErrors++;
             console.error(
-              `Python syntax error in ${ex.id} (${label}): ${err.message.split("\n").slice(-2).join(" ")}`
+              `Python syntax error in ${entry ? entry.id : path} (${entry ? entry.label : "?"}): ${msgParts.join("\t")}`
             );
           }
         }
