@@ -17,7 +17,14 @@ import { createRequire } from "node:module";
 import { pathToFileURL } from "node:url";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { readFileSync, writeFileSync, rmSync } from "node:fs";
+import {
+  readFileSync,
+  writeFileSync,
+  rmSync,
+  existsSync,
+  mkdirSync,
+} from "node:fs";
+import { execSync, execFileSync } from "node:child_process";
 
 const require = createRequire(import.meta.url);
 const ts = require("typescript");
@@ -28,13 +35,9 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 // Node won't import it as ESM. Transpile it to a temp `.mjs` *in the same
 // directory* (so `import.meta.url` and relative/node_modules resolution stay
 // identical) and import that.
-async function loadModule() {
-  const tsPath = resolve(__dirname, "../docs/.vitepress/data/storyExamples.ts");
-  const tmpPath = resolve(
-    __dirname,
-    "../docs/.vitepress/data/storyExamples.__check__.mjs"
-  );
-  const source = readFileSync(tsPath, "utf-8");
+function transpileTo(tsPath, tmpPath, rewrites = []) {
+  let source = readFileSync(tsPath, "utf-8");
+  for (const [from, to] of rewrites) source = source.split(from).join(to);
   const { outputText } = ts.transpileModule(source, {
     compilerOptions: {
       target: ts.ScriptTarget.ESNext,
@@ -43,10 +46,54 @@ async function loadModule() {
     fileName: tsPath,
   });
   writeFileSync(tmpPath, outputText);
+}
+
+async function loadModule() {
+  const tsPath = resolve(__dirname, "../docs/.vitepress/data/storyExamples.ts");
+  const tmpPath = resolve(
+    __dirname,
+    "../docs/.vitepress/data/storyExamples.__check__.mjs"
+  );
+  transpileTo(tsPath, tmpPath);
   try {
     return await import(pathToFileURL(tmpPath).href);
   } finally {
     rmSync(tmpPath, { force: true });
+  }
+}
+
+// pythonExamples.ts statically imports storyExamples.ts (a `.ts` specifier) —
+// Node's native type-stripping loader can't resolve that reliably outside a
+// tsx-driven entry point (the same reason storyExamples.ts itself gets
+// pre-transpiled above), so point the rewritten copy at storyExamples'
+// already-transpiled tmp `.mjs` instead of re-deriving the resolution rules.
+async function loadPythonModule() {
+  const jsTmpPath = resolve(
+    __dirname,
+    "../docs/.vitepress/data/storyExamples.__check__.mjs"
+  );
+  const tsPath = resolve(
+    __dirname,
+    "../docs/.vitepress/data/pythonExamples.ts"
+  );
+  const tmpPath = resolve(
+    __dirname,
+    "../docs/.vitepress/data/pythonExamples.__check__.mjs"
+  );
+  const jsTmpExisted = existsSync(jsTmpPath);
+  if (!jsTmpExisted)
+    transpileTo(
+      resolve(__dirname, "../docs/.vitepress/data/storyExamples.ts"),
+      jsTmpPath
+    );
+  transpileTo(tsPath, tmpPath, [
+    ["./storyExamples.ts", "./storyExamples.__check__.mjs"],
+  ]);
+  try {
+    return await import(pathToFileURL(tmpPath).href);
+  } finally {
+    rmSync(tmpPath, { force: true });
+    if (!jsTmpExisted) rmSync(jsTmpPath, { force: true });
   }
 }
 
@@ -175,6 +222,87 @@ async function main() {
     `Fallbacks: ${fallbacks.length}${fallbacks.length ? " (" + fallbacks.map((r) => r.id).join(", ") + ")" : ""}`
   );
   console.log(`Failures: ${failures}`);
+
+  // -------------------------------------------------------------------------
+  // Python data layer (pythonExamples.ts) — must load without throwing, cover
+  // exactly the same id set as the JS gallery, and every ported/fallback
+  // snippet must be syntactically valid Python (checked via `python3 -m py_compile`
+  // when a `python3` is on PATH; skipped with a warning otherwise, since the
+  // docs build itself doesn't need Python installed).
+  // -------------------------------------------------------------------------
+  console.log("\n--- Python example data layer ---");
+  const pyMod = await loadPythonModule();
+  const pyExamples = pyMod.loadPythonExamples();
+
+  const jsIds = new Set(examples.map((ex) => ex.id));
+  const pyIds = new Set(pyExamples.map((ex) => ex.id));
+  const missingInPy = [...jsIds].filter((id) => !pyIds.has(id));
+  const extraInPy = [...pyIds].filter((id) => !jsIds.has(id));
+  if (missingInPy.length) {
+    console.error(`Python id set is missing: ${missingInPy.join(", ")}`);
+    failures++;
+  }
+  if (extraInPy.length) {
+    console.error(
+      `Python id set has extra ids not in JS: ${extraInPy.join(", ")}`
+    );
+    failures++;
+  }
+
+  const ported = pyExamples.filter((ex) => ex.pythonCode && !ex.isFallback);
+  const pyFallbacks = pyExamples.filter((ex) => ex.isFallback);
+  const notPorted = pyExamples.filter((ex) => !ex.pythonCode);
+  const diverging = pyExamples.filter((ex) => ex.renderDiverges);
+
+  let pythonAvailable = true;
+  try {
+    execSync("python3 --version", { stdio: "ignore" });
+  } catch {
+    pythonAvailable = false;
+  }
+  let syntaxErrors = 0;
+  if (pythonAvailable) {
+    const tmpDir = resolve(__dirname, "../.tmp-py-check");
+    mkdirSync(tmpDir, { recursive: true });
+    try {
+      for (const ex of pyExamples) {
+        for (const [label, src] of [
+          ["code", ex.pythonCode],
+          ["dataset", ex.pythonDatasetCode],
+        ]) {
+          if (!src) continue;
+          const f = resolve(tmpDir, `${ex.id}.${label}.py`);
+          writeFileSync(f, src);
+          try {
+            execFileSync(
+              "python3",
+              ["-c", "import ast, sys; ast.parse(open(sys.argv[1]).read())", f],
+              { stdio: "pipe" }
+            );
+          } catch (err) {
+            syntaxErrors++;
+            console.error(
+              `Python syntax error in ${ex.id} (${label}): ${err.message.split("\n").slice(-2).join(" ")}`
+            );
+          }
+        }
+      }
+    } finally {
+      rmSync(tmpDir, { recursive: true, force: true });
+    }
+  } else {
+    console.log(
+      "(python3 not found on PATH — skipping Python syntax validation)"
+    );
+  }
+  if (syntaxErrors > 0) failures += syntaxErrors;
+
+  console.log(
+    `Python examples: ${pyExamples.length} total — ported ${ported.length}, fallback ${pyFallbacks.length}, not ported ${notPorted.length}, diverging ${diverging.length}`
+  );
+  if (pyFallbacks.length) {
+    console.log(`  fallback: ${pyFallbacks.map((ex) => ex.id).join(", ")}`);
+  }
 
   if (failures > 0) {
     console.error(`\nFAILED with ${failures} problem(s).`);

@@ -30,6 +30,11 @@ This is a documentation site for the GoFish Graphics library built with VitePres
   build time by `docs/.vitepress/data/storyExamples.ts` (exposed via the
   `storyExamples.data.js` loader). There is no hand-maintained registry — the set of
   valid `example:<id>` ids is exactly the gallery story ids (`pnpm check-story-examples`).
+  Per-example pages are **generated**, one per language, from this same id set:
+  `js/examples/[id].paths.ts` (JS snippet) and `python/examples/[id].paths.ts`
+  (Python parity port, via `docs/.vitepress/data/pythonExamples.ts` — see below).
+  API pages (`js/api/**`, `python/api/**`) stay hand-written fenced code, unrelated
+  to this generator.
 
 #### Interactive Code Execution
 
@@ -42,6 +47,7 @@ This is a documentation site for the GoFish Graphics library built with VitePres
 
 - **Dataset modules**: Located in `components/data/` - TypeScript modules exporting chart datasets (titanic, penguins, streamgraph data, etc.)
 - **Example data layer**: `docs/.vitepress/data/storyExamples.ts` scans gallery-tagged stories and synthesizes a standalone snippet (+ dataset) for each. The legacy `examples.data.js` registry is gone; only `internal-*` wiki diagrams (`.vitepress/examples/internal-*.ts`) are still loaded directly by the markdown plugin.
+- **Python example data layer**: `docs/.vitepress/data/pythonExamples.ts` resolves each gallery example's matching `tests/python-stories/**/test_*.py` parity port (same title→path convention as `tests/scripts/path-mapping.ts`, duplicated there since it's a cross-package build-time import) and synthesizes a standalone Python snippet (+ `dataset.py`) from the `story_*` function's body. Examples with no port yet get `pythonCode: null` (the page still renders, with a "not ported" note and a link to the JS version); a port whose shape the transform can't standalone-ify falls back to showing the function verbatim. `tests/.python-sync-exempt` entries mark `renderDiverges` (the port intentionally uses a different algorithm — the live render is always the JS engine, since JS/Python serialize to the same IR).
 
 ### Key Architecture Patterns
 
@@ -101,9 +107,12 @@ When editing the docs, keep the two language trees structurally parallel.
 
 **Python chart previews:** Python and JavaScript serialize to the same
 intermediate representation, so a chart renders identically regardless of
-language. Python pages show hand-written Python code in a `python` fence, then
-render the chart with the existing JS engine via `::: gofish example:<id>
-hidden` — which renders the gallery example without showing its JS code.
+language. Hand-written **API pages** (`python/api/**`) show Python code in a
+`python` fence, then render the chart with the existing JS engine via `:::
+gofish example:<id> hidden` — which renders the gallery example without
+showing its JS code. **Per-example pages** (`python/examples/<id>`) are
+generated instead (see "Example data layer" above): the fence comes from the
+gallery example's Python parity port, not a hand-written snippet.
 
 #### Internal Architecture Wiki (`docs/internals/`)
 
@@ -137,7 +146,7 @@ language toggle (`LanguageToggle.vue` hides itself on `/internals/` routes). See
 - `.vitepress/config.mts` - VitePress configuration (per-language + internals sidebars)
 - `.vitepress/theme/` - Custom theme components (incl. `LanguageToggle.vue`, `EssayMeta.vue`)
 - `.vitepress/examples/` - `.ts` source for `internal-*.ts` wiki diagrams (the only live examples still sourced from files; chart examples come from stories)
-- `.vitepress/data/` - build-time data loaders (`storyExamples.ts` + `storyExamples.data.js` for gallery examples, `routes.data.ts`)
+- `.vitepress/data/` - build-time data loaders (`storyExamples.ts` + `storyExamples.data.js` for gallery examples, `pythonExamples.ts` for the Python parity ports of those same examples, `routes.data.ts`)
 
 ### Scripts (`scripts/`)
 
