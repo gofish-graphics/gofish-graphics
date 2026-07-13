@@ -94,16 +94,12 @@ onMounted(() => {
   ).matches;
   const DOLLY_MS = 300; // duration of the dolly-in (keep in sync with gallery.css)
 
-  // Click-through target. Per-example pages currently exist only under
-  // /js/examples/ (the Python docs direct readers to that catalog, which renders
-  // identical charts), so a Python piece would 404 on /python/examples/<id>. To
-  // keep clicks landing on real content (and the console error-free), Python
-  // pieces also open the JS example page. When Python per-example pages land,
-  // switch this back to deriving `/${effectiveLang(route.path)}/examples/<id>`.
+  // Click-through target. Both language sections have per-example pages
+  // (`/js/examples/<id>` and `/python/examples/<id>`, same ids) generated
+  // from the same gallery-tagged stories, so the gallery always links into
+  // the section the visitor is currently browsing.
   function exampleHref(id: string): string {
-    const lang = effectiveLang(route.path);
-    const section = lang === "python" ? "js" : lang;
-    return `/${section}/examples/${id}`;
+    return `/${effectiveLang(route.path)}/examples/${id}`;
   }
 
   // =====================================================================

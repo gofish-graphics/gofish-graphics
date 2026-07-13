@@ -15,7 +15,8 @@
  *
  * This module is imported at build time by the VitePress data loader
  * (`storyExamples.data.js`) and may also be consumed by markdown-it plugins, so
- * it is synchronous and depends only on `node:fs` / `node:path` / `typescript`.
+ * it is synchronous and depends only on `node:fs` / `node:path` / `typescript`
+ * / the sibling `textUtils.ts` (dedent/indent helpers shared with pythonExamples.ts).
  *
  * Hard build-time guards: duplicate ids throw; unparseable tagged stories throw.
  */
@@ -23,6 +24,7 @@ import { readFileSync, readdirSync, statSync } from "node:fs";
 import { dirname, join, relative, resolve, basename } from "node:path";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";
+import { dedent, indent } from "./textUtils.ts";
 
 export interface StoryExample {
   /** kebab-case of gallery.title, e.g. "seattle-weather-stacked-bar-chart" */
@@ -779,27 +781,7 @@ function transformBody(
     text = text.slice(0, e.start) + e.text + text.slice(e.end);
   }
 
-  return dedentBlock(text);
-}
-
-/** Remove common leading indentation and trim blank edges. */
-function dedentBlock(text: string): string {
-  const lines = text.replace(/\t/g, "  ").split("\n");
-  // drop leading / trailing blank lines
-  while (lines.length && lines[0].trim() === "") lines.shift();
-  while (lines.length && lines[lines.length - 1].trim() === "") lines.pop();
-  const indents = lines
-    .filter((l) => l.trim() !== "")
-    .map((l) => l.match(/^ */)![0].length);
-  const min = indents.length ? Math.min(...indents) : 0;
-  return lines.map((l) => l.slice(min)).join("\n");
-}
-
-function indent(text: string, pad: string): string {
-  return text
-    .split("\n")
-    .map((l) => (l.trim() === "" ? l : pad + l))
-    .join("\n");
+  return dedent(text, 2);
 }
 
 /** Fallback: lightly-cleaned raw render body with an `adapted from` header. */
