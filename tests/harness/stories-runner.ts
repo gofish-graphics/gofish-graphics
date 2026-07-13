@@ -130,6 +130,17 @@ window.__renderStory__ = async (id: string): Promise<boolean> => {
       root.appendChild(element);
     }
 
+    // Most stories fire `.render(container, ...)` WITHOUT awaiting it and
+    // return the container synchronously; the gofish render promise gates on
+    // `document.fonts.ready` before layout. On a warm page fonts.ready is
+    // already resolved and the rAF + settle below suffices, but each capture
+    // now runs in a fresh browser context (see capture-core.ts) where the
+    // webfont stylesheet fetch can outlast the settle — leaving "Loading..."
+    // in the captured DOM. Await the same gate those renders block on.
+    if (document.fonts?.ready) {
+      await document.fonts.ready;
+    }
+
     // Wait a frame for SolidJS to flush
     await new Promise((resolve) => requestAnimationFrame(resolve));
     // Wall clock stops at the rAF flush — the 100ms settle below is capture

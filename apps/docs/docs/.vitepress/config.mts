@@ -473,6 +473,7 @@ export default defineConfig({
                 { text: "group", link: "/js/api/operators/group" },
                 { text: "treemap", link: "/js/api/operators/treemap" },
                 { text: "layer", link: "/js/api/operators/layer" },
+                { text: "position", link: "/js/api/operators/position" },
                 { text: "arrow", link: "/js/api/operators/arrow" },
                 {
                   text: "region compositing",
@@ -601,6 +602,10 @@ export default defineConfig({
                 { text: "group", link: "/python/api/operators/group" },
                 { text: "treemap", link: "/python/api/operators/treemap" },
                 { text: "layer", link: "/python/api/operators/layer" },
+                {
+                  text: "position",
+                  link: "/python/api/operators/position",
+                },
                 { text: "arrow", link: "/python/api/operators/arrow" },
                 { text: "derive", link: "/python/api/operators/derive" },
                 {

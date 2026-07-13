@@ -6,8 +6,23 @@
  *   - capture-diff.ts     (HEAD vs base-ref geometry/DOM diff)
  *
  * The capture loop is identical in both: spin up a Vite dev server that serves
- * the stories-runner page, navigate Playwright to it once, then render every
- * (optionally filtered) story in sequence and extract + normalize its DOM.
+ * the stories-runner page, then render every (optionally filtered) story and
+ * extract + normalize its DOM — in a FRESH browser context per story. The
+ * per-story context is deliberate, not waste: Chromium's canvas `measureText`
+ * font metrics (`fontBoundingBoxAscent`/`Descent`, sometimes advance widths)
+ * for a font with a distinct real face (e.g. `italic 30px serif` → Times
+ * Italic, `300 18px monospace` → a light monospace face) CHANGE once that
+ * face is first rasterized in the renderer process — and taking a screenshot
+ * rasterizes every face the page paints. In a single long-lived page this
+ * made text layout order-dependent: a story's `<text>` positions shifted by
+ * 0.5-1px depending on which stories had been rendered+screenshotted BEFORE
+ * it (and on whether screenshots were enabled at all). Some of that state
+ * even survives same-URL navigation (which reuses the renderer process), so
+ * the reset that actually holds is a new browser context — its own renderer.
+ * Every story is thus measured in an identical fresh environment, byte-
+ * comparable with capture-one and the Python parity capture
+ * (capture-python-dom.ts). With a warm Vite module cache a context + load
+ * costs ~100-150ms/story, the same order as one story render.
  *
  * What varies between callers is ONLY which `harnessDir` the Vite server is
  * rooted in (so capture-diff can point a second server at a base-ref worktree)
@@ -129,36 +144,50 @@ export async function captureStories(
     mkdirSync(outDir, { recursive: true });
 
     browser = await chromium.launch({ headless: true });
-    const context = await browser.newContext({
-      viewport: { width: 1280, height: 720 },
-    });
-    const page = await context.newPage();
 
-    page.on("console", (msg) => {
-      if (msg.type() === "error") console.error(`[browser] ${msg.text()}`);
-      else if (process.env.DEBUG)
-        console.log(`[browser:${msg.type()}] ${msg.text()}`);
-    });
-    page.on("pageerror", (err) =>
-      console.error(`[browser pageerror] ${err.message}`)
-    );
+    // Open a fresh, fully isolated runner page. A new browser CONTEXT gets
+    // its own renderer process, which is the reset that actually holds: a
+    // same-URL `page.goto` reuses the renderer, and some of Chromium's font
+    // state survives navigation inside one renderer (rendering + screenshot
+    // of certain stories flipped `300 18px monospace` metrics for every
+    // later story in the run — see header comment). Context startup is
+    // ~tens of ms, same order as the navigation itself.
+    const openRunnerPage = async () => {
+      const context = await browser!.newContext({
+        viewport: { width: 1280, height: 720 },
+      });
+      const page = await context.newPage();
+      page.on("console", (msg) => {
+        if (msg.type() === "error") console.error(`[browser] ${msg.text()}`);
+        else if (process.env.DEBUG)
+          console.log(`[browser:${msg.type()}] ${msg.text()}`);
+      });
+      page.on("pageerror", (err) =>
+        console.error(`[browser pageerror] ${err.message}`)
+      );
+      await page.goto(`http://localhost:${port}/stories-runner.html`, {
+        waitUntil: "domcontentloaded",
+      });
+      await page.waitForFunction(
+        () => (window as any).__STORIES_RUNNER_READY__ === true,
+        { timeout: 30_000 }
+      );
+      const runnerError = await page.evaluate(
+        () => (window as any).__STORIES_RUNNER_ERROR__
+      );
+      if (runnerError) {
+        await context.close();
+        throw new Error(`Stories runner failed to initialize: ${runnerError}`);
+      }
+      return { context, page };
+    };
 
-    await page.goto(`http://localhost:${port}/stories-runner.html`, {
-      waitUntil: "domcontentloaded",
-    });
-    await page.waitForFunction(
-      () => (window as any).__STORIES_RUNNER_READY__ === true,
-      { timeout: 30_000 }
-    );
-    const runnerError = await page.evaluate(
-      () => (window as any).__STORIES_RUNNER_ERROR__
-    );
-    if (runnerError)
-      throw new Error(`Stories runner failed to initialize: ${runnerError}`);
-
-    const allStories = (await page.evaluate(() =>
+    // Discovery pass: list the stories, then discard the context.
+    const discovery = await openRunnerPage();
+    const allStories = (await discovery.page.evaluate(() =>
       window.__listStories__()
     )) as StoryInfo[];
+    await discovery.context.close();
 
     const needle = filter?.toLowerCase().trim();
     const stories = needle
@@ -176,6 +205,10 @@ export async function captureStories(
       const path = storyToPath(story.title, story.name);
       process.stdout.write(`  ${story.title}/${story.name} ... `);
 
+      // Fresh context (and page) per story: resets Chromium's renderer
+      // font-metric state so text measurement can't be polluted by a
+      // previous story's raster (see header comment).
+      const { context, page } = await openRunnerPage();
       try {
         const success = await page.evaluate(
           async (id) => window.__renderStory__(id),
@@ -225,11 +258,12 @@ export async function captureStories(
         const msg = err instanceof Error ? err.message : String(err);
         console.log(`FAILED: ${msg}`);
         result.failed.push({ path, error: msg });
+      } finally {
+        await context.close();
       }
     }
 
     result.captured.sort();
-    await context.close();
   } finally {
     await browser?.close();
     viteProc.kill();

@@ -451,11 +451,15 @@ export function mapMark(
 
   // Leaf-form `ref(name)` — not a combinator, not a mark factory.
   if (spec.type === "ref" && !spec.__combinator) {
-    return applyTranslate(
-      ref(
-        resolveRefSelection(spec.selection, resolveToken)
-      ) as unknown as Mark<any>
-    );
+    const refNode = ref(resolveRefSelection(spec.selection, resolveToken));
+    // `ref(name).name(name)` — the cross-tier name proxy. GoFishRef's
+    // `.name()` mutates in place and returns `this`, making the ref a
+    // constraint target of the enclosing layer (RefMarkIR carries `name`;
+    // mirrors the __inputRef rename branch above).
+    if (spec.name != null) {
+      (refNode as any).name(resolveNameField(spec.name, resolveToken));
+    }
+    return applyTranslate(refNode as unknown as Mark<any>);
   }
 
   // `offset` node: shift a single child by (x, y) render-pixels. Maps to the

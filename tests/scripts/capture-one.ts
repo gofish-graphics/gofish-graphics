@@ -82,35 +82,48 @@ async function main() {
     await waitForVite(VITE_PORT);
 
     browser = await chromium.launch({ headless: true });
-    const context = await browser.newContext({
-      viewport: { width: 1280, height: 720 },
-    });
-    const page = await context.newPage();
 
-    // Surface render-time errors — these are exactly what the review loop wants to see.
-    page.on("console", (msg) => {
-      if (msg.type() === "error") console.error(`[browser] ${msg.text()}`);
-      else if (process.env.DEBUG)
-        console.log(`[browser:${msg.type()}] ${msg.text()}`);
-    });
-    page.on("pageerror", (err) =>
-      console.error(`[browser pageerror] ${err.message}`)
-    );
+    // Fresh, isolated runner page per use — same font-metric isolation as
+    // capture-core.ts (see its header comment): rasterized faces mutate
+    // Chromium's measureText metrics renderer-wide, so when a filter matches
+    // several stories each must render in its own browser context to stay
+    // byte-comparable with the batch and Python captures.
+    const openRunnerPage = async () => {
+      const context = await browser!.newContext({
+        viewport: { width: 1280, height: 720 },
+      });
+      const page = await context.newPage();
+      // Surface render-time errors — these are exactly what the review loop wants to see.
+      page.on("console", (msg) => {
+        if (msg.type() === "error") console.error(`[browser] ${msg.text()}`);
+        else if (process.env.DEBUG)
+          console.log(`[browser:${msg.type()}] ${msg.text()}`);
+      });
+      page.on("pageerror", (err) =>
+        console.error(`[browser pageerror] ${err.message}`)
+      );
+      await page.goto(`http://localhost:${VITE_PORT}/stories-runner.html`, {
+        waitUntil: "domcontentloaded",
+      });
+      await page.waitForFunction(
+        () => (window as any).__STORIES_RUNNER_READY__ === true,
+        { timeout: 30_000 }
+      );
+      const runnerError = await page.evaluate(
+        () => (window as any).__STORIES_RUNNER_ERROR__
+      );
+      if (runnerError) {
+        await context.close();
+        throw new Error(`Stories runner failed to initialize: ${runnerError}`);
+      }
+      return { context, page };
+    };
 
-    await page.goto(`http://localhost:${VITE_PORT}/stories-runner.html`, {
-      waitUntil: "domcontentloaded",
-    });
-    await page.waitForFunction(
-      () => (window as any).__STORIES_RUNNER_READY__ === true,
-      { timeout: 30_000 }
+    const discovery = await openRunnerPage();
+    const stories = await discovery.page.evaluate(() =>
+      window.__listStories__()
     );
-    const runnerError = await page.evaluate(
-      () => (window as any).__STORIES_RUNNER_ERROR__
-    );
-    if (runnerError)
-      throw new Error(`Stories runner failed to initialize: ${runnerError}`);
-
-    const stories = await page.evaluate(() => window.__listStories__());
+    await discovery.context.close();
 
     // No filter → list what's available and exit. Helps when you don't know the id.
     if (!filter) {
@@ -152,6 +165,7 @@ async function main() {
 
       // Guard each story (like capture-js-dom.ts) so one render/timeout failure
       // doesn't abort the remaining matches when a filter hits several stories.
+      const { context, page } = await openRunnerPage();
       try {
         const success = await page.evaluate(
           async (id) => window.__renderStory__(id),
@@ -194,6 +208,8 @@ async function main() {
         console.log("OK");
       } catch (err) {
         console.log(`FAILED: ${err instanceof Error ? err.message : err}`);
+      } finally {
+        await context.close();
       }
     }
 
@@ -203,8 +219,6 @@ async function main() {
       );
       for (const p of written) console.log(`  ${p}`);
     }
-
-    await context.close();
   } finally {
     await browser?.close();
     viteProc.kill();

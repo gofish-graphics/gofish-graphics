@@ -297,6 +297,7 @@ const COMBINATOR_ONLY = [
   "atop",
   "mask",
   "enclose",
+  "position",
   "arrow",
 ];
 for (const wireType of COMBINATOR_ONLY) {

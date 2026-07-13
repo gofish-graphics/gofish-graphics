@@ -547,6 +547,7 @@ export const FRONTEND_IR_JSON_SCHEMA = {
             "table",
             "layer",
             "enclose",
+            "position",
             "arrow",
             "line",
             "ribbon",

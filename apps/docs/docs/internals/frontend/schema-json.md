@@ -582,6 +582,7 @@ for the API.
             "table",
             "layer",
             "enclose",
+            "position",
             "arrow",
             "line",
             "ribbon",

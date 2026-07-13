@@ -8,7 +8,12 @@
  * 5. Normalize DOM, write to tmp/python/<path>.html and tmp/python/<path>.png
  */
 
-import { chromium, type Browser, type Page } from "playwright";
+import {
+  chromium,
+  type Browser,
+  type BrowserContext,
+  type Page,
+} from "playwright";
 import { spawn, type ChildProcess } from "child_process";
 import {
   readFileSync,
@@ -485,23 +490,33 @@ async function main() {
     console.log("Harness server ready\n");
 
     browser = await chromium.launch({ headless: true });
-    const context = await browser.newContext({
-      viewport: { width: 1280, height: 720 },
-    });
-    const page = await context.newPage();
-    // Surface in-page failures in the capture log AND fail the story — an
-    // uncaught exception thrown from an async render microtask escapes the
-    // harness's try/catch (so __GOFISH_RENDER_ERROR__ never gets set), and
-    // the story would otherwise "capture OK" with a Loading/blank DOM.
-    page.on("pageerror", (err) => {
-      console.log(`    [pageerror] ${err.message}`);
-      pageErrors.push(err.message);
-    });
-    page.on("console", (msg) => {
-      if (msg.type() === "error" || msg.type() === "warning") {
-        console.log(`    [console.${msg.type()}] ${msg.text()}`);
-      }
-    });
+    // Fresh browser context (own renderer process) per story — the same
+    // font-metric isolation the JS capture uses (see capture-core.ts's
+    // header): rasterized font faces mutate Chromium's measureText metrics
+    // renderer-wide, and some of that state survives same-URL navigation.
+    const openPage = async (): Promise<{
+      context: BrowserContext;
+      page: Page;
+    }> => {
+      const context = await browser!.newContext({
+        viewport: { width: 1280, height: 720 },
+      });
+      const page = await context.newPage();
+      // Surface in-page failures in the capture log AND fail the story — an
+      // uncaught exception thrown from an async render microtask escapes the
+      // harness's try/catch (so __GOFISH_RENDER_ERROR__ never gets set), and
+      // the story would otherwise "capture OK" with a Loading/blank DOM.
+      page.on("pageerror", (err) => {
+        console.log(`    [pageerror] ${err.message}`);
+        pageErrors.push(err.message);
+      });
+      page.on("console", (msg) => {
+        if (msg.type() === "error" || msg.type() === "warning") {
+          console.log(`    [console.${msg.type()}] ${msg.text()}`);
+        }
+      });
+      return { context, page };
+    };
 
     for (const story of stories) {
       process.stdout.write(
@@ -559,6 +574,7 @@ async function main() {
         continue;
       }
 
+      const { context, page } = await openPage();
       try {
         pageErrors.length = 0;
         const { dom, screenshot } = await captureStory(
@@ -595,6 +611,8 @@ async function main() {
           story: `${story.module}::${story.function}`,
           reason: msg,
         });
+      } finally {
+        await context.close();
       }
       flushCaptureResults();
     }
@@ -628,8 +646,6 @@ async function main() {
         2
       )
     );
-
-    await context.close();
 
     // Surface capture failures so CI doesn't silently pass when stories
     // can't even produce output. Without this, the compare step has

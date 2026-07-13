@@ -836,6 +836,15 @@ export const COMBINATOR_MARKS: Record<string, ConstructDescriptor> = {
     },
   }),
 
+  position: combinatorMark("position", {
+    doc: "Set a single child's min-corner (x, y) in parent coordinates — an absolute-offset placement primitive, NOT center-anchored. Unlike `enclose`'s convex-hull styling, `position` draws nothing of its own; it exists for cases (e.g. the Topology story's combinator trees) that need to place one child precisely without `enclose`'s fill/stroke/hull limits.",
+    fields: {
+      key: { type: t.string },
+      x: ch.num("Min-corner x offset."),
+      y: ch.num("Min-corner y offset."),
+    },
+  }),
+
   arrow: combinatorMark("arrow", {
     doc: "A perfect-arrows box-to-box arrow between exactly two children.",
     fields: {
