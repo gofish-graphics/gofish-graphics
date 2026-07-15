@@ -12,6 +12,7 @@ covers:
   - packages/gofish-graphics/src/ast/displayList/lowerHelpers.ts
   - packages/gofish-ir/src/display-list/schema.ts
   - packages/gofish-ir/src/display-list/render.ts
+  - packages/gofish-ir/src/display-list/composite.ts
 ---
 
 # Rendering
@@ -252,8 +253,20 @@ three carry structure the flat-absolute fold cannot express on its own:
   list can't fold away.
 - **`composite`** — a Porter-Duff composite of two sub-lists, named with Figma-style
   operators (`over`/`atop`/`in`/`out`/`xor` plus a CSS `mixBlendMode`). The SVG
-  backend reconstructs the `feImage`/`feComposite`/`feBlend` filter graph; a
-  Canvas/WebGPU backend would map the operator to its own blend state.
+  backends reconstruct it as plain SVG masks and `mix-blend-mode`, not an
+  `<feImage>` filter graph: `<feImage>` referencing live SVG content has three
+  independent browser pathologies (Chrome's GPU raster path clips it at
+  fractional page zoom, issue #795; WebKit misaligns its content bbox; WebKit
+  can rasterize before a data-URI `<image>` inside it decodes and never
+  invalidate), so both painters emit the source and destination groups once
+  each and wire them together per-operator: the source is grayscaled with a
+  local `saturate(0)` filter, and each layer is alpha-masked by the other
+  layer's content (or its inverse) depending on the operator — `over` masks
+  neither, `atop`/`in` mask the destination by the source's alpha, `out`/`xor`
+  mask the destination by the source's _inverse_ alpha, and `in`/`xor`
+  additionally mask the source by the destination's alpha or inverse alpha.
+  Only `over`/`atop`/`in` add a `mix-blend-mode` to the destination layer. A
+  Canvas/WebGPU backend would map the operator to its own blend state instead.
 - **`mask`** — clip `content` by the alpha of `mask`.
 
 Each item also carries optional **provenance** — `datum` (the source row(s) the
@@ -290,7 +303,7 @@ test keeps them in lockstep, since they must agree pixel-for-pixel:
 Because items are already in final absolute pixels, painting is verbatim: a `rect`
 item becomes `<rect x y width height …/>`, an `ellipse` becomes `<ellipse cx cy …/>`,
 and so on. The only painter-side cleverness is reconstructing the `composite`/`mask`
-filter graphs and assigning their deterministic def ids.
+mask-and-blend-mode graphs and assigning their deterministic def ids.
 
 ## How the live `render()` wires it together
 

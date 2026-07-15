@@ -21,6 +21,7 @@ import type {
   MaskItem,
   Style,
 } from "./schema.js";
+import { compositeLayerConfig } from "./composite.js";
 
 const esc = (s: string): string =>
   s
@@ -118,10 +119,15 @@ const itemToSVG = (item: DisplayItem): string => {
  *  agree on id shape. */
 let compositeIdCounter = 0;
 
-/** Reconstruct the Porter-Duff filter / mask SVG from a structured
- *  composite/mask item — ported verbatim from porterDuff.tsx's `renderComposite`
- *  / mask render. The lower pass folded the legacy outer `<g transform>` into
- *  the items' absolute pixels and the `bbox`, so no wrapper group is emitted. */
+/** Reconstruct the Porter-Duff mask/blend SVG from a structured composite/mask
+ *  item — ported verbatim from `paintSVG.tsx`'s `composite`/`mask` cases,
+ *  which carry the full rationale for the mask/blend lowering (no `<feImage>`
+ *  — see that file for why: Chrome GPU-raster quantization at fractional zoom
+ *  clips `<feImage>` content, issue #795; WebKit has two more `<feImage>`
+ *  pathologies). The lower pass folded the legacy outer `<g transform>` into
+ *  the items' absolute pixels and the `bbox`, so for `mask` no wrapper group
+ *  is emitted; `composite` wraps its layers in a `<g transform="translate(…)">`
+ *  at the bbox origin since its children are lowered bbox-relative. */
 const compositeToSVG = (item: CompositeItem | MaskItem): string => {
   const uid = `gf-comp-${compositeIdCounter++}`;
   const sourceId = `${uid}-source`;
@@ -140,30 +146,85 @@ const compositeToSVG = (item: CompositeItem | MaskItem): string => {
     );
   }
 
-  const filterId = `${uid}-filter`;
+  const grayId = `${uid}-gray`;
+  const maskAlphaSrcId = `${uid}-mask-alpha-src`;
+  const maskAlphaDestId = `${uid}-mask-alpha-dest`;
+  const maskInvAlphaSrcId = `${uid}-mask-invalpha-src`;
+  const maskInvAlphaDestId = `${uid}-mask-invalpha-dest`;
   const { operator } = item;
   const blendMode = item.blendMode ?? "color";
-  const tail =
-    operator === "in"
-      ? `<feBlend in="compositeResult" in2="graySource" mode="${esc(blendMode)}" result="blendedIntersect"/>` +
-        `<feComposite in="blendedIntersect" in2="compositeResult" operator="in"/>`
-      : operator === "over" || operator === "atop"
-        ? `<feBlend in="compositeResult" in2="graySource" mode="${esc(blendMode)}"/>`
-        : "";
   const { x, y, w, h } = item.bbox;
+
+  const cfg = compositeLayerConfig[operator];
+  const { hasSourceLayer, hasBlend } = cfg;
+
+  const sourceMaskId =
+    cfg.sourceMask === "alphaDest"
+      ? maskAlphaDestId
+      : cfg.sourceMask === "invAlphaDest"
+        ? maskInvAlphaDestId
+        : undefined;
+  const destMaskId =
+    cfg.destMask === "alphaSrc"
+      ? maskAlphaSrcId
+      : cfg.destMask === "invAlphaSrc"
+        ? maskInvAlphaSrcId
+        : undefined;
+
+  /** `mask-type:alpha` mask that clips by the referenced layer's alpha. */
+  const alphaMask = (id: string, refId: string): string =>
+    `<mask id="${id}" maskUnits="userSpaceOnUse" maskContentUnits="userSpaceOnUse" style="mask-type:alpha"><use href="#${refId}"/></mask>`;
+  /** Inverse-alpha mask: white rect (fully opaque) minus the referenced
+   *  layer's shape (blacked out via `brightness(0)`), so the mask clips to
+   *  everywhere the referenced layer is NOT. */
+  const invAlphaMask = (id: string, refId: string): string =>
+    `<mask id="${id}" maskUnits="userSpaceOnUse" maskContentUnits="userSpaceOnUse">` +
+    `<rect x="0" y="0" width="${w}" height="${h}" fill="#fff"/>` +
+    `<use href="#${refId}" filter="brightness(0)"/></mask>`;
+
+  const grayFilterDef = hasSourceLayer
+    ? `<filter id="${grayId}" color-interpolation-filters="sRGB"><feColorMatrix type="saturate" values="0"/></filter>`
+    : "";
+  const alphaSrcMaskDef =
+    cfg.destMask === "alphaSrc" ? alphaMask(maskAlphaSrcId, sourceId) : "";
+  const alphaDestMaskDef =
+    cfg.sourceMask === "alphaDest"
+      ? alphaMask(maskAlphaDestId, destinationId)
+      : "";
+  const invAlphaSrcMaskDef =
+    cfg.destMask === "invAlphaSrc"
+      ? invAlphaMask(maskInvAlphaSrcId, sourceId)
+      : "";
+  const invAlphaDestMaskDef =
+    cfg.sourceMask === "invAlphaDest"
+      ? invAlphaMask(maskInvAlphaDestId, destinationId)
+      : "";
+
+  const sourceLayer = hasSourceLayer
+    ? `<use href="#${sourceId}" filter="url(#${grayId})"${
+        sourceMaskId ? ` mask="url(#${sourceMaskId})"` : ""
+      }/>`
+    : "";
+  const destLayer =
+    `<use href="#${destinationId}"` +
+    (hasBlend ? ` style="mix-blend-mode:${esc(blendMode)}"` : "") +
+    (destMaskId ? ` mask="url(#${destMaskId})"` : "") +
+    `/>`;
+
   return (
+    `<g transform="translate(${x} ${y})" style="isolation:isolate">` +
     `<defs>` +
     `<g id="${sourceId}">${item.source.map(itemToSVG).join("")}</g>` +
     `<g id="${destinationId}">${item.dest.map(itemToSVG).join("")}</g>` +
-    `<filter id="${filterId}" x="${x}" y="${y}" width="${w}" height="${h}" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">` +
-    `<feImage href="#${sourceId}" result="sourceImage"/>` +
-    `<feColorMatrix in="sourceImage" type="saturate" values="0" result="graySource"/>` +
-    `<feImage href="#${destinationId}" result="destination"/>` +
-    `<feComposite in="destination" in2="graySource" operator="${operator}" result="compositeResult"/>` +
-    tail +
-    `</filter>` +
+    grayFilterDef +
+    alphaSrcMaskDef +
+    alphaDestMaskDef +
+    invAlphaSrcMaskDef +
+    invAlphaDestMaskDef +
     `</defs>` +
-    `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="transparent" filter="url(#${filterId})"/>`
+    sourceLayer +
+    destLayer +
+    `</g>`
   );
 };
 
