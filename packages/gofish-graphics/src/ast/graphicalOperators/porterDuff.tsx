@@ -111,7 +111,12 @@ const createCompositeRelation = (type: string, operator: CompositeOperator) =>
             // Pixel bbox top-left, flip-AGNOSTIC (see `pixelBox`): under the
             // y-up flip the top edge is `gyMax`, in y-down free space it is
             // `gyMin` — the component-wise min picks the right one (issue #143/#16).
-            const { x: bx, y: by } = pixelBox(
+            const {
+              x: bx,
+              y: by,
+              w: bw,
+              h: bh,
+            } = pixelBox(
               [tx + minX, ty + minY],
               [tx + minX + width, ty + minY + height],
               outer
@@ -145,7 +150,7 @@ const createCompositeRelation = (type: string, operator: CompositeOperator) =>
                 kind: "composite",
                 operator,
                 blendMode,
-                bbox: { x: bx, y: by, w: width, h: height },
+                bbox: { x: bx, y: by, w: bw, h: bh },
                 source,
                 dest,
               },
@@ -290,7 +295,12 @@ export const mask = createNodeOperator(
           const width = intrinsicDims?.[0]?.size ?? 0;
           const height = intrinsicDims?.[1]?.size ?? 0;
           // Flip-agnostic bbox top-left — see `pixelBox` / the compositor (#143/#16).
-          const { x: bx, y: by } = pixelBox(
+          const {
+            x: bx,
+            y: by,
+            w: bw,
+            h: bh,
+          } = pixelBox(
             [tx + minX, ty + minY],
             [tx + minX + width, ty + minY + height],
             outer
@@ -299,7 +309,7 @@ export const mask = createNodeOperator(
           return [
             {
               kind: "mask",
-              bbox: { x: bx, y: by, w: width, h: height },
+              bbox: { x: bx, y: by, w: bw, h: bh },
               mask: maskItems,
               content,
             },
