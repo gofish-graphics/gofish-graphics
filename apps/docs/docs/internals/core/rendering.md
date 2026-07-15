@@ -12,6 +12,7 @@ covers:
   - packages/gofish-graphics/src/ast/displayList/lowerHelpers.ts
   - packages/gofish-ir/src/display-list/schema.ts
   - packages/gofish-ir/src/display-list/render.ts
+  - packages/gofish-ir/src/display-list/composite.ts
 ---
 
 # Rendering

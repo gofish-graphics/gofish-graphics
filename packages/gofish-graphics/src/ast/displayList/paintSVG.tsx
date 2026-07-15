@@ -16,7 +16,7 @@
  */
 
 import type { JSX } from "solid-js";
-import type { DisplayList } from "gofish-ir";
+import { DisplayList } from "gofish-ir";
 import { getLiveSlots } from "../../interaction/liveSlots";
 
 type Style = DisplayList.Style | undefined;
@@ -198,6 +198,16 @@ export function paintSVG(
       // the lowered items' bbox-relative coordinates) and `isolate`d so
       // `mix-blend-mode` only blends the two layers against each other, not
       // against whatever is behind the composite on the page.
+      //
+      // Cost: for `atop`/`in`/`xor`, the masked layer's sublist is referenced
+      // twice (once as mask content via `<use>`, once as the visible layer),
+      // so those sublists rasterize twice per composite. That's inherent to
+      // SVG's mask model, not a bug — the accepted price of leaving
+      // `<feImage>` behind.
+      //
+      // Per-operator layer/mask wiring lives in gofish-ir's
+      // `compositeLayerConfig` (the single source of truth both SVG backends
+      // consume); see that table for the over/atop/in/out/xor breakdown.
       const uid = `gf-comp-${compositeIdCounter++}`;
       const sourceId = `${uid}-source`;
       const destinationId = `${uid}-destination`;
@@ -210,24 +220,46 @@ export function paintSVG(
       const blendMode = item.blendMode ?? "color";
       const { x, y, w, h } = item.bbox;
 
-      const hasSourceLayer = operator !== "out";
-      const hasBlend =
-        operator === "over" || operator === "atop" || operator === "in";
-      const needsAlphaSrcMask = operator === "atop" || operator === "in";
-      const needsAlphaDestMask = operator === "in";
-      const needsInvAlphaSrcMask = operator === "out" || operator === "xor";
-      const needsInvAlphaDestMask = operator === "xor";
+      const cfg = DisplayList.compositeLayerConfig[operator];
+      const { hasSourceLayer, hasBlend } = cfg;
 
-      const sourceMaskId = needsAlphaDestMask
-        ? maskAlphaDestId
-        : needsInvAlphaDestMask
-          ? maskInvAlphaDestId
-          : undefined;
-      const destMaskId = needsAlphaSrcMask
-        ? maskAlphaSrcId
-        : needsInvAlphaSrcMask
-          ? maskInvAlphaSrcId
-          : undefined;
+      const sourceMaskId =
+        cfg.sourceMask === "alphaDest"
+          ? maskAlphaDestId
+          : cfg.sourceMask === "invAlphaDest"
+            ? maskInvAlphaDestId
+            : undefined;
+      const destMaskId =
+        cfg.destMask === "alphaSrc"
+          ? maskAlphaSrcId
+          : cfg.destMask === "invAlphaSrc"
+            ? maskInvAlphaSrcId
+            : undefined;
+
+      /** `mask-type:alpha` mask that clips by the referenced layer's alpha. */
+      const alphaMask = (id: string, refId: string): JSX.Element => (
+        <mask
+          id={id}
+          maskUnits="userSpaceOnUse"
+          maskContentUnits="userSpaceOnUse"
+          style="mask-type:alpha"
+        >
+          <use href={`#${refId}`} />
+        </mask>
+      );
+      /** Inverse-alpha mask: white rect (fully opaque) minus the referenced
+       *  layer's shape (blacked out via `brightness(0)`), so the mask clips
+       *  to everywhere the referenced layer is NOT. */
+      const invAlphaMask = (id: string, refId: string): JSX.Element => (
+        <mask
+          id={id}
+          maskUnits="userSpaceOnUse"
+          maskContentUnits="userSpaceOnUse"
+        >
+          <rect x={0} y={0} width={w} height={h} fill="#fff" />
+          <use href={`#${refId}`} filter="brightness(0)" />
+        </mask>
+      );
 
       return (
         <g transform={`translate(${x} ${y})`} style="isolation:isolate">
@@ -243,46 +275,13 @@ export function paintSVG(
                 <feColorMatrix type="saturate" values="0" />
               </filter>
             )}
-            {needsAlphaSrcMask && (
-              <mask
-                id={maskAlphaSrcId}
-                maskUnits="userSpaceOnUse"
-                maskContentUnits="userSpaceOnUse"
-                style="mask-type:alpha"
-              >
-                <use href={`#${sourceId}`} />
-              </mask>
-            )}
-            {needsAlphaDestMask && (
-              <mask
-                id={maskAlphaDestId}
-                maskUnits="userSpaceOnUse"
-                maskContentUnits="userSpaceOnUse"
-                style="mask-type:alpha"
-              >
-                <use href={`#${destinationId}`} />
-              </mask>
-            )}
-            {needsInvAlphaSrcMask && (
-              <mask
-                id={maskInvAlphaSrcId}
-                maskUnits="userSpaceOnUse"
-                maskContentUnits="userSpaceOnUse"
-              >
-                <rect x={0} y={0} width={w} height={h} fill="#fff" />
-                <use href={`#${sourceId}`} filter="brightness(0)" />
-              </mask>
-            )}
-            {needsInvAlphaDestMask && (
-              <mask
-                id={maskInvAlphaDestId}
-                maskUnits="userSpaceOnUse"
-                maskContentUnits="userSpaceOnUse"
-              >
-                <rect x={0} y={0} width={w} height={h} fill="#fff" />
-                <use href={`#${destinationId}`} filter="brightness(0)" />
-              </mask>
-            )}
+            {cfg.destMask === "alphaSrc" && alphaMask(maskAlphaSrcId, sourceId)}
+            {cfg.sourceMask === "alphaDest" &&
+              alphaMask(maskAlphaDestId, destinationId)}
+            {cfg.destMask === "invAlphaSrc" &&
+              invAlphaMask(maskInvAlphaSrcId, sourceId)}
+            {cfg.sourceMask === "invAlphaDest" &&
+              invAlphaMask(maskInvAlphaDestId, destinationId)}
           </defs>
           {hasSourceLayer && (
             <use

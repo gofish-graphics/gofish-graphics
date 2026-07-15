@@ -21,6 +21,7 @@ import type {
   MaskItem,
   Style,
 } from "./schema.js";
+import { compositeLayerConfig } from "./composite.js";
 
 const esc = (s: string): string =>
   s
@@ -154,44 +155,50 @@ const compositeToSVG = (item: CompositeItem | MaskItem): string => {
   const blendMode = item.blendMode ?? "color";
   const { x, y, w, h } = item.bbox;
 
-  const hasSourceLayer = operator !== "out";
-  const hasBlend =
-    operator === "over" || operator === "atop" || operator === "in";
-  const needsAlphaSrcMask = operator === "atop" || operator === "in";
-  const needsAlphaDestMask = operator === "in";
-  const needsInvAlphaSrcMask = operator === "out" || operator === "xor";
-  const needsInvAlphaDestMask = operator === "xor";
+  const cfg = compositeLayerConfig[operator];
+  const { hasSourceLayer, hasBlend } = cfg;
 
-  const sourceMaskId = needsAlphaDestMask
-    ? maskAlphaDestId
-    : needsInvAlphaDestMask
-      ? maskInvAlphaDestId
-      : undefined;
-  const destMaskId = needsAlphaSrcMask
-    ? maskAlphaSrcId
-    : needsInvAlphaSrcMask
-      ? maskInvAlphaSrcId
-      : undefined;
+  const sourceMaskId =
+    cfg.sourceMask === "alphaDest"
+      ? maskAlphaDestId
+      : cfg.sourceMask === "invAlphaDest"
+        ? maskInvAlphaDestId
+        : undefined;
+  const destMaskId =
+    cfg.destMask === "alphaSrc"
+      ? maskAlphaSrcId
+      : cfg.destMask === "invAlphaSrc"
+        ? maskInvAlphaSrcId
+        : undefined;
+
+  /** `mask-type:alpha` mask that clips by the referenced layer's alpha. */
+  const alphaMask = (id: string, refId: string): string =>
+    `<mask id="${id}" maskUnits="userSpaceOnUse" maskContentUnits="userSpaceOnUse" style="mask-type:alpha"><use href="#${refId}"/></mask>`;
+  /** Inverse-alpha mask: white rect (fully opaque) minus the referenced
+   *  layer's shape (blacked out via `brightness(0)`), so the mask clips to
+   *  everywhere the referenced layer is NOT. */
+  const invAlphaMask = (id: string, refId: string): string =>
+    `<mask id="${id}" maskUnits="userSpaceOnUse" maskContentUnits="userSpaceOnUse">` +
+    `<rect x="0" y="0" width="${w}" height="${h}" fill="#fff"/>` +
+    `<use href="#${refId}" filter="brightness(0)"/></mask>`;
 
   const grayFilterDef = hasSourceLayer
     ? `<filter id="${grayId}" color-interpolation-filters="sRGB"><feColorMatrix type="saturate" values="0"/></filter>`
     : "";
-  const alphaSrcMaskDef = needsAlphaSrcMask
-    ? `<mask id="${maskAlphaSrcId}" maskUnits="userSpaceOnUse" maskContentUnits="userSpaceOnUse" style="mask-type:alpha"><use href="#${sourceId}"/></mask>`
-    : "";
-  const alphaDestMaskDef = needsAlphaDestMask
-    ? `<mask id="${maskAlphaDestId}" maskUnits="userSpaceOnUse" maskContentUnits="userSpaceOnUse" style="mask-type:alpha"><use href="#${destinationId}"/></mask>`
-    : "";
-  const invAlphaSrcMaskDef = needsInvAlphaSrcMask
-    ? `<mask id="${maskInvAlphaSrcId}" maskUnits="userSpaceOnUse" maskContentUnits="userSpaceOnUse">` +
-      `<rect x="0" y="0" width="${w}" height="${h}" fill="#fff"/>` +
-      `<use href="#${sourceId}" filter="brightness(0)"/></mask>`
-    : "";
-  const invAlphaDestMaskDef = needsInvAlphaDestMask
-    ? `<mask id="${maskInvAlphaDestId}" maskUnits="userSpaceOnUse" maskContentUnits="userSpaceOnUse">` +
-      `<rect x="0" y="0" width="${w}" height="${h}" fill="#fff"/>` +
-      `<use href="#${destinationId}" filter="brightness(0)"/></mask>`
-    : "";
+  const alphaSrcMaskDef =
+    cfg.destMask === "alphaSrc" ? alphaMask(maskAlphaSrcId, sourceId) : "";
+  const alphaDestMaskDef =
+    cfg.sourceMask === "alphaDest"
+      ? alphaMask(maskAlphaDestId, destinationId)
+      : "";
+  const invAlphaSrcMaskDef =
+    cfg.destMask === "invAlphaSrc"
+      ? invAlphaMask(maskInvAlphaSrcId, sourceId)
+      : "";
+  const invAlphaDestMaskDef =
+    cfg.sourceMask === "invAlphaDest"
+      ? invAlphaMask(maskInvAlphaDestId, destinationId)
+      : "";
 
   const sourceLayer = hasSourceLayer
     ? `<use href="#${sourceId}" filter="url(#${grayId})"${
