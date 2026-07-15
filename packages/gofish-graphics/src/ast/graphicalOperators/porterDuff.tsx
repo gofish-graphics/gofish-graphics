@@ -93,8 +93,8 @@ const createCompositeRelation = (type: string, operator: CompositeOperator) =>
           // so its children are NOT pre-lowered: we re-walk the two subtrees
           // ourselves, offset by the node's baked translate (the legacy
           // `<g transform>`), and emit one CompositeItem. source = first child
-          // (`#…-source`), dest = second (`#…-destination`), matching
-          // `renderComposite`'s feImage wiring.
+          // (`#…-source`), dest = second (`#…-destination`), matching the SVG
+          // backends' `composite` source/destination group ids.
           lower: (
             { intrinsicDims, transform, coordinateTransform },
             _children,
@@ -123,13 +123,11 @@ const createCompositeRelation = (type: string, operator: CompositeOperator) =>
             );
 
             // The two layers are lowered RELATIVE to the bbox pixel origin, not
-            // at absolute pixels. The SVG backend places each layer in a
-            // `<feImage>` whose subregion is the filter region (the bbox), and
-            // browsers offset a referenced `<feImage>` element BY that region
-            // origin — so an absolute-positioned child would double-count it.
-            // Legacy `renderComposite` sidestepped this by keeping children in
-            // the compositor's local frame (min ≈ 0) with the filter at that
-            // same min; we reproduce that by subtracting the bbox origin.
+            // at absolute pixels: both SVG backends wrap the composited layers
+            // in a `<g transform="translate(bbox.x bbox.y)">` (see
+            // `paintSVG`'s / `render.ts`'s `composite` case), so child
+            // coordinates must start near the bbox's own origin rather than
+            // the document's. We reproduce that by subtracting the bbox origin.
             const composed: ToPixel = ([cx, cy]) => {
               const [ax, ay] = outer([tx + cx, ty + cy]);
               return [ax - bx, ay - by];

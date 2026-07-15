@@ -171,33 +171,66 @@ export function paintSVG(
       );
     }
     case "composite": {
+      // Porter-Duff composite, lowered to plain SVG masks + `mix-blend-mode`
+      // (no `<feImage>`). `<feImage>` referencing live SVG content has three
+      // independent browser pathologies: Chrome's GPU raster path quantizes
+      // the reference at fractional page zoom and clips the right/bottom of
+      // the composited image (issue #795); WebKit aligns the referenced
+      // element's content bbox to the filter region's origin rather than the
+      // element's own origin (diverging from Chromium's behavior); and WebKit
+      // can rasterize the filter before a data-URI `<image>` inside it has
+      // decoded, then never invalidate to repaint once it has. Masks and
+      // `mix-blend-mode` are the ordinary, well-tested rendering path — no
+      // `<feImage>` anywhere in the graph below.
+      //
+      // Grayscale-then-composite becomes: paint the source once, grayscale it
+      // with a local `saturate(0)` filter, and paint the destination once;
+      // which of the two gets alpha-masked by the other (and whether the
+      // destination gets a `mix-blend-mode`) depends on the operator:
+      //
+      //   over:  gray(src) unmasked           + dest blended, unmasked
+      //   atop:  gray(src) unmasked           + dest blended, masked by alpha(src)
+      //   in:    gray(src) masked by alpha(dest) + dest blended, masked by alpha(src)
+      //   out:   (no source layer)            + dest NOT blended, masked by inverse-alpha(src)
+      //   xor:   gray(src) masked by inverse-alpha(dest) + dest NOT blended, masked by inverse-alpha(src)
+      //
+      // Both layers live in a group translated to the bbox origin (matching
+      // the lowered items' bbox-relative coordinates) and `isolate`d so
+      // `mix-blend-mode` only blends the two layers against each other, not
+      // against whatever is behind the composite on the page.
       const uid = `gf-comp-${compositeIdCounter++}`;
       const sourceId = `${uid}-source`;
       const destinationId = `${uid}-destination`;
-      const filterId = `${uid}-filter`;
+      const grayId = `${uid}-gray`;
+      const maskAlphaSrcId = `${uid}-mask-alpha-src`;
+      const maskAlphaDestId = `${uid}-mask-alpha-dest`;
+      const maskInvAlphaSrcId = `${uid}-mask-invalpha-src`;
+      const maskInvAlphaDestId = `${uid}-mask-invalpha-dest`;
       const { operator } = item;
-      const blendMode = (item.blendMode ?? "color") as "multiply" | "screen";
-      const tail =
-        operator === "in" ? (
-          <>
-            <feBlend
-              in="compositeResult"
-              in2="graySource"
-              mode={blendMode}
-              result="blendedIntersect"
-            />
-            <feComposite
-              in="blendedIntersect"
-              in2="compositeResult"
-              operator="in"
-            />
-          </>
-        ) : operator === "over" || operator === "atop" ? (
-          <feBlend in="compositeResult" in2="graySource" mode={blendMode} />
-        ) : null;
+      const blendMode = item.blendMode ?? "color";
       const { x, y, w, h } = item.bbox;
+
+      const hasSourceLayer = operator !== "out";
+      const hasBlend =
+        operator === "over" || operator === "atop" || operator === "in";
+      const needsAlphaSrcMask = operator === "atop" || operator === "in";
+      const needsAlphaDestMask = operator === "in";
+      const needsInvAlphaSrcMask = operator === "out" || operator === "xor";
+      const needsInvAlphaDestMask = operator === "xor";
+
+      const sourceMaskId = needsAlphaDestMask
+        ? maskAlphaDestId
+        : needsInvAlphaDestMask
+          ? maskInvAlphaDestId
+          : undefined;
+      const destMaskId = needsAlphaSrcMask
+        ? maskAlphaSrcId
+        : needsInvAlphaSrcMask
+          ? maskInvAlphaSrcId
+          : undefined;
+
       return (
-        <>
+        <g transform={`translate(${x} ${y})`} style="isolation:isolate">
           <defs>
             <g id={sourceId}>
               {item.source.map((c) => paintSVG(c, interactive))}
@@ -205,41 +238,65 @@ export function paintSVG(
             <g id={destinationId}>
               {item.dest.map((c) => paintSVG(c, interactive))}
             </g>
-            <filter
-              id={filterId}
-              x={x}
-              y={y}
-              width={w}
-              height={h}
-              filterUnits="userSpaceOnUse"
-              color-interpolation-filters="sRGB"
-            >
-              <feImage href={`#${sourceId}`} result="sourceImage" />
-              <feColorMatrix
-                in="sourceImage"
-                type="saturate"
-                values="0"
-                result="graySource"
-              />
-              <feImage href={`#${destinationId}`} result="destination" />
-              <feComposite
-                in="destination"
-                in2="graySource"
-                operator={operator}
-                result="compositeResult"
-              />
-              {tail}
-            </filter>
+            {hasSourceLayer && (
+              <filter id={grayId} color-interpolation-filters="sRGB">
+                <feColorMatrix type="saturate" values="0" />
+              </filter>
+            )}
+            {needsAlphaSrcMask && (
+              <mask
+                id={maskAlphaSrcId}
+                maskUnits="userSpaceOnUse"
+                maskContentUnits="userSpaceOnUse"
+                style="mask-type:alpha"
+              >
+                <use href={`#${sourceId}`} />
+              </mask>
+            )}
+            {needsAlphaDestMask && (
+              <mask
+                id={maskAlphaDestId}
+                maskUnits="userSpaceOnUse"
+                maskContentUnits="userSpaceOnUse"
+                style="mask-type:alpha"
+              >
+                <use href={`#${destinationId}`} />
+              </mask>
+            )}
+            {needsInvAlphaSrcMask && (
+              <mask
+                id={maskInvAlphaSrcId}
+                maskUnits="userSpaceOnUse"
+                maskContentUnits="userSpaceOnUse"
+              >
+                <rect x={0} y={0} width={w} height={h} fill="#fff" />
+                <use href={`#${sourceId}`} filter="brightness(0)" />
+              </mask>
+            )}
+            {needsInvAlphaDestMask && (
+              <mask
+                id={maskInvAlphaDestId}
+                maskUnits="userSpaceOnUse"
+                maskContentUnits="userSpaceOnUse"
+              >
+                <rect x={0} y={0} width={w} height={h} fill="#fff" />
+                <use href={`#${destinationId}`} filter="brightness(0)" />
+              </mask>
+            )}
           </defs>
-          <rect
-            x={x}
-            y={y}
-            width={w}
-            height={h}
-            fill="transparent"
-            filter={`url(#${filterId})`}
+          {hasSourceLayer && (
+            <use
+              href={`#${sourceId}`}
+              filter={`url(#${grayId})`}
+              mask={sourceMaskId ? `url(#${sourceMaskId})` : undefined}
+            />
+          )}
+          <use
+            href={`#${destinationId}`}
+            style={hasBlend ? `mix-blend-mode:${blendMode}` : undefined}
+            mask={destMaskId ? `url(#${destMaskId})` : undefined}
           />
-        </>
+        </g>
       );
     }
     case "mask": {
