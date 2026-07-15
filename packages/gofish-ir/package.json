@@ -37,6 +37,7 @@
   },
   "scripts": {
     "build": "tsc && tsx scripts/emit-jsonschema.ts",
+    "prepare": "pnpm run build",
     "test": "tsx src/tests/schema.test.ts && tsx src/tests/displayList.test.ts && tsx src/tests/descriptors.test.ts",
     "prepublishOnly": "pnpm run build"
   },
