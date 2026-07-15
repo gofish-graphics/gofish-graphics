@@ -10,9 +10,10 @@ low-level mark/operator API are supported. (See [notes/design.md](notes/design.m
 pip install --pre gofish-graphics
 ```
 
-The latest stable release on PyPI is old and lags far behind development. These docs
-describe the current dev builds, which are published on every change to `main`. You
-must include the `--pre` flag, otherwise pip installs the outdated stable release.
+The latest stable release on PyPI is old and lags far behind development. The docs at
+[gofish.graphics](https://gofish.graphics/python/get-started) describe the current dev
+builds, which are published on every change to `main`. You must include the `--pre`
+flag, otherwise pip installs the outdated stable release.
 
 The package is imported as `gofish`:
 
