@@ -18,7 +18,8 @@ adopters install the latest **dev** build with `--pre` (shown above). Dev builds
 are published whenever `main` changes; pin a specific one with
 `gofish-graphics==<version>` once you find a build you like.
 
-Prefer the stable release? Install it with `pip install gofish-graphics`.
+The stable release on PyPI is far behind and will not match these docs, so do not
+drop the `--pre` flag.
 :::
 
 Import it as `gofish`:
