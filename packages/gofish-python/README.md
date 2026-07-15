@@ -1,33 +1,28 @@
 # gofish-python
 
-A Python wrapper for the GoFish graphics library. Supports the mid-level chart API for now. The
-low-level API is not supported yet. (See [notes/design.md](notes/design.md) and [notes/implementation.md](notes/implementation.md) for more details.)
-
-**Note**: This package uses [uv](https://github.com/astral-sh/uv) for fast package management and testing.
-
-## Prerequisites
-
-- **Python 3.8+**
-- **[uv](https://github.com/astral-sh/uv)** - Fast Python package manager
-- **Node.js** (for building the widget bundle)
-- **pnpm** (for managing Node.js dependencies)
+A Python wrapper for the GoFish graphics library. Both the mid-level chart API and the
+low-level mark/operator API are supported. (See [notes/design.md](notes/design.md) and
+[notes/implementation.md](notes/implementation.md) for more details.)
 
 ## Installation
 
-This package uses [uv](https://github.com/astral-sh/uv) for fast package management.
-
 ```bash
-cd packages/gofish-python
-uv pip install -e .
+pip install --pre gofish-graphics
 ```
 
-### Installing Node.js Dependencies
+The latest stable release on PyPI is old and lags far behind development. The docs at
+[gofish.graphics](https://gofish.graphics/python/get-started) describe the current dev
+builds, which are published on every change to `main`. You must include the `--pre`
+flag, otherwise pip installs the outdated stable release.
 
-If you need to build the widget bundle, install Node.js dependencies:
+The package is imported as `gofish`:
 
-```bash
-pnpm install
+```python
+from gofish import chart
 ```
+
+See the [getting started docs](https://gofish.graphics/python/get-started) for a full
+introduction.
 
 ## Usage
 
@@ -76,7 +71,32 @@ The JSON IR has the following structure:
 }
 ```
 
-## Building
+## Development
+
+**Note**: This package uses [uv](https://github.com/astral-sh/uv) for fast package
+management and testing.
+
+### Prerequisites
+
+- **Python 3.10+**
+- **[uv](https://github.com/astral-sh/uv)** - Fast Python package manager
+- **Node.js** (for building the widget bundle)
+- **pnpm** (for managing Node.js dependencies)
+
+### Development Install
+
+```bash
+cd packages/gofish-python
+uv pip install -e .
+```
+
+#### Installing Node.js Dependencies
+
+If you need to build the widget bundle, install Node.js dependencies:
+
+```bash
+pnpm install
+```
 
 ### Building the Widget Bundle
 
@@ -98,9 +118,9 @@ This will:
 
 **Note**: The build process will automatically use `gofish-graphics/dist/index.js` if available, otherwise it falls back to the package import. Make sure `gofish-graphics` is built first if you're developing locally.
 
-## Running Tests
+### Running Tests
 
-### Python Unit Tests
+#### Python Unit Tests
 
 ```bash
 # Install with test dependencies
@@ -119,7 +139,7 @@ pytest tests/test_ast.py
 pytest -v
 ```
 
-### Jupyter Notebook Tests
+#### Jupyter Notebook Tests
 
 The package includes Jupyter notebooks for interactive testing:
 
@@ -136,7 +156,7 @@ jupyter notebook
 ./run_notebook.sh
 ```
 
-## Development Workflow
+### Development Workflow
 
 1. **Install dependencies**:
 

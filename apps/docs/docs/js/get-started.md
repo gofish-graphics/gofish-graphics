@@ -15,7 +15,8 @@ adopters install the **nightly** build (shown above) to get the latest features
 and fixes. Nightlies are published whenever `main` changes; pin a specific one
 with `gofish-graphics@<version>` once you find a build you like.
 
-Prefer the stable release? Install it with `npm install gofish-graphics`.
+The stable release on npm is far behind and will not match these docs, so do not
+drop the `@nightly` tag.
 :::
 
 ## 2. Create a chart!
@@ -62,7 +63,7 @@ const alphabet = [
 
 const root = document.createElement("div");
 
-chart(seafood, { axes: true })
+chart(alphabet, { axes: true })
   .flow(spread({ by: "letter", dir: "x" }))
   .mark(rect({ h: "frequency" }))
   .render(root, {

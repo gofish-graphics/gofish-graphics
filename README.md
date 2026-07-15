@@ -20,11 +20,8 @@ pnpm add gofish-graphics@nightly
 yarn add gofish-graphics@nightly
 ```
 
-For the last stable release, drop the `@nightly` tag:
-
-```bash
-npm install gofish-graphics
-```
+The stable release on npm is far behind and will not match the docs, so do not
+drop the `@nightly` tag.
 
 Using Python? `pip install --pre gofish-graphics` (see the
 [docs](https://gofish.graphics/python/get-started)).
