@@ -310,6 +310,16 @@ export function evalFieldValues<T>(
     }
     if (op.op === "normalize") throw normalizeNotSupportedError();
     if (op.op === "map") {
+      // `map` is elementwise, so it can only run over the pre-aggregate
+      // per-row values. Applying it silently here after an aggregate was
+      // already recorded would reorder the pipeline (map-then-fold when the
+      // user wrote fold-then-map) — make that loud instead.
+      if (agg !== undefined) {
+        throw new Error(
+          `field(...).map() must precede aggregation — write ` +
+            `field(x).map({...}).${agg.op}(), not field(x).${agg.op}().map({...}).`
+        );
+      }
       values = applyMapOp(values, op);
       continue;
     }

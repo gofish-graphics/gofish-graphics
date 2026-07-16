@@ -199,14 +199,25 @@ const isFieldExprValue = (v: unknown): v is FieldExpr | FieldExprWire =>
  * a plain row or a homogeneous bag of refs (e.g. a `group()`-bound ribbon) —
  * then run through the field's own op pipeline (`evalFieldValues`, so
  * `.map(...)` applies identically to the label/value-channel paths).
+ *
+ * Returns `undefined` when the field-expr yields no usable number — a
+ * `.map()` miss with no default (`null`/`undefined`), or a mapping value
+ * that isn't numeric (`Number(...)` → NaN). An `undefined` hint means "don't
+ * set a z hint at all": the mark keeps BASE paint order, per `.map()`'s
+ * documented fall-through semantics.
  */
-function resolveZOrderValue(value: ZOrderValue, datum: unknown): number {
+function resolveZOrderValue(
+  value: ZOrderValue,
+  datum: unknown
+): number | undefined {
   if (typeof value === "function") return value(datum);
   if (isFieldExprValue(value)) {
     const name = value.name;
     const scalar = projectPath(datum, name);
     const { values } = evalFieldValues(value, [{ [name]: scalar }]);
-    return Number(values[0]);
+    if (values[0] === undefined || values[0] === null) return undefined;
+    const n = Number(values[0]);
+    return Number.isNaN(n) ? undefined : n;
   }
   return value;
 }
@@ -445,7 +456,11 @@ export const labelModifier = createModifier<
 export const zOrderModifier = createModifier<[value: ZOrderValue]>({
   name: "zOrder",
   apply: (node, _layerContext, datum, value) => {
-    node.zOrder(resolveZOrderValue(value, datum));
+    // An undefined resolution (field-expr `.map()` miss with no default, or a
+    // non-numeric mapping value) means "no z hint": leave the node on base
+    // paint order rather than stamping NaN.
+    const resolved = resolveZOrderValue(value, datum);
+    if (resolved !== undefined) node.zOrder(resolved);
   },
   tag: (wrapped, base, value) => {
     // A constant or field-expr hint round-trips; a callback can't be
