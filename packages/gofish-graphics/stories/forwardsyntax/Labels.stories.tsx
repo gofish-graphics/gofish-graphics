@@ -298,6 +298,40 @@ export const LabelOnSpread: StoryObj<Args> = {
   }
 };
 
+// ─── Conditional group callout (field(...).map(), #796) ───────────────────────
+// `.label(field("lake").map({...}), options)` chained on the `spread`
+// operator: `map()` is a partial mapping — only "Lake B" has an entry, so
+// only its group gets a callout text ("Best catch!"); every other group's
+// accessor evaluates to `undefined` (no `default` given), and the label
+// elaborator skips a group whose text is empty. This is the same mechanism
+// LayeredBarsAndArea's `.zOrder(field("site").map(...))` uses for data-driven
+// paint order, applied to labels instead: a partial discrete mapping is a
+// keyed projection into a NEW domain (here, callout text) that a bare field
+// name or an aggregate can't express.
+
+export const LabelOnSpreadConditional: StoryObj<Args> = {
+  name: "Label on Spread (conditional, field.map())",
+  args: { w: 500, h: 300 },
+  render: (args) => {
+    const container = initializeContainer();
+    chart(seafood, { axes: false })
+      .flow(
+        spread({ by: "lake", dir: "x", spacing: 50 }).label(
+          field("lake").map({ "Lake B": "Best catch!" }),
+          {
+            position: "outset-top",
+            fontSize: 13,
+            color: "#c0392b",
+          }
+        ),
+        stack({ by: "species", dir: "x" })
+      )
+      .mark(rect({ h: "count", fill: "species" }))
+      .render(container, { w: args.w, h: args.h });
+    return container;
+  }
+};
+
 // ─── Label on stack (per-group label, #702) ───────────────────────────────────
 // `.label(accessor)` chained directly on a `stack({by, dir})` operator: each
 // class's leaf produces one rect, stamped with that leaf's own rows and a

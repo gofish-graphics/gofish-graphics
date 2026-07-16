@@ -126,7 +126,9 @@ appends one op to an ordered pipeline. It works in two disjoint places:
 - As a mark or `size` channel value (a **value** slot): `.sum()`, `.mean()`,
   `.count()`, and `.distinct()` **fold a group's rows to one number**,
   overriding the channel's own default aggregation (sum for size, mean for
-  position).
+  position). `.map(mapping, default=...)` **replaces each value through a
+  partial mapping** — it is elementwise, not a fold, and also works in
+  `.label()` and `.z_order()` accessors.
 
 Mixing the two — an aggregate op on `by`, or a domain op on a value channel —
 raises.
@@ -191,6 +193,42 @@ chart(data).flow(
 `.count()` and `.distinct()` report measure `"count"` (they're counts, not the
 source field's own units) unless you annotate the accessor explicitly:
 `field("id", measure="my-measure").distinct()`.
+
+**Map values through a partial discrete mapping** —
+`.map(mapping, default=...)` is a keyed projection into a NEW domain
+(semantics of polars' `replace_strict`, named after pandas' `Series.map`).
+Each value is looked up in `mapping`; a miss becomes `default` when given,
+else `None` — and each consuming surface applies its own fallback for `None`:
+a `.label()` **skips** that group, `.z_order()` falls back to base paint
+order. `mapping` must be a plain dict (a callable raises `TypeError` — use
+`derive()` for arbitrary transforms).
+
+```python
+# Data-driven paint order: raise the two emphasized sites' areas above
+# the rest — no per-datum callback needed
+chart(selectAll("bars")).flow(group(by="variety"), group(by="site")).mark(
+    ribbon(opacity=0.7).z_order(
+        field("site").map({"Morris": 1, "Grand Rapids": 1}, default=0)
+    )
+)
+```
+
+```python
+# Conditional group callout: only "Lake B" maps to a text; every other
+# group's label evaluates to None and is skipped
+chart(seafood).flow(
+    spread(by="lake", dir="x").label(
+        field("lake").map({"Lake B": "Best catch!"}),
+        position="outset-top",
+    ),
+    stack(by="species", dir="x"),
+).mark(rect(h="count", fill="species"))
+```
+
+An explicit `default=None` is a real default (misses become `None` on the
+wire, `"default": null`), distinct from omitting the argument entirely (no
+`default` key on the wire; misses fall through to each surface's own
+fallback).
 
 ## Space-filling spines (mosaic / marimekko) {#space-filling-spines-mosaic-marimekko}
 

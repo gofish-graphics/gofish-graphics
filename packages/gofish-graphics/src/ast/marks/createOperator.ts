@@ -46,8 +46,11 @@ import {
   hasNormalizeOp,
   splitAtNormalize,
   applyEntryNormalize,
+  evalFieldValues,
   FieldExpr,
+  type FieldExprWire,
 } from "../fieldExpr";
+import { projectPath } from "../datumProjection";
 import type { LabelAccessor, LabelOptions } from "../labels/labelPlacement";
 import type { NameableMark } from "../withGoFish";
 import {
@@ -172,9 +175,41 @@ export type ModifierConfig<Args extends any[] = any[]> = {
   tag?: (wrapped: Mark<any>, base: Mark<any>, ...args: Args) => void;
 };
 
-/** A paint-order hint: a constant, or a callback resolved per-instance against
- *  the datum the mark is bound to. */
-export type ZOrderValue<T = any> = number | ((datum: T) => number);
+/** A paint-order hint: a constant, a callback resolved per-instance against
+ *  the datum the mark is bound to, or a `field(...)` accessor (e.g.
+ *  `field("site").map({...}, { default: 0 })`) resolved the same way a
+ *  callback is — but, unlike a callback, serializable, so it round-trips
+ *  through IR (see `zOrderModifier`'s `tag`). */
+export type ZOrderValue<T = any> =
+  | number
+  | ((datum: T) => number)
+  | FieldExpr
+  | FieldExprWire;
+
+/** Is this a `field(...)` accessor (class instance or deserialized wire
+ *  form)? Mirrors the identical duck-typed check in `labelPlacement.ts`. */
+const isFieldExprValue = (v: unknown): v is FieldExpr | FieldExprWire =>
+  v instanceof FieldExpr ||
+  (v !== null && typeof v === "object" && (v as any).type === "field");
+
+/**
+ * Resolve a `.zOrder(value)` hint against the mark's bound datum. A field-
+ * expr accessor is evaluated against the SAME projected scalar `project(d,
+ * name)` (`projectPath`) would read off `d` — so it works whether `datum` is
+ * a plain row or a homogeneous bag of refs (e.g. a `group()`-bound ribbon) —
+ * then run through the field's own op pipeline (`evalFieldValues`, so
+ * `.map(...)` applies identically to the label/value-channel paths).
+ */
+function resolveZOrderValue(value: ZOrderValue, datum: unknown): number {
+  if (typeof value === "function") return value(datum);
+  if (isFieldExprValue(value)) {
+    const name = value.name;
+    const scalar = projectPath(datum, name);
+    const { values } = evalFieldValues(value, [{ [name]: scalar }]);
+    return Number(values[0]);
+  }
+  return value;
+}
 
 /** Register a modifier. Identity at runtime; the value is the typed config. */
 export function createModifier<Args extends any[]>(
@@ -410,14 +445,17 @@ export const labelModifier = createModifier<
 export const zOrderModifier = createModifier<[value: ZOrderValue]>({
   name: "zOrder",
   apply: (node, _layerContext, datum, value) => {
-    node.zOrder(typeof value === "function" ? value(datum) : value);
+    node.zOrder(resolveZOrderValue(value, datum));
   },
   tag: (wrapped, base, value) => {
-    // A constant hint round-trips; a callback can't be JSON-serialized, so it
-    // is dropped from the emitted IR (the rest of the tag still propagates),
-    // mirroring `.label(fn)`.
+    // A constant or field-expr hint round-trips; a callback can't be
+    // JSON-serialized, so it is dropped from the emitted IR (the rest of the
+    // tag still propagates), mirroring `.label(fn)`.
     propagateSerialize(base, wrapped, (tag) => {
       if (typeof value === "number") tag.zOrder = value;
+      else if (isFieldExprValue(value)) {
+        tag.zOrder = value instanceof FieldExpr ? value.toJSON() : value;
+      }
     });
   },
 });

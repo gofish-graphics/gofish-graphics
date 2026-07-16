@@ -86,29 +86,36 @@ options list, including `fontFamily`/`fontWeight`/`fontStyle`.
 ### `.zOrder(value)` — paint order {#zorder}
 
 `.zOrder(value)` sets the mark's paint-order hint: higher values paint **later**
-(on top). `value` is either a constant or a **callback** resolved per-instance
-against the datum the mark is bound to, so paint order can be data-driven without
-splitting the mark into separately-named layers:
+(on top). `value` is a constant, a
+[`field(...)`](/js/api/operators/spread#field-expression-pipeline) accessor,
+or a **callback** — the latter two are resolved per-instance against the datum
+the mark is bound to, so paint order can be data-driven without splitting the
+mark into separately-named layers:
 
 ```ts
 // Constant: raise this whole mark above its siblings.
 rect({ h: "count" }).zOrder(1);
 
-// Data-driven: raise the emphasized category over the rest. `d` is the bag the
-// mark is bound to, so read the field with `project` (see ref / selection).
-const isEmphasized = (site: unknown) =>
-  site === "Morris" || site === "Grand Rapids";
-
-area({ opacity: 0.7 }).zOrder((d) =>
-  isEmphasized(project(d, "site")) ? 1 : 0
+// Data-driven: raise the emphasized categories over the rest. `.map()` is a
+// partial mapping — unmapped sites get the `default`.
+ribbon({ opacity: 0.7 }).zOrder(
+  field("site").map({ Morris: 1, "Grand Rapids": 1 }, { default: 0 })
 );
+
+// Callback escape hatch — arbitrary logic, but not serializable. `d` is the
+// bag the mark is bound to, so read the field with `project` (see ref /
+// selection).
+area({ opacity: 0.7 }).zOrder((d) => (project(d, "site") === "Morris" ? 1 : 0));
 ```
 
 Within a layer, children are painted in `(zOrder, document order)` order, so a
-higher `zOrder` lifts a mark in front of its lower siblings. The constant form
-round-trips through the [IR](/internals/python/bridge); a callback can't be
-serialized, so it is applied at render time and omitted from the emitted IR (the
-same as a function [`.label`](#modifiers) accessor).
+higher `zOrder` lifts a mark in front of its lower siblings. The constant and
+`field(...)` forms round-trip through the [IR](/internals/python/bridge); a
+callback can't be serialized, so it is applied at render time and omitted from
+the emitted IR (the same as a function [`.label`](#modifiers) accessor). A
+`field(...)` zOrder whose `.map()` misses (no `default` given) evaluates to
+`undefined`, which falls back to the base paint order — the same as not calling
+`.zOrder()` on that instance.
 
 ### `.translate({ x?, y? })` — pixel offset
 

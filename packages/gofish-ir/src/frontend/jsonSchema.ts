@@ -447,6 +447,22 @@ export const FRONTEND_IR_JSON_SCHEMA = {
           required: ["op"],
           properties: { op: { const: "distinct" } },
         },
+        {
+          type: "object",
+          required: ["op", "mapping"],
+          properties: {
+            op: { const: "map" },
+            mapping: {
+              type: "object",
+              description:
+                "Partial discrete mapping, keyed by the field's (stringified) values.",
+            },
+            default: {
+              description:
+                "Value for an unmapped key. Presence on the wire (vs. omission) is itself meaningful: an explicit `default: null` still applies, while an omitted default falls through to undefined.",
+            },
+          },
+        },
       ],
     },
     MarkIR: {
