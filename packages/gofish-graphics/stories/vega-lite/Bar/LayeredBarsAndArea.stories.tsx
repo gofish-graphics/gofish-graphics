@@ -10,7 +10,6 @@ import {
   layer,
   selectAll,
   palette,
-  project,
   field,
 } from "../../../src/lib";
 import data from "vega-datasets";
@@ -29,6 +28,16 @@ type Args = { w: number; h: number };
 
 const isEmphasized = (site: unknown) =>
   site === "Morris" || site === "Grand Rapids";
+
+// Data-driven paint order (#796): the two emphasized sites' areas (z = 1)
+// paint on top of the gray ones (z = 0). This is `field("site").map(...)`
+// rather than the `(d) => isEmphasized(project(d, "site")) ? 1 : 0` callback
+// it replaces — a callback can't be serialized (has no IR spelling), so it
+// never round-trips through Python; `.map()` does.
+const emphasisZOrder = field("site").map(
+  { Morris: 1, "Grand Rapids": 1 },
+  { default: 0 }
+);
 
 export const Default: StoryObj<Args> = {
   args: { w: 400, h: 400 },
@@ -49,14 +58,7 @@ export const Default: StoryObj<Args> = {
         .mark(rect({ h: "yield", fill: "site" }).name("bars")),
       chart(selectAll("bars"))
         .flow(group({ by: "variety" }), group({ by: "site" }))
-        // Data-driven paint order: the emphasized sites' areas (z = 1) paint on
-        // top of the gray ones (z = 0). `project` reads the site off the bag of
-        // refs the area is bound to (homogeneous, since we grouped by site).
-        .mark(
-          ribbon({ opacity: 0.7 }).zOrder((d) =>
-            isEmphasized(project(d, "site")) ? 1 : 0
-          )
-        ),
+        .mark(ribbon({ opacity: 0.7 }).zOrder(emphasisZOrder)),
     ]).render(container, { w: args.w, h: args.h, axes: true });
 
     return container;
@@ -132,11 +134,7 @@ export const HoistedVarietySpread: StoryObj<Args> = {
             .mark(rect({ h: "yield", fill: "site" }).name("bars")),
           chart(selectAll("bars"))
             .flow(group({ by: "site" }))
-            .mark(
-              ribbon({ opacity: 0.7 }).zOrder((a) =>
-                isEmphasized(project(a, "site")) ? 1 : 0
-              )
-            ),
+            .mark(ribbon({ opacity: 0.7 }).zOrder(emphasisZOrder)),
         ])
       )
       .render(container, { w: args.w, h: args.h });

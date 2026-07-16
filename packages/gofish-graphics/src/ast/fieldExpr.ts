@@ -49,7 +49,17 @@ export type FieldOp =
   | { op: "sum" }
   | { op: "mean" }
   | { op: "count" }
-  | { op: "distinct" };
+  | { op: "distinct" }
+  | {
+      op: "map";
+      /** Partial discrete mapping, keyed by the field's (stringified) values. */
+      mapping: Record<string, unknown>;
+      /** Value for an unmapped key. Presence on the wire (vs. omission) is
+       *  itself meaningful: an explicit `default: null` still applies, while
+       *  an omitted `default` means "fall through to undefined" — see
+       *  `map()`'s doc below. */
+      default?: unknown;
+    };
 
 /** The field-expression wire shape — what `FieldExpr#toJSON` emits and what
  *  the Python bridge/deserializer produces directly (no class involved). */
@@ -161,6 +171,46 @@ export class FieldExpr {
     return this._withOp({ op: "distinct" });
   }
 
+  /**
+   * A partial discrete mapping, keyed by this field's own values — a keyed
+   * projection into a NEW domain, e.g.
+   * `field("site").map({ Morris: 1, "Grand Rapids": 1 }, { default: 0 })`.
+   * Elementwise, like `sort`'s `values` form but for values rather than
+   * order: each row's value at this field is looked up in `mapping` (an own-
+   * property check, so `{}`'s inherited members never match); a miss becomes
+   * `opts.default` when given, else `undefined` (each consuming surface then
+   * applies its own default — a label skips an undefined result, `zOrder`
+   * falls back to base paint order). `opts.default` may itself be `null` —
+   * that's a real, present default, distinct from omitting the option
+   * entirely (which leaves misses as `undefined`).
+   *
+   * `mapping` must be a plain record, not a function: this construct exists
+   * specifically because function accessors have no IR spelling and can't
+   * cross the Python bridge. For an arbitrary computed transform, use
+   * `derive()` instead.
+   *
+   * Semantics mirror polars' `replace_strict(mapping, default=...)`; named
+   * after pandas' `Series.map(dict)`.
+   */
+  map(
+    mapping: Record<string, unknown>,
+    opts?: { default?: unknown }
+  ): FieldExpr {
+    if (typeof mapping === "function") {
+      throw new Error(
+        "field(...).map() takes a plain mapping object, not a function — " +
+          "use derive() for arbitrary transforms."
+      );
+    }
+    return this._withOp({
+      op: "map",
+      mapping,
+      ...(opts && Object.prototype.hasOwnProperty.call(opts, "default")
+        ? { default: opts.default }
+        : {}),
+    });
+  }
+
   toJSON(): FieldExprWire {
     return {
       type: this.type,
@@ -196,6 +246,28 @@ export function getFieldOps(accessor: unknown): FieldOp[] {
 const AGGREGATE_OPS = new Set(["sum", "mean", "count", "distinct"]);
 /** Domain op names — valid only on a `by` (grouping) slot. */
 const DOMAIN_OPS = new Set(["sort", "reverse", "bin", "dropNulls"]);
+// `map` is neither: a VALUE op (valid in a value/label/zOrder slot, like the
+// aggregates) but elementwise rather than folding (like neither `normalize`
+// nor an aggregate) — see `evalFieldValues`'s pipeline loop below.
+
+/** Apply one `map` op elementwise: look up each value's (stringified) key in
+ *  `mapping` via an own-property check (so `{}`'s inherited members never
+ *  match); a miss becomes `op.default` when the op carries one, else
+ *  `undefined`. Shared so every evaluation site applies the identical
+ *  lookup rule. */
+function applyMapOp(
+  values: unknown[],
+  op: Extract<FieldOp, { op: "map" }>
+): unknown[] {
+  const hasDefault = Object.prototype.hasOwnProperty.call(op, "default");
+  return values.map((v) => {
+    const key = String(v);
+    if (Object.prototype.hasOwnProperty.call(op.mapping, key)) {
+      return op.mapping[key];
+    }
+    return hasDefault ? op.default : undefined;
+  });
+}
 
 export const isAggregateOp = (op: FieldOp): boolean => AGGREGATE_OPS.has(op.op);
 export const isDomainOp = (op: FieldOp): boolean => DOMAIN_OPS.has(op.op);
@@ -227,6 +299,7 @@ export function evalFieldValues<T>(
       ? accessor
       : (r: any) =>
           r?.[typeof accessor === "string" ? accessor : accessor.name];
+  let values: unknown[] = rows.map(key);
   let agg: FieldOp | undefined;
   for (const op of getFieldOps(accessor)) {
     if (isDomainOp(op)) {
@@ -236,6 +309,20 @@ export function evalFieldValues<T>(
       );
     }
     if (op.op === "normalize") throw normalizeNotSupportedError();
+    if (op.op === "map") {
+      // `map` is elementwise, so it can only run over the pre-aggregate
+      // per-row values. Applying it silently here after an aggregate was
+      // already recorded would reorder the pipeline (map-then-fold when the
+      // user wrote fold-then-map) — make that loud instead.
+      if (agg !== undefined) {
+        throw new Error(
+          `field(...).map() must precede aggregation — write ` +
+            `field(x).map({...}).${agg.op}(), not field(x).${agg.op}().map({...}).`
+        );
+      }
+      values = applyMapOp(values, op);
+      continue;
+    }
     if (agg !== undefined) {
       throw new Error(
         `field(...) can only carry one aggregate op; found ${agg.op}, ${op.op}.`
@@ -243,7 +330,7 @@ export function evalFieldValues<T>(
     }
     agg = op;
   }
-  if (agg === undefined) return { values: rows.map(key) };
+  if (agg === undefined) return { values };
   const annotation =
     typeof accessor === "object" && accessor !== null
       ? accessor.measure
@@ -253,13 +340,13 @@ export function evalFieldValues<T>(
       return { values: [rows.length], measure: annotation ?? "count" };
     case "distinct":
       return {
-        values: [new Set(rows.map(key)).size],
+        values: [new Set(values).size],
         measure: annotation ?? "count",
       };
     case "mean":
-      return { values: [meanBy(rows.map(key) as any[])] };
+      return { values: [meanBy(values as any[])] };
     default: // "sum"
-      return { values: [sumBy(rows.map(key) as any[])] };
+      return { values: [sumBy(values as any[])] };
   }
 }
 

@@ -149,7 +149,9 @@ appends one op to an ordered pipeline. It works in two disjoint places:
 - As a mark or `size` channel value (a **value** slot): `.sum()`, `.mean()`,
   `.count()`, and `.distinct()` **fold a group's rows to one number**,
   overriding the channel's own default aggregation (sum for size, mean for
-  position).
+  position). `.map(mapping, { default? })` **replaces each value through a
+  partial mapping** — it is elementwise, not a fold, and also works in
+  [`.label()`](../../guides/labels.md) and `.zOrder()` accessors.
 
 Mixing the two — an aggregate op on `by`, or a domain op on a value channel —
 throws.
@@ -207,6 +209,40 @@ Empty bins are dropped, like an ordinary `groupBy`. Pass
 `.count()` and `.distinct()` report measure `"count"` (they're counts, not the
 source field's own units) unless you annotate the accessor explicitly:
 `field("id", "my-measure").distinct()`.
+
+**Map values through a partial discrete mapping** —
+`.map(mapping, { default? })` is a keyed projection into a NEW domain
+(semantics of polars' `replace_strict`, named after pandas' `Series.map`).
+Each value is looked up in `mapping`; a miss becomes `default` when given,
+else `undefined` — and each consuming surface applies its own fallback for
+`undefined`: a `.label()` **skips** that group, `.zOrder()` falls back to
+base paint order. `mapping` must be a plain object (a function throws —
+use `derive()` for arbitrary transforms); unlike a function, `.map()`
+serializes, so it round-trips through IR and works from Python.
+
+```ts
+// Data-driven paint order: raise the two emphasized sites' areas above
+// the rest — no per-datum callback, so the spec stays serializable
+.mark(
+  ribbon({ opacity: 0.7 }).zOrder(
+    field("site").map({ Morris: 1, "Grand Rapids": 1 }, { default: 0 })
+  )
+)
+```
+
+```ts
+// Conditional group callout: only "Lake B" maps to a text; every other
+// group's label evaluates to undefined and is skipped
+.flow(
+  spread({ by: "lake", dir: "x" }).label(
+    field("lake").map({ "Lake B": "Best catch!" }),
+    { position: "outset-top" }
+  )
+)
+```
+
+An explicit `default: null` is a real default (misses become `null`), distinct
+from omitting the option (misses stay `undefined`).
 
 ## Space-filling spines (mosaic / marimekko)
 

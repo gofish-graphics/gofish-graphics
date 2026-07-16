@@ -103,6 +103,23 @@ packages/gofish-graphics/stories/lowlevel/Constraints.stories.tsx::SpreadY_Rever
 # structure, data, options); only the pixel-for-pixel DOM diff is skipped.
 packages/gofish-graphics/stories/lowlevel/ViolinPlot.stories.tsx::Default
 
+# Per-export exemption — LayeredBarsAndArea::HoistedVarietySpread nests
+# `layer([chart(...), chart(...)])` INSIDE another chart's `.mark(...)`
+# (a chart-tier layer used as an embedded mark). Default and TwoSites (same
+# file) ARE ported and byte-parity-validated — #796's
+# `field(...).map(mapping, default=...)` gave the emphasis `.zOrder(...)`
+# call a serializable spelling, which is why this file is no longer exempt
+# wholesale. This one export hits a separate, pre-existing gap: Python's
+# `layer([...])` only implements the LayerIR chart-tiers wire shape
+# (`{type: "layer", charts: [...]}`, reconstructed as a ROOT chart), not the
+# mark-combinator shape JS's single `layer()` also produces when nested
+# inside a `.mark(...)` call (`{type: "layer", __combinator: true, children:
+# [...]}` — a different wire type, reconstructed via COMBINATOR_FACTORIES).
+# Closing this needs new Python-wrapper dispatch design (when do ChartBuilder
+# children serialize as chart-tiers vs. as an embeddable mark?), not a
+# field(...).map() follow-up — tracked as a to-do, not fixed here.
+packages/gofish-graphics/stories/vega-lite/Bar/LayeredBarsAndArea.stories.tsx::HoistedVarietySpread
+
 # ---------------------------------------------------------------------------
 # gofish-gotree (the GoTree tree-DSL package) — exempt from Python parity.
 #
@@ -116,15 +133,6 @@ packages/gofish-graphics/stories/lowlevel/ViolinPlot.stories.tsx::Default
 # (see walkJsStories + the gitDiff filters in check-python-sync.ts), so it
 # never walks the gofish-gotree package. If parity coverage is ever extended
 # to gofish-gotree, list its stories here.
-
-# LayeredBarsAndArea stays exempt: it drives a data-driven paint order with
-# `area(...).zOrder(d => …)` and reorders the area selection with a `derive`
-# callback. Both are JS functions that can't cross the derive RPC, and the
-# `.zOrder(fn)` form is omitted from the IR (like a function `.label`), so a
-# Python port can't reproduce — let alone byte-match — the paint ordering that
-# raises the emphasized sites above the gray ones. Revisit once the highlight /
-# `emphasize` API (#641) gives this a serializable, declarative spelling.
-packages/gofish-graphics/stories/vega-lite/Bar/LayeredBarsAndArea.stories.tsx
 
 # ---------------------------------------------------------------------------
 # Interaction/reactivity stories — exempt from Python parity (JS-only feature).

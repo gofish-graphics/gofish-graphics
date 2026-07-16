@@ -257,6 +257,12 @@ export function splitEntries<T extends Record<string, any>>(
           `field(...).${op.op}() is an aggregate op — valid on a value channel ` +
             `(e.g. rect({ h: field(...).${op.op}() })), not on \`by\`.`
         );
+      case "map":
+        throw new Error(
+          "field(...).map() is a value op — valid on a value channel " +
+            "(e.g. rect({ h: field(...).map({...}) })) or a .label()/.zOrder() " +
+            "accessor, not on `by`."
+        );
       case "normalize":
         throw new Error(
           "field(...).normalize() is only supported on an operator's size channel"
