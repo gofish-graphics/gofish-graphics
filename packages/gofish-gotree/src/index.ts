@@ -26,3 +26,7 @@ export type {
   Alignment,
   TreeData,
 } from "./spec";
+// Python-bridge reconstruction (issue #792) — injected into gofish-graphics'
+// deserializer as a `markBridges["gotree-tree"]` entry; see serialize.ts.
+export { reconstructGotreeTree } from "./serialize";
+export type { GotreeReconstructCtx } from "./serialize";

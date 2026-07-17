@@ -1,3 +1,7 @@
+// <gofish-wiki> AUTO-GENERATED — see covers: in the essay; run `pnpm --filter docs sync-backlinks`
+// @wiki Frontend IR — /internals/frontend/serialization
+// </gofish-wiki>
+
 import type { Mark } from "gofish-graphics";
 import type { HierarchyNode } from "d3-hierarchy";
 
@@ -40,7 +44,16 @@ export type HierarchyDatum = {
   width: number;
 };
 
-export type NodeFactory = (datum: HierarchyDatum) => Mark<any>;
+/**
+ * `path` is the node's stable position key (`nodePath` in data.ts — index
+ * chain from the root, e.g. `"root/0/1"`). It's an optional 2nd argument so
+ * existing single-arg factories are unaffected; the Python-bridge
+ * reconstruction (`gofish-gotree/src/serialize.ts`) needs it to key its
+ * pre-expanded per-node Mark map (RPC-backed node templates must resolve
+ * their lambdas before `tree()` runs, since this factory is called
+ * synchronously from `renderSubtree`).
+ */
+export type NodeFactory = (datum: HierarchyDatum, path?: string) => Mark<any>;
 
 export type LinkOptions = {
   // Screen-space path shape for the link (GoTree's `Link` element). Maps to a
@@ -52,10 +65,22 @@ export type LinkOptions = {
   opacity?: number;
 };
 
+/**
+ * `sourcePath`/`targetPath` are the endpoints' stable position keys
+ * (`nodePath`) — optional trailing arguments for the same reason as
+ * `NodeFactory`'s `path`: the Python-bridge reconstruction pre-resolves
+ * lambda-backed link options per edge (keyed by these paths) before
+ * `tree()`'s synchronous `collectEdges` walk runs.
+ */
 export type LinkSpec =
   | "none"
   | LinkOptions
-  | ((source: HierarchyDatum, target: HierarchyDatum) => LinkOptions);
+  | ((
+      source: HierarchyDatum,
+      target: HierarchyDatum,
+      sourcePath?: string,
+      targetPath?: string
+    ) => LinkOptions);
 
 export type GoTreeSpec = {
   node?: NodeFactory;

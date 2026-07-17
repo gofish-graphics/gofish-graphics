@@ -184,11 +184,16 @@ function isSpecNeutralChange(jsFile: string, baseRef: string): boolean {
 }
 
 // ---------------------------------------------------------------------------
-// Walk all JS stories under packages/gofish-graphics/stories/.
+// Walk all JS stories under packages/gofish-graphics/stories/ and
+// packages/gofish-gotree/stories/ (the tree-DSL package — see #792).
 // ---------------------------------------------------------------------------
 
+const JS_STORY_ROOTS = [
+  "packages/gofish-graphics/stories",
+  "packages/gofish-gotree/stories",
+];
+
 function walkJsStories(): string[] {
-  const root = join(ROOT_DIR, "packages/gofish-graphics/stories");
   const out: string[] = [];
   function walk(dir: string) {
     if (!existsSync(dir)) return;
@@ -200,7 +205,7 @@ function walkJsStories(): string[] {
       }
     }
   }
-  walk(root);
+  for (const root of JS_STORY_ROOTS) walk(join(ROOT_DIR, root));
   return out.sort();
 }
 

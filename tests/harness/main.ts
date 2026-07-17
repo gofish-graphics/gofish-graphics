@@ -76,6 +76,7 @@ import {
   type Mark,
   type Token,
 } from "gofish-graphics";
+import { reconstructGotreeTree } from "gofish-gotree";
 import { Frontend } from "gofish-ir";
 
 // Combinator-form factory map. Each entry takes (opts, marks) and returns
@@ -263,6 +264,63 @@ function unwrapMarkOpts(value: any, deriveServerUrl: string | undefined): any {
  * `unwrapMarkOpts` directly. */
 function unwrapValues(value: any): any {
   return unwrapMarkOpts(value, undefined);
+}
+
+// ---------------------------------------------------------------------------
+// gotree-tree mark bridge (#792)
+// ---------------------------------------------------------------------------
+
+/**
+ * Adapt gofish-gotree's `applyLambda(id, args)` (one lambda call, arbitrary
+ * positional args, one resolved result) onto this harness's rows-in/rows-out
+ * `/derive/<id>` endpoint. A gotree lambda call — one node-template channel
+ * (`args = [row]`) or one link's options (`args = [srcRow, tgtRow]`) — is a
+ * SINGLE Python call with those args positional, not a batch of independent
+ * per-row calls, so `args` rides as the payload of one single-row batch call:
+ * `{ __gofish_args: args }`. Mirrors the same shortcut in
+ * `packages/gofish-python/widget-src/index.ts`'s `makeGotreeApplyLambda` —
+ * see its doc comment for the Python-side dispatch contract this requires.
+ */
+async function applyGotreeLambda(
+  id: string,
+  args: any[],
+  deriveServerUrl: string | undefined
+): Promise<any> {
+  if (!deriveServerUrl) {
+    throw new Error(`gotree lambda ${id} requires deriveServerUrl on the spec`);
+  }
+  const resp = await fetch(`${deriveServerUrl}/derive/${id}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify([{ __gofish_args: args }]),
+  });
+  if (!resp.ok) {
+    throw new Error(
+      `gotree lambda ${id} failed: ${resp.status} ${await resp.text()}`
+    );
+  }
+  const result = await resp.json();
+  return Array.isArray(result) ? result[0] : result;
+}
+
+/** The `markBridges` map passed to `mapMark`/`buildChartFromSpec` — mirrors
+ *  `packages/gofish-python/widget-src/index.ts`'s `makeMarkBridges`. `bridges`
+ *  closes over itself via `mapMark` so a nested gotree-tree (a node template
+ *  containing another gotree-tree) resolves through the same map. */
+function makeMarkBridges(
+  deriveServerUrl: string | undefined,
+  resolveToken: TokenResolver
+): Record<string, (spec: any) => Promise<Mark<any>> | Mark<any>> {
+  const bridges: Record<string, (spec: any) => Promise<Mark<any>>> = {
+    "gotree-tree": (spec: any) =>
+      reconstructGotreeTree(spec, {
+        mapMark: (markIR: any) =>
+          mapMark(markIR, deriveServerUrl, resolveToken, undefined, bridges),
+        applyLambda: (id: string, args: any[]) =>
+          applyGotreeLambda(id, args, deriveServerUrl),
+      }),
+  };
+  return bridges;
 }
 
 /**
@@ -517,7 +575,8 @@ function mapMarkChildren(
   specs: MarkSpec[],
   deriveServerUrl: string | undefined,
   resolveToken: TokenResolver,
-  inputRefs?: any[]
+  inputRefs?: any[],
+  markBridges?: Record<string, (spec: any) => Promise<Mark<any>> | Mark<any>>
 ): any[] {
   const out: any[] = [];
   for (const child of specs as any[]) {
@@ -526,7 +585,8 @@ function mapMarkChildren(
         child.source,
         deriveServerUrl,
         resolveToken,
-        inputRefs
+        inputRefs,
+        markBridges
       );
       const slices = cutSlices(sourceMark as any, {
         dir: child.dir,
@@ -536,7 +596,13 @@ function mapMarkChildren(
       out.push(...slices);
     } else {
       out.push(
-        mapMark(child as MarkSpec, deriveServerUrl, resolveToken, inputRefs)
+        mapMark(
+          child as MarkSpec,
+          deriveServerUrl,
+          resolveToken,
+          inputRefs,
+          markBridges
+        )
       );
     }
   }
@@ -567,7 +633,8 @@ function mapMark(
   spec: MarkSpec,
   deriveServerUrl: string | undefined,
   resolveToken: TokenResolver,
-  inputRefs?: any[]
+  inputRefs?: any[],
+  markBridges?: Record<string, (spec: any) => Promise<Mark<any>> | Mark<any>>
 ): Mark<any> {
   const applyTranslate = <T>(mark: T): T =>
     spec.translate && typeof (mark as any).translate === "function"
@@ -598,6 +665,33 @@ function mapMark(
       );
     }
     return inputRef;
+  }
+
+  // Injected reconstruction (e.g. gotree-tree, #792) — mirrors
+  // packages/gofish-graphics/src/serialize/fromJSON.ts's markBridges check.
+  // The factory is async, so defer resolution into an async Mark wrapper;
+  // `resolveMarkResult` awaits/recurses through whatever comes back.
+  const inject = markBridges?.[spec.type];
+  if (inject) {
+    const nameVal = resolveNameField((spec as any).name, resolveToken);
+    return (async (data: any, key: any, layerContext: any) => {
+      let innerMark: any = await inject(spec);
+      if (spec.translate && typeof innerMark?.translate === "function") {
+        innerMark = innerMark.translate(spec.translate);
+      }
+      if (nameVal != null && typeof innerMark?.name === "function") {
+        innerMark = innerMark.name(nameVal);
+      }
+      if (
+        typeof (spec as any).zOrder === "number" &&
+        typeof innerMark?.zOrder === "function"
+      ) {
+        innerMark = innerMark.zOrder((spec as any).zOrder);
+      }
+      return typeof innerMark === "function"
+        ? innerMark(data, key, layerContext)
+        : innerMark;
+    }) as unknown as Mark<any>;
   }
 
   // Mark-as-function: Python registered a `(data) -> ChartBuilder | Mark`
@@ -648,10 +742,16 @@ function mapMark(
               resultSpec.mark,
               deriveServerUrl,
               resolveToken,
-              newInputRefs
+              newInputRefs,
+              markBridges
             );
           }
-          return buildChartFromSpec(resultSpec, deriveServerUrl, resolveToken);
+          return buildChartFromSpec(
+            resultSpec,
+            deriveServerUrl,
+            resolveToken,
+            markBridges
+          );
         })();
         cache.set(cacheKey, entry);
       }
@@ -683,7 +783,8 @@ function mapMark(
       spec.children ?? [],
       deriveServerUrl,
       resolveToken,
-      inputRefs
+      inputRefs,
+      markBridges
     );
     return applyTranslate(
       offsetOp({ x: spec.x, y: spec.y }, [
@@ -701,7 +802,8 @@ function mapMark(
       spec.source,
       deriveServerUrl,
       resolveToken,
-      inputRefs
+      inputRefs,
+      markBridges
     );
     let mark = cutMark({
       source: sourceMark as any,
@@ -734,7 +836,8 @@ function mapMark(
       spec.children ?? [],
       deriveServerUrl,
       resolveToken,
-      inputRefs
+      inputRefs,
+      markBridges
     );
     // Resolve color/coord configs too — e.g. a `layer({coord: polar()})`
     // carries its coord transform in the combinator options (BalloonChart,
@@ -900,14 +1003,21 @@ function resolveOptions(
 function buildChartFromSpec(
   chartSpec: ChartHarnessSpec,
   deriveServerUrl: string | undefined,
-  resolveToken: TokenResolver
+  resolveToken: TokenResolver,
+  markBridges?: Record<string, (spec: any) => Promise<Mark<any>> | Mark<any>>
 ): ChartBuilder<any, any> {
   const operators: Operator<any, any>[] = [];
   for (const opSpec of chartSpec.operators || []) {
     const op = mapOperator(opSpec, deriveServerUrl);
     if (op) operators.push(op);
   }
-  const mark = mapMark(chartSpec.mark, deriveServerUrl, resolveToken);
+  const mark = mapMark(
+    chartSpec.mark,
+    deriveServerUrl,
+    resolveToken,
+    undefined,
+    markBridges
+  );
   const chartOpts = resolveOptions(chartSpec.options || {});
 
   // Unwrap the canonical DataIR shapes. The wire formats are:
@@ -950,6 +1060,7 @@ function renderChart(spec: HarnessSpec) {
   // Fresh per-render Token cache so Python's `createName(...)` UUIDs map
   // to the same JS Token everywhere they appear in this spec.
   const resolveToken = makeTokenResolver();
+  const markBridges = makeMarkBridges(spec.deriveServerUrl, resolveToken);
 
   // Wrap the render path in an async IIFE so we can `await` each path's
   // gofish `.render()` (Promise-returning since `inferRaw` went async and
@@ -967,7 +1078,9 @@ function renderChart(spec: HarnessSpec) {
         const mark = mapMark(
           spec.mark,
           spec.deriveServerUrl,
-          resolveToken
+          resolveToken,
+          undefined,
+          markBridges
         ) as any;
         await mark.render(container, {
           w,
@@ -991,8 +1104,19 @@ function renderChart(spec: HarnessSpec) {
         // them via `.layer()`, which accepts either.
         const childCharts = spec.charts.map((c: any) =>
           c && c.type === "raw-mark"
-            ? mapMark(c.mark, spec.deriveServerUrl, resolveToken)
-            : buildChartFromSpec(c, spec.deriveServerUrl, resolveToken)
+            ? mapMark(
+                c.mark,
+                spec.deriveServerUrl,
+                resolveToken,
+                undefined,
+                markBridges
+              )
+            : buildChartFromSpec(
+                c,
+                spec.deriveServerUrl,
+                resolveToken,
+                markBridges
+              )
         );
 
         if (spec.constraints && spec.constraints.length > 0) {
@@ -1085,7 +1209,8 @@ function renderChart(spec: HarnessSpec) {
             zOrder: spec.zOrder ?? null,
           },
           spec.deriveServerUrl,
-          resolveToken
+          resolveToken,
+          markBridges
         );
 
         await node.render(container, {

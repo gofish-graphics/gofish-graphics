@@ -18,6 +18,12 @@ const BENCH_PROD = process.env.GOFISH_BENCH_PROD === "1";
 const gofishAlias = BENCH_PROD
   ? resolve(__dirname, "../../packages/gofish-graphics/dist-bench/index.js")
   : resolve(__dirname, "../../packages/gofish-graphics/src/lib.ts");
+// gofish-gotree has no dist-bench build; always resolve to source, even in
+// prod-bench mode (only gofish-graphics itself is instrumented there).
+const gofishGotreeAlias = resolve(
+  __dirname,
+  "../../packages/gofish-gotree/src/index.ts"
+);
 
 export default defineConfig({
   // In prod-bench mode, keep the SolidJS dev export condition from being picked
@@ -43,6 +49,7 @@ export default defineConfig({
       : undefined,
     alias: {
       "gofish-graphics": gofishAlias,
+      "gofish-gotree": gofishGotreeAlias,
     },
   },
 });
