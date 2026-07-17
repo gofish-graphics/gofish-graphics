@@ -159,7 +159,10 @@ Walking `createOperator.ts:391-415`:
    `inferColor` on annotated opts. For an entry-flagged channel
    (`{type, entry: true}`), the inference runs once per split entry,
    producing an array of values (one per child); otherwise it aggregates
-   over all of `d` and produces one value.
+   over all of `d` and produces one value. `applyChannels`/`runChannel`/
+   `buildLayoutOpts` are all `async` because `inferColor` is (see [The Mark
+   Factory](/internals/frontend/mark-factory) — it awaits a function
+   accessor, which is how a Python-bridge `fill` lambda resolves).
 4. **Strip factory keys** — `by` and `debug` never reach the low-level
    layout; remove them from opts.
 5. **Inject the grouping measure** — `by` is stripped, but a grouping operator

@@ -705,14 +705,16 @@ function translateOperator<T, U>(
  * per-entry slice that does not) and passed down so `inferSize`/`inferPos` don't
  * recompute it per split entry.
  */
-function runChannel(
+async function runChannel(
   type: ChannelType,
   val: any,
   data: any[],
   measure: Measure | undefined
-): any {
+): Promise<any> {
   if (type === "size") return inferSize(val, data, measure);
   if (type === "pos") return inferPos(val, data, measure);
+  // `inferColor` is async (like `inferRaw`) so a callable accessor may
+  // return a Promise — the Python-bridge lambda path.
   if (type === "color") return inferColor(val, data);
   return val;
 }
@@ -741,12 +743,12 @@ function isNonNumericEntryField(
  * - If the opts value is already an array, channels pass it through unchanged
  *   (user supplied the final form directly).
  */
-function applyChannels<Options extends Record<string, any>>(
+async function applyChannels<Options extends Record<string, any>>(
   opts: Options,
   channels: ChannelAnnotations<Options> | undefined,
   d: any,
   entries: Map<string | number, any> | undefined
-): Options {
+): Promise<Options> {
   if (!channels) return opts;
   const wholeData = Array.isArray(d) ? d : [d];
   const out: any = { ...opts };
@@ -792,8 +794,10 @@ function applyChannels<Options extends Record<string, any>>(
       // knowledge from this.
       if (type === "size" && hasNormalizeOp(val)) {
         const { pre } = splitAtNormalize(val);
-        const rawEntryValues = [...entries.values()].map((items) =>
-          runChannel(type, pre, items, measure)
+        const rawEntryValues = await Promise.all(
+          [...entries.values()].map((items) =>
+            runChannel(type, pre, items, measure)
+          )
         );
         const byOpt = (opts as any).by;
         const byName =
@@ -808,11 +812,13 @@ function applyChannels<Options extends Record<string, any>>(
       // Value aggregation uses each entry's items; the measure comes from
       // `wholeData` (the binned array still carries the symbol — each per-entry
       // slice does not).
-      out[key] = [...entries.values()].map((items) =>
-        runChannel(type, val, items, measure)
+      out[key] = await Promise.all(
+        [...entries.values()].map((items) =>
+          runChannel(type, val, items, measure)
+        )
       );
     } else {
-      out[key] = runChannel(type, val, wholeData, measure);
+      out[key] = await runChannel(type, val, wholeData, measure);
     }
   }
   return out as Options;
@@ -837,14 +843,14 @@ function stripFactoryKeys<Options extends Record<string, any>>(
 }
 
 /** Build the low-level opts passed to `layout`. */
-function buildLayoutOpts<Datum, Options extends Record<string, any>>(
+async function buildLayoutOpts<Datum, Options extends Record<string, any>>(
   channels: ChannelAnnotations<Options> | undefined,
   opts: Options,
   d: Datum | Datum[],
   entries: Map<string | number, Datum | Datum[]> | undefined,
   keys: Record<string, string[]> | undefined
-): Options {
-  const withChannels = applyChannels(opts, channels, d, entries);
+): Promise<Options> {
+  const withChannels = await applyChannels(opts, channels, d, entries);
   const stripped = stripFactoryKeys(withChannels);
   // Merge split's axis keys (e.g. colKeys, rowKeys for table) into opts.
   return keys !== undefined ? ({ ...stripped, ...keys } as Options) : stripped;
@@ -896,7 +902,7 @@ export function createOperator<Datum, Options extends Record<string, any>>(
             return resolveMarkResult(result, layerContext);
           })
         );
-        const lowOpts = buildLayoutOpts(
+        const lowOpts = await buildLayoutOpts(
           cfg.channels,
           opts,
           d,
@@ -1047,7 +1053,13 @@ export function createOperator<Datum, Options extends Record<string, any>>(
           })
         );
         const nodes = nodesPerLeaf.flat();
-        const lowOpts = buildLayoutOpts(cfg.channels, opts, d, entries, keys);
+        const lowOpts = await buildLayoutOpts(
+          cfg.channels,
+          opts,
+          d,
+          entries,
+          keys
+        );
         // Carry the grouping field (e.g. spread's `by`) into the node operator
         // so it can stamp the ORDINAL space it builds with a `measure` — the
         // discrete axis names itself off its own space, mirroring how a

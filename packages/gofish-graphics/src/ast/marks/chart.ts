@@ -500,11 +500,11 @@ function tagRelationalFusable(
  */
 const PAINT_KEYS = ["fill", "stroke"] as const;
 
-function resolveGroupFill<O extends RelationalMarkOptions>(
+async function resolveGroupFill<O extends RelationalMarkOptions>(
   type: string,
   opts: O,
   groupRefs: GoFishRef[]
-): O {
+): Promise<O> {
   const rows = groupRefs.flatMap((r) =>
     Array.isArray(r.datum) ? r.datum : [r.datum]
   );
@@ -532,7 +532,7 @@ function resolveGroupFill<O extends RelationalMarkOptions>(
           `explicit color.`
       );
     }
-    const resolved = inferColor(raw, rows);
+    const resolved = await inferColor(raw, rows);
     if (resolved !== undefined) {
       resolvedOpts = { ...resolvedOpts, [key]: resolved } as O;
     }
@@ -631,7 +631,7 @@ export function createRelationalMark<O extends RelationalMarkOptions>(
             const groupRefs = (
               Array.isArray(group) ? group : [group]
             ) as GoFishRef[];
-            const groupOpts = resolveGroupFill(type, baseOpts, groupRefs);
+            const groupOpts = await resolveGroupFill(type, baseOpts, groupRefs);
             return tagRelationalOperands(
               (await produce(groupOpts, groupRefs)) as GoFishNode,
               groupRefs
@@ -643,7 +643,7 @@ export function createRelationalMark<O extends RelationalMarkOptions>(
 
       // Unsplit: one connector through the whole bag, treated as a single
       // group for `resolveGroupFill` (see its doc comment for the paint fix).
-      const groupOpts = resolveGroupFill(type, baseOpts, d);
+      const groupOpts = await resolveGroupFill(type, baseOpts, d);
       return tagRelationalOperands(
         (await produce(groupOpts, d)) as GoFishNode,
         d
