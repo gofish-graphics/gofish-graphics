@@ -111,9 +111,9 @@ packages/gofish-graphics/stories/lowlevel/ViolinPlot.stories.tsx::Default
 # under tests/python-stories/gotree/... (same title-derived mapping as
 # gofish-graphics — see mapJsToPython in tests/scripts/path-mapping.ts).
 #
-# The gofish-gotree Python bridge landed with #792, but the ports themselves
-# haven't been written yet, so every current gotree story is listed below to
-# keep the checker green today. This list is a punch list, not a permanent
+# The gofish-gotree Python bridge and the ports of all 40 DSL-based gallery
+# stories landed with #792; the remaining entries below are the stories that
+# still need bespoke work. This list is a punch list, not a permanent
 # exemption: remove a line as soon as its Python port exists (mirroring the
 # workflow used for the gofish-graphics entries above). These stories ARE
 # already captured by the JS visual-diff harness (tests/harness/
@@ -121,44 +121,6 @@ packages/gofish-graphics/stories/lowlevel/ViolinPlot.stories.tsx::Default
 # visual regressions independent of this list.
 packages/gofish-gotree/stories/Matrix.stories.tsx
 packages/gofish-gotree/stories/Tree.stories.tsx
-packages/gofish-gotree/stories/gallery/ArcTree.stories.tsx
-packages/gofish-gotree/stories/gallery/BarcodeTree.stories.tsx
-packages/gofish-gotree/stories/gallery/BeamTree.stories.tsx
-packages/gofish-gotree/stories/gallery/CartesianDeepTree.stories.tsx
-packages/gofish-gotree/stories/gallery/CascadedTreemap.stories.tsx
-packages/gofish-gotree/stories/gallery/Cheops.stories.tsx
-packages/gofish-gotree/stories/gallery/ClockTree.stories.tsx
-packages/gofish-gotree/stories/gallery/ClockTreeWithLink.stories.tsx
-packages/gofish-gotree/stories/gallery/DeepTree.stories.tsx
-packages/gofish-gotree/stories/gallery/Dendrogram.stories.tsx
-packages/gofish-gotree/stories/gallery/ElasticHierarchy.stories.tsx
-packages/gofish-gotree/stories/gallery/FlowerTree.stories.tsx
-packages/gofish-gotree/stories/gallery/GardenLayout.stories.tsx
-packages/gofish-gotree/stories/gallery/HTreeLayout.stories.tsx
-packages/gofish-gotree/stories/gallery/HVDrawing.stories.tsx
-packages/gofish-gotree/stories/gallery/HierarchicalSectorChart.stories.tsx
-packages/gofish-gotree/stories/gallery/IciclePlotPolar.stories.tsx
-packages/gofish-gotree/stories/gallery/IndentedTree.stories.tsx
-packages/gofish-gotree/stories/gallery/Iptp.stories.tsx
-packages/gofish-gotree/stories/gallery/Jewelry.stories.tsx
-packages/gofish-gotree/stories/gallery/NestedPieTree.stories.tsx
-packages/gofish-gotree/stories/gallery/NodeLinkTree.stories.tsx
-packages/gofish-gotree/stories/gallery/OakTreeVis.stories.tsx
-packages/gofish-gotree/stories/gallery/OrthogonalGridEmbedding.stories.tsx
-packages/gofish-gotree/stories/gallery/SectorTree.stories.tsx
-packages/gofish-gotree/stories/gallery/SectorTree2.stories.tsx
-packages/gofish-gotree/stories/gallery/SideTree.stories.tsx
-packages/gofish-gotree/stories/gallery/SpiralLayout.stories.tsx
-packages/gofish-gotree/stories/gallery/StairTree.stories.tsx
-packages/gofish-gotree/stories/gallery/Sunburst.stories.tsx
-packages/gofish-gotree/stories/gallery/TornadoTree.stories.tsx
-packages/gofish-gotree/stories/gallery/TornadoTree2.stories.tsx
-packages/gofish-gotree/stories/gallery/Treemap.stories.tsx
-packages/gofish-gotree/stories/gallery/TreemapOval.stories.tsx
-packages/gofish-gotree/stories/gallery/TreemapSlice.stories.tsx
-packages/gofish-gotree/stories/gallery/TyreTree.stories.tsx
-packages/gofish-gotree/stories/gallery/ViolinTree.stories.tsx
-packages/gofish-gotree/stories/gallery/WeaveTree.stories.tsx
 
 # The following seven gotree gallery stories are hand-rolled, non-DSL
 # layouts (they don't go through the tree()/combine() grammar the other
@@ -168,7 +130,6 @@ packages/gofish-gotree/stories/gallery/WeaveTree.stories.tsx
 packages/gofish-gotree/stories/gallery/MultilevelSilhouetteTree.stories.tsx
 packages/gofish-gotree/stories/gallery/OutsideInTree.stories.tsx
 packages/gofish-gotree/stories/gallery/RadialDeep.stories.tsx
-packages/gofish-gotree/stories/gallery/ReadableTreeLayout.stories.tsx
 packages/gofish-gotree/stories/gallery/RadialPhylogeneticTree.stories.tsx
 packages/gofish-gotree/stories/gallery/RadialTree.stories.tsx
 packages/gofish-gotree/stories/gallery/RadialTreeIncline.stories.tsx

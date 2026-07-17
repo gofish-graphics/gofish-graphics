@@ -60,19 +60,26 @@ function isLambdaSentinel(v: any): v is { __gofish_lambda: string } {
  * order below (`rest` first, then the HierarchyDatum fields) is what
  * enforces that collision rule. Both the Python emitter and this
  * reconstructor must agree on it.
+ *
+ * Exception: `datum.value` is only populated when the hierarchy was built
+ * with d3's `.sum()`/`.count()`, which gotree's own `normalize()` never
+ * calls — so an unconditional `value: datum.value` would stomp a raw data
+ * field named `value` (the field most gallery specs actually read) with
+ * `undefined`. The synthesized key therefore only overrides when it exists.
  */
 function buildRow(datum: HierarchyDatum): Record<string, any> {
   const { children: _children, ...rest } = (datum.data ?? {}) as Record<
     string,
     any
   >;
-  return {
+  const row: Record<string, any> = {
     ...rest,
     depth: datum.depth,
     height: datum.height,
     width: datum.width,
-    value: datum.value,
   };
+  if (datum.value !== undefined) row.value = datum.value;
+  return row;
 }
 
 /**

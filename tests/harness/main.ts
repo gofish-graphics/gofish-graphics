@@ -1075,13 +1075,33 @@ function renderChart(spec: HarnessSpec) {
       if (spec.type === "raw-mark") {
         const allOpts = spec.options || {};
         const { w, h, axes, debug } = allOpts;
-        const mark = mapMark(
-          spec.mark,
-          spec.deriveServerUrl,
-          resolveToken,
-          undefined,
-          markBridges
-        ) as any;
+        // A top-level bridge-reconstructed mark (e.g. gotree-tree, #792)
+        // resolves to a REAL renderable Mark (`.render()` attached).
+        // `mapMark`'s generic injection branch instead defers resolution
+        // behind an anonymous `Mark<T>` callable meant to be called by a
+        // parent chart's own evaluation (`mark(data, key, layerContext)`)
+        // when nested — there's no such parent at the top level, so
+        // resolve the bridge directly here instead of going through
+        // `mapMark`.
+        const bridgeInject = markBridges?.[(spec.mark as any).type];
+        let mark: any;
+        if (bridgeInject) {
+          mark = await bridgeInject(spec.mark);
+          if (
+            (spec.mark as any).translate &&
+            typeof mark?.translate === "function"
+          ) {
+            mark = mark.translate((spec.mark as any).translate);
+          }
+        } else {
+          mark = mapMark(
+            spec.mark,
+            spec.deriveServerUrl,
+            resolveToken,
+            undefined,
+            markBridges
+          ) as any;
+        }
         await mark.render(container, {
           w,
           h,

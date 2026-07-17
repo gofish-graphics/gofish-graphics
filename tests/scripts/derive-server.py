@@ -63,6 +63,80 @@ sys.path.insert(0, os.path.join(PROJECT_ROOT, "tests"))
 # Registry: lambdaId → Python function
 _registry: dict = {}
 
+
+def _collect_raw_accessor_lambdas(mark) -> list:
+    """Like `gofish.ast._collect_mark_lambdas`, but yields `(lambda_id,
+    raw_fn)` pairs — the bare `(row) -> value` callable itself, not the
+    rows-batched `lambda rows: [fn(r) for r in rows]` wrapper.
+
+    Used only for gotree node templates (#792): a channel lambda embedded
+    directly in a gotree `node=` Mark template is resolved one row at a
+    time via the `__gofish_args` positional-call convention (see
+    `_register_gotree_lambdas`/`_handle_derive`), never batched, so the
+    registry must hold the raw callable.
+    """
+    from gofish.ast import _PendingAccessor
+
+    pairs: list = []
+    for val in mark.kwargs.values():
+        if isinstance(val, _PendingAccessor):
+            pairs.append((val.lambda_id, val.fn))
+    if mark._children is not None:
+        for child in mark._children:
+            pairs.extend(_collect_raw_accessor_lambdas(child))
+    return pairs
+
+
+def _register_gotree_lambdas(tree_obj) -> list:
+    """Register the lambdas hanging off a `gofish.gotree.Tree` (#792):
+    a `node=` mark-fn callable, a `node=` template's own channel
+    accessors, and/or a `link=` callable. All three are invoked by the JS
+    reconstruction (`reconstructGotreeTree` in
+    `packages/gofish-gotree/src/serialize.ts`) as single positional-arg
+    RPCs (`ctx.applyLambda(id, args)`), never as row batches — see
+    `makeGotreeApplyLambda`'s doc comment in
+    `packages/gofish-python/widget-src/index.ts` for the wire convention
+    (`{"__gofish_args": args}`) and `_handle_derive` below for the
+    Python-side unwrap. Returns the registered lambda ids.
+    """
+    from gofish.ast import Mark, _MarkFn, _PendingAccessor, _collect_mark_lambdas
+
+    derive_ids: list = []
+
+    node = tree_obj._node
+    if isinstance(node, _MarkFn):
+        user_fn = node.fn
+
+        def _node_fn(row, _fn=user_fn):
+            mark = _fn(row)
+            if not isinstance(mark, Mark):
+                raise TypeError(
+                    "gotree.tree(): node= callable must return a gofish "
+                    f"Mark, got {type(mark).__name__}"
+                )
+            # The returned mark may itself carry channel accessors (fresh
+            # `_PendingAccessor`s minted inside the call) — register them
+            # under the ordinary rows-batched contract, since those are
+            # resolved by `mapMark`'s normal DeriveBridge, not by another
+            # `ctx.applyLambda` round trip.
+            for lam_id, rows_fn in _collect_mark_lambdas(mark):
+                _registry[lam_id] = rows_fn
+            return mark.to_dict()
+
+        _registry[node.lambda_id] = _node_fn
+        derive_ids.append(node.lambda_id)
+    elif isinstance(node, Mark):
+        for lam_id, fn in _collect_raw_accessor_lambdas(node):
+            _registry[lam_id] = fn
+            derive_ids.append(lam_id)
+
+    link = tree_obj._link
+    if isinstance(link, _PendingAccessor):
+        _registry[link.lambda_id] = link.fn
+        derive_ids.append(link.lambda_id)
+
+    return derive_ids
+
 # Track where the `python_stories` package was registered from, so a /load
 # request with a different pythonStoriesDir can re-register against the new
 # path instead of silently reusing a stale registration.
@@ -172,6 +246,21 @@ class DeriveHandler(BaseHTTPRequestHandler):
                 _MarkFn,
                 _InputRef,
             )
+            from gofish.gotree import Tree
+
+            if isinstance(builder, Tree):
+                # A gotree Tree is a standalone top-level render, like a
+                # raw Mark story (#792) — it is never a ChartBuilder/
+                # LayerBuilder, and its lambdas (node mark-fn/template
+                # accessors, link callable) use the positional
+                # `__gofish_args` convention, not the rows-batched one.
+                self._json_response(200, {
+                    "_kind": "raw-mark",
+                    "mark": builder.to_dict(),
+                    "options": options,
+                    "deriveIds": _register_gotree_lambdas(builder),
+                })
+                return
 
             def serialize_chart(child) -> tuple:
                 """Return (child_payload, derive_ids) for one layer tier.
@@ -355,6 +444,25 @@ class DeriveHandler(BaseHTTPRequestHandler):
         try:
             data = json.loads(body)
             fn = _registry[lambda_id]
+
+            # gotree lambda calls (#792): the JS adapter
+            # (`makeGotreeApplyLambda`/`applyGotreeLambda`) sends a single
+            # positional-arg call as a one-row batch, `[{"__gofish_args":
+            # args}]`, because gofish-gotree's own `applyLambda(id, args)`
+            # contract is one-call/positional-args, not rows-in/rows-out.
+            # Ordinary derive/channel lambdas never send this shape, so
+            # this unwrap only ever fires for `_register_gotree_lambdas`-
+            # registered callables, which expect their args positionally.
+            if (
+                isinstance(data, list)
+                and len(data) == 1
+                and isinstance(data[0], dict)
+                and set(data[0].keys()) == {"__gofish_args"}
+            ):
+                result = fn(*data[0]["__gofish_args"])
+                self._json_response(200, [result])
+                return
+
             result = fn(data)
 
             # Ensure result is JSON-serializable

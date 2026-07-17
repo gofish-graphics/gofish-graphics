@@ -408,15 +408,14 @@ console.log(`Checking Python story sync against ${baseRef}...`);
 
 const exemptSet = loadExemptSet();
 
-const addedJs = gitDiff("A", baseRef).filter((f) =>
-  f.match(/^packages\/gofish-graphics\/stories\/.*\.stories\.tsx$/)
+const jsStoryPathRe = new RegExp(
+  `^(${JS_STORY_ROOTS.map((r) => r.replace(/\//g, "\\/")).join(
+    "|"
+  )})\\/.*\\.stories\\.tsx$`
 );
-const deletedJs = gitDiff("D", baseRef).filter((f) =>
-  f.match(/^packages\/gofish-graphics\/stories\/.*\.stories\.tsx$/)
-);
-const modifiedJs = gitDiff("M", baseRef).filter((f) =>
-  f.match(/^packages\/gofish-graphics\/stories\/.*\.stories\.tsx$/)
-);
+const addedJs = gitDiff("A", baseRef).filter((f) => f.match(jsStoryPathRe));
+const deletedJs = gitDiff("D", baseRef).filter((f) => f.match(jsStoryPathRe));
+const modifiedJs = gitDiff("M", baseRef).filter((f) => f.match(jsStoryPathRe));
 const allChangedFiles = new Set(gitDiff("ACDMRT", baseRef));
 
 const results: SyncResult[] = [];
