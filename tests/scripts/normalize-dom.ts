@@ -13,22 +13,69 @@
 /**
  * Extract the meaningful chart content from wrapper divs.
  * Storybook wraps charts in `#storybook-root > div[style="margin: 20px"]`.
+ * The gotree gallery stories additionally wrap in a
+ * `div[style="margin: 16px; width: ...px; height: ...px"]` via
+ * `initializeContainer()` (packages/gofish-gotree/stories/helper.ts).
  * The harness wraps in `#gofish-harness-root`.
- * We want just the first child's innerHTML (the SVG + axes etc.).
+ *
+ * Rather than fingerprint each scaffolding variant, strip *any* outermost
+ * `<div style="...">...</div>` wrapper that fully encloses the content —
+ * scaffolding is, by construction, a styled div wrapper around the real
+ * chart markup. Applied iteratively so nested scaffolding wrappers (e.g. a
+ * Storybook margin div around a gotree helper margin div) all get peeled.
  */
 export function stripWrapper(html: string): string {
-  // Remove the outermost div with margin:20px that initializeContainer() adds
   let s = html.trim();
 
-  // Strip <div style="margin: 20px;"> wrapper (Storybook only)
-  const marginWrap =
-    /^<div\s+style="margin:\s*20px;?">\s*([\s\S]*?)\s*<\/div>$/i;
-  const m = s.match(marginWrap);
-  if (m) {
+  const styledDivWrap = /^<div\s+style="[^"]*">\s*([\s\S]*?)\s*<\/div>$/i;
+  for (;;) {
+    const m = s.match(styledDivWrap);
+    if (!m) break;
     s = m[1].trim();
   }
 
   return s;
+}
+
+// ---------------------------------------------------------------------------
+// 1b. Strip display-projection attributes from the ROOT <svg> only
+// ---------------------------------------------------------------------------
+
+const ROOT_SVG_PROJECTION_ATTRS = new Set([
+  "width",
+  "height",
+  "viewbox",
+  "preserveaspectratio",
+]);
+
+/**
+ * Strip `width`, `height`, `viewBox`, and `preserveAspectRatio` from the
+ * ROOT `<svg>` element only (nested `<svg>` elements, if any, are untouched).
+ *
+ * Parity compares content geometry, not display sizing. The root svg's
+ * width/height/viewBox/preserveAspectRatio are a *display projection* —
+ * how the chart's already-solved coordinate space gets mapped onto the
+ * page/viewport — and story scaffolding legitimately rewrites them (e.g.
+ * gotree's `fitToContent` sets `width="100%" height="100%"` plus a
+ * content-fitted `viewBox` on a RAF after mount; the Python harness path
+ * never runs that scaffolding). Any real sizing bug in the chart itself
+ * shows up in the content coordinates (x/y/d/transform/etc. on the actual
+ * marks) that layout solved against, which this normalizer still compares
+ * byte-for-byte. So this rule is applied uniformly to every capture, JS and
+ * Python alike, before the two sides are ever diffed.
+ */
+export function stripRootSvgProjectionAttrs(html: string): string {
+  let replaced = false;
+  return html.replace(/<svg\b([^>]*)>/i, (whole, attrs: string) => {
+    if (replaced) return whole; // only the first (root) <svg>
+    replaced = true;
+    const kept = attrs.replace(
+      /\s+([\w:.-]+)="[^"]*"/g,
+      (attrMatch: string, name: string) =>
+        ROOT_SVG_PROJECTION_ATTRS.has(name.toLowerCase()) ? "" : attrMatch
+    );
+    return `<svg${kept}>`;
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -60,13 +107,20 @@ const NUMERIC_ATTRS = new Set([
   "stroke-opacity",
 ]);
 
-/** Round a single number string to `decimals` places. */
+/**
+ * Round a single number string to `decimals` places, preserving any trailing
+ * unit suffix (`%`, `px`, `em`, ...) rather than silently dropping it —
+ * `width="100%"` must stay `100%`, not become `100`.
+ */
 function roundNum(numStr: string, decimals: number): string {
-  const n = parseFloat(numStr);
+  const m = numStr.match(/^(-?\d+\.?\d*(?:e[+-]?\d+)?)([a-z%]*)$/i);
+  const [numPart, unit] = m ? [m[1], m[2]] : [numStr, ""];
+  const n = parseFloat(numPart);
   if (Number.isNaN(n)) return numStr;
   // Avoid -0
   const rounded = Math.round(n * 10 ** decimals) / 10 ** decimals;
-  return Object.is(rounded, -0) ? "0" : String(rounded);
+  const roundedStr = Object.is(rounded, -0) ? "0" : String(rounded);
+  return roundedStr + unit;
 }
 
 /** Round numbers inside an SVG `d` attribute (path data). */
@@ -322,6 +376,7 @@ export function normalizeDom(
 
   let s = html;
   s = stripWrapper(s);
+  s = stripRootSvgProjectionAttrs(s);
   s = roundFloats(s, decimals);
   s = normalizeIds(s);
   s = normalizeImageHrefs(s);

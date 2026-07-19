@@ -104,18 +104,36 @@ packages/gofish-graphics/stories/lowlevel/Constraints.stories.tsx::SpreadY_Rever
 packages/gofish-graphics/stories/lowlevel/ViolinPlot.stories.tsx::Default
 
 # ---------------------------------------------------------------------------
-# gofish-gotree (the GoTree tree-DSL package) — exempt from Python parity.
+# gofish-gotree (the GoTree tree-DSL package) — per-file exemptions (#792).
 #
-# These stories ARE captured by the JS visual-diff harness (tests/harness/
-# stories-runner.ts globs gofish-gotree/stories too), so they are tracked for
-# visual regressions. They are NOT mirrored to Python: gofish-gotree is a
-# JS-only package with no Python wrapper, so there is nothing to byte-match.
+# `walkJsStories()` now walks packages/gofish-gotree/stories/ alongside
+# gofish-graphics, so every gotree story is checked for a Python parity port
+# under tests/python-stories/gotree/... (same title-derived mapping as
+# gofish-graphics — see mapJsToPython in tests/scripts/path-mapping.ts).
 #
-# No per-file entries are needed below: this checker (both delta mode and
-# `--all`) hard-filters JS stories to `packages/gofish-graphics/stories/`
-# (see walkJsStories + the gitDiff filters in check-python-sync.ts), so it
-# never walks the gofish-gotree package. If parity coverage is ever extended
-# to gofish-gotree, list its stories here.
+# The gofish-gotree Python bridge and the ports of all 40 DSL-based gallery
+# stories landed with #792; the remaining entries below are the stories that
+# still need bespoke work. This list is a punch list, not a permanent
+# exemption: remove a line as soon as its Python port exists (mirroring the
+# workflow used for the gofish-graphics entries above). These stories ARE
+# already captured by the JS visual-diff harness (tests/harness/
+# stories-runner.ts globs gofish-gotree/stories too), so they're tracked for
+# visual regressions independent of this list.
+packages/gofish-gotree/stories/Matrix.stories.tsx
+packages/gofish-gotree/stories/Tree.stories.tsx
+
+# The following seven gotree gallery stories are hand-rolled, non-DSL
+# layouts (they don't go through the tree()/combine() grammar the other
+# gotree ports use), so they need bespoke Python ports rather than a
+# mechanical translation — flagged separately as a heads-up for whoever
+# picks them up.
+packages/gofish-gotree/stories/gallery/MultilevelSilhouetteTree.stories.tsx
+packages/gofish-gotree/stories/gallery/OutsideInTree.stories.tsx
+packages/gofish-gotree/stories/gallery/RadialDeep.stories.tsx
+packages/gofish-gotree/stories/gallery/RadialPhylogeneticTree.stories.tsx
+packages/gofish-gotree/stories/gallery/RadialTree.stories.tsx
+packages/gofish-gotree/stories/gallery/RadialTreeIncline.stories.tsx
+packages/gofish-gotree/stories/gallery/RotationTree.stories.tsx
 
 # LayeredBarsAndArea stays exempt: it drives a data-driven paint order with
 # `area(...).zOrder(d => …)` and reorders the area selection with a `derive`

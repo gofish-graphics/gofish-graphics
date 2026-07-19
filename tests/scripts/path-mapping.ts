@@ -22,18 +22,30 @@ const ROOT_DIR = dirname(TESTS_DIR);
  * this fold, resolving a `.python-sync-exempt` `file::Export` line through
  * `storyToPath` kept the underscore (`spread-x_center-to-center`) and the
  * parity-skip set never matched the captured DOM path. */
-export const toKebab = (s: string) =>
-  s
+export const toKebab = (s: string) => {
+  // "GoTree" (the gofish-gotree package's title segment on every one of its
+  // story titles, e.g. "GoTree / Gallery / arc-tree") is a single proper-noun
+  // token, not two English words — the general CamelCase-split rule below
+  // would otherwise mangle it to "go-tree", diverging from the package's own
+  // "gotree" name (and from the tests/python-stories/gotree/ convention).
+  // Declared exception, not a generalizable rule: no other title segment
+  // needs this.
+  if (s.trim() === "GoTree") return "gotree";
+  return s
     .replace(/([a-z])([A-Z])/g, "$1-$2")
     .replace(/[\s_]+/g, "-")
     .toLowerCase();
+};
 
 /**
  * Storybook title → file-level story id used by capture + parity review.
  * e.g. "atom/TitanicUnitDots" → "atom/titanic-unit-dots"
  */
 export function titleToStoryId(title: string): string {
-  return title.split("/").map(toKebab).join("/");
+  return title
+    .split("/")
+    .map((seg) => toKebab(seg.trim()))
+    .join("/");
 }
 
 /**
@@ -46,7 +58,7 @@ export function titleToStoryId(title: string): string {
  * the two stay in lockstep if the kebab-casing rule ever changes.
  */
 export function storyToPath(title: string, name: string): string {
-  const segments = title.split("/").map(toKebab);
+  const segments = title.split("/").map((seg) => toKebab(seg.trim()));
   return `${segments.join("/")}--${toKebab(name)}`;
 }
 
@@ -55,6 +67,11 @@ export function storyToPath(title: string, name: string): string {
  *
  * e.g. "packages/gofish-graphics/stories/forwardsyntax/Bar/BarBasic.stories.tsx"
  *   →  "tests/python-stories/forwardsyntax/bar/test_bar_basic.py"
+ *
+ * gofish-gotree stories title their first segment "GoTree" (e.g. "GoTree /
+ * Gallery / arc-tree"), which kebab-cases to "gotree" — so this same rule
+ * naturally lands them under tests/python-stories/gotree/gallery/test_*.py
+ * with no gotree-specific special case.
  */
 export function mapJsToPython(jsFile: string): string {
   // Read the Storybook title from the JS file and derive the Python path from it.
@@ -63,21 +80,34 @@ export function mapJsToPython(jsFile: string): string {
   let title: string | null = null;
   try {
     const content = readFileSync(absPath, "utf-8");
-    const m = content.match(/title:\s*["'](.+?)["']/);
+    // Anchor the search to the `meta: Meta` object rather than matching the
+    // first `title:` in the file — some gallery stories (gofish-gotree) also
+    // carry a `parameters.gallery.title` (the gallery-card caption) that can
+    // appear earlier in the file than the Storybook nav `meta.title` this
+    // function needs.
+    const metaIdx = content.search(/:\s*Meta\b/);
+    const searchFrom = metaIdx >= 0 ? content.slice(metaIdx) : content;
+    const m = searchFrom.match(/title:\s*["'](.+?)["']/);
     if (m) title = m[1];
   } catch {
     /* file unreadable — fall through to path-based fallback */
   }
 
   if (title) {
-    const segments = title.split("/").map(toKebab);
+    // Storybook titles are `/`-delimited nav paths; gofish-gotree writes them
+    // with spaces around the slash ("GoTree / Gallery / arc-tree"), so each
+    // segment is trimmed before kebab-casing (otherwise the surrounding
+    // whitespace folds into stray leading/trailing dashes — see toKebab).
+    const segments = title.split("/").map((seg) => toKebab(seg.trim()));
     const dirPath = segments.slice(0, -1).join("/");
     const basePart = segments[segments.length - 1].replace(/-/g, "_");
     return `tests/python-stories/${dirPath}/test_${basePart}.py`;
   }
 
   // Fallback: derive from file path (CamelCase → snake_case, flatten one level)
-  let rel = jsFile.replace(/^packages\/gofish-graphics\/stories\//, "");
+  let rel = jsFile
+    .replace(/^packages\/gofish-graphics\/stories\//, "")
+    .replace(/^packages\/gofish-gotree\/stories\//, "");
   rel = rel.replace(/\.stories\.tsx$/, "");
   const lastSlash = rel.lastIndexOf("/");
   const dirPart = lastSlash >= 0 ? rel.slice(0, lastSlash) : ".";

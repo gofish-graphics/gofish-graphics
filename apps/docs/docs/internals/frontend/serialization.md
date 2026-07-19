@@ -13,6 +13,8 @@ covers:
   - packages/gofish-graphics/src/serialize/fromJSON.ts
   - packages/gofish-graphics/src/serialize/registry.ts
   - packages/gofish-python/scripts/generate.ts
+  - packages/gofish-gotree/src/serialize.ts
+  - packages/gofish-gotree/src/spec.ts
 ---
 
 # The Frontend IR
@@ -136,7 +138,8 @@ without a bridge. Marks are a tree — leaves
 `image`, `polygon`, plus the Python-bridge `mark-fn`), combinators (with
 `__combinator: true` and a `children` array — `layer`, `spread`, `stack`,
 `arrow`, `position`, `line`, `ribbon`, `treemap`, and the Porter-Duff family),
-refs, or the two self-discriminating wrapper marks `offset` and `cut` (below).
+refs, or one of the self-discriminating wrapper marks `offset`, `cut`, and
+`gotree-tree` (below).
 `position` is `enclose`'s undecorated sibling: it sets a single child's
 min-corner `(x, y)` in the parent's coordinates and draws nothing of its own
 (no hull, no styling) — a workaround for `enclose`'s convex-bbox-hull-only
@@ -164,6 +167,57 @@ absolute-vs-weight mixing, measure-unit checks) lives in ONE place, JS-side:
   deserializer expands it in place into its N slice nodes — the pure
   `cut(source, opts)` returns a `Promise<GoFishNode>[]` that combinators accept
   directly as children (see `mapMarkChildren` in `fromJSON.ts`).
+
+`gotree-tree` (#792) — `{ type: "gotree-tree", data, node?, link?, parentChild?,
+sibling?, coord? }` — a serialized gotree hierarchy visualization (the
+`gofish-gotree` package's tree grammar). `data` is the nested tree; `node` is a
+per-node mark template (channels may be `FieldAccessor`s, `DatumValue`s, or
+`{__gofish_lambda}` sentinels — omitted means gotree's `DEFAULT_NODE`); `link`
+is `"none"`, a static `{curve?, stroke?, strokeWidth?, opacity?}` object, or a
+lambda sentinel; `parentChild`/`sibling` are `GotreeCombinerIR`s — `{kind:
+"spread"|"distribute"|"nest"|"combine", options}` calling the matching
+gofish-gotree helper, or `{kind: "alternate", combiners}` for the depth-cycling
+combiner. The row seen by every field/lambda resolution at a hierarchy node is
+`{...data (children key omitted), depth, height, width, value}` —
+`depth`/`height`/`width`/`value` come from gotree's `HierarchyDatum` and
+**override** same-named fields already on the raw tree data.
+
+Unlike every other mark type, `gotree-tree` isn't reconstructed inside
+gofish-graphics at all: gofish-graphics must not depend on `gofish-gotree`
+(that package already depends on gofish-graphics, so the reverse edge would be
+a workspace cycle). Instead the deserializer accepts an optional `markBridges:
+Record<string, (spec) => Promise<Mark<any>> | Mark<any>>` map — consulted in
+`mapMark` before the `mark-fn`/`MARK_MAP` dispatch, keyed by the IR's `type`
+tag — and the caller (the Python widget, the parity harness) supplies `{
+"gotree-tree": (spec) => reconstructGotreeTree(spec, ctx) }`, where
+`reconstructGotreeTree` (`packages/gofish-gotree/src/serialize.ts`) rebuilds
+the real `GoTreeSpec` and calls gotree's own `tree()`. This is the same
+injection shape as `DeriveBridge`, generalized from "resolve a lambda" to
+"reconstruct an entire mark subtree gofish-graphics doesn't know about."
+
+`reconstructGotreeTree`'s `ctx` is `{ mapMark, applyLambda? }` — `mapMark`
+recurses back into the caller's own `Serialize.mapMark` (so a node template can
+itself contain any other mark IR, including a nested `gotree-tree`);
+`applyLambda(id, args)` resolves one lambda call to one value. That's a
+narrower contract than `DeriveBridge.applyLambda(id, rows)` (batched rows-in/
+rows-out over Arrow) — gotree needs single calls with 1 or 2 positional
+arguments (one node's row, or a link's `(srcRow, tgtRow)` pair), which doesn't
+fit the row-batching shape at all. Both the widget and the harness adapt the
+two by wrapping the positional args as the payload of a one-row batch call
+(`{__gofish_args: args}`); this is a deliberate shortcut, not a new bridge
+protocol — see `makeGotreeApplyLambda` in `widget-src/index.ts` for the exact
+wire shape a Python-side lambda dispatcher for gotree callables must unwrap.
+
+Because gotree's node factory and link callback are called _synchronously_
+during `tree()`'s hierarchy walk, `reconstructGotreeTree` cannot resolve
+lambda-backed channels or link options lazily — it pre-walks the hierarchy,
+resolves every node's `Mark` and every edge's link options up front (keyed by
+each node's stable `nodePath`), and only then calls `tree()` with plain
+synchronous lookup functions. This required a small internal change to
+`gofish-gotree` itself: `NodeFactory` and the function form of `LinkSpec` both
+gained an optional trailing `path`/`sourcePath, targetPath` argument so the
+pre-computed lookup can key by position (existing single-argument callers are
+unaffected).
 
 **`mark-fn` over refs** (#591) — a Python `.mark(fn)` callback isn't limited
 to receiving plain data rows: when the callback's `data` is a bag of
@@ -550,6 +604,11 @@ directly — no bridge sentinel needed.
 Olli and other pure-JS consumers don't see these — they're a
 `FrontendIRWithBridge` extension declared in the Python widget code
 (see [The Jupyter Bridge & RPC](/internals/python/bridge)).
+
+The `gotree-tree` mark (above) reuses the RPC transport but not the schema
+extension mechanism: instead of a new sentinel, it's an optional
+`markBridges` map passed alongside `bridge` into `mapMark`/`buildChart`, so
+gofish-graphics stays unaware of `gofish-gotree`'s existence.
 
 ## Prior art
 

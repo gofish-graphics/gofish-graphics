@@ -288,6 +288,9 @@ importers:
       apache-arrow:
         specifier: ^14.0.0
         version: 14.0.2
+      gofish-gotree:
+        specifier: workspace:*
+        version: link:../gofish-gotree
       gofish-graphics:
         specifier: workspace:*
         version: link:../gofish-graphics

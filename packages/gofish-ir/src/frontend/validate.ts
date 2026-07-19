@@ -20,6 +20,9 @@ import {
   type CutMarkIR,
   type DataIR,
   type FrontendIRDocument,
+  type GotreeCombinerIR,
+  type GotreeLinkOptionsIR,
+  type GotreeTreeIR,
   type LabelIR,
   type LeafMarkIR,
   type MarkIR,
@@ -817,6 +820,10 @@ function walkMark(node: unknown, path: string, ctx: Context): void {
     walkCutMark(node, path, ctx);
     return;
   }
+  if (t === "gotree-tree") {
+    walkGotreeTreeMark(node, path, ctx);
+    return;
+  }
   if (node.__combinator === true) {
     walkCombinatorMark(node, path, ctx);
     return;
@@ -967,6 +974,132 @@ function walkCutMark(
         "name",
         "zOrder",
         "translate",
+        "origin",
+        "meta",
+      ],
+      path,
+      ctx
+    );
+  }
+}
+
+/** `gotree-tree.link`'s object form — see {@link GotreeLinkOptionsIR}. */
+function walkGotreeLinkOptions(
+  value: Record<string, unknown>,
+  path: string,
+  ctx: Context
+): void {
+  if (
+    value.curve !== undefined &&
+    !["straight", "bezier", "orthogonal", "arc"].includes(value.curve as string)
+  ) {
+    ctx.errors.push({
+      path: `${path}.curve`,
+      message: `link.curve must be one of "straight" | "bezier" | "orthogonal" | "arc", got ${JSON.stringify(value.curve)}`,
+    });
+  }
+  optionalField(value, "stroke", path, ctx, expectString);
+  optionalField(value, "strokeWidth", path, ctx, expectNumber);
+  optionalField(value, "opacity", path, ctx, expectNumber);
+  if (ctx.strict) {
+    rejectUnknown(
+      value,
+      ["curve", "stroke", "strokeWidth", "opacity"],
+      path,
+      ctx
+    );
+  }
+}
+
+/** `gotree-tree.link` — `"none"`, a `GotreeLinkOptionsIR` object, or a
+ *  `{__gofish_lambda}` sentinel (the lambda receives `(srcRow, tgtRow)` and
+ *  returns a link-options dict, resolved eagerly at deserialize time). */
+function walkGotreeLink(value: unknown, path: string, ctx: Context): void {
+  if (value === "none") return;
+  if (!isObject(value)) {
+    ctx.errors.push({
+      path,
+      message: `link must be "none", a link-options object, or a lambda sentinel, got ${typeNameOf(value)}`,
+    });
+    return;
+  }
+  if ("__gofish_lambda" in value) {
+    if (typeof value.__gofish_lambda !== "string") {
+      ctx.errors.push({
+        path: `${path}.__gofish_lambda`,
+        message: "__gofish_lambda must be a string",
+      });
+    }
+    return;
+  }
+  walkGotreeLinkOptions(value, path, ctx);
+}
+
+const GOTREE_COMBINER_KINDS = [
+  "spread",
+  "distribute",
+  "nest",
+  "combine",
+  "alternate",
+] as const;
+
+/** `gotree-tree.parentChild` / `.sibling` — see {@link GotreeCombinerIR}.
+ *  `options` bags are validated only for shape (object), not deeply —
+ *  mirrors how combinator-mark/operator `options` are treated elsewhere in
+ *  this file; the real gofish-gotree helpers own their own opts. */
+function walkGotreeCombiner(value: unknown, path: string, ctx: Context): void {
+  if (!isObject(value)) {
+    ctx.errors.push({ path, message: "expected object" });
+    return;
+  }
+  const kind = value.kind;
+  if (!(GOTREE_COMBINER_KINDS as readonly string[]).includes(kind as string)) {
+    ctx.errors.push({
+      path: `${path}.kind`,
+      message: `gotree combiner "kind" must be one of ${GOTREE_COMBINER_KINDS.join(", ")}, got ${JSON.stringify(kind)}`,
+    });
+    return;
+  }
+  if (kind === "alternate") {
+    expectField(value, "combiners", path, ctx, (v, p) =>
+      walkArray(v, p, ctx, walkGotreeCombiner)
+    );
+    if (ctx.strict) rejectUnknown(value, ["kind", "combiners"], path, ctx);
+    return;
+  }
+  expectField(value, "options", path, ctx, expectObject);
+  if (ctx.strict) rejectUnknown(value, ["kind", "options"], path, ctx);
+}
+
+/**
+ * `gotree-tree` mark (issue #792) — see {@link GotreeTreeIR}. `node` (if
+ * present) recurses through the ordinary `walkMark` — a valid `MarkIR`, or
+ * the `{type:"mark-fn", lambdaId}` whole-factory fallback, which is already
+ * a `LeafMarkIR` variant.
+ */
+function walkGotreeTreeMark(
+  node: Record<string, unknown>,
+  path: string,
+  ctx: Context
+): void {
+  walkBaseFields(node, path, ctx);
+  expectField(node, "data", path, ctx, expectObject);
+  optionalField(node, "node", path, ctx, walkMark);
+  optionalField(node, "link", path, ctx, walkGotreeLink);
+  optionalField(node, "parentChild", path, ctx, walkGotreeCombiner);
+  optionalField(node, "sibling", path, ctx, walkGotreeCombiner);
+  optionalField(node, "coord", path, ctx, expectObject);
+  if (ctx.strict) {
+    rejectUnknown(
+      node,
+      [
+        "type",
+        "data",
+        "node",
+        "link",
+        "parentChild",
+        "sibling",
+        "coord",
         "origin",
         "meta",
       ],
@@ -1388,6 +1521,9 @@ export type {
   CutMarkIR,
   DataIR,
   FrontendIRDocument,
+  GotreeCombinerIR,
+  GotreeLinkOptionsIR,
+  GotreeTreeIR,
   LabelIR,
   LeafMarkIR,
   MarkIR,

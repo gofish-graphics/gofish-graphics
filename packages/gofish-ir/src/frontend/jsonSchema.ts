@@ -456,6 +456,71 @@ export const FRONTEND_IR_JSON_SCHEMA = {
         { $ref: "#/$defs/RefMarkIR" },
         { $ref: "#/$defs/OffsetMarkIR" },
         { $ref: "#/$defs/CutMarkIR" },
+        { $ref: "#/$defs/GotreeTreeIR" },
+      ],
+    },
+    GotreeTreeIR: {
+      description:
+        "gotree-tree (issue #792): a serialized gotree hierarchy visualization. Reconstructed via an injected markBridges entry (gofish-graphics never statically imports gofish-gotree). Row shape for field/lambda resolution at each hierarchy node: {...d.data (children key omitted), depth, height, width, value} — depth/height/width/value come from gotree's HierarchyDatum and OVERRIDE same-named data fields.",
+      type: "object",
+      required: ["type", "data"],
+      properties: {
+        type: { const: "gotree-tree" },
+        data: { type: "object" },
+        node: { $ref: "#/$defs/MarkIR" },
+        link: { $ref: "#/$defs/GotreeLinkSpec" },
+        parentChild: { $ref: "#/$defs/GotreeCombinerIR" },
+        sibling: { $ref: "#/$defs/GotreeCombinerIR" },
+        coord: { type: "object" },
+        origin: { $ref: "#/$defs/Origin" },
+        meta: { $ref: "#/$defs/Meta" },
+      },
+    },
+    GotreeLinkOptionsIR: {
+      type: "object",
+      properties: {
+        curve: { enum: ["straight", "bezier", "orthogonal", "arc"] },
+        stroke: { type: "string" },
+        strokeWidth: { type: "number" },
+        opacity: { type: "number" },
+      },
+    },
+    GotreeLinkSpec: {
+      description:
+        '"none", a link-options object, or a {__gofish_lambda} sentinel — the lambda receives (srcRow, tgtRow) and returns a link-options dict, resolved eagerly at deserialize time.',
+      oneOf: [
+        { const: "none" },
+        { $ref: "#/$defs/GotreeLinkOptionsIR" },
+        {
+          type: "object",
+          required: ["__gofish_lambda"],
+          properties: { __gofish_lambda: { type: "string" } },
+        },
+      ],
+    },
+    GotreeCombinerIR: {
+      description:
+        "Mirrors gofish-gotree's SpreadOptions/DistributeOptions/NestOptions/CombineOptions (helpers.ts) and its depth-indexed alternate(...). `options` bags are unvalidated here (the real helpers own their own opts), like other combinator options elsewhere in this schema.",
+      oneOf: [
+        {
+          type: "object",
+          required: ["kind", "options"],
+          properties: {
+            kind: { enum: ["spread", "distribute", "nest", "combine"] },
+            options: { type: "object" },
+          },
+        },
+        {
+          type: "object",
+          required: ["kind", "combiners"],
+          properties: {
+            kind: { const: "alternate" },
+            combiners: {
+              type: "array",
+              items: { $ref: "#/$defs/GotreeCombinerIR" },
+            },
+          },
+        },
       ],
     },
     OffsetMarkIR: {

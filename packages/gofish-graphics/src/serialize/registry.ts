@@ -93,6 +93,22 @@ export interface DeriveBridge {
 }
 
 /**
+ * Injected reconstruction for a mark-IR `type` that gofish-graphics doesn't
+ * itself know how to build — e.g. `"gotree-tree"` (issue #792), whose
+ * reconstruction logic lives in `gofish-gotree` and can't be statically
+ * imported here (gofish-graphics must not depend on gofish-gotree — that
+ * would be a workspace cycle, since gofish-gotree already depends on
+ * gofish-graphics). Consulted by `mapMark` BEFORE the `MARK_MAP` lookup,
+ * alongside the existing `mark-fn` special case. Keyed by the mark IR's
+ * `type` discriminator; the factory receives the raw mark spec and returns
+ * (a promise of) a live `Mark`.
+ */
+export type MarkBridges = Record<
+  string,
+  (spec: Record<string, any>) => Promise<Mark<any>> | Mark<any>
+>;
+
+/**
  * Combinator-form factories: operator-like factories that, when called with
  * marks as the second argument, return a combined mark. Keyed by the
  * lowercase `type` discriminator.

@@ -8,7 +8,10 @@ import { normalize } from "./data";
 import { renderSubtree } from "./recursion";
 import { collectEdges } from "./links";
 
-const DEFAULT_NODE: NodeFactory = () => rect({ w: 12, h: 12, fill: "#4682b4" });
+// Exported so the Python-bridge reconstruction (serialize.ts) can fall back
+// to the same default when the wire IR omits `node`.
+export const DEFAULT_NODE: NodeFactory = () =>
+  rect({ w: 12, h: 12, fill: "#4682b4" });
 
 export function tree(spec: GoTreeSpec, data: TreeData): any {
   const root = normalize(data);

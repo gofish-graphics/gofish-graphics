@@ -31,12 +31,19 @@ const CURVE_FOR: Record<NonNullable<LinkOptions["curve"]>, () => Curve> = {
 function resolveLinkOptions(
   link: LinkSpec | undefined,
   sourceNode: HierarchyNode<any>,
-  targetNode: HierarchyNode<any>
+  targetNode: HierarchyNode<any>,
+  sourcePath: string,
+  targetPath: string
 ): LinkOptions | null {
   if (link === "none") return null;
   if (!link) return {};
   if (typeof link === "function") {
-    return link(toDatum(sourceNode), toDatum(targetNode));
+    return link(
+      toDatum(sourceNode),
+      toDatum(targetNode),
+      sourcePath,
+      targetPath
+    );
   }
   return link;
 }
@@ -88,10 +95,18 @@ export function collectEdges(
     // The parent↔child combiner (and thus the growth axis) is resolved at the
     // parent's depth — matching how `renderSubtree` assembles that level.
     const growthDir = growthDirAtDepth(spec, node.depth);
+    const sourcePath = nodePath(node);
     for (const child of node.children) {
-      const opts = resolveLinkOptions(link, node, child);
+      const targetPath = nodePath(child);
+      const opts = resolveLinkOptions(
+        link,
+        node,
+        child,
+        sourcePath,
+        targetPath
+      );
       if (opts === null) continue;
-      edges.push(linkMark(opts, nodePath(node), nodePath(child), growthDir));
+      edges.push(linkMark(opts, sourcePath, targetPath, growthDir));
     }
   });
   return edges;
