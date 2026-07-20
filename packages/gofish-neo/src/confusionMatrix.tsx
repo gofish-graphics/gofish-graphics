@@ -10,25 +10,26 @@
  *
  * Alignment recipe (see gofish-gotree's `NeoAlignmentSpike` story, issue
  * #639, for the proof-of-concept this generalizes): every structure — the
- * table-body grid, the gotree row/column margins, and the scatter-based
- * measure strips — shares one leaf `pitch` (cellSize + spacing). The grid
- * divides its extent into `N` equal `pitch`-wide tracks; the trees use a
- * UNIFORM `spacing` at every sibling level plus a node size that spans
- * exactly `leafCount * pitch - spacing` (so a leaf, with leafCount 1,
- * measures exactly `pitch - spacing`) — matched pitch falls out of the
- * recursion with no per-node arithmetic. The measure strips use `scatter`'s
- * `yMin`/`yMax` continuous channel, which is y-UP even though the grid's
- * `table` rows are top-down, so row `i`'s band is
- * `[(N-1-i)*pitch, (N-i)*pitch]` (flipped from the grid's own top-down `i`).
+ * table-body grid, the gotree row/column margins, and the measure strips —
+ * shares one leaf `pitch` (cellSize + spacing). The grid divides its extent
+ * into `N` equal `pitch`-wide tracks; the trees use a UNIFORM `spacing` at
+ * every sibling level plus a node size that spans exactly
+ * `leafCount * pitch - spacing` (so a leaf, with leafCount 1, measures
+ * exactly `pitch - spacing`) — matched pitch falls out of the recursion with
+ * no per-node arithmetic. The measure strips are themselves an ordinal,
+ * one-column `table()` (see gofish-neo's `PinningSpike` scratch story): a
+ * `table({by:{x:<const>, y:"row"}})` orders its single column of rows
+ * top-down in data order, same as the grid's own rows, so strip row `i`
+ * lines up with grid row `i` directly — no y-flip arithmetic (that used to
+ * be needed for the old `scatter`-based strips, see historical issue #812)
+ * and no measure-tagged field workaround.
  */
 
 import {
   chart,
   table,
-  scatter,
   rect,
   text,
-  field,
   Layer,
   Constraint,
   layer,
@@ -192,43 +193,50 @@ const RATIO_MEASURES: ReadonlySet<Measure> = new Set([
 async function buildMeasureStrip(opts: {
   values: number[];
   n: number;
-  pitch: number;
+  cellSize: number;
+  spacing: number;
   stripW: number;
   format: (v: number) => string;
 }) {
-  const { values, n, pitch, format } = opts;
-  // `rect`'s `w` field, under `scatter`, resolves through a continuous
-  // 0-anchored domain that fills the chart's own declared width at the max
-  // value (gotcha: unlike `table`'s grid — which treats a numeric field as a
-  // literal pixel claim — `scatter` maps a size field through a domain/range
-  // scale, same as its position channels). `headroom` keeps the longest bar
-  // short of the full container so an inset label never crowds the edge.
-  const headroom = 1.15;
+  const { values, n, cellSize, spacing, stripW, format } = opts;
   const maxVal = Math.max(...values, 1e-9);
   const rows = values.map((v, i) => ({
-    barValue: v / (maxVal * headroom),
+    row: i,
+    col: "v",
+    barW: Math.max(0, (v / maxVal) * stripW),
     labelStr: format(v),
-    start: (n - 1 - i) * pitch,
-    end: (n - i) * pitch,
   }));
-  return chart(rows, { w: opts.stripW, h: n * pitch, axes: false })
-    .flow(
-      scatter({
-        yMin: field("start", "rowPos"),
-        yMax: field("end", "rowPos"),
-      } as any)
-    )
-    .mark(
-      rect({
-        w: "barValue",
-        h: Math.max(4, pitch * 0.5),
-        fill: "#3d6ea5",
-      } as any).label("labelStr", {
-        position: "inset-right",
-        fontSize: 9,
-        color: "white",
-      })
-    )
+  // The bar fills the full row track height (cellSize) — matching what the
+  // old scatter-based strip actually rendered (its `yMin`/`yMax` interval
+  // constraint stretched the box to span the whole band regardless of its
+  // own declared `h`).
+  //
+  // A per-row varying bar `w` would break `table`'s uniform-track sizing (it
+  // claims a track's width from the max cell in it) and centering it in the
+  // track would defeat the left-anchored look — so, same workaround as
+  // `bodyMark`'s size encoding below (and issue #813): a per-row FUNCTION
+  // mark building an invisible full-strip-width reference plus the concrete
+  // bar, left-aligned to the reference's left edge. `table`'s per-cell leaf
+  // is a length-1 bucket (`[row]`), not the bare row — unwrap it.
+  const stripMark = (leaf: any) => {
+    const d = Array.isArray(leaf) ? leaf[0] : leaf;
+    return layer([
+      rect({ w: stripW, h: cellSize, fill: "transparent" } as any).name("ref"),
+      rect({ w: d.barW, h: cellSize, fill: "#3d6ea5" } as any)
+        .name("bar")
+        .label(() => d.labelStr, {
+          position: "inset-right",
+          fontSize: 9,
+          color: "white",
+        }),
+    ]).constrain(({ ref, bar }: any) => [
+      Constraint.align({ x: "start", y: "middle" }, [ref, bar]),
+    ]);
+  };
+  const stripExtent = n * cellSize + (n - 1) * spacing;
+  return chart(rows, { w: stripW, h: stripExtent, axes: false })
+    .flow(table({ by: { x: "col", y: "row" }, spacing }))
+    .mark(stripMark as any)
     .resolve();
 }
 
@@ -407,7 +415,8 @@ export async function confusionMatrix(
       const chartNode = await buildMeasureStrip({
         values,
         n,
-        pitch,
+        cellSize,
+        spacing,
         stripW: STRIP_W,
         format: (v) => (isRatio ? v.toFixed(2) : String(Math.round(v))),
       });
