@@ -217,11 +217,26 @@ export function frontier(
   return leaves(root, (n) => !collapsedIds.has(n.id));
 }
 
-/** Finds a node by id via a simple tree walk, or undefined if absent. */
+/** Finds a node by id via a tree walk that stops as soon as it's found. */
 export function findNode(root: TreeNode, id: string): TreeNode | undefined {
-  let found: TreeNode | undefined;
+  if (root.id === id) return root;
+  for (const child of root.children) {
+    const found = findNode(child, id);
+    if (found) return found;
+  }
+  return undefined;
+}
+
+/**
+ * Builds an id -> node lookup `Map` for the whole tree in one O(size) walk,
+ * for callers that look up many ids against the same tree (e.g.
+ * `buildMatrix`'s per-cell `actual`/`observed` lookups) — an O(1) map lookup
+ * per id instead of an O(size) `findNode` walk per id.
+ */
+export function nodeIndex(root: TreeNode): Map<string, TreeNode> {
+  const index = new Map<string, TreeNode>();
   preorder(root, (n) => {
-    if (n.id === id) found = n;
+    index.set(n.id, n);
   });
-  return found;
+  return index;
 }

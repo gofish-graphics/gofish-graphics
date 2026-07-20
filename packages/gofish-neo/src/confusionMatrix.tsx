@@ -63,10 +63,20 @@ export interface ConfusionMatrixSpec extends NeoSpec {
 
 const DEFAULT_CELL_SIZE = 44;
 const DEFAULT_SPACING = 0;
-const DEFAULT_COLORS: [string, string] = ["#e6f5f8", "#0b5394"];
-const ZERO_FILL = "#f2f2f3";
 
-const PALETTE_DEPTH = ["#1d3557", "#3d6ea5", "#7ba7d1", "#b7d0e8"];
+/** Sequential gradient endpoints used as the body cells' default color encoding. */
+export const DEFAULT_COLORS: [string, string] = ["#e6f5f8", "#0b5394"];
+/** Fill for a zero-count cell (never gradient-encoded — zero is categorical, not a scaled value). */
+export const ZERO_FILL = "#f2f2f3";
+
+/** Per-tree-depth fill for margin nodes, darkest at the root. */
+export const PALETTE_DEPTH = ["#1d3557", "#3d6ea5", "#7ba7d1", "#b7d0e8"];
+
+// Rough estimate of a rendered glyph's width as a fraction of its font size,
+// used to decide whether a margin-node label needs to shrink to fit its box.
+// gofish-graphics doesn't yet expose its real text measurement to callers;
+// this is a placeholder pending that (an issue should be filed to track it).
+const CHAR_W_RATIO = 0.62;
 
 const PC_GAP = 16; // parent<->child-group gap in both tree margins
 const NODE_W_ROW = 88; // row-tree node width, uniform across levels
@@ -143,10 +153,13 @@ function marginNodeFactory(opts: {
     const last = String(d.data.name).split(":").pop()!;
     const displayName = axis === "w" ? last : full;
     const available = w - 6;
-    const estCharW = fontSize * 0.62;
+    const estCharW = fontSize * CHAR_W_RATIO;
     const shrunk =
       displayName.length * estCharW > available
-        ? Math.max(7, Math.floor(available / (displayName.length * 0.62)))
+        ? Math.max(
+            7,
+            Math.floor(available / (displayName.length * CHAR_W_RATIO))
+          )
         : fontSize;
     return Layer({ w, h }, [
       rect({
@@ -256,7 +269,7 @@ export async function confusionMatrix(
   const cells = rows.flatMap((rowNode) =>
     cols.map((colNode) => {
       const count = frequency(matrix, rowNode, colNode);
-      const norm = normalizer(rowNode, colNode);
+      const norm = normalizer(rowNode, colNode, count);
       const isZero = count === 0;
       const fillColor = isZero
         ? ZERO_FILL
@@ -323,11 +336,14 @@ export async function confusionMatrix(
         ]);
       }) as any);
 
-  const grid = await chart(cells, { w: gridExtent, h: gridExtent, axes: false })
+  const gridPromise = chart(cells, {
+    w: gridExtent,
+    h: gridExtent,
+    axes: false,
+  })
     .flow(table({ by: { x: "observed", y: "actual" }, spacing }))
     .mark(bodyMark as any)
     .resolve();
-  grid.name("grid");
 
   // ─── row + column margins ───────────────────────────────────────────────
   // The tree root is a synthetic wrapper with exactly one child (the
@@ -337,49 +353,42 @@ export async function confusionMatrix(
   const goTreeData = toGoTreeData(dimRoot, collapsedIds);
   const levels = levelCount(dimRoot, collapsedIds);
 
-  const rowMargin = tree(
-    {
-      node: marginNodeFactory({
-        pitch,
-        spacing,
-        cross: NODE_W_ROW,
-        axis: "h",
-        fontSize: 10,
-      }),
-      link: "none",
-      parentChild: distribute({
-        dir: "x",
-        spacing: PC_GAP,
-        alignment: "middle",
-      }),
-      sibling: distribute({ dir: "y", spacing, alignment: "start" }),
-    },
-    goTreeData as any
-  ) as any;
-  rowMargin.name("rowMargin");
-  const rowTreeW = levels * NODE_W_ROW + (levels - 1) * PC_GAP;
+  // Both margins are the same shape, transposed: a "row" margin grows along
+  // x (parent<->child) and stacks siblings along y, with a fixed-width
+  // cross-axis node column; a "col" margin is the same recipe with x/y (and
+  // their per-axis constants) swapped.
+  function buildMargin(axis: "row" | "col"): { node: any; size: number } {
+    const cross = axis === "row" ? NODE_W_ROW : NODE_H_COL;
+    const fontSize = axis === "row" ? 10 : 9;
+    const parentChildDir = axis === "row" ? "x" : "y";
+    const siblingDir = axis === "row" ? "y" : "x";
 
-  const colMargin = tree(
-    {
-      node: marginNodeFactory({
-        pitch,
-        spacing,
-        cross: NODE_H_COL,
-        axis: "w",
-        fontSize: 9,
-      }),
-      link: "none",
-      parentChild: distribute({
-        dir: "y",
-        spacing: PC_GAP,
-        alignment: "middle",
-      }),
-      sibling: distribute({ dir: "x", spacing, alignment: "start" }),
-    },
-    goTreeData as any
-  ) as any;
-  colMargin.name("colMargin");
-  const colTreeH = levels * NODE_H_COL + (levels - 1) * PC_GAP;
+    const node = tree(
+      {
+        node: marginNodeFactory({
+          pitch,
+          spacing,
+          cross,
+          axis: axis === "row" ? "h" : "w",
+          fontSize,
+        }),
+        link: "none",
+        parentChild: distribute({
+          dir: parentChildDir,
+          spacing: PC_GAP,
+          alignment: "middle",
+        }),
+        sibling: distribute({ dir: siblingDir, spacing, alignment: "start" }),
+      },
+      goTreeData as any
+    ) as any;
+    node.name(axis === "row" ? "rowMargin" : "colMargin");
+    const size = levels * cross + (levels - 1) * PC_GAP;
+    return { node, size };
+  }
+
+  const { node: rowMargin, size: rowTreeW } = buildMargin("row");
+  const { node: colMargin, size: colTreeH } = buildMargin("col");
 
   // Leaves in both margins are laid out at the SAME uniform pitch as the
   // grid's own rows/columns (a leaf's cross-axis-orthogonal size is exactly
@@ -391,7 +400,7 @@ export async function confusionMatrix(
   const STRIP_W = 84;
   const HEADER_H = 14;
 
-  const strips = await Promise.all(
+  const stripsPromise = Promise.all(
     resolved.measures.map(async (measure) => {
       const values = rows.map((node) => computeMeasure(measure, matrix, node));
       const isRatio = RATIO_MEASURES.has(measure);
@@ -414,8 +423,12 @@ export async function confusionMatrix(
     })
   );
 
+  // The grid and the measure strips are independent resolves — run them
+  // concurrently instead of sequentially.
+  const [grid, strips] = await Promise.all([gridPromise, stripsPromise]);
+  grid.name("grid");
+
   // ─── compose ─────────────────────────────────────────────────────────────
-  const rowMarginX = 0;
   const gridX = rowTreeW + MARGIN_GAP;
   const gridY = colTreeH + MARGIN_GAP;
 
@@ -430,7 +443,7 @@ export async function confusionMatrix(
   const composed = layer(pieces).constrain(({ ...refs }: any) => {
     const constraints: any[] = [
       Constraint.position({ x: gridX, y: gridY, anchor: "start" }, [refs.grid]),
-      Constraint.position({ x: rowMarginX, y: gridY, anchor: "start" }, [
+      Constraint.position({ x: 0, y: gridY, anchor: "start" }, [
         refs.rowMargin,
       ]),
       Constraint.position({ x: gridX, y: 0, anchor: "start" }, [

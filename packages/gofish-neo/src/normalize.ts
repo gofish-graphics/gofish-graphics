@@ -9,8 +9,17 @@ import { frontier, type TreeNode } from "./labelTree";
 import { frequency, totalColumn, totalRow, type Matrix } from "./matrix";
 import type { Normalization } from "./spec";
 
-/** Maps a (rowNode, colNode) cell to a `[0, 1]` visual-scale value. */
-export type Normalizer = (rowNode: TreeNode, colNode: TreeNode) => number;
+/**
+ * Maps a (rowNode, colNode) cell to a `[0, 1]` visual-scale value. `count`
+ * is that cell's already-computed `frequency(matrix, rowNode, colNode)` —
+ * every call site has it in hand already, so the normalizer never
+ * recomputes it internally.
+ */
+export type Normalizer = (
+  rowNode: TreeNode,
+  colNode: TreeNode,
+  count: number
+) => number;
 
 /**
  * Builds a normalizer of the given kind:
@@ -45,15 +54,25 @@ export function buildNormalizer(
   options: NormalizerOptions = {}
 ): Normalizer {
   if (normalization === "row") {
-    return (rowNode, colNode) => {
-      const denom = totalRow(matrix, rowNode);
-      return denom === 0 ? 0 : frequency(matrix, rowNode, colNode) / denom;
+    const rowTotals = new Map<string, number>();
+    return (rowNode, _colNode, count) => {
+      let denom = rowTotals.get(rowNode.id);
+      if (denom === undefined) {
+        denom = totalRow(matrix, rowNode);
+        rowTotals.set(rowNode.id, denom);
+      }
+      return denom === 0 ? 0 : count / denom;
     };
   }
   if (normalization === "column") {
-    return (rowNode, colNode) => {
-      const denom = totalColumn(matrix, colNode);
-      return denom === 0 ? 0 : frequency(matrix, rowNode, colNode) / denom;
+    const colTotals = new Map<string, number>();
+    return (_rowNode, colNode, count) => {
+      let denom = colTotals.get(colNode.id);
+      if (denom === undefined) {
+        denom = totalColumn(matrix, colNode);
+        colTotals.set(colNode.id, denom);
+      }
+      return denom === 0 ? 0 : count / denom;
     };
   }
 
@@ -74,12 +93,11 @@ export function buildNormalizer(
   }
   const degenerate = !Number.isFinite(min) || !Number.isFinite(max);
 
-  return (rowNode, colNode) => {
-    const v = frequency(matrix, rowNode, colNode);
-    if (degenerate || v <= 0) return 0;
+  return (_rowNode, _colNode, count) => {
+    if (degenerate || count <= 0) return 0;
     if (max === min) return 1;
     // A diagonal cell excluded from the domain can exceed it; clamp rather
     // than let it run past 1.
-    return Math.min(1, (v - min) / (max - min));
+    return Math.min(1, (count - min) / (max - min));
   };
 }

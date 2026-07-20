@@ -67,5 +67,10 @@ export type { Measure } from "./measures";
 export { applyDefaults } from "./spec";
 export type { NeoSpec, ResolvedNeoSpec, Normalization, Encoding } from "./spec";
 
-export { confusionMatrix } from "./confusionMatrix";
+export {
+  confusionMatrix,
+  DEFAULT_COLORS,
+  ZERO_FILL,
+  PALETTE_DEPTH,
+} from "./confusionMatrix";
 export type { ConfusionMatrixSpec } from "./confusionMatrix";

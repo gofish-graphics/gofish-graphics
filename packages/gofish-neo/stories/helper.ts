@@ -6,14 +6,13 @@
 
 // Scale the rendered SVG to fill the container by setting its viewBox to the
 // content bounding box (so small charts are centered and large ones don't clip).
-export const fitToContent = (host: HTMLElement) => {
+export const fitToContent = (host: HTMLElement, pad = 10) => {
   requestAnimationFrame(() => {
     const svg = host.querySelector("svg");
     if (!svg) return;
     try {
       const bb = (svg as SVGSVGElement).getBBox();
       if (!bb.width || !bb.height) return;
-      const pad = 10;
       svg.setAttribute(
         "viewBox",
         `${bb.x - pad} ${bb.y - pad} ${bb.width + 2 * pad} ${bb.height + 2 * pad}`
@@ -31,13 +30,14 @@ export const fitToContent = (host: HTMLElement) => {
 // rendered into it on the next frame. Stories call this, then render their
 // chart into the returned element.
 export const initializeContainer = (
-  size: { w: number; h: number } = { w: 640, h: 420 }
+  size: { w: number; h: number } = { w: 640, h: 420 },
+  pad?: number
 ) => {
   const c = document.createElement("div");
   c.style.margin = "16px";
   c.style.width = `${size.w}px`;
   c.style.height = `${size.h}px`;
   document.body.appendChild(c);
-  fitToContent(c);
+  fitToContent(c, pad);
   return c;
 };

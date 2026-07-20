@@ -32,14 +32,30 @@ export function truePositives(matrix: Matrix, node: TreeNode): number {
   return sum;
 }
 
+/**
+ * Computes TP/FP/FN for `node` from the underlying matrix primitives exactly
+ * once each — the shared basis for `falsePositives`/`falseNegatives`/
+ * `trueNegatives`/`accuracy`, so a caller that needs more than one of these
+ * quantities (e.g. `accuracy`) never recomputes `truePositives` per quantity.
+ */
+function tpFpFn(
+  matrix: Matrix,
+  node: TreeNode
+): { tp: number; fp: number; fn: number } {
+  const tp = truePositives(matrix, node);
+  const fp = totalColumn(matrix, node) - tp;
+  const fn = totalRow(matrix, node) - tp;
+  return { tp, fp, fn };
+}
+
 /** False positives for `node`: everything predicted as `node` that wasn't actually `node`. */
 export function falsePositives(matrix: Matrix, node: TreeNode): number {
-  return totalColumn(matrix, node) - truePositives(matrix, node);
+  return tpFpFn(matrix, node).fp;
 }
 
 /** False negatives for `node`: everything actually `node` that wasn't predicted as `node`. */
 export function falseNegatives(matrix: Matrix, node: TreeNode): number {
-  return totalRow(matrix, node) - truePositives(matrix, node);
+  return tpFpFn(matrix, node).fn;
 }
 
 /**
@@ -57,9 +73,7 @@ export function falseNegatives(matrix: Matrix, node: TreeNode): number {
  * grand total exactly.
  */
 export function trueNegatives(matrix: Matrix, node: TreeNode): number {
-  const tp = truePositives(matrix, node);
-  const fp = falsePositives(matrix, node);
-  const fn = falseNegatives(matrix, node);
+  const { tp, fp, fn } = tpFpFn(matrix, node);
   return total(matrix) - tp - fp - fn;
 }
 
@@ -93,10 +107,8 @@ export function recall(matrix: Matrix, node: TreeNode): number {
  * equivalently `(TP + TN) / total()`. Guarded to 0 when the total is 0.
  */
 export function accuracy(matrix: Matrix, node: TreeNode): number {
-  const tp = truePositives(matrix, node);
-  const tn = trueNegatives(matrix, node);
-  const fp = falsePositives(matrix, node);
-  const fn = falseNegatives(matrix, node);
+  const { tp, fp, fn } = tpFpFn(matrix, node);
+  const tn = total(matrix) - tp - fp - fn;
   return safeDivide(tp + tn, tp + tn + fp + fn);
 }
 

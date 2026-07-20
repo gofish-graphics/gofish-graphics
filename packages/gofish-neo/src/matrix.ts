@@ -4,7 +4,7 @@
  * frequency is a rectangular sum over `matrix[row.start:row.end][col.start:col.end]`.
  */
 
-import { buildLabelTree, findNode, type TreeNode } from "./labelTree";
+import { buildLabelTree, nodeIndex, type TreeNode } from "./labelTree";
 import {
   condition,
   dimensions,
@@ -51,9 +51,10 @@ export function buildMatrix(records: Confusion[], spec: NeoSpec): Built {
 
   const n = tree.end; // root always covers [0, n)
   const matrix: Matrix = Array.from({ length: n }, () => new Array(n).fill(0));
+  const index = nodeIndex(tree);
   for (const cell of cells) {
-    const rowNode = findNode(tree, cell.actual);
-    const colNode = findNode(tree, cell.observed);
+    const rowNode = index.get(cell.actual);
+    const colNode = index.get(cell.observed);
     if (!rowNode || !colNode) {
       throw new Error(
         `marginalized label "${cell.actual}"/"${cell.observed}" not found in built tree`

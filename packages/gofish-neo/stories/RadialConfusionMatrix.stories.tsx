@@ -13,6 +13,9 @@ import {
   frequency,
   buildNormalizer,
   applyDefaults,
+  DEFAULT_COLORS,
+  ZERO_FILL,
+  PALETTE_DEPTH,
 } from "../src";
 import { initializeContainer } from "./helper";
 import { animalsHierarchical } from "./data";
@@ -35,11 +38,18 @@ const meta: Meta = {
 export default meta;
 
 const CONTAINER_SIZE = { w: 900, h: 900 };
+// `fitToContent` (the story harness's viewBox auto-fit) crops tightly to the
+// content bbox with only a small default pad, which would put the header
+// labels — the widest things in the piece, since they sit right at the rim —
+// flush against the crop edge. Pass a larger pad through `initializeContainer`
+// instead of padding the bbox with invisible marker marks: ~150px of the
+// breathing room the old markers provided, minus the harness's own 10px
+// default (already folded into that 150px), so the total margin is roughly
+// unchanged.
+const RADIAL_PAD = 150 - 10;
 
-// ─── palette (matches the Cartesian ConfusionMatrix stories' sequential ramp) ──
-const COLORS: [string, string] = ["#e6f5f8", "#0b5394"];
-const ZERO_FILL = "#f2f2f3";
-const HEADER_FILL = "#1d3557"; // same navy as the flat version's root tree-box
+// ─── palette (shared with the Cartesian renderer, confusionMatrix.tsx) ──────
+const HEADER_FILL = PALETTE_DEPTH[0]; // same navy as the flat version's root tree-box
 
 // ─── geometry ───────────────────────────────────────────────────────────────
 // A full 2π sweep degenerates (a rect spanning exactly 2π collapses to a
@@ -91,11 +101,14 @@ async function radialConfusionMatrix() {
     const rInner = BODY_R_INNER + ringPos * ringThickness;
     cols.forEach((colNode) => {
       const count = frequency(matrix, rowNode, colNode);
-      const norm = normalizer(rowNode, colNode);
+      const norm = normalizer(rowNode, colNode, count);
       const isZero = count === 0;
       const fill = isZero
         ? ZERO_FILL
-        : assignGradientColor({ _tag: "gradient", stops: COLORS } as any, norm);
+        : assignGradientColor(
+            { _tag: "gradient", stops: DEFAULT_COLORS } as any,
+            norm
+          );
       marks.push(
         rect({
           x: colNode.start * perLeafAngle,
@@ -202,30 +215,6 @@ async function radialConfusionMatrix() {
     );
   });
 
-  // Invisible margin markers: `fitToContent` (the story harness's viewBox
-  // auto-fit) crops tightly to the content bbox with only a fixed 10px pad,
-  // which puts the header labels — the widest things in the piece, since they
-  // sit right at the rim — flush against the crop edge. A ring of small,
-  // unembedded (position-only) points at a larger radius pads the bbox on
-  // every side without drawing anything visible. Unlike `text`, a shape's
-  // (x, y) here IS still routed through the coord transform when neither
-  // dimension is embedded (see ellipse.tsx's `space.transform(center)`), so
-  // these are genuine (θ, r) pairs, not pre-transformed pixels.
-  const MARGIN_R = HEADER_R_OUTER + 150;
-  for (let i = 0; i < 8; i++) {
-    const theta = (i * 2 * Math.PI) / 8;
-    marks.push(
-      rect({
-        x: theta,
-        y: MARGIN_R,
-        w: 2,
-        h: 2,
-        fill: "none",
-        stroke: "none",
-      } as any)
-    );
-  }
-
   return Frame(
     {
       w: CONTAINER_SIZE.w,
@@ -251,7 +240,7 @@ export const Radial: StoryObj = {
     },
   },
   render: () => {
-    const container = initializeContainer(CONTAINER_SIZE);
+    const container = initializeContainer(CONTAINER_SIZE, RADIAL_PAD);
     (async () => {
       const node = await radialConfusionMatrix();
       node.render(container, CONTAINER_SIZE);

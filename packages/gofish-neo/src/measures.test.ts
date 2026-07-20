@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildLabelTree, findNode, type TreeNode } from "./labelTree";
+import { buildLabelTree, findNode } from "./labelTree";
 import type { Matrix } from "./matrix";
 import {
   accuracy,
@@ -10,28 +10,7 @@ import {
   trueNegatives,
   truePositives,
 } from "./measures";
-
-/** See matrix.test.ts for the canonical-fixture description. */
-function fixture(): {
-  tree: TreeNode;
-  matrix: Matrix;
-  A: TreeNode;
-  B: TreeNode;
-  C: TreeNode;
-  BC: TreeNode;
-} {
-  const tree = buildLabelTree(["A", "BC:B", "BC:C"]);
-  const A = findNode(tree, "A")!;
-  const B = findNode(tree, "BC:B")!;
-  const C = findNode(tree, "BC:C")!;
-  const BC = findNode(tree, "BC")!;
-  const matrix: Matrix = [
-    [3, 5, 2],
-    [3, 4, 3],
-    [1, 2, 7],
-  ];
-  return { tree, matrix, A, B, C, BC };
-}
+import { fixture } from "./testFixture";
 
 describe("per-leaf measures", () => {
   it("matches the worked TP/FP/FN/TN", () => {
