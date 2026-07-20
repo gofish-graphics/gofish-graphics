@@ -10,6 +10,7 @@ export default {
   watch: [
     "../../../../../packages/gofish-graphics/stories/**/*.stories.tsx",
     "../../../../../packages/gofish-gotree/stories/**/*.stories.tsx",
+    "../../../../../packages/gofish-neo/stories/**/*.stories.tsx",
   ],
   load() {
     const examples = loadStoryExamples();

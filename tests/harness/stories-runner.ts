@@ -5,9 +5,10 @@
  */
 
 // Import all story modules eagerly so they're available synchronously after page
-// load. Both workspace packages with stories are scanned: gofish-graphics and the
-// gofish-gotree tree-DSL package (the latter compiles its SolidJS source directly
-// via the relative `../../src` import in its stories, so no built dist is needed).
+// load. Three workspace packages with stories are scanned: gofish-graphics, the
+// gofish-gotree tree-DSL package, and the gofish-neo hierarchical-confusion-matrix
+// package (the latter two compile their SolidJS source directly via the relative
+// `../../src` import in their stories, so no built dist is needed).
 const storyModules = {
   ...import.meta.glob(
     "../../packages/gofish-graphics/stories/**/*.stories.tsx",
@@ -16,6 +17,9 @@ const storyModules = {
     }
   ),
   ...import.meta.glob("../../packages/gofish-gotree/stories/**/*.stories.tsx", {
+    eager: true,
+  }),
+  ...import.meta.glob("../../packages/gofish-neo/stories/**/*.stories.tsx", {
     eager: true,
   }),
 } as Record<string, any>;
