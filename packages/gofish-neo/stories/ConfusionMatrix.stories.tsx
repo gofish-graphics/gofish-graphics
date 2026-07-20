@@ -32,8 +32,11 @@ export const Flat: StoryObj = {
         "A hierarchical confusion matrix for a flat 5-class animal classifier, with tree-shaped row/column margins and per-class precision/recall/accuracy strips.",
     },
   },
-  render: () =>
-    renderInto(() => confusionMatrix({ classes: ["animal"] }, animalsFlat)),
+  render: () => {
+    return renderInto(() =>
+      confusionMatrix({ classes: ["animal"] }, animalsFlat)
+    );
+  },
 };
 
 export const Hierarchical: StoryObj = {
@@ -46,13 +49,14 @@ export const Hierarchical: StoryObj = {
         "A confusion matrix over a 2-level animal-class hierarchy (mammal/bird/reptile groups), where the tree-shaped margins make within-group confusion (cat/dog/fox) visually distinct from rarer across-group mistakes.",
     },
   },
-  render: () =>
-    renderInto(() =>
+  render: () => {
+    return renderInto(() =>
       confusionMatrix(
         { classes: ["animal"], measures: ["precision", "recall", "accuracy"] },
         animalsHierarchical
       )
-    ),
+    );
+  },
 };
 
 export const CollapsedSubtree: StoryObj = {
@@ -98,10 +102,11 @@ export const MultiOutputNested: StoryObj = {
         "A checkout classifier's beverage and size predictions nested into a single matrix — size confusions surface within each beverage's own block instead of being averaged away.",
     },
   },
-  render: () =>
-    renderInto(() =>
+  render: () => {
+    return renderInto(() =>
       confusionMatrix({ classes: ["beverage", "size"] }, checkoutMultiOutput)
-    ),
+    );
+  },
 };
 
 export const Conditioned: StoryObj = {
