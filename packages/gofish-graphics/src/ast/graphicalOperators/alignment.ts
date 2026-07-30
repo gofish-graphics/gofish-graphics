@@ -14,7 +14,7 @@ import {
   mergeMeasures,
   mergeAllMeasures,
   forgetAllMeasures,
-  spaceMeasure,
+  spaceMeasureState,
   spacePlacement,
   continuousExtentInterval,
   UnderlyingSpace,
@@ -59,8 +59,8 @@ export function unionChildSpaces(
     for (const ord of ordinals) {
       if (ord.domain) for (const k of ord.domain) keys.add(k);
     }
-    // Carry the grouping measure through the union (FORGET on a real clash, as
-    // the magnitude path does) so a category axis keeps naming itself off its
+    // Carry the grouping measure through the union (record MIXED on a real clash,
+    // as the magnitude path does) so a category axis keeps naming itself off its
     // own space — e.g. a `Frame` wrapping a `spread(lake)` preserves "lake".
     const measure = forgetAllMeasures(ordinals.map((o) => o.measure));
     // Anonymous only if EVERY unioned ordinal is anonymous — one semantically
@@ -78,7 +78,7 @@ export function unionChildSpaces(
   // bars/stacks not yet placed). Keep the symbolic Monotonic so the parent can
   // σ-solve via `inverse` (preserving piecewise/intercept extents that an
   // interval-at-σ=1 collapse would bake away). Composing different fields'
-  // magnitudes is legitimate, so measures FORGET on conflict.
+  // magnitudes is legitimate, so a conflict records the unit-erasing MIXED state.
   //
   // A non-UNDEFINED, non-CONTINUOUS sibling (e.g. an empty `ORDINAL([])` from an
   // unresolved `ref()`) is NOT a magnitude and VETOES this path — exactly the
@@ -127,14 +127,14 @@ export function resolveAlignmentSpace(
   const conts = spaces.filter(isCONTINUOUS);
   if (conts.length === 0 || conts.length !== spaces.length) return UNDEFINED;
 
-  // When every child is a baseline magnitude ("free"), measures FORGET on
-  // conflict — that's how a histogram's count axis carries a "count" tag
+  // When every child is a baseline magnitude ("free"), measures record MIXED on
+  // conflict — while a histogram's singleton count axis carries its "count" tag
   // forward; mixed/positioned children unify measures as TYPES (throw on a real
   // clash).
   const allBaseline = conts.every((s) => spacePlacement(s) === "free");
   const measure = allBaseline
-    ? forgetAllMeasures(conts.map(spaceMeasure))
-    : mergeAllMeasures(conts.map(spaceMeasure), "alignment");
+    ? forgetAllMeasures(conts.map(spaceMeasureState))
+    : mergeAllMeasures(conts.map(spaceMeasureState), "alignment");
 
   // `middle` DROPS the anchor (centering scrambles baselines); an already
   // unanchored ("conflict") child can't be re-anchored by alignment (it is

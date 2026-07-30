@@ -46,7 +46,7 @@ import {
   continuousInterval,
   isBaselineMagnitude,
   isUNDEFINED,
-  spaceMeasure,
+  spaceMeasureState,
 } from "../underlyingSpace";
 import { unionChildSpaces } from "../graphicalOperators/alignment";
 import { type ConstraintSpec } from ".";
@@ -156,7 +156,7 @@ export function resolveLayerAxisSpace(
   // The position/span constraints' OWN measure is the authoritative unit for
   // this axis's data domain (they define it); it wins, falling back to the
   // children's POSITION measure when the constraints are untagged.
-  return POSITION(merged, positionMeasure ?? spaceMeasure(base));
+  return POSITION(merged, positionMeasure ?? spaceMeasureState(base));
 }
 
 export function resolveLayerBaseSpaces(

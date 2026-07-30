@@ -1,0 +1,499 @@
+---
+title: Core Layout Semantics v0
+section: Core
+order: 25
+status: draft
+covers:
+  - packages/gofish-graphics/src/ast/layoutClaims.ts
+  - packages/gofish-graphics/src/ast/layoutKernel.ts
+---
+
+# Core Layout Semantics v0
+
+This page is the normative contract for a small GoFish layout kernel. It describes
+the semantics that an implementation must preserve, not every behavior of the
+current AST implementation. Surface operators may elaborate into this kernel, and
+an implementation may optimize it, provided the laws below still hold.
+
+The words **MUST**, **MUST NOT**, **SHOULD**, and **MAY** are normative. A layout
+either produces a resolved scene or a structured failure. Silent first-wins name
+resolution, last-writer-wins placement, skipped constraints, and invalid numeric
+fallbacks are not part of the semantics.
+
+The kernel is intentionally smaller than the authoring language. Its concepts are:
+
+- stable node identities;
+- transparent `Layer`s and their lowered `Fragment`s;
+- coordinate and scale `Frame`s;
+- geometric constraints over local targets and placed references;
+- an explicit dependency graph; and
+- a paint program that runs after geometry.
+
+See [Underlying Space](/internals/core/underlying-space) for the current claim
+vocabulary, [The Bounding-Box Model](/internals/core/bbox) for box terminology,
+and [Name Resolution & Scoping](/internals/core/names-and-scoping) for the
+author-facing naming problem. This contract deliberately separates those concerns
+from structural parenthood.
+
+## 0. Status and executable slices
+
+This is a target contract, not a claim that the current AST already conforms. The
+implementation in this change makes three deliberately bounded pieces executable:
+
+- `layoutClaims.ts` is the closed, inspectable claim algebra proposed for the
+  normalized core; production still uses `Monotonic` while migration is evaluated.
+- `layoutKernel.ts` is only the **same-frame, known-size placement subkernel**. A
+  `PlacedPort` supplied to it is already resolved and transported into the consumer
+  frame. Frame construction, scale ownership, coordinate transport, name lowering,
+  and the full task DAG remain upstream obligations; this subkernel does not pretend
+  to prove them.
+- the production underlying-space fold now has a lossless `none | one | mixed`
+  measure state, eliminating one concrete violation of layer associativity.
+
+The executable law tests establish the algebra of those slices. Conformance of the
+whole engine additionally requires differential tests from surface `Layer`, `Frame`,
+and `ref` programs into the kernel records described here. Until those exist, this
+page should be read as the migration target and the tests as constructive evidence,
+not as a proof of current end-to-end behavior.
+
+## 1. Results and observations
+
+For a viewport and a normalized core program, evaluation returns exactly one of:
+
+```text
+ResolvedScene {
+  boxes:       NodeId -> Box
+  transforms:  NodeId -> WorldTransform
+  scales:      ScaleId -> ResolvedScale
+  references:  RefId -> NodeId
+  displayList: DisplayItem[]
+}
+
+LayoutFailure {
+  errors: LayoutError[]
+}
+```
+
+Two programs are **geometry-equivalent**, written `A ≈ᴳ B`, when their
+surviving node IDs have the same resolved references, scale IDs and maps, local
+boxes, world geometry, and outward claims. Mathematically these values are equal;
+an implementation may compare floating-point results within one documented global
+tolerance.
+
+They are **paint-equivalent**, written `A ≈ᴾ B`, when they lower to the same
+ordered display primitives with the same world geometry, clipping, compositing,
+and style. Paint equivalence implies that ordering is observable. Geometry
+equivalence does not.
+
+An optimization MUST preserve both equivalences unless it explicitly operates on
+geometry only. If evaluation fails, equivalent programs MUST report the same
+canonical set of errors; source traversal order may not choose the error.
+
+## 2. Stable identity and names
+
+Every semantic node has a `NodeId` that is unique within the program and stable
+across:
+
+- child-array permutations;
+- constraint-declaration permutations;
+- insertion or removal of `Fragment`s; and
+- serialization and deserialization of the same program.
+
+A `NodeId` MUST NOT be derived from a current child index. A surface elaborator may
+derive an ID from a stable data key or allocate one once and persist it.
+
+Human-readable names are symbols that resolve to `NodeId`s before layout. Within a
+name scope, an unknown name is `UnknownReference` and more than one visible match is
+`AmbiguousName`. There is no first DFS match or direct-child-wins rule. Name scopes
+are explicit and independent of `Fragment`, `Layer`, `Frame`, and paint grouping.
+
+After name resolution, every constraint and reference names a `NodeId`; later tree
+walks never repeat string lookup. This is a precondition for all permutation laws
+below.
+
+## 3. Layer and Fragment
+
+`Layer(children, constraints)` is transparent authoring syntax: it contributes
+nodes and geometric facts to the nearest enclosing `Frame` (or to the implicit
+root frame). It does not allocate a box, own a scale, open a coordinate system, or
+create a scheduling phase. Its `.constrain()` callback is a lexical fact builder,
+not a runtime solve boundary.
+
+`Fragment` is the normalized form of that contribution. It is an immutable set of
+stable-ID node definitions and facts, with paint ordering represented separately.
+It has no `NodeId`, name, box, transform, scale policy, coordinate system, layout
+phase, or paint scope, and it cannot itself be referenced.
+
+Within one frame, layer nesting is therefore just associative fragment union. If
+`C₁` and `C₂` are constraint fact sets, then:
+
+```text
+Layer()                                                    ≈ identity
+Layer(A, Layer(B, C; C₂); C₁)                              ≈ Layer(A, B, C; C₁ ∪ C₂)
+Layer(Layer(A, B), C)                                      ≈ Layer(A, Layer(B, C))
+```
+
+These laws hold for `≈ᴳ`. They also hold for `≈ᴾ` when flattening splices the
+inner paint sequence in place. Structural layer boundaries are ignored when
+choosing the writable solve region: a constraint declared in an outer layer may
+write `A`, `B`, or `C`, and an inner declaration contributes to the same joint
+problem.
+
+Geometry treats children and declarations as membership, not as an implicit
+execution sequence. For any permutations `π` and `σ`,
+
+```text
+geometry(Layer(X; C)) = geometry(Layer(π(X); σ(C)))
+```
+
+provided resolved IDs and explicit sequence-valued operands are unchanged. Paint
+may change when the author changes an explicit paint or z sequence; that ordering
+is not geometric input. Identical facts are idempotent.
+
+The flattening laws require the wrapper to be a genuine layer. Anything that owns
+an allocation, transform, coordinate map, scale policy, flip, or clip is a
+`Frame` (or an explicit paint group), not a layer. Name resolution must also
+produce the same IDs before and after flattening. If surface syntax names or refs
+an aggregate layer, normalization creates an explicit derived aggregate node;
+that node's bounds are an associative union of its members and the structural
+wrapper is still erased.
+
+Associative composition requires explicit state for information that cannot be
+represented by a single optional value. For example, measure combination needs
+states equivalent to `none`, `one(measure)`, and `mixed`; using `undefined` for
+both “no claim” and “conflict” makes the fold non-associative. Likewise, ordinal
+domain order MUST be explicit or canonical rather than inherited from child
+encounter order.
+
+## 4. Frame, coordinates, and scales
+
+`Frame` is the only core construct that opens a coordinate or positional-scale
+boundary. A frame has an allocated two-dimensional extent, one child body, an
+optional coordinate map, and one explicit scale policy per axis:
+
+```text
+Frame {
+  id: NodeId
+  body: Node
+  extent: [ExtentPolicy, ExtentPolicy]
+  coord?: CoordinateMap
+  scale: [ScalePolicy, ScalePolicy]
+}
+
+ScalePolicy = inherit | fit | share(ScaleId) | pixel
+```
+
+The surface language may infer these policies, but the normalized core MUST store
+them explicitly.
+
+### Per-axis scale policy
+
+- **`inherit`** reuses the accessible parent `ScaleId` and mapping. The frame does
+  not solve a new scale. A child that requires a data scale when none is available
+  fails with `MissingInheritedScale`.
+- **`fit`** consumes the body's claim and solves one local scale against the
+  frame's finite allocated interval. The inner data claim does not escape to the
+  parent; outwardly the axis is a resolved geometric extent. A missing extent,
+  incompatible claim, or non-invertible size relation is a structured failure.
+- **`share(id)`** contributes its claim to the named scale group. All participants'
+  claims are joined first, the group has exactly one owner, and the resulting scale
+  is solved once. Incompatible measures or two owners fail; traversal order never
+  chooses a winner.
+- **`pixel`** declares that the axis is already in frame-local geometric units and
+  has no data scale. A data-dependent child that still needs a scale fails with
+  `ScaleRequired`.
+
+Scale claims form an order-independent algebra. For compatible claims `a`, `b`,
+and `c`, the join `⊔` MUST satisfy:
+
+```text
+a ⊔ b = b ⊔ a
+(a ⊔ b) ⊔ c = a ⊔ (b ⊔ c)
+a ⊔ a = a
+```
+
+An incompatible join returns `IncompatibleScaleClaims`; it does not forget unit
+information. Ordered categories are represented by an explicit domain sequence or
+ordering key outside this commutative join.
+
+### Coordinate map
+
+With no `coord`, the frame-local Cartesian map is the identity. Otherwise `coord`
+maps fully resolved frame-local geometry into the parent coordinate space after
+per-axis scales have been applied. An affine map may transform boxes directly. A
+nonlinear map MUST transform the actual path or an approximation with a documented
+error bound; transforming only opposite box corners is not equivalent.
+
+A coordinate frame is never transparent merely because its current map happens to
+look like an identity. Its scope identity may be consumed by references, scale
+sharing, or later animation.
+
+As an object in its parent's solve region, the frame itself is a local
+`ConstraintTarget` with an allocated box. Targets inside its body belong to the
+frame's inner region. Constraints may move the outer frame from the parent but may
+not thereby acquire write access to its contents.
+
+## 5. Constraint targets and placed references
+
+The core has two deliberately different handles:
+
+```text
+ConstraintTarget<NodeId>  // local and writable
+PlacedRef<NodeId>         // potentially nonlocal and read-only
+```
+
+A `ConstraintTarget` belongs to exactly one frame-local solve region. All layers
+inside that frame elaborate to the same region, so their callbacks may constrain
+one another's targets after name resolution. Passing a target across a `Frame`
+boundary as writable state is `NonlocalWrite`.
+
+A `PlacedRef` observes geometry after its source has been resolved. It may be used
+by connectors, enclosures, labels, and as a fixed source anchor for a local
+constraint. It never grants permission to move or resize its source, never
+duplicates the source's scale claim, and never reinterprets the source under the
+consumer's scale.
+
+Surface `.constrain()` callbacks receive `ConstraintTarget`s even if their syntax
+looks reference-like; those handles are the writable variables in the current
+frame-local problem. Surface `ref(name)` produces a `PlacedRef`, including when the
+source happens to be nearby. Thus align and distribute lower to ordinary equations
+between local targets. If they also contain a `PlacedRef`, its anchors lower to
+constants: local targets may move relative to it, while an all-placed relation is
+only a consistency check. A placed operand is never selected as the thing to move.
+
+Let `s` be the source, `c` the consumer, and `L` their least common coordinate
+scope. If `Φ(x → L)` maps geometry from `x`'s local frame into `L`, then:
+
+```text
+geometry_c(ref(s)) = inverse(Φ(c → L))(Φ(s → L)(geometry_s))
+```
+
+The source geometry is first resolved using the source frame's scale policy. A ref
+across a self-scaled frame therefore preserves the source scale and appears to the
+consumer as placed geometry. It does not inject the source's data domain into the
+consumer's scale join. Inserting or removing `Fragment`s does not alter the least
+common coordinate scope and therefore cannot change this result.
+
+The least common coordinate scope is only the transport space; it is not an
+implicit scale owner. A `fit` scale is solved in its declared source frame,
+`inherit` uses the declared ancestor scale, and `share(id)` uses its one explicit
+owner. Cross-frame refs never promote those solves to the least common ancestor.
+Code that needs a joint scale must request `share(id)` (or a future explicit joint
+layout construct) instead of relying on a reference side effect.
+
+Read-only transport requires a forward path from source to the common scope and a
+way to express the result in the consumer frame. If that transport is undefined,
+evaluation fails with `IncompatibleCoordinateTransport`. Writing across a
+nonlinear or independently scaled boundary is never inferred; authors must instead
+declare a shared frame/scale or an explicit projection operation.
+
+## 6. Constraint algebra and confluence
+
+A frame's layer declarations elaborate to an unordered set of equations and
+relations. They are solved as one problem, not executed as mutations in
+declaration order.
+
+Operand order is part of a constraint only where the constraint says so:
+
+| Constraint form                    | Normative operand shape                                          |
+| ---------------------------------- | ---------------------------------------------------------------- |
+| Position many targets at one value | set of targets                                                   |
+| Align at one anchor                | set of targets                                                   |
+| Align with different anchors       | map `target -> anchor`                                           |
+| Copy span or size                  | one explicit source plus a set of targets                        |
+| Distribute                         | ordered path of targets                                          |
+| Grid                               | map `target -> (row, column)`, or an explicit row-major sequence |
+| Nest                               | role record `{ outer, inner }`                                   |
+| Above/below                        | directed paint edge; not a geometric constraint                  |
+
+Reordering a set or map has no semantic effect. Reordering a distribute path,
+swapping nest roles, or changing grid coordinates intentionally changes the
+program. Simultaneously permuting `(target, anchor)` pairs does not.
+
+For node table `N`, geometric fact set `C`, child permutation `π`, and declaration
+permutation `σ`, the confluence law is:
+
+```text
+Solve(N, C) = Solve(π(N), σ(C))
+```
+
+provided names resolve identically and every explicit ordered operand is held
+fixed. If the equations are consistent, both sides yield the same boxes and scales.
+If they are inconsistent, both yield the same canonical conflict set.
+
+An unpinned placement component has translation freedom. The kernel fixes that
+gauge by translating the component so its minimum finite occupied coordinate is
+zero. A lone unconstrained target is placed at the local origin. Remaining rank
+deficiency in an extent or scale is `UnderdeterminedLayout`; it is not resolved by
+choosing the first declaration.
+
+If an ordered operator needs a different gauge—such as keeping the head of a
+negative-gap distribute path at zero—its lowering emits that origin as an explicit
+pin. The generic solver never recovers semantic order by inspecting fact storage or
+owner strings.
+
+## 7. Proof sketches for the executable laws
+
+These are ordinary mathematical proof obligations, separate from TypeScript tests.
+The tests exercise counterexamples and finite instances; they are not a proof
+assistant.
+
+**Layer flattening.** Normalize every layer inside one frame to its node definitions
+and fact set. Set union is associative, commutative, and idempotent, while paint
+sequence splicing is associative. Therefore regrouping layers preserves normalized
+geometry facts (and preserves paint when relative sequence is spliced in place).
+The theorem requires name resolution and explicit ordered operands to be unchanged.
+
+**Placement confluence.** On one axis, anchor lowering produces equations
+`min(v) - min(u) = d`. In a connected component, every consistent path assigns the
+same relative potential exactly when every cycle sums to zero. All solutions then
+differ by one translation. Consistent pins determine that translation; without a
+pin, the minimum-at-zero gauge determines it. Thus a consistent component has one
+canonical solution independent of fact order. A nonzero cycle or disagreeing pins is
+an order-independent conflict.
+
+**Placed-reference immutability.** A transported `PlacedRef` lowers to a numeric
+constant, never to the source node's writable variable. Local equations can position
+local targets relative to that constant, but cannot change the source. Because the
+source's claim is absent from the consumer fact set, referencing it also cannot
+duplicate its scale contribution.
+
+**Measure join.** Raw measure state is `none`, `one(m)`, or `mixed`. `none` is the
+identity, equal singleton values join to themselves, unequal singleton values join to
+`mixed`, and `mixed` is absorbing. Case analysis gives associativity, commutativity,
+and idempotence. Projecting `mixed` to no public axis title happens only after all
+internal joins, so projection cannot make a later fold resurrect a unit.
+
+**Claim closure.** A claim is a finite maximum of non-negative-slope affine pieces
+and zero. Maximum is set union followed by upper-envelope normalization. Addition
+uses `maxᵢ pᵢ + maxⱼ qⱼ = maxᵢⱼ(pᵢ + qⱼ)`. These constructions preserve finiteness,
+non-negativity, continuity, monotonicity, and piecewise linearity, and their set and
+Cartesian-product laws give the stated associativity and permutation invariance.
+
+## 8. Dependency graph
+
+Execution order comes from data dependencies, never from child order or nesting
+used as an accidental phase barrier. The normalized program contains a directed
+acyclic graph of tasks. Useful task kinds are:
+
+- `Claim(node, axis)` — compute the scale/size claim;
+- `Scale(frame, axis)` — solve or obtain the frame's scale;
+- `Intrinsic(node)` — compute scale-dependent intrinsic geometry;
+- `Place(frame, axis)` — jointly solve the frame-local constraints;
+- `Bounds(node)` — compute placed bounds; and
+- `Derived(node)` — build geometry that consumes `PlacedRef`s.
+
+Required edges include:
+
+- child claims before a parent or shared-scale claim join;
+- a frame's claim and allocated extent before its `fit` scale;
+- a scale before intrinsic geometry that consumes it;
+- intrinsic target geometry before the owning frame's placement solve;
+- a nest or sizing source before its derived target;
+- source bounds before every `PlacedRef` consumer; and
+- placement before final bounds and paint lowering.
+
+Independent tasks may run in any order or in parallel. A cycle is
+`DependencyCycle` and MUST include a stable-ID path in its diagnostic. A derived
+mark may not enlarge an ancestor allocation that its own source depended on; that
+would be such a cycle. Supporting that behavior would require a separately
+specified fixed-point solver and is outside v0.
+
+## 9. Geometry and paint are separate
+
+Geometry produces boxes, transforms, scales, and resolved reference geometry.
+Paint consumes those values afterwards. The geometry solver MUST ignore:
+
+- child paint sequence;
+- numeric z hints;
+- above/below relations;
+- backend batching order; and
+- whether an otherwise identical node is drawn before or after a sibling.
+
+The paint program consists of ordered sequences, directed above/below edges, and
+explicit clip/compositor groups. It is topologically ordered only after geometry
+has succeeded. Incomparable paint nodes may use an explicit sequence as their
+fallback; if storage-order-invariant paint is required, that sequence must use
+stable paint keys. A paint cycle is `PaintCycle` and does not become a geometric
+constraint conflict.
+
+Consequently, reordering layer children may alter an explicit or fallback paint
+order while geometry and scales remain identical. That is intentional separation,
+not a confluence exception.
+
+## 10. Required failures
+
+At minimum, a conforming implementation reports these conditions explicitly:
+
+| Failure                                   | Meaning                                                           |
+| ----------------------------------------- | ----------------------------------------------------------------- |
+| `DuplicateNodeId`                         | Two semantic nodes have the same stable ID.                       |
+| `UnknownReference` / `AmbiguousName`      | Name resolution did not produce exactly one target.               |
+| `InvalidFragment`                         | A purported layer/fragment carries a frame or paint boundary.     |
+| `IncompatibleScaleClaims`                 | A scale join contains incompatible units or claim kinds.          |
+| `MissingInheritedScale` / `ScaleRequired` | A node needs a scale forbidden or absent under its frame policy.  |
+| `ScaleOwnershipConflict`                  | A shared scale group has more than one owner.                     |
+| `NonInvertibleScale`                      | A `fit` relation cannot be solved for the allocated interval.     |
+| `NonlocalWrite`                           | A constraint attempts to mutate a nonlocal target or `PlacedRef`. |
+| `IncompatibleCoordinateTransport`         | Referenced geometry cannot be represented in the consumer frame.  |
+| `ConstraintConflict`                      | Geometric equations imply inconsistent values.                    |
+| `UnderdeterminedLayout`                   | Required geometry remains free after canonical gauge fixing.      |
+| `DependencyCycle`                         | Layout dependencies are cyclic.                                   |
+| `PaintCycle`                              | Above/below relations are cyclic.                                 |
+| `NonFiniteGeometry`                       | A successful-looking solve produced `NaN` or infinity.            |
+
+Errors are values produced before a display list. Diagnostics SHOULD include stable
+node IDs, axis, owning frame-local solve region, and the competing facts. Reordering
+inputs may change source spans shown as secondary context, but not the error kind or
+the canonical conflicting fact set.
+
+## 11. A short reimplementation algorithm
+
+A minimal independent implementation can follow these steps:
+
+1. **Normalize structure.** Resolve and flatten `Layer`s and `Fragment`s into one
+   node/fact set per frame, validate or assign stable IDs, and retain `Frame`, name,
+   and paint boundaries explicitly.
+2. **Resolve names.** Build explicit name scopes, reject missing or ambiguous
+   names, and rewrite every constraint and ref to `NodeId`s.
+3. **Lower semantics.** Convert geometric constraints to unordered facts with
+   their set-, map-, path-, or role-shaped operands. Separate paint edges.
+4. **Build dependencies.** Create the task DAG, including every scale, sizing,
+   nesting, and `PlacedRef` dependency; reject cycles.
+5. **Resolve claims and scales.** Join claims bottom-up with the associative
+   algebra, solve shared groups once, and apply each frame's per-axis policy.
+6. **Resolve geometry.** In topological order, compute intrinsic boxes, jointly
+   solve each frame-local fact set, fix translation gauges canonically, and
+   transport placed refs through their least common coordinate scopes.
+7. **Validate.** Compute outward/world boxes, check box invariants and finite
+   numbers, and return the canonical error set if any check failed.
+8. **Paint.** Topologically order the independent paint program and lower the
+   resolved scene to a flat display list.
+
+No step requires executing siblings or constraint declarations in source order.
+The only sequences that survive normalization are sequences the program explicitly
+declares: distribute paths, grid order where coordinates are not explicit, and
+paint order.
+
+## 12. Migration checklist
+
+The following gaps are intentionally visible rather than papered over:
+
+- lower production `Layer` syntax into transparent frame-local fragments and add
+  surface-to-kernel differential tests;
+- make `Frame` allocation, scale ownership, and coordinate transport explicit in
+  the executable IR;
+- replace sibling-order ref scheduling with task-level dependency edges and lower
+  cross-frame refs to transported placed ports;
+- lower fallback child paint order to an explicit paint sequence before geometric
+  child order is discarded;
+- replace encounter-ordered ordinal-domain union with explicit order facts (or a
+  documented canonical category order) so nested union is genuinely associative;
+- bound and benchmark the claim representation, then migrate production callers
+  from opaque `Monotonic.unknown` cases where the closed algebra applies; and
+- return canonical complete conflict sets rather than whichever single diagnostic
+  a legacy path encounters first.
+
+Each item should land with a counterexample that fails before the migration and a
+law or differential test that remains after it. The v0 contract is complete only
+when this list is empty.

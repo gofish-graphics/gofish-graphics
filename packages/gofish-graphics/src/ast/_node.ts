@@ -58,6 +58,7 @@ import {
   isPOSITION,
   isUNDEFINED,
   continuousInterval,
+  MIXED_MEASURE,
   spacePlacement,
   UnderlyingSpace,
 } from "./underlyingSpace";
@@ -303,7 +304,7 @@ function selfScaledAxisSignature(
     JSON.stringify({
       d: s.dataDomain,
       w: s.width,
-      m: s.measure,
+      m: s.measure === MIXED_MEASURE ? { mixed: true } : s.measure,
     })
   );
 }

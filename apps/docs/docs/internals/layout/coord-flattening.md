@@ -237,6 +237,12 @@ re-root (it propagates the inherited σ — see the scale-root scoping gate in
 nested grouping of the same data-driven children (see
 [Layout & Render Passes](/internals/layout/passes)).
 
+The coordinate scope's ordinal and continuous child folds also carry the lossless
+raw measure state described in [Underlying Space](/internals/core/underlying-space).
+In particular, a mixed-unit magnitude stays `mixed` through a nested `coord`; it is
+not projected to public `undefined` until after composition, so regrouping cannot
+resurrect one child's unit.
+
 ## Current limitations
 
 `flattenLayout` is still evolving. The source carries TODOs, and the surrounding

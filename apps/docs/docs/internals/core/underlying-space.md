@@ -220,13 +220,15 @@ type Placement = "free" | "determined" | "conflict";
 
 type DataDomain = Interval | "delta" | undefined;
 
+type SpaceMeasure = Measure | typeof MIXED_MEASURE | undefined;
+
 type CONTINUOUS_TYPE = {
   kind: "continuous";
   width: Monotonic;       // the σ-affine SIZE: slope·σ + intercept
   dataDomain: DataDomain; // data-space extent AND the sole placement carrier
-  measure?: Measure;
+  measure?: SpaceMeasure;
 };
-type ORDINAL_TYPE   = { kind: "ordinal";   domain?: string[]; measure?: Measure; ... };
+type ORDINAL_TYPE   = { kind: "ordinal";   domain?: string[]; measure?: SpaceMeasure; ... };
 type UNDEFINED_TYPE = { kind: "undefined"; ... };
 
 // placement is in bijection with dataDomain's shape:
@@ -245,10 +247,13 @@ equaled `dataDomain.min` — so placement collapses to a bare lattice.
 discrete analogue of `CONTINUOUS`'s measure. It's set from the grouping operator
 (`spread`'s `by`) when the ordinal space is built (`distributeSpaceFold` →
 `ORDINAL(keys, measure)`) and preserved through `unionChildSpaces`. So
-`spaceMeasure(space)` reads a measure off **both** continuous and ordinal kinds
-(only `UNDEFINED` is measureless), which is what lets an axis name itself off its
-own resolved space — a continuous axis by its unit, an ordinal axis by its
-grouping field (see [the layout passes](/internals/layout/passes)).
+`spaceMeasureState(space)` reads the lossless internal state off **both** continuous
+and ordinal kinds. `spaceMeasure(space)` is the presentation projection: it returns
+the one measure when there is one, and `undefined` for both a measureless and a mixed
+space. That projection is what lets an axis name itself off its own resolved space —
+a continuous axis by its unit, an ordinal axis by its grouping field — without
+letting an internal conflict leak into a title (see [the layout
+passes](/internals/layout/passes)).
 
 A companion predicate, **`isPositioningSpace`**, folds the two axis-bearing
 kinds together: it holds for `POSITION` (a data axis) and `ORDINAL` (a category
@@ -1165,21 +1170,23 @@ shared union has to tell "same units, merge" from "foreign units, refuse"
 without a human reading the field names.
 
 That distinction is a **measure**: a unit-of-measure tag carried on a space.
-`CONTINUOUS` carries an optional `measure?: Measure` (`Measure` is just a
-string — a field name like `"Beak Depth (mm)"`, or `"count"`). It is the dead
-`source?` slot's replacement, but with teeth: spaces now **unify per
-measure**.
+`CONTINUOUS` carries a raw `measure?: SpaceMeasure` (`Measure` itself is just a
+string — a field name like `"Beak Depth (mm)"`, or `"count"`). The extra internal
+state is the unique `MIXED_MEASURE` sentinel. It is the dead `source?` slot's
+replacement, but with teeth: spaces now **unify per measure**.
 
 ```ts
 // underlyingSpace.ts
-export type CONTINUOUS_TYPE = { kind: "continuous"; width: Monotonic; dataDomain: DataDomain; measure?: Measure; ... };
+export type SpaceMeasure = Measure | typeof MIXED_MEASURE | undefined;
+export type CONTINUOUS_TYPE = { kind: "continuous"; width: Monotonic; dataDomain: DataDomain; measure?: SpaceMeasure; ... };
 ```
 
 **Merging.** Two helpers in `underlyingSpace.ts` decide what happens when two
 measures meet. `undefined` is always permissive — it means "no claim", unifies
 with anything, and yields the other side (this is why `getMeasure` returns
 `undefined` rather than a `"unit"`/`"unknown"` sentinel: a measureless value
-must merge silently into a tagged one).
+must merge silently into a tagged one). `MIXED_MEASURE` means the opposite: a
+permissive composition has already seen multiple units, so it is absorbing.
 
 - `mergeMeasures(a, b, context)` — unify as **types**. Equal measures unify to
   themselves; two _different_ defined measures are a type error and it
@@ -1188,15 +1195,20 @@ must merge silently into a tagged one).
   `resolveAlignmentSpace`'s non-baseline branch (not every child a `free`
   magnitude) use it, so overlaying a count axis onto a millimeter axis fails
   loudly instead of corrupting the domain.
-- `forgetOnConflict(a, b)` — a conflict **forgets** (returns `undefined`)
-  rather than throwing. Used where composing differently-measured magnitudes
-  is legitimate: stacking two different fields' extents produces a real
-  magnitude that carries no single unit, so the baseline-magnitude path
-  (every child `placement: free`) in `unionChildSpaces` forgets on conflict,
-  and `resolveAlignmentSpace`'s baseline reduce uses it too.
+- `forgetOnConflict(a, b)` — a conflict produces `MIXED_MEASURE` rather than
+  throwing. Used where composing differently-measured magnitudes is legitimate:
+  stacking two different fields' extents produces a real magnitude that carries no
+  single public unit, so the baseline-magnitude path (every child `placement: free`)
+  in `unionChildSpaces` records the mixed state, and `resolveAlignmentSpace`'s
+  baseline reduce does too. Only `spaceMeasure()` later projects it to `undefined`
+  for public consumers.
 
 So the rule of thumb: **aligning/overlaying siblings throws on a unit clash;
-composing them into a new extent forgets.**
+composing them into a new extent retains an internal mixed state but exposes no
+single unit.** The three-state join is associative, commutative, and idempotent:
+`none` is its identity and `mixed` its absorbing top. Keeping `none` and `mixed`
+distinct fixes the old counterexample in which `[A, A, B]` and `[A, B, A]` could
+fold differently, or a nested mixed layer could acquire `A` again.
 
 **Where measures come from** is itself a small type system with three sources,
 checked (not silently prioritized) in `resolveMeasure` (`channels.ts`):
