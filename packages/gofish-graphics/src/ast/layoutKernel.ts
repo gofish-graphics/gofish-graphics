@@ -731,16 +731,29 @@ function schedule(
   }
   for (const next of graph.values()) next.sort(compare);
 
+  // Determinism requires always dequeuing the lexicographically smallest
+  // ready node. Rather than `shift()` (O(n) per dequeue) and re-sorting the
+  // whole array whenever a node becomes ready, track a cursor past the
+  // already-emitted prefix and insert newly-ready nodes into their sorted
+  // position within the remaining (not-yet-dequeued) tail via binary search
+  // + a single splice.
   const ready = nodes.filter((node) => degree.get(node) === 0).sort(compare);
   const order: NodeId[] = [];
-  while (ready.length > 0) {
-    const node = ready.shift()!;
+  let cursor = 0;
+  while (cursor < ready.length) {
+    const node = ready[cursor++];
     order.push(node);
     for (const next of graph.get(node)!) {
       degree.set(next, degree.get(next)! - 1);
       if (degree.get(next) === 0) {
-        ready.push(next);
-        ready.sort(compare);
+        let lo = cursor;
+        let hi = ready.length;
+        while (lo < hi) {
+          const mid = (lo + hi) >>> 1;
+          if (compare(ready[mid], next) < 0) lo = mid + 1;
+          else hi = mid;
+        }
+        ready.splice(lo, 0, next);
       }
     }
   }

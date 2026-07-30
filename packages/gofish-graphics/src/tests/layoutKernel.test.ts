@@ -21,6 +21,7 @@ import {
   placedPortRef,
   relation,
   scheduleDependencies,
+  schedulePaint,
   solveFragment,
   solvedMin,
   translateFragment,
@@ -360,6 +361,40 @@ test("dependency scheduling is invariant and cycle diagnostics are canonical", (
   assertEqual(firstConflict, secondConflict, "canonical cycle conflict");
   assert(
     firstConflict.conflict.message === "Dependency cycle: A -> B -> A",
+    firstConflict.conflict.message
+  );
+});
+
+test("paint scheduling is invariant and cycle diagnostics are canonical", () => {
+  const nodes = [node(C), node(A), node(B)];
+  const ab = paintBefore(A, C);
+  const bb = paintBefore(B, C);
+  const first = schedulePaint(fragment({ nodes, paint: [ab, bb] }));
+  const second = schedulePaint(
+    fragment({ nodes: [...nodes].reverse(), paint: [bb, ab] })
+  );
+  assert(first.status === "scheduled", json(first));
+  assert(second.status === "scheduled", json(second));
+  assertEqual(first.order, [A, B, C], "canonical paint order");
+  assertEqual(first, second, "paint permutation");
+
+  const cycle1 = schedulePaint(
+    fragment({
+      nodes: [node(A), node(B)],
+      paint: [paintBefore(B, A), paintBefore(A, B)],
+    })
+  );
+  const cycle2 = schedulePaint(
+    fragment({
+      nodes: [node(B), node(A)],
+      paint: [paintBefore(A, B), paintBefore(B, A)],
+    })
+  );
+  const firstConflict = expectConflict(cycle1, "paint-cycle");
+  const secondConflict = expectConflict(cycle2, "paint-cycle");
+  assertEqual(firstConflict, secondConflict, "canonical paint cycle conflict");
+  assert(
+    firstConflict.conflict.message === "Paint cycle: A -> B -> A",
     firstConflict.conflict.message
   );
 });
