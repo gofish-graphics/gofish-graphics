@@ -1,3 +1,7 @@
+// <gofish-wiki> AUTO-GENERATED — see covers: in the essay; run `pnpm --filter docs sync-backlinks`
+// @wiki How the Layout Engine Works — /internals/layout/how-layout-works
+// </gofish-wiki>
+
 import { FancyDims } from "../dims";
 import { CoordinateTransform } from "../coordinateTransforms/coord";
 import { coord } from "../coordinateTransforms/coord";

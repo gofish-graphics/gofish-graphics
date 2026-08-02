@@ -1,5 +1,6 @@
 // <gofish-wiki> AUTO-GENERATED — see covers: in the essay; run `pnpm --filter docs sync-backlinks`
 // @wiki Rendering — /internals/core/rendering
+// @wiki How the Layout Engine Works — /internals/layout/how-layout-works
 // @wiki Overview — /internals/layout/passes
 // @wiki Architecture Overview — /internals/overview/architecture
 // </gofish-wiki>
