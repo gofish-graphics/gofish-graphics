@@ -18,6 +18,7 @@ import { GoFishLive } from "../../../components/GoFishLive";
 import LanguageToggle from "./components/LanguageToggle.vue";
 import EssayMeta from "./components/EssayMeta.vue";
 import InternalsLink from "./components/InternalsLink.vue";
+import ArticleGlossary from "./components/ArticleGlossary.vue";
 import TwoslashFloatingVue from "@shikijs/vitepress-twoslash/client";
 import "@shikijs/vitepress-twoslash/style.css";
 export default {
@@ -38,7 +39,14 @@ export default {
       "layout-top": () => h(LanguageToggle, { placement: "localnav" }),
       // Status banner + "Source files" box for internals essays
       // (the component renders nothing on pages without the frontmatter).
-      "doc-before": () => h(EssayMeta),
+      "doc-before": () => [
+        h(EssayMeta),
+        h(ArticleGlossary, { placement: "inline" }),
+      ],
+      // Optional article-local vocabulary table. VitePress already keeps this
+      // rail fixed and independently scrollable; the component renders only
+      // when the page declares `glossary` frontmatter.
+      "aside-top": () => h(ArticleGlossary, { placement: "aside" }),
     });
   },
   enhanceApp({ app, router }) {

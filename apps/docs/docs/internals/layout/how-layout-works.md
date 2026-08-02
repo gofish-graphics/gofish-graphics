@@ -4,6 +4,97 @@ section: Layout & Rendering
 order: 50.5
 group: Layout
 status: draft
+pageClass: layout-engine-article
+glossary:
+  title: Layout terms
+  entries:
+    - term: Allocation
+      definition: "A finite pixel budget offered on one axis; an input, not necessarily the occupied result."
+      href: "#term-allocation"
+    - term: "Scale / σ"
+      definition: "A data-to-pixel rule; σ is its pixels-per-data-unit slope."
+      href: "#term-scale"
+    - term: Claim
+      definition: "A symbolic C(σ) giving the pixel extent requested at scale σ."
+      href: "#term-claim"
+    - term: Scope
+      definition: "A region sharing one kind of state or solve; always qualify it."
+      href: "#term-scope"
+    - term: Scale scope
+      definition: "One region and axis sharing a solved σ or anchored position map."
+      href: "#term-scale-scope"
+    - term: Frame equation
+      definition: "The fit equation content(σ) = allocated pixels at a scale root."
+      href: "#term-frame-equation"
+    - term: Underlying space
+      definition: "The pre-pixel IR for quantity kind, domain, measure, and symbolic size."
+      href: "#term-underlying-space"
+    - term: Measure
+      definition: "A semantic unit/group identity for compatibility, not numeric measurement."
+      href: "#term-measure"
+    - term: Intrinsic geometry
+      definition: "A node's local geometry after scale and mark measurement, before parent placement."
+      href: "#term-intrinsic-geometry"
+    - term: Proposal
+      definition: "A provisional pixel allocation offered to a child, not its final size."
+      href: "#term-proposal"
+    - term: Placement
+      definition: "The solve assigning box positions and any spans determined by anchor equations."
+      href: "#term-placement"
+    - term: Placement fact
+      definition: "A normalized numeric solver input such as a pin, participant, or anchor relation."
+      href: "#term-placement-fact"
+    - term: Anchor
+      definition: "A named one-axis point on a box, such as start, middle, end, or baseline."
+      href: "#term-anchor"
+    - term: Bounds
+      definition: "An axis-aligned conservative enclosure, always relative to a named coordinate space."
+      href: "#term-bounds"
+    - term: Frame
+      definition: "Target boundary for local writes and coordinate/scale policy; production is not normalized yet."
+      href: "#term-frame"
+    - term: Layer
+      definition: "Target transparent grouping that adds nodes and facts without opening a new Frame."
+      href: "#term-layer"
+    - term: Placement region
+      definition: "The writable targets and facts solved jointly inside one Frame."
+      href: "#term-placement-region"
+    - term: Scale policy
+      definition: "A Frame's per-axis choice among inherit, fit, share(id), and pixel."
+      href: "#term-scale-policy"
+    - term: Frame fit
+      definition: "The policy turning a claim plus pixel budget into a scale or structured fit outcome."
+      href: "#term-frame-fit"
+    - term: Coordinate scope
+      definition: "A subtree sharing one coordinate-map context for transforms and ref transport."
+      href: "#term-coordinate-scope"
+    - term: Local target
+      definition: "A writable handle the current Frame may move or size while solving."
+      href: "#term-local-target"
+    - term: Placed ref
+      definition: "A read-only observation of source geometry already solved in its home Frame."
+      href: "#term-placed-ref"
+    - term: Geometry port
+      definition: "A typed exported projection of completed geometry, such as an anchor, bounds, or path."
+      href: "#term-geometry-port"
+    - term: Transport
+      definition: "Mapping a completed port from source coordinates through a common space to the consumer."
+      href: "#term-transport"
+    - term: LCA
+      definition: "The deepest shared coordinate ancestor; a transform rendezvous, not a scale owner."
+      href: "#term-lca"
+    - term: Task DAG
+      definition: "The dependency graph of computations whose outputs become available at different times."
+      href: "#term-task-dag"
+    - term: Scheduler
+      definition: "Chooses a topological task order; it does not order simultaneous placement facts."
+      href: "#term-scheduler"
+    - term: Paint order
+      definition: "A separate ordering of finished display primitives that does not determine geometry."
+      href: "#term-paint-order"
+    - term: Lowering
+      definition: "Translating a rich representation into a simpler IR, such as constraints into facts."
+      href: "#term-lowering"
 covers:
   - packages/gofish-graphics/src/ast/gofish.tsx
   - packages/gofish-graphics/src/ast/graphicalOperators/frame.tsx
@@ -25,7 +116,7 @@ It has several small interpreters that successively answer different questions:
 1. What spatial quantity does each node represent?
 2. How many pixels should one data unit receive?
 3. How large is each node at that scale?
-4. Where do those fixed-size boxes go?
+4. Where do those boxes go, and which remaining spans do relations determine?
 5. Which later geometry may observe those boxes?
 6. How is everything transformed and painted?
 
@@ -60,11 +151,27 @@ Begin with two rectangles whose data-driven widths are 2 and 3.
 
 They are distributed with a 10-pixel gap inside a 210-pixel allocation.
 
+An <dfn id="term-allocation">allocation</dfn>, also called a budget, is the
+finite pixel interval a parent offers on one axis. It is an input to layout, not
+necessarily the interval the child ultimately occupies.
+
 Before a scale is chosen, their widths are symbolic:
 
 $$
 w_A = 2\sigma, \qquad w_B = 3\sigma.
 $$
+
+A <dfn id="term-scale">scale</dfn> converts data magnitudes or positions into
+pixels. Here its slope, <dfn id="term-sigma">$\sigma$</dfn>, means pixels per
+data unit.
+
+The engine records this pre-pixel information as an
+<dfn id="term-underlying-space">underlying space</dfn>: a per-axis description
+of the quantity kind, data domain, semantic measure, and symbolic size.
+
+A <dfn id="term-claim">size claim</dfn> is the function $C(\sigma)$ that returns
+the pixel extent requested at a particular $\sigma$. It describes required
+space without choosing the scale itself.
 
 Distribution combines those claims in series:
 
@@ -72,7 +179,13 @@ $$
 C_x(\sigma) = 2\sigma + 3\sigma + 10.
 $$
 
-The local scale scope solves the frame equation:
+A <dfn id="term-scope">scope</dfn> is a region over which one particular kind of
+state is shared or solved. Because GoFish also has coordinate, name, and flip
+scopes, this article avoids using the word unqualified after this definition.
+
+The local <dfn id="term-scale-scope">scale scope</dfn> is one node region and
+axis that shares a solved $\sigma$ or anchored position map. It solves the
+<dfn id="term-frame-equation">frame equation</dfn>:
 
 $$
 5\sigma + 10 = 210,
@@ -84,19 +197,36 @@ $$
 \sigma = 40.
 $$
 
-Intrinsic layout can now produce concrete widths:
+The phrase _frame equation_ means $\operatorname{content}(\sigma) =
+\operatorname{allocation}$. It does not by itself imply that a normalized
+`Frame` node owns this production solve.
+
+<dfn id="term-intrinsic-geometry">Intrinsic geometry</dfn> is geometry computed
+in a node's own local coordinates after applying scale and mark-specific
+measurement, but before parent placement or coordinate transport. Intrinsic
+layout can now produce concrete widths:
 
 $$
 w_A = 80, \qquad w_B = 120.
 $$
 
-Placement lowers the edge-to-edge distribution relation to:
+<dfn id="term-placement">Placement</dfn> assigns box positions, and sometimes a
+still-unknown span, from geometric equations after enough intrinsic information
+is available.
+
+<dfn id="term-lowering">Lowering</dfn> translates a richer representation into a
+simpler one. Here placement lowers the author-facing distribution constraint to
+a numeric <dfn id="term-placement-fact">placement fact</dfn>:
 
 $$
 \min(B) - \min(A) = 80 + 10 = 90.
 $$
 
 The two boxes finally occupy $80 + 10 + 120 = 210$ pixels.
+
+Their <dfn id="term-bounds">bounds</dfn> are the conservative axis-aligned
+enclosure of that completed geometry. Bounds are meaningful only together with
+the coordinate space in which they were computed.
 
 The figure exposes the artifacts produced along this route.
 
@@ -127,7 +257,9 @@ The engine is easiest to navigate when recursive method calls are translated int
 the values that must exist before other values can be computed.
 
 The arrows in this map are computation dependencies, not syntax-tree containment
-and not paint order.
+and not <dfn id="term-paint-order">paint order</dfn>. Paint order is a separate
+relation saying which completed display primitive draws before another; it does
+not determine layout geometry.
 
 ::: gofish example:internal-layout-architecture-map hidden
 :::
@@ -169,7 +301,7 @@ resolve names and quantity types
         ↓
 collect symbolic claims
         ↓
-solve scopes according to explicit Frame policy
+solve scale scopes according to explicit Frame policy
         ↓
 compute intrinsic geometry
         ↓
@@ -182,6 +314,13 @@ transport refs and construct derived geometry
 lower an independently ordered paint program
 ```
 
+A <dfn id="term-coordinate-scope">coordinate scope</dfn> is a subtree sharing
+one coordinate-map context for transformation and reference transport.
+
+A <dfn id="term-geometry-port">geometry port</dfn> is a typed projection exported
+from completed geometry for later observation, such as a point anchor, segment,
+oriented bounds, or path.
+
 Production does not yet represent this whole dependency graph explicitly.
 
 Some arrows are encoded by method-call nesting, some by source-array order, some by
@@ -190,9 +329,18 @@ specialized proposal plans, and some by the separate paint graph.
 The target architecture makes those dependencies data so that incidental traversal
 order stops carrying semantics.
 
-## A scenegraph is not a solve scope
+## A scenegraph subtree is not a placement region
 
 Consider a chart with a Cartesian outer Frame and a polar inner Frame.
+
+In the target semantics, a <dfn id="term-frame">Frame</dfn> is the boundary that
+declares per-axis allocation, coordinate, and scale policy. Its contents form
+one local writable <dfn id="term-placement-region">placement region</dfn>: the
+targets and facts that may be solved jointly.
+
+A <dfn id="term-layer">Layer</dfn> is intended to be transparent authoring syntax
+that contributes nodes and facts to its enclosing Frame without opening another
+allocation, coordinate, scale, or scheduling boundary.
 
 The toy program has this shape:
 
@@ -255,6 +403,10 @@ mechanisms.
 | Difference graph       | Fixed-size anchors, relations, and pins             | Relative positions, component gauges, and conflicts |
 | Bake, lower, and paint | Placed geometry, coordinate scopes, and paint edges | Display-list primitives and SVG                     |
 
+A <dfn id="term-proposal">proposal</dfn> is a provisional pixel allocation a
+parent planner offers a child during recursive production layout. It is neither
+the child's final size nor a placement fact.
+
 A surface constraint can participate in more than one mechanism.
 
 For example, `distribute` can combine child claims as a sum during
@@ -280,6 +432,11 @@ continuous {
 }
 ```
 
+The <dfn id="term-measure">measure</dfn> field is a semantic unit or grouping
+identity used to decide whether spaces and scales are compatible. It is not a
+numeric measurement, text measurement, or the legacy `GoFishRef.measure()`
+method.
+
 The `dataDomain` distinguishes an unanchored magnitude, an anchored data-position
 space, and a space where only differences are meaningful.
 
@@ -293,7 +450,7 @@ representation.
 
 ### A scale scope chooses pixels per unit
 
-A scope can produce either a magnitude scale or an anchored position map.
+A scale scope can produce either a magnitude scale or an anchored position map.
 
 The magnitude scale is the slope $\sigma$ in pixels per data unit.
 
@@ -317,7 +474,11 @@ It is not a global constraint solver, and it is not a scheduler.
 
 ## Size claims and the Frame-fit question
 
-The simplest useful claim fragment consists of nonnegative affine pieces:
+A <dfn id="term-frame-fit">Frame-fit policy</dfn> turns a size claim plus a
+finite allocation into a scale or a structured outcome such as slack, overflow,
+or underdetermination.
+
+The simplest useful claim algebra consists of nonnegative affine pieces:
 
 $$
 a\sigma + b, \qquad a \ge 0.
@@ -396,7 +557,8 @@ Without one it delegates to `Layer`.
 <Badge type="tip" text="TARGET" /> A normalized Frame should be the only construct
 that opens an allocation, coordinate, or positional-scale boundary.
 
-It should carry an explicit per-axis policy:
+It should carry an explicit per-axis
+<dfn id="term-scale-policy">scale policy</dfn>:
 
 ```text
 inherit | fit | share(id) | pixel
@@ -442,7 +604,8 @@ Scale solving answers how large data-dependent boxes become.
 
 Placement begins after their sizes are sufficiently known.
 
-For a box with minimum $m$ and size $s$, its common anchors are:
+An <dfn id="term-anchor">anchor</dfn> is a named one-axis point derived from a
+box. For a box with minimum $m$ and size $s$, its common anchors are:
 
 $$
 \operatorname{start} = m,
@@ -478,7 +641,10 @@ $$
 The rank-two closure detects incompatible equations instead of letting the last
 constraint silently overwrite an earlier one.
 
-A size that remains intrinsic participates as a known extent in the next stage.
+A _fallback intrinsic extent_ is the seed produced by the child's own layout when
+strong placement equations do not determine its span. Production classifies
+that seed as weak; it is not itself another solver equation. Once retained, it
+participates as a known extent in the next stage.
 
 ### Difference-graph placement
 
@@ -712,6 +878,15 @@ ConstraintTarget<NodeId>   local, unresolved, writable
 PlacedRef<GeometryPort>    possibly nonlocal, resolved, read-only
 ```
 
+A <dfn id="term-local-target">local target</dfn>, represented by
+`ConstraintTarget<NodeId>`, is a writable handle authorizing the current Frame
+to move or size one node in its placement region.
+
+A <dfn id="term-placed-ref">placed reference</dfn>, represented by
+`PlacedRef<G>`, is a read-only observation of source geometry already solved in
+its home Frame. _Local_ means inside the same writable placement region;
+_nonlocal_ means outside it.
+
 When a relation mixes the two, the placed reference lowers to a constant and the
 local target remains a variable.
 
@@ -738,9 +913,16 @@ This noninterference property is what makes dependency layering safe.
 
 ## Frames, coordinates, and nonlocal references
 
-A least common ancestor answers where two transform paths meet.
+A <dfn id="term-lca">least common ancestor (LCA)</dfn> is the deepest coordinate
+ancestor shared by source and consumer. It answers where their transform paths
+meet.
 
 It should not automatically own either node's scale.
+
+<dfn id="term-transport">Coordinate transport</dfn> maps a completed geometry
+port from the source Frame through that common coordinate space and into the
+consumer Frame. It converts geometry; it does not re-run the source's scale or
+placement solve.
 
 <Badge type="tip" text="TARGET" /> A cross-Frame reference should follow this order:
 
@@ -821,7 +1003,13 @@ The current ref implementation does not yet make those cases explicit.
 
 ## What the scheduler should schedule
 
-The scheduler is not for deciding whether `align` runs before `distribute`.
+A <dfn id="term-task-dag">task DAG</dfn> is the directed acyclic graph of
+computations whose outputs become available at different times. Its edges mean
+“this output must exist before that computation can run.”
+
+The <dfn id="term-scheduler">scheduler</dfn> chooses any topological execution
+order for that graph. It is not for deciding whether `align` runs before
+`distribute`.
 
 Same-Frame constraints contribute to one simultaneous fact set.
 
@@ -882,9 +1070,10 @@ The normalized engine needs only a few semantic records.
 ```text
 Frame {
   id
-  allocation: [AxisPolicy, AxisPolicy]
+  body
+  extent: [ExtentPolicy, ExtentPolicy]
+  scale: [ScalePolicy, ScalePolicy]
   coord?
-  nodes
   placementFacts
   derivedTasks
   paintEdges
@@ -971,7 +1160,8 @@ Every layout change or agent brief should answer:
 
 - Is this describing production behavior, target semantics, or the executable
   reference kernel?
-- Which Frame owns the allocation and scale?
+- Which Frame receives the allocation, what scale policy does it declare, and
+  which scale scope performs the solve?
 - Is each operand a writable local `ConstraintTarget` or a read-only `PlacedRef`?
 - Which phase owns the behavior: claim, scale, intrinsic layout, placement, bounds,
   transport, derived geometry, or paint?
@@ -982,7 +1172,8 @@ Every layout change or agent brief should answer:
 
 The shortest durable mental model is this:
 
-> A Frame owns scale and coordinates, a Layer contributes unordered local facts,
-> the placement solver solves those facts jointly, a PlacedRef observes completed
-> geometry without moving its source, the task DAG orders dependencies between
-> Frames, and paint order is separate from geometry.
+> A Frame declares allocation, scale, and coordinate policy; a Layer contributes
+> unordered facts to its local placement region; the placement solver solves
+> those facts jointly; a PlacedRef observes completed geometry without moving its
+> source; the task DAG orders dependencies between Frames; and paint order is
+> separate from geometry.
