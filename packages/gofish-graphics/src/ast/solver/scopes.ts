@@ -1,5 +1,5 @@
 // <gofish-wiki> AUTO-GENERATED — see covers: in the essay; run `pnpm --filter docs sync-backlinks`
-// @wiki How the Layout Engine Works — /internals/layout/how-layout-works
+// @wiki Frames, Scale Scopes, and Size Claims — /internals/layout/frames-scale-scopes-and-claims
 // </gofish-wiki>
 
 /**

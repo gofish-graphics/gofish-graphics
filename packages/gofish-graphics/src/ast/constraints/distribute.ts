@@ -1,5 +1,6 @@
 // <gofish-wiki> AUTO-GENERATED — see covers: in the essay; run `pnpm --filter docs sync-backlinks`
 // @wiki Underlying Space — /internals/core/underlying-space
+// @wiki Placement Solving and the Layer Laws — /internals/layout/placement-and-layer-laws
 // </gofish-wiki>
 
 import type { Axis, AlignAnchor, ConstraintRef } from "./shared";

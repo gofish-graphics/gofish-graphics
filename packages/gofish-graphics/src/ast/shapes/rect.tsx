@@ -1,5 +1,5 @@
 // <gofish-wiki> AUTO-GENERATED — see covers: in the essay; run `pnpm --filter docs sync-backlinks`
-// @wiki Overview — /internals/layout/passes
+// @wiki Production Pass Inventory — /internals/layout/passes
 // </gofish-wiki>
 
 import { color6, resolveColorChannel } from "../../color";

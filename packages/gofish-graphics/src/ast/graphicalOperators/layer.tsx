@@ -1,6 +1,6 @@
 // <gofish-wiki> AUTO-GENERATED — see covers: in the essay; run `pnpm --filter docs sync-backlinks`
 // @wiki Underlying Space — /internals/core/underlying-space
-// @wiki How the Layout Engine Works — /internals/layout/how-layout-works
+// @wiki Frames, Scale Scopes, and Size Claims — /internals/layout/frames-scale-scopes-and-claims
 // </gofish-wiki>
 
 import { GoFishNode, placeUnplacedChild, type ToPixel } from "../_node";

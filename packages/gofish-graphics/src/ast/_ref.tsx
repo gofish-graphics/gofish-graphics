@@ -1,5 +1,5 @@
 // <gofish-wiki> AUTO-GENERATED — see covers: in the essay; run `pnpm --filter docs sync-backlinks`
-// @wiki How the Layout Engine Works — /internals/layout/how-layout-works
+// @wiki References, Coordinate Transport, and Scheduling — /internals/layout/references-coordinates-and-scheduling
 // </gofish-wiki>
 
 import type { JSX } from "solid-js";
