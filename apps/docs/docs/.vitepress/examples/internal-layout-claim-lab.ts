@@ -14,6 +14,11 @@ const presets = [
     defaultBudget: 180,
     minimum: 50,
     claim: (sigma) => Math.max(40 * sigma, 10 * sigma + 50),
+    pieces: [
+      { formula: "40σ", claim: (sigma) => 40 * sigma },
+      { formula: "10σ + 50", claim: (sigma) => 10 * sigma + 50 },
+    ],
+    crossovers: [5 / 3],
   },
   {
     id: "series",
@@ -22,6 +27,8 @@ const presets = [
     defaultBudget: 210,
     minimum: 10,
     claim: (sigma) => 5 * sigma + 10,
+    pieces: [{ formula: "5σ + 10", claim: (sigma) => 5 * sigma + 10 }],
+    crossovers: [],
   },
   {
     id: "plateau",
@@ -30,6 +37,11 @@ const presets = [
     defaultBudget: 120,
     minimum: 120,
     claim: (sigma) => Math.max(120, 30 * sigma),
+    pieces: [
+      { formula: "120", claim: () => 120 },
+      { formula: "30σ", claim: (sigma) => 30 * sigma },
+    ],
+    crossovers: [4],
   },
   {
     id: "pixel",
@@ -38,6 +50,8 @@ const presets = [
     defaultBudget: 120,
     minimum: 120,
     claim: () => 120,
+    pieces: [{ formula: "120", claim: () => 120 }],
+    crossovers: [],
   },
 ];
 
@@ -207,9 +221,11 @@ plot.setAttribute("role", "img");
 const legend = document.createElement("div");
 legend.className = "gf-claim-legend";
 legend.innerHTML = `
+  <span class="gf-claim-key" style="--key-color:#98a2b3">affine pieces aᵢσ + bᵢ</span>
   <span class="gf-claim-key" style="--key-color:#3451b2">claim C(σ)</span>
   <span class="gf-claim-key" style="--key-color:#d65a4a">budget B</span>
   <span class="gf-claim-key" style="--key-color:#51931b">selected σ*</span>
+  <span class="gf-claim-key" style="--key-color:#b56a00">piece crossover</span>
 `;
 
 root.append(style, shell);
@@ -309,7 +325,29 @@ const plotScene = (preset, analysis) => {
     { sigma: maxSigma, claim: budget },
   ];
 
+  const pieceLayers = preset.pieces.flatMap((piece, index) => {
+    const name = `claimPiece${index}Points`;
+    const data = Array.from({ length: sampleCount + 1 }, (_, sampleIndex) => {
+      const sigma = (maxSigma * sampleIndex) / sampleCount;
+      return { sigma, claim: piece.claim(sigma) };
+    });
+    return [
+      gf
+        .chart(data)
+        .flow(gf.scatter({ x: "sigma", y: "claim" }))
+        .mark(gf.circle({ r: 0.01, fill: "transparent" }).name(name)),
+      gf.chart(gf.selectAll(name)).mark(
+        gf.line({
+          stroke: "#98a2b3",
+          strokeWidth: 1.4,
+          strokeDasharray: "4 4",
+        })
+      ),
+    ];
+  });
+
   const layers = [
+    ...pieceLayers,
     gf
       .chart(curveData)
       .flow(gf.scatter({ x: "sigma", y: "claim" }))
@@ -335,6 +373,30 @@ const plotScene = (preset, analysis) => {
       })
     ),
   ];
+
+  const visibleCrossovers = preset.crossovers.filter(
+    (sigma) => sigma >= 0 && sigma <= maxSigma
+  );
+  if (visibleCrossovers.length > 0) {
+    layers.push(
+      gf
+        .chart(
+          visibleCrossovers.map((sigma) => ({
+            sigma,
+            claim: preset.claim(sigma),
+          }))
+        )
+        .flow(gf.scatter({ x: "sigma", y: "claim" }))
+        .mark(
+          gf.circle({
+            r: 4.5,
+            fill: "#b56a00",
+            stroke: "white",
+            strokeWidth: 1.5,
+          })
+        )
+    );
+  }
 
   if (analysis.sigma !== null) {
     layers.push(

@@ -17,14 +17,20 @@ glossary:
     - term: Claim
       definition: "A symbolic C(σ) giving the pixel extent requested at scale σ."
       href: "#term-claim"
+    - term: Affine piece
+      definition: "One line aσ+b with nonnegative slope inside a claim."
+      href: "#term-affine-piece"
+    - term: Upper envelope
+      definition: "The pointwise maximum of a finite set of affine pieces and zero."
+      href: "#term-upper-envelope"
     - term: Scope
-      definition: "A region sharing one kind of state or solve; always qualify it."
+      definition: "Participants sharing one kind of state or solve; always qualify it."
       href: "#term-scope"
     - term: Scale scope
-      definition: "One region and axis sharing a solved σ or anchored position map."
+      definition: "Participants on one axis sharing a solved σ or anchored position map."
       href: "#term-scale-scope"
     - term: Frame equation
-      definition: "The fit equation content(σ) = allocated pixels at a scale root."
+      definition: "The fit equation content(σ) = allocation at the owner of one scale scope."
       href: "#term-frame-equation"
     - term: Underlying space
       definition: "The pre-pixel IR for quantity kind, domain, measure, and symbolic size."
@@ -42,11 +48,29 @@ glossary:
       definition: "The solve assigning box positions and any spans determined by anchor equations."
       href: "#term-placement"
     - term: Placement fact
-      definition: "A normalized numeric solver input such as a pin, participant, or anchor relation."
+      definition: "A normalized anchor pin, size pin, participant, or anchor relation."
       href: "#term-placement-fact"
     - term: Anchor
       definition: "A named one-axis point on a box, such as start, middle, end, or baseline."
       href: "#term-anchor"
+    - term: Rank-two closure
+      definition: "Solving a box's two unknowns (min, size) from independent equations."
+      href: "#term-rank-two-closure"
+    - term: Difference graph
+      definition: "A graph whose weighted edges encode equations x_v − x_u = d."
+      href: "#term-difference-graph"
+    - term: Connected component
+      definition: "Placement variables joined by difference edges and sharing one translation freedom."
+      href: "#term-connected-component"
+    - term: Potential
+      definition: "A node coordinate relative to a chosen component root, obtained from path sums."
+      href: "#term-potential"
+    - term: Pin
+      definition: "An absolute anchor equation that fixes a component's free translation."
+      href: "#term-pin"
+    - term: Gauge
+      definition: "A canonical origin chosen for an otherwise unpinned component."
+      href: "#term-gauge"
     - term: Bounds
       definition: "An axis-aligned conservative enclosure, always relative to a named coordinate space."
       href: "#term-bounds"
@@ -179,13 +203,15 @@ $$
 C_x(\sigma) = 2\sigma + 3\sigma + 10.
 $$
 
-A <dfn id="term-scope">scope</dfn> is a region over which one particular kind of
-state is shared or solved. Because GoFish also has coordinate, name, and flip
-scopes, this article avoids using the word unqualified after this definition.
+A <dfn id="term-scope">scope</dfn> is a set of participants over which one
+particular kind of state is shared or solved. Because GoFish also has coordinate,
+name, and flip scopes, this article avoids using the word unqualified after this
+definition.
 
-The local <dfn id="term-scale-scope">scale scope</dfn> is one node region and
-axis that shares a solved $\sigma$ or anchored position map. It solves the
-<dfn id="term-frame-equation">frame equation</dfn>:
+A <dfn id="term-scale-scope">scale scope</dfn> is the set of participants on one
+axis that share a solved $\sigma$ or anchored position map. This simple local
+scope is contiguous, and its owner solves the <dfn id="term-frame-equation">frame
+equation</dfn>:
 
 $$
 5\sigma + 10 = 210,
@@ -493,78 +519,308 @@ It is not a global constraint solver, and it is not a scheduler.
 
 ## Size claims and the Frame-fit question
 
-A <dfn id="term-frame-fit">Frame-fit policy</dfn> turns a size claim plus a
-finite allocation into a scale or a structured outcome such as slack, overflow,
-or underdetermination.
+### Concrete: which overlaid child is widest?
 
-The simplest useful claim algebra consists of nonnegative affine pieces:
+Consider two children occupying the same region:
 
 $$
-a\sigma + b, \qquad a \ge 0.
+C_1(\sigma)=40\sigma,
+\qquad
+C_2(\sigma)=10\sigma+50.
 $$
 
-Overlay combines claims with `max`:
+The first is all data-scaled width. The second has a smaller data-scaled part and
+50 fixed pixels. Their crossover is:
 
 $$
-C_{\text{overlay}} = C_1 \vee C_2 = \max(C_1, C_2).
+40\sigma=10\sigma+50
+\quad\Longrightarrow\quad
+\sigma=\frac{5}{3}.
 $$
 
-Series layout combines them with addition:
+An overlay must reserve whichever width is larger at the chosen scale:
 
 $$
-C_{\text{series}} = C_1 + C_2 + \text{gap}.
+C(\sigma)=\max(40\sigma,10\sigma+50).
 $$
 
-Finite maxima of nonnegative affine pieces remain continuous, monotone, convex,
-and piecewise linear.
-
-The explorer includes the plateau and overflow cases that a single inverse value
-can hide.
+The faint lines in the explorer are the constituent affine pieces. The solid line
+is their upper envelope: the actual claim seen by the parent.
 
 ::: gofish example:internal-layout-claim-lab hidden
 :::
 
-The plateau control demonstrates the **greatest-feasible** candidate policy below.
+### Abstracting the pattern: one variable, one upper envelope
 
-The executable experiment in `layoutClaims.ts` currently takes the more
-conservative position: when the budget equals a flat minimum, `fitClaim()`
-reports `underdetermined` and records the canonical least solution
-$\sigma=0$ instead of choosing the plateau's far edge.
+Fix one axis and one scale identity $S$. Every participating leaf contributes a
+claim tagged with compatible axis semantics and a compatible measure. A node that
+has no claim contributes $\bot$, not the zero function; that distinction matters
+for fill and proposal policies.
 
-Choosing between those contracts is part of the Frame-fit decision, not a theorem
-of the claim algebra.
-
-<Badge type="info" text="THEOREM" /> For compatible claims, `max` is associative,
-commutative, and idempotent.
+Within one valid scale scope, every real claim depends on the same unknown
+$\sigma_S$. The closed target language is:
 
 $$
-a \vee b = b \vee a,
+\mathcal K
+=
+\left\{
+C:[0,\infty)\to[0,\infty)
+\;\middle|\;
+C(\sigma)=\max(0,a_1\sigma+b_1,\ldots,a_n\sigma+b_n),\ a_i\ge0
+\right\}.
+$$
+
+An <dfn id="term-affine-piece">affine piece</dfn> is one line
+$a_i\sigma+b_i$ with nonnegative slope and finite intercept. The implicit zero
+piece floors physical extents at zero; the other intercepts need not be positive.
+
+The <dfn id="term-upper-envelope">upper envelope</dfn> is their pointwise
+maximum. It is finite, nonnegative, continuous, nondecreasing, convex, and
+piecewise linear.
+
+The author-facing size problem can be written as an expression:
+
+$$
+E ::= C_n
+\mid E\vee E
+\mid E+E
+\mid kE
+\mid [E+c]_+,
+\qquad k\ge0.
+$$
+
+Overlay uses $\vee=\max$, series layout uses $+$, scalar sizing uses $kE$, and
+fixed padding or gaps shift the intercept. Evaluating the expression bottom-up
+eliminates every intermediate size variable:
+
+$$
+C_S=\operatorname{eval}(E_S),
+\qquad
+\operatorname{Fit}(C_S,B_S)\rightsquigarrow\sigma_S,
+\qquad
+s_n=C_n(\sigma_S).
+$$
+
+Equivalently, the larger system
+
+$$
+\begin{aligned}
+s_{\mathrm{overlay}}&=\max_i s_i,\\
+s_{\mathrm{series}}&=\sum_i s_i+\sum_i g_i,\\
+s_{\mathrm{outer}}&=s_{\mathrm{inner}}+2p,\\
+s_n&=C_n(\sigma_S),\\
+s_{\mathrm{root}}&=B_S
+\end{aligned}
+$$
+
+compiles to the single per-scope equation $C_S(\sigma_S)=B_S$. This is the
+whole size-claim reduction: first build one symbolic function, then solve its one
+scale unknown, then evaluate the leaves.
+
+The one-variable qualification is essential. If two children actually use
+different scale identities, their parent has a multivariate expression such as
+$C(\sigma_\mu,\sigma_\nu)$. The engine must split the scopes, inherit or pin one
+scale, or declare an explicit shared solve. Calling a one-dimensional inverse on
+that expression would be a semantic error.
+
+### Canonical claim representation
+
+Let $P_C=\{(a_i,b_i)\}$ be a finite piece set and write:
+
+$$
+\operatorname{Env}(P_C)(\sigma)
+=
+\max\!\left(0,\max_{(a,b)\in P_C}(a\sigma+b)\right).
+$$
+
+Different piece sets can denote the same function. For example:
+
+$$
+\max(10,\sigma+5,2\sigma)=\max(10,2\sigma)
+$$
+
+on $\sigma\ge0$: the middle line only ties at $\sigma=5$ and never owns an
+interval of the upper envelope.
+
+The canonical hull $H(P)$ keeps only pieces that bind on a nonempty interval,
+sorted by increasing slope. For adjacent retained pieces
+$p_{j-1}=(a_{j-1},b_{j-1})$ and $p_j=(a_j,b_j)$, the transition is:
+
+$$
+\tau_j
+=
+\frac{b_{j-1}-b_j}{a_j-a_{j-1}},
+\qquad
+0<\tau_1<\tau_2<\cdots.
+$$
+
+An implementation can compute $H$ by sorting by slope, keeping only the greatest
+intercept for each slope, and scanning the lines while popping every piece whose
+transition is no later than the previous transition. Pieces inactive on
+$\sigma\ge0$ are then discarded.
+
+<Badge type="info" text="THEOREM" /> Over exact real arithmetic, this normal form
+is semantic:
+
+$$
+H(P)=H(Q)
+\quad\Longleftrightarrow\quad
+\forall\sigma\ge0,\;
+\operatorname{Env}(P)(\sigma)=\operatorname{Env}(Q)(\sigma).
+$$
+
+The TypeScript kernel still needs a documented floating-point policy for nearly
+coincident lines; the theorem is about the mathematical representation.
+
+### Why overlay and series stay in the language
+
+If $C=\operatorname{Env}(P)$ and $D=\operatorname{Env}(Q)$, overlay is piece
+union followed by canonicalization:
+
+$$
+C\vee D
+=
+\operatorname{Env}(P\cup Q).
+$$
+
+Series composition is the pairwise sum of pieces followed by canonicalization:
+
+$$
+C+D+g
+=
+\operatorname{Env}
+\left(
+\left\{
+(a+c)\sigma+(b+d+g)
+\;\middle|\;
+(a,b)\in P,\ (c,d)\in Q
+\right\}
+\right).
+$$
+
+For example, putting $A(\sigma)=\max(10,2\sigma)$ in series with
+$D(\sigma)=3\sigma$ and a 2-pixel gap gives:
+
+$$
+C(\sigma)=\max(3\sigma+12,5\sigma+2).
+$$
+
+At budget $B=27$ the two candidate upper bounds are $5$ and $5$, so
+$\sigma=5$ and $10+15+2=27$ pixels.
+
+Compatible claims are claims whose measures, quantity meanings, axis, and scale
+identity allow them to participate in one solve. For compatible claims, overlay
+is associative, commutative, and idempotent:
+
+$$
+a\vee b=b\vee a,
+\qquad
+(a\vee b)\vee c=a\vee(b\vee c),
+\qquad
+a\vee a=a.
+$$
+
+Series addition is an associative commutative monoid, and distributes over the
+join:
+
+$$
+a+(b\vee c)=(a+b)\vee(a+c).
+$$
+
+Evaluation preserves both operations:
+
+$$
+\operatorname{ev}_\sigma(a\vee b)
+=
+\max(\operatorname{ev}_\sigma a,\operatorname{ev}_\sigma b),
 $$
 
 $$
-(a \vee b) \vee c = a \vee (b \vee c),
+\operatorname{ev}_\sigma(a+b)
+=
+\operatorname{ev}_\sigma a+\operatorname{ev}_\sigma b.
 $$
 
-$$
-a \vee a = a.
-$$
+<Badge type="info" text="THEOREM" /> Folding a fixed multiset of compatible claim
+operands is independent of traversal order and parenthesization, and evaluating
+after the fold equals composing already-evaluated extents.
 
-Addition is associative and commutative, and it distributes over `max`:
-
-$$
-a + (b \vee c) = (a + b) \vee (a + c).
-$$
-
-These laws are the algebraic reason overlay and series claims can be accumulated
-without choosing an execution order.
+This does not make an explicitly ordered distribute path geometrically
+reorderable. It only says its total series claim is insensitive to how the same
+operands are folded.
 
 Production's general [Monotonic module](/internals/core/monotonic) represents a
-broader symbolic language.
+broader language, including opaque functions and numeric inversion. The
+reference `layoutClaims.ts` deliberately uses this smaller closed fragment so
+canonicalization, exact fitting, and algebraic laws remain inspectable.
 
-The reference `layoutClaims.ts` deliberately experiments with a smaller closed
-fragment whose laws are easier to inspect and test.
+### Fit is a policy over the envelope
 
-### Frame is intended to own this policy
+A <dfn id="term-frame-fit">Frame-fit policy</dfn> turns a claim $C$ and finite
+allocation $B$ into a scale or a structured outcome. Define:
+
+$$
+m=C(0),
+\qquad
+F_B=\{\sigma\ge0\mid C(\sigma)\le B\},
+\qquad
+E_B=\{\sigma\ge0\mid C(\sigma)=B\}.
+$$
+
+Because $C$ is an upper envelope, $C(\sigma)\le B$ exactly when every piece is
+at most $B$. If $B\ge m$ and at least one piece grows, then:
+
+$$
+F_B=[0,u_B],
+\qquad
+u_B
+=
+\min_{i:a_i>0}\frac{B-b_i}{a_i}.
+$$
+
+That gives the complete classification:
+
+- If $B<m$, no scale fits: `overflow`, with deficit $m-B$.
+- If $C$ grows and $B>m$, $E_B=\{u_B\}$: one exact scale.
+- If $B=m$ and growth begins immediately, the exact scale is $0$.
+- If $B=m$ and $C$ begins with a plateau, $E_B$ is an interval:
+  `underdetermined`.
+- If $C$ is constant and $B=m$, every $\sigma$ is a solution:
+  `underdetermined`.
+- If $C$ is constant and $B>m$, equality has no solution and every scale is
+  feasible: `slack`, with $B-m$ unused pixels.
+
+The executable `fitClaim()` experiment reports a plateau as underdetermined and
+records its canonical least solution, $\sigma=0$. A greatest-feasible policy
+would instead choose $u_B$ when it is finite. That choice belongs to Frame policy,
+not to the claim algebra.
+
+For several participants sharing one scale, the general constraint is:
+
+$$
+F_{\mathrm{shared}}
+=
+\bigcap_k F_{B_k}(C_k).
+$$
+
+When every participant uses the same allocation, this is equivalent to fitting
+$\bigvee_k C_k$ once. With distinct budgets, the intersection form makes the
+shared unknown and every participant's obligation explicit.
+
+Finally, $\bot$ is not the zero claim. A true zero claim participates but cannot
+determine a local scale. A fill child with no claim introduces another allocation
+unknown. For claimed children $N$ and fill children $F$, the series equation is:
+
+$$
+B
+=
+C_N(\sigma)+\text{gaps}+\sum_{j\in F}f_j.
+$$
+
+Choosing equal fill, minimum fill, or a scale before fill is an explicit proposal
+policy. It cannot be recovered by pretending every $\bot$ was $C(\sigma)=0$.
+
+### Frame declares scale policy
 
 <Badge type="info" text="AS BUILT" /> The current `Frame` operator is not yet a
 semantic allocation boundary.
@@ -588,34 +844,19 @@ inherit | fit | share(id) | pixel
 - `share(id)` contributes to one explicitly owned shared scale.
 - `pixel` says the axis is already expressed in local geometric units.
 
-<Badge type="warning" text="OPEN DECISION" /> `fit` needs semantics for more than
-the happy-path equation $C(\sigma)=B$.
-
-A useful starting point is the feasible set:
-
-$$
-F_B = \{\sigma \ge 0 \mid C(\sigma) \le B\}.
-$$
-
-When it has a greatest finite element, `fit` can choose:
-
-$$
-\sigma^* = \max F_B.
-$$
-
-This treats a finite plateau deliberately rather than pretending equality has one
-solution.
-
-Several policies remain to be fixed:
+<Badge type="warning" text="OPEN DECISION" /> The algebra now distinguishes the
+fit outcomes, but a normalized Frame still needs explicit behavior for them:
 
 - An empty feasible set means unavoidable overflow, but the Frame must decide
   whether that is an error or an explicitly requested clip.
-- An unbounded feasible set means a constant-only claim did not determine a data
-  scale; it must not invent an arbitrary $\sigma$.
+- A finite plateau can remain underdetermined or use an explicitly named endpoint
+  policy; it must not look like a unique inverse.
+- An unbounded feasible set means a constant-only claim did not determine a scale;
+  it must not invent an arbitrary $\sigma$.
 - Unused pixels are slack, and centering or edge-seating that slack is a placement
   policy rather than part of scale inversion.
-- A shared scale needs one explicit owner and an order-independent way to combine
-  every participant's claim.
+- A shared scale needs one explicit owner, compatible participants, and an
+  order-independent interpretation of distinct participant budgets.
 
 ## Placement is a different mathematical problem
 
@@ -641,79 +882,313 @@ $$
 ### Rank-two box closure
 
 <Badge type="info" text="AS BUILT" /> Strong placement facts initially form linear
-equations over the pair $(m,s)$.
+equations over the two box unknowns $(m,s)$.
 
-Two independent equations determine that pair.
-
-For example:
+<dfn id="term-rank-two-closure">Rank-two box closure</dfn> means that two
+independent equations determine that pair. For example:
 
 $$
-\operatorname{start}=10, \qquad \operatorname{end}=70
+\operatorname{start}=10,
+\qquad
+\operatorname{end}=70
 $$
 
 implies:
 
 $$
-m=10, \qquad s=60.
+m=10,
+\qquad
+s=60.
 $$
 
-The rank-two closure detects incompatible equations instead of letting the last
-constraint silently overwrite an earlier one.
+Dependent equations leave one degree of freedom; incompatible equations produce a
+conflict. The solver does not let the last constraint silently overwrite an
+earlier one.
 
 A _fallback intrinsic extent_ is the seed produced by the child's own layout when
-strong placement equations do not determine its span. Production classifies
-that seed as weak; it is not itself another solver equation. Once retained, it
-participates as a known extent in the next stage.
+strong equations do not determine its span. Production classifies that seed as
+weak; it is not another exact solver equation. Once retained, its numeric size is
+substituted into the difference stage.
 
-### Difference-graph placement
+### Concrete: one relation becomes one weighted edge
 
-Once a node's size is fixed, every anchor relation reduces to a difference
-equation:
-
-$$
-x_v - x_u = d.
-$$
-
-For example:
+Return to the opening boxes after scale evaluation:
 
 $$
-B.\operatorname{start}=A.\operatorname{end}+8
+w_A=80,
+\qquad
+w_B=120.
 $$
 
-becomes:
+The 10-pixel edge gap says:
 
 $$
-\min(B)-\min(A)=w_A+8.
+B.\operatorname{start}=A.\operatorname{end}+10,
 $$
 
-The difference solver traverses connected components, assigns relative potentials,
-reconciles hard pins, and then chooses an origin for an otherwise free component.
+so:
 
-A connected component is consistent exactly when every signed cycle sums to zero.
+$$
+x_B-x_A=80+10=90,
+$$
 
-When it is consistent, all of its solutions differ by one translation.
+where $x_v=\min(v)$ on this axis. The relation fixes a difference, not an
+absolute position:
 
-A hard pin fixes that translation.
+$$
+(x_A,x_B)=(t,t+90).
+$$
 
-Otherwise the engine needs a canonical gauge, such as moving the occupied extent's
-minimum to zero.
+Adding $x_C-x_B=70$ gives the family
+
+$$
+(x_A,x_B,x_C)=(t,t+90,t+160).
+$$
+
+The explorer separates that solution family from the policy that fixes $t$. Its
+conflict state adds a direct edge that asserts $x_C-x_A=150$ even though the path
+through $B$ implies $160$.
+
+::: gofish example:internal-placement-difference-graph-lab hidden
+:::
+
+### Abstracting the pattern: an equality difference graph
+
+Fix one axis. Once size closure has produced $s_v\ge0$, every anchor is a known
+offset from the remaining position variable:
+
+$$
+[v:a]=x_v+o_v(a),
+$$
+
+with:
+
+$$
+o_v(\operatorname{start})=0,
+\qquad
+o_v(\operatorname{middle})=\frac{s_v}{2},
+\qquad
+o_v(\operatorname{end})=s_v,
+\qquad
+o_v(\operatorname{baseline})=\beta_v.
+$$
+
+An author-facing relation
+
+$$
+[v:b]=[u:a]+g
+$$
+
+therefore lowers by substitution to:
+
+$$
+x_v-x_u
+=
+o_u(a)+g-o_v(b)
+=
+d_{uv}.
+$$
+
+A <dfn id="term-difference-graph">difference graph</dfn> has one vertex for
+each writable $x_v$ and one directed edge $u\to v$ weighted by $d_{uv}$. The
+reverse traversal has weight $-d_{uv}$.
+
+This is an equality-potential problem. It is not the similarly named shortest-path
+problem over inequalities $x_v-x_u\le d$.
+
+Orient the edges and let $D$ be their incidence matrix:
+
+$$
+D_{e,u}=-1,
+\qquad
+D_{e,v}=1
+\qquad
+\text{for }e=(u,v).
+$$
+
+Let $d$ be the edge-weight vector. Absolute anchor facts lower to a selector
+matrix $P$ and numeric vector $p$. The complete fixed-size placement problem is:
+
+$$
+Dx=d,
+\qquad
+Px=p.
+$$
+
+That pair of equations is the whole abstract difference-graph solver.
+
+### Components, potentials, pins, and gauges
+
+Suppose the undirected relation graph has $k$ <dfn
+id="term-connected-component">connected components</dfn> $C_1,\ldots,C_k$.
+Then:
+
+$$
+\operatorname{rank}(D)=|V|-k,
+$$
+
+and:
+
+$$
+\ker(D)
+=
+\operatorname{span}
+\{\mathbf 1_{C_1},\ldots,\mathbf 1_{C_k}\}.
+$$
+
+Each component therefore has exactly one unconstrained degree of freedom:
+translation.
+
+Choose a root in one component and assign it $r_{\mathrm{root}}=0$. A <dfn
+id="term-potential">potential</dfn> $r_v$ is the signed sum of edge weights along
+a root-to-$v$ path. The relation edges are consistent exactly when every signed
+cycle has zero total weight:
+
+$$
+\sum_{e\in\gamma}\operatorname{sign}_{\gamma}(e)d_e=0
+\qquad
+\text{for every cycle }\gamma.
+$$
+
+Equivalently:
+
+$$
+z^{\mathsf T}d=0
+\qquad
+\text{for every }z\in\ker(D^{\mathsf T}).
+$$
+
+The zero-cycle condition makes $r_v$ independent of which path was chosen. Every
+solution on a consistent component is then:
+
+$$
+x_v=r_v+t_C.
+$$
+
+A <dfn id="term-pin">pin</dfn> is an absolute anchor equation. After anchor
+offset substitution, $x_i=p_i$ requires:
+
+$$
+t_C=p_i-r_i.
+$$
+
+All pins in one component are compatible exactly when they imply the same $t_C$.
+For any two pinned vertices $i,j$ this means:
+
+$$
+p_j-p_i
+=
+\sum_{e\in i\leadsto j}d_e.
+$$
+
+An unpinned component still needs a deterministic origin. A <dfn
+id="term-gauge">gauge</dfn> chooses one representative from the translation family
+without adding geometric meaning. The reference kernel uses:
+
+$$
+t_C=-\min_{v\in C}r_v,
+\qquad
+\min_{v\in C}x_v=0.
+$$
+
+The two algebraic conflicts are now explicit:
+
+1. a closing edge disagrees with an already implied potential, producing a
+   nonzero cycle; or
+2. two pins imply different component translations.
+
+A useful structured diagnostic would retain the complete cycle or pin-to-pin path
+as a witness. Production currently reports the conflicting owners plus asserted
+and implied values, but not the whole path.
+
+### Placed references lower to constants
+
+A transported nonlocal reference contributes a numeric constant $c_r$, not
+another writable graph variable. A relation from that constant to a local anchor
+becomes a pin:
+
+$$
+[v:b]=c_r+g
+\quad\Longrightarrow\quad
+x_v=c_r+g-o_v(b).
+$$
+
+A relation between two placed constants is only a check:
+
+$$
+c_q\stackrel{?}{=}c_r+g.
+$$
+
+This is the algebraic form of the authority boundary: local targets become
+variables; placed references become constants; an observation cannot move its
+source.
+
+### Align and distribute are graph elaborations
+
+Aligning operands $(v_i,a_i)$ introduces a shared anchor coordinate $\lambda$:
+
+$$
+x_i+o_i(a_i)=\lambda
+\qquad\text{for every }i.
+$$
+
+Eliminating $\lambda$ with any representative $r$ yields a star of difference
+edges:
+
+$$
+x_i-x_r=o_r(a_r)-o_i(a_i).
+$$
+
+The representative has no semantic authority; it is only an economical way to
+emit the same equation set. If two already pinned operands disagree, the result
+must be a conflict rather than “first source wins.”
+
+For the explicitly ordered distribute path $v_0,\ldots,v_{n-1}$:
+
+$$
+x_{i+1}+o_{i+1}(a_{\mathrm{to}})
+=
+x_i+o_i(a_{\mathrm{from}})+g_i,
+$$
+
+so:
+
+$$
+x_{i+1}-x_i
+=
+o_i(a_{\mathrm{from}})+g_i-o_{i+1}(a_{\mathrm{to}}).
+$$
+
+Edge spacing chooses `end` then `start`, giving the familiar rule:
+
+$$
+x_{i+1}-x_i=s_i+g_i.
+$$
+
+Changing fact storage order cannot change these edges. Changing the explicit
+operand path does change which edges exist.
+
+<Badge type="info" text="AS BUILT" /> The formulas expose several production
+exceptions that should be removed during normalization:
+
+- `align` can choose the first already positioned operand as its source and omit
+  other positioned operands instead of checking all of their equations;
+- `distribute` can skip an edge when both endpoints were already positioned; and
+- the production graph recognizes a distribute-chain origin by inspecting owner
+  strings, whereas target lowering should emit an explicit head pin and leave the
+  generic solver owner-agnostic.
 
 <Badge type="info" text="THEOREM" /> For fixed intrinsic sizes, a fixed multiset of
-consistent lowered facts, and a canonical free-component gauge, the solved geometry
+consistent lowered facts, and a canonical free-component gauge, solved geometry
 is independent of fact traversal order.
 
-**Proof sketch.** Summing edge equations along any path gives a node's potential
-relative to the component root.
-
-The zero-cycle condition makes this value independent of which path is chosen.
-
-Pins or the canonical gauge then choose the one remaining component translation
-without consulting traversal order.
+**Proof sketch.** The zero-cycle condition makes every potential a path-independent
+sum. Pins or the gauge then select each component's only free translation. None of
+those values depends on the order in which vertices or facts were visited.
 
 This theorem says nothing about a syntactic reordering that changes the lowered
-fact set.
-
-In particular, `[A, B, C]` and `[A, C, B]` are different ordered distribute paths.
+fact set. In particular, `[A, B, C]` and `[A, C, B]` are different ordered
+distribute paths.
 
 ## The Layer laws we want
 
@@ -1153,19 +1628,23 @@ pipeline and not evidence that every surface program already conforms.
 
 These laws separate established mathematics from end-to-end conformance goals.
 
-| Property                                                       | Kind                         |
-| -------------------------------------------------------------- | ---------------------------- |
-| Claim `max` is associative, commutative, and idempotent        | Claim algebra                |
-| Claim addition is associative and commutative                  | Claim algebra                |
-| A strictly increasing claim has at most one equality solution  | Claim algebra                |
-| Two independent box equations uniquely determine `(min, size)` | Placement algebra            |
-| A consistent difference component is unique modulo translation | Placement algebra            |
-| A fixed placement fact multiset is permutation-invariant       | Kernel conformance target    |
-| Transparent Layer identity and associativity                   | Core conformance target      |
-| Node and fact storage permutations preserve geometry           | Core conformance target      |
-| A `PlacedRef` cannot alter source scale or geometry            | Reference conformance target |
-| A complete task DAG is independent of topological schedule     | Scheduler conformance target |
-| Paint order is permutation-invariant                           | Deliberately false           |
+| Property                                                        | Kind                         |
+| --------------------------------------------------------------- | ---------------------------- |
+| Claim `max` is associative, commutative, and idempotent         | Claim algebra                |
+| Claim addition is associative and commutative                   | Claim algebra                |
+| Canonical claim hull equality is pointwise semantic equality    | Claim algebra                |
+| Claim evaluation preserves `max` and addition                   | Claim algebra                |
+| A strictly increasing claim has at most one equality solution   | Claim algebra                |
+| Two independent box equations uniquely determine `(min, size)`  | Placement algebra            |
+| Relation edges are feasible iff every signed cycle sums to zero | Placement algebra            |
+| Component pins are feasible iff they imply one translation      | Placement algebra            |
+| A consistent difference component is unique modulo translation  | Placement algebra            |
+| A fixed placement fact multiset is permutation-invariant        | Kernel conformance target    |
+| Transparent Layer identity and associativity                    | Core conformance target      |
+| Node and fact storage permutations preserve geometry            | Core conformance target      |
+| A `PlacedRef` cannot alter source scale or geometry             | Reference conformance target |
+| A complete task DAG is independent of topological schedule      | Scheduler conformance target |
+| Paint order is permutation-invariant                            | Deliberately false           |
 
 The conformance properties need differential tests from surface `Layer`, `Frame`,
 and `ref` programs into normalized kernel records.
