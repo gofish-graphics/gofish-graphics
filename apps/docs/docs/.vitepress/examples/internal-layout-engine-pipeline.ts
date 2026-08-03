@@ -30,9 +30,9 @@ const palette = {
 
 const stepData = [
   {
-    short: "Claim",
-    title: "1 · Underlying-space claim",
-    equation: "Cₓ(σ) = 2σ + 3σ + 10",
+    short: "Request",
+    title: "1 · Scale-dependent size request",
+    equation: "Rₓ(σ) = 2σ + 3σ + 10",
     detail:
       "The children contribute two and three data units; distribute contributes a fixed 10 px gap. No pixel width has been chosen yet.",
   },
@@ -41,7 +41,7 @@ const stepData = [
     title: "2 · Scope solve",
     equation: "5σ + 10 = 210  ⟹  σ = 40 px / unit",
     detail:
-      "The owning scale scope inverts the claim against the 210 px allocation.",
+      "The owning scale scope inverts the size request against the 210 px allocation.",
   },
   {
     short: "Intrinsic",
@@ -243,7 +243,7 @@ const exactSeries = (soft) => [
 const commonCaption = (value, y, fill, weight) =>
   at(SERIES_MIDDLE, y, text(value, 12, fill || palette.quiet, weight));
 
-const claimScene = () => {
+const requestScene = () => {
   const aUnits = gf.stackX({ spacing: 0, alignment: "middle" }, [
     unitCell("σ", palette.a, palette.aSoft),
     unitCell("σ", palette.a, palette.aSoft),
@@ -360,7 +360,7 @@ const paintScene = () => {
 };
 
 const scenes = [
-  claimScene,
+  requestScene,
   scaleScene,
   intrinsicScene,
   factsScene,

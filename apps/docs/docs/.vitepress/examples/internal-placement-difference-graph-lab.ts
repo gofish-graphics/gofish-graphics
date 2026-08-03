@@ -185,7 +185,9 @@ const graphNode = (id, potential, value, x, y, fill, stroke) =>
       ])
   );
 
-const edge = (from, to, label, x, y, conflict = false) => [
+// `gf.enclose` derives its box from middle-anchored text, so these coordinates
+// are the edge midpoint (unlike the old fixed rectangle's top-left corner).
+const edge = (from, to, label, centerX, centerY, conflict = false) => [
   gf.line(
     {
       stroke: conflict ? palette.red : palette.edge,
@@ -197,30 +199,19 @@ const edge = (from, to, label, x, y, conflict = false) => [
     [gf.ref(`difference-${from}`), gf.ref(`difference-${to}`)]
   ),
   at(
-    x,
-    y,
-    gf
-      .layer([
-        gf
-          .rect({
-            w: conflict ? 146 : 112,
-            h: 28,
-            rx: 14,
-            fill: conflict ? palette.redSoft : palette.panelSoft,
-            stroke: conflict ? palette.red : palette.border,
-            strokeWidth: 1.25,
-          })
-          .name("shape"),
-        text(label, 10, conflict ? palette.red : palette.muted, "760").name(
-          "label"
-        ),
-      ])
-      .constrain((targets) => [
-        gf.Constraint.align({ x: "middle", y: "middle" }, [
-          targets.shape,
-          targets.label,
-        ]),
-      ])
+    centerX,
+    centerY,
+    gf.enclose(
+      {
+        padding: 8,
+        rx: 999,
+        ry: 999,
+        fill: conflict ? palette.redSoft : palette.panelSoft,
+        stroke: conflict ? palette.red : palette.border,
+        strokeWidth: 1.25,
+      },
+      [text(label, 10, conflict ? palette.red : palette.muted, "760")]
+    )
   ),
 ];
 
@@ -253,9 +244,9 @@ const pinNode = () =>
 const applyViewport = () => {
   const svg = canvas.querySelector("svg");
   if (!svg) return false;
-  // GoFish's conservative absolute-position claim is wider than the requested
-  // render budget. Keep the full semantic drawing in view rather than making
-  // the article column horizontally scroll.
+  // GoFish's conservative absolute-position extent estimate is wider than the
+  // requested render budget. Keep the full semantic drawing in view rather than
+  // making the article column horizontally scroll.
   svg.setAttribute("viewBox", `0 0 ${VIEW_W} ${H}`);
   svg.setAttribute("width", String(VIEW_W));
   svg.setAttribute("height", String(H));
@@ -322,8 +313,8 @@ const render = () => {
       palette.marsFill,
       palette.marsStroke
     ),
-    ...edge("A", "B", "A → B   +90", 180, 112),
-    ...edge("B", "C", "B → C   +70", 365, 112),
+    ...edge("A", "B", "A → B   +90", 225, 157),
+    ...edge("B", "C", "B → C   +70", 435, 157),
     at(
       360,
       38,
@@ -354,7 +345,7 @@ const render = () => {
 
   if (isConflict) {
     nodes.push(
-      ...edge("A", "C", "asserted +150 · implied +160", 235, 260, true)
+      ...edge("A", "C", "asserted +150 · implied +160", 320, 217, true)
     );
   } else {
     nodes.push(

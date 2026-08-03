@@ -48,7 +48,7 @@ const stages = [
     id: "scale",
     label: "2 · scale",
     mechanism: "production scope roots and ScopeRegistry",
-    input: "symbolic claim C(σ) plus a pixel allocation",
+    input: "scale-dependent size request R(σ) plus a pixel allocation",
     output: "σ and/or an anchored data-to-pixel map",
     note: "Today roots include the render root, coordinate boundaries, and some Layers. The target declares fit/inherit/share policy on Frames.",
   },

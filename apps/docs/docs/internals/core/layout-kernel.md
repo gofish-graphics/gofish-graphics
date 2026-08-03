@@ -4,7 +4,7 @@ section: Core
 order: 25
 status: draft
 covers:
-  - packages/gofish-graphics/src/ast/layoutClaims.ts
+  - packages/gofish-graphics/src/ast/sizeRequests.ts
   - packages/gofish-graphics/src/ast/layoutKernel.ts
 ---
 
@@ -29,7 +29,7 @@ The kernel is intentionally smaller than the authoring language. Its concepts ar
 - an explicit dependency graph; and
 - a paint program that runs after geometry.
 
-See [Underlying Space](/internals/core/underlying-space) for the current claim
+See [Underlying Space](/internals/core/underlying-space) for the current size-request
 vocabulary, [The Bounding-Box Model](/internals/core/bbox) for box terminology,
 and [Name Resolution & Scoping](/internals/core/names-and-scoping) for the
 author-facing naming problem. This contract deliberately separates those concerns
@@ -40,13 +40,13 @@ from structural parenthood.
 This is a target contract, not a claim that the current AST already conforms. The
 implementation in this change makes three deliberately bounded pieces executable:
 
-- `layoutClaims.ts` is the closed, inspectable claim algebra proposed for the
+- `sizeRequests.ts` is the closed, inspectable size-request algebra proposed for the
   normalized core; production still uses `Monotonic` while migration is evaluated.
 - `layoutKernel.ts` is only the **same-frame, known-size placement subkernel**. A
   `PlacedPort` supplied to it is already resolved and transported into the consumer
-  frame. Frame construction, scale ownership, coordinate transport, name lowering,
-  and the full task DAG remain upstream obligations; this subkernel does not pretend
-  to prove them.
+  frame. Frame construction, allocation/extent resolution, scale ownership,
+  coordinate transport, name lowering, and the full task DAG remain upstream
+  obligations; this subkernel does not pretend to prove them.
 - the production underlying-space fold now has a lossless `none | one | mixed`
   measure state, eliminating one concrete violation of layer associativity.
 
@@ -60,23 +60,24 @@ not as a proof of current end-to-end behavior.
 
 For a viewport and a normalized core program, evaluation returns exactly one of:
 
-```text
-ResolvedScene {
-  boxes:       NodeId -> Box
-  transforms:  NodeId -> WorldTransform
-  scales:      ScaleId -> ResolvedScale
-  references:  RefId -> NodeId
-  displayList: DisplayItem[]
+```ts
+interface ResolvedScene {
+  boxes: Map<NodeId, Box>;
+  transforms: Map<NodeId, WorldTransform>;
+  scales: Map<ScaleId, ResolvedScale>;
+  references: Map<RefId, NodeId>;
+  displayList: DisplayItem[];
 }
 
-LayoutFailure {
-  errors: LayoutError[]
+interface LayoutFailure {
+  errors: LayoutError[];
 }
 ```
 
 Two programs are **geometry-equivalent**, written `A ≈ᴳ B`, when their
 surviving node IDs have the same resolved references, scale IDs and maps, local
-boxes, world geometry, and outward claims. Mathematically these values are equal;
+boxes, world geometry, and outward size requests. Mathematically these values are
+equal;
 an implementation may compare floating-point results within one documented global
 tolerance.
 
@@ -161,49 +162,107 @@ wrapper is still erased.
 Associative composition requires explicit state for information that cannot be
 represented by a single optional value. For example, measure combination needs
 states equivalent to `none`, `one(measure)`, and `mixed`; using `undefined` for
-both “no claim” and “conflict” makes the fold non-associative. Likewise, ordinal
+both “no measure” and “conflict” makes the fold non-associative. Likewise, ordinal
 domain order MUST be explicit or canonical rather than inherited from child
 encounter order.
 
 ## 4. Frame, coordinates, and scales
 
 `Frame` is the only core construct that opens a coordinate or positional-scale
-boundary. A frame has an allocated two-dimensional extent, one child body, an
-optional coordinate map, and one explicit scale policy per axis:
+boundary. A frame has one child body and declares, per axis, how its shell extent
+is obtained and how its scale is obtained. It may also declare a coordinate map:
 
-```text
-Frame {
-  id: NodeId
-  body: Node
-  extent: [ExtentPolicy, ExtentPolicy]
-  coord?: CoordinateMap
-  scale: [ScalePolicy, ScalePolicy]
+```ts
+interface Frame {
+  id: NodeId;
+  body: Node;
+  extent: readonly [ExtentPolicy, ExtentPolicy];
+  coord?: CoordinateMap;
+  scale: readonly [ScalePolicy, ScalePolicy];
 }
 
-ScalePolicy = inherit | fit | share(ScaleId) | pixel
+type PixelExtent = number; // finite, non-negative pixels
+
+type ExtentPolicy =
+  | { kind: "fixed"; px: PixelExtent }
+  | { kind: "allocated" }
+  | {
+      kind: "auto";
+      inset?: { before: PixelExtent; after: PixelExtent };
+    };
+
+type ScalePolicy =
+  | { kind: "inherit" }
+  | { kind: "fit" }
+  | { kind: "share"; id: ScaleId }
+  | { kind: "pixel" };
 ```
 
 The surface language may infer these policies, but the normalized core MUST store
 them explicitly.
 
+### Per-axis extent policy
+
+For Frame $F$ and axis $a$, `Allocation(F, a)` is a finite pixel extent supplied
+by the root viewport or a parent-owned sizing task. It MUST be independent of
+$F$'s body. `Extent(F, a)` is a task whose output is the resolved shell size seen
+by the parent's placement region. They are different values even when the extent
+policy makes them numerically equal.
+
+- **`fixed(px)`** makes `Extent(F, a) = px` without consuming an allocation.
+- **`allocated`** makes `Extent(F, a) = Allocation(F, a)`. A missing root or
+  parent offer is `MissingAllocation`.
+- **`auto(inset)`** waits for resolved body bounds expressed in the shell's
+  parent-facing coordinate basis, before the parent places the shell, and makes
+  `Extent(F, a) = span(BodyBounds(F), a) + inset.before + inset.after`. Omitted
+  insets are zero. This result is occupied shell size, not an allocation fed back
+  into the same body.
+
+Every allocation, fixed extent, and derived extent MUST be finite and
+non-negative. `fixed` and `allocated` extents are available before body layout;
+`auto` extents are available only after the body's scale, intrinsic geometry,
+Frame-local placement, and local bounds.
+
+An `auto` shell is therefore schedulable with `inherit` when its coordinate map
+does not consume that same shell extent: the ancestor scale resolves first, then
+the child body and coordinate mapping, then its shell extent, and finally the
+shell's placement in the parent. It is also schedulable with `pixel` under the
+same condition. If the coordinate map depends on `Extent(F, a)`, that dependency
+is an explicit DAG edge and may form a cycle. A `fit` scale always requires a
+`fixed` or `allocated` extent that exists before body layout. Combining `fit` and
+`auto` on the same axis produces a dependency cycle and MUST fail as
+`DependencyCycle` in v0; no fixed-point semantics is implied.
+
+Under `inherit`, `SizeRequest(F.body, a)` contributes symbolically to the
+inherited scale identity's request join before its ancestor owner solves the
+scale. That join does not wait for `Extent(F, a) [auto]`; the auto extent is the
+later concrete result of evaluating and placing the body under the solved scale.
+
+For `share(id)`, all participants may contribute symbolic size requests before
+their geometry exists. The group's one fitting owner MUST provide a `fixed` or
+`allocated` extent. A non-owner participant may be `auto`, because it derives its
+shell only after the shared scale has been solved.
+
 ### Per-axis scale policy
 
-- **`inherit`** reuses the accessible parent `ScaleId` and mapping. The frame does
-  not solve a new scale. A child that requires a data scale when none is available
-  fails with `MissingInheritedScale`.
-- **`fit`** consumes the body's claim and solves one local scale against the
-  frame's finite allocated interval. The inner data claim does not escape to the
-  parent; outwardly the axis is a resolved geometric extent. A missing extent,
-  incompatible claim, or non-invertible size relation is a structured failure.
-- **`share(id)`** contributes its claim to the named scale group. All participants'
-  claims are joined first, the group has exactly one owner, and the resulting scale
-  is solved once. Incompatible measures or two owners fail; traversal order never
-  chooses a winner.
+- **`inherit`** contributes the body's symbolic request to the accessible parent
+  `ScaleId` and reuses its solved mapping. The frame does not solve a new scale. A
+  child that requires a data scale when none is available fails with
+  `MissingInheritedScale`.
+- **`fit`** consumes the body's size request and solves one local scale against the
+  frame's finite pre-body `Extent`. The inner data-dependent request does not escape
+  to the parent; outwardly the axis is a resolved geometric extent. A missing
+  extent, incompatible request, or non-invertible size relation is a structured
+  failure.
+- **`share(id)`** contributes its size request to the named scale group. All
+  participants' requests are joined first, the group has exactly one owner, and the
+  resulting scale is solved once. Incompatible measures or two owners fail;
+  traversal order never chooses a winner.
 - **`pixel`** declares that the axis is already in frame-local geometric units and
   has no data scale. A data-dependent child that still needs a scale fails with
   `ScaleRequired`.
 
-Scale claims form an order-independent algebra. For compatible claims `a`, `b`,
+Size requests form an order-independent algebra. For compatible requests `a`, `b`,
 and `c`, the join `⊔` MUST satisfy:
 
 ```text
@@ -212,7 +271,7 @@ a ⊔ b = b ⊔ a
 a ⊔ a = a
 ```
 
-An incompatible join returns `IncompatibleScaleClaims`; it does not forget unit
+An incompatible join returns `IncompatibleSizeRequests`; it does not forget unit
 information. Ordered categories are represented by an explicit domain sequence or
 ordering key outside this commutative join.
 
@@ -229,18 +288,34 @@ look like an identity. Its scope identity may be consumed by references, scale
 sharing, or later animation.
 
 As an object in its parent's solve region, the frame itself is a local
-`ConstraintTarget` with an allocated box. Targets inside its body belong to the
-frame's inner region. Constraints may move the outer frame from the parent but may
-not thereby acquire write access to its contents.
+`ConstraintTarget` with a shell box whose size comes from `Extent(F, axis)`.
+Targets inside its body belong to the frame's inner region. Constraints may move
+the outer frame from the parent but may not thereby acquire write access to its
+contents.
 
 ## 5. Constraint targets and placed references
 
 The core has two deliberately different handles:
 
-```text
-ConstraintTarget<NodeId>  // local and writable
-PlacedRef<NodeId>         // potentially nonlocal and read-only
+```ts
+interface ConstraintTarget {
+  readonly owner: FrameId;
+  readonly node: NodeId;
+  readonly anchor: Anchor;
+}
+
+interface PlacedRef<G extends GeometryPort = GeometryPort> {
+  readonly sourceFrame: FrameId;
+  readonly sourceNode: NodeId;
+  readonly port: G;
+}
+
+declare const target: ConstraintTarget; // local and writable
+declare const ref: PlacedRef<GeometryPort>; // potentially nonlocal and read-only
 ```
+
+`ConstraintTarget` is a concrete node-and-anchor handle. Only `PlacedRef<G>` is
+generic: $G$ is the geometry-port type that the consumer is allowed to observe.
 
 A `ConstraintTarget` belongs to exactly one frame-local solve region. All layers
 inside that frame elaborate to the same region, so their callbacks may constrain
@@ -250,7 +325,7 @@ boundary as writable state is `NonlocalWrite`.
 A `PlacedRef` observes geometry after its source has been resolved. It may be used
 by connectors, enclosures, labels, and as a fixed source anchor for a local
 constraint. It never grants permission to move or resize its source, never
-duplicates the source's scale claim, and never reinterprets the source under the
+duplicates the source's size request, and never reinterprets the source under the
 consumer's scale.
 
 Surface `.constrain()` callbacks receive `ConstraintTarget`s even if their syntax
@@ -355,7 +430,7 @@ an order-independent conflict.
 **Placed-reference immutability.** A transported `PlacedRef` lowers to a numeric
 constant, never to the source node's writable variable. Local equations can position
 local targets relative to that constant, but cannot change the source. Because the
-source's claim is absent from the consumer fact set, referencing it also cannot
+source's size request is absent from the consumer fact set, referencing it also cannot
 duplicate its scale contribution.
 
 **Measure join.** Raw measure state is `none`, `one(m)`, or `mixed`. `none` is the
@@ -364,11 +439,17 @@ identity, equal singleton values join to themselves, unequal singleton values jo
 and idempotence. Projecting `mixed` to no public axis title happens only after all
 internal joins, so projection cannot make a later fold resurrect a unit.
 
-**Claim closure.** A claim is a finite maximum of non-negative-slope affine pieces
-and zero. Maximum is set union followed by upper-envelope normalization. Addition
+**Size-request closure.** A size request is a finite maximum of
+non-negative-slope affine pieces and zero. Maximum is set union followed by
+upper-envelope normalization. Addition
 uses `maxᵢ pᵢ + maxⱼ qⱼ = maxᵢⱼ(pᵢ + qⱼ)`. These constructions preserve finiteness,
 non-negativity, continuity, monotonicity, and piecewise linearity, and their set and
-Cartesian-product laws give the stated associativity and permutation invariance.
+Cartesian-product laws give the stated associativity and permutation invariance over
+exact real arithmetic. JavaScript `number` does not preserve structural equality
+under every regrouping. The law suite uses exact object equality only for exactly
+representable cases and checks selected evaluations of floating-point
+counterexamples within an explicit tolerance; a complete approximate-equivalence
+procedure remains future work.
 
 ## 8. Dependency graph
 
@@ -376,7 +457,9 @@ Execution order comes from data dependencies, never from child order or nesting
 used as an accidental phase barrier. The normalized program contains a directed
 acyclic graph of tasks. Useful task kinds are:
 
-- `Claim(node, axis)` — compute the scale/size claim;
+- `SizeRequest(node, axis)` — compute the scale-dependent size request;
+- `Allocation(frame, axis)` — supply a root- or parent-owned finite pixel offer;
+- `Extent(frame, axis)` — resolve shell size according to `ExtentPolicy`;
 - `Scale(frame, axis)` — solve or obtain the frame's scale;
 - `Intrinsic(node)` — compute scale-dependent intrinsic geometry;
 - `Place(frame, axis)` — jointly solve the frame-local constraints;
@@ -385,10 +468,17 @@ acyclic graph of tasks. Useful task kinds are:
 
 Required edges include:
 
-- child claims before a parent or shared-scale claim join;
-- a frame's claim and allocated extent before its `fit` scale;
+- child size requests before an inherited-parent or shared-scale request join;
+- a root/parent offer before an `allocated` extent;
+- a frame's size request and pre-body extent before its `fit` scale;
+- an ancestor scale before a descendant's `inherit` scale;
+- all shared requests and the fitting owner's pre-body extent before a shared
+  scale;
 - a scale before intrinsic geometry that consumes it;
 - intrinsic target geometry before the owning frame's placement solve;
+- Frame-local placement before local body bounds;
+- local body bounds before an `auto` extent;
+- a child shell extent before the parent placement task that consumes its size;
 - a nest or sizing source before its derived target;
 - source bounds before every `PlacedRef` consumer; and
 - placement before final bounds and paint lowering.
@@ -398,6 +488,11 @@ Independent tasks may run in any order or in parallel. A cycle is
 mark may not enlarge an ancestor allocation that its own source depended on; that
 would be such a cycle. Supporting that behavior would require a separately
 specified fixed-point solver and is outside v0.
+
+In particular, `fit` plus `auto` on one Frame axis yields the stable-ID task path
+`Extent(F, a) → Scale(F, a) → Intrinsic(F.body) → Place(F) →
+BodyBounds(F) → Extent(F, a)`. With `inherit`, that scale-specific edge is
+absent: `Scale(F, a)` comes from the ancestor rather than from `Extent(F, a)`.
 
 ## 9. Geometry and paint are separate
 
@@ -430,10 +525,12 @@ At minimum, a conforming implementation reports these conditions explicitly:
 | `DuplicateNodeId`                         | Two semantic nodes have the same stable ID.                       |
 | `UnknownReference` / `AmbiguousName`      | Name resolution did not produce exactly one target.               |
 | `InvalidFragment`                         | A purported layer/fragment carries a frame or paint boundary.     |
-| `IncompatibleScaleClaims`                 | A scale join contains incompatible units or claim kinds.          |
+| `MissingAllocation`                       | An `allocated` extent has no root or parent-owned pixel offer.    |
+| `InvalidExtent`                           | An allocation or resolved extent is negative or non-finite.       |
+| `IncompatibleSizeRequests`                | A scale join contains incompatible units or request kinds.        |
 | `MissingInheritedScale` / `ScaleRequired` | A node needs a scale forbidden or absent under its frame policy.  |
 | `ScaleOwnershipConflict`                  | A shared scale group has more than one owner.                     |
-| `NonInvertibleScale`                      | A `fit` relation cannot be solved for the allocated interval.     |
+| `NonInvertibleScale`                      | A `fit` relation cannot be solved for its pre-body extent.        |
 | `NonlocalWrite`                           | A constraint attempts to mutate a nonlocal target or `PlacedRef`. |
 | `IncompatibleCoordinateTransport`         | Referenced geometry cannot be represented in the consumer frame.  |
 | `ConstraintConflict`                      | Geometric equations imply inconsistent values.                    |
@@ -458,16 +555,20 @@ A minimal independent implementation can follow these steps:
    names, and rewrite every constraint and ref to `NodeId`s.
 3. **Lower semantics.** Convert geometric constraints to unordered facts with
    their set-, map-, path-, or role-shaped operands. Separate paint edges.
-4. **Build dependencies.** Create the task DAG, including every scale, sizing,
-   nesting, and `PlacedRef` dependency; reject cycles.
-5. **Resolve claims and scales.** Join claims bottom-up with the associative
-   algebra, solve shared groups once, and apply each frame's per-axis policy.
-6. **Resolve geometry.** In topological order, compute intrinsic boxes, jointly
-   solve each frame-local fact set, fix translation gauges canonically, and
-   transport placed refs through their least common coordinate scopes.
-7. **Validate.** Compute outward/world boxes, check box invariants and finite
+4. **Build dependencies.** Create the task DAG, including every allocation,
+   extent, scale, sizing, nesting, and `PlacedRef` dependency; reject cycles.
+5. **Seed pre-body values.** Join symbolic size requests bottom-up, supply root or
+   parent-owned allocations, and resolve `fixed` and `allocated` extents.
+6. **Resolve scales and geometry.** In topological order, solve or inherit scales,
+   compute intrinsic boxes, jointly solve each ready frame-local fact set, and fix
+   translation gauges canonically.
+7. **Resolve auto shells and refs.** Apply coordinate maps needed for
+   parent-facing body bounds, compute `auto` extents, unblock parent shell
+   placement, and transport placed refs through their least common coordinate
+   scopes.
+8. **Validate.** Compute outward/world boxes, check box invariants and finite
    numbers, and return the canonical error set if any check failed.
-8. **Paint.** Topologically order the independent paint program and lower the
+9. **Paint.** Topologically order the independent paint program and lower the
    resolved scene to a flat display list.
 
 No step requires executing siblings or constraint declarations in source order.
@@ -481,15 +582,15 @@ The following gaps are intentionally visible rather than papered over:
 
 - lower production `Layer` syntax into transparent frame-local fragments and add
   surface-to-kernel differential tests;
-- make `Frame` allocation, scale ownership, and coordinate transport explicit in
-  the executable IR;
+- make `Frame` `Allocation`/`Extent` tasks, scale ownership, and coordinate
+  transport explicit in the executable IR;
 - replace sibling-order ref scheduling with task-level dependency edges and lower
   cross-frame refs to transported placed ports;
 - lower fallback child paint order to an explicit paint sequence before geometric
   child order is discarded;
 - replace encounter-ordered ordinal-domain union with explicit order facts (or a
   documented canonical category order) so nested union is genuinely associative;
-- bound and benchmark the claim representation, then migrate production callers
+- bound and benchmark the size-request representation, then migrate production callers
   from opaque `Monotonic.unknown` cases where the closed algebra applies; and
 - return canonical complete conflict sets rather than whichever single diagnostic
   a legacy path encounters first.

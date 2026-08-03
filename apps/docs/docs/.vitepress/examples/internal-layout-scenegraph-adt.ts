@@ -47,8 +47,11 @@ style.textContent = `
 shell.append(style, canvas);
 root.append(shell);
 
-const W = 760;
-const H = 615;
+// Absolute-positioned GoFish diagrams receive the renderer's 40 px ambient
+// inset. Include that inset in the viewport so the right and bottom edges are
+// not clipped.
+const W = 800;
+const H = 720;
 
 const palette = {
   ink: "#252150",
@@ -132,41 +135,33 @@ const planet = (name, label, x, y) =>
             strokeWidth: 3,
           })
           .name(name),
-        text(label, 13, "white", "760").name("label"),
+        text(label, 13, "white", "760").name(`${name}-label`),
       ])
       .constrain((targets) => [
         gf.Constraint.align({ x: "middle", y: "middle" }, [
           targets[name],
-          targets.label,
+          targets[`${name}-label`],
         ]),
       ])
   );
 
-const consumer = (name, label, x, y, w) =>
+const consumer = (name, label, x, y, w) => [
   at(
     x,
     y,
     gf
-      .layer([
-        gf
-          .rect({
-            w,
-            h: 42,
-            rx: 21,
-            fill: palette.derivedFill,
-            stroke: palette.derivedStroke,
-            strokeWidth: 3,
-          })
-          .name(name),
-        text(label, 10.5, palette.derivedText, "760").name("label"),
-      ])
-      .constrain((targets) => [
-        gf.Constraint.align({ x: "middle", y: "middle" }, [
-          targets[name],
-          targets.label,
-        ]),
-      ])
-  );
+      .rect({
+        w,
+        h: 42,
+        rx: 21,
+        fill: palette.derivedFill,
+        stroke: palette.derivedStroke,
+        strokeWidth: 3,
+      })
+      .name(name)
+  ),
+  at(x + w / 2, y + 21, text(label, 10.5, palette.derivedText, "760")),
+];
 
 const dottedRoute = (x1, y1, x2, y2, count) =>
   Array.from({ length: count }, (_, i) => {
@@ -177,6 +172,62 @@ const dottedRoute = (x1, y1, x2, y2, count) =>
       gf.circle({ r: 2.1, fill: palette.ref })
     );
   });
+
+const radialScaleRegion = gf.enclose(
+  {
+    padding: 20,
+    rx: 32,
+    ry: 32,
+    fill: palette.scaleFill,
+    stroke: palette.scaleStroke,
+    strokeWidth: 3,
+  },
+  [
+    at(113, 0, text("radial ScaleId ρ", 9.5, palette.scaleText, "760")),
+    planet("adt-p", "p", 18, 37),
+    planet("adt-q", "q", 146, 37),
+    gf.line(
+      {
+        stroke: palette.targetStroke,
+        strokeWidth: 3,
+        source: { x: "end", y: "middle" },
+        target: { x: "start", y: "middle" },
+      },
+      [gf.ref("adt-p"), gf.ref("adt-q")]
+    ),
+  ]
+);
+
+// Frame P is an auto-sized coordinate/writability region in this toy scene.
+// Deriving its yellow background from the nested scale group makes the visual
+// containment claim true even when the scale group's contents change.
+const framePRegion = gf.enclose(
+  {
+    padding: 16,
+    rx: 18,
+    ry: 18,
+    fill: palette.coordInnerFill,
+    stroke: palette.coordInnerStroke,
+    strokeWidth: 3,
+  },
+  [
+    gf.stackY({ spacing: 10, alignment: "middle" }, [
+      text(
+        "Frame P · κᴾ · shell(P) ∈ R · body owner P",
+        9.5,
+        palette.coordText,
+        "760"
+      ),
+      radialScaleRegion,
+      text(
+        "solid blue · one local fact set in P",
+        9.5,
+        palette.targetStroke,
+        "700"
+      ),
+    ]),
+  ]
+);
 
 const nodes = [
   // The authoring/elaborated ADT uses the full article width so its labels
@@ -221,7 +272,7 @@ const nodes = [
     y: 106,
     w: 320,
     title: "Mark(id, intrinsicSpec)",
-    detail: "symbolic claim → intrinsic geometry",
+    detail: "size request → intrinsic geometry",
     fill: "#dbeafa",
     stroke: palette.targetStroke,
   }),
@@ -240,7 +291,7 @@ const nodes = [
     y: 176,
     w: 320,
     title: "Frame(id, body, extent², scale², coord?)",
-    detail: "allocation + coordinate + local-write boundary",
+    detail: "extent policy + coordinate + local-write boundary",
     fill: palette.coordFill,
     stroke: palette.coordStroke,
   }),
@@ -308,7 +359,7 @@ const nodes = [
     390,
     gf.rect({
       w: 720,
-      h: 218,
+      h: 252,
       rx: 18,
       fill: palette.coordFill,
       stroke: palette.coordStroke,
@@ -322,77 +373,29 @@ const nodes = [
   ),
   at(718, 412, text("scaleᴿ = pixel", 9.5, palette.coordText, "700", "end")),
 
-  // Child Frame P has an outer shell in R and a body owned by P.
-  at(
-    47,
-    432,
-    gf.rect({
-      w: 326,
-      h: 139,
-      rx: 16,
-      fill: palette.coordInnerFill,
-      stroke: palette.coordInnerStroke,
-      strokeWidth: 3,
-    })
-  ),
-  at(62, 451, text("shell(P) ∈ R", 9.5, palette.coordText, "760", "start")),
-  at(358, 451, text("body owner = P", 9.5, palette.coordText, "760", "end")),
-
-  // The purple scale identity is distinct from the yellow coordinate region.
-  at(
-    95,
-    466,
-    gf.ellipse({
-      w: 225,
-      h: 91,
-      fill: palette.scaleFill,
-      stroke: palette.scaleStroke,
-      strokeWidth: 3,
-    })
-  ),
-  at(208, 482, text("radial ScaleId ρ", 9.5, palette.scaleText, "760")),
-
-  // Static GoFish marks make the relation types explicit without relying on
-  // layout-time reference resolution inside this explanatory figure.
-  at(
-    166,
-    521,
-    gf.rect({
-      w: 62,
-      h: 3,
-      rx: 1.5,
-      fill: palette.targetStroke,
-    })
-  ),
-  ...dottedRoute(146, 506, 472, 459, 15),
-  ...dottedRoute(273, 516, 472, 459, 10),
-  ...dottedRoute(273, 524, 500, 531, 12),
+  // Child Frame P derives its yellow background from its purple scale region.
+  // The blue line is a real GoFish ref edge whose level endpoints denote
+  // align-y(p, q).
+  at(47, 420, framePRegion),
+  ...consumer("adt-connector", "connector", 472, 438, 146),
+  ...consumer("adt-label", "label", 500, 510, 112),
+  // Sample the three directed port-to-consumer segments with GoFish marks.
+  // These inputs subtract the renderer's 40 px ambient inset from the visible
+  // source and target boundaries, so the rendered routes meet those boundaries.
+  ...dottedRoute(93, 512, 472, 459, 15),
+  ...dottedRoute(221, 512, 472, 459, 10),
+  ...dottedRoute(221, 512, 500, 531, 12),
   at(457, 457, text("›", 15, palette.ref, "760")),
   at(487, 530, text("›", 15, palette.ref, "760")),
 
-  planet("adt-p", "p", 122, 505),
-  planet("adt-q", "q", 250, 514),
-  consumer("adt-connector", "connector", 472, 438, 146),
-  consumer("adt-label", "label", 500, 510, 112),
-
-  at(
-    208,
-    557,
-    text(
-      "solid blue · one local fact set in P",
-      9.5,
-      palette.targetStroke,
-      "700"
-    )
-  ),
   at(
     552,
-    558,
+    580,
     text("dashed orange · PlacedRef ports", 9.5, palette.ref, "700")
   ),
   at(
     401,
-    575,
+    610,
     gf.rect({
       w: 314,
       h: 23,
@@ -404,7 +407,7 @@ const nodes = [
   ),
   at(
     558,
-    590,
+    625,
     text(
       "Layer is gone · task dependencies ≠ paint edges",
       9,

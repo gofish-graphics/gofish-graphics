@@ -455,8 +455,8 @@ const applyViewport = () => {
   if (!svg) return false;
 
   // GoFish currently sizes this absolute-positioned Layer from its conservative
-  // claim, which is wider than the actual drawing. Supply the intended viewport
-  // explicitly so the complete scope map scales into the article column.
+  // size request, which is wider than the actual drawing. Supply the intended
+  // viewport explicitly so the complete scope map scales into the article column.
   svg.setAttribute("viewBox", `40 40 ${W} ${H}`);
   svg.setAttribute("width", String(W));
   svg.setAttribute("height", String(H));

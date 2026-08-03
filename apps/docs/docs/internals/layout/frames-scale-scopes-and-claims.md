@@ -1,5 +1,5 @@
 ---
-title: Frames, Scale Scopes, and Size Claims
+title: Frames, Scale Scopes, and Size Requests
 section: Layout & Rendering
 order: 50.1
 group: Layout
@@ -23,9 +23,9 @@ glossary:
     - term: Scale scope
       definition: "Participants on one axis sharing a solved σ or anchored position map."
       href: "#term-scale-scope"
-    - term: Claim
-      definition: "A symbolic C(σ) giving the pixel extent requested at scale σ."
-      href: "#term-claim"
+    - term: Size request
+      definition: "A scale-dependent function R: ScaleFactor → PixelExtent passed upward during sizing."
+      href: "#term-size-request"
     - term: Placement region
       definition: "The writable targets and facts solved jointly inside one Frame."
       href: "#term-placement-region"
@@ -39,13 +39,13 @@ glossary:
       definition: "A provisional pixel allocation offered to a child, not its final size."
       href: "#term-proposal"
     - term: Affine piece
-      definition: "One line aσ+b with nonnegative slope inside a claim."
+      definition: "One line aσ+b with nonnegative slope inside a size request."
       href: "#term-affine-piece"
     - term: Upper envelope
       definition: "The pointwise maximum of a finite set of affine pieces and zero."
       href: "#term-upper-envelope"
     - term: Frame fit
-      definition: "The policy turning a claim plus pixel budget into a scale or a structured fit outcome."
+      definition: "The policy turning a size request plus pixel allocation into a scale or a structured fit outcome."
       href: "#term-frame-fit"
     - term: Scale policy
       definition: "A Frame's per-axis choice among inherit, fit, share(id), and pixel."
@@ -54,13 +54,13 @@ covers:
   - packages/gofish-graphics/src/ast/graphicalOperators/frame.tsx
   - packages/gofish-graphics/src/ast/graphicalOperators/layer.tsx
   - packages/gofish-graphics/src/ast/solver/scopes.ts
-  - packages/gofish-graphics/src/ast/layoutClaims.ts
+  - packages/gofish-graphics/src/ast/sizeRequests.ts
 ---
 
-# Frames, Scale Scopes, and Size Claims
+# Frames, Scale Scopes, and Size Requests
 
 > **Layout engine series · Part 2 of 4**<br>
-> [1. How the Layout Engine Works](/internals/layout/how-layout-works) · **2. Frames, Scale Scopes, and Size Claims** · [3. Placement Solving and the Layer Laws](/internals/layout/placement-and-layer-laws) · [4. References, Coordinate Transport, and Scheduling](/internals/layout/references-coordinates-and-scheduling)
+> [1. How the Layout Engine Works](/internals/layout/how-layout-works) · **2. Frames, Scale Scopes, and Size Requests** · [3. Placement Solving and the Layer Laws](/internals/layout/placement-and-layer-laws) · [4. References, Coordinate Transport, and Scheduling](/internals/layout/references-coordinates-and-scheduling)
 
 This article is the scale-and-size deep dive in the layout-engine series. It
 starts from the same small scenegraph used by the overview:
@@ -85,13 +85,113 @@ participants that share one solved scale on an axis form a
 <dfn id="term-scale-scope">scale scope</dfn>. Before pixels are chosen, an
 <dfn id="term-underlying-space">underlying space</dfn> records the quantity
 kind, domain, measure, and symbolic size. Its symbolic size is a
-<dfn id="term-claim">claim</dfn> $C(\sigma)$: the extent requested at scale
-$\sigma$.
+<span id="term-claim"></span><dfn id="term-size-request">scale-dependent size
+request</dfn>: a function from scale factor to requested pixel extent. Earlier
+drafts called this object a “claim.”
 
 The page first separates structural containment from writable placement and
 scale ownership. It then identifies the production mechanisms that currently
-cooperate inside layout, derives a closed algebra for claims, and states the
+cooperate inside layout, derives a closed algebra for size requests, and states the
 remaining policy choices for fitting a Frame.
+
+## A Frame seals a Layer body
+
+The shortest useful model is close to “Frame = Layer + scope boundary,” with one
+qualification: a Frame declares several policies, while an actual scale scope is
+_derived_ from one of those policies.
+
+```ts
+type NodeId = string;
+type FrameId = NodeId;
+type ScaleId = string;
+type PixelExtent = number; // finite, non-negative pixels
+
+interface Fragment {
+  nodes: Map<NodeId, LocalNode>;
+  facts: Set<LocalFact>;
+}
+
+interface NormResult {
+  fragment: Fragment; // contribution to the current owner
+  frames: Map<FrameId, FrameIR>; // sealed child Frames, including descendants
+}
+
+type ExtentPolicy =
+  | { kind: "fixed"; px: PixelExtent }
+  | { kind: "allocated" }
+  | { kind: "auto"; inset?: { before: PixelExtent; after: PixelExtent } };
+
+type ScalePolicy =
+  | { kind: "inherit" }
+  | { kind: "fit" }
+  | { kind: "share"; id: ScaleId }
+  | { kind: "pixel" };
+
+interface FrameIR {
+  id: FrameId;
+  parent?: FrameId;
+  shell: FrameShell; // one placeable box in the parent Frame
+  body: Fragment; // the local writable region
+  coordToParent: CoordinateMap;
+  extent: readonly [ExtentPolicy, ExtentPolicy];
+  scale: readonly [ScalePolicy, ScalePolicy];
+}
+```
+
+A normalization step always returns a `NormResult`; a Layer and a Frame do not
+silently change its result type. In the equations below, write that record as a
+pair $(f,\mathcal H)$. Results combine componentwise:
+
+$$
+(f_1,\mathcal H_1)\oplus(f_2,\mathcal H_2)
+=
+(f_1\sqcup f_2,\mathcal H_1\uplus\mathcal H_2),
+\qquad
+\operatorname{lift}(f)=(f,\varnothing).
+$$
+
+Here $\sqcup$ joins Fragment node and fact sets. The symbol $\uplus$ is disjoint
+map union: two entries with the same stable `FrameId` are a normalization error.
+A Layer combines complete results inside the current owner $F$:
+
+$$
+\operatorname{norm}_F(\operatorname{Layer}(X;D))
+=\bigoplus_{x\in X}\operatorname{norm}_F(x)
+ \oplus\operatorname{lift}(\operatorname{lower}_F(D)).
+$$
+
+A Frame instead binds its body to a fresh owner $G$, while contributing only
+$\operatorname{shellFragment}_F(G):\operatorname{Fragment}$ to its parent $F$.
+If $\operatorname{frameIR}(G,F,P,b):\operatorname{FrameIR}$ seals body fragment
+$b$ with boundary policy bundle $P$, then:
+
+$$
+\begin{gathered}
+(b,\mathcal H)=\operatorname{norm}_G(B),\\
+\operatorname{norm}_F(\operatorname{Frame}_P(B))
+=\left(\operatorname{shellFragment}_F(G),
+  \mathcal H\uplus
+  \{G\mapsto\operatorname{frameIR}(G,F,P,b)\}\right).
+\end{gathered}
+$$
+
+That boundary creates four things:
+
+1. a fresh writable placement region;
+2. a coordinate-context identity, even when the map is Cartesian identity;
+3. an allocated shell that the parent may size and place; and
+4. one scale-policy declaration per axis.
+
+The policy then determines scale identity. `fit` creates a local scale;
+`inherit` reuses an ancestor scale; `share(id)` can connect structurally
+nonlocal Frames; and `pixel` has no data scale. Coordinate contexts therefore
+follow the Frame tree, while scale scopes need not.
+
+<Badge type="info" text="AS BUILT" /> Production makes the overlap literal:
+`Frame(...)` immediately returns either a `coord` node or a `layer` node. A
+production Layer is still boxed and may solve local scales, plan proposals,
+place children, and fold bounds. The explicit `FrameIR`/transparent `Fragment`
+split above is the normalization target, not the current carrier type.
 
 ## A scenegraph subtree is not a placement region
 
@@ -144,7 +244,7 @@ declared; the policy then decides whether each scale is fitted locally, inherite
 or shared explicitly with another Frame. A Layer boundary alone does not declare
 either policy.
 
-Step through claim, placement, reference transport, and paint in the figure.
+Step through size request, placement, reference transport, and paint in the figure.
 
 ::: gofish example:internal-frame-scenegraph-tour hidden
 :::
@@ -175,8 +275,8 @@ mechanisms.
 
 | Mechanism              | Input                                               | Output                                              |
 | ---------------------- | --------------------------------------------------- | --------------------------------------------------- |
-| Underlying-space fold  | Mark encodings, operators, constraint typing        | Measures, domains, and symbolic size claims         |
-| Scope registry         | A claim or data interval plus a pixel allocation    | A scalar $\sigma$ or affine position map            |
+| Underlying-space fold  | Mark encodings, operators, constraint typing        | Measures, domains, and symbolic size requests       |
+| Scope registry         | A size request or data interval plus an allocation  | A scalar $\sigma$ or affine position map            |
 | Proposal planners      | Grid tracks, distributes, nests, and allocations    | Child size proposals and some dependency order      |
 | Rank-two box closure   | Strong equations over `(min, size)`                 | Determined sizes and positions                      |
 | Difference graph       | Fixed-size anchors, relations, and pins             | Relative positions, component gauges, and conflicts |
@@ -188,7 +288,7 @@ the child's final size nor a placement fact.
 
 A surface constraint can participate in more than one mechanism.
 
-For example, `distribute` can combine child claims as a sum during
+For example, `distribute` can combine child size requests as a sum during
 underlying-space resolution, divide an allocation into child proposals, and
 produce difference equations during placement.
 
@@ -197,17 +297,28 @@ semantically different jobs.
 
 ### Underlying space describes a quantity, not its pixels
 
-Per axis, production records an underlying space that is approximately one of:
+Per axis, production records this TypeScript union:
 
-```text
-undefined
+```ts
+type UnderlyingSpace = ContinuousSpace | OrdinalSpace | UndefinedSpace;
 
-ordinal(keys)
+interface ContinuousSpace {
+  kind: "continuous";
+  width: Monotonic; // the scale-dependent size request, as built
+  dataDomain: Interval | "delta" | undefined;
+  measure?: Measure | MixedMeasure;
+  spacing?: number;
+  coordinateTransform?: CoordinateTransform;
+}
 
-continuous {
-  width: C(σ)
-  dataDomain: undefined | [min, max] | "delta"
-  measure
+interface OrdinalSpace {
+  kind: "ordinal";
+  domain?: string[];
+  measure?: Measure | MixedMeasure;
+}
+
+interface UndefinedSpace {
+  kind: "undefined";
 }
 ```
 
@@ -220,12 +331,67 @@ The `dataDomain` distinguishes an unanchored magnitude, an anchored data-positio
 space, and a space where only differences are meaningful.
 
 This intermediate representation says what kind of quantity is present and how
-much room it claims as a function of scale.
+much room it requests as a function of scale.
 
 It does not yet contain final pixel geometry.
 
 See [Underlying Space](/internals/core/underlying-space) for the complete current
 representation.
+
+### Where the size request lives
+
+There are currently two representations, and they are not yet wired together.
+
+<Badge type="info" text="AS BUILT" /> Each `GoFishNode` memoizes two
+`UnderlyingSpace` values in `_underlyingSpace`, one per axis. For a continuous
+axis, the size request is the `width: Monotonic` field above. Marks construct it,
+Layers fold child widths, and a scale root passes the folded value plus its
+allocation to `ScopeRegistry.solveSize()`.
+
+<Badge type="tip" text="TARGET" /> The executable reference kernel uses a
+smaller, inspectable representation:
+
+```ts
+type ScaleFactor = number; // pixels per data unit
+type PixelExtent = number; // pixels
+
+interface AffineExtent {
+  slope: number; // data units
+  intercept: number; // fixed pixels
+}
+
+interface SizeRequest {
+  pieces: readonly AffineExtent[];
+}
+
+declare function requestedExtentAt(
+  request: SizeRequest,
+  scale: ScaleFactor
+): PixelExtent;
+
+declare function fitSizeRequest(
+  request: SizeRequest,
+  allocation: PixelExtent
+): FitResult;
+```
+
+The representation is stored in `sizeRequests.ts`. It is still a reference
+algebra: production's `ContinuousSpace.width` remains the more permissive
+`Monotonic` type.
+
+The complete lifecycle on one axis is:
+
+| Stage                          | Concrete location                              | Value                                           |
+| ------------------------------ | ---------------------------------------------- | ----------------------------------------------- |
+| Leaf contribution              | `mark.resolveUnderlyingSpace()`                | a `Monotonic` such as $2\sigma$                 |
+| Per-node memo                  | `node._underlyingSpace[axis]`                  | `ContinuousSpace.width`                         |
+| Transparent combination target | Frame-local Fragment fold                      | one `SizeRequest` per compatible scale identity |
+| Scale solve                    | `ScopeRegistry.solveSize(request, allocation)` | $\sigma$                                        |
+| Downward layout                | `AxisScale` passed to `mark.layout()`          | concrete pixel extent                           |
+
+A literal fixed-pixel mark currently reports `undefined`, not a constant request,
+so production does not yet implement every case expressible by `SizeRequest`.
+That is an incomplete semantic case, not something the article should hide.
 
 ### A scale scope chooses pixels per unit
 
@@ -253,16 +419,29 @@ define a complete fit policy.
 
 It is not a global constraint solver, and it is not a scheduler.
 
-## Size claims and the Frame-fit question
+## Size requests and the Frame-fit question
+
+Use the following typed notation throughout this section. In particular,
+$\sigma$ is not an untyped number:
+
+| Symbol     | Mathematical type                                           | Meaning                                   | Units                   |
+| ---------- | ----------------------------------------------------------- | ----------------------------------------- | ----------------------- |
+| $S$        | `ScaleId`                                                   | one compatible scale identity on one axis | —                       |
+| $\sigma_S$ | $\operatorname{ScaleFactor}_S=\mathbb R_{\ge0}$             | scale chosen for $S$                      | $\mathrm{px}/u_S$       |
+| $R_n$      | $\operatorname{ScaleFactor}_S\to\operatorname{PixelExtent}$ | size request contributed by node $n$      | output in $\mathrm{px}$ |
+| $B$        | $\operatorname{PixelExtent}=\mathbb R_{\ge0}$               | allocation offered by the Frame           | $\mathrm{px}$           |
+
+Thus $R_n(\sigma_S)$ is the pixel extent requested by $n$ when one data unit
+$u_S$ receives $\sigma_S$ pixels.
 
 ### Concrete: which overlaid child is widest?
 
 Consider two children occupying the same region:
 
 $$
-C_1(\sigma)=40\sigma,
+R_1(\sigma)=40\sigma,
 \qquad
-C_2(\sigma)=10\sigma+50.
+R_2(\sigma)=10\sigma+50.
 $$
 
 The first is all data-scaled width. The second has a smaller data-scaled part and
@@ -277,34 +456,49 @@ $$
 An overlay must reserve whichever width is larger at the chosen scale:
 
 $$
-C(\sigma)=\max(40\sigma,10\sigma+50).
+R(\sigma)=\max(40\sigma,10\sigma+50).
 $$
 
 The faint lines in the explorer are the constituent affine pieces. The solid line
-is their upper envelope: the actual claim seen by the parent.
+is their upper envelope: the actual size request seen by the parent.
 
-::: gofish example:internal-layout-claim-lab hidden
+::: gofish example:internal-layout-size-request-lab hidden
 :::
 
 ### Abstracting the pattern: one variable, one upper envelope
 
 Fix one axis and one scale identity $S$. Every participating leaf contributes a
-claim tagged with compatible axis semantics and a compatible measure. A node that
-has no claim contributes $\bot$, not the zero function; that distinction matters
+size request tagged with compatible axis semantics and a compatible measure. A
+node that has no request contributes $\bot$, not the zero function; that distinction matters
 for fill and proposal policies.
 
-Within one valid scale scope, every real claim depends on the same unknown
-$\sigma_S$. The closed target language is:
+Within one valid scale scope, every real request depends on the same unknown
+$\sigma_S$. Written as type declarations, the notation above is:
 
 $$
-\mathcal K
+\begin{aligned}
+\sigma_S &\in \operatorname{ScaleFactor}_S
+  = \mathbb R_{\ge0}\;[\mathrm{px}/u_S],\\
+R_n &: \operatorname{ScaleFactor}_S
+  \longrightarrow \operatorname{PixelExtent}
+  = \mathbb R_{\ge0}\;[\mathrm{px}].
+\end{aligned}
+$$
+
+The closed target language of such functions is:
+
+$$
+\mathcal K_S
 =
 \left\{
-C:[0,\infty)\to[0,\infty)
+R:\operatorname{ScaleFactor}_S\to\operatorname{PixelExtent}
 \;\middle|\;
-C(\sigma)=\max(0,a_1\sigma+b_1,\ldots,a_n\sigma+b_n),\ a_i\ge0
+R(\sigma)=\max(0,a_1\sigma+b_1,\ldots,a_n\sigma+b_n),\ a_i\ge0
 \right\}.
 $$
+
+The coefficients carry units: $a_i$ is in data units $u_S$, $b_i$ is in
+pixels, and therefore $a_i\sigma+b_i$ is a pixel extent.
 
 An <dfn id="term-affine-piece">affine piece</dfn> is one line
 $a_i\sigma+b_i$ with nonnegative slope and finite intercept. The implicit zero
@@ -317,24 +511,24 @@ piecewise linear.
 The author-facing size problem can be written as an expression:
 
 $$
-E ::= C_n
-\mid E\vee E
-\mid E+E
-\mid kE
-\mid [E+c]_+,
+e ::= R_n
+\mid e\vee e
+\mid e+e
+\mid ke
+\mid [e+c]_+,
 \qquad k\ge0.
 $$
 
-Overlay uses $\vee=\max$, series layout uses $+$, scalar sizing uses $kE$, and
+Overlay uses $\vee=\max$, series layout uses $+$, scalar sizing uses $ke$, and
 fixed padding or gaps shift the intercept. Evaluating the expression bottom-up
 eliminates every intermediate size variable:
 
 $$
-C_S=\operatorname{eval}(E_S),
+R_S=\operatorname{eval}(e_S),
 \qquad
-\operatorname{Fit}(C_S,B_S)\rightsquigarrow\sigma_S,
+\operatorname{FitSizeRequest}(R_S,B_S)\rightsquigarrow\sigma_S,
 \qquad
-s_n=C_n(\sigma_S).
+s_n=R_n(\sigma_S).
 $$
 
 Equivalently, the larger system
@@ -344,29 +538,29 @@ $$
 s_{\mathrm{overlay}}&=\max_i s_i,\\
 s_{\mathrm{series}}&=\sum_i s_i+\sum_i g_i,\\
 s_{\mathrm{outer}}&=s_{\mathrm{inner}}+2p,\\
-s_n&=C_n(\sigma_S),\\
+s_n&=R_n(\sigma_S),\\
 s_{\mathrm{root}}&=B_S
 \end{aligned}
 $$
 
-compiles to the single per-scope equation $C_S(\sigma_S)=B_S$. This is the
-whole size-claim reduction: first build one symbolic function, then solve its one
+compiles to the single per-scope equation $R_S(\sigma_S)=B_S$. This is the
+whole size-request reduction: first build one symbolic function, then solve its one
 scale unknown, then evaluate the leaves.
 
 The one-variable qualification is essential. If two children actually use
 different scale identities, their parent has a multivariate expression such as
-$C(\sigma_\mu,\sigma_\nu)$. The engine must split the scopes, inherit or pin one
+$R(\sigma_\mu,\sigma_\nu)$. The engine must split the scopes, inherit or pin one
 scale, or declare an explicit shared solve. Calling a one-dimensional inverse on
 that expression would be a semantic error.
 
-### Canonical claim representation
+### Canonical size-request representation
 
-Let $P_C=\{(a_i,b_i)\}$ be a finite piece set and write:
+Let $P_R=\{(a_i,b_i)\}$ be a finite piece set and write:
 
 $$
-\operatorname{Env}(P_C)(\sigma)
+\operatorname{Env}(P_R)(\sigma)
 =
-\max\!\left(0,\max_{(a,b)\in P_C}(a\sigma+b)\right).
+\max\!\left(0,\max_{(a,b)\in P_R}(a\sigma+b)\right).
 $$
 
 Different piece sets can denote the same function. For example:
@@ -410,11 +604,11 @@ coincident lines; the theorem is about the mathematical representation.
 
 ### Why overlay and series stay in the language
 
-If $C=\operatorname{Env}(P)$ and $D=\operatorname{Env}(Q)$, overlay is piece
+If $R=\operatorname{Env}(P)$ and $S=\operatorname{Env}(Q)$, overlay is piece
 union followed by canonicalization:
 
 $$
-C\vee D
+R\vee S
 =
 \operatorname{Env}(P\cup Q).
 $$
@@ -422,7 +616,7 @@ $$
 Series composition is the pairwise sum of pieces followed by canonicalization:
 
 $$
-C+D+g
+R+S+g
 =
 \operatorname{Env}
 \left(
@@ -438,14 +632,15 @@ For example, putting $A(\sigma)=\max(10,2\sigma)$ in series with
 $D(\sigma)=3\sigma$ and a 2-pixel gap gives:
 
 $$
-C(\sigma)=\max(3\sigma+12,5\sigma+2).
+R(\sigma)=\max(3\sigma+12,5\sigma+2).
 $$
 
 At budget $B=27$ the two candidate upper bounds are $5$ and $5$, so
 $\sigma=5$ and $10+15+2=27$ pixels.
 
-Compatible claims are claims whose measures, quantity meanings, axis, and scale
-identity allow them to participate in one solve. For compatible claims, overlay
+Compatible size requests are requests whose measures, quantity meanings, axis,
+and scale identity allow them to participate in one solve. For compatible
+requests, overlay
 is associative, commutative, and idempotent:
 
 $$
@@ -463,6 +658,15 @@ $$
 a+(b\vee c)=(a+b)\vee(a+c).
 $$
 
+These are laws of the denoted functions over exact real arithmetic. The
+TypeScript experiment stores coefficients as JavaScript `number`s, so decimal
+reordering can produce distinct bit patterns such as `0.6` and
+`0.6000000000000001`. Its tests distinguish the exact mathematical law from the
+implementation policy: exactly representable examples use structural equality,
+while counterexamples evaluate selected points within an explicit relative
+tolerance. Canonical object equality is therefore not a floating-point confluence
+theorem, and a production approximate-equivalence procedure remains future work.
+
 Evaluation preserves both operations:
 
 $$
@@ -477,37 +681,37 @@ $$
 \operatorname{ev}_\sigma a+\operatorname{ev}_\sigma b.
 $$
 
-<Badge type="info" text="THEOREM" /> Folding a fixed multiset of compatible claim
+<Badge type="info" text="THEOREM" /> Folding a fixed multiset of compatible size-request
 operands is independent of traversal order and parenthesization, and evaluating
 after the fold equals composing already-evaluated extents.
 
 This does not make an explicitly ordered distribute path geometrically
-reorderable. It only says its total series claim is insensitive to how the same
+reorderable. It only says its total series request is insensitive to how the same
 operands are folded.
 
 Production's general [Monotonic module](/internals/core/monotonic) represents a
 broader language, including opaque functions and numeric inversion. The
-reference `layoutClaims.ts` deliberately uses this smaller closed fragment so
+reference `sizeRequests.ts` deliberately uses this smaller closed fragment so
 canonicalization, exact fitting, and algebraic laws remain inspectable.
 
 ### Fit is a policy over the envelope
 
-A <dfn id="term-frame-fit">Frame-fit policy</dfn> turns a claim $C$ and finite
+A <dfn id="term-frame-fit">Frame-fit policy</dfn> turns a size request $R$ and finite
 allocation $B$ into a scale or a structured outcome. Define:
 
 $$
-m=C(0),
+m=R(0),
 \qquad
-F_B=\{\sigma\ge0\mid C(\sigma)\le B\},
+\mathsf{Feasible}_B(R)=\{\sigma\ge0\mid R(\sigma)\le B\},
 \qquad
-E_B=\{\sigma\ge0\mid C(\sigma)=B\}.
+\mathsf{Exact}_B(R)=\{\sigma\ge0\mid R(\sigma)=B\}.
 $$
 
-Because $C$ is an upper envelope, $C(\sigma)\le B$ exactly when every piece is
+Because $R$ is an upper envelope, $R(\sigma)\le B$ exactly when every piece is
 at most $B$. If $B\ge m$ and at least one piece grows, then:
 
 $$
-F_B=[0,u_B],
+\mathsf{Feasible}_B(R)=[0,u_B],
 \qquad
 u_B
 =
@@ -517,44 +721,45 @@ $$
 That gives the complete classification:
 
 - If $B<m$, no scale fits: `overflow`, with deficit $m-B$.
-- If $C$ grows and $B>m$, $E_B=\{u_B\}$: one exact scale.
+- If $R$ grows and $B>m$, $\mathsf{Exact}_B(R)=\{u_B\}$: one exact scale.
 - If $B=m$ and growth begins immediately, the exact scale is $0$.
-- If $B=m$ and $C$ begins with a plateau, $E_B$ is an interval:
+- If $B=m$ and $R$ begins with a plateau, $\mathsf{Exact}_B(R)$ is an interval:
   `underdetermined`.
-- If $C$ is constant and $B=m$, every $\sigma$ is a solution:
+- If $R$ is constant and $B=m$, every $\sigma$ is a solution:
   `underdetermined`.
-- If $C$ is constant and $B>m$, equality has no solution and every scale is
+- If $R$ is constant and $B>m$, equality has no solution and every scale is
   feasible: `slack`, with $B-m$ unused pixels.
 
-The executable `fitClaim()` experiment reports a plateau as underdetermined and
+The executable `fitSizeRequest()` experiment reports a plateau as underdetermined and
 records its canonical least solution, $\sigma=0$. A greatest-feasible policy
 would instead choose $u_B$ when it is finite. That choice belongs to Frame policy,
-not to the claim algebra.
+not to the size-request algebra.
 
 For several participants sharing one scale, the general constraint is:
 
 $$
-F_{\mathrm{shared}}
+\mathsf{Feasible}_{\mathrm{shared}}
 =
-\bigcap_k F_{B_k}(C_k).
+\bigcap_k \mathsf{Feasible}_{B_k}(R_k).
 $$
 
 When every participant uses the same allocation, this is equivalent to fitting
-$\bigvee_k C_k$ once. With distinct budgets, the intersection form makes the
+$\bigvee_k R_k$ once. With distinct budgets, the intersection form makes the
 shared unknown and every participant's obligation explicit.
 
-Finally, $\bot$ is not the zero claim. A true zero claim participates but cannot
-determine a local scale. A fill child with no claim introduces another allocation
-unknown. For claimed children $N$ and fill children $F$, the series equation is:
+Finally, $\bot$ is not the zero request. A true zero request participates but
+cannot determine a local scale. A fill child with no request introduces another
+allocation unknown. For requesting children $N$ and fill children $F$, the
+series equation is:
 
 $$
 B
 =
-C_N(\sigma)+\text{gaps}+\sum_{j\in F}f_j.
+R_N(\sigma)+\text{gaps}+\sum_{j\in F}f_j.
 $$
 
 Choosing equal fill, minimum fill, or a scale before fill is an explicit proposal
-policy. It cannot be recovered by pretending every $\bot$ was $C(\sigma)=0$.
+policy. It cannot be recovered by pretending every $\bot$ was $R(\sigma)=0$.
 
 ### Frame declares scale policy
 
@@ -566,17 +771,14 @@ With a coordinate system it delegates to that coordinate operator.
 Without one it delegates to `Layer`.
 
 <Badge type="tip" text="TARGET" /> A normalized Frame should be the only construct
-that opens an allocation, coordinate, or positional-scale boundary.
+that declares shell extent policy or opens a coordinate or positional-scale
+boundary.
 
-It should carry an explicit per-axis
-<dfn id="term-scale-policy">scale policy</dfn>:
-
-```text
-inherit | fit | share(id) | pixel
-```
+It should carry the explicit per-axis
+<dfn id="term-scale-policy">`ScalePolicy`</dfn> defined in the opening `FrameIR`:
 
 - `inherit` reuses an accessible parent scale.
-- `fit` solves a local scale from a finite allocation and a child claim.
+- `fit` solves a local scale from a finite allocation and a child size request.
 - `share(id)` contributes to one explicitly owned shared scale.
 - `pixel` says the axis is already expressed in local geometric units.
 
@@ -587,7 +789,7 @@ fit outcomes, but a normalized Frame still needs explicit behavior for them:
   whether that is an error or an explicitly requested clip.
 - A finite plateau can remain underdetermined or use an explicitly named endpoint
   policy; it must not look like a unique inverse.
-- An unbounded feasible set means a constant-only claim did not determine a scale;
+- An unbounded feasible set means a constant-only request did not determine a scale;
   it must not invent an arbitrary $\sigma$.
 - Unused pixels are slack, and centering or edge-seating that slack is a placement
   policy rather than part of scale inversion.

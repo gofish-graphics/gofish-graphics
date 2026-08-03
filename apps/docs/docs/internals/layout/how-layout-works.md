@@ -26,11 +26,11 @@ glossary:
     - term: "Scale / σ"
       definition: "A data-to-pixel rule; σ is its pixels-per-data-unit slope."
       href: "#term-scale"
-    - term: Claim
-      definition: "A symbolic C(σ) giving the pixel extent requested at scale σ."
-      href: "#term-claim"
+    - term: Size request
+      definition: "A scale-dependent function R: ScaleFactor → PixelExtent passed upward during sizing."
+      href: "#term-size-request"
     - term: Affine piece
-      definition: "One line aσ+b with nonnegative slope inside a claim."
+      definition: "One line aσ+b with nonnegative slope inside a size request."
       href: "/internals/layout/frames-scale-scopes-and-claims#term-affine-piece"
     - term: Upper envelope
       definition: "The pointwise maximum of a finite set of affine pieces and zero."
@@ -99,7 +99,7 @@ glossary:
       definition: "A Frame's per-axis choice among inherit, fit, share(id), and pixel."
       href: "/internals/layout/frames-scale-scopes-and-claims#term-scale-policy"
     - term: Frame fit
-      definition: "The policy turning a claim plus pixel budget into a scale or structured fit outcome."
+      definition: "The policy turning a size request plus pixel allocation into a scale or structured fit outcome."
       href: "/internals/layout/frames-scale-scopes-and-claims#term-frame-fit"
     - term: Coordinate scope
       definition: "A subtree sharing one coordinate-map context for transforms and ref transport."
@@ -177,7 +177,7 @@ For the normative target contract, see [Core Layout Semantics v0](/internals/cor
 
 > **Layout engine series · Part 1 of 4**<br>
 > **1. How the Layout Engine Works** ·
-> [2. Frames, Scale Scopes, and Size Claims](/internals/layout/frames-scale-scopes-and-claims)
+> [2. Frames, Scale Scopes, and Size Requests](/internals/layout/frames-scale-scopes-and-claims)
 > · [3. Placement Solving and the Layer Laws](/internals/layout/placement-and-layer-laws)
 > · [4. References, Coordinate Transport, and Scheduling](/internals/layout/references-coordinates-and-scheduling)
 
@@ -198,21 +198,47 @@ w_A = 2\sigma, \qquad w_B = 3\sigma.
 $$
 
 A <dfn id="term-scale">scale</dfn> converts data magnitudes or positions into
-pixels. Here its slope, <dfn id="term-sigma">$\sigma$</dfn>, means pixels per
-data unit.
+pixels. On one scale scope $S$, define the types first:
+
+$$
+\begin{aligned}
+\operatorname{ScaleFactor}_S
+  &\coloneqq \mathbb R_{\ge 0}\;[\mathrm{px}/u_S],\\
+\operatorname{PixelExtent}
+  &\coloneqq \mathbb R_{\ge 0}\;[\mathrm{px}],\\
+\sigma_S &\in \operatorname{ScaleFactor}_S.
+\end{aligned}
+$$
+
+Here $u_S$ is the data unit shared by the scope and
+<dfn id="term-sigma">$\sigma_S$</dfn> is its pixels-per-data-unit slope.
 
 The engine records this pre-pixel information as an
 <dfn id="term-underlying-space">underlying space</dfn>: a per-axis description
 of the quantity kind, data domain, semantic measure, and symbolic size.
 
-A <dfn id="term-claim">size claim</dfn> is the function $C(\sigma)$ that returns
-the pixel extent requested at a particular $\sigma$. It describes required
-space without choosing the scale itself.
-
-Distribution combines those claims in series:
+A <span id="term-claim"></span><dfn id="term-size-request">scale-dependent
+size request</dfn>, shortened below to _size request_, has the mathematical
+type:
 
 $$
-C_x(\sigma) = 2\sigma + 3\sigma + 10.
+R_n : \operatorname{ScaleFactor}_S \longrightarrow
+      \operatorname{PixelExtent}.
+$$
+
+$R_n(\sigma)$ is the pixel extent node $n$ requests if scope $S$ chooses
+$\sigma$. The request describes required space without choosing the scale.
+This is the established layout pairing of a child _size request_ and a parent
+_allocation_; [GTK's widget-sizing model](https://docs.gtk.org/gtk4/class.Widget.html)
+uses that request/allocation vocabulary. CSS's related term is
+[_intrinsic size contribution_](https://www.w3.org/TR/css-sizing-3/#intrinsic-contribution),
+but _size request_ is clearer here because the value remains a function of
+$\sigma$. Earlier drafts called $R_n$ a “claim.”
+
+Distribution combines those requests in series:
+
+$$
+R_x(\sigma) = 2\sigma + 3\sigma + 10.
 $$
 
 A <dfn id="term-scope">scope</dfn> is a set of participants over which one
@@ -271,6 +297,26 @@ The figure exposes the artifacts produced along this route.
 ::: gofish example:internal-layout-engine-pipeline hidden
 :::
 
+### Where those values live in production
+
+The conceptual names above are not all first-class runtime types yet. This is
+the concrete implementation map for the same two-box example:
+
+| Concept                       | Current carrier                                                                | Created by                                                       | Read by / lifetime                                          |
+| ----------------------------- | ------------------------------------------------------------------------------ | ---------------------------------------------------------------- | ----------------------------------------------------------- |
+| Per-axis size request         | `node._underlyingSpace[axis]`, specifically `ContinuousSpace.width: Monotonic` | each node's `resolveUnderlyingSpace()`; Layer folds child spaces | scale solving and proposal planning, before concrete layout |
+| Chosen scale                  | `AxisScale`                                                                    | `ScopeRegistry.solveSize()` or a position-scale path             | passed downward through recursive `layout(size, scales)`    |
+| Intrinsic box                 | `node.intrinsicDims`                                                           | the node-kind-specific `_layout` callback                        | local constraints, bounds folding, and geometry queries     |
+| Parent placement              | `node.transform.translate` plus constraint solver state                        | Layer proposal and placement mechanisms                          | child bounds, ref reconciliation, and lowering              |
+| Completed observable geometry | `Placeable` state on the source node                                           | the source's completed `layout()`                                | `GoFishRef.layout()` and derived operators                  |
+| Paint program                 | `DisplayList.DisplayItem[]`                                                    | `INTERNAL_lower()` after layout                                  | renderer only                                               |
+
+There is no production `SizeRequest` object attached to each node. The smaller
+`sizeRequests.ts` module introduced in this branch is an executable reference
+algebra; production still carries the request as `Monotonic` inside
+`UnderlyingSpace`. Keeping those two columns distinct prevents the target model
+from being mistaken for an already-completed migration.
+
 <Badge type="info" text="AS BUILT" /> This six-stage presentation is conceptual.
 
 Production performs nested scale solves and child layout recursively.
@@ -301,22 +347,31 @@ variants and records that may inhabit that tree.
 
 <Badge type="info" text="AS BUILT" /> Production's entire carrier type is only:
 
-```text
-GoFishAST = GoFishNode | GoFishRef
+```ts
+type GoFishAST = GoFishNode | GoFishRef;
 
-GoFishNode ≈ {
-  uid, type, parent?, children: GoFishAST[]
-  shared: [boolean, boolean]
-  constraints: ConstraintSpec[]
-  resolveUnderlyingSpace(...)
-  layout(allocation, axisScales, ...)
-  lower(...)
-  _underlyingSpace?, intrinsicDims?, transform?
+interface GoFishNode {
+  uid: string;
+  type: string;
+  parent?: GoFishNode;
+  children: GoFishAST[];
+  shared: [boolean, boolean];
+  constraints: ConstraintSpec[];
+  resolveUnderlyingSpace(...args: unknown[]): UnderlyingSpace[];
+  layout(...args: unknown[]): Placeable;
+  lower(...args: unknown[]): DisplayItem[];
+  _underlyingSpace?: UnderlyingSpace[];
+  intrinsicDims?: Dimensions;
+  transform?: Transform;
 }
 
-GoFishRef ≈ {
-  selection | directNode, selectedNode?, parent?
-  intrinsicDims?, transform?
+interface GoFishRef {
+  selection?: Selection;
+  directNode?: GoFishNode;
+  selectedNode?: GoFishNode;
+  parent?: GoFishNode;
+  intrinsicDims?: Dimensions;
+  transform?: Transform;
 }
 ```
 
@@ -334,24 +389,54 @@ overloaded word _scope_.
 
 The useful explanatory surface ADT is more specific:
 
-```text
-Scene =
-    Mark {
-      id, intrinsicSpec
-    }
-  | Layer {
-      children: Scene[], declarations: ConstraintDecl[]
-    }
-  | Frame {
-      id, body: Scene, extent: ExtentPolicy²,
-      scale: ScalePolicy², coord?: CoordinateMap
-    }
-  | Derived {
-      id, inputs: RefQuery<GeometryPort>[], build
-    }
+```ts
+type Scene = Mark | Layer | Frame | Derived;
 
-ScalePolicy = inherit | fit | share(ScaleId) | pixel
-RefQuery<G> = ref(selector, requestedPort: G)
+interface Mark {
+  kind: "mark";
+  id: NodeId;
+  intrinsicSpec: IntrinsicSpec;
+}
+
+interface Layer {
+  kind: "layer";
+  children: Scene[];
+  declarations: ConstraintDecl[];
+}
+
+interface Frame {
+  kind: "frame";
+  id: FrameId;
+  body: Scene;
+  extent: readonly [ExtentPolicy, ExtentPolicy];
+  scale: readonly [ScalePolicy, ScalePolicy];
+  coord?: CoordinateMap;
+}
+
+interface Derived {
+  kind: "derived";
+  id: NodeId;
+  inputs: RefQuery<GeometryPort>[];
+  build: DerivedBuilder;
+}
+
+type PixelExtent = number; // finite, non-negative pixels
+
+type ExtentPolicy =
+  | { kind: "fixed"; px: PixelExtent }
+  | { kind: "allocated" }
+  | { kind: "auto"; inset?: { before: PixelExtent; after: PixelExtent } };
+
+type ScalePolicy =
+  | { kind: "inherit" }
+  | { kind: "fit" }
+  | { kind: "share"; id: ScaleId }
+  | { kind: "pixel" };
+
+interface RefQuery<G extends GeometryPort> {
+  selector: Selector;
+  requestedPort: G;
+}
 ```
 
 <Badge type="tip" text="TARGET" /> This is a semantic classification, not a
@@ -360,10 +445,57 @@ A connector, enclosure, or label is `Derived` when its geometry must wait for
 completed input ports. A ref is one of its operands, not a fifth kind of writable
 node.
 
-A <dfn id="term-frame">Frame</dfn> is the core boundary that declares an
-allocation, one coordinate context, and one scale policy per axis. A
+A <dfn id="term-frame">Frame</dfn> is the core boundary that declares one shell
+extent policy, one coordinate context, and one scale policy per axis. It receives
+an allocation only when that extent policy requires one. A
 <dfn id="term-layer">Layer</dfn> is transparent authoring syntax that contributes
 children and declarations to the nearest Frame.
+
+The useful intuition is therefore “Frame = Layer body + boundary,” but the two
+normalize to different objects. A Layer produces a mergeable fragment; a Frame
+seals such a fragment under a fresh owner:
+
+```ts
+interface NormResult {
+  fragment: Fragment; // contribution to the current owner
+  frames: Map<FrameId, FrameIR>; // sealed child Frames, including descendants
+}
+```
+
+Write a `NormResult` as $(f,\mathcal H)$. Normalization results merge
+componentwise, never by changing type:
+
+$$
+(f_1,\mathcal H_1)\oplus(f_2,\mathcal H_2)
+=
+(f_1\sqcup f_2,\mathcal H_1\uplus\mathcal H_2),
+\qquad
+\operatorname{lift}(f)=(f,\varnothing).
+$$
+
+$\sqcup$ joins Fragment node and fact sets. $\uplus$ is disjoint Frame-map
+union, so a duplicate stable `FrameId` is an error. With fresh child owner $G$,
+$\operatorname{shellFragment}_F(G):\operatorname{Fragment}$, and
+$\operatorname{frameIR}(G,F,P,b):\operatorname{FrameIR}$:
+
+$$
+\begin{aligned}
+\operatorname{norm}_F(\operatorname{Layer}(X;D))
+  &= \bigoplus_{x\in X}\operatorname{norm}_F(x)
+     \oplus \operatorname{lift}(\operatorname{lower}_F(D)),\\
+ (b,\mathcal H)
+  &= \operatorname{norm}_G(B),\\
+\operatorname{norm}_F(\operatorname{Frame}_P(B))
+  &= \left(\operatorname{shellFragment}_F(G),\;
+      \mathcal H\uplus
+      \{G\mapsto\operatorname{frameIR}(G,F,P,b)\}\right).
+\end{aligned}
+$$
+
+So Layer is a fragment-combining operation. Frame is a region-forming binder:
+it creates a writable region and shell, gives the body a coordinate identity,
+and declares scale policy. It does **not** necessarily create a new scale
+identity; `inherit` and `share(id)` may reuse one.
 
 Use one toy tree throughout the article:
 
@@ -385,25 +517,33 @@ ancestor.
 Transparent Layers disappear into Frame-local fragments. The normalized core is
 closer to the following records:
 
-```text
-ProgramIR {
-  frames: Map<FrameId, FrameIR>
-  dependencies: Set<TaskEdge>
-  paint: Set<PaintEdge>
+```ts
+interface ProgramIR {
+  frames: Map<FrameId, FrameIR>;
+  dependencies: Set<TaskEdge>;
+  paint: Set<PaintEdge>;
 }
 
-FrameIR<F> {
-  parent?: FrameId
-  coordToParent: CoordinateMap
-  scale: [ScalePolicy, ScalePolicy]
-  localNodes: Map<NodeId, MarkDef | FrameShell | DerivedDef>
-  facts: Set<LocalFact<F>>
-  derivedTasks: Set<DerivedTask<F>>
+interface FrameIR {
+  parent?: FrameId;
+  coordToParent: CoordinateMap;
+  scale: [ScalePolicy, ScalePolicy];
+  localNodes: Map<NodeId, MarkDef | FrameShell | DerivedDef>;
+  facts: Set<LocalFact>;
+  derivedTasks: Set<DerivedTask>;
 }
 
-ConstraintTarget<F> { node, anchor }       // local, unresolved, writable
-PlacedRef<G>        { sourceFrame, sourceNode, port: GeometryPort<G> }
-                                              // resolved before use, read-only
+interface ConstraintTarget {
+  readonly owner: FrameId;
+  readonly node: NodeId;
+  readonly anchor: Anchor;
+} // local, unresolved, writable
+
+interface PlacedRef<G extends GeometryPort = GeometryPort> {
+  readonly sourceFrame: FrameId;
+  readonly sourceNode: NodeId;
+  readonly port: G;
+} // resolved before use, read-only
 ```
 
 A child Frame has two deliberately different faces. Its
@@ -502,7 +642,7 @@ $$
 
 This equation reads a port from already-placed geometry, then changes the
 coordinate context in which that value is expressed. It neither evaluates the
-source under $F$'s scale nor inserts the source claim into $F$.
+source under $F$'s scale nor inserts the source size request into $F$.
 
 The figure compiles the surface variants into these normalized relations. Yellow
 is coordinate/Frame structure, purple is scale identity, blue is local writable
@@ -510,6 +650,11 @@ geometry, green is derived geometry, and dashed edges are read-only observations
 
 ::: gofish example:internal-layout-scenegraph-adt hidden
 :::
+
+The yellow child-Frame region and the purple scale region are content-derived
+enclosures, so each background actually contains the structure it denotes. The
+blue segment literally joins the aligned `p` and `q` anchors; the orange dotted
+routes denote exported, read-only ports consumed outside their home Frame.
 
 The durable invariants are:
 
@@ -539,27 +684,25 @@ not determine layout geometry.
 
 Read the production diagram as this call structure:
 
-```text
-runLayout(root)
-  resolve color, names, aliases, and underlying spaces
-  elaborate axes, labels, titles, and legend; re-resolve affected passes
-  solve root scale scopes
-  root.layout(...)
-    dispatch recursively by node kind
-      Layer.layout(...)
-        build local scale, proposal, and dependency plans
-        for child in planned order: child.layout(...)     ← recursion
-        apply the Layer's placement facts simultaneously
-        fold the placed child bounds
-      coord.layout(...)                                   ← coordinate-backed Frame path
-        derive the coordinate-space allocation
-        solve coordinate-local scale scopes
-        for child: child.layout(...)                      ← recursion
-        anchor children locally, transform, and fold screen bounds
-      mark.layout(...)
-        compute known or weak intrinsic extents
-  pin the root and compute final extents
-  bake coordinate scopes; order paint; lower to SVG
+```ts
+async function runLayout(root: GoFishNode): Promise<DisplayList> {
+  resolveColorNamesAliasesAndSpaces(root);
+  elaborateGuides(root); // axes, labels, titles, legend
+  resolveAffectedPassesAgain(root);
+  solveRootScaleScopes(root);
+
+  // Production dispatches recursively by node kind.
+  const placed = await root.layout(/* allocation and inherited scales */);
+
+  // Layer.layout() builds local plans, lays out children in a planned order,
+  // solves its placement facts simultaneously, and folds child bounds.
+  // coord.layout() derives a coordinate allocation, solves local scales,
+  // recurses, anchors children, transforms them, and folds screen bounds.
+  // mark.layout() computes known or weak intrinsic extents.
+
+  pinRootAndFinalizeExtents(placed);
+  return lowerToDisplayList(orderPaint(bakeCoordinateScopes(placed)));
+}
 ```
 
 This explains why production does not have one global “intrinsic pass” followed
@@ -572,7 +715,7 @@ The normalized dependency flow we want to recover from that recursion is:
 ```text
 resolve names and quantity types
         ↓
-collect symbolic claims
+collect symbolic size requests
         ↓
 solve scale scopes according to explicit Frame policy
         ↓
@@ -612,7 +755,7 @@ without competing with the rest of the engine.
 | Part | Question                                                                                  | Chapter                                                                                                     |
 | ---- | ----------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
 | 1    | What exists, who owns it, and when can it be computed?                                    | **This overview**                                                                                           |
-| 2    | How do Frames, scale scopes, claims, and fit policy determine size?                       | [Frames, Scale Scopes, and Size Claims](/internals/layout/frames-scale-scopes-and-claims)                   |
+| 2    | How do Frames, scale scopes, size requests, and fit policy determine size?                | [Frames, Scale Scopes, and Size Requests](/internals/layout/frames-scale-scopes-and-claims)                 |
 | 3    | How do anchor equations determine placement, and when may Layers flatten?                 | [Placement Solving and the Layer Laws](/internals/layout/placement-and-layer-laws)                          |
 | 4    | How does completed geometry cross coordinate boundaries without granting write authority? | [References, Coordinate Transport, and Scheduling](/internals/layout/references-coordinates-and-scheduling) |
 
@@ -628,8 +771,8 @@ composition of mechanisms with different inputs and outputs:
 
 | Mechanism              | Input                                               | Output                                              |
 | ---------------------- | --------------------------------------------------- | --------------------------------------------------- |
-| Underlying-space fold  | Mark encodings, operators, constraint typing        | Measures, domains, and symbolic size claims         |
-| Scope registry         | A claim or data interval plus a pixel allocation    | A scalar $\sigma$ or affine position map            |
+| Underlying-space fold  | Mark encodings, operators, constraint typing        | Measures, domains, and symbolic size requests       |
+| Scope registry         | A size request or data interval plus an allocation  | A scalar $\sigma$ or affine position map            |
 | Proposal planners      | Grid tracks, distributes, nests, and allocations    | Child size proposals and some dependency order      |
 | Rank-two box closure   | Strong equations over `(min, size)`                 | Determined sizes and positions                      |
 | Difference graph       | Fixed-size anchors, relations, and pins             | Relative positions, component gauges, and conflicts |
@@ -640,7 +783,7 @@ parent planner offers a child. It is neither the child's final size nor a
 placement fact.
 
 A surface operator may contribute to several rows. `distribute`, for example,
-can combine claims, propose child allocations, and lower to placement
+can combine size requests, propose child allocations, and lower to placement
 equations. The chapters separate those interpretations explicitly.
 
 ## A scenegraph subtree is not a placement region
@@ -657,21 +800,21 @@ $$
 
 Coordinate ancestry and per-axis scale identity are separate projections again.
 The full scope diagrams and scale semantics begin in
-[Frames, Scale Scopes, and Size Claims](/internals/layout/frames-scale-scopes-and-claims#a-scenegraph-subtree-is-not-a-placement-region).
+[Frames, Scale Scopes, and Size Requests](/internals/layout/frames-scale-scopes-and-claims#a-scenegraph-subtree-is-not-a-placement-region).
 
-## Size claims and the Frame-fit question
+## Size requests and the Frame-fit question
 
 Size solving reduces a finite family of data-scaled and fixed-pixel demands to a
 canonical upper envelope:
 
 $$
-C(\sigma)=\max\!\left(0,\max_i(a_i\sigma+b_i)\right).
+R(\sigma)=\max\!\left(0,\max_i(a_i\sigma+b_i)\right).
 $$
 
 The algebra determines the feasible scales for a pixel budget; the Frame still
 needs an explicit policy for empty, unique, plateau, and unbounded outcomes.
 The derivation and interactive envelope live in
-[Frames, Scale Scopes, and Size Claims](/internals/layout/frames-scale-scopes-and-claims#size-claims-and-the-frame-fit-question).
+[Frames, Scale Scopes, and Size Requests](/internals/layout/frames-scale-scopes-and-claims#size-requests-and-the-frame-fit-question).
 
 ## Placement is a different mathematical problem
 
@@ -707,10 +850,10 @@ conditions stay beside the placement-confluence proof in
 
 The decisive distinction is authority:
 
-| Value                 | Meaning                                          | May the current Frame write the source? |
-| --------------------- | ------------------------------------------------ | --------------------------------------- |
-| `ConstraintTarget<F>` | An unresolved variable owned by Frame $F$        | Yes                                     |
-| `PlacedRef<G>`        | A completed geometry port observed by a consumer | No                                      |
+| Value              | Meaning                                                | May the current Frame write the source? |
+| ------------------ | ------------------------------------------------------ | --------------------------------------- |
+| `ConstraintTarget` | An unresolved node anchor with an explicit Frame owner | Yes                                     |
+| `PlacedRef<G>`     | A completed geometry port of type $G$                  | No                                      |
 
 The production callback token and public scenegraph `ref()` only approximate
 these two roles today. Their current behavior and target replacements are
@@ -753,7 +896,7 @@ The complete normalized route is deliberately short:
 resolve stable IDs
 → normalize Layers into Frame-local nodes and facts
 → build the cross-Frame task DAG
-→ fold claims and solve explicit scale policies
+→ fold size requests and solve explicit scale policies
 → compute intrinsic geometry
 → close box equations and solve anchor differences
 → export bounds and geometry ports
@@ -767,11 +910,11 @@ fallbacks. The full implementation checklist and failure taxonomy conclude
 
 ## Proof obligations worth keeping
 
-| Family               | Representative law                                                                                       | Detailed chapter                                                                                                     |
-| -------------------- | -------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| Claim algebra        | `max` and addition are associative and commutative; canonical hull equality is semantic equality         | [Frames and claims](/internals/layout/frames-scale-scopes-and-claims#canonical-claim-representation)                 |
-| Placement algebra    | Feasibility is equivalent to zero signed cycle sums; consistent components are unique modulo translation | [Placement and Layers](/internals/layout/placement-and-layer-laws#components-potentials-pins-and-gauges)             |
-| Boundary conformance | Placed refs cannot alter source geometry; complete task DAGs are schedule-invariant                      | [References and scheduling](/internals/layout/references-coordinates-and-scheduling#proof-obligations-worth-keeping) |
+| Family               | Representative law                                                                                        | Detailed chapter                                                                                                     |
+| -------------------- | --------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| Size-request algebra | Over exact reals, `max` and addition are associative and commutative; numeric TypeScript uses a tolerance | [Frames and size requests](/internals/layout/frames-scale-scopes-and-claims#canonical-size-request-representation)   |
+| Placement algebra    | Feasibility is equivalent to zero signed cycle sums; consistent components are unique modulo translation  | [Placement and Layers](/internals/layout/placement-and-layer-laws#components-potentials-pins-and-gauges)             |
+| Boundary conformance | Placed refs cannot alter source geometry; complete task DAGs are schedule-invariant                       | [References and scheduling](/internals/layout/references-coordinates-and-scheduling#proof-obligations-worth-keeping) |
 
 These are proofs about explicit semantic inputs. Surface conformance still needs
 differential tests showing that author programs normalize to those inputs.
@@ -784,7 +927,7 @@ Every layout change or agent brief should answer:
   kernel?
 - Which Frame receives the allocation, and which per-axis scale policy applies?
 - Is each operand a writable local `ConstraintTarget` or a read-only `PlacedRef`?
-- Which phase owns the behavior: claim, scale, intrinsic layout, placement,
+- Which phase owns the behavior: size request, scale, intrinsic layout, placement,
   bounds, transport, derived geometry, or paint?
 - Which collections are unordered fact sets, and which are explicit sequences?
 - Which theorem should the change preserve?
@@ -801,4 +944,4 @@ The shortest durable mental model is:
 
 ---
 
-> **Next:** [Frames, Scale Scopes, and Size Claims](/internals/layout/frames-scale-scopes-and-claims)
+> **Next:** [Frames, Scale Scopes, and Size Requests](/internals/layout/frames-scale-scopes-and-claims)

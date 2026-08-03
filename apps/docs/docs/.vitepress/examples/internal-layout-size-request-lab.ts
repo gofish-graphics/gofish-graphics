@@ -1,4 +1,4 @@
-// Internal-wiki explorer: investigate the small monotone claim language and an
+// Internal-wiki explorer: investigate the small monotone size-request language and an
 // explicit Frame-fit policy. Controls and status are DOM; the plot is a live
 // GoFish chart. Executed as JavaScript by GoFishVue's new Function.
 
@@ -10,47 +10,47 @@ const presets = [
   {
     id: "overlay",
     label: "Overlay max",
-    formula: "C(σ) = max(40σ, 10σ + 50)",
+    formula: "R(σ) = max(40σ, 10σ + 50)",
     defaultBudget: 180,
     minimum: 50,
-    claim: (sigma) => Math.max(40 * sigma, 10 * sigma + 50),
+    request: (sigma) => Math.max(40 * sigma, 10 * sigma + 50),
     pieces: [
-      { formula: "40σ", claim: (sigma) => 40 * sigma },
-      { formula: "10σ + 50", claim: (sigma) => 10 * sigma + 50 },
+      { formula: "40σ", request: (sigma) => 40 * sigma },
+      { formula: "10σ + 50", request: (sigma) => 10 * sigma + 50 },
     ],
     crossovers: [5 / 3],
   },
   {
     id: "series",
     label: "Series",
-    formula: "C(σ) = 2σ + 3σ + 10",
+    formula: "R(σ) = 2σ + 3σ + 10",
     defaultBudget: 210,
     minimum: 10,
-    claim: (sigma) => 5 * sigma + 10,
-    pieces: [{ formula: "5σ + 10", claim: (sigma) => 5 * sigma + 10 }],
+    request: (sigma) => 5 * sigma + 10,
+    pieces: [{ formula: "5σ + 10", request: (sigma) => 5 * sigma + 10 }],
     crossovers: [],
   },
   {
     id: "plateau",
     label: "Plateau",
-    formula: "C(σ) = max(120, 30σ)",
+    formula: "R(σ) = max(120, 30σ)",
     defaultBudget: 120,
     minimum: 120,
-    claim: (sigma) => Math.max(120, 30 * sigma),
+    request: (sigma) => Math.max(120, 30 * sigma),
     pieces: [
-      { formula: "120", claim: () => 120 },
-      { formula: "30σ", claim: (sigma) => 30 * sigma },
+      { formula: "120", request: () => 120 },
+      { formula: "30σ", request: (sigma) => 30 * sigma },
     ],
     crossovers: [4],
   },
   {
     id: "pixel",
     label: "Pixel only",
-    formula: "C(σ) = 120",
+    formula: "R(σ) = 120",
     defaultBudget: 120,
     minimum: 120,
-    claim: () => 120,
-    pieces: [{ formula: "120", claim: () => 120 }],
+    request: () => 120,
+    pieces: [{ formula: "120", request: () => 120 }],
     crossovers: [],
   },
 ];
@@ -68,6 +68,10 @@ const classifications = {
     label: "overflow",
     color: "#d65a4a",
   },
+  slack: {
+    label: "slack",
+    color: "#3451b2",
+  },
   underdetermined: {
     label: "underdetermined",
     color: "#7259b6",
@@ -76,26 +80,26 @@ const classifications = {
 
 const style = document.createElement("style");
 style.textContent = `
-  .gf-claim-lab *,
-  .gf-claim-lab *::before,
-  .gf-claim-lab *::after {
+  .gf-size-request-lab *,
+  .gf-size-request-lab *::before,
+  .gf-size-request-lab *::after {
     animation: none !important;
     transition: none !important;
   }
-  .gf-claim-lab {
+  .gf-size-request-lab {
     border: 1px solid var(--vp-c-divider);
     border-radius: 12px;
     background: var(--vp-c-bg-soft);
     overflow: hidden;
   }
-  .gf-claim-toolbar {
+  .gf-size-request-toolbar {
     display: flex;
     flex-wrap: wrap;
     gap: 7px;
     padding: 12px;
     border-bottom: 1px solid var(--vp-c-divider);
   }
-  .gf-claim-toolbar button {
+  .gf-size-request-toolbar button {
     appearance: none;
     padding: 7px 11px;
     border: 1px solid var(--vp-c-divider);
@@ -106,39 +110,39 @@ style.textContent = `
     font-size: 12px;
     cursor: pointer;
   }
-  .gf-claim-toolbar button:hover {
+  .gf-size-request-toolbar button:hover {
     border-color: var(--vp-c-brand-1);
     color: var(--vp-c-brand-1);
   }
-  .gf-claim-toolbar button[aria-pressed="true"] {
+  .gf-size-request-toolbar button[aria-pressed="true"] {
     border-color: var(--vp-c-brand-1);
     background: var(--vp-c-brand-soft);
     color: var(--vp-c-brand-1);
     font-weight: 650;
   }
-  .gf-claim-readout {
+  .gf-size-request-readout {
     display: grid;
     grid-template-columns: minmax(220px, 1fr) minmax(220px, 1fr);
     gap: 16px;
     padding: 14px 16px 10px;
   }
-  .gf-claim-formula {
+  .gf-size-request-formula {
     margin: 0 0 7px;
     color: var(--vp-c-brand-1);
     font-family: var(--vp-font-family-mono);
     font-size: 13px;
     font-weight: 650;
   }
-  .gf-claim-result {
+  .gf-size-request-result {
     margin: 0;
     color: var(--vp-c-text-2);
     font-size: 13px;
     line-height: 1.45;
   }
-  .gf-claim-result strong {
-    color: var(--gf-claim-status-color);
+  .gf-size-request-result strong {
+    color: var(--gf-size-request-status-color);
   }
-  .gf-claim-budget {
+  .gf-size-request-budget {
     display: grid;
     grid-template-columns: auto minmax(100px, 1fr) 52px;
     align-items: center;
@@ -146,28 +150,28 @@ style.textContent = `
     color: var(--vp-c-text-2);
     font-size: 12px;
   }
-  .gf-claim-budget output {
+  .gf-size-request-budget output {
     color: var(--vp-c-text-1);
     font-family: var(--vp-font-family-mono);
     font-weight: 650;
     text-align: right;
   }
-  .gf-claim-budget input {
+  .gf-size-request-budget input {
     width: 100%;
     accent-color: var(--vp-c-brand-1);
   }
-  .gf-claim-plot {
+  .gf-size-request-plot {
     min-height: 250px;
     padding: 0 10px 12px;
   }
-  .gf-claim-plot svg {
+  .gf-size-request-plot svg {
     display: block;
     width: 100%;
     max-width: ${PLOT_W}px;
     height: auto;
     margin: 0 auto;
   }
-  .gf-claim-legend {
+  .gf-size-request-legend {
     display: flex;
     flex-wrap: wrap;
     gap: 12px;
@@ -175,7 +179,7 @@ style.textContent = `
     color: var(--vp-c-text-3);
     font-size: 11px;
   }
-  .gf-claim-key::before {
+  .gf-size-request-key::before {
     content: "";
     display: inline-block;
     width: 18px;
@@ -186,28 +190,28 @@ style.textContent = `
     background: var(--key-color);
   }
   @media (max-width: 560px) {
-    .gf-claim-readout { grid-template-columns: 1fr; }
+    .gf-size-request-readout { grid-template-columns: 1fr; }
   }
 `;
 
 const shell = document.createElement("section");
-shell.className = "gf-claim-lab";
-shell.setAttribute("aria-label", "Interactive size claim and Frame fit lab");
+shell.className = "gf-size-request-lab";
+shell.setAttribute("aria-label", "Interactive size request and Frame fit lab");
 
 const toolbar = document.createElement("div");
-toolbar.className = "gf-claim-toolbar";
+toolbar.className = "gf-size-request-toolbar";
 
 const readout = document.createElement("div");
-readout.className = "gf-claim-readout";
+readout.className = "gf-size-request-readout";
 
 const explanation = document.createElement("div");
 explanation.innerHTML = `
-  <p class="gf-claim-formula"></p>
-  <p class="gf-claim-result" aria-live="polite"></p>
+  <p class="gf-size-request-formula"></p>
+  <p class="gf-size-request-result" aria-live="polite"></p>
 `;
 
 const budgetControl = document.createElement("label");
-budgetControl.className = "gf-claim-budget";
+budgetControl.className = "gf-size-request-budget";
 budgetControl.innerHTML = `
   <span>Budget B</span>
   <input type="range" min="0" max="260" step="1" />
@@ -215,17 +219,17 @@ budgetControl.innerHTML = `
 `;
 
 const plot = document.createElement("div");
-plot.className = "gf-claim-plot";
+plot.className = "gf-size-request-plot";
 plot.setAttribute("role", "img");
 
 const legend = document.createElement("div");
-legend.className = "gf-claim-legend";
+legend.className = "gf-size-request-legend";
 legend.innerHTML = `
-  <span class="gf-claim-key" style="--key-color:#98a2b3">affine pieces aᵢσ + bᵢ</span>
-  <span class="gf-claim-key" style="--key-color:#3451b2">claim C(σ)</span>
-  <span class="gf-claim-key" style="--key-color:#d65a4a">budget B</span>
-  <span class="gf-claim-key" style="--key-color:#51931b">selected σ*</span>
-  <span class="gf-claim-key" style="--key-color:#b56a00">piece crossover</span>
+  <span class="gf-size-request-key" style="--key-color:#98a2b3">affine pieces aᵢσ + bᵢ</span>
+  <span class="gf-size-request-key" style="--key-color:#3451b2">request R(σ)</span>
+  <span class="gf-size-request-key" style="--key-color:#d65a4a">budget B</span>
+  <span class="gf-size-request-key" style="--key-color:#51931b">selected σ*</span>
+  <span class="gf-size-request-key" style="--key-color:#b56a00">piece crossover</span>
 `;
 
 root.append(style, shell);
@@ -234,21 +238,21 @@ readout.append(explanation, budgetControl);
 
 const budgetInput = budgetControl.querySelector("input");
 const budgetOutput = budgetControl.querySelector("output");
-const formulaNode = explanation.querySelector(".gf-claim-formula");
-const resultNode = explanation.querySelector(".gf-claim-result");
+const formulaNode = explanation.querySelector(".gf-size-request-formula");
+const resultNode = explanation.querySelector(".gf-size-request-result");
 
 let activePreset = 0;
 let budget = presets[0].defaultBudget;
 
 const approximatelyEqual = (a, b) => Math.abs(a - b) <= EPSILON;
 
-const uniqueRoot = (claim, target) => {
+const uniqueRoot = (request, target) => {
   let low = 0;
   let high = 1;
-  while (claim(high) < target && high < 1000000) high *= 2;
+  while (request(high) < target && high < 1000000) high *= 2;
   for (let i = 0; i < 72; i += 1) {
     const middle = (low + high) / 2;
-    if (claim(middle) < target) low = middle;
+    if (request(middle) < target) low = middle;
     else high = middle;
   }
   return (low + high) / 2;
@@ -259,18 +263,18 @@ const analyze = (preset, target) => {
     return {
       kind: "overflow",
       sigma: null,
-      text: `C(0) = ${preset.minimum} px already exceeds B, so no nonnegative scale is feasible.`,
+      text: `R(0) = ${preset.minimum} px already exceeds B, so no nonnegative scale is feasible.`,
     };
   }
 
   if (preset.id === "pixel") {
+    const exact = approximatelyEqual(target, preset.minimum);
     return {
-      kind: "underdetermined",
+      kind: exact ? "underdetermined" : "slack",
       sigma: null,
-      text:
-        target === preset.minimum
-          ? "Every σ ≥ 0 gives the same 120 px claim; size alone cannot choose a scale."
-          : "The claim stays below B for every σ, so fit has no greatest finite scale.",
+      text: exact
+        ? "Every σ ≥ 0 gives the same 120 px request; size alone cannot choose a scale."
+        : `R(σ) = 120 px stays below B for every σ, leaving ${target - preset.minimum} px unused.`,
     };
   }
 
@@ -278,15 +282,15 @@ const analyze = (preset, target) => {
     return {
       kind: "plateau",
       sigma: 4,
-      text: "Every σ in [0, 4] satisfies C(σ) = B; greatest-feasible fit selects σ* = 4.",
+      text: "Every σ in [0, 4] satisfies R(σ) = B; greatest-feasible fit selects σ* = 4.",
     };
   }
 
-  const sigma = uniqueRoot(preset.claim, target);
+  const sigma = uniqueRoot(preset.request, target);
   return {
     kind: "unique",
     sigma,
-    text: `The monotone claim reaches B once, at σ* = ${sigma.toFixed(2)} px / unit.`,
+    text: `The monotone request reaches B once, at σ* = ${sigma.toFixed(2)} px / unit.`,
   };
 };
 
@@ -318,23 +322,23 @@ const plotScene = (preset, analysis) => {
   const sampleCount = 100;
   const curveData = Array.from({ length: sampleCount + 1 }, (_, index) => {
     const sigma = (maxSigma * index) / sampleCount;
-    return { sigma, claim: preset.claim(sigma) };
+    return { sigma, request: preset.request(sigma) };
   });
   const budgetData = [
-    { sigma: 0, claim: budget },
-    { sigma: maxSigma, claim: budget },
+    { sigma: 0, request: budget },
+    { sigma: maxSigma, request: budget },
   ];
 
   const pieceLayers = preset.pieces.flatMap((piece, index) => {
-    const name = `claimPiece${index}Points`;
+    const name = `requestPiece${index}Points`;
     const data = Array.from({ length: sampleCount + 1 }, (_, sampleIndex) => {
       const sigma = (maxSigma * sampleIndex) / sampleCount;
-      return { sigma, claim: piece.claim(sigma) };
+      return { sigma, request: piece.request(sigma) };
     });
     return [
       gf
         .chart(data)
-        .flow(gf.scatter({ x: "sigma", y: "claim" }))
+        .flow(gf.scatter({ x: "sigma", y: "request" }))
         .mark(gf.circle({ r: 0.01, fill: "transparent" }).name(name)),
       gf.chart(gf.selectAll(name)).mark(
         gf.line({
@@ -350,18 +354,18 @@ const plotScene = (preset, analysis) => {
     ...pieceLayers,
     gf
       .chart(curveData)
-      .flow(gf.scatter({ x: "sigma", y: "claim" }))
+      .flow(gf.scatter({ x: "sigma", y: "request" }))
       .mark(
         gf
           .circle({ r: 1.6, fill: "rgba(52,81,178,0.35)" })
-          .name("claimCurvePoints")
+          .name("requestCurvePoints")
       ),
     gf
-      .chart(gf.selectAll("claimCurvePoints"))
+      .chart(gf.selectAll("requestCurvePoints"))
       .mark(gf.line({ stroke: "#3451b2", strokeWidth: 2.5 })),
     gf
       .chart(budgetData)
-      .flow(gf.scatter({ x: "sigma", y: "claim" }))
+      .flow(gf.scatter({ x: "sigma", y: "request" }))
       .mark(
         gf.circle({ r: 0.01, fill: "transparent" }).name("budgetLinePoints")
       ),
@@ -383,10 +387,10 @@ const plotScene = (preset, analysis) => {
         .chart(
           visibleCrossovers.map((sigma) => ({
             sigma,
-            claim: preset.claim(sigma),
+            request: preset.request(sigma),
           }))
         )
-        .flow(gf.scatter({ x: "sigma", y: "claim" }))
+        .flow(gf.scatter({ x: "sigma", y: "request" }))
         .mark(
           gf.circle({
             r: 4.5,
@@ -401,8 +405,8 @@ const plotScene = (preset, analysis) => {
   if (analysis.sigma !== null) {
     layers.push(
       gf
-        .chart([{ sigma: analysis.sigma, claim: budget }])
-        .flow(gf.scatter({ x: "sigma", y: "claim" }))
+        .chart([{ sigma: analysis.sigma, request: budget }])
+        .flow(gf.scatter({ x: "sigma", y: "request" }))
         .mark(
           gf.circle({
             r: 6,
@@ -427,7 +431,10 @@ const render = () => {
   });
   formulaNode.textContent = preset.formula;
   budgetOutput.value = `${budget} px`;
-  resultNode.style.setProperty("--gf-claim-status-color", classification.color);
+  resultNode.style.setProperty(
+    "--gf-size-request-status-color",
+    classification.color
+  );
   resultNode.innerHTML = `<strong>${classification.label}</strong> · ${analysis.text}`;
   plot.setAttribute(
     "aria-label",
