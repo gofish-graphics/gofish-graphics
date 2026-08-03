@@ -360,6 +360,25 @@ placed inside the polar Frame.
 A plain Layer inside either shaded Frame only contributes nodes and facts to that
 Frame's local writable placement problem.
 
+The same scenegraph therefore carries two different scope structures. Coordinate
+scopes are tree-shaped: a nested Frame's coordinate map has one parent coordinate
+context. Scale identity is chosen separately, once per axis, by scale policy. A
+local `fit` often looks nested too, but `inherit` and `share(id)` need not coincide
+with the coordinate tree.
+
+The figure shows one scale axis. Yellow regions are coordinate scopes; purple is
+that axis's scale scope, identified by its shared scale identity. The darker
+outline is the same-hue stroke treatment used by the thesis planets diagram.
+
+::: gofish example:internal-layout-scope-map hidden
+:::
+
+The dashed reference edges are not another kind of scope. They transport already-placed
+geometry from `p` and `q` into the Cartesian consumer as constants. They neither
+carry the source scale nor make the consumer part of the purple scale identity.
+The least common ancestor is where transform paths meet, not where a new scale is
+implicitly solved.
+
 In the target vocabulary, a Frame boundary is where coordinate and scale policy is
 declared; the policy then decides whether each scale is fitted locally, inherited,
 or shared explicitly with another Frame. A Layer boundary alone does not declare
