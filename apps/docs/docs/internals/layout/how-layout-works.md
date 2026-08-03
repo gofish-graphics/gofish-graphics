@@ -8,6 +8,18 @@ pageClass: layout-engine-article
 glossary:
   title: Layout terms
   entries:
+    - term: Surface AST
+      definition: "The author-facing parent/child tree before Layers, names, refs, and policies are normalized."
+      href: "#term-surface-ast"
+    - term: ADT
+      definition: "An algebraic data type: a closed set of variant and record forms describing legal structure."
+      href: "#term-adt"
+    - term: Frame owner
+      definition: "The unique Frame whose placement region has write authority over a node."
+      href: "#term-frame-owner"
+    - term: Frame shell
+      definition: "A child Frame viewed as one writable box in its parent, distinct from the nodes inside its body."
+      href: "#term-frame-shell"
     - term: Allocation
       definition: "A finite pixel budget offered on one axis; an input, not necessarily the occupied result."
       href: "#term-allocation"
@@ -120,6 +132,8 @@ glossary:
       definition: "Translating a rich representation into a simpler IR, such as constraints into facts."
       href: "#term-lowering"
 covers:
+  - packages/gofish-graphics/src/ast/_ast.ts
+  - packages/gofish-graphics/src/ast/_node.ts
   - packages/gofish-graphics/src/ast/gofish.tsx
   - packages/gofish-graphics/src/ast/graphicalOperators/frame.tsx
   - packages/gofish-graphics/src/ast/graphicalOperators/layer.tsx
@@ -277,6 +291,241 @@ The word _measurement_ currently refers to at least three operations:
 `GoFishRef.measure()` is currently an unused identity-like placeholder, not a
 general measurement phase.
 
+## The scenegraph is one tree, not one scope hierarchy
+
+Before following the engine's call graph, separate the program's syntax from
+the semantic relations computed from it.
+
+An <dfn id="term-surface-ast">abstract syntax tree (AST)</dfn> records recursive
+parent/child containment: what the author constructed inside what. An
+<dfn id="term-adt">algebraic data type (ADT)</dfn> names the finite set of
+variants and records that may inhabit that tree.
+
+<Badge type="info" text="AS BUILT" /> Production's entire carrier type is only:
+
+```text
+GoFishAST = GoFishNode | GoFishRef
+
+GoFishNode ≈ {
+  uid, type, parent?, children: GoFishAST[]
+  shared: [boolean, boolean]
+  constraints: ConstraintSpec[]
+  resolveUnderlyingSpace(...)
+  layout(allocation, axisScales, ...)
+  lower(...)
+  _underlyingSpace?, intrinsicDims?, transform?
+}
+
+GoFishRef ≈ {
+  selection | directNode, selectedNode?, parent?
+  intrinsicDims?, transform?
+}
+```
+
+`GoFishNode.type`, optional fields, and recursive methods distinguish marks,
+Layers, coordinates, and operators. `GoFishRef` is a proxy leaf that selects a
+different node. This representation is flexible, but it does not expose the
+engine's semantic boundaries in its type.
+
+There is no production node with `type: "frame"`. The `Frame` factory immediately
+returns a `coord` node when given a coordinate map and a `layer` otherwise.
+Likewise, `_isScope` is a token-name registration boundary, `shared[axis]` marks
+a scale-solving root, `type: "coord"` marks a coordinate warp, and `constraints`
+are interpreted by Layer placement. These are distinct relations despite the
+overloaded word _scope_.
+
+The useful explanatory surface ADT is more specific:
+
+```text
+Scene =
+    Mark {
+      id, intrinsicSpec
+    }
+  | Layer {
+      children: Scene[], declarations: ConstraintDecl[]
+    }
+  | Frame {
+      id, body: Scene, extent: ExtentPolicy²,
+      scale: ScalePolicy², coord?: CoordinateMap
+    }
+  | Derived {
+      id, inputs: RefQuery<GeometryPort>[], build
+    }
+
+ScalePolicy = inherit | fit | share(ScaleId) | pixel
+RefQuery<G> = ref(selector, requestedPort: G)
+```
+
+<Badge type="tip" text="TARGET" /> This is a semantic classification, not a
+claim that those four variants are already a public serialized TypeScript union.
+A connector, enclosure, or label is `Derived` when its geometry must wait for
+completed input ports. A ref is one of its operands, not a fifth kind of writable
+node.
+
+A <dfn id="term-frame">Frame</dfn> is the core boundary that declares an
+allocation, one coordinate context, and one scale policy per axis. A
+<dfn id="term-layer">Layer</dfn> is transparent authoring syntax that contributes
+children and declarations to the nearest Frame.
+
+Use one toy tree throughout the article:
+
+```text
+Frame R · Cartesian
+└─ Layer L
+   ├─ Frame P · polar
+   │  └─ Layer(p, q; distribute(p, q))
+   ├─ connector(ref(p.point), ref(q.point))
+   └─ label(ref(q.point))
+```
+
+The parent pointers above define exactly one syntax tree. They do **not** say
+that every descendant shares a solver, scale, or coordinate map with every
+ancestor.
+
+### Normalization makes the other relations explicit
+
+Transparent Layers disappear into Frame-local fragments. The normalized core is
+closer to the following records:
+
+```text
+ProgramIR {
+  frames: Map<FrameId, FrameIR>
+  dependencies: Set<TaskEdge>
+  paint: Set<PaintEdge>
+}
+
+FrameIR<F> {
+  parent?: FrameId
+  coordToParent: CoordinateMap
+  scale: [ScalePolicy, ScalePolicy]
+  localNodes: Map<NodeId, MarkDef | FrameShell | DerivedDef>
+  facts: Set<LocalFact<F>>
+  derivedTasks: Set<DerivedTask<F>>
+}
+
+ConstraintTarget<F> { node, anchor }       // local, unresolved, writable
+PlacedRef<G>        { sourceFrame, sourceNode, port: GeometryPort<G> }
+                                              // resolved before use, read-only
+```
+
+A child Frame has two deliberately different faces. Its
+<dfn id="term-frame-shell">shell</dfn> is one box in the parent Frame's local
+problem; its body opens the child's local problem. The parent may place or size
+`shell(P)`. It may not thereby move `p` or `q` inside `P`.
+
+The <dfn id="term-frame-owner">Frame owner</dfn> of a node is the unique Frame
+whose placement region has authority to write it. In the toy tree:
+
+$$
+\begin{aligned}
+\operatorname{owner}(\operatorname{shell}(P))
+  &= \operatorname{owner}(\text{connector})
+   = \operatorname{owner}(\text{label}) = R,\\
+\operatorname{owner}(p)
+  &= \operatorname{owner}(q) = P.
+\end{aligned}
+$$
+
+A <dfn id="term-local-target">local target</dfn>
+$\operatorname{Target}_F(n,a)$ is well formed exactly when:
+
+$$
+\operatorname{owner}(n)=F.
+$$
+
+Therefore $\operatorname{Target}_R(\operatorname{shell}(P))$ is valid, while
+$\operatorname{Target}_R(q)$ is `NonlocalWrite`.
+
+It denotes a variable the solver for $F$ may write. A
+<dfn id="term-placed-ref">placed reference</dfn> denotes completed source
+geometry that a consumer may only read. Thus `distribute(p, q)` contributes
+variables to $P$'s simultaneous placement problem, while the label in $R$ may
+use a transported point from $q$ only as a constant:
+
+$$
+x_{\text{label.start}}
+=
+\operatorname{transport}_{P\rightarrow R}(q.\text{point}) + 8.
+$$
+
+Only the label moves. The ref does not grant $R$ write authority over $q$.
+Authority, not tree distance, is the fundamental distinction: a `PlacedRef`
+remains read-only even when its source happens to share the consumer's Frame.
+
+### Scopes are projections of the tree
+
+The normalized program derives several indices and graphs from the same AST.
+They are not additional parent/child trees hidden inside `Layer`:
+
+| Question                                    | Semantic object                                | Toy answer                                                      |
+| ------------------------------------------- | ---------------------------------------------- | --------------------------------------------------------------- |
+| What contains this syntax?                  | AST parent relation                            | `Layer L` contains `Frame P`, connector, and label              |
+| Which solver may write it?                  | `owner : NodeId → FrameId`                     | `p,q ↦ P`; `shell(P),connector,label ↦ R`                       |
+| In which coordinates is it expressed?       | Frame coordinate-context tree $\kappa$         | $\kappa_P$ maps to parent context $\kappa_R$                    |
+| Which data scale does it share on axis $a$? | `scaleId : FrameId × Axis → ScaleId ∪ {pixel}` | chosen separately by each Frame's policy                        |
+| What must finish before a consumer runs?    | task-dependency DAG                            | place $q$, export its point, transport it, then build the label |
+| What paints on top?                         | paint edges                                    | independent of every relation above                             |
+
+Every Frame establishes a distinct coordinate context, even when its map to its
+parent is the identity:
+
+$$
+\operatorname{parent}(\kappa_F)=\kappa_{\operatorname{parentFrame}(F)},
+\qquad
+\Phi_F = F.\operatorname{coord}\ \text{or}\ \operatorname{id}.
+$$
+
+Scale identity is interpreted independently, once per axis:
+
+$$
+\operatorname{scaleId}(F,a)=
+\begin{cases}
+\operatorname{Local}(F,a) & \text{if policy is }\operatorname{fit},\\
+\operatorname{scaleId}(\operatorname{parentFrame}(F),a)
+  & \text{if policy is }\operatorname{inherit},\\
+k & \text{if policy is }\operatorname{share}(k),\\
+\operatorname{pixel} & \text{if policy is }\operatorname{pixel}.
+\end{cases}
+$$
+
+Consequently, coordinate scopes follow the Frame tree, while a scale scope is an
+equivalence class of `(Frame, axis)` pairs with the same non-pixel `ScaleId`.
+`share(k)` can make that class structurally non-contiguous. A ref changes neither
+mapping: it adds a read-after-place dependency and a coordinate transport.
+
+For a source $s$ observed in consumer Frame $F$:
+
+$$
+\operatorname{value}_F(\operatorname{PlacedRef}(s,g))
+=
+T_{\kappa_{\operatorname{owner}(s)}\rightarrow\kappa_F}
+\left(g(\operatorname{Place}(s))\right).
+$$
+
+This equation reads a port from already-placed geometry, then changes the
+coordinate context in which that value is expressed. It neither evaluates the
+source under $F$'s scale nor inserts the source claim into $F$.
+
+The figure compiles the surface variants into these normalized relations. Yellow
+is coordinate/Frame structure, purple is scale identity, blue is local writable
+geometry, green is derived geometry, and dashed edges are read-only observations.
+
+::: gofish example:internal-layout-scenegraph-adt hidden
+:::
+
+The durable invariants are:
+
+- every semantic node has exactly one Frame owner;
+- a child Frame's shell belongs to its parent region, while its body belongs to
+  the child region;
+- every variable in one local fact has the same Frame owner;
+- Layers introduce no Frame, coordinate, scale, or scheduling identity;
+- a `PlacedRef` becomes a transported constant, never the source variable; and
+- task dependencies and paint edges are explicit relations, not child order.
+
+This classifies what the input _is_. The next diagram classifies when each
+artifact can be computed.
+
 ## Architecture at a glance
 
 The engine is easiest to navigate when recursive method calls are translated into
@@ -357,31 +606,28 @@ order stops carrying semantics.
 
 ## A scenegraph subtree is not a placement region
 
-Consider a chart with a Cartesian outer Frame and a polar inner Frame.
+Return to the opening toy tree with Cartesian outer Frame $R$ and polar inner
+Frame $P$.
 
-In the target semantics, a <dfn id="term-frame">Frame</dfn> is the boundary that
+In the target semantics, a Frame is the boundary that
 declares per-axis allocation, coordinate, and scale policy. Its contents form
 one local writable <dfn id="term-placement-region">placement region</dfn>: the
 targets and facts that may be solved jointly.
 
-A <dfn id="term-layer">Layer</dfn> is intended to be transparent authoring syntax
+A Layer is intended to be transparent authoring syntax
 that contributes nodes and facts to its enclosing Frame without opening another
 allocation, coordinate, scale, or scheduling boundary.
 
-The toy program has this shape:
-
-```text
-Frame R · Cartesian
-└─ Layer · transparent grouping
-   ├─ Frame P · polar
-   │  ├─ point p
-   │  └─ point q
-   ├─ connector(ref p, ref q)
-   └─ label(ref q)
-```
-
 The outer Frame contains a Cartesian label and connector that observe points
 placed inside the polar Frame.
+
+Its writable regions are:
+
+$$
+\mathcal R_R=\{\operatorname{shell}(P),\text{connector},\text{label}\},
+\qquad
+\mathcal R_P=\{p,q\}.
+$$
 
 A plain Layer inside either shaded Frame only contributes nodes and facts to that
 Frame's local writable placement problem.
@@ -505,8 +751,10 @@ pixel interval.
 An `AxisScale` may carry both because the slope and the anchored map can originate
 at different structural scopes.
 
-<Badge type="info" text="AS BUILT" /> `ScopeRegistry` is the choke point through
-which production derives these values.
+<Badge type="info" text="AS BUILT" /> `ScopeRegistry` is the intended choke point
+through which production derives these values. Some proposal planning still
+constructs position maps directly with `posScaleFromSpace`, so the migration is
+not complete.
 
 Its `solveSize()` method delegates to `Monotonic.inverse()`.
 
@@ -1330,10 +1578,11 @@ During one production layout run it approximately:
 2. finds the least common ancestor of source and proxy;
 3. accumulates translations from each side to that ancestor;
 4. stores the translation difference on the proxy;
-5. copies the source's intrinsic dimensions; and
+5. aliases the source's intrinsic-dimensions object onto the proxy; and
 6. draws nothing.
 
-Moving the proxy does not move the source.
+The ordinary resolved placement path moves the proxy transform rather than the
+source transform.
 
 The ref therefore already resembles a read-only observation plus a writable local
 stand-in.
@@ -1344,8 +1593,11 @@ It expects the source to have been laid out already.
 
 It transports translations rather than general coordinate transforms.
 
-It copies an axis-aligned intrinsic box even when a nonlinear transform would not
-preserve that box.
+It proxies an axis-aligned intrinsic box even when a nonlinear transform would
+not preserve that box.
+
+Its shared `intrinsicDims` reference and source-delegating `embed()` path also mean
+that full source noninterference is not a production guarantee yet.
 
 It ignores the consumer scale passed to its own `layout()`, but its
 `resolveUnderlyingSpace()` still proxies the source space upward.
@@ -1372,11 +1624,11 @@ ConstraintTarget<NodeId>   local, unresolved, writable
 PlacedRef<GeometryPort>    possibly nonlocal, resolved, read-only
 ```
 
-A <dfn id="term-local-target">local target</dfn>, represented by
+A local target, represented by
 `ConstraintTarget<NodeId>`, is a writable handle authorizing the current Frame
 to move or size one node in its placement region.
 
-A <dfn id="term-placed-ref">placed reference</dfn>, represented by
+A placed reference, represented by
 `PlacedRef<G>`, is a read-only observation of source geometry already solved in
 its home Frame. _Local_ means inside the same writable placement region;
 _nonlocal_ means outside it.
@@ -1559,33 +1811,10 @@ defines that cycle.
 
 ## A small engine someone else could reimplement
 
-The normalized engine needs only a few semantic records.
-
-```text
-Frame {
-  id
-  body
-  extent: [ExtentPolicy, ExtentPolicy]
-  scale: [ScalePolicy, ScalePolicy]
-  coord?
-  placementFacts
-  derivedTasks
-  paintEdges
-}
-
-ConstraintTarget {
-  frame
-  node
-}
-
-PlacedRef<G> {
-  sourceFrame
-  sourceNode
-  port: GeometryPort<G>
-}
-```
-
-Transparent Layers disappear into immutable Fragments before evaluation.
+The `ProgramIR`, `FrameIR`, `ConstraintTarget`, and `PlacedRef` records introduced
+near the beginning are enough for the normalized engine. Transparent Layers
+disappear into immutable Fragments before evaluation; Frames and their shell/body
+distinction remain.
 
 An independent implementation can then use the following sequence:
 

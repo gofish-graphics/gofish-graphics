@@ -2,6 +2,7 @@
 // @wiki Underlying Space — /internals/core/underlying-space
 // @wiki Axes — /internals/frontend/axes
 // @wiki Color Scale Resolution — /internals/layout/color-scales
+// @wiki How the Layout Engine Works — /internals/layout/how-layout-works
 // @wiki Overview — /internals/layout/passes
 // @wiki Architecture Overview — /internals/overview/architecture
 // </gofish-wiki>
